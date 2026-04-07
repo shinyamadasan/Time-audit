@@ -800,9 +800,12 @@ function initAutoSync() {
 function syncEntries() {
   if (!fbRoomRef) return;
 
-  fbRoomRef.update({
-    entries: entries
+  const updates = {};
+  entries.forEach(e => {
+    updates[`entries/${e.id}`] = e;
   });
+
+  fbRoomRef.update(updates);
 }
 
 function syncTimerState() {
@@ -838,7 +841,8 @@ function persist() {
   localStorage.setItem('ta3-intention', intention);
 }
 function load() {
-  try { entries = JSON.parse(localStorage.getItem('ta3-entries') || '[]'); } catch(e){ entries=[]; }
+  try { const raw = JSON.parse(localStorage.getItem('ta3-entries') || '[]');
+entries = Array.isArray(raw) ? raw : Object.values(raw); } catch(e){ entries=[]; }
   try { const s = JSON.parse(localStorage.getItem('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
   try { reviews = JSON.parse(localStorage.getItem('ta3-reviews') || '{}'); } catch(e){ reviews={}; }
   intention = localStorage.getItem('ta3-intention') || '';
@@ -1689,10 +1693,8 @@ function startSync() {
     if (!data) return;
 
     if (data.entries) {
-      entries = data.entries;
-      persist();
-      renderToday();
-    }
+  entries = Object.values(data.entries);
+}
 
     if (data.timer) {
       remaining = data.timer.remaining || remaining;
