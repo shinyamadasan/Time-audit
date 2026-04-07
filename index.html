@@ -728,7 +728,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <div class="toast" id="toast"></div>
 <!-- place this BEFORE <script> -->
 <audio id="focus-music" loop>
-  <source src="sounds/focus.mp3" type="audio/mpeg">
+  <source src="https://raw.githubusercontent.com/shinyamadasan/Time-audit/main/Sounds/focus.mp3" type="audio/mpeg">
 </audio>
 
 <!-- Firebase Compat SDK -->
@@ -936,7 +936,7 @@ function playAlert(times = 2, gap = 600) {
   let count = 0;
 
   function playOnce() {
-    const audio = new Audio("sounds/alert.mp3");
+    const audio = new Audio("https://raw.githubusercontent.com/shinyamadasan/Time-audit/main/Sounds/alert.mp3");
     audio.volume = 0.2;
     audio.play().catch(() => {});
 
