@@ -2289,7 +2289,11 @@ function localTime(ts){
   return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
 }
 function getTodayEntries(){const k=toDateKey(new Date());return entries.filter(e=>e.date===k);}
-function getWeekEntries(){const w=new Date(Date.now()-7*86400000);return entries.filter(e=>new Date(e.ts)>=w);}
+function getWeekEntries(offset=0){
+  const days = getWeekDays(offset);
+  const keys = new Set(days.map(d=>d.key));
+  return entries.filter(e=>keys.has(e.date));
+}
 function computeDeepScore(arr){return arr.length?Math.round(arr.filter(e=>e.energy==='deep').length/arr.length*100):0;}
 function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(settings.intervalMin/60)).toFixed(1);}
 function computeStreak(){let s=0;const d=new Date();for(let i=0;i<30;i++){const k=toDateKey(new Date(d-i*86400000));if(entries.filter(e=>e.date===k).length>=4)s++;else if(i>0)break;}return s;}
@@ -2714,32 +2718,166 @@ function renderToday() {
 }).join('');
 }
 
-let weekSelectedDay = 'week'; // 'week' or a dateKey like '2026-04-08'
+let weekSelectedDay = 'week'; // 'week', 'month', or a dateKey
+let weekRangeOffset = 0; // 0 = current week/month, -1 = last, etc.
+
+// Get Mon–Sun of a given week offset (0=this week, -1=last week)
+function getWeekDays(offset=0) {
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun
+  const mondayDiff = (dow === 0 ? -6 : 1 - dow) + offset * 7;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + mondayDiff);
+  const days = [];
+  for (let i=0; i<7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const key = toDateKey(d);
+    const isToday = key === toDateKey(new Date());
+    const isFuture = d > today;
+    const dayE = entries.filter(e=>e.date===key && !e.missed && !e.away);
+    days.push({key, label:DAY[d.getDay()]||'?', isToday, isFuture, hasData:dayE.length>0, entries:dayE, date:d});
+  }
+  return days;
+}
+
+function getMonthEntries(offset=0) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + offset, 1);
+  const year = d.getFullYear(), month = d.getMonth();
+  return entries.filter(e => {
+    const ed = new Date(e.ts);
+    return ed.getFullYear()===year && ed.getMonth()===month && !e.missed && !e.away;
+  });
+}
+
+function getRangeLabel() {
+  if (weekSelectedDay === 'month') {
+    const d = new Date(); d.setMonth(d.getMonth()+weekRangeOffset,1);
+    return d.toLocaleDateString([],{month:'long',year:'numeric'});
+  }
+  const days = getWeekDays(weekRangeOffset);
+  const first = days[0].date, last = days[6].date;
+  const same = first.getMonth()===last.getMonth();
+  return first.toLocaleDateString([],{month:'short',day:'numeric'}) + ' – ' +
+    last.toLocaleDateString([],{month:same?undefined:'short',day:'numeric',year:'numeric'});
+}
 
 function renderWeek() {
-  // Build day tabs
-  const days = [];
-  for (let i=6; i>=0; i--) {
-    const d = new Date(Date.now()-i*86400000);
-    const key = toDateKey(d);
-    const dayE = entries.filter(e=>e.date===key && !e.missed && !e.away);
-    days.push({key, label:DAY[d.getDay()], isToday:i===0, hasData:dayE.length>0, entries:dayE});
-  }
+  const isMonth = weekSelectedDay === 'month';
+  const days = isMonth ? [] : getWeekDays(weekRangeOffset);
   const tabs = document.getElementById('day-tabs');
-  tabs.innerHTML = `<button class="day-tab ${weekSelectedDay==='week'?'active':''}" onclick="selectWeekDay('week')">Week</button>` +
-    days.map(d => `<button class="day-tab ${d.hasData?'has-data':''} ${weekSelectedDay===d.key?'active':''}" onclick="selectWeekDay('${d.key}')">${d.label}${d.isToday?' ·':''}</button>`).join('');
 
-  if (weekSelectedDay === 'week') {
-    renderWeekOverview(days);
+  // Range controls row (Week/Month toggle + prev/next)
+  tabs.innerHTML = `
+    <button class="day-tab ${!isMonth?'active':''}" onclick="setWeekMode('week')">Week</button>
+    <button class="day-tab ${isMonth?'active':''}" onclick="setWeekMode('month')">Month</button>
+    <button class="day-tab" onclick="shiftRange(-1)" style="padding:7px 10px">‹</button>
+    <span style="font-size:11px;color:var(--muted);padding:7px 4px;white-space:nowrap;flex-shrink:0">${getRangeLabel()}</span>
+    <button class="day-tab" onclick="shiftRange(1)" ${weekRangeOffset===0?'disabled style="opacity:0.3"':''}style="padding:7px 10px">›</button>
+    ${!isMonth ? `<div style="width:1px;background:var(--border2);margin:4px 2px;flex-shrink:0"></div>` +
+      days.filter(d=>!d.isFuture).map(d=>`<button class="day-tab ${d.hasData?'has-data':''} ${weekSelectedDay===d.key?'active':''}" onclick="selectWeekDay('${d.key}')">${d.label}${d.isToday?' •':''}</button>`).join('') : ''}`;
+
+  if (weekSelectedDay === 'month') {
+    const monthE = getMonthEntries(weekRangeOffset);
+    const d = new Date(); d.setMonth(d.getMonth()+weekRangeOffset,1);
+    document.getElementById('week-view-title').textContent = d.toLocaleDateString([],{month:'long',year:'numeric'});
+    renderMonthOverview(monthE, d);
+  } else if (weekSelectedDay === 'week' || !days.find(d=>d.key===weekSelectedDay)) {
+    weekSelectedDay = 'week';
+    document.getElementById('week-view-title').textContent = getRangeLabel();
+    renderWeekOverview(days.filter(d=>!d.isFuture));
   } else {
     const day = days.find(d=>d.key===weekSelectedDay);
+    document.getElementById('week-view-title').textContent = day.date.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
     if (day) renderDayDetail(day);
   }
 }
 
+function setWeekMode(mode) {
+  weekSelectedDay = mode === 'month' ? 'month' : 'week';
+  weekRangeOffset = 0;
+  renderWeek();
+}
+
+function shiftRange(dir) {
+  if (weekRangeOffset + dir > 0) return;
+  weekRangeOffset += dir;
+  weekSelectedDay = weekSelectedDay === 'month' ? 'month' : 'week';
+  renderWeek();
+}
+
 function selectWeekDay(key) {
   weekSelectedDay = key;
-  document.getElementById('week-view-title').textContent = key === 'week' ? 'This Week' : new Date(key+'T12:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
+  renderWeek();
+}
+
+function renderMonthOverview(monthE, monthDate) {
+  const deepHrs = computeDeepHrs(monthE);
+  const totalMins = monthE.reduce((s,e)=>s+entryMins(e),0);
+  const onPlanE = monthE.filter(e=>e.onPlan!==null);
+  const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
+  const distractionCost = Math.round(monthE.filter(e=>e.energy==='distraction').reduce((s,e)=>s+entryMins(e),0)/60*settings.targetRate);
+
+  // Build days of month
+  const year = monthDate.getFullYear(), month = monthDate.getMonth();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const today = toDateKey(new Date());
+  const dayBars = [];
+  let maxDayH = 0.5;
+  for (let i=1; i<=daysInMonth; i++) {
+    const key = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+    const dayE = entries.filter(e=>e.date===key&&!e.missed&&!e.away);
+    const totalH = dayE.reduce((s,e)=>s+entryMins(e),0)/60;
+    const deepH = computeDeepHrs(dayE);
+    if (totalH > maxDayH) maxDayH = totalH;
+    dayBars.push({i, key, totalH, deepH, isToday:key===today, isFuture:key>today, hasData:dayE.length>0});
+  }
+
+  const content = document.getElementById('week-content');
+  content.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="w-stat"><div class="w-stat-num" style="color:var(--deep)">${deepHrs}</div><div class="w-stat-label">Deep hrs</div></div>
+      <div class="w-stat"><div class="w-stat-num">${(Math.round(totalMins/6)/10).toFixed(1)}</div><div class="w-stat-label">Total hrs</div></div>
+      <div class="w-stat"><div class="w-stat-num">${onPlanPct}</div><div class="w-stat-label">On-plan</div></div>
+    </div>
+    <div class="w-card">
+      <div class="w-card-title">Daily deep work <span style="font-weight:400;color:var(--muted2)">(green = deep, grey = total)</span></div>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:60px;overflow-x:auto">
+        ${dayBars.map(d=>d.isFuture?`<div style="flex:0 0 ${Math.max(8,Math.floor(260/daysInMonth))}px"></div>`:
+          `<div title="${d.key}: ${d.deepH}h deep" style="flex:0 0 ${Math.max(8,Math.floor(260/daysInMonth))}px;display:flex;flex-direction:column;align-items:center;gap:1px;height:100%;justify-content:flex-end;cursor:pointer" onclick="selectWeekDay('${d.key}');setWeekMode2()">
+            <div style="width:100%;border-radius:2px 2px 0 0;position:relative;overflow:hidden;height:${Math.max(2,Math.round(d.totalH/maxDayH*54))}px;background:var(--bg4)${d.isToday?';outline:1px solid var(--deep)':''}">
+              <div style="position:absolute;bottom:0;left:0;right:0;height:${d.totalH>0?Math.round(d.deepH/d.totalH*100):0}%;background:var(--deep)"></div>
+            </div>
+            <div style="font-size:8px;color:${d.isToday?'var(--deep)':'var(--muted2)'};text-align:center;margin-top:2px">${d.i}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="w-card" style="margin:0"><div class="w-card-title">Time split</div><div id="w-energy-split-month"></div></div>
+      <div class="w-card" style="margin:0">
+        <div class="w-card-title">Highlights</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Distraction cost</div><div style="font-size:13px;font-weight:700;color:var(--distraction)">$${distractionCost}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Days tracked</div><div style="font-size:13px;font-weight:700">${dayBars.filter(d=>d.hasData).length}</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="w-card"><div class="w-card-title">Top activities</div><div id="w-top-acts-month"></div></div>`;
+
+  renderEnergySplit(document.getElementById('w-energy-split-month'), monthE);
+  renderTopActivities(document.getElementById('w-top-acts-month'), monthE, 10);
+}
+
+// Switch from month view back to week when clicking a day bar
+function setWeekMode2() {
+  weekSelectedDay = weekSelectedDay; // already set by selectWeekDay
+  weekRangeOffset = 0;
+  // find what week the selected day is in
+  const selDate = new Date(weekSelectedDay+'T12:00:00');
+  const today = new Date();
+  const diffDays = Math.round((selDate - today) / 86400000);
+  weekRangeOffset = Math.floor(diffDays / 7);
   renderWeek();
 }
 
@@ -2812,7 +2950,7 @@ function renderEntryList(el, entriesArr) {
 }
 
 function renderWeekOverview(days) {
-  const weekE = getWeekEntries().filter(e=>!e.missed&&!e.away);
+  const weekE = getWeekEntries(weekRangeOffset).filter(e=>!e.missed&&!e.away);
   const goal = settings.deepGoal;
   const deepHrs = computeDeepHrs(weekE);
   const totalMins = weekE.reduce((s,e)=>s+entryMins(e),0);
@@ -2995,7 +3133,7 @@ function renderDayDetail(day) {
 function renderWeekTable() {
   const energyFilter = document.getElementById('filter-energy')?.value || '';
   const actFilter = document.getElementById('filter-activity')?.value || '';
-  let filtered = getWeekEntries().filter(e=>!e.missed&&!e.away);
+  let filtered = getWeekEntries(weekRangeOffset).filter(e=>!e.missed&&!e.away);
   if (energyFilter) filtered = filtered.filter(e=>e.energy===energyFilter);
   if (actFilter) filtered = filtered.filter(e=>e.activity.startsWith(actFilter));
 
