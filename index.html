@@ -1179,7 +1179,13 @@ function initAutoSync() {
 
 function signIn() {
   const provider = new firebase.auth.GoogleAuthProvider();
-  firebase.auth().signInWithRedirect(provider);
+  firebase.auth().signInWithPopup(provider).catch(err => {
+    if (err.code === 'auth/popup-blocked') {
+      showToast('Allow popups for this site, then try again');
+    } else if (err.code !== 'auth/popup-closed-by-user') {
+      showToast('Sign-in failed: ' + (err.code || ''));
+    }
+  });
 }
 
 function signOutUser() {
