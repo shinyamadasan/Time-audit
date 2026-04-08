@@ -380,13 +380,19 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   cursor:pointer;flex-shrink:0;margin-left:12px}
 
 /* ── Same-as-last hero chip ── */
-.same-last-btn{width:100%;padding:10px 14px;background:var(--deep-dim2);
-  border:1px solid rgba(200,240,74,0.25);border-radius:var(--r);
-  color:var(--deep);font-family:var(--head);font-size:13px;font-weight:600;
-  cursor:pointer;text-align:left;margin-bottom:8px;display:none;
-  transition:background 0.12s}
-.same-last-btn:hover{background:var(--deep-dim)}
-.same-last-btn span{color:var(--muted);font-weight:400;font-size:12px;margin-left:6px}
+.same-last-btn{width:100%;padding:14px 16px;background:var(--deep);
+  border:none;border-radius:var(--r);
+  color:var(--bg);font-family:var(--head);font-size:14px;font-weight:700;
+  cursor:pointer;text-align:center;margin-bottom:10px;display:none;
+  transition:background 0.12s;letter-spacing:0.01em}
+.same-last-btn:hover{background:#d8ff5c}
+.same-last-btn .sl-sub{display:block;font-size:11px;font-weight:500;opacity:0.65;margin-top:2px}
+.same-last-other{width:100%;padding:8px 14px;background:none;
+  border:1px solid var(--border2);border-radius:var(--r);
+  color:var(--muted);font-family:var(--head);font-size:12px;font-weight:500;
+  cursor:pointer;text-align:center;margin-bottom:12px;display:none;
+  transition:all 0.12s}
+.same-last-other:hover{border-color:var(--border3);color:var(--text)}
 
 /* ── Activity timeline ── */
 .tl-row{display:flex;align-items:stretch;gap:0;min-height:36px;position:relative}
@@ -789,8 +795,8 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   <button class="nav-btn" id="nav-week" onclick="showView('week')">
     <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Week
   </button>
-  <button class="nav-log" onclick="openLog()">
-    <div class="nav-log-inner">+ LOG</div>
+  <button class="nav-log" id="nav-past-btn" onclick="openGapsPicker()" style="display:none">
+    <div class="nav-log-inner" style="background:var(--distraction);color:#fff">+ Past block</div>
   </button>
   <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>Settings
@@ -867,6 +873,10 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   <div class="modal-handle"></div>
   <div class="modal-tag" id="log-ping-tag"></div>
   <div class="modal-title">What were you just doing?</div>
+  <div id="log-committed-bar" style="display:none;background:var(--deep-dim2);border:1px solid rgba(200,240,74,0.15);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--muted)">
+    <span style="color:var(--deep);font-weight:600;letter-spacing:0.04em">YOU SAID:</span>
+    <span id="log-committed-text" style="color:var(--text);margin-left:6px"></span>
+  </div>
   <div class="distraction-warning" id="distraction-warning">
     <div style="font-size:13px;font-weight:700;color:var(--distraction);margin-bottom:4px">2 distraction blocks in a row ⚡</div>
     <div style="font-size:12px;color:var(--muted)">Want to reset with a focused sprint?</div>
@@ -875,9 +885,12 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <button class="btn sm ghost" onclick="document.getElementById('distraction-warning').classList.remove('show')">Ignore</button>
     </div>
   </div>
-  <button class="same-last-btn" id="same-last-btn" onclick="applySameLast()">
-    ↩ Same as last<span id="same-last-label"></span>
+  <button class="same-last-btn" id="same-last-btn" onclick="saveLastEntry()">
+    Still on: <span id="same-last-label"></span>
+    <span class="sl-sub">Tap to log and continue</span>
   </button>
+  <button class="same-last-other" id="same-last-other" onclick="showLogForm()">Something different ↓</button>
+  <div id="log-form-body">
   <div style="margin-bottom:6px">
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Quick pick</div>
     <div class="presets-scroll" id="preset-chips"></div>
@@ -921,6 +934,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <button class="btn ghost" id="log-cancel-btn" onclick="dismissLog()">Skip</button>
     <button class="btn primary" onclick="saveEntry()">Save Entry</button>
   </div>
+  </div><!-- end log-form-body -->
 </div></div>
 
 <!-- ══ AWAY RETURN MODAL ══ -->
@@ -948,7 +962,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   <div class="focus-intention-text" id="focus-intention-text">—</div>
   <div class="focus-countdown-big" id="focus-countdown">30:00</div>
   <div class="focus-next">next ping</div>
-  <button class="btn primary" style="margin-top:24px;padding:12px 32px;font-size:14px" onclick="openQuickLog()">+ Log Activity</button>
+  <button class="btn primary" style="margin-top:24px;padding:12px 32px;font-size:14px" onclick="openQuickLog()">↷ Switch task</button>
   <div class="focus-exit-wrap">
     <button class="btn sm ghost" id="focus-exit-btn" onclick="tryExitFocusMode()">Exit</button>
     <div class="focus-exit-countdown" id="focus-exit-cd" style="display:none"></div>
@@ -956,6 +970,19 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 </div>
 
 <!-- ══ RETROACTIVE LOG MODAL ══ -->
+<!-- ══ GAPS PICKER ══ -->
+<div class="overlay" id="gaps-overlay" onclick="if(event.target.id==='gaps-overlay')closeModal('gaps-overlay')">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-tag">UNLOGGED TIME</div>
+  <div class="modal-title">Fill the gaps</div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Tap a gap to log it, or mark it as away time.</div>
+  <div id="gaps-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:4px"></div>
+  <div style="display:flex;justify-content:flex-end;margin-top:16px">
+    <button class="btn ghost" onclick="closeModal('gaps-overlay')">Done</button>
+  </div>
+</div></div>
+
 <div class="overlay" id="retro-overlay" onclick="if(event.target.id==='retro-overlay')closeModal('retro-overlay')">
 <div class="modal">
   <div class="modal-handle"></div>
@@ -1625,6 +1652,8 @@ function openQuickLog() {
     showToast('Start the timer first to log a block');
     return;
   }
+  // Prevent opening if already open
+  if (document.getElementById('quicklog-overlay').classList.contains('open')) return;
   clearTimeout(snoozeTimer);
   quickLogBusy = false; // reset guard on fresh open
   const el = document.getElementById('quicklog-overlay');
@@ -1851,6 +1880,10 @@ function showView(name) {
 // ══════════════════════════════════════════════════════
 let logIsPing = false;
 function openLog(pingNum) {
+  // Prevent opening if any log modal is already visible
+  if (document.getElementById('log-overlay').classList.contains('open') ||
+      document.getElementById('retro-overlay').classList.contains('open') ||
+      document.getElementById('quicklog-overlay').classList.contains('open')) return;
   // If no timer running and not a ping, send to retro log (has proper time inputs)
   if (!pingNum && !running && !breakActive) {
     openRetroLog();
@@ -1871,20 +1904,36 @@ function openLog(pingNum) {
   } else {
     document.getElementById('log-ping-tag').textContent = pingNum ? `PING #${pingNum} — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}` : '';
   }
+  // Show committed task context on pings
+  const committedBar = document.getElementById('log-committed-bar');
+  const committedTask = lastTaskForRepeat ? lastTaskForRepeat.replace(/ \(Output:.*\)/, '') : '';
+  if (pingNum && committedTask) {
+    document.getElementById('log-committed-text').textContent = committedTask;
+    committedBar.style.display = 'block';
+  } else {
+    committedBar.style.display = 'none';
+  }
   // During ping, Skip = log as missed. Outside ping, Skip = cancel
   document.getElementById('log-cancel-btn').textContent = logIsPing ? 'Skip (log missed)' : 'Cancel';
 
-  // Same-as-last hero button
+  // Same-as-last hero button — primary CTA when a previous entry exists
   const slBtn = document.getElementById('same-last-btn');
+  const slOther = document.getElementById('same-last-other');
   const slLabel = document.getElementById('same-last-label');
-  if (entries.length > 0) {
-    const last = entries.find(e => !e.missed);
-    if (last) {
-      slLabel.textContent = last.activity.substring(0, 28);
-      slBtn.style.display = 'block';
-      slBtn.dataset.lastId = last.id;
-    }
-  } else { slBtn.style.display = 'none'; }
+  const logFormBody = document.getElementById('log-form-body');
+  const last = entries.find(e => !e.missed && !e.break);
+  if (last && (logIsPing || switchingTask)) {
+    slLabel.textContent = last.activity.substring(0, 32);
+    slBtn.style.display = 'block';
+    slOther.style.display = 'block';
+    logFormBody.style.display = 'none';
+    slBtn.dataset.lastEnergy = last.energy;
+    slBtn.dataset.lastActivity = last.activity;
+  } else {
+    slBtn.style.display = 'none';
+    slOther.style.display = 'none';
+    logFormBody.style.display = 'block';
+  }
 
   const lastTwo = getTodayEntries().slice(0,2);
   document.getElementById('distraction-warning').classList.toggle('show', lastTwo.length===2 && lastTwo.every(e=>e.energy==='distraction'));
@@ -1899,17 +1948,29 @@ function openLog(pingNum) {
   setTimeout(()=>document.getElementById('f-activity').focus(),250);
 }
 
-function applySameLast() {
-  const last = entries.find(e => !e.missed);
-  if (!last) return;
-  document.getElementById('f-activity').value = last.activity;
-  setEnergy(last.energy);
-  document.getElementById('same-last-btn').style.background = 'var(--deep-dim)';
+function saveLastEntry() {
+  const btn = document.getElementById('same-last-btn');
+  const activity = btn.dataset.lastActivity;
+  const energy = btn.dataset.lastEnergy;
+  if (!activity) return;
+  // Pre-fill and immediately save
+  document.getElementById('f-activity').value = activity;
+  setEnergy(energy);
+  setOnPlan(energy !== 'distraction');
+  saveEntry();
+}
+
+function showLogForm() {
+  document.getElementById('same-last-btn').style.display = 'none';
+  document.getElementById('same-last-other').style.display = 'none';
+  document.getElementById('log-form-body').style.display = 'block';
+  setTimeout(() => document.getElementById('f-activity').focus(), 100);
 }
 
 // ── Retroactive logging ──
 let retroEnergy = '';
 function openRetroLog() {
+  if (document.getElementById('retro-overlay').classList.contains('open')) return;
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('retro-activity').value = '';
@@ -2228,6 +2289,74 @@ function scrollToTimeline() {
 }
 
 // Open retro log pre-filled with exact gap times — one tap to fill a gap
+function openGapsPicker() {
+  const gaps = computeGaps(getTodayEntries());
+  if (!gaps.length) { showToast('No unlogged gaps found'); return; }
+  renderGapsList(gaps);
+  document.getElementById('gaps-overlay').classList.add('open');
+}
+
+function renderGapsList(gaps) {
+  const pad = n => String(n).padStart(2,'0');
+  function fmt(ts) { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+  const awayTypes = [
+    { label: '😴 Sleep', activity: 'Sleep', energy: 'admin' },
+    { label: '🚗 Commute', activity: 'Commute', energy: 'shallow' },
+    { label: '☕ Break', activity: 'Break', energy: 'break' },
+    { label: '📵 Offline', activity: 'Offline / Away', energy: 'shallow' },
+  ];
+  document.getElementById('gaps-list').innerHTML = gaps.map((g, i) => {
+    const endLabel = g.isCurrent ? 'now' : fmt(g.ts);
+    const label = g.isCurrent ? 'Since last log' : 'Unlogged gap';
+    const awayBtns = awayTypes.map(a =>
+      `<button onclick="logAwayBlock(${g.tsStart},${Math.round(g.ts)},'${a.activity}','${a.energy}',${i})"
+        style="flex:1;min-width:0;padding:6px 4px;background:var(--bg4);border:1px solid var(--border2);
+               border-radius:6px;color:var(--muted);font-family:var(--head);font-size:10px;
+               font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.label}</button>`
+    ).join('');
+    return `<div id="gap-item-${i}" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden">
+      <button onclick="closeModal('gaps-overlay');openRetroLogPrefilled(${g.tsStart},${Math.round(g.ts)})"
+        style="display:flex;align-items:center;justify-content:space-between;width:100%;
+               background:none;border:none;padding:12px 14px;cursor:pointer;text-align:left;gap:10px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${label}</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">${fmt(g.tsStart)} – ${endLabel}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="background:var(--distraction-dim);color:var(--distraction);font-size:11px;font-weight:700;
+                      padding:4px 10px;border-radius:999px;flex-shrink:0">${g.gapMin}m</div>
+          <span style="font-size:11px;color:var(--muted)">Log it →</span>
+        </div>
+      </button>
+      <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 6px">I was away:</div>
+        <div style="display:flex;gap:6px">${awayBtns}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function logAwayBlock(tsStart, tsEnd, activity, energy, gapIndex) {
+  const dur = Math.round((tsEnd - tsStart) / 60000);
+  const entry = {
+    id: Date.now(), ts: tsEnd, tsStart,
+    blockIntervalMin: dur, date: toDateKey(new Date(tsEnd)),
+    activity, energy, onPlan: true,
+    break: energy === 'break', away: true
+  };
+  entries.unshift(entry);
+  persist(); renderToday(); syncEntries();
+  // Refresh gaps list in place
+  const remaining = computeGaps(getTodayEntries());
+  if (!remaining.length) {
+    closeModal('gaps-overlay');
+    showToast('All gaps filled!');
+  } else {
+    renderGapsList(remaining);
+    showToast(`Logged as ${activity}`);
+  }
+}
+
 function openRetroLogPrefilled(tsStart, tsEnd) {
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
@@ -2312,10 +2441,11 @@ function renderToday() {
     }).join('');
   }
 
-  // Untracked banner — visible as long as there are unfilled gaps today
+  // Untracked banner + past block nav button
   const untrackedMin = computeUntrackedMin(todayE);
   const banner = document.getElementById('untracked-banner');
   const workStarted = Date.now() > getWorkDayStartTs();
+  document.getElementById('nav-past-btn').style.display = (untrackedMin >= 10 && workStarted) ? 'flex' : 'none';
   if (untrackedMin >= 10 && workStarted) {
     const h = Math.floor(untrackedMin / 60), m = untrackedMin % 60;
     document.getElementById('untracked-banner-text').textContent =
@@ -2908,7 +3038,7 @@ document.getElementById('intention').addEventListener('blur', function(){ syncIn
 // KEYBOARD
 // ══════════════════════════════════════════════════════
 document.addEventListener('keydown', e => {
-  if(e.key==='Escape'){ dismissLog(); closeModal('precommit-overlay'); closeModal('review-overlay'); if(focusModeOn) tryExitFocusMode(); }
+  if(e.key==='Escape'){ dismissLog(); closeModal('precommit-overlay'); closeModal('review-overlay'); closeModal('gaps-overlay'); if(focusModeOn) tryExitFocusMode(); }
   if(e.key==='l' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='TEXTAREA') openLog();
 });
 
@@ -3010,6 +3140,13 @@ if (intention) document.getElementById('intention').value = intention;
 updateRing();
 renderToday();
 initAutoSync();
+// On load: if significant untracked time exists, prompt to fill gaps
+setTimeout(() => {
+  const workStarted = Date.now() > getWorkDayStartTs();
+  if (workStarted && computeUntrackedMin(getTodayEntries()) >= 10) {
+    openGapsPicker();
+  }
+}, 1200);
 // Refresh timeline every 60s so "Since last log" gap stays current
 setInterval(() => { if (!running && !breakActive) renderToday(); }, 60000);
 </script>
