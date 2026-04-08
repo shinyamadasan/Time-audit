@@ -543,6 +543,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <div class="interval-row">every <input type="number" id="interval-input" value="30" min="1" max="240" step="5"> min</div>
       <button class="btn primary" id="main-btn" onclick="toggleTimer()">Start</button>
       <button class="btn sm ghost" onclick="resetTimer()">Reset</button>
+      <button class="btn sm" id="switch-btn" onclick="switchTaskMidBlock()" style="display:none">↷ Switch task</button>
       <button class="btn sm" id="break-btn" onclick="openBreakModal()" style="display:none;border-color:var(--break);color:var(--break)">☕ Break</button>
     </div>
     <div class="break-active-row" id="break-active-row">
@@ -1080,7 +1081,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <div class="toast" id="toast"></div>
 <!-- place this BEFORE <script> -->
 <audio id="focus-music" loop>
-  <source src="sounds/focus.mp3" type="audio/mpeg">
+  <source src="Sounds/focus.mp3" type="audio/mpeg">
 </audio>
 
 <!-- Firebase Compat SDK -->
@@ -1117,6 +1118,8 @@ let currentUser = null;
 let timerStartedAt = null;
 let snoozesUsedToday = 0;
 let snoozeTimer = null;
+let quickLogBusy = false;
+let switchingTask = false;
 let dailyCommitment = 0;
 let lastTaskForRepeat = '';
 let breakActive = false;
@@ -1336,7 +1339,7 @@ async function toggleTimer() {
     running = false; clearInterval(ticker); ticker = null;
     persist();
     document.getElementById('main-btn').textContent = 'Resume';
-    document.getElementById('break-btn').style.display = 'none';
+    document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
     document.getElementById('timer-status').textContent = 'Paused';
     syncTimerState();
   }
@@ -1386,7 +1389,7 @@ async function _startTimer(task) {
   running = true;
   switchState('deep');
   document.getElementById('main-btn').textContent = 'Pause';
-  document.getElementById('break-btn').style.display = 'inline-flex';
+  document.getElementById('break-btn').style.display = 'inline-flex'; document.getElementById('switch-btn').style.display = 'inline-flex';
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min`;
   timerStartedAt = Date.now();
   remaining = totalSecs;
@@ -1411,7 +1414,7 @@ function switchState(newState) {
 function playAlert(times = 2, gap = 600) {
   let count = 0;
   function playOnce() {
-    const audio = new Audio("sounds/alert.mp3");
+    const audio = new Audio("Sounds/alert.mp3");
     audio.volume = 0.2;
     audio.play().catch(() => {
       // Fallback to Web Audio beep if file missing
@@ -1435,7 +1438,7 @@ function resetTimer() {
   running = false; clearInterval(ticker); ticker = null;
   if (breakActive) { clearInterval(breakTicker); breakTicker = null; breakActive = false; document.getElementById('break-active-row').classList.remove('show'); }
   document.getElementById('interval-input').disabled = false;
-  document.getElementById('break-btn').style.display = 'none';
+  document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
   document.getElementById('main-btn').disabled = false;
   settings.intervalMin = parseInt(document.getElementById('interval-input').value)||30;
   totalSecs = settings.intervalMin*60; remaining = totalSecs; pingCount = 0;
@@ -1443,6 +1446,15 @@ function resetTimer() {
   document.getElementById('main-btn').textContent = 'Start';
   document.getElementById('timer-status').textContent = 'Ready';
   updateRing(); syncTimerState();
+}
+
+// ══════════════════════════════════════════════════════
+// SWITCH TASK MID-BLOCK
+// ══════════════════════════════════════════════════════
+function switchTaskMidBlock() {
+  if (!running) { showToast('No active block to switch from'); return; }
+  switchingTask = true;
+  openLog(); // log what you were doing, then pre-commit opens for next task
 }
 
 // ══════════════════════════════════════════════════════
@@ -1474,7 +1486,7 @@ function startBreak(mins) {
   // Show break UI
   _updateBreakDisplay();
   document.getElementById('break-active-row').classList.add('show');
-  document.getElementById('break-btn').style.display = 'none';
+  document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
   document.getElementById('main-btn').textContent = 'On Break';
   document.getElementById('main-btn').disabled = true;
   document.getElementById('timer-status').textContent = `${mins}-min break · timer resumes automatically`;
@@ -1503,7 +1515,7 @@ function endBreak() {
   document.getElementById('break-active-row').classList.remove('show');
   document.getElementById('main-btn').disabled = false;
   document.getElementById('main-btn').textContent = 'Pause';
-  document.getElementById('break-btn').style.display = 'inline-flex';
+  document.getElementById('break-btn').style.display = 'inline-flex'; document.getElementById('switch-btn').style.display = 'inline-flex';
 
   // Log the break as an entry
   const actualDur = Math.round((Date.now() - breakStartTs) / 60000);
@@ -1608,7 +1620,13 @@ function doPing() {
 // QUICK LOG
 // ══════════════════════════════════════════════════════
 function openQuickLog() {
+  // Only allow quick log when a timer block is actually in progress
+  if (!running && !blockStartTime) {
+    showToast('Start the timer first to log a block');
+    return;
+  }
   clearTimeout(snoozeTimer);
+  quickLogBusy = false; // reset guard on fresh open
   const el = document.getElementById('quicklog-overlay');
   document.getElementById('ql-tag').textContent = `PING #${pingCount}`;
   document.getElementById('ql-sub').textContent = `Last ${settings.intervalMin} min · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
@@ -1621,6 +1639,9 @@ function openQuickLog() {
 }
 
 function quickLog(energy) {
+  // Prevent double-tap / multiple clicks logging duplicate entries
+  if (quickLogBusy) return;
+  quickLogBusy = true;
   clearTimeout(snoozeTimer);
   stopAlertLoop();
   // Use last activity as default label
@@ -1844,7 +1865,12 @@ function openLog(pingNum) {
   document.getElementById('detail-arrow').textContent='▸';
   document.querySelectorAll('.energy-btn').forEach(b=>b.classList.remove('selected'));
   selectedOnPlan = null;
-  document.getElementById('log-ping-tag').textContent = pingNum ? `PING #${pingNum} — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}` : '';
+  if (switchingTask) {
+    const elapsed = blockStartTime ? Math.round((Date.now() - blockStartTime) / 60000) : settings.intervalMin;
+    document.getElementById('log-ping-tag').textContent = `SWITCHING TASKS — log last ${elapsed}m`;
+  } else {
+    document.getElementById('log-ping-tag').textContent = pingNum ? `PING #${pingNum} — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}` : '';
+  }
   // During ping, Skip = log as missed. Outside ping, Skip = cancel
   document.getElementById('log-cancel-btn').textContent = logIsPing ? 'Skip (log missed)' : 'Cancel';
 
@@ -1941,6 +1967,7 @@ function saveRetroEntry() {
 }
 
 function dismissLog() {
+  switchingTask = false;
   if (logIsPing) {
     entries.unshift({
       id: Date.now(), ts: Date.now(),
@@ -2007,6 +2034,26 @@ function saveEntry() {
   showLogFeedback(entry.energy);
   checkReviewPrompt();
   checkEscalation();
+
+  // If mid-block switch: reset block start and open pre-commit for next task
+  if (switchingTask) {
+    switchingTask = false;
+    blockStartTime = Date.now();
+    timerStartedAt = Date.now();
+    remaining = totalSecs;
+    setTimeout(() => {
+      const hasLast = !!lastTaskForRepeat;
+      document.getElementById('pc-task').value = '';
+      document.getElementById('pc-output').value = '';
+      document.getElementById('pc-why').value = '';
+      document.getElementById('pc-full-form').style.display = hasLast ? 'none' : 'block';
+      document.getElementById('pc-repeat-hint').style.display = hasLast ? 'block' : 'none';
+      document.getElementById('pc-continue-btn').style.display = hasLast ? 'inline-flex' : 'none';
+      if (hasLast) document.getElementById('pc-last-task').textContent = lastTaskForRepeat.replace(/ \(Output:.*\)/, '');
+      document.getElementById('precommit-overlay').classList.add('open');
+      if (!hasLast) setTimeout(() => document.getElementById('pc-task').focus(), 250);
+    }, 300);
+  }
 }
 
 function triggerPenaltyMode() {
@@ -2632,7 +2679,7 @@ function startSync() {
       breakActive = true;
       running = false; clearInterval(ticker); ticker = null;
       document.getElementById('break-active-row').classList.add('show');
-      document.getElementById('break-btn').style.display = 'none';
+      document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
       document.getElementById('main-btn').textContent = 'On Break';
       document.getElementById('main-btn').disabled = true;
       document.getElementById('timer-status').textContent = `${data.durationMin||'?'}-min break · synced from other device`;
