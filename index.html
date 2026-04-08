@@ -1180,9 +1180,10 @@ function initAutoSync() {
 function signIn() {
   const provider = new firebase.auth.GoogleAuthProvider();
   firebase.auth().signInWithPopup(provider).catch(err => {
-    if (err.code === 'auth/popup-blocked') {
-      showToast('Allow popups for this site, then try again');
-    } else if (err.code !== 'auth/popup-closed-by-user') {
+    if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
+      // Popup blocked (common on mobile) — fall back to redirect
+      firebase.auth().signInWithRedirect(provider);
+    } else {
       showToast('Sign-in failed: ' + (err.code || ''));
     }
   });
@@ -1409,18 +1410,25 @@ function switchState(newState) {
 }
 function playAlert(times = 2, gap = 600) {
   let count = 0;
-
   function playOnce() {
     const audio = new Audio("sounds/alert.mp3");
     audio.volume = 0.2;
-    audio.play().catch(() => {});
-
+    audio.play().catch(() => {
+      // Fallback to Web Audio beep if file missing
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 880; osc.type = 'sine';
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        osc.start(); osc.stop(ctx.currentTime + 0.35);
+      } catch(e) {}
+    });
     count++;
-    if (count < times) {
-      setTimeout(playOnce, gap);
-    }
+    if (count < times) setTimeout(playOnce, gap);
   }
-
   playOnce();
 }
 function resetTimer() {
@@ -1822,6 +1830,11 @@ function showView(name) {
 // ══════════════════════════════════════════════════════
 let logIsPing = false;
 function openLog(pingNum) {
+  // If no timer running and not a ping, send to retro log (has proper time inputs)
+  if (!pingNum && !running && !breakActive) {
+    openRetroLog();
+    return;
+  }
   logIsPing = !!pingNum;
   selectedEnergy=''; selectedOnPlan=null;
   ['f-activity','f-note'].forEach(id=>document.getElementById(id).value='');
