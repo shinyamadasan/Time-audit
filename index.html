@@ -416,6 +416,21 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-badge.missed{background:var(--bg4);color:var(--muted)}
 .tl-badge.break{background:var(--break-dim);color:var(--break)}
 
+/* ── Week day tabs ── */
+.day-tab{padding:7px 14px;border-radius:999px;border:1px solid var(--border2);
+  background:none;color:var(--muted);font-family:var(--head);font-size:11px;font-weight:600;
+  cursor:pointer;white-space:nowrap;transition:all 0.15s;flex-shrink:0}
+.day-tab:hover{border-color:var(--border3);color:var(--text)}
+.day-tab.active{background:var(--deep);border-color:var(--deep);color:var(--bg)}
+.day-tab.has-data{border-color:var(--border3)}
+
+/* ── Week stat card ── */
+.w-stat{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 12px;text-align:center}
+.w-stat-num{font-size:26px;font-weight:800;font-family:var(--mono);line-height:1}
+.w-stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px}
+.w-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:10px}
+.w-card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:10px}
+
 /* ── Timeline bucket (grouped) rows ── */
 .tl-bucket{border-radius:var(--r);overflow:hidden;margin-bottom:3px}
 .tl-bucket-header{display:flex;align-items:stretch;gap:0;min-height:40px;cursor:pointer;
@@ -608,83 +623,16 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <!-- ══ WEEK ══ -->
 <div class="view" id="view-week">
   <div class="page-header">
-    <div class="page-title">This Week</div>
+    <div class="page-title" id="week-view-title">This Week</div>
     <button class="btn sm ghost" onclick="exportCSV()">Export CSV</button>
   </div>
 
-  <!-- Hero stats row -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 12px;text-align:center">
-      <div style="font-size:28px;font-weight:800;color:var(--deep);font-family:var(--mono)" id="w-deep-hrs">0</div>
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px">Deep hrs</div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 12px;text-align:center">
-      <div style="font-size:28px;font-weight:800;color:var(--text);font-family:var(--mono)" id="w-total-hrs">0</div>
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px">Total hrs</div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 12px;text-align:center">
-      <div style="font-size:28px;font-weight:800;color:var(--text);font-family:var(--mono)" id="w-onplan">—</div>
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px">On-plan</div>
-    </div>
-  </div>
+  <!-- Day tabs -->
+  <div style="display:flex;gap:4px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px" id="day-tabs"></div>
 
-  <!-- Weekly goal progress -->
-  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:12px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Weekly deep goal</div>
-      <div style="font-size:12px;font-family:var(--mono);color:var(--deep)" id="w-progress-label">0 / 20h</div>
-    </div>
-    <div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden">
-      <div id="w-progress-fill" style="height:100%;background:var(--deep);border-radius:4px;width:0%;transition:width 0.4s"></div>
-    </div>
-    <div style="display:flex;gap:6px;margin-top:10px;align-items:center" id="streak-dots-row"></div>
-  </div>
-
-  <!-- Day bars -->
-  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:12px">
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:12px">Hours by day</div>
-    <div style="display:flex;align-items:flex-end;gap:6px;height:80px" id="day-bars"></div>
-    <div style="display:flex;gap:6px;margin-top:6px" id="day-bar-labels"></div>
-  </div>
-
-  <!-- Energy breakdown donut + time split -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:10px">Time split</div>
-      <div id="w-energy-split" style="display:flex;flex-direction:column;gap:6px"></div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:10px">Highlights</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div><div style="font-size:10px;color:var(--muted);margin-bottom:1px">Best day</div><div style="font-size:13px;font-weight:700" id="i-best-day">—</div></div>
-        <div><div style="font-size:10px;color:var(--muted);margin-bottom:1px">Avg deep/day</div><div style="font-size:13px;font-weight:700" id="i-avg-score">—</div></div>
-        <div><div style="font-size:10px;color:var(--muted);margin-bottom:1px">Distraction cost</div><div style="font-size:13px;font-weight:700;color:var(--distraction)" id="i-waste-week">$0</div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Top activities -->
-  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:12px" id="top-activities"></div>
-
-  <!-- Entries grouped by day -->
-  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Entries</div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <select id="filter-energy" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
-          <option value="">All types</option>
-          <option value="deep">Deep</option>
-          <option value="shallow">Shallow</option>
-          <option value="admin">Admin</option>
-          <option value="distraction">Distraction</option>
-        </select>
-        <select id="filter-activity" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
-          <option value="">All activities</option>
-        </select>
-      </div>
-    </div>
-    <div id="week-table-body"></div>
-  </div>
+  <!-- Dynamic content area — changes based on selected tab -->
+  <div id="week-content"></div>
+</div>
 </div>
 
 <!-- ══ SETTINGS ══ -->
@@ -2766,149 +2714,323 @@ function renderToday() {
 }).join('');
 }
 
+let weekSelectedDay = 'week'; // 'week' or a dateKey like '2026-04-08'
+
 function renderWeek() {
-  const weekE = getWeekEntries().filter(e => !e.missed && !e.away);
-  const goal = settings.deepGoal;
-  const deepHrs = computeDeepHrs(weekE);
-  const totalMins = weekE.reduce((s,e) => s + (e.tsStart ? Math.round((e.ts-e.tsStart)/60000) : (e.blockIntervalMin||settings.intervalMin)), 0);
-  const pct = Math.min(100, Math.round(deepHrs / goal * 100));
-
-  document.getElementById('w-deep-hrs').textContent = deepHrs;
-  document.getElementById('w-total-hrs').textContent = (Math.round(totalMins/6)/10).toFixed(1);
-  document.getElementById('w-progress-fill').style.width = pct + '%';
-  document.getElementById('w-progress-label').textContent = `${deepHrs} / ${goal}h (${pct}%)`;
-
-  const onPlanE = weekE.filter(e => e.onPlan !== null);
-  document.getElementById('w-onplan').textContent = onPlanE.length ? Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%' : '—';
-
-  // Days
+  // Build day tabs
   const days = [];
   for (let i=6; i>=0; i--) {
-    const d = new Date(Date.now()-i*86400000), key = toDateKey(d);
+    const d = new Date(Date.now()-i*86400000);
+    const key = toDateKey(d);
     const dayE = entries.filter(e=>e.date===key && !e.missed && !e.away);
-    const deepH = computeDeepHrs(dayE);
-    const totalH = Math.round(dayE.reduce((s,e)=>s+(e.tsStart?Math.round((e.ts-e.tsStart)/60000):(e.blockIntervalMin||settings.intervalMin)),0)/60*10)/10;
-    days.push({key, label:DAY[d.getDay()], deepH, totalH, count:dayE.length, isToday:i===0});
+    days.push({key, label:DAY[d.getDay()], isToday:i===0, hasData:dayE.length>0, entries:dayE});
   }
-  const maxH = Math.max(...days.map(d=>d.totalH), 1);
+  const tabs = document.getElementById('day-tabs');
+  tabs.innerHTML = `<button class="day-tab ${weekSelectedDay==='week'?'active':''}" onclick="selectWeekDay('week')">Week</button>` +
+    days.map(d => `<button class="day-tab ${d.hasData?'has-data':''} ${weekSelectedDay===d.key?'active':''}" onclick="selectWeekDay('${d.key}')">${d.label}${d.isToday?' ·':''}</button>`).join('');
 
-  document.getElementById('day-bars').innerHTML = days.map(d => `
-    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--muted)">${d.totalH>0?d.totalH+'h':''}</div>
-      <div style="width:100%;border-radius:4px 4px 0 0;position:relative;overflow:hidden;min-height:3px;height:${Math.max(4,Math.round(d.totalH/maxH*68))}px;background:var(--bg4)">
-        <div style="position:absolute;bottom:0;left:0;right:0;height:${d.totalH>0?Math.round(d.deepH/d.totalH*100):0}%;background:var(--deep);border-radius:4px 4px 0 0"></div>
-      </div>
-    </div>`).join('');
+  if (weekSelectedDay === 'week') {
+    renderWeekOverview(days);
+  } else {
+    const day = days.find(d=>d.key===weekSelectedDay);
+    if (day) renderDayDetail(day);
+  }
+}
 
-  document.getElementById('day-bar-labels').innerHTML = days.map(d =>
-    `<div style="flex:1;text-align:center;font-size:9px;color:${d.isToday?'var(--deep)':'var(--muted)'};font-family:var(--mono);font-weight:${d.isToday?'700':'400'}">${d.label}</div>`
-  ).join('');
+function selectWeekDay(key) {
+  weekSelectedDay = key;
+  document.getElementById('week-view-title').textContent = key === 'week' ? 'This Week' : new Date(key+'T12:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
+  renderWeek();
+}
 
-  document.getElementById('streak-dots-row').innerHTML =
-    days.map(d=>`<div class="streak-dot ${d.count>=4?'on':'off'} ${d.isToday?'today-dot':''}" title="${d.label}: ${d.count} entries"></div>`).join('') +
-    `<span style="font-size:11px;color:var(--muted);margin-left:4px">${computeStreak()} day streak</span>`;
+function entryMins(e) {
+  return e.tsStart ? Math.round((e.ts-e.tsStart)/60000) : (e.blockIntervalMin||settings.intervalMin);
+}
 
-  const bestDay = days.reduce((a,b)=>b.deepH>a.deepH?b:a, days[0]);
-  document.getElementById('i-best-day').textContent = bestDay.deepH>0 ? `${bestDay.deepH}h — ${bestDay.label}` : '—';
-  const activeDays = days.filter(d=>d.count>0);
-  document.getElementById('i-avg-score').textContent = activeDays.length ? (Math.round(activeDays.reduce((s,d)=>s+d.deepH,0)/activeDays.length*10)/10)+'h' : '—';
-  document.getElementById('i-waste-week').textContent = '$'+Math.round(weekE.filter(e=>e.energy==='distraction').length*(settings.intervalMin/60)*settings.targetRate);
-
-  // Energy split bars
-  const energyMins = {deep:0, shallow:0, admin:0, distraction:0};
-  weekE.forEach(e => { const m = e.tsStart?Math.round((e.ts-e.tsStart)/60000):(e.blockIntervalMin||settings.intervalMin); if(energyMins[e.energy]!==undefined) energyMins[e.energy]+=m; });
-  const totalTracked = Object.values(energyMins).reduce((a,b)=>a+b,0) || 1;
+function renderEnergySplit(el, entriesArr) {
+  const energyMins = {deep:0,shallow:0,admin:0,distraction:0};
+  entriesArr.forEach(e => { if(energyMins[e.energy]!==undefined) energyMins[e.energy]+=entryMins(e); });
+  const total = Object.values(energyMins).reduce((a,b)=>a+b,0)||1;
   const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)'};
-  document.getElementById('w-energy-split').innerHTML = Object.entries(energyMins).map(([type, mins]) => {
-    const pct = Math.round(mins/totalTracked*100);
-    const hrs = (Math.round(mins/6)/10).toFixed(1);
-    return `<div>
+  el.innerHTML = Object.entries(energyMins).map(([type,mins])=>{
+    const pct = Math.round(mins/total*100);
+    const hrs = mins>=60?(Math.round(mins/6)/10).toFixed(1)+'h':mins+'m';
+    return `<div style="margin-bottom:6px">
       <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
         <span style="color:${energyColors[type]};font-weight:600;text-transform:capitalize">${type}</span>
-        <span style="color:var(--muted);font-family:var(--mono)">${hrs}h · ${pct}%</span>
+        <span style="color:var(--muted);font-family:var(--mono)">${hrs} · ${pct}%</span>
       </div>
       <div style="height:5px;background:var(--bg4);border-radius:3px;overflow:hidden">
-        <div style="height:100%;width:${pct}%;background:${energyColors[type]};border-radius:3px"></div>
+        <div style="height:100%;width:${pct}%;background:${energyColors[type]};border-radius:3px;transition:width 0.3s"></div>
+      </div></div>`;
+  }).join('');
+}
+
+function renderTopActivities(el, entriesArr, limit=8) {
+  const actMap = {};
+  entriesArr.filter(e=>!e.missed&&!e.break).forEach(e=>{
+    const key = e.activity.split(' (Output')[0];
+    const m = entryMins(e);
+    if(!actMap[key]) actMap[key]={mins:0,energy:e.energy};
+    actMap[key].mins+=m;
+  });
+  const top = Object.entries(actMap).sort((a,b)=>b[1].mins-a[1].mins).slice(0,limit);
+  const maxMins = top[0]?.[1].mins||1;
+  const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)'};
+  el.innerHTML = top.length ? top.map(([act,data])=>{
+    const w = Math.round(data.mins/maxMins*100);
+    const color = getActivityColor(act)||energyColors[data.energy]||'var(--deep)';
+    const label = data.mins>=60?(Math.round(data.mins/6)/10).toFixed(1)+'h':data.mins+'m';
+    return `<div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+        <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%">${act}</span>
+        <span style="color:var(--muted);font-family:var(--mono);flex-shrink:0">${label}</span>
       </div>
+      <div style="height:6px;background:var(--bg4);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${w}%;background:${color};border-radius:4px;transition:width 0.3s"></div>
+      </div></div>`;
+  }).join('') : '<div style="color:var(--muted);font-size:12px">No data</div>';
+}
+
+function renderEntryList(el, entriesArr) {
+  if (!entriesArr.length) { el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries.</div>'; return; }
+  const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)',break:'var(--break)'};
+  el.innerHTML = entriesArr.sort((a,b)=>(b.tsStart||b.ts)-(a.tsStart||a.ts)).map(e=>{
+    const dur = entryMins(e);
+    const time = e.tsStart?`${localTime(e.tsStart)} – ${localTime(e.ts)}`:localTime(e.ts);
+    const color = getActivityColor(e.activity)||energyColors[e.energy]||'var(--muted)';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="width:3px;height:34px;border-radius:2px;background:${color};flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.activity}</div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${dur}m</div>
+      </div>
+      <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
+      <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
     </div>`;
   }).join('');
+}
 
-  // Top activities
-  const actMap = {};
-  weekE.forEach(e => {
-    if (e.missed||e.break) return;
-    const key = e.activity.split(' (Output')[0];
-    const m = e.tsStart?Math.round((e.ts-e.tsStart)/60000):(e.blockIntervalMin||settings.intervalMin);
-    if (!actMap[key]) actMap[key]={mins:0,energy:e.energy};
-    actMap[key].mins += m;
-  });
-  const topActs = Object.entries(actMap).sort((a,b)=>b[1].mins-a[1].mins).slice(0,8);
-  const maxActMins = topActs[0]?.[1].mins || 1;
-  document.getElementById('top-activities').innerHTML = `
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:10px">Top activities</div>
-    ${topActs.length ? topActs.map(([act, data]) => {
-      const w = Math.round(data.mins/maxActMins*100);
-      const color = getActivityColor(act) || energyColors[data.energy] || 'var(--deep)';
-      const hrs = data.mins >= 60 ? (Math.round(data.mins/6)/10).toFixed(1)+'h' : data.mins+'m';
-      return `<div style="margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
-          <span style="font-weight:500">${act}</span>
-          <span style="color:var(--muted);font-family:var(--mono)">${hrs}</span>
-        </div>
-        <div style="height:6px;background:var(--bg4);border-radius:4px;overflow:hidden">
-          <div style="height:100%;width:${w}%;background:${color};border-radius:4px"></div>
-        </div>
-      </div>`;
-    }).join('') : '<div style="color:var(--muted);font-size:12px">No data yet</div>'}`;
+function renderWeekOverview(days) {
+  const weekE = getWeekEntries().filter(e=>!e.missed&&!e.away);
+  const goal = settings.deepGoal;
+  const deepHrs = computeDeepHrs(weekE);
+  const totalMins = weekE.reduce((s,e)=>s+entryMins(e),0);
+  const pct = Math.min(100,Math.round(deepHrs/goal*100));
+  const onPlanE = weekE.filter(e=>e.onPlan!==null);
+  const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
+  const distractionCost = Math.round(weekE.filter(e=>e.energy==='distraction').length*(settings.intervalMin/60)*settings.targetRate);
+  const bestDay = days.reduce((a,b)=>b.entries.length&&computeDeepHrs(b.entries)>computeDeepHrs(a.entries)?b:a, days[0]);
+  const activeDays = days.filter(d=>d.entries.length);
+  const avgDeep = activeDays.length?(Math.round(activeDays.reduce((s,d)=>s+computeDeepHrs(d.entries),0)/activeDays.length*10)/10).toFixed(1)+'h':'—';
+  const maxTotal = Math.max(...days.map(d=>d.entries.reduce((s,e)=>s+entryMins(e),0)/60),0.5);
 
-  // Populate activity filter dropdown
+  const content = document.getElementById('week-content');
+  content.innerHTML = `
+    <!-- 3 hero stats -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="w-stat"><div class="w-stat-num" style="color:var(--deep)">${deepHrs}</div><div class="w-stat-label">Deep hrs</div></div>
+      <div class="w-stat"><div class="w-stat-num">${(Math.round(totalMins/6)/10).toFixed(1)}</div><div class="w-stat-label">Total hrs</div></div>
+      <div class="w-stat"><div class="w-stat-num">${onPlanPct}</div><div class="w-stat-label">On-plan</div></div>
+    </div>
+
+    <!-- Goal progress -->
+    <div class="w-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="w-card-title" style="margin:0">Deep work goal</div>
+        <div style="font-size:12px;font-family:var(--mono);color:var(--deep)">${deepHrs} / ${goal}h · ${pct}%</div>
+      </div>
+      <div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden">
+        <div style="height:100%;background:var(--deep);border-radius:4px;width:${pct}%;transition:width 0.4s"></div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px;align-items:center">
+        ${days.map(d=>`<div class="streak-dot ${d.entries.length>=4?'on':'off'} ${d.isToday?'today-dot':''}" title="${d.label}: ${d.entries.length} entries" onclick="selectWeekDay('${d.key}')" style="cursor:pointer"></div>`).join('')}
+        <span style="font-size:11px;color:var(--muted);margin-left:4px">${computeStreak()} day streak</span>
+      </div>
+    </div>
+
+    <!-- Day bars — clickable -->
+    <div class="w-card">
+      <div class="w-card-title">Hours by day <span style="font-weight:400;color:var(--muted2)">(tap a day to drill in)</span></div>
+      <div style="display:flex;align-items:flex-end;gap:6px;height:80px">
+        ${days.map(d=>{
+          const totalH = d.entries.reduce((s,e)=>s+entryMins(e),0)/60;
+          const deepH = computeDeepHrs(d.entries);
+          const barH = Math.max(4,Math.round(totalH/maxTotal*72));
+          const deepPct = totalH>0?Math.round(deepH/totalH*100):0;
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end;cursor:pointer" onclick="selectWeekDay('${d.key}')">
+            <div style="font-size:9px;font-family:var(--mono);color:${d.isToday?'var(--deep)':'var(--muted)'}">${totalH>0?(Math.round(totalH*10)/10)+'h':''}</div>
+            <div style="width:100%;border-radius:4px 4px 0 0;position:relative;overflow:hidden;height:${barH}px;background:var(--bg4);transition:height 0.3s">
+              <div style="position:absolute;bottom:0;left:0;right:0;height:${deepPct}%;background:var(--deep);border-radius:4px 4px 0 0"></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        ${days.map(d=>`<div style="flex:1;text-align:center;font-size:9px;color:${d.isToday?'var(--deep)':'var(--muted)'};font-family:var(--mono);font-weight:${d.isToday?'700':'400'};cursor:pointer" onclick="selectWeekDay('${d.key}')">${d.label}</div>`).join('')}
+      </div>
+      <div style="display:flex;gap:12px;margin-top:10px;font-size:10px;color:var(--muted)">
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--deep);margin-right:4px"></span>Deep</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--bg4);margin-right:4px"></span>Other</span>
+      </div>
+    </div>
+
+    <!-- Split + highlights -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="w-card" style="margin:0">
+        <div class="w-card-title">Time split</div>
+        <div id="w-energy-split-week"></div>
+      </div>
+      <div class="w-card" style="margin:0">
+        <div class="w-card-title">Highlights</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Best day</div><div style="font-size:13px;font-weight:700">${bestDay.entries.length?computeDeepHrs(bestDay.entries)+'h — '+bestDay.label:'—'}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Avg deep/day</div><div style="font-size:13px;font-weight:700">${avgDeep}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Distraction cost</div><div style="font-size:13px;font-weight:700;color:var(--distraction)">$${distractionCost}</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top activities -->
+    <div class="w-card"><div class="w-card-title">Top activities this week</div><div id="w-top-acts-week"></div></div>
+
+    <!-- All entries filter + list -->
+    <div class="w-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="w-card-title" style="margin:0">All entries</div>
+        <div style="display:flex;gap:6px">
+          <select id="filter-energy" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
+            <option value="">All types</option>
+            <option value="deep">Deep</option>
+            <option value="shallow">Shallow</option>
+            <option value="admin">Admin</option>
+            <option value="distraction">Distraction</option>
+          </select>
+          <select id="filter-activity" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
+            <option value="">All activities</option>
+          </select>
+        </div>
+      </div>
+      <div id="week-table-body"></div>
+    </div>`;
+
+  renderEnergySplit(document.getElementById('w-energy-split-week'), weekE);
+  renderTopActivities(document.getElementById('w-top-acts-week'), weekE);
+
+  // Populate activity dropdown
+  const actMap2 = {};
+  weekE.filter(e=>!e.missed&&!e.break).forEach(e=>{ const k=e.activity.split(' (Output')[0]; actMap2[k]=(actMap2[k]||0)+entryMins(e); });
   const actSel = document.getElementById('filter-activity');
-  const currentAct = actSel.value;
   actSel.innerHTML = '<option value="">All activities</option>' +
-    topActs.map(([act]) => `<option value="${act}" ${act===currentAct?'selected':''}>${act}</option>`).join('');
+    Object.entries(actMap2).sort((a,b)=>b[1]-a[1]).map(([act])=>`<option value="${act}">${act}</option>`).join('');
 
   renderWeekTable();
 }
 
+function renderDayDetail(day) {
+  const dayE = day.entries.filter(e=>!e.missed&&!e.away);
+  const deepHrs = computeDeepHrs(dayE);
+  const totalMins = dayE.reduce((s,e)=>s+entryMins(e),0);
+  const onPlanE = dayE.filter(e=>e.onPlan!==null);
+  const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
+  const distractionMins = dayE.filter(e=>e.energy==='distraction').reduce((s,e)=>s+entryMins(e),0);
+
+  // Time-of-day pattern: morning (before 12), afternoon (12-17), evening (17+)
+  function blockHour(e) { return new Date(e.tsStart||e.ts).getHours(); }
+  const morning = dayE.filter(e=>blockHour(e)<12);
+  const afternoon = dayE.filter(e=>blockHour(e)>=12&&blockHour(e)<17);
+  const evening = dayE.filter(e=>blockHour(e)>=17);
+  const morningDeep = computeDeepHrs(morning), aftDeep = computeDeepHrs(afternoon), eveDeep = computeDeepHrs(evening);
+
+  const content = document.getElementById('week-content');
+  content.innerHTML = `
+    <!-- 3 hero stats -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="w-stat"><div class="w-stat-num" style="color:var(--deep)">${deepHrs}</div><div class="w-stat-label">Deep hrs</div></div>
+      <div class="w-stat"><div class="w-stat-num">${(Math.round(totalMins/6)/10).toFixed(1)}</div><div class="w-stat-label">Total hrs</div></div>
+      <div class="w-stat"><div class="w-stat-num">${onPlanPct}</div><div class="w-stat-label">On-plan</div></div>
+    </div>
+
+    <!-- Time of day breakdown -->
+    <div class="w-card">
+      <div class="w-card-title">When was I focused?</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        ${[['Morning','🌅',morning,morningDeep],['Afternoon','☀️',afternoon,aftDeep],['Evening','🌙',evening,eveDeep]].map(([label,icon,arr,deep])=>`
+          <div style="background:var(--bg3);border-radius:var(--r);padding:10px;text-align:center">
+            <div style="font-size:18px;margin-bottom:4px">${icon}</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${label}</div>
+            <div style="font-size:16px;font-weight:700;color:${deep>0?'var(--deep)':'var(--muted)'}">${deep>0?deep+'h deep':'—'}</div>
+            <div style="font-size:10px;color:var(--muted2);margin-top:2px">${arr.length} blocks</div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- Energy split + distraction -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="w-card" style="margin:0">
+        <div class="w-card-title">Time split</div>
+        <div id="w-energy-split-day"></div>
+      </div>
+      <div class="w-card" style="margin:0">
+        <div class="w-card-title">Day stats</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Blocks logged</div><div style="font-size:13px;font-weight:700">${dayE.length}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Distraction time</div><div style="font-size:13px;font-weight:700;color:${distractionMins>0?'var(--distraction)':'var(--text)'}">${distractionMins>0?distractionMins+'m':'none'}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Distraction cost</div><div style="font-size:13px;font-weight:700;color:var(--distraction)">$${Math.round(distractionMins/60*settings.targetRate)}</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top activities today -->
+    <div class="w-card"><div class="w-card-title">Activities</div><div id="w-top-acts-day"></div></div>
+
+    <!-- Entry list -->
+    <div class="w-card"><div class="w-card-title">Timeline</div><div id="w-day-entries"></div></div>`;
+
+  renderEnergySplit(document.getElementById('w-energy-split-day'), dayE);
+  renderTopActivities(document.getElementById('w-top-acts-day'), dayE, 10);
+  renderEntryList(document.getElementById('w-day-entries'), dayE);
+}
+
 function renderWeekTable() {
-  const energyFilter = document.getElementById('filter-energy').value;
-  const actFilter = document.getElementById('filter-activity').value;
-  let filtered = getWeekEntries().filter(e => !e.missed && !e.away);
-  if (energyFilter) filtered = filtered.filter(e => e.energy === energyFilter);
-  if (actFilter) filtered = filtered.filter(e => e.activity.startsWith(actFilter));
+  const energyFilter = document.getElementById('filter-energy')?.value || '';
+  const actFilter = document.getElementById('filter-activity')?.value || '';
+  let filtered = getWeekEntries().filter(e=>!e.missed&&!e.away);
+  if (energyFilter) filtered = filtered.filter(e=>e.energy===energyFilter);
+  if (actFilter) filtered = filtered.filter(e=>e.activity.startsWith(actFilter));
 
   const tbody = document.getElementById('week-table-body');
-  if (!filtered.length) { tbody.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries match the filter.</div>'; return; }
+  if (!tbody) return;
+  if (!filtered.length) { tbody.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries match the filter.</div>'; return; }
 
   // Group by date
   const byDay = {};
-  filtered.forEach(e => { if(!byDay[e.date]) byDay[e.date]=[]; byDay[e.date].push(e); });
+  filtered.forEach(e=>{ if(!byDay[e.date]) byDay[e.date]=[]; byDay[e.date].push(e); });
   const dayKeys = Object.keys(byDay).sort().reverse();
+  const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)',break:'var(--break)'};
 
-  tbody.innerHTML = dayKeys.map(dateKey => {
-    const dayEntries = byDay[dateKey].sort((a,b) => (b.tsStart||b.ts)-(a.tsStart||a.ts));
+  tbody.innerHTML = dayKeys.map(dateKey=>{
+    const dayEntries = byDay[dateKey].sort((a,b)=>(b.tsStart||b.ts)-(a.tsStart||a.ts));
     const dayDate = new Date(dateKey+'T12:00:00');
     const dayLabel = dayDate.toLocaleDateString([],{weekday:'long',month:'short',day:'numeric'});
     const dayDeep = computeDeepHrs(dayEntries);
-    const dayTotal = Math.round(dayEntries.reduce((s,e)=>s+(e.tsStart?Math.round((e.ts-e.tsStart)/60000):(e.blockIntervalMin||settings.intervalMin)),0)/60*10)/10;
-
+    const dayTotal = (Math.round(dayEntries.reduce((s,e)=>s+entryMins(e),0)/60*10)/10).toFixed(1);
     return `<div style="margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:8px">
-        <div style="font-size:12px;font-weight:700;color:var(--text)">${dayLabel}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:6px;cursor:pointer" onclick="selectWeekDay('${dateKey}')">
+        <div style="font-size:12px;font-weight:700">${dayLabel} <span style="font-size:10px;color:var(--muted);font-weight:400">— tap for detail</span></div>
         <div style="font-size:10px;font-family:var(--mono);color:var(--muted)">${dayDeep}h deep · ${dayTotal}h total</div>
       </div>
-      ${dayEntries.map(e => {
-        const dur = e.tsStart ? Math.round((e.ts-e.tsStart)/60000) : (e.blockIntervalMin||settings.intervalMin);
-        const time = e.tsStart ? `${localTime(e.tsStart)} – ${localTime(e.ts)}` : localTime(e.ts);
-        const actColor = getActivityColor(e.activity);
-        const barColor = actColor || `var(--${e.energy})`;
+      ${dayEntries.map(e=>{
+        const dur = entryMins(e);
+        const time = e.tsStart?`${localTime(e.tsStart)} – ${localTime(e.ts)}`:localTime(e.ts);
+        const color = getActivityColor(e.activity)||energyColors[e.energy]||'var(--muted)';
         return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
-          <div style="width:3px;height:32px;border-radius:2px;background:${barColor};flex-shrink:0"></div>
+          <div style="width:3px;height:32px;border-radius:2px;background:${color};flex-shrink:0"></div>
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.activity}</div>
             <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${dur}m</div>
           </div>
-          <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${barColor}22;color:${barColor};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
+          <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
           <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
         </div>`;
       }).join('')}
