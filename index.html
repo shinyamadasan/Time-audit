@@ -416,41 +416,31 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-badge.missed{background:var(--bg4);color:var(--muted)}
 .tl-badge.break{background:var(--break-dim);color:var(--break)}
 
+/* ── Timeline bucket (grouped) rows ── */
+.tl-bucket{border-radius:var(--r);overflow:hidden;margin-bottom:3px}
+.tl-bucket-header{display:flex;align-items:stretch;gap:0;min-height:40px;cursor:pointer;
+  background:var(--bg3);border:1px solid var(--border)}
+.tl-bucket-header:hover{background:var(--bg4)}
+.tl-bucket-children{display:none;border:1px solid var(--border);border-top:none;
+  border-radius:0 0 var(--r) var(--r);background:var(--bg2)}
+.tl-bucket-children.open{display:block}
+.tl-bucket-children .tl-row{padding:0 8px;border-top:1px solid var(--border)}
+.tl-expand-btn{font-size:10px;color:var(--muted);font-family:var(--mono);
+  padding:0 10px;flex-shrink:0;display:flex;align-items:center;white-space:nowrap}
+
 /* ── Missed block badge ── */
 .missed-badge{background:var(--distraction-dim);border:1px solid rgba(255,107,107,0.2);
   border-radius:4px;padding:2px 7px;font-size:10px;font-family:var(--mono);
   color:var(--distraction);margin-left:6px}
 
 /* ── Quick-log fullscreen overlay ── */
-.quicklog-overlay{position:fixed;inset:0;background:var(--bg);z-index:400;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:0;padding:24px;opacity:0;pointer-events:none;transition:opacity 0.2s}
+.quicklog-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:400;
+  display:flex;align-items:flex-end;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity 0.2s}
 .quicklog-overlay.open{opacity:1;pointer-events:all}
-.quicklog-tag{font-family:var(--mono);font-size:11px;text-transform:uppercase;
-  letter-spacing:0.1em;color:var(--muted);margin-bottom:6px}
-.quicklog-title{font-size:22px;font-weight:800;margin-bottom:6px;text-align:center;line-height:1.2}
-.quicklog-sub{font-size:13px;color:var(--muted);margin-bottom:28px;text-align:center}
-.quicklog-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:360px}
-.ql-btn{padding:20px 16px;border-radius:14px;border:2px solid var(--border2);
-  background:var(--bg2);cursor:pointer;text-align:center;
-  transition:all 0.12s;font-family:var(--head);-webkit-tap-highlight-color:transparent}
-.ql-btn .ql-icon{font-size:28px;display:block;margin-bottom:8px}
-.ql-btn .ql-name{font-size:15px;font-weight:700;display:block;margin-bottom:3px}
-.ql-btn .ql-desc{font-size:11px;color:var(--muted);display:block}
-.ql-btn.deep{border-color:var(--deep);background:var(--deep-dim)}
-.ql-btn.deep .ql-name{color:var(--deep)}
-.ql-btn.shallow{border-color:var(--shallow);background:var(--shallow-dim)}
-.ql-btn.shallow .ql-name{color:var(--shallow)}
-.ql-btn.admin{border-color:var(--admin);background:var(--admin-dim)}
-.ql-btn.admin .ql-name{color:var(--admin)}
-.ql-btn.distraction{border-color:var(--distraction);background:var(--distraction-dim)}
-.ql-btn.distraction .ql-name{color:var(--distraction)}
-.ql-btn:active{transform:scale(0.96)}
-.quicklog-add-detail{margin-top:20px;font-size:12px;color:var(--muted);
-  background:none;border:none;cursor:pointer;font-family:var(--head);
-  text-decoration:underline;text-underline-offset:3px}
-.quicklog-snooze{margin-top:10px;font-size:12px;color:var(--muted2);
-  background:none;border:none;cursor:pointer;font-family:var(--head)}
+.quicklog-overlay.open .modal{transform:translateY(0)}
+.quicklog-snooze{width:100%;margin-top:8px;font-size:12px;color:var(--muted2);
+  background:none;border:none;cursor:pointer;font-family:var(--head);text-align:center;padding:4px}
 
 /* ── Daily commitment bar ── */
 .commit-bar{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);
@@ -619,59 +609,81 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <div class="view" id="view-week">
   <div class="page-header">
     <div class="page-title">This Week</div>
-    <div style="display:flex;gap:6px">
-      <button class="btn sm ghost" onclick="exportCSV()">CSV</button>
-      <button class="btn sm danger" onclick="clearTodayOnly()">Clear today</button>
-      <button class="btn sm danger" onclick="clearAll()">Clear all</button>
+    <button class="btn sm ghost" onclick="exportCSV()">Export CSV</button>
+  </div>
+
+  <!-- Hero stats row -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 12px;text-align:center">
+      <div style="font-size:28px;font-weight:800;color:var(--deep);font-family:var(--mono)" id="w-deep-hrs">0</div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px">Deep hrs</div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 12px;text-align:center">
+      <div style="font-size:28px;font-weight:800;color:var(--text);font-family:var(--mono)" id="w-total-hrs">0</div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px">Total hrs</div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 12px;text-align:center">
+      <div style="font-size:28px;font-weight:800;color:var(--text);font-family:var(--mono)" id="w-onplan">—</div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px">On-plan</div>
     </div>
   </div>
-  <div class="week-hero">
-    <div>
-      <div class="week-score-num" id="w-deep-hrs">0</div>
-      <div style="font-size:11px;color:var(--muted)">deep work hrs</div>
+
+  <!-- Weekly goal progress -->
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Weekly deep goal</div>
+      <div style="font-size:12px;font-family:var(--mono);color:var(--deep)" id="w-progress-label">0 / 20h</div>
     </div>
-    <div class="week-score-right">
-      <div class="week-progress-bar"><div class="week-progress-fill" id="w-progress-fill" style="width:0%"></div></div>
-      <div class="week-progress-label" id="w-progress-label">0 / 20 hr target</div>
-      <div style="display:flex;gap:6px;margin-top:8px;align-items:center" id="streak-dots-row"></div>
+    <div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden">
+      <div id="w-progress-fill" style="height:100%;background:var(--deep);border-radius:4px;width:0%;transition:width 0.4s"></div>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:10px;align-items:center" id="streak-dots-row"></div>
+  </div>
+
+  <!-- Day bars -->
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:12px">
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:12px">Hours by day</div>
+    <div style="display:flex;align-items:flex-end;gap:6px;height:80px" id="day-bars"></div>
+    <div style="display:flex;gap:6px;margin-top:6px" id="day-bar-labels"></div>
+  </div>
+
+  <!-- Energy breakdown donut + time split -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:10px">Time split</div>
+      <div id="w-energy-split" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:10px">Highlights</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:1px">Best day</div><div style="font-size:13px;font-weight:700" id="i-best-day">—</div></div>
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:1px">Avg deep/day</div><div style="font-size:13px;font-weight:700" id="i-avg-score">—</div></div>
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:1px">Distraction cost</div><div style="font-size:13px;font-weight:700;color:var(--distraction)" id="i-waste-week">$0</div></div>
+      </div>
     </div>
   </div>
-  <div class="timeline-section" style="margin-bottom:12px">
-    <div class="section-label"><span>Deep work by day</span></div>
-    <div class="day-bars" id="day-bars"></div>
-    <div style="display:flex;gap:5px" id="day-bar-labels"></div>
-  </div>
-  <div class="insight-cards">
-    <div id="top-activities"></div>
-    <div class="insight-card"><div class="i-label">Best day</div><div class="i-val" id="i-best-day">—</div><div class="i-sub">deep hrs</div></div>
-    <div class="insight-card"><div class="i-label">Avg deep score</div><div class="i-val" id="i-avg-score">—</div></div>
-    <div class="insight-card"><div class="i-label">Distraction cost</div><div class="i-val" id="i-waste-week">$0</div><div class="i-sub">this week</div></div>
-    <div class="insight-card"><div class="i-label">On-plan rate</div><div class="i-val" id="i-onplan">—</div></div>
-  </div>
-  <div class="full-table">
-    <div class="ft-header">
-      <div class="ft-title">All entries</div>
-      <select id="filter-energy" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
-        <option value="">All types</option>
-        <option value="deep">Deep</option>
-        <option value="shallow">Shallow</option>
-        <option value="admin">Admin</option>
-        <option value="distraction">Distraction</option>
-        <option value="break">Break</option>
-      </select>
+
+  <!-- Top activities -->
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:12px" id="top-activities"></div>
+
+  <!-- Entries grouped by day -->
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Entries</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="filter-energy" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
+          <option value="">All types</option>
+          <option value="deep">Deep</option>
+          <option value="shallow">Shallow</option>
+          <option value="admin">Admin</option>
+          <option value="distraction">Distraction</option>
+        </select>
+        <select id="filter-activity" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
+          <option value="">All activities</option>
+        </select>
+      </div>
     </div>
-    <div style="overflow-x:auto">
-      <table><thead><tr>
-        <th onclick="sortBy('ts')">Time</th>
-        <th onclick="sortBy('activity')">Activity</th>
-        <th onclick="sortBy('energy')">Type</th>
-        <th onclick="sortBy('deap')">DEA-P</th>
-        <th onclick="sortBy('rate')">$/hr</th>
-        <th onclick="sortBy('onPlan')">Plan</th>
-        <th></th>
-      </tr></thead>
-      <tbody id="week-table-body"></tbody></table>
-    </div>
+    <div id="week-table-body"></div>
   </div>
 </div>
 
@@ -804,35 +816,44 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 </nav>
 
 <!-- ══ QUICK-LOG OVERLAY (fires on ping) ══ -->
-<div class="quicklog-overlay" id="quicklog-overlay">
-  <div class="quicklog-tag" id="ql-tag">PING #1</div>
-  <div class="quicklog-title">What were you just doing?</div>
-  <div class="quicklog-sub" id="ql-sub">Last 30 min</div>
-  <div class="quicklog-grid">
-    <button class="ql-btn deep" onclick="quickLog('deep')">
-      <span class="ql-icon">🧠</span>
-      <span class="ql-name">Deep Work</span>
-      <span class="ql-desc">Creative, strategic</span>
-    </button>
-    <button class="ql-btn shallow" onclick="quickLog('shallow')">
-      <span class="ql-icon">📨</span>
-      <span class="ql-name">Shallow Work</span>
-      <span class="ql-desc">Email, meetings</span>
-    </button>
-    <button class="ql-btn admin" onclick="quickLog('admin')">
-      <span class="ql-icon">📋</span>
-      <span class="ql-name">Admin</span>
-      <span class="ql-desc">Necessary tasks</span>
-    </button>
-    <button class="ql-btn distraction" onclick="quickLog('distraction')">
-      <span class="ql-icon">📱</span>
-      <span class="ql-name">Distraction</span>
-      <span class="ql-desc">You already know</span>
-    </button>
+<div class="quicklog-overlay" id="quicklog-overlay" onclick="if(event.target.id==='quicklog-overlay')dismissQuickLog()">
+<div class="modal" style="max-height:90vh;overflow-y:auto">
+  <div class="modal-handle"></div>
+  <div class="modal-tag" id="ql-tag">PING #1</div>
+  <div class="modal-title">What were you just doing?</div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:12px" id="ql-sub">Last 30 min</div>
+  <div id="ql-committed-bar" style="display:none;background:var(--deep-dim2);border:1px solid rgba(200,240,74,0.15);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--muted)">
+    <span style="color:var(--deep);font-weight:600;letter-spacing:0.04em">YOU SAID:</span>
+    <span id="ql-committed-text" style="color:var(--text);margin-left:6px"></span>
   </div>
-  <button class="quicklog-add-detail" onclick="openDetailLog()">+ Add activity detail</button>
+  <button class="same-last-btn" id="ql-continue-btn" onclick="quickSaveLast()">
+    Still on: <span id="ql-last-label"></span>
+    <span class="sl-sub">Tap to log and continue</span>
+  </button>
+  <button class="same-last-other" id="ql-other-btn" onclick="showQuickForm()">Something different ↓</button>
+  <div id="ql-form-body">
+    <div id="ql-chips-wrap" style="display:none;margin-bottom:10px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Recent</div>
+      <div class="presets-scroll" id="ql-chips"></div>
+    </div>
+    <div class="field">
+      <label>Activity</label>
+      <input type="text" id="ql-activity" placeholder="What were you doing?">
+    </div>
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin:10px 0 6px">Energy type</div>
+    <div class="energy-grid">
+      <button class="energy-btn deep" onclick="setQlEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Creative, strategic</span></button>
+      <button class="energy-btn shallow" onclick="setQlEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
+      <button class="energy-btn admin" onclick="setQlEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary tasks</span></button>
+      <button class="energy-btn distraction" onclick="setQlEnergy('distraction')"><span class="e-name">Distraction</span><span class="e-desc">You already know</span></button>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn ghost" onclick="dismissQuickLog()">Skip</button>
+      <button class="btn primary" onclick="saveQuickEntry()">Save Entry</button>
+    </div>
+  </div>
   <button class="quicklog-snooze" id="ql-snooze-btn" onclick="snoozeLog()">Snooze 3 min (<span id="ql-snooze-count">2</span> left today)</button>
-</div>
+</div></div>
 
 <!-- ══ PRE-COMMIT MODAL ══ -->
 <div class="overlay" id="precommit-overlay" onclick="overlayClose(event,'precommit-overlay')">
@@ -854,16 +875,20 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <input type="text" id="pc-why" placeholder="Why is this important?">
     </div>
   </div>
-  <div id="pc-repeat-hint" style="display:none;background:var(--bg3);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;font-size:13px;color:var(--muted)">
-    Continuing: <strong id="pc-last-task" style="color:var(--text)"></strong>
-    <div style="margin-top:8px">
-      <button class="btn sm ghost" style="font-size:11px" onclick="switchToNewTask()">Different task →</button>
+  <div id="pc-repeat-hint" style="display:none">
+    <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:4px">Continuing</div>
+      <div id="pc-last-task" style="font-size:15px;font-weight:700;color:var(--text)"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn ghost" style="flex:1" onclick="closeModal('precommit-overlay')">Cancel</button>
+      <button class="btn sm" style="flex:1;border-color:var(--border3);color:var(--muted)" onclick="switchToNewTask()">Different task</button>
+      <button class="btn primary" style="flex:1" id="pc-continue-btn" onclick="continueLastTask()">Continue →</button>
     </div>
   </div>
-  <div style="display:flex;gap:8px;margin-top:18px">
+  <div id="pc-new-task-actions" style="display:none;gap:8px;margin-top:18px">
     <button class="btn ghost" style="flex:1" onclick="closeModal('precommit-overlay')">Cancel</button>
-    <button class="btn ghost" id="pc-continue-btn" style="display:none;flex:1" onclick="continueLastTask()">Continue →</button>
-    <button class="btn primary" style="flex:1" onclick="confirmPreCommit()">Start</button>
+    <button class="btn primary" style="flex:1" onclick="confirmPreCommit()">Start timer</button>
   </div>
 </div></div>
 
@@ -1002,6 +1027,10 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <label>Activity</label>
     <input type="text" id="retro-activity" placeholder="What were you doing?">
   </div>
+  <div id="retro-chips-wrap" style="margin-bottom:12px;display:none">
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Recent</div>
+    <div class="presets-scroll" id="retro-chips"></div>
+  </div>
   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Energy type</div>
   <div class="energy-grid">
     <button class="energy-btn deep" onclick="setRetroEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Creative, strategic</span></button>
@@ -1122,7 +1151,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 // ══════════════════════════════════════════════════════
 let currentTask = '';
 let entries = [];
-let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workDayStart:'09:00' };
+let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workDayStart:'09:00', activityColors:{} };
 let reviews = {};
 let intention = '';
 let running = false;
@@ -1358,7 +1387,7 @@ async function toggleTimer() {
     const hasLast = !!lastTaskForRepeat;
     document.getElementById('pc-full-form').style.display = hasLast ? 'none' : 'block';
     document.getElementById('pc-repeat-hint').style.display = hasLast ? 'block' : 'none';
-    document.getElementById('pc-continue-btn').style.display = hasLast ? 'inline-flex' : 'none';
+    document.getElementById('pc-new-task-actions').style.display = hasLast ? 'none' : 'flex';
     if (hasLast) document.getElementById('pc-last-task').textContent = lastTaskForRepeat.replace(/ \(Output:.*\)/, '');
     document.getElementById('precommit-overlay').classList.add('open');
     if (!hasLast) setTimeout(() => document.getElementById('pc-task').focus(), 250);
@@ -1379,8 +1408,8 @@ function continueLastTask() {
 
 function switchToNewTask() {
   document.getElementById('pc-repeat-hint').style.display = 'none';
-  document.getElementById('pc-continue-btn').style.display = 'none';
   document.getElementById('pc-full-form').style.display = 'block';
+  document.getElementById('pc-new-task-actions').style.display = 'flex';
   document.getElementById('pc-task').value = '';
   setTimeout(() => document.getElementById('pc-task').focus(), 100);
 }
@@ -1655,27 +1684,109 @@ function openQuickLog() {
   // Prevent opening if already open
   if (document.getElementById('quicklog-overlay').classList.contains('open')) return;
   clearTimeout(snoozeTimer);
-  quickLogBusy = false; // reset guard on fresh open
-  const el = document.getElementById('quicklog-overlay');
+  quickLogBusy = false;
+  qlEnergy = '';
   document.getElementById('ql-tag').textContent = `PING #${pingCount}`;
   document.getElementById('ql-sub').textContent = `Last ${settings.intervalMin} min · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+  document.getElementById('ql-activity').value = '';
+  document.querySelectorAll('#quicklog-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
+
+  // Committed task context
+  const committedTask = lastTaskForRepeat ? lastTaskForRepeat.replace(/ \(Output:.*\)/, '') : '';
+  const committedBar = document.getElementById('ql-committed-bar');
+  if (committedTask) { document.getElementById('ql-committed-text').textContent = committedTask; committedBar.style.display = 'block'; }
+  else { committedBar.style.display = 'none'; }
+
+  // Continue last as primary CTA
+  const last = entries.find(e => !e.missed && !e.break);
+  const continueBtn = document.getElementById('ql-continue-btn');
+  const otherBtn = document.getElementById('ql-other-btn');
+  const formBody = document.getElementById('ql-form-body');
+  if (last) {
+    document.getElementById('ql-last-label').textContent = last.activity.split(' (Output:')[0].substring(0, 32);
+    continueBtn.dataset.lastActivity = last.activity;
+    continueBtn.dataset.lastEnergy = last.energy;
+    continueBtn.style.display = 'block';
+    otherBtn.style.display = 'block';
+    formBody.style.display = 'none';
+  } else {
+    continueBtn.style.display = 'none';
+    otherBtn.style.display = 'none';
+    formBody.style.display = 'block';
+  }
+
+  // Recent chips
+  populateQlChips();
+
   const snoozeLeft = 2 - snoozesUsedToday;
   const snoozeBtn = document.getElementById('ql-snooze-btn');
   document.getElementById('ql-snooze-count').textContent = snoozeLeft;
   snoozeBtn.style.display = snoozeLeft > 0 ? 'block' : 'none';
-  el.classList.add('open');
+  document.getElementById('quicklog-overlay').classList.add('open');
   hidePingBanner();
 }
 
-function quickLog(energy) {
-  // Prevent double-tap / multiple clicks logging duplicate entries
+let qlEnergy = '';
+function setQlEnergy(type) {
+  qlEnergy = type;
+  document.querySelectorAll('#quicklog-overlay .energy-btn').forEach(b => b.classList.toggle('selected', b.classList.contains(type)));
+}
+
+function populateQlChips() {
+  const seen = new Set();
+  const recent = [];
+  for (const e of entries) {
+    if (e.missed || e.break || e.away || !e.activity) continue;
+    const key = e.activity.split(' (Output:')[0];
+    if (!seen.has(key)) { seen.add(key); recent.push({ activity: key, energy: e.energy }); }
+    if (recent.length >= 8) break;
+  }
+  const wrap = document.getElementById('ql-chips-wrap');
+  const chips = document.getElementById('ql-chips');
+  if (!recent.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  chips.innerHTML = '';
+  recent.forEach(r => {
+    const chip = document.createElement('div');
+    chip.className = 'preset-chip';
+    chip.textContent = r.activity;
+    chip.onclick = () => {
+      document.getElementById('ql-activity').value = r.activity;
+      setQlEnergy(r.energy);
+      chips.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+    };
+    chips.appendChild(chip);
+  });
+}
+
+function showQuickForm() {
+  document.getElementById('ql-continue-btn').style.display = 'none';
+  document.getElementById('ql-other-btn').style.display = 'none';
+  document.getElementById('ql-form-body').style.display = 'block';
+  setTimeout(() => document.getElementById('ql-activity').focus(), 100);
+}
+
+function quickSaveLast() {
   if (quickLogBusy) return;
   quickLogBusy = true;
+  const btn = document.getElementById('ql-continue-btn');
+  _doQuickSave(btn.dataset.lastActivity, btn.dataset.lastEnergy);
+}
+
+function saveQuickEntry() {
+  if (quickLogBusy) return;
+  const activity = document.getElementById('ql-activity').value.trim();
+  if (!activity) { showToast('Add an activity name'); return; }
+  if (!qlEnergy) { showToast('Pick an energy type'); return; }
+  quickLogBusy = true;
+  _doQuickSave(activity, qlEnergy);
+}
+
+function _doQuickSave(activity, energy) {
   clearTimeout(snoozeTimer);
   stopAlertLoop();
-  // Use last activity as default label
-  const last = entries.find(e => !e.missed);
-  const activity = last ? last.activity.split(' (Output:')[0] : energy;
+  if (!activity) activity = energy;
   const entry = {
     id: Date.now(), ts: Date.now(),
     tsStart: blockStartTime || (Date.now() - totalSecs * 1000),
@@ -1691,13 +1802,24 @@ function quickLog(energy) {
   persist(); renderToday(); syncEntries();
   showLogFeedback(energy);
   checkReviewPrompt();
-  // Escalation — only after 5 missed/distraction pattern, not 2
   checkEscalation();
 }
 
-function openDetailLog() {
+function dismissQuickLog() {
+  // Skip = log block as missed
+  entries.unshift({
+    id: Date.now(), ts: Date.now(),
+    tsStart: blockStartTime || (Date.now() - totalSecs * 1000),
+    blockIntervalMin: settings.intervalMin,
+    date: toDateKey(new Date()),
+    activity: 'Untracked block', energy: 'shallow', onPlan: null, missed: true
+  });
+  persist(); renderToday(); syncEntries();
+  stopAlertLoop();
+  clearTimeout(snoozeTimer);
   document.getElementById('quicklog-overlay').classList.remove('open');
-  openLog(pingCount);
+  document.title = 'Time Audit';
+  showToast('Block marked as untracked');
 }
 
 function snoozeLog() {
@@ -1969,11 +2091,41 @@ function showLogForm() {
 
 // ── Retroactive logging ──
 let retroEnergy = '';
+function populateRetroChips() {
+  // Build unique recent activities (last 10 distinct, preserving energy type)
+  const seen = new Set();
+  const recent = [];
+  for (const e of entries) {
+    if (e.missed || e.break || e.away || !e.activity) continue;
+    const key = e.activity.split(' (Output:')[0];
+    if (!seen.has(key)) { seen.add(key); recent.push({ activity: key, energy: e.energy }); }
+    if (recent.length >= 8) break;
+  }
+  const wrap = document.getElementById('retro-chips-wrap');
+  const chips = document.getElementById('retro-chips');
+  if (!recent.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  chips.innerHTML = '';
+  recent.forEach(r => {
+    const chip = document.createElement('div');
+    chip.className = 'preset-chip';
+    chip.textContent = r.activity;
+    chip.onclick = () => {
+      document.getElementById('retro-activity').value = r.activity;
+      setRetroEnergy(r.energy);
+      chips.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+    };
+    chips.appendChild(chip);
+  });
+}
+
 function openRetroLog() {
   if (document.getElementById('retro-overlay').classList.contains('open')) return;
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('retro-activity').value = '';
+  populateRetroChips();
   // Default: last block's end time as start, now as end
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
@@ -2020,6 +2172,7 @@ function saveRetroEntry() {
     onPlan: retroEnergy !== 'distraction',
     retro: true
   };
+  getActivityColor(activity); // assign color on first save
   entries.push(entry);
   entries.sort((a,b) => b.ts - a.ts);
   persist(); renderToday(); syncEntries();
@@ -2083,6 +2236,7 @@ function saveEntry() {
     note:document.getElementById('f-note').value.trim(),
   };
 
+  getActivityColor(activity); // assign color on first save
   if (entry.energy === 'distraction') switchState('distraction');
   entries.unshift(entry);
   stopAlertLoop();
@@ -2109,7 +2263,7 @@ function saveEntry() {
       document.getElementById('pc-why').value = '';
       document.getElementById('pc-full-form').style.display = hasLast ? 'none' : 'block';
       document.getElementById('pc-repeat-hint').style.display = hasLast ? 'block' : 'none';
-      document.getElementById('pc-continue-btn').style.display = hasLast ? 'inline-flex' : 'none';
+      document.getElementById('pc-new-task-actions').style.display = hasLast ? 'none' : 'flex';
       if (hasLast) document.getElementById('pc-last-task').textContent = lastTaskForRepeat.replace(/ \(Output:.*\)/, '');
       document.getElementById('precommit-overlay').classList.add('open');
       if (!hasLast) setTimeout(() => document.getElementById('pc-task').focus(), 250);
@@ -2193,6 +2347,30 @@ function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(s
 function computeStreak(){let s=0;const d=new Date();for(let i=0;i<30;i++){const k=toDateKey(new Date(d-i*86400000));if(entries.filter(e=>e.date===k).length>=4)s++;else if(i>0)break;}return s;}
 
 const eLabel={deep:'Deep',shallow:'Shallow',admin:'Admin',distraction:'Distraction',break:'Break'};
+const ACTIVITY_PALETTE = [
+  '#7dd3fc','#86efac','#fcd34d','#f9a8d4','#a5b4fc','#6ee7b7','#fb923c','#e879f9',
+  '#38bdf8','#4ade80','#facc15','#f472b6','#818cf8','#34d399','#fb7185','#a78bfa',
+  '#67e8f9','#bbf7d0','#fde68a','#fbcfe8','#c7d2fe','#a7f3d0','#fed7aa','#f5d0fe',
+  '#22d3ee','#86efac','#fbbf24','#ec4899','#6366f1','#10b981','#f97316','#d946ef'
+];
+function getActivityColor(activity) {
+  if (!activity || ['Break','Sleep','Commute','Offline / Away'].includes(activity)) return null;
+  if (!settings.activityColors) settings.activityColors = {};
+  if (!settings.activityColors[activity]) {
+    const idx = Object.keys(settings.activityColors).length;
+    if (idx < ACTIVITY_PALETTE.length) {
+      settings.activityColors[activity] = ACTIVITY_PALETTE[idx];
+    } else {
+      // Beyond 32: generate by rotating hue based on index
+      const hue = (idx * 37) % 360; // 37° golden-angle-ish step avoids clustering
+      const sat = 65 + (idx % 3) * 10; // vary saturation slightly
+      const lit = 60 + (idx % 2) * 8;  // vary lightness slightly
+      settings.activityColors[activity] = `hsl(${hue},${sat}%,${lit}%)`;
+    }
+    persist();
+  }
+  return settings.activityColors[activity];
+}
 function computeIdentityScore(arr) {
   return arr.filter(e => e.onPlan === true && e.energy === 'deep').length;
 }
@@ -2361,6 +2539,7 @@ function openRetroLogPrefilled(tsStart, tsEnd) {
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('retro-activity').value = '';
+  populateRetroChips();
   const pad = n => String(n).padStart(2, '0');
   const s = new Date(tsStart);
   const e = new Date(Math.min(tsEnd, Date.now()));
@@ -2368,6 +2547,126 @@ function openRetroLogPrefilled(tsStart, tsEnd) {
   document.getElementById('retro-end').value   = `${pad(e.getHours())}:${pad(e.getMinutes())}`;
   document.getElementById('retro-overlay').classList.add('open');
   setTimeout(() => document.getElementById('retro-activity').focus(), 250);
+}
+
+function renderEntryRow(item) {
+  const energyClass = item.missed ? 'missed' : item.energy;
+  const dur = item.tsStart
+    ? Math.round((item.ts - item.tsStart) / 60000)
+    : (item.blockIntervalMin || settings.intervalMin);
+  const timeLabel = item.tsStart
+    ? `${localTime(item.tsStart)} – ${localTime(item.ts)}`
+    : localTime(item.ts);
+  const label = item.missed ? 'Untracked' : (eLabel[item.energy] || item.energy);
+  const actColor = item.missed ? null : getActivityColor(item.activity);
+  const barStyle = actColor ? `style="background:${actColor}"` : '';
+  const badgeStyle = actColor ? `style="background:${actColor}22;color:${actColor};border-radius:4px"` : '';
+  return `<div class="tl-row">
+    <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
+    <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
+    <div class="tl-content">
+      <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span></div>
+      <div class="tl-meta">${timeLabel} · ${dur}m</div>
+    </div>
+  </div>`;
+}
+
+function renderGapRow(item) {
+  const gapLabel = item.isCurrent ? 'Since last log' : 'Unlogged gap';
+  const endLabel = item.isCurrent ? 'now' : localTime(item.ts);
+  return `<div class="tl-row tl-gap-row">
+    <div class="tl-time">${localTime(item.tsStart)}</div>
+    <div class="tl-bar-col tl-bar-gap"></div>
+    <div class="tl-content">
+      <div class="tl-activity">${gapLabel}<span class="tl-badge missed">${item.gapMin}m</span></div>
+      <div class="tl-meta">${localTime(item.tsStart)} – ${endLabel}</div>
+    </div>
+    <button class="log-gap-btn" onclick="openRetroLogPrefilled(${item.tsStart},${Math.round(item.ts)})">Log it</button>
+  </div>`;
+}
+
+let tlExpandedBuckets = new Set();
+
+function renderTimelineCombined(combined) {
+  const BUCKET_MS = 30 * 60 * 1000;
+  const html = [];
+  let i = 0;
+
+  while (i < combined.length) {
+    const item = combined[i];
+
+    // Gaps always render standalone
+    if (item.isGap) { html.push(renderGapRow(item)); i++; continue; }
+
+    // Collect consecutive non-gap entries within the same 30-min bucket
+    const bucketStart = Math.floor((item.tsStart || item.ts) / BUCKET_MS) * BUCKET_MS;
+    const bucketEnd = bucketStart + BUCKET_MS;
+    const group = [];
+    let j = i;
+    while (j < combined.length && !combined[j].isGap) {
+      const ts = combined[j].tsStart || combined[j].ts;
+      if (ts >= bucketEnd) break;
+      group.push(combined[j]);
+      j++;
+    }
+
+    if (group.length === 1) {
+      // Single entry in bucket — render flat
+      html.push(renderEntryRow(group[0]));
+    } else {
+      // Multiple entries — render as collapsible bucket
+      const bucketId = `bucket-${bucketStart}`;
+      const isOpen = tlExpandedBuckets.has(bucketId);
+
+      // Dominant activity = most total time
+      const actDur = {};
+      let totalDur = 0;
+      for (const e of group) {
+        const d = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || settings.intervalMin);
+        actDur[e.activity] = (actDur[e.activity] || 0) + d;
+        totalDur += d;
+      }
+      const dominant = Object.entries(actDur).sort((a,b) => b[1]-a[1])[0][0];
+      const dominantEnergy = group.find(e => e.activity === dominant)?.energy || 'shallow';
+      const actColor = getActivityColor(dominant);
+      const barStyle = actColor ? `style="background:${actColor}"` : '';
+      const energyClass = dominantEnergy;
+      const timeRange = `${localTime(group[0].tsStart || group[0].ts)} – ${localTime(group[group.length-1].ts)}`;
+      // Summarise unique activities
+      const uniqueActs = [...new Set(group.map(e => e.activity))];
+      const summary = uniqueActs.length === 1 ? dominant : `${dominant} +${uniqueActs.length - 1} more`;
+
+      html.push(`<div class="tl-bucket" id="${bucketId}">
+        <div class="tl-bucket-header" onclick="toggleTlBucket('${bucketId}')">
+          <div class="tl-time" style="padding-top:12px">${localTime(group[0].tsStart || group[0].ts)}</div>
+          <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle} style="margin-top:4px;margin-bottom:4px"></div>
+          <div class="tl-content">
+            <div class="tl-activity" style="font-size:12px;font-weight:600">${summary}</div>
+            <div class="tl-meta">${timeRange} · ${totalDur}m · ${group.length} entries</div>
+          </div>
+          <div class="tl-expand-btn">${isOpen ? '▾' : '▸'} ${group.length}</div>
+        </div>
+        <div class="tl-bucket-children ${isOpen ? 'open' : ''}">
+          ${group.map(renderEntryRow).join('')}
+        </div>
+      </div>`);
+    }
+
+    i = j;
+  }
+  return html.join('');
+}
+
+function toggleTlBucket(id) {
+  if (tlExpandedBuckets.has(id)) { tlExpandedBuckets.delete(id); }
+  else { tlExpandedBuckets.add(id); }
+  const bucket = document.getElementById(id);
+  if (!bucket) return;
+  const children = bucket.querySelector('.tl-bucket-children');
+  const btn = bucket.querySelector('.tl-expand-btn');
+  const isOpen = tlExpandedBuckets.has(id);
+  children.classList.toggle('open', isOpen);
+  if (btn) btn.textContent = (isOpen ? '▾ ' : '▸ ') + (btn.textContent.replace(/[▾▸]\s*/,''));
 }
 
 function renderToday() {
@@ -2406,39 +2705,7 @@ function renderToday() {
     const gaps = computeGaps(todayE);
     const combined = [...sorted, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
 
-    tlEl.innerHTML = combined.map(item => {
-      // ── Gap row ──
-      if (item.isGap) {
-        const gapLabel = item.isCurrent ? 'Since last log' : 'Unlogged gap';
-        const endLabel = item.isCurrent ? 'now' : localTime(item.ts);
-        return `<div class="tl-row tl-gap-row">
-          <div class="tl-time">${localTime(item.tsStart)}</div>
-          <div class="tl-bar-col tl-bar-gap"></div>
-          <div class="tl-content">
-            <div class="tl-activity">${gapLabel}<span class="tl-badge missed">${item.gapMin}m</span></div>
-            <div class="tl-meta">${localTime(item.tsStart)} – ${endLabel}</div>
-          </div>
-          <button class="log-gap-btn" onclick="openRetroLogPrefilled(${item.tsStart},${Math.round(item.ts)})">Log it</button>
-        </div>`;
-      }
-      // ── Regular entry row ──
-      const energyClass = item.missed ? 'missed' : item.energy;
-      const dur = item.tsStart
-        ? Math.round((item.ts - item.tsStart) / 60000)
-        : (item.blockIntervalMin || settings.intervalMin);
-      const timeLabel = item.tsStart
-        ? `${localTime(item.tsStart)} – ${localTime(item.ts)}`
-        : localTime(item.ts);
-      const label = item.missed ? 'Untracked' : (eLabel[item.energy] || item.energy);
-      return `<div class="tl-row">
-        <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
-        <div class="tl-bar-col ${energyClass}"></div>
-        <div class="tl-content">
-          <div class="tl-activity">${item.activity}<span class="tl-badge ${energyClass}">${label}</span></div>
-          <div class="tl-meta">${timeLabel} · ${dur}m</div>
-        </div>
-      </div>`;
-    }).join('');
+    tlEl.innerHTML = renderTimelineCombined(combined);
   }
 
   // Untracked banner + past block nav button
@@ -2500,108 +2767,153 @@ function renderToday() {
 }
 
 function renderWeek() {
-  const weekE=getWeekEntries(), goal=settings.deepGoal;
-  const deepHrs=computeDeepHrs(weekE), pct=Math.min(100,Math.round(deepHrs/goal*100));
-  document.getElementById('w-deep-hrs').textContent=deepHrs;
-  document.getElementById('w-progress-fill').style.width=pct+'%';
-  document.getElementById('w-progress-label').textContent=`${deepHrs} / ${goal} hr target (${pct}%)`;
-  const days=[];
-  for(let i=6;i>=0;i--){const d=new Date(Date.now()-i*86400000),key=toDateKey(d),dayE=entries.filter(e=>e.date===key);days.push({key,label:DAY[d.getDay()],hrs:computeDeepHrs(dayE),count:dayE.length,isToday:i===0});}
-  const maxHrs=Math.max(...days.map(d=>d.hrs),1);
-  document.getElementById('day-bars').innerHTML=days.map(d=>`<div class="day-bar-wrap"><div style="font-family:var(--mono);font-size:9px;color:var(--muted)">${d.hrs>0?d.hrs+'h':''}</div><div class="day-bar-inner ${d.isToday?'today':''}" style="height:${Math.max(3,Math.round(d.hrs/maxHrs*58))}px;width:100%"></div></div>`).join('');
-  document.getElementById('day-bar-labels').innerHTML=days.map(d=>`<div style="flex:1;text-align:center;font-size:9px;color:${d.isToday?'var(--deep)':'var(--muted)'};font-family:var(--mono)">${d.label}</div>`).join('');
-  document.getElementById('streak-dots-row').innerHTML=days.map((d,i)=>`<div class="streak-dot ${d.count>=4?'on':'off'} ${d.isToday?'today-dot':''}" title="${d.label}: ${d.count} entries"></div>`).join('')+`<span style="font-size:11px;color:var(--muted);margin-left:4px">${computeStreak()} day streak</span>`;
-  const bestDay=days.reduce((a,b)=>b.hrs>a.hrs?b:a,days[0]);
-  document.getElementById('i-best-day').textContent=bestDay.hrs>0?`${bestDay.hrs}h (${bestDay.label})`:'—';
-  const scored=days.filter(d=>d.count>0);
-  document.getElementById('i-avg-score').textContent=scored.length?Math.round(scored.reduce((s,d)=>s+computeDeepScore(entries.filter(e=>e.date===d.key)),0)/scored.length):'—';
-  document.getElementById('i-waste-week').textContent='$'+Math.round(weekE.filter(e=>e.energy==='distraction').length*(settings.intervalMin/60)*settings.targetRate);
-  const onPlanE=weekE.filter(e=>e.onPlan!==null);
-  document.getElementById('i-onplan').textContent=onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
-  renderWeekTable();
-  const activityMap = getTimeByActivity(weekE);
+  const weekE = getWeekEntries().filter(e => !e.missed && !e.away);
+  const goal = settings.deepGoal;
+  const deepHrs = computeDeepHrs(weekE);
+  const totalMins = weekE.reduce((s,e) => s + (e.tsStart ? Math.round((e.ts-e.tsStart)/60000) : (e.blockIntervalMin||settings.intervalMin)), 0);
+  const pct = Math.min(100, Math.round(deepHrs / goal * 100));
 
-const sorted = Object.entries(activityMap)
-  .sort((a, b) => b[1] - a[1])
-  .slice(0, 5); // top 5
+  document.getElementById('w-deep-hrs').textContent = deepHrs;
+  document.getElementById('w-total-hrs').textContent = (Math.round(totalMins/6)/10).toFixed(1);
+  document.getElementById('w-progress-fill').style.width = pct + '%';
+  document.getElementById('w-progress-label').textContent = `${deepHrs} / ${goal}h (${pct}%)`;
 
+  const onPlanE = weekE.filter(e => e.onPlan !== null);
+  document.getElementById('w-onplan').textContent = onPlanE.length ? Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%' : '—';
 
-const container = document.getElementById('top-activities');
+  // Days
+  const days = [];
+  for (let i=6; i>=0; i--) {
+    const d = new Date(Date.now()-i*86400000), key = toDateKey(d);
+    const dayE = entries.filter(e=>e.date===key && !e.missed && !e.away);
+    const deepH = computeDeepHrs(dayE);
+    const totalH = Math.round(dayE.reduce((s,e)=>s+(e.tsStart?Math.round((e.ts-e.tsStart)/60000):(e.blockIntervalMin||settings.intervalMin)),0)/60*10)/10;
+    days.push({key, label:DAY[d.getDay()], deepH, totalH, count:dayE.length, isToday:i===0});
+  }
+  const maxH = Math.max(...days.map(d=>d.totalH), 1);
 
-const max = sorted[0]?.[1] || 1;
+  document.getElementById('day-bars').innerHTML = days.map(d => `
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--muted)">${d.totalH>0?d.totalH+'h':''}</div>
+      <div style="width:100%;border-radius:4px 4px 0 0;position:relative;overflow:hidden;min-height:3px;height:${Math.max(4,Math.round(d.totalH/maxH*68))}px;background:var(--bg4)">
+        <div style="position:absolute;bottom:0;left:0;right:0;height:${d.totalH>0?Math.round(d.deepH/d.totalH*100):0}%;background:var(--deep);border-radius:4px 4px 0 0"></div>
+      </div>
+    </div>`).join('');
 
-container.innerHTML = `
-  <div class="insight-card">
-    <div class="i-label">Top Activities</div>
+  document.getElementById('day-bar-labels').innerHTML = days.map(d =>
+    `<div style="flex:1;text-align:center;font-size:9px;color:${d.isToday?'var(--deep)':'var(--muted)'};font-family:var(--mono);font-weight:${d.isToday?'700':'400'}">${d.label}</div>`
+  ).join('');
 
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+  document.getElementById('streak-dots-row').innerHTML =
+    days.map(d=>`<div class="streak-dot ${d.count>=4?'on':'off'} ${d.isToday?'today-dot':''}" title="${d.label}: ${d.count} entries"></div>`).join('') +
+    `<span style="font-size:11px;color:var(--muted);margin-left:4px">${computeStreak()} day streak</span>`;
 
-      ${sorted.map(([act, mins]) => {
-        const width = Math.round((mins / max) * 100);
+  const bestDay = days.reduce((a,b)=>b.deepH>a.deepH?b:a, days[0]);
+  document.getElementById('i-best-day').textContent = bestDay.deepH>0 ? `${bestDay.deepH}h — ${bestDay.label}` : '—';
+  const activeDays = days.filter(d=>d.count>0);
+  document.getElementById('i-avg-score').textContent = activeDays.length ? (Math.round(activeDays.reduce((s,d)=>s+d.deepH,0)/activeDays.length*10)/10)+'h' : '—';
+  document.getElementById('i-waste-week').textContent = '$'+Math.round(weekE.filter(e=>e.energy==='distraction').length*(settings.intervalMin/60)*settings.targetRate);
 
-        const color =
-          act.includes('away') ? 'var(--distraction)' :
-          act.includes('admin') ? 'var(--admin)' :
-          act.includes('shallow') ? 'var(--shallow)' :
-          'var(--deep)';
+  // Energy split bars
+  const energyMins = {deep:0, shallow:0, admin:0, distraction:0};
+  weekE.forEach(e => { const m = e.tsStart?Math.round((e.ts-e.tsStart)/60000):(e.blockIntervalMin||settings.intervalMin); if(energyMins[e.energy]!==undefined) energyMins[e.energy]+=m; });
+  const totalTracked = Object.values(energyMins).reduce((a,b)=>a+b,0) || 1;
+  const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)'};
+  document.getElementById('w-energy-split').innerHTML = Object.entries(energyMins).map(([type, mins]) => {
+    const pct = Math.round(mins/totalTracked*100);
+    const hrs = (Math.round(mins/6)/10).toFixed(1);
+    return `<div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+        <span style="color:${energyColors[type]};font-weight:600;text-transform:capitalize">${type}</span>
+        <span style="color:var(--muted);font-family:var(--mono)">${hrs}h · ${pct}%</span>
+      </div>
+      <div style="height:5px;background:var(--bg4);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${energyColors[type]};border-radius:3px"></div>
+      </div>
+    </div>`;
+  }).join('');
 
-        return `
-          <div style="display:flex;flex-direction:column;gap:3px">
-
-            <div style="display:flex;justify-content:space-between;font-size:12px">
-              <span>${act}</span>
-              <span style="color:var(--muted)">${Math.round(mins)}m</span>
-            </div>
-
-            <div style="height:6px;background:var(--bg4);border-radius:4px;overflow:hidden">
-              <div style="
-                width:${width}%;
-                height:100%;
-                background:${color};
-                border-radius:4px;
-              "></div>
-            </div>
-
-          </div>
-        `;
-      }).join('')}
-
-    </div>
-  </div>
-`;
-}
-
-function getTimeByActivity(entriesArr) {
-  const map = {};
-
-  entriesArr.forEach(e => {
-    const mins = e.segments
-      ? e.segments.reduce((sum, s) => sum + s.duration, 0) / 60
-      : settings.intervalMin;
-
-    const key = e.activity.split(' (Output')[0].toLowerCase().trim();
-
-if (!map[key]) map[key] = 0;
-map[key] += mins;
+  // Top activities
+  const actMap = {};
+  weekE.forEach(e => {
+    if (e.missed||e.break) return;
+    const key = e.activity.split(' (Output')[0];
+    const m = e.tsStart?Math.round((e.ts-e.tsStart)/60000):(e.blockIntervalMin||settings.intervalMin);
+    if (!actMap[key]) actMap[key]={mins:0,energy:e.energy};
+    actMap[key].mins += m;
   });
+  const topActs = Object.entries(actMap).sort((a,b)=>b[1].mins-a[1].mins).slice(0,8);
+  const maxActMins = topActs[0]?.[1].mins || 1;
+  document.getElementById('top-activities').innerHTML = `
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:10px">Top activities</div>
+    ${topActs.length ? topActs.map(([act, data]) => {
+      const w = Math.round(data.mins/maxActMins*100);
+      const color = getActivityColor(act) || energyColors[data.energy] || 'var(--deep)';
+      const hrs = data.mins >= 60 ? (Math.round(data.mins/6)/10).toFixed(1)+'h' : data.mins+'m';
+      return `<div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+          <span style="font-weight:500">${act}</span>
+          <span style="color:var(--muted);font-family:var(--mono)">${hrs}</span>
+        </div>
+        <div style="height:6px;background:var(--bg4);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${w}%;background:${color};border-radius:4px"></div>
+        </div>
+      </div>`;
+    }).join('') : '<div style="color:var(--muted);font-size:12px">No data yet</div>'}`;
 
-  return map;
+  // Populate activity filter dropdown
+  const actSel = document.getElementById('filter-activity');
+  const currentAct = actSel.value;
+  actSel.innerHTML = '<option value="">All activities</option>' +
+    topActs.map(([act]) => `<option value="${act}" ${act===currentAct?'selected':''}>${act}</option>`).join('');
+
+  renderWeekTable();
 }
+
 function renderWeekTable() {
-  const filter=document.getElementById('filter-energy').value;
-  const filtered=(filter?getWeekEntries().filter(e=>e.energy===filter):getWeekEntries());
-  const sorted=[...filtered].sort((a,b)=>{let av=a[sortKey],bv=b[sortKey];if(typeof av==='string'){av=av.toLowerCase();bv=bv.toLowerCase();}if(av<bv)return sortDir;if(av>bv)return -sortDir;return 0;});
-  const tbody=document.getElementById('week-table-body');
-  if (!sorted.length){tbody.innerHTML='<tr><td colspan="7" class="empty">No entries this week.</td></tr>';return;}
-  tbody.innerHTML=sorted.map(e=>`<tr>
-    <td style="color:var(--muted);white-space:nowrap">${e.date.slice(5)} ${e.tsStart ? localTime(e.tsStart)+' – '+localTime(e.ts) : localTime(e.ts)}</td>
-    <td class="act">${e.activity}</td>
-    <td><span class="badge ${e.energy}">${eLabel[e.energy]||e.energy}</span></td>
-    <td>${e.deap?`<span class="badge deap">${e.deap}</span>`:'<span style="color:var(--muted2)">—</span>'}</td>
-    <td>${e.rate?'$'+e.rate:'<span style="color:var(--muted2)">—</span>'}</td>
-    <td>${e.onPlan===true?'<span class="badge onplan">✓</span>':e.onPlan===false?'<span class="badge offplan">✗</span>':'<span style="color:var(--muted2)">—</span>'}</td>
-    <td><button class="btn sm ghost" style="padding:2px 6px" onclick="deleteEntry(${e.id})">✕</button></td>
-  </tr>`).join('');
+  const energyFilter = document.getElementById('filter-energy').value;
+  const actFilter = document.getElementById('filter-activity').value;
+  let filtered = getWeekEntries().filter(e => !e.missed && !e.away);
+  if (energyFilter) filtered = filtered.filter(e => e.energy === energyFilter);
+  if (actFilter) filtered = filtered.filter(e => e.activity.startsWith(actFilter));
+
+  const tbody = document.getElementById('week-table-body');
+  if (!filtered.length) { tbody.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries match the filter.</div>'; return; }
+
+  // Group by date
+  const byDay = {};
+  filtered.forEach(e => { if(!byDay[e.date]) byDay[e.date]=[]; byDay[e.date].push(e); });
+  const dayKeys = Object.keys(byDay).sort().reverse();
+
+  tbody.innerHTML = dayKeys.map(dateKey => {
+    const dayEntries = byDay[dateKey].sort((a,b) => (b.tsStart||b.ts)-(a.tsStart||a.ts));
+    const dayDate = new Date(dateKey+'T12:00:00');
+    const dayLabel = dayDate.toLocaleDateString([],{weekday:'long',month:'short',day:'numeric'});
+    const dayDeep = computeDeepHrs(dayEntries);
+    const dayTotal = Math.round(dayEntries.reduce((s,e)=>s+(e.tsStart?Math.round((e.ts-e.tsStart)/60000):(e.blockIntervalMin||settings.intervalMin)),0)/60*10)/10;
+
+    return `<div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:8px">
+        <div style="font-size:12px;font-weight:700;color:var(--text)">${dayLabel}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--muted)">${dayDeep}h deep · ${dayTotal}h total</div>
+      </div>
+      ${dayEntries.map(e => {
+        const dur = e.tsStart ? Math.round((e.ts-e.tsStart)/60000) : (e.blockIntervalMin||settings.intervalMin);
+        const time = e.tsStart ? `${localTime(e.tsStart)} – ${localTime(e.ts)}` : localTime(e.ts);
+        const actColor = getActivityColor(e.activity);
+        const barColor = actColor || `var(--${e.energy})`;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
+          <div style="width:3px;height:32px;border-radius:2px;background:${barColor};flex-shrink:0"></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.activity}</div>
+            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${dur}m</div>
+          </div>
+          <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${barColor}22;color:${barColor};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
+          <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
 }
 
 function sortBy(key){sortKey===key?sortDir*=-1:(sortKey=key,sortDir=-1);renderWeekTable();}
