@@ -33,7 +33,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 
-.app{display:flex;flex-direction:column;min-height:100vh;max-width:680px;margin:0 auto}
+.app{display:flex;flex-direction:column;max-width:680px;margin:0 auto}
 .view{display:none;flex:1;padding:16px 16px calc(80px + var(--safe-bottom))}
 .view.active{display:block}
 
@@ -628,7 +628,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   </div>
 
   <!-- Day tabs -->
-  <div style="display:flex;gap:4px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px" id="day-tabs"></div>
+  <div style="display:flex;align-items:center;gap:4px;margin-bottom:14px;flex-wrap:wrap" id="day-tabs"></div>
 
   <!-- Dynamic content area — changes based on selected tab -->
   <div id="week-content"></div>
@@ -769,7 +769,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   <div class="modal-handle"></div>
   <div class="modal-tag" id="ql-tag">PING #1</div>
   <div class="modal-title">What were you just doing?</div>
-  <div style="font-size:12px;color:var(--muted);margin-bottom:12px" id="ql-sub">Last 30 min</div>
+  <div style="font-size:15px;color:var(--muted);margin-bottom:12px;font-weight:500" id="ql-sub">Last 30 min</div>
   <div id="ql-committed-bar" style="display:none;background:var(--deep-dim2);border:1px solid rgba(200,240,74,0.15);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--muted)">
     <span style="color:var(--deep);font-weight:600;letter-spacing:0.04em">YOU SAID:</span>
     <span id="ql-committed-text" style="color:var(--text);margin-left:6px"></span>
@@ -959,8 +959,8 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <div class="overlay" id="retro-overlay" onclick="if(event.target.id==='retro-overlay')closeModal('retro-overlay')">
 <div class="modal">
   <div class="modal-handle"></div>
-  <div class="modal-tag">LOG PAST BLOCK</div>
-  <div class="modal-title">What were you doing?</div>
+  <div class="modal-tag" id="retro-modal-tag">LOG PAST BLOCK</div>
+  <div class="modal-title" id="retro-modal-title">What were you doing?</div>
   <div class="field-row" style="margin-bottom:12px">
     <div class="field">
       <label>Start time</label>
@@ -987,7 +987,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <button class="energy-btn distraction" onclick="setRetroEnergy('distraction')"><span class="e-name">Distraction</span><span class="e-desc">You already know</span></button>
   </div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
-    <button class="btn ghost" onclick="closeModal('retro-overlay')">Cancel</button>
+    <button class="btn ghost" onclick="cancelRetroEdit()">Cancel</button>
     <button class="btn primary" onclick="saveRetroEntry()">Save</button>
   </div>
 </div></div>
@@ -1402,6 +1402,7 @@ async function _startTimer(task) {
     remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
     remaining <= 0 ? doPing() : updateRing();
   }, 1000);
+  scheduleNativePing(totalSecs); // fires even when app is backgrounded
   persist();
   syncTimerState();
 }
@@ -1440,6 +1441,7 @@ function playAlert(times = 2, gap = 600) {
 }
 function resetTimer() {
   running = false; clearInterval(ticker); ticker = null;
+  cancelNativePing();
   if (breakActive) { clearInterval(breakTicker); breakTicker = null; breakActive = false; document.getElementById('break-active-row').classList.remove('show'); }
   document.getElementById('interval-input').disabled = false;
   document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
@@ -1582,6 +1584,7 @@ function doPing() {
   timerStartedAt = Date.now();
   remaining = totalSecs;
   updateRing();
+  scheduleNativePing(totalSecs); // reschedule next ping
 
   // Notification — once, not looping
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -1634,8 +1637,9 @@ function openQuickLog() {
   clearTimeout(snoozeTimer);
   quickLogBusy = false;
   qlEnergy = '';
+  const elapsedMin = blockStartTime ? Math.max(1, Math.round((Date.now() - blockStartTime) / 60000)) : settings.intervalMin;
   document.getElementById('ql-tag').textContent = `PING #${pingCount}`;
-  document.getElementById('ql-sub').textContent = `Last ${settings.intervalMin} min · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+  document.getElementById('ql-sub').textContent = `Last ${elapsedMin} min · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
   document.getElementById('ql-activity').value = '';
   document.querySelectorAll('#quicklog-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
 
@@ -2039,6 +2043,8 @@ function showLogForm() {
 
 // ── Retroactive logging ──
 let retroEnergy = '';
+let editingEntryId = null;   // id of entry being edited (null = new entry)
+let editingEntryBase = null; // { startDate, crossesMidnight } for timestamp reconstruction
 function populateRetroChips() {
   // Build unique recent activities (last 10 distinct, preserving energy type)
   const seen = new Set();
@@ -2070,6 +2076,10 @@ function populateRetroChips() {
 
 function openRetroLog() {
   if (document.getElementById('retro-overlay').classList.contains('open')) return;
+  editingEntryId = null;
+  editingEntryBase = null;
+  document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
+  document.getElementById('retro-modal-title').textContent = 'What were you doing?';
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('retro-activity').value = '';
@@ -2103,29 +2113,52 @@ function saveRetroEntry() {
   const endVal = document.getElementById('retro-end').value;
   if (!startVal || !endVal) { showToast('Set start and end time'); return; }
 
-  // Build timestamps from today's date + entered times
-  const today = new Date();
   const [sh, sm] = startVal.split(':').map(Number);
   const [eh, em] = endVal.split(':').map(Number);
-  const tsStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), sh, sm, 0).getTime();
-  let tsEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), eh, em, 0).getTime();
-  if (tsEnd <= tsStart) { showToast('End time must be after start time'); return; }
+
+  // Use start date from edit context if editing, otherwise today
+  const baseDate = editingEntryBase ? editingEntryBase.startDate : new Date();
+  const yr = baseDate.getFullYear(), mo = baseDate.getMonth(), dy = baseDate.getDate();
+  const tsStart = new Date(yr, mo, dy, sh, sm, 0).getTime();
+  let tsEnd   = new Date(yr, mo, dy, eh, em, 0).getTime();
+  // Handle midnight-crossing: if end < start in time-of-day, end is next day
+  if (tsEnd <= tsStart) tsEnd += 24 * 60 * 60 * 1000;
   const dur = Math.round((tsEnd - tsStart) / 60000);
 
-  const entry = {
-    id: tsEnd, ts: tsEnd, tsStart,
-    blockIntervalMin: dur,
-    date: toDateKey(new Date(tsStart)),
-    activity, energy: retroEnergy,
-    onPlan: retroEnergy !== 'distraction',
-    retro: true
-  };
-  getActivityColor(activity); // assign color on first save
-  entries.push(entry);
-  entries.sort((a,b) => b.ts - a.ts);
-  persist(); renderToday(); syncEntries();
-  closeModal('retro-overlay');
-  showToast(`Logged retroactively · ${dur}m`);
+  getActivityColor(activity);
+
+  if (editingEntryId !== null) {
+    // Update existing entry in place
+    const idx = entries.findIndex(e => e.id === editingEntryId);
+    if (idx !== -1) {
+      entries[idx] = { ...entries[idx], activity, energy: retroEnergy,
+        onPlan: retroEnergy !== 'distraction',
+        tsStart, ts: tsEnd, blockIntervalMin: dur,
+        date: toDateKey(new Date(tsStart)) };
+    }
+    editingEntryId = null;
+    editingEntryBase = null;
+    entries.sort((a,b) => b.ts - a.ts);
+    persist(); renderToday(); syncEntries();
+    document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
+    document.getElementById('retro-modal-title').textContent = 'What were you doing?';
+    closeModal('retro-overlay');
+    showToast('Block updated');
+  } else {
+    const entry = {
+      id: tsEnd, ts: tsEnd, tsStart,
+      blockIntervalMin: dur,
+      date: toDateKey(new Date(tsStart)),
+      activity, energy: retroEnergy,
+      onPlan: retroEnergy !== 'distraction',
+      retro: true
+    };
+    entries.push(entry);
+    entries.sort((a,b) => b.ts - a.ts);
+    persist(); renderToday(); syncEntries();
+    closeModal('retro-overlay');
+    showToast(`Logged retroactively · ${dur}m`);
+  }
 }
 
 function dismissLog() {
@@ -2488,6 +2521,10 @@ function logAwayBlock(tsStart, tsEnd, activity, energy, gapIndex) {
 }
 
 function openRetroLogPrefilled(tsStart, tsEnd) {
+  editingEntryId = null;
+  editingEntryBase = null;
+  document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
+  document.getElementById('retro-modal-title').textContent = 'What were you doing?';
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('retro-activity').value = '';
@@ -2499,6 +2536,44 @@ function openRetroLogPrefilled(tsStart, tsEnd) {
   document.getElementById('retro-end').value   = `${pad(e.getHours())}:${pad(e.getMinutes())}`;
   document.getElementById('retro-overlay').classList.add('open');
   setTimeout(() => document.getElementById('retro-activity').focus(), 250);
+}
+
+function openEditEntry(id) {
+  const entry = entries.find(e => e.id === id);
+  if (!entry) return;
+  editingEntryId = id;
+
+  const pad = n => String(n).padStart(2, '0');
+  const tsS = entry.tsStart || (entry.ts - (entry.blockIntervalMin || settings.intervalMin) * 60000);
+  const tsE = entry.ts;
+  const sDate = new Date(tsS);
+  const eDate = new Date(tsE);
+
+  // Detect midnight-crossing (end time earlier in day than start time)
+  const crossesMidnight = eDate.getHours() * 60 + eDate.getMinutes() < sDate.getHours() * 60 + sDate.getMinutes();
+  editingEntryBase = { startDate: sDate, crossesMidnight };
+
+  retroEnergy = entry.energy || '';
+  document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
+  if (retroEnergy) document.querySelectorAll(`#retro-overlay .energy-btn.${retroEnergy}`).forEach(b => b.classList.add('selected'));
+  document.getElementById('retro-activity').value = entry.activity || '';
+  populateRetroChips();
+
+  document.getElementById('retro-start').value = `${pad(sDate.getHours())}:${pad(sDate.getMinutes())}`;
+  document.getElementById('retro-end').value   = `${pad(eDate.getHours())}:${pad(eDate.getMinutes())}`;
+
+  document.getElementById('retro-modal-tag').textContent = 'EDIT BLOCK';
+  document.getElementById('retro-modal-title').textContent = 'Edit this block';
+  document.getElementById('retro-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('retro-activity').focus(), 250);
+}
+
+function cancelRetroEdit() {
+  editingEntryId = null;
+  editingEntryBase = null;
+  document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
+  document.getElementById('retro-modal-title').textContent = 'What were you doing?';
+  closeModal('retro-overlay');
 }
 
 function renderEntryRow(item) {
@@ -2513,13 +2588,14 @@ function renderEntryRow(item) {
   const actColor = item.missed ? null : getActivityColor(item.activity);
   const barStyle = actColor ? `style="background:${actColor}"` : '';
   const badgeStyle = actColor ? `style="background:${actColor}22;color:${actColor};border-radius:4px"` : '';
-  return `<div class="tl-row">
+  return `<div class="tl-row" onclick="openEditEntry(${item.id})" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
       <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span></div>
       <div class="tl-meta">${timeLabel} · ${dur}m</div>
     </div>
+    <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
   </div>`;
 }
 
@@ -2768,15 +2844,24 @@ function renderWeek() {
   const days = isMonth ? [] : getWeekDays(weekRangeOffset);
   const tabs = document.getElementById('day-tabs');
 
-  // Range controls row (Week/Month toggle + prev/next)
+  // Build day options for the dropdown (past + today days of selected week)
+  const dayOptions = !isMonth ? days.filter(d=>!d.isFuture).map(d=>{
+    const label = d.date.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'}) + (d.isToday?' (today)':'');
+    const sel = weekSelectedDay===d.key ? 'selected' : '';
+    return `<option value="${d.key}" ${sel}>${label}</option>`;
+  }).join('') : '';
+
+  // Range controls row (Week/Month toggle + prev/next + day dropdown)
   tabs.innerHTML = `
     <button class="day-tab ${!isMonth?'active':''}" onclick="setWeekMode('week')">Week</button>
     <button class="day-tab ${isMonth?'active':''}" onclick="setWeekMode('month')">Month</button>
     <button class="day-tab" onclick="shiftRange(-1)" style="padding:7px 10px">‹</button>
     <span style="font-size:11px;color:var(--muted);padding:7px 4px;white-space:nowrap;flex-shrink:0">${getRangeLabel()}</span>
     <button class="day-tab" onclick="shiftRange(1)" ${weekRangeOffset===0?'disabled style="opacity:0.3"':''}style="padding:7px 10px">›</button>
-    ${!isMonth ? `<div style="width:1px;background:var(--border2);margin:4px 2px;flex-shrink:0"></div>` +
-      days.filter(d=>!d.isFuture).map(d=>`<button class="day-tab ${d.hasData?'has-data':''} ${weekSelectedDay===d.key?'active':''}" onclick="selectWeekDay('${d.key}')">${d.label}${d.isToday?' •':''}</button>`).join('') : ''}`;
+    ${!isMonth ? `<select onchange="selectWeekDay(this.value)" style="margin-left:6px;padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card);color:var(--fg);font-size:12px;cursor:pointer;flex-shrink:0">
+      <option value="week" ${weekSelectedDay==='week'?'selected':''}>All days</option>
+      ${dayOptions}
+    </select>` : ''}`;
 
   if (weekSelectedDay === 'month') {
     const monthE = getMonthEntries(weekRangeOffset);
@@ -3707,11 +3792,57 @@ if (running && timerStartedAt) {
   totalSecs = settings.intervalMin * 60;
   remaining = totalSecs;
 }
+// ── Capacitor Local Notifications (native ping when backgrounded) ──
+const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+let LocalNotifications = null;
+const PING_NOTIF_ID = 1001;
+
+async function initNativeNotifications() {
+  if (!isNative) return;
+  try {
+    const cap = await import('https://cdn.jsdelivr.net/npm/@capacitor/local-notifications/dist/esm/index.js').catch(()=>null);
+    if (!cap) return;
+    LocalNotifications = cap.LocalNotifications;
+    const perm = await LocalNotifications.requestPermissions();
+    if (perm.display !== 'granted') return;
+    // Handle notification tap — open log modal
+    LocalNotifications.addListener('localNotificationActionPerformed', () => {
+      window.focus(); openQuickLog();
+    });
+    console.log('[Native] Local notifications ready');
+  } catch(e) { console.warn('[Native] Notifications init failed', e); }
+}
+
+function scheduleNativePing(inSeconds) {
+  if (!isNative || !LocalNotifications) return;
+  const at = new Date(Date.now() + inSeconds * 1000);
+  LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }] }).catch(()=>{});
+  LocalNotifications.schedule({
+    notifications: [{
+      id: PING_NOTIF_ID,
+      title: '⏱ Block complete',
+      body: lastTaskForRepeat
+        ? `You were on: ${lastTaskForRepeat.replace(/ \(Output:.*\)/,'')} — tap to log`
+        : 'Tap to log what you were doing',
+      schedule: { at },
+      sound: 'default',
+      actionTypeId: '',
+      extra: null
+    }]
+  }).catch(e => console.warn('[Native] Schedule failed', e));
+}
+
+function cancelNativePing() {
+  if (!isNative || !LocalNotifications) return;
+  LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }] }).catch(()=>{});
+}
+
 // Pre-fill intention from load()
 if (intention) document.getElementById('intention').value = intention;
 updateRing();
 renderToday();
 initAutoSync();
+initNativeNotifications();
 // On load: if significant untracked time exists, prompt to fill gaps
 setTimeout(() => {
   const workStarted = Date.now() > getWorkDayStartTs();
