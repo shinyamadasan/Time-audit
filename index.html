@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Time Audit</title>
+<title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Time Audit">
+<meta name="apple-mobile-web-app-title" content="ChronaSense">
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%23c8f04a' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%23c8f04a' font-family='monospace' font-weight='bold'>T</text></svg>">
 <link rel="manifest" id="pwa-manifest">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -248,10 +248,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .focus-overlay{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:12px;opacity:0;pointer-events:none;transition:opacity 0.3s;padding:24px}
 .focus-overlay.open{opacity:1;pointer-events:all}
-.focus-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted)}
-.focus-intention-text{font-size:15px;color:var(--muted);text-align:center;max-width:300px;font-weight:500;line-height:1.4}
-.focus-countdown-big{font-family:var(--mono);font-size:72px;font-weight:500;color:var(--text);letter-spacing:-3px;line-height:1}
-.focus-next{font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)}
+.focus-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted)}
+.focus-intention-text{font-size:22px;color:var(--text);text-align:center;max-width:340px;font-weight:700;line-height:1.3}
+.focus-countdown-big{font-family:var(--mono);font-size:108px;font-weight:500;color:var(--text);letter-spacing:-4px;line-height:1}
+.focus-next{font-size:13px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)}
+.focus-task-input{background:none;border:none;border-bottom:1px solid var(--border2);color:var(--text);font-size:20px;font-weight:600;text-align:center;width:100%;max-width:340px;padding:6px 0;outline:none;font-family:var(--head)}
+.focus-task-input::placeholder{color:var(--muted)}
 .focus-exit-wrap{position:absolute;top:calc(var(--safe-top) + 16px);right:16px}
 .focus-exit-countdown{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;margin-top:4px}
 
@@ -735,7 +737,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <!-- ══ SIGN-IN OVERLAY ══ -->
 <div class="signin-overlay" id="signin-overlay">
   <div class="signin-logo">⏱</div>
-  <div class="signin-app-name">Time Audit</div>
+  <div class="signin-app-name">ChronaSense</div>
   <div class="signin-tagline">Track every hour. See where your time really goes. Syncs instantly across all your devices.</div>
   <button class="signin-google-btn" onclick="signIn()">
     <svg width="20" height="20" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
@@ -767,10 +769,6 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   <div class="modal-tag" id="ql-tag">PING #1</div>
   <div class="modal-title">What were you just doing?</div>
   <div style="font-size:15px;color:var(--muted);margin-bottom:12px;font-weight:500" id="ql-sub">Last 30 min</div>
-  <div id="ql-committed-bar" style="display:none;background:var(--deep-dim2);border:1px solid rgba(200,240,74,0.15);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--muted)">
-    <span style="color:var(--deep);font-weight:600;letter-spacing:0.04em">YOU SAID:</span>
-    <span id="ql-committed-text" style="color:var(--text);margin-left:6px"></span>
-  </div>
   <button class="same-last-btn" id="ql-continue-btn" onclick="quickSaveLast()">
     Still on: <span id="ql-last-label"></span>
     <span class="sl-sub">Tap to log and continue</span>
@@ -929,7 +927,8 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <!-- ══ FOCUS / POMODORO OVERLAY ══ -->
 <div class="focus-overlay" id="focus-overlay">
   <div class="focus-label" id="focus-phase-label">POMODORO</div>
-  <div class="focus-intention-text" id="focus-intention-text">—</div>
+  <input class="focus-task-input" id="focus-task-input" placeholder="What are you focusing on?" autocomplete="off">
+  <div class="focus-intention-text" id="focus-intention-text" style="display:none">—</div>
 
   <!-- Completed session dots -->
   <div id="focus-pomo-dots" style="display:flex;gap:7px;margin-top:6px;min-height:10px"></div>
@@ -1637,7 +1636,7 @@ function doPing() {
 
   // Sound plays ONCE
   playAlert(2, 400);
-  document.title = '⏱ LOG NOW — Time Audit';
+  document.title = '⏱ LOG NOW — ChronaSense';
   window.focus();
 
   // Close last segment
@@ -1684,11 +1683,6 @@ function openQuickLog() {
   document.getElementById('ql-activity').value = '';
   document.querySelectorAll('#quicklog-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
 
-  // Committed task context
-  const committedTask = lastTaskForRepeat ? lastTaskForRepeat.replace(/ \(Output:.*\)/, '') : '';
-  const committedBar = document.getElementById('ql-committed-bar');
-  if (committedTask) { document.getElementById('ql-committed-text').textContent = committedTask; committedBar.style.display = 'block'; }
-  else { committedBar.style.display = 'none'; }
 
   // Continue last as primary CTA
   const last = entries.find(e => !e.missed && !e.break);
@@ -1791,7 +1785,7 @@ function _doQuickSave(activity, energy) {
   };
   entries.unshift(entry);
   document.getElementById('quicklog-overlay').classList.remove('open');
-  document.title = 'Time Audit';
+  document.title = 'ChronaSense';
   persist(); renderToday(); syncEntries();
   showLogFeedback(energy);
   checkReviewPrompt();
@@ -1799,20 +1793,10 @@ function _doQuickSave(activity, energy) {
 }
 
 function dismissQuickLog() {
-  // Skip = log block as missed
-  entries.unshift({
-    id: Date.now(), ts: Date.now(),
-    tsStart: blockStartTime || (Date.now() - totalSecs * 1000),
-    blockIntervalMin: settings.intervalMin,
-    date: toDateKey(new Date()),
-    activity: 'Untracked block', energy: 'shallow', onPlan: null, missed: true
-  });
-  persist(); renderToday(); syncEntries();
   stopAlertLoop();
   clearTimeout(snoozeTimer);
   document.getElementById('quicklog-overlay').classList.remove('open');
-  document.title = 'Time Audit';
-  showToast('Block marked as untracked');
+  document.title = 'ChronaSense';
 }
 
 function snoozeLog() {
@@ -1929,6 +1913,20 @@ function startPomodoro() {
   pomodoroPhase = 'work';
   pomodoroRemaining = pomodoroWorkMin * 60;
 
+  // Capture task from input and switch to static display
+  const taskInput = document.getElementById('focus-task-input');
+  const focusTask = taskInput.value.trim() || currentTask || intention || 'Deep work';
+  taskInput.style.display = 'none';
+  const intentionEl = document.getElementById('focus-intention-text');
+  intentionEl.textContent = focusTask;
+  intentionEl.style.display = 'block';
+
+  // Pause main timer to avoid two countdowns fighting
+  if (running) {
+    pomodoroWasPaused = true;
+    clearInterval(ticker); ticker = null;
+  }
+
   document.getElementById('focus-phase-label').textContent = 'FOCUS';
   document.getElementById('focus-phase-sub').textContent = `work session · ${pomodoroWorkMin} min`;
   document.getElementById('focus-settings-row').style.display = 'none';
@@ -1944,7 +1942,7 @@ function tickPomodoro() {
   pomodoroRemaining = Math.max(0, pomodoroRemaining - 1);
   setPomodoroCountdown(pomodoroRemaining);
   if (pomodoroRemaining <= 0) {
-    pomodoroPhase === 'work' ? endWorkSession() : endBreak();
+    pomodoroPhase === 'work' ? endWorkSession() : endPomodoroBreak();
   }
 }
 
@@ -1989,7 +1987,7 @@ function endWorkSession() {
   pomodoroTimer = setInterval(tickPomodoro, 1000);
 }
 
-function endBreak() {
+function endPomodoroBreak() {
   clearInterval(pomodoroTimer);
   pomodoroPhase = 'idle';
   playAlertSound();
@@ -1997,6 +1995,8 @@ function endBreak() {
   document.getElementById('focus-phase-label').textContent = 'BREAK DONE';
   document.getElementById('focus-phase-sub').textContent = 'ready for the next one?';
   document.getElementById('focus-settings-row').style.display = 'flex';
+  document.getElementById('focus-task-input').style.display = 'block';
+  document.getElementById('focus-intention-text').style.display = 'none';
   setPomodoroCountdown(pomodoroWorkMin * 60);
 
   const btn = document.getElementById('focus-start-btn');
@@ -2023,6 +2023,8 @@ function playAlertSound() {
   } catch(e) {}
 }
 
+let pomodoroWasPaused = false; // track if we paused the main timer
+
 function enterFocusMode() {
   const music = document.getElementById('focus-music');
   music.volume = 0.3;
@@ -2033,10 +2035,15 @@ function enterFocusMode() {
   pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min')?.value) || 25;
   pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min')?.value) || 5;
 
+  // Pre-fill task input with current task if available
+  const taskInput = document.getElementById('focus-task-input');
+  taskInput.value = currentTask || intention || '';
+  taskInput.style.display = 'block';
+  document.getElementById('focus-intention-text').style.display = 'none';
+
   document.getElementById('focus-overlay').classList.add('open');
-  document.getElementById('focus-intention-text').textContent = currentTask || intention || 'No focus set';
   document.getElementById('focus-phase-label').textContent = 'POMODORO';
-  document.getElementById('focus-phase-sub').textContent = 'work session';
+  document.getElementById('focus-phase-sub').textContent = 'set your timer and go';
   document.getElementById('focus-settings-row').style.display = 'flex';
   document.getElementById('focus-start-btn').textContent = 'Start';
   document.getElementById('focus-start-btn').onclick = startPomodoro;
@@ -2059,6 +2066,15 @@ function confirmExitFocus() {
   music.currentTime = 0;
   focusModeOn = false;
   document.getElementById('focus-overlay').classList.remove('open');
+  // Resume main timer if it was paused for pomodoro
+  if (pomodoroWasPaused && running && !ticker) {
+    ticker = setInterval(() => {
+      remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
+      updateRing();
+      if (remaining <= 0) doPing();
+    }, 1000);
+  }
+  pomodoroWasPaused = false;
 }
 
 function showFocusBlocker(reason) {
@@ -2163,7 +2179,14 @@ function openLog(pingNum) {
   const slLabel = document.getElementById('same-last-label');
   const logFormBody = document.getElementById('log-form-body');
   const last = entries.find(e => !e.missed && !e.break);
-  if (last && (logIsPing || switchingTask)) {
+
+  if (switchingTask) {
+    // Skip "Still on" — user explicitly wants to switch, show form pre-filled with current task
+    slBtn.style.display = 'none';
+    slOther.style.display = 'none';
+    logFormBody.style.display = 'block';
+    if (currentTask) document.getElementById('f-activity').value = currentTask;
+  } else if (last && logIsPing) {
     slLabel.textContent = last.activity.substring(0, 32);
     slBtn.style.display = 'block';
     slOther.style.display = 'block';
@@ -2330,22 +2353,11 @@ function saveRetroEntry() {
 
 function dismissLog() {
   switchingTask = false;
-  if (logIsPing) {
-    entries.unshift({
-      id: Date.now(), ts: Date.now(),
-      tsStart: blockStartTime || (Date.now() - totalSecs * 1000),
-      blockIntervalMin: settings.intervalMin,
-      date: toDateKey(new Date()),
-      activity: 'Untracked block', energy: 'shallow', onPlan: null, missed: true
-    });
-    persist(); renderToday(); syncEntries();
-    showToast('Block marked as untracked');
-  }
   stopAlertLoop();
   hidePingBanner();
   clearTimeout(snoozeTimer);
   document.getElementById('quicklog-overlay').classList.remove('open');
-  document.title = 'Time Audit';
+  document.title = 'ChronaSense';
   closeModal('log-overlay');
 }
 
@@ -2391,7 +2403,7 @@ function saveEntry() {
   hidePingBanner();
   clearTimeout(snoozeTimer);
   document.getElementById('quicklog-overlay').classList.remove('open');
-  document.title = 'Time Audit';
+  document.title = 'ChronaSense';
   persist(); renderToday(); closeModal('log-overlay');
   syncEntries();
   showLogFeedback(entry.energy);
@@ -2918,7 +2930,8 @@ function renderToday() {
     tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
   } else {
     // Sort entries chronologically, then interleave detected gaps
-    const sorted = [...todayE].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+    // Filter out old missed/untracked entries — gaps cover that time already
+    const sorted = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
     const gaps = computeGaps(todayE);
     const combined = [...sorted, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
 
@@ -3912,7 +3925,7 @@ document.getElementById('interval-input').addEventListener('change', function(){
 // ══════════════════════════════════════════════════════
 // PWA
 // ══════════════════════════════════════════════════════
-const manifest={name:'Time Audit',short_name:'Time Audit',display:'standalone',background_color:'#0b0b0c',theme_color:'#0b0b0c',orientation:'portrait-primary',start_url:'.',icons:[{src:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%23c8f04a' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%23c8f04a' font-family='monospace' font-weight='bold'>T</text></svg>",sizes:'512x512',type:'image/svg+xml'}]};
+const manifest={name:'ChronaSense',short_name:'ChronaSense',display:'standalone',background_color:'#0b0b0c',theme_color:'#0b0b0c',orientation:'portrait-primary',start_url:'.',icons:[{src:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%23c8f04a' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%23c8f04a' font-family='monospace' font-weight='bold'>T</text></svg>",sizes:'512x512',type:'image/svg+xml'}]};
 document.getElementById('pwa-manifest').href=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/json'}));
 
 const swCode=`const C='ta3-sw';self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))));self.clients.claim();});self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.open(C).then(c=>fetch(e.request).then(r=>{c.put(e.request,r.clone());return r;}).catch(()=>caches.match(e.request))));});`;
