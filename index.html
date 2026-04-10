@@ -154,22 +154,33 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .btn.danger:hover{background:var(--distraction-dim)}
 
 /* ── Activity Hero ── */
-.activity-hero{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:12px}
-.hero-prompt{font-size:11px;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);font-weight:600;margin-bottom:10px}
+.activity-hero{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:12px;transition:border-color 0.3s,background 0.3s}
+.activity-hero.tracking{border-color:rgba(76,199,240,0.3);background:linear-gradient(135deg,var(--bg2) 0%,rgba(76,199,240,0.04) 100%)}
+.hero-prompt{font-size:22px;font-weight:800;color:var(--text);margin-bottom:14px;letter-spacing:-0.3px}
+.hero-prompt-sub{font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);font-weight:600;margin-bottom:14px}
 .hero-start-row{display:flex;gap:8px;align-items:center}
-.hero-input{flex:1;font-family:var(--head);font-size:14px;padding:9px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);outline:none}
-.hero-input:focus{border-color:var(--deep)}
-.hero-active-top{display:flex;align-items:center;gap:14px;margin-bottom:12px}
-.hero-ring-wrap svg{display:block;transform:rotate(-90deg)}
-.hero-task-name{font-size:17px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
-.hero-elapsed{font-size:13px;font-weight:600;color:var(--deep);font-family:var(--mono);margin-top:2px}
-.hero-status{font-size:11px;color:var(--muted);margin-top:2px}
-.hero-cost{font-size:11px;font-family:var(--mono);color:var(--muted);flex-shrink:0}
-.hero-controls{display:flex;gap:8px;flex-wrap:wrap}
-.quick-retro-bar{display:flex;gap:8px;align-items:center;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;margin-bottom:12px}
-.quick-retro-input{flex:1;font-family:var(--head);font-size:12px;padding:6px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);outline:none;min-width:0}
+.hero-input{flex:1;font-family:var(--head);font-size:15px;padding:11px 14px;border-radius:10px;border:1.5px solid var(--border2);background:var(--bg3);color:var(--text);outline:none;transition:border-color 0.15s,box-shadow 0.15s}
+.hero-input:focus{border-color:var(--deep);box-shadow:0 0 0 3px rgba(76,199,240,0.1)}
+.hero-active-top{display:flex;align-items:center;gap:18px;margin-bottom:16px}
+.hero-ring-wrap{position:relative;flex-shrink:0}
+.hero-ring-wrap svg{display:block;transform:rotate(-90deg);filter:drop-shadow(0 0 8px rgba(76,199,240,0.35))}
+.hero-ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.hero-ring-secs{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--deep);line-height:1}
+.hero-ring-label{font-family:var(--mono);font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em}
+.hero-task-name{font-size:18px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);letter-spacing:-0.2px}
+.hero-elapsed{font-size:28px;font-weight:500;color:var(--deep);font-family:var(--mono);margin-top:2px;letter-spacing:-1px;line-height:1}
+.hero-elapsed-unit{font-size:13px;font-weight:400;color:var(--muted);margin-left:2px}
+.hero-live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--deep);margin-right:5px;animation:livepulse 2s ease-in-out infinite;vertical-align:middle}
+@keyframes livepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.7)}}
+.hero-status{font-size:11px;color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:4px}
+.hero-cost{font-size:12px;font-family:var(--mono);color:var(--muted);flex-shrink:0;align-self:flex-start;margin-top:4px}
+.hero-controls{display:flex;gap:8px;flex-wrap:wrap;padding-top:4px;border-top:1px solid var(--border);margin-top:4px}
+.quick-retro-bar{display:flex;gap:8px;align-items:center;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;margin-bottom:12px;flex-wrap:wrap}
+.quick-retro-input{flex:1;font-family:var(--head);font-size:13px;padding:7px 11px;border-radius:8px;border:1.5px solid var(--border2);background:var(--bg3);color:var(--text);outline:none;min-width:120px;transition:border-color 0.15s}
 .quick-retro-input:focus{border-color:var(--deep)}
-.quick-retro-sel{font-family:var(--head);font-size:11px;padding:5px 7px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex-shrink:0}
+.quick-retro-sel{font-family:var(--head);font-size:11px;padding:6px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex-shrink:0}
+.switch-list-item{padding:10px 13px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;background:var(--bg3);border:1px solid var(--border);transition:all 0.12s;color:var(--text)}
+.switch-list-item:hover{background:var(--deep-dim);border-color:var(--deep);color:var(--deep)}
 
 /* ── Recent task chips ── */
 .chips-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;min-height:0}
@@ -608,9 +619,9 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <div id="hero-idle">
       <div class="hero-prompt">What are you working on?</div>
       <div class="hero-start-row">
-        <input class="hero-input" id="hero-task-input" placeholder="Type a task…"
+        <input class="hero-input" id="hero-task-input" placeholder="Name your task…"
           onkeydown="if(event.key==='Enter')startFromHero()">
-        <button class="btn primary" onclick="startFromHero()">Start</button>
+        <button class="btn primary" onclick="startFromHero()" style="padding:11px 20px;font-size:14px">Start</button>
       </div>
       <div class="chips-row" id="recent-chips"></div>
     </div>
@@ -619,15 +630,21 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <div id="hero-active" style="display:none">
       <div class="hero-active-top">
         <div class="hero-ring-wrap">
-          <svg width="64" height="64" viewBox="0 0 120 120">
+          <svg width="80" height="80" viewBox="0 0 120 120">
             <circle class="ring-bg" cx="60" cy="60" r="50"/>
             <circle class="ring-fg" id="ring" cx="60" cy="60" r="50" stroke-dasharray="314.2" stroke-dashoffset="314.2"/>
           </svg>
+          <div class="hero-ring-center">
+            <div class="hero-ring-secs" id="hero-ring-secs">0:00</div>
+            <div class="hero-ring-label">block</div>
+          </div>
         </div>
         <div style="flex:1;min-width:0">
           <div class="hero-task-name" id="hero-task-name">—</div>
-          <div class="hero-elapsed" id="hero-elapsed">0m</div>
-          <div class="hero-status" id="timer-status">Tracking</div>
+          <div style="display:flex;align-items:baseline;gap:0;margin-top:4px">
+            <div class="hero-elapsed" id="hero-elapsed">0</div><span class="hero-elapsed-unit">m on task</span>
+          </div>
+          <div class="hero-status"><span class="hero-live-dot"></span><span id="timer-status">Tracking</span></div>
         </div>
         <div id="live-cost-active" class="hero-cost"></div>
       </div>
@@ -642,25 +659,27 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <div id="switch-panel" style="display:none;margin-top:10px">
         <div class="hero-start-row">
           <input class="hero-input" id="switch-input" placeholder="Switch to…"
-            onkeydown="if(event.key==='Enter')confirmSwitch()">
+            onkeydown="if(event.key==='Enter')confirmSwitch()" oninput="filterSwitchList(this.value)">
           <button class="btn primary" onclick="confirmSwitch()">Switch</button>
         </div>
-        <div class="chips-row" id="switch-chips" style="margin-top:8px"></div>
+        <div id="switch-list" style="margin-top:6px;max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
       </div>
     </div>
 
     <!-- Away active state -->
     <div id="hero-away" style="display:none">
       <div class="hero-active-top">
-        <div style="font-size:28px;flex-shrink:0">⊙</div>
+        <div style="width:80px;height:80px;border-radius:50%;background:var(--away-dim);border:2px solid rgba(148,163,184,0.3);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">⊙</div>
         <div style="flex:1;min-width:0">
           <div class="hero-task-name" id="hero-away-label">Away</div>
-          <div class="hero-elapsed" id="hero-away-elapsed">0m</div>
-          <div class="hero-status">Away from work</div>
+          <div style="display:flex;align-items:baseline;gap:0;margin-top:4px">
+            <div class="hero-elapsed" id="hero-away-elapsed" style="color:var(--away)">0</div><span class="hero-elapsed-unit">m away</span>
+          </div>
+          <div class="hero-status" style="color:var(--away)"><span class="hero-live-dot" style="background:var(--away)"></span>Away from work</div>
         </div>
       </div>
       <div class="hero-controls">
-        <button class="btn primary" onclick="toggleAway()">↩ Back</button>
+        <button class="btn primary" onclick="toggleAway()" style="background:var(--away);border-color:var(--away)">↩ Back to work</button>
       </div>
     </div>
 
@@ -700,9 +719,10 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   </div>
 
   <!-- Quick retro log -->
-  <div class="quick-retro-bar">
-    <input class="quick-retro-input" id="retro-task" placeholder="Log something that already happened…"
-      onkeydown="if(event.key==='Enter')quickRetroLog()">
+  <div class="quick-retro-bar" style="flex-wrap:wrap;gap:6px">
+    <input class="quick-retro-input" id="retro-task" placeholder="What did you do?"
+      onkeydown="if(event.key==='Enter')quickRetroLog()" style="flex:1;min-width:120px">
+    <input type="time" id="retro-time" class="quick-retro-sel" style="flex-shrink:0">
     <select class="quick-retro-sel" id="retro-dur">
       <option value="15">15m</option>
       <option value="30" selected>30m</option>
@@ -710,8 +730,9 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <option value="60">1h</option>
       <option value="90">1h 30m</option>
       <option value="120">2h</option>
+      <option value="180">3h</option>
     </select>
-    <button class="btn sm" onclick="quickRetroLog()">Log</button>
+    <button class="btn sm primary" onclick="quickRetroLog()">Log</button>
   </div>
 
   <!-- Untracked warning banner — shows whenever there are gaps -->
@@ -1547,16 +1568,28 @@ function updateRing() {
   const ring = document.getElementById('ring');
   if (!ring) return;
   // Ring fills UP as elapsed time grows
-  const pct = remaining / totalSecs; // 1 at start, 0 at end
-  ring.style.strokeDashoffset = CIRCUM * pct; // CIRCUM→0: ring fills
+  const pct = remaining / totalSecs;
+  ring.style.strokeDashoffset = CIRCUM * pct;
   ring.style.stroke = currentState === 'distraction' ? '#ff6b6b' : 'var(--deep)';
 
-  // Hero: total elapsed time on this task (across intervals)
-  const elapsed = taskStartTime ? Math.max(0, Math.round((Date.now() - taskStartTime) / 60000)) : 0;
+  // Live seconds in ring center: show time elapsed in current block (MM:SS)
+  const blockElapsedSecs = totalSecs - remaining;
+  const bm = Math.floor(blockElapsedSecs / 60);
+  const bs = blockElapsedSecs % 60;
+  const secsEl = document.getElementById('hero-ring-secs');
+  if (secsEl) secsEl.textContent = `${bm}:${String(bs).padStart(2,'0')}`;
+
+  // Hero: total elapsed on this task (whole minutes)
+  const totalElapsedMin = taskStartTime ? Math.max(0, Math.floor((Date.now() - taskStartTime) / 60000)) : 0;
   const elEl = document.getElementById('hero-elapsed');
-  if (elEl) elEl.textContent = elapsed > 0 ? fmtDur(elapsed) : '0m';
+  if (elEl) elEl.textContent = totalElapsedMin;
+
   const nameEl = document.getElementById('hero-task-name');
   if (nameEl && currentTask) nameEl.textContent = currentTask;
+
+  // Tracking glow class
+  const hero = document.getElementById('activity-hero');
+  if (hero) hero.classList.toggle('tracking', running);
 
   // Legacy compat
   const cdEl = document.getElementById('countdown');
@@ -1649,7 +1682,10 @@ async function _startTimer(task) {
   document.getElementById('hero-active').style.display = 'block';
   document.getElementById('hero-away').style.display = 'none';
   document.getElementById('hero-task-name').textContent = task;
-  document.getElementById('hero-elapsed').textContent = '0m';
+  document.getElementById('hero-elapsed').textContent = '0';
+  const secsEl = document.getElementById('hero-ring-secs');
+  if (secsEl) secsEl.textContent = '0:00';
+  document.getElementById('activity-hero').classList.add('tracking');
   document.getElementById('switch-panel').style.display = 'none';
   // Legacy compat
   document.getElementById('main-btn').textContent = 'Break';
@@ -1720,6 +1756,7 @@ function resetTimer() {
   document.getElementById('hero-idle').style.display = 'block';
   document.getElementById('hero-task-input').value = '';
   document.getElementById('switch-panel').style.display = 'none';
+  document.getElementById('activity-hero').classList.remove('tracking');
   updateRing(); syncTimerState();
 }
 
@@ -3234,26 +3271,44 @@ function startFromHero() {
   _startTimer(task);
 }
 
+let _switchTasks = [];
 function openSwitchPanel() {
   const panel = document.getElementById('switch-panel');
   const isOpen = panel.style.display !== 'none';
   panel.style.display = isOpen ? 'none' : 'block';
   if (!isOpen) {
     document.getElementById('switch-input').value = '';
+    _switchTasks = [];
     const seen = new Set();
-    const tasks = [];
     for (const e of entries) {
       if (e.missed || e.break || e.away || !e.activity) continue;
       const key = e.activity.split(' (Output:')[0];
-      if (!seen.has(key) && key !== currentTask) { seen.add(key); tasks.push(key); }
-      if (tasks.length >= 5) break;
+      if (!seen.has(key) && key !== currentTask) { seen.add(key); _switchTasks.push(key); }
+      if (_switchTasks.length >= 20) break;
     }
-    const chipsEl = document.getElementById('switch-chips');
-    chipsEl.innerHTML = tasks.map(t =>
-      `<button class="chip" onclick="switchToTask(${JSON.stringify(t)})">${t}</button>`
-    ).join('');
+    renderSwitchList(_switchTasks);
     setTimeout(() => document.getElementById('switch-input').focus(), 100);
   }
+}
+
+function renderSwitchList(tasks) {
+  const el = document.getElementById('switch-list');
+  if (!tasks.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px">No recent tasks</div>'; return; }
+  el.innerHTML = tasks.map(t =>
+    `<div class="switch-list-item" onclick="fillSwitch(${JSON.stringify(t)})">${t}</div>`
+  ).join('');
+}
+
+function fillSwitch(task) {
+  document.getElementById('switch-input').value = task;
+  document.getElementById('switch-input').focus();
+}
+
+function filterSwitchList(val) {
+  const filtered = val.trim()
+    ? _switchTasks.filter(t => t.toLowerCase().includes(val.toLowerCase()))
+    : _switchTasks;
+  renderSwitchList(filtered);
 }
 
 function confirmSwitch() {
@@ -3291,19 +3346,32 @@ function quickRetroLog() {
   const task = taskInput.value.trim();
   if (!task) { showToast('What did you do?'); taskInput.focus(); return; }
   const dur = parseInt(document.getElementById('retro-dur').value) || 30;
-  const tsEnd = Date.now();
-  const tsStart = tsEnd - dur * 60000;
+  const timeVal = document.getElementById('retro-time').value; // "HH:MM"
+  let tsStart;
+  if (timeVal) {
+    const [h, m] = timeVal.split(':').map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    tsStart = d.getTime();
+    // If the time is in the future, assume it was yesterday
+    if (tsStart > Date.now()) tsStart -= 86400000;
+  } else {
+    tsStart = Date.now() - dur * 60000;
+  }
+  const tsEnd = tsStart + dur * 60000;
   const entry = {
     id: tsEnd, ts: tsEnd, tsStart,
     blockIntervalMin: dur,
-    date: toDateKey(new Date()),
+    date: toDateKey(new Date(tsStart)),
     activity: task, energy: 'shallow',
     onPlan: true, retro: true
   };
   getActivityColor(task);
-  entries.unshift(entry);
+  entries.push(entry);
+  entries.sort((a, b) => b.ts - a.ts);
   persist(); renderToday(); syncEntries();
   taskInput.value = '';
+  document.getElementById('retro-time').value = '';
   showToast(`Logged: ${task} · ${fmtDur(dur)}`);
 }
 
@@ -3477,10 +3545,10 @@ function startAway(label) {
   // Away elapsed ticker
   clearInterval(awayElapsedTicker);
   awayElapsedTicker = setInterval(() => {
-    const min = Math.round((Date.now() - awayStartTime) / 60000);
+    const min = Math.floor((Date.now() - awayStartTime) / 60000);
     const el = document.getElementById('hero-away-elapsed');
-    if (el) el.textContent = fmtDur(min) || '0m';
-  }, 15000);
+    if (el) el.textContent = min;
+  }, 10000);
   // Legacy compat
   const btn = document.getElementById('away-btn');
   btn.textContent = `↩ Back (${label})`;
@@ -4820,6 +4888,8 @@ function cancelNativePing() {
 
 // Pre-fill intention from load()
 if (intention) document.getElementById('intention').value = intention;
+// Pre-fill retro time with current time
+(function(){ const now = new Date(); const el = document.getElementById('retro-time'); if(el) el.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`; })();
 // Restore hero UI state on page load
 if (running && lastTaskForRepeat) {
   taskStartTime = timerStartedAt || Date.now();
