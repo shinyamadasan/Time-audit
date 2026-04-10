@@ -585,6 +585,25 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .reflect-weekly-block{background:var(--bg3);border-top:1px solid var(--border2);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
 .reflect-weekly-q{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
 .reflect-weekly-a{font-size:13px;color:var(--text)}
+
+/* ── Reflect stat grid ── */
+.reflect-stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.reflect-stat{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+.reflect-stat-val{font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--text)}
+.reflect-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-top:4px;font-weight:600}
+.reflect-stat-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.reflect-stat.bad .reflect-stat-val{color:var(--distraction)}
+.reflect-stat.good .reflect-stat-val{color:var(--deep)}
+.reflect-goal-bar{height:6px;background:var(--bg4);border-radius:3px;overflow:hidden;margin-top:8px}
+.reflect-goal-fill{height:100%;border-radius:3px;background:var(--deep);transition:width 0.5s}
+/* ── History cards ── */
+.reflect-week-card{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r2);overflow:hidden;margin-bottom:8px}
+.reflect-week-card-header{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.reflect-week-card-key{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted)}
+.reflect-week-card-stats{font-size:11px;font-family:var(--mono);color:var(--deep)}
+.reflect-section-tag{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;padding:2px 7px;border-radius:999px;display:inline-block;margin-bottom:4px}
+.reflect-section-tag.review{background:var(--deep-dim);color:var(--deep)}
+.reflect-section-tag.plan{background:var(--admin-dim);color:var(--admin)}
 </style>
 </head>
 <body>
@@ -812,10 +831,10 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <div class="view" id="view-reflect">
   <div class="page-header"><div class="page-title">Reflect</div></div>
 
-  <!-- Insights -->
+  <!-- This week's patterns -->
   <div class="settings-section">
-    <div class="settings-title">This week's patterns</div>
-    <div id="reflect-insights" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="settings-title">This week's numbers</div>
+    <div id="reflect-insights"></div>
   </div>
 
   <!-- Weekly Review -->
@@ -824,18 +843,36 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       Weekly review
       <span id="weekly-review-saved" style="font-size:10px;color:var(--deep);font-weight:600;display:none">✓ Saved</span>
     </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Look back at this week honestly.</div>
     <div style="display:flex;flex-direction:column;gap:10px">
-      <div class="field"><label>How did this week go overall?</label><textarea id="wr-overall" rows="2" placeholder="Honest take on the week…" style="resize:none"></textarea></div>
-      <div class="field"><label>Did your time reflect your priorities?</label><textarea id="wr-priorities" rows="2" placeholder="What matched, what didn't…" style="resize:none"></textarea></div>
-      <div class="field"><label>Biggest time drain</label><input type="text" id="wr-drain" placeholder="What stole the most time?"></div>
-      <div class="field"><label>What will you do differently next week?</label><textarea id="wr-nextweek" rows="2" placeholder="One specific change…" style="resize:none"></textarea></div>
-      <button class="btn primary" onclick="saveWeeklyReview()" style="align-self:flex-end">Save reflection</button>
+      <div class="field"><label>What went well?</label><textarea id="wr-overall" rows="2" placeholder="Wins, progress, good habits…" style="resize:none"></textarea></div>
+      <div class="field"><label>What didn't go well?</label><textarea id="wr-priorities" rows="2" placeholder="What fell short or felt off…" style="resize:none"></textarea></div>
+      <div class="field"><label>Biggest time drain <span style="color:var(--distraction)">↓</span></label><input type="text" id="wr-drain" placeholder="What stole the most time?"></div>
+      <div class="field"><label>One thing to change next week</label><textarea id="wr-nextweek" rows="2" placeholder="One specific, actionable change…" style="resize:none"></textarea></div>
+      <button class="btn primary" onclick="saveWeeklyReview()" style="align-self:flex-end">Save review</button>
+    </div>
+  </div>
+
+  <!-- Weekly Planning -->
+  <div class="settings-section">
+    <div class="settings-title" style="display:flex;justify-content:space-between;align-items:center">
+      Next week's plan
+      <span id="weekly-plan-saved" style="font-size:10px;color:var(--deep);font-weight:600;display:none">✓ Saved</span>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Set your intentions before the week begins.</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="field"><label>Top priority #1</label><input type="text" id="wp-p1" placeholder="Most important thing to move forward"></div>
+      <div class="field"><label>Top priority #2</label><input type="text" id="wp-p2" placeholder="Second most important…"></div>
+      <div class="field"><label>Top priority #3</label><input type="text" id="wp-p3" placeholder="Third…"></div>
+      <div class="field"><label>Deep work goal <span style="color:var(--muted);font-weight:400">(hours)</span></label><input type="number" id="wp-deepgoal" min="1" max="60" placeholder="e.g. 20"></div>
+      <div class="field"><label>What to protect / avoid</label><input type="text" id="wp-avoid" placeholder="Distraction or time drain to cut"></div>
+      <button class="btn primary" onclick="saveWeeklyPlan()" style="align-self:flex-end">Save plan</button>
     </div>
   </div>
 
   <!-- History -->
   <div class="settings-section">
-    <div class="settings-title">Reflection history</div>
+    <div class="settings-title">History</div>
     <div id="reflect-history" style="display:flex;flex-direction:column;gap:12px"></div>
   </div>
 </div>
@@ -4156,10 +4193,36 @@ function getEntriesForWeekKey(weekKey) {
 }
 
 function computeInsights(weekKey) {
-  const we = getEntriesForWeekKey(weekKey);
+  const we = getEntriesForWeekKey(weekKey).filter(e => !e.missed);
   if (!we.length) return null;
 
-  // Peak focus hour — which hour has most deep-work minutes
+  const totalMin = we.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const deepMin = we.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const shallowMin = we.filter(e => e.energy === 'shallow').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const distMin = we.filter(e => e.energy === 'distraction').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const awayMin = we.filter(e => e.away).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const deepPct = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
+  const deepHrs = (deepMin / 60).toFixed(1);
+
+  // Top activity by time
+  const actMap = {};
+  we.filter(e => !e.break && !e.away && e.activity).forEach(e => {
+    const k = e.activity.split(' (Output:')[0];
+    actMap[k] = (actMap[k] || 0) + (e.blockIntervalMin || 0);
+  });
+  let topActivity = '—', topActivityMin = 0;
+  Object.entries(actMap).forEach(([k, m]) => { if (m > topActivityMin) { topActivityMin = m; topActivity = k; } });
+
+  // Worst distraction by time
+  const distMap = {};
+  we.filter(e => e.energy === 'distraction' && e.activity).forEach(e => {
+    const k = e.activity.split(' (Output:')[0];
+    distMap[k] = (distMap[k] || 0) + (e.blockIntervalMin || 0);
+  });
+  let worstDist = '—', worstDistMin = 0;
+  Object.entries(distMap).forEach(([k, m]) => { if (m > worstDistMin) { worstDistMin = m; worstDist = k; } });
+
+  // Peak focus hour
   const hourBuckets = {};
   we.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
     const hr = new Date(e.tsStart).getHours();
@@ -4167,42 +4230,20 @@ function computeInsights(weekKey) {
   });
   let peakHour = null, peakMin = 0;
   Object.entries(hourBuckets).forEach(([h, m]) => { if (m > peakMin) { peakMin = m; peakHour = Number(h); } });
-  const peakHourLabel = peakHour !== null
-    ? `${peakHour % 12 || 12}${peakHour < 12 ? 'am' : 'pm'}`
-    : '—';
+  const peakHourLabel = peakHour !== null ? `${peakHour % 12 || 12}${peakHour < 12 ? 'am' : 'pm'}` : '—';
 
-  // Most common distraction label
-  const distEntries = we.filter(e => e.energy === 'distraction');
-  const distCounts = {};
-  distEntries.forEach(e => {
-    const label = (e.activity || 'Unknown').trim();
-    distCounts[label] = (distCounts[label] || 0) + 1;
-  });
-  let topDistraction = '—';
-  let topCount = 0;
-  Object.entries(distCounts).forEach(([l, c]) => { if (c > topCount) { topCount = c; topDistraction = l; } });
-
-  // Best day (most deep-work minutes)
+  // Best day
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const dayBuckets = {};
   we.filter(e => e.energy === 'deep').forEach(e => {
-    const key = e.date;
-    dayBuckets[key] = (dayBuckets[key] || 0) + (e.blockIntervalMin || 0);
+    dayBuckets[e.date] = (dayBuckets[e.date] || 0) + (e.blockIntervalMin || 0);
   });
   let bestDay = '—', bestDayMin = 0;
-  Object.entries(dayBuckets).forEach(([dateStr, m]) => {
-    if (m > bestDayMin) { bestDayMin = m; bestDay = dayNames[new Date(dateStr + 'T12:00:00').getDay()]; }
-  });
+  Object.entries(dayBuckets).forEach(([d, m]) => { if (m > bestDayMin) { bestDayMin = m; bestDay = dayNames[new Date(d+'T12:00:00').getDay()]; } });
 
-  // Deep work %
-  const totalMin = we.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const deepMin = we.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const deepPct = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
-
-  // Deep work hours this week
-  const deepHrs = (deepMin / 60).toFixed(1);
-
-  return { peakHourLabel, topDistraction, bestDay, deepPct, deepHrs, totalMin };
+  return { totalMin, deepMin, deepHrs, deepPct, shallowMin, distMin, awayMin,
+           topActivity, topActivityMin, worstDist, worstDistMin,
+           peakHourLabel, bestDay, bestDayMin };
 }
 
 function renderReflectView() {
@@ -4212,122 +4253,145 @@ function renderReflectView() {
   // ── Insights ──
   const insightsEl = document.getElementById('reflect-insights');
   const ins = computeInsights(weekKey);
+  const deepGoal = settings.deepGoal || 20;
+
   if (!ins || ins.totalMin === 0) {
-    insightsEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No data yet this week — start tracking to see patterns.</div>`;
+    insightsEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:8px 0">No data yet this week — start tracking to see your numbers.</div>`;
   } else {
+    const deepGoalPct = Math.min(100, Math.round(ins.deepMin / (deepGoal * 60) * 100));
     insightsEl.innerHTML = `
-      <div class="insight-card">
-        <div class="insight-icon">⏰</div>
-        <div><div class="insight-val">${ins.peakHourLabel}</div><div style="font-size:11px;color:var(--muted)">Peak focus hour</div></div>
-      </div>
-      <div class="insight-card">
-        <div class="insight-icon">📉</div>
-        <div><div class="insight-val" style="color:var(--distraction)">${ins.topDistraction}</div><div style="font-size:11px;color:var(--muted)">Most common distraction</div></div>
-      </div>
-      <div class="insight-card">
-        <div class="insight-icon">🏆</div>
-        <div><div class="insight-val">${ins.bestDay}</div><div style="font-size:11px;color:var(--muted)">Best day this week</div></div>
-      </div>
-      <div class="insight-card">
-        <div class="insight-icon">🎯</div>
-        <div><div class="insight-val">${ins.deepPct}%<span style="font-size:14px;font-weight:400;color:var(--muted);margin-left:6px">${ins.deepHrs}h</span></div><div style="font-size:11px;color:var(--muted)">Deep work this week</div></div>
+      <div class="reflect-stat-grid">
+        <div class="reflect-stat good">
+          <div class="reflect-stat-val">${ins.deepHrs}h</div>
+          <div class="reflect-stat-label">Deep work</div>
+          <div class="reflect-stat-sub">${ins.deepPct}% of tracked time</div>
+          <div class="reflect-goal-bar"><div class="reflect-goal-fill" style="width:${deepGoalPct}%"></div></div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Goal: ${deepGoal}h · ${deepGoalPct}% done</div>
+        </div>
+        <div class="reflect-stat ${ins.distMin > 0 ? 'bad' : ''}">
+          <div class="reflect-stat-val">${ins.distMin >= 60 ? (ins.distMin/60).toFixed(1)+'h' : ins.distMin+'m'}</div>
+          <div class="reflect-stat-label">Lost to distractions</div>
+          <div class="reflect-stat-sub">${ins.worstDist !== '—' ? ins.worstDist : 'None logged'}</div>
+        </div>
+        <div class="reflect-stat">
+          <div class="reflect-stat-val">${ins.topActivity !== '—' ? ins.topActivity.slice(0,14) : '—'}</div>
+          <div class="reflect-stat-label">Top activity</div>
+          <div class="reflect-stat-sub">${ins.topActivityMin >= 60 ? (ins.topActivityMin/60).toFixed(1)+'h' : ins.topActivityMin+'m'}</div>
+        </div>
+        <div class="reflect-stat">
+          <div class="reflect-stat-val">${ins.peakHourLabel}</div>
+          <div class="reflect-stat-label">Peak focus hour</div>
+          <div class="reflect-stat-sub">Best day: ${ins.bestDay}</div>
+        </div>
       </div>`;
   }
 
-  // ── Weekly review form — pre-fill if already saved ──
+  // ── Pre-fill review form ──
   const wr = weeklyReviews[weekKey] || {};
   document.getElementById('wr-overall').value = wr.overall || '';
   document.getElementById('wr-priorities').value = wr.priorities || '';
   document.getElementById('wr-drain').value = wr.drain || '';
   document.getElementById('wr-nextweek').value = wr.nextweek || '';
-  const savedBadge = document.getElementById('weekly-review-saved');
-  savedBadge.style.display = weeklyReviews[weekKey] ? 'inline' : 'none';
+  document.getElementById('weekly-review-saved').style.display = wr.savedAt ? 'inline' : 'none';
 
-  // ── History ──
+  // ── Pre-fill plan form (next week's key) ──
+  const nextWeekKey = getWeekKey(new Date(now.getTime() + 7 * 86400000));
+  const wp = (weeklyReviews[nextWeekKey] || {}).plan || {};
+  document.getElementById('wp-p1').value = wp.p1 || '';
+  document.getElementById('wp-p2').value = wp.p2 || '';
+  document.getElementById('wp-p3').value = wp.p3 || '';
+  document.getElementById('wp-deepgoal').value = wp.deepgoal || '';
+  document.getElementById('wp-avoid').value = wp.avoid || '';
+  document.getElementById('weekly-plan-saved').style.display = wp.savedAt ? 'inline' : 'none';
+
   renderReflectHistory();
 }
 
 function saveWeeklyReview() {
   const weekKey = getWeekKey(new Date());
-  weeklyReviews[weekKey] = {
-    overall:   document.getElementById('wr-overall').value.trim(),
-    priorities:document.getElementById('wr-priorities').value.trim(),
-    drain:     document.getElementById('wr-drain').value.trim(),
-    nextweek:  document.getElementById('wr-nextweek').value.trim(),
-    savedAt:   Date.now()
-  };
+  if (!weeklyReviews[weekKey]) weeklyReviews[weekKey] = {};
+  weeklyReviews[weekKey].overall    = document.getElementById('wr-overall').value.trim();
+  weeklyReviews[weekKey].priorities = document.getElementById('wr-priorities').value.trim();
+  weeklyReviews[weekKey].drain      = document.getElementById('wr-drain').value.trim();
+  weeklyReviews[weekKey].nextweek   = document.getElementById('wr-nextweek').value.trim();
+  weeklyReviews[weekKey].savedAt    = Date.now();
+  // Snapshot the week's key stats alongside the reflection
+  const ins = computeInsights(weekKey);
+  if (ins) weeklyReviews[weekKey].stats = { deepHrs: ins.deepHrs, deepPct: ins.deepPct, distMin: ins.distMin, worstDist: ins.worstDist, topActivity: ins.topActivity };
   persist();
   document.getElementById('weekly-review-saved').style.display = 'inline';
-  showToast('Weekly reflection saved ✓');
+  showToast('Review saved ✓');
+  renderReflectHistory();
+}
+
+function saveWeeklyPlan() {
+  const now = new Date();
+  const nextWeekKey = getWeekKey(new Date(now.getTime() + 7 * 86400000));
+  if (!weeklyReviews[nextWeekKey]) weeklyReviews[nextWeekKey] = {};
+  weeklyReviews[nextWeekKey].plan = {
+    p1:       document.getElementById('wp-p1').value.trim(),
+    p2:       document.getElementById('wp-p2').value.trim(),
+    p3:       document.getElementById('wp-p3').value.trim(),
+    deepgoal: document.getElementById('wp-deepgoal').value.trim(),
+    avoid:    document.getElementById('wp-avoid').value.trim(),
+    savedAt:  Date.now()
+  };
+  persist();
+  document.getElementById('weekly-plan-saved').style.display = 'inline';
+  showToast('Plan saved ✓');
   renderReflectHistory();
 }
 
 function renderReflectHistory() {
   const histEl = document.getElementById('reflect-history');
-  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
-  // Collect all weeks that have daily reviews or weekly reviews, last 8 weeks
   const weekSet = new Set();
   const now = new Date();
-  for (let i = 0; i < 8; i++) {
-    const d = new Date(now - i * 7 * 86400000);
-    weekSet.add(getWeekKey(d));
-  }
+  for (let i = 0; i < 12; i++) weekSet.add(getWeekKey(new Date(now - i * 7 * 86400000)));
   Object.keys(weeklyReviews).forEach(k => weekSet.add(k));
 
-  // Also collect weeks from daily reviews
-  Object.keys(reviews).forEach(dateStr => {
-    const d = new Date(dateStr + 'T12:00:00');
-    if (!isNaN(d)) weekSet.add(getWeekKey(d));
-  });
+  const weeks = Array.from(weekSet).sort().reverse().slice(0, 12);
+  const currentWeek = getWeekKey(now);
 
-  const weeks = Array.from(weekSet).sort().reverse().slice(0, 10);
+  const cards = weeks.map(wk => {
+    const wr = weeklyReviews[wk] || {};
+    const plan = wr.plan;
+    const hasReview = wr.savedAt;
+    const hasPlan = plan && plan.savedAt;
+    if (!hasReview && !hasPlan) return '';
 
-  if (!weeks.length) {
-    histEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No reflections yet. Save your daily reviews to build history.</div>`;
-    return;
-  }
+    const isCurrent = wk === currentWeek;
+    const stats = wr.stats;
+    const statsHtml = stats ? `<span class="reflect-week-card-stats">${stats.deepHrs}h deep · ${stats.deepPct}% · ${stats.distMin}m lost</span>` : '';
 
-  histEl.innerHTML = weeks.map(wk => {
-    const wr = weeklyReviews[wk];
-
-    // Daily reviews for this week
-    const dailyRows = Object.entries(reviews)
-      .filter(([dateStr]) => {
-        const d = new Date(dateStr + 'T12:00:00');
-        return !isNaN(d) && getWeekKey(d) === wk;
-      })
-      .sort(([a],[b]) => b.localeCompare(a))
-      .map(([dateStr, rv]) => {
-        const d = new Date(dateStr + 'T12:00:00');
-        const label = `${dayNames[d.getDay()]} ${d.getMonth()+1}/${d.getDate()}`;
-        const parts = [];
-        if (rv.win) parts.push(`<span style="color:var(--deep)">✓ ${rv.win}</span>`);
-        if (rv.waste) parts.push(`<span style="color:var(--distraction)">✗ ${rv.waste}</span>`);
-        if (rv.tomorrow) parts.push(`<span style="color:var(--muted)">→ ${rv.tomorrow}</span>`);
-        if (!parts.length) return '';
-        return `<div class="reflect-day-row"><span style="font-size:11px;color:var(--muted);min-width:48px">${label}</span><div style="display:flex;flex-direction:column;gap:3px;font-size:12px">${parts.join('')}</div></div>`;
-      }).filter(Boolean).join('');
-
-    const wrBlock = wr ? `
-      <div class="reflect-weekly-block">
-        ${wr.overall ? `<div style="margin-bottom:6px"><span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Overall</span><div style="font-size:13px;margin-top:2px">${wr.overall}</div></div>` : ''}
-        ${wr.drain ? `<div style="margin-bottom:6px"><span style="font-size:10px;color:var(--distraction);text-transform:uppercase;letter-spacing:.05em">Drain</span><div style="font-size:13px;margin-top:2px">${wr.drain}</div></div>` : ''}
-        ${wr.nextweek ? `<div><span style="font-size:10px;color:var(--deep);text-transform:uppercase;letter-spacing:.05em">Next week</span><div style="font-size:13px;margin-top:2px">${wr.nextweek}</div></div>` : ''}
+    const reviewHtml = hasReview ? `
+      <div style="padding:12px 14px;border-bottom:${hasPlan ? '1px solid var(--border)' : 'none'}">
+        <div class="reflect-section-tag review">Review</div>
+        ${wr.overall ? `<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">What went well</div><div style="font-size:13px;color:var(--text)">${wr.overall}</div></div>` : ''}
+        ${wr.priorities ? `<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">What didn't go well</div><div style="font-size:13px;color:var(--text)">${wr.priorities}</div></div>` : ''}
+        ${wr.drain ? `<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--distraction);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Biggest drain</div><div style="font-size:13px;color:var(--text)">${wr.drain}</div></div>` : ''}
+        ${wr.nextweek ? `<div><div style="font-size:10px;color:var(--deep);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">One change</div><div style="font-size:13px;color:var(--text)">${wr.nextweek}</div></div>` : ''}
       </div>` : '';
 
-    if (!dailyRows && !wrBlock) return '';
+    const planHtml = hasPlan ? `
+      <div style="padding:12px 14px">
+        <div class="reflect-section-tag plan">Plan</div>
+        ${[plan.p1, plan.p2, plan.p3].filter(Boolean).map((p, i) => `<div style="font-size:13px;color:var(--text);margin-bottom:4px"><span style="color:var(--muted);font-size:11px">#${i+1} </span>${p}</div>`).join('')}
+        ${plan.deepgoal ? `<div style="font-size:11px;color:var(--deep);margin-top:6px">🎯 ${plan.deepgoal}h deep work goal</div>` : ''}
+        ${plan.avoid ? `<div style="font-size:11px;color:var(--distraction);margin-top:4px">✗ Avoid: ${plan.avoid}</div>` : ''}
+      </div>` : '';
 
-    return `<div class="reflect-history-week">
-      <div style="padding:10px 12px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border)">${wk}</div>
-      ${dailyRows ? `<div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px">${dailyRows}</div>` : ''}
-      ${wrBlock}
+    return `<div class="reflect-week-card">
+      <div class="reflect-week-card-header">
+        <span class="reflect-week-card-key">${isCurrent ? 'This week' : wk}</span>
+        ${statsHtml}
+      </div>
+      ${reviewHtml}${planHtml}
     </div>`;
-  }).filter(Boolean).join('');
+  }).filter(Boolean);
 
-  if (!histEl.innerHTML.trim()) {
-    histEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No reflections yet. Save your daily reviews to build history.</div>`;
-  }
+  histEl.innerHTML = cards.length
+    ? cards.join('')
+    : `<div style="color:var(--muted);font-size:13px;padding:8px 0">No entries yet — save a review or plan to start building history.</div>`;
 }
 
 // ══════════════════════════════════════════════════════
