@@ -191,17 +191,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .chip:hover{background:var(--deep-dim);border-color:var(--deep);color:var(--deep)}
 .chip:active{transform:scale(0.95)}
 
-/* ── Away picker ── */
-.away-picker{display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
-  padding:10px 12px;margin-top:8px;gap:6px;flex-wrap:wrap;align-items:center}
-.away-picker.show{display:flex}
-.away-picker-chip{font-family:var(--head);font-size:11px;font-weight:500;padding:4px 10px;border-radius:999px;
-  cursor:pointer;border:1px solid var(--away);background:var(--away-dim);color:var(--away);
-  transition:background 0.12s,color 0.12s;white-space:nowrap}
-.away-picker-chip:hover{background:var(--away);color:var(--bg)}
-.away-picker-chip:active{transform:scale(0.95)}
-.away-custom-input{font-family:var(--head);font-size:11px;padding:4px 8px;border-radius:999px;
-  border:1px solid var(--border2);background:var(--bg3);color:var(--text);width:90px;outline:none}
+/* ── Away dropdown ── */
+.away-dropdown{display:none;position:absolute;bottom:calc(100% + 6px);left:0;
+  min-width:160px;background:var(--bg2);border:1px solid var(--border2);
+  border-radius:var(--r2);box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:200;overflow:hidden}
+.away-dropdown.show{display:block}
+.away-dropdown-item{padding:10px 14px;font-size:13px;font-weight:500;cursor:pointer;
+  color:var(--text);transition:background 0.1s;white-space:nowrap}
+.away-dropdown-item:hover{background:var(--away-dim);color:var(--away)}
+.away-dropdown-divider{height:1px;background:var(--border);margin:4px 0}
+.away-dropdown-custom{padding:8px 10px}
+.away-custom-input{font-family:var(--head);font-size:12px;padding:6px 10px;border-radius:7px;
+  border:1px solid var(--border2);background:var(--bg3);color:var(--text);width:100%;outline:none}
 .away-custom-input:focus{border-color:var(--away)}
 
 /* ── Continue banner ── */
@@ -652,7 +653,24 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <div class="hero-controls">
         <button class="btn sm" onclick="openSwitchPanel()">↷ Switch</button>
         <button class="btn sm" onclick="openBreakModal()" style="border-color:var(--break);color:var(--break)">☕ Break</button>
-        <button class="btn sm" id="away-btn" onclick="toggleAway()" style="border-color:var(--away);color:var(--away)">⊙ Away</button>
+        <div style="position:relative">
+          <button class="btn sm" id="away-btn" onclick="toggleAway()" style="border-color:var(--away);color:var(--away)">⊙ Away</button>
+          <!-- Away dropdown -->
+          <div class="away-dropdown" id="away-picker">
+            <div class="away-dropdown-item" onclick="startAway('Eat')">🍽 Eat</div>
+            <div class="away-dropdown-item" onclick="startAway('Walk')">🚶 Walk</div>
+            <div class="away-dropdown-item" onclick="startAway('Exercise')">🏋 Exercise</div>
+            <div class="away-dropdown-item" onclick="startAway('Commute')">🚗 Commute</div>
+            <div class="away-dropdown-item" onclick="startAway('Rest')">💤 Rest</div>
+            <div class="away-dropdown-item" onclick="startAway('Errand')">🛒 Errand</div>
+            <div class="away-dropdown-item" onclick="startAway('Personal')">👤 Personal</div>
+            <div class="away-dropdown-divider"></div>
+            <div class="away-dropdown-custom">
+              <input class="away-custom-input" id="away-custom" placeholder="Other…"
+                onkeydown="if(event.key==='Enter'&&this.value.trim())startAway(this.value.trim())">
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Inline switch panel -->
@@ -693,19 +711,6 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <button class="btn sm" style="border-color:var(--break);color:var(--break);font-size:11px" onclick="endBreak()">End early</button>
     </div>
 
-    <!-- Away picker -->
-    <div class="away-picker" id="away-picker">
-      <span style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.07em;flex-basis:100%;margin-bottom:2px">What are you doing?</span>
-      <button class="away-picker-chip" onclick="startAway('Lunch')">🍽 Lunch</button>
-      <button class="away-picker-chip" onclick="startAway('Walk')">🚶 Walk</button>
-      <button class="away-picker-chip" onclick="startAway('Exercise')">🏋 Exercise</button>
-      <button class="away-picker-chip" onclick="startAway('Commute')">🚗 Commute</button>
-      <button class="away-picker-chip" onclick="startAway('Rest')">💤 Rest</button>
-      <button class="away-picker-chip" onclick="startAway('Errand')">🛒 Errand</button>
-      <button class="away-picker-chip" onclick="startAway('Personal')">👤 Personal</button>
-      <input class="away-custom-input" id="away-custom" placeholder="Custom…" onkeydown="if(event.key==='Enter'&&this.value.trim())startAway(this.value.trim())">
-      <button class="away-picker-chip" onclick="const v=document.getElementById('away-custom').value.trim();if(v)startAway(v)" style="padding:4px 8px">Go</button>
-    </div>
   </div>
 
   <!-- Continue banner -->
@@ -4909,6 +4914,14 @@ updateRing();
 renderToday();
 initAutoSync();
 initNativeNotifications();
+// Close away dropdown when clicking outside
+document.addEventListener('click', e => {
+  const picker = document.getElementById('away-picker');
+  const btn = document.getElementById('away-btn');
+  if (picker && picker.classList.contains('show') && !picker.contains(e.target) && e.target !== btn) {
+    picker.classList.remove('show');
+  }
+});
 // On load: if significant untracked time exists, prompt to fill gaps
 setTimeout(() => {
   const workStarted = Date.now() > getWorkDayStartTs();
