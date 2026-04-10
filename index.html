@@ -192,9 +192,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .chip:active{transform:scale(0.95)}
 
 /* ── Away dropdown ── */
-.away-dropdown{display:none;position:absolute;bottom:calc(100% + 6px);left:0;
-  min-width:160px;background:var(--bg2);border:1px solid var(--border2);
-  border-radius:var(--r2);box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:200;overflow:hidden}
+.away-dropdown{display:none;position:absolute;top:calc(100% + 6px);left:0;
+  min-width:160px;max-height:260px;overflow-y:auto;background:var(--bg2);border:1px solid var(--border2);
+  border-radius:var(--r2);box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:200}
 .away-dropdown.show{display:block}
 .away-dropdown-item{padding:10px 14px;font-size:13px;font-weight:500;cursor:pointer;
   color:var(--text);transition:background 0.1s;white-space:nowrap}
@@ -599,7 +599,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <button class="btn sm ghost" onclick="openReview()">Review</button>
-      <button class="btn sm ghost" onclick="enterFocusMode()">⊙</button>
+      <button class="btn sm ghost" onclick="enterFocusMode()" title="Focus / Pomodoro mode">⊙ Focus</button>
     </div>
   </div>
 
@@ -691,7 +691,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
         <div style="flex:1;min-width:0">
           <div class="hero-task-name" id="hero-away-label">Away</div>
           <div style="display:flex;align-items:baseline;gap:0;margin-top:4px">
-            <div class="hero-elapsed" id="hero-away-elapsed" style="color:var(--away)">0</div><span class="hero-elapsed-unit">m away</span>
+            <div class="hero-elapsed" id="hero-away-elapsed" style="color:var(--away);font-size:22px">0:00</div>
           </div>
           <div class="hero-status" style="color:var(--away)"><span class="hero-live-dot" style="background:var(--away)"></span>Away from work</div>
         </div>
@@ -3550,10 +3550,12 @@ function startAway(label) {
   // Away elapsed ticker
   clearInterval(awayElapsedTicker);
   awayElapsedTicker = setInterval(() => {
-    const min = Math.floor((Date.now() - awayStartTime) / 60000);
+    const totalSecs = Math.floor((Date.now() - awayStartTime) / 1000);
+    const m = Math.floor(totalSecs / 60);
+    const s = totalSecs % 60;
     const el = document.getElementById('hero-away-elapsed');
-    if (el) el.textContent = min;
-  }, 10000);
+    if (el) el.textContent = `${m}:${String(s).padStart(2,'0')}`;
+  }, 1000);
   // Legacy compat
   const btn = document.getElementById('away-btn');
   btn.textContent = `↩ Back (${label})`;
