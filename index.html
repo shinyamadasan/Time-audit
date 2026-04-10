@@ -23,6 +23,7 @@
   --admin:#f9c74f;--admin-dim:rgba(249,199,79,0.12);
   --distraction:#ff6b6b;--distraction-dim:rgba(255,107,107,0.12);
   --break:#a78bfa;--break-dim:rgba(167,139,250,0.12);
+  --away:#94a3b8;--away-dim:rgba(148,163,184,0.12);
   --head:'Syne',sans-serif;--mono:'DM Mono',monospace;
   --r:10px;--r2:14px;
   --safe-top:env(safe-area-inset-top,0px);
@@ -102,7 +103,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .t-block:hover{transform:scaleY(1.15)}
 .t-block.deep{background:var(--deep)}.t-block.shallow{background:var(--shallow)}
 .t-block.admin{background:var(--admin)}.t-block.distraction{background:var(--distraction)}
-.t-block.empty{background:var(--bg4)}
+.t-block.empty{background:var(--bg4)}.t-block.away{background:var(--away)}
 .timeline-legend{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
 .legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
 .legend-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
@@ -123,7 +124,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .entry-bar{width:4px;height:34px;border-radius:2px;flex-shrink:0}
 .entry-bar.deep{background:var(--deep)}.entry-bar.shallow{background:var(--shallow)}
 .entry-bar.admin{background:var(--admin)}.entry-bar.distraction{background:var(--distraction)}
-.entry-bar.break{background:var(--break)}
+.entry-bar.break{background:var(--break)}.entry-bar.away{background:var(--away)}
 .entry-main{flex:1;min-width:0}
 .entry-activity{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .entry-meta{font-size:11px;color:var(--muted);margin-top:1px;font-family:var(--mono)}
@@ -136,6 +137,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .badge.deap{background:rgba(255,255,255,0.06);color:var(--muted)}
 .badge.onplan{background:var(--deep-dim);color:var(--deep)}.badge.offplan{background:var(--distraction-dim);color:var(--distraction)}
 .badge.break{background:var(--break-dim);color:var(--break)}
+.badge.away{background:var(--away-dim);color:var(--away)}
 
 /* ── Buttons ── */
 .btn{font-family:var(--head);font-size:13px;font-weight:500;padding:8px 18px;border-radius:8px;
@@ -150,6 +152,53 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .btn.ghost:hover{background:var(--bg3);color:var(--text);border-color:var(--border)}
 .btn.danger{border-color:rgba(255,107,107,0.25);color:var(--distraction)}
 .btn.danger:hover{background:var(--distraction-dim)}
+
+/* ── Activity Hero ── */
+.activity-hero{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:12px}
+.hero-prompt{font-size:11px;text-transform:uppercase;letter-spacing:0.09em;color:var(--muted);font-weight:600;margin-bottom:10px}
+.hero-start-row{display:flex;gap:8px;align-items:center}
+.hero-input{flex:1;font-family:var(--head);font-size:14px;padding:9px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);outline:none}
+.hero-input:focus{border-color:var(--deep)}
+.hero-active-top{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.hero-ring-wrap svg{display:block;transform:rotate(-90deg)}
+.hero-task-name{font-size:17px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.hero-elapsed{font-size:13px;font-weight:600;color:var(--deep);font-family:var(--mono);margin-top:2px}
+.hero-status{font-size:11px;color:var(--muted);margin-top:2px}
+.hero-cost{font-size:11px;font-family:var(--mono);color:var(--muted);flex-shrink:0}
+.hero-controls{display:flex;gap:8px;flex-wrap:wrap}
+.quick-retro-bar{display:flex;gap:8px;align-items:center;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;margin-bottom:12px}
+.quick-retro-input{flex:1;font-family:var(--head);font-size:12px;padding:6px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);outline:none;min-width:0}
+.quick-retro-input:focus{border-color:var(--deep)}
+.quick-retro-sel{font-family:var(--head);font-size:11px;padding:5px 7px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex-shrink:0}
+
+/* ── Recent task chips ── */
+.chips-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;min-height:0}
+.chip{font-family:var(--head);font-size:11px;font-weight:500;padding:4px 10px;border-radius:999px;
+  cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--muted);
+  transition:background 0.12s,border-color 0.12s,color 0.12s;letter-spacing:0.02em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px}
+.chip:hover{background:var(--deep-dim);border-color:var(--deep);color:var(--deep)}
+.chip:active{transform:scale(0.95)}
+
+/* ── Away picker ── */
+.away-picker{display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  padding:10px 12px;margin-top:8px;gap:6px;flex-wrap:wrap;align-items:center}
+.away-picker.show{display:flex}
+.away-picker-chip{font-family:var(--head);font-size:11px;font-weight:500;padding:4px 10px;border-radius:999px;
+  cursor:pointer;border:1px solid var(--away);background:var(--away-dim);color:var(--away);
+  transition:background 0.12s,color 0.12s;white-space:nowrap}
+.away-picker-chip:hover{background:var(--away);color:var(--bg)}
+.away-picker-chip:active{transform:scale(0.95)}
+.away-custom-input{font-family:var(--head);font-size:11px;padding:4px 8px;border-radius:999px;
+  border:1px solid var(--border2);background:var(--bg3);color:var(--text);width:90px;outline:none}
+.away-custom-input:focus{border-color:var(--away)}
+
+/* ── Continue banner ── */
+.continue-banner{display:none;background:var(--bg2);border:1px solid rgba(76,199,240,0.25);
+  border-radius:var(--r2);padding:12px 14px;margin-bottom:12px;align-items:center;gap:10px}
+.continue-banner.show{display:flex}
+.continue-banner-text{font-size:13px;font-weight:600;color:var(--text)}
+.continue-banner-sub{font-size:11px;color:var(--muted);margin-top:2px}
 
 /* ── Energy buttons ── */
 .energy-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
@@ -405,7 +454,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-bar-col.deep{background:var(--deep)}.tl-bar-col.shallow{background:var(--shallow)}
 .tl-bar-col.admin{background:var(--admin)}.tl-bar-col.distraction{background:var(--distraction)}
 .tl-bar-col.missed{background:var(--bg4)}
-.tl-bar-col.break{background:var(--break)}
+.tl-bar-col.break{background:var(--break)}.tl-bar-col.away{background:var(--away)}
 .tl-content{flex:1;min-width:0;padding:6px 0 6px 0}
 .tl-activity{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 .tl-meta{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px}
@@ -417,6 +466,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-badge.distraction{background:var(--distraction-dim);color:var(--distraction)}
 .tl-badge.missed{background:var(--bg4);color:var(--muted)}
 .tl-badge.break{background:var(--break-dim);color:var(--break)}
+.tl-badge.away{background:var(--away-dim);color:var(--away)}
 
 /* ── Week day tabs ── */
 .day-tab{padding:7px 14px;border-radius:999px;border:1px solid var(--border2);
@@ -541,36 +591,80 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     </div>
   </div>
 
-  <div class="intention-bar">
-    <div class="intention-dot"></div>
-    <div style="flex:1">
-      <div class="intention-label">Today's focus</div>
-      <input class="intention-input" id="intention" placeholder="What are you focused on today?" maxlength="120">
-    </div>
-  </div>
+  <!-- hidden inputs kept for compatibility -->
+  <input id="intention" style="display:none" maxlength="120">
+  <input type="number" id="interval-input" value="30" min="1" max="240" step="5" style="display:none">
+  <div id="timer-current-task" style="display:none"></div>
+  <div id="countdown" style="display:none"></div>
+  <div id="live-cost" style="display:none"></div>
+  <button id="main-btn" style="display:none" onclick="toggleTimer()"></button>
+  <button id="switch-btn" style="display:none" onclick="openSwitchPanel()"></button>
+  <button id="break-btn" style="display:none"></button>
 
-  <div class="timer-section">
-    <div class="timer-top">
-      <div class="ring-wrap">
-        <svg width="120" height="120" viewBox="0 0 120 120">
-          <circle class="ring-bg" cx="60" cy="60" r="50"/>
-          <circle class="ring-fg" id="ring" cx="60" cy="60" r="50" stroke-dasharray="314.2" stroke-dashoffset="0"/>
-        </svg>
-        <div class="ring-center"><span class="ring-pct" id="ring-pct">100%</span></div>
+  <!-- ── Activity Hero ── -->
+  <div class="activity-hero" id="activity-hero">
+
+    <!-- Idle state -->
+    <div id="hero-idle">
+      <div class="hero-prompt">What are you working on?</div>
+      <div class="hero-start-row">
+        <input class="hero-input" id="hero-task-input" placeholder="Type a task…"
+          onkeydown="if(event.key==='Enter')startFromHero()">
+        <button class="btn primary" onclick="startFromHero()">Start</button>
       </div>
-      <div>
-        <div id="timer-current-task" style="font-size:12px;color:var(--deep);font-weight:600;letter-spacing:0.04em;margin-bottom:2px;display:none"></div>
-        <div class="timer-countdown" id="countdown">30:00</div>
-        <div class="timer-status" id="timer-status">Ready</div>
-        <div class="timer-status" id="live-cost">-$0 drifting</div>
+      <div class="chips-row" id="recent-chips"></div>
+    </div>
+
+    <!-- Active state -->
+    <div id="hero-active" style="display:none">
+      <div class="hero-active-top">
+        <div class="hero-ring-wrap">
+          <svg width="64" height="64" viewBox="0 0 120 120">
+            <circle class="ring-bg" cx="60" cy="60" r="50"/>
+            <circle class="ring-fg" id="ring" cx="60" cy="60" r="50" stroke-dasharray="314.2" stroke-dashoffset="314.2"/>
+          </svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="hero-task-name" id="hero-task-name">—</div>
+          <div class="hero-elapsed" id="hero-elapsed">0m</div>
+          <div class="hero-status" id="timer-status">Tracking</div>
+        </div>
+        <div id="live-cost-active" class="hero-cost"></div>
+      </div>
+
+      <div class="hero-controls">
+        <button class="btn sm" onclick="openSwitchPanel()">↷ Switch</button>
+        <button class="btn sm" onclick="openBreakModal()" style="border-color:var(--break);color:var(--break)">☕ Break</button>
+        <button class="btn sm" id="away-btn" onclick="toggleAway()" style="border-color:var(--away);color:var(--away)">⊙ Away</button>
+      </div>
+
+      <!-- Inline switch panel -->
+      <div id="switch-panel" style="display:none;margin-top:10px">
+        <div class="hero-start-row">
+          <input class="hero-input" id="switch-input" placeholder="Switch to…"
+            onkeydown="if(event.key==='Enter')confirmSwitch()">
+          <button class="btn primary" onclick="confirmSwitch()">Switch</button>
+        </div>
+        <div class="chips-row" id="switch-chips" style="margin-top:8px"></div>
       </div>
     </div>
-    <div class="timer-controls">
-      <div class="interval-row">every <input type="number" id="interval-input" value="30" min="1" max="240" step="5"> min</div>
-      <button class="btn primary" id="main-btn" onclick="toggleTimer()">Start</button>
-      <button class="btn sm" id="switch-btn" onclick="switchTaskMidBlock()" style="display:none">↷ Switch task</button>
-      <button class="btn sm" id="break-btn" onclick="openBreakModal()" style="display:none;border-color:var(--break);color:var(--break)">☕ Break</button>
+
+    <!-- Away active state -->
+    <div id="hero-away" style="display:none">
+      <div class="hero-active-top">
+        <div style="font-size:28px;flex-shrink:0">⊙</div>
+        <div style="flex:1;min-width:0">
+          <div class="hero-task-name" id="hero-away-label">Away</div>
+          <div class="hero-elapsed" id="hero-away-elapsed">0m</div>
+          <div class="hero-status">Away from work</div>
+        </div>
+      </div>
+      <div class="hero-controls">
+        <button class="btn primary" onclick="toggleAway()">↩ Back</button>
+      </div>
     </div>
+
+    <!-- Break active row -->
     <div class="break-active-row" id="break-active-row">
       <div class="b-icon">☕</div>
       <div style="flex:1">
@@ -579,6 +673,45 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       </div>
       <button class="btn sm" style="border-color:var(--break);color:var(--break);font-size:11px" onclick="endBreak()">End early</button>
     </div>
+
+    <!-- Away picker -->
+    <div class="away-picker" id="away-picker">
+      <span style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.07em;flex-basis:100%;margin-bottom:2px">What are you doing?</span>
+      <button class="away-picker-chip" onclick="startAway('Lunch')">🍽 Lunch</button>
+      <button class="away-picker-chip" onclick="startAway('Walk')">🚶 Walk</button>
+      <button class="away-picker-chip" onclick="startAway('Exercise')">🏋 Exercise</button>
+      <button class="away-picker-chip" onclick="startAway('Commute')">🚗 Commute</button>
+      <button class="away-picker-chip" onclick="startAway('Rest')">💤 Rest</button>
+      <button class="away-picker-chip" onclick="startAway('Errand')">🛒 Errand</button>
+      <button class="away-picker-chip" onclick="startAway('Personal')">👤 Personal</button>
+      <input class="away-custom-input" id="away-custom" placeholder="Custom…" onkeydown="if(event.key==='Enter'&&this.value.trim())startAway(this.value.trim())">
+      <button class="away-picker-chip" onclick="const v=document.getElementById('away-custom').value.trim();if(v)startAway(v)" style="padding:4px 8px">Go</button>
+    </div>
+  </div>
+
+  <!-- Continue banner -->
+  <div class="continue-banner" id="continue-banner">
+    <div style="flex:1">
+      <div class="continue-banner-text" id="continue-banner-text">✓ Block done</div>
+      <div class="continue-banner-sub" id="continue-banner-sub">Auto-continuing in 30s</div>
+    </div>
+    <button class="btn sm" id="continue-banner-btn" onclick="doContinueBlock()" style="border-color:var(--deep);color:var(--deep)">▶ Continue</button>
+    <button class="btn sm ghost" onclick="doSwitchFromBanner()">↷ Switch</button>
+  </div>
+
+  <!-- Quick retro log -->
+  <div class="quick-retro-bar">
+    <input class="quick-retro-input" id="retro-task" placeholder="Log something that already happened…"
+      onkeydown="if(event.key==='Enter')quickRetroLog()">
+    <select class="quick-retro-sel" id="retro-dur">
+      <option value="15">15m</option>
+      <option value="30" selected>30m</option>
+      <option value="45">45m</option>
+      <option value="60">1h</option>
+      <option value="90">1h 30m</option>
+      <option value="120">2h</option>
+    </select>
+    <button class="btn sm" onclick="quickRetroLog()">Log</button>
   </div>
 
   <!-- Untracked warning banner — shows whenever there are gaps -->
@@ -770,10 +903,13 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 
   <div class="settings-section">
     <div class="settings-title">Data</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn sm" onclick="exportCSV()">Export CSV</button>
-      <button class="btn sm danger" onclick="clearTodayOnly()">Clear today</button>
       <button class="btn sm danger" onclick="clearAll()">Clear all</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+      <select id="clear-day-select" style="font-family:var(--head);font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex:1;min-width:0"></select>
+      <button class="btn sm danger" onclick="clearSelectedDay()">Clear day</button>
     </div>
     <div style="margin-top:10px;font-size:12px;color:var(--muted)" id="settings-stats"></div>
   </div>
@@ -1208,6 +1344,14 @@ let breakEndsAt = null;
 let breakTicker = null;
 let breakStartTs = null;
 let timerOwnerDeviceId = null;
+let awayActive = false;
+let awayStartTime = null;
+let awayLabel = 'Away';
+let continueBannerTimer = null;
+let continueBannerCountdown = 0;
+let recentChipTasks = [];
+let taskStartTime = null;
+let awayElapsedTicker = null;
 const firebaseConfig = {
   apiKey: "AIzaSyDQeoZ1o1uz7adi1fLQiC6VKFCJ-6q8kgA",
   authDomain: "time-audit-3c3da.firebaseapp.com",
@@ -1392,19 +1536,35 @@ function load() {
 // TIMER
 // ══════════════════════════════════════════════════════
 function fmt(s) { return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
+function fmtDur(min) {
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
 
 function updateRing() {
-// change color if distracted
-if (currentState === 'distraction') {
-  document.getElementById('ring').style.stroke = '#ff6b6b';
-} else {
-  document.getElementById('ring').style.stroke = 'var(--deep)';
-}
-  const pct = remaining / totalSecs;
-  document.getElementById('ring').style.strokeDashoffset = CIRCUM*(1-pct);
-  document.getElementById('countdown').textContent = fmt(remaining);
-  document.getElementById('ring-pct').textContent = Math.round(pct*100)+'%';
-  document.getElementById('focus-countdown').textContent = fmt(remaining);
+  const ring = document.getElementById('ring');
+  if (!ring) return;
+  // Ring fills UP as elapsed time grows
+  const pct = remaining / totalSecs; // 1 at start, 0 at end
+  ring.style.strokeDashoffset = CIRCUM * pct; // CIRCUM→0: ring fills
+  ring.style.stroke = currentState === 'distraction' ? '#ff6b6b' : 'var(--deep)';
+
+  // Hero: total elapsed time on this task (across intervals)
+  const elapsed = taskStartTime ? Math.max(0, Math.round((Date.now() - taskStartTime) / 60000)) : 0;
+  const elEl = document.getElementById('hero-elapsed');
+  if (elEl) elEl.textContent = elapsed > 0 ? fmtDur(elapsed) : '0m';
+  const nameEl = document.getElementById('hero-task-name');
+  if (nameEl && currentTask) nameEl.textContent = currentTask;
+
+  // Legacy compat
+  const cdEl = document.getElementById('countdown');
+  if (cdEl) cdEl.textContent = fmt(remaining);
+  const pctEl = document.getElementById('ring-pct');
+  if (pctEl) pctEl.textContent = Math.round((1 - pct) * 100) + '%';
+  const focEl = document.getElementById('focus-countdown');
+  if (focEl) focEl.textContent = fmt(remaining);
 }
 
 async function toggleTimer() {
@@ -1473,6 +1633,7 @@ function updateTimerTaskLabel() {
 async function _startTimer(task) {
   currentTask = task;
   lastTaskForRepeat = task;
+  taskStartTime = Date.now();
   blockStartTime = Date.now();
   lastStateChange = Date.now();
   currentState = 'deep';
@@ -1480,12 +1641,19 @@ async function _startTimer(task) {
   if (typeof Notification !== 'undefined' && Notification.permission==='default') { try { await Notification.requestPermission(); } catch(e){} }
   settings.intervalMin = parseInt(document.getElementById('interval-input').value)||30;
   totalSecs = settings.intervalMin*60;
-  document.getElementById('interval-input').disabled = true;
   timerOwnerDeviceId = syncedDeviceId;
   running = true;
   switchState('deep');
+  // Hero UI: show active state
+  document.getElementById('hero-idle').style.display = 'none';
+  document.getElementById('hero-active').style.display = 'block';
+  document.getElementById('hero-away').style.display = 'none';
+  document.getElementById('hero-task-name').textContent = task;
+  document.getElementById('hero-elapsed').textContent = '0m';
+  document.getElementById('switch-panel').style.display = 'none';
+  // Legacy compat
   document.getElementById('main-btn').textContent = 'Break';
-  document.getElementById('break-btn').style.display = 'inline-flex'; document.getElementById('switch-btn').style.display = 'inline-flex';
+  document.getElementById('switch-btn').style.display = 'inline-flex';
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min`;
   updateTimerTaskLabel();
   timerStartedAt = Date.now();
@@ -1495,7 +1663,7 @@ async function _startTimer(task) {
     remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
     remaining <= 0 ? doPing() : updateRing();
   }, 1000);
-  scheduleNativePing(totalSecs); // fires even when app is backgrounded
+  scheduleNativePing(totalSecs);
   persist();
   syncTimerState();
 }
@@ -1536,6 +1704,7 @@ function resetTimer() {
   running = false; clearInterval(ticker); ticker = null;
   cancelNativePing();
   if (breakActive) { clearInterval(breakTicker); breakTicker = null; breakActive = false; document.getElementById('break-active-row').classList.remove('show'); }
+  taskStartTime = null;
   document.getElementById('interval-input').disabled = false;
   document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
   document.getElementById('main-btn').disabled = false;
@@ -1545,6 +1714,12 @@ function resetTimer() {
   document.getElementById('main-btn').textContent = 'Start';
   document.getElementById('timer-status').textContent = 'Ready';
   currentTask = ''; updateTimerTaskLabel();
+  // Hero UI: back to idle
+  document.getElementById('hero-active').style.display = 'none';
+  document.getElementById('hero-away').style.display = 'none';
+  document.getElementById('hero-idle').style.display = 'block';
+  document.getElementById('hero-task-input').value = '';
+  document.getElementById('switch-panel').style.display = 'none';
   updateRing(); syncTimerState();
 }
 
@@ -1573,7 +1748,7 @@ function switchTaskMidBlock() {
     entries.sort((a, b) => b.ts - a.ts);
     lastTaskForRepeat = prevTask;
     persist(); renderToday(); syncEntries();
-    showToast(`Logged: ${prevTask} · ${dur}m`);
+    showToast(`Logged: ${prevTask} · ${fmtDur(dur)}`);
   }
 
   // Reset block timer and open pre-commit for next task
@@ -1623,6 +1798,7 @@ function startBreak(mins) {
   // Show break UI
   _updateBreakDisplay();
   document.getElementById('break-active-row').classList.add('show');
+  document.getElementById('hero-active').style.display = 'none'; // hide active panel during break
   document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
   document.getElementById('main-btn').textContent = 'On Break';
   document.getElementById('main-btn').disabled = true;
@@ -1650,9 +1826,11 @@ function endBreak() {
   breakActive = false;
 
   document.getElementById('break-active-row').classList.remove('show');
+  document.getElementById('hero-active').style.display = 'block'; // restore active panel
+  document.getElementById('hero-task-name').textContent = currentTask || lastTaskForRepeat || 'Work';
   document.getElementById('main-btn').disabled = false;
   document.getElementById('main-btn').textContent = 'Break';
-  document.getElementById('break-btn').style.display = 'inline-flex'; document.getElementById('switch-btn').style.display = 'inline-flex';
+  document.getElementById('switch-btn').style.display = 'inline-flex';
 
   // Log the break as an entry
   const actualDur = Math.round((Date.now() - breakStartTs) / 60000);
@@ -1746,12 +1924,9 @@ function doPing() {
   syncEntries();
   showPingBanner(pingCount);
 
-  // 3-minute grace window before opening log
+  // Show continue banner — auto-logs and continues after 30s
   clearTimeout(snoozeTimer);
-  snoozeTimer = setTimeout(() => {
-    if (document.getElementById('quicklog-overlay').classList.contains('open')) return;
-    openQuickLog();
-  }, 3 * 60 * 1000);
+  showContinueBanner(currentTask || lastTaskForRepeat || intention || 'Work');
 }
 
 // ══════════════════════════════════════════════════════
@@ -1770,7 +1945,7 @@ function openQuickLog() {
   qlEnergy = '';
   const elapsedMin = blockStartTime ? Math.max(1, Math.round((Date.now() - blockStartTime) / 60000)) : settings.intervalMin;
   document.getElementById('ql-tag').textContent = `PING #${pingCount}`;
-  document.getElementById('ql-sub').textContent = `Last ${elapsedMin} min · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+  document.getElementById('ql-sub').textContent = `Last ${fmtDur(elapsedMin)} · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
   document.getElementById('ql-activity').value = '';
   document.querySelectorAll('#quicklog-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
 
@@ -2064,7 +2239,7 @@ function endWorkSession() {
   entries.sort((a,b) => b.ts - a.ts);
   blockStartTime = Date.now();
   persist(); syncEntries();
-  showToast(`Logged: ${task} · ${dur}m`);
+  showToast(`Logged: ${task} · ${fmtDur(dur)}`);
 
   // Start break
   pomodoroPhase = 'break';
@@ -2169,7 +2344,7 @@ function exitFocusConfirm() {
       entries.push(entry);
       entries.sort((a, b) => b.ts - a.ts);
       persist(); syncEntries();
-      showToast(`Logged: ${task} · ${dur}m`);
+      showToast(`Logged: ${task} · ${fmtDur(dur)}`);
     }
     focusStartTime = null;
   }
@@ -2465,7 +2640,7 @@ function saveRetroEntry() {
     entries.sort((a,b) => b.ts - a.ts);
     persist(); renderToday(); syncEntries();
     closeModal('retro-overlay');
-    showToast(`Logged retroactively · ${dur}m`);
+    showToast(`Logged retroactively · ${fmtDur(dur)}`);
   }
 }
 
@@ -2565,7 +2740,6 @@ function triggerPenaltyMode() {
      running = true;
      document.getElementById('main-btn').textContent = 'Break';
      document.getElementById('timer-status').textContent = `Penalty mode`;
-     document.getElementById('interval-input').disabled = true;
      timerStartedAt = Date.now();
      if(!ticker) ticker = setInterval(() => {
        remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
@@ -2579,7 +2753,7 @@ function triggerPenaltyMode() {
 
 function deleteEntry(id) {
   entries=entries.filter(e=>e.id!==id);
-  persist(); renderToday(); renderWeekTable();
+  persist(); renderToday(); renderWeek(); renderWeekTable();
   syncEntries();
 }
 
@@ -2611,8 +2785,8 @@ function getTimeByActivity(entriesArr) {
   return map;
 }
 function toDateKey(d){
-  // Day boundaries use the canonical timezone so all devices agree on which "day" it is
-  return new Intl.DateTimeFormat('en-CA', {timeZone: settings.timezone}).format(d);
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return new Intl.DateTimeFormat('en-CA', {timeZone: tz}).format(d);
 }
 // Display time always in THIS device's local timezone from the raw ts
 function localTime(ts){
@@ -2628,7 +2802,7 @@ function computeDeepScore(arr){return arr.length?Math.round(arr.filter(e=>e.ener
 function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(settings.intervalMin/60)).toFixed(1);}
 function computeStreak(){let s=0;const d=new Date();for(let i=0;i<30;i++){const k=toDateKey(new Date(d-i*86400000));if(entries.filter(e=>e.date===k).length>=4)s++;else if(i>0)break;}return s;}
 
-const eLabel={deep:'Deep',shallow:'Shallow',admin:'Admin',distraction:'Distraction',break:'Break'};
+const eLabel={deep:'Deep',shallow:'Shallow',admin:'Admin',distraction:'Distraction',break:'Break',away:'Away'};
 const ACTIVITY_PALETTE = [
   '#7dd3fc','#86efac','#fcd34d','#f9a8d4','#a5b4fc','#6ee7b7','#fb923c','#e879f9',
   '#38bdf8','#4ade80','#facc15','#f472b6','#818cf8','#34d399','#fb7185','#a78bfa',
@@ -2636,7 +2810,7 @@ const ACTIVITY_PALETTE = [
   '#22d3ee','#86efac','#fbbf24','#ec4899','#6366f1','#10b981','#f97316','#d946ef'
 ];
 function getActivityColor(activity) {
-  if (!activity || ['Break','Sleep','Commute','Offline / Away'].includes(activity)) return null;
+  if (!activity || ['Break','Away','Lunch','Walk','Exercise','Commute','Rest','Errand','Personal','Sleep','Offline / Away'].includes(activity)) return null;
   if (!settings.activityColors) settings.activityColors = {};
   if (!settings.activityColors[activity]) {
     const idx = Object.keys(settings.activityColors).length;
@@ -2699,7 +2873,7 @@ function computeGaps(todayEntries) {
   // Decide where to scan up to:
   // If timer is running or break is active, stop at the last entry (current block is live)
   // Otherwise, scan all the way to now
-  const scanEnd = (running || breakActive) ? (merged.length ? merged[merged.length-1].end : workStart) : now;
+  const scanEnd = (running || breakActive || awayActive) ? (merged.length ? merged[merged.length-1].end : workStart) : now;
 
   const gaps = [];
 
@@ -2729,7 +2903,7 @@ function computeGaps(todayEntries) {
   }
 
   // Gap from last entry to now (only when not actively tracking)
-  if (!running && !breakActive) {
+  if (!running && !breakActive && !awayActive) {
     const lastEnd = merged[merged.length - 1].end;
     const nowGapMin = Math.round((now - lastEnd) / 60000);
     if (nowGapMin >= MIN_GAP_MIN) {
@@ -2900,7 +3074,7 @@ function renderEntryRow(item) {
       <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
       <div class="tl-bar-col tl-bar-gap"></div>
       <div class="tl-content">
-        <div class="tl-activity">Untracked block<span class="tl-badge missed">${dur}m</span></div>
+        <div class="tl-activity">Untracked block<span class="tl-badge missed">${fmtDur(dur)}</span></div>
         <div class="tl-meta">${timeLabel}</div>
       </div>
       <button class="log-gap-btn" onclick="openEditEntry(${item.id})">Log it</button>
@@ -2912,7 +3086,7 @@ function renderEntryRow(item) {
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
       <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span></div>
-      <div class="tl-meta">${timeLabel} · ${dur}m</div>
+      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}</div>
     </div>
     <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
   </div>`;
@@ -2925,7 +3099,7 @@ function renderGapRow(item) {
     <div class="tl-time">${localTime(item.tsStart)}</div>
     <div class="tl-bar-col tl-bar-gap"></div>
     <div class="tl-content">
-      <div class="tl-activity">${gapLabel}<span class="tl-badge missed">${item.gapMin}m</span></div>
+      <div class="tl-activity">${gapLabel}<span class="tl-badge missed">${fmtDur(item.gapMin)}</span></div>
       <div class="tl-meta">${localTime(item.tsStart)} – ${endLabel}</div>
     </div>
     <button class="log-gap-btn" onclick="openRetroLogPrefilled(${item.tsStart},${Math.round(item.ts)})">Log it</button>
@@ -2935,73 +3109,7 @@ function renderGapRow(item) {
 let tlExpandedBuckets = new Set();
 
 function renderTimelineCombined(combined) {
-  const BUCKET_MS = 30 * 60 * 1000;
-  const html = [];
-  let i = 0;
-
-  while (i < combined.length) {
-    const item = combined[i];
-
-    // Gaps always render standalone
-    if (item.isGap) { html.push(renderGapRow(item)); i++; continue; }
-
-    // Collect consecutive non-gap entries within the same 30-min bucket
-    const bucketStart = Math.floor((item.tsStart || item.ts) / BUCKET_MS) * BUCKET_MS;
-    const bucketEnd = bucketStart + BUCKET_MS;
-    const group = [];
-    let j = i;
-    while (j < combined.length && !combined[j].isGap) {
-      const ts = combined[j].tsStart || combined[j].ts;
-      if (ts >= bucketEnd) break;
-      group.push(combined[j]);
-      j++;
-    }
-
-    if (group.length === 1) {
-      // Single entry in bucket — render flat
-      html.push(renderEntryRow(group[0]));
-    } else {
-      // Multiple entries — render as collapsible bucket
-      const bucketId = `bucket-${bucketStart}`;
-      const isOpen = tlExpandedBuckets.has(bucketId);
-
-      // Dominant activity = most total time
-      const actDur = {};
-      let totalDur = 0;
-      for (const e of group) {
-        const d = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || settings.intervalMin);
-        actDur[e.activity] = (actDur[e.activity] || 0) + d;
-        totalDur += d;
-      }
-      const dominant = Object.entries(actDur).sort((a,b) => b[1]-a[1])[0][0];
-      const dominantEnergy = group.find(e => e.activity === dominant)?.energy || 'shallow';
-      const actColor = getActivityColor(dominant);
-      const barStyle = actColor ? `style="background:${actColor}"` : '';
-      const energyClass = dominantEnergy;
-      const timeRange = `${localTime(group[0].tsStart || group[0].ts)} – ${localTime(group[group.length-1].ts)}`;
-      // Summarise unique activities
-      const uniqueActs = [...new Set(group.map(e => e.activity))];
-      const summary = uniqueActs.length === 1 ? dominant : `${dominant} +${uniqueActs.length - 1} more`;
-
-      html.push(`<div class="tl-bucket" id="${bucketId}">
-        <div class="tl-bucket-header" onclick="toggleTlBucket('${bucketId}')">
-          <div class="tl-time" style="padding-top:12px">${localTime(group[0].tsStart || group[0].ts)}</div>
-          <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle} style="margin-top:4px;margin-bottom:4px"></div>
-          <div class="tl-content">
-            <div class="tl-activity" style="font-size:12px;font-weight:600">${summary}</div>
-            <div class="tl-meta">${timeRange} · ${totalDur}m · ${group.length} entries</div>
-          </div>
-          <div class="tl-expand-btn">${isOpen ? '▾' : '▸'} ${group.length}</div>
-        </div>
-        <div class="tl-bucket-children ${isOpen ? 'open' : ''}">
-          ${group.map(renderEntryRow).join('')}
-        </div>
-      </div>`);
-    }
-
-    i = j;
-  }
-  return html.join('');
+  return combined.map(item => item.isGap ? renderGapRow(item) : renderEntryRow(item)).join('');
 }
 
 function toggleTlBucket(id) {
@@ -3098,7 +3206,7 @@ function renderToday() {
       <div class="entry-main">
         <div class="entry-activity">${e.activity}</div>
         <div class="entry-meta">
-  ${timeRange} · ${duration}m
+  ${timeRange} · ${fmtDur(duration)}
   ${e.deap ? ' · ' + e.deap : ''}
   ${e.rate ? ' · $' + e.rate + '/hr' : ''}
 </div>
@@ -3112,6 +3220,275 @@ function renderToday() {
     </div>
    `;
 }).join('');
+  renderRecentChips();
+}
+
+// ══════════════════════════════════════════════════════
+// HERO UI ACTIONS
+// ══════════════════════════════════════════════════════
+function startFromHero() {
+  const input = document.getElementById('hero-task-input');
+  const task = input.value.trim();
+  if (!task) { showToast('What will you work on?'); input.focus(); return; }
+  input.value = '';
+  _startTimer(task);
+}
+
+function openSwitchPanel() {
+  const panel = document.getElementById('switch-panel');
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    document.getElementById('switch-input').value = '';
+    const seen = new Set();
+    const tasks = [];
+    for (const e of entries) {
+      if (e.missed || e.break || e.away || !e.activity) continue;
+      const key = e.activity.split(' (Output:')[0];
+      if (!seen.has(key) && key !== currentTask) { seen.add(key); tasks.push(key); }
+      if (tasks.length >= 5) break;
+    }
+    const chipsEl = document.getElementById('switch-chips');
+    chipsEl.innerHTML = tasks.map(t =>
+      `<button class="chip" onclick="switchToTask(${JSON.stringify(t)})">${t}</button>`
+    ).join('');
+    setTimeout(() => document.getElementById('switch-input').focus(), 100);
+  }
+}
+
+function confirmSwitch() {
+  const input = document.getElementById('switch-input');
+  const task = input.value.trim();
+  if (!task) { showToast('What task are you switching to?'); return; }
+  switchToTask(task);
+}
+
+function switchToTask(task) {
+  // Log current block before switching
+  if (running && blockStartTime) {
+    const tsEnd = Date.now();
+    const dur = Math.max(1, Math.round((tsEnd - blockStartTime) / 60000));
+    const prevTask = currentTask || lastTaskForRepeat || 'Work';
+    const lastEnergy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
+    entries.unshift({
+      id: tsEnd, ts: tsEnd, tsStart: blockStartTime,
+      blockIntervalMin: dur,
+      date: toDateKey(new Date()),
+      activity: prevTask, energy: lastEnergy,
+      onPlan: lastEnergy !== 'distraction', retro: false
+    });
+    getActivityColor(prevTask);
+    lastTaskForRepeat = prevTask;
+    persist(); renderToday(); syncEntries();
+    showToast(`Logged: ${prevTask} · ${fmtDur(dur)}`);
+  }
+  document.getElementById('switch-panel').style.display = 'none';
+  _startTimer(task);
+}
+
+function quickRetroLog() {
+  const taskInput = document.getElementById('retro-task');
+  const task = taskInput.value.trim();
+  if (!task) { showToast('What did you do?'); taskInput.focus(); return; }
+  const dur = parseInt(document.getElementById('retro-dur').value) || 30;
+  const tsEnd = Date.now();
+  const tsStart = tsEnd - dur * 60000;
+  const entry = {
+    id: tsEnd, ts: tsEnd, tsStart,
+    blockIntervalMin: dur,
+    date: toDateKey(new Date()),
+    activity: task, energy: 'shallow',
+    onPlan: true, retro: true
+  };
+  getActivityColor(task);
+  entries.unshift(entry);
+  persist(); renderToday(); syncEntries();
+  taskInput.value = '';
+  showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+}
+
+// ══════════════════════════════════════════════════════
+// RECENT TASK CHIPS
+// ══════════════════════════════════════════════════════
+function renderRecentChips() {
+  const el = document.getElementById('recent-chips');
+  if (!el) return;
+  const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const seen = new Set();
+  recentChipTasks = [];
+  for (const e of entries) {
+    if (e.ts < cutoff) break;
+    if (e.break || e.away || e.missed || !e.activity) continue;
+    if (!seen.has(e.activity)) {
+      seen.add(e.activity);
+      recentChipTasks.push(e.activity);
+    }
+    if (recentChipTasks.length >= 5) break;
+  }
+  if (!recentChipTasks.length) { el.innerHTML = ''; return; }
+  el.innerHTML = recentChipTasks.map((t, i) =>
+    `<button class="chip" onclick="useChip(${i})" title="${t.replace(/"/g,'&quot;').replace(/</g,'&lt;')}">${t.replace(/</g,'&lt;')}</button>`
+  ).join('');
+}
+
+function useChip(idx) {
+  const task = recentChipTasks[idx];
+  if (!task) return;
+  if (running) {
+    switchToTask(task);
+  } else {
+    _startTimer(task);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// CONTINUE BANNER
+// ══════════════════════════════════════════════════════
+function showContinueBanner(task) {
+  clearInterval(continueBannerTimer);
+  continueBannerCountdown = 30;
+  const shortTask = task.length > 28 ? task.slice(0, 28) + '…' : task;
+  document.getElementById('continue-banner-text').textContent = `✓ Block done · auto-continuing in ${continueBannerCountdown}s`;
+  document.getElementById('continue-banner-btn').textContent = `▶ Continue "${shortTask}"`;
+  document.getElementById('continue-banner').classList.add('show');
+  continueBannerTimer = setInterval(() => {
+    continueBannerCountdown--;
+    if (continueBannerCountdown <= 0) {
+      clearInterval(continueBannerTimer);
+      doContinueBlock();
+      return;
+    }
+    document.getElementById('continue-banner-text').textContent = `✓ Block done · auto-continuing in ${continueBannerCountdown}s`;
+  }, 1000);
+}
+
+function hideContinueBanner() {
+  clearInterval(continueBannerTimer);
+  document.getElementById('continue-banner').classList.remove('show');
+}
+
+function doContinueBlock() {
+  hideContinueBanner();
+  const lastEnergy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
+  const task = currentTask || lastTaskForRepeat || intention || 'Work';
+  _doQuickSave(task, lastEnergy);
+}
+
+function doSwitchFromBanner() {
+  hideContinueBanner();
+  clearTimeout(snoozeTimer);
+  // Stop timer — user will start fresh task
+  running = false;
+  clearInterval(ticker); ticker = null;
+  timerStartedAt = null;
+  taskStartTime = null;
+  cancelNativePing();
+  // Show hero-idle
+  document.getElementById('hero-active').style.display = 'none';
+  document.getElementById('hero-idle').style.display = 'block';
+  document.getElementById('switch-panel').style.display = 'none';
+  const heroInput = document.getElementById('hero-task-input');
+  if (heroInput) { heroInput.value = ''; setTimeout(() => heroInput.focus(), 100); }
+  showToast('Type your next task and tap Start');
+}
+
+// ══════════════════════════════════════════════════════
+// AWAY TRACKING
+// ══════════════════════════════════════════════════════
+function toggleAway() {
+  if (awayActive) {
+    // End away — log it
+    const now = Date.now();
+    const dur = Math.max(1, Math.round((now - awayStartTime) / 60000));
+    const entry = {
+      id: now, ts: now,
+      tsStart: awayStartTime,
+      blockIntervalMin: dur,
+      date: toDateKey(new Date()),
+      activity: awayLabel, energy: 'away',
+      away: true, onPlan: null
+    };
+    entries.unshift(entry);
+    clearInterval(awayElapsedTicker);
+    awayActive = false;
+    awayStartTime = null;
+    awayLabel = 'Away';
+    // Hero UI: back to idle
+    document.getElementById('hero-away').style.display = 'none';
+    document.getElementById('hero-idle').style.display = 'block';
+    const btn = document.getElementById('away-btn');
+    btn.textContent = '⊙ Away';
+    btn.style.borderColor = 'var(--away)';
+    btn.style.color = 'var(--away)';
+    document.getElementById('timer-status').textContent = 'Ready';
+    persist(); renderToday(); syncEntries();
+    showToast(`${entry.activity} logged · ${fmtDur(dur)}`);
+  } else {
+    // Toggle the away picker
+    const picker = document.getElementById('away-picker');
+    const isOpen = picker.classList.contains('show');
+    if (isOpen) {
+      picker.classList.remove('show');
+    } else {
+      picker.classList.add('show');
+      document.getElementById('away-custom').value = '';
+      setTimeout(() => document.getElementById('away-custom').focus(), 150);
+    }
+  }
+}
+
+function startAway(label) {
+  document.getElementById('away-picker').classList.remove('show');
+  // If timer is running, log current block first
+  if (running) {
+    const task = currentTask || lastTaskForRepeat || intention || 'Work';
+    const lastEnergy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
+    const tsEnd = Date.now();
+    const tsStart = blockStartTime || (tsEnd - totalSecs * 1000);
+    const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
+    entries.unshift({
+      id: tsEnd, ts: tsEnd, tsStart,
+      blockIntervalMin: dur,
+      date: toDateKey(new Date()),
+      activity: task, energy: lastEnergy,
+      onPlan: lastEnergy !== 'distraction', retro: false
+    });
+    clearInterval(ticker);
+    running = false;
+    timerStartedAt = null;
+    blockStartTime = null;
+    document.getElementById('main-btn').textContent = 'Start';
+    document.getElementById('switch-btn').style.display = 'none';
+    document.getElementById('break-btn').style.display = 'none';
+    document.getElementById('interval-input').disabled = false;
+    updateTimerTaskLabel();
+    persist(); syncTimerState();
+  }
+  hideContinueBanner();
+  awayActive = true;
+  awayStartTime = Date.now();
+  awayLabel = label;
+  // Hero UI: show away state
+  document.getElementById('hero-active').style.display = 'none';
+  document.getElementById('hero-idle').style.display = 'none';
+  document.getElementById('hero-away').style.display = 'block';
+  document.getElementById('hero-away-label').textContent = label;
+  document.getElementById('hero-away-elapsed').textContent = '0m';
+  // Away elapsed ticker
+  clearInterval(awayElapsedTicker);
+  awayElapsedTicker = setInterval(() => {
+    const min = Math.round((Date.now() - awayStartTime) / 60000);
+    const el = document.getElementById('hero-away-elapsed');
+    if (el) el.textContent = fmtDur(min) || '0m';
+  }, 15000);
+  // Legacy compat
+  const btn = document.getElementById('away-btn');
+  btn.textContent = `↩ Back (${label})`;
+  btn.style.borderColor = 'var(--distraction)';
+  btn.style.color = 'var(--distraction)';
+  document.getElementById('timer-status').textContent = `Away · ${label}`;
+  renderToday();
+  showToast(`${label} started — tap Back when you return`);
 }
 
 let weekSelectedDay = 'week'; // 'week', 'month', or a dateKey
@@ -3361,7 +3738,7 @@ function renderEntryList(el, entriesArr) {
       <div style="width:3px;height:34px;border-radius:2px;background:${color};flex-shrink:0"></div>
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.activity}</div>
-        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${dur}m</div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
       </div>
       <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
       <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
@@ -3586,7 +3963,7 @@ function renderWeekTable() {
           <div style="width:3px;height:32px;border-radius:2px;background:${color};flex-shrink:0"></div>
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.activity}</div>
-            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${dur}m</div>
+            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
           </div>
           <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
           <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
@@ -3606,6 +3983,16 @@ function renderSettings() {
   document.getElementById('set-workdaystart').value=settings.workDayStart||'09:00';
   document.getElementById('set-timezone').value=settings.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
   document.getElementById('settings-stats').textContent=`${entries.length} total entries · ${getWeekEntries().length} this week`;
+  const datesWithEntries = [...new Set(entries.map(e=>e.date))].sort().reverse();
+  const todayKey = toDateKey(new Date());
+  const clearSel = document.getElementById('clear-day-select');
+  clearSel.innerHTML = datesWithEntries.length
+    ? datesWithEntries.map(d => {
+        const label = d === todayKey ? 'Today' : new Date(d+'T12:00:00').toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+        const count = entries.filter(e=>e.date===d).length;
+        return `<option value="${d}">${label} (${count} entries)</option>`;
+      }).join('')
+    : '<option value="">No entries</option>';
   const pe=document.getElementById('presets-editor');
   pe.innerHTML=settings.presets.map((p,i)=>`<div class="preset-edit-row">
     <input type="text" value="${p.label}" onchange="settings.presets[${i}].label=this.value;persist()">
@@ -3627,8 +4014,10 @@ function saveSettings(){
   settings.exitDelay=parseInt(document.getElementById('set-exitdelay').value)||10;
   settings.workDayStart=document.getElementById('set-workdaystart').value||'09:00';
   settings.timezone=document.getElementById('set-timezone').value;
+  // Sync interval back to Today tab input
+  document.getElementById('interval-input').value = settings.intervalMin;
+  if (!running) { totalSecs = settings.intervalMin*60; remaining = totalSecs; updateRing(); }
   persist();
-  // Sync settings to Firebase so all devices pick up the timezone change
   if (fbRoomRef) fbRoomRef.update({ settings });
   renderToday();
 }
@@ -3682,7 +4071,7 @@ function getWeekKey(d) {
   return `${d.getFullYear()}-W${String(weekNum).padStart(2,'0')}`;
 }
 
-function getWeekEntries(weekKey) {
+function getEntriesForWeekKey(weekKey) {
   // Get all entries whose date falls within the given weekKey
   return entries.filter(e => {
     if (!e.date) return false;
@@ -3692,7 +4081,7 @@ function getWeekEntries(weekKey) {
 }
 
 function computeInsights(weekKey) {
-  const we = getWeekEntries(weekKey);
+  const we = getEntriesForWeekKey(weekKey);
   if (!we.length) return null;
 
   // Peak focus hour — which hour has most deep-work minutes
@@ -3928,9 +4317,14 @@ function startSync() {
         running = true;
         settings.intervalMin = data.intervalSecs / 60;
         document.getElementById('interval-input').value = settings.intervalMin;
-        document.getElementById('interval-input').disabled = true;
         document.getElementById('main-btn').textContent = 'Break';
         document.getElementById('timer-status').textContent = `Synced · pinging every ${settings.intervalMin} min`;
+        // Show hero-active when synced timer starts
+        const task = currentTask || lastTaskForRepeat || 'Work';
+        if (!taskStartTime) taskStartTime = timerStartedAt || Date.now();
+        document.getElementById('hero-idle').style.display = 'none';
+        document.getElementById('hero-active').style.display = 'block';
+        document.getElementById('hero-task-name').textContent = task;
         if (!ticker) {
           ticker = setInterval(() => {
             remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
@@ -4202,6 +4596,24 @@ function clearAll(){
   showToast('Cleared');
 }
 
+function clearSelectedDay(){
+  const sel = document.getElementById('clear-day-select');
+  const dateKey = sel?.value;
+  if (!dateKey) return;
+  const count = entries.filter(e=>e.date===dateKey).length;
+  const label = new Date(dateKey+'T12:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
+  if (!confirm(`Clear all ${count} entries for ${label}? This cannot be undone.`)) return;
+  const ids = new Set(entries.filter(e=>e.date===dateKey).map(e=>'e_'+e.id));
+  entries = entries.filter(e=>e.date!==dateKey);
+  persist(); renderToday(); renderWeek(); renderWeekTable(); renderSettings();
+  if (fbRoomRef && ids.size) {
+    const updates={};
+    ids.forEach(id=>{ updates['entries/'+id]=null; });
+    fbRoomRef.update(updates);
+  }
+  showToast(`${label} cleared`);
+}
+
 function clearTodayOnly(){
   const todayKey = toDateKey(new Date());
   const todayIds = new Set(entries.filter(e=>e.date===todayKey).map(e=>'e_'+e.id));
@@ -4316,7 +4728,6 @@ if (running && timerStartedAt) {
   document.getElementById('main-btn').textContent = 'Break';
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min (restored)`;
   updateTimerTaskLabel();
-  document.getElementById('interval-input').disabled = true;
   if (!ticker) ticker = setInterval(() => {
     remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
     remaining <= 0 ? doPing() : updateRing();
@@ -4409,6 +4820,21 @@ function cancelNativePing() {
 
 // Pre-fill intention from load()
 if (intention) document.getElementById('intention').value = intention;
+// Restore hero UI state on page load
+if (running && lastTaskForRepeat) {
+  taskStartTime = timerStartedAt || Date.now();
+  currentTask = lastTaskForRepeat;
+  document.getElementById('hero-idle').style.display = 'none';
+  document.getElementById('hero-active').style.display = 'block';
+  document.getElementById('hero-task-name').textContent = lastTaskForRepeat;
+  document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min`;
+  // Restart ticker
+  clearInterval(ticker);
+  ticker = setInterval(() => {
+    remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
+    remaining <= 0 ? doPing() : updateRing();
+  }, 1000);
+}
 updateRing();
 renderToday();
 initAutoSync();
