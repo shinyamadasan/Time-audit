@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ChronaSense">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%23c8f04a' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%23c8f04a' font-family='monospace' font-weight='bold'>T</text></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%234cc7f0' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%234cc7f0' font-family='monospace' font-weight='bold'>T</text></svg>">
 <link rel="manifest" id="pwa-manifest">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -18,7 +18,7 @@
   --bg:#0b0b0c;--bg2:#131315;--bg3:#1a1a1d;--bg4:#222226;
   --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--border3:rgba(255,255,255,0.2);
   --text:#eeecea;--muted:#787672;--muted2:#555452;
-  --deep:#c8f04a;--deep-dim:rgba(200,240,74,0.12);--deep-dim2:rgba(200,240,74,0.07);
+  --deep:#4cc7f0;--deep-dim:rgba(76,199,240,0.12);--deep-dim2:rgba(76,199,240,0.07);
   --shallow:#6fb3f2;--shallow-dim:rgba(111,179,242,0.12);
   --admin:#f9c74f;--admin-dim:rgba(249,199,79,0.12);
   --distraction:#ff6b6b;--distraction-dim:rgba(255,107,107,0.12);
@@ -58,7 +58,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 /* ── Sync status pill ── */
 .sync-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--mono);
   padding:3px 10px;border-radius:999px;border:1px solid var(--border2);color:var(--muted);transition:all 0.3s}
-.sync-pill.connected{border-color:rgba(200,240,74,0.3);color:var(--deep);background:var(--deep-dim2)}
+.sync-pill.connected{border-color:rgba(76,199,240,0.3);color:var(--deep);background:var(--deep-dim2)}
 .sync-pill.syncing{border-color:rgba(111,179,242,0.3);color:var(--shallow)}
 .sync-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 .sync-dot.pulse{animation:pulse 1.5s infinite}
@@ -144,7 +144,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .btn:hover{background:var(--bg4);border-color:var(--border3)}
 .btn:active{transform:scale(0.97)}
 .btn.primary{background:var(--deep);color:#0b0b0c;border-color:var(--deep);font-weight:700}
-.btn.primary:hover{background:#d8ff5c}
+.btn.primary:hover{background:#7dd9f7}
 .btn.sm{padding:5px 12px;font-size:11px}
 .btn.ghost{background:none;border-color:transparent;color:var(--muted)}
 .btn.ghost:hover{background:var(--bg3);color:var(--text);border-color:var(--border)}
@@ -224,7 +224,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
   opacity:0;pointer-events:none;transition:opacity 0.3s;padding:20px;text-align:center}
 .focus-block-overlay.show{opacity:1;pointer-events:all}
 .fbo-badge{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.12em;
-  color:var(--deep);border:1px solid rgba(200,240,74,0.3);padding:4px 14px;border-radius:999px;margin-bottom:24px}
+  color:var(--deep);border:1px solid rgba(76,199,240,0.3);padding:4px 14px;border-radius:999px;margin-bottom:24px}
 .fbo-icon{font-size:48px;margin-bottom:16px}
 .fbo-title{font-size:26px;font-weight:800;color:var(--text);margin-bottom:8px;line-height:1.1}
 .fbo-sub{font-size:14px;color:var(--muted);max-width:280px;line-height:1.5;margin-bottom:32px}
@@ -476,7 +476,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   padding:32px;text-align:center}
 .signin-logo{width:72px;height:72px;background:var(--deep-dim);border-radius:20px;
   display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:24px;
-  border:1px solid rgba(200,240,74,0.2)}
+  border:1px solid rgba(76,199,240,0.2)}
 .signin-app-name{font-size:30px;font-weight:800;margin-bottom:6px}
 .signin-tagline{font-size:14px;color:var(--muted);max-width:260px;line-height:1.6;margin-bottom:40px}
 .signin-google-btn{display:flex;align-items:center;gap:10px;background:#fff;color:#1f1f1f;
@@ -490,7 +490,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 /* ── Gap rows in timeline ── */
 .tl-gap-row .tl-activity{color:var(--muted);font-style:italic}
 .tl-bar-gap{background:repeating-linear-gradient(45deg,var(--bg4),var(--bg4) 3px,transparent 3px,transparent 7px)!important}
-.log-gap-btn{font-size:11px;flex-shrink:0;padding:4px 10px;border-radius:6px;border:1px solid rgba(200,240,74,0.35);
+.log-gap-btn{font-size:11px;flex-shrink:0;padding:4px 10px;border-radius:6px;border:1px solid rgba(76,199,240,0.35);
   background:var(--deep-dim2);color:var(--deep);cursor:pointer;font-family:var(--head);font-weight:600;
   white-space:nowrap;transition:background 0.12s}
 .log-gap-btn:hover{background:var(--deep-dim)}
@@ -507,6 +507,22 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .snooze-badge{position:absolute;top:-4px;right:-4px;background:var(--admin);
   color:var(--bg);border-radius:999px;font-size:9px;font-weight:700;
   padding:1px 5px;font-family:var(--mono)}
+/* ── Reflect view ── */
+.insight-card{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:12px}
+.insight-icon{font-size:20px;flex-shrink:0;width:32px;text-align:center}
+.insight-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;font-weight:600}
+.insight-val{font-size:16px;font-weight:700;color:var(--text);margin-top:1px}
+.insight-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.reflect-history-week{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden}
+.reflect-week-header{padding:10px 14px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid var(--border2);background:var(--bg3)}
+.reflect-day-row{padding:10px 14px;border-bottom:1px solid var(--border2);display:flex;flex-direction:column;gap:4px}
+.reflect-day-row:last-child{border-bottom:none}
+.reflect-day-label{font-size:11px;color:var(--deep);font-weight:700;text-transform:uppercase;letter-spacing:0.06em}
+.reflect-entry-line{font-size:13px;color:var(--text);display:flex;gap:6px}
+.reflect-entry-line span{color:var(--muted);font-size:12px;flex-shrink:0}
+.reflect-weekly-block{background:var(--bg3);border-top:1px solid var(--border2);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.reflect-weekly-q{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
+.reflect-weekly-a{font-size:13px;color:var(--text)}
 </style>
 </head>
 <body>
@@ -552,7 +568,6 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <div class="timer-controls">
       <div class="interval-row">every <input type="number" id="interval-input" value="30" min="1" max="240" step="5"> min</div>
       <button class="btn primary" id="main-btn" onclick="toggleTimer()">Start</button>
-      <button class="btn sm ghost" onclick="resetTimer()">Reset</button>
       <button class="btn sm" id="switch-btn" onclick="switchTaskMidBlock()" style="display:none">↷ Switch task</button>
       <button class="btn sm" id="break-btn" onclick="openBreakModal()" style="display:none;border-color:var(--break);color:var(--break)">☕ Break</button>
     </div>
@@ -632,6 +647,38 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   <!-- Dynamic content area — changes based on selected tab -->
   <div id="week-content"></div>
 </div>
+</div>
+
+<!-- ══ REFLECT ══ -->
+<div class="view" id="view-reflect">
+  <div class="page-header"><div class="page-title">Reflect</div></div>
+
+  <!-- Insights -->
+  <div class="settings-section">
+    <div class="settings-title">This week's patterns</div>
+    <div id="reflect-insights" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+
+  <!-- Weekly Review -->
+  <div class="settings-section">
+    <div class="settings-title" style="display:flex;justify-content:space-between;align-items:center">
+      Weekly review
+      <span id="weekly-review-saved" style="font-size:10px;color:var(--deep);font-weight:600;display:none">✓ Saved</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="field"><label>How did this week go overall?</label><textarea id="wr-overall" rows="2" placeholder="Honest take on the week…" style="resize:none"></textarea></div>
+      <div class="field"><label>Did your time reflect your priorities?</label><textarea id="wr-priorities" rows="2" placeholder="What matched, what didn't…" style="resize:none"></textarea></div>
+      <div class="field"><label>Biggest time drain</label><input type="text" id="wr-drain" placeholder="What stole the most time?"></div>
+      <div class="field"><label>What will you do differently next week?</label><textarea id="wr-nextweek" rows="2" placeholder="One specific change…" style="resize:none"></textarea></div>
+      <button class="btn primary" onclick="saveWeeklyReview()" style="align-self:flex-end">Save reflection</button>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="settings-section">
+    <div class="settings-title">Reflection history</div>
+    <div id="reflect-history" style="display:flex;flex-direction:column;gap:12px"></div>
+  </div>
 </div>
 
 <!-- ══ SETTINGS ══ -->
@@ -757,6 +804,9 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   <button class="nav-log" id="nav-past-btn" onclick="openGapsPicker()" style="display:none">
     <div class="nav-log-inner" style="background:var(--distraction);color:#fff">+ Past block</div>
   </button>
+  <button class="nav-btn" id="nav-reflect" onclick="showView('reflect');renderReflectView()">
+    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>Reflect
+  </button>
   <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>Settings
   </button>
@@ -841,7 +891,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   <div class="modal-handle"></div>
   <div class="modal-tag" id="log-ping-tag"></div>
   <div class="modal-title">What were you just doing?</div>
-  <div id="log-committed-bar" style="display:none;background:var(--deep-dim2);border:1px solid rgba(200,240,74,0.15);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--muted)">
+  <div id="log-committed-bar" style="display:none;background:var(--deep-dim2);border:1px solid rgba(76,199,240,0.15);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--muted)">
     <span style="color:var(--deep);font-weight:600;letter-spacing:0.04em">YOU SAID:</span>
     <span id="log-committed-text" style="color:var(--text);margin-left:6px"></span>
   </div>
@@ -964,8 +1014,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 
   <!-- Secondary actions -->
   <div style="display:flex;gap:10px;margin-top:10px">
-    <button id="focus-switch-btn" class="btn sm ghost" onclick="switchTaskMidBlock()" style="display:none">↷ Switch task</button>
-    <button class="btn sm ghost" onclick="confirmExitFocus()">Exit</button>
+    <button class="btn sm ghost" onclick="exitFocusConfirm()">Exit</button>
   </div>
 </div>
 
@@ -1128,6 +1177,7 @@ let currentTask = '';
 let entries = [];
 let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workDayStart:'09:00', activityColors:{} };
 let reviews = {};
+let weeklyReviews = {};
 let intention = '';
 let running = false;
 let ticker = null;
@@ -1180,10 +1230,14 @@ function initAutoSync() {
   }
   fbDb = firebase.database();
 
-  // Handle redirect sign-in result (runs after Google redirects back)
-  firebase.auth().getRedirectResult().catch(err => {
-    if (err.code) showToast('Sign-in error: ' + err.code);
-  });
+  // Initialize Google Auth once at startup
+  if (window.Capacitor && window.Capacitor.Plugins.GoogleAuth) {
+    window.Capacitor.Plugins.GoogleAuth.initialize({
+      clientId: '548433155531-r93hucpo6pa8darnjm5tioj1rgg4vn6s.apps.googleusercontent.com',
+      scopes: ['profile', 'email'],
+      grantOfflineAccess: true
+    });
+  }
 
   // Auth state drives everything — signed in = synced, signed out = show login
   firebase.auth().onAuthStateChanged(user => {
@@ -1211,16 +1265,18 @@ function initAutoSync() {
   });
 }
 
-function signIn() {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  firebase.auth().signInWithPopup(provider).catch(err => {
-    if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
-      // Popup blocked (common on mobile) — fall back to redirect
-      firebase.auth().signInWithRedirect(provider);
-    } else {
-      showToast('Sign-in failed: ' + (err.code || ''));
+async function signIn() {
+  try {
+    const googleUser = await window.Capacitor.Plugins.GoogleAuth.signIn();
+    const credential = firebase.auth.GoogleAuthProvider.credential(
+      googleUser.authentication.idToken
+    );
+    await firebase.auth().signInWithCredential(credential);
+  } catch (err) {
+    if (err && err.error !== 'popup_closed_by_user') {
+      showToast('Sign-in failed: ' + (err.error || err.message || ''));
     }
-  });
+  }
 }
 
 function signOutUser() {
@@ -1287,6 +1343,7 @@ function persist() {
   localStorage.setItem('ta3-entries', JSON.stringify(entries));
   localStorage.setItem('ta3-settings', JSON.stringify(settings));
   localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
+  localStorage.setItem('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
   localStorage.setItem('ta3-intention', intention);
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
   if (running && timerStartedAt) {
@@ -1299,6 +1356,7 @@ function load() {
   try { const raw = JSON.parse(localStorage.getItem('ta3-entries') || '[]'); entries = Array.isArray(raw) ? raw : Object.values(raw).filter(e=>e&&e.id); } catch(e){ entries=[]; }
   try { const s = JSON.parse(localStorage.getItem('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
   try { reviews = JSON.parse(localStorage.getItem('ta3-reviews') || '{}'); } catch(e){ reviews={}; }
+  try { weeklyReviews = JSON.parse(localStorage.getItem('ta3-weekly-reviews') || '{}'); } catch(e){ weeklyReviews={}; }
   intention = localStorage.getItem('ta3-intention') || '';
   if (!settings.presets?.length) settings.presets = DEFAULT_PRESETS;
   // Pre-fill intention from yesterday's "tomorrow" field if today's is empty
@@ -1367,12 +1425,8 @@ async function toggleTimer() {
     document.getElementById('precommit-overlay').classList.add('open');
     if (!hasLast) setTimeout(() => document.getElementById('pc-task').focus(), 250);
   } else {
-    running = false; clearInterval(ticker); ticker = null;
-    persist();
-    document.getElementById('main-btn').textContent = 'Resume';
-    document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
-    document.getElementById('timer-status').textContent = 'Paused';
-    syncTimerState();
+    // Pause removed — stepping away should be tracked as a break
+    openBreakModal();
   }
 }
 
@@ -1430,7 +1484,7 @@ async function _startTimer(task) {
   timerOwnerDeviceId = syncedDeviceId;
   running = true;
   switchState('deep');
-  document.getElementById('main-btn').textContent = 'Pause';
+  document.getElementById('main-btn').textContent = 'Break';
   document.getElementById('break-btn').style.display = 'inline-flex'; document.getElementById('switch-btn').style.display = 'inline-flex';
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min`;
   updateTimerTaskLabel();
@@ -1499,8 +1553,45 @@ function resetTimer() {
 // ══════════════════════════════════════════════════════
 function switchTaskMidBlock() {
   if (!running) { showToast('No active block to switch from'); return; }
-  switchingTask = true;
-  openLog(); // log what you were doing, then pre-commit opens for next task
+
+  // Auto-log the previous task immediately
+  const tsEnd = Date.now();
+  const tsStart = blockStartTime || (tsEnd - totalSecs * 1000);
+  const dur = Math.round((tsEnd - tsStart) / 60000);
+  const prevTask = currentTask || intention || 'Work block';
+  const prevEnergy = entries.find(e => !e.missed && !e.break)?.energy || 'deep';
+  if (dur >= 1) {
+    const entry = {
+      id: tsEnd, ts: tsEnd, tsStart,
+      blockIntervalMin: dur,
+      date: toDateKey(new Date()),
+      activity: prevTask, energy: prevEnergy,
+      onPlan: true, retro: false
+    };
+    getActivityColor(prevTask);
+    entries.push(entry);
+    entries.sort((a, b) => b.ts - a.ts);
+    lastTaskForRepeat = prevTask;
+    persist(); renderToday(); syncEntries();
+    showToast(`Logged: ${prevTask} · ${dur}m`);
+  }
+
+  // Reset block timer and open pre-commit for next task
+  blockStartTime = Date.now();
+  timerStartedAt = Date.now();
+  remaining = totalSecs;
+  setTimeout(() => {
+    const hasLast = !!lastTaskForRepeat;
+    document.getElementById('pc-task').value = '';
+    document.getElementById('pc-output').value = '';
+    document.getElementById('pc-why').value = '';
+    document.getElementById('pc-full-form').style.display = hasLast ? 'none' : 'block';
+    document.getElementById('pc-repeat-hint').style.display = hasLast ? 'block' : 'none';
+    document.getElementById('pc-new-task-actions').style.display = hasLast ? 'none' : 'flex';
+    if (hasLast) document.getElementById('pc-last-task').textContent = lastTaskForRepeat.replace(/ \(Output:.*\)/, '');
+    document.getElementById('precommit-overlay').classList.add('open');
+    if (!hasLast) setTimeout(() => document.getElementById('pc-task').focus(), 250);
+  }, 300);
 }
 
 // ══════════════════════════════════════════════════════
@@ -1560,7 +1651,7 @@ function endBreak() {
 
   document.getElementById('break-active-row').classList.remove('show');
   document.getElementById('main-btn').disabled = false;
-  document.getElementById('main-btn').textContent = 'Pause';
+  document.getElementById('main-btn').textContent = 'Break';
   document.getElementById('break-btn').style.display = 'inline-flex'; document.getElementById('switch-btn').style.display = 'inline-flex';
 
   // Log the break as an entry
@@ -1772,6 +1863,8 @@ function saveQuickEntry() {
 
 function _doQuickSave(activity, energy) {
   clearTimeout(snoozeTimer);
+  clearTimeout(followupNotifTimer);
+  if (LocalNotifications) LocalNotifications.cancel({ notifications: [{ id: PING_FOLLOWUP_ID }] }).catch(()=>{});
   stopAlertLoop();
   if (!activity) activity = energy;
   const entry = {
@@ -1880,6 +1973,7 @@ let pomodoroRemaining = 0;
 let pomodoroWorkMin = 25;
 let pomodoroBreakMin = 5;
 let pomodoroCount = 0; // completed sessions this focus session
+let focusStartTime = null; // tracks when focus mode began
 
 function updateFocusDeepBar() {
   const todayE = getTodayEntries().filter(e => !e.missed && !e.break);
@@ -1912,6 +2006,7 @@ function startPomodoro() {
   pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min').value) || 5;
   pomodoroPhase = 'work';
   pomodoroRemaining = pomodoroWorkMin * 60;
+  focusStartTime = Date.now();
 
   // Capture task from input and switch to static display
   const taskInput = document.getElementById('focus-task-input');
@@ -1931,7 +2026,6 @@ function startPomodoro() {
   document.getElementById('focus-phase-sub').textContent = `work session · ${pomodoroWorkMin} min`;
   document.getElementById('focus-settings-row').style.display = 'none';
   document.getElementById('focus-start-btn').style.display = 'none';
-  document.getElementById('focus-switch-btn').style.display = 'block';
 
   clearInterval(pomodoroTimer);
   pomodoroTimer = setInterval(tickPomodoro, 1000);
@@ -1977,7 +2071,6 @@ function endWorkSession() {
   pomodoroRemaining = pomodoroBreakMin * 60;
   document.getElementById('focus-phase-label').textContent = 'BREAK ☕';
   document.getElementById('focus-phase-sub').textContent = `take a breather · ${pomodoroBreakMin} min`;
-  document.getElementById('focus-switch-btn').style.display = 'none';
 
   const btn = document.getElementById('focus-start-btn');
   btn.textContent = 'Skip break';
@@ -2048,13 +2141,38 @@ function enterFocusMode() {
   document.getElementById('focus-start-btn').textContent = 'Start';
   document.getElementById('focus-start-btn').onclick = startPomodoro;
   document.getElementById('focus-start-btn').style.display = 'block';
-  document.getElementById('focus-switch-btn').style.display = 'none';
   setPomodoroCountdown(pomodoroWorkMin * 60);
   renderPomoDots();
   updateFocusDeepBar();
 }
 
 function tryExitFocusMode() {
+  confirmExitFocus();
+}
+
+function exitFocusConfirm() {
+  if (!confirm('Are you sure you want to be distracted?')) return;
+  // Auto-log the focus time spent so far
+  if (focusStartTime) {
+    const task = document.getElementById('focus-intention-text').textContent || currentTask || intention || 'Deep work';
+    const tsEnd = Date.now();
+    const dur = Math.round((tsEnd - focusStartTime) / 60000);
+    if (dur >= 1) {
+      const entry = {
+        id: tsEnd, ts: tsEnd, tsStart: focusStartTime,
+        blockIntervalMin: dur,
+        date: toDateKey(new Date()),
+        activity: task, energy: 'deep',
+        onPlan: true, retro: false
+      };
+      getActivityColor(task);
+      entries.push(entry);
+      entries.sort((a, b) => b.ts - a.ts);
+      persist(); syncEntries();
+      showToast(`Logged: ${task} · ${dur}m`);
+    }
+    focusStartTime = null;
+  }
   confirmExitFocus();
 }
 
@@ -2445,7 +2563,7 @@ function triggerPenaltyMode() {
   
   if (!running) {
      running = true;
-     document.getElementById('main-btn').textContent = 'Pause';
+     document.getElementById('main-btn').textContent = 'Break';
      document.getElementById('timer-status').textContent = `Penalty mode`;
      document.getElementById('interval-input').disabled = true;
      timerStartedAt = Date.now();
@@ -3552,6 +3670,203 @@ function saveReview(){
 function checkReviewPrompt(){if(new Date().getHours()>=18&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
 
 // ══════════════════════════════════════════════════════
+// REFLECT  — insights, weekly review, history
+// ══════════════════════════════════════════════════════
+
+function getWeekKey(d) {
+  // Returns e.g. "2026-W15"
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  const startOfW1 = new Date(jan4);
+  startOfW1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+  const weekNum = Math.floor((d - startOfW1) / 604800000) + 1;
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2,'0')}`;
+}
+
+function getWeekEntries(weekKey) {
+  // Get all entries whose date falls within the given weekKey
+  return entries.filter(e => {
+    if (!e.date) return false;
+    const d = new Date(e.date + 'T12:00:00');
+    return getWeekKey(d) === weekKey;
+  });
+}
+
+function computeInsights(weekKey) {
+  const we = getWeekEntries(weekKey);
+  if (!we.length) return null;
+
+  // Peak focus hour — which hour has most deep-work minutes
+  const hourBuckets = {};
+  we.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
+    const hr = new Date(e.tsStart).getHours();
+    hourBuckets[hr] = (hourBuckets[hr] || 0) + (e.blockIntervalMin || 0);
+  });
+  let peakHour = null, peakMin = 0;
+  Object.entries(hourBuckets).forEach(([h, m]) => { if (m > peakMin) { peakMin = m; peakHour = Number(h); } });
+  const peakHourLabel = peakHour !== null
+    ? `${peakHour % 12 || 12}${peakHour < 12 ? 'am' : 'pm'}`
+    : '—';
+
+  // Most common distraction label
+  const distEntries = we.filter(e => e.energy === 'distraction');
+  const distCounts = {};
+  distEntries.forEach(e => {
+    const label = (e.activity || 'Unknown').trim();
+    distCounts[label] = (distCounts[label] || 0) + 1;
+  });
+  let topDistraction = '—';
+  let topCount = 0;
+  Object.entries(distCounts).forEach(([l, c]) => { if (c > topCount) { topCount = c; topDistraction = l; } });
+
+  // Best day (most deep-work minutes)
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dayBuckets = {};
+  we.filter(e => e.energy === 'deep').forEach(e => {
+    const key = e.date;
+    dayBuckets[key] = (dayBuckets[key] || 0) + (e.blockIntervalMin || 0);
+  });
+  let bestDay = '—', bestDayMin = 0;
+  Object.entries(dayBuckets).forEach(([dateStr, m]) => {
+    if (m > bestDayMin) { bestDayMin = m; bestDay = dayNames[new Date(dateStr + 'T12:00:00').getDay()]; }
+  });
+
+  // Deep work %
+  const totalMin = we.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const deepMin = we.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const deepPct = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
+
+  // Deep work hours this week
+  const deepHrs = (deepMin / 60).toFixed(1);
+
+  return { peakHourLabel, topDistraction, bestDay, deepPct, deepHrs, totalMin };
+}
+
+function renderReflectView() {
+  const now = new Date();
+  const weekKey = getWeekKey(now);
+
+  // ── Insights ──
+  const insightsEl = document.getElementById('reflect-insights');
+  const ins = computeInsights(weekKey);
+  if (!ins || ins.totalMin === 0) {
+    insightsEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No data yet this week — start tracking to see patterns.</div>`;
+  } else {
+    insightsEl.innerHTML = `
+      <div class="insight-card">
+        <div class="insight-icon">⏰</div>
+        <div><div class="insight-val">${ins.peakHourLabel}</div><div style="font-size:11px;color:var(--muted)">Peak focus hour</div></div>
+      </div>
+      <div class="insight-card">
+        <div class="insight-icon">📉</div>
+        <div><div class="insight-val" style="color:var(--distraction)">${ins.topDistraction}</div><div style="font-size:11px;color:var(--muted)">Most common distraction</div></div>
+      </div>
+      <div class="insight-card">
+        <div class="insight-icon">🏆</div>
+        <div><div class="insight-val">${ins.bestDay}</div><div style="font-size:11px;color:var(--muted)">Best day this week</div></div>
+      </div>
+      <div class="insight-card">
+        <div class="insight-icon">🎯</div>
+        <div><div class="insight-val">${ins.deepPct}%<span style="font-size:14px;font-weight:400;color:var(--muted);margin-left:6px">${ins.deepHrs}h</span></div><div style="font-size:11px;color:var(--muted)">Deep work this week</div></div>
+      </div>`;
+  }
+
+  // ── Weekly review form — pre-fill if already saved ──
+  const wr = weeklyReviews[weekKey] || {};
+  document.getElementById('wr-overall').value = wr.overall || '';
+  document.getElementById('wr-priorities').value = wr.priorities || '';
+  document.getElementById('wr-drain').value = wr.drain || '';
+  document.getElementById('wr-nextweek').value = wr.nextweek || '';
+  const savedBadge = document.getElementById('weekly-review-saved');
+  savedBadge.style.display = weeklyReviews[weekKey] ? 'inline' : 'none';
+
+  // ── History ──
+  renderReflectHistory();
+}
+
+function saveWeeklyReview() {
+  const weekKey = getWeekKey(new Date());
+  weeklyReviews[weekKey] = {
+    overall:   document.getElementById('wr-overall').value.trim(),
+    priorities:document.getElementById('wr-priorities').value.trim(),
+    drain:     document.getElementById('wr-drain').value.trim(),
+    nextweek:  document.getElementById('wr-nextweek').value.trim(),
+    savedAt:   Date.now()
+  };
+  persist();
+  document.getElementById('weekly-review-saved').style.display = 'inline';
+  showToast('Weekly reflection saved ✓');
+  renderReflectHistory();
+}
+
+function renderReflectHistory() {
+  const histEl = document.getElementById('reflect-history');
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  // Collect all weeks that have daily reviews or weekly reviews, last 8 weeks
+  const weekSet = new Set();
+  const now = new Date();
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now - i * 7 * 86400000);
+    weekSet.add(getWeekKey(d));
+  }
+  Object.keys(weeklyReviews).forEach(k => weekSet.add(k));
+
+  // Also collect weeks from daily reviews
+  Object.keys(reviews).forEach(dateStr => {
+    const d = new Date(dateStr + 'T12:00:00');
+    if (!isNaN(d)) weekSet.add(getWeekKey(d));
+  });
+
+  const weeks = Array.from(weekSet).sort().reverse().slice(0, 10);
+
+  if (!weeks.length) {
+    histEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No reflections yet. Save your daily reviews to build history.</div>`;
+    return;
+  }
+
+  histEl.innerHTML = weeks.map(wk => {
+    const wr = weeklyReviews[wk];
+
+    // Daily reviews for this week
+    const dailyRows = Object.entries(reviews)
+      .filter(([dateStr]) => {
+        const d = new Date(dateStr + 'T12:00:00');
+        return !isNaN(d) && getWeekKey(d) === wk;
+      })
+      .sort(([a],[b]) => b.localeCompare(a))
+      .map(([dateStr, rv]) => {
+        const d = new Date(dateStr + 'T12:00:00');
+        const label = `${dayNames[d.getDay()]} ${d.getMonth()+1}/${d.getDate()}`;
+        const parts = [];
+        if (rv.win) parts.push(`<span style="color:var(--deep)">✓ ${rv.win}</span>`);
+        if (rv.waste) parts.push(`<span style="color:var(--distraction)">✗ ${rv.waste}</span>`);
+        if (rv.tomorrow) parts.push(`<span style="color:var(--muted)">→ ${rv.tomorrow}</span>`);
+        if (!parts.length) return '';
+        return `<div class="reflect-day-row"><span style="font-size:11px;color:var(--muted);min-width:48px">${label}</span><div style="display:flex;flex-direction:column;gap:3px;font-size:12px">${parts.join('')}</div></div>`;
+      }).filter(Boolean).join('');
+
+    const wrBlock = wr ? `
+      <div class="reflect-weekly-block">
+        ${wr.overall ? `<div style="margin-bottom:6px"><span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Overall</span><div style="font-size:13px;margin-top:2px">${wr.overall}</div></div>` : ''}
+        ${wr.drain ? `<div style="margin-bottom:6px"><span style="font-size:10px;color:var(--distraction);text-transform:uppercase;letter-spacing:.05em">Drain</span><div style="font-size:13px;margin-top:2px">${wr.drain}</div></div>` : ''}
+        ${wr.nextweek ? `<div><span style="font-size:10px;color:var(--deep);text-transform:uppercase;letter-spacing:.05em">Next week</span><div style="font-size:13px;margin-top:2px">${wr.nextweek}</div></div>` : ''}
+      </div>` : '';
+
+    if (!dailyRows && !wrBlock) return '';
+
+    return `<div class="reflect-history-week">
+      <div style="padding:10px 12px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border)">${wk}</div>
+      ${dailyRows ? `<div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px">${dailyRows}</div>` : ''}
+      ${wrBlock}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  if (!histEl.innerHTML.trim()) {
+    histEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No reflections yet. Save your daily reviews to build history.</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════
 // FIREBASE SYNC  (compat SDK only — no modular imports)
 // ══════════════════════════════════════════════════════
 function toggleSyncInstructions(){
@@ -3614,7 +3929,7 @@ function startSync() {
         settings.intervalMin = data.intervalSecs / 60;
         document.getElementById('interval-input').value = settings.intervalMin;
         document.getElementById('interval-input').disabled = true;
-        document.getElementById('main-btn').textContent = 'Pause';
+        document.getElementById('main-btn').textContent = 'Break';
         document.getElementById('timer-status').textContent = `Synced · pinging every ${settings.intervalMin} min`;
         if (!ticker) {
           ticker = setInterval(() => {
@@ -3925,7 +4240,7 @@ document.getElementById('interval-input').addEventListener('change', function(){
 // ══════════════════════════════════════════════════════
 // PWA
 // ══════════════════════════════════════════════════════
-const manifest={name:'ChronaSense',short_name:'ChronaSense',display:'standalone',background_color:'#0b0b0c',theme_color:'#0b0b0c',orientation:'portrait-primary',start_url:'.',icons:[{src:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%23c8f04a' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%23c8f04a' font-family='monospace' font-weight='bold'>T</text></svg>",sizes:'512x512',type:'image/svg+xml'}]};
+const manifest={name:'ChronaSense',short_name:'ChronaSense',display:'standalone',background_color:'#0b0b0c',theme_color:'#0b0b0c',orientation:'portrait-primary',start_url:'.',icons:[{src:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%234cc7f0' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%234cc7f0' font-family='monospace' font-weight='bold'>T</text></svg>",sizes:'512x512',type:'image/svg+xml'}]};
 document.getElementById('pwa-manifest').href=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/json'}));
 
 const swCode=`const C='ta3-sw';self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))));self.clients.claim();});self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.open(C).then(c=>fetch(e.request).then(r=>{c.put(e.request,r.clone());return r;}).catch(()=>caches.match(e.request))));});`;
@@ -3998,7 +4313,7 @@ load();
 document.getElementById('interval-input').value = settings.intervalMin;
 // If timer was restored from localStorage, resume it
 if (running && timerStartedAt) {
-  document.getElementById('main-btn').textContent = 'Pause';
+  document.getElementById('main-btn').textContent = 'Break';
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min (restored)`;
   updateTimerTaskLabel();
   document.getElementById('interval-input').disabled = true;
@@ -4014,6 +4329,8 @@ if (running && timerStartedAt) {
 const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 let LocalNotifications = null;
 const PING_NOTIF_ID = 1001;
+const PING_FOLLOWUP_ID = 1002; // follow-up if user ignores first ping
+let followupNotifTimer = null;
 
 async function initNativeNotifications() {
   if (!isNative) return;
@@ -4023,8 +4340,19 @@ async function initNativeNotifications() {
     LocalNotifications = cap.LocalNotifications;
     const perm = await LocalNotifications.requestPermissions();
     if (perm.display !== 'granted') return;
+    // Create high-priority notification channel on Android
+    try {
+      await LocalNotifications.createChannel({
+        id: 'chrona_pings',
+        name: 'Time Block Pings',
+        importance: 5, // IMPORTANCE_HIGH
+        sound: 'default',
+        vibration: true,
+        lights: true
+      });
+    } catch(e) {}
     // Handle notification tap — open log modal
-    LocalNotifications.addListener('localNotificationActionPerformed', () => {
+    LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
       window.focus(); openQuickLog();
     });
     console.log('[Native] Local notifications ready');
@@ -4034,25 +4362,49 @@ async function initNativeNotifications() {
 function scheduleNativePing(inSeconds) {
   if (!isNative || !LocalNotifications) return;
   const at = new Date(Date.now() + inSeconds * 1000);
-  LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }] }).catch(()=>{});
+  const task = lastTaskForRepeat ? lastTaskForRepeat.replace(/ \(Output:.*\)/,'') : null;
+  LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }, { id: PING_FOLLOWUP_ID }] }).catch(()=>{});
   LocalNotifications.schedule({
     notifications: [{
       id: PING_NOTIF_ID,
-      title: '⏱ Block complete',
-      body: lastTaskForRepeat
-        ? `You were on: ${lastTaskForRepeat.replace(/ \(Output:.*\)/,'')} — tap to log`
-        : 'Tap to log what you were doing',
+      channelId: 'chrona_pings',
+      title: '⏱ Time block complete — log it now',
+      body: task ? `You were on: ${task}` : 'What were you just working on?',
       schedule: { at },
       sound: 'default',
       actionTypeId: '',
       extra: null
     }]
   }).catch(e => console.warn('[Native] Schedule failed', e));
+
+  // Schedule a follow-up 5 min after the ping if user hasn't logged
+  clearTimeout(followupNotifTimer);
+  followupNotifTimer = setTimeout(() => {
+    scheduleFollowUpPing(task);
+  }, inSeconds * 1000);
+}
+
+function scheduleFollowUpPing(task) {
+  if (!isNative || !LocalNotifications) return;
+  const at = new Date(Date.now() + 5 * 60 * 1000); // 5 min from now
+  LocalNotifications.schedule({
+    notifications: [{
+      id: PING_FOLLOWUP_ID,
+      channelId: 'chrona_pings',
+      title: '⚠️ Unlogged block — time is slipping',
+      body: task ? `Still haven't logged: ${task}` : 'You have an unlogged time block',
+      schedule: { at },
+      sound: 'default',
+      actionTypeId: '',
+      extra: null
+    }]
+  }).catch(()=>{});
 }
 
 function cancelNativePing() {
   if (!isNative || !LocalNotifications) return;
-  LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }] }).catch(()=>{});
+  clearTimeout(followupNotifTimer);
+  LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }, { id: PING_FOLLOWUP_ID }] }).catch(()=>{});
 }
 
 // Pre-fill intention from load()
