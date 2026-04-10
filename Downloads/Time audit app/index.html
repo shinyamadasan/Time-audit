@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Time Audit</title>
+<title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Time Audit">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%23c8f04a' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%23c8f04a' font-family='monospace' font-weight='bold'>T</text></svg>">
+<meta name="apple-mobile-web-app-title" content="ChronaSense">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%234cc7f0' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%234cc7f0' font-family='monospace' font-weight='bold'>T</text></svg>">
 <link rel="manifest" id="pwa-manifest">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -18,11 +18,12 @@
   --bg:#0b0b0c;--bg2:#131315;--bg3:#1a1a1d;--bg4:#222226;
   --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--border3:rgba(255,255,255,0.2);
   --text:#eeecea;--muted:#787672;--muted2:#555452;
-  --deep:#c8f04a;--deep-dim:rgba(200,240,74,0.12);--deep-dim2:rgba(200,240,74,0.07);
+  --deep:#4cc7f0;--deep-dim:rgba(76,199,240,0.12);--deep-dim2:rgba(76,199,240,0.07);
   --shallow:#6fb3f2;--shallow-dim:rgba(111,179,242,0.12);
   --admin:#f9c74f;--admin-dim:rgba(249,199,79,0.12);
   --distraction:#ff6b6b;--distraction-dim:rgba(255,107,107,0.12);
   --break:#a78bfa;--break-dim:rgba(167,139,250,0.12);
+  --away:#94a3b8;--away-dim:rgba(148,163,184,0.12);
   --head:'Syne',sans-serif;--mono:'DM Mono',monospace;
   --r:10px;--r2:14px;
   --safe-top:env(safe-area-inset-top,0px);
@@ -58,7 +59,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 /* ── Sync status pill ── */
 .sync-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--mono);
   padding:3px 10px;border-radius:999px;border:1px solid var(--border2);color:var(--muted);transition:all 0.3s}
-.sync-pill.connected{border-color:rgba(200,240,74,0.3);color:var(--deep);background:var(--deep-dim2)}
+.sync-pill.connected{border-color:rgba(76,199,240,0.3);color:var(--deep);background:var(--deep-dim2)}
 .sync-pill.syncing{border-color:rgba(111,179,242,0.3);color:var(--shallow)}
 .sync-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 .sync-dot.pulse{animation:pulse 1.5s infinite}
@@ -102,7 +103,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .t-block:hover{transform:scaleY(1.15)}
 .t-block.deep{background:var(--deep)}.t-block.shallow{background:var(--shallow)}
 .t-block.admin{background:var(--admin)}.t-block.distraction{background:var(--distraction)}
-.t-block.empty{background:var(--bg4)}
+.t-block.empty{background:var(--bg4)}.t-block.away{background:var(--away)}
 .timeline-legend{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
 .legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
 .legend-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
@@ -123,7 +124,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .entry-bar{width:4px;height:34px;border-radius:2px;flex-shrink:0}
 .entry-bar.deep{background:var(--deep)}.entry-bar.shallow{background:var(--shallow)}
 .entry-bar.admin{background:var(--admin)}.entry-bar.distraction{background:var(--distraction)}
-.entry-bar.break{background:var(--break)}
+.entry-bar.break{background:var(--break)}.entry-bar.away{background:var(--away)}
 .entry-main{flex:1;min-width:0}
 .entry-activity{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .entry-meta{font-size:11px;color:var(--muted);margin-top:1px;font-family:var(--mono)}
@@ -136,6 +137,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .badge.deap{background:rgba(255,255,255,0.06);color:var(--muted)}
 .badge.onplan{background:var(--deep-dim);color:var(--deep)}.badge.offplan{background:var(--distraction-dim);color:var(--distraction)}
 .badge.break{background:var(--break-dim);color:var(--break)}
+.badge.away{background:var(--away-dim);color:var(--away)}
 
 /* ── Buttons ── */
 .btn{font-family:var(--head);font-size:13px;font-weight:500;padding:8px 18px;border-radius:8px;
@@ -144,12 +146,41 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .btn:hover{background:var(--bg4);border-color:var(--border3)}
 .btn:active{transform:scale(0.97)}
 .btn.primary{background:var(--deep);color:#0b0b0c;border-color:var(--deep);font-weight:700}
-.btn.primary:hover{background:#d8ff5c}
+.btn.primary:hover{background:#7dd9f7}
 .btn.sm{padding:5px 12px;font-size:11px}
 .btn.ghost{background:none;border-color:transparent;color:var(--muted)}
 .btn.ghost:hover{background:var(--bg3);color:var(--text);border-color:var(--border)}
 .btn.danger{border-color:rgba(255,107,107,0.25);color:var(--distraction)}
 .btn.danger:hover{background:var(--distraction-dim)}
+
+/* ── Recent task chips ── */
+.chips-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;min-height:0}
+.chip{font-family:var(--head);font-size:11px;font-weight:500;padding:4px 10px;border-radius:999px;
+  cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--muted);
+  transition:background 0.12s,border-color 0.12s,color 0.12s;letter-spacing:0.02em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px}
+.chip:hover{background:var(--deep-dim);border-color:var(--deep);color:var(--deep)}
+.chip:active{transform:scale(0.95)}
+
+/* ── Away picker ── */
+.away-picker{display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  padding:10px 12px;margin-top:8px;gap:6px;flex-wrap:wrap;align-items:center}
+.away-picker.show{display:flex}
+.away-picker-chip{font-family:var(--head);font-size:11px;font-weight:500;padding:4px 10px;border-radius:999px;
+  cursor:pointer;border:1px solid var(--away);background:var(--away-dim);color:var(--away);
+  transition:background 0.12s,color 0.12s;white-space:nowrap}
+.away-picker-chip:hover{background:var(--away);color:var(--bg)}
+.away-picker-chip:active{transform:scale(0.95)}
+.away-custom-input{font-family:var(--head);font-size:11px;padding:4px 8px;border-radius:999px;
+  border:1px solid var(--border2);background:var(--bg3);color:var(--text);width:90px;outline:none}
+.away-custom-input:focus{border-color:var(--away)}
+
+/* ── Continue banner ── */
+.continue-banner{display:none;background:var(--bg2);border:1px solid rgba(76,199,240,0.25);
+  border-radius:var(--r2);padding:12px 14px;margin-bottom:12px;align-items:center;gap:10px}
+.continue-banner.show{display:flex}
+.continue-banner-text{font-size:13px;font-weight:600;color:var(--text)}
+.continue-banner-sub{font-size:11px;color:var(--muted);margin-top:2px}
 
 /* ── Energy buttons ── */
 .energy-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
@@ -224,7 +255,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
   opacity:0;pointer-events:none;transition:opacity 0.3s;padding:20px;text-align:center}
 .focus-block-overlay.show{opacity:1;pointer-events:all}
 .fbo-badge{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.12em;
-  color:var(--deep);border:1px solid rgba(200,240,74,0.3);padding:4px 14px;border-radius:999px;margin-bottom:24px}
+  color:var(--deep);border:1px solid rgba(76,199,240,0.3);padding:4px 14px;border-radius:999px;margin-bottom:24px}
 .fbo-icon{font-size:48px;margin-bottom:16px}
 .fbo-title{font-size:26px;font-weight:800;color:var(--text);margin-bottom:8px;line-height:1.1}
 .fbo-sub{font-size:14px;color:var(--muted);max-width:280px;line-height:1.5;margin-bottom:32px}
@@ -248,10 +279,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .focus-overlay{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:12px;opacity:0;pointer-events:none;transition:opacity 0.3s;padding:24px}
 .focus-overlay.open{opacity:1;pointer-events:all}
-.focus-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted)}
-.focus-intention-text{font-size:15px;color:var(--muted);text-align:center;max-width:300px;font-weight:500;line-height:1.4}
-.focus-countdown-big{font-family:var(--mono);font-size:72px;font-weight:500;color:var(--text);letter-spacing:-3px;line-height:1}
-.focus-next{font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)}
+.focus-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted)}
+.focus-intention-text{font-size:22px;color:var(--text);text-align:center;max-width:340px;font-weight:700;line-height:1.3}
+.focus-countdown-big{font-family:var(--mono);font-size:108px;font-weight:500;color:var(--text);letter-spacing:-4px;line-height:1}
+.focus-next{font-size:13px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)}
+.focus-task-input{background:none;border:none;border-bottom:1px solid var(--border2);color:var(--text);font-size:20px;font-weight:600;text-align:center;width:100%;max-width:340px;padding:6px 0;outline:none;font-family:var(--head)}
+.focus-task-input::placeholder{color:var(--muted)}
 .focus-exit-wrap{position:absolute;top:calc(var(--safe-top) + 16px);right:16px}
 .focus-exit-countdown{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;margin-top:4px}
 
@@ -403,7 +436,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-bar-col.deep{background:var(--deep)}.tl-bar-col.shallow{background:var(--shallow)}
 .tl-bar-col.admin{background:var(--admin)}.tl-bar-col.distraction{background:var(--distraction)}
 .tl-bar-col.missed{background:var(--bg4)}
-.tl-bar-col.break{background:var(--break)}
+.tl-bar-col.break{background:var(--break)}.tl-bar-col.away{background:var(--away)}
 .tl-content{flex:1;min-width:0;padding:6px 0 6px 0}
 .tl-activity{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 .tl-meta{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px}
@@ -415,6 +448,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-badge.distraction{background:var(--distraction-dim);color:var(--distraction)}
 .tl-badge.missed{background:var(--bg4);color:var(--muted)}
 .tl-badge.break{background:var(--break-dim);color:var(--break)}
+.tl-badge.away{background:var(--away-dim);color:var(--away)}
 
 /* ── Week day tabs ── */
 .day-tab{padding:7px 14px;border-radius:999px;border:1px solid var(--border2);
@@ -474,7 +508,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   padding:32px;text-align:center}
 .signin-logo{width:72px;height:72px;background:var(--deep-dim);border-radius:20px;
   display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:24px;
-  border:1px solid rgba(200,240,74,0.2)}
+  border:1px solid rgba(76,199,240,0.2)}
 .signin-app-name{font-size:30px;font-weight:800;margin-bottom:6px}
 .signin-tagline{font-size:14px;color:var(--muted);max-width:260px;line-height:1.6;margin-bottom:40px}
 .signin-google-btn{display:flex;align-items:center;gap:10px;background:#fff;color:#1f1f1f;
@@ -488,7 +522,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 /* ── Gap rows in timeline ── */
 .tl-gap-row .tl-activity{color:var(--muted);font-style:italic}
 .tl-bar-gap{background:repeating-linear-gradient(45deg,var(--bg4),var(--bg4) 3px,transparent 3px,transparent 7px)!important}
-.log-gap-btn{font-size:11px;flex-shrink:0;padding:4px 10px;border-radius:6px;border:1px solid rgba(200,240,74,0.35);
+.log-gap-btn{font-size:11px;flex-shrink:0;padding:4px 10px;border-radius:6px;border:1px solid rgba(76,199,240,0.35);
   background:var(--deep-dim2);color:var(--deep);cursor:pointer;font-family:var(--head);font-weight:600;
   white-space:nowrap;transition:background 0.12s}
 .log-gap-btn:hover{background:var(--deep-dim)}
@@ -505,6 +539,22 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .snooze-badge{position:absolute;top:-4px;right:-4px;background:var(--admin);
   color:var(--bg);border-radius:999px;font-size:9px;font-weight:700;
   padding:1px 5px;font-family:var(--mono)}
+/* ── Reflect view ── */
+.insight-card{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:12px}
+.insight-icon{font-size:20px;flex-shrink:0;width:32px;text-align:center}
+.insight-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;font-weight:600}
+.insight-val{font-size:16px;font-weight:700;color:var(--text);margin-top:1px}
+.insight-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.reflect-history-week{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden}
+.reflect-week-header{padding:10px 14px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid var(--border2);background:var(--bg3)}
+.reflect-day-row{padding:10px 14px;border-bottom:1px solid var(--border2);display:flex;flex-direction:column;gap:4px}
+.reflect-day-row:last-child{border-bottom:none}
+.reflect-day-label{font-size:11px;color:var(--deep);font-weight:700;text-transform:uppercase;letter-spacing:0.06em}
+.reflect-entry-line{font-size:13px;color:var(--text);display:flex;gap:6px}
+.reflect-entry-line span{color:var(--muted);font-size:12px;flex-shrink:0}
+.reflect-weekly-block{background:var(--bg3);border-top:1px solid var(--border2);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.reflect-weekly-q{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
+.reflect-weekly-a{font-size:13px;color:var(--text)}
 </style>
 </head>
 <body>
@@ -518,10 +568,6 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <div class="page-title" style="margin-top:2px">Daily Focus</div>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
-      <div class="sync-pill" id="sync-pill" onclick="showView('settings')">
-        <div class="sync-dot" id="sync-dot"></div>
-        <span id="sync-label">offline</span>
-      </div>
       <button class="btn sm ghost" onclick="openReview()">Review</button>
       <button class="btn sm ghost" onclick="enterFocusMode()">⊙</button>
     </div>
@@ -532,7 +578,17 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <div style="flex:1">
       <div class="intention-label">Today's focus</div>
       <input class="intention-input" id="intention" placeholder="What are you focused on today?" maxlength="120">
+      <div class="chips-row" id="recent-chips"></div>
     </div>
+  </div>
+
+  <div class="continue-banner" id="continue-banner">
+    <div style="flex:1">
+      <div class="continue-banner-text" id="continue-banner-text">✓ Block done</div>
+      <div class="continue-banner-sub" id="continue-banner-sub">Auto-continuing in 30s</div>
+    </div>
+    <button class="btn sm" id="continue-banner-btn" onclick="doContinueBlock()" style="border-color:var(--deep);color:var(--deep)">▶ Continue</button>
+    <button class="btn sm ghost" onclick="doSwitchFromBanner()">↷ Switch</button>
   </div>
 
   <div class="timer-section">
@@ -545,6 +601,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
         <div class="ring-center"><span class="ring-pct" id="ring-pct">100%</span></div>
       </div>
       <div>
+        <div id="timer-current-task" style="font-size:12px;color:var(--deep);font-weight:600;letter-spacing:0.04em;margin-bottom:2px;display:none"></div>
         <div class="timer-countdown" id="countdown">30:00</div>
         <div class="timer-status" id="timer-status">Ready</div>
         <div class="timer-status" id="live-cost">-$0 drifting</div>
@@ -553,9 +610,21 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <div class="timer-controls">
       <div class="interval-row">every <input type="number" id="interval-input" value="30" min="1" max="240" step="5"> min</div>
       <button class="btn primary" id="main-btn" onclick="toggleTimer()">Start</button>
-      <button class="btn sm ghost" onclick="resetTimer()">Reset</button>
       <button class="btn sm" id="switch-btn" onclick="switchTaskMidBlock()" style="display:none">↷ Switch task</button>
       <button class="btn sm" id="break-btn" onclick="openBreakModal()" style="display:none;border-color:var(--break);color:var(--break)">☕ Break</button>
+      <button class="btn sm" id="away-btn" onclick="toggleAway()" style="border-color:var(--away);color:var(--away)">⊙ Away</button>
+    </div>
+    <div class="away-picker" id="away-picker">
+      <span style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.07em;flex-basis:100%;margin-bottom:2px">What are you doing?</span>
+      <button class="away-picker-chip" onclick="startAway('Lunch')">🍽 Lunch</button>
+      <button class="away-picker-chip" onclick="startAway('Walk')">🚶 Walk</button>
+      <button class="away-picker-chip" onclick="startAway('Exercise')">🏋 Exercise</button>
+      <button class="away-picker-chip" onclick="startAway('Commute')">🚗 Commute</button>
+      <button class="away-picker-chip" onclick="startAway('Rest')">💤 Rest</button>
+      <button class="away-picker-chip" onclick="startAway('Errand')">🛒 Errand</button>
+      <button class="away-picker-chip" onclick="startAway('Personal')">👤 Personal</button>
+      <input class="away-custom-input" id="away-custom" placeholder="Custom…" onkeydown="if(event.key==='Enter'&&this.value.trim())startAway(this.value.trim())">
+      <button class="away-picker-chip" onclick="const v=document.getElementById('away-custom').value.trim();if(v)startAway(v)" style="padding:4px 8px">Go</button>
     </div>
     <div class="break-active-row" id="break-active-row">
       <div class="b-icon">☕</div>
@@ -628,11 +697,43 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   </div>
 
   <!-- Day tabs -->
-  <div style="display:flex;align-items:center;gap:4px;margin-bottom:14px;flex-wrap:wrap" id="day-tabs"></div>
+  <div style="display:flex;flex-direction:column;gap:0;margin-bottom:14px" id="day-tabs"></div>
 
   <!-- Dynamic content area — changes based on selected tab -->
   <div id="week-content"></div>
 </div>
+</div>
+
+<!-- ══ REFLECT ══ -->
+<div class="view" id="view-reflect">
+  <div class="page-header"><div class="page-title">Reflect</div></div>
+
+  <!-- Insights -->
+  <div class="settings-section">
+    <div class="settings-title">This week's patterns</div>
+    <div id="reflect-insights" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+
+  <!-- Weekly Review -->
+  <div class="settings-section">
+    <div class="settings-title" style="display:flex;justify-content:space-between;align-items:center">
+      Weekly review
+      <span id="weekly-review-saved" style="font-size:10px;color:var(--deep);font-weight:600;display:none">✓ Saved</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="field"><label>How did this week go overall?</label><textarea id="wr-overall" rows="2" placeholder="Honest take on the week…" style="resize:none"></textarea></div>
+      <div class="field"><label>Did your time reflect your priorities?</label><textarea id="wr-priorities" rows="2" placeholder="What matched, what didn't…" style="resize:none"></textarea></div>
+      <div class="field"><label>Biggest time drain</label><input type="text" id="wr-drain" placeholder="What stole the most time?"></div>
+      <div class="field"><label>What will you do differently next week?</label><textarea id="wr-nextweek" rows="2" placeholder="One specific change…" style="resize:none"></textarea></div>
+      <button class="btn primary" onclick="saveWeeklyReview()" style="align-self:flex-end">Save reflection</button>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="settings-section">
+    <div class="settings-title">Reflection history</div>
+    <div id="reflect-history" style="display:flex;flex-direction:column;gap:12px"></div>
+  </div>
 </div>
 
 <!-- ══ SETTINGS ══ -->
@@ -724,10 +825,13 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 
   <div class="settings-section">
     <div class="settings-title">Data</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn sm" onclick="exportCSV()">Export CSV</button>
-      <button class="btn sm danger" onclick="clearTodayOnly()">Clear today</button>
       <button class="btn sm danger" onclick="clearAll()">Clear all</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+      <select id="clear-day-select" style="font-family:var(--head);font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex:1;min-width:0"></select>
+      <button class="btn sm danger" onclick="clearSelectedDay()">Clear day</button>
     </div>
     <div style="margin-top:10px;font-size:12px;color:var(--muted)" id="settings-stats"></div>
   </div>
@@ -738,7 +842,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <!-- ══ SIGN-IN OVERLAY ══ -->
 <div class="signin-overlay" id="signin-overlay">
   <div class="signin-logo">⏱</div>
-  <div class="signin-app-name">Time Audit</div>
+  <div class="signin-app-name">ChronaSense</div>
   <div class="signin-tagline">Track every hour. See where your time really goes. Syncs instantly across all your devices.</div>
   <button class="signin-google-btn" onclick="signIn()">
     <svg width="20" height="20" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
@@ -758,6 +862,9 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   <button class="nav-log" id="nav-past-btn" onclick="openGapsPicker()" style="display:none">
     <div class="nav-log-inner" style="background:var(--distraction);color:#fff">+ Past block</div>
   </button>
+  <button class="nav-btn" id="nav-reflect" onclick="showView('reflect');renderReflectView()">
+    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>Reflect
+  </button>
   <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>Settings
   </button>
@@ -770,10 +877,6 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   <div class="modal-tag" id="ql-tag">PING #1</div>
   <div class="modal-title">What were you just doing?</div>
   <div style="font-size:15px;color:var(--muted);margin-bottom:12px;font-weight:500" id="ql-sub">Last 30 min</div>
-  <div id="ql-committed-bar" style="display:none;background:var(--deep-dim2);border:1px solid rgba(200,240,74,0.15);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--muted)">
-    <span style="color:var(--deep);font-weight:600;letter-spacing:0.04em">YOU SAID:</span>
-    <span id="ql-committed-text" style="color:var(--text);margin-left:6px"></span>
-  </div>
   <button class="same-last-btn" id="ql-continue-btn" onclick="quickSaveLast()">
     Still on: <span id="ql-last-label"></span>
     <span class="sl-sub">Tap to log and continue</span>
@@ -846,7 +949,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   <div class="modal-handle"></div>
   <div class="modal-tag" id="log-ping-tag"></div>
   <div class="modal-title">What were you just doing?</div>
-  <div id="log-committed-bar" style="display:none;background:var(--deep-dim2);border:1px solid rgba(200,240,74,0.15);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--muted)">
+  <div id="log-committed-bar" style="display:none;background:var(--deep-dim2);border:1px solid rgba(76,199,240,0.15);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--muted)">
     <span style="color:var(--deep);font-weight:600;letter-spacing:0.04em">YOU SAID:</span>
     <span id="log-committed-text" style="color:var(--text);margin-left:6px"></span>
   </div>
@@ -929,16 +1032,47 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   </div>
 </div>
 
-<!-- ══ FOCUS CLEAN OVERLAY ══ -->
+<!-- ══ FOCUS / POMODORO OVERLAY ══ -->
 <div class="focus-overlay" id="focus-overlay">
-  <div class="focus-label">FOCUS MODE</div>
-  <div class="focus-intention-text" id="focus-intention-text">—</div>
-  <div class="focus-countdown-big" id="focus-countdown">30:00</div>
-  <div class="focus-next">next ping</div>
-  <button class="btn primary" style="margin-top:24px;padding:12px 32px;font-size:14px" onclick="openQuickLog()">↷ Switch task</button>
-  <div class="focus-exit-wrap">
-    <button class="btn sm ghost" id="focus-exit-btn" onclick="tryExitFocusMode()">Exit</button>
-    <div class="focus-exit-countdown" id="focus-exit-cd" style="display:none"></div>
+  <div class="focus-label" id="focus-phase-label">POMODORO</div>
+  <input class="focus-task-input" id="focus-task-input" placeholder="What are you focusing on?" autocomplete="off">
+  <div class="focus-intention-text" id="focus-intention-text" style="display:none">—</div>
+
+  <!-- Completed session dots -->
+  <div id="focus-pomo-dots" style="display:flex;gap:7px;margin-top:6px;min-height:10px"></div>
+
+  <!-- Countdown -->
+  <div class="focus-countdown-big" id="focus-countdown">25:00</div>
+  <div class="focus-next" id="focus-phase-sub">work session</div>
+
+  <!-- Editable settings (shown when idle) -->
+  <div id="focus-settings-row" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-top:10px">
+    <span>Work</span>
+    <input type="number" id="pomo-work-min" value="25" min="1" max="120"
+      style="width:42px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:6px;padding:4px 6px;font-size:13px;text-align:center">
+    <span>min · Break</span>
+    <input type="number" id="pomo-break-min" value="5" min="1" max="60"
+      style="width:42px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:6px;padding:4px 6px;font-size:13px;text-align:center">
+    <span>min</span>
+  </div>
+
+  <!-- Deep work progress bar -->
+  <div style="width:100%;max-width:280px;margin-top:18px">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px">
+      <span>Deep work today</span>
+      <span id="focus-deep-label">0 / 0 blocks</span>
+    </div>
+    <div style="background:var(--bg3);border-radius:99px;height:5px;overflow:hidden">
+      <div id="focus-deep-bar" style="height:100%;background:var(--deep);border-radius:99px;width:0%;transition:width 0.5s"></div>
+    </div>
+  </div>
+
+  <!-- Primary action button -->
+  <button id="focus-start-btn" class="btn primary" style="margin-top:24px;padding:13px 44px;font-size:15px;font-weight:700" onclick="startPomodoro()">Start</button>
+
+  <!-- Secondary actions -->
+  <div style="display:flex;gap:10px;margin-top:10px">
+    <button class="btn sm ghost" onclick="exitFocusConfirm()">Exit</button>
   </div>
 </div>
 
@@ -1101,6 +1235,7 @@ let currentTask = '';
 let entries = [];
 let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workDayStart:'09:00', activityColors:{} };
 let reviews = {};
+let weeklyReviews = {};
 let intention = '';
 let running = false;
 let ticker = null;
@@ -1131,6 +1266,12 @@ let breakEndsAt = null;
 let breakTicker = null;
 let breakStartTs = null;
 let timerOwnerDeviceId = null;
+let awayActive = false;
+let awayStartTime = null;
+let awayLabel = 'Away';
+let continueBannerTimer = null;
+let continueBannerCountdown = 0;
+let recentChipTasks = [];
 const firebaseConfig = {
   apiKey: "AIzaSyDQeoZ1o1uz7adi1fLQiC6VKFCJ-6q8kgA",
   authDomain: "time-audit-3c3da.firebaseapp.com",
@@ -1153,10 +1294,14 @@ function initAutoSync() {
   }
   fbDb = firebase.database();
 
-  // Handle redirect sign-in result (runs after Google redirects back)
-  firebase.auth().getRedirectResult().catch(err => {
-    if (err.code) showToast('Sign-in error: ' + err.code);
-  });
+  // Initialize Google Auth once at startup
+  if (window.Capacitor && window.Capacitor.Plugins.GoogleAuth) {
+    window.Capacitor.Plugins.GoogleAuth.initialize({
+      clientId: '548433155531-r93hucpo6pa8darnjm5tioj1rgg4vn6s.apps.googleusercontent.com',
+      scopes: ['profile', 'email'],
+      grantOfflineAccess: true
+    });
+  }
 
   // Auth state drives everything — signed in = synced, signed out = show login
   firebase.auth().onAuthStateChanged(user => {
@@ -1184,16 +1329,18 @@ function initAutoSync() {
   });
 }
 
-function signIn() {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  firebase.auth().signInWithPopup(provider).catch(err => {
-    if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
-      // Popup blocked (common on mobile) — fall back to redirect
-      firebase.auth().signInWithRedirect(provider);
-    } else {
-      showToast('Sign-in failed: ' + (err.code || ''));
+async function signIn() {
+  try {
+    const googleUser = await window.Capacitor.Plugins.GoogleAuth.signIn();
+    const credential = firebase.auth.GoogleAuthProvider.credential(
+      googleUser.authentication.idToken
+    );
+    await firebase.auth().signInWithCredential(credential);
+  } catch (err) {
+    if (err && err.error !== 'popup_closed_by_user') {
+      showToast('Sign-in failed: ' + (err.error || err.message || ''));
     }
-  });
+  }
 }
 
 function signOutUser() {
@@ -1260,6 +1407,7 @@ function persist() {
   localStorage.setItem('ta3-entries', JSON.stringify(entries));
   localStorage.setItem('ta3-settings', JSON.stringify(settings));
   localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
+  localStorage.setItem('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
   localStorage.setItem('ta3-intention', intention);
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
   if (running && timerStartedAt) {
@@ -1272,6 +1420,7 @@ function load() {
   try { const raw = JSON.parse(localStorage.getItem('ta3-entries') || '[]'); entries = Array.isArray(raw) ? raw : Object.values(raw).filter(e=>e&&e.id); } catch(e){ entries=[]; }
   try { const s = JSON.parse(localStorage.getItem('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
   try { reviews = JSON.parse(localStorage.getItem('ta3-reviews') || '{}'); } catch(e){ reviews={}; }
+  try { weeklyReviews = JSON.parse(localStorage.getItem('ta3-weekly-reviews') || '{}'); } catch(e){ weeklyReviews={}; }
   intention = localStorage.getItem('ta3-intention') || '';
   if (!settings.presets?.length) settings.presets = DEFAULT_PRESETS;
   // Pre-fill intention from yesterday's "tomorrow" field if today's is empty
@@ -1307,6 +1456,12 @@ function load() {
 // TIMER
 // ══════════════════════════════════════════════════════
 function fmt(s) { return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
+function fmtDur(min) {
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
 
 function updateRing() {
 // change color if distracted
@@ -1340,12 +1495,8 @@ async function toggleTimer() {
     document.getElementById('precommit-overlay').classList.add('open');
     if (!hasLast) setTimeout(() => document.getElementById('pc-task').focus(), 250);
   } else {
-    running = false; clearInterval(ticker); ticker = null;
-    persist();
-    document.getElementById('main-btn').textContent = 'Resume';
-    document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
-    document.getElementById('timer-status').textContent = 'Paused';
-    syncTimerState();
+    // Pause removed — stepping away should be tracked as a break
+    openBreakModal();
   }
 }
 
@@ -1378,6 +1529,17 @@ async function confirmPreCommit() {
   await _startTimer(task);
 }
 
+function updateTimerTaskLabel() {
+  const el = document.getElementById('timer-current-task');
+  if (!el) return;
+  if (currentTask && running) {
+    el.textContent = currentTask;
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
 async function _startTimer(task) {
   currentTask = task;
   lastTaskForRepeat = task;
@@ -1388,13 +1550,13 @@ async function _startTimer(task) {
   if (typeof Notification !== 'undefined' && Notification.permission==='default') { try { await Notification.requestPermission(); } catch(e){} }
   settings.intervalMin = parseInt(document.getElementById('interval-input').value)||30;
   totalSecs = settings.intervalMin*60;
-  document.getElementById('interval-input').disabled = true;
   timerOwnerDeviceId = syncedDeviceId;
   running = true;
   switchState('deep');
-  document.getElementById('main-btn').textContent = 'Pause';
-  document.getElementById('break-btn').style.display = 'inline-flex'; document.getElementById('switch-btn').style.display = 'inline-flex';
+  document.getElementById('main-btn').textContent = 'Break';
+  document.getElementById('switch-btn').style.display = 'inline-flex';
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min`;
+  updateTimerTaskLabel();
   timerStartedAt = Date.now();
   remaining = totalSecs;
   clearInterval(ticker);
@@ -1451,6 +1613,7 @@ function resetTimer() {
   timerOwnerDeviceId = null;
   document.getElementById('main-btn').textContent = 'Start';
   document.getElementById('timer-status').textContent = 'Ready';
+  currentTask = ''; updateTimerTaskLabel();
   updateRing(); syncTimerState();
 }
 
@@ -1459,8 +1622,45 @@ function resetTimer() {
 // ══════════════════════════════════════════════════════
 function switchTaskMidBlock() {
   if (!running) { showToast('No active block to switch from'); return; }
-  switchingTask = true;
-  openLog(); // log what you were doing, then pre-commit opens for next task
+
+  // Auto-log the previous task immediately
+  const tsEnd = Date.now();
+  const tsStart = blockStartTime || (tsEnd - totalSecs * 1000);
+  const dur = Math.round((tsEnd - tsStart) / 60000);
+  const prevTask = currentTask || intention || 'Work block';
+  const prevEnergy = entries.find(e => !e.missed && !e.break)?.energy || 'deep';
+  if (dur >= 1) {
+    const entry = {
+      id: tsEnd, ts: tsEnd, tsStart,
+      blockIntervalMin: dur,
+      date: toDateKey(new Date()),
+      activity: prevTask, energy: prevEnergy,
+      onPlan: true, retro: false
+    };
+    getActivityColor(prevTask);
+    entries.push(entry);
+    entries.sort((a, b) => b.ts - a.ts);
+    lastTaskForRepeat = prevTask;
+    persist(); renderToday(); syncEntries();
+    showToast(`Logged: ${prevTask} · ${fmtDur(dur)}`);
+  }
+
+  // Reset block timer and open pre-commit for next task
+  blockStartTime = Date.now();
+  timerStartedAt = Date.now();
+  remaining = totalSecs;
+  setTimeout(() => {
+    const hasLast = !!lastTaskForRepeat;
+    document.getElementById('pc-task').value = '';
+    document.getElementById('pc-output').value = '';
+    document.getElementById('pc-why').value = '';
+    document.getElementById('pc-full-form').style.display = hasLast ? 'none' : 'block';
+    document.getElementById('pc-repeat-hint').style.display = hasLast ? 'block' : 'none';
+    document.getElementById('pc-new-task-actions').style.display = hasLast ? 'none' : 'flex';
+    if (hasLast) document.getElementById('pc-last-task').textContent = lastTaskForRepeat.replace(/ \(Output:.*\)/, '');
+    document.getElementById('precommit-overlay').classList.add('open');
+    if (!hasLast) setTimeout(() => document.getElementById('pc-task').focus(), 250);
+  }, 300);
 }
 
 // ══════════════════════════════════════════════════════
@@ -1520,8 +1720,8 @@ function endBreak() {
 
   document.getElementById('break-active-row').classList.remove('show');
   document.getElementById('main-btn').disabled = false;
-  document.getElementById('main-btn').textContent = 'Pause';
-  document.getElementById('break-btn').style.display = 'inline-flex'; document.getElementById('switch-btn').style.display = 'inline-flex';
+  document.getElementById('main-btn').textContent = 'Break';
+  document.getElementById('switch-btn').style.display = 'inline-flex';
 
   // Log the break as an entry
   const actualDur = Math.round((Date.now() - breakStartTs) / 60000);
@@ -1596,7 +1796,7 @@ function doPing() {
 
   // Sound plays ONCE
   playAlert(2, 400);
-  document.title = '⏱ LOG NOW — Time Audit';
+  document.title = '⏱ LOG NOW — ChronaSense';
   window.focus();
 
   // Close last segment
@@ -1615,12 +1815,9 @@ function doPing() {
   syncEntries();
   showPingBanner(pingCount);
 
-  // 3-minute grace window before opening log
+  // Show continue banner — auto-logs and continues after 30s
   clearTimeout(snoozeTimer);
-  snoozeTimer = setTimeout(() => {
-    if (document.getElementById('quicklog-overlay').classList.contains('open')) return;
-    openQuickLog();
-  }, 3 * 60 * 1000);
+  showContinueBanner(currentTask || lastTaskForRepeat || intention || 'Work');
 }
 
 // ══════════════════════════════════════════════════════
@@ -1639,15 +1836,10 @@ function openQuickLog() {
   qlEnergy = '';
   const elapsedMin = blockStartTime ? Math.max(1, Math.round((Date.now() - blockStartTime) / 60000)) : settings.intervalMin;
   document.getElementById('ql-tag').textContent = `PING #${pingCount}`;
-  document.getElementById('ql-sub').textContent = `Last ${elapsedMin} min · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+  document.getElementById('ql-sub').textContent = `Last ${fmtDur(elapsedMin)} · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
   document.getElementById('ql-activity').value = '';
   document.querySelectorAll('#quicklog-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
 
-  // Committed task context
-  const committedTask = lastTaskForRepeat ? lastTaskForRepeat.replace(/ \(Output:.*\)/, '') : '';
-  const committedBar = document.getElementById('ql-committed-bar');
-  if (committedTask) { document.getElementById('ql-committed-text').textContent = committedTask; committedBar.style.display = 'block'; }
-  else { committedBar.style.display = 'none'; }
 
   // Continue last as primary CTA
   const last = entries.find(e => !e.missed && !e.break);
@@ -1737,6 +1929,8 @@ function saveQuickEntry() {
 
 function _doQuickSave(activity, energy) {
   clearTimeout(snoozeTimer);
+  clearTimeout(followupNotifTimer);
+  if (LocalNotifications) LocalNotifications.cancel({ notifications: [{ id: PING_FOLLOWUP_ID }] }).catch(()=>{});
   stopAlertLoop();
   if (!activity) activity = energy;
   const entry = {
@@ -1750,7 +1944,7 @@ function _doQuickSave(activity, energy) {
   };
   entries.unshift(entry);
   document.getElementById('quicklog-overlay').classList.remove('open');
-  document.title = 'Time Audit';
+  document.title = 'ChronaSense';
   persist(); renderToday(); syncEntries();
   showLogFeedback(energy);
   checkReviewPrompt();
@@ -1758,20 +1952,10 @@ function _doQuickSave(activity, energy) {
 }
 
 function dismissQuickLog() {
-  // Skip = log block as missed
-  entries.unshift({
-    id: Date.now(), ts: Date.now(),
-    tsStart: blockStartTime || (Date.now() - totalSecs * 1000),
-    blockIntervalMin: settings.intervalMin,
-    date: toDateKey(new Date()),
-    activity: 'Untracked block', energy: 'shallow', onPlan: null, missed: true
-  });
-  persist(); renderToday(); syncEntries();
   stopAlertLoop();
   clearTimeout(snoozeTimer);
   document.getElementById('quicklog-overlay').classList.remove('open');
-  document.title = 'Time Audit';
-  showToast('Block marked as untracked');
+  document.title = 'ChronaSense';
 }
 
 function snoozeLog() {
@@ -1848,50 +2032,233 @@ window.addEventListener('beforeunload', e => {
 });
 
 
+// ── Pomodoro state ──
+let pomodoroPhase = 'idle'; // 'idle' | 'work' | 'break'
+let pomodoroTimer = null;
+let pomodoroRemaining = 0;
+let pomodoroWorkMin = 25;
+let pomodoroBreakMin = 5;
+let pomodoroCount = 0; // completed sessions this focus session
+let focusStartTime = null; // tracks when focus mode began
+
+function updateFocusDeepBar() {
+  const todayE = getTodayEntries().filter(e => !e.missed && !e.break);
+  const deepBlocks = todayE.filter(e => e.energy === 'deep').length;
+  const goal = dailyCommitment || settings.deepGoal || 8;
+  const pct = Math.min(100, Math.round((deepBlocks / goal) * 100));
+  document.getElementById('focus-deep-label').textContent = `${deepBlocks} / ${goal} blocks`;
+  document.getElementById('focus-deep-bar').style.width = pct + '%';
+}
+
+function renderPomoDots() {
+  const container = document.getElementById('focus-pomo-dots');
+  const total = Math.max(4, pomodoroCount + (4 - pomodoroCount % 4 === 4 ? 0 : 4 - pomodoroCount % 4));
+  container.innerHTML = '';
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement('div');
+    d.style.cssText = `width:9px;height:9px;border-radius:50%;background:${i < pomodoroCount ? 'var(--deep)' : 'var(--bg3)'};transition:background 0.3s`;
+    container.appendChild(d);
+  }
+}
+
+function setPomodoroCountdown(secs) {
+  const m = Math.floor(secs / 60), s = secs % 60;
+  document.getElementById('focus-countdown').textContent =
+    `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function startPomodoro() {
+  pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min').value) || 25;
+  pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min').value) || 5;
+  pomodoroPhase = 'work';
+  pomodoroRemaining = pomodoroWorkMin * 60;
+  focusStartTime = Date.now();
+
+  // Capture task from input and switch to static display
+  const taskInput = document.getElementById('focus-task-input');
+  const focusTask = taskInput.value.trim() || currentTask || intention || 'Deep work';
+  taskInput.style.display = 'none';
+  const intentionEl = document.getElementById('focus-intention-text');
+  intentionEl.textContent = focusTask;
+  intentionEl.style.display = 'block';
+
+  // Pause main timer to avoid two countdowns fighting
+  if (running) {
+    pomodoroWasPaused = true;
+    clearInterval(ticker); ticker = null;
+  }
+
+  document.getElementById('focus-phase-label').textContent = 'FOCUS';
+  document.getElementById('focus-phase-sub').textContent = `work session · ${pomodoroWorkMin} min`;
+  document.getElementById('focus-settings-row').style.display = 'none';
+  document.getElementById('focus-start-btn').style.display = 'none';
+
+  clearInterval(pomodoroTimer);
+  pomodoroTimer = setInterval(tickPomodoro, 1000);
+  updateFocusDeepBar();
+}
+
+function tickPomodoro() {
+  pomodoroRemaining = Math.max(0, pomodoroRemaining - 1);
+  setPomodoroCountdown(pomodoroRemaining);
+  if (pomodoroRemaining <= 0) {
+    pomodoroPhase === 'work' ? endWorkSession() : endPomodoroBreak();
+  }
+}
+
+function endWorkSession() {
+  clearInterval(pomodoroTimer);
+  pomodoroCount++;
+  renderPomoDots();
+  updateFocusDeepBar();
+  playAlertSound();
+
+  // Auto-log the work block
+  const task = currentTask || intention || 'Deep work';
+  const tsEnd = Date.now();
+  const tsStart = blockStartTime || (tsEnd - pomodoroWorkMin * 60000);
+  const dur = Math.round((tsEnd - tsStart) / 60000);
+  const entry = {
+    id: tsEnd, ts: tsEnd, tsStart,
+    blockIntervalMin: dur,
+    date: toDateKey(new Date()),
+    activity: task, energy: 'deep',
+    onPlan: true, retro: false
+  };
+  getActivityColor(task);
+  entries.push(entry);
+  entries.sort((a,b) => b.ts - a.ts);
+  blockStartTime = Date.now();
+  persist(); syncEntries();
+  showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+
+  // Start break
+  pomodoroPhase = 'break';
+  pomodoroRemaining = pomodoroBreakMin * 60;
+  document.getElementById('focus-phase-label').textContent = 'BREAK ☕';
+  document.getElementById('focus-phase-sub').textContent = `take a breather · ${pomodoroBreakMin} min`;
+
+  const btn = document.getElementById('focus-start-btn');
+  btn.textContent = 'Skip break';
+  btn.onclick = skipBreak;
+  btn.style.display = 'block';
+
+  pomodoroTimer = setInterval(tickPomodoro, 1000);
+}
+
+function endPomodoroBreak() {
+  clearInterval(pomodoroTimer);
+  pomodoroPhase = 'idle';
+  playAlertSound();
+
+  document.getElementById('focus-phase-label').textContent = 'BREAK DONE';
+  document.getElementById('focus-phase-sub').textContent = 'ready for the next one?';
+  document.getElementById('focus-settings-row').style.display = 'flex';
+  document.getElementById('focus-task-input').style.display = 'block';
+  document.getElementById('focus-intention-text').style.display = 'none';
+  setPomodoroCountdown(pomodoroWorkMin * 60);
+
+  const btn = document.getElementById('focus-start-btn');
+  btn.textContent = 'Start next session';
+  btn.onclick = startPomodoro;
+  btn.style.display = 'block';
+}
+
+function skipBreak() {
+  clearInterval(pomodoroTimer);
+  startPomodoro();
+}
+
+function playAlertSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 150, 300].forEach(delay => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 880; g.gain.value = 0.3;
+      o.start(ctx.currentTime + delay/1000);
+      o.stop(ctx.currentTime + delay/1000 + 0.15);
+    });
+  } catch(e) {}
+}
+
+let pomodoroWasPaused = false; // track if we paused the main timer
+
 function enterFocusMode() {
   const music = document.getElementById('focus-music');
-music.volume = 0.3;
-music.play().catch(()=>{});
+  music.volume = 0.3;
+  music.play().catch(()=>{});
   focusModeOn = true;
+  pomodoroCount = 0;
+  pomodoroPhase = 'idle';
+  pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min')?.value) || 25;
+  pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min')?.value) || 5;
+
+  // Pre-fill task input with current task if available
+  const taskInput = document.getElementById('focus-task-input');
+  taskInput.value = currentTask || intention || '';
+  taskInput.style.display = 'block';
+  document.getElementById('focus-intention-text').style.display = 'none';
+
   document.getElementById('focus-overlay').classList.add('open');
-  document.getElementById('focus-intention-text').textContent = currentTask || intention || 'No focus set';
-  document.getElementById('focus-exit-btn').disabled = false;
-  document.getElementById('focus-exit-btn').textContent = 'Exit';
-  document.getElementById('focus-exit-btn').onclick = tryExitFocusMode;
-  document.getElementById('focus-exit-cd').style.display = 'none';
+  document.getElementById('focus-phase-label').textContent = 'POMODORO';
+  document.getElementById('focus-phase-sub').textContent = 'set your timer and go';
+  document.getElementById('focus-settings-row').style.display = 'flex';
+  document.getElementById('focus-start-btn').textContent = 'Start';
+  document.getElementById('focus-start-btn').onclick = startPomodoro;
+  document.getElementById('focus-start-btn').style.display = 'block';
+  setPomodoroCountdown(pomodoroWorkMin * 60);
+  renderPomoDots();
+  updateFocusDeepBar();
 }
 
 function tryExitFocusMode() {
-  const delay = running ? (settings.exitDelay || 10) : 0;
-  if (delay === 0) { confirmExitFocus(); return; }
-  let cd = delay;
-  const btn = document.getElementById('focus-exit-btn');
-  const cdEl = document.getElementById('focus-exit-cd');
-  btn.disabled = true;
-  cdEl.style.display = 'block';
-  cdEl.textContent = `Wait ${cd}s…`;
-  clearInterval(focusExitTimer);
-  focusExitTimer = setInterval(() => {
-    cd--;
-    cdEl.textContent = `Wait ${cd}s…`;
-    if (cd <= 0) {
-      clearInterval(focusExitTimer);
-      cdEl.style.display = 'none';
-      btn.disabled = false;
-      btn.textContent = 'Confirm exit';
-      btn.onclick = confirmExitFocus;
+  confirmExitFocus();
+}
+
+function exitFocusConfirm() {
+  if (!confirm('Are you sure you want to be distracted?')) return;
+  // Auto-log the focus time spent so far
+  if (focusStartTime) {
+    const task = document.getElementById('focus-intention-text').textContent || currentTask || intention || 'Deep work';
+    const tsEnd = Date.now();
+    const dur = Math.round((tsEnd - focusStartTime) / 60000);
+    if (dur >= 1) {
+      const entry = {
+        id: tsEnd, ts: tsEnd, tsStart: focusStartTime,
+        blockIntervalMin: dur,
+        date: toDateKey(new Date()),
+        activity: task, energy: 'deep',
+        onPlan: true, retro: false
+      };
+      getActivityColor(task);
+      entries.push(entry);
+      entries.sort((a, b) => b.ts - a.ts);
+      persist(); syncEntries();
+      showToast(`Logged: ${task} · ${fmtDur(dur)}`);
     }
-  }, 1000);
+    focusStartTime = null;
+  }
+  confirmExitFocus();
 }
 
 function confirmExitFocus() {
+  clearInterval(pomodoroTimer);
+  pomodoroPhase = 'idle';
   const music = document.getElementById('focus-music');
-music.pause();
-music.currentTime = 0;
+  music.pause();
+  music.currentTime = 0;
   focusModeOn = false;
   document.getElementById('focus-overlay').classList.remove('open');
-  document.getElementById('focus-exit-btn').textContent = 'Exit';
-  document.getElementById('focus-exit-btn').onclick = tryExitFocusMode;
+  // Resume main timer if it was paused for pomodoro
+  if (pomodoroWasPaused && running && !ticker) {
+    ticker = setInterval(() => {
+      remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
+      updateRing();
+      if (remaining <= 0) doPing();
+    }, 1000);
+  }
+  pomodoroWasPaused = false;
 }
 
 function showFocusBlocker(reason) {
@@ -1996,7 +2363,14 @@ function openLog(pingNum) {
   const slLabel = document.getElementById('same-last-label');
   const logFormBody = document.getElementById('log-form-body');
   const last = entries.find(e => !e.missed && !e.break);
-  if (last && (logIsPing || switchingTask)) {
+
+  if (switchingTask) {
+    // Skip "Still on" — user explicitly wants to switch, show form pre-filled with current task
+    slBtn.style.display = 'none';
+    slOther.style.display = 'none';
+    logFormBody.style.display = 'block';
+    if (currentTask) document.getElementById('f-activity').value = currentTask;
+  } else if (last && logIsPing) {
     slLabel.textContent = last.activity.substring(0, 32);
     slBtn.style.display = 'block';
     slOther.style.display = 'block';
@@ -2157,28 +2531,17 @@ function saveRetroEntry() {
     entries.sort((a,b) => b.ts - a.ts);
     persist(); renderToday(); syncEntries();
     closeModal('retro-overlay');
-    showToast(`Logged retroactively · ${dur}m`);
+    showToast(`Logged retroactively · ${fmtDur(dur)}`);
   }
 }
 
 function dismissLog() {
   switchingTask = false;
-  if (logIsPing) {
-    entries.unshift({
-      id: Date.now(), ts: Date.now(),
-      tsStart: blockStartTime || (Date.now() - totalSecs * 1000),
-      blockIntervalMin: settings.intervalMin,
-      date: toDateKey(new Date()),
-      activity: 'Untracked block', energy: 'shallow', onPlan: null, missed: true
-    });
-    persist(); renderToday(); syncEntries();
-    showToast('Block marked as untracked');
-  }
   stopAlertLoop();
   hidePingBanner();
   clearTimeout(snoozeTimer);
   document.getElementById('quicklog-overlay').classList.remove('open');
-  document.title = 'Time Audit';
+  document.title = 'ChronaSense';
   closeModal('log-overlay');
 }
 
@@ -2224,7 +2587,7 @@ function saveEntry() {
   hidePingBanner();
   clearTimeout(snoozeTimer);
   document.getElementById('quicklog-overlay').classList.remove('open');
-  document.title = 'Time Audit';
+  document.title = 'ChronaSense';
   persist(); renderToday(); closeModal('log-overlay');
   syncEntries();
   showLogFeedback(entry.energy);
@@ -2266,9 +2629,8 @@ function triggerPenaltyMode() {
   
   if (!running) {
      running = true;
-     document.getElementById('main-btn').textContent = 'Pause';
+     document.getElementById('main-btn').textContent = 'Break';
      document.getElementById('timer-status').textContent = `Penalty mode`;
-     document.getElementById('interval-input').disabled = true;
      timerStartedAt = Date.now();
      if(!ticker) ticker = setInterval(() => {
        remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
@@ -2282,7 +2644,7 @@ function triggerPenaltyMode() {
 
 function deleteEntry(id) {
   entries=entries.filter(e=>e.id!==id);
-  persist(); renderToday(); renderWeekTable();
+  persist(); renderToday(); renderWeek(); renderWeekTable();
   syncEntries();
 }
 
@@ -2331,7 +2693,7 @@ function computeDeepScore(arr){return arr.length?Math.round(arr.filter(e=>e.ener
 function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(settings.intervalMin/60)).toFixed(1);}
 function computeStreak(){let s=0;const d=new Date();for(let i=0;i<30;i++){const k=toDateKey(new Date(d-i*86400000));if(entries.filter(e=>e.date===k).length>=4)s++;else if(i>0)break;}return s;}
 
-const eLabel={deep:'Deep',shallow:'Shallow',admin:'Admin',distraction:'Distraction',break:'Break'};
+const eLabel={deep:'Deep',shallow:'Shallow',admin:'Admin',distraction:'Distraction',break:'Break',away:'Away'};
 const ACTIVITY_PALETTE = [
   '#7dd3fc','#86efac','#fcd34d','#f9a8d4','#a5b4fc','#6ee7b7','#fb923c','#e879f9',
   '#38bdf8','#4ade80','#facc15','#f472b6','#818cf8','#34d399','#fb7185','#a78bfa',
@@ -2339,7 +2701,7 @@ const ACTIVITY_PALETTE = [
   '#22d3ee','#86efac','#fbbf24','#ec4899','#6366f1','#10b981','#f97316','#d946ef'
 ];
 function getActivityColor(activity) {
-  if (!activity || ['Break','Sleep','Commute','Offline / Away'].includes(activity)) return null;
+  if (!activity || ['Break','Away','Lunch','Walk','Exercise','Commute','Rest','Errand','Personal','Sleep','Offline / Away'].includes(activity)) return null;
   if (!settings.activityColors) settings.activityColors = {};
   if (!settings.activityColors[activity]) {
     const idx = Object.keys(settings.activityColors).length;
@@ -2402,7 +2764,7 @@ function computeGaps(todayEntries) {
   // Decide where to scan up to:
   // If timer is running or break is active, stop at the last entry (current block is live)
   // Otherwise, scan all the way to now
-  const scanEnd = (running || breakActive) ? (merged.length ? merged[merged.length-1].end : workStart) : now;
+  const scanEnd = (running || breakActive || awayActive) ? (merged.length ? merged[merged.length-1].end : workStart) : now;
 
   const gaps = [];
 
@@ -2432,7 +2794,7 @@ function computeGaps(todayEntries) {
   }
 
   // Gap from last entry to now (only when not actively tracking)
-  if (!running && !breakActive) {
+  if (!running && !breakActive && !awayActive) {
     const lastEnd = merged[merged.length - 1].end;
     const nowGapMin = Math.round((now - lastEnd) / 60000);
     if (nowGapMin >= MIN_GAP_MIN) {
@@ -2553,17 +2915,25 @@ function openEditEntry(id) {
   const crossesMidnight = eDate.getHours() * 60 + eDate.getMinutes() < sDate.getHours() * 60 + sDate.getMinutes();
   editingEntryBase = { startDate: sDate, crossesMidnight };
 
-  retroEnergy = entry.energy || '';
-  document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
-  if (retroEnergy) document.querySelectorAll(`#retro-overlay .energy-btn.${retroEnergy}`).forEach(b => b.classList.add('selected'));
-  document.getElementById('retro-activity').value = entry.activity || '';
+  // Untracked blocks: open as a fresh log (just prefill the time, clear activity)
+  if (entry.missed) {
+    retroEnergy = '';
+    document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
+    document.getElementById('retro-activity').value = '';
+    document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
+    document.getElementById('retro-modal-title').textContent = 'What were you doing?';
+  } else {
+    retroEnergy = entry.energy || '';
+    document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
+    if (retroEnergy) document.querySelectorAll(`#retro-overlay .energy-btn.${retroEnergy}`).forEach(b => b.classList.add('selected'));
+    document.getElementById('retro-activity').value = entry.activity || '';
+    document.getElementById('retro-modal-tag').textContent = 'EDIT BLOCK';
+    document.getElementById('retro-modal-title').textContent = 'Edit this block';
+  }
   populateRetroChips();
 
   document.getElementById('retro-start').value = `${pad(sDate.getHours())}:${pad(sDate.getMinutes())}`;
   document.getElementById('retro-end').value   = `${pad(eDate.getHours())}:${pad(eDate.getMinutes())}`;
-
-  document.getElementById('retro-modal-tag').textContent = 'EDIT BLOCK';
-  document.getElementById('retro-modal-title').textContent = 'Edit this block';
   document.getElementById('retro-overlay').classList.add('open');
   setTimeout(() => document.getElementById('retro-activity').focus(), 250);
 }
@@ -2588,12 +2958,26 @@ function renderEntryRow(item) {
   const actColor = item.missed ? null : getActivityColor(item.activity);
   const barStyle = actColor ? `style="background:${actColor}"` : '';
   const badgeStyle = actColor ? `style="background:${actColor}22;color:${actColor};border-radius:4px"` : '';
+
+  if (item.missed) {
+    // Untracked block — show like a gap row with a Log it button
+    return `<div class="tl-row tl-gap-row">
+      <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
+      <div class="tl-bar-col tl-bar-gap"></div>
+      <div class="tl-content">
+        <div class="tl-activity">Untracked block<span class="tl-badge missed">${fmtDur(dur)}</span></div>
+        <div class="tl-meta">${timeLabel}</div>
+      </div>
+      <button class="log-gap-btn" onclick="openEditEntry(${item.id})">Log it</button>
+    </div>`;
+  }
+
   return `<div class="tl-row" onclick="openEditEntry(${item.id})" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
       <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span></div>
-      <div class="tl-meta">${timeLabel} · ${dur}m</div>
+      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}</div>
     </div>
     <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
   </div>`;
@@ -2606,7 +2990,7 @@ function renderGapRow(item) {
     <div class="tl-time">${localTime(item.tsStart)}</div>
     <div class="tl-bar-col tl-bar-gap"></div>
     <div class="tl-content">
-      <div class="tl-activity">${gapLabel}<span class="tl-badge missed">${item.gapMin}m</span></div>
+      <div class="tl-activity">${gapLabel}<span class="tl-badge missed">${fmtDur(item.gapMin)}</span></div>
       <div class="tl-meta">${localTime(item.tsStart)} – ${endLabel}</div>
     </div>
     <button class="log-gap-btn" onclick="openRetroLogPrefilled(${item.tsStart},${Math.round(item.ts)})">Log it</button>
@@ -2616,73 +3000,7 @@ function renderGapRow(item) {
 let tlExpandedBuckets = new Set();
 
 function renderTimelineCombined(combined) {
-  const BUCKET_MS = 30 * 60 * 1000;
-  const html = [];
-  let i = 0;
-
-  while (i < combined.length) {
-    const item = combined[i];
-
-    // Gaps always render standalone
-    if (item.isGap) { html.push(renderGapRow(item)); i++; continue; }
-
-    // Collect consecutive non-gap entries within the same 30-min bucket
-    const bucketStart = Math.floor((item.tsStart || item.ts) / BUCKET_MS) * BUCKET_MS;
-    const bucketEnd = bucketStart + BUCKET_MS;
-    const group = [];
-    let j = i;
-    while (j < combined.length && !combined[j].isGap) {
-      const ts = combined[j].tsStart || combined[j].ts;
-      if (ts >= bucketEnd) break;
-      group.push(combined[j]);
-      j++;
-    }
-
-    if (group.length === 1) {
-      // Single entry in bucket — render flat
-      html.push(renderEntryRow(group[0]));
-    } else {
-      // Multiple entries — render as collapsible bucket
-      const bucketId = `bucket-${bucketStart}`;
-      const isOpen = tlExpandedBuckets.has(bucketId);
-
-      // Dominant activity = most total time
-      const actDur = {};
-      let totalDur = 0;
-      for (const e of group) {
-        const d = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || settings.intervalMin);
-        actDur[e.activity] = (actDur[e.activity] || 0) + d;
-        totalDur += d;
-      }
-      const dominant = Object.entries(actDur).sort((a,b) => b[1]-a[1])[0][0];
-      const dominantEnergy = group.find(e => e.activity === dominant)?.energy || 'shallow';
-      const actColor = getActivityColor(dominant);
-      const barStyle = actColor ? `style="background:${actColor}"` : '';
-      const energyClass = dominantEnergy;
-      const timeRange = `${localTime(group[0].tsStart || group[0].ts)} – ${localTime(group[group.length-1].ts)}`;
-      // Summarise unique activities
-      const uniqueActs = [...new Set(group.map(e => e.activity))];
-      const summary = uniqueActs.length === 1 ? dominant : `${dominant} +${uniqueActs.length - 1} more`;
-
-      html.push(`<div class="tl-bucket" id="${bucketId}">
-        <div class="tl-bucket-header" onclick="toggleTlBucket('${bucketId}')">
-          <div class="tl-time" style="padding-top:12px">${localTime(group[0].tsStart || group[0].ts)}</div>
-          <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle} style="margin-top:4px;margin-bottom:4px"></div>
-          <div class="tl-content">
-            <div class="tl-activity" style="font-size:12px;font-weight:600">${summary}</div>
-            <div class="tl-meta">${timeRange} · ${totalDur}m · ${group.length} entries</div>
-          </div>
-          <div class="tl-expand-btn">${isOpen ? '▾' : '▸'} ${group.length}</div>
-        </div>
-        <div class="tl-bucket-children ${isOpen ? 'open' : ''}">
-          ${group.map(renderEntryRow).join('')}
-        </div>
-      </div>`);
-    }
-
-    i = j;
-  }
-  return html.join('');
+  return combined.map(item => item.isGap ? renderGapRow(item) : renderEntryRow(item)).join('');
 }
 
 function toggleTlBucket(id) {
@@ -2729,7 +3047,8 @@ function renderToday() {
     tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
   } else {
     // Sort entries chronologically, then interleave detected gaps
-    const sorted = [...todayE].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+    // Filter out old missed/untracked entries — gaps cover that time already
+    const sorted = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
     const gaps = computeGaps(todayE);
     const combined = [...sorted, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
 
@@ -2778,7 +3097,7 @@ function renderToday() {
       <div class="entry-main">
         <div class="entry-activity">${e.activity}</div>
         <div class="entry-meta">
-  ${timeRange} · ${duration}m
+  ${timeRange} · ${fmtDur(duration)}
   ${e.deap ? ' · ' + e.deap : ''}
   ${e.rate ? ' · $' + e.rate + '/hr' : ''}
 </div>
@@ -2792,6 +3111,172 @@ function renderToday() {
     </div>
    `;
 }).join('');
+  renderRecentChips();
+}
+
+// ══════════════════════════════════════════════════════
+// RECENT TASK CHIPS
+// ══════════════════════════════════════════════════════
+function renderRecentChips() {
+  const el = document.getElementById('recent-chips');
+  if (!el) return;
+  const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const seen = new Set();
+  recentChipTasks = [];
+  for (const e of entries) {
+    if (e.ts < cutoff) break;
+    if (e.break || e.away || e.missed || !e.activity) continue;
+    if (!seen.has(e.activity)) {
+      seen.add(e.activity);
+      recentChipTasks.push(e.activity);
+    }
+    if (recentChipTasks.length >= 5) break;
+  }
+  if (!recentChipTasks.length) { el.innerHTML = ''; return; }
+  el.innerHTML = recentChipTasks.map((t, i) =>
+    `<button class="chip" onclick="useChip(${i})" title="${t.replace(/"/g,'&quot;').replace(/</g,'&lt;')}">${t.replace(/</g,'&lt;')}</button>`
+  ).join('');
+}
+
+function useChip(idx) {
+  const task = recentChipTasks[idx];
+  if (!task) return;
+  document.getElementById('intention').value = task;
+  intention = task;
+  localStorage.setItem('ta3-intention', task);
+  if (running) {
+    currentTask = task;
+    lastTaskForRepeat = task;
+    updateTimerTaskLabel();
+    showToast(`Now: ${task}`);
+  } else {
+    lastTaskForRepeat = task;
+    _startTimer(task);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// CONTINUE BANNER
+// ══════════════════════════════════════════════════════
+function showContinueBanner(task) {
+  clearInterval(continueBannerTimer);
+  continueBannerCountdown = 30;
+  const shortTask = task.length > 28 ? task.slice(0, 28) + '…' : task;
+  document.getElementById('continue-banner-text').textContent = `✓ Block done · auto-continuing in ${continueBannerCountdown}s`;
+  document.getElementById('continue-banner-btn').textContent = `▶ Continue "${shortTask}"`;
+  document.getElementById('continue-banner').classList.add('show');
+  continueBannerTimer = setInterval(() => {
+    continueBannerCountdown--;
+    if (continueBannerCountdown <= 0) {
+      clearInterval(continueBannerTimer);
+      doContinueBlock();
+      return;
+    }
+    document.getElementById('continue-banner-text').textContent = `✓ Block done · auto-continuing in ${continueBannerCountdown}s`;
+  }, 1000);
+}
+
+function hideContinueBanner() {
+  clearInterval(continueBannerTimer);
+  document.getElementById('continue-banner').classList.remove('show');
+}
+
+function doContinueBlock() {
+  hideContinueBanner();
+  const lastEnergy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
+  const task = currentTask || lastTaskForRepeat || intention || 'Work';
+  _doQuickSave(task, lastEnergy);
+}
+
+function doSwitchFromBanner() {
+  hideContinueBanner();
+  clearTimeout(snoozeTimer);
+  const intentEl = document.getElementById('intention');
+  intentEl.value = '';
+  intention = '';
+  intentEl.focus();
+  showToast('Type your next task and tap Start');
+}
+
+// ══════════════════════════════════════════════════════
+// AWAY TRACKING
+// ══════════════════════════════════════════════════════
+function toggleAway() {
+  if (awayActive) {
+    // End away — log it
+    const now = Date.now();
+    const dur = Math.max(1, Math.round((now - awayStartTime) / 60000));
+    const entry = {
+      id: now, ts: now,
+      tsStart: awayStartTime,
+      blockIntervalMin: dur,
+      date: toDateKey(new Date()),
+      activity: awayLabel, energy: 'away',
+      away: true, onPlan: null
+    };
+    entries.unshift(entry);
+    awayActive = false;
+    awayStartTime = null;
+    awayLabel = 'Away';
+    const btn = document.getElementById('away-btn');
+    btn.textContent = '⊙ Away';
+    btn.style.borderColor = 'var(--away)';
+    btn.style.color = 'var(--away)';
+    document.getElementById('timer-status').textContent = 'Ready';
+    persist(); renderToday(); syncEntries();
+    showToast(`${entry.activity} logged · ${fmtDur(dur)}`);
+  } else {
+    // Toggle the away picker
+    const picker = document.getElementById('away-picker');
+    const isOpen = picker.classList.contains('show');
+    if (isOpen) {
+      picker.classList.remove('show');
+    } else {
+      picker.classList.add('show');
+      document.getElementById('away-custom').value = '';
+      setTimeout(() => document.getElementById('away-custom').focus(), 150);
+    }
+  }
+}
+
+function startAway(label) {
+  document.getElementById('away-picker').classList.remove('show');
+  // If timer is running, log current block first
+  if (running) {
+    const task = currentTask || lastTaskForRepeat || intention || 'Work';
+    const lastEnergy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
+    const tsEnd = Date.now();
+    const tsStart = blockStartTime || (tsEnd - totalSecs * 1000);
+    const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
+    entries.unshift({
+      id: tsEnd, ts: tsEnd, tsStart,
+      blockIntervalMin: dur,
+      date: toDateKey(new Date()),
+      activity: task, energy: lastEnergy,
+      onPlan: lastEnergy !== 'distraction', retro: false
+    });
+    clearInterval(ticker);
+    running = false;
+    timerStartedAt = null;
+    blockStartTime = null;
+    document.getElementById('main-btn').textContent = 'Start';
+    document.getElementById('switch-btn').style.display = 'none';
+    document.getElementById('break-btn').style.display = 'none';
+    document.getElementById('interval-input').disabled = false;
+    updateTimerTaskLabel();
+    persist(); syncTimerState();
+  }
+  hideContinueBanner();
+  awayActive = true;
+  awayStartTime = Date.now();
+  awayLabel = label;
+  const btn = document.getElementById('away-btn');
+  btn.textContent = `↩ Back (${label})`;
+  btn.style.borderColor = 'var(--distraction)';
+  btn.style.color = 'var(--distraction)';
+  document.getElementById('timer-status').textContent = `Away · ${label}`;
+  renderToday();
+  showToast(`${label} started — tap Back when you return`);
 }
 
 let weekSelectedDay = 'week'; // 'week', 'month', or a dateKey
@@ -2844,24 +3329,39 @@ function renderWeek() {
   const days = isMonth ? [] : getWeekDays(weekRangeOffset);
   const tabs = document.getElementById('day-tabs');
 
-  // Build day options for the dropdown (past + today days of selected week)
-  const dayOptions = !isMonth ? days.filter(d=>!d.isFuture).map(d=>{
-    const label = d.date.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'}) + (d.isToday?' (today)':'');
-    const sel = weekSelectedDay===d.key ? 'selected' : '';
-    return `<option value="${d.key}" ${sel}>${label}</option>`;
+  // Build day buttons row (past + today days)
+  const dayBtns = !isMonth ? days.filter(d=>!d.isFuture).map(d=>{
+    const dayName = d.date.toLocaleDateString([],{weekday:'short'});
+    const dayNum  = d.date.getDate();
+    const isActive = weekSelectedDay === d.key;
+    return `<button onclick="selectWeekDay('${d.key}')" style="
+      flex:1;padding:6px 2px;border-radius:8px;border:1px solid ${isActive?'var(--deep)':'var(--border2)'};
+      background:${isActive?'var(--deep)':'transparent'};color:${isActive?'#000':'var(--fg)'};
+      font-size:11px;font-weight:600;cursor:pointer;text-align:center;line-height:1.3;
+      ${d.isToday&&!isActive?'border-color:var(--deep);color:var(--deep)':''}">
+      <div>${dayName}</div><div style="font-size:13px">${dayNum}</div>
+    </button>`;
   }).join('') : '';
 
-  // Range controls row (Week/Month toggle + prev/next + day dropdown)
+  // Row 1: Week/Month toggle + prev/next nav
+  // Row 2: day buttons (full width, only in week mode)
   tabs.innerHTML = `
-    <button class="day-tab ${!isMonth?'active':''}" onclick="setWeekMode('week')">Week</button>
-    <button class="day-tab ${isMonth?'active':''}" onclick="setWeekMode('month')">Month</button>
-    <button class="day-tab" onclick="shiftRange(-1)" style="padding:7px 10px">‹</button>
-    <span style="font-size:11px;color:var(--muted);padding:7px 4px;white-space:nowrap;flex-shrink:0">${getRangeLabel()}</span>
-    <button class="day-tab" onclick="shiftRange(1)" ${weekRangeOffset===0?'disabled style="opacity:0.3"':''}style="padding:7px 10px">›</button>
-    ${!isMonth ? `<select onchange="selectWeekDay(this.value)" style="margin-left:6px;padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--card);color:var(--fg);font-size:12px;cursor:pointer;flex-shrink:0">
-      <option value="week" ${weekSelectedDay==='week'?'selected':''}>All days</option>
-      ${dayOptions}
-    </select>` : ''}`;
+    <div style="display:flex;align-items:center;gap:4px;width:100%">
+      <button class="day-tab ${!isMonth?'active':''}" onclick="setWeekMode('week')">Week</button>
+      <button class="day-tab ${isMonth?'active':''}" onclick="setWeekMode('month')">Month</button>
+      <button class="day-tab" onclick="shiftRange(-1)" style="padding:7px 10px">‹</button>
+      <span style="font-size:11px;color:var(--muted);padding:7px 4px;white-space:nowrap;flex:1;text-align:center">${getRangeLabel()}</span>
+      <button class="day-tab" onclick="shiftRange(1)" ${weekRangeOffset===0?'disabled style="opacity:0.3"':''}style="padding:7px 10px">›</button>
+    </div>
+    ${!isMonth ? `<div style="display:flex;gap:4px;width:100%;margin-top:6px">
+      <button onclick="selectWeekDay('week')" style="
+        flex:1;padding:6px 2px;border-radius:8px;border:1px solid ${weekSelectedDay==='week'?'var(--deep)':'var(--border2)'};
+        background:${weekSelectedDay==='week'?'var(--deep)':'transparent'};color:${weekSelectedDay==='week'?'#000':'var(--fg)'};
+        font-size:11px;font-weight:600;cursor:pointer;text-align:center;line-height:1.3;">
+        <div>All</div><div style="font-size:13px">—</div>
+      </button>
+      ${dayBtns}
+    </div>` : ''}`;
 
   if (weekSelectedDay === 'month') {
     const monthE = getMonthEntries(weekRangeOffset);
@@ -3026,7 +3526,7 @@ function renderEntryList(el, entriesArr) {
       <div style="width:3px;height:34px;border-radius:2px;background:${color};flex-shrink:0"></div>
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.activity}</div>
-        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${dur}m</div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
       </div>
       <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
       <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
@@ -3251,7 +3751,7 @@ function renderWeekTable() {
           <div style="width:3px;height:32px;border-radius:2px;background:${color};flex-shrink:0"></div>
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.activity}</div>
-            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${dur}m</div>
+            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
           </div>
           <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
           <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
@@ -3271,6 +3771,16 @@ function renderSettings() {
   document.getElementById('set-workdaystart').value=settings.workDayStart||'09:00';
   document.getElementById('set-timezone').value=settings.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
   document.getElementById('settings-stats').textContent=`${entries.length} total entries · ${getWeekEntries().length} this week`;
+  const datesWithEntries = [...new Set(entries.map(e=>e.date))].sort().reverse();
+  const todayKey = toDateKey(new Date());
+  const clearSel = document.getElementById('clear-day-select');
+  clearSel.innerHTML = datesWithEntries.length
+    ? datesWithEntries.map(d => {
+        const label = d === todayKey ? 'Today' : new Date(d+'T12:00:00').toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+        const count = entries.filter(e=>e.date===d).length;
+        return `<option value="${d}">${label} (${count} entries)</option>`;
+      }).join('')
+    : '<option value="">No entries</option>';
   const pe=document.getElementById('presets-editor');
   pe.innerHTML=settings.presets.map((p,i)=>`<div class="preset-edit-row">
     <input type="text" value="${p.label}" onchange="settings.presets[${i}].label=this.value;persist()">
@@ -3292,8 +3802,10 @@ function saveSettings(){
   settings.exitDelay=parseInt(document.getElementById('set-exitdelay').value)||10;
   settings.workDayStart=document.getElementById('set-workdaystart').value||'09:00';
   settings.timezone=document.getElementById('set-timezone').value;
+  // Sync interval back to Today tab input
+  document.getElementById('interval-input').value = settings.intervalMin;
+  if (!running) { totalSecs = settings.intervalMin*60; remaining = totalSecs; updateRing(); }
   persist();
-  // Sync settings to Firebase so all devices pick up the timezone change
   if (fbRoomRef) fbRoomRef.update({ settings });
   renderToday();
 }
@@ -3333,6 +3845,203 @@ function saveReview(){
   showToast('Review saved ✓');
 }
 function checkReviewPrompt(){if(new Date().getHours()>=18&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
+
+// ══════════════════════════════════════════════════════
+// REFLECT  — insights, weekly review, history
+// ══════════════════════════════════════════════════════
+
+function getWeekKey(d) {
+  // Returns e.g. "2026-W15"
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  const startOfW1 = new Date(jan4);
+  startOfW1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+  const weekNum = Math.floor((d - startOfW1) / 604800000) + 1;
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2,'0')}`;
+}
+
+function getEntriesForWeekKey(weekKey) {
+  // Get all entries whose date falls within the given weekKey
+  return entries.filter(e => {
+    if (!e.date) return false;
+    const d = new Date(e.date + 'T12:00:00');
+    return getWeekKey(d) === weekKey;
+  });
+}
+
+function computeInsights(weekKey) {
+  const we = getEntriesForWeekKey(weekKey);
+  if (!we.length) return null;
+
+  // Peak focus hour — which hour has most deep-work minutes
+  const hourBuckets = {};
+  we.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
+    const hr = new Date(e.tsStart).getHours();
+    hourBuckets[hr] = (hourBuckets[hr] || 0) + (e.blockIntervalMin || 0);
+  });
+  let peakHour = null, peakMin = 0;
+  Object.entries(hourBuckets).forEach(([h, m]) => { if (m > peakMin) { peakMin = m; peakHour = Number(h); } });
+  const peakHourLabel = peakHour !== null
+    ? `${peakHour % 12 || 12}${peakHour < 12 ? 'am' : 'pm'}`
+    : '—';
+
+  // Most common distraction label
+  const distEntries = we.filter(e => e.energy === 'distraction');
+  const distCounts = {};
+  distEntries.forEach(e => {
+    const label = (e.activity || 'Unknown').trim();
+    distCounts[label] = (distCounts[label] || 0) + 1;
+  });
+  let topDistraction = '—';
+  let topCount = 0;
+  Object.entries(distCounts).forEach(([l, c]) => { if (c > topCount) { topCount = c; topDistraction = l; } });
+
+  // Best day (most deep-work minutes)
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dayBuckets = {};
+  we.filter(e => e.energy === 'deep').forEach(e => {
+    const key = e.date;
+    dayBuckets[key] = (dayBuckets[key] || 0) + (e.blockIntervalMin || 0);
+  });
+  let bestDay = '—', bestDayMin = 0;
+  Object.entries(dayBuckets).forEach(([dateStr, m]) => {
+    if (m > bestDayMin) { bestDayMin = m; bestDay = dayNames[new Date(dateStr + 'T12:00:00').getDay()]; }
+  });
+
+  // Deep work %
+  const totalMin = we.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const deepMin = we.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const deepPct = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
+
+  // Deep work hours this week
+  const deepHrs = (deepMin / 60).toFixed(1);
+
+  return { peakHourLabel, topDistraction, bestDay, deepPct, deepHrs, totalMin };
+}
+
+function renderReflectView() {
+  const now = new Date();
+  const weekKey = getWeekKey(now);
+
+  // ── Insights ──
+  const insightsEl = document.getElementById('reflect-insights');
+  const ins = computeInsights(weekKey);
+  if (!ins || ins.totalMin === 0) {
+    insightsEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No data yet this week — start tracking to see patterns.</div>`;
+  } else {
+    insightsEl.innerHTML = `
+      <div class="insight-card">
+        <div class="insight-icon">⏰</div>
+        <div><div class="insight-val">${ins.peakHourLabel}</div><div style="font-size:11px;color:var(--muted)">Peak focus hour</div></div>
+      </div>
+      <div class="insight-card">
+        <div class="insight-icon">📉</div>
+        <div><div class="insight-val" style="color:var(--distraction)">${ins.topDistraction}</div><div style="font-size:11px;color:var(--muted)">Most common distraction</div></div>
+      </div>
+      <div class="insight-card">
+        <div class="insight-icon">🏆</div>
+        <div><div class="insight-val">${ins.bestDay}</div><div style="font-size:11px;color:var(--muted)">Best day this week</div></div>
+      </div>
+      <div class="insight-card">
+        <div class="insight-icon">🎯</div>
+        <div><div class="insight-val">${ins.deepPct}%<span style="font-size:14px;font-weight:400;color:var(--muted);margin-left:6px">${ins.deepHrs}h</span></div><div style="font-size:11px;color:var(--muted)">Deep work this week</div></div>
+      </div>`;
+  }
+
+  // ── Weekly review form — pre-fill if already saved ──
+  const wr = weeklyReviews[weekKey] || {};
+  document.getElementById('wr-overall').value = wr.overall || '';
+  document.getElementById('wr-priorities').value = wr.priorities || '';
+  document.getElementById('wr-drain').value = wr.drain || '';
+  document.getElementById('wr-nextweek').value = wr.nextweek || '';
+  const savedBadge = document.getElementById('weekly-review-saved');
+  savedBadge.style.display = weeklyReviews[weekKey] ? 'inline' : 'none';
+
+  // ── History ──
+  renderReflectHistory();
+}
+
+function saveWeeklyReview() {
+  const weekKey = getWeekKey(new Date());
+  weeklyReviews[weekKey] = {
+    overall:   document.getElementById('wr-overall').value.trim(),
+    priorities:document.getElementById('wr-priorities').value.trim(),
+    drain:     document.getElementById('wr-drain').value.trim(),
+    nextweek:  document.getElementById('wr-nextweek').value.trim(),
+    savedAt:   Date.now()
+  };
+  persist();
+  document.getElementById('weekly-review-saved').style.display = 'inline';
+  showToast('Weekly reflection saved ✓');
+  renderReflectHistory();
+}
+
+function renderReflectHistory() {
+  const histEl = document.getElementById('reflect-history');
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  // Collect all weeks that have daily reviews or weekly reviews, last 8 weeks
+  const weekSet = new Set();
+  const now = new Date();
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now - i * 7 * 86400000);
+    weekSet.add(getWeekKey(d));
+  }
+  Object.keys(weeklyReviews).forEach(k => weekSet.add(k));
+
+  // Also collect weeks from daily reviews
+  Object.keys(reviews).forEach(dateStr => {
+    const d = new Date(dateStr + 'T12:00:00');
+    if (!isNaN(d)) weekSet.add(getWeekKey(d));
+  });
+
+  const weeks = Array.from(weekSet).sort().reverse().slice(0, 10);
+
+  if (!weeks.length) {
+    histEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No reflections yet. Save your daily reviews to build history.</div>`;
+    return;
+  }
+
+  histEl.innerHTML = weeks.map(wk => {
+    const wr = weeklyReviews[wk];
+
+    // Daily reviews for this week
+    const dailyRows = Object.entries(reviews)
+      .filter(([dateStr]) => {
+        const d = new Date(dateStr + 'T12:00:00');
+        return !isNaN(d) && getWeekKey(d) === wk;
+      })
+      .sort(([a],[b]) => b.localeCompare(a))
+      .map(([dateStr, rv]) => {
+        const d = new Date(dateStr + 'T12:00:00');
+        const label = `${dayNames[d.getDay()]} ${d.getMonth()+1}/${d.getDate()}`;
+        const parts = [];
+        if (rv.win) parts.push(`<span style="color:var(--deep)">✓ ${rv.win}</span>`);
+        if (rv.waste) parts.push(`<span style="color:var(--distraction)">✗ ${rv.waste}</span>`);
+        if (rv.tomorrow) parts.push(`<span style="color:var(--muted)">→ ${rv.tomorrow}</span>`);
+        if (!parts.length) return '';
+        return `<div class="reflect-day-row"><span style="font-size:11px;color:var(--muted);min-width:48px">${label}</span><div style="display:flex;flex-direction:column;gap:3px;font-size:12px">${parts.join('')}</div></div>`;
+      }).filter(Boolean).join('');
+
+    const wrBlock = wr ? `
+      <div class="reflect-weekly-block">
+        ${wr.overall ? `<div style="margin-bottom:6px"><span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Overall</span><div style="font-size:13px;margin-top:2px">${wr.overall}</div></div>` : ''}
+        ${wr.drain ? `<div style="margin-bottom:6px"><span style="font-size:10px;color:var(--distraction);text-transform:uppercase;letter-spacing:.05em">Drain</span><div style="font-size:13px;margin-top:2px">${wr.drain}</div></div>` : ''}
+        ${wr.nextweek ? `<div><span style="font-size:10px;color:var(--deep);text-transform:uppercase;letter-spacing:.05em">Next week</span><div style="font-size:13px;margin-top:2px">${wr.nextweek}</div></div>` : ''}
+      </div>` : '';
+
+    if (!dailyRows && !wrBlock) return '';
+
+    return `<div class="reflect-history-week">
+      <div style="padding:10px 12px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border)">${wk}</div>
+      ${dailyRows ? `<div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px">${dailyRows}</div>` : ''}
+      ${wrBlock}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  if (!histEl.innerHTML.trim()) {
+    histEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No reflections yet. Save your daily reviews to build history.</div>`;
+  }
+}
 
 // ══════════════════════════════════════════════════════
 // FIREBASE SYNC  (compat SDK only — no modular imports)
@@ -3396,8 +4105,7 @@ function startSync() {
         running = true;
         settings.intervalMin = data.intervalSecs / 60;
         document.getElementById('interval-input').value = settings.intervalMin;
-        document.getElementById('interval-input').disabled = true;
-        document.getElementById('main-btn').textContent = 'Pause';
+        document.getElementById('main-btn').textContent = 'Break';
         document.getElementById('timer-status').textContent = `Synced · pinging every ${settings.intervalMin} min`;
         if (!ticker) {
           ticker = setInterval(() => {
@@ -3670,6 +4378,24 @@ function clearAll(){
   showToast('Cleared');
 }
 
+function clearSelectedDay(){
+  const sel = document.getElementById('clear-day-select');
+  const dateKey = sel?.value;
+  if (!dateKey) return;
+  const count = entries.filter(e=>e.date===dateKey).length;
+  const label = new Date(dateKey+'T12:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
+  if (!confirm(`Clear all ${count} entries for ${label}? This cannot be undone.`)) return;
+  const ids = new Set(entries.filter(e=>e.date===dateKey).map(e=>'e_'+e.id));
+  entries = entries.filter(e=>e.date!==dateKey);
+  persist(); renderToday(); renderWeek(); renderWeekTable(); renderSettings();
+  if (fbRoomRef && ids.size) {
+    const updates={};
+    ids.forEach(id=>{ updates['entries/'+id]=null; });
+    fbRoomRef.update(updates);
+  }
+  showToast(`${label} cleared`);
+}
+
 function clearTodayOnly(){
   const todayKey = toDateKey(new Date());
   const todayIds = new Set(entries.filter(e=>e.date===todayKey).map(e=>'e_'+e.id));
@@ -3708,7 +4434,7 @@ document.getElementById('interval-input').addEventListener('change', function(){
 // ══════════════════════════════════════════════════════
 // PWA
 // ══════════════════════════════════════════════════════
-const manifest={name:'Time Audit',short_name:'Time Audit',display:'standalone',background_color:'#0b0b0c',theme_color:'#0b0b0c',orientation:'portrait-primary',start_url:'.',icons:[{src:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%23c8f04a' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%23c8f04a' font-family='monospace' font-weight='bold'>T</text></svg>",sizes:'512x512',type:'image/svg+xml'}]};
+const manifest={name:'ChronaSense',short_name:'ChronaSense',display:'standalone',background_color:'#0b0b0c',theme_color:'#0b0b0c',orientation:'portrait-primary',start_url:'.',icons:[{src:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0b0c'/><circle cx='50' cy='50' r='28' fill='none' stroke='%234cc7f0' stroke-width='6'/><text x='50' y='57' text-anchor='middle' font-size='24' fill='%234cc7f0' font-family='monospace' font-weight='bold'>T</text></svg>",sizes:'512x512',type:'image/svg+xml'}]};
 document.getElementById('pwa-manifest').href=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/json'}));
 
 const swCode=`const C='ta3-sw';self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))));self.clients.claim();});self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.open(C).then(c=>fetch(e.request).then(r=>{c.put(e.request,r.clone());return r;}).catch(()=>caches.match(e.request))));});`;
@@ -3781,9 +4507,9 @@ load();
 document.getElementById('interval-input').value = settings.intervalMin;
 // If timer was restored from localStorage, resume it
 if (running && timerStartedAt) {
-  document.getElementById('main-btn').textContent = 'Pause';
+  document.getElementById('main-btn').textContent = 'Break';
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min (restored)`;
-  document.getElementById('interval-input').disabled = true;
+  updateTimerTaskLabel();
   if (!ticker) ticker = setInterval(() => {
     remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
     remaining <= 0 ? doPing() : updateRing();
@@ -3796,6 +4522,8 @@ if (running && timerStartedAt) {
 const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 let LocalNotifications = null;
 const PING_NOTIF_ID = 1001;
+const PING_FOLLOWUP_ID = 1002; // follow-up if user ignores first ping
+let followupNotifTimer = null;
 
 async function initNativeNotifications() {
   if (!isNative) return;
@@ -3805,8 +4533,19 @@ async function initNativeNotifications() {
     LocalNotifications = cap.LocalNotifications;
     const perm = await LocalNotifications.requestPermissions();
     if (perm.display !== 'granted') return;
+    // Create high-priority notification channel on Android
+    try {
+      await LocalNotifications.createChannel({
+        id: 'chrona_pings',
+        name: 'Time Block Pings',
+        importance: 5, // IMPORTANCE_HIGH
+        sound: 'default',
+        vibration: true,
+        lights: true
+      });
+    } catch(e) {}
     // Handle notification tap — open log modal
-    LocalNotifications.addListener('localNotificationActionPerformed', () => {
+    LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
       window.focus(); openQuickLog();
     });
     console.log('[Native] Local notifications ready');
@@ -3816,25 +4555,49 @@ async function initNativeNotifications() {
 function scheduleNativePing(inSeconds) {
   if (!isNative || !LocalNotifications) return;
   const at = new Date(Date.now() + inSeconds * 1000);
-  LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }] }).catch(()=>{});
+  const task = lastTaskForRepeat ? lastTaskForRepeat.replace(/ \(Output:.*\)/,'') : null;
+  LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }, { id: PING_FOLLOWUP_ID }] }).catch(()=>{});
   LocalNotifications.schedule({
     notifications: [{
       id: PING_NOTIF_ID,
-      title: '⏱ Block complete',
-      body: lastTaskForRepeat
-        ? `You were on: ${lastTaskForRepeat.replace(/ \(Output:.*\)/,'')} — tap to log`
-        : 'Tap to log what you were doing',
+      channelId: 'chrona_pings',
+      title: '⏱ Time block complete — log it now',
+      body: task ? `You were on: ${task}` : 'What were you just working on?',
       schedule: { at },
       sound: 'default',
       actionTypeId: '',
       extra: null
     }]
   }).catch(e => console.warn('[Native] Schedule failed', e));
+
+  // Schedule a follow-up 5 min after the ping if user hasn't logged
+  clearTimeout(followupNotifTimer);
+  followupNotifTimer = setTimeout(() => {
+    scheduleFollowUpPing(task);
+  }, inSeconds * 1000);
+}
+
+function scheduleFollowUpPing(task) {
+  if (!isNative || !LocalNotifications) return;
+  const at = new Date(Date.now() + 5 * 60 * 1000); // 5 min from now
+  LocalNotifications.schedule({
+    notifications: [{
+      id: PING_FOLLOWUP_ID,
+      channelId: 'chrona_pings',
+      title: '⚠️ Unlogged block — time is slipping',
+      body: task ? `Still haven't logged: ${task}` : 'You have an unlogged time block',
+      schedule: { at },
+      sound: 'default',
+      actionTypeId: '',
+      extra: null
+    }]
+  }).catch(()=>{});
 }
 
 function cancelNativePing() {
   if (!isNative || !LocalNotifications) return;
-  LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }] }).catch(()=>{});
+  clearTimeout(followupNotifTimer);
+  LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }, { id: PING_FOLLOWUP_ID }] }).catch(()=>{});
 }
 
 // Pre-fill intention from load()
