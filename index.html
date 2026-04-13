@@ -255,6 +255,32 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .energy-btn.exercise.selected .e-name,.energy-btn.exercise:hover .e-name{color:var(--exercise)}
 .energy-btn.social.selected,.energy-btn.social:hover{background:var(--social-dim);border-color:var(--social)}
 .energy-btn.social.selected .e-name,.energy-btn.social:hover .e-name{color:var(--social)}
+.quick-lane{margin:12px 0 14px}
+.quick-lane-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:8px}
+.quick-actions-grid,.recent-task-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.quick-action-btn,.recent-task-btn{width:100%;min-height:64px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border2);
+  background:var(--bg3);color:var(--text);text-align:left;cursor:pointer;transition:transform 0.12s,background 0.12s,border-color 0.12s;
+  font-family:var(--head)}
+.quick-action-btn:hover,.recent-task-btn:hover{background:var(--bg4);border-color:var(--border3)}
+.quick-action-btn:active,.recent-task-btn:active{transform:scale(0.98)}
+.quick-action-btn .qa-title,.recent-task-btn .rt-title{display:block;font-size:15px;font-weight:700;line-height:1.15}
+.quick-action-btn .qa-meta,.recent-task-btn .rt-meta{display:block;font-size:11px;color:var(--muted);margin-top:4px}
+.quick-action-btn.deep{border-color:rgba(76,199,240,0.28);background:var(--deep-dim2)}
+.quick-action-btn.deep .qa-title{color:var(--deep)}
+.quick-action-btn.shallow{border-color:rgba(111,179,242,0.24)}
+.quick-action-btn.shallow .qa-title{color:var(--shallow)}
+.quick-action-btn.recovery{border-color:rgba(167,139,250,0.24)}
+.quick-action-btn.recovery .qa-title{color:var(--break)}
+.quick-action-btn.exercise{border-color:rgba(251,146,60,0.24)}
+.quick-action-btn.exercise .qa-title{color:var(--exercise)}
+.quick-action-btn.errands{border-color:rgba(148,163,184,0.24)}
+.quick-action-btn.errands .qa-title{color:var(--away)}
+.quick-action-btn.waste{border-color:rgba(255,107,107,0.24)}
+.quick-action-btn.waste .qa-title{color:var(--distraction)}
+.recent-task-wrap{margin-top:12px}
+.recent-task-btn{min-height:58px}
+.recent-task-btn .rt-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent-task-btn .rt-meta{font-family:var(--mono)}
 
 /* ── Presets ── */
 .presets-scroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin:6px 0}
@@ -695,7 +721,9 @@ button, a, [role="button"],
 .setting-row { padding: 11px 0; }
 .settings-section { padding: 16px; }
 
-.energy-btn { padding: 14px 12px; }
+.energy-btn { padding: 16px 12px; min-height: 64px; }
+.quick-actions-grid, .recent-task-grid { grid-template-columns: 1fr; }
+.quick-action-btn, .recent-task-btn { min-height: 70px; }
 
 /* font-size ≥ 16px prevents iOS Safari from auto-zooming on input focus */
 .field input, .field select, .field textarea {
@@ -1292,6 +1320,14 @@ button, a, [role="button"],
     <span class="sl-sub">Tap to log and continue</span>
   </button>
   <button class="same-last-other" id="ql-other-btn" onclick="showQuickForm()">Something different ↓</button>
+  <div class="quick-lane">
+    <div class="quick-lane-label">Quick Log</div>
+    <div class="quick-actions-grid" id="ql-quick-actions"></div>
+    <div class="recent-task-wrap" id="ql-recent-wrap" style="display:none">
+      <div class="quick-lane-label">Recent Tasks</div>
+      <div class="recent-task-grid" id="ql-recent-tasks"></div>
+    </div>
+  </div>
   <div id="ql-form-body">
     <div id="ql-chips-wrap" style="display:none;margin-bottom:10px">
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Recent</div>
@@ -1381,6 +1417,14 @@ button, a, [role="button"],
     <span class="sl-sub">Tap to log and continue</span>
   </button>
   <button class="same-last-other" id="same-last-other" onclick="showLogForm()">Something different ↓</button>
+  <div class="quick-lane">
+    <div class="quick-lane-label">Quick Log</div>
+    <div class="quick-actions-grid" id="log-quick-actions"></div>
+    <div class="recent-task-wrap" id="log-recent-wrap" style="display:none">
+      <div class="quick-lane-label">Recent Tasks</div>
+      <div class="recent-task-grid" id="log-recent-tasks"></div>
+    </div>
+  </div>
   <div id="log-form-body">
   <div style="margin-bottom:6px">
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Quick pick</div>
@@ -1672,6 +1716,14 @@ let distractionDebt = 0;
 let pingCount = 0;
 let sortKey = 'ts', sortDir = -1;
 let selectedEnergy = '', selectedOnPlan = null;
+const QUICK_ACTIVITY_OPTIONS = [
+  { label: 'Deep Work', activity: 'Deep Work', energy: 'deep', hint: 'Focused, high-value' },
+  { label: 'Admin', activity: 'Admin', energy: 'shallow', hint: 'Email, forms, follow-up' },
+  { label: 'Eat', activity: 'Eat', energy: 'recovery', hint: 'Meal or snack break' },
+  { label: 'Workout', activity: 'Workout', energy: 'exercise', hint: 'Movement or training' },
+  { label: 'Commute', activity: 'Commute', energy: 'errands', hint: 'Driving, travel, transit' },
+  { label: 'Scroll', activity: 'Scroll', energy: 'waste', hint: 'Phone or feed drift' },
+];
 let focusModeOn = false;
 let blockStartTime = null;
 let lastStateChange = null;
@@ -2165,6 +2217,17 @@ function openQuickLog() {
     formBody.style.display = 'block';
   }
 
+  renderQuickActionGrid('ql-quick-actions', option => {
+    if (quickLogBusy) return;
+    quickLogBusy = true;
+    _doQuickSave(option.activity, option.energy);
+  });
+  renderRecentTaskGrid('ql-recent-tasks', 'ql-recent-wrap', item => {
+    if (quickLogBusy) return;
+    quickLogBusy = true;
+    _doQuickSave(item.activity, item.energy);
+  });
+
   // Recent chips
   populateQlChips();
 
@@ -2183,14 +2246,7 @@ function setQlEnergy(type) {
 }
 
 function populateQlChips() {
-  const seen = new Set();
-  const recent = [];
-  for (const e of entries) {
-    if (e.missed || e.break || e.away || !e.activity) continue;
-    const key = e.activity.split(' (Output:')[0];
-    if (!seen.has(key)) { seen.add(key); recent.push({ activity: key, energy: e.energy }); }
-    if (recent.length >= 8) break;
-  }
+  const recent = getRecentLogOptions(8);
   const wrap = document.getElementById('ql-chips-wrap');
   const chips = document.getElementById('ql-chips');
   if (!recent.length) { wrap.style.display = 'none'; return; }
@@ -2617,6 +2673,79 @@ function showView(name) {
 // ══════════════════════════════════════════════════════
 // LOG MODAL
 // ══════════════════════════════════════════════════════
+function getRecentLogOptions(limit = 6) {
+  const seen = new Set();
+  const recent = [];
+  for (const e of entries) {
+    if (e.missed || e.break || e.away || !e.activity) continue;
+    const activity = e.activity.split(' (Output:')[0].trim();
+    if (!activity) continue;
+    const key = `${activity.toLowerCase()}|${e.energy || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    recent.push({ activity, energy: e.energy || 'shallow' });
+    if (recent.length >= limit) break;
+  }
+  return recent;
+}
+
+function formatEnergyLabel(energy) {
+  return ({
+    deep: 'Deep Work',
+    shallow: 'Shallow Work',
+    recovery: 'Recovery',
+    exercise: 'Exercise',
+    errands: 'Errands',
+    waste: 'Waste',
+    nine5: '9-5',
+    learning: 'Learning',
+    social: 'Social',
+    distraction: 'Distraction'
+  })[energy] || energy || 'Activity';
+}
+
+function renderQuickActionGrid(containerId, clickHandler) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = '';
+  QUICK_ACTIVITY_OPTIONS.forEach((option, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `quick-action-btn ${option.energy}`;
+    btn.innerHTML = `<span class="qa-title">${option.label}</span><span class="qa-meta">${option.hint}</span>`;
+    btn.addEventListener('click', () => clickHandler(option, idx));
+    el.appendChild(btn);
+  });
+}
+
+function renderRecentTaskGrid(containerId, wrapId, clickHandler) {
+  const el = document.getElementById(containerId);
+  const wrap = document.getElementById(wrapId);
+  if (!el || !wrap) return;
+  const recent = getRecentLogOptions();
+  if (!recent.length) {
+    wrap.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  wrap.style.display = 'block';
+  el.innerHTML = '';
+  recent.forEach((item, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'recent-task-btn';
+    btn.innerHTML = `<span class="rt-title">${item.activity}</span><span class="rt-meta">${formatEnergyLabel(item.energy)}</span>`;
+    btn.addEventListener('click', () => clickHandler(item, idx));
+    el.appendChild(btn);
+  });
+}
+
+function saveLogChoice(activity, energy) {
+  document.getElementById('f-activity').value = activity;
+  setEnergy(energy);
+  saveEntry();
+}
+
 let logIsPing = false;
 function openLog(pingNum) {
   // Prevent opening if any log modal is already visible
@@ -2635,7 +2764,7 @@ function openLog(pingNum) {
   document.getElementById('f-rate').value='';
   document.getElementById('detail-body').classList.remove('open');
   document.getElementById('detail-arrow').textContent='▸';
-  document.querySelectorAll('.energy-btn').forEach(b=>b.classList.remove('selected'));
+  document.querySelectorAll('#log-overlay .energy-btn').forEach(b=>b.classList.remove('selected'));
   selectedOnPlan = null;
   if (switchingTask) {
     const elapsed = blockStartTime ? Math.round((Date.now() - blockStartTime) / 60000) : settings.intervalMin;
@@ -2690,6 +2819,8 @@ function openLog(pingNum) {
     chip.onclick=()=>{ document.getElementById('f-activity').value=p.label; setEnergy(p.energy); chips.querySelectorAll('.preset-chip').forEach(c=>c.classList.remove('selected')); chip.classList.add('selected'); };
     chips.appendChild(chip);
   });
+  renderQuickActionGrid('log-quick-actions', option => saveLogChoice(option.activity, option.energy));
+  renderRecentTaskGrid('log-recent-tasks', 'log-recent-wrap', item => saveLogChoice(item.activity, item.energy));
   document.getElementById('log-overlay').classList.add('open');
   setTimeout(()=>document.getElementById('f-activity').focus(),250);
 }
@@ -2848,7 +2979,7 @@ function dismissLog() {
 
 function setEnergy(type) {
   selectedEnergy=type;
-  document.querySelectorAll('.energy-btn').forEach(b=>b.classList.toggle('selected',b.classList.contains(type)));
+  document.querySelectorAll('#log-overlay .energy-btn').forEach(b=>b.classList.toggle('selected',b.classList.contains(type)));
   // Auto-set on-plan: distraction = off-plan, everything else = on-plan
   if (type === 'distraction' || type === 'waste') setOnPlan(false);
   else setOnPlan(true);
