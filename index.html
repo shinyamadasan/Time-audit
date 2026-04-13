@@ -102,8 +102,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .t-block{height:26px;flex:1;min-width:14px;max-width:30px;border-radius:4px;cursor:default;transition:transform 0.1s}
 .t-block:hover{transform:scaleY(1.15)}
 .t-block.deep{background:var(--deep)}.t-block.shallow{background:var(--shallow)}
-.t-block.admin{background:var(--admin)}.t-block.distraction{background:var(--distraction)}
-.t-block.empty{background:var(--bg4)}.t-block.away{background:var(--away)}
+.t-block.admin{background:var(--admin)}.t-block.distraction{background:var(--distraction)}.t-block.waste{background:var(--distraction)}
+.t-block.empty{background:var(--bg4)}.t-block.away{background:var(--away)}.t-block.recovery{background:var(--break)}
 .timeline-legend{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
 .legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
 .legend-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
@@ -123,8 +123,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
   padding:9px 12px;display:flex;align-items:center;gap:9px}
 .entry-bar{width:4px;height:34px;border-radius:2px;flex-shrink:0}
 .entry-bar.deep{background:var(--deep)}.entry-bar.shallow{background:var(--shallow)}
-.entry-bar.admin{background:var(--admin)}.entry-bar.distraction{background:var(--distraction)}
-.entry-bar.break{background:var(--break)}.entry-bar.away{background:var(--away)}
+.entry-bar.admin{background:var(--admin)}.entry-bar.distraction{background:var(--distraction)}.entry-bar.waste{background:var(--distraction)}
+.entry-bar.break{background:var(--break)}.entry-bar.away{background:var(--away)}.entry-bar.recovery{background:var(--break)}
 .entry-main{flex:1;min-width:0}
 .entry-activity{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .entry-meta{font-size:11px;color:var(--muted);margin-top:1px;font-family:var(--mono)}
@@ -133,10 +133,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 /* ── Badges ── */
 .badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:999px;font-weight:500;white-space:nowrap}
 .badge.deep{background:var(--deep-dim);color:var(--deep)}.badge.shallow{background:var(--shallow-dim);color:var(--shallow)}
-.badge.admin{background:var(--admin-dim);color:var(--admin)}.badge.distraction{background:var(--distraction-dim);color:var(--distraction)}
+.badge.admin{background:var(--admin-dim);color:var(--admin)}.badge.distraction{background:var(--distraction-dim);color:var(--distraction)}.badge.waste{background:var(--distraction-dim);color:var(--distraction)}
 .badge.deap{background:rgba(255,255,255,0.06);color:var(--muted)}
 .badge.onplan{background:var(--deep-dim);color:var(--deep)}.badge.offplan{background:var(--distraction-dim);color:var(--distraction)}
-.badge.break{background:var(--break-dim);color:var(--break)}
+.badge.break{background:var(--break-dim);color:var(--break)}.badge.recovery{background:var(--break-dim);color:var(--break)}
 .badge.away{background:var(--away-dim);color:var(--away)}
 
 /* ── Buttons ── */
@@ -222,6 +222,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .energy-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
 .energy-btn{padding:12px 10px;border-radius:var(--r);border:1.5px solid var(--border2);
   background:var(--bg3);cursor:pointer;text-align:left;transition:all 0.12s;font-family:var(--head)}
+.energy-btn:last-child:nth-child(odd){grid-column:1/-1}
 .energy-btn .e-name{font-size:13px;font-weight:600;display:block;margin-bottom:2px;color:var(--text)}
 .energy-btn .e-desc{font-size:11px;color:var(--muted);display:block}
 .energy-btn.deep.selected,.energy-btn.deep:hover{background:var(--deep-dim);border-color:var(--deep)}
@@ -230,6 +231,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .energy-btn.shallow.selected .e-name,.energy-btn.shallow:hover .e-name{color:var(--shallow)}
 .energy-btn.admin.selected,.energy-btn.admin:hover{background:var(--admin-dim);border-color:var(--admin)}
 .energy-btn.admin.selected .e-name,.energy-btn.admin:hover .e-name{color:var(--admin)}
+.energy-btn.recovery.selected,.energy-btn.recovery:hover{background:var(--break-dim);border-color:var(--break)}
+.energy-btn.recovery.selected .e-name,.energy-btn.recovery:hover .e-name{color:var(--break)}
+.energy-btn.waste.selected,.energy-btn.waste:hover{background:var(--distraction-dim);border-color:var(--distraction)}
+.energy-btn.waste.selected .e-name,.energy-btn.waste:hover .e-name{color:var(--distraction)}
 .energy-btn.distraction.selected,.energy-btn.distraction:hover{background:var(--distraction-dim);border-color:var(--distraction)}
 .energy-btn.distraction.selected .e-name,.energy-btn.distraction:hover .e-name{color:var(--distraction)}
 
@@ -470,9 +475,9 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   padding-top:10px;flex-shrink:0;text-align:right;padding-right:8px}
 .tl-bar-col{width:4px;flex-shrink:0;border-radius:2px;margin:3px 8px 3px 0}
 .tl-bar-col.deep{background:var(--deep)}.tl-bar-col.shallow{background:var(--shallow)}
-.tl-bar-col.admin{background:var(--admin)}.tl-bar-col.distraction{background:var(--distraction)}
+.tl-bar-col.admin{background:var(--admin)}.tl-bar-col.distraction{background:var(--distraction)}.tl-bar-col.waste{background:var(--distraction)}
 .tl-bar-col.missed{background:var(--bg4)}
-.tl-bar-col.break{background:var(--break)}.tl-bar-col.away{background:var(--away)}
+.tl-bar-col.break{background:var(--break)}.tl-bar-col.recovery{background:var(--break)}.tl-bar-col.away{background:var(--away)}
 .tl-content{flex:1;min-width:0;padding:6px 0 6px 0}
 .tl-activity{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 .tl-meta{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px}
@@ -481,9 +486,9 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-badge.deep{background:var(--deep-dim);color:var(--deep)}
 .tl-badge.shallow{background:var(--shallow-dim);color:var(--shallow)}
 .tl-badge.admin{background:var(--admin-dim);color:var(--admin)}
-.tl-badge.distraction{background:var(--distraction-dim);color:var(--distraction)}
+.tl-badge.distraction{background:var(--distraction-dim);color:var(--distraction)}.tl-badge.waste{background:var(--distraction-dim);color:var(--distraction)}
 .tl-badge.missed{background:var(--bg4);color:var(--muted)}
-.tl-badge.break{background:var(--break-dim);color:var(--break)}
+.tl-badge.break{background:var(--break-dim);color:var(--break)}.tl-badge.recovery{background:var(--break-dim);color:var(--break)}
 .tl-badge.away{background:var(--away-dim);color:var(--away)}
 
 /* ── Week day tabs ── */
@@ -1269,12 +1274,13 @@ button, a, [role="button"],
       <label>Activity</label>
       <input type="text" id="ql-activity" placeholder="What were you doing?">
     </div>
-    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin:10px 0 6px">Energy type</div>
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin:10px 0 6px">Category</div>
     <div class="energy-grid">
-      <button class="energy-btn deep" onclick="setQlEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Creative, strategic</span></button>
+      <button class="energy-btn deep" onclick="setQlEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
       <button class="energy-btn shallow" onclick="setQlEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
-      <button class="energy-btn admin" onclick="setQlEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary tasks</span></button>
-      <button class="energy-btn distraction" onclick="setQlEnergy('distraction')"><span class="e-name">Distraction</span><span class="e-desc">You already know</span></button>
+      <button class="energy-btn admin" onclick="setQlEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary overhead</span></button>
+      <button class="energy-btn recovery" onclick="setQlEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, breaks</span></button>
+      <button class="energy-btn waste" onclick="setQlEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
       <button class="btn ghost" onclick="dismissQuickLog()">Skip</button>
@@ -1356,12 +1362,13 @@ button, a, [role="button"],
       <button class="voice-btn" id="voice-btn" onclick="startVoiceLog()" title="Voice input">🎤</button>
     </div>
   </div>
-  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Energy type</div>
+  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
   <div class="energy-grid">
-    <button class="energy-btn deep" onclick="setEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Creative, strategic</span></button>
+    <button class="energy-btn deep" onclick="setEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
     <button class="energy-btn shallow" onclick="setEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
-    <button class="energy-btn admin" onclick="setEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary tasks</span></button>
-    <button class="energy-btn distraction" onclick="setEnergy('distraction')"><span class="e-name">Distraction</span><span class="e-desc">You already know</span></button>
+    <button class="energy-btn admin" onclick="setEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary overhead</span></button>
+    <button class="energy-btn recovery" onclick="setEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, breaks</span></button>
+    <button class="energy-btn waste" onclick="setEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
   </div>
   <button class="detail-toggle" onclick="toggleDetail()"><span id="detail-arrow">▸</span> Add detail (DEA-P, $/hr)</button>
   <div class="detail-body" id="detail-body">
@@ -1491,12 +1498,13 @@ button, a, [role="button"],
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Recent</div>
     <div class="presets-scroll" id="retro-chips"></div>
   </div>
-  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Energy type</div>
+  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
   <div class="energy-grid">
-    <button class="energy-btn deep" onclick="setRetroEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Creative, strategic</span></button>
-    <button class="energy-btn shallow" onclick="setRetroEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Email, meetings</span></button>
-    <button class="energy-btn admin" onclick="setRetroEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary tasks</span></button>
-    <button class="energy-btn distraction" onclick="setRetroEnergy('distraction')"><span class="e-name">Distraction</span><span class="e-desc">You already know</span></button>
+    <button class="energy-btn deep" onclick="setRetroEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
+    <button class="energy-btn shallow" onclick="setRetroEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
+    <button class="energy-btn admin" onclick="setRetroEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary overhead</span></button>
+    <button class="energy-btn recovery" onclick="setRetroEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, breaks</span></button>
+    <button class="energy-btn waste" onclick="setRetroEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
   </div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
     <button class="btn ghost" onclick="cancelRetroEdit()">Cancel</button>
@@ -1683,13 +1691,18 @@ const AWAY_BUCKETS = {
 
 function getBucket(entry) {
   if (!entry) return null;
-  if (entry.away) return AWAY_BUCKETS[entry.activity] || 'recovery';
-  if (entry.break || entry.energy === 'break') return 'recovery';
-  if (entry.energy === 'deep')        return 'deep_work';
-  if (entry.energy === 'shallow')     return 'shallow_work';
-  if (entry.energy === 'admin')       return 'shallow_work';
-  if (entry.energy === 'distraction') return 'waste';
-  return null;
+  switch (entry.energy) {
+    case 'deep':       return 'deep_work';
+    case 'shallow':    return 'shallow_work';
+    case 'admin':      return 'admin';
+    case 'recovery':   return 'recovery';
+    case 'waste':      return 'waste';
+    // Legacy fallbacks (pre-migration entries)
+    case 'distraction': return 'waste';
+    case 'break':       return 'recovery';
+    case 'away': return (AWAY_BUCKETS[entry.activity] === 'shallow_work') ? 'shallow_work' : 'recovery';
+    default: return null;
+  }
 }
 
 function initAutoSync() {
@@ -1829,7 +1842,13 @@ function load() {
   try { const raw = JSON.parse(localStorage.getItem('ta3-entries') || '[]'); entries = Array.isArray(raw) ? raw : Object.values(raw).filter(e=>e&&e.id); } catch(e){ entries=[]; }
   // Migrate: stamp updatedAt on any entry that's missing it (older entries)
   entries.forEach(e => { if (!e.updatedAt) e.updatedAt = e.ts || Date.now(); });
-  // Migrate: stamp category + originalLabel on any entry that's missing them (older entries)
+  // Migrate: rename old energy values to new 5-category system
+  entries.forEach(e => {
+    if ((e.energy === 'waste' || e.energy === 'distraction')) e.energy = 'waste';
+    else if (e.energy === 'break')  e.energy = 'recovery';
+    else if (e.energy === 'away')   e.energy = (AWAY_BUCKETS[e.activity] === 'shallow_work') ? 'shallow' : 'recovery';
+  });
+  // Migrate: stamp category + originalLabel on any entry that's missing them
   entries.forEach(e => {
     if (!e.category)      e.category      = getBucket(e);
     if (!e.originalLabel) e.originalLabel = e.energy || null;
@@ -2194,9 +2213,8 @@ function endBreak() {
     blockIntervalMin: actualDur,
     date: toDateKey(new Date()),
     activity: 'Break',
-    energy: 'break',
+    energy: 'recovery',
     onPlan: true,
-    break: true
   };
   entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
   entries.unshift(entry);
@@ -2404,7 +2422,7 @@ function _doQuickSave(activity, energy) {
     blockIntervalMin: settings.intervalMin,
     date: toDateKey(new Date()),
     activity, energy,
-    onPlan: energy !== 'distraction',
+    onPlan: energy !== 'distraction' && energy !== 'waste',
     quickLogged: true
   };
   entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
@@ -2458,7 +2476,7 @@ function analyzeBehavior(entry, todayE) {
 
   const real = todayE.filter(e => !e.away && !e.break);
   const deepEntries = real.filter(e => e.energy === 'deep');
-  const distEntries = real.filter(e => e.energy === 'distraction');
+  const distEntries = real.filter(e => (e.energy === 'waste' || e.energy === 'distraction'));
   const deepMin  = deepEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const distMin  = distEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const totalMin = real.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
@@ -2469,7 +2487,7 @@ function analyzeBehavior(entry, todayE) {
   // ── How many consecutive entries from the top (most recent) are distraction? ──
   let distStreak = 0;
   for (const e of real) {
-    if (e.energy === 'distraction') distStreak++; else break;
+    if ((e.energy === 'waste' || e.energy === 'distraction')) distStreak++; else break;
   }
 
   // ── How many times has this exact activity been logged as distraction today? ──
@@ -2666,7 +2684,7 @@ function checkEscalation() {
   const missedToday = todayE.filter(e => e.missed).length;
   let dStreak = 0;
   for (const e of todayE) {
-    if (e.energy === 'distraction' || e.missed) dStreak++;
+    if ((e.energy === 'waste' || e.energy === 'distraction') || e.missed) dStreak++;
     else break;
   }
   if (dStreak >= 5) {
@@ -3084,7 +3102,7 @@ function saveLastEntry() {
   // Pre-fill and immediately save
   document.getElementById('f-activity').value = activity;
   setEnergy(energy);
-  setOnPlan(energy !== 'distraction');
+  setOnPlan(energy !== 'distraction' && energy !== 'waste');
   saveEntry();
 }
 
@@ -3186,7 +3204,7 @@ function saveRetroEntry() {
     const idx = entries.findIndex(e => e.id === editingEntryId);
     if (idx !== -1) {
       const updated = { ...entries[idx], activity, energy: retroEnergy,
-        onPlan: retroEnergy !== 'distraction',
+        onPlan: retroEnergy !== 'distraction' && retroEnergy !== 'waste',
         tsStart, ts: tsEnd, blockIntervalMin: dur,
         date: toDateKey(new Date(tsStart)) };
       updated.category = getBucket(updated); updated.originalLabel = updated.energy || null;
@@ -3206,7 +3224,7 @@ function saveRetroEntry() {
       blockIntervalMin: dur,
       date: toDateKey(new Date(tsStart)),
       activity, energy: retroEnergy,
-      onPlan: retroEnergy !== 'distraction',
+      onPlan: retroEnergy !== 'distraction' && retroEnergy !== 'waste',
       retro: true
     };
     entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
@@ -3232,7 +3250,7 @@ function setEnergy(type) {
   selectedEnergy=type;
   document.querySelectorAll('.energy-btn').forEach(b=>b.classList.toggle('selected',b.classList.contains(type)));
   // Auto-set on-plan: distraction = off-plan, everything else = on-plan
-  if (type === 'distraction') setOnPlan(false);
+  if (type === 'distraction' || type === 'waste') setOnPlan(false);
   else setOnPlan(true);
 }
 function setOnPlan(val) {
@@ -3265,7 +3283,7 @@ function saveEntry() {
   entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
 
   getActivityColor(activity); // assign color on first save
-  if (entry.energy === 'distraction') switchState('distraction');
+  if (entry.energy === 'waste' || entry.energy === 'distraction') switchState('distraction');
   entries.unshift(entry);
   stopAlertLoop();
   hidePingBanner();
@@ -3969,7 +3987,7 @@ function quickRetroLog() {
 //   "3.5 hours of deep work is a solid result. That kind of focus compounds."
 // ══════════════════════════════════════════════════════
 function generateInsights(data) {
-  const { deep_work = 0, shallow_work = 0, recovery = 0, waste = 0, total = 0 } = data;
+  const { deep_work = 0, shallow_work = 0, admin = 0, recovery = 0, waste = 0, total = 0 } = data;
   if (total <= 0) return [];
 
   const pct = v => Math.round(v / total * 100);
@@ -3979,25 +3997,24 @@ function generateInsights(data) {
 
   // 1. Composition summary
   const parts = [
-    deep_work  > 0 ? `deep work (${fmt(deep_work)})`    : null,
-    shallow_work>0 ? `shallow work (${fmt(shallow_work)})` : null,
-    recovery   > 0 ? `recovery (${fmt(recovery)})`      : null,
-    waste      > 0 ? `waste (${fmt(waste)})`             : null,
+    deep_work   > 0 ? `deep work (${fmt(deep_work)})`     : null,
+    shallow_work> 0 ? `shallow work (${fmt(shallow_work)})`: null,
+    admin       > 0 ? `admin (${fmt(admin)})`              : null,
+    recovery    > 0 ? `recovery (${fmt(recovery)})`        : null,
+    waste       > 0 ? `waste (${fmt(waste)})`              : null,
   ].filter(Boolean);
   insights.push(`You tracked ${fmt(total)} today — ${parts.join(', ')}.`);
 
   // 2. Dominant category
-  const cats = { deep_work, shallow_work, recovery, waste };
+  const cats = { 'Deep work': deep_work, 'Shallow work': shallow_work, Admin: admin, Recovery: recovery, Waste: waste };
   const dominant = Object.entries(cats).sort((a, b) => b[1] - a[1])[0];
-  const dominantLabel = { deep_work: 'Deep work', shallow_work: 'Shallow work', recovery: 'Recovery', waste: 'Waste' }[dominant[0]];
-  insights.push(`${dominantLabel} was your dominant category at ${pct(dominant[1])}% of your tracked time.`);
+  insights.push(`${dominant[0]} was your dominant category at ${pct(dominant[1])}% of your tracked time.`);
 
   // 3. Waste alert
   if (waste > 2 || pct(waste) >= 25) {
-    const wasteMsg = pct(waste) >= 40
+    insights.push(pct(waste) >= 40
       ? `Waste was ${pct(waste)}% of your day (${fmt(waste)}). That's a significant leak.`
-      : `Waste was ${pct(waste)}% of your day (${fmt(waste)}) — above the 25% threshold. Worth examining.`;
-    insights.push(wasteMsg);
+      : `Waste was ${pct(waste)}% of your day (${fmt(waste)}) — above the 25% threshold. Worth examining.`);
   }
 
   // 4. Positive reinforcement
@@ -4028,7 +4045,7 @@ function renderAwarenessSignal() {
   const real     = todayE.filter(e => !e.away && !e.break);
   const totalMin = real.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const deepMin  = real.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const distMin  = real.filter(e => e.energy === 'distraction').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const distMin  = real.filter(e => (e.energy === 'waste' || e.energy === 'distraction')).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const awayMin  = todayE.filter(e => e.away).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const deepPct  = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
   const distPct  = totalMin > 0 ? Math.round(distMin / totalMin * 100) : 0;
@@ -4046,7 +4063,7 @@ function renderAwarenessSignal() {
 
   // Repeated distraction activities: map activity → total minutes
   const distActivityMap = {};
-  real.filter(e => e.energy === 'distraction').forEach(e => {
+  real.filter(e => (e.energy === 'waste' || e.energy === 'distraction')).forEach(e => {
     const k = e.activity.split(' (Output:')[0];
     distActivityMap[k] = (distActivityMap[k] || 0) + (e.blockIntervalMin || 0);
   });
@@ -4058,7 +4075,7 @@ function renderAwarenessSignal() {
 
   // Distraction run at top of entry list
   let distStreak = 0;
-  for (const e of real) { if (e.energy === 'distraction') distStreak++; else break; }
+  for (const e of real) { if ((e.energy === 'waste' || e.energy === 'distraction')) distStreak++; else break; }
 
   const T = (a, c, m) => ({ analyst: a, coach: c, mirror: m })[tone] || a;
   const signals = [];
@@ -4082,7 +4099,7 @@ function renderAwarenessSignal() {
   // ── Named waste: same distraction activity ≥ 2 times ──
   if (worstWaste && distActivityMap[worstWaste[0]] >= 30) {
     const [activity, mins] = worstWaste;
-    const count = real.filter(e => e.energy === 'distraction' && e.activity.split(' (Output:')[0] === activity).length;
+    const count = real.filter(e => (e.energy === 'waste' || e.energy === 'distraction') && e.activity.split(' (Output:')[0] === activity).length;
     if (count >= 2) {
       const wStr = mins >= 60 ? `${(mins/60).toFixed(1)}h` : `${mins}m`;
       signals.push({ color: 'var(--distraction)', severity: 'bad', label: 'Repeat offender',
@@ -4302,8 +4319,9 @@ function toggleAway() {
       tsStart: awayStartTime,
       blockIntervalMin: dur,
       date: toDateKey(new Date()),
-      activity: awayLabel, energy: 'away',
-      away: true, onPlan: null
+      activity: awayLabel,
+      energy: (AWAY_BUCKETS[awayLabel] === 'shallow_work') ? 'shallow' : 'recovery',
+      onPlan: null
     };
     entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
     entries.unshift(entry);
@@ -4954,7 +4972,7 @@ function openReview(){
   
   const todayE = getTodayEntries();
   const deepCount = todayE.filter(e => e.energy === 'deep').length;
-  const distCount = todayE.filter(e => e.energy === 'distraction').length;
+  const distCount = todayE.filter(e => (e.energy === 'waste' || e.energy === 'distraction')).length;
   const realityScore = deepCount - distCount;
   
   const rsVal = document.getElementById('reality-score-val');
@@ -5036,7 +5054,7 @@ function computeDailySummary(dateKey) {
   const deepMin    = dayEntries.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const shallowMin = dayEntries.filter(e => e.energy === 'shallow').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const adminMin   = dayEntries.filter(e => e.energy === 'admin').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const distMin    = dayEntries.filter(e => e.energy === 'distraction').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const distMin    = dayEntries.filter(e => (e.energy === 'waste' || e.energy === 'distraction')).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
 
   const productiveMin = deepMin + shallowMin + adminMin;
   const deepPct       = Math.round(deepMin / totalMin * 100);
@@ -5194,7 +5212,7 @@ function computeInsights(weekKey) {
   const totalMin = we.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const deepMin = we.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const shallowMin = we.filter(e => e.energy === 'shallow').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const distMin = we.filter(e => e.energy === 'distraction').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const distMin = we.filter(e => (e.energy === 'waste' || e.energy === 'distraction')).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const awayMin = we.filter(e => e.away).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const deepPct = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
   const deepHrs = (deepMin / 60).toFixed(1);
@@ -5210,7 +5228,7 @@ function computeInsights(weekKey) {
 
   // Worst distraction by time
   const distMap = {};
-  we.filter(e => e.energy === 'distraction' && e.activity).forEach(e => {
+  we.filter(e => (e.energy === 'waste' || e.energy === 'distraction') && e.activity).forEach(e => {
     const k = e.activity.split(' (Output:')[0];
     distMap[k] = (distMap[k] || 0) + (e.blockIntervalMin || 0);
   });
