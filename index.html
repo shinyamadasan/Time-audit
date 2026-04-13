@@ -825,6 +825,27 @@ button, a, [role="button"],
         <button class="btn primary" onclick="startFromHero()" style="padding:11px 20px;font-size:14px">Start</button>
       </div>
       <div class="chips-row" id="recent-chips"></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border)">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;flex-shrink:0">Away:</span>
+        <button class="btn sm ghost" onclick="startAway('Sleep')" style="border-color:var(--away);color:var(--away)">💤 Sleep</button>
+        <button class="btn sm ghost" onclick="startAway('Eat')" style="border-color:var(--away);color:var(--away)">🍽 Eat</button>
+        <button class="btn sm ghost" onclick="startAway('Walk')" style="border-color:var(--away);color:var(--away)">🚶 Walk</button>
+        <div style="position:relative">
+          <button class="btn sm ghost" id="idle-away-btn" onclick="toggleIdleAwayPicker()" style="border-color:var(--away);color:var(--away)">⊙ More…</button>
+          <div class="away-dropdown" id="idle-away-picker">
+            <div class="away-dropdown-item" onclick="startAway('Exercise')">🏋 Exercise</div>
+            <div class="away-dropdown-item" onclick="startAway('Commute')">🚗 Commute</div>
+            <div class="away-dropdown-item" onclick="startAway('Rest')">💤 Rest</div>
+            <div class="away-dropdown-item" onclick="startAway('Errand')">🛒 Errand</div>
+            <div class="away-dropdown-item" onclick="startAway('Personal')">👤 Personal</div>
+            <div class="away-dropdown-divider"></div>
+            <div class="away-dropdown-custom">
+              <input class="away-custom-input" id="idle-away-custom" placeholder="Other…"
+                onkeydown="if(event.key==='Enter'&&this.value.trim()){startAway(this.value.trim());document.getElementById('idle-away-picker').classList.remove('show')}">
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Active state -->
@@ -1650,6 +1671,7 @@ const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 // Maps any entry to one of: deep_work | shallow_work | recovery | waste
 // ══════════════════════════════════════════════════════
 const AWAY_BUCKETS = {
+  'Sleep':    'recovery',
   'Eat':      'recovery',
   'Walk':     'recovery',
   'Exercise': 'recovery',
@@ -3852,9 +3874,10 @@ function openSwitchPanel() {
 function renderSwitchList(tasks) {
   const el = document.getElementById('switch-list');
   if (!tasks.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px">No recent tasks</div>'; return; }
-  el.innerHTML = tasks.map(t =>
-    `<div class="switch-list-item" onclick="fillSwitch(${JSON.stringify(t)})">${t}</div>`
-  ).join('');
+  el.innerHTML = tasks.map(t => `<div class="switch-list-item">${t}</div>`).join('');
+  el.querySelectorAll('.switch-list-item').forEach((item, i) => {
+    item.addEventListener('click', () => fillSwitch(tasks[i]));
+  });
 }
 
 function fillSwitch(task) {
@@ -4199,6 +4222,20 @@ function doSwitchFromBanner() {
 
 // ══════════════════════════════════════════════════════
 // AWAY TRACKING
+function toggleIdleAwayPicker() {
+  const picker = document.getElementById('idle-away-picker');
+  const isOpen = picker.classList.contains('show');
+  // Close the active away picker too just in case
+  document.getElementById('away-picker').classList.remove('show');
+  if (isOpen) {
+    picker.classList.remove('show');
+  } else {
+    picker.classList.add('show');
+    document.getElementById('idle-away-custom').value = '';
+    setTimeout(() => document.getElementById('idle-away-custom').focus(), 150);
+  }
+}
+
 // ══════════════════════════════════════════════════════
 function toggleAway() {
   if (awayActive) {
@@ -4245,6 +4282,7 @@ function toggleAway() {
 
 function startAway(label) {
   document.getElementById('away-picker').classList.remove('show');
+  document.getElementById('idle-away-picker').classList.remove('show');
   // If timer is running, log current block first
   if (running) {
     const task = currentTask || lastTaskForRepeat || intention || 'Work';
