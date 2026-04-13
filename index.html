@@ -2947,7 +2947,8 @@ function triggerPenaltyMode() {
 function deleteEntry(id) {
   entries=entries.filter(e=>e.id!==id);
   persist(); renderToday(); renderWeek(); renderWeekTable();
-  syncEntries();
+  // Explicitly remove from Firebase so it doesn't come back on the next sync
+  if (fbRoomRef && roomCode) fbDb.ref(`rooms/${roomCode}/entries/e_${id}`).remove();
 }
 
 function startSprint() {
