@@ -24,6 +24,12 @@
   --distraction:#ff6b6b;--distraction-dim:rgba(255,107,107,0.12);
   --break:#a78bfa;--break-dim:rgba(167,139,250,0.12);
   --away:#94a3b8;--away-dim:rgba(148,163,184,0.12);
+  /* 9-category system */
+  --nine5:#f9c74f;--nine5-dim:rgba(249,199,79,0.12);
+  --errands:#94a3b8;--errands-dim:rgba(148,163,184,0.12);
+  --learning:#34d399;--learning-dim:rgba(52,211,153,0.12);
+  --exercise:#fb923c;--exercise-dim:rgba(251,146,60,0.12);
+  --social:#f472b6;--social-dim:rgba(244,114,182,0.12);
   --head:'Syne',sans-serif;--mono:'DM Mono',monospace;
   --r:10px;--r2:14px;
   --safe-top:env(safe-area-inset-top,0px);
@@ -102,8 +108,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .t-block{height:26px;flex:1;min-width:14px;max-width:30px;border-radius:4px;cursor:default;transition:transform 0.1s}
 .t-block:hover{transform:scaleY(1.15)}
 .t-block.deep{background:var(--deep)}.t-block.shallow{background:var(--shallow)}
-.t-block.admin{background:var(--admin)}.t-block.distraction{background:var(--distraction)}
-.t-block.empty{background:var(--bg4)}.t-block.away{background:var(--away)}
+.t-block.admin{background:var(--admin)}.t-block.distraction{background:var(--distraction)}.t-block.waste{background:var(--distraction)}
+.t-block.empty{background:var(--bg4)}.t-block.away{background:var(--away)}.t-block.recovery{background:var(--break)}
+.t-block.nine5{background:var(--nine5)}.t-block.errands{background:var(--errands)}.t-block.learning{background:var(--learning)}.t-block.exercise{background:var(--exercise)}.t-block.social{background:var(--social)}
 .timeline-legend{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
 .legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
 .legend-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
@@ -123,8 +130,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
   padding:9px 12px;display:flex;align-items:center;gap:9px}
 .entry-bar{width:4px;height:34px;border-radius:2px;flex-shrink:0}
 .entry-bar.deep{background:var(--deep)}.entry-bar.shallow{background:var(--shallow)}
-.entry-bar.admin{background:var(--admin)}.entry-bar.distraction{background:var(--distraction)}
-.entry-bar.break{background:var(--break)}.entry-bar.away{background:var(--away)}
+.entry-bar.admin{background:var(--admin)}.entry-bar.distraction{background:var(--distraction)}.entry-bar.waste{background:var(--distraction)}
+.entry-bar.break{background:var(--break)}.entry-bar.away{background:var(--away)}.entry-bar.recovery{background:var(--break)}
+.entry-bar.nine5{background:var(--nine5)}.entry-bar.errands{background:var(--errands)}.entry-bar.learning{background:var(--learning)}.entry-bar.exercise{background:var(--exercise)}.entry-bar.social{background:var(--social)}
 .entry-main{flex:1;min-width:0}
 .entry-activity{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .entry-meta{font-size:11px;color:var(--muted);margin-top:1px;font-family:var(--mono)}
@@ -133,10 +141,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 /* ── Badges ── */
 .badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:999px;font-weight:500;white-space:nowrap}
 .badge.deep{background:var(--deep-dim);color:var(--deep)}.badge.shallow{background:var(--shallow-dim);color:var(--shallow)}
-.badge.admin{background:var(--admin-dim);color:var(--admin)}.badge.distraction{background:var(--distraction-dim);color:var(--distraction)}
+.badge.admin{background:var(--admin-dim);color:var(--admin)}.badge.distraction{background:var(--distraction-dim);color:var(--distraction)}.badge.waste{background:var(--distraction-dim);color:var(--distraction)}
+.badge.nine5{background:var(--nine5-dim);color:var(--nine5)}.badge.errands{background:var(--errands-dim);color:var(--errands)}.badge.learning{background:var(--learning-dim);color:var(--learning)}.badge.exercise{background:var(--exercise-dim);color:var(--exercise)}.badge.social{background:var(--social-dim);color:var(--social)}
 .badge.deap{background:rgba(255,255,255,0.06);color:var(--muted)}
 .badge.onplan{background:var(--deep-dim);color:var(--deep)}.badge.offplan{background:var(--distraction-dim);color:var(--distraction)}
-.badge.break{background:var(--break-dim);color:var(--break)}
+.badge.break{background:var(--break-dim);color:var(--break)}.badge.recovery{background:var(--break-dim);color:var(--break)}
 .badge.away{background:var(--away-dim);color:var(--away)}
 
 /* ── Buttons ── */
@@ -153,6 +162,35 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .btn.danger{border-color:rgba(255,107,107,0.25);color:var(--distraction)}
 .btn.danger:hover{background:var(--distraction-dim)}
 
+/* ── Activity Hero ── */
+.activity-hero{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:12px;transition:border-color 0.3s,background 0.3s}
+.activity-hero.tracking{border-color:rgba(76,199,240,0.3);background:linear-gradient(135deg,var(--bg2) 0%,rgba(76,199,240,0.04) 100%)}
+.hero-prompt{font-size:22px;font-weight:800;color:var(--text);margin-bottom:14px;letter-spacing:-0.3px}
+.hero-prompt-sub{font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);font-weight:600;margin-bottom:14px}
+.hero-start-row{display:flex;gap:8px;align-items:center}
+.hero-input{flex:1;font-family:var(--head);font-size:15px;padding:11px 14px;border-radius:10px;border:1.5px solid var(--border2);background:var(--bg3);color:var(--text);outline:none;transition:border-color 0.15s,box-shadow 0.15s}
+.hero-input:focus{border-color:var(--deep);box-shadow:0 0 0 3px rgba(76,199,240,0.1)}
+.hero-active-top{display:flex;align-items:center;gap:18px;margin-bottom:16px}
+.hero-ring-wrap{position:relative;flex-shrink:0}
+.hero-ring-wrap svg{display:block;transform:rotate(-90deg);filter:drop-shadow(0 0 8px rgba(76,199,240,0.35))}
+.hero-ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.hero-ring-secs{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--deep);line-height:1}
+.hero-ring-label{font-family:var(--mono);font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em}
+.hero-task-name{font-size:18px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);letter-spacing:-0.2px}
+.hero-elapsed{font-size:28px;font-weight:500;color:var(--deep);font-family:var(--mono);margin-top:2px;letter-spacing:-1px;line-height:1}
+.hero-elapsed-unit{font-size:13px;font-weight:400;color:var(--muted);margin-left:2px}
+.hero-live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--deep);margin-right:5px;animation:livepulse 2s ease-in-out infinite;vertical-align:middle}
+@keyframes livepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.7)}}
+.hero-status{font-size:11px;color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:4px}
+.hero-cost{font-size:12px;font-family:var(--mono);color:var(--muted);flex-shrink:0;align-self:flex-start;margin-top:4px}
+.hero-controls{display:flex;gap:8px;flex-wrap:wrap;padding-top:4px;border-top:1px solid var(--border);margin-top:4px}
+.quick-retro-bar{display:flex;gap:8px;align-items:center;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;margin-bottom:12px;flex-wrap:wrap}
+.quick-retro-input{flex:1;font-family:var(--head);font-size:13px;padding:7px 11px;border-radius:8px;border:1.5px solid var(--border2);background:var(--bg3);color:var(--text);outline:none;min-width:120px;transition:border-color 0.15s}
+.quick-retro-input:focus{border-color:var(--deep)}
+.quick-retro-sel{font-family:var(--head);font-size:11px;padding:6px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex-shrink:0}
+.switch-list-item{padding:10px 13px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;background:var(--bg3);border:1px solid var(--border);transition:all 0.12s;color:var(--text)}
+.switch-list-item:hover{background:var(--deep-dim);border-color:var(--deep);color:var(--deep)}
+
 /* ── Recent task chips ── */
 .chips-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;min-height:0}
 .chip{font-family:var(--head);font-size:11px;font-weight:500;padding:4px 10px;border-radius:999px;
@@ -162,18 +200,25 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .chip:hover{background:var(--deep-dim);border-color:var(--deep);color:var(--deep)}
 .chip:active{transform:scale(0.95)}
 
-/* ── Away picker ── */
-.away-picker{display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
-  padding:10px 12px;margin-top:8px;gap:6px;flex-wrap:wrap;align-items:center}
-.away-picker.show{display:flex}
-.away-picker-chip{font-family:var(--head);font-size:11px;font-weight:500;padding:4px 10px;border-radius:999px;
-  cursor:pointer;border:1px solid var(--away);background:var(--away-dim);color:var(--away);
-  transition:background 0.12s,color 0.12s;white-space:nowrap}
-.away-picker-chip:hover{background:var(--away);color:var(--bg)}
-.away-picker-chip:active{transform:scale(0.95)}
-.away-custom-input{font-family:var(--head);font-size:11px;padding:4px 8px;border-radius:999px;
-  border:1px solid var(--border2);background:var(--bg3);color:var(--text);width:90px;outline:none}
+/* ── Away dropdown ── */
+.away-dropdown{display:none;position:absolute;top:calc(100% + 6px);left:0;
+  min-width:160px;max-height:260px;overflow-y:auto;background:var(--bg2);border:1px solid var(--border2);
+  border-radius:var(--r2);box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:200}
+.away-dropdown.show{display:block}
+.away-dropdown-item{padding:10px 14px;font-size:13px;font-weight:500;cursor:pointer;
+  color:var(--text);transition:background 0.1s;white-space:nowrap}
+.away-dropdown-item:hover{background:var(--away-dim);color:var(--away)}
+.away-dropdown-divider{height:1px;background:var(--border);margin:4px 0}
+.away-dropdown-custom{padding:8px 10px}
+.away-custom-input{font-family:var(--head);font-size:12px;padding:6px 10px;border-radius:7px;
+  border:1px solid var(--border2);background:var(--bg3);color:var(--text);width:100%;outline:none}
 .away-custom-input:focus{border-color:var(--away)}
+
+/* ── Awareness Signal ── */
+.signal-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:12px}
+.signal-header{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted2);margin-bottom:10px}
+.signal-item{font-size:13px;color:var(--text);line-height:1.5;padding:3px 0;display:flex;align-items:flex-start;gap:10px}
+.signal-dot{width:5px;height:5px;border-radius:50%;margin-top:7px;flex-shrink:0}
 
 /* ── Continue banner ── */
 .continue-banner{display:none;background:var(--bg2);border:1px solid rgba(76,199,240,0.25);
@@ -183,10 +228,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .continue-banner-sub{font-size:11px;color:var(--muted);margin-top:2px}
 
 /* ── Energy buttons ── */
-.energy-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
-.energy-btn{padding:12px 10px;border-radius:var(--r);border:1.5px solid var(--border2);
+.energy-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+.energy-btn{padding:10px 8px;border-radius:var(--r);border:1.5px solid var(--border2);
   background:var(--bg3);cursor:pointer;text-align:left;transition:all 0.12s;font-family:var(--head)}
-.energy-btn .e-name{font-size:13px;font-weight:600;display:block;margin-bottom:2px}
+.energy-btn .e-name{font-size:13px;font-weight:600;display:block;margin-bottom:2px;color:var(--text)}
 .energy-btn .e-desc{font-size:11px;color:var(--muted);display:block}
 .energy-btn.deep.selected,.energy-btn.deep:hover{background:var(--deep-dim);border-color:var(--deep)}
 .energy-btn.deep.selected .e-name,.energy-btn.deep:hover .e-name{color:var(--deep)}
@@ -194,8 +239,48 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .energy-btn.shallow.selected .e-name,.energy-btn.shallow:hover .e-name{color:var(--shallow)}
 .energy-btn.admin.selected,.energy-btn.admin:hover{background:var(--admin-dim);border-color:var(--admin)}
 .energy-btn.admin.selected .e-name,.energy-btn.admin:hover .e-name{color:var(--admin)}
+.energy-btn.recovery.selected,.energy-btn.recovery:hover{background:var(--break-dim);border-color:var(--break)}
+.energy-btn.recovery.selected .e-name,.energy-btn.recovery:hover .e-name{color:var(--break)}
+.energy-btn.waste.selected,.energy-btn.waste:hover{background:var(--distraction-dim);border-color:var(--distraction)}
+.energy-btn.waste.selected .e-name,.energy-btn.waste:hover .e-name{color:var(--distraction)}
 .energy-btn.distraction.selected,.energy-btn.distraction:hover{background:var(--distraction-dim);border-color:var(--distraction)}
 .energy-btn.distraction.selected .e-name,.energy-btn.distraction:hover .e-name{color:var(--distraction)}
+.energy-btn.nine5.selected,.energy-btn.nine5:hover{background:var(--nine5-dim);border-color:var(--nine5)}
+.energy-btn.nine5.selected .e-name,.energy-btn.nine5:hover .e-name{color:var(--nine5)}
+.energy-btn.errands.selected,.energy-btn.errands:hover{background:var(--errands-dim);border-color:var(--errands)}
+.energy-btn.errands.selected .e-name,.energy-btn.errands:hover .e-name{color:var(--errands)}
+.energy-btn.learning.selected,.energy-btn.learning:hover{background:var(--learning-dim);border-color:var(--learning)}
+.energy-btn.learning.selected .e-name,.energy-btn.learning:hover .e-name{color:var(--learning)}
+.energy-btn.exercise.selected,.energy-btn.exercise:hover{background:var(--exercise-dim);border-color:var(--exercise)}
+.energy-btn.exercise.selected .e-name,.energy-btn.exercise:hover .e-name{color:var(--exercise)}
+.energy-btn.social.selected,.energy-btn.social:hover{background:var(--social-dim);border-color:var(--social)}
+.energy-btn.social.selected .e-name,.energy-btn.social:hover .e-name{color:var(--social)}
+.quick-lane{margin:12px 0 14px}
+.quick-lane-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:8px}
+.quick-actions-grid,.recent-task-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.quick-action-btn,.recent-task-btn{width:100%;min-height:64px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border2);
+  background:var(--bg3);color:var(--text);text-align:left;cursor:pointer;transition:transform 0.12s,background 0.12s,border-color 0.12s;
+  font-family:var(--head)}
+.quick-action-btn:hover,.recent-task-btn:hover{background:var(--bg4);border-color:var(--border3)}
+.quick-action-btn:active,.recent-task-btn:active{transform:scale(0.98)}
+.quick-action-btn .qa-title,.recent-task-btn .rt-title{display:block;font-size:15px;font-weight:700;line-height:1.15}
+.quick-action-btn .qa-meta,.recent-task-btn .rt-meta{display:block;font-size:11px;color:var(--muted);margin-top:4px}
+.quick-action-btn.deep{border-color:rgba(76,199,240,0.28);background:var(--deep-dim2)}
+.quick-action-btn.deep .qa-title{color:var(--deep)}
+.quick-action-btn.shallow{border-color:rgba(111,179,242,0.24)}
+.quick-action-btn.shallow .qa-title{color:var(--shallow)}
+.quick-action-btn.recovery{border-color:rgba(167,139,250,0.24)}
+.quick-action-btn.recovery .qa-title{color:var(--break)}
+.quick-action-btn.exercise{border-color:rgba(251,146,60,0.24)}
+.quick-action-btn.exercise .qa-title{color:var(--exercise)}
+.quick-action-btn.errands{border-color:rgba(148,163,184,0.24)}
+.quick-action-btn.errands .qa-title{color:var(--away)}
+.quick-action-btn.waste{border-color:rgba(255,107,107,0.24)}
+.quick-action-btn.waste .qa-title{color:var(--distraction)}
+.recent-task-wrap{margin-top:12px}
+.recent-task-btn{min-height:58px}
+.recent-task-btn .rt-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent-task-btn .rt-meta{font-family:var(--mono)}
 
 /* ── Presets ── */
 .presets-scroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin:6px 0}
@@ -434,9 +519,10 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   padding-top:10px;flex-shrink:0;text-align:right;padding-right:8px}
 .tl-bar-col{width:4px;flex-shrink:0;border-radius:2px;margin:3px 8px 3px 0}
 .tl-bar-col.deep{background:var(--deep)}.tl-bar-col.shallow{background:var(--shallow)}
-.tl-bar-col.admin{background:var(--admin)}.tl-bar-col.distraction{background:var(--distraction)}
+.tl-bar-col.admin{background:var(--admin)}.tl-bar-col.distraction{background:var(--distraction)}.tl-bar-col.waste{background:var(--distraction)}
+.tl-bar-col.nine5{background:var(--nine5)}.tl-bar-col.errands{background:var(--errands)}.tl-bar-col.learning{background:var(--learning)}.tl-bar-col.exercise{background:var(--exercise)}.tl-bar-col.social{background:var(--social)}
 .tl-bar-col.missed{background:var(--bg4)}
-.tl-bar-col.break{background:var(--break)}.tl-bar-col.away{background:var(--away)}
+.tl-bar-col.break{background:var(--break)}.tl-bar-col.recovery{background:var(--break)}.tl-bar-col.away{background:var(--away)}
 .tl-content{flex:1;min-width:0;padding:6px 0 6px 0}
 .tl-activity{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 .tl-meta{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px}
@@ -445,9 +531,10 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-badge.deep{background:var(--deep-dim);color:var(--deep)}
 .tl-badge.shallow{background:var(--shallow-dim);color:var(--shallow)}
 .tl-badge.admin{background:var(--admin-dim);color:var(--admin)}
-.tl-badge.distraction{background:var(--distraction-dim);color:var(--distraction)}
+.tl-badge.distraction{background:var(--distraction-dim);color:var(--distraction)}.tl-badge.waste{background:var(--distraction-dim);color:var(--distraction)}
+.tl-badge.nine5{background:var(--nine5-dim);color:var(--nine5)}.tl-badge.errands{background:var(--errands-dim);color:var(--errands)}.tl-badge.learning{background:var(--learning-dim);color:var(--learning)}.tl-badge.exercise{background:var(--exercise-dim);color:var(--exercise)}.tl-badge.social{background:var(--social-dim);color:var(--social)}
 .tl-badge.missed{background:var(--bg4);color:var(--muted)}
-.tl-badge.break{background:var(--break-dim);color:var(--break)}
+.tl-badge.break{background:var(--break-dim);color:var(--break)}.tl-badge.recovery{background:var(--break-dim);color:var(--break)}
 .tl-badge.away{background:var(--away-dim);color:var(--away)}
 
 /* ── Week day tabs ── */
@@ -519,8 +606,11 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .signin-google-btn:active{transform:scale(0.97)}
 .signin-note{font-size:11px;color:var(--muted2);margin-top:20px;max-width:240px;line-height:1.6}
 
-/* ── Gap rows in timeline ── */
-.tl-gap-row .tl-activity{color:var(--muted);font-style:italic}
+/* ── Untracked blocks in timeline ── */
+.tl-untracked-row .tl-activity{color:var(--muted)}
+.tl-bar-untracked{background:var(--away);opacity:0.35}
+.tl-badge-untracked{background:rgba(148,163,184,0.15);color:var(--away);border-radius:4px;font-size:9px;font-weight:700;padding:2px 6px;margin-left:6px;letter-spacing:0.04em}
+/* keep .tl-bar-gap for any legacy missed entries */
 .tl-bar-gap{background:repeating-linear-gradient(45deg,var(--bg4),var(--bg4) 3px,transparent 3px,transparent 7px)!important}
 .log-gap-btn{font-size:11px;flex-shrink:0;padding:4px 10px;border-radius:6px;border:1px solid rgba(76,199,240,0.35);
   background:var(--deep-dim2);color:var(--deep);cursor:pointer;font-family:var(--head);font-weight:600;
@@ -555,6 +645,206 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .reflect-weekly-block{background:var(--bg3);border-top:1px solid var(--border2);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
 .reflect-weekly-q{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
 .reflect-weekly-a{font-size:13px;color:var(--text)}
+
+/* ── Reflect stat grid ── */
+.reflect-stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.reflect-stat{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+.reflect-stat-val{font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--text)}
+.reflect-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-top:4px;font-weight:600}
+.reflect-stat-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.reflect-stat.bad .reflect-stat-val{color:var(--distraction)}
+.reflect-stat.good .reflect-stat-val{color:var(--deep)}
+.reflect-goal-bar{height:6px;background:var(--bg4);border-radius:3px;overflow:hidden;margin-top:8px}
+.reflect-goal-fill{height:100%;border-radius:3px;background:var(--deep);transition:width 0.5s}
+/* ── History cards ── */
+.reflect-week-card{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r2);overflow:hidden;margin-bottom:8px}
+.reflect-week-card-header{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.reflect-week-card-key{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted)}
+.reflect-week-card-stats{font-size:11px;font-family:var(--mono);color:var(--deep)}
+.reflect-section-tag{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;padding:2px 7px;border-radius:999px;display:inline-block;margin-bottom:4px}
+.reflect-section-tag.review{background:var(--deep-dim);color:var(--deep)}
+.reflect-section-tag.plan{background:var(--admin-dim);color:var(--admin)}
+
+/* ══════════════════════════════════════════════════════
+   MOBILE TOUCH OPTIMIZATION
+   ══════════════════════════════════════════════════════ */
+
+/* Smooth scrolling globally */
+html { scroll-behavior: smooth; }
+
+/* Scrollable views — momentum scroll + contain bounce */
+.view {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+.modal, .away-dropdown, .presets-scroll, .switch-list {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Remove tap flash on all interactive elements */
+button, a, [role="button"],
+.chip, .preset-chip, .day-tab, .energy-btn, .friction-btn,
+.switch-list-item, .away-dropdown-item, .tl-bucket-header,
+.tl-row, .log-gap-btn, .nav-btn, .nav-log {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation; /* eliminates 300ms click delay */
+}
+
+/* ── Tap target sizes (min 44px height) ── */
+.btn.sm { padding: 9px 14px; font-size: 12px; }
+
+.chip { padding: 7px 13px; font-size: 12px; }
+.chips-row { gap: 8px; margin-top: 10px; }
+
+.preset-chip { padding: 8px 16px; font-size: 12px; }
+
+.log-gap-btn { padding: 8px 13px; font-size: 12px; min-height: 36px; }
+
+.nav-btn { padding: 10px 0; }
+.nav-btn svg { width: 20px; height: 20px; }
+
+.tl-row { min-height: 44px; }
+.tl-row + .tl-row { margin-top: 4px; }
+
+.tl-bucket-header { min-height: 48px; }
+
+.day-tab { padding: 10px 16px; }
+
+.away-dropdown-item { padding: 12px 16px; }
+
+/* ── Thumb-friendly spacing ── */
+.hero-controls { gap: 10px; padding-top: 10px; margin-top: 8px; }
+
+.entry-row { padding: 11px 14px; gap: 10px; }
+
+.setting-row { padding: 11px 0; }
+.settings-section { padding: 16px; }
+
+.energy-btn { padding: 16px 12px; min-height: 64px; }
+.quick-actions-grid, .recent-task-grid { grid-template-columns: 1fr; }
+.quick-action-btn, .recent-task-btn { min-height: 70px; }
+
+/* font-size ≥ 16px prevents iOS Safari from auto-zooming on input focus */
+.field input, .field select, .field textarea {
+  padding: 10px 12px;
+  font-size: 16px;
+}
+.quick-retro-input { padding: 9px 12px; font-size: 16px; }
+.quick-retro-sel { padding: 9px 10px; font-size: 14px; }
+.hero-input { font-size: 16px; }
+.setting-control input { font-size: 16px; }
+.sync-room-row input { font-size: 16px; }
+.away-custom-input { font-size: 16px; }
+
+/* ── Smoother transitions ── */
+.btn {
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.btn:active { transform: scale(0.96); transition: transform 0.08s ease; }
+
+/* Modal sheet — iOS-style spring */
+.modal { transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1); }
+.overlay { transition: opacity 0.25s ease; }
+.overlay.open .modal { transition: transform 0.32s cubic-bezier(0.34, 1.1, 0.64, 1); }
+
+/* Overlay panels */
+.quicklog-overlay { transition: opacity 0.22s ease; }
+.focus-block-overlay { transition: opacity 0.25s ease; }
+
+/* Away dropdown */
+.away-dropdown {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform-origin: top left;
+}
+.away-dropdown.show { opacity: 1; transform: scale(1); }
+.away-dropdown:not(.show) { opacity: 0; transform: scale(0.96); }
+
+/* Hero state transitions */
+.activity-hero { transition: border-color 0.3s ease, background 0.3s ease; }
+
+/* Switch list items */
+.switch-list-item { transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+
+/* Ring fill */
+.ring-fg { transition: stroke-dashoffset 0.9s linear; }
+
+/* Commit bar / week progress fill */
+.commit-fill, .week-progress-fill, .reflect-goal-fill, .fbo-progress-fill {
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (max-width: 380px) {
+  .btn.sm { padding: 9px 11px; }
+  .chip { max-width: 110px; }
+  .hero-controls { gap: 7px; }
+}
+
+/* ── Behavioral Feedback Flash ── */
+.feedback-flash{border-radius:var(--r2);padding:12px 15px;margin-bottom:12px;
+  border-left:3px solid;cursor:pointer;position:relative}
+@keyframes fb-in{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fb-out{from{opacity:1}to{opacity:0}}
+.feedback-flash.entering{animation:fb-in 0.22s ease forwards}
+.feedback-flash.leaving{animation:fb-out 0.35s ease forwards;pointer-events:none}
+.feedback-flash.type-deep{background:var(--deep-dim);border-color:var(--deep)}
+.feedback-flash.type-warn{background:rgba(249,199,79,0.1);border-color:var(--admin)}
+.feedback-flash.type-bad{background:var(--distraction-dim);border-color:var(--distraction)}
+.feedback-flash.type-neutral{background:var(--bg3);border-color:var(--border2)}
+.fb-eyebrow{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px}
+.type-deep .fb-eyebrow{color:var(--deep)}.type-warn .fb-eyebrow{color:var(--admin)}
+.type-bad .fb-eyebrow{color:var(--distraction)}.type-neutral .fb-eyebrow{color:var(--muted)}
+.fb-message{font-size:13px;font-weight:600;line-height:1.5;color:var(--text)}
+.fb-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
+.fb-dismiss{position:absolute;top:10px;right:12px;font-size:11px;color:var(--muted2);
+  background:none;border:none;cursor:pointer;padding:2px 4px;line-height:1}
+
+/* ── Awareness signal upgrade ── */
+.signal-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:12px}
+.signal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.signal-header-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted2)}
+.signal-badge{font-size:9px;font-family:var(--mono);font-weight:700;padding:2px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:0.07em}
+.signal-badge.good{background:var(--deep-dim);color:var(--deep)}
+.signal-badge.bad{background:var(--distraction-dim);color:var(--distraction)}
+.signal-badge.warn{background:rgba(249,199,79,0.1);color:var(--admin)}
+.signal-item{font-size:13px;color:var(--text);line-height:1.5;padding:5px 0;display:flex;align-items:flex-start;gap:10px;border-top:1px solid var(--border)}
+.signal-item:first-of-type{border-top:none;padding-top:0}
+.signal-dot{width:5px;height:5px;border-radius:50%;margin-top:8px;flex-shrink:0}
+.signal-item-body{flex:1}
+.signal-item-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:2px}
+
+/* ── Daily Summary Card ── */
+.daily-summary{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:12px}
+.daily-summary.has-data{border-color:rgba(76,199,240,0.18)}
+.ds-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.ds-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)}
+.ds-score-pill{font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--deep-dim);color:var(--deep)}
+.ds-score-pill.mid{background:rgba(249,199,79,0.12);color:var(--admin)}
+.ds-score-pill.low{background:var(--distraction-dim);color:var(--distraction)}
+.ds-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
+.ds-metric{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 8px;text-align:center}
+.ds-metric-val{font-family:var(--mono);font-size:17px;font-weight:600;color:var(--text);line-height:1}
+.ds-metric-val.good{color:var(--deep)}
+.ds-metric-val.warn{color:var(--admin)}
+.ds-metric-val.bad{color:var(--distraction)}
+.ds-metric-label{font-size:9px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-top:3px;font-weight:600}
+.ds-split-label{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:4px}
+.ds-split-bar{display:flex;height:7px;border-radius:4px;overflow:hidden;margin-bottom:10px;gap:1px;background:var(--bg4)}
+.ds-split-seg{height:100%;min-width:0;transition:width 0.5s cubic-bezier(0.4,0,0.2,1)}
+.ds-split-seg.deep{background:var(--deep)}
+.ds-split-seg.shallow{background:var(--shallow)}
+.ds-split-seg.admin{background:var(--admin)}
+.ds-split-seg.distraction{background:var(--distraction)}
+.ds-split-seg.nine5{background:var(--nine5)}
+.ds-split-seg.errands{background:var(--errands)}
+.ds-split-seg.learning{background:var(--learning)}
+.ds-split-seg.exercise{background:var(--exercise)}
+.ds-split-seg.social{background:var(--social)}
+.ds-split-seg.recovery{background:var(--break)}
+.ds-split-seg.waste{background:var(--distraction)}
+.ds-peak{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px}
+.ds-peak-badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--deep-dim);color:var(--deep);white-space:nowrap}
+.ds-insight{font-size:12px;color:var(--muted);line-height:1.55;padding-top:9px;border-top:1px solid var(--border);font-style:italic}
 </style>
 </head>
 <body>
@@ -569,19 +859,142 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <button class="btn sm ghost" onclick="openReview()">Review</button>
-      <button class="btn sm ghost" onclick="enterFocusMode()">⊙</button>
+      <button class="btn sm ghost" onclick="enterFocusMode()" title="Focus / Pomodoro mode">⊙ Focus</button>
     </div>
   </div>
 
-  <div class="intention-bar">
-    <div class="intention-dot"></div>
-    <div style="flex:1">
-      <div class="intention-label">Today's focus</div>
-      <input class="intention-input" id="intention" placeholder="What are you focused on today?" maxlength="120">
+  <!-- hidden inputs kept for compatibility -->
+  <input id="intention" style="display:none" maxlength="120">
+  <input type="number" id="interval-input" value="30" min="1" max="240" step="5" style="display:none">
+  <div id="timer-current-task" style="display:none"></div>
+  <div id="countdown" style="display:none"></div>
+  <div id="live-cost" style="display:none"></div>
+  <button id="main-btn" style="display:none" onclick="toggleTimer()"></button>
+  <button id="switch-btn" style="display:none" onclick="openSwitchPanel()"></button>
+  <button id="break-btn" style="display:none"></button>
+
+  <!-- ── Activity Hero ── -->
+  <div class="activity-hero" id="activity-hero">
+
+    <!-- Idle state -->
+    <div id="hero-idle">
+      <div class="hero-prompt">What are you working on?</div>
+      <div class="hero-start-row">
+        <input class="hero-input" id="hero-task-input" placeholder="Name your task…"
+          onkeydown="if(event.key==='Enter')startFromHero()">
+        <button class="btn primary" onclick="startFromHero()" style="padding:11px 20px;font-size:14px">Start</button>
+      </div>
       <div class="chips-row" id="recent-chips"></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border)">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;flex-shrink:0">Away:</span>
+        <button class="btn sm ghost" onclick="startAway('Sleep')" style="border-color:var(--away);color:var(--away)">💤 Sleep</button>
+        <button class="btn sm ghost" onclick="startAway('Eat')" style="border-color:var(--away);color:var(--away)">🍽 Eat</button>
+        <button class="btn sm ghost" onclick="startAway('Walk')" style="border-color:var(--away);color:var(--away)">🚶 Walk</button>
+        <div style="position:relative">
+          <button class="btn sm ghost" id="idle-away-btn" onclick="toggleIdleAwayPicker()" style="border-color:var(--away);color:var(--away)">⊙ More…</button>
+          <div class="away-dropdown" id="idle-away-picker">
+            <div class="away-dropdown-item" onclick="startAway('Exercise')">🏋 Exercise</div>
+            <div class="away-dropdown-item" onclick="startAway('Commute')">🚗 Commute</div>
+            <div class="away-dropdown-item" onclick="startAway('Rest')">💤 Rest</div>
+            <div class="away-dropdown-item" onclick="startAway('Errand')">🛒 Errand</div>
+            <div class="away-dropdown-item" onclick="startAway('Personal')">👤 Personal</div>
+            <div class="away-dropdown-divider"></div>
+            <div class="away-dropdown-custom">
+              <input class="away-custom-input" id="idle-away-custom" placeholder="Other…"
+                onkeydown="if(event.key==='Enter'&&this.value.trim()){startAway(this.value.trim());document.getElementById('idle-away-picker').classList.remove('show')}">
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- Active state -->
+    <div id="hero-active" style="display:none">
+      <div class="hero-active-top">
+        <div class="hero-ring-wrap">
+          <svg width="80" height="80" viewBox="0 0 120 120">
+            <circle class="ring-bg" cx="60" cy="60" r="50"/>
+            <circle class="ring-fg" id="ring" cx="60" cy="60" r="50" stroke-dasharray="314.2" stroke-dashoffset="314.2"/>
+          </svg>
+          <div class="hero-ring-center">
+            <div class="hero-ring-secs" id="hero-ring-secs">0:00</div>
+            <div class="hero-ring-label">block</div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="hero-task-name" id="hero-task-name">—</div>
+          <div style="display:flex;align-items:baseline;gap:0;margin-top:4px">
+            <div class="hero-elapsed" id="hero-elapsed">0</div><span class="hero-elapsed-unit">m on task</span>
+          </div>
+          <div class="hero-status"><span class="hero-live-dot"></span><span id="timer-status">Tracking</span></div>
+        </div>
+        <div id="live-cost-active" class="hero-cost"></div>
+      </div>
+
+      <div class="hero-controls">
+        <button class="btn sm" onclick="openSwitchPanel()">↷ Switch</button>
+        <button class="btn sm" onclick="openBreakModal()" style="border-color:var(--break);color:var(--break)">☕ Break</button>
+        <div style="position:relative">
+          <button class="btn sm" id="away-btn" onclick="toggleAway()" style="border-color:var(--away);color:var(--away)">⊙ Away</button>
+          <!-- Away dropdown -->
+          <div class="away-dropdown" id="away-picker">
+            <div class="away-dropdown-item" onclick="startAway('Eat')">🍽 Eat</div>
+            <div class="away-dropdown-item" onclick="startAway('Walk')">🚶 Walk</div>
+            <div class="away-dropdown-item" onclick="startAway('Exercise')">🏋 Exercise</div>
+            <div class="away-dropdown-item" onclick="startAway('Commute')">🚗 Commute</div>
+            <div class="away-dropdown-item" onclick="startAway('Rest')">💤 Rest</div>
+            <div class="away-dropdown-item" onclick="startAway('Errand')">🛒 Errand</div>
+            <div class="away-dropdown-item" onclick="startAway('Personal')">👤 Personal</div>
+            <div class="away-dropdown-divider"></div>
+            <div class="away-dropdown-custom">
+              <input class="away-custom-input" id="away-custom" placeholder="Other…"
+                onkeydown="if(event.key==='Enter'&&this.value.trim())startAway(this.value.trim())">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inline switch panel -->
+      <div id="switch-panel" style="display:none;margin-top:10px">
+        <div class="hero-start-row">
+          <input class="hero-input" id="switch-input" placeholder="Switch to…"
+            onkeydown="if(event.key==='Enter')confirmSwitch()" oninput="filterSwitchList(this.value)">
+          <button class="btn primary" onclick="confirmSwitch()">Switch</button>
+        </div>
+        <div id="switch-list" style="margin-top:6px;max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+      </div>
+    </div>
+
+    <!-- Away active state -->
+    <div id="hero-away" style="display:none">
+      <div class="hero-active-top">
+        <div style="width:80px;height:80px;border-radius:50%;background:var(--away-dim);border:2px solid rgba(148,163,184,0.3);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">⊙</div>
+        <div style="flex:1;min-width:0">
+          <div class="hero-task-name" id="hero-away-label">Away</div>
+          <div style="display:flex;align-items:baseline;gap:0;margin-top:4px">
+            <div class="hero-elapsed" id="hero-away-elapsed" style="color:var(--away);font-size:22px">0:00</div>
+          </div>
+          <div class="hero-status" style="color:var(--away)"><span class="hero-live-dot" style="background:var(--away)"></span>Away from work</div>
+        </div>
+      </div>
+      <div class="hero-controls">
+        <button class="btn primary" onclick="toggleAway()" style="background:var(--away);border-color:var(--away)">↩ Back to work</button>
+      </div>
+    </div>
+
+    <!-- Break active row -->
+    <div class="break-active-row" id="break-active-row">
+      <div class="b-icon">☕</div>
+      <div style="flex:1">
+        <div class="b-label">Break in progress</div>
+        <div class="b-sub">Timer resumes in <span id="break-countdown-text">--:--</span></div>
+      </div>
+      <button class="btn sm" style="border-color:var(--break);color:var(--break);font-size:11px" onclick="endBreak()">End early</button>
+    </div>
+
   </div>
 
+  <!-- Continue banner -->
   <div class="continue-banner" id="continue-banner">
     <div style="flex:1">
       <div class="continue-banner-text" id="continue-banner-text">✓ Block done</div>
@@ -591,50 +1004,28 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <button class="btn sm ghost" onclick="doSwitchFromBanner()">↷ Switch</button>
   </div>
 
-  <div class="timer-section">
-    <div class="timer-top">
-      <div class="ring-wrap">
-        <svg width="120" height="120" viewBox="0 0 120 120">
-          <circle class="ring-bg" cx="60" cy="60" r="50"/>
-          <circle class="ring-fg" id="ring" cx="60" cy="60" r="50" stroke-dasharray="314.2" stroke-dashoffset="0"/>
-        </svg>
-        <div class="ring-center"><span class="ring-pct" id="ring-pct">100%</span></div>
-      </div>
-      <div>
-        <div id="timer-current-task" style="font-size:12px;color:var(--deep);font-weight:600;letter-spacing:0.04em;margin-bottom:2px;display:none"></div>
-        <div class="timer-countdown" id="countdown">30:00</div>
-        <div class="timer-status" id="timer-status">Ready</div>
-        <div class="timer-status" id="live-cost">-$0 drifting</div>
-      </div>
-    </div>
-    <div class="timer-controls">
-      <div class="interval-row">every <input type="number" id="interval-input" value="30" min="1" max="240" step="5"> min</div>
-      <button class="btn primary" id="main-btn" onclick="toggleTimer()">Start</button>
-      <button class="btn sm" id="switch-btn" onclick="switchTaskMidBlock()" style="display:none">↷ Switch task</button>
-      <button class="btn sm" id="break-btn" onclick="openBreakModal()" style="display:none;border-color:var(--break);color:var(--break)">☕ Break</button>
-      <button class="btn sm" id="away-btn" onclick="toggleAway()" style="border-color:var(--away);color:var(--away)">⊙ Away</button>
-    </div>
-    <div class="away-picker" id="away-picker">
-      <span style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.07em;flex-basis:100%;margin-bottom:2px">What are you doing?</span>
-      <button class="away-picker-chip" onclick="startAway('Lunch')">🍽 Lunch</button>
-      <button class="away-picker-chip" onclick="startAway('Walk')">🚶 Walk</button>
-      <button class="away-picker-chip" onclick="startAway('Exercise')">🏋 Exercise</button>
-      <button class="away-picker-chip" onclick="startAway('Commute')">🚗 Commute</button>
-      <button class="away-picker-chip" onclick="startAway('Rest')">💤 Rest</button>
-      <button class="away-picker-chip" onclick="startAway('Errand')">🛒 Errand</button>
-      <button class="away-picker-chip" onclick="startAway('Personal')">👤 Personal</button>
-      <input class="away-custom-input" id="away-custom" placeholder="Custom…" onkeydown="if(event.key==='Enter'&&this.value.trim())startAway(this.value.trim())">
-      <button class="away-picker-chip" onclick="const v=document.getElementById('away-custom').value.trim();if(v)startAway(v)" style="padding:4px 8px">Go</button>
-    </div>
-    <div class="break-active-row" id="break-active-row">
-      <div class="b-icon">☕</div>
-      <div style="flex:1">
-        <div class="b-label">Break in progress</div>
-        <div class="b-sub">Timer resumes in <span id="break-countdown-text">--:--</span></div>
-      </div>
-      <button class="btn sm" style="border-color:var(--break);color:var(--break);font-size:11px" onclick="endBreak()">End early</button>
-    </div>
+  <!-- Behavioral Feedback Flash -->
+  <div id="feedback-flash" style="display:none"></div>
+
+  <!-- Quick retro log -->
+  <div class="quick-retro-bar" style="flex-wrap:wrap;gap:6px">
+    <input class="quick-retro-input" id="retro-task" placeholder="What did you do?"
+      onkeydown="if(event.key==='Enter')quickRetroLog()" style="flex:1;min-width:120px">
+    <input type="time" id="retro-time" class="quick-retro-sel" style="flex-shrink:0">
+    <select class="quick-retro-sel" id="retro-dur">
+      <option value="15">15m</option>
+      <option value="30" selected>30m</option>
+      <option value="45">45m</option>
+      <option value="60">1h</option>
+      <option value="90">1h 30m</option>
+      <option value="120">2h</option>
+      <option value="180">3h</option>
+    </select>
+    <button class="btn sm primary" onclick="quickRetroLog()">Log</button>
   </div>
+
+  <!-- Awareness Signal -->
+  <div id="awareness-signal" style="display:none"></div>
 
   <!-- Untracked warning banner — shows whenever there are gaps -->
   <div id="untracked-banner" style="display:none;background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.25);border-radius:var(--r2);padding:12px 14px;margin-bottom:12px;align-items:center;gap:10px">
@@ -671,6 +1062,9 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <div class="s-val" id="s-identity" style="font-size:13px">—</div>
     </div>
   </div>
+  <!-- Daily Summary Card -->
+  <div class="daily-summary" id="daily-summary" style="display:none"></div>
+
   <!-- Daily commitment bar -->
   <div class="commit-bar" id="commit-bar">
     <div style="font-size:12px;color:var(--muted);flex-shrink:0">Goal</div>
@@ -708,10 +1102,16 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <div class="view" id="view-reflect">
   <div class="page-header"><div class="page-title">Reflect</div></div>
 
-  <!-- Insights -->
+  <!-- Today's Daily Summary -->
+  <div class="settings-section" id="reflect-daily-section">
+    <div class="settings-title">Today's summary</div>
+    <div id="reflect-daily-summary"></div>
+  </div>
+
+  <!-- This week's patterns -->
   <div class="settings-section">
-    <div class="settings-title">This week's patterns</div>
-    <div id="reflect-insights" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="settings-title">This week's numbers</div>
+    <div id="reflect-insights"></div>
   </div>
 
   <!-- Weekly Review -->
@@ -720,18 +1120,38 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       Weekly review
       <span id="weekly-review-saved" style="font-size:10px;color:var(--deep);font-weight:600;display:none">✓ Saved</span>
     </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Look back at this week honestly.</div>
+    <div style="font-size:10px;color:var(--muted2);margin-bottom:12px">Each week is saved permanently — saving a new one never overwrites another.</div>
     <div style="display:flex;flex-direction:column;gap:10px">
-      <div class="field"><label>How did this week go overall?</label><textarea id="wr-overall" rows="2" placeholder="Honest take on the week…" style="resize:none"></textarea></div>
-      <div class="field"><label>Did your time reflect your priorities?</label><textarea id="wr-priorities" rows="2" placeholder="What matched, what didn't…" style="resize:none"></textarea></div>
-      <div class="field"><label>Biggest time drain</label><input type="text" id="wr-drain" placeholder="What stole the most time?"></div>
-      <div class="field"><label>What will you do differently next week?</label><textarea id="wr-nextweek" rows="2" placeholder="One specific change…" style="resize:none"></textarea></div>
-      <button class="btn primary" onclick="saveWeeklyReview()" style="align-self:flex-end">Save reflection</button>
+      <div class="field"><label>What went well?</label><textarea id="wr-overall" rows="2" placeholder="Wins, progress, good habits…" style="resize:none"></textarea></div>
+      <div class="field"><label>What didn't go well?</label><textarea id="wr-priorities" rows="2" placeholder="What fell short or felt off…" style="resize:none"></textarea></div>
+      <div class="field"><label>Biggest time drain <span style="color:var(--distraction)">↓</span></label><input type="text" id="wr-drain" placeholder="What stole the most time?"></div>
+      <div class="field"><label>One thing to change next week</label><textarea id="wr-nextweek" rows="2" placeholder="One specific, actionable change…" style="resize:none"></textarea></div>
+      <button class="btn primary" onclick="saveWeeklyReview()" style="align-self:flex-end">Save review</button>
+    </div>
+  </div>
+
+  <!-- Weekly Planning -->
+  <div class="settings-section">
+    <div class="settings-title" style="display:flex;justify-content:space-between;align-items:center">
+      Next week's plan
+      <span id="weekly-plan-saved" style="font-size:10px;color:var(--deep);font-weight:600;display:none">✓ Saved</span>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Set your intentions before the week begins.</div>
+    <div style="font-size:10px;color:var(--muted2);margin-bottom:12px">Saved permanently per week — won't be overwritten when next week starts.</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="field"><label>Top priority #1</label><input type="text" id="wp-p1" placeholder="Most important thing to move forward"></div>
+      <div class="field"><label>Top priority #2</label><input type="text" id="wp-p2" placeholder="Second most important…"></div>
+      <div class="field"><label>Top priority #3</label><input type="text" id="wp-p3" placeholder="Third…"></div>
+      <div class="field"><label>Deep work goal <span style="color:var(--muted);font-weight:400">(hours)</span></label><input type="number" id="wp-deepgoal" min="1" max="60" placeholder="e.g. 20"></div>
+      <div class="field"><label>What to protect / avoid</label><input type="text" id="wp-avoid" placeholder="Distraction or time drain to cut"></div>
+      <button class="btn primary" onclick="saveWeeklyPlan()" style="align-self:flex-end">Save plan</button>
     </div>
   </div>
 
   <!-- History -->
   <div class="settings-section">
-    <div class="settings-title">Reflection history</div>
+    <div class="settings-title">History</div>
     <div id="reflect-history" style="display:flex;flex-direction:column;gap:12px"></div>
   </div>
 </div>
@@ -783,6 +1203,24 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   </div>
 
   
+
+  <div class="settings-section">
+    <div class="settings-title">Identity</div>
+    <div class="setting-row" style="border-bottom:none">
+      <div>
+        <div class="setting-label">Coach tone</div>
+        <div class="setting-sub">How the app speaks to you about your time</div>
+      </div>
+      <div class="setting-control">
+        <select id="set-coach-tone" onchange="saveSettings()" style="width:auto;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 7px;border-radius:6px;outline:none">
+          <option value="analyst">Neutral Analyst</option>
+          <option value="coach">Strict Coach</option>
+          <option value="mirror">Brutal Mirror</option>
+        </select>
+      </div>
+    </div>
+    <div id="coach-tone-preview" style="font-size:11px;color:var(--muted);font-style:italic;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"></div>
+  </div>
 
   <div class="settings-section">
     <div class="settings-title">Quick-log presets</div>
@@ -843,7 +1281,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <div class="signin-overlay" id="signin-overlay">
   <div class="signin-logo">⏱</div>
   <div class="signin-app-name">ChronaSense</div>
-  <div class="signin-tagline">Track every hour. See where your time really goes. Syncs instantly across all your devices.</div>
+  <div class="signin-tagline">It shows you exactly where your life is going every day.</div>
   <button class="signin-google-btn" onclick="signIn()">
     <svg width="20" height="20" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
     Continue with Google
@@ -882,6 +1320,14 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <span class="sl-sub">Tap to log and continue</span>
   </button>
   <button class="same-last-other" id="ql-other-btn" onclick="showQuickForm()">Something different ↓</button>
+  <div class="quick-lane">
+    <div class="quick-lane-label">Quick Log</div>
+    <div class="quick-actions-grid" id="ql-quick-actions"></div>
+    <div class="recent-task-wrap" id="ql-recent-wrap" style="display:none">
+      <div class="quick-lane-label">Recent Tasks</div>
+      <div class="recent-task-grid" id="ql-recent-tasks"></div>
+    </div>
+  </div>
   <div id="ql-form-body">
     <div id="ql-chips-wrap" style="display:none;margin-bottom:10px">
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Recent</div>
@@ -891,12 +1337,17 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <label>Activity</label>
       <input type="text" id="ql-activity" placeholder="What were you doing?">
     </div>
-    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin:10px 0 6px">Energy type</div>
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin:10px 0 6px">Category</div>
     <div class="energy-grid">
-      <button class="energy-btn deep" onclick="setQlEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Creative, strategic</span></button>
+      <button class="energy-btn nine5" onclick="setQlEnergy('nine5')"><span class="e-name">9-5</span><span class="e-desc">Scheduled work</span></button>
+      <button class="energy-btn deep" onclick="setQlEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
       <button class="energy-btn shallow" onclick="setQlEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
-      <button class="energy-btn admin" onclick="setQlEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary tasks</span></button>
-      <button class="energy-btn distraction" onclick="setQlEnergy('distraction')"><span class="e-name">Distraction</span><span class="e-desc">You already know</span></button>
+      <button class="energy-btn errands" onclick="setQlEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
+      <button class="energy-btn learning" onclick="setQlEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Study, growth</span></button>
+      <button class="energy-btn exercise" onclick="setQlEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Movement, sports</span></button>
+      <button class="energy-btn social" onclick="setQlEnergy('social')"><span class="e-name">Social</span><span class="e-desc">People, connection</span></button>
+      <button class="energy-btn recovery" onclick="setQlEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, sleep</span></button>
+      <button class="energy-btn waste" onclick="setQlEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
       <button class="btn ghost" onclick="dismissQuickLog()">Skip</button>
@@ -966,6 +1417,14 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <span class="sl-sub">Tap to log and continue</span>
   </button>
   <button class="same-last-other" id="same-last-other" onclick="showLogForm()">Something different ↓</button>
+  <div class="quick-lane">
+    <div class="quick-lane-label">Quick Log</div>
+    <div class="quick-actions-grid" id="log-quick-actions"></div>
+    <div class="recent-task-wrap" id="log-recent-wrap" style="display:none">
+      <div class="quick-lane-label">Recent Tasks</div>
+      <div class="recent-task-grid" id="log-recent-tasks"></div>
+    </div>
+  </div>
   <div id="log-form-body">
   <div style="margin-bottom:6px">
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Quick pick</div>
@@ -978,12 +1437,17 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <button class="voice-btn" id="voice-btn" onclick="startVoiceLog()" title="Voice input">🎤</button>
     </div>
   </div>
-  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Energy type</div>
+  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
   <div class="energy-grid">
-    <button class="energy-btn deep" onclick="setEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Creative, strategic</span></button>
+    <button class="energy-btn nine5" onclick="setEnergy('nine5')"><span class="e-name">9-5</span><span class="e-desc">Scheduled work</span></button>
+    <button class="energy-btn deep" onclick="setEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
     <button class="energy-btn shallow" onclick="setEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
-    <button class="energy-btn admin" onclick="setEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary tasks</span></button>
-    <button class="energy-btn distraction" onclick="setEnergy('distraction')"><span class="e-name">Distraction</span><span class="e-desc">You already know</span></button>
+    <button class="energy-btn errands" onclick="setEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
+    <button class="energy-btn learning" onclick="setEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Study, growth</span></button>
+    <button class="energy-btn exercise" onclick="setEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Movement, sports</span></button>
+    <button class="energy-btn social" onclick="setEnergy('social')"><span class="e-name">Social</span><span class="e-desc">People, connection</span></button>
+    <button class="energy-btn recovery" onclick="setEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, sleep</span></button>
+    <button class="energy-btn waste" onclick="setEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
   </div>
   <button class="detail-toggle" onclick="toggleDetail()"><span id="detail-arrow">▸</span> Add detail (DEA-P, $/hr)</button>
   <div class="detail-body" id="detail-body">
@@ -1113,12 +1577,17 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Recent</div>
     <div class="presets-scroll" id="retro-chips"></div>
   </div>
-  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Energy type</div>
+  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
   <div class="energy-grid">
-    <button class="energy-btn deep" onclick="setRetroEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Creative, strategic</span></button>
-    <button class="energy-btn shallow" onclick="setRetroEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Email, meetings</span></button>
-    <button class="energy-btn admin" onclick="setRetroEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary tasks</span></button>
-    <button class="energy-btn distraction" onclick="setRetroEnergy('distraction')"><span class="e-name">Distraction</span><span class="e-desc">You already know</span></button>
+    <button class="energy-btn nine5" onclick="setRetroEnergy('nine5')"><span class="e-name">9-5</span><span class="e-desc">Scheduled work</span></button>
+    <button class="energy-btn deep" onclick="setRetroEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
+    <button class="energy-btn shallow" onclick="setRetroEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
+    <button class="energy-btn errands" onclick="setRetroEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
+    <button class="energy-btn learning" onclick="setRetroEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Study, growth</span></button>
+    <button class="energy-btn exercise" onclick="setRetroEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Movement, sports</span></button>
+    <button class="energy-btn social" onclick="setRetroEnergy('social')"><span class="e-name">Social</span><span class="e-desc">People, connection</span></button>
+    <button class="energy-btn recovery" onclick="setRetroEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, sleep</span></button>
+    <button class="energy-btn waste" onclick="setRetroEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
   </div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
     <button class="btn ghost" onclick="cancelRetroEdit()">Cancel</button>
@@ -1226,6 +1695,8 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="storage.js"></script>
+<script src="insights.js"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -1233,7 +1704,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 // ══════════════════════════════════════════════════════
 let currentTask = '';
 let entries = [];
-let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workDayStart:'09:00', activityColors:{} };
+let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workDayStart:'09:00', activityColors:{}, coachTone:'analyst' };
 let reviews = {};
 let weeklyReviews = {};
 let intention = '';
@@ -1245,6 +1716,14 @@ let distractionDebt = 0;
 let pingCount = 0;
 let sortKey = 'ts', sortDir = -1;
 let selectedEnergy = '', selectedOnPlan = null;
+const QUICK_ACTIVITY_OPTIONS = [
+  { label: 'Deep Work', activity: 'Deep Work', energy: 'deep', hint: 'Focused, high-value' },
+  { label: 'Admin', activity: 'Admin', energy: 'shallow', hint: 'Email, forms, follow-up' },
+  { label: 'Eat', activity: 'Eat', energy: 'recovery', hint: 'Meal or snack break' },
+  { label: 'Workout', activity: 'Workout', energy: 'exercise', hint: 'Movement or training' },
+  { label: 'Commute', activity: 'Commute', energy: 'errands', hint: 'Driving, travel, transit' },
+  { label: 'Scroll', activity: 'Scroll', energy: 'waste', hint: 'Phone or feed drift' },
+];
 let focusModeOn = false;
 let blockStartTime = null;
 let lastStateChange = null;
@@ -1272,185 +1751,19 @@ let awayLabel = 'Away';
 let continueBannerTimer = null;
 let continueBannerCountdown = 0;
 let recentChipTasks = [];
-const firebaseConfig = {
-  apiKey: "AIzaSyDQeoZ1o1uz7adi1fLQiC6VKFCJ-6q8kgA",
-  authDomain: "time-audit-3c3da.firebaseapp.com",
-  databaseURL: "https://time-audit-3c3da-default-rtdb.asia-southeast1.firebasedatabase.app/",
-  projectId: "time-audit-3c3da"
-};
-
-let syncedDeviceId = localStorage.getItem('ta3-device-id') || ('device_' + Math.random().toString(36).slice(2,8));
-localStorage.setItem('ta3-device-id', syncedDeviceId);
-let connectedDevices = {};
+let taskStartTime = null;
+let awayElapsedTicker = null;
+// firebaseConfig, syncedDeviceId, connectedDevices — moved to storage.js
 
 const CIRCUM = 314.2;
-const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+// DAY, AWAY_BUCKETS, getBucket — moved to storage.js
 
-function initAutoSync() {
-  if (!firebase.apps.length) {
-    fbApp = firebase.initializeApp(firebaseConfig);
-  } else {
-    fbApp = firebase.app();
-  }
-  fbDb = firebase.database();
+// initAutoSync, signIn, signOutUser, updateAuthUI, syncEntries, syncTimerState — moved to storage.js
 
-  // Initialize Google Auth once at startup
-  if (window.Capacitor && window.Capacitor.Plugins.GoogleAuth) {
-    window.Capacitor.Plugins.GoogleAuth.initialize({
-      clientId: '548433155531-r93hucpo6pa8darnjm5tioj1rgg4vn6s.apps.googleusercontent.com',
-      scopes: ['profile', 'email'],
-      grantOfflineAccess: true
-    });
-  }
-
-  // Auth state drives everything — signed in = synced, signed out = show login
-  firebase.auth().onAuthStateChanged(user => {
-    if (user) {
-      currentUser = user;
-      // Use UID as room — same account on any device = same room = auto-sync
-      roomCode = 'uid_' + user.uid;
-      document.getElementById('signin-overlay').style.display = 'none';
-      updateAuthUI(user);
-      startSync();
-    } else {
-      currentUser = null;
-      // Tear down listeners from previous session
-      if (fbDb && roomCode) {
-        ['timer','entries','intention','settings','devices','breakState'].forEach(k =>
-          fbDb.ref(`rooms/${roomCode}/${k}`).off()
-        );
-        fbDb.ref('.info/connected').off();
-      }
-      fbRoomRef = null; roomCode = '';
-      updateSyncPill('offline', 'signed out');
-      updateAuthUI(null);
-      document.getElementById('signin-overlay').style.display = 'flex';
-    }
-  });
-}
-
-async function signIn() {
-  try {
-    const googleUser = await window.Capacitor.Plugins.GoogleAuth.signIn();
-    const credential = firebase.auth.GoogleAuthProvider.credential(
-      googleUser.authentication.idToken
-    );
-    await firebase.auth().signInWithCredential(credential);
-  } catch (err) {
-    if (err && err.error !== 'popup_closed_by_user') {
-      showToast('Sign-in failed: ' + (err.error || err.message || ''));
-    }
-  }
-}
-
-function signOutUser() {
-  if (!confirm('Sign out? Your local data stays on this device.')) return;
-  // Remove device presence before signing out
-  if (fbDb && roomCode) {
-    fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).remove();
-  }
-  firebase.auth().signOut();
-}
-
-function updateAuthUI(user) {
-  const signedIn  = document.getElementById('auth-signed-in');
-  const signedOut = document.getElementById('auth-signed-out');
-  if (!signedIn || !signedOut) return;
-  if (user) {
-    signedIn.style.display = 'block';
-    signedOut.style.display = 'none';
-    const avatar = document.getElementById('auth-avatar');
-    if (user.photoURL) { avatar.src = user.photoURL; avatar.style.display = 'block'; }
-    document.getElementById('auth-name').textContent  = user.displayName || '';
-    document.getElementById('auth-email').textContent = user.email || '';
-  } else {
-    signedIn.style.display  = 'none';
-    signedOut.style.display = 'block';
-  }
-}
-
-function syncEntries() {
-  if (!fbRoomRef) return;
-
-  fbRoomRef.update({
-    entries: entries
-  });
-}
-
-function syncTimerState() {
-  if (!fbRoomRef) return;
-
-  fbRoomRef.update({
-    timer: {
-      remaining: remaining,
-      running: running
-    }
-  });
-}
-
-const DEFAULT_PRESETS = [
-  {label:'Email / Slack',energy:'shallow'},
-  {label:'Deep work',energy:'deep'},
-  {label:'Sales call',energy:'deep'},
-  {label:'Admin task',energy:'admin'},
-  {label:'Social media',energy:'distraction'},
-  {label:'Meeting',energy:'shallow'},
-  {label:'Content creation',energy:'deep'},
-  {label:'Client work',energy:'deep'},
-];
+// DEFAULT_PRESETS — moved to storage.js
 
 
-// ══════════════════════════════════════════════════════
-// PERSIST
-// ══════════════════════════════════════════════════════
-function persist() {
-  localStorage.setItem('ta3-entries', JSON.stringify(entries));
-  localStorage.setItem('ta3-settings', JSON.stringify(settings));
-  localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
-  localStorage.setItem('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
-  localStorage.setItem('ta3-intention', intention);
-  localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
-  if (running && timerStartedAt) {
-    localStorage.setItem('ta3-timer', JSON.stringify({timerStartedAt, totalSecs, running: true, lastTask: lastTaskForRepeat}));
-  } else {
-    localStorage.removeItem('ta3-timer');
-  }
-}
-function load() {
-  try { const raw = JSON.parse(localStorage.getItem('ta3-entries') || '[]'); entries = Array.isArray(raw) ? raw : Object.values(raw).filter(e=>e&&e.id); } catch(e){ entries=[]; }
-  try { const s = JSON.parse(localStorage.getItem('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
-  try { reviews = JSON.parse(localStorage.getItem('ta3-reviews') || '{}'); } catch(e){ reviews={}; }
-  try { weeklyReviews = JSON.parse(localStorage.getItem('ta3-weekly-reviews') || '{}'); } catch(e){ weeklyReviews={}; }
-  intention = localStorage.getItem('ta3-intention') || '';
-  if (!settings.presets?.length) settings.presets = DEFAULT_PRESETS;
-  // Pre-fill intention from yesterday's "tomorrow" field if today's is empty
-  if (!intention) {
-    const yesterday = toDateKey(new Date(Date.now() - 86400000));
-    if (reviews[yesterday]?.tomorrow) intention = reviews[yesterday].tomorrow;
-  }
-  // Restore daily commitment
-  try {
-    const c = JSON.parse(localStorage.getItem('ta3-commitment') || 'null');
-    if (c && c.date === toDateKey(new Date())) {
-      dailyCommitment = c.goal || 0;
-      snoozesUsedToday = c.snoozesToday || 0;
-    }
-  } catch(e) {}
-  // Restore timer state across refresh
-  try {
-    const saved = JSON.parse(localStorage.getItem('ta3-timer') || 'null');
-    if (saved && saved.running && saved.timerStartedAt) {
-      const elapsed = Math.floor((Date.now() - saved.timerStartedAt) / 1000);
-      if (elapsed < saved.totalSecs) {
-        timerStartedAt = saved.timerStartedAt;
-        totalSecs = saved.totalSecs;
-        remaining = Math.max(0, totalSecs - elapsed);
-        running = true;
-        lastTaskForRepeat = saved.lastTask || '';
-      }
-    }
-  } catch(e) {}
-}
+// persist, load — moved to storage.js
 
 // ══════════════════════════════════════════════════════
 // TIMER
@@ -1464,17 +1777,39 @@ function fmtDur(min) {
 }
 
 function updateRing() {
-// change color if distracted
-if (currentState === 'distraction') {
-  document.getElementById('ring').style.stroke = '#ff6b6b';
-} else {
-  document.getElementById('ring').style.stroke = 'var(--deep)';
-}
+  const ring = document.getElementById('ring');
+  if (!ring) return;
+  // Ring fills UP as elapsed time grows
   const pct = remaining / totalSecs;
-  document.getElementById('ring').style.strokeDashoffset = CIRCUM*(1-pct);
-  document.getElementById('countdown').textContent = fmt(remaining);
-  document.getElementById('ring-pct').textContent = Math.round(pct*100)+'%';
-  document.getElementById('focus-countdown').textContent = fmt(remaining);
+  ring.style.strokeDashoffset = CIRCUM * pct;
+  ring.style.stroke = currentState === 'distraction' ? '#ff6b6b' : 'var(--deep)';
+
+  // Live seconds in ring center: show time elapsed in current block (MM:SS)
+  const blockElapsedSecs = totalSecs - remaining;
+  const bm = Math.floor(blockElapsedSecs / 60);
+  const bs = blockElapsedSecs % 60;
+  const secsEl = document.getElementById('hero-ring-secs');
+  if (secsEl) secsEl.textContent = `${bm}:${String(bs).padStart(2,'0')}`;
+
+  // Hero: total elapsed on this task (whole minutes)
+  const totalElapsedMin = taskStartTime ? Math.max(0, Math.floor((Date.now() - taskStartTime) / 60000)) : 0;
+  const elEl = document.getElementById('hero-elapsed');
+  if (elEl) elEl.textContent = totalElapsedMin;
+
+  const nameEl = document.getElementById('hero-task-name');
+  if (nameEl && currentTask) nameEl.textContent = currentTask;
+
+  // Tracking glow class
+  const hero = document.getElementById('activity-hero');
+  if (hero) hero.classList.toggle('tracking', running);
+
+  // Legacy compat
+  const cdEl = document.getElementById('countdown');
+  if (cdEl) cdEl.textContent = fmt(remaining);
+  const pctEl = document.getElementById('ring-pct');
+  if (pctEl) pctEl.textContent = Math.round((1 - pct) * 100) + '%';
+  const focEl = document.getElementById('focus-countdown');
+  if (focEl) focEl.textContent = fmt(remaining);
 }
 
 async function toggleTimer() {
@@ -1543,6 +1878,7 @@ function updateTimerTaskLabel() {
 async function _startTimer(task) {
   currentTask = task;
   lastTaskForRepeat = task;
+  taskStartTime = Date.now();
   blockStartTime = Date.now();
   lastStateChange = Date.now();
   currentState = 'deep';
@@ -1553,6 +1889,17 @@ async function _startTimer(task) {
   timerOwnerDeviceId = syncedDeviceId;
   running = true;
   switchState('deep');
+  // Hero UI: show active state
+  document.getElementById('hero-idle').style.display = 'none';
+  document.getElementById('hero-active').style.display = 'block';
+  document.getElementById('hero-away').style.display = 'none';
+  document.getElementById('hero-task-name').textContent = task;
+  document.getElementById('hero-elapsed').textContent = '0';
+  const secsEl = document.getElementById('hero-ring-secs');
+  if (secsEl) secsEl.textContent = '0:00';
+  document.getElementById('activity-hero').classList.add('tracking');
+  document.getElementById('switch-panel').style.display = 'none';
+  // Legacy compat
   document.getElementById('main-btn').textContent = 'Break';
   document.getElementById('switch-btn').style.display = 'inline-flex';
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min`;
@@ -1564,7 +1911,7 @@ async function _startTimer(task) {
     remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
     remaining <= 0 ? doPing() : updateRing();
   }, 1000);
-  scheduleNativePing(totalSecs); // fires even when app is backgrounded
+  scheduleNativePing(totalSecs);
   persist();
   syncTimerState();
 }
@@ -1605,6 +1952,7 @@ function resetTimer() {
   running = false; clearInterval(ticker); ticker = null;
   cancelNativePing();
   if (breakActive) { clearInterval(breakTicker); breakTicker = null; breakActive = false; document.getElementById('break-active-row').classList.remove('show'); }
+  taskStartTime = null;
   document.getElementById('interval-input').disabled = false;
   document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
   document.getElementById('main-btn').disabled = false;
@@ -1614,6 +1962,13 @@ function resetTimer() {
   document.getElementById('main-btn').textContent = 'Start';
   document.getElementById('timer-status').textContent = 'Ready';
   currentTask = ''; updateTimerTaskLabel();
+  // Hero UI: back to idle
+  document.getElementById('hero-active').style.display = 'none';
+  document.getElementById('hero-away').style.display = 'none';
+  document.getElementById('hero-idle').style.display = 'block';
+  document.getElementById('hero-task-input').value = '';
+  document.getElementById('switch-panel').style.display = 'none';
+  document.getElementById('activity-hero').classList.remove('tracking');
   updateRing(); syncTimerState();
 }
 
@@ -1692,6 +2047,7 @@ function startBreak(mins) {
   // Show break UI
   _updateBreakDisplay();
   document.getElementById('break-active-row').classList.add('show');
+  document.getElementById('hero-active').style.display = 'none'; // hide active panel during break
   document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
   document.getElementById('main-btn').textContent = 'On Break';
   document.getElementById('main-btn').disabled = true;
@@ -1719,6 +2075,8 @@ function endBreak() {
   breakActive = false;
 
   document.getElementById('break-active-row').classList.remove('show');
+  document.getElementById('hero-active').style.display = 'block'; // restore active panel
+  document.getElementById('hero-task-name').textContent = currentTask || lastTaskForRepeat || 'Work';
   document.getElementById('main-btn').disabled = false;
   document.getElementById('main-btn').textContent = 'Break';
   document.getElementById('switch-btn').style.display = 'inline-flex';
@@ -1731,10 +2089,10 @@ function endBreak() {
     blockIntervalMin: actualDur,
     date: toDateKey(new Date()),
     activity: 'Break',
-    energy: 'break',
+    energy: 'recovery',
     onPlan: true,
-    break: true
   };
+  entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
   entries.unshift(entry);
 
   // Restart timer for next block
@@ -1859,6 +2217,17 @@ function openQuickLog() {
     formBody.style.display = 'block';
   }
 
+  renderQuickActionGrid('ql-quick-actions', option => {
+    if (quickLogBusy) return;
+    quickLogBusy = true;
+    _doQuickSave(option.activity, option.energy);
+  });
+  renderRecentTaskGrid('ql-recent-tasks', 'ql-recent-wrap', item => {
+    if (quickLogBusy) return;
+    quickLogBusy = true;
+    _doQuickSave(item.activity, item.energy);
+  });
+
   // Recent chips
   populateQlChips();
 
@@ -1877,14 +2246,7 @@ function setQlEnergy(type) {
 }
 
 function populateQlChips() {
-  const seen = new Set();
-  const recent = [];
-  for (const e of entries) {
-    if (e.missed || e.break || e.away || !e.activity) continue;
-    const key = e.activity.split(' (Output:')[0];
-    if (!seen.has(key)) { seen.add(key); recent.push({ activity: key, energy: e.energy }); }
-    if (recent.length >= 8) break;
-  }
+  const recent = getRecentLogOptions(8);
   const wrap = document.getElementById('ql-chips-wrap');
   const chips = document.getElementById('ql-chips');
   if (!recent.length) { wrap.style.display = 'none'; return; }
@@ -1933,15 +2295,17 @@ function _doQuickSave(activity, energy) {
   if (LocalNotifications) LocalNotifications.cancel({ notifications: [{ id: PING_FOLLOWUP_ID }] }).catch(()=>{});
   stopAlertLoop();
   if (!activity) activity = energy;
+  const _now = Date.now();
   const entry = {
-    id: Date.now(), ts: Date.now(),
-    tsStart: blockStartTime || (Date.now() - totalSecs * 1000),
+    id: _now, ts: _now, updatedAt: _now,
+    tsStart: blockStartTime || (_now - totalSecs * 1000),
     blockIntervalMin: settings.intervalMin,
     date: toDateKey(new Date()),
     activity, energy,
-    onPlan: energy !== 'distraction',
+    onPlan: energy !== 'distraction' && energy !== 'waste',
     quickLogged: true
   };
+  entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
   entries.unshift(entry);
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
@@ -1969,34 +2333,24 @@ function snoozeLog() {
 
 function showLogFeedback(energy) {
   const ring = document.getElementById('ring');
-  ring.classList.add('ring-flash');
-  ring.addEventListener('animationend', () => ring.classList.remove('ring-flash'), {once: true});
-  const deepCount = getTodayEntries().filter(e => e.energy === 'deep' && !e.missed).length;
-  if (energy === 'deep') {
-    showToast(`Deep block logged · ${deepCount} deep block${deepCount !== 1 ? 's' : ''} today`);
-  } else if (energy === 'distraction') {
-    showToast('Distraction logged — refocus for next block');
-  } else {
-    showToast('Logged ✓');
-  }
+  if (ring) { ring.classList.add('ring-flash'); ring.addEventListener('animationend', () => ring.classList.remove('ring-flash'), {once:true}); }
+  const todayE = getTodayEntries().filter(e => !e.missed);
+  const latest = todayE[0];
+  if (latest) fireBehavioralFeedback(latest, todayE);
 }
 
-function checkEscalation() {
-  const todayE = getTodayEntries();
-  const missedToday = todayE.filter(e => e.missed).length;
-  let dStreak = 0;
-  for (const e of todayE) {
-    if (e.energy === 'distraction' || e.missed) dStreak++;
-    else break;
-  }
-  if (dStreak >= 5) {
-    settings.exitDelay = 60;
-    persist();
-    showToast('Focus lock active — exit delay set to 60s');
-  }
-  // Only trigger penalty after 5 in a row, not 2
-  if (dStreak >= 5) triggerPenaltyMode();
+// ══════════════════════════════════════════════════════
+// BEHAVIORAL FEEDBACK ENGINE
+// ══════════════════════════════════════════════════════
+let _feedbackTimer = null;
+
+function fireBehavioralFeedback(entry, todayE) {
+  const fb = analyzeBehavior(entry, todayE);
+  if (!fb) return;
+  renderFeedbackFlash(fb);
 }
+
+// analyzeBehavior, renderFeedbackFlash, dismissFeedbackFlash, checkEscalation — moved to insights.js
 
 function setDailyCommitment() {
   document.getElementById('commitment-custom').value = dailyCommitment || '';
@@ -2042,7 +2396,7 @@ let pomodoroCount = 0; // completed sessions this focus session
 let focusStartTime = null; // tracks when focus mode began
 
 function updateFocusDeepBar() {
-  const todayE = getTodayEntries().filter(e => !e.missed && !e.break);
+  const todayE = getTodayEntries().filter(e => !e.missed);
   const deepBlocks = todayE.filter(e => e.energy === 'deep').length;
   const goal = dailyCommitment || settings.deepGoal || 8;
   const pct = Math.min(100, Math.round((deepBlocks / goal) * 100));
@@ -2319,6 +2673,79 @@ function showView(name) {
 // ══════════════════════════════════════════════════════
 // LOG MODAL
 // ══════════════════════════════════════════════════════
+function getRecentLogOptions(limit = 6) {
+  const seen = new Set();
+  const recent = [];
+  for (const e of entries) {
+    if (e.missed || e.break || e.away || !e.activity) continue;
+    const activity = e.activity.split(' (Output:')[0].trim();
+    if (!activity) continue;
+    const key = `${activity.toLowerCase()}|${e.energy || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    recent.push({ activity, energy: e.energy || 'shallow' });
+    if (recent.length >= limit) break;
+  }
+  return recent;
+}
+
+function formatEnergyLabel(energy) {
+  return ({
+    deep: 'Deep Work',
+    shallow: 'Shallow Work',
+    recovery: 'Recovery',
+    exercise: 'Exercise',
+    errands: 'Errands',
+    waste: 'Waste',
+    nine5: '9-5',
+    learning: 'Learning',
+    social: 'Social',
+    distraction: 'Distraction'
+  })[energy] || energy || 'Activity';
+}
+
+function renderQuickActionGrid(containerId, clickHandler) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = '';
+  QUICK_ACTIVITY_OPTIONS.forEach((option, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `quick-action-btn ${option.energy}`;
+    btn.innerHTML = `<span class="qa-title">${option.label}</span><span class="qa-meta">${option.hint}</span>`;
+    btn.addEventListener('click', () => clickHandler(option, idx));
+    el.appendChild(btn);
+  });
+}
+
+function renderRecentTaskGrid(containerId, wrapId, clickHandler) {
+  const el = document.getElementById(containerId);
+  const wrap = document.getElementById(wrapId);
+  if (!el || !wrap) return;
+  const recent = getRecentLogOptions();
+  if (!recent.length) {
+    wrap.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  wrap.style.display = 'block';
+  el.innerHTML = '';
+  recent.forEach((item, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'recent-task-btn';
+    btn.innerHTML = `<span class="rt-title">${item.activity}</span><span class="rt-meta">${formatEnergyLabel(item.energy)}</span>`;
+    btn.addEventListener('click', () => clickHandler(item, idx));
+    el.appendChild(btn);
+  });
+}
+
+function saveLogChoice(activity, energy) {
+  document.getElementById('f-activity').value = activity;
+  setEnergy(energy);
+  saveEntry();
+}
+
 let logIsPing = false;
 function openLog(pingNum) {
   // Prevent opening if any log modal is already visible
@@ -2337,7 +2764,7 @@ function openLog(pingNum) {
   document.getElementById('f-rate').value='';
   document.getElementById('detail-body').classList.remove('open');
   document.getElementById('detail-arrow').textContent='▸';
-  document.querySelectorAll('.energy-btn').forEach(b=>b.classList.remove('selected'));
+  document.querySelectorAll('#log-overlay .energy-btn').forEach(b=>b.classList.remove('selected'));
   selectedOnPlan = null;
   if (switchingTask) {
     const elapsed = blockStartTime ? Math.round((Date.now() - blockStartTime) / 60000) : settings.intervalMin;
@@ -2392,6 +2819,8 @@ function openLog(pingNum) {
     chip.onclick=()=>{ document.getElementById('f-activity').value=p.label; setEnergy(p.energy); chips.querySelectorAll('.preset-chip').forEach(c=>c.classList.remove('selected')); chip.classList.add('selected'); };
     chips.appendChild(chip);
   });
+  renderQuickActionGrid('log-quick-actions', option => saveLogChoice(option.activity, option.energy));
+  renderRecentTaskGrid('log-recent-tasks', 'log-recent-wrap', item => saveLogChoice(item.activity, item.energy));
   document.getElementById('log-overlay').classList.add('open');
   setTimeout(()=>document.getElementById('f-activity').focus(),250);
 }
@@ -2404,7 +2833,7 @@ function saveLastEntry() {
   // Pre-fill and immediately save
   document.getElementById('f-activity').value = activity;
   setEnergy(energy);
-  setOnPlan(energy !== 'distraction');
+  setOnPlan(energy !== 'distraction' && energy !== 'waste');
   saveEntry();
 }
 
@@ -2505,10 +2934,12 @@ function saveRetroEntry() {
     // Update existing entry in place
     const idx = entries.findIndex(e => e.id === editingEntryId);
     if (idx !== -1) {
-      entries[idx] = { ...entries[idx], activity, energy: retroEnergy,
-        onPlan: retroEnergy !== 'distraction',
+      const updated = { ...entries[idx], activity, energy: retroEnergy,
+        onPlan: retroEnergy !== 'distraction' && retroEnergy !== 'waste',
         tsStart, ts: tsEnd, blockIntervalMin: dur,
         date: toDateKey(new Date(tsStart)) };
+      updated.category = getBucket(updated); updated.originalLabel = updated.energy || null;
+      entries[idx] = updated;
     }
     editingEntryId = null;
     editingEntryBase = null;
@@ -2524,9 +2955,10 @@ function saveRetroEntry() {
       blockIntervalMin: dur,
       date: toDateKey(new Date(tsStart)),
       activity, energy: retroEnergy,
-      onPlan: retroEnergy !== 'distraction',
+      onPlan: retroEnergy !== 'distraction' && retroEnergy !== 'waste',
       retro: true
     };
+    entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
     entries.push(entry);
     entries.sort((a,b) => b.ts - a.ts);
     persist(); renderToday(); syncEntries();
@@ -2547,9 +2979,9 @@ function dismissLog() {
 
 function setEnergy(type) {
   selectedEnergy=type;
-  document.querySelectorAll('.energy-btn').forEach(b=>b.classList.toggle('selected',b.classList.contains(type)));
+  document.querySelectorAll('#log-overlay .energy-btn').forEach(b=>b.classList.toggle('selected',b.classList.contains(type)));
   // Auto-set on-plan: distraction = off-plan, everything else = on-plan
-  if (type === 'distraction') setOnPlan(false);
+  if (type === 'distraction' || type === 'waste') setOnPlan(false);
   else setOnPlan(true);
 }
 function setOnPlan(val) {
@@ -2579,9 +3011,10 @@ function saveEntry() {
     rate:parseFloat(document.getElementById('f-rate').value)||null,
     note:document.getElementById('f-note').value.trim(),
   };
+  entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
 
   getActivityColor(activity); // assign color on first save
-  if (entry.energy === 'distraction') switchState('distraction');
+  if (entry.energy === 'waste') switchState('distraction');
   entries.unshift(entry);
   stopAlertLoop();
   hidePingBanner();
@@ -2645,7 +3078,8 @@ function triggerPenaltyMode() {
 function deleteEntry(id) {
   entries=entries.filter(e=>e.id!==id);
   persist(); renderToday(); renderWeek(); renderWeekTable();
-  syncEntries();
+  // Explicitly remove from Firebase so it doesn't come back on the next sync
+  if (fbRoomRef && roomCode) fbDb.ref(`rooms/${roomCode}/entries/e_${id}`).remove();
 }
 
 function startSprint() {
@@ -2675,20 +3109,12 @@ function getTimeByActivity(entriesArr) {
 
   return map;
 }
-function toDateKey(d){
-  // Day boundaries use the canonical timezone so all devices agree on which "day" it is
-  return new Intl.DateTimeFormat('en-CA', {timeZone: settings.timezone}).format(d);
-}
+// toDateKey — moved to storage.js
 // Display time always in THIS device's local timezone from the raw ts
 function localTime(ts){
   return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
 }
-function getTodayEntries(){const k=toDateKey(new Date());return entries.filter(e=>e.date===k);}
-function getWeekEntries(offset=0){
-  const days = getWeekDays(offset);
-  const keys = new Set(days.map(d=>d.key));
-  return entries.filter(e=>keys.has(e.date));
-}
+// getTodayEntries, getWeekEntries — moved to storage.js
 function computeDeepScore(arr){return arr.length?Math.round(arr.filter(e=>e.energy==='deep').length/arr.length*100):0;}
 function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(settings.intervalMin/60)).toFixed(1);}
 function computeStreak(){let s=0;const d=new Date();for(let i=0;i<30;i++){const k=toDateKey(new Date(d-i*86400000));if(entries.filter(e=>e.date===k).length>=4)s++;else if(i>0)break;}return s;}
@@ -2733,6 +3159,24 @@ function getWorkDayStartTs() {
   const [h, m] = (settings.workDayStart || '09:00').split(':').map(Number);
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0).getTime();
+}
+
+// ── Overlap clipping: display-only shallow copies, earlier block clipped to next block's start ──
+function clipOverlapsForDisplay(ascSorted) {
+  if (ascSorted.length < 2) return ascSorted;
+  const result = ascSorted.map(e => ({ ...e })); // shallow copies — never mutates stored data
+  for (let i = 0; i < result.length - 1; i++) {
+    const curr = result[i];
+    const next = result[i + 1];
+    const nextStart = next.tsStart || next.ts;
+    if (curr.ts > nextStart) {
+      // Earlier block overruns next block's start — clip it
+      curr.ts = nextStart;
+      const startMs = curr.tsStart || (curr.ts - (curr.blockIntervalMin || 1) * 60000);
+      curr.blockIntervalMin = Math.max(1, Math.round((curr.ts - startMs) / 60000));
+    }
+  }
+  return result;
 }
 
 // ── Gap detection: anchored to work day start, not first entry ──
@@ -2832,7 +3276,7 @@ function renderGapsList(gaps) {
   ];
   document.getElementById('gaps-list').innerHTML = gaps.map((g, i) => {
     const endLabel = g.isCurrent ? 'now' : fmt(g.ts);
-    const label = g.isCurrent ? 'Since last log' : 'Unlogged gap';
+    const label = g.isCurrent ? 'Untracked (since last log)' : 'Untracked';
     const awayBtns = awayTypes.map(a =>
       `<button onclick="logAwayBlock(${g.tsStart},${Math.round(g.ts)},'${a.activity}','${a.energy}',${i})"
         style="flex:1;min-width:0;padding:6px 4px;background:var(--bg4);border:1px solid var(--border2);
@@ -2850,7 +3294,7 @@ function renderGapsList(gaps) {
         <div style="display:flex;align-items:center;gap:6px">
           <div style="background:var(--distraction-dim);color:var(--distraction);font-size:11px;font-weight:700;
                       padding:4px 10px;border-radius:999px;flex-shrink:0">${g.gapMin}m</div>
-          <span style="font-size:11px;color:var(--muted)">Log it →</span>
+          <span style="font-size:11px;color:var(--muted)">Fill in →</span>
         </div>
       </button>
       <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
@@ -2867,7 +3311,7 @@ function logAwayBlock(tsStart, tsEnd, activity, energy, gapIndex) {
     id: Date.now(), ts: tsEnd, tsStart,
     blockIntervalMin: dur, date: toDateKey(new Date(tsEnd)),
     activity, energy, onPlan: true,
-    break: energy === 'break', away: true
+    away: true
   };
   entries.unshift(entry);
   persist(); renderToday(); syncEntries();
@@ -2960,15 +3404,14 @@ function renderEntryRow(item) {
   const badgeStyle = actColor ? `style="background:${actColor}22;color:${actColor};border-radius:4px"` : '';
 
   if (item.missed) {
-    // Untracked block — show like a gap row with a Log it button
-    return `<div class="tl-row tl-gap-row">
+    return `<div class="tl-row tl-untracked-row">
       <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
-      <div class="tl-bar-col tl-bar-gap"></div>
+      <div class="tl-bar-col tl-bar-untracked"></div>
       <div class="tl-content">
-        <div class="tl-activity">Untracked block<span class="tl-badge missed">${fmtDur(dur)}</span></div>
+        <div class="tl-activity">Untracked<span class="tl-badge tl-badge-untracked">${fmtDur(dur)}</span></div>
         <div class="tl-meta">${timeLabel}</div>
       </div>
-      <button class="log-gap-btn" onclick="openEditEntry(${item.id})">Log it</button>
+      <button class="log-gap-btn" onclick="openEditEntry(${item.id})">Fill in</button>
     </div>`;
   }
 
@@ -2984,16 +3427,15 @@ function renderEntryRow(item) {
 }
 
 function renderGapRow(item) {
-  const gapLabel = item.isCurrent ? 'Since last log' : 'Unlogged gap';
   const endLabel = item.isCurrent ? 'now' : localTime(item.ts);
-  return `<div class="tl-row tl-gap-row">
+  return `<div class="tl-row tl-untracked-row">
     <div class="tl-time">${localTime(item.tsStart)}</div>
-    <div class="tl-bar-col tl-bar-gap"></div>
+    <div class="tl-bar-col tl-bar-untracked"></div>
     <div class="tl-content">
-      <div class="tl-activity">${gapLabel}<span class="tl-badge missed">${fmtDur(item.gapMin)}</span></div>
+      <div class="tl-activity">Untracked<span class="tl-badge tl-badge-untracked">${fmtDur(item.gapMin)}</span></div>
       <div class="tl-meta">${localTime(item.tsStart)} – ${endLabel}</div>
     </div>
-    <button class="log-gap-btn" onclick="openRetroLogPrefilled(${item.tsStart},${Math.round(item.ts)})">Log it</button>
+    <button class="log-gap-btn" onclick="openRetroLogPrefilled(${item.tsStart},${Math.round(item.ts)})">Fill in</button>
   </div>`;
 }
 
@@ -3014,6 +3456,11 @@ function toggleTlBucket(id) {
   children.classList.toggle('open', isOpen);
   if (btn) btn.textContent = (isOpen ? '▾ ' : '▸ ') + (btn.textContent.replace(/[▾▸]\s*/,''));
 }
+
+// _renderTodayPending, scheduleRenderToday — moved to storage.js
+
+// Cache key — skip expensive innerHTML work when today's entries haven't changed
+let _todayRenderKey = '';
 
 function renderToday() {
   const todayE = getTodayEntries();
@@ -3041,18 +3488,24 @@ function renderToday() {
     document.getElementById('commit-label').textContent = 'Set a goal';
   }
 
+  // Cache key — only rebuild timeline/list DOM when today's entries actually change
+  const newRenderKey = todayE.map(e => e.id + ':' + (e.updatedAt || e.ts)).join(',');
+  const entriesChanged = newRenderKey !== _todayRenderKey;
+  if (entriesChanged) _todayRenderKey = newRenderKey;
+
   const tlEl = document.getElementById('timeline-blocks');
 
-  if (!todayE.length) {
-    tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
-  } else {
-    // Sort entries chronologically, then interleave detected gaps
-    // Filter out old missed/untracked entries — gaps cover that time already
-    const sorted = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-    const gaps = computeGaps(todayE);
-    const combined = [...sorted, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-
-    tlEl.innerHTML = renderTimelineCombined(combined);
+  if (entriesChanged) {
+    if (!todayE.length) {
+      tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
+    } else {
+      // Sort chronologically, clip overlaps, then interleave gaps
+      const sorted  = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+      const clipped = clipOverlapsForDisplay(sorted);
+      const gaps    = computeGaps(todayE);
+      const combined = [...clipped, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+      tlEl.innerHTML = renderTimelineCombined(combined);
+    }
   }
 
   // Untracked banner + past block nav button
@@ -3069,6 +3522,9 @@ function renderToday() {
     banner.style.display = 'none';
   }
 
+  // Daily summary card
+  renderDailySummary();
+
   // Timeline summary
   const untrackedStr = untrackedMin > 0 ? ` · ${Math.round(untrackedMin/60*10)/10}h unlogged` : ' · fully logged ✓';
   document.getElementById('timeline-summary').textContent =
@@ -3076,12 +3532,15 @@ function renderToday() {
 
   const listEl = document.getElementById('recent-list');
 
-  if (!todayE.length) {
-    listEl.innerHTML = '<div class="empty"><span class="empty-icon">⏱</span>Start the timer and log your first block.</div>';
-    return;
-  }
+  if (entriesChanged) {
+    if (!todayE.length) {
+      listEl.innerHTML = '<div class="empty"><span class="empty-icon">⏱</span>Start the timer and log your first block.</div>';
+      renderRecentChips();
+      renderAwarenessSignal();
+      return;
+    }
 
-  listEl.innerHTML = todayE.slice(0, 6).map(e => {
+    listEl.innerHTML = todayE.slice(0, 6).map(e => {
   const duration = e.segments
     ? Math.round(e.segments.reduce((sum, s) => sum + s.duration, 0) / 60)
     : e.tsStart
@@ -3110,9 +3569,131 @@ function renderToday() {
       <button class="btn sm ghost" style="padding:3px 7px;font-size:11px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
     </div>
    `;
-}).join('');
+    }).join('');
+  } // end if (entriesChanged)
+
   renderRecentChips();
+  renderAwarenessSignal();
 }
+
+// ══════════════════════════════════════════════════════
+// HERO UI ACTIONS
+// ══════════════════════════════════════════════════════
+function startFromHero() {
+  const input = document.getElementById('hero-task-input');
+  const task = input.value.trim();
+  if (!task) { showToast('What will you work on?'); input.focus(); return; }
+  input.value = '';
+  _startTimer(task);
+}
+
+let _switchTasks = [];
+function openSwitchPanel() {
+  const panel = document.getElementById('switch-panel');
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    document.getElementById('switch-input').value = '';
+    _switchTasks = [];
+    const seen = new Set();
+    for (const e of entries) {
+      if (e.missed || e.break || e.away || !e.activity) continue;
+      const key = e.activity.split(' (Output:')[0];
+      if (!seen.has(key) && key !== currentTask) { seen.add(key); _switchTasks.push(key); }
+      if (_switchTasks.length >= 20) break;
+    }
+    renderSwitchList(_switchTasks);
+    setTimeout(() => document.getElementById('switch-input').focus(), 100);
+  }
+}
+
+function renderSwitchList(tasks) {
+  const el = document.getElementById('switch-list');
+  if (!tasks.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px">No recent tasks</div>'; return; }
+  el.innerHTML = tasks.map(t => `<div class="switch-list-item">${t}</div>`).join('');
+  el.querySelectorAll('.switch-list-item').forEach((item, i) => {
+    item.addEventListener('click', () => fillSwitch(tasks[i]));
+  });
+}
+
+function fillSwitch(task) {
+  document.getElementById('switch-input').value = task;
+  switchToTask(task);
+}
+
+function filterSwitchList(val) {
+  const filtered = val.trim()
+    ? _switchTasks.filter(t => t.toLowerCase().includes(val.toLowerCase()))
+    : _switchTasks;
+  renderSwitchList(filtered);
+}
+
+function confirmSwitch() {
+  const input = document.getElementById('switch-input');
+  const task = input.value.trim();
+  if (!task) { showToast('What task are you switching to?'); return; }
+  switchToTask(task);
+}
+
+function switchToTask(task) {
+  // Log current block before switching
+  if (running && blockStartTime) {
+    const tsEnd = Date.now();
+    const dur = Math.max(1, Math.round((tsEnd - blockStartTime) / 60000));
+    const prevTask = currentTask || lastTaskForRepeat || 'Work';
+    const lastEnergy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
+    entries.unshift({
+      id: tsEnd, ts: tsEnd, tsStart: blockStartTime,
+      blockIntervalMin: dur,
+      date: toDateKey(new Date()),
+      activity: prevTask, energy: lastEnergy,
+      onPlan: lastEnergy !== 'distraction', retro: false
+    });
+    getActivityColor(prevTask);
+    lastTaskForRepeat = prevTask;
+    persist(); renderToday(); syncEntries();
+    showToast(`Logged: ${prevTask} · ${fmtDur(dur)}`);
+  }
+  document.getElementById('switch-panel').style.display = 'none';
+  _startTimer(task);
+}
+
+function quickRetroLog() {
+  const taskInput = document.getElementById('retro-task');
+  const task = taskInput.value.trim();
+  if (!task) { showToast('What did you do?'); taskInput.focus(); return; }
+  const dur = parseInt(document.getElementById('retro-dur').value) || 30;
+  const timeVal = document.getElementById('retro-time').value; // "HH:MM"
+  let tsStart;
+  if (timeVal) {
+    const [h, m] = timeVal.split(':').map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    tsStart = d.getTime();
+    // If the time is in the future, assume it was yesterday
+    if (tsStart > Date.now()) tsStart -= 86400000;
+  } else {
+    tsStart = Date.now() - dur * 60000;
+  }
+  const tsEnd = tsStart + dur * 60000;
+  const entry = {
+    id: tsEnd, ts: tsEnd, tsStart,
+    blockIntervalMin: dur,
+    date: toDateKey(new Date(tsStart)),
+    activity: task, energy: 'shallow',
+    onPlan: true, retro: true
+  };
+  entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
+  getActivityColor(task);
+  entries.push(entry);
+  entries.sort((a, b) => b.ts - a.ts);
+  persist(); renderToday(); syncEntries();
+  taskInput.value = '';
+  document.getElementById('retro-time').value = '';
+  showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+}
+
+// generateInsights, renderAwarenessSignal — moved to insights.js
 
 // ══════════════════════════════════════════════════════
 // RECENT TASK CHIPS
@@ -3141,16 +3722,9 @@ function renderRecentChips() {
 function useChip(idx) {
   const task = recentChipTasks[idx];
   if (!task) return;
-  document.getElementById('intention').value = task;
-  intention = task;
-  localStorage.setItem('ta3-intention', task);
   if (running) {
-    currentTask = task;
-    lastTaskForRepeat = task;
-    updateTimerTaskLabel();
-    showToast(`Now: ${task}`);
+    switchToTask(task);
   } else {
-    lastTaskForRepeat = task;
     _startTimer(task);
   }
 }
@@ -3191,15 +3765,37 @@ function doContinueBlock() {
 function doSwitchFromBanner() {
   hideContinueBanner();
   clearTimeout(snoozeTimer);
-  const intentEl = document.getElementById('intention');
-  intentEl.value = '';
-  intention = '';
-  intentEl.focus();
+  // Stop timer — user will start fresh task
+  running = false;
+  clearInterval(ticker); ticker = null;
+  timerStartedAt = null;
+  taskStartTime = null;
+  cancelNativePing();
+  // Show hero-idle
+  document.getElementById('hero-active').style.display = 'none';
+  document.getElementById('hero-idle').style.display = 'block';
+  document.getElementById('switch-panel').style.display = 'none';
+  const heroInput = document.getElementById('hero-task-input');
+  if (heroInput) { heroInput.value = ''; setTimeout(() => heroInput.focus(), 100); }
   showToast('Type your next task and tap Start');
 }
 
 // ══════════════════════════════════════════════════════
 // AWAY TRACKING
+function toggleIdleAwayPicker() {
+  const picker = document.getElementById('idle-away-picker');
+  const isOpen = picker.classList.contains('show');
+  // Close the active away picker too just in case
+  document.getElementById('away-picker').classList.remove('show');
+  if (isOpen) {
+    picker.classList.remove('show');
+  } else {
+    picker.classList.add('show');
+    document.getElementById('idle-away-custom').value = '';
+    setTimeout(() => document.getElementById('idle-away-custom').focus(), 150);
+  }
+}
+
 // ══════════════════════════════════════════════════════
 function toggleAway() {
   if (awayActive) {
@@ -3211,13 +3807,19 @@ function toggleAway() {
       tsStart: awayStartTime,
       blockIntervalMin: dur,
       date: toDateKey(new Date()),
-      activity: awayLabel, energy: 'away',
-      away: true, onPlan: null
+      activity: awayLabel,
+      energy: AWAY_BUCKETS[awayLabel] || 'recovery',
+      onPlan: null
     };
+    entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
     entries.unshift(entry);
+    clearInterval(awayElapsedTicker);
     awayActive = false;
     awayStartTime = null;
     awayLabel = 'Away';
+    // Hero UI: back to idle
+    document.getElementById('hero-away').style.display = 'none';
+    document.getElementById('hero-idle').style.display = 'block';
     const btn = document.getElementById('away-btn');
     btn.textContent = '⊙ Away';
     btn.style.borderColor = 'var(--away)';
@@ -3241,6 +3843,7 @@ function toggleAway() {
 
 function startAway(label) {
   document.getElementById('away-picker').classList.remove('show');
+  document.getElementById('idle-away-picker').classList.remove('show');
   // If timer is running, log current block first
   if (running) {
     const task = currentTask || lastTaskForRepeat || intention || 'Work';
@@ -3248,13 +3851,15 @@ function startAway(label) {
     const tsEnd = Date.now();
     const tsStart = blockStartTime || (tsEnd - totalSecs * 1000);
     const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
-    entries.unshift({
+    const workEntry = {
       id: tsEnd, ts: tsEnd, tsStart,
       blockIntervalMin: dur,
       date: toDateKey(new Date()),
       activity: task, energy: lastEnergy,
       onPlan: lastEnergy !== 'distraction', retro: false
-    });
+    };
+    workEntry.category = getBucket(workEntry); workEntry.originalLabel = workEntry.energy || null;
+    entries.unshift(workEntry);
     clearInterval(ticker);
     running = false;
     timerStartedAt = null;
@@ -3270,6 +3875,22 @@ function startAway(label) {
   awayActive = true;
   awayStartTime = Date.now();
   awayLabel = label;
+  // Hero UI: show away state
+  document.getElementById('hero-active').style.display = 'none';
+  document.getElementById('hero-idle').style.display = 'none';
+  document.getElementById('hero-away').style.display = 'block';
+  document.getElementById('hero-away-label').textContent = label;
+  document.getElementById('hero-away-elapsed').textContent = '0m';
+  // Away elapsed ticker
+  clearInterval(awayElapsedTicker);
+  awayElapsedTicker = setInterval(() => {
+    const totalSecs = Math.floor((Date.now() - awayStartTime) / 1000);
+    const m = Math.floor(totalSecs / 60);
+    const s = totalSecs % 60;
+    const el = document.getElementById('hero-away-elapsed');
+    if (el) el.textContent = `${m}:${String(s).padStart(2,'0')}`;
+  }, 1000);
+  // Legacy compat
   const btn = document.getElementById('away-btn');
   btn.textContent = `↩ Back (${label})`;
   btn.style.borderColor = 'var(--distraction)';
@@ -3282,35 +3903,7 @@ function startAway(label) {
 let weekSelectedDay = 'week'; // 'week', 'month', or a dateKey
 let weekRangeOffset = 0; // 0 = current week/month, -1 = last, etc.
 
-// Get Mon–Sun of a given week offset (0=this week, -1=last week)
-function getWeekDays(offset=0) {
-  const today = new Date();
-  const dow = today.getDay(); // 0=Sun
-  const mondayDiff = (dow === 0 ? -6 : 1 - dow) + offset * 7;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + mondayDiff);
-  const days = [];
-  for (let i=0; i<7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    const key = toDateKey(d);
-    const isToday = key === toDateKey(new Date());
-    const isFuture = d > today;
-    const dayE = entries.filter(e=>e.date===key && !e.missed && !e.away);
-    days.push({key, label:DAY[d.getDay()]||'?', isToday, isFuture, hasData:dayE.length>0, entries:dayE, date:d});
-  }
-  return days;
-}
-
-function getMonthEntries(offset=0) {
-  const d = new Date();
-  d.setMonth(d.getMonth() + offset, 1);
-  const year = d.getFullYear(), month = d.getMonth();
-  return entries.filter(e => {
-    const ed = new Date(e.ts);
-    return ed.getFullYear()===year && ed.getMonth()===month && !e.missed && !e.away;
-  });
-}
+// getWeekDays, getMonthEntries — moved to storage.js
 
 function getRangeLabel() {
   if (weekSelectedDay === 'month') {
@@ -3471,27 +4064,36 @@ function entryMins(e) {
 }
 
 function renderEnergySplit(el, entriesArr) {
-  const energyMins = {deep:0,shallow:0,admin:0,distraction:0};
+  const energyMins = {deep:0,shallow:0,nine5:0,errands:0,learning:0,exercise:0,social:0,recovery:0,waste:0};
   entriesArr.forEach(e => { if(energyMins[e.energy]!==undefined) energyMins[e.energy]+=entryMins(e); });
   const total = Object.values(energyMins).reduce((a,b)=>a+b,0)||1;
-  const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)'};
-  el.innerHTML = Object.entries(energyMins).map(([type,mins])=>{
+  const energyColors = {
+    deep:'var(--deep)',shallow:'var(--shallow)',nine5:'var(--nine5)',
+    errands:'var(--errands)',learning:'var(--learning)',exercise:'var(--exercise)',
+    social:'var(--social)',recovery:'var(--break)',waste:'var(--distraction)'
+  };
+  const energyLabels = {
+    deep:'Deep work',shallow:'Shallow work',nine5:'9-5',
+    errands:'Errands',learning:'Learning',exercise:'Exercise',
+    social:'Social',recovery:'Recovery',waste:'Waste'
+  };
+  el.innerHTML = Object.entries(energyMins).filter(([,m])=>m>0).map(([type,mins])=>{
     const pct = Math.round(mins/total*100);
     const hrs = mins>=60?(Math.round(mins/6)/10).toFixed(1)+'h':mins+'m';
     return `<div style="margin-bottom:6px">
       <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
-        <span style="color:${energyColors[type]};font-weight:600;text-transform:capitalize">${type}</span>
+        <span style="color:${energyColors[type]};font-weight:600">${energyLabels[type]||type}</span>
         <span style="color:var(--muted);font-family:var(--mono)">${hrs} · ${pct}%</span>
       </div>
       <div style="height:5px;background:var(--bg4);border-radius:3px;overflow:hidden">
         <div style="height:100%;width:${pct}%;background:${energyColors[type]};border-radius:3px;transition:width 0.3s"></div>
       </div></div>`;
-  }).join('');
+  }).join('') || `<div style="color:var(--muted);font-size:12px">No data</div>`;
 }
 
 function renderTopActivities(el, entriesArr, limit=8) {
   const actMap = {};
-  entriesArr.filter(e=>!e.missed&&!e.break).forEach(e=>{
+  entriesArr.filter(e=>!e.missed).forEach(e=>{
     const key = e.activity.split(' (Output')[0];
     const m = entryMins(e);
     if(!actMap[key]) actMap[key]={mins:0,energy:e.energy};
@@ -3499,7 +4101,11 @@ function renderTopActivities(el, entriesArr, limit=8) {
   });
   const top = Object.entries(actMap).sort((a,b)=>b[1].mins-a[1].mins).slice(0,limit);
   const maxMins = top[0]?.[1].mins||1;
-  const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)'};
+  const energyColors = {
+    deep:'var(--deep)',shallow:'var(--shallow)',nine5:'var(--nine5)',
+    errands:'var(--errands)',learning:'var(--learning)',exercise:'var(--exercise)',
+    social:'var(--social)',recovery:'var(--break)',waste:'var(--distraction)'
+  };
   el.innerHTML = top.length ? top.map(([act,data])=>{
     const w = Math.round(data.mins/maxMins*100);
     const color = getActivityColor(act)||energyColors[data.energy]||'var(--deep)';
@@ -3535,14 +4141,14 @@ function renderEntryList(el, entriesArr) {
 }
 
 function renderWeekOverview(days) {
-  const weekE = getWeekEntries(weekRangeOffset).filter(e=>!e.missed&&!e.away);
+  const weekE = getWeekEntries(weekRangeOffset).filter(e=>!e.missed);
   const goal = settings.deepGoal;
   const deepHrs = computeDeepHrs(weekE);
   const totalMins = weekE.reduce((s,e)=>s+entryMins(e),0);
   const pct = Math.min(100,Math.round(deepHrs/goal*100));
   const onPlanE = weekE.filter(e=>e.onPlan!==null);
   const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
-  const distractionCost = Math.round(weekE.filter(e=>e.energy==='distraction').length*(settings.intervalMin/60)*settings.targetRate);
+  const distractionCost = Math.round(weekE.filter(e=>e.energy==='waste').length*(settings.intervalMin/60)*settings.targetRate);
   const bestDay = days.reduce((a,b)=>b.entries.length&&computeDeepHrs(b.entries)>computeDeepHrs(a.entries)?b:a, days[0]);
   const activeDays = days.filter(d=>d.entries.length);
   const avgDeep = activeDays.length?(Math.round(activeDays.reduce((s,d)=>s+computeDeepHrs(d.entries),0)/activeDays.length*10)/10).toFixed(1)+'h':'—';
@@ -3624,10 +4230,15 @@ function renderWeekOverview(days) {
         <div style="display:flex;gap:6px">
           <select id="filter-energy" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
             <option value="">All types</option>
-            <option value="deep">Deep</option>
-            <option value="shallow">Shallow</option>
-            <option value="admin">Admin</option>
-            <option value="distraction">Distraction</option>
+            <option value="deep">Deep work</option>
+            <option value="shallow">Shallow work</option>
+            <option value="nine5">9-5</option>
+            <option value="errands">Errands</option>
+            <option value="learning">Learning</option>
+            <option value="exercise">Exercise</option>
+            <option value="social">Social</option>
+            <option value="recovery">Recovery</option>
+            <option value="waste">Waste</option>
           </select>
           <select id="filter-activity" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
             <option value="">All activities</option>
@@ -3718,7 +4329,7 @@ function renderDayDetail(day) {
 function renderWeekTable() {
   const energyFilter = document.getElementById('filter-energy')?.value || '';
   const actFilter = document.getElementById('filter-activity')?.value || '';
-  let filtered = getWeekEntries(weekRangeOffset).filter(e=>!e.missed&&!e.away);
+  let filtered = getWeekEntries(weekRangeOffset).filter(e=>!e.missed);
   if (energyFilter) filtered = filtered.filter(e=>e.energy===energyFilter);
   if (actFilter) filtered = filtered.filter(e=>e.activity.startsWith(actFilter));
 
@@ -3770,6 +4381,9 @@ function renderSettings() {
   document.getElementById('set-exitdelay').value=settings.exitDelay||10;
   document.getElementById('set-workdaystart').value=settings.workDayStart||'09:00';
   document.getElementById('set-timezone').value=settings.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const toneEl = document.getElementById('set-coach-tone');
+  toneEl.value = settings.coachTone || 'analyst';
+  renderTonePreview();
   document.getElementById('settings-stats').textContent=`${entries.length} total entries · ${getWeekEntries().length} this week`;
   const datesWithEntries = [...new Set(entries.map(e=>e.date))].sort().reverse();
   const todayKey = toDateKey(new Date());
@@ -3785,14 +4399,30 @@ function renderSettings() {
   pe.innerHTML=settings.presets.map((p,i)=>`<div class="preset-edit-row">
     <input type="text" value="${p.label}" onchange="settings.presets[${i}].label=this.value;persist()">
     <select onchange="settings.presets[${i}].energy=this.value;persist()">
-      <option value="deep" ${p.energy==='deep'?'selected':''}>Deep</option>
-      <option value="shallow" ${p.energy==='shallow'?'selected':''}>Shallow</option>
-      <option value="admin" ${p.energy==='admin'?'selected':''}>Admin</option>
-      <option value="distraction" ${p.energy==='distraction'?'selected':''}>Distraction</option>
+      <option value="deep" ${p.energy==='deep'?'selected':''}>Deep work</option>
+      <option value="shallow" ${p.energy==='shallow'?'selected':''}>Shallow work</option>
+      <option value="nine5" ${p.energy==='nine5'?'selected':''}>9-5</option>
+      <option value="errands" ${p.energy==='errands'?'selected':''}>Errands</option>
+      <option value="learning" ${p.energy==='learning'?'selected':''}>Learning</option>
+      <option value="exercise" ${p.energy==='exercise'?'selected':''}>Exercise</option>
+      <option value="social" ${p.energy==='social'?'selected':''}>Social</option>
+      <option value="recovery" ${p.energy==='recovery'?'selected':''}>Recovery</option>
+      <option value="waste" ${p.energy==='waste'?'selected':''}>Waste</option>
     </select>
     <button class="btn sm ghost" onclick="removePreset(${i})">✕</button>
   </div>`).join('');
   updateSyncUI();
+}
+
+const TONE_PREVIEWS = {
+  analyst: '"Deep work: 1.5h today. That\'s 18% of your tracked time."',
+  coach:   '"1.5h of deep work. That\'s not enough. What happened to the rest of your day?"',
+  mirror:  '"You spent 3 hours on low-value tasks today. The timeline doesn\'t lie."'
+};
+function renderTonePreview() {
+  const tone = (document.getElementById('set-coach-tone') || {}).value || settings.coachTone || 'analyst';
+  const el = document.getElementById('coach-tone-preview');
+  if (el) el.textContent = TONE_PREVIEWS[tone] || '';
 }
 
 function saveSettings(){
@@ -3802,6 +4432,8 @@ function saveSettings(){
   settings.exitDelay=parseInt(document.getElementById('set-exitdelay').value)||10;
   settings.workDayStart=document.getElementById('set-workdaystart').value||'09:00';
   settings.timezone=document.getElementById('set-timezone').value;
+  settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
+  renderTonePreview();
   // Sync interval back to Today tab input
   document.getElementById('interval-input').value = settings.intervalMin;
   if (!running) { totalSecs = settings.intervalMin*60; remaining = totalSecs; updateRing(); }
@@ -3823,7 +4455,7 @@ function openReview(){
   
   const todayE = getTodayEntries();
   const deepCount = todayE.filter(e => e.energy === 'deep').length;
-  const distCount = todayE.filter(e => e.energy === 'distraction').length;
+  const distCount = todayE.filter(e => e.energy === 'waste').length;
   const realityScore = deepCount - distCount;
   
   const rsVal = document.getElementById('reality-score-val');
@@ -3850,197 +4482,287 @@ function checkReviewPrompt(){if(new Date().getHours()>=18&&!reviews[toDateKey(ne
 // REFLECT  — insights, weekly review, history
 // ══════════════════════════════════════════════════════
 
-function getWeekKey(d) {
-  // Returns e.g. "2026-W15"
-  const jan4 = new Date(d.getFullYear(), 0, 4);
-  const startOfW1 = new Date(jan4);
-  startOfW1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
-  const weekNum = Math.floor((d - startOfW1) / 604800000) + 1;
-  return `${d.getFullYear()}-W${String(weekNum).padStart(2,'0')}`;
+// getWeekKey — moved to storage.js
+
+function formatWeekLabel(weekKey) {
+  // Convert "2026-W15" → "Apr 7 – Apr 13, 2026"
+  try {
+    const [yearStr, wStr] = weekKey.split('-W');
+    const year = parseInt(yearStr, 10);
+    const week = parseInt(wStr, 10);
+    const jan4 = new Date(year, 0, 4);
+    const startOfW1 = new Date(jan4);
+    startOfW1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+    const monday = new Date(startOfW1.getTime() + (week - 1) * 7 * 86400000);
+    const sunday = new Date(monday.getTime() + 6 * 86400000);
+    const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const sameYear = monday.getFullYear() === sunday.getFullYear();
+    return `${fmt(monday)} – ${fmt(sunday)}${sameYear ? ', ' + monday.getFullYear() : ''}`;
+  } catch(e) { return weekKey; }
 }
 
-function getEntriesForWeekKey(weekKey) {
-  // Get all entries whose date falls within the given weekKey
-  return entries.filter(e => {
-    if (!e.date) return false;
-    const d = new Date(e.date + 'T12:00:00');
-    return getWeekKey(d) === weekKey;
-  });
+function formatSavedAt(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' at ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
 }
 
-function computeInsights(weekKey) {
-  const we = getEntriesForWeekKey(weekKey);
-  if (!we.length) return null;
+// getEntriesForWeekKey — moved to storage.js
 
-  // Peak focus hour — which hour has most deep-work minutes
+// ══════════════════════════════════════════════════════
+// DAILY SUMMARY
+// ══════════════════════════════════════════════════════
+function computeDailySummary(dateKey) {
+  const dayEntries = entries.filter(e => e.date === dateKey && !e.missed);
+  if (!dayEntries.length) return null;
+
+  const totalMin = dayEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  if (totalMin === 0) return null;
+
+  const minFor = key => dayEntries.filter(e => e.energy === key).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const nine5Min    = minFor('nine5');
+  const deepMin     = minFor('deep');
+  const shallowMin  = minFor('shallow');
+  const errandsMin  = minFor('errands');
+  const learningMin = minFor('learning');
+  const exerciseMin = minFor('exercise');
+  const socialMin   = minFor('social');
+  const recoveryMin = minFor('recovery');
+  const wasteMin    = minFor('waste');
+
+  const productiveMin = nine5Min + deepMin + shallowMin + errandsMin + learningMin;
+  const pct = m => Math.round(m / totalMin * 100);
+  const deepPct       = pct(deepMin);
+  const nine5Pct      = pct(nine5Min);
+  const shallowPct    = pct(shallowMin);
+  const errandsPct    = pct(errandsMin);
+  const learningPct   = pct(learningMin);
+  const exercisePct   = pct(exerciseMin);
+  const socialPct     = pct(socialMin);
+  const recoveryPct   = pct(recoveryMin);
+  const wastePct      = pct(wasteMin);
+  const productivePct = pct(productiveMin);
+
+  // Peak focus hour — hour with the most deep-work minutes
   const hourBuckets = {};
-  we.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
+  dayEntries.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
     const hr = new Date(e.tsStart).getHours();
     hourBuckets[hr] = (hourBuckets[hr] || 0) + (e.blockIntervalMin || 0);
   });
-  let peakHour = null, peakMin = 0;
-  Object.entries(hourBuckets).forEach(([h, m]) => { if (m > peakMin) { peakMin = m; peakHour = Number(h); } });
-  const peakHourLabel = peakHour !== null
-    ? `${peakHour % 12 || 12}${peakHour < 12 ? 'am' : 'pm'}`
-    : '—';
-
-  // Most common distraction label
-  const distEntries = we.filter(e => e.energy === 'distraction');
-  const distCounts = {};
-  distEntries.forEach(e => {
-    const label = (e.activity || 'Unknown').trim();
-    distCounts[label] = (distCounts[label] || 0) + 1;
+  let peakHour = null, peakHourMin = 0;
+  Object.entries(hourBuckets).forEach(([h, m]) => {
+    if (m > peakHourMin) { peakHourMin = m; peakHour = Number(h); }
   });
-  let topDistraction = '—';
-  let topCount = 0;
-  Object.entries(distCounts).forEach(([l, c]) => { if (c > topCount) { topCount = c; topDistraction = l; } });
+  const peakHourLabel = peakHour !== null ? `${peakHour % 12 || 12}${peakHour < 12 ? 'am' : 'pm'}` : null;
 
-  // Best day (most deep-work minutes)
-  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const dayBuckets = {};
-  we.filter(e => e.energy === 'deep').forEach(e => {
-    const key = e.date;
-    dayBuckets[key] = (dayBuckets[key] || 0) + (e.blockIntervalMin || 0);
-  });
-  let bestDay = '—', bestDayMin = 0;
-  Object.entries(dayBuckets).forEach(([dateStr, m]) => {
-    if (m > bestDayMin) { bestDayMin = m; bestDay = dayNames[new Date(dateStr + 'T12:00:00').getDay()]; }
-  });
+  // Focus score 0–100
+  const dailyDeepGoalMin = ((settings.deepGoal || 20) / 5) * 60;
+  const focusScore = Math.min(100, Math.round(
+    deepPct * 0.5 +
+    Math.min(deepMin / Math.max(dailyDeepGoalMin, 1), 1) * 30 +
+    (productivePct >= 70 ? 20 : productivePct * 20 / 70)
+  ));
 
-  // Deep work %
-  const totalMin = we.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const deepMin = we.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const deepPct = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
-
-  // Deep work hours this week
-  const deepHrs = (deepMin / 60).toFixed(1);
-
-  return { peakHourLabel, topDistraction, bestDay, deepPct, deepHrs, totalMin };
+  return { totalMin, nine5Min, deepMin, shallowMin, errandsMin, learningMin, exerciseMin, socialMin, recoveryMin, wasteMin,
+           productiveMin, deepPct, nine5Pct, shallowPct, errandsPct, learningPct, exercisePct, socialPct, recoveryPct, wastePct, productivePct,
+           peakHour, peakHourLabel, peakHourMin, focusScore,
+           deepHrs: (deepMin / 60).toFixed(1),
+           entryCount: dayEntries.length };
 }
+
+// getDailySummaryInsight, buildDailySummaryHTML — moved to insights.js
+
+function renderDailySummary() {
+  const todayKey = toDateKey(new Date());
+  const s = computeDailySummary(todayKey);
+
+  // Today view card
+  const card = document.getElementById('daily-summary');
+  if (card) {
+    if (s) {
+      card.style.display = 'block';
+      card.classList.add('has-data');
+      card.innerHTML = buildDailySummaryHTML(s);
+    } else {
+      card.style.display = 'none';
+    }
+  }
+
+  // Reflect view panel
+  const reflectPanel = document.getElementById('reflect-daily-summary');
+  if (reflectPanel) {
+    reflectPanel.innerHTML = buildDailySummaryHTML(s);
+  }
+}
+
+// computeInsights — moved to insights.js
 
 function renderReflectView() {
   const now = new Date();
   const weekKey = getWeekKey(now);
 
+  // ── Daily summary ──
+  renderDailySummary();
+
   // ── Insights ──
   const insightsEl = document.getElementById('reflect-insights');
   const ins = computeInsights(weekKey);
+  const deepGoal = settings.deepGoal || 20;
+
   if (!ins || ins.totalMin === 0) {
-    insightsEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No data yet this week — start tracking to see patterns.</div>`;
+    insightsEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:8px 0">No data yet this week — start tracking to see your numbers.</div>`;
   } else {
+    const deepGoalPct = Math.min(100, Math.round(ins.deepMin / (deepGoal * 60) * 100));
     insightsEl.innerHTML = `
-      <div class="insight-card">
-        <div class="insight-icon">⏰</div>
-        <div><div class="insight-val">${ins.peakHourLabel}</div><div style="font-size:11px;color:var(--muted)">Peak focus hour</div></div>
-      </div>
-      <div class="insight-card">
-        <div class="insight-icon">📉</div>
-        <div><div class="insight-val" style="color:var(--distraction)">${ins.topDistraction}</div><div style="font-size:11px;color:var(--muted)">Most common distraction</div></div>
-      </div>
-      <div class="insight-card">
-        <div class="insight-icon">🏆</div>
-        <div><div class="insight-val">${ins.bestDay}</div><div style="font-size:11px;color:var(--muted)">Best day this week</div></div>
-      </div>
-      <div class="insight-card">
-        <div class="insight-icon">🎯</div>
-        <div><div class="insight-val">${ins.deepPct}%<span style="font-size:14px;font-weight:400;color:var(--muted);margin-left:6px">${ins.deepHrs}h</span></div><div style="font-size:11px;color:var(--muted)">Deep work this week</div></div>
+      <div class="reflect-stat-grid">
+        <div class="reflect-stat good">
+          <div class="reflect-stat-val">${ins.deepHrs}h</div>
+          <div class="reflect-stat-label">Deep work</div>
+          <div class="reflect-stat-sub">${ins.deepPct}% of tracked time</div>
+          <div class="reflect-goal-bar"><div class="reflect-goal-fill" style="width:${deepGoalPct}%"></div></div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Goal: ${deepGoal}h · ${deepGoalPct}% done</div>
+        </div>
+        <div class="reflect-stat ${ins.wasteMin > 0 ? 'bad' : ''}">
+          <div class="reflect-stat-val">${ins.wasteMin >= 60 ? (ins.wasteMin/60).toFixed(1)+'h' : ins.wasteMin+'m'}</div>
+          <div class="reflect-stat-label">Lost to waste</div>
+          <div class="reflect-stat-sub">${ins.worstDist !== '—' ? ins.worstDist : 'None logged'}</div>
+        </div>
+        <div class="reflect-stat">
+          <div class="reflect-stat-val">${ins.topActivity !== '—' ? ins.topActivity.slice(0,14) : '—'}</div>
+          <div class="reflect-stat-label">Top activity</div>
+          <div class="reflect-stat-sub">${ins.topActivityMin >= 60 ? (ins.topActivityMin/60).toFixed(1)+'h' : ins.topActivityMin+'m'}</div>
+        </div>
+        <div class="reflect-stat">
+          <div class="reflect-stat-val">${ins.peakHourLabel}</div>
+          <div class="reflect-stat-label">Peak focus hour</div>
+          <div class="reflect-stat-sub">Best day: ${ins.bestDay}</div>
+        </div>
       </div>`;
   }
 
-  // ── Weekly review form — pre-fill if already saved ──
+  // ── Pre-fill review form ──
   const wr = weeklyReviews[weekKey] || {};
   document.getElementById('wr-overall').value = wr.overall || '';
   document.getElementById('wr-priorities').value = wr.priorities || '';
   document.getElementById('wr-drain').value = wr.drain || '';
   document.getElementById('wr-nextweek').value = wr.nextweek || '';
-  const savedBadge = document.getElementById('weekly-review-saved');
-  savedBadge.style.display = weeklyReviews[weekKey] ? 'inline' : 'none';
+  const reviewBadge = document.getElementById('weekly-review-saved');
+  if (wr.savedAt) {
+    reviewBadge.textContent = '✓ Saved ' + formatSavedAt(wr.savedAt);
+    reviewBadge.style.display = 'inline';
+  } else {
+    reviewBadge.style.display = 'none';
+  }
 
-  // ── History ──
+  // ── Pre-fill plan form (next week's key) ──
+  const nextWeekKey = getWeekKey(new Date(now.getTime() + 7 * 86400000));
+  const wp = (weeklyReviews[nextWeekKey] || {}).plan || {};
+  document.getElementById('wp-p1').value = wp.p1 || '';
+  document.getElementById('wp-p2').value = wp.p2 || '';
+  document.getElementById('wp-p3').value = wp.p3 || '';
+  document.getElementById('wp-deepgoal').value = wp.deepgoal || '';
+  document.getElementById('wp-avoid').value = wp.avoid || '';
+  const planBadge = document.getElementById('weekly-plan-saved');
+  if (wp.savedAt) {
+    planBadge.textContent = '✓ Saved ' + formatSavedAt(wp.savedAt);
+    planBadge.style.display = 'inline';
+  } else {
+    planBadge.style.display = 'none';
+  }
+
   renderReflectHistory();
 }
 
 function saveWeeklyReview() {
   const weekKey = getWeekKey(new Date());
-  weeklyReviews[weekKey] = {
-    overall:   document.getElementById('wr-overall').value.trim(),
-    priorities:document.getElementById('wr-priorities').value.trim(),
-    drain:     document.getElementById('wr-drain').value.trim(),
-    nextweek:  document.getElementById('wr-nextweek').value.trim(),
-    savedAt:   Date.now()
+  if (!weeklyReviews[weekKey]) weeklyReviews[weekKey] = {};
+  weeklyReviews[weekKey].overall    = document.getElementById('wr-overall').value.trim();
+  weeklyReviews[weekKey].priorities = document.getElementById('wr-priorities').value.trim();
+  weeklyReviews[weekKey].drain      = document.getElementById('wr-drain').value.trim();
+  weeklyReviews[weekKey].nextweek   = document.getElementById('wr-nextweek').value.trim();
+  weeklyReviews[weekKey].savedAt    = Date.now();
+  // Snapshot the week's key stats alongside the reflection
+  const ins = computeInsights(weekKey);
+  if (ins) weeklyReviews[weekKey].stats = { deepHrs: ins.deepHrs, deepPct: ins.deepPct, wasteMin: ins.wasteMin, worstDist: ins.worstDist, topActivity: ins.topActivity };
+  persist();
+  const reviewBadge = document.getElementById('weekly-review-saved');
+  reviewBadge.textContent = '✓ Saved ' + formatSavedAt(weeklyReviews[weekKey].savedAt);
+  reviewBadge.style.display = 'inline';
+  showToast('Review saved ✓');
+  renderReflectHistory();
+}
+
+function saveWeeklyPlan() {
+  const now = new Date();
+  const nextWeekKey = getWeekKey(new Date(now.getTime() + 7 * 86400000));
+  if (!weeklyReviews[nextWeekKey]) weeklyReviews[nextWeekKey] = {};
+  weeklyReviews[nextWeekKey].plan = {
+    p1:       document.getElementById('wp-p1').value.trim(),
+    p2:       document.getElementById('wp-p2').value.trim(),
+    p3:       document.getElementById('wp-p3').value.trim(),
+    deepgoal: document.getElementById('wp-deepgoal').value.trim(),
+    avoid:    document.getElementById('wp-avoid').value.trim(),
+    savedAt:  Date.now()
   };
   persist();
-  document.getElementById('weekly-review-saved').style.display = 'inline';
-  showToast('Weekly reflection saved ✓');
+  const planBadge = document.getElementById('weekly-plan-saved');
+  planBadge.textContent = '✓ Saved ' + formatSavedAt(weeklyReviews[nextWeekKey].plan.savedAt);
+  planBadge.style.display = 'inline';
+  showToast('Plan saved ✓');
   renderReflectHistory();
 }
 
 function renderReflectHistory() {
   const histEl = document.getElementById('reflect-history');
-  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
-  // Collect all weeks that have daily reviews or weekly reviews, last 8 weeks
   const weekSet = new Set();
   const now = new Date();
-  for (let i = 0; i < 8; i++) {
-    const d = new Date(now - i * 7 * 86400000);
-    weekSet.add(getWeekKey(d));
-  }
+  for (let i = 0; i < 12; i++) weekSet.add(getWeekKey(new Date(now - i * 7 * 86400000)));
   Object.keys(weeklyReviews).forEach(k => weekSet.add(k));
 
-  // Also collect weeks from daily reviews
-  Object.keys(reviews).forEach(dateStr => {
-    const d = new Date(dateStr + 'T12:00:00');
-    if (!isNaN(d)) weekSet.add(getWeekKey(d));
-  });
+  const weeks = Array.from(weekSet).sort().reverse().slice(0, 12);
+  const currentWeek = getWeekKey(now);
 
-  const weeks = Array.from(weekSet).sort().reverse().slice(0, 10);
+  const cards = weeks.map(wk => {
+    const wr = weeklyReviews[wk] || {};
+    const plan = wr.plan;
+    const hasReview = wr.savedAt;
+    const hasPlan = plan && plan.savedAt;
+    if (!hasReview && !hasPlan) return '';
 
-  if (!weeks.length) {
-    histEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No reflections yet. Save your daily reviews to build history.</div>`;
-    return;
-  }
+    const isCurrent = wk === currentWeek;
+    const stats = wr.stats;
+    const statsHtml = stats ? `<span class="reflect-week-card-stats">${stats.deepHrs}h deep · ${stats.deepPct}% · ${stats.wasteMin != null ? stats.wasteMin : (stats.distMin || 0)}m wasted</span>` : '';
 
-  histEl.innerHTML = weeks.map(wk => {
-    const wr = weeklyReviews[wk];
-
-    // Daily reviews for this week
-    const dailyRows = Object.entries(reviews)
-      .filter(([dateStr]) => {
-        const d = new Date(dateStr + 'T12:00:00');
-        return !isNaN(d) && getWeekKey(d) === wk;
-      })
-      .sort(([a],[b]) => b.localeCompare(a))
-      .map(([dateStr, rv]) => {
-        const d = new Date(dateStr + 'T12:00:00');
-        const label = `${dayNames[d.getDay()]} ${d.getMonth()+1}/${d.getDate()}`;
-        const parts = [];
-        if (rv.win) parts.push(`<span style="color:var(--deep)">✓ ${rv.win}</span>`);
-        if (rv.waste) parts.push(`<span style="color:var(--distraction)">✗ ${rv.waste}</span>`);
-        if (rv.tomorrow) parts.push(`<span style="color:var(--muted)">→ ${rv.tomorrow}</span>`);
-        if (!parts.length) return '';
-        return `<div class="reflect-day-row"><span style="font-size:11px;color:var(--muted);min-width:48px">${label}</span><div style="display:flex;flex-direction:column;gap:3px;font-size:12px">${parts.join('')}</div></div>`;
-      }).filter(Boolean).join('');
-
-    const wrBlock = wr ? `
-      <div class="reflect-weekly-block">
-        ${wr.overall ? `<div style="margin-bottom:6px"><span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Overall</span><div style="font-size:13px;margin-top:2px">${wr.overall}</div></div>` : ''}
-        ${wr.drain ? `<div style="margin-bottom:6px"><span style="font-size:10px;color:var(--distraction);text-transform:uppercase;letter-spacing:.05em">Drain</span><div style="font-size:13px;margin-top:2px">${wr.drain}</div></div>` : ''}
-        ${wr.nextweek ? `<div><span style="font-size:10px;color:var(--deep);text-transform:uppercase;letter-spacing:.05em">Next week</span><div style="font-size:13px;margin-top:2px">${wr.nextweek}</div></div>` : ''}
+    const reviewHtml = hasReview ? `
+      <div style="padding:12px 14px;border-bottom:${hasPlan ? '1px solid var(--border)' : 'none'}">
+        <div class="reflect-section-tag review">Review</div>
+        ${wr.overall ? `<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">What went well</div><div style="font-size:13px;color:var(--text)">${wr.overall}</div></div>` : ''}
+        ${wr.priorities ? `<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">What didn't go well</div><div style="font-size:13px;color:var(--text)">${wr.priorities}</div></div>` : ''}
+        ${wr.drain ? `<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--distraction);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Biggest drain</div><div style="font-size:13px;color:var(--text)">${wr.drain}</div></div>` : ''}
+        ${wr.nextweek ? `<div><div style="font-size:10px;color:var(--deep);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">One change</div><div style="font-size:13px;color:var(--text)">${wr.nextweek}</div></div>` : ''}
       </div>` : '';
 
-    if (!dailyRows && !wrBlock) return '';
+    const planHtml = hasPlan ? `
+      <div style="padding:12px 14px">
+        <div class="reflect-section-tag plan">Plan</div>
+        ${[plan.p1, plan.p2, plan.p3].filter(Boolean).map((p, i) => `<div style="font-size:13px;color:var(--text);margin-bottom:4px"><span style="color:var(--muted);font-size:11px">#${i+1} </span>${p}</div>`).join('')}
+        ${plan.deepgoal ? `<div style="font-size:11px;color:var(--deep);margin-top:6px">🎯 ${plan.deepgoal}h deep work goal</div>` : ''}
+        ${plan.avoid ? `<div style="font-size:11px;color:var(--distraction);margin-top:4px">✗ Avoid: ${plan.avoid}</div>` : ''}
+      </div>` : '';
 
-    return `<div class="reflect-history-week">
-      <div style="padding:10px 12px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border)">${wk}</div>
-      ${dailyRows ? `<div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px">${dailyRows}</div>` : ''}
-      ${wrBlock}
+    return `<div class="reflect-week-card">
+      <div class="reflect-week-card-header">
+        <span class="reflect-week-card-key">${isCurrent ? 'This week' : formatWeekLabel(wk)}</span>
+        ${statsHtml}
+      </div>
+      ${reviewHtml}${planHtml}
     </div>`;
-  }).filter(Boolean).join('');
+  }).filter(Boolean);
 
-  if (!histEl.innerHTML.trim()) {
-    histEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px 0">No reflections yet. Save your daily reviews to build history.</div>`;
-  }
+  histEl.innerHTML = cards.length
+    ? cards.join('')
+    : `<div style="color:var(--muted);font-size:13px;padding:8px 0">No entries yet — save a review or plan to start building history.</div>`;
 }
 
 // ══════════════════════════════════════════════════════
@@ -4055,302 +4777,13 @@ function connectSync() {
   showToast("Auto sync enabled");
 }
 
-function startSync() {
-  if (!fbDb) return;
-  fbRoomRef = fbDb.ref(`rooms/${roomCode}`);
-
-  fbDb.ref('.info/connected').on('value', snap => {
-    const online = snap.val();
-    if (online) {
-      updateSyncPill('connected', 'synced');
-      deviceRef.set({
-        lastSeen: Date.now(),
-        name: navigator.userAgent.includes('Mobile') ? '📱 Mobile' : '💻 Desktop'
-      });
-    } else {
-      const pill = document.getElementById('sync-pill');
-      if (pill.classList.contains('connected')) {
-        updateSyncPill('syncing', 'reconnecting…');
-      }
-    }
-  });
-
-  // Clean up any stale devices (last seen > 30 min ago) before registering
-  fbDb.ref(`rooms/${roomCode}/devices`).once('value', snap => {
-    const devs = snap.val() || {};
-    const cutoff = Date.now() - 30 * 60 * 1000;
-    Object.entries(devs).forEach(([id, d]) => {
-      if (id !== syncedDeviceId && d.lastSeen && d.lastSeen < cutoff) {
-        fbDb.ref(`rooms/${roomCode}/devices/${id}`).remove();
-      }
-    });
-  });
-  const deviceRef = fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`);
-  deviceRef.set({
-    lastSeen: Date.now(),
-    name: navigator.userAgent.includes('Mobile') ? '📱 Mobile' : '💻 Desktop'
-  });
-  deviceRef.onDisconnect().remove();
-
-  fbDb.ref(`rooms/${roomCode}/timer`).on('value', snap => {
-    const data = snap.val();
-    if (!data) return;
-    if (data.ownerDeviceId) timerOwnerDeviceId = data.ownerDeviceId;
-    if (data.running && data.startedAt) {
-      const elapsed = Math.floor((Date.now() - data.startedAt) / 1000);
-      timerStartedAt = data.startedAt;
-      totalSecs = data.intervalSecs;
-      remaining = Math.max(0, totalSecs - elapsed);
-      if (!running) {
-        running = true;
-        settings.intervalMin = data.intervalSecs / 60;
-        document.getElementById('interval-input').value = settings.intervalMin;
-        document.getElementById('main-btn').textContent = 'Break';
-        document.getElementById('timer-status').textContent = `Synced · pinging every ${settings.intervalMin} min`;
-        if (!ticker) {
-          ticker = setInterval(() => {
-            remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-            updateLiveCost();
-            remaining <= 0 ? doPing() : updateRing();
-          }, 1000);
-        }
-      } else {
-        // Already running — just re-sync remaining without restarting ticker
-        remaining = Math.max(0, totalSecs - elapsed);
-        updateRing();
-      }
-    } else if (!data.running) {
-      if (data.pausedRemaining != null) remaining = data.pausedRemaining;
-      if (running) {
-        running = false; clearInterval(ticker); ticker = null;
-        document.getElementById('main-btn').textContent = 'Resume';
-        document.getElementById('timer-status').textContent = 'Paused (synced)';
-      }
-    }
-    if (data.intervalSecs) { totalSecs = data.intervalSecs; settings.intervalMin = data.intervalSecs/60; }
-    updateRing();
-  });
-
-  fbDb.ref(`rooms/${roomCode}/entries`).on('value', snap => {
-    const data = snap.val();
-    if (!data) return;
-    const remoteEntries = Object.values(data).sort((a,b)=>b.ts-a.ts);
-    const localIds = new Set(entries.map(e=>e.id));
-    let changed = false;
-    remoteEntries.forEach(re => { if (!localIds.has(re.id)) { entries.push(re); changed=true; } });
-    if (changed) {
-      entries.sort((a,b)=>b.ts-a.ts);
-      persist(); renderToday();
-      if(document.getElementById('view-week').classList.contains('active')) renderWeek();
-    }
-  });
-
-  fbDb.ref(`rooms/${roomCode}/intention`).on('value', snap => {
-    const val = snap.val();
-    if (val && val !== intention) { intention = val; document.getElementById('intention').value = intention; persist(); }
-  });
-
-  fbDb.ref(`rooms/${roomCode}/settings`).on('value', snap => {
-    const val = snap.val();
-    if (val && val.timezone && val.timezone !== settings.timezone) {
-      settings.timezone = val.timezone;
-      persist();
-      renderToday();
-    }
-  });
-
-  fbDb.ref(`rooms/${roomCode}/devices`).on('value', snap => {
-    connectedDevices = snap.val() || {};
-    updateSyncUI();
-  });
-
-  fbDb.ref(`rooms/${roomCode}/breakState`).on('value', snap => {
-    const data = snap.val();
-    if (!data) return;
-    if (data.active && data.endsAt && !breakActive && data.startedBy !== syncedDeviceId) {
-      // Remote device started a break — mirror it here
-      breakEndsAt = data.endsAt;
-      breakStartTs = Date.now();
-      breakActive = true;
-      running = false; clearInterval(ticker); ticker = null;
-      document.getElementById('break-active-row').classList.add('show');
-      document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
-      document.getElementById('main-btn').textContent = 'On Break';
-      document.getElementById('main-btn').disabled = true;
-      document.getElementById('timer-status').textContent = `${data.durationMin||'?'}-min break · synced from other device`;
-      _updateBreakDisplay();
-      clearInterval(breakTicker);
-      breakTicker = setInterval(() => { _updateBreakDisplay(); if (Date.now() >= breakEndsAt) endBreak(); }, 1000);
-    } else if (!data.active && breakActive && data.startedBy !== syncedDeviceId) {
-      // Remote device ended break — mirror it
-      clearInterval(breakTicker); breakTicker = null;
-      breakActive = false;
-      document.getElementById('break-active-row').classList.remove('show');
-      document.getElementById('main-btn').disabled = false;
-    }
-  });
-
-  updateSyncPill('connected', 'synced');
-  syncEntries();
-  showToast('Synced ✓');
-}
-
-function syncTimerState() {
-  if (!fbRoomRef) return;
-  fbRoomRef.update({
-    timer: {
-      running,
-      intervalSecs: totalSecs,
-      startedAt: running ? Date.now() - (totalSecs - remaining) * 1000 : null,
-      pausedRemaining: running ? null : remaining,
-      ownerDeviceId: timerOwnerDeviceId || null
-    }
-  });
-}
+// startSync, syncTimerState — moved to storage.js
 function updateLiveCost() {
   const perSec = settings.targetRate / 3600;
   const wasted = (totalSecs - remaining) * perSec;
   document.getElementById('live-cost').textContent = `-$${Math.round(wasted)}`;
 }
-function syncEntries() {
-  if (!fbRoomRef) return;
-  const updates = {};
-  entries.forEach(e => { updates[`entries/e_${e.id}`] = e; });
-  fbRoomRef.update(updates);
-}
-
-function syncIntention(val) {
-  if (!fbRoomRef) return;
-  fbRoomRef.update({ intention: val });
-}
-
-function disconnectSync() {
-  if (!confirm('Disconnect from room? Your data stays local.')) return;
-  if (fbDb && roomCode) {
-    fbDb.ref('.info/connected').off();
-    fbDb.ref(`rooms/${roomCode}/timer`).off();
-    fbDb.ref(`rooms/${roomCode}/entries`).off();
-    fbDb.ref(`rooms/${roomCode}/intention`).off();
-    fbDb.ref(`rooms/${roomCode}/devices`).off();
-    fbDb.ref(`rooms/${roomCode}/settings`).off();
-    fbDb.ref(`rooms/${roomCode}/breakState`).off();
-    if (fbRoomRef) fbRoomRef.off();
-    fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).onDisconnect().cancel();
-    fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).remove();
-  }
-  fbRoomRef = null; roomCode = '';
-  // Generate a fresh private room so this device is isolated
-  const newRoom = 'USER-' + Math.random().toString(36).slice(2,8).toUpperCase();
-  localStorage.setItem('ta3-room', newRoom);
-  updateSyncPill('offline', 'offline');
-  const crEl = document.getElementById('connected-room');
-  if (crEl) crEl.textContent = '—';
-  showToast('Disconnected — data is local only');
-  // Re-init so Firebase is still available for future joins
-  initAutoSync();
-}
-
-function updateSyncPill(state, label) {
-  ['sync-pill','sync-pill2'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el) el.className='sync-pill'+(state==='connected'?' connected':state==='syncing'?' syncing':'');
-  });
-  ['sync-label','sync-label2'].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=label; });
-  ['sync-dot','sync-dot2'].forEach(id=>{
-    const d=document.getElementById(id);
-    if(d) d.className='sync-dot'+(state==='syncing'?' pulse':'');
-  });
-  const dl=document.getElementById('sync-detail-label');
-  if(dl) dl.textContent =
-    state==='connected' ? `Synced across all your devices` :
-    state==='syncing'   ? 'Connecting…' :
-                          'Not connected';
-}
-
-function copyRoomCode() {
-  if (!roomCode) { showToast('Not connected yet'); return; }
-  // navigator.clipboard requires HTTPS — use fallback for local HTTP
-  if (navigator.clipboard && location.protocol === 'https:') {
-    navigator.clipboard.writeText(roomCode)
-      .then(() => showToast('Room code copied ✓'))
-      .catch(() => _copyFallback(roomCode));
-  } else {
-    _copyFallback(roomCode);
-  }
-}
-function _copyFallback(text) {
-  const el = document.createElement('textarea');
-  el.value = text;
-  el.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
-  document.body.appendChild(el);
-  el.focus(); el.select();
-  try { document.execCommand('copy'); showToast('Room code copied ✓'); }
-  catch(e) { showToast('Your code: ' + text); }
-  document.body.removeChild(el);
-}
-
-function joinRoom() {
-  const input = document.getElementById('room-code-input');
-  const code = (input.value || '').trim().toUpperCase();
-  if (!code) { showToast('Enter a room code'); return; }
-  if (code === roomCode) { showToast('Already in this room'); return; }
-  // Tear down existing listeners
-  if (fbDb && roomCode) {
-    fbDb.ref('.info/connected').off();
-    fbDb.ref(`rooms/${roomCode}/timer`).off();
-    fbDb.ref(`rooms/${roomCode}/entries`).off();
-    fbDb.ref(`rooms/${roomCode}/intention`).off();
-    fbDb.ref(`rooms/${roomCode}/devices`).off();
-    fbDb.ref(`rooms/${roomCode}/breakState`).off();
-    if (fbRoomRef) fbRoomRef.off();
-    fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).remove();
-  }
-  // Re-initialize Firebase if it never started (e.g. crashed on load)
-  if (!fbDb) {
-    try {
-      fbApp = firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
-      fbDb = firebase.database();
-    } catch(e) { showToast('Firebase init failed'); return; }
-  }
-  roomCode = code;
-  localStorage.setItem('ta3-room', code);
-  input.value = '';
-  updateSyncPill('syncing', 'connecting…');
-  startSync();
-}
-
-function updateSyncUI() {
-  const devicesEl = document.getElementById('sync-devices');
-  const deviceEntries = Object.entries(connectedDevices);
-  if (deviceEntries.length > 0) {
-    devicesEl.innerHTML =
-      `<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px;margin-top:8px">Connected devices</div>` +
-      deviceEntries.map(([id,d])=>`<div class="sync-device-row"><div class="sync-device-dot"></div>${d.name||'Device'} ${id===syncedDeviceId?'<span style="color:var(--deep)">(this device)</span>':''}</div>`).join('');
-  } else { devicesEl.innerHTML = ''; }
-}
-
-function tryAutoConnect() {
-  const savedConfig = localStorage.getItem('ta3-firebase-config');
-  const savedRoom = localStorage.getItem('ta3-room-code');
-  if (!savedConfig || !savedRoom) return;
-  try {
-    const config = JSON.parse(savedConfig);
-    document.getElementById('firebase-config-input').value = savedConfig;
-    document.getElementById('room-code-input').value = savedRoom;
-    updateSyncPill('syncing','connecting…');
-    if (!firebase.apps.length) {
-      fbApp = firebase.initializeApp(config);
-    } else {
-      fbApp = firebase.app();
-    }
-    fbDb = firebase.database();
-    roomCode = savedRoom;
-    startSync();
-  } catch(e) {
-    updateSyncPill('offline','offline');
-    console.error('Auto-connect failed:', e);
-  }
-}
+// syncEntries, syncIntention, disconnectSync, updateSyncPill, copyRoomCode, _copyFallback, joinRoom, updateSyncUI, tryAutoConnect — moved to storage.js
 
 // ══════════════════════════════════════════════════════
 // UTILS
@@ -4602,10 +5035,35 @@ function cancelNativePing() {
 
 // Pre-fill intention from load()
 if (intention) document.getElementById('intention').value = intention;
+// Pre-fill retro time with current time
+(function(){ const now = new Date(); const el = document.getElementById('retro-time'); if(el) el.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`; })();
+// Restore hero UI state on page load
+if (running && lastTaskForRepeat) {
+  taskStartTime = timerStartedAt || Date.now();
+  currentTask = lastTaskForRepeat;
+  document.getElementById('hero-idle').style.display = 'none';
+  document.getElementById('hero-active').style.display = 'block';
+  document.getElementById('hero-task-name').textContent = lastTaskForRepeat;
+  document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min`;
+  // Restart ticker
+  clearInterval(ticker);
+  ticker = setInterval(() => {
+    remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
+    remaining <= 0 ? doPing() : updateRing();
+  }, 1000);
+}
 updateRing();
 renderToday();
 initAutoSync();
 initNativeNotifications();
+// Close away dropdown when clicking outside
+document.addEventListener('click', e => {
+  const picker = document.getElementById('away-picker');
+  const btn = document.getElementById('away-btn');
+  if (picker && picker.classList.contains('show') && !picker.contains(e.target) && e.target !== btn) {
+    picker.classList.remove('show');
+  }
+});
 // On load: if significant untracked time exists, prompt to fill gaps
 setTimeout(() => {
   const workStarted = Date.now() > getWorkDayStartTs();
