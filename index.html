@@ -222,7 +222,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .energy-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
 .energy-btn{padding:12px 10px;border-radius:var(--r);border:1.5px solid var(--border2);
   background:var(--bg3);cursor:pointer;text-align:left;transition:all 0.12s;font-family:var(--head)}
-.energy-btn .e-name{font-size:13px;font-weight:600;display:block;margin-bottom:2px}
+.energy-btn .e-name{font-size:13px;font-weight:600;display:block;margin-bottom:2px;color:var(--text)}
 .energy-btn .e-desc{font-size:11px;color:var(--muted);display:block}
 .energy-btn.deep.selected,.energy-btn.deep:hover{background:var(--deep-dim);border-color:var(--deep)}
 .energy-btn.deep.selected .e-name,.energy-btn.deep:hover .e-name{color:var(--deep)}
@@ -3955,6 +3955,61 @@ function quickRetroLog() {
   taskInput.value = '';
   document.getElementById('retro-time').value = '';
   showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+}
+
+// ══════════════════════════════════════════════════════
+// INSIGHT GENERATION
+// generateInsights({ deep_work, shallow_work, recovery, waste, total })
+// Returns an array of 3–4 plain-language insight strings.
+//
+// Example output for { deep_work:3.5, shallow_work:1.2, recovery:1.0, waste:2.8, total:8.5 }:
+//   "You tracked 8.5 hours today — deep work (3.5h), shallow work (1.2h), recovery (1.0h), waste (2.8h)."
+//   "Deep work was your dominant category at 41% of your tracked time."
+//   "Waste was 33% of your day (2.8h) — above the 25% threshold. Worth examining."
+//   "3.5 hours of deep work is a solid result. That kind of focus compounds."
+// ══════════════════════════════════════════════════════
+function generateInsights(data) {
+  const { deep_work = 0, shallow_work = 0, recovery = 0, waste = 0, total = 0 } = data;
+  if (total <= 0) return [];
+
+  const pct = v => Math.round(v / total * 100);
+  const fmt = h => h === Math.floor(h) ? `${h}h` : `${h.toFixed(1)}h`;
+
+  const insights = [];
+
+  // 1. Composition summary
+  const parts = [
+    deep_work  > 0 ? `deep work (${fmt(deep_work)})`    : null,
+    shallow_work>0 ? `shallow work (${fmt(shallow_work)})` : null,
+    recovery   > 0 ? `recovery (${fmt(recovery)})`      : null,
+    waste      > 0 ? `waste (${fmt(waste)})`             : null,
+  ].filter(Boolean);
+  insights.push(`You tracked ${fmt(total)} today — ${parts.join(', ')}.`);
+
+  // 2. Dominant category
+  const cats = { deep_work, shallow_work, recovery, waste };
+  const dominant = Object.entries(cats).sort((a, b) => b[1] - a[1])[0];
+  const dominantLabel = { deep_work: 'Deep work', shallow_work: 'Shallow work', recovery: 'Recovery', waste: 'Waste' }[dominant[0]];
+  insights.push(`${dominantLabel} was your dominant category at ${pct(dominant[1])}% of your tracked time.`);
+
+  // 3. Waste alert
+  if (waste > 2 || pct(waste) >= 25) {
+    const wasteMsg = pct(waste) >= 40
+      ? `Waste was ${pct(waste)}% of your day (${fmt(waste)}). That's a significant leak.`
+      : `Waste was ${pct(waste)}% of your day (${fmt(waste)}) — above the 25% threshold. Worth examining.`;
+    insights.push(wasteMsg);
+  }
+
+  // 4. Positive reinforcement
+  if (deep_work >= 4) {
+    insights.push(`${fmt(deep_work)} of deep work is an excellent result. That kind of sustained focus is rare.`);
+  } else if (deep_work >= 2) {
+    insights.push(`${fmt(deep_work)} of deep work is a solid result. That kind of focus compounds.`);
+  } else if (deep_work > 0 && deep_work < 1) {
+    insights.push(`Less than an hour of deep work today. Even one focused block tomorrow changes the trajectory.`);
+  }
+
+  return insights;
 }
 
 // ══════════════════════════════════════════════════════
