@@ -24,6 +24,12 @@
   --distraction:#ff6b6b;--distraction-dim:rgba(255,107,107,0.12);
   --break:#a78bfa;--break-dim:rgba(167,139,250,0.12);
   --away:#94a3b8;--away-dim:rgba(148,163,184,0.12);
+  /* 9-category system */
+  --nine5:#f9c74f;--nine5-dim:rgba(249,199,79,0.12);
+  --errands:#94a3b8;--errands-dim:rgba(148,163,184,0.12);
+  --learning:#34d399;--learning-dim:rgba(52,211,153,0.12);
+  --exercise:#fb923c;--exercise-dim:rgba(251,146,60,0.12);
+  --social:#f472b6;--social-dim:rgba(244,114,182,0.12);
   --head:'Syne',sans-serif;--mono:'DM Mono',monospace;
   --r:10px;--r2:14px;
   --safe-top:env(safe-area-inset-top,0px);
@@ -104,6 +110,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .t-block.deep{background:var(--deep)}.t-block.shallow{background:var(--shallow)}
 .t-block.admin{background:var(--admin)}.t-block.distraction{background:var(--distraction)}.t-block.waste{background:var(--distraction)}
 .t-block.empty{background:var(--bg4)}.t-block.away{background:var(--away)}.t-block.recovery{background:var(--break)}
+.t-block.nine5{background:var(--nine5)}.t-block.errands{background:var(--errands)}.t-block.learning{background:var(--learning)}.t-block.exercise{background:var(--exercise)}.t-block.social{background:var(--social)}
 .timeline-legend{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
 .legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
 .legend-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
@@ -125,6 +132,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .entry-bar.deep{background:var(--deep)}.entry-bar.shallow{background:var(--shallow)}
 .entry-bar.admin{background:var(--admin)}.entry-bar.distraction{background:var(--distraction)}.entry-bar.waste{background:var(--distraction)}
 .entry-bar.break{background:var(--break)}.entry-bar.away{background:var(--away)}.entry-bar.recovery{background:var(--break)}
+.entry-bar.nine5{background:var(--nine5)}.entry-bar.errands{background:var(--errands)}.entry-bar.learning{background:var(--learning)}.entry-bar.exercise{background:var(--exercise)}.entry-bar.social{background:var(--social)}
 .entry-main{flex:1;min-width:0}
 .entry-activity{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .entry-meta{font-size:11px;color:var(--muted);margin-top:1px;font-family:var(--mono)}
@@ -134,6 +142,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:999px;font-weight:500;white-space:nowrap}
 .badge.deep{background:var(--deep-dim);color:var(--deep)}.badge.shallow{background:var(--shallow-dim);color:var(--shallow)}
 .badge.admin{background:var(--admin-dim);color:var(--admin)}.badge.distraction{background:var(--distraction-dim);color:var(--distraction)}.badge.waste{background:var(--distraction-dim);color:var(--distraction)}
+.badge.nine5{background:var(--nine5-dim);color:var(--nine5)}.badge.errands{background:var(--errands-dim);color:var(--errands)}.badge.learning{background:var(--learning-dim);color:var(--learning)}.badge.exercise{background:var(--exercise-dim);color:var(--exercise)}.badge.social{background:var(--social-dim);color:var(--social)}
 .badge.deap{background:rgba(255,255,255,0.06);color:var(--muted)}
 .badge.onplan{background:var(--deep-dim);color:var(--deep)}.badge.offplan{background:var(--distraction-dim);color:var(--distraction)}
 .badge.break{background:var(--break-dim);color:var(--break)}.badge.recovery{background:var(--break-dim);color:var(--break)}
@@ -219,10 +228,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .continue-banner-sub{font-size:11px;color:var(--muted);margin-top:2px}
 
 /* ── Energy buttons ── */
-.energy-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
-.energy-btn{padding:12px 10px;border-radius:var(--r);border:1.5px solid var(--border2);
+.energy-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+.energy-btn{padding:10px 8px;border-radius:var(--r);border:1.5px solid var(--border2);
   background:var(--bg3);cursor:pointer;text-align:left;transition:all 0.12s;font-family:var(--head)}
-.energy-btn:last-child:nth-child(odd){grid-column:1/-1}
 .energy-btn .e-name{font-size:13px;font-weight:600;display:block;margin-bottom:2px;color:var(--text)}
 .energy-btn .e-desc{font-size:11px;color:var(--muted);display:block}
 .energy-btn.deep.selected,.energy-btn.deep:hover{background:var(--deep-dim);border-color:var(--deep)}
@@ -237,6 +245,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .energy-btn.waste.selected .e-name,.energy-btn.waste:hover .e-name{color:var(--distraction)}
 .energy-btn.distraction.selected,.energy-btn.distraction:hover{background:var(--distraction-dim);border-color:var(--distraction)}
 .energy-btn.distraction.selected .e-name,.energy-btn.distraction:hover .e-name{color:var(--distraction)}
+.energy-btn.nine5.selected,.energy-btn.nine5:hover{background:var(--nine5-dim);border-color:var(--nine5)}
+.energy-btn.nine5.selected .e-name,.energy-btn.nine5:hover .e-name{color:var(--nine5)}
+.energy-btn.errands.selected,.energy-btn.errands:hover{background:var(--errands-dim);border-color:var(--errands)}
+.energy-btn.errands.selected .e-name,.energy-btn.errands:hover .e-name{color:var(--errands)}
+.energy-btn.learning.selected,.energy-btn.learning:hover{background:var(--learning-dim);border-color:var(--learning)}
+.energy-btn.learning.selected .e-name,.energy-btn.learning:hover .e-name{color:var(--learning)}
+.energy-btn.exercise.selected,.energy-btn.exercise:hover{background:var(--exercise-dim);border-color:var(--exercise)}
+.energy-btn.exercise.selected .e-name,.energy-btn.exercise:hover .e-name{color:var(--exercise)}
+.energy-btn.social.selected,.energy-btn.social:hover{background:var(--social-dim);border-color:var(--social)}
+.energy-btn.social.selected .e-name,.energy-btn.social:hover .e-name{color:var(--social)}
 
 /* ── Presets ── */
 .presets-scroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin:6px 0}
@@ -476,6 +494,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-bar-col{width:4px;flex-shrink:0;border-radius:2px;margin:3px 8px 3px 0}
 .tl-bar-col.deep{background:var(--deep)}.tl-bar-col.shallow{background:var(--shallow)}
 .tl-bar-col.admin{background:var(--admin)}.tl-bar-col.distraction{background:var(--distraction)}.tl-bar-col.waste{background:var(--distraction)}
+.tl-bar-col.nine5{background:var(--nine5)}.tl-bar-col.errands{background:var(--errands)}.tl-bar-col.learning{background:var(--learning)}.tl-bar-col.exercise{background:var(--exercise)}.tl-bar-col.social{background:var(--social)}
 .tl-bar-col.missed{background:var(--bg4)}
 .tl-bar-col.break{background:var(--break)}.tl-bar-col.recovery{background:var(--break)}.tl-bar-col.away{background:var(--away)}
 .tl-content{flex:1;min-width:0;padding:6px 0 6px 0}
@@ -487,6 +506,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-badge.shallow{background:var(--shallow-dim);color:var(--shallow)}
 .tl-badge.admin{background:var(--admin-dim);color:var(--admin)}
 .tl-badge.distraction{background:var(--distraction-dim);color:var(--distraction)}.tl-badge.waste{background:var(--distraction-dim);color:var(--distraction)}
+.tl-badge.nine5{background:var(--nine5-dim);color:var(--nine5)}.tl-badge.errands{background:var(--errands-dim);color:var(--errands)}.tl-badge.learning{background:var(--learning-dim);color:var(--learning)}.tl-badge.exercise{background:var(--exercise-dim);color:var(--exercise)}.tl-badge.social{background:var(--social-dim);color:var(--social)}
 .tl-badge.missed{background:var(--bg4);color:var(--muted)}
 .tl-badge.break{background:var(--break-dim);color:var(--break)}.tl-badge.recovery{background:var(--break-dim);color:var(--break)}
 .tl-badge.away{background:var(--away-dim);color:var(--away)}
@@ -787,6 +807,13 @@ button, a, [role="button"],
 .ds-split-seg.shallow{background:var(--shallow)}
 .ds-split-seg.admin{background:var(--admin)}
 .ds-split-seg.distraction{background:var(--distraction)}
+.ds-split-seg.nine5{background:var(--nine5)}
+.ds-split-seg.errands{background:var(--errands)}
+.ds-split-seg.learning{background:var(--learning)}
+.ds-split-seg.exercise{background:var(--exercise)}
+.ds-split-seg.social{background:var(--social)}
+.ds-split-seg.recovery{background:var(--break)}
+.ds-split-seg.waste{background:var(--distraction)}
 .ds-peak{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px}
 .ds-peak-badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--deep-dim);color:var(--deep);white-space:nowrap}
 .ds-insight{font-size:12px;color:var(--muted);line-height:1.55;padding-top:9px;border-top:1px solid var(--border);font-style:italic}
@@ -1276,10 +1303,14 @@ button, a, [role="button"],
     </div>
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin:10px 0 6px">Category</div>
     <div class="energy-grid">
+      <button class="energy-btn nine5" onclick="setQlEnergy('nine5')"><span class="e-name">9-5</span><span class="e-desc">Scheduled work</span></button>
       <button class="energy-btn deep" onclick="setQlEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
       <button class="energy-btn shallow" onclick="setQlEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
-      <button class="energy-btn admin" onclick="setQlEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary overhead</span></button>
-      <button class="energy-btn recovery" onclick="setQlEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, breaks</span></button>
+      <button class="energy-btn errands" onclick="setQlEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
+      <button class="energy-btn learning" onclick="setQlEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Study, growth</span></button>
+      <button class="energy-btn exercise" onclick="setQlEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Movement, sports</span></button>
+      <button class="energy-btn social" onclick="setQlEnergy('social')"><span class="e-name">Social</span><span class="e-desc">People, connection</span></button>
+      <button class="energy-btn recovery" onclick="setQlEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, sleep</span></button>
       <button class="energy-btn waste" onclick="setQlEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
@@ -1364,10 +1395,14 @@ button, a, [role="button"],
   </div>
   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
   <div class="energy-grid">
+    <button class="energy-btn nine5" onclick="setEnergy('nine5')"><span class="e-name">9-5</span><span class="e-desc">Scheduled work</span></button>
     <button class="energy-btn deep" onclick="setEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
     <button class="energy-btn shallow" onclick="setEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
-    <button class="energy-btn admin" onclick="setEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary overhead</span></button>
-    <button class="energy-btn recovery" onclick="setEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, breaks</span></button>
+    <button class="energy-btn errands" onclick="setEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
+    <button class="energy-btn learning" onclick="setEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Study, growth</span></button>
+    <button class="energy-btn exercise" onclick="setEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Movement, sports</span></button>
+    <button class="energy-btn social" onclick="setEnergy('social')"><span class="e-name">Social</span><span class="e-desc">People, connection</span></button>
+    <button class="energy-btn recovery" onclick="setEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, sleep</span></button>
     <button class="energy-btn waste" onclick="setEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
   </div>
   <button class="detail-toggle" onclick="toggleDetail()"><span id="detail-arrow">▸</span> Add detail (DEA-P, $/hr)</button>
@@ -1500,10 +1535,14 @@ button, a, [role="button"],
   </div>
   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
   <div class="energy-grid">
+    <button class="energy-btn nine5" onclick="setRetroEnergy('nine5')"><span class="e-name">9-5</span><span class="e-desc">Scheduled work</span></button>
     <button class="energy-btn deep" onclick="setRetroEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
     <button class="energy-btn shallow" onclick="setRetroEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
-    <button class="energy-btn admin" onclick="setRetroEnergy('admin')"><span class="e-name">Admin</span><span class="e-desc">Necessary overhead</span></button>
-    <button class="energy-btn recovery" onclick="setRetroEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, breaks</span></button>
+    <button class="energy-btn errands" onclick="setRetroEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
+    <button class="energy-btn learning" onclick="setRetroEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Study, growth</span></button>
+    <button class="energy-btn exercise" onclick="setRetroEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Movement, sports</span></button>
+    <button class="energy-btn social" onclick="setRetroEnergy('social')"><span class="e-name">Social</span><span class="e-desc">People, connection</span></button>
+    <button class="energy-btn recovery" onclick="setRetroEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, sleep</span></button>
     <button class="energy-btn waste" onclick="setRetroEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
   </div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
@@ -1678,29 +1717,35 @@ const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 // BUCKET CLASSIFICATION
 // Maps any entry to one of: deep_work | shallow_work | recovery | waste
 // ══════════════════════════════════════════════════════
+// Maps away activity labels → energy keys for the 9-category system
 const AWAY_BUCKETS = {
   'Sleep':    'recovery',
   'Eat':      'recovery',
-  'Walk':     'recovery',
-  'Exercise': 'recovery',
   'Rest':     'recovery',
-  'Personal': 'recovery',
-  'Commute':  'shallow_work',
-  'Errand':   'shallow_work',
+  'Walk':     'exercise',
+  'Exercise': 'exercise',
+  'Commute':  'nine5',
+  'Errand':   'errands',
+  'Personal': 'social',
 };
 
 function getBucket(entry) {
   if (!entry) return null;
   switch (entry.energy) {
-    case 'deep':       return 'deep_work';
-    case 'shallow':    return 'shallow_work';
-    case 'admin':      return 'admin';
-    case 'recovery':   return 'recovery';
-    case 'waste':      return 'waste';
-    // Legacy fallbacks (pre-migration entries)
+    case 'nine5':    return 'nine5';
+    case 'deep':     return 'deep_work';
+    case 'shallow':  return 'shallow_work';
+    case 'errands':  return 'errands';
+    case 'learning': return 'learning';
+    case 'exercise': return 'exercise';
+    case 'social':   return 'social';
+    case 'recovery': return 'recovery';
+    case 'waste':    return 'waste';
+    // Legacy fallbacks
+    case 'admin':       return 'nine5';
     case 'distraction': return 'waste';
     case 'break':       return 'recovery';
-    case 'away': return (AWAY_BUCKETS[entry.activity] === 'shallow_work') ? 'shallow_work' : 'recovery';
+    case 'away':        return AWAY_BUCKETS[entry.activity] || 'recovery';
     default: return null;
   }
 }
@@ -1842,11 +1887,12 @@ function load() {
   try { const raw = JSON.parse(localStorage.getItem('ta3-entries') || '[]'); entries = Array.isArray(raw) ? raw : Object.values(raw).filter(e=>e&&e.id); } catch(e){ entries=[]; }
   // Migrate: stamp updatedAt on any entry that's missing it (older entries)
   entries.forEach(e => { if (!e.updatedAt) e.updatedAt = e.ts || Date.now(); });
-  // Migrate: rename old energy values to new 5-category system
+  // Migrate: rename old energy values to 9-category system
   entries.forEach(e => {
-    if ((e.energy === 'waste' || e.energy === 'distraction')) e.energy = 'waste';
-    else if (e.energy === 'break')  e.energy = 'recovery';
-    else if (e.energy === 'away')   e.energy = (AWAY_BUCKETS[e.activity] === 'shallow_work') ? 'shallow' : 'recovery';
+    if      (e.energy === 'distraction') e.energy = 'waste';
+    else if (e.energy === 'break')       e.energy = 'recovery';
+    else if (e.energy === 'admin')       e.energy = 'nine5';
+    else if (e.energy === 'away')        e.energy = AWAY_BUCKETS[e.activity] || 'recovery';
   });
   // Migrate: stamp category + originalLabel on any entry that's missing them
   entries.forEach(e => {
@@ -2474,9 +2520,9 @@ function analyzeBehavior(entry, todayE) {
   const tone = settings.coachTone || 'analyst';
   const T = (a, c, m) => ({ analyst: a, coach: c, mirror: m })[tone] || a;
 
-  const real = todayE.filter(e => !e.away && !e.break);
+  const real = todayE;
   const deepEntries = real.filter(e => e.energy === 'deep');
-  const distEntries = real.filter(e => (e.energy === 'waste' || e.energy === 'distraction'));
+  const distEntries = real.filter(e => e.energy === 'waste');
   const deepMin  = deepEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const distMin  = distEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const totalMin = real.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
@@ -2484,10 +2530,10 @@ function analyzeBehavior(entry, todayE) {
   const distPct  = totalMin > 0 ? Math.round(distMin / totalMin * 100) : 0;
   const hour     = new Date().getHours();
 
-  // ── How many consecutive entries from the top (most recent) are distraction? ──
+  // ── How many consecutive entries from the top (most recent) are waste? ──
   let distStreak = 0;
   for (const e of real) {
-    if ((e.energy === 'waste' || e.energy === 'distraction')) distStreak++; else break;
+    if (e.energy === 'waste') distStreak++; else break;
   }
 
   // ── How many times has this exact activity been logged as distraction today? ──
@@ -2500,8 +2546,8 @@ function analyzeBehavior(entry, todayE) {
   const lastDeep = deepEntries[0]; // entries sorted newest-first
   const minsSinceDeep = lastDeep ? Math.round((Date.now() - lastDeep.ts) / 60000) : null;
 
-  // === DISTRACTION entries ===
-  if (entry.energy === 'distraction') {
+  // === WASTE entries ===
+  if (entry.energy === 'waste') {
     const wastedStr = distMin >= 60 ? `${(distMin/60).toFixed(1)}h` : `${distMin}m`;
 
     if (sameActivityDist >= 3) {
@@ -2566,14 +2612,14 @@ function analyzeBehavior(entry, todayE) {
     const deepHrsStr = deepMin >= 60 ? `${(deepMin/60).toFixed(1)}h` : `${deepMin}m`;
 
     // Just recovered from a distraction streak
-    if (real[1] && real[1].energy === 'distraction') {
+    if (real[1] && real[1].energy === 'waste') {
       return { type: 'deep', eyebrow: 'Recovery block',
         message: T(
           `Back to deep work. ${deepHrsStr} total today.`,
           `Good. You broke the drift. Now chain another one.`,
           `You came back. That matters. Don't let it be the only one.`
         ),
-        sub: distPct > 0 ? `${distPct}% of today was still distraction.` : '' };
+        sub: distPct > 0 ? `${distPct}% wasted today.` : '' };
     }
 
     // Milestones
@@ -2593,7 +2639,7 @@ function analyzeBehavior(entry, todayE) {
           `Three deep blocks. You're building real momentum.`,
           `Three in. Now the question is: can you push it to five?`
         ),
-        sub: `${deepHrsStr} total · ${distPct > 0 ? `${distPct}% still lost to distraction` : 'no distractions logged'}` };
+        sub: `${deepHrsStr} total · ${distPct > 0 ? `${distPct}% waste` : 'no waste logged'}` };
     }
     if (deepPct >= 60 && deepEntries.length >= 2) {
       return { type: 'deep', eyebrow: 'Deep work majority',
@@ -2627,8 +2673,8 @@ function analyzeBehavior(entry, todayE) {
       sub: '' };
   }
 
-  // === SHALLOW / ADMIN — only fire when patterns warrant ===
-  if (entry.energy === 'shallow' || entry.energy === 'admin') {
+  // === SHALLOW / 9-5 — only fire when patterns warrant ===
+  if (entry.energy === 'shallow' || entry.energy === 'nine5') {
     // Long run without deep work during prime hours
     if (hour >= 10 && hour <= 16 && minsSinceDeep !== null && minsSinceDeep > 120 && deepMin > 0) {
       const gapStr = minsSinceDeep >= 120 ? `${Math.round(minsSinceDeep/60)}h` : `${minsSinceDeep}m`;
@@ -2684,7 +2730,7 @@ function checkEscalation() {
   const missedToday = todayE.filter(e => e.missed).length;
   let dStreak = 0;
   for (const e of todayE) {
-    if ((e.energy === 'waste' || e.energy === 'distraction') || e.missed) dStreak++;
+    if (e.energy === 'waste' || e.missed) dStreak++;
     else break;
   }
   if (dStreak >= 5) {
@@ -2740,7 +2786,7 @@ let pomodoroCount = 0; // completed sessions this focus session
 let focusStartTime = null; // tracks when focus mode began
 
 function updateFocusDeepBar() {
-  const todayE = getTodayEntries().filter(e => !e.missed && !e.break);
+  const todayE = getTodayEntries().filter(e => !e.missed);
   const deepBlocks = todayE.filter(e => e.energy === 'deep').length;
   const goal = dailyCommitment || settings.deepGoal || 8;
   const pct = Math.min(100, Math.round((deepBlocks / goal) * 100));
@@ -3283,7 +3329,7 @@ function saveEntry() {
   entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
 
   getActivityColor(activity); // assign color on first save
-  if (entry.energy === 'waste' || entry.energy === 'distraction') switchState('distraction');
+  if (entry.energy === 'waste') switchState('distraction');
   entries.unshift(entry);
   stopAlertLoop();
   hidePingBanner();
@@ -3587,7 +3633,7 @@ function logAwayBlock(tsStart, tsEnd, activity, energy, gapIndex) {
     id: Date.now(), ts: tsEnd, tsStart,
     blockIntervalMin: dur, date: toDateKey(new Date(tsEnd)),
     activity, energy, onPlan: true,
-    break: energy === 'break', away: true
+    away: true
   };
   entries.unshift(entry);
   persist(); renderToday(); syncEntries();
@@ -3977,17 +4023,11 @@ function quickRetroLog() {
 
 // ══════════════════════════════════════════════════════
 // INSIGHT GENERATION
-// generateInsights({ deep_work, shallow_work, recovery, waste, total })
+// generateInsights({ deep, shallow, nine5, errands, learning, exercise, social, recovery, waste, total })
 // Returns an array of 3–4 plain-language insight strings.
-//
-// Example output for { deep_work:3.5, shallow_work:1.2, recovery:1.0, waste:2.8, total:8.5 }:
-//   "You tracked 8.5 hours today — deep work (3.5h), shallow work (1.2h), recovery (1.0h), waste (2.8h)."
-//   "Deep work was your dominant category at 41% of your tracked time."
-//   "Waste was 33% of your day (2.8h) — above the 25% threshold. Worth examining."
-//   "3.5 hours of deep work is a solid result. That kind of focus compounds."
 // ══════════════════════════════════════════════════════
 function generateInsights(data) {
-  const { deep_work = 0, shallow_work = 0, admin = 0, recovery = 0, waste = 0, total = 0 } = data;
+  const { deep = 0, shallow = 0, nine5 = 0, errands = 0, learning = 0, exercise = 0, social = 0, recovery = 0, waste = 0, total = 0 } = data;
   if (total <= 0) return [];
 
   const pct = v => Math.round(v / total * 100);
@@ -3997,18 +4037,28 @@ function generateInsights(data) {
 
   // 1. Composition summary
   const parts = [
-    deep_work   > 0 ? `deep work (${fmt(deep_work)})`     : null,
-    shallow_work> 0 ? `shallow work (${fmt(shallow_work)})`: null,
-    admin       > 0 ? `admin (${fmt(admin)})`              : null,
-    recovery    > 0 ? `recovery (${fmt(recovery)})`        : null,
-    waste       > 0 ? `waste (${fmt(waste)})`              : null,
+    deep     > 0 ? `deep work (${fmt(deep)})`       : null,
+    shallow  > 0 ? `shallow work (${fmt(shallow)})`  : null,
+    nine5    > 0 ? `9-5 (${fmt(nine5)})`             : null,
+    errands  > 0 ? `errands (${fmt(errands)})`        : null,
+    learning > 0 ? `learning (${fmt(learning)})`      : null,
+    exercise > 0 ? `exercise (${fmt(exercise)})`      : null,
+    social   > 0 ? `social (${fmt(social)})`          : null,
+    recovery > 0 ? `recovery (${fmt(recovery)})`      : null,
+    waste    > 0 ? `waste (${fmt(waste)})`            : null,
   ].filter(Boolean);
-  insights.push(`You tracked ${fmt(total)} today — ${parts.join(', ')}.`);
+  insights.push(`You tracked ${fmt(total)} — ${parts.join(', ')}.`);
 
   // 2. Dominant category
-  const cats = { 'Deep work': deep_work, 'Shallow work': shallow_work, Admin: admin, Recovery: recovery, Waste: waste };
+  const cats = {
+    'Deep work': deep, 'Shallow work': shallow, '9-5': nine5,
+    Errands: errands, Learning: learning, Exercise: exercise,
+    Social: social, Recovery: recovery, Waste: waste
+  };
   const dominant = Object.entries(cats).sort((a, b) => b[1] - a[1])[0];
-  insights.push(`${dominant[0]} was your dominant category at ${pct(dominant[1])}% of your tracked time.`);
+  if (dominant[1] > 0) {
+    insights.push(`${dominant[0]} was your dominant category at ${pct(dominant[1])}% of tracked time.`);
+  }
 
   // 3. Waste alert
   if (waste > 2 || pct(waste) >= 25) {
@@ -4017,13 +4067,13 @@ function generateInsights(data) {
       : `Waste was ${pct(waste)}% of your day (${fmt(waste)}) — above the 25% threshold. Worth examining.`);
   }
 
-  // 4. Positive reinforcement
-  if (deep_work >= 4) {
-    insights.push(`${fmt(deep_work)} of deep work is an excellent result. That kind of sustained focus is rare.`);
-  } else if (deep_work >= 2) {
-    insights.push(`${fmt(deep_work)} of deep work is a solid result. That kind of focus compounds.`);
-  } else if (deep_work > 0 && deep_work < 1) {
-    insights.push(`Less than an hour of deep work today. Even one focused block tomorrow changes the trajectory.`);
+  // 4. Deep work reinforcement
+  if (deep >= 4) {
+    insights.push(`${fmt(deep)} of deep work is an excellent result. That kind of sustained focus is rare.`);
+  } else if (deep >= 2) {
+    insights.push(`${fmt(deep)} of deep work is a solid result. That kind of focus compounds.`);
+  } else if (deep > 0 && deep < 1) {
+    insights.push(`Less than an hour of deep work. Even one focused block tomorrow changes the trajectory.`);
   }
 
   return insights;
@@ -4042,11 +4092,11 @@ function renderAwarenessSignal() {
 
   if (!todayE.length && hour < 10) { el.style.display = 'none'; return; }
 
-  const real     = todayE.filter(e => !e.away && !e.break);
+  const real     = todayE;
   const totalMin = real.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const deepMin  = real.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const distMin  = real.filter(e => (e.energy === 'waste' || e.energy === 'distraction')).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const awayMin  = todayE.filter(e => e.away).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const distMin  = real.filter(e => e.energy === 'waste').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const recovMin = real.filter(e => e.energy === 'recovery').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const deepPct  = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
   const distPct  = totalMin > 0 ? Math.round(distMin / totalMin * 100) : 0;
   const deepHrs  = (deepMin / 60).toFixed(1);
@@ -4061,9 +4111,9 @@ function renderAwarenessSignal() {
   Object.entries(hourBuckets).forEach(([h, m]) => { if (m > peakHourMin) { peakHourMin = m; peakHour = Number(h); } });
   const peakLabel = peakHour !== null ? `${peakHour % 12 || 12}${peakHour < 12 ? 'am' : 'pm'}` : null;
 
-  // Repeated distraction activities: map activity → total minutes
+  // Repeated waste activities: map activity → total minutes
   const distActivityMap = {};
-  real.filter(e => (e.energy === 'waste' || e.energy === 'distraction')).forEach(e => {
+  real.filter(e => e.energy === 'waste').forEach(e => {
     const k = e.activity.split(' (Output:')[0];
     distActivityMap[k] = (distActivityMap[k] || 0) + (e.blockIntervalMin || 0);
   });
@@ -4073,9 +4123,9 @@ function renderAwarenessSignal() {
   const lastDeep = real.filter(e => e.energy === 'deep')[0];
   const minsSinceDeep = lastDeep ? Math.round((Date.now() - lastDeep.ts) / 60000) : null;
 
-  // Distraction run at top of entry list
+  // Waste run at top of entry list
   let distStreak = 0;
-  for (const e of real) { if ((e.energy === 'waste' || e.energy === 'distraction')) distStreak++; else break; }
+  for (const e of real) { if (e.energy === 'waste') distStreak++; else break; }
 
   const T = (a, c, m) => ({ analyst: a, coach: c, mirror: m })[tone] || a;
   const signals = [];
@@ -4099,7 +4149,7 @@ function renderAwarenessSignal() {
   // ── Named waste: same distraction activity ≥ 2 times ──
   if (worstWaste && distActivityMap[worstWaste[0]] >= 30) {
     const [activity, mins] = worstWaste;
-    const count = real.filter(e => (e.energy === 'waste' || e.energy === 'distraction') && e.activity.split(' (Output:')[0] === activity).length;
+    const count = real.filter(e => e.energy === 'waste' && e.activity.split(' (Output:')[0] === activity).length;
     if (count >= 2) {
       const wStr = mins >= 60 ? `${(mins/60).toFixed(1)}h` : `${mins}m`;
       signals.push({ color: 'var(--distraction)', severity: 'bad', label: 'Repeat offender',
@@ -4136,7 +4186,7 @@ function renderAwarenessSignal() {
   // ── Deep work: decent, but with distraction ──
   else if (deepMin >= 60 && distPct >= 20) {
     signals.push({ color: 'var(--shallow)', severity: 'warn', label: 'Mixed session',
-      text: T(`${deepHrs}h deep work, but ${distPct}% lost to distraction.`,
+      text: T(`${deepHrs}h deep work, but ${distPct}% wasted.`,
               `${deepHrs}h of good work, but ${distPct}% wasted. Protect the next block.`,
               `${deepHrs}h real work. ${distPct}% wasted. Those two numbers tell your whole story.`) });
   }
@@ -4156,13 +4206,13 @@ function renderAwarenessSignal() {
               `${peakLabel} — ${peakHourMin}m deep. That's your real capacity. Stop wasting it.`) });
   }
 
-  // ── Away time exceeds deep work ──
-  if (awayMin > 120 && awayMin > deepMin && totalMin > 0) {
-    const awayHrsStr = (awayMin / 60).toFixed(1);
-    signals.push({ color: 'var(--away)', severity: 'warn', label: 'Away > deep work',
-      text: T(`${awayHrsStr}h away — more than ${deepHrs}h of deep work.`,
-              `${awayHrsStr}h off, ${deepHrs}h deep. Watch that ratio.`,
-              `You spent more time away (${awayHrsStr}h) than working deeply (${deepHrs}h). Intentional?`) });
+  // ── Recovery time exceeds deep work ──
+  if (recovMin > 120 && recovMin > deepMin && totalMin > 0) {
+    const recovHrsStr = (recovMin / 60).toFixed(1);
+    signals.push({ color: 'var(--break)', severity: 'warn', label: 'Recovery > deep work',
+      text: T(`${recovHrsStr}h in recovery — more than ${deepHrs}h of deep work.`,
+              `${recovHrsStr}h resting, ${deepHrs}h deep. Watch that ratio.`,
+              `You spent more time recovering (${recovHrsStr}h) than working deeply (${deepHrs}h). Intentional?`) });
   }
 
   // ── End-of-day verdict ──
@@ -4172,10 +4222,10 @@ function renderAwarenessSignal() {
                                      `Day closed. ${deepHrs}h deep. This is the result of discipline.`,
                                      `${deepPct}% deep. You earned today.`) }
       : distPct >= 30
-      ? { severity: 'bad', text: T(`Day done. ${distPct}% lost to distraction. Examine why.`,
-                                    `Day closed. ${distPct}% distraction. What will you change tomorrow?`,
+      ? { severity: 'bad', text: T(`Day done. ${distPct}% waste. Examine why.`,
+                                    `Day closed. ${distPct}% waste. What will you change tomorrow?`,
                                     `${distPct}% wasted. You'll remember tomorrow's version of this choice.`) }
-      : { severity: 'warn', text: T(`Day done. ${deepHrs}h deep work, ${distPct}% distraction.`,
+      : { severity: 'warn', text: T(`Day done. ${deepHrs}h deep work, ${distPct}% waste.`,
                                      `Day closed. ${deepHrs}h deep. Push for more tomorrow.`,
                                      `${deepHrs}h real work. You can do better. You know it.`) };
     signals.push({ color: verdict.severity === 'good' ? 'var(--deep)' : verdict.severity === 'bad' ? 'var(--distraction)' : 'var(--admin)',
@@ -4320,7 +4370,7 @@ function toggleAway() {
       blockIntervalMin: dur,
       date: toDateKey(new Date()),
       activity: awayLabel,
-      energy: (AWAY_BUCKETS[awayLabel] === 'shallow_work') ? 'shallow' : 'recovery',
+      energy: AWAY_BUCKETS[awayLabel] || 'recovery',
       onPlan: null
     };
     entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
@@ -4604,27 +4654,36 @@ function entryMins(e) {
 }
 
 function renderEnergySplit(el, entriesArr) {
-  const energyMins = {deep:0,shallow:0,admin:0,distraction:0};
+  const energyMins = {deep:0,shallow:0,nine5:0,errands:0,learning:0,exercise:0,social:0,recovery:0,waste:0};
   entriesArr.forEach(e => { if(energyMins[e.energy]!==undefined) energyMins[e.energy]+=entryMins(e); });
   const total = Object.values(energyMins).reduce((a,b)=>a+b,0)||1;
-  const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)'};
-  el.innerHTML = Object.entries(energyMins).map(([type,mins])=>{
+  const energyColors = {
+    deep:'var(--deep)',shallow:'var(--shallow)',nine5:'var(--nine5)',
+    errands:'var(--errands)',learning:'var(--learning)',exercise:'var(--exercise)',
+    social:'var(--social)',recovery:'var(--break)',waste:'var(--distraction)'
+  };
+  const energyLabels = {
+    deep:'Deep work',shallow:'Shallow work',nine5:'9-5',
+    errands:'Errands',learning:'Learning',exercise:'Exercise',
+    social:'Social',recovery:'Recovery',waste:'Waste'
+  };
+  el.innerHTML = Object.entries(energyMins).filter(([,m])=>m>0).map(([type,mins])=>{
     const pct = Math.round(mins/total*100);
     const hrs = mins>=60?(Math.round(mins/6)/10).toFixed(1)+'h':mins+'m';
     return `<div style="margin-bottom:6px">
       <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
-        <span style="color:${energyColors[type]};font-weight:600;text-transform:capitalize">${type}</span>
+        <span style="color:${energyColors[type]};font-weight:600">${energyLabels[type]||type}</span>
         <span style="color:var(--muted);font-family:var(--mono)">${hrs} · ${pct}%</span>
       </div>
       <div style="height:5px;background:var(--bg4);border-radius:3px;overflow:hidden">
         <div style="height:100%;width:${pct}%;background:${energyColors[type]};border-radius:3px;transition:width 0.3s"></div>
       </div></div>`;
-  }).join('');
+  }).join('') || `<div style="color:var(--muted);font-size:12px">No data</div>`;
 }
 
 function renderTopActivities(el, entriesArr, limit=8) {
   const actMap = {};
-  entriesArr.filter(e=>!e.missed&&!e.break).forEach(e=>{
+  entriesArr.filter(e=>!e.missed).forEach(e=>{
     const key = e.activity.split(' (Output')[0];
     const m = entryMins(e);
     if(!actMap[key]) actMap[key]={mins:0,energy:e.energy};
@@ -4632,7 +4691,11 @@ function renderTopActivities(el, entriesArr, limit=8) {
   });
   const top = Object.entries(actMap).sort((a,b)=>b[1].mins-a[1].mins).slice(0,limit);
   const maxMins = top[0]?.[1].mins||1;
-  const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)'};
+  const energyColors = {
+    deep:'var(--deep)',shallow:'var(--shallow)',nine5:'var(--nine5)',
+    errands:'var(--errands)',learning:'var(--learning)',exercise:'var(--exercise)',
+    social:'var(--social)',recovery:'var(--break)',waste:'var(--distraction)'
+  };
   el.innerHTML = top.length ? top.map(([act,data])=>{
     const w = Math.round(data.mins/maxMins*100);
     const color = getActivityColor(act)||energyColors[data.energy]||'var(--deep)';
@@ -4668,14 +4731,14 @@ function renderEntryList(el, entriesArr) {
 }
 
 function renderWeekOverview(days) {
-  const weekE = getWeekEntries(weekRangeOffset).filter(e=>!e.missed&&!e.away);
+  const weekE = getWeekEntries(weekRangeOffset).filter(e=>!e.missed);
   const goal = settings.deepGoal;
   const deepHrs = computeDeepHrs(weekE);
   const totalMins = weekE.reduce((s,e)=>s+entryMins(e),0);
   const pct = Math.min(100,Math.round(deepHrs/goal*100));
   const onPlanE = weekE.filter(e=>e.onPlan!==null);
   const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
-  const distractionCost = Math.round(weekE.filter(e=>e.energy==='distraction').length*(settings.intervalMin/60)*settings.targetRate);
+  const distractionCost = Math.round(weekE.filter(e=>e.energy==='waste').length*(settings.intervalMin/60)*settings.targetRate);
   const bestDay = days.reduce((a,b)=>b.entries.length&&computeDeepHrs(b.entries)>computeDeepHrs(a.entries)?b:a, days[0]);
   const activeDays = days.filter(d=>d.entries.length);
   const avgDeep = activeDays.length?(Math.round(activeDays.reduce((s,d)=>s+computeDeepHrs(d.entries),0)/activeDays.length*10)/10).toFixed(1)+'h':'—';
@@ -4757,10 +4820,15 @@ function renderWeekOverview(days) {
         <div style="display:flex;gap:6px">
           <select id="filter-energy" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
             <option value="">All types</option>
-            <option value="deep">Deep</option>
-            <option value="shallow">Shallow</option>
-            <option value="admin">Admin</option>
-            <option value="distraction">Distraction</option>
+            <option value="deep">Deep work</option>
+            <option value="shallow">Shallow work</option>
+            <option value="nine5">9-5</option>
+            <option value="errands">Errands</option>
+            <option value="learning">Learning</option>
+            <option value="exercise">Exercise</option>
+            <option value="social">Social</option>
+            <option value="recovery">Recovery</option>
+            <option value="waste">Waste</option>
           </select>
           <select id="filter-activity" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
             <option value="">All activities</option>
@@ -4851,7 +4919,7 @@ function renderDayDetail(day) {
 function renderWeekTable() {
   const energyFilter = document.getElementById('filter-energy')?.value || '';
   const actFilter = document.getElementById('filter-activity')?.value || '';
-  let filtered = getWeekEntries(weekRangeOffset).filter(e=>!e.missed&&!e.away);
+  let filtered = getWeekEntries(weekRangeOffset).filter(e=>!e.missed);
   if (energyFilter) filtered = filtered.filter(e=>e.energy===energyFilter);
   if (actFilter) filtered = filtered.filter(e=>e.activity.startsWith(actFilter));
 
@@ -4921,10 +4989,15 @@ function renderSettings() {
   pe.innerHTML=settings.presets.map((p,i)=>`<div class="preset-edit-row">
     <input type="text" value="${p.label}" onchange="settings.presets[${i}].label=this.value;persist()">
     <select onchange="settings.presets[${i}].energy=this.value;persist()">
-      <option value="deep" ${p.energy==='deep'?'selected':''}>Deep</option>
-      <option value="shallow" ${p.energy==='shallow'?'selected':''}>Shallow</option>
-      <option value="admin" ${p.energy==='admin'?'selected':''}>Admin</option>
-      <option value="distraction" ${p.energy==='distraction'?'selected':''}>Distraction</option>
+      <option value="deep" ${p.energy==='deep'?'selected':''}>Deep work</option>
+      <option value="shallow" ${p.energy==='shallow'?'selected':''}>Shallow work</option>
+      <option value="nine5" ${p.energy==='nine5'?'selected':''}>9-5</option>
+      <option value="errands" ${p.energy==='errands'?'selected':''}>Errands</option>
+      <option value="learning" ${p.energy==='learning'?'selected':''}>Learning</option>
+      <option value="exercise" ${p.energy==='exercise'?'selected':''}>Exercise</option>
+      <option value="social" ${p.energy==='social'?'selected':''}>Social</option>
+      <option value="recovery" ${p.energy==='recovery'?'selected':''}>Recovery</option>
+      <option value="waste" ${p.energy==='waste'?'selected':''}>Waste</option>
     </select>
     <button class="btn sm ghost" onclick="removePreset(${i})">✕</button>
   </div>`).join('');
@@ -4972,7 +5045,7 @@ function openReview(){
   
   const todayE = getTodayEntries();
   const deepCount = todayE.filter(e => e.energy === 'deep').length;
-  const distCount = todayE.filter(e => (e.energy === 'waste' || e.energy === 'distraction')).length;
+  const distCount = todayE.filter(e => e.energy === 'waste').length;
   const realityScore = deepCount - distCount;
   
   const rsVal = document.getElementById('reality-score-val');
@@ -5045,23 +5118,35 @@ function getEntriesForWeekKey(weekKey) {
 // DAILY SUMMARY
 // ══════════════════════════════════════════════════════
 function computeDailySummary(dateKey) {
-  const dayEntries = entries.filter(e => e.date === dateKey && !e.missed && !e.away && !e.break);
+  const dayEntries = entries.filter(e => e.date === dateKey && !e.missed);
   if (!dayEntries.length) return null;
 
   const totalMin = dayEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   if (totalMin === 0) return null;
 
-  const deepMin    = dayEntries.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const shallowMin = dayEntries.filter(e => e.energy === 'shallow').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const adminMin   = dayEntries.filter(e => e.energy === 'admin').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const distMin    = dayEntries.filter(e => (e.energy === 'waste' || e.energy === 'distraction')).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const minFor = key => dayEntries.filter(e => e.energy === key).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const nine5Min    = minFor('nine5');
+  const deepMin     = minFor('deep');
+  const shallowMin  = minFor('shallow');
+  const errandsMin  = minFor('errands');
+  const learningMin = minFor('learning');
+  const exerciseMin = minFor('exercise');
+  const socialMin   = minFor('social');
+  const recoveryMin = minFor('recovery');
+  const wasteMin    = minFor('waste');
 
-  const productiveMin = deepMin + shallowMin + adminMin;
-  const deepPct       = Math.round(deepMin / totalMin * 100);
-  const shallowPct    = Math.round(shallowMin / totalMin * 100);
-  const adminPct      = Math.round(adminMin / totalMin * 100);
-  const distPct       = Math.round(distMin / totalMin * 100);
-  const productivePct = Math.round(productiveMin / totalMin * 100);
+  const productiveMin = nine5Min + deepMin + shallowMin + errandsMin + learningMin;
+  const pct = m => Math.round(m / totalMin * 100);
+  const deepPct       = pct(deepMin);
+  const nine5Pct      = pct(nine5Min);
+  const shallowPct    = pct(shallowMin);
+  const errandsPct    = pct(errandsMin);
+  const learningPct   = pct(learningMin);
+  const exercisePct   = pct(exerciseMin);
+  const socialPct     = pct(socialMin);
+  const recoveryPct   = pct(recoveryMin);
+  const wastePct      = pct(wasteMin);
+  const productivePct = pct(productiveMin);
 
   // Peak focus hour — hour with the most deep-work minutes
   const hourBuckets = {};
@@ -5083,8 +5168,8 @@ function computeDailySummary(dateKey) {
     (productivePct >= 70 ? 20 : productivePct * 20 / 70)
   ));
 
-  return { totalMin, deepMin, shallowMin, adminMin, distMin, productiveMin,
-           deepPct, shallowPct, adminPct, distPct, productivePct,
+  return { totalMin, nine5Min, deepMin, shallowMin, errandsMin, learningMin, exerciseMin, socialMin, recoveryMin, wasteMin,
+           productiveMin, deepPct, nine5Pct, shallowPct, errandsPct, learningPct, exercisePct, socialPct, recoveryPct, wastePct, productivePct,
            peakHour, peakHourLabel, peakHourMin, focusScore,
            deepHrs: (deepMin / 60).toFixed(1),
            entryCount: dayEntries.length };
@@ -5092,7 +5177,7 @@ function computeDailySummary(dateKey) {
 
 function getDailySummaryInsight(s) {
   const tone = settings.coachTone || 'analyst';
-  const { deepPct, distPct, productivePct, peakHourLabel, deepMin, focusScore } = s;
+  const { deepPct, wastePct, productivePct, peakHourLabel, deepMin, focusScore } = s;
   const dh = (deepMin / 60).toFixed(1);
   const ph = peakHourLabel ? ` Peak: ${peakHourLabel}.` : '';
 
@@ -5110,11 +5195,11 @@ function getDailySummaryInsight(s) {
       mirror:  `You avoided the hard work today. Own it and fix it.`
     }[tone];
   }
-  if (distPct >= 30) {
+  if (wastePct >= 30) {
     return {
-      analyst: `${distPct}% lost to distraction. ${productivePct}% productive.${ph}`,
-      coach:   `${distPct}% distraction is eating your output. Protect your blocks.`,
-      mirror:  `${distPct}% of today was wasted. You know what you chose over your work.`
+      analyst: `${wastePct}% lost to waste. ${productivePct}% productive.${ph}`,
+      coach:   `${wastePct}% waste is eating your output. Protect your blocks.`,
+      mirror:  `${wastePct}% of today was wasted. You know what you chose over your work.`
     }[tone];
   }
   return {
@@ -5129,7 +5214,7 @@ function buildDailySummaryHTML(s) {
 
   const scorePillClass = s.focusScore >= 70 ? '' : s.focusScore >= 40 ? ' mid' : ' low';
   const deepValClass   = s.deepPct >= 40 ? 'good' : s.deepPct >= 20 ? 'warn' : '';
-  const distValClass   = s.distPct >= 30 ? 'bad' : s.distPct >= 15 ? 'warn' : '';
+  const wasteValClass  = s.wastePct >= 30 ? 'bad' : s.wastePct >= 15 ? 'warn' : '';
   const prodValClass   = s.productivePct >= 70 ? 'good' : s.productivePct >= 50 ? 'warn' : '';
 
   const peakHtml = s.peakHourLabel
@@ -5140,12 +5225,17 @@ function buildDailySummaryHTML(s) {
        </div>`
     : '';
 
-  // Split bar proportions — cap at 100% total
+  // Split bar — all 9 categories
   const segs = [
-    { cls: 'deep',        pct: s.deepPct },
-    { cls: 'shallow',     pct: s.shallowPct },
-    { cls: 'admin',       pct: s.adminPct },
-    { cls: 'distraction', pct: s.distPct },
+    { cls: 'deep',     pct: s.deepPct },
+    { cls: 'shallow',  pct: s.shallowPct },
+    { cls: 'nine5',    pct: s.nine5Pct },
+    { cls: 'errands',  pct: s.errandsPct },
+    { cls: 'learning', pct: s.learningPct },
+    { cls: 'exercise', pct: s.exercisePct },
+    { cls: 'social',   pct: s.socialPct },
+    { cls: 'recovery', pct: s.recoveryPct },
+    { cls: 'waste',    pct: s.wastePct },
   ].filter(seg => seg.pct > 0);
 
   const splitBar = segs.map(seg =>
@@ -5169,12 +5259,12 @@ function buildDailySummaryHTML(s) {
         <div class="ds-metric-label">Productive</div>
       </div>
       <div class="ds-metric">
-        <div class="ds-metric-val ${distValClass}">${s.distPct}%</div>
-        <div class="ds-metric-label">Distraction</div>
+        <div class="ds-metric-val ${wasteValClass}">${s.wastePct}%</div>
+        <div class="ds-metric-label">Waste</div>
       </div>
     </div>
     <div class="ds-split-label">
-      <span>Deep · Shallow · Admin · Distraction</span>
+      <span>Deep · Shallow · 9-5 · Errands · Learning · Exercise · Social · Recovery · Waste</span>
       <span>${fmtDur(s.totalMin)} tracked</span>
     </div>
     <div class="ds-split-bar">${splitBar}</div>
@@ -5210,30 +5300,38 @@ function computeInsights(weekKey) {
   if (!we.length) return null;
 
   const totalMin = we.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const deepMin = we.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const shallowMin = we.filter(e => e.energy === 'shallow').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const distMin = we.filter(e => (e.energy === 'waste' || e.energy === 'distraction')).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const awayMin = we.filter(e => e.away).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const deepPct = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
-  const deepHrs = (deepMin / 60).toFixed(1);
+  const minFor = key => we.filter(e => e.energy === key).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const deepMin     = minFor('deep');
+  const shallowMin  = minFor('shallow');
+  const nine5Min    = minFor('nine5');
+  const errandsMin  = minFor('errands');
+  const learningMin = minFor('learning');
+  const exerciseMin = minFor('exercise');
+  const socialMin   = minFor('social');
+  const recoveryMin = minFor('recovery');
+  const wasteMin    = minFor('waste');
+  const productiveMin = nine5Min + deepMin + shallowMin + errandsMin + learningMin;
+  const deepPct  = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
+  const wastePct = totalMin > 0 ? Math.round(wasteMin / totalMin * 100) : 0;
+  const deepHrs  = (deepMin / 60).toFixed(1);
 
   // Top activity by time
   const actMap = {};
-  we.filter(e => !e.break && !e.away && e.activity).forEach(e => {
+  we.filter(e => e.activity).forEach(e => {
     const k = e.activity.split(' (Output:')[0];
     actMap[k] = (actMap[k] || 0) + (e.blockIntervalMin || 0);
   });
   let topActivity = '—', topActivityMin = 0;
   Object.entries(actMap).forEach(([k, m]) => { if (m > topActivityMin) { topActivityMin = m; topActivity = k; } });
 
-  // Worst distraction by time
-  const distMap = {};
-  we.filter(e => (e.energy === 'waste' || e.energy === 'distraction') && e.activity).forEach(e => {
+  // Worst waste activity by time
+  const wasteMap = {};
+  we.filter(e => e.energy === 'waste' && e.activity).forEach(e => {
     const k = e.activity.split(' (Output:')[0];
-    distMap[k] = (distMap[k] || 0) + (e.blockIntervalMin || 0);
+    wasteMap[k] = (wasteMap[k] || 0) + (e.blockIntervalMin || 0);
   });
   let worstDist = '—', worstDistMin = 0;
-  Object.entries(distMap).forEach(([k, m]) => { if (m > worstDistMin) { worstDistMin = m; worstDist = k; } });
+  Object.entries(wasteMap).forEach(([k, m]) => { if (m > worstDistMin) { worstDistMin = m; worstDist = k; } });
 
   // Peak focus hour
   const hourBuckets = {};
@@ -5245,7 +5343,7 @@ function computeInsights(weekKey) {
   Object.entries(hourBuckets).forEach(([h, m]) => { if (m > peakMin) { peakMin = m; peakHour = Number(h); } });
   const peakHourLabel = peakHour !== null ? `${peakHour % 12 || 12}${peakHour < 12 ? 'am' : 'pm'}` : '—';
 
-  // Best day
+  // Best day (most deep work)
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const dayBuckets = {};
   we.filter(e => e.energy === 'deep').forEach(e => {
@@ -5254,7 +5352,8 @@ function computeInsights(weekKey) {
   let bestDay = '—', bestDayMin = 0;
   Object.entries(dayBuckets).forEach(([d, m]) => { if (m > bestDayMin) { bestDayMin = m; bestDay = dayNames[new Date(d+'T12:00:00').getDay()]; } });
 
-  return { totalMin, deepMin, deepHrs, deepPct, shallowMin, distMin, awayMin,
+  return { totalMin, deepMin, deepHrs, deepPct, shallowMin, nine5Min, errandsMin, learningMin, exerciseMin, socialMin, recoveryMin, wasteMin,
+           productiveMin, wastePct,
            topActivity, topActivityMin, worstDist, worstDistMin,
            peakHourLabel, bestDay, bestDayMin };
 }
@@ -5284,9 +5383,9 @@ function renderReflectView() {
           <div class="reflect-goal-bar"><div class="reflect-goal-fill" style="width:${deepGoalPct}%"></div></div>
           <div style="font-size:10px;color:var(--muted);margin-top:4px">Goal: ${deepGoal}h · ${deepGoalPct}% done</div>
         </div>
-        <div class="reflect-stat ${ins.distMin > 0 ? 'bad' : ''}">
-          <div class="reflect-stat-val">${ins.distMin >= 60 ? (ins.distMin/60).toFixed(1)+'h' : ins.distMin+'m'}</div>
-          <div class="reflect-stat-label">Lost to distractions</div>
+        <div class="reflect-stat ${ins.wasteMin > 0 ? 'bad' : ''}">
+          <div class="reflect-stat-val">${ins.wasteMin >= 60 ? (ins.wasteMin/60).toFixed(1)+'h' : ins.wasteMin+'m'}</div>
+          <div class="reflect-stat-label">Lost to waste</div>
           <div class="reflect-stat-sub">${ins.worstDist !== '—' ? ins.worstDist : 'None logged'}</div>
         </div>
         <div class="reflect-stat">
@@ -5345,7 +5444,7 @@ function saveWeeklyReview() {
   weeklyReviews[weekKey].savedAt    = Date.now();
   // Snapshot the week's key stats alongside the reflection
   const ins = computeInsights(weekKey);
-  if (ins) weeklyReviews[weekKey].stats = { deepHrs: ins.deepHrs, deepPct: ins.deepPct, distMin: ins.distMin, worstDist: ins.worstDist, topActivity: ins.topActivity };
+  if (ins) weeklyReviews[weekKey].stats = { deepHrs: ins.deepHrs, deepPct: ins.deepPct, wasteMin: ins.wasteMin, worstDist: ins.worstDist, topActivity: ins.topActivity };
   persist();
   const reviewBadge = document.getElementById('weekly-review-saved');
   reviewBadge.textContent = '✓ Saved ' + formatSavedAt(weeklyReviews[weekKey].savedAt);
@@ -5393,7 +5492,7 @@ function renderReflectHistory() {
 
     const isCurrent = wk === currentWeek;
     const stats = wr.stats;
-    const statsHtml = stats ? `<span class="reflect-week-card-stats">${stats.deepHrs}h deep · ${stats.deepPct}% · ${stats.distMin}m lost</span>` : '';
+    const statsHtml = stats ? `<span class="reflect-week-card-stats">${stats.deepHrs}h deep · ${stats.deepPct}% · ${stats.wasteMin != null ? stats.wasteMin : (stats.distMin || 0)}m wasted</span>` : '';
 
     const reviewHtml = hasReview ? `
       <div style="padding:12px 14px;border-bottom:${hasPlan ? '1px solid var(--border)' : 'none'}">
