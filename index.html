@@ -205,6 +205,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
   border:1px solid var(--border2);background:var(--bg3);color:var(--text);width:100%;outline:none}
 .away-custom-input:focus{border-color:var(--away)}
 
+/* ── Awareness Signal ── */
+.signal-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:12px}
+.signal-header{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted2);margin-bottom:10px}
+.signal-item{font-size:13px;color:var(--text);line-height:1.5;padding:3px 0;display:flex;align-items:flex-start;gap:10px}
+.signal-dot{width:5px;height:5px;border-radius:50%;margin-top:7px;flex-shrink:0}
+
 /* ── Continue banner ── */
 .continue-banner{display:none;background:var(--bg2);border:1px solid rgba(76,199,240,0.25);
   border-radius:var(--r2);padding:12px 14px;margin-bottom:12px;align-items:center;gap:10px}
@@ -549,8 +555,11 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .signin-google-btn:active{transform:scale(0.97)}
 .signin-note{font-size:11px;color:var(--muted2);margin-top:20px;max-width:240px;line-height:1.6}
 
-/* ── Gap rows in timeline ── */
-.tl-gap-row .tl-activity{color:var(--muted);font-style:italic}
+/* ── Untracked blocks in timeline ── */
+.tl-untracked-row .tl-activity{color:var(--muted)}
+.tl-bar-untracked{background:var(--away);opacity:0.35}
+.tl-badge-untracked{background:rgba(148,163,184,0.15);color:var(--away);border-radius:4px;font-size:9px;font-weight:700;padding:2px 6px;margin-left:6px;letter-spacing:0.04em}
+/* keep .tl-bar-gap for any legacy missed entries */
 .tl-bar-gap{background:repeating-linear-gradient(45deg,var(--bg4),var(--bg4) 3px,transparent 3px,transparent 7px)!important}
 .log-gap-btn{font-size:11px;flex-shrink:0;padding:4px 10px;border-radius:6px;border:1px solid rgba(76,199,240,0.35);
   background:var(--deep-dim2);color:var(--deep);cursor:pointer;font-family:var(--head);font-weight:600;
@@ -604,6 +613,178 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .reflect-section-tag{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;padding:2px 7px;border-radius:999px;display:inline-block;margin-bottom:4px}
 .reflect-section-tag.review{background:var(--deep-dim);color:var(--deep)}
 .reflect-section-tag.plan{background:var(--admin-dim);color:var(--admin)}
+
+/* ══════════════════════════════════════════════════════
+   MOBILE TOUCH OPTIMIZATION
+   ══════════════════════════════════════════════════════ */
+
+/* Smooth scrolling globally */
+html { scroll-behavior: smooth; }
+
+/* Scrollable views — momentum scroll + contain bounce */
+.view {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+.modal, .away-dropdown, .presets-scroll, .switch-list {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Remove tap flash on all interactive elements */
+button, a, [role="button"],
+.chip, .preset-chip, .day-tab, .energy-btn, .friction-btn,
+.switch-list-item, .away-dropdown-item, .tl-bucket-header,
+.tl-row, .log-gap-btn, .nav-btn, .nav-log {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation; /* eliminates 300ms click delay */
+}
+
+/* ── Tap target sizes (min 44px height) ── */
+.btn.sm { padding: 9px 14px; font-size: 12px; }
+
+.chip { padding: 7px 13px; font-size: 12px; }
+.chips-row { gap: 8px; margin-top: 10px; }
+
+.preset-chip { padding: 8px 16px; font-size: 12px; }
+
+.log-gap-btn { padding: 8px 13px; font-size: 12px; min-height: 36px; }
+
+.nav-btn { padding: 10px 0; }
+.nav-btn svg { width: 20px; height: 20px; }
+
+.tl-row { min-height: 44px; }
+.tl-row + .tl-row { margin-top: 4px; }
+
+.tl-bucket-header { min-height: 48px; }
+
+.day-tab { padding: 10px 16px; }
+
+.away-dropdown-item { padding: 12px 16px; }
+
+/* ── Thumb-friendly spacing ── */
+.hero-controls { gap: 10px; padding-top: 10px; margin-top: 8px; }
+
+.entry-row { padding: 11px 14px; gap: 10px; }
+
+.setting-row { padding: 11px 0; }
+.settings-section { padding: 16px; }
+
+.energy-btn { padding: 14px 12px; }
+
+/* font-size ≥ 16px prevents iOS Safari from auto-zooming on input focus */
+.field input, .field select, .field textarea {
+  padding: 10px 12px;
+  font-size: 16px;
+}
+.quick-retro-input { padding: 9px 12px; font-size: 16px; }
+.quick-retro-sel { padding: 9px 10px; font-size: 14px; }
+.hero-input { font-size: 16px; }
+.setting-control input { font-size: 16px; }
+.sync-room-row input { font-size: 16px; }
+.away-custom-input { font-size: 16px; }
+
+/* ── Smoother transitions ── */
+.btn {
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.btn:active { transform: scale(0.96); transition: transform 0.08s ease; }
+
+/* Modal sheet — iOS-style spring */
+.modal { transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1); }
+.overlay { transition: opacity 0.25s ease; }
+.overlay.open .modal { transition: transform 0.32s cubic-bezier(0.34, 1.1, 0.64, 1); }
+
+/* Overlay panels */
+.quicklog-overlay { transition: opacity 0.22s ease; }
+.focus-block-overlay { transition: opacity 0.25s ease; }
+
+/* Away dropdown */
+.away-dropdown {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform-origin: top left;
+}
+.away-dropdown.show { opacity: 1; transform: scale(1); }
+.away-dropdown:not(.show) { opacity: 0; transform: scale(0.96); }
+
+/* Hero state transitions */
+.activity-hero { transition: border-color 0.3s ease, background 0.3s ease; }
+
+/* Switch list items */
+.switch-list-item { transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+
+/* Ring fill */
+.ring-fg { transition: stroke-dashoffset 0.9s linear; }
+
+/* Commit bar / week progress fill */
+.commit-fill, .week-progress-fill, .reflect-goal-fill, .fbo-progress-fill {
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (max-width: 380px) {
+  .btn.sm { padding: 9px 11px; }
+  .chip { max-width: 110px; }
+  .hero-controls { gap: 7px; }
+}
+
+/* ── Behavioral Feedback Flash ── */
+.feedback-flash{border-radius:var(--r2);padding:12px 15px;margin-bottom:12px;
+  border-left:3px solid;cursor:pointer;position:relative}
+@keyframes fb-in{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fb-out{from{opacity:1}to{opacity:0}}
+.feedback-flash.entering{animation:fb-in 0.22s ease forwards}
+.feedback-flash.leaving{animation:fb-out 0.35s ease forwards;pointer-events:none}
+.feedback-flash.type-deep{background:var(--deep-dim);border-color:var(--deep)}
+.feedback-flash.type-warn{background:rgba(249,199,79,0.1);border-color:var(--admin)}
+.feedback-flash.type-bad{background:var(--distraction-dim);border-color:var(--distraction)}
+.feedback-flash.type-neutral{background:var(--bg3);border-color:var(--border2)}
+.fb-eyebrow{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px}
+.type-deep .fb-eyebrow{color:var(--deep)}.type-warn .fb-eyebrow{color:var(--admin)}
+.type-bad .fb-eyebrow{color:var(--distraction)}.type-neutral .fb-eyebrow{color:var(--muted)}
+.fb-message{font-size:13px;font-weight:600;line-height:1.5;color:var(--text)}
+.fb-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
+.fb-dismiss{position:absolute;top:10px;right:12px;font-size:11px;color:var(--muted2);
+  background:none;border:none;cursor:pointer;padding:2px 4px;line-height:1}
+
+/* ── Awareness signal upgrade ── */
+.signal-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:12px}
+.signal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.signal-header-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted2)}
+.signal-badge{font-size:9px;font-family:var(--mono);font-weight:700;padding:2px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:0.07em}
+.signal-badge.good{background:var(--deep-dim);color:var(--deep)}
+.signal-badge.bad{background:var(--distraction-dim);color:var(--distraction)}
+.signal-badge.warn{background:rgba(249,199,79,0.1);color:var(--admin)}
+.signal-item{font-size:13px;color:var(--text);line-height:1.5;padding:5px 0;display:flex;align-items:flex-start;gap:10px;border-top:1px solid var(--border)}
+.signal-item:first-of-type{border-top:none;padding-top:0}
+.signal-dot{width:5px;height:5px;border-radius:50%;margin-top:8px;flex-shrink:0}
+.signal-item-body{flex:1}
+.signal-item-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:2px}
+
+/* ── Daily Summary Card ── */
+.daily-summary{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:12px}
+.daily-summary.has-data{border-color:rgba(76,199,240,0.18)}
+.ds-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.ds-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)}
+.ds-score-pill{font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--deep-dim);color:var(--deep)}
+.ds-score-pill.mid{background:rgba(249,199,79,0.12);color:var(--admin)}
+.ds-score-pill.low{background:var(--distraction-dim);color:var(--distraction)}
+.ds-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
+.ds-metric{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 8px;text-align:center}
+.ds-metric-val{font-family:var(--mono);font-size:17px;font-weight:600;color:var(--text);line-height:1}
+.ds-metric-val.good{color:var(--deep)}
+.ds-metric-val.warn{color:var(--admin)}
+.ds-metric-val.bad{color:var(--distraction)}
+.ds-metric-label{font-size:9px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-top:3px;font-weight:600}
+.ds-split-label{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:4px}
+.ds-split-bar{display:flex;height:7px;border-radius:4px;overflow:hidden;margin-bottom:10px;gap:1px;background:var(--bg4)}
+.ds-split-seg{height:100%;min-width:0;transition:width 0.5s cubic-bezier(0.4,0,0.2,1)}
+.ds-split-seg.deep{background:var(--deep)}
+.ds-split-seg.shallow{background:var(--shallow)}
+.ds-split-seg.admin{background:var(--admin)}
+.ds-split-seg.distraction{background:var(--distraction)}
+.ds-peak{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px}
+.ds-peak-badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--deep-dim);color:var(--deep);white-space:nowrap}
+.ds-insight{font-size:12px;color:var(--muted);line-height:1.55;padding-top:9px;border-top:1px solid var(--border);font-style:italic}
 </style>
 </head>
 <body>
@@ -742,6 +923,9 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     <button class="btn sm ghost" onclick="doSwitchFromBanner()">↷ Switch</button>
   </div>
 
+  <!-- Behavioral Feedback Flash -->
+  <div id="feedback-flash" style="display:none"></div>
+
   <!-- Quick retro log -->
   <div class="quick-retro-bar" style="flex-wrap:wrap;gap:6px">
     <input class="quick-retro-input" id="retro-task" placeholder="What did you do?"
@@ -758,6 +942,9 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
     </select>
     <button class="btn sm primary" onclick="quickRetroLog()">Log</button>
   </div>
+
+  <!-- Awareness Signal -->
+  <div id="awareness-signal" style="display:none"></div>
 
   <!-- Untracked warning banner — shows whenever there are gaps -->
   <div id="untracked-banner" style="display:none;background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.25);border-radius:var(--r2);padding:12px 14px;margin-bottom:12px;align-items:center;gap:10px">
@@ -794,6 +981,9 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       <div class="s-val" id="s-identity" style="font-size:13px">—</div>
     </div>
   </div>
+  <!-- Daily Summary Card -->
+  <div class="daily-summary" id="daily-summary" style="display:none"></div>
+
   <!-- Daily commitment bar -->
   <div class="commit-bar" id="commit-bar">
     <div style="font-size:12px;color:var(--muted);flex-shrink:0">Goal</div>
@@ -831,6 +1021,12 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <div class="view" id="view-reflect">
   <div class="page-header"><div class="page-title">Reflect</div></div>
 
+  <!-- Today's Daily Summary -->
+  <div class="settings-section" id="reflect-daily-section">
+    <div class="settings-title">Today's summary</div>
+    <div id="reflect-daily-summary"></div>
+  </div>
+
   <!-- This week's patterns -->
   <div class="settings-section">
     <div class="settings-title">This week's numbers</div>
@@ -843,7 +1039,8 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       Weekly review
       <span id="weekly-review-saved" style="font-size:10px;color:var(--deep);font-weight:600;display:none">✓ Saved</span>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Look back at this week honestly.</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Look back at this week honestly.</div>
+    <div style="font-size:10px;color:var(--muted2);margin-bottom:12px">Each week is saved permanently — saving a new one never overwrites another.</div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="field"><label>What went well?</label><textarea id="wr-overall" rows="2" placeholder="Wins, progress, good habits…" style="resize:none"></textarea></div>
       <div class="field"><label>What didn't go well?</label><textarea id="wr-priorities" rows="2" placeholder="What fell short or felt off…" style="resize:none"></textarea></div>
@@ -859,7 +1056,8 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
       Next week's plan
       <span id="weekly-plan-saved" style="font-size:10px;color:var(--deep);font-weight:600;display:none">✓ Saved</span>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Set your intentions before the week begins.</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Set your intentions before the week begins.</div>
+    <div style="font-size:10px;color:var(--muted2);margin-bottom:12px">Saved permanently per week — won't be overwritten when next week starts.</div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="field"><label>Top priority #1</label><input type="text" id="wp-p1" placeholder="Most important thing to move forward"></div>
       <div class="field"><label>Top priority #2</label><input type="text" id="wp-p2" placeholder="Second most important…"></div>
@@ -926,6 +1124,24 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   
 
   <div class="settings-section">
+    <div class="settings-title">Identity</div>
+    <div class="setting-row" style="border-bottom:none">
+      <div>
+        <div class="setting-label">Coach tone</div>
+        <div class="setting-sub">How the app speaks to you about your time</div>
+      </div>
+      <div class="setting-control">
+        <select id="set-coach-tone" onchange="saveSettings()" style="width:auto;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 7px;border-radius:6px;outline:none">
+          <option value="analyst">Neutral Analyst</option>
+          <option value="coach">Strict Coach</option>
+          <option value="mirror">Brutal Mirror</option>
+        </select>
+      </div>
+    </div>
+    <div id="coach-tone-preview" style="font-size:11px;color:var(--muted);font-style:italic;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"></div>
+  </div>
+
+  <div class="settings-section">
     <div class="settings-title">Quick-log presets</div>
     <div class="presets-editor" id="presets-editor"></div>
     <button class="btn sm ghost" onclick="addPreset()" style="margin-top:4px">+ Add preset</button>
@@ -984,7 +1200,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 <div class="signin-overlay" id="signin-overlay">
   <div class="signin-logo">⏱</div>
   <div class="signin-app-name">ChronaSense</div>
-  <div class="signin-tagline">Track every hour. See where your time really goes. Syncs instantly across all your devices.</div>
+  <div class="signin-tagline">It shows you exactly where your life is going every day.</div>
   <button class="signin-google-btn" onclick="signIn()">
     <svg width="20" height="20" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
     Continue with Google
@@ -1374,7 +1590,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 // ══════════════════════════════════════════════════════
 let currentTask = '';
 let entries = [];
-let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workDayStart:'09:00', activityColors:{} };
+let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workDayStart:'09:00', activityColors:{}, coachTone:'analyst' };
 let reviews = {};
 let weeklyReviews = {};
 let intention = '';
@@ -1428,6 +1644,31 @@ let connectedDevices = {};
 
 const CIRCUM = 314.2;
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+// ══════════════════════════════════════════════════════
+// BUCKET CLASSIFICATION
+// Maps any entry to one of: deep_work | shallow_work | recovery | waste
+// ══════════════════════════════════════════════════════
+const AWAY_BUCKETS = {
+  'Eat':      'recovery',
+  'Walk':     'recovery',
+  'Exercise': 'recovery',
+  'Rest':     'recovery',
+  'Personal': 'recovery',
+  'Commute':  'shallow_work',
+  'Errand':   'shallow_work',
+};
+
+function getBucket(entry) {
+  if (!entry) return null;
+  if (entry.away) return AWAY_BUCKETS[entry.activity] || 'recovery';
+  if (entry.break || entry.energy === 'break') return 'recovery';
+  if (entry.energy === 'deep')        return 'deep_work';
+  if (entry.energy === 'shallow')     return 'shallow_work';
+  if (entry.energy === 'admin')       return 'shallow_work';
+  if (entry.energy === 'distraction') return 'waste';
+  return null;
+}
 
 function initAutoSync() {
   if (!firebase.apps.length) {
@@ -1547,12 +1788,15 @@ const DEFAULT_PRESETS = [
 // PERSIST
 // ══════════════════════════════════════════════════════
 function persist() {
+  // Always store entries in strict chronological order (newest first)
+  entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
   localStorage.setItem('ta3-entries', JSON.stringify(entries));
   localStorage.setItem('ta3-settings', JSON.stringify(settings));
   localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
   localStorage.setItem('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
   localStorage.setItem('ta3-intention', intention);
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
+  localStorage.setItem('ta3-lv', Date.now()); // local version — used to detect unsynced changes
   if (running && timerStartedAt) {
     localStorage.setItem('ta3-timer', JSON.stringify({timerStartedAt, totalSecs, running: true, lastTask: lastTaskForRepeat}));
   } else {
@@ -1561,6 +1805,15 @@ function persist() {
 }
 function load() {
   try { const raw = JSON.parse(localStorage.getItem('ta3-entries') || '[]'); entries = Array.isArray(raw) ? raw : Object.values(raw).filter(e=>e&&e.id); } catch(e){ entries=[]; }
+  // Migrate: stamp updatedAt on any entry that's missing it (older entries)
+  entries.forEach(e => { if (!e.updatedAt) e.updatedAt = e.ts || Date.now(); });
+  // Migrate: stamp category + originalLabel on any entry that's missing them (older entries)
+  entries.forEach(e => {
+    if (!e.category)      e.category      = getBucket(e);
+    if (!e.originalLabel) e.originalLabel = e.energy || null;
+  });
+  // Always sort by actual start time, newest first
+  entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
   try { const s = JSON.parse(localStorage.getItem('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
   try { reviews = JSON.parse(localStorage.getItem('ta3-reviews') || '{}'); } catch(e){ reviews={}; }
   try { weeklyReviews = JSON.parse(localStorage.getItem('ta3-weekly-reviews') || '{}'); } catch(e){ weeklyReviews={}; }
@@ -1923,6 +2176,7 @@ function endBreak() {
     onPlan: true,
     break: true
   };
+  entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
   entries.unshift(entry);
 
   // Restart timer for next block
@@ -2121,15 +2375,17 @@ function _doQuickSave(activity, energy) {
   if (LocalNotifications) LocalNotifications.cancel({ notifications: [{ id: PING_FOLLOWUP_ID }] }).catch(()=>{});
   stopAlertLoop();
   if (!activity) activity = energy;
+  const _now = Date.now();
   const entry = {
-    id: Date.now(), ts: Date.now(),
-    tsStart: blockStartTime || (Date.now() - totalSecs * 1000),
+    id: _now, ts: _now, updatedAt: _now,
+    tsStart: blockStartTime || (_now - totalSecs * 1000),
     blockIntervalMin: settings.intervalMin,
     date: toDateKey(new Date()),
     activity, energy,
     onPlan: energy !== 'distraction',
     quickLogged: true
   };
+  entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
   entries.unshift(entry);
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
@@ -2157,16 +2413,230 @@ function snoozeLog() {
 
 function showLogFeedback(energy) {
   const ring = document.getElementById('ring');
-  ring.classList.add('ring-flash');
-  ring.addEventListener('animationend', () => ring.classList.remove('ring-flash'), {once: true});
-  const deepCount = getTodayEntries().filter(e => e.energy === 'deep' && !e.missed).length;
-  if (energy === 'deep') {
-    showToast(`Deep block logged · ${deepCount} deep block${deepCount !== 1 ? 's' : ''} today`);
-  } else if (energy === 'distraction') {
-    showToast('Distraction logged — refocus for next block');
-  } else {
-    showToast('Logged ✓');
+  if (ring) { ring.classList.add('ring-flash'); ring.addEventListener('animationend', () => ring.classList.remove('ring-flash'), {once:true}); }
+  const todayE = getTodayEntries().filter(e => !e.missed);
+  const latest = todayE[0];
+  if (latest) fireBehavioralFeedback(latest, todayE);
+}
+
+// ══════════════════════════════════════════════════════
+// BEHAVIORAL FEEDBACK ENGINE
+// ══════════════════════════════════════════════════════
+let _feedbackTimer = null;
+
+function fireBehavioralFeedback(entry, todayE) {
+  const fb = analyzeBehavior(entry, todayE);
+  if (!fb) return;
+  renderFeedbackFlash(fb);
+}
+
+function analyzeBehavior(entry, todayE) {
+  const tone = settings.coachTone || 'analyst';
+  const T = (a, c, m) => ({ analyst: a, coach: c, mirror: m })[tone] || a;
+
+  const real = todayE.filter(e => !e.away && !e.break);
+  const deepEntries = real.filter(e => e.energy === 'deep');
+  const distEntries = real.filter(e => e.energy === 'distraction');
+  const deepMin  = deepEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const distMin  = distEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const totalMin = real.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const deepPct  = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
+  const distPct  = totalMin > 0 ? Math.round(distMin / totalMin * 100) : 0;
+  const hour     = new Date().getHours();
+
+  // ── How many consecutive entries from the top (most recent) are distraction? ──
+  let distStreak = 0;
+  for (const e of real) {
+    if (e.energy === 'distraction') distStreak++; else break;
   }
+
+  // ── How many times has this exact activity been logged as distraction today? ──
+  const activityName = entry.activity.split(' (Output:')[0];
+  const sameActivityDist = distEntries.filter(e =>
+    e.activity.split(' (Output:')[0].toLowerCase() === activityName.toLowerCase()
+  ).length;
+
+  // ── Minutes since last deep work ──
+  const lastDeep = deepEntries[0]; // entries sorted newest-first
+  const minsSinceDeep = lastDeep ? Math.round((Date.now() - lastDeep.ts) / 60000) : null;
+
+  // === DISTRACTION entries ===
+  if (entry.energy === 'distraction') {
+    const wastedStr = distMin >= 60 ? `${(distMin/60).toFixed(1)}h` : `${distMin}m`;
+
+    if (sameActivityDist >= 3) {
+      return { type: 'bad', eyebrow: 'Habit detected',
+        message: T(
+          `"${activityName}" has appeared ${sameActivityDist}× today.`,
+          `"${activityName}" again. That's ${sameActivityDist} times today. Call it what it is.`,
+          `${sameActivityDist}× on "${activityName}". That's not accidental — that's a default.`
+        ),
+        sub: T(`${wastedStr} lost to distractions total.`,
+              `${wastedStr} gone. Each time you open it you choose it.`,
+              `${wastedStr} of your life. You know this.`) };
+    }
+
+    if (distStreak >= 3) {
+      return { type: 'bad', eyebrow: `${distStreak} distractions in a row`,
+        message: T(
+          `Three consecutive distraction blocks logged.`,
+          `${distStreak} distractions in a row. You've lost the session. Reset now.`,
+          `${distStreak} in a row. You're not working — you're avoiding something.`
+        ),
+        sub: T(`Consider resetting with a focused sprint.`,
+              `Start a 25-min sprint. Right now.`,
+              `What are you running from?`) };
+    }
+
+    if (distStreak === 2) {
+      return { type: 'bad', eyebrow: 'Pattern forming',
+        message: T(
+          `Two distraction blocks back to back.`,
+          `Two in a row. This is where it snowballs — stop it here.`,
+          `Twice in a row. You're in a drift. The next block decides the day.`
+        ),
+        sub: T(`${wastedStr} lost to distractions today.`,
+              `${wastedStr} wasted. Make the next one count.`,
+              `${wastedStr} gone. The trend is yours to reverse.`) };
+    }
+
+    // First or single distraction
+    if (hour >= 14 && deepMin < 60) {
+      return { type: 'bad', eyebrow: 'Distraction logged',
+        message: T(
+          `Distraction logged. ${deepMin}m of deep work so far — and it's past 2pm.`,
+          `Past 2pm. ${deepMin < 30 ? 'Almost no' : 'Only ' + deepMin + 'm of'} deep work. This distraction just made that worse.`,
+          `It's ${hour}:00. You've done ${deepMin < 30 ? 'almost nothing deep' : `${deepMin}m of deep work`}. And you just chose this.`
+        ),
+        sub: `${wastedStr} lost to distractions today.` };
+    }
+
+    return { type: 'bad', eyebrow: 'Distraction logged',
+      message: T(
+        `Distraction logged. ${distEntries.length === 1 ? 'First one today.' : `${distEntries.length} today.`}`,
+        `Logged. Now refocus. Don't let it become two.`,
+        `You know it was a waste. The next block is the test.`
+      ),
+      sub: `${wastedStr} lost to distractions today.` };
+  }
+
+  // === DEEP WORK entries ===
+  if (entry.energy === 'deep') {
+    const blockDur = entry.blockIntervalMin || 0;
+    const deepHrsStr = deepMin >= 60 ? `${(deepMin/60).toFixed(1)}h` : `${deepMin}m`;
+
+    // Just recovered from a distraction streak
+    if (real[1] && real[1].energy === 'distraction') {
+      return { type: 'deep', eyebrow: 'Recovery block',
+        message: T(
+          `Back to deep work. ${deepHrsStr} total today.`,
+          `Good. You broke the drift. Now chain another one.`,
+          `You came back. That matters. Don't let it be the only one.`
+        ),
+        sub: distPct > 0 ? `${distPct}% of today was still distraction.` : '' };
+    }
+
+    // Milestones
+    if (deepEntries.length === 5) {
+      return { type: 'deep', eyebrow: '5 deep blocks',
+        message: T(
+          `Five deep work blocks today. That's a strong output day.`,
+          `5 deep blocks. This is what a real workday looks like.`,
+          `5 deep blocks. Most people never get there. Keep going.`
+        ),
+        sub: `${deepHrsStr} of deep work logged today.` };
+    }
+    if (deepEntries.length === 3) {
+      return { type: 'deep', eyebrow: '3 deep blocks',
+        message: T(
+          `Three deep blocks in. Consistent output today.`,
+          `Three deep blocks. You're building real momentum.`,
+          `Three in. Now the question is: can you push it to five?`
+        ),
+        sub: `${deepHrsStr} total · ${distPct > 0 ? `${distPct}% still lost to distraction` : 'no distractions logged'}` };
+    }
+    if (deepPct >= 60 && deepEntries.length >= 2) {
+      return { type: 'deep', eyebrow: 'Deep work majority',
+        message: T(
+          `Deep work is now ${deepPct}% of your tracked time.`,
+          `${deepPct}% deep. This is what a high-leverage day looks like.`,
+          `${deepPct}% deep. You're proving something to yourself today.`
+        ),
+        sub: `${deepHrsStr} locked in.` };
+    }
+    if (deepEntries.length === 1) {
+      return { type: 'deep', eyebrow: 'First deep block',
+        message: T(
+          `First deep block of the day logged. ${blockDur}m.`,
+          `First deep block in. Now build on it.`,
+          `Finally. Now don't stop.`
+        ),
+        sub: hour >= 14
+          ? T(`It\'s past 2pm — make every remaining block count.`,
+              `Late start. Fewer hours left. Make each one count.`,
+              `You started late. That\'s already a cost. Minimize the rest.`)
+          : `Build a chain from here.` };
+    }
+
+    return { type: 'deep', eyebrow: 'Deep work logged',
+      message: T(
+        `Deep block logged. ${deepHrsStr} total today.`,
+        `${deepHrsStr} of deep work. Keep the chain alive.`,
+        `${deepHrsStr} in. The day is being built. Don\'t break it now.`
+      ),
+      sub: '' };
+  }
+
+  // === SHALLOW / ADMIN — only fire when patterns warrant ===
+  if (entry.energy === 'shallow' || entry.energy === 'admin') {
+    // Long run without deep work during prime hours
+    if (hour >= 10 && hour <= 16 && minsSinceDeep !== null && minsSinceDeep > 120 && deepMin > 0) {
+      const gapStr = minsSinceDeep >= 120 ? `${Math.round(minsSinceDeep/60)}h` : `${minsSinceDeep}m`;
+      return { type: 'warn', eyebrow: 'Deep work gap',
+        message: T(
+          `No deep work in the last ${gapStr}. Shallow blocks are accumulating.`,
+          `${gapStr} since your last deep block. You\'re in reactive mode.`,
+          `${gapStr} without real work. You\'re busy — but on what?`
+        ),
+        sub: `${deepMin}m deep so far today.` };
+    }
+    // No deep work at all late in day
+    if (hour >= 15 && deepMin === 0) {
+      return { type: 'warn', eyebrow: 'No deep work yet',
+        message: T(
+          `No deep work logged today and it\'s ${hour}:00.`,
+          `${hour}:00 and zero deep work. The window is closing.`,
+          `It\'s ${hour}:00. You haven\'t done a single deep block. Why?`
+        ),
+        sub: 'The last few hours of the day are still yours.' };
+    }
+  }
+
+  return null; // No feedback for unremarkable entries
+}
+
+function renderFeedbackFlash(fb) {
+  const el = document.getElementById('feedback-flash');
+  if (!el) return;
+
+  clearTimeout(_feedbackTimer);
+  el.className = `feedback-flash type-${fb.type} entering`;
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="fb-eyebrow">${fb.eyebrow}</div>
+    <div class="fb-message">${fb.message}</div>
+    ${fb.sub ? `<div class="fb-sub">${fb.sub}</div>` : ''}
+    <button class="fb-dismiss" onclick="dismissFeedbackFlash()">✕</button>`;
+
+  _feedbackTimer = setTimeout(() => dismissFeedbackFlash(), 8000);
+}
+
+function dismissFeedbackFlash() {
+  const el = document.getElementById('feedback-flash');
+  if (!el || el.style.display === 'none') return;
+  el.classList.remove('entering');
+  el.classList.add('leaving');
+  setTimeout(() => { el.style.display = 'none'; el.className = 'feedback-flash'; }, 360);
 }
 
 function checkEscalation() {
@@ -2693,10 +3163,12 @@ function saveRetroEntry() {
     // Update existing entry in place
     const idx = entries.findIndex(e => e.id === editingEntryId);
     if (idx !== -1) {
-      entries[idx] = { ...entries[idx], activity, energy: retroEnergy,
+      const updated = { ...entries[idx], activity, energy: retroEnergy,
         onPlan: retroEnergy !== 'distraction',
         tsStart, ts: tsEnd, blockIntervalMin: dur,
         date: toDateKey(new Date(tsStart)) };
+      updated.category = getBucket(updated); updated.originalLabel = updated.energy || null;
+      entries[idx] = updated;
     }
     editingEntryId = null;
     editingEntryBase = null;
@@ -2715,6 +3187,7 @@ function saveRetroEntry() {
       onPlan: retroEnergy !== 'distraction',
       retro: true
     };
+    entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
     entries.push(entry);
     entries.sort((a,b) => b.ts - a.ts);
     persist(); renderToday(); syncEntries();
@@ -2767,6 +3240,7 @@ function saveEntry() {
     rate:parseFloat(document.getElementById('f-rate').value)||null,
     note:document.getElementById('f-note').value.trim(),
   };
+  entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
 
   getActivityColor(activity); // assign color on first save
   if (entry.energy === 'distraction') switchState('distraction');
@@ -2923,6 +3397,24 @@ function getWorkDayStartTs() {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0).getTime();
 }
 
+// ── Overlap clipping: display-only shallow copies, earlier block clipped to next block's start ──
+function clipOverlapsForDisplay(ascSorted) {
+  if (ascSorted.length < 2) return ascSorted;
+  const result = ascSorted.map(e => ({ ...e })); // shallow copies — never mutates stored data
+  for (let i = 0; i < result.length - 1; i++) {
+    const curr = result[i];
+    const next = result[i + 1];
+    const nextStart = next.tsStart || next.ts;
+    if (curr.ts > nextStart) {
+      // Earlier block overruns next block's start — clip it
+      curr.ts = nextStart;
+      const startMs = curr.tsStart || (curr.ts - (curr.blockIntervalMin || 1) * 60000);
+      curr.blockIntervalMin = Math.max(1, Math.round((curr.ts - startMs) / 60000));
+    }
+  }
+  return result;
+}
+
 // ── Gap detection: anchored to work day start, not first entry ──
 // This means: even if you never opened the app, gaps show from your start time.
 function computeGaps(todayEntries) {
@@ -3020,7 +3512,7 @@ function renderGapsList(gaps) {
   ];
   document.getElementById('gaps-list').innerHTML = gaps.map((g, i) => {
     const endLabel = g.isCurrent ? 'now' : fmt(g.ts);
-    const label = g.isCurrent ? 'Since last log' : 'Unlogged gap';
+    const label = g.isCurrent ? 'Untracked (since last log)' : 'Untracked';
     const awayBtns = awayTypes.map(a =>
       `<button onclick="logAwayBlock(${g.tsStart},${Math.round(g.ts)},'${a.activity}','${a.energy}',${i})"
         style="flex:1;min-width:0;padding:6px 4px;background:var(--bg4);border:1px solid var(--border2);
@@ -3038,7 +3530,7 @@ function renderGapsList(gaps) {
         <div style="display:flex;align-items:center;gap:6px">
           <div style="background:var(--distraction-dim);color:var(--distraction);font-size:11px;font-weight:700;
                       padding:4px 10px;border-radius:999px;flex-shrink:0">${g.gapMin}m</div>
-          <span style="font-size:11px;color:var(--muted)">Log it →</span>
+          <span style="font-size:11px;color:var(--muted)">Fill in →</span>
         </div>
       </button>
       <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
@@ -3148,15 +3640,14 @@ function renderEntryRow(item) {
   const badgeStyle = actColor ? `style="background:${actColor}22;color:${actColor};border-radius:4px"` : '';
 
   if (item.missed) {
-    // Untracked block — show like a gap row with a Log it button
-    return `<div class="tl-row tl-gap-row">
+    return `<div class="tl-row tl-untracked-row">
       <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
-      <div class="tl-bar-col tl-bar-gap"></div>
+      <div class="tl-bar-col tl-bar-untracked"></div>
       <div class="tl-content">
-        <div class="tl-activity">Untracked block<span class="tl-badge missed">${fmtDur(dur)}</span></div>
+        <div class="tl-activity">Untracked<span class="tl-badge tl-badge-untracked">${fmtDur(dur)}</span></div>
         <div class="tl-meta">${timeLabel}</div>
       </div>
-      <button class="log-gap-btn" onclick="openEditEntry(${item.id})">Log it</button>
+      <button class="log-gap-btn" onclick="openEditEntry(${item.id})">Fill in</button>
     </div>`;
   }
 
@@ -3172,16 +3663,15 @@ function renderEntryRow(item) {
 }
 
 function renderGapRow(item) {
-  const gapLabel = item.isCurrent ? 'Since last log' : 'Unlogged gap';
   const endLabel = item.isCurrent ? 'now' : localTime(item.ts);
-  return `<div class="tl-row tl-gap-row">
+  return `<div class="tl-row tl-untracked-row">
     <div class="tl-time">${localTime(item.tsStart)}</div>
-    <div class="tl-bar-col tl-bar-gap"></div>
+    <div class="tl-bar-col tl-bar-untracked"></div>
     <div class="tl-content">
-      <div class="tl-activity">${gapLabel}<span class="tl-badge missed">${fmtDur(item.gapMin)}</span></div>
+      <div class="tl-activity">Untracked<span class="tl-badge tl-badge-untracked">${fmtDur(item.gapMin)}</span></div>
       <div class="tl-meta">${localTime(item.tsStart)} – ${endLabel}</div>
     </div>
-    <button class="log-gap-btn" onclick="openRetroLogPrefilled(${item.tsStart},${Math.round(item.ts)})">Log it</button>
+    <button class="log-gap-btn" onclick="openRetroLogPrefilled(${item.tsStart},${Math.round(item.ts)})">Fill in</button>
   </div>`;
 }
 
@@ -3202,6 +3692,17 @@ function toggleTlBucket(id) {
   children.classList.toggle('open', isOpen);
   if (btn) btn.textContent = (isOpen ? '▾ ' : '▸ ') + (btn.textContent.replace(/[▾▸]\s*/,''));
 }
+
+// Debounced render — batches rapid Firebase-triggered calls into one rAF
+let _renderTodayPending = false;
+function scheduleRenderToday() {
+  if (_renderTodayPending) return;
+  _renderTodayPending = true;
+  requestAnimationFrame(() => { _renderTodayPending = false; renderToday(); });
+}
+
+// Cache key — skip expensive innerHTML work when today's entries haven't changed
+let _todayRenderKey = '';
 
 function renderToday() {
   const todayE = getTodayEntries();
@@ -3229,18 +3730,24 @@ function renderToday() {
     document.getElementById('commit-label').textContent = 'Set a goal';
   }
 
+  // Cache key — only rebuild timeline/list DOM when today's entries actually change
+  const newRenderKey = todayE.map(e => e.id + ':' + (e.updatedAt || e.ts)).join(',');
+  const entriesChanged = newRenderKey !== _todayRenderKey;
+  if (entriesChanged) _todayRenderKey = newRenderKey;
+
   const tlEl = document.getElementById('timeline-blocks');
 
-  if (!todayE.length) {
-    tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
-  } else {
-    // Sort entries chronologically, then interleave detected gaps
-    // Filter out old missed/untracked entries — gaps cover that time already
-    const sorted = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-    const gaps = computeGaps(todayE);
-    const combined = [...sorted, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-
-    tlEl.innerHTML = renderTimelineCombined(combined);
+  if (entriesChanged) {
+    if (!todayE.length) {
+      tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
+    } else {
+      // Sort chronologically, clip overlaps, then interleave gaps
+      const sorted  = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+      const clipped = clipOverlapsForDisplay(sorted);
+      const gaps    = computeGaps(todayE);
+      const combined = [...clipped, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+      tlEl.innerHTML = renderTimelineCombined(combined);
+    }
   }
 
   // Untracked banner + past block nav button
@@ -3257,6 +3764,9 @@ function renderToday() {
     banner.style.display = 'none';
   }
 
+  // Daily summary card
+  renderDailySummary();
+
   // Timeline summary
   const untrackedStr = untrackedMin > 0 ? ` · ${Math.round(untrackedMin/60*10)/10}h unlogged` : ' · fully logged ✓';
   document.getElementById('timeline-summary').textContent =
@@ -3264,12 +3774,15 @@ function renderToday() {
 
   const listEl = document.getElementById('recent-list');
 
-  if (!todayE.length) {
-    listEl.innerHTML = '<div class="empty"><span class="empty-icon">⏱</span>Start the timer and log your first block.</div>';
-    return;
-  }
+  if (entriesChanged) {
+    if (!todayE.length) {
+      listEl.innerHTML = '<div class="empty"><span class="empty-icon">⏱</span>Start the timer and log your first block.</div>';
+      renderRecentChips();
+      renderAwarenessSignal();
+      return;
+    }
 
-  listEl.innerHTML = todayE.slice(0, 6).map(e => {
+    listEl.innerHTML = todayE.slice(0, 6).map(e => {
   const duration = e.segments
     ? Math.round(e.segments.reduce((sum, s) => sum + s.duration, 0) / 60)
     : e.tsStart
@@ -3298,8 +3811,11 @@ function renderToday() {
       <button class="btn sm ghost" style="padding:3px 7px;font-size:11px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
     </div>
    `;
-}).join('');
+    }).join('');
+  } // end if (entriesChanged)
+
   renderRecentChips();
+  renderAwarenessSignal();
 }
 
 // ══════════════════════════════════════════════════════
@@ -3343,7 +3859,7 @@ function renderSwitchList(tasks) {
 
 function fillSwitch(task) {
   document.getElementById('switch-input').value = task;
-  document.getElementById('switch-input').focus();
+  switchToTask(task);
 }
 
 function filterSwitchList(val) {
@@ -3408,6 +3924,7 @@ function quickRetroLog() {
     activity: task, energy: 'shallow',
     onPlan: true, retro: true
   };
+  entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
   getActivityColor(task);
   entries.push(entry);
   entries.sort((a, b) => b.ts - a.ts);
@@ -3415,6 +3932,184 @@ function quickRetroLog() {
   taskInput.value = '';
   document.getElementById('retro-time').value = '';
   showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+}
+
+// ══════════════════════════════════════════════════════
+// AWARENESS ENGINE
+// ══════════════════════════════════════════════════════
+function renderAwarenessSignal() {
+  const el = document.getElementById('awareness-signal');
+  if (!el) return;
+
+  const todayE = getTodayEntries().filter(e => !e.missed);
+  const tone   = settings.coachTone || 'analyst';
+  const hour   = new Date().getHours();
+
+  if (!todayE.length && hour < 10) { el.style.display = 'none'; return; }
+
+  const real     = todayE.filter(e => !e.away && !e.break);
+  const totalMin = real.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const deepMin  = real.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const distMin  = real.filter(e => e.energy === 'distraction').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const awayMin  = todayE.filter(e => e.away).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const deepPct  = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
+  const distPct  = totalMin > 0 ? Math.round(distMin / totalMin * 100) : 0;
+  const deepHrs  = (deepMin / 60).toFixed(1);
+
+  // Peak focus hour
+  const hourBuckets = {};
+  real.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
+    const h = new Date(e.tsStart).getHours();
+    hourBuckets[h] = (hourBuckets[h] || 0) + (e.blockIntervalMin || 0);
+  });
+  let peakHour = null, peakHourMin = 0;
+  Object.entries(hourBuckets).forEach(([h, m]) => { if (m > peakHourMin) { peakHourMin = m; peakHour = Number(h); } });
+  const peakLabel = peakHour !== null ? `${peakHour % 12 || 12}${peakHour < 12 ? 'am' : 'pm'}` : null;
+
+  // Repeated distraction activities: map activity → total minutes
+  const distActivityMap = {};
+  real.filter(e => e.energy === 'distraction').forEach(e => {
+    const k = e.activity.split(' (Output:')[0];
+    distActivityMap[k] = (distActivityMap[k] || 0) + (e.blockIntervalMin || 0);
+  });
+  const worstWaste = Object.entries(distActivityMap).sort((a, b) => b[1] - a[1])[0];
+
+  // Last deep block — how long ago?
+  const lastDeep = real.filter(e => e.energy === 'deep')[0];
+  const minsSinceDeep = lastDeep ? Math.round((Date.now() - lastDeep.ts) / 60000) : null;
+
+  // Distraction run at top of entry list
+  let distStreak = 0;
+  for (const e of real) { if (e.energy === 'distraction') distStreak++; else break; }
+
+  const T = (a, c, m) => ({ analyst: a, coach: c, mirror: m })[tone] || a;
+  const signals = [];
+
+  // ── No entries yet ──
+  if (!real.length && hour >= 10) {
+    signals.push({ color: 'var(--muted)', severity: 'warn', label: 'Nothing logged',
+      text: T('No entries logged yet today.',
+              'Nothing logged. What are you actually doing right now?',
+              "The timer doesn't lie. You haven't started.") });
+  }
+
+  // ── Distraction streak ──
+  if (distStreak >= 2) {
+    signals.push({ color: 'var(--distraction)', severity: 'bad', label: `${distStreak} distractions in a row`,
+      text: T(`${distStreak} consecutive distraction blocks.`,
+              `${distStreak} in a row. You need to stop the slide — now.`,
+              `${distStreak} distractions back to back. You're not working, you're hiding.`) });
+  }
+
+  // ── Named waste: same distraction activity ≥ 2 times ──
+  if (worstWaste && distActivityMap[worstWaste[0]] >= 30) {
+    const [activity, mins] = worstWaste;
+    const count = real.filter(e => e.energy === 'distraction' && e.activity.split(' (Output:')[0] === activity).length;
+    if (count >= 2) {
+      const wStr = mins >= 60 ? `${(mins/60).toFixed(1)}h` : `${mins}m`;
+      signals.push({ color: 'var(--distraction)', severity: 'bad', label: 'Repeat offender',
+        text: T(`"${activity}" logged ${count}× today — ${wStr} total.`,
+                `"${activity}" ${count} times. ${wStr} gone. You know this isn't working.`,
+                `${wStr} on "${activity}". ${count} separate choices to waste time. Own it.`) });
+    }
+  }
+
+  // ── Long gap without deep work (during work hours) ──
+  if (minsSinceDeep !== null && minsSinceDeep > 90 && hour >= 10 && hour <= 17) {
+    const gapStr = minsSinceDeep >= 120 ? `${Math.round(minsSinceDeep / 60)}h` : `${minsSinceDeep}m`;
+    signals.push({ color: 'var(--admin)', severity: 'warn', label: `${gapStr} since last deep work`,
+      text: T(`No deep work for ${gapStr}. You're in reactive mode.`,
+              `${gapStr} without deep work. Reactive mode is a trap — break out.`,
+              `${gapStr} without doing anything that matters. What are you busy with?`) });
+  }
+
+  // ── No deep work at all, late in day ──
+  if (hour >= 14 && deepMin === 0 && real.length > 0) {
+    signals.push({ color: 'var(--distraction)', severity: 'bad', label: 'No deep work today',
+      text: T(`${hour}:00 — no deep work logged yet today.`,
+              `Past ${hour}:00 with zero deep work. The window is closing fast.`,
+              `It's ${hour}:00. Nothing deep. You chose everything else over your real work.`) });
+  }
+
+  // ── Deep work: strong day ──
+  if (deepPct >= 50 && deepMin >= 90 && distStreak === 0) {
+    signals.push({ color: 'var(--deep)', severity: 'good', label: 'Strong focus day',
+      text: T(`Deep work is ${deepPct}% of today — ${deepHrs}h. Above average.`,
+              `${deepPct}% deep, ${deepHrs}h in. This is the standard.`,
+              `${deepPct}% deep. Rare. Don't let tomorrow undo it.`) });
+  }
+  // ── Deep work: decent, but with distraction ──
+  else if (deepMin >= 60 && distPct >= 20) {
+    signals.push({ color: 'var(--shallow)', severity: 'warn', label: 'Mixed session',
+      text: T(`${deepHrs}h deep work, but ${distPct}% lost to distraction.`,
+              `${deepHrs}h of good work, but ${distPct}% wasted. Protect the next block.`,
+              `${deepHrs}h real work. ${distPct}% wasted. Those two numbers tell your whole story.`) });
+  }
+  // ── Deep work: consistently low after 2pm ──
+  else if (hour >= 14 && deepMin > 0 && deepMin < 90) {
+    signals.push({ color: 'var(--shallow)', severity: 'warn', label: 'Low deep output',
+      text: T(`Only ${deepHrs}h of deep work. The focus window is narrowing.`,
+              `${deepHrs}h deep — not enough. You have hours left. Use them.`,
+              `${deepHrs}h of real work by ${hour}:00. You know that's not enough.`) });
+  }
+
+  // ── Peak focus hour (positive, only when day is going well) ──
+  if (peakLabel && peakHourMin >= 45 && deepPct >= 40) {
+    signals.push({ color: 'var(--deep)', severity: 'good', label: `Peak hour: ${peakLabel}`,
+      text: T(`Your focus peaked at ${peakLabel} today — ${peakHourMin}m of deep work that hour.`,
+              `${peakLabel} is your zone. ${peakHourMin}m deep. Protect that window every day.`,
+              `${peakLabel} — ${peakHourMin}m deep. That's your real capacity. Stop wasting it.`) });
+  }
+
+  // ── Away time exceeds deep work ──
+  if (awayMin > 120 && awayMin > deepMin && totalMin > 0) {
+    const awayHrsStr = (awayMin / 60).toFixed(1);
+    signals.push({ color: 'var(--away)', severity: 'warn', label: 'Away > deep work',
+      text: T(`${awayHrsStr}h away — more than ${deepHrs}h of deep work.`,
+              `${awayHrsStr}h off, ${deepHrs}h deep. Watch that ratio.`,
+              `You spent more time away (${awayHrsStr}h) than working deeply (${deepHrs}h). Intentional?`) });
+  }
+
+  // ── End-of-day verdict ──
+  if (hour >= 18 && totalMin > 0) {
+    const verdict = deepPct >= 50
+      ? { severity: 'good', text: T(`Day done. ${deepHrs}h deep work — ${deepPct}% of your day. Strong.`,
+                                     `Day closed. ${deepHrs}h deep. This is the result of discipline.`,
+                                     `${deepPct}% deep. You earned today.`) }
+      : distPct >= 30
+      ? { severity: 'bad', text: T(`Day done. ${distPct}% lost to distraction. Examine why.`,
+                                    `Day closed. ${distPct}% distraction. What will you change tomorrow?`,
+                                    `${distPct}% wasted. You'll remember tomorrow's version of this choice.`) }
+      : { severity: 'warn', text: T(`Day done. ${deepHrs}h deep work, ${distPct}% distraction.`,
+                                     `Day closed. ${deepHrs}h deep. Push for more tomorrow.`,
+                                     `${deepHrs}h real work. You can do better. You know it.`) };
+    signals.push({ color: verdict.severity === 'good' ? 'var(--deep)' : verdict.severity === 'bad' ? 'var(--distraction)' : 'var(--admin)',
+      severity: verdict.severity, label: 'Day closed', text: verdict.text });
+  }
+
+  // Deduplicate by severity priority, keep top 3
+  const order = { bad: 0, warn: 1, good: 2 };
+  const top = signals.sort((a, b) => order[a.severity] - order[b.severity]).slice(0, 3);
+
+  if (!top.length) { el.style.display = 'none'; return; }
+
+  el.style.display = 'block';
+  el.innerHTML = `<div class="signal-card">
+    <div class="signal-header">
+      <span class="signal-header-title">Today's Signal</span>
+      ${top[0].severity === 'good' ? '<span class="signal-badge good">On track</span>' :
+        top[0].severity === 'bad'  ? '<span class="signal-badge bad">Needs attention</span>' :
+                                      '<span class="signal-badge warn">Watch this</span>'}
+    </div>
+    ${top.map(s => `
+      <div class="signal-item">
+        <div class="signal-dot" style="background:${s.color}"></div>
+        <div class="signal-item-body">
+          <div class="signal-item-label">${s.label}</div>
+          <div>${s.text}</div>
+        </div>
+      </div>`).join('')}
+  </div>`;
 }
 
 // ══════════════════════════════════════════════════════
@@ -3518,6 +4213,7 @@ function toggleAway() {
       activity: awayLabel, energy: 'away',
       away: true, onPlan: null
     };
+    entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
     entries.unshift(entry);
     clearInterval(awayElapsedTicker);
     awayActive = false;
@@ -3556,13 +4252,15 @@ function startAway(label) {
     const tsEnd = Date.now();
     const tsStart = blockStartTime || (tsEnd - totalSecs * 1000);
     const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
-    entries.unshift({
+    const workEntry = {
       id: tsEnd, ts: tsEnd, tsStart,
       blockIntervalMin: dur,
       date: toDateKey(new Date()),
       activity: task, energy: lastEnergy,
       onPlan: lastEnergy !== 'distraction', retro: false
-    });
+    };
+    workEntry.category = getBucket(workEntry); workEntry.originalLabel = workEntry.energy || null;
+    entries.unshift(workEntry);
     clearInterval(ticker);
     running = false;
     timerStartedAt = null;
@@ -4094,6 +4792,9 @@ function renderSettings() {
   document.getElementById('set-exitdelay').value=settings.exitDelay||10;
   document.getElementById('set-workdaystart').value=settings.workDayStart||'09:00';
   document.getElementById('set-timezone').value=settings.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const toneEl = document.getElementById('set-coach-tone');
+  toneEl.value = settings.coachTone || 'analyst';
+  renderTonePreview();
   document.getElementById('settings-stats').textContent=`${entries.length} total entries · ${getWeekEntries().length} this week`;
   const datesWithEntries = [...new Set(entries.map(e=>e.date))].sort().reverse();
   const todayKey = toDateKey(new Date());
@@ -4119,6 +4820,17 @@ function renderSettings() {
   updateSyncUI();
 }
 
+const TONE_PREVIEWS = {
+  analyst: '"Deep work: 1.5h today. That\'s 18% of your tracked time."',
+  coach:   '"1.5h of deep work. That\'s not enough. What happened to the rest of your day?"',
+  mirror:  '"You spent 3 hours on low-value tasks today. The timeline doesn\'t lie."'
+};
+function renderTonePreview() {
+  const tone = (document.getElementById('set-coach-tone') || {}).value || settings.coachTone || 'analyst';
+  const el = document.getElementById('coach-tone-preview');
+  if (el) el.textContent = TONE_PREVIEWS[tone] || '';
+}
+
 function saveSettings(){
   settings.intervalMin=parseInt(document.getElementById('set-interval').value)||30;
   settings.targetRate=parseInt(document.getElementById('set-rate').value)||250;
@@ -4126,6 +4838,8 @@ function saveSettings(){
   settings.exitDelay=parseInt(document.getElementById('set-exitdelay').value)||10;
   settings.workDayStart=document.getElementById('set-workdaystart').value||'09:00';
   settings.timezone=document.getElementById('set-timezone').value;
+  settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
+  renderTonePreview();
   // Sync interval back to Today tab input
   document.getElementById('interval-input').value = settings.intervalMin;
   if (!running) { totalSecs = settings.intervalMin*60; remaining = totalSecs; updateRing(); }
@@ -4183,6 +4897,30 @@ function getWeekKey(d) {
   return `${d.getFullYear()}-W${String(weekNum).padStart(2,'0')}`;
 }
 
+function formatWeekLabel(weekKey) {
+  // Convert "2026-W15" → "Apr 7 – Apr 13, 2026"
+  try {
+    const [yearStr, wStr] = weekKey.split('-W');
+    const year = parseInt(yearStr, 10);
+    const week = parseInt(wStr, 10);
+    const jan4 = new Date(year, 0, 4);
+    const startOfW1 = new Date(jan4);
+    startOfW1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+    const monday = new Date(startOfW1.getTime() + (week - 1) * 7 * 86400000);
+    const sunday = new Date(monday.getTime() + 6 * 86400000);
+    const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const sameYear = monday.getFullYear() === sunday.getFullYear();
+    return `${fmt(monday)} – ${fmt(sunday)}${sameYear ? ', ' + monday.getFullYear() : ''}`;
+  } catch(e) { return weekKey; }
+}
+
+function formatSavedAt(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' at ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+}
+
 function getEntriesForWeekKey(weekKey) {
   // Get all entries whose date falls within the given weekKey
   return entries.filter(e => {
@@ -4190,6 +4928,170 @@ function getEntriesForWeekKey(weekKey) {
     const d = new Date(e.date + 'T12:00:00');
     return getWeekKey(d) === weekKey;
   });
+}
+
+// ══════════════════════════════════════════════════════
+// DAILY SUMMARY
+// ══════════════════════════════════════════════════════
+function computeDailySummary(dateKey) {
+  const dayEntries = entries.filter(e => e.date === dateKey && !e.missed && !e.away && !e.break);
+  if (!dayEntries.length) return null;
+
+  const totalMin = dayEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  if (totalMin === 0) return null;
+
+  const deepMin    = dayEntries.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const shallowMin = dayEntries.filter(e => e.energy === 'shallow').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const adminMin   = dayEntries.filter(e => e.energy === 'admin').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const distMin    = dayEntries.filter(e => e.energy === 'distraction').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+
+  const productiveMin = deepMin + shallowMin + adminMin;
+  const deepPct       = Math.round(deepMin / totalMin * 100);
+  const shallowPct    = Math.round(shallowMin / totalMin * 100);
+  const adminPct      = Math.round(adminMin / totalMin * 100);
+  const distPct       = Math.round(distMin / totalMin * 100);
+  const productivePct = Math.round(productiveMin / totalMin * 100);
+
+  // Peak focus hour — hour with the most deep-work minutes
+  const hourBuckets = {};
+  dayEntries.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
+    const hr = new Date(e.tsStart).getHours();
+    hourBuckets[hr] = (hourBuckets[hr] || 0) + (e.blockIntervalMin || 0);
+  });
+  let peakHour = null, peakHourMin = 0;
+  Object.entries(hourBuckets).forEach(([h, m]) => {
+    if (m > peakHourMin) { peakHourMin = m; peakHour = Number(h); }
+  });
+  const peakHourLabel = peakHour !== null ? `${peakHour % 12 || 12}${peakHour < 12 ? 'am' : 'pm'}` : null;
+
+  // Focus score 0–100
+  const dailyDeepGoalMin = ((settings.deepGoal || 20) / 5) * 60;
+  const focusScore = Math.min(100, Math.round(
+    deepPct * 0.5 +
+    Math.min(deepMin / Math.max(dailyDeepGoalMin, 1), 1) * 30 +
+    (productivePct >= 70 ? 20 : productivePct * 20 / 70)
+  ));
+
+  return { totalMin, deepMin, shallowMin, adminMin, distMin, productiveMin,
+           deepPct, shallowPct, adminPct, distPct, productivePct,
+           peakHour, peakHourLabel, peakHourMin, focusScore,
+           deepHrs: (deepMin / 60).toFixed(1),
+           entryCount: dayEntries.length };
+}
+
+function getDailySummaryInsight(s) {
+  const tone = settings.coachTone || 'analyst';
+  const { deepPct, distPct, productivePct, peakHourLabel, deepMin, focusScore } = s;
+  const dh = (deepMin / 60).toFixed(1);
+  const ph = peakHourLabel ? ` Peak: ${peakHourLabel}.` : '';
+
+  if (focusScore >= 80) {
+    return {
+      analyst: `${deepPct}% deep work today — strong signal.${ph}`,
+      coach:   `${dh}h of deep work. Execution on point.${ph}`,
+      mirror:  `${deepPct}% deep. Keep this standard or explain why you didn't.`
+    }[tone];
+  }
+  if (deepMin < 30) {
+    return {
+      analyst: `No significant deep work logged. Examine what fragmented the day.`,
+      coach:   `Zero deep work. That's the thing you need to change tomorrow.`,
+      mirror:  `You avoided the hard work today. Own it and fix it.`
+    }[tone];
+  }
+  if (distPct >= 30) {
+    return {
+      analyst: `${distPct}% lost to distraction. ${productivePct}% productive.${ph}`,
+      coach:   `${distPct}% distraction is eating your output. Protect your blocks.`,
+      mirror:  `${distPct}% of today was wasted. You know what you chose over your work.`
+    }[tone];
+  }
+  return {
+    analyst: `${productivePct}% productive · ${deepPct}% deep work.${ph}`,
+    coach:   `Decent day. ${dh}h deep work. Push for more tomorrow.`,
+    mirror:  `${productivePct}% productive. Good, not great. You can do better.`
+  }[tone];
+}
+
+function buildDailySummaryHTML(s) {
+  if (!s) return `<div style="color:var(--muted);font-size:13px;padding:4px 0">No entries logged yet today.</div>`;
+
+  const scorePillClass = s.focusScore >= 70 ? '' : s.focusScore >= 40 ? ' mid' : ' low';
+  const deepValClass   = s.deepPct >= 40 ? 'good' : s.deepPct >= 20 ? 'warn' : '';
+  const distValClass   = s.distPct >= 30 ? 'bad' : s.distPct >= 15 ? 'warn' : '';
+  const prodValClass   = s.productivePct >= 70 ? 'good' : s.productivePct >= 50 ? 'warn' : '';
+
+  const peakHtml = s.peakHourLabel
+    ? `<div class="ds-peak">
+        <span style="font-size:11px;color:var(--muted)">Peak focus hour</span>
+        <span class="ds-peak-badge">${s.peakHourLabel}</span>
+        <span style="font-size:11px;color:var(--muted);font-family:var(--mono)">${s.peakHourMin}m deep in that hour</span>
+       </div>`
+    : '';
+
+  // Split bar proportions — cap at 100% total
+  const segs = [
+    { cls: 'deep',        pct: s.deepPct },
+    { cls: 'shallow',     pct: s.shallowPct },
+    { cls: 'admin',       pct: s.adminPct },
+    { cls: 'distraction', pct: s.distPct },
+  ].filter(seg => seg.pct > 0);
+
+  const splitBar = segs.map(seg =>
+    `<div class="ds-split-seg ${seg.cls}" style="width:${seg.pct}%"></div>`
+  ).join('');
+
+  const insight = getDailySummaryInsight(s);
+
+  return `
+    <div class="ds-header">
+      <span class="ds-title">Today's pulse</span>
+      <span class="ds-score-pill${scorePillClass}">Score ${s.focusScore}</span>
+    </div>
+    <div class="ds-metrics">
+      <div class="ds-metric">
+        <div class="ds-metric-val ${deepValClass}">${s.deepHrs}h</div>
+        <div class="ds-metric-label">Deep work</div>
+      </div>
+      <div class="ds-metric">
+        <div class="ds-metric-val ${prodValClass}">${s.productivePct}%</div>
+        <div class="ds-metric-label">Productive</div>
+      </div>
+      <div class="ds-metric">
+        <div class="ds-metric-val ${distValClass}">${s.distPct}%</div>
+        <div class="ds-metric-label">Distraction</div>
+      </div>
+    </div>
+    <div class="ds-split-label">
+      <span>Deep · Shallow · Admin · Distraction</span>
+      <span>${fmtDur(s.totalMin)} tracked</span>
+    </div>
+    <div class="ds-split-bar">${splitBar}</div>
+    ${peakHtml}
+    <div class="ds-insight">${insight}</div>`;
+}
+
+function renderDailySummary() {
+  const todayKey = toDateKey(new Date());
+  const s = computeDailySummary(todayKey);
+
+  // Today view card
+  const card = document.getElementById('daily-summary');
+  if (card) {
+    if (s) {
+      card.style.display = 'block';
+      card.classList.add('has-data');
+      card.innerHTML = buildDailySummaryHTML(s);
+    } else {
+      card.style.display = 'none';
+    }
+  }
+
+  // Reflect view panel
+  const reflectPanel = document.getElementById('reflect-daily-summary');
+  if (reflectPanel) {
+    reflectPanel.innerHTML = buildDailySummaryHTML(s);
+  }
 }
 
 function computeInsights(weekKey) {
@@ -4250,6 +5152,9 @@ function renderReflectView() {
   const now = new Date();
   const weekKey = getWeekKey(now);
 
+  // ── Daily summary ──
+  renderDailySummary();
+
   // ── Insights ──
   const insightsEl = document.getElementById('reflect-insights');
   const ins = computeInsights(weekKey);
@@ -4292,7 +5197,13 @@ function renderReflectView() {
   document.getElementById('wr-priorities').value = wr.priorities || '';
   document.getElementById('wr-drain').value = wr.drain || '';
   document.getElementById('wr-nextweek').value = wr.nextweek || '';
-  document.getElementById('weekly-review-saved').style.display = wr.savedAt ? 'inline' : 'none';
+  const reviewBadge = document.getElementById('weekly-review-saved');
+  if (wr.savedAt) {
+    reviewBadge.textContent = '✓ Saved ' + formatSavedAt(wr.savedAt);
+    reviewBadge.style.display = 'inline';
+  } else {
+    reviewBadge.style.display = 'none';
+  }
 
   // ── Pre-fill plan form (next week's key) ──
   const nextWeekKey = getWeekKey(new Date(now.getTime() + 7 * 86400000));
@@ -4302,7 +5213,13 @@ function renderReflectView() {
   document.getElementById('wp-p3').value = wp.p3 || '';
   document.getElementById('wp-deepgoal').value = wp.deepgoal || '';
   document.getElementById('wp-avoid').value = wp.avoid || '';
-  document.getElementById('weekly-plan-saved').style.display = wp.savedAt ? 'inline' : 'none';
+  const planBadge = document.getElementById('weekly-plan-saved');
+  if (wp.savedAt) {
+    planBadge.textContent = '✓ Saved ' + formatSavedAt(wp.savedAt);
+    planBadge.style.display = 'inline';
+  } else {
+    planBadge.style.display = 'none';
+  }
 
   renderReflectHistory();
 }
@@ -4319,7 +5236,9 @@ function saveWeeklyReview() {
   const ins = computeInsights(weekKey);
   if (ins) weeklyReviews[weekKey].stats = { deepHrs: ins.deepHrs, deepPct: ins.deepPct, distMin: ins.distMin, worstDist: ins.worstDist, topActivity: ins.topActivity };
   persist();
-  document.getElementById('weekly-review-saved').style.display = 'inline';
+  const reviewBadge = document.getElementById('weekly-review-saved');
+  reviewBadge.textContent = '✓ Saved ' + formatSavedAt(weeklyReviews[weekKey].savedAt);
+  reviewBadge.style.display = 'inline';
   showToast('Review saved ✓');
   renderReflectHistory();
 }
@@ -4337,7 +5256,9 @@ function saveWeeklyPlan() {
     savedAt:  Date.now()
   };
   persist();
-  document.getElementById('weekly-plan-saved').style.display = 'inline';
+  const planBadge = document.getElementById('weekly-plan-saved');
+  planBadge.textContent = '✓ Saved ' + formatSavedAt(weeklyReviews[nextWeekKey].plan.savedAt);
+  planBadge.style.display = 'inline';
   showToast('Plan saved ✓');
   renderReflectHistory();
 }
@@ -4382,7 +5303,7 @@ function renderReflectHistory() {
 
     return `<div class="reflect-week-card">
       <div class="reflect-week-card-header">
-        <span class="reflect-week-card-key">${isCurrent ? 'This week' : wk}</span>
+        <span class="reflect-week-card-key">${isCurrent ? 'This week' : formatWeekLabel(wk)}</span>
         ${statsHtml}
       </div>
       ${reviewHtml}${planHtml}
@@ -4418,10 +5339,14 @@ function startSync() {
         lastSeen: Date.now(),
         name: navigator.userAgent.includes('Mobile') ? '📱 Mobile' : '💻 Desktop'
       });
+      // Push any local changes that happened while offline
+      const lv = parseInt(localStorage.getItem('ta3-lv') || '0', 10);
+      const ls = parseInt(localStorage.getItem('ta3-last-sync') || '0', 10);
+      if (lv > ls) syncEntries();
     } else {
       const pill = document.getElementById('sync-pill');
-      if (pill.classList.contains('connected')) {
-        updateSyncPill('syncing', 'reconnecting…');
+      if (pill && pill.classList.contains('connected')) {
+        updateSyncPill('syncing', 'offline · data saved locally');
       }
     }
   });
@@ -4491,14 +5416,37 @@ function startSync() {
   fbDb.ref(`rooms/${roomCode}/entries`).on('value', snap => {
     const data = snap.val();
     if (!data) return;
-    const remoteEntries = Object.values(data).sort((a,b)=>b.ts-a.ts);
-    const localIds = new Set(entries.map(e=>e.id));
+    const remoteEntries = Object.values(data);
+    // Build a Map for O(1) lookup and conflict resolution
+    const localMap = new Map(entries.map(e => [e.id, e]));
     let changed = false;
-    remoteEntries.forEach(re => { if (!localIds.has(re.id)) { entries.push(re); changed=true; } });
+    remoteEntries.forEach(re => {
+      if (!re || !re.id) return;
+      const local = localMap.get(re.id);
+      if (!local) {
+        // New entry from remote — add it
+        if (!re.updatedAt) re.updatedAt = re.ts || Date.now();
+        entries.push(re);
+        changed = true;
+      } else {
+        // Conflict: prefer whichever version is newer
+        const remoteV = re.updatedAt || re.ts || 0;
+        const localV  = local.updatedAt || local.ts || 0;
+        if (remoteV > localV) {
+          Object.assign(local, re);
+          changed = true;
+        }
+      }
+    });
     if (changed) {
-      entries.sort((a,b)=>b.ts-a.ts);
-      persist(); renderToday();
-      if(document.getElementById('view-week').classList.contains('active')) renderWeek();
+      entries.sort((a,b) => b.ts - a.ts);
+      localStorage.setItem('ta3-last-sync', Date.now());
+      persist();
+      scheduleRenderToday();
+      if (document.getElementById('view-week').classList.contains('active')) renderWeek();
+    } else {
+      // No new data but still record that sync happened
+      localStorage.setItem('ta3-last-sync', Date.now());
     }
   });
 
@@ -4549,6 +5497,7 @@ function startSync() {
 
   updateSyncPill('connected', 'synced');
   syncEntries();
+  localStorage.setItem('ta3-last-sync', Date.now());
   showToast('Synced ✓');
 }
 
