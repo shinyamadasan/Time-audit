@@ -4084,19 +4084,52 @@ function startFromHero() {
 
 let _heroSugIndex = -1;
 function buildHeroSuggestions(filter) {
+  const hidden = new Set(settings.hiddenSuggestions || []);
   const seen = new Set();
   const recent = [];
   for (const e of entries) {
     if (e.missed || e.away || !e.activity || e.deleted) continue;
     const key = e.activity.split(' (Output:')[0].trim();
-    if (!seen.has(key)) { seen.add(key); recent.push(key); }
+    if (!seen.has(key) && !hidden.has(key)) { seen.add(key); recent.push(key); }
   }
-  const presets = (settings.presets || []).map(p => p.label).filter(l => !seen.has(l));
+  const presets = (settings.presets || []).map(p => p.label).filter(l => !seen.has(l) && !hidden.has(l));
   const all = [...recent, ...presets];
   if (!filter) return { recent, presets };
   const q = filter.toLowerCase();
   const matched = all.filter(t => t.toLowerCase().includes(q));
   return { recent: matched, presets: [] };
+}
+
+// Build a single suggestion row with a dismiss ✕ button.
+function buildSugItem(task, selectCall) {
+  const safe = task.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return `<div class="hero-sug-item" style="display:flex;align-items:center;gap:4px" onmousedown="${selectCall}">
+    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${task}</span>
+    <span onmousedown="event.stopPropagation();hideActivitySuggestion('${safe}')"
+      style="font-size:10px;color:var(--muted2);padding:2px 6px;border-radius:4px;flex-shrink:0;cursor:pointer;line-height:1"
+      title="Remove from suggestions">✕</span>
+  </div>`;
+}
+
+function hideActivitySuggestion(task) {
+  if (!settings.hiddenSuggestions) settings.hiddenSuggestions = [];
+  if (!settings.hiddenSuggestions.includes(task)) {
+    settings.hiddenSuggestions.push(task);
+    saveSettings();
+  }
+  // Refresh all open dropdowns
+  ['hero-suggestions','retro-suggestions','quick-retro-suggestions','focus-suggestions']
+    .forEach(id => { const el = document.getElementById(id); if (el && el.style.display !== 'none') el.dispatchEvent(new Event('_refresh')); });
+  const active = document.activeElement?.id;
+  if (active === 'hero-task-input')    showHeroSuggestions(document.getElementById('hero-task-input').value);
+  else if (active === 'retro-activity') showRetroSuggestions(document.getElementById('retro-activity').value);
+  else if (active === 'retro-task')    showQuickRetroSuggestions(document.getElementById('retro-task').value);
+  else if (active === 'focus-task-input') showFocusSuggestions(document.getElementById('focus-task-input').value);
+  else {
+    // fallback: hide all
+    ['hero-suggestions','retro-suggestions','quick-retro-suggestions','focus-suggestions']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  }
 }
 
 function showHeroSuggestions(filter) {
@@ -4107,15 +4140,11 @@ function showHeroSuggestions(filter) {
   let html = '';
   if (recent.length) {
     if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
-    html += recent.map(t =>
-      `<div class="hero-sug-item" onmousedown="selectHeroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
-    ).join('');
+    html += recent.map(t => buildSugItem(t, `selectHeroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
   }
   if (presets.length) {
     html += `<div class="hero-sug-label">Presets</div>`;
-    html += presets.map(t =>
-      `<div class="hero-sug-item" onmousedown="selectHeroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
-    ).join('');
+    html += presets.map(t => buildSugItem(t, `selectHeroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
   }
   el.innerHTML = html;
   el.style.display = 'block';
@@ -4142,12 +4171,12 @@ function handleHeroKey(e) {
     e.preventDefault();
     _heroSugIndex = Math.min(_heroSugIndex + 1, items.length - 1);
     items.forEach((it, i) => it.style.background = i === _heroSugIndex ? 'var(--deep-dim)' : '');
-    if (items[_heroSugIndex]) document.getElementById('hero-task-input').value = items[_heroSugIndex].textContent;
+    if (items[_heroSugIndex]) document.getElementById('hero-task-input').value = items[_heroSugIndex].querySelector('span')?.textContent||items[_heroSugIndex].textContent;
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
     _heroSugIndex = Math.max(_heroSugIndex - 1, -1);
     items.forEach((it, i) => it.style.background = i === _heroSugIndex ? 'var(--deep-dim)' : '');
-    if (_heroSugIndex >= 0 && items[_heroSugIndex]) document.getElementById('hero-task-input').value = items[_heroSugIndex].textContent;
+    if (_heroSugIndex >= 0 && items[_heroSugIndex]) document.getElementById('hero-task-input').value = items[_heroSugIndex].querySelector('span')?.textContent||items[_heroSugIndex].textContent;
   } else if (e.key === 'Escape') {
     hideHeroSuggestions();
   } else if (e.key === 'Enter') {
@@ -4167,15 +4196,11 @@ function showRetroSuggestions(filter) {
   let html = '';
   if (recent.length) {
     if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
-    html += recent.map(t =>
-      `<div class="hero-sug-item" onmousedown="selectRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
-    ).join('');
+    html += recent.map(t => buildSugItem(t, `selectRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
   }
   if (presets.length) {
     html += `<div class="hero-sug-label">Presets</div>`;
-    html += presets.map(t =>
-      `<div class="hero-sug-item" onmousedown="selectRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
-    ).join('');
+    html += presets.map(t => buildSugItem(t, `selectRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
   }
   el.innerHTML = html;
   el.style.display = 'block';
@@ -4200,12 +4225,12 @@ function handleRetroKey(e) {
     e.preventDefault();
     _retroSugIndex = Math.min(_retroSugIndex + 1, items.length - 1);
     items.forEach((it, i) => it.style.background = i === _retroSugIndex ? 'var(--deep-dim)' : '');
-    if (items[_retroSugIndex]) document.getElementById('retro-activity').value = items[_retroSugIndex].textContent;
+    if (items[_retroSugIndex]) document.getElementById('retro-activity').value = items[_retroSugIndex].querySelector('span')?.textContent||items[_retroSugIndex].textContent;
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
     _retroSugIndex = Math.max(_retroSugIndex - 1, -1);
     items.forEach((it, i) => it.style.background = i === _retroSugIndex ? 'var(--deep-dim)' : '');
-    if (_retroSugIndex >= 0 && items[_retroSugIndex]) document.getElementById('retro-activity').value = items[_retroSugIndex].textContent;
+    if (_retroSugIndex >= 0 && items[_retroSugIndex]) document.getElementById('retro-activity').value = items[_retroSugIndex].querySelector('span')?.textContent||items[_retroSugIndex].textContent;
   } else if (e.key === 'Escape') {
     hideRetroSuggestions();
   }
@@ -4223,15 +4248,11 @@ function showFocusSuggestions(filter) {
   let html = '';
   if (recent.length) {
     if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
-    html += recent.map(t =>
-      `<div class="hero-sug-item" onmousedown="selectFocusSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
-    ).join('');
+    html += recent.map(t => buildSugItem(t, `selectFocusSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
   }
   if (presets.length) {
     html += `<div class="hero-sug-label">Presets</div>`;
-    html += presets.map(t =>
-      `<div class="hero-sug-item" onmousedown="selectFocusSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
-    ).join('');
+    html += presets.map(t => buildSugItem(t, `selectFocusSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
   }
   el.innerHTML = html;
   el.style.display = 'block';
@@ -4256,12 +4277,12 @@ function handleFocusKey(e) {
     e.preventDefault();
     _focusSugIndex = Math.min(_focusSugIndex + 1, items.length - 1);
     items.forEach((it, i) => it.style.background = i === _focusSugIndex ? 'var(--deep-dim)' : '');
-    if (items[_focusSugIndex]) document.getElementById('focus-task-input').value = items[_focusSugIndex].textContent;
+    if (items[_focusSugIndex]) document.getElementById('focus-task-input').value = items[_focusSugIndex].querySelector('span')?.textContent||items[_focusSugIndex].textContent;
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
     _focusSugIndex = Math.max(_focusSugIndex - 1, -1);
     items.forEach((it, i) => it.style.background = i === _focusSugIndex ? 'var(--deep-dim)' : '');
-    if (_focusSugIndex >= 0 && items[_focusSugIndex]) document.getElementById('focus-task-input').value = items[_focusSugIndex].textContent;
+    if (_focusSugIndex >= 0 && items[_focusSugIndex]) document.getElementById('focus-task-input').value = items[_focusSugIndex].querySelector('span')?.textContent||items[_focusSugIndex].textContent;
   } else if (e.key === 'Escape') {
     hideFocusSuggestions();
   } else if (e.key === 'Enter') {
@@ -4282,15 +4303,11 @@ function showQuickRetroSuggestions(filter) {
   let html = '';
   if (recent.length) {
     if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
-    html += recent.map(t =>
-      `<div class="hero-sug-item" onmousedown="selectQuickRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
-    ).join('');
+    html += recent.map(t => buildSugItem(t, `selectQuickRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
   }
   if (presets.length) {
     html += `<div class="hero-sug-label">Presets</div>`;
-    html += presets.map(t =>
-      `<div class="hero-sug-item" onmousedown="selectQuickRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
-    ).join('');
+    html += presets.map(t => buildSugItem(t, `selectQuickRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
   }
   el.innerHTML = html;
   el.style.display = 'block';
@@ -4315,12 +4332,12 @@ function handleQuickRetroKey(e) {
     e.preventDefault();
     _quickRetroSugIndex = Math.min(_quickRetroSugIndex + 1, items.length - 1);
     items.forEach((it, i) => it.style.background = i === _quickRetroSugIndex ? 'var(--deep-dim)' : '');
-    if (items[_quickRetroSugIndex]) document.getElementById('retro-task').value = items[_quickRetroSugIndex].textContent;
+    if (items[_quickRetroSugIndex]) document.getElementById('retro-task').value = items[_quickRetroSugIndex].querySelector('span')?.textContent||items[_quickRetroSugIndex].textContent;
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
     _quickRetroSugIndex = Math.max(_quickRetroSugIndex - 1, -1);
     items.forEach((it, i) => it.style.background = i === _quickRetroSugIndex ? 'var(--deep-dim)' : '');
-    if (_quickRetroSugIndex >= 0 && items[_quickRetroSugIndex]) document.getElementById('retro-task').value = items[_quickRetroSugIndex].textContent;
+    if (_quickRetroSugIndex >= 0 && items[_quickRetroSugIndex]) document.getElementById('retro-task').value = items[_quickRetroSugIndex].querySelector('span')?.textContent||items[_quickRetroSugIndex].textContent;
   } else if (e.key === 'Escape') {
     hideQuickRetroSuggestions();
   } else if (e.key === 'Enter') {
