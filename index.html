@@ -477,6 +477,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   font-weight:700;cursor:pointer;padding:0;flex-shrink:0}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 .shake{animation:shake 0.3s ease}
+#date-picker-dropdown > div:hover{background:var(--bg4) !important}
 .gap-time-input{background:none;border:none;border-bottom:1px solid var(--border2);color:var(--muted);
   font-family:var(--mono);font-size:11px;padding:2px 2px;cursor:text;outline:none;width:46px;
   text-align:center}
@@ -869,14 +870,31 @@ button, a, [role="button"],
 
 <!-- ══ TODAY ══ -->
 <div class="view active" id="view-today">
-  <div class="page-header">
+  <div class="page-header" style="position:relative">
     <div>
-      <div style="font-size:19px;font-weight:800;line-height:1" id="today-date">—</div>
-      <div class="page-title" style="margin-top:2px">Daily Focus</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div style="font-size:19px;font-weight:800;line-height:1;cursor:pointer;user-select:none"
+             id="today-date" onclick="toggleDatePicker()" title="Browse other days">—</div>
+        <span onclick="toggleDatePicker()" style="font-size:12px;color:var(--muted);cursor:pointer;user-select:none;line-height:1;padding-top:2px">▾</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+        <div class="page-title">Daily Focus</div>
+        <button id="back-to-today-btn" onclick="setViewDate(null)"
+          style="display:none;padding:2px 8px;background:var(--deep);color:#fff;border:none;
+                 border-radius:999px;font-size:10px;font-weight:700;cursor:pointer;font-family:var(--head)">
+          ← Today
+        </button>
+      </div>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <button class="btn sm ghost" onclick="openReview()">Review</button>
       <button class="btn sm ghost" onclick="enterFocusMode()" title="Focus / Pomodoro mode">⊙ Focus</button>
+    </div>
+    <!-- Date picker dropdown -->
+    <div id="date-picker-dropdown"
+         style="display:none;position:absolute;top:100%;left:0;z-index:300;
+                min-width:260px;background:var(--bg2);border:1px solid var(--border2);
+                border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,0.4);overflow:hidden">
     </div>
   </div>
 
@@ -1718,6 +1736,7 @@ button, a, [role="button"],
 // STATE
 // ══════════════════════════════════════════════════════
 let currentTask = '';
+let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
 let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst' };
 let reviews = {};
@@ -3129,6 +3148,74 @@ function getTimeByActivity(entriesArr) {
 // Display time in the user's configured timezone (never device-local)
 function localTime(ts){ return tzTime(ts); }
 // getTodayEntries, getWeekEntries — moved to storage.js
+
+// ── Day-browsing helpers ──────────────────────────────────────────────────
+function getViewingDateKey() {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return viewingDateKey || getDateInTZ(Date.now(), tz);
+}
+function getViewingEntries() {
+  return getEntriesForDate(getViewingDateKey());
+}
+function isViewingToday() {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return getViewingDateKey() === getDateInTZ(Date.now(), tz);
+}
+// End of day as UTC ms for a YYYY-MM-DD key (= start of next calendar day - 1 ms)
+function dayEndTs(dateKey) {
+  const [y, mo, d] = dateKey.split('-').map(Number);
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const nextKey = `${y}-${String(mo).padStart(2,'0')}-${String(d+1).padStart(2,'0')}`;
+  return tzParseTime(nextKey, '00:00') - 1;
+}
+function setViewDate(dateKey) {
+  viewingDateKey = dateKey;
+  _todayRenderKey = ''; // force full re-render
+  renderToday();
+  document.getElementById('date-picker-dropdown').style.display = 'none';
+}
+function navigateDateBy(delta) {
+  const cur = getViewingDateKey();
+  const [y, mo, d] = cur.split('-').map(Number);
+  const next = new Date(Date.UTC(y, mo - 1, d + delta));
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const nextKey = getDateInTZ(next.getTime(), tz);
+  // Don't navigate past today
+  const todayKey = getDateInTZ(Date.now(), tz);
+  if (nextKey > todayKey) return;
+  setViewDate(nextKey === todayKey ? null : nextKey);
+}
+function toggleDatePicker() {
+  const dd = document.getElementById('date-picker-dropdown');
+  if (dd.style.display !== 'none') { dd.style.display = 'none'; return; }
+  // Build list: last 14 calendar days including today
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const curKey = getViewingDateKey();
+  const items = [];
+  for (let i = 0; i < 14; i++) {
+    const ts = Date.now() - i * 86400000;
+    const k = getDateInTZ(ts, tz);
+    const count = getEntriesForDate(k).length;
+    const label = i === 0 ? 'Today' : i === 1 ? 'Yesterday'
+      : new Intl.DateTimeFormat('en-US', {timeZone: tz, weekday:'long'}).format(new Date(ts));
+    const dateStr = new Intl.DateTimeFormat('en-US', {timeZone: tz, month:'short', day:'numeric'}).format(new Date(ts));
+    const isSelected = k === curKey;
+    items.push(`<div onclick="setViewDate(${k === todayKey ? 'null' : `'${k}'`})"
+      style="display:flex;justify-content:space-between;align-items:center;
+             padding:9px 14px;cursor:pointer;${isSelected ? 'background:var(--bg4)' : ''}">
+      <div>
+        <span style="font-weight:700;font-size:13px;color:${isSelected ? 'var(--deep)' : 'var(--text)'}">${label}</span>
+        <span style="color:var(--muted);font-size:11px;margin-left:6px">${dateStr}</span>
+      </div>
+      <span style="font-size:11px;color:${count ? 'var(--deep)' : 'var(--muted2)'};font-weight:600">
+        ${count ? count + (count === 1 ? ' entry' : ' entries') : '—'}
+      </span>
+    </div>`);
+  }
+  dd.innerHTML = items.join('');
+  dd.style.display = 'block';
+}
 function computeDeepScore(arr){return arr.length?Math.round(arr.filter(e=>e.energy==='deep').length/arr.length*100):0;}
 function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(settings.intervalMin/60)).toFixed(1);}
 function computeStreak(){
@@ -3180,8 +3267,8 @@ function getIdentityLevelWithEmoji(score) {
 
 // Returns today's work day start as a Unix timestamp.
 // Anchored to the first real entry of the day so entries logged at any hour are covered.
-function getWorkDayStartTs() {
-  const todayEntries = getTodayEntries().filter(e => !e.missed && (e.tsStart || e.ts));
+function getWorkDayStartTs(entriesOverride) {
+  const todayEntries = (entriesOverride || getTodayEntries()).filter(e => !e.missed && (e.tsStart || e.ts));
   if (!todayEntries.length) return Date.now(); // no entries yet → no gaps to show
   return Math.min(...todayEntries.map(e => e.tsStart || e.ts));
 }
@@ -3228,10 +3315,11 @@ function mergeConsecutiveForDisplay(sorted) {
 
 // ── Gap detection: anchored to work day start, not first entry ──
 // This means: even if you never opened the app, gaps show from your start time.
-function computeGaps(todayEntries) {
+function computeGaps(todayEntries, dayNow) {
   const MIN_GAP_MIN = 10;
-  const workStart = getWorkDayStartTs();
-  const now = Date.now();
+  const workStart = getWorkDayStartTs(todayEntries);
+  const now = dayNow || Date.now();
+  const isPast = !!dayNow;
 
   // Work day hasn't started yet — nothing to show
   if (now < workStart) return [];
@@ -3253,9 +3341,10 @@ function computeGaps(todayEntries) {
   }
 
   // Decide where to scan up to:
-  // If timer is running or break is active, stop at the last entry (current block is live)
-  // Otherwise, scan all the way to now
-  const scanEnd = (running || breakActive || awayActive) ? (merged.length ? merged[merged.length-1].end : workStart) : now;
+  // For past days: always scan to end of day. For today: stop at last entry if timer is live.
+  const scanEnd = (!isPast && (running || breakActive || awayActive))
+    ? (merged.length ? merged[merged.length-1].end : workStart)
+    : now;
 
   const gaps = [];
 
@@ -3284,12 +3373,12 @@ function computeGaps(todayEntries) {
     }
   }
 
-  // Gap from last entry to now (only when not actively tracking)
-  if (!running && !breakActive && !awayActive) {
+  // Gap from last entry to now (for past days always; for today only when not actively tracking)
+  if (isPast || (!running && !breakActive && !awayActive)) {
     const lastEnd = merged[merged.length - 1].end;
     const nowGapMin = Math.round((now - lastEnd) / 60000);
     if (nowGapMin >= MIN_GAP_MIN) {
-      gaps.push({ tsStart: lastEnd, ts: now, gapMin: nowGapMin, isGap: true, isCurrent: true });
+      gaps.push({ tsStart: lastEnd, ts: now, gapMin: nowGapMin, isGap: true, isCurrent: !isPast });
     }
   }
 
@@ -3306,7 +3395,9 @@ function scrollToTimeline() {
 
 // Open retro log pre-filled with exact gap times — one tap to fill a gap
 function openGapsPicker() {
-  const gaps = computeGaps(getTodayEntries());
+  const viewE = getViewingEntries();
+  const dayNow = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
+  const gaps = computeGaps(viewE, dayNow);
   if (!gaps.length) { showToast('No unlogged gaps found'); return; }
   renderGapsList(gaps);
   document.getElementById('gaps-overlay').classList.add('open');
@@ -3711,14 +3802,19 @@ function toggleTlBucket(id) {
 let _todayRenderKey = '';
 
 function renderToday() {
-  const todayE = getTodayEntries();
+  const todayE = getViewingEntries();
   const realEntries = todayE.filter(e => !e.missed);
   const deepCount = realEntries.filter(e => e.energy === 'deep').length;
 
   const _tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const _viewKey = getViewingDateKey();
+  const _viewTs = new Date(_viewKey + 'T12:00:00'); // noon on that day (safe for display)
   document.getElementById('today-date').textContent = new Intl.DateTimeFormat('en-US', {
     timeZone: _tz, weekday: 'long', month: 'long', day: 'numeric'
-  }).format(new Date());
+  }).format(_viewTs);
+  // Show/hide "back to today" button
+  const backBtn = document.getElementById('back-to-today-btn');
+  if (backBtn) backBtn.style.display = isViewingToday() ? 'none' : 'inline-flex';
   document.getElementById('intention').value = intention;
 
   // Simplified stat row
@@ -3757,21 +3853,23 @@ function renderToday() {
         return dur > 0;
       });
       const mergedDisplay = mergeConsecutiveForDisplay(clipped);
-      const gaps    = computeGaps(todayE);
+      const _dayNow = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
+      const gaps    = computeGaps(todayE, _dayNow);
       const combined = [...mergedDisplay, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
       tlEl.innerHTML = renderTimelineCombined(combined);
     }
   }
 
   // Untracked banner + past block nav button
-  const untrackedMin = computeUntrackedMin(todayE);
+  const _dayNowB = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
+  const untrackedMin = computeGaps(todayE, _dayNowB).reduce((s, g) => s + g.gapMin, 0);
   const banner = document.getElementById('untracked-banner');
-  const workStarted = Date.now() > getWorkDayStartTs();
+  const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(todayE)) : todayE.length > 0;
   document.getElementById('nav-past-btn').style.display = (untrackedMin >= 10 && workStarted) ? 'flex' : 'none';
   if (untrackedMin >= 10 && workStarted) {
     const h = Math.floor(untrackedMin / 60), m = untrackedMin % 60;
     document.getElementById('untracked-banner-text').textContent =
-      (h > 0 ? `${h}h ${m}m` : `${m}m`) + ' untracked today';
+      (h > 0 ? `${h}h ${m}m` : `${m}m`) + (isViewingToday() ? ' untracked today' : ' untracked that day');
     banner.style.display = 'flex';
   } else {
     banner.style.display = 'none';
@@ -3995,7 +4093,7 @@ function quickRetroLog() {
   if (!task) { showToast('What did you do?'); taskInput.focus(); return; }
 
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const todayKey = getDateInTZ(Date.now(), tz);
+  const todayKey = getViewingDateKey();
   const startVal = document.getElementById('retro-qstart').value; // "HH:MM"
   const endVal   = document.getElementById('retro-qend').value;   // "HH:MM"
 
@@ -5436,6 +5534,12 @@ document.addEventListener('click', e => {
   const btn = document.getElementById('away-btn');
   if (picker && picker.classList.contains('show') && !picker.contains(e.target) && e.target !== btn) {
     picker.classList.remove('show');
+  }
+  // Close date picker dropdown when clicking outside
+  const dd = document.getElementById('date-picker-dropdown');
+  const dateEl = document.getElementById('today-date');
+  if (dd && dd.style.display !== 'none' && !dd.contains(e.target) && !dateEl.contains(e.target)) {
+    dd.style.display = 'none';
   }
 });
 // On load: if significant untracked time exists, prompt to fill gaps

@@ -157,6 +157,14 @@ function getTodayEntries() {
   });
 }
 
+function getEntriesForDate(dateKey) {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return entries.filter(e => {
+    if (e.deleted) return false;
+    return getDateInTZ(e.tsStart || e.ts, tz) === dateKey;
+  });
+}
+
 function getWeekEntries(offset=0) {
   const days = getWeekDays(offset);
   const keys = new Set(days.map(d => d.key));
