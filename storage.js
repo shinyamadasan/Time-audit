@@ -81,32 +81,108 @@ function toDateKey(d) {
   return new Intl.DateTimeFormat('en-CA', {timeZone: tz}).format(d);
 }
 
+// ── Timezone-aware display/parse helpers ──────────────────────────────────
+// All functions read settings.timezone (set once, syncs to all devices).
+// Never use Date.getHours() / .getDay() / .getMonth() directly — those
+// return device-local values and break multi-device, multi-timezone setups.
+
+function tzTime(ts) {
+  // "9:30 AM" in user's timezone, for display
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true
+  }).format(new Date(ts));
+}
+
+function tzHHMM(ts) {
+  // "HH:MM" (24-hour) for <input type="time"> prefill
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(new Date(ts));
+  const h = (parts.find(p => p.type === 'hour')?.value || '00').replace(/^24$/, '00');
+  const m =  parts.find(p => p.type === 'minute')?.value || '00';
+  return `${h.padStart(2,'0')}:${m.padStart(2,'0')}`;
+}
+
+function tzHour(ts) {
+  // Hour 0–23 in user's timezone
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: 'numeric', hour12: false
+  }).formatToParts(new Date(ts));
+  return parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10) % 24;
+}
+
+function tzDow(ts) {
+  // Day-of-week 0=Sun…6=Sat in user's timezone
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  return DAYS.indexOf(
+    new Intl.DateTimeFormat('en-US', {timeZone: tz, weekday: 'short'}).format(new Date(ts))
+  );
+}
+
+function tzParseTime(dateKey, hhmm) {
+  // Convert a wall-clock "HH:MM" time on dateKey (YYYY-MM-DD, in user's timezone)
+  // to a UTC timestamp. Iterates to self-correct for timezone offset.
+  const [h, m] = hhmm.split(':').map(Number);
+  const [y, mo, d] = dateKey.split('-').map(Number);
+  let ts = Date.UTC(y, mo - 1, d, h, m, 0); // start with naive UTC guess
+  for (let i = 0; i < 3; i++) {
+    const [ah, am] = tzHHMM(ts).split(':').map(Number);
+    const diff = ((h * 60 + m) - (ah * 60 + am)) * 60000;
+    ts += diff;
+    if (diff === 0) break;
+  }
+  return ts;
+}
+
+function getDateInTZ(ts, tz) {
+  // Canonical "what calendar date is this UTC timestamp on?" in the user's timezone.
+  // Always derive from the UTC timestamp — never trust the stored e.date field, which
+  // may have been written with a different (or absent) timezone setting.
+  tz = tz || settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return new Intl.DateTimeFormat('en-CA', {timeZone: tz}).format(new Date(ts));
+}
+
 function getTodayEntries() {
-  const k = toDateKey(new Date());
-  return entries.filter(e => e.date === k);
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  return entries.filter(e => {
+    if (e.deleted) return false;
+    // Derive the entry's date from its UTC timestamp, not the stored e.date field.
+    // e.tsStart is when the block began; e.ts is when it ended. Use start if available.
+    return getDateInTZ(e.tsStart || e.ts, tz) === todayKey;
+  });
 }
 
 function getWeekEntries(offset=0) {
   const days = getWeekDays(offset);
   const keys = new Set(days.map(d => d.key));
-  return entries.filter(e => keys.has(e.date));
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return entries.filter(e => {
+    if (e.deleted) return false;
+    return keys.has(getDateInTZ(e.tsStart || e.ts, tz));
+  });
 }
 
 function getWeekDays(offset=0) {
-  const today = new Date();
-  const dow = today.getDay(); // 0=Sun
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = toDateKey(new Date());
+  const [ty, tm, td] = todayKey.split('-').map(Number);
+  const dow = tzDow(Date.now()); // day-of-week in user's timezone
   const mondayDiff = (dow === 0 ? -6 : 1 - dow) + offset * 7;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + mondayDiff);
   const days = [];
-  for (let i=0; i<7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    const key = toDateKey(d);
-    const isToday = key === toDateKey(new Date());
-    const isFuture = d > today;
-    const dayE = entries.filter(e => e.date === key && !e.missed && !e.away);
-    days.push({key, label:DAY[d.getDay()]||'?', isToday, isFuture, hasData:dayE.length>0, entries:dayE, date:d});
+  for (let i = 0; i < 7; i++) {
+    // Use noon UTC so the date survives any DST boundary or large TZ offset
+    const dt = new Date(Date.UTC(ty, tm - 1, td + mondayDiff + i, 12, 0, 0));
+    const key = toDateKey(dt);
+    const isToday = key === todayKey;
+    const isFuture = key > todayKey;
+    const dayE = entries.filter(e => !e.missed && !e.away && !e.deleted && getDateInTZ(e.tsStart || e.ts, tz) === key);
+    const label = new Intl.DateTimeFormat('en-US', {timeZone: tz, weekday: 'short'}).format(dt);
+    days.push({key, label, isToday, isFuture, hasData: dayE.length > 0, entries: dayE, date: dt});
   }
   return days;
 }
@@ -121,20 +197,24 @@ function getWeekKey(d) {
 }
 
 function getEntriesForWeekKey(weekKey) {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   return entries.filter(e => {
-    if (!e.date) return false;
-    const d = new Date(e.date + 'T12:00:00');
+    if (!e.ts || e.deleted) return false;
+    // Derive date from UTC timestamp, then build a noon-UTC date for getWeekKey()
+    const dateKey = getDateInTZ(e.tsStart || e.ts, tz);
+    const d = new Date(dateKey + 'T12:00:00Z');
     return getWeekKey(d) === weekKey;
   });
 }
 
 function getMonthEntries(offset=0) {
-  const d = new Date();
-  d.setMonth(d.getMonth() + offset, 1);
-  const year = d.getFullYear(), month = d.getMonth();
+  // Target month using user's timezone date key prefix (e.g. "2026-04")
+  const [y, mo] = toDateKey(new Date()).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, mo - 1 + offset, 15, 12, 0, 0)); // 15th avoids month edge issues
+  const targetPrefix = toDateKey(dt).slice(0, 7);
   return entries.filter(e => {
-    const ed = new Date(e.ts);
-    return ed.getFullYear()===year && ed.getMonth()===month && !e.missed && !e.away;
+    if (e.missed || e.away || e.deleted || !e.ts) return false;
+    return getDateInTZ(e.tsStart || e.ts, settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone).startsWith(targetPrefix);
   });
 }
 
@@ -162,17 +242,7 @@ function persist() {
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
   localStorage.setItem('ta3-lv', Date.now()); // local version — used to detect unsynced changes
   if (running && timerStartedAt) {
-    localStorage.setItem('ta3-timer', JSON.stringify({
-      timerStartedAt,
-      totalSecs,
-      running: true,
-      lastTask: lastTaskForRepeat,
-      currentTask,
-      taskStartTime,
-      blockStartTime,
-      pendingLogStartTime,
-      pendingLogEndTime
-    }));
+    localStorage.setItem('ta3-timer', JSON.stringify({timerStartedAt, totalSecs, running: true, lastTask: lastTaskForRepeat}));
   } else {
     localStorage.removeItem('ta3-timer');
   }
@@ -218,17 +288,14 @@ function load() {
   try {
     const saved = JSON.parse(localStorage.getItem('ta3-timer') || 'null');
     if (saved && saved.running && saved.timerStartedAt) {
-      const elapsed = Math.floor((Date.now() - new Date(saved.timerStartedAt).getTime()) / 1000);
-      timerStartedAt = saved.timerStartedAt;
-      totalSecs = saved.totalSecs;
-      remaining = Math.max(0, totalSecs - elapsed);
-      running = true;
-      lastTaskForRepeat = saved.lastTask || '';
-      currentTask = saved.currentTask || saved.lastTask || currentTask;
-      taskStartTime = saved.taskStartTime || saved.timerStartedAt;
-      blockStartTime = saved.blockStartTime || saved.timerStartedAt;
-      pendingLogStartTime = saved.pendingLogStartTime || null;
-      pendingLogEndTime = saved.pendingLogEndTime || null;
+      const elapsed = Math.floor((Date.now() - saved.timerStartedAt) / 1000);
+      if (elapsed < saved.totalSecs) {
+        timerStartedAt = saved.timerStartedAt;
+        totalSecs = saved.totalSecs;
+        remaining = Math.max(0, totalSecs - elapsed);
+        running = true;
+        lastTaskForRepeat = saved.lastTask || '';
+      }
     }
   } catch(e) {}
 }
@@ -368,16 +435,10 @@ function startSync() {
     if (!data) return;
     if (data.ownerDeviceId) timerOwnerDeviceId = data.ownerDeviceId;
     if (data.running && data.startedAt) {
-      const elapsed = Math.floor((Date.now() - new Date(data.startedAt).getTime()) / 1000);
+      const elapsed = Math.floor((Date.now() - data.startedAt) / 1000);
       timerStartedAt = data.startedAt;
-      taskStartTime = data.taskStartTime || data.startedAt;
-      blockStartTime = data.blockStartTime || data.startedAt;
-      pendingLogStartTime = data.pendingLogStartTime || null;
-      pendingLogEndTime = data.pendingLogEndTime || null;
       totalSecs = data.intervalSecs;
       remaining = Math.max(0, totalSecs - elapsed);
-      currentTask = data.currentTask || currentTask || data.lastTask || '';
-      lastTaskForRepeat = data.lastTask || currentTask || lastTaskForRepeat;
       if (!running) {
         running = true;
         settings.intervalMin = data.intervalSecs / 60;
@@ -386,19 +447,28 @@ function startSync() {
         document.getElementById('timer-status').textContent = `Synced · pinging every ${settings.intervalMin} min`;
         // Show hero-active when synced timer starts
         const task = currentTask || lastTaskForRepeat || 'Work';
+        if (!taskStartTime) taskStartTime = timerStartedAt || Date.now();
         document.getElementById('hero-idle').style.display = 'none';
         document.getElementById('hero-active').style.display = 'block';
         document.getElementById('hero-task-name').textContent = task;
-        startUiTicker();
+        if (!ticker) {
+          ticker = setInterval(() => {
+            remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
+            updateLiveCost();
+            remaining <= 0 ? doPing() : updateRing();
+          }, 1000);
+        }
       } else {
+        // Already running — just re-sync remaining without restarting ticker
         remaining = Math.max(0, totalSecs - elapsed);
         updateRing();
       }
     } else if (!data.running) {
+      if (data.pausedRemaining != null) remaining = data.pausedRemaining;
       if (running) {
-        running = false; stopUiTicker();
-        document.getElementById('main-btn').textContent = 'Start';
-        document.getElementById('timer-status').textContent = 'Ready';
+        running = false; clearInterval(ticker); ticker = null;
+        document.getElementById('main-btn').textContent = 'Resume';
+        document.getElementById('timer-status').textContent = 'Paused (synced)';
       }
     }
     if (data.intervalSecs) { totalSecs = data.intervalSecs; settings.intervalMin = data.intervalSecs/60; }
@@ -416,12 +486,13 @@ function startSync() {
       if (!re || !re.id) return;
       const local = localMap.get(re.id);
       if (!local) {
-        // New entry from remote — add it
+        // New entry from remote — skip tombstones, add live entries
+        if (re.deleted) return;
         if (!re.updatedAt) re.updatedAt = re.ts || Date.now();
         entries.push(re);
         changed = true;
       } else {
-        // Conflict: prefer whichever version is newer
+        // Conflict: prefer whichever version is newer (deleted flag propagates too)
         const remoteV = re.updatedAt || re.ts || 0;
         const localV  = local.updatedAt || local.ts || 0;
         if (remoteV > localV) {
@@ -466,9 +537,9 @@ function startSync() {
     if (data.active && data.endsAt && !breakActive && data.startedBy !== syncedDeviceId) {
       // Remote device started a break — mirror it here
       breakEndsAt = data.endsAt;
-      breakStartTs = data.startedAt || new Date().toISOString();
+      breakStartTs = Date.now();
       breakActive = true;
-      running = false; stopUiTicker();
+      running = false; clearInterval(ticker); ticker = null;
       document.getElementById('break-active-row').classList.add('show');
       document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
       document.getElementById('main-btn').textContent = 'On Break';
@@ -476,7 +547,7 @@ function startSync() {
       document.getElementById('timer-status').textContent = `${data.durationMin||'?'}-min break · synced from other device`;
       _updateBreakDisplay();
       clearInterval(breakTicker);
-      breakTicker = setInterval(() => { _updateBreakDisplay(); if (Date.now() >= new Date(breakEndsAt).getTime()) endBreak(); }, 1000);
+      breakTicker = setInterval(() => { _updateBreakDisplay(); if (Date.now() >= breakEndsAt) endBreak(); }, 1000);
     } else if (!data.active && breakActive && data.startedBy !== syncedDeviceId) {
       // Remote device ended break — mirror it
       clearInterval(breakTicker); breakTicker = null;
@@ -498,13 +569,8 @@ function syncTimerState() {
     timer: {
       running,
       intervalSecs: totalSecs,
-      startedAt: running ? timerStartedAt : null,
-      taskStartTime: running ? taskStartTime : null,
-      blockStartTime: running ? blockStartTime : null,
-      currentTask: currentTask || null,
-      lastTask: lastTaskForRepeat || null,
-      pendingLogStartTime: pendingLogStartTime || null,
-      pendingLogEndTime: pendingLogEndTime || null,
+      startedAt: running ? Date.now() - (totalSecs - remaining) * 1000 : null,
+      pausedRemaining: running ? null : remaining,
       ownerDeviceId: timerOwnerDeviceId || null
     }
   });
