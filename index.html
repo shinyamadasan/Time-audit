@@ -2956,16 +2956,35 @@ function saveRetroEntry() {
 
   getActivityColor(activity);
 
+  // Detect midnight span: start and end on different calendar dates in user's TZ
+  const startDateKey = toDateKey(new Date(tsStart));
+  const endDateKey   = toDateKey(new Date(tsEnd));
+  const spansMidnight = startDateKey !== endDateKey;
+  const midnight = spansMidnight ? tzParseTime(endDateKey, '00:00') : null;
+
+  const onPlan = retroEnergy !== 'distraction' && retroEnergy !== 'waste';
+
+  function makeEntry(id, ts, tsS, dateKey) {
+    const blkDur = Math.round((ts - tsS) / 60000);
+    const e = { id, ts, tsStart: tsS, blockIntervalMin: blkDur,
+      date: dateKey, activity, energy: retroEnergy, onPlan, retro: true,
+      updatedAt: Date.now() };
+    e.category = getBucket(e); e.originalLabel = e.energy || null;
+    return e;
+  }
+
   if (editingEntryId !== null) {
-    // Update existing entry in place
+    // Update existing entry — if it now spans midnight, split it
     const idx = entries.findIndex(e => e.id === editingEntryId);
     if (idx !== -1) {
-      const updated = { ...entries[idx], activity, energy: retroEnergy,
-        onPlan: retroEnergy !== 'distraction' && retroEnergy !== 'waste',
-        tsStart, ts: tsEnd, blockIntervalMin: dur,
-        date: toDateKey(new Date(tsStart)), updatedAt: Date.now() };
-      updated.category = getBucket(updated); updated.originalLabel = updated.energy || null;
-      entries[idx] = updated;
+      if (spansMidnight) {
+        // Replace the original with the pre-midnight part; push a new next-day entry
+        entries[idx] = makeEntry(midnight - 1, midnight, tsStart, startDateKey);
+        entries.push(makeEntry(tsEnd, tsEnd, midnight, endDateKey));
+      } else {
+        entries[idx] = makeEntry(entries[idx].id, tsEnd, tsStart, startDateKey);
+        entries[idx].updatedAt = Date.now();
+      }
     }
     editingEntryId = null;
     editingEntryBase = null;
@@ -2974,22 +2993,24 @@ function saveRetroEntry() {
     document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
     document.getElementById('retro-modal-title').textContent = 'What were you doing?';
     closeModal('retro-overlay');
-    showToast('Block updated');
+    showToast(spansMidnight ? 'Split at midnight · block updated' : 'Block updated');
   } else {
-    const entry = {
-      id: tsEnd, ts: tsEnd, tsStart,
-      blockIntervalMin: dur,
-      date: toDateKey(new Date(tsStart)),
-      activity, energy: retroEnergy,
-      onPlan: retroEnergy !== 'distraction' && retroEnergy !== 'waste',
-      retro: true
-    };
-    entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
-    entries.push(entry);
-    entries.sort((a,b) => b.ts - a.ts);
-    persist(); renderToday(); syncEntries();
-    closeModal('retro-overlay');
-    showToast(`Logged retroactively · ${fmtDur(dur)}`);
+    if (spansMidnight) {
+      entries.push(makeEntry(midnight - 1, midnight, tsStart, startDateKey));
+      entries.push(makeEntry(tsEnd, tsEnd, midnight, endDateKey));
+      entries.sort((a,b) => b.ts - a.ts);
+      persist(); renderToday(); syncEntries();
+      closeModal('retro-overlay');
+      const dur1 = Math.round((midnight - tsStart) / 60000);
+      const dur2 = Math.round((tsEnd - midnight) / 60000);
+      showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
+    } else {
+      entries.push(makeEntry(tsEnd, tsEnd, tsStart, startDateKey));
+      entries.sort((a,b) => b.ts - a.ts);
+      persist(); renderToday(); syncEntries();
+      closeModal('retro-overlay');
+      showToast(`Logged retroactively · ${fmtDur(dur)}`);
+    }
   }
 }
 
