@@ -3194,6 +3194,28 @@ function clipOverlapsForDisplay(ascSorted) {
   return result;
 }
 
+// ── Merge consecutive same-activity entries for display ──
+// Display-only: never mutates stored entries.
+// Two entries merge if they share activity+energy and the gap between them is < 5 min.
+function mergeConsecutiveForDisplay(sorted) {
+  if (!sorted.length) return sorted;
+  const MAX_GAP_MS = 5 * 60000;
+  const out = [];
+  let g = { ...sorted[0], _mergeCount: 1 };
+  for (let i = 1; i < sorted.length; i++) {
+    const e = sorted[i];
+    const gap = (e.tsStart || e.ts) - g.ts;
+    if (e.activity === g.activity && e.energy === g.energy && gap >= 0 && gap <= MAX_GAP_MS) {
+      g = { ...g, ts: e.ts, blockIntervalMin: Math.round((e.ts - (g.tsStart || g.ts)) / 60000), _mergeCount: g._mergeCount + 1 };
+    } else {
+      out.push(g);
+      g = { ...e, _mergeCount: 1 };
+    }
+  }
+  out.push(g);
+  return out;
+}
+
 // ── Gap detection: anchored to work day start, not first entry ──
 // This means: even if you never opened the app, gaps show from your start time.
 function computeGaps(todayEntries) {
@@ -3462,11 +3484,14 @@ function renderEntryRow(item) {
     </div>`;
   }
 
+  const mergeTag = item._mergeCount > 1
+    ? `<span style="font-size:10px;color:var(--muted);font-weight:600;margin-left:4px;opacity:0.7">×${item._mergeCount}</span>`
+    : '';
   return `<div class="tl-row" onclick="openEditEntry(${item.id})" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
-      <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span></div>
+      <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span>${mergeTag}</div>
       <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}</div>
     </div>
     <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
@@ -3549,15 +3574,15 @@ function renderToday() {
     if (!todayE.length) {
       tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
     } else {
-      // Sort chronologically, clip overlaps, then interleave gaps
+      // Sort chronologically, clip overlaps, drop 0m, merge consecutive same-activity, interleave gaps
       const sorted  = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
       const clipped = clipOverlapsForDisplay(sorted).filter(e => {
-        // Drop entries that were clipped down to 0 minutes — they're invisible and confusing
         const dur = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 1);
         return dur > 0;
       });
+      const mergedDisplay = mergeConsecutiveForDisplay(clipped);
       const gaps    = computeGaps(todayE);
-      const combined = [...clipped, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+      const combined = [...mergedDisplay, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
       tlEl.innerHTML = renderTimelineCombined(combined);
     }
   }
