@@ -2134,7 +2134,7 @@ function showPingBanner(pingNum) {
   const b = document.getElementById('ping-banner');
   const streak = getTodayEntries().filter(e=>!e.missed).length;
   document.getElementById('ping-banner-sub').textContent =
-    `Block #${pingNum}${streak > 1 ? ' · ' + streak + '-block streak' : ''} · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+    `Block #${pingNum}${streak > 1 ? ' · ' + streak + '-block streak' : ''} · ${tzTime(Date.now())}`;
   b.classList.add('show');
 }
 function hidePingBanner() {
@@ -2204,7 +2204,7 @@ function openQuickLog() {
   qlEnergy = '';
   const elapsedMin = blockStartTime ? Math.max(1, Math.round((Date.now() - blockStartTime) / 60000)) : settings.intervalMin;
   document.getElementById('ql-tag').textContent = `PING #${pingCount}`;
-  document.getElementById('ql-sub').textContent = `Last ${fmtDur(elapsedMin)} · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+  document.getElementById('ql-sub').textContent = `Last ${fmtDur(elapsedMin)} · ${tzTime(Date.now())}`;
   document.getElementById('ql-activity').value = '';
   document.querySelectorAll('#quicklog-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
 
@@ -2780,7 +2780,7 @@ function openLog(pingNum) {
     const elapsed = blockStartTime ? Math.round((Date.now() - blockStartTime) / 60000) : settings.intervalMin;
     document.getElementById('log-ping-tag').textContent = `SWITCHING TASKS — log last ${elapsed}m`;
   } else {
-    document.getElementById('log-ping-tag').textContent = pingNum ? `PING #${pingNum} — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}` : '';
+    document.getElementById('log-ping-tag').textContent = pingNum ? `PING #${pingNum} — ${tzTime(Date.now())}` : '';
   }
   // Show committed task context on pings
   const committedBar = document.getElementById('log-committed-bar');
@@ -2898,15 +2898,9 @@ function openRetroLog() {
   document.getElementById('retro-activity').value = '';
   populateRetroChips();
   // Default: last block's end time as start, now as end
-  const now = new Date();
-  const pad = n => String(n).padStart(2,'0');
-  const nowStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  const lastEntry = entries[0];
-  let startStr = nowStr;
-  if (lastEntry && lastEntry.ts) {
-    const lastEnd = new Date(lastEntry.ts);
-    startStr = `${pad(lastEnd.getHours())}:${pad(lastEnd.getMinutes())}`;
-  }
+  const nowStr = tzHHMM(Date.now());
+  const lastEntry = entries.filter(e => !e.deleted)[0];
+  const startStr = lastEntry?.ts ? tzHHMM(lastEntry.ts) : nowStr;
   document.getElementById('retro-start').value = startStr;
   document.getElementById('retro-end').value = nowStr;
   document.getElementById('retro-overlay').classList.add('open');
@@ -2926,15 +2920,13 @@ function saveRetroEntry() {
   const endVal = document.getElementById('retro-end').value;
   if (!startVal || !endVal) { showToast('Set start and end time'); return; }
 
-  const [sh, sm] = startVal.split(':').map(Number);
-  const [eh, em] = endVal.split(':').map(Number);
-
-  // Use start date from edit context if editing, otherwise today
-  const baseDate = editingEntryBase ? editingEntryBase.startDate : new Date();
-  const yr = baseDate.getFullYear(), mo = baseDate.getMonth(), dy = baseDate.getDate();
-  const tsStart = new Date(yr, mo, dy, sh, sm, 0).getTime();
-  let tsEnd   = new Date(yr, mo, dy, eh, em, 0).getTime();
-  // Handle midnight-crossing: if end < start in time-of-day, end is next day
+  // Parse times in user's timezone, not device-local time
+  const baseDateKey = editingEntryBase
+    ? toDateKey(editingEntryBase.startDate)  // date the block was on, in user's TZ
+    : toDateKey(new Date());                  // today in user's TZ
+  const tsStart = tzParseTime(baseDateKey, startVal);
+  let tsEnd     = tzParseTime(baseDateKey, endVal);
+  // Midnight-crossing: if end ≤ start as wall-clock, end is on the next calendar day
   if (tsEnd <= tsStart) tsEnd += 24 * 60 * 60 * 1000;
   const dur = Math.round((tsEnd - tsStart) / 60000);
 
@@ -3129,10 +3121,8 @@ function getTimeByActivity(entriesArr) {
   return map;
 }
 // toDateKey — moved to storage.js
-// Display time always in THIS device's local timezone from the raw ts
-function localTime(ts){
-  return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-}
+// Display time in the user's configured timezone (never device-local)
+function localTime(ts){ return tzTime(ts); }
 // getTodayEntries, getWeekEntries — moved to storage.js
 function computeDeepScore(arr){return arr.length?Math.round(arr.filter(e=>e.energy==='deep').length/arr.length*100):0;}
 function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(settings.intervalMin/60)).toFixed(1);}
@@ -3287,7 +3277,7 @@ function openGapsPicker() {
 
 function renderGapsList(gaps) {
   const pad = n => String(n).padStart(2,'0');
-  function fmt(ts) { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+  function fmt(ts) { return tzHHMM(ts); }
   const awayTypes = [
     { label: '😴 Sleep', activity: 'Sleep', energy: 'admin' },
     { label: '🚗 Commute', activity: 'Commute', energy: 'shallow' },
@@ -3355,11 +3345,8 @@ function openRetroLogPrefilled(tsStart, tsEnd) {
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('retro-activity').value = '';
   populateRetroChips();
-  const pad = n => String(n).padStart(2, '0');
-  const s = new Date(tsStart);
-  const e = new Date(Math.min(tsEnd, Date.now()));
-  document.getElementById('retro-start').value = `${pad(s.getHours())}:${pad(s.getMinutes())}`;
-  document.getElementById('retro-end').value   = `${pad(e.getHours())}:${pad(e.getMinutes())}`;
+  document.getElementById('retro-start').value = tzHHMM(tsStart);
+  document.getElementById('retro-end').value   = tzHHMM(Math.min(tsEnd, Date.now()));
   document.getElementById('retro-overlay').classList.add('open');
   setTimeout(() => document.getElementById('retro-activity').focus(), 250);
 }
@@ -3369,15 +3356,13 @@ function openEditEntry(id) {
   if (!entry) return;
   editingEntryId = id;
 
-  const pad = n => String(n).padStart(2, '0');
   const tsS = entry.tsStart || (entry.ts - (entry.blockIntervalMin || settings.intervalMin) * 60000);
   const tsE = entry.ts;
-  const sDate = new Date(tsS);
-  const eDate = new Date(tsE);
-
-  // Detect midnight-crossing (end time earlier in day than start time)
-  const crossesMidnight = eDate.getHours() * 60 + eDate.getMinutes() < sDate.getHours() * 60 + sDate.getMinutes();
-  editingEntryBase = { startDate: sDate, crossesMidnight };
+  const [sh, sm] = tzHHMM(tsS).split(':').map(Number);
+  const [eh, em] = tzHHMM(tsE).split(':').map(Number);
+  // Detect midnight-crossing in user's timezone
+  const crossesMidnight = eh * 60 + em < sh * 60 + sm;
+  editingEntryBase = { startDate: new Date(tsS), crossesMidnight };
 
   // Untracked blocks: open as a fresh log (just prefill the time, clear activity)
   if (entry.missed) {
@@ -3396,8 +3381,8 @@ function openEditEntry(id) {
   }
   populateRetroChips();
 
-  document.getElementById('retro-start').value = `${pad(sDate.getHours())}:${pad(sDate.getMinutes())}`;
-  document.getElementById('retro-end').value   = `${pad(eDate.getHours())}:${pad(eDate.getMinutes())}`;
+  document.getElementById('retro-start').value = tzHHMM(tsS);
+  document.getElementById('retro-end').value   = tzHHMM(tsE);
   document.getElementById('retro-overlay').classList.add('open');
   setTimeout(() => document.getElementById('retro-activity').focus(), 250);
 }
@@ -3487,7 +3472,10 @@ function renderToday() {
   const realEntries = todayE.filter(e => !e.missed);
   const deepCount = realEntries.filter(e => e.energy === 'deep').length;
 
-  document.getElementById('today-date').textContent = new Date().toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
+  const _tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  document.getElementById('today-date').textContent = new Intl.DateTimeFormat('en-US', {
+    timeZone: _tz, weekday: 'long', month: 'long', day: 'numeric'
+  }).format(new Date());
   document.getElementById('intention').value = intention;
 
   // Simplified stat row
@@ -4365,7 +4353,7 @@ function renderDayDetail(day) {
   const distractionMins = dayE.filter(e=>e.energy==='distraction').reduce((s,e)=>s+entryMins(e),0);
 
   // Time-of-day pattern: morning (before 12), afternoon (12-17), evening (17+)
-  function blockHour(e) { return new Date(e.tsStart||e.ts).getHours(); }
+  function blockHour(e) { return tzHour(e.tsStart||e.ts); }
   const morning = dayE.filter(e=>blockHour(e)<12);
   const afternoon = dayE.filter(e=>blockHour(e)>=12&&blockHour(e)<17);
   const evening = dayE.filter(e=>blockHour(e)>=17);
@@ -4569,7 +4557,7 @@ function saveReview(){
   closeModal('review-overlay');
   showToast('Review saved ✓');
 }
-function checkReviewPrompt(){if(new Date().getHours()>=18&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
+function checkReviewPrompt(){if(tzHour(Date.now())>=18&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
 
 // ══════════════════════════════════════════════════════
 // REFLECT  — insights, weekly review, history
@@ -4640,7 +4628,7 @@ function computeDailySummary(dateKey) {
   // Peak focus hour — hour with the most deep-work minutes
   const hourBuckets = {};
   dayEntries.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
-    const hr = new Date(e.tsStart).getHours();
+    const hr = tzHour(e.tsStart);
     hourBuckets[hr] = (hourBuckets[hr] || 0) + (e.blockIntervalMin || 0);
   });
   let peakHour = null, peakHourMin = 0;
@@ -5129,7 +5117,7 @@ function cancelNativePing() {
 // Pre-fill intention from load()
 if (intention) document.getElementById('intention').value = intention;
 // Pre-fill retro time with current time
-(function(){ const now = new Date(); const el = document.getElementById('retro-time'); if(el) el.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`; })();
+(function(){ const el = document.getElementById('retro-time'); if(el) el.value = tzHHMM(Date.now()); })();
 // Restore hero UI state on page load
 if (running && lastTaskForRepeat) {
   taskStartTime = timerStartedAt || Date.now();
