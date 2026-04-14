@@ -1380,7 +1380,7 @@ button, a, [role="button"],
     </div>
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin:10px 0 6px">Category</div>
     <div class="energy-grid">
-      <button class="energy-btn nine5" onclick="setQlEnergy('nine5')"><span class="e-name">Scheduled</span><span class="e-desc">Fixed, recurring work</span></button>
+      <button class="energy-btn nine5" onclick="setQlEnergy('nine5')"><span class="e-name">Scheduled work</span><span class="e-desc">Fixed, recurring work</span></button>
       <button class="energy-btn deep" onclick="setQlEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
       <button class="energy-btn shallow" onclick="setQlEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
       <button class="energy-btn errands" onclick="setQlEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
@@ -1480,7 +1480,7 @@ button, a, [role="button"],
   </div>
   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
   <div class="energy-grid">
-    <button class="energy-btn nine5" onclick="setEnergy('nine5')"><span class="e-name">Scheduled</span><span class="e-desc">Fixed, recurring work</span></button>
+    <button class="energy-btn nine5" onclick="setEnergy('nine5')"><span class="e-name">Scheduled work</span><span class="e-desc">Fixed, recurring work</span></button>
     <button class="energy-btn deep" onclick="setEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
     <button class="energy-btn shallow" onclick="setEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
     <button class="energy-btn errands" onclick="setEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
@@ -1628,7 +1628,7 @@ button, a, [role="button"],
   </div>
   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
   <div class="energy-grid">
-    <button class="energy-btn nine5" onclick="setRetroEnergy('nine5')"><span class="e-name">Scheduled</span><span class="e-desc">Fixed, recurring work</span></button>
+    <button class="energy-btn nine5" onclick="setRetroEnergy('nine5')"><span class="e-name">Scheduled work</span><span class="e-desc">Fixed, recurring work</span></button>
     <button class="energy-btn deep" onclick="setRetroEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
     <button class="energy-btn shallow" onclick="setRetroEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
     <button class="energy-btn errands" onclick="setRetroEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
@@ -2747,7 +2747,7 @@ function formatEnergyLabel(energy) {
     exercise: 'Exercise',
     errands: 'Errands',
     waste: 'Waste',
-    nine5: 'Scheduled',
+    nine5: 'Scheduled work',
     learning: 'Learning',
     social: 'Social',
     distraction: 'Distraction'
@@ -3286,7 +3286,7 @@ function computeStreak(){
   return s;
 }
 
-const eLabel={deep:'Deep',shallow:'Shallow',nine5:'Scheduled',errands:'Errands',learning:'Learning',exercise:'Exercise',social:'Social',recovery:'Recovery',waste:'Waste',admin:'Admin',distraction:'Distraction',break:'Break',away:'Away'};
+const eLabel={deep:'Deep',shallow:'Shallow',nine5:'Scheduled work',errands:'Errands',learning:'Learning',exercise:'Exercise',social:'Social',recovery:'Recovery',waste:'Waste',admin:'Admin',distraction:'Distraction',break:'Break',away:'Away'};
 const ACTIVITY_PALETTE = [
   '#7dd3fc','#86efac','#fcd34d','#f9a8d4','#a5b4fc','#6ee7b7','#fb923c','#e879f9',
   '#38bdf8','#4ade80','#facc15','#f472b6','#818cf8','#34d399','#fb7185','#a78bfa',
@@ -4752,7 +4752,7 @@ function renderEnergySplit(el, entriesArr) {
     social:'var(--social)',recovery:'var(--break)',waste:'var(--distraction)'
   };
   const energyLabels = {
-    deep:'Deep work',shallow:'Shallow work',nine5:'Scheduled',
+    deep:'Deep work',shallow:'Shallow work',nine5:'Scheduled work',
     errands:'Errands',learning:'Learning',exercise:'Exercise',
     social:'Social',recovery:'Recovery',waste:'Waste'
   };
@@ -4911,7 +4911,7 @@ function renderWeekOverview(days) {
             <option value="">All types</option>
             <option value="deep">Deep work</option>
             <option value="shallow">Shallow work</option>
-            <option value="nine5">Scheduled</option>
+            <option value="nine5">Scheduled work</option>
             <option value="errands">Errands</option>
             <option value="learning">Learning</option>
             <option value="exercise">Exercise</option>
