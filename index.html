@@ -1540,7 +1540,16 @@ button, a, [role="button"],
 <!-- ══ FOCUS / POMODORO OVERLAY ══ -->
 <div class="focus-overlay" id="focus-overlay">
   <div class="focus-label" id="focus-phase-label">POMODORO</div>
-  <input class="focus-task-input" id="focus-task-input" placeholder="What are you focusing on?" autocomplete="off">
+  <div style="position:relative;width:100%;max-width:340px">
+    <input class="focus-task-input" id="focus-task-input" placeholder="What are you focusing on?"
+      autocomplete="off"
+      onfocus="showFocusSuggestions(this.value)"
+      oninput="showFocusSuggestions(this.value)"
+      onblur="setTimeout(hideFocusSuggestions,150)"
+      onkeydown="handleFocusKey(event)">
+    <div class="hero-suggestions" id="focus-suggestions"
+      style="display:none;text-align:left;font-size:13px;font-weight:500"></div>
+  </div>
   <div class="focus-intention-text" id="focus-intention-text" style="display:none">—</div>
 
   <!-- Completed session dots -->
@@ -2589,6 +2598,29 @@ function playAlertSound() {
 let pomodoroWasPaused = false; // track if we paused the main timer
 
 function enterFocusMode() {
+  // Auto-log and stop any running timer before starting a fresh focus session
+  if (running && blockStartTime) {
+    const tsEnd = Date.now();
+    const dur = Math.round((tsEnd - blockStartTime) / 60000);
+    if (dur >= 1) {
+      const task = currentTask || intention || 'Work block';
+      const energy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
+      const entry = {
+        id: tsEnd, ts: tsEnd, tsStart: blockStartTime,
+        blockIntervalMin: dur, date: toDateKey(new Date(tsEnd)),
+        activity: task, energy, onPlan: true, retro: false
+      };
+      entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
+      getActivityColor(task);
+      entries.push(entry);
+      entries.sort((a, b) => b.ts - a.ts);
+      lastTaskForRepeat = task;
+      persist(); renderToday(); syncEntries();
+      showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+    }
+    resetTimer();
+  }
+
   const music = document.getElementById('focus-music');
   music.volume = 0.3;
   music.play().catch(()=>{});
@@ -4174,6 +4206,65 @@ function handleRetroKey(e) {
     if (_retroSugIndex >= 0 && items[_retroSugIndex]) document.getElementById('retro-activity').value = items[_retroSugIndex].textContent;
   } else if (e.key === 'Escape') {
     hideRetroSuggestions();
+  }
+}
+
+// ── Focus / Pomodoro task suggestions ──
+let _focusSugIndex = -1;
+
+function showFocusSuggestions(filter) {
+  const el = document.getElementById('focus-suggestions');
+  if (!el) return;
+  const { recent, presets } = buildHeroSuggestions(filter);
+  if (!recent.length && !presets.length) { el.style.display = 'none'; return; }
+  _focusSugIndex = -1;
+  let html = '';
+  if (recent.length) {
+    if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
+    html += recent.map(t =>
+      `<div class="hero-sug-item" onmousedown="selectFocusSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
+    ).join('');
+  }
+  if (presets.length) {
+    html += `<div class="hero-sug-label">Presets</div>`;
+    html += presets.map(t =>
+      `<div class="hero-sug-item" onmousedown="selectFocusSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
+    ).join('');
+  }
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+function hideFocusSuggestions() {
+  const el = document.getElementById('focus-suggestions');
+  if (el) el.style.display = 'none';
+  _focusSugIndex = -1;
+}
+
+function selectFocusSuggestion(e, task) {
+  e.preventDefault();
+  document.getElementById('focus-task-input').value = task;
+  hideFocusSuggestions();
+}
+
+function handleFocusKey(e) {
+  const el = document.getElementById('focus-suggestions');
+  const items = el ? el.querySelectorAll('.hero-sug-item') : [];
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _focusSugIndex = Math.min(_focusSugIndex + 1, items.length - 1);
+    items.forEach((it, i) => it.style.background = i === _focusSugIndex ? 'var(--deep-dim)' : '');
+    if (items[_focusSugIndex]) document.getElementById('focus-task-input').value = items[_focusSugIndex].textContent;
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _focusSugIndex = Math.max(_focusSugIndex - 1, -1);
+    items.forEach((it, i) => it.style.background = i === _focusSugIndex ? 'var(--deep-dim)' : '');
+    if (_focusSugIndex >= 0 && items[_focusSugIndex]) document.getElementById('focus-task-input').value = items[_focusSugIndex].textContent;
+  } else if (e.key === 'Escape') {
+    hideFocusSuggestions();
+  } else if (e.key === 'Enter') {
+    hideFocusSuggestions();
+    startPomodoro();
   }
 }
 
