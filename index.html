@@ -3372,7 +3372,7 @@ function mergeConsecutiveForDisplay(sorted) {
 // ── Gap detection: anchored to work day start, not first entry ──
 // This means: even if you never opened the app, gaps show from your start time.
 function computeGaps(todayEntries, dayNow) {
-  const MIN_GAP_MIN = 10;
+  const MIN_GAP_MIN = 5;
   const workStart = getWorkDayStartTs(todayEntries);
   const now = dayNow || Date.now();
   const isPast = !!dayNow;
