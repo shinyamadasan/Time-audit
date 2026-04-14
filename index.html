@@ -5005,6 +5005,12 @@ function startVoiceLog() {
   voiceRecognition.start();
 }
 
+// ── Capacitor Local Notifications (native ping when backgrounded) ──
+const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+let LocalNotifications = null;
+const PING_NOTIF_ID = 1001;
+const PING_FOLLOWUP_ID = 1002; // follow-up if user ignores first ping
+
 // ══════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════
@@ -5022,11 +5028,6 @@ if (running && timerStartedAt) {
   totalSecs = settings.intervalMin * 60;
   remaining = totalSecs;
 }
-// ── Capacitor Local Notifications (native ping when backgrounded) ──
-const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-let LocalNotifications = null;
-const PING_NOTIF_ID = 1001;
-const PING_FOLLOWUP_ID = 1002; // follow-up if user ignores first ping
 let followupNotifTimer = null;
 
 async function initNativeNotifications() {
