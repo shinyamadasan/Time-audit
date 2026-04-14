@@ -170,6 +170,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .hero-start-row{display:flex;gap:8px;align-items:center}
 .hero-input{flex:1;font-family:var(--head);font-size:15px;padding:11px 14px;border-radius:10px;border:1.5px solid var(--border2);background:var(--bg3);color:var(--text);outline:none;transition:border-color 0.15s,box-shadow 0.15s}
 .hero-input:focus{border-color:var(--deep);box-shadow:0 0 0 3px rgba(76,199,240,0.1)}
+.hero-input-wrap{position:relative;flex:1}
+.hero-input-wrap .hero-input{width:100%}
+.hero-suggestions{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);max-height:220px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,0.4)}
+.hero-sug-item{padding:10px 14px;font-size:13px;font-weight:500;cursor:pointer;border-bottom:1px solid var(--border);color:var(--text);transition:background 0.1s,color 0.1s}
+.hero-sug-item:last-child{border-bottom:none}
+.hero-sug-item:hover{background:var(--deep-dim);color:var(--deep)}
+.hero-sug-label{font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);padding:8px 14px 4px;font-weight:600}
 .hero-active-top{display:flex;align-items:center;gap:18px;margin-bottom:16px}
 .hero-ring-wrap{position:relative;flex-shrink:0}
 .hero-ring-wrap svg{display:block;transform:rotate(-90deg);filter:drop-shadow(0 0 8px rgba(76,199,240,0.35))}
@@ -880,8 +887,15 @@ button, a, [role="button"],
     <div id="hero-idle">
       <div class="hero-prompt">What are you working on?</div>
       <div class="hero-start-row">
-        <input class="hero-input" id="hero-task-input" placeholder="Name your task…"
-          onkeydown="if(event.key==='Enter')startFromHero()">
+        <div class="hero-input-wrap">
+          <input class="hero-input" id="hero-task-input" placeholder="Name your task…"
+            autocomplete="off"
+            onfocus="showHeroSuggestions(this.value)"
+            oninput="showHeroSuggestions(this.value)"
+            onblur="setTimeout(hideHeroSuggestions,150)"
+            onkeydown="handleHeroKey(event)">
+          <div class="hero-suggestions" id="hero-suggestions" style="display:none"></div>
+        </div>
         <button class="btn primary" onclick="startFromHero()" style="padding:11px 20px;font-size:14px">Start</button>
       </div>
       <div class="chips-row" id="recent-chips"></div>
@@ -3590,7 +3604,82 @@ function startFromHero() {
   const task = input.value.trim();
   if (!task) { showToast('What will you work on?'); input.focus(); return; }
   input.value = '';
+  hideHeroSuggestions();
   _startTimer(task);
+}
+
+let _heroSugIndex = -1;
+function buildHeroSuggestions(filter) {
+  const seen = new Set();
+  const recent = [];
+  for (const e of entries) {
+    if (e.missed || e.away || !e.activity || e.deleted) continue;
+    const key = e.activity.split(' (Output:')[0].trim();
+    if (!seen.has(key)) { seen.add(key); recent.push(key); }
+    if (recent.length >= 20) break;
+  }
+  const presets = (settings.presets || []).map(p => p.label).filter(l => !seen.has(l));
+  const all = [...recent, ...presets];
+  if (!filter) return { recent, presets: presets.slice(0, 5) };
+  const q = filter.toLowerCase();
+  const matched = all.filter(t => t.toLowerCase().includes(q));
+  return { recent: matched, presets: [] };
+}
+
+function showHeroSuggestions(filter) {
+  const el = document.getElementById('hero-suggestions');
+  const { recent, presets } = buildHeroSuggestions(filter);
+  if (!recent.length && !presets.length) { el.style.display = 'none'; return; }
+  _heroSugIndex = -1;
+  let html = '';
+  if (recent.length) {
+    if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
+    html += recent.slice(0, filter ? 8 : 6).map(t =>
+      `<div class="hero-sug-item" onmousedown="selectHeroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
+    ).join('');
+  }
+  if (presets.length) {
+    html += `<div class="hero-sug-label">Presets</div>`;
+    html += presets.map(t =>
+      `<div class="hero-sug-item" onmousedown="selectHeroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
+    ).join('');
+  }
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+function hideHeroSuggestions() {
+  const el = document.getElementById('hero-suggestions');
+  if (el) el.style.display = 'none';
+  _heroSugIndex = -1;
+}
+
+function selectHeroSuggestion(e, task) {
+  e.preventDefault();
+  const input = document.getElementById('hero-task-input');
+  input.value = task;
+  hideHeroSuggestions();
+  startFromHero();
+}
+
+function handleHeroKey(e) {
+  const el = document.getElementById('hero-suggestions');
+  const items = el ? el.querySelectorAll('.hero-sug-item') : [];
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _heroSugIndex = Math.min(_heroSugIndex + 1, items.length - 1);
+    items.forEach((it, i) => it.style.background = i === _heroSugIndex ? 'var(--deep-dim)' : '');
+    if (items[_heroSugIndex]) document.getElementById('hero-task-input').value = items[_heroSugIndex].textContent;
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _heroSugIndex = Math.max(_heroSugIndex - 1, -1);
+    items.forEach((it, i) => it.style.background = i === _heroSugIndex ? 'var(--deep-dim)' : '');
+    if (_heroSugIndex >= 0 && items[_heroSugIndex]) document.getElementById('hero-task-input').value = items[_heroSugIndex].textContent;
+  } else if (e.key === 'Escape') {
+    hideHeroSuggestions();
+  } else if (e.key === 'Enter') {
+    startFromHero();
+  }
 }
 
 let _switchTasks = [];
