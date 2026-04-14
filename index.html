@@ -2963,7 +2963,7 @@ function saveRetroEntry() {
       const updated = { ...entries[idx], activity, energy: retroEnergy,
         onPlan: retroEnergy !== 'distraction' && retroEnergy !== 'waste',
         tsStart, ts: tsEnd, blockIntervalMin: dur,
-        date: toDateKey(new Date(tsStart)) };
+        date: toDateKey(new Date(tsStart)), updatedAt: Date.now() };
       updated.category = getBucket(updated); updated.originalLabel = updated.energy || null;
       entries[idx] = updated;
     }
