@@ -469,8 +469,14 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .toast{position:fixed;bottom:calc(76px + var(--safe-bottom));left:50%;transform:translateX(-50%) translateY(10px);
   background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;
   padding:9px 18px;border-radius:999px;opacity:0;transition:opacity 0.2s,transform 0.2s;
-  z-index:999;font-family:var(--head);white-space:nowrap;pointer-events:none}
+  z-index:999;font-family:var(--head);white-space:nowrap;pointer-events:none;
+  display:flex;align-items:center;gap:10px}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.show.has-undo{pointer-events:auto}
+.toast-undo-btn{background:none;border:none;color:var(--deep);font-family:var(--head);font-size:12px;
+  font-weight:700;cursor:pointer;padding:0;flex-shrink:0}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.shake{animation:shake 0.3s ease}
 
 .empty{padding:36px 16px;text-align:center;color:var(--muted);font-size:13px}
 .empty-icon{font-size:26px;margin-bottom:6px;display:block}
@@ -3358,15 +3364,59 @@ function logInstantBlock(tsStart, tsEnd, activity, energy, gapIndex) {
   entry.originalLabel = entry.energy || null;
   getActivityColor(activity);
   entries.unshift(entry);
+  _lastInstantLogId = entry.id;
   persist(); renderToday(); syncEntries();
   const remaining = computeGaps(getTodayEntries());
   if (!remaining.length) {
     closeModal('gaps-overlay');
-    showToast('All gaps filled!');
+    showToast(`✓ ${activity} · All gaps filled!`, true);
   } else {
     renderGapsList(remaining);
-    showToast(`Logged: ${activity}`);
+    showToast(`✓ ${activity}`, true);
   }
+}
+
+// Expand the "Type activity..." button into an inline input within the gap card
+function expandGapInput(cardIdx, ts0, ts1) {
+  const wrap = document.getElementById(`gap-type-wrap-${cardIdx}`);
+  if (!wrap) return;
+  const CATS = [
+    { label: '💼 Work',     e: 'shallow',  bg: 'var(--bg4)',            c: 'var(--text)'        },
+    { label: '😴 Recovery', e: 'recovery', bg: 'var(--break-dim)',       c: 'var(--break)'       },
+    { label: '📺 Waste',    e: 'waste',    bg: 'var(--distraction-dim)', c: 'var(--distraction)' },
+  ];
+  wrap.innerHTML = `
+    <input id="gap-inline-${cardIdx}" type="text" placeholder="e.g. Gym, Reading, Cooking…"
+      onkeydown="handleGapInlineKey(event,${cardIdx},${ts0},${ts1})"
+      style="width:100%;padding:10px 12px;background:var(--bg4);border:1.5px solid var(--deep);
+             border-radius:8px;color:var(--text);font-family:var(--head);font-size:13px;
+             outline:none;margin-bottom:8px;display:block">
+    <div style="display:flex;gap:6px">
+      ${CATS.map(p =>
+        `<button onmousedown="logGapInlineEntry(${cardIdx},${ts0},${ts1},'${p.e}')"
+          style="flex:1;padding:8px 4px;background:${p.bg};border:1px solid var(--border2);
+                 border-radius:8px;color:${p.c};font-family:var(--head);font-size:11px;
+                 font-weight:700;cursor:pointer;text-align:center">${p.label}</button>`
+      ).join('')}
+    </div>`;
+  setTimeout(() => document.getElementById(`gap-inline-${cardIdx}`)?.focus(), 30);
+}
+
+function handleGapInlineKey(event, cardIdx, ts0, ts1) {
+  if (event.key === 'Enter') { event.preventDefault(); logGapInlineEntry(cardIdx, ts0, ts1, 'shallow'); }
+  if (event.key === 'Escape') renderGapsList(computeGaps(getTodayEntries()));
+}
+
+function logGapInlineEntry(cardIdx, ts0, ts1, energy) {
+  const input = document.getElementById(`gap-inline-${cardIdx}`);
+  const activity = input?.value.trim();
+  if (!activity) {
+    input?.classList.add('shake');
+    setTimeout(() => input?.classList.remove('shake'), 350);
+    input?.focus();
+    return;
+  }
+  logInstantBlock(ts0, ts1, activity, energy, cardIdx);
 }
 
 function renderGapsList(gaps) {
@@ -3446,16 +3496,20 @@ function renderGapsList(gaps) {
       <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 6px">Or specifically:</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${taskChips}</div>
-        <button onmousedown="closeModal('gaps-overlay');openRetroLogPrefilled(${ts0},${ts1})"
-          style="width:100%;padding:8px;background:none;border:1px solid var(--border2);
-                 border-radius:6px;color:var(--muted);font-family:var(--head);font-size:11px;
-                 font-weight:600;cursor:pointer">+ Type activity...</button>
+        <div id="gap-type-wrap-${i}">
+          <button onmousedown="expandGapInput(${i},${ts0},${ts1})"
+            style="width:100%;padding:8px;background:none;border:1px solid var(--border2);
+                   border-radius:6px;color:var(--muted);font-family:var(--head);font-size:11px;
+                   font-weight:600;cursor:pointer">+ Type activity...</button>
+        </div>
       </div>` : `
       <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
-        <button onmousedown="closeModal('gaps-overlay');openRetroLogPrefilled(${ts0},${ts1})"
-          style="width:100%;padding:10px;background:var(--bg4);border:1px solid var(--border2);
-                 border-radius:6px;color:var(--text);font-family:var(--head);font-size:12px;
-                 font-weight:600;cursor:pointer">+ Type activity...</button>
+        <div id="gap-type-wrap-${i}">
+          <button onmousedown="expandGapInput(${i},${ts0},${ts1})"
+            style="width:100%;padding:10px;background:var(--bg4);border:1px solid var(--border2);
+                   border-radius:6px;color:var(--text);font-family:var(--head);font-size:12px;
+                   font-weight:600;cursor:pointer">+ Type activity...</button>
+        </div>
       </div>`}
       <div style="padding:0 10px 12px;border-top:1px solid var(--border)">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 6px">I was away:</div>
@@ -5028,7 +5082,36 @@ function updateLiveCost() {
 // ══════════════════════════════════════════════════════
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 function overlayClose(e,id){if(e.target.id===id)closeModal(id);}
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+let _toastTimer = null;
+function showToast(msg, withUndo) {
+  const t = document.getElementById('toast');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  if (withUndo) {
+    t.innerHTML = `<span>${msg}</span><button class="toast-undo-btn" onclick="undoLastInstantLog()">Undo</button>`;
+    t.classList.add('has-undo');
+    _toastTimer = setTimeout(() => { t.classList.remove('show','has-undo'); }, 5000);
+  } else {
+    t.innerHTML = `<span>${msg}</span>`;
+    t.classList.remove('has-undo');
+    _toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+  t.classList.add('show');
+}
+
+let _lastInstantLogId = null;
+function undoLastInstantLog() {
+  document.getElementById('toast').classList.remove('show','has-undo');
+  if (_lastInstantLogId === null) return;
+  const idx = entries.findIndex(e => e.id === _lastInstantLogId);
+  if (idx !== -1) { entries.splice(idx, 1); persist(); renderToday(); syncEntries(); }
+  _lastInstantLogId = null;
+  // Re-open the gaps modal with the restored gap
+  const gaps = computeGaps(getTodayEntries());
+  if (gaps.length) {
+    renderGapsList(gaps);
+    document.getElementById('gaps-overlay').classList.add('open');
+  }
+}
 
 function exportCSV() {
   if (!entries.length){showToast('No entries to export');return;}
