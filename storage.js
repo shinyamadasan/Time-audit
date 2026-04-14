@@ -81,6 +81,63 @@ function toDateKey(d) {
   return new Intl.DateTimeFormat('en-CA', {timeZone: tz}).format(d);
 }
 
+// ── Timezone-aware display/parse helpers ──────────────────────────────────
+// All functions read settings.timezone (set once, syncs to all devices).
+// Never use Date.getHours() / .getDay() / .getMonth() directly — those
+// return device-local values and break multi-device, multi-timezone setups.
+
+function tzTime(ts) {
+  // "9:30 AM" in user's timezone, for display
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true
+  }).format(new Date(ts));
+}
+
+function tzHHMM(ts) {
+  // "HH:MM" (24-hour) for <input type="time"> prefill
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(new Date(ts));
+  const h = (parts.find(p => p.type === 'hour')?.value || '00').replace(/^24$/, '00');
+  const m =  parts.find(p => p.type === 'minute')?.value || '00';
+  return `${h.padStart(2,'0')}:${m.padStart(2,'0')}`;
+}
+
+function tzHour(ts) {
+  // Hour 0–23 in user's timezone
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: 'numeric', hour12: false
+  }).formatToParts(new Date(ts));
+  return parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10) % 24;
+}
+
+function tzDow(ts) {
+  // Day-of-week 0=Sun…6=Sat in user's timezone
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  return DAYS.indexOf(
+    new Intl.DateTimeFormat('en-US', {timeZone: tz, weekday: 'short'}).format(new Date(ts))
+  );
+}
+
+function tzParseTime(dateKey, hhmm) {
+  // Convert a wall-clock "HH:MM" time on dateKey (YYYY-MM-DD, in user's timezone)
+  // to a UTC timestamp. Iterates to self-correct for timezone offset.
+  const [h, m] = hhmm.split(':').map(Number);
+  const [y, mo, d] = dateKey.split('-').map(Number);
+  let ts = Date.UTC(y, mo - 1, d, h, m, 0); // start with naive UTC guess
+  for (let i = 0; i < 3; i++) {
+    const [ah, am] = tzHHMM(ts).split(':').map(Number);
+    const diff = ((h * 60 + m) - (ah * 60 + am)) * 60000;
+    ts += diff;
+    if (diff === 0) break;
+  }
+  return ts;
+}
+
 function getTodayEntries() {
   const k = toDateKey(new Date());
   return entries.filter(e => e.date === k && !e.deleted);
@@ -93,20 +150,21 @@ function getWeekEntries(offset=0) {
 }
 
 function getWeekDays(offset=0) {
-  const today = new Date();
-  const dow = today.getDay(); // 0=Sun
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = toDateKey(new Date());
+  const [ty, tm, td] = todayKey.split('-').map(Number);
+  const dow = tzDow(Date.now()); // day-of-week in user's timezone
   const mondayDiff = (dow === 0 ? -6 : 1 - dow) + offset * 7;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + mondayDiff);
   const days = [];
-  for (let i=0; i<7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    const key = toDateKey(d);
-    const isToday = key === toDateKey(new Date());
-    const isFuture = d > today;
+  for (let i = 0; i < 7; i++) {
+    // Use noon UTC so the date survives any DST boundary or large TZ offset
+    const dt = new Date(Date.UTC(ty, tm - 1, td + mondayDiff + i, 12, 0, 0));
+    const key = toDateKey(dt);
+    const isToday = key === todayKey;
+    const isFuture = key > todayKey;
     const dayE = entries.filter(e => e.date === key && !e.missed && !e.away && !e.deleted);
-    days.push({key, label:DAY[d.getDay()]||'?', isToday, isFuture, hasData:dayE.length>0, entries:dayE, date:d});
+    const label = new Intl.DateTimeFormat('en-US', {timeZone: tz, weekday: 'short'}).format(dt);
+    days.push({key, label, isToday, isFuture, hasData: dayE.length > 0, entries: dayE, date: dt});
   }
   return days;
 }
@@ -129,12 +187,12 @@ function getEntriesForWeekKey(weekKey) {
 }
 
 function getMonthEntries(offset=0) {
-  const d = new Date();
-  d.setMonth(d.getMonth() + offset, 1);
-  const year = d.getFullYear(), month = d.getMonth();
+  // Target month using user's timezone date key prefix (e.g. "2026-04")
+  const [y, mo] = toDateKey(new Date()).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, mo - 1 + offset, 15, 12, 0, 0)); // 15th avoids month edge issues
+  const targetPrefix = toDateKey(dt).slice(0, 7);
   return entries.filter(e => {
-    const ed = new Date(e.ts);
-    return ed.getFullYear()===year && ed.getMonth()===month && !e.missed && !e.away && !e.deleted;
+    return !e.missed && !e.away && !e.deleted && e.date && e.date.startsWith(targetPrefix);
   });
 }
 
