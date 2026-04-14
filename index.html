@@ -3126,7 +3126,17 @@ function localTime(ts){ return tzTime(ts); }
 // getTodayEntries, getWeekEntries — moved to storage.js
 function computeDeepScore(arr){return arr.length?Math.round(arr.filter(e=>e.energy==='deep').length/arr.length*100):0;}
 function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(settings.intervalMin/60)).toFixed(1);}
-function computeStreak(){let s=0;const d=new Date();for(let i=0;i<30;i++){const k=toDateKey(new Date(d-i*86400000));if(entries.filter(e=>e.date===k).length>=4)s++;else if(i>0)break;}return s;}
+function computeStreak(){
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const now = Date.now();
+  let s = 0;
+  for (let i = 0; i < 30; i++) {
+    const k = getDateInTZ(now - i * 86400000, tz);
+    if (entries.filter(e => !e.deleted && getDateInTZ(e.tsStart || e.ts, tz) === k).length >= 4) s++;
+    else if (i > 0) break;
+  }
+  return s;
+}
 
 const eLabel={deep:'Deep',shallow:'Shallow',admin:'Admin',distraction:'Distraction',break:'Break',away:'Away'};
 const ACTIVITY_PALETTE = [
@@ -4088,7 +4098,7 @@ function renderMonthOverview(monthE, monthDate) {
   let maxDayH = 0.5;
   for (let i=1; i<=daysInMonth; i++) {
     const key = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
-    const dayE = entries.filter(e=>e.date===key&&!e.missed&&!e.away);
+    const dayE = entries.filter(e=>!e.missed&&!e.away&&!e.deleted&&getDateInTZ(e.tsStart||e.ts)===key);
     const totalH = dayE.reduce((s,e)=>s+entryMins(e),0)/60;
     const deepH = computeDeepHrs(dayE);
     if (totalH > maxDayH) maxDayH = totalH;
@@ -4595,7 +4605,7 @@ function formatSavedAt(ts) {
 // DAILY SUMMARY
 // ══════════════════════════════════════════════════════
 function computeDailySummary(dateKey) {
-  const dayEntries = entries.filter(e => e.date === dateKey && !e.missed);
+  const dayEntries = entries.filter(e => !e.missed && !e.deleted && getDateInTZ(e.tsStart || e.ts) === dateKey);
   if (!dayEntries.length) return null;
 
   const totalMin = dayEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);

@@ -138,15 +138,33 @@ function tzParseTime(dateKey, hhmm) {
   return ts;
 }
 
+function getDateInTZ(ts, tz) {
+  // Canonical "what calendar date is this UTC timestamp on?" in the user's timezone.
+  // Always derive from the UTC timestamp — never trust the stored e.date field, which
+  // may have been written with a different (or absent) timezone setting.
+  tz = tz || settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return new Intl.DateTimeFormat('en-CA', {timeZone: tz}).format(new Date(ts));
+}
+
 function getTodayEntries() {
-  const k = toDateKey(new Date());
-  return entries.filter(e => e.date === k && !e.deleted);
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  return entries.filter(e => {
+    if (e.deleted) return false;
+    // Derive the entry's date from its UTC timestamp, not the stored e.date field.
+    // e.tsStart is when the block began; e.ts is when it ended. Use start if available.
+    return getDateInTZ(e.tsStart || e.ts, tz) === todayKey;
+  });
 }
 
 function getWeekEntries(offset=0) {
   const days = getWeekDays(offset);
   const keys = new Set(days.map(d => d.key));
-  return entries.filter(e => keys.has(e.date) && !e.deleted);
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return entries.filter(e => {
+    if (e.deleted) return false;
+    return keys.has(getDateInTZ(e.tsStart || e.ts, tz));
+  });
 }
 
 function getWeekDays(offset=0) {
@@ -162,7 +180,7 @@ function getWeekDays(offset=0) {
     const key = toDateKey(dt);
     const isToday = key === todayKey;
     const isFuture = key > todayKey;
-    const dayE = entries.filter(e => e.date === key && !e.missed && !e.away && !e.deleted);
+    const dayE = entries.filter(e => !e.missed && !e.away && !e.deleted && getDateInTZ(e.tsStart || e.ts, tz) === key);
     const label = new Intl.DateTimeFormat('en-US', {timeZone: tz, weekday: 'short'}).format(dt);
     days.push({key, label, isToday, isFuture, hasData: dayE.length > 0, entries: dayE, date: dt});
   }
@@ -179,9 +197,12 @@ function getWeekKey(d) {
 }
 
 function getEntriesForWeekKey(weekKey) {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   return entries.filter(e => {
-    if (!e.date || e.deleted) return false;
-    const d = new Date(e.date + 'T12:00:00');
+    if (!e.ts || e.deleted) return false;
+    // Derive date from UTC timestamp, then build a noon-UTC date for getWeekKey()
+    const dateKey = getDateInTZ(e.tsStart || e.ts, tz);
+    const d = new Date(dateKey + 'T12:00:00Z');
     return getWeekKey(d) === weekKey;
   });
 }
@@ -192,7 +213,8 @@ function getMonthEntries(offset=0) {
   const dt = new Date(Date.UTC(y, mo - 1 + offset, 15, 12, 0, 0)); // 15th avoids month edge issues
   const targetPrefix = toDateKey(dt).slice(0, 7);
   return entries.filter(e => {
-    return !e.missed && !e.away && !e.deleted && e.date && e.date.startsWith(targetPrefix);
+    if (e.missed || e.away || e.deleted || !e.ts) return false;
+    return getDateInTZ(e.tsStart || e.ts, settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone).startsWith(targetPrefix);
   });
 }
 
