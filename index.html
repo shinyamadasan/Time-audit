@@ -479,8 +479,8 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .shake{animation:shake 0.3s ease}
 #date-picker-dropdown > div:hover{background:var(--bg4) !important}
 .gap-time-input{background:none;border:none;border-bottom:1px solid var(--border2);color:var(--muted);
-  font-family:var(--mono);font-size:11px;padding:2px 0;cursor:pointer;outline:none;width:68px;
-  color-scheme:dark}
+  font-family:var(--mono);font-size:12px;padding:3px 2px;cursor:text;outline:none;width:44px;
+  text-align:center;letter-spacing:0.04em}
 .gap-time-input:focus,.gap-time-input:hover{border-bottom-color:var(--deep);color:var(--text)}
 
 .empty{padding:36px 16px;text-align:center;color:var(--muted);font-size:13px}
@@ -3476,15 +3476,19 @@ function logInstantBlock(tsStart, tsEnd, activity, energy, gapIndex) {
 function getChunkTimes(cardIdx) {
   const card = document.getElementById(`gap-item-${cardIdx}`);
   if (!card) return null;
-  const tz          = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const gapTsStart  = parseInt(card.dataset.tsStart);
-  const gapTsEnd    = card.dataset.isCurrent === 'true' ? Date.now() : parseInt(card.dataset.tsEnd);
-  const dateKey     = getDateInTZ(gapTsStart, tz);
+  const tz         = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const gapTsStart = parseInt(card.dataset.tsStart);
+  const gapTsEnd   = card.dataset.isCurrent === 'true' ? Date.now() : parseInt(card.dataset.tsEnd);
+  // Use each end's own calendar date so midnight-spanning gaps are handled
+  // without a fragile +24h wrap that corrupts within-day adjustments.
+  const startDateKey = getDateInTZ(gapTsStart, tz);
+  const endDateKey   = getDateInTZ(gapTsEnd,   tz);
   const si = document.getElementById(`gap-start-${cardIdx}`);
   const ei = document.getElementById(`gap-end-${cardIdx}`);
-  let ts0 = si?.value ? tzParseTime(dateKey, si.value) : gapTsStart;
-  let ts1 = ei?.value ? tzParseTime(dateKey, ei.value) : gapTsEnd;
-  if (ts1 <= ts0) ts1 += 86400000; // midnight crossing
+  const isHHMM = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+  let ts0 = (si?.value && isHHMM(si.value)) ? tzParseTime(startDateKey, si.value) : gapTsStart;
+  let ts1 = (ei?.value && isHHMM(ei.value)) ? tzParseTime(endDateKey,   ei.value) : gapTsEnd;
+  // Clamp to gap bounds — never expand beyond original range
   ts0 = Math.max(ts0, gapTsStart);
   ts1 = Math.min(ts1, gapTsEnd);
   return { ts0, ts1 };
@@ -3496,6 +3500,18 @@ function updateGapDuration(cardIdx) {
   const dur = Math.max(0, Math.round((t.ts1 - t.ts0) / 60000));
   const badge = document.getElementById(`gap-dur-${cardIdx}`);
   if (badge) badge.textContent = fmtDur(dur);
+}
+
+// Auto-format a gap time text input to HH:MM as the user types digits.
+// Strips non-digits, auto-inserts ":" after the second digit.
+// Shows number-pad on mobile via inputmode=numeric so no AM/PM confusion.
+function gapTimeAutoFormat(el, cardIdx) {
+  let v = el.value.replace(/\D/g, '').slice(0, 4); // digits only, max 4
+  if (v.length >= 3) {
+    v = v.slice(0, 2) + ':' + v.slice(2, 4);
+  }
+  el.value = v;
+  updateGapDuration(cardIdx);
 }
 
 function logGapChunk(cardIdx, activity, energy) {
@@ -3614,11 +3630,13 @@ function renderGapsList(gaps) {
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.07em">${header}</div>
           <div style="display:flex;align-items:center;gap:4px;margin-top:4px">
-            <span lang="en-GB"><input type="time" id="gap-start-${i}" class="gap-time-input" value="${startVal}"
-              onchange="updateGapDuration(${i})" title="Adjust start time"></span>
+            <input type="text" inputmode="numeric" id="gap-start-${i}" class="gap-time-input"
+              value="${startVal}" maxlength="5" placeholder="HH:MM" autocomplete="off"
+              oninput="gapTimeAutoFormat(this,${i})" title="Start time (24h, e.g. 14:30)">
             <span style="color:var(--muted2);font-size:11px">–</span>
-            <span lang="en-GB"><input type="time" id="gap-end-${i}" class="gap-time-input" value="${endVal}"
-              onchange="updateGapDuration(${i})" title="Adjust end time"></span>
+            <input type="text" inputmode="numeric" id="gap-end-${i}" class="gap-time-input"
+              value="${endVal}" maxlength="5" placeholder="HH:MM" autocomplete="off"
+              oninput="gapTimeAutoFormat(this,${i})" title="End time (24h, e.g. 18:00)">
           </div>
         </div>
         <div id="gap-dur-${i}" style="background:var(--distraction-dim);color:var(--distraction);
