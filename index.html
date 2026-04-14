@@ -3286,39 +3286,72 @@ function openGapsPicker() {
 }
 
 function renderGapsList(gaps) {
-  const pad = n => String(n).padStart(2,'0');
   function fmt(ts) { return tzHHMM(ts); }
   const awayTypes = [
-    { label: '😴 Sleep', activity: 'Sleep', energy: 'admin' },
-    { label: '🚗 Commute', activity: 'Commute', energy: 'shallow' },
-    { label: '☕ Break', activity: 'Break', energy: 'break' },
-    { label: '📵 Offline', activity: 'Offline / Away', energy: 'shallow' },
+    { label: '😴 Sleep',    activity: 'Sleep',         energy: 'recovery' },
+    { label: '🚗 Commute',  activity: 'Commute',        energy: 'shallow'  },
+    { label: '☕ Break',    activity: 'Break',          energy: 'recovery' },
+    { label: '📵 Offline',  activity: 'Offline / Away', energy: 'shallow'  },
   ];
+
+  // Collect up to 4 recent unique work tasks (non-away, non-deleted)
+  const seen = new Set();
+  const recentTasks = [];
+  for (const e of entries) {
+    if (e.deleted || e.away || e.missed || !e.activity || !e.energy) continue;
+    if (!seen.has(e.activity)) {
+      seen.add(e.activity);
+      recentTasks.push({ activity: e.activity, energy: e.energy });
+    }
+    if (recentTasks.length >= 4) break;
+  }
+
   document.getElementById('gaps-list').innerHTML = gaps.map((g, i) => {
     const endLabel = g.isCurrent ? 'now' : fmt(g.ts);
-    const label = g.isCurrent ? 'Untracked (since last log)' : 'Untracked';
+    const label    = g.isCurrent ? 'Untracked (since last log)' : 'Untracked';
+    const durLabel = fmtDur(g.gapMin);
+
     const awayBtns = awayTypes.map(a =>
       `<button onclick="logAwayBlock(${g.tsStart},${Math.round(g.ts)},'${a.activity}','${a.energy}',${i})"
         style="flex:1;min-width:0;padding:6px 4px;background:var(--bg4);border:1px solid var(--border2);
                border-radius:6px;color:var(--muted);font-family:var(--head);font-size:10px;
                font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.label}</button>`
     ).join('');
+
+    const taskChips = recentTasks.map(t => {
+      const safe = t.activity.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const short = t.activity.length > 22 ? t.activity.slice(0, 22) + '…' : t.activity;
+      return `<button onmousedown="closeModal('gaps-overlay');openRetroLogPrefilled(${g.tsStart},${Math.round(g.ts)},'${safe}','${t.energy}')"
+        class="energy-btn ${t.energy}"
+        style="padding:6px 10px;font-size:11px;font-weight:600;text-align:left;flex-shrink:0;max-width:100%">${short}</button>`;
+    }).join('');
+
     return `<div id="gap-item-${i}" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden">
-      <button onclick="closeModal('gaps-overlay');openRetroLogPrefilled(${g.tsStart},${Math.round(g.ts)})"
-        style="display:flex;align-items:center;justify-content:space-between;width:100%;
-               background:none;border:none;padding:12px 14px;cursor:pointer;text-align:left;gap:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;gap:10px">
         <div>
           <div style="font-size:13px;font-weight:600;color:var(--text)">${label}</div>
           <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">${fmt(g.tsStart)} – ${endLabel}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <div style="background:var(--distraction-dim);color:var(--distraction);font-size:11px;font-weight:700;
-                      padding:4px 10px;border-radius:999px;flex-shrink:0">${g.gapMin}m</div>
-          <span style="font-size:11px;color:var(--muted)">Fill in →</span>
-        </div>
-      </button>
+        <div style="background:var(--distraction-dim);color:var(--distraction);font-size:12px;font-weight:700;
+                    padding:4px 12px;border-radius:999px;flex-shrink:0">${durLabel}</div>
+      </div>
+      ${recentTasks.length ? `
       <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 6px">I was away:</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 6px">Quick log:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${taskChips}</div>
+        <button onmousedown="closeModal('gaps-overlay');openRetroLogPrefilled(${g.tsStart},${Math.round(g.ts)})"
+          style="width:100%;padding:8px;background:none;border:1px solid var(--border2);
+                 border-radius:6px;color:var(--muted);font-family:var(--head);font-size:11px;
+                 font-weight:600;cursor:pointer">+ Something else</button>
+      </div>` : `
+      <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
+        <button onmousedown="closeModal('gaps-overlay');openRetroLogPrefilled(${g.tsStart},${Math.round(g.ts)})"
+          style="width:100%;padding:10px;background:var(--bg4);border:1px solid var(--border2);
+                 border-radius:6px;color:var(--text);font-family:var(--head);font-size:12px;
+                 font-weight:600;cursor:pointer">Log what you did →</button>
+      </div>`}
+      <div style="padding:0 10px 10px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:4px 0 6px">I was away:</div>
         <div style="display:flex;gap:6px">${awayBtns}</div>
       </div>
     </div>`;
@@ -3346,19 +3379,23 @@ function logAwayBlock(tsStart, tsEnd, activity, energy, gapIndex) {
   }
 }
 
-function openRetroLogPrefilled(tsStart, tsEnd) {
+function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
   editingEntryId = null;
   editingEntryBase = null;
   document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
   document.getElementById('retro-modal-title').textContent = 'What were you doing?';
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
-  document.getElementById('retro-activity').value = '';
+  document.getElementById('retro-activity').value = activity || '';
+  if (energy) setRetroEnergy(energy);
   populateRetroChips();
   document.getElementById('retro-start').value = tzHHMM(tsStart);
   document.getElementById('retro-end').value   = tzHHMM(Math.min(tsEnd, Date.now()));
   document.getElementById('retro-overlay').classList.add('open');
-  setTimeout(() => document.getElementById('retro-activity').focus(), 250);
+  setTimeout(() => {
+    const input = document.getElementById('retro-activity');
+    if (!activity) input.focus();
+  }, 250);
 }
 
 function openEditEntry(id) {
