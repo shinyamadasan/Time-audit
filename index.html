@@ -3581,22 +3581,23 @@ function expandGapInput(cardIdx) {
   const wrap = document.getElementById(`gap-type-wrap-${cardIdx}`);
   if (!wrap) return;
   const CATS = [
-    { label: '💼 Work',     e: 'shallow',  bg: 'var(--bg4)',            c: 'var(--text)'        },
-    { label: '😴 Recovery', e: 'recovery', bg: 'var(--break-dim)',       c: 'var(--break)'       },
-    { label: '📺 Waste',    e: 'waste',    bg: 'var(--distraction-dim)', c: 'var(--distraction)' },
+    { label: 'Work',     e: 'shallow',  c: 'var(--text)'        },
+    { label: 'Recovery', e: 'recovery', c: 'var(--break)'       },
+    { label: 'Waste',    e: 'waste',    c: 'var(--distraction)' },
   ];
   wrap.innerHTML = `
     <input id="gap-inline-${cardIdx}" type="text" placeholder="e.g. Gym, Reading, Cooking…"
       onkeydown="handleGapInlineKey(event,${cardIdx})"
       style="width:100%;padding:10px 12px;background:var(--bg4);border:1.5px solid var(--deep);
              border-radius:8px;color:var(--text);font-family:var(--head);font-size:13px;
-             outline:none;margin-bottom:8px;display:block">
-    <div style="display:flex;gap:6px">
+             outline:none;margin-bottom:8px;display:block;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:10px;color:var(--muted);font-weight:600;white-space:nowrap">Save as:</span>
       ${CATS.map(p =>
         `<button onmousedown="logGapInlineEntry(${cardIdx},'${p.e}')"
-          style="flex:1;padding:8px 4px;background:${p.bg};border:1px solid var(--border2);
-                 border-radius:8px;color:${p.c};font-family:var(--head);font-size:11px;
-                 font-weight:700;cursor:pointer;text-align:center">${p.label}</button>`
+          style="padding:5px 12px;background:none;border:1px solid var(--border2);
+                 border-radius:999px;color:${p.c};font-family:var(--head);font-size:11px;
+                 font-weight:600;cursor:pointer">${p.label}</button>`
       ).join('')}
     </div>`;
   setTimeout(() => document.getElementById(`gap-inline-${cardIdx}`)?.focus(), 30);
@@ -3686,13 +3687,13 @@ function renderGapsList(gaps) {
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.07em">${header}</div>
           <div style="display:flex;align-items:center;gap:4px;margin-top:4px">
-            <input type="text" inputmode="numeric" id="gap-start-${i}" class="gap-time-input"
-              value="${startVal}" maxlength="5" placeholder="HH:MM" autocomplete="off"
-              oninput="gapTimeAutoFormat(this,${i})" title="Start time (24h, e.g. 14:30)">
+            <input type="time" id="gap-start-${i}" class="quick-retro-sel"
+              value="${startVal}" autocomplete="off"
+              onchange="updateGapDuration(${i})">
             <span style="color:var(--muted2);font-size:11px">–</span>
-            <input type="text" inputmode="numeric" id="gap-end-${i}" class="gap-time-input"
-              value="${endVal}" maxlength="5" placeholder="HH:MM" autocomplete="off"
-              oninput="gapTimeAutoFormat(this,${i})" title="End time (24h, e.g. 18:00)">
+            <input type="time" id="gap-end-${i}" class="quick-retro-sel"
+              value="${endVal}" autocomplete="off"
+              onchange="updateGapDuration(${i})">
           </div>
         </div>
         <div id="gap-dur-${i}" style="background:var(--distraction-dim);color:var(--distraction);
