@@ -170,13 +170,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .hero-start-row{display:flex;gap:8px;align-items:center}
 .hero-input{flex:1;font-family:var(--head);font-size:15px;padding:11px 14px;border-radius:10px;border:1.5px solid var(--border2);background:var(--bg3);color:var(--text);outline:none;transition:border-color 0.15s,box-shadow 0.15s}
 .hero-input:focus{border-color:var(--deep);box-shadow:0 0 0 3px rgba(76,199,240,0.1)}
-.hero-input-wrap{position:relative;flex:1}
-.hero-input-wrap .hero-input{width:100%}
-.hero-suggestions{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);max-height:220px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,0.4)}
-.hero-sug-item{padding:10px 14px;font-size:13px;font-weight:500;cursor:pointer;border-bottom:1px solid var(--border);color:var(--text);transition:background 0.1s,color 0.1s}
-.hero-sug-item:last-child{border-bottom:none}
-.hero-sug-item:hover{background:var(--deep-dim);color:var(--deep)}
-.hero-sug-label{font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);padding:8px 14px 4px;font-weight:600}
 .hero-active-top{display:flex;align-items:center;gap:18px;margin-bottom:16px}
 .hero-ring-wrap{position:relative;flex-shrink:0}
 .hero-ring-wrap svg{display:block;transform:rotate(-90deg);filter:drop-shadow(0 0 8px rgba(76,199,240,0.35))}
@@ -237,7 +230,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 /* ── Energy buttons ── */
 .energy-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
 .energy-btn{padding:10px 8px;border-radius:var(--r);border:1.5px solid var(--border2);
-  background:var(--bg3);cursor:pointer;text-align:left;transition:all 0.12s;font-family:var(--head);color:var(--text)}
+  background:var(--bg3);cursor:pointer;text-align:left;transition:all 0.12s;font-family:var(--head)}
 .energy-btn .e-name{font-size:13px;font-weight:600;display:block;margin-bottom:2px;color:var(--text)}
 .energy-btn .e-desc{font-size:11px;color:var(--muted);display:block}
 .energy-btn.deep.selected,.energy-btn.deep:hover{background:var(--deep-dim);border-color:var(--deep)}
@@ -469,18 +462,8 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .toast{position:fixed;bottom:calc(76px + var(--safe-bottom));left:50%;transform:translateX(-50%) translateY(10px);
   background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;
   padding:9px 18px;border-radius:999px;opacity:0;transition:opacity 0.2s,transform 0.2s;
-  z-index:999;font-family:var(--head);white-space:nowrap;pointer-events:none;
-  display:flex;align-items:center;gap:10px}
+  z-index:999;font-family:var(--head);white-space:nowrap;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.toast.show.has-undo{pointer-events:auto}
-.toast-undo-btn{background:none;border:none;color:var(--deep);font-family:var(--head);font-size:12px;
-  font-weight:700;cursor:pointer;padding:0;flex-shrink:0}
-@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
-.shake{animation:shake 0.3s ease}
-.gap-time-input{background:none;border:none;border-bottom:1px solid var(--border2);color:var(--muted);
-  font-family:var(--mono);font-size:11px;padding:2px 2px;cursor:pointer;outline:none;width:68px;
-  color-scheme:dark}
-.gap-time-input:focus,.gap-time-input:hover{border-bottom-color:var(--deep);color:var(--text)}
 
 .empty{padding:36px 16px;text-align:center;color:var(--muted);font-size:13px}
 .empty-icon{font-size:26px;margin-bottom:6px;display:block}
@@ -897,15 +880,8 @@ button, a, [role="button"],
     <div id="hero-idle">
       <div class="hero-prompt">What are you working on?</div>
       <div class="hero-start-row">
-        <div class="hero-input-wrap">
-          <input class="hero-input" id="hero-task-input" placeholder="Name your task…"
-            autocomplete="off"
-            onfocus="showHeroSuggestions(this.value)"
-            oninput="showHeroSuggestions(this.value)"
-            onblur="setTimeout(hideHeroSuggestions,150)"
-            onkeydown="handleHeroKey(event)">
-          <div class="hero-suggestions" id="hero-suggestions" style="display:none"></div>
-        </div>
+        <input class="hero-input" id="hero-task-input" placeholder="Name your task…"
+          onkeydown="if(event.key==='Enter')startFromHero()">
         <button class="btn primary" onclick="startFromHero()" style="padding:11px 20px;font-size:14px">Start</button>
       </div>
       <div class="chips-row" id="recent-chips"></div>
@@ -1035,11 +1011,16 @@ button, a, [role="button"],
   <div class="quick-retro-bar" style="flex-wrap:wrap;gap:6px">
     <input class="quick-retro-input" id="retro-task" placeholder="What did you do?"
       onkeydown="if(event.key==='Enter')quickRetroLog()" style="flex:1;min-width:120px">
-    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-      <input type="time" id="retro-qstart" class="quick-retro-sel">
-      <span style="color:var(--muted);font-size:11px;user-select:none">–</span>
-      <input type="time" id="retro-qend" class="quick-retro-sel">
-    </div>
+    <input type="time" id="retro-time" class="quick-retro-sel" style="flex-shrink:0">
+    <select class="quick-retro-sel" id="retro-dur">
+      <option value="15">15m</option>
+      <option value="30" selected>30m</option>
+      <option value="45">45m</option>
+      <option value="60">1h</option>
+      <option value="90">1h 30m</option>
+      <option value="120">2h</option>
+      <option value="180">3h</option>
+    </select>
     <button class="btn sm primary" onclick="quickRetroLog()">Log</button>
   </div>
 
@@ -1196,6 +1177,10 @@ button, a, [role="button"],
     <div class="setting-row">
       <div><div class="setting-label">Focus block exit delay</div><div class="setting-sub">Seconds to wait before leaving focus</div></div>
       <div class="setting-control"><input type="number" id="set-exitdelay" value="10" min="3" max="60" onchange="saveSettings()"></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">Work day starts at</div><div class="setting-sub">Gap tracking begins from this time — even with no entries</div></div>
+      <div class="setting-control"><input type="time" id="set-workdaystart" value="09:00" onchange="saveSettings()" style="width:auto"></div>
     </div>
     <div class="setting-row">
       <div><div class="setting-label">Work day timezone</div><div class="setting-sub">When does your day start/end — set once, syncs to all devices</div></div>
@@ -1561,8 +1546,8 @@ button, a, [role="button"],
 <div class="modal">
   <div class="modal-handle"></div>
   <div class="modal-tag">UNLOGGED TIME</div>
-  <div class="modal-title">Reconstruct your day</div>
-  <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Each block below is untracked time. Tap once to fill it.</div>
+  <div class="modal-title">Fill the gaps</div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Tap a gap to log it, or mark it as away time.</div>
   <div id="gaps-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:4px"></div>
   <div style="display:flex;justify-content:flex-end;margin-top:16px">
     <button class="btn ghost" onclick="closeModal('gaps-overlay')">Done</button>
@@ -1719,7 +1704,7 @@ button, a, [role="button"],
 // ══════════════════════════════════════════════════════
 let currentTask = '';
 let entries = [];
-let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst' };
+let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workDayStart:'09:00', activityColors:{}, coachTone:'analyst' };
 let reviews = {};
 let weeklyReviews = {};
 let intention = '';
@@ -1768,6 +1753,8 @@ let continueBannerCountdown = 0;
 let recentChipTasks = [];
 let taskStartTime = null;
 let awayElapsedTicker = null;
+let pendingLogStartTime = null;
+let pendingLogEndTime = null;
 // firebaseConfig, syncedDeviceId, connectedDevices — moved to storage.js
 
 const CIRCUM = 314.2;
@@ -1791,11 +1778,72 @@ function fmtDur(min) {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function isoToMs(value) {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function getElapsedMs(startTime, endMs = Date.now()) {
+  const startMs = isoToMs(startTime);
+  if (!startMs) return 0;
+  return Math.max(0, endMs - startMs);
+}
+
+function getRemainingSecs() {
+  if (!running || !timerStartedAt) return totalSecs;
+  const elapsedSecs = Math.floor(getElapsedMs(timerStartedAt) / 1000);
+  return Math.max(0, totalSecs - elapsedSecs);
+}
+
+function syncDerivedTimerState() {
+  remaining = getRemainingSecs();
+  return remaining;
+}
+
+function getBlockStartMs(fallbackEndMs = Date.now()) {
+  return isoToMs(blockStartTime) || (fallbackEndMs - totalSecs * 1000);
+}
+
+function getPendingLogWindow(endMs = Date.now()) {
+  const tsEnd = isoToMs(pendingLogEndTime) || endMs;
+  const tsStart = isoToMs(pendingLogStartTime) || getBlockStartMs(tsEnd);
+  return { tsStart, tsEnd };
+}
+
+function clearPendingLogWindow() {
+  pendingLogStartTime = null;
+  pendingLogEndTime = null;
+}
+
+function startUiTicker() {
+  clearInterval(ticker);
+  ticker = setInterval(() => {
+    const secsLeft = syncDerivedTimerState();
+    updateLiveCost();
+    if (running && secsLeft <= 0) {
+      doPing();
+      return;
+    }
+    updateRing();
+  }, 1000);
+}
+
+function stopUiTicker() {
+  clearInterval(ticker);
+  ticker = null;
+}
+
 function updateRing() {
   const ring = document.getElementById('ring');
   if (!ring) return;
+  if (running) syncDerivedTimerState();
   // Ring fills UP as elapsed time grows
-  const pct = remaining / totalSecs;
+  const pct = totalSecs ? (remaining / totalSecs) : 1;
   ring.style.strokeDashoffset = CIRCUM * pct;
   ring.style.stroke = currentState === 'distraction' ? '#ff6b6b' : 'var(--deep)';
 
@@ -1807,7 +1855,7 @@ function updateRing() {
   if (secsEl) secsEl.textContent = `${bm}:${String(bs).padStart(2,'0')}`;
 
   // Hero: total elapsed on this task (whole minutes)
-  const totalElapsedMin = taskStartTime ? Math.max(0, Math.floor((Date.now() - taskStartTime) / 60000)) : 0;
+  const totalElapsedMin = taskStartTime ? Math.max(0, Math.floor(getElapsedMs(taskStartTime) / 60000)) : 0;
   const elEl = document.getElementById('hero-elapsed');
   if (elEl) elEl.textContent = totalElapsedMin;
 
@@ -1891,10 +1939,13 @@ function updateTimerTaskLabel() {
 }
 
 async function _startTimer(task) {
+  const startIso = nowIso();
   currentTask = task;
   lastTaskForRepeat = task;
-  taskStartTime = Date.now();
-  blockStartTime = Date.now();
+  taskStartTime = startIso;
+  blockStartTime = startIso;
+  timerStartedAt = startIso;
+  clearPendingLogWindow();
   lastStateChange = Date.now();
   currentState = 'deep';
   blockSegments = [];
@@ -1919,14 +1970,9 @@ async function _startTimer(task) {
   document.getElementById('switch-btn').style.display = 'inline-flex';
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min`;
   updateTimerTaskLabel();
-  timerStartedAt = Date.now();
-  remaining = totalSecs;
-  clearInterval(ticker);
-  ticker = setInterval(() => {
-    remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-    remaining <= 0 ? doPing() : updateRing();
-  }, 1000);
-  scheduleNativePing(totalSecs);
+  syncDerivedTimerState();
+  startUiTicker();
+  scheduleNativePing(Math.max(1, remaining));
   persist();
   syncTimerState();
 }
@@ -1964,10 +2010,13 @@ function playAlert(times = 2, gap = 600) {
   playOnce();
 }
 function resetTimer() {
-  running = false; clearInterval(ticker); ticker = null;
+  running = false; stopUiTicker();
   cancelNativePing();
   if (breakActive) { clearInterval(breakTicker); breakTicker = null; breakActive = false; document.getElementById('break-active-row').classList.remove('show'); }
   taskStartTime = null;
+  blockStartTime = null;
+  timerStartedAt = null;
+  clearPendingLogWindow();
   document.getElementById('interval-input').disabled = false;
   document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
   document.getElementById('main-btn').disabled = false;
@@ -1995,7 +2044,7 @@ function switchTaskMidBlock() {
 
   // Auto-log the previous task immediately
   const tsEnd = Date.now();
-  const tsStart = blockStartTime || (tsEnd - totalSecs * 1000);
+  const tsStart = getBlockStartMs(tsEnd);
   const dur = Math.round((tsEnd - tsStart) / 60000);
   const prevTask = currentTask || intention || 'Work block';
   const prevEnergy = entries.find(e => !e.missed && !e.break)?.energy || 'deep';
@@ -2016,9 +2065,10 @@ function switchTaskMidBlock() {
   }
 
   // Reset block timer and open pre-commit for next task
-  blockStartTime = Date.now();
-  timerStartedAt = Date.now();
-  remaining = totalSecs;
+  const resetIso = nowIso();
+  blockStartTime = resetIso;
+  timerStartedAt = resetIso;
+  syncDerivedTimerState();
   setTimeout(() => {
     const hasLast = !!lastTaskForRepeat;
     document.getElementById('pc-task').value = '';
@@ -2051,13 +2101,13 @@ function startBreakCustom() {
 
 function startBreak(mins) {
   closeModal('break-overlay');
-  breakStartTs = Date.now();
-  breakEndsAt = Date.now() + mins * 60000;
+  breakStartTs = nowIso();
+  breakEndsAt = new Date(Date.now() + mins * 60000).toISOString();
   breakActive = true;
 
   // Pause the main timer
   running = false;
-  clearInterval(ticker); ticker = null;
+  stopUiTicker();
 
   // Show break UI
   _updateBreakDisplay();
@@ -2071,16 +2121,16 @@ function startBreak(mins) {
   clearInterval(breakTicker);
   breakTicker = setInterval(() => {
     _updateBreakDisplay();
-    if (Date.now() >= breakEndsAt) endBreak();
+    if (Date.now() >= (isoToMs(breakEndsAt) || 0)) endBreak();
   }, 1000);
 
-  if (fbRoomRef) fbRoomRef.update({ breakState: { active: true, endsAt: breakEndsAt, durationMin: mins, startedBy: syncedDeviceId } });
+  if (fbRoomRef) fbRoomRef.update({ breakState: { active: true, startedAt: breakStartTs, endsAt: breakEndsAt, durationMin: mins, startedBy: syncedDeviceId } });
   persist();
   showToast(`${mins}-min break started ☕ timer auto-resumes`);
 }
 
 function _updateBreakDisplay() {
-  const left = Math.max(0, breakEndsAt - Date.now());
+  const left = Math.max(0, (isoToMs(breakEndsAt) || 0) - Date.now());
   document.getElementById('break-countdown-text').textContent = fmt(Math.floor(left / 1000));
 }
 
@@ -2097,12 +2147,14 @@ function endBreak() {
   document.getElementById('switch-btn').style.display = 'inline-flex';
 
   // Log the break as an entry
-  const actualDur = Math.round((Date.now() - breakStartTs) / 60000);
+  const breakEndMs = Date.now();
+  const breakStartMs = isoToMs(breakStartTs) || breakEndMs;
+  const actualDur = Math.round((breakEndMs - breakStartMs) / 60000);
   const entry = {
-    id: Date.now(), ts: Date.now(),
-    tsStart: breakStartTs,
+    id: breakEndMs, ts: breakEndMs,
+    tsStart: breakStartMs,
     blockIntervalMin: actualDur,
-    date: toDateKey(new Date()),
+    date: toDateKey(new Date(breakEndMs)),
     activity: 'Break',
     energy: 'recovery',
     onPlan: true,
@@ -2112,15 +2164,13 @@ function endBreak() {
 
   // Restart timer for next block
   totalSecs = settings.intervalMin * 60;
+  const resumeIso = nowIso();
   remaining = totalSecs;
-  timerStartedAt = Date.now();
+  timerStartedAt = resumeIso;
+  blockStartTime = resumeIso;
   timerOwnerDeviceId = syncedDeviceId;
   running = true;
-  clearInterval(ticker);
-  ticker = setInterval(() => {
-    remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-    remaining <= 0 ? doPing() : updateRing();
-  }, 1000);
+  startUiTicker();
 
   document.getElementById('timer-status').textContent = `Break done · pinging every ${settings.intervalMin} min`;
   updateRing();
@@ -2139,7 +2189,7 @@ function showPingBanner(pingNum) {
   const b = document.getElementById('ping-banner');
   const streak = getTodayEntries().filter(e=>!e.missed).length;
   document.getElementById('ping-banner-sub').textContent =
-    `Block #${pingNum}${streak > 1 ? ' · ' + streak + '-block streak' : ''} · ${tzTime(Date.now())}`;
+    `Block #${pingNum}${streak > 1 ? ' · ' + streak + '-block streak' : ''} · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
   b.classList.add('show');
 }
 function hidePingBanner() {
@@ -2148,16 +2198,20 @@ function hidePingBanner() {
 
 function doPing() {
   // Don't ping during a break
-  if (breakActive) { timerStartedAt = Date.now(); remaining = totalSecs; updateRing(); return; }
+  if (breakActive) { timerStartedAt = nowIso(); remaining = totalSecs; updateRing(); return; }
   // Only the device that started the timer handles the ping UI
   if (timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId) {
-    timerStartedAt = Date.now(); remaining = totalSecs; updateRing(); return;
+    timerStartedAt = nowIso(); remaining = totalSecs; updateRing(); return;
   }
+  const completedWindow = getPendingLogWindow();
   pingCount++;
-  timerStartedAt = Date.now();
+  pendingLogStartTime = new Date(completedWindow.tsStart).toISOString();
+  pendingLogEndTime = new Date(completedWindow.tsEnd).toISOString();
+  timerStartedAt = nowIso();
+  blockStartTime = timerStartedAt;
   remaining = totalSecs;
   updateRing();
-  scheduleNativePing(totalSecs); // reschedule next ping
+  scheduleNativePing(Math.max(1, totalSecs)); // reschedule next ping
 
   // Notification — once, not looping
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -2181,7 +2235,6 @@ function doPing() {
   blockSegments = [];
   currentState = 'deep';
   lastStateChange = now;
-  blockStartTime = now; // reset for next block
 
   persist();
   renderToday();
@@ -2207,9 +2260,9 @@ function openQuickLog() {
   clearTimeout(snoozeTimer);
   quickLogBusy = false;
   qlEnergy = '';
-  const elapsedMin = blockStartTime ? Math.max(1, Math.round((Date.now() - blockStartTime) / 60000)) : settings.intervalMin;
+  const elapsedMin = blockStartTime ? Math.max(1, Math.round(getElapsedMs(blockStartTime) / 60000)) : settings.intervalMin;
   document.getElementById('ql-tag').textContent = `PING #${pingCount}`;
-  document.getElementById('ql-sub').textContent = `Last ${fmtDur(elapsedMin)} · ${tzTime(Date.now())}`;
+  document.getElementById('ql-sub').textContent = `Last ${fmtDur(elapsedMin)} · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
   document.getElementById('ql-activity').value = '';
   document.querySelectorAll('#quicklog-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
 
@@ -2311,17 +2364,19 @@ function _doQuickSave(activity, energy) {
   stopAlertLoop();
   if (!activity) activity = energy;
   const _now = Date.now();
+  const { tsStart, tsEnd } = getPendingLogWindow(_now);
   const entry = {
-    id: _now, ts: _now, updatedAt: _now,
-    tsStart: blockStartTime || (_now - totalSecs * 1000),
-    blockIntervalMin: settings.intervalMin,
-    date: toDateKey(new Date()),
+    id: _now, ts: tsEnd, updatedAt: _now,
+    tsStart,
+    blockIntervalMin: Math.max(1, Math.round((tsEnd - tsStart) / 60000)),
+    date: toDateKey(new Date(tsEnd)),
     activity, energy,
     onPlan: energy !== 'distraction' && energy !== 'waste',
     quickLogged: true
   };
   entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
   entries.unshift(entry);
+  clearPendingLogWindow();
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
   persist(); renderToday(); syncEntries();
@@ -2388,12 +2443,9 @@ function saveCommitment() {
 // ══════════════════════════════════════════════════════
 document.addEventListener('visibilitychange', () => {
   if (!running || document.hidden) return;
-  // Recalculate remaining from startedAt when screen wakes — fixes mobile timer drift
-  if (timerStartedAt) {
-    remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-    if (remaining <= 0) { doPing(); return; }
-    updateRing();
-  }
+  const secsLeft = syncDerivedTimerState();
+  if (secsLeft <= 0) { doPing(); return; }
+  updateRing();
 });
 
 window.addEventListener('beforeunload', e => {
@@ -2485,7 +2537,7 @@ function endWorkSession() {
   // Auto-log the work block
   const task = currentTask || intention || 'Deep work';
   const tsEnd = Date.now();
-  const tsStart = blockStartTime || (tsEnd - pomodoroWorkMin * 60000);
+  const tsStart = getBlockStartMs(tsEnd);
   const dur = Math.round((tsEnd - tsStart) / 60000);
   const entry = {
     id: tsEnd, ts: tsEnd, tsStart,
@@ -2497,7 +2549,7 @@ function endWorkSession() {
   getActivityColor(task);
   entries.push(entry);
   entries.sort((a,b) => b.ts - a.ts);
-  blockStartTime = Date.now();
+  blockStartTime = nowIso();
   persist(); syncEntries();
   showToast(`Logged: ${task} · ${fmtDur(dur)}`);
 
@@ -2621,11 +2673,7 @@ function confirmExitFocus() {
   document.getElementById('focus-overlay').classList.remove('open');
   // Resume main timer if it was paused for pomodoro
   if (pomodoroWasPaused && running && !ticker) {
-    ticker = setInterval(() => {
-      remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-      updateRing();
-      if (remaining <= 0) doPing();
-    }, 1000);
+    startUiTicker();
   }
   pomodoroWasPaused = false;
 }
@@ -2782,10 +2830,10 @@ function openLog(pingNum) {
   document.querySelectorAll('#log-overlay .energy-btn').forEach(b=>b.classList.remove('selected'));
   selectedOnPlan = null;
   if (switchingTask) {
-    const elapsed = blockStartTime ? Math.round((Date.now() - blockStartTime) / 60000) : settings.intervalMin;
+    const elapsed = blockStartTime ? Math.round(getElapsedMs(blockStartTime) / 60000) : settings.intervalMin;
     document.getElementById('log-ping-tag').textContent = `SWITCHING TASKS — log last ${elapsed}m`;
   } else {
-    document.getElementById('log-ping-tag').textContent = pingNum ? `PING #${pingNum} — ${tzTime(Date.now())}` : '';
+    document.getElementById('log-ping-tag').textContent = pingNum ? `PING #${pingNum} — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}` : '';
   }
   // Show committed task context on pings
   const committedBar = document.getElementById('log-committed-bar');
@@ -2903,9 +2951,15 @@ function openRetroLog() {
   document.getElementById('retro-activity').value = '';
   populateRetroChips();
   // Default: last block's end time as start, now as end
-  const nowStr = tzHHMM(Date.now());
-  const lastEntry = entries.filter(e => !e.deleted)[0];
-  const startStr = lastEntry?.ts ? tzHHMM(lastEntry.ts) : nowStr;
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const nowStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const lastEntry = entries[0];
+  let startStr = nowStr;
+  if (lastEntry && lastEntry.ts) {
+    const lastEnd = new Date(lastEntry.ts);
+    startStr = `${pad(lastEnd.getHours())}:${pad(lastEnd.getMinutes())}`;
+  }
   document.getElementById('retro-start').value = startStr;
   document.getElementById('retro-end').value = nowStr;
   document.getElementById('retro-overlay').classList.add('open');
@@ -2925,13 +2979,15 @@ function saveRetroEntry() {
   const endVal = document.getElementById('retro-end').value;
   if (!startVal || !endVal) { showToast('Set start and end time'); return; }
 
-  // Parse times in user's timezone, not device-local time
-  const baseDateKey = editingEntryBase
-    ? toDateKey(editingEntryBase.startDate)  // date the block was on, in user's TZ
-    : toDateKey(new Date());                  // today in user's TZ
-  const tsStart = tzParseTime(baseDateKey, startVal);
-  let tsEnd     = tzParseTime(baseDateKey, endVal);
-  // Midnight-crossing: if end ≤ start as wall-clock, end is on the next calendar day
+  const [sh, sm] = startVal.split(':').map(Number);
+  const [eh, em] = endVal.split(':').map(Number);
+
+  // Use start date from edit context if editing, otherwise today
+  const baseDate = editingEntryBase ? editingEntryBase.startDate : new Date();
+  const yr = baseDate.getFullYear(), mo = baseDate.getMonth(), dy = baseDate.getDate();
+  const tsStart = new Date(yr, mo, dy, sh, sm, 0).getTime();
+  let tsEnd   = new Date(yr, mo, dy, eh, em, 0).getTime();
+  // Handle midnight-crossing: if end < start in time-of-day, end is next day
   if (tsEnd <= tsStart) tsEnd += 24 * 60 * 60 * 1000;
   const dur = Math.round((tsEnd - tsStart) / 60000);
 
@@ -3006,11 +3062,13 @@ function saveEntry() {
   if (!activity){showToast('Add an activity description');return;}
   if (!selectedEnergy){showToast('Pick an energy type');return;}
 
+  const nowMs = Date.now();
+  const { tsStart, tsEnd } = getPendingLogWindow(nowMs);
   const entry = {
-    id:Date.now(), ts:Date.now(),
-    tsStart: blockStartTime || (Date.now() - totalSecs * 1000),
-    blockIntervalMin: settings.intervalMin,
-    date:toDateKey(new Date()),
+    id:nowMs, ts:tsEnd,
+    tsStart,
+    blockIntervalMin: Math.max(1, Math.round((tsEnd - tsStart) / 60000)),
+    date:toDateKey(new Date(tsEnd)),
     activity,
     energy:selectedEnergy,
     onPlan:selectedOnPlan,
@@ -3023,6 +3081,7 @@ function saveEntry() {
   getActivityColor(activity); // assign color on first save
   if (entry.energy === 'waste') switchState('distraction');
   entries.unshift(entry);
+  clearPendingLogWindow();
   stopAlertLoop();
   hidePingBanner();
   clearTimeout(snoozeTimer);
@@ -3037,9 +3096,10 @@ function saveEntry() {
   // If mid-block switch: reset block start and open pre-commit for next task
   if (switchingTask) {
     switchingTask = false;
-    blockStartTime = Date.now();
-    timerStartedAt = Date.now();
-    remaining = totalSecs;
+    const restartIso = nowIso();
+    blockStartTime = restartIso;
+    timerStartedAt = restartIso;
+    syncDerivedTimerState();
     setTimeout(() => {
       const hasLast = !!lastTaskForRepeat;
       document.getElementById('pc-task').value = '';
@@ -3071,11 +3131,12 @@ function triggerPenaltyMode() {
      running = true;
      document.getElementById('main-btn').textContent = 'Break';
      document.getElementById('timer-status').textContent = `Penalty mode`;
-     timerStartedAt = Date.now();
-     if(!ticker) ticker = setInterval(() => {
-       remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-       remaining <= 0 ? doPing() : updateRing();
-     }, 1000);
+     const startIso = nowIso();
+     timerStartedAt = startIso;
+     taskStartTime = taskStartTime || startIso;
+     blockStartTime = blockStartTime || startIso;
+     syncDerivedTimerState();
+     startUiTicker();
      syncTimerState();
   } else {
      syncTimerState();
@@ -3083,19 +3144,10 @@ function triggerPenaltyMode() {
 }
 
 function deleteEntry(id) {
-  // Tombstone instead of filter — lets Firebase and other devices know this entry is gone.
-  // Filtering it out would create a race: the sync listener sees it "missing" locally and re-adds it.
-  const entry = entries.find(e => e.id === id);
-  if (entry) {
-    entry.deleted = true;
-    entry.updatedAt = Date.now();
-  }
-  persist();
-  // Push tombstone to Firebase so other devices stop syncing this entry back
-  if (fbRoomRef && roomCode && entry) {
-    fbDb.ref(`rooms/${roomCode}/entries/e_${id}`).set(entry);
-  }
-  renderToday(); renderWeek(); renderWeekTable();
+  entries=entries.filter(e=>e.id!==id);
+  persist(); renderToday(); renderWeek(); renderWeekTable();
+  // Explicitly remove from Firebase so it doesn't come back on the next sync
+  if (fbRoomRef && roomCode) fbDb.ref(`rooms/${roomCode}/entries/e_${id}`).remove();
 }
 
 function startSprint() {
@@ -3126,22 +3178,14 @@ function getTimeByActivity(entriesArr) {
   return map;
 }
 // toDateKey — moved to storage.js
-// Display time in the user's configured timezone (never device-local)
-function localTime(ts){ return tzTime(ts); }
+// Display time always in THIS device's local timezone from the raw ts
+function localTime(ts){
+  return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
 // getTodayEntries, getWeekEntries — moved to storage.js
 function computeDeepScore(arr){return arr.length?Math.round(arr.filter(e=>e.energy==='deep').length/arr.length*100):0;}
 function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(settings.intervalMin/60)).toFixed(1);}
-function computeStreak(){
-  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const now = Date.now();
-  let s = 0;
-  for (let i = 0; i < 30; i++) {
-    const k = getDateInTZ(now - i * 86400000, tz);
-    if (entries.filter(e => !e.deleted && getDateInTZ(e.tsStart || e.ts, tz) === k).length >= 4) s++;
-    else if (i > 0) break;
-  }
-  return s;
-}
+function computeStreak(){let s=0;const d=new Date();for(let i=0;i<30;i++){const k=toDateKey(new Date(d-i*86400000));if(entries.filter(e=>e.date===k).length>=4)s++;else if(i>0)break;}return s;}
 
 const eLabel={deep:'Deep',shallow:'Shallow',admin:'Admin',distraction:'Distraction',break:'Break',away:'Away'};
 const ACTIVITY_PALETTE = [
@@ -3178,12 +3222,11 @@ function getIdentityLevelWithEmoji(score) {
   return "Drifting 🔴";
 }
 
-// Returns today's work day start as a Unix timestamp.
-// Anchored to the first real entry of the day so entries logged at any hour are covered.
+// Returns today's work day start as a Unix timestamp
 function getWorkDayStartTs() {
-  const todayEntries = getTodayEntries().filter(e => !e.missed && (e.tsStart || e.ts));
-  if (!todayEntries.length) return Date.now(); // no entries yet → no gaps to show
-  return Math.min(...todayEntries.map(e => e.tsStart || e.ts));
+  const [h, m] = (settings.workDayStart || '09:00').split(':').map(Number);
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0).getTime();
 }
 
 // ── Overlap clipping: display-only shallow copies, earlier block clipped to next block's start ──
@@ -3202,28 +3245,6 @@ function clipOverlapsForDisplay(ascSorted) {
     }
   }
   return result;
-}
-
-// ── Merge consecutive same-activity entries for display ──
-// Display-only: never mutates stored entries.
-// Two entries merge if they share activity+energy and the gap between them is < 5 min.
-function mergeConsecutiveForDisplay(sorted) {
-  if (!sorted.length) return sorted;
-  const MAX_GAP_MS = 5 * 60000;
-  const out = [];
-  let g = { ...sorted[0], _mergeCount: 1 };
-  for (let i = 1; i < sorted.length; i++) {
-    const e = sorted[i];
-    const gap = (e.tsStart || e.ts) - g.ts;
-    if (e.activity === g.activity && e.energy === g.energy && gap >= 0 && gap <= MAX_GAP_MS) {
-      g = { ...g, ts: e.ts, blockIntervalMin: Math.round((e.ts - (g.tsStart || g.ts)) / 60000), _mergeCount: g._mergeCount + 1 };
-    } else {
-      out.push(g);
-      g = { ...e, _mergeCount: 1 };
-    }
-  }
-  out.push(g);
-  return out;
 }
 
 // ── Gap detection: anchored to work day start, not first entry ──
@@ -3312,251 +3333,39 @@ function openGapsPicker() {
   document.getElementById('gaps-overlay').classList.add('open');
 }
 
-// Split a gap into named time-period chunks (Night/Morning/Afternoon/Evening).
-// Only kicks in for gaps > 3h; chunks < 20 min are discarded.
-function splitGapIntoChunks(gap) {
-  const MIN_TO_SPLIT_MS = 3 * 60 * 60 * 1000;
-  const MIN_CHUNK_MS    = 20 * 60 * 1000;
-  const tz  = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const end = gap.isCurrent ? Date.now() : gap.ts;
-  if (end - gap.tsStart <= MIN_TO_SPLIT_MS) return [gap];
-
-  const PERIODS = [
-    { name: 'Night',     h: 0  },
-    { name: 'Morning',   h: 6  },
-    { name: 'Afternoon', h: 12 },
-    { name: 'Evening',   h: 18 },
-    { name: 'Night',     h: 24 }, // sentinel for next midnight
-  ];
-
-  const dateKey = getDateInTZ(gap.tsStart, tz);
-  const bTimes  = PERIODS.map(p => {
-    const ts = tzParseTime(dateKey, String(p.h === 24 ? 0 : p.h).padStart(2,'0') + ':00');
-    return p.h === 24 ? ts + 86400000 : ts;
-  });
-
-  const chunks = [];
-  let cursor = gap.tsStart;
-  for (let i = 0; i < PERIODS.length - 1; i++) {
-    if (bTimes[i + 1] <= cursor || bTimes[i] >= end) continue;
-    const cs = Math.max(cursor, bTimes[i]);
-    const ce = Math.min(bTimes[i + 1], end);
-    if (ce - cs >= MIN_CHUNK_MS) {
-      chunks.push({ ...gap, tsStart: cs, ts: ce,
-        gapMin: Math.round((ce - cs) / 60000),
-        isCurrent: gap.isCurrent && ce >= end,
-        periodName: PERIODS[i].name });
-    }
-    cursor = ce;
-    if (cursor >= end) break;
-  }
-  return chunks.length >= 2 ? chunks : [gap];
-}
-
-// Unified instant-log: logs a block immediately without opening any form.
-// Used by primary choices, task chips, and away buttons.
-function logInstantBlock(tsStart, tsEnd, activity, energy, gapIndex) {
-  const dur = Math.round((tsEnd - tsStart) / 60000);
-  const awayActivities = new Set(['Sleep','Commute','Break','Offline / Away','Recovery']);
-  const entry = {
-    id: Date.now(), ts: tsEnd, tsStart,
-    blockIntervalMin: dur, date: toDateKey(new Date(tsStart)),
-    activity, energy, onPlan: energy !== 'waste',
-    ...(awayActivities.has(activity) ? { away: true } : { retro: true }),
-  };
-  entry.category = getBucket(entry);
-  entry.originalLabel = entry.energy || null;
-  getActivityColor(activity);
-  entries.unshift(entry);
-  _lastInstantLogId = entry.id;
-  persist(); renderToday(); syncEntries();
-  const remaining = computeGaps(getTodayEntries());
-  if (!remaining.length) {
-    closeModal('gaps-overlay');
-    showToast(`✓ ${activity} · All gaps filled!`, true);
-  } else {
-    renderGapsList(remaining);
-    showToast(`✓ ${activity}`, true);
-  }
-}
-
-// Read the current (possibly user-adjusted) time range for a gap card.
-// Falls back to the original gap bounds stored as data attributes.
-function getChunkTimes(cardIdx) {
-  const card = document.getElementById(`gap-item-${cardIdx}`);
-  if (!card) return null;
-  const tz          = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const gapTsStart  = parseInt(card.dataset.tsStart);
-  const gapTsEnd    = card.dataset.isCurrent === 'true' ? Date.now() : parseInt(card.dataset.tsEnd);
-  const dateKey     = getDateInTZ(gapTsStart, tz);
-  const si = document.getElementById(`gap-start-${cardIdx}`);
-  const ei = document.getElementById(`gap-end-${cardIdx}`);
-  let ts0 = si?.value ? tzParseTime(dateKey, si.value) : gapTsStart;
-  let ts1 = ei?.value ? tzParseTime(dateKey, ei.value) : gapTsEnd;
-  if (ts1 <= ts0) ts1 += 86400000; // midnight crossing
-  ts0 = Math.max(ts0, gapTsStart);
-  ts1 = Math.min(ts1, gapTsEnd);
-  return { ts0, ts1 };
-}
-
-function updateGapDuration(cardIdx) {
-  const t = getChunkTimes(cardIdx);
-  if (!t) return;
-  const dur = Math.max(0, Math.round((t.ts1 - t.ts0) / 60000));
-  const badge = document.getElementById(`gap-dur-${cardIdx}`);
-  if (badge) badge.textContent = fmtDur(dur);
-}
-
-function logGapChunk(cardIdx, activity, energy) {
-  const t = getChunkTimes(cardIdx);
-  if (!t) return;
-  if (t.ts1 <= t.ts0) { showToast('End time must be after start time'); return; }
-  logInstantBlock(t.ts0, t.ts1, activity, energy, cardIdx);
-}
-
-function expandGapInput(cardIdx) {
-  const wrap = document.getElementById(`gap-type-wrap-${cardIdx}`);
-  if (!wrap) return;
-  const CATS = [
-    { label: '💼 Work',     e: 'shallow',  bg: 'var(--bg4)',            c: 'var(--text)'        },
-    { label: '😴 Recovery', e: 'recovery', bg: 'var(--break-dim)',       c: 'var(--break)'       },
-    { label: '📺 Waste',    e: 'waste',    bg: 'var(--distraction-dim)', c: 'var(--distraction)' },
-  ];
-  wrap.innerHTML = `
-    <input id="gap-inline-${cardIdx}" type="text" placeholder="e.g. Gym, Reading, Cooking…"
-      onkeydown="handleGapInlineKey(event,${cardIdx})"
-      style="width:100%;padding:10px 12px;background:var(--bg4);border:1.5px solid var(--deep);
-             border-radius:8px;color:var(--text);font-family:var(--head);font-size:13px;
-             outline:none;margin-bottom:8px;display:block">
-    <div style="display:flex;gap:6px">
-      ${CATS.map(p =>
-        `<button onmousedown="logGapInlineEntry(${cardIdx},'${p.e}')"
-          style="flex:1;padding:8px 4px;background:${p.bg};border:1px solid var(--border2);
-                 border-radius:8px;color:${p.c};font-family:var(--head);font-size:11px;
-                 font-weight:700;cursor:pointer;text-align:center">${p.label}</button>`
-      ).join('')}
-    </div>`;
-  setTimeout(() => document.getElementById(`gap-inline-${cardIdx}`)?.focus(), 30);
-}
-
-function handleGapInlineKey(event, cardIdx) {
-  if (event.key === 'Enter') { event.preventDefault(); logGapInlineEntry(cardIdx, 'shallow'); }
-  if (event.key === 'Escape') renderGapsList(computeGaps(getTodayEntries()));
-}
-
-function logGapInlineEntry(cardIdx, energy) {
-  const input = document.getElementById(`gap-inline-${cardIdx}`);
-  const activity = input?.value.trim();
-  if (!activity) {
-    input?.classList.add('shake');
-    setTimeout(() => input?.classList.remove('shake'), 350);
-    input?.focus();
-    return;
-  }
-  logGapChunk(cardIdx, activity, energy);
-}
-
 function renderGapsList(gaps) {
-  // Collect up to 4 recent unique non-away tasks for quick-fill chips
-  const seen = new Set();
-  const recentTasks = [];
-  for (const e of entries) {
-    if (e.deleted || e.away || e.missed || !e.activity || !e.energy) continue;
-    if (!seen.has(e.activity)) {
-      seen.add(e.activity);
-      recentTasks.push({ activity: e.activity, energy: e.energy });
-    }
-    if (recentTasks.length >= 4) break;
-  }
-
-  // Expand each gap into period-sized chunks
-  const chunks = gaps.flatMap(g => splitGapIntoChunks(g));
-
-  const AWAY = [
-    { label: '😴 Sleep',   activity: 'Sleep',         energy: 'recovery' },
-    { label: '🚗 Commute', activity: 'Commute',        energy: 'shallow'  },
-    { label: '☕ Break',   activity: 'Break',          energy: 'recovery' },
-    { label: '📵 Offline', activity: 'Offline / Away', energy: 'shallow'  },
+  const pad = n => String(n).padStart(2,'0');
+  function fmt(ts) { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+  const awayTypes = [
+    { label: '😴 Sleep', activity: 'Sleep', energy: 'admin' },
+    { label: '🚗 Commute', activity: 'Commute', energy: 'shallow' },
+    { label: '☕ Break', activity: 'Break', energy: 'break' },
+    { label: '📵 Offline', activity: 'Offline / Away', energy: 'shallow' },
   ];
-  const PRIMARY = [
-    { label: '💼 Work',     activity: 'Work',     energy: 'shallow',
-      bg: 'var(--bg4)', color: 'var(--text)' },
-    { label: '😴 Recovery', activity: 'Recovery', energy: 'recovery',
-      bg: 'var(--break-dim)', color: 'var(--break)' },
-    { label: '📺 Waste',    activity: 'Waste',    energy: 'waste',
-      bg: 'var(--distraction-dim)', color: 'var(--distraction)' },
-  ];
-
-  document.getElementById('gaps-list').innerHTML = chunks.map((g, i) => {
-    const isCur    = g.isCurrent;
-    const rawEnd   = Math.round(isCur ? Date.now() : g.ts);
-    const header   = g.periodName || 'Untracked';
-    const durLabel = fmtDur(g.gapMin);
-    const startVal = tzHHMM(g.tsStart);
-    const endVal   = tzHHMM(rawEnd);
-
-    const primaryBtns = PRIMARY.map(p =>
-      `<button onmousedown="logGapChunk(${i},'${p.activity}','${p.energy}')"
-        style="flex:1;padding:10px 4px;background:${p.bg};border:1px solid var(--border2);
-               border-radius:8px;color:${p.color};font-family:var(--head);font-size:11px;
-               font-weight:700;cursor:pointer;text-align:center;line-height:1.4">${p.label}</button>`
-    ).join('');
-
-    const taskChips = recentTasks.map(t => {
-      const safe  = t.activity.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      const short = t.activity.length > 20 ? t.activity.slice(0,20) + '…' : t.activity;
-      return `<button onmousedown="logGapChunk(${i},'${safe}','${t.energy}')"
-        class="energy-btn ${t.energy}"
-        style="padding:6px 10px;font-size:11px;font-weight:600;flex-shrink:0">${short}</button>`;
-    }).join('');
-
-    const awayBtns = AWAY.map(a =>
-      `<button onmousedown="logGapChunk(${i},'${a.activity}','${a.energy}')"
+  document.getElementById('gaps-list').innerHTML = gaps.map((g, i) => {
+    const endLabel = g.isCurrent ? 'now' : fmt(g.ts);
+    const label = g.isCurrent ? 'Untracked (since last log)' : 'Untracked';
+    const awayBtns = awayTypes.map(a =>
+      `<button onclick="logAwayBlock(${g.tsStart},${Math.round(g.ts)},'${a.activity}','${a.energy}',${i})"
         style="flex:1;min-width:0;padding:6px 4px;background:var(--bg4);border:1px solid var(--border2);
                border-radius:6px;color:var(--muted);font-family:var(--head);font-size:10px;
                font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.label}</button>`
     ).join('');
-
-    return `<div id="gap-item-${i}" data-ts-start="${g.tsStart}" data-ts-end="${rawEnd}" data-is-current="${isCur}"
-        style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;gap:10px">
+    return `<div id="gap-item-${i}" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden">
+      <button onclick="closeModal('gaps-overlay');openRetroLogPrefilled(${g.tsStart},${Math.round(g.ts)})"
+        style="display:flex;align-items:center;justify-content:space-between;width:100%;
+               background:none;border:none;padding:12px 14px;cursor:pointer;text-align:left;gap:10px">
         <div>
-          <div style="font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.07em">${header}</div>
-          <div style="display:flex;align-items:center;gap:4px;margin-top:4px">
-            <input type="time" id="gap-start-${i}" class="gap-time-input" value="${startVal}"
-              onchange="updateGapDuration(${i})" title="Adjust start time">
-            <span style="color:var(--muted2);font-size:11px">–</span>
-            <input type="time" id="gap-end-${i}" class="gap-time-input" value="${endVal}"
-              onchange="updateGapDuration(${i})" title="Adjust end time">
-          </div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${label}</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">${fmt(g.tsStart)} – ${endLabel}</div>
         </div>
-        <div id="gap-dur-${i}" style="background:var(--distraction-dim);color:var(--distraction);
-             font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;flex-shrink:0">${durLabel}</div>
-      </div>
-      <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 8px">What were you mostly doing?</div>
-        <div style="display:flex;gap:6px">${primaryBtns}</div>
-      </div>
-      ${recentTasks.length ? `
-      <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 6px">Or specifically:</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${taskChips}</div>
-        <div id="gap-type-wrap-${i}">
-          <button onmousedown="expandGapInput(${i})"
-            style="width:100%;padding:8px;background:none;border:1px solid var(--border2);
-                   border-radius:6px;color:var(--muted);font-family:var(--head);font-size:11px;
-                   font-weight:600;cursor:pointer">+ Type activity...</button>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="background:var(--distraction-dim);color:var(--distraction);font-size:11px;font-weight:700;
+                      padding:4px 10px;border-radius:999px;flex-shrink:0">${g.gapMin}m</div>
+          <span style="font-size:11px;color:var(--muted)">Fill in →</span>
         </div>
-      </div>` : `
+      </button>
       <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
-        <div id="gap-type-wrap-${i}">
-          <button onmousedown="expandGapInput(${i})"
-            style="width:100%;padding:10px;background:var(--bg4);border:1px solid var(--border2);
-                   border-radius:6px;color:var(--text);font-family:var(--head);font-size:12px;
-                   font-weight:600;cursor:pointer">+ Type activity...</button>
-        </div>
-      </div>`}
-      <div style="padding:0 10px 12px;border-top:1px solid var(--border)">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 6px">I was away:</div>
         <div style="display:flex;gap:6px">${awayBtns}</div>
       </div>
@@ -3564,28 +3373,43 @@ function renderGapsList(gaps) {
   }).join('');
 }
 
-// Kept for backward compat; delegates to logInstantBlock
 function logAwayBlock(tsStart, tsEnd, activity, energy, gapIndex) {
-  logInstantBlock(tsStart, tsEnd, activity, energy, gapIndex);
+  const dur = Math.round((tsEnd - tsStart) / 60000);
+  const entry = {
+    id: Date.now(), ts: tsEnd, tsStart,
+    blockIntervalMin: dur, date: toDateKey(new Date(tsEnd)),
+    activity, energy, onPlan: true,
+    away: true
+  };
+  entries.unshift(entry);
+  persist(); renderToday(); syncEntries();
+  // Refresh gaps list in place
+  const remaining = computeGaps(getTodayEntries());
+  if (!remaining.length) {
+    closeModal('gaps-overlay');
+    showToast('All gaps filled!');
+  } else {
+    renderGapsList(remaining);
+    showToast(`Logged as ${activity}`);
+  }
 }
 
-function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
+function openRetroLogPrefilled(tsStart, tsEnd) {
   editingEntryId = null;
   editingEntryBase = null;
   document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
   document.getElementById('retro-modal-title').textContent = 'What were you doing?';
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
-  document.getElementById('retro-activity').value = activity || '';
-  if (energy) setRetroEnergy(energy);
+  document.getElementById('retro-activity').value = '';
   populateRetroChips();
-  document.getElementById('retro-start').value = tzHHMM(tsStart);
-  document.getElementById('retro-end').value   = tzHHMM(Math.min(tsEnd, Date.now()));
+  const pad = n => String(n).padStart(2, '0');
+  const s = new Date(tsStart);
+  const e = new Date(Math.min(tsEnd, Date.now()));
+  document.getElementById('retro-start').value = `${pad(s.getHours())}:${pad(s.getMinutes())}`;
+  document.getElementById('retro-end').value   = `${pad(e.getHours())}:${pad(e.getMinutes())}`;
   document.getElementById('retro-overlay').classList.add('open');
-  setTimeout(() => {
-    const input = document.getElementById('retro-activity');
-    if (!activity) input.focus();
-  }, 250);
+  setTimeout(() => document.getElementById('retro-activity').focus(), 250);
 }
 
 function openEditEntry(id) {
@@ -3593,13 +3417,15 @@ function openEditEntry(id) {
   if (!entry) return;
   editingEntryId = id;
 
+  const pad = n => String(n).padStart(2, '0');
   const tsS = entry.tsStart || (entry.ts - (entry.blockIntervalMin || settings.intervalMin) * 60000);
   const tsE = entry.ts;
-  const [sh, sm] = tzHHMM(tsS).split(':').map(Number);
-  const [eh, em] = tzHHMM(tsE).split(':').map(Number);
-  // Detect midnight-crossing in user's timezone
-  const crossesMidnight = eh * 60 + em < sh * 60 + sm;
-  editingEntryBase = { startDate: new Date(tsS), crossesMidnight };
+  const sDate = new Date(tsS);
+  const eDate = new Date(tsE);
+
+  // Detect midnight-crossing (end time earlier in day than start time)
+  const crossesMidnight = eDate.getHours() * 60 + eDate.getMinutes() < sDate.getHours() * 60 + sDate.getMinutes();
+  editingEntryBase = { startDate: sDate, crossesMidnight };
 
   // Untracked blocks: open as a fresh log (just prefill the time, clear activity)
   if (entry.missed) {
@@ -3618,8 +3444,8 @@ function openEditEntry(id) {
   }
   populateRetroChips();
 
-  document.getElementById('retro-start').value = tzHHMM(tsS);
-  document.getElementById('retro-end').value   = tzHHMM(tsE);
+  document.getElementById('retro-start').value = `${pad(sDate.getHours())}:${pad(sDate.getMinutes())}`;
+  document.getElementById('retro-end').value   = `${pad(eDate.getHours())}:${pad(eDate.getMinutes())}`;
   document.getElementById('retro-overlay').classList.add('open');
   setTimeout(() => document.getElementById('retro-activity').focus(), 250);
 }
@@ -3657,14 +3483,11 @@ function renderEntryRow(item) {
     </div>`;
   }
 
-  const mergeTag = item._mergeCount > 1
-    ? `<span style="font-size:10px;color:var(--muted);font-weight:600;margin-left:4px;opacity:0.7">×${item._mergeCount}</span>`
-    : '';
   return `<div class="tl-row" onclick="openEditEntry(${item.id})" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
-      <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span>${mergeTag}</div>
+      <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span></div>
       <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}</div>
     </div>
     <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
@@ -3712,10 +3535,7 @@ function renderToday() {
   const realEntries = todayE.filter(e => !e.missed);
   const deepCount = realEntries.filter(e => e.energy === 'deep').length;
 
-  const _tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  document.getElementById('today-date').textContent = new Intl.DateTimeFormat('en-US', {
-    timeZone: _tz, weekday: 'long', month: 'long', day: 'numeric'
-  }).format(new Date());
+  document.getElementById('today-date').textContent = new Date().toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
   document.getElementById('intention').value = intention;
 
   // Simplified stat row
@@ -3747,15 +3567,11 @@ function renderToday() {
     if (!todayE.length) {
       tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
     } else {
-      // Sort chronologically, clip overlaps, drop 0m, merge consecutive same-activity, interleave gaps
+      // Sort chronologically, clip overlaps, then interleave gaps
       const sorted  = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-      const clipped = clipOverlapsForDisplay(sorted).filter(e => {
-        const dur = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 1);
-        return dur > 0;
-      });
-      const mergedDisplay = mergeConsecutiveForDisplay(clipped);
+      const clipped = clipOverlapsForDisplay(sorted);
       const gaps    = computeGaps(todayE);
-      const combined = [...mergedDisplay, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+      const combined = [...clipped, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
       tlEl.innerHTML = renderTimelineCombined(combined);
     }
   }
@@ -3792,8 +3608,7 @@ function renderToday() {
       return;
     }
 
-    const sortedRecent = [...todayE].sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
-    listEl.innerHTML = sortedRecent.slice(0, 6).map(e => {
+    listEl.innerHTML = todayE.slice(0, 6).map(e => {
   const duration = e.segments
     ? Math.round(e.segments.reduce((sum, s) => sum + s.duration, 0) / 60)
     : e.tsStart
@@ -3837,82 +3652,7 @@ function startFromHero() {
   const task = input.value.trim();
   if (!task) { showToast('What will you work on?'); input.focus(); return; }
   input.value = '';
-  hideHeroSuggestions();
   _startTimer(task);
-}
-
-let _heroSugIndex = -1;
-function buildHeroSuggestions(filter) {
-  const seen = new Set();
-  const recent = [];
-  for (const e of entries) {
-    if (e.missed || e.away || !e.activity || e.deleted) continue;
-    const key = e.activity.split(' (Output:')[0].trim();
-    if (!seen.has(key)) { seen.add(key); recent.push(key); }
-    if (recent.length >= 20) break;
-  }
-  const presets = (settings.presets || []).map(p => p.label).filter(l => !seen.has(l));
-  const all = [...recent, ...presets];
-  if (!filter) return { recent, presets: presets.slice(0, 5) };
-  const q = filter.toLowerCase();
-  const matched = all.filter(t => t.toLowerCase().includes(q));
-  return { recent: matched, presets: [] };
-}
-
-function showHeroSuggestions(filter) {
-  const el = document.getElementById('hero-suggestions');
-  const { recent, presets } = buildHeroSuggestions(filter);
-  if (!recent.length && !presets.length) { el.style.display = 'none'; return; }
-  _heroSugIndex = -1;
-  let html = '';
-  if (recent.length) {
-    if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
-    html += recent.slice(0, filter ? 8 : 6).map(t =>
-      `<div class="hero-sug-item" onmousedown="selectHeroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
-    ).join('');
-  }
-  if (presets.length) {
-    html += `<div class="hero-sug-label">Presets</div>`;
-    html += presets.map(t =>
-      `<div class="hero-sug-item" onmousedown="selectHeroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
-    ).join('');
-  }
-  el.innerHTML = html;
-  el.style.display = 'block';
-}
-
-function hideHeroSuggestions() {
-  const el = document.getElementById('hero-suggestions');
-  if (el) el.style.display = 'none';
-  _heroSugIndex = -1;
-}
-
-function selectHeroSuggestion(e, task) {
-  e.preventDefault();
-  const input = document.getElementById('hero-task-input');
-  input.value = task;
-  hideHeroSuggestions();
-  startFromHero();
-}
-
-function handleHeroKey(e) {
-  const el = document.getElementById('hero-suggestions');
-  const items = el ? el.querySelectorAll('.hero-sug-item') : [];
-  if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    _heroSugIndex = Math.min(_heroSugIndex + 1, items.length - 1);
-    items.forEach((it, i) => it.style.background = i === _heroSugIndex ? 'var(--deep-dim)' : '');
-    if (items[_heroSugIndex]) document.getElementById('hero-task-input').value = items[_heroSugIndex].textContent;
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    _heroSugIndex = Math.max(_heroSugIndex - 1, -1);
-    items.forEach((it, i) => it.style.background = i === _heroSugIndex ? 'var(--deep-dim)' : '');
-    if (_heroSugIndex >= 0 && items[_heroSugIndex]) document.getElementById('hero-task-input').value = items[_heroSugIndex].textContent;
-  } else if (e.key === 'Escape') {
-    hideHeroSuggestions();
-  } else if (e.key === 'Enter') {
-    startFromHero();
-  }
 }
 
 let _switchTasks = [];
@@ -3967,11 +3707,12 @@ function switchToTask(task) {
   // Log current block before switching
   if (running && blockStartTime) {
     const tsEnd = Date.now();
-    const dur = Math.max(1, Math.round((tsEnd - blockStartTime) / 60000));
+    const tsStart = getBlockStartMs(tsEnd);
+    const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
     const prevTask = currentTask || lastTaskForRepeat || 'Work';
     const lastEnergy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
     entries.unshift({
-      id: tsEnd, ts: tsEnd, tsStart: blockStartTime,
+      id: tsEnd, ts: tsEnd, tsStart,
       blockIntervalMin: dur,
       date: toDateKey(new Date()),
       activity: prevTask, energy: lastEnergy,
@@ -3990,27 +3731,20 @@ function quickRetroLog() {
   const taskInput = document.getElementById('retro-task');
   const task = taskInput.value.trim();
   if (!task) { showToast('What did you do?'); taskInput.focus(); return; }
-
-  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const todayKey = getDateInTZ(Date.now(), tz);
-  const startVal = document.getElementById('retro-qstart').value; // "HH:MM"
-  const endVal   = document.getElementById('retro-qend').value;   // "HH:MM"
-
-  let tsStart, tsEnd;
-  if (startVal && endVal) {
-    tsStart = tzParseTime(todayKey, startVal);
-    tsEnd   = tzParseTime(todayKey, endVal);
-    if (tsEnd <= tsStart) tsEnd += 86400000; // midnight crossing
-  } else if (startVal) {
-    tsStart = tzParseTime(todayKey, startVal);
-    tsEnd   = Math.min(Date.now(), tsStart + 30 * 60000);
-    if (tsEnd <= tsStart) tsEnd = tsStart + 30 * 60000;
+  const dur = parseInt(document.getElementById('retro-dur').value) || 30;
+  const timeVal = document.getElementById('retro-time').value; // "HH:MM"
+  let tsStart;
+  if (timeVal) {
+    const [h, m] = timeVal.split(':').map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    tsStart = d.getTime();
+    // If the time is in the future, assume it was yesterday
+    if (tsStart > Date.now()) tsStart -= 86400000;
   } else {
-    tsEnd   = Date.now();
-    tsStart = tsEnd - 30 * 60000;
+    tsStart = Date.now() - dur * 60000;
   }
-  const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
-
+  const tsEnd = tsStart + dur * 60000;
   const entry = {
     id: tsEnd, ts: tsEnd, tsStart,
     blockIntervalMin: dur,
@@ -4024,11 +3758,7 @@ function quickRetroLog() {
   entries.sort((a, b) => b.ts - a.ts);
   persist(); renderToday(); syncEntries();
   taskInput.value = '';
-  // Reset times to a fresh window ending at now
-  const nowStr = tzHHMM(Date.now());
-  const thirtyAgoStr = tzHHMM(Date.now() - 30 * 60000);
-  document.getElementById('retro-qstart').value = thirtyAgoStr;
-  document.getElementById('retro-qend').value   = nowStr;
+  document.getElementById('retro-time').value = '';
   showToast(`Logged: ${task} · ${fmtDur(dur)}`);
 }
 
@@ -4106,9 +3836,11 @@ function doSwitchFromBanner() {
   clearTimeout(snoozeTimer);
   // Stop timer — user will start fresh task
   running = false;
-  clearInterval(ticker); ticker = null;
+  stopUiTicker();
   timerStartedAt = null;
   taskStartTime = null;
+  blockStartTime = null;
+  clearPendingLogWindow();
   cancelNativePing();
   // Show hero-idle
   document.getElementById('hero-active').style.display = 'none';
@@ -4188,7 +3920,7 @@ function startAway(label) {
     const task = currentTask || lastTaskForRepeat || intention || 'Work';
     const lastEnergy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
     const tsEnd = Date.now();
-    const tsStart = blockStartTime || (tsEnd - totalSecs * 1000);
+    const tsStart = getBlockStartMs(tsEnd);
     const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
     const workEntry = {
       id: tsEnd, ts: tsEnd, tsStart,
@@ -4199,10 +3931,11 @@ function startAway(label) {
     };
     workEntry.category = getBucket(workEntry); workEntry.originalLabel = workEntry.energy || null;
     entries.unshift(workEntry);
-    clearInterval(ticker);
+    stopUiTicker();
     running = false;
     timerStartedAt = null;
     blockStartTime = null;
+    clearPendingLogWindow();
     document.getElementById('main-btn').textContent = 'Start';
     document.getElementById('switch-btn').style.display = 'none';
     document.getElementById('break-btn').style.display = 'none';
@@ -4344,7 +4077,7 @@ function renderMonthOverview(monthE, monthDate) {
   let maxDayH = 0.5;
   for (let i=1; i<=daysInMonth; i++) {
     const key = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
-    const dayE = entries.filter(e=>!e.missed&&!e.away&&!e.deleted&&getDateInTZ(e.tsStart||e.ts)===key);
+    const dayE = entries.filter(e=>e.date===key&&!e.missed&&!e.away);
     const totalH = dayE.reduce((s,e)=>s+entryMins(e),0)/60;
     const deepH = computeDeepHrs(dayE);
     if (totalH > maxDayH) maxDayH = totalH;
@@ -4609,7 +4342,7 @@ function renderDayDetail(day) {
   const distractionMins = dayE.filter(e=>e.energy==='distraction').reduce((s,e)=>s+entryMins(e),0);
 
   // Time-of-day pattern: morning (before 12), afternoon (12-17), evening (17+)
-  function blockHour(e) { return tzHour(e.tsStart||e.ts); }
+  function blockHour(e) { return new Date(e.tsStart||e.ts).getHours(); }
   const morning = dayE.filter(e=>blockHour(e)<12);
   const afternoon = dayE.filter(e=>blockHour(e)>=12&&blockHour(e)<17);
   const evening = dayE.filter(e=>blockHour(e)>=17);
@@ -4718,6 +4451,7 @@ function renderSettings() {
   document.getElementById('set-rate').value=settings.targetRate;
   document.getElementById('set-deepgoal').value=settings.deepGoal;
   document.getElementById('set-exitdelay').value=settings.exitDelay||10;
+  document.getElementById('set-workdaystart').value=settings.workDayStart||'09:00';
   document.getElementById('set-timezone').value=settings.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
   const toneEl = document.getElementById('set-coach-tone');
   toneEl.value = settings.coachTone || 'analyst';
@@ -4768,6 +4502,7 @@ function saveSettings(){
   settings.targetRate=parseInt(document.getElementById('set-rate').value)||250;
   settings.deepGoal=parseInt(document.getElementById('set-deepgoal').value)||20;
   settings.exitDelay=parseInt(document.getElementById('set-exitdelay').value)||10;
+  settings.workDayStart=document.getElementById('set-workdaystart').value||'09:00';
   settings.timezone=document.getElementById('set-timezone').value;
   settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
   renderTonePreview();
@@ -4813,7 +4548,7 @@ function saveReview(){
   closeModal('review-overlay');
   showToast('Review saved ✓');
 }
-function checkReviewPrompt(){if(tzHour(Date.now())>=18&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
+function checkReviewPrompt(){if(new Date().getHours()>=18&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
 
 // ══════════════════════════════════════════════════════
 // REFLECT  — insights, weekly review, history
@@ -4851,7 +4586,7 @@ function formatSavedAt(ts) {
 // DAILY SUMMARY
 // ══════════════════════════════════════════════════════
 function computeDailySummary(dateKey) {
-  const dayEntries = entries.filter(e => !e.missed && !e.deleted && getDateInTZ(e.tsStart || e.ts) === dateKey);
+  const dayEntries = entries.filter(e => e.date === dateKey && !e.missed);
   if (!dayEntries.length) return null;
 
   const totalMin = dayEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
@@ -4884,7 +4619,7 @@ function computeDailySummary(dateKey) {
   // Peak focus hour — hour with the most deep-work minutes
   const hourBuckets = {};
   dayEntries.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
-    const hr = tzHour(e.tsStart);
+    const hr = new Date(e.tsStart).getHours();
     hourBuckets[hr] = (hourBuckets[hr] || 0) + (e.blockIntervalMin || 0);
   });
   let peakHour = null, peakHourMin = 0;
@@ -5127,36 +4862,7 @@ function updateLiveCost() {
 // ══════════════════════════════════════════════════════
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 function overlayClose(e,id){if(e.target.id===id)closeModal(id);}
-let _toastTimer = null;
-function showToast(msg, withUndo) {
-  const t = document.getElementById('toast');
-  if (_toastTimer) clearTimeout(_toastTimer);
-  if (withUndo) {
-    t.innerHTML = `<span>${msg}</span><button class="toast-undo-btn" onclick="undoLastInstantLog()">Undo</button>`;
-    t.classList.add('has-undo');
-    _toastTimer = setTimeout(() => { t.classList.remove('show','has-undo'); }, 5000);
-  } else {
-    t.innerHTML = `<span>${msg}</span>`;
-    t.classList.remove('has-undo');
-    _toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
-  }
-  t.classList.add('show');
-}
-
-let _lastInstantLogId = null;
-function undoLastInstantLog() {
-  document.getElementById('toast').classList.remove('show','has-undo');
-  if (_lastInstantLogId === null) return;
-  const idx = entries.findIndex(e => e.id === _lastInstantLogId);
-  if (idx !== -1) { entries.splice(idx, 1); persist(); renderToday(); syncEntries(); }
-  _lastInstantLogId = null;
-  // Re-open the gaps modal with the restored gap
-  const gaps = computeGaps(getTodayEntries());
-  if (gaps.length) {
-    renderGapsList(gaps);
-    document.getElementById('gaps-overlay').classList.add('open');
-  }
-}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 
 function exportCSV() {
   if (!entries.length){showToast('No entries to export');return;}
@@ -5306,13 +5012,12 @@ load();
 document.getElementById('interval-input').value = settings.intervalMin;
 // If timer was restored from localStorage, resume it
 if (running && timerStartedAt) {
+  syncDerivedTimerState();
   document.getElementById('main-btn').textContent = 'Break';
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min (restored)`;
   updateTimerTaskLabel();
-  if (!ticker) ticker = setInterval(() => {
-    remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-    remaining <= 0 ? doPing() : updateRing();
-  }, 1000);
+  startUiTicker();
+  scheduleNativePing(Math.max(1, remaining));
 } else {
   totalSecs = settings.intervalMin * 60;
   remaining = totalSecs;
@@ -5401,27 +5106,18 @@ function cancelNativePing() {
 
 // Pre-fill intention from load()
 if (intention) document.getElementById('intention').value = intention;
-// Pre-fill quick retro bar: start = 30m ago, end = now
-(function(){
-  const s = document.getElementById('retro-qstart');
-  const e = document.getElementById('retro-qend');
-  if (s) s.value = tzHHMM(Date.now() - 30 * 60000);
-  if (e) e.value = tzHHMM(Date.now());
-})();
+// Pre-fill retro time with current time
+(function(){ const now = new Date(); const el = document.getElementById('retro-time'); if(el) el.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`; })();
 // Restore hero UI state on page load
 if (running && lastTaskForRepeat) {
-  taskStartTime = timerStartedAt || Date.now();
+  taskStartTime = taskStartTime || timerStartedAt || nowIso();
+  blockStartTime = blockStartTime || timerStartedAt || nowIso();
   currentTask = lastTaskForRepeat;
   document.getElementById('hero-idle').style.display = 'none';
   document.getElementById('hero-active').style.display = 'block';
   document.getElementById('hero-task-name').textContent = lastTaskForRepeat;
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min`;
-  // Restart ticker
-  clearInterval(ticker);
-  ticker = setInterval(() => {
-    remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-    remaining <= 0 ? doPing() : updateRing();
-  }, 1000);
+  startUiTicker();
 }
 updateRing();
 renderToday();
