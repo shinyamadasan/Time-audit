@@ -1051,8 +1051,16 @@ button, a, [role="button"],
 
   <!-- Quick retro log -->
   <div class="quick-retro-bar" style="flex-wrap:wrap;gap:6px">
-    <input class="quick-retro-input" id="retro-task" placeholder="What did you do?"
-      onkeydown="if(event.key==='Enter')quickRetroLog()" style="flex:1;min-width:120px">
+    <div style="position:relative;flex:1;min-width:120px">
+      <input class="quick-retro-input" id="retro-task" placeholder="What did you do?"
+        autocomplete="off"
+        onfocus="showQuickRetroSuggestions(this.value)"
+        oninput="showQuickRetroSuggestions(this.value)"
+        onblur="setTimeout(hideQuickRetroSuggestions,150)"
+        onkeydown="handleQuickRetroKey(event)"
+        style="width:100%;box-sizing:border-box">
+      <div class="hero-suggestions" id="quick-retro-suggestions" style="display:none;bottom:calc(100% + 4px);top:auto"></div>
+    </div>
     <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
       <input type="time" id="retro-qstart" class="quick-retro-sel">
       <span style="color:var(--muted);font-size:11px;user-select:none">–</span>
@@ -4166,6 +4174,65 @@ function handleRetroKey(e) {
     if (_retroSugIndex >= 0 && items[_retroSugIndex]) document.getElementById('retro-activity').value = items[_retroSugIndex].textContent;
   } else if (e.key === 'Escape') {
     hideRetroSuggestions();
+  }
+}
+
+// ── Quick-retro bar suggestions ──
+let _quickRetroSugIndex = -1;
+
+function showQuickRetroSuggestions(filter) {
+  const el = document.getElementById('quick-retro-suggestions');
+  if (!el) return;
+  const { recent, presets } = buildHeroSuggestions(filter);
+  if (!recent.length && !presets.length) { el.style.display = 'none'; return; }
+  _quickRetroSugIndex = -1;
+  let html = '';
+  if (recent.length) {
+    if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
+    html += recent.slice(0, filter ? 8 : 6).map(t =>
+      `<div class="hero-sug-item" onmousedown="selectQuickRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
+    ).join('');
+  }
+  if (presets.length) {
+    html += `<div class="hero-sug-label">Presets</div>`;
+    html += presets.map(t =>
+      `<div class="hero-sug-item" onmousedown="selectQuickRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
+    ).join('');
+  }
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+function hideQuickRetroSuggestions() {
+  const el = document.getElementById('quick-retro-suggestions');
+  if (el) el.style.display = 'none';
+  _quickRetroSugIndex = -1;
+}
+
+function selectQuickRetroSuggestion(e, task) {
+  e.preventDefault();
+  document.getElementById('retro-task').value = task;
+  hideQuickRetroSuggestions();
+}
+
+function handleQuickRetroKey(e) {
+  const el = document.getElementById('quick-retro-suggestions');
+  const items = el ? el.querySelectorAll('.hero-sug-item') : [];
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _quickRetroSugIndex = Math.min(_quickRetroSugIndex + 1, items.length - 1);
+    items.forEach((it, i) => it.style.background = i === _quickRetroSugIndex ? 'var(--deep-dim)' : '');
+    if (items[_quickRetroSugIndex]) document.getElementById('retro-task').value = items[_quickRetroSugIndex].textContent;
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _quickRetroSugIndex = Math.max(_quickRetroSugIndex - 1, -1);
+    items.forEach((it, i) => it.style.background = i === _quickRetroSugIndex ? 'var(--deep-dim)' : '');
+    if (_quickRetroSugIndex >= 0 && items[_quickRetroSugIndex]) document.getElementById('retro-task').value = items[_quickRetroSugIndex].textContent;
+  } else if (e.key === 'Escape') {
+    hideQuickRetroSuggestions();
+  } else if (e.key === 'Enter') {
+    hideQuickRetroSuggestions();
+    quickRetroLog();
   }
 }
 
