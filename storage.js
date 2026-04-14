@@ -194,7 +194,7 @@ function getWeekDays(offset=0) {
     const key = toDateKey(dt);
     const isToday = key === todayKey;
     const isFuture = key > todayKey;
-    const dayE = entries.filter(e => !e.missed && !e.away && !e.deleted && getDateInTZ(e.tsStart || e.ts, tz) === key);
+    const dayE = entries.filter(e => !e.missed && !e.deleted && getDateInTZ(e.tsStart || e.ts, tz) === key);
     const label = new Intl.DateTimeFormat('en-US', {timeZone: tz, weekday: 'short'}).format(dt);
     days.push({key, label, isToday, isFuture, hasData: dayE.length > 0, entries: dayE, date: dt});
   }
@@ -266,6 +266,8 @@ function load() {
   try { const raw = JSON.parse(localStorage.getItem('ta3-entries') || '[]'); entries = Array.isArray(raw) ? raw : Object.values(raw).filter(e=>e&&e.id); } catch(e){ entries=[]; }
   // Migrate: stamp updatedAt on any entry that's missing it (older entries)
   entries.forEach(e => { if (!e.updatedAt) e.updatedAt = e.ts || Date.now(); });
+  // Migrate: clear stale away:true on user-logged entries (old code preserved away flag on edits)
+  entries.forEach(e => { if (e.away && e.activity && e.retro) delete e.away; });
   // Migrate: rename old energy values to 9-category system
   entries.forEach(e => {
     if      (e.energy === 'distraction') e.energy = 'waste';

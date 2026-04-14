@@ -1604,7 +1604,15 @@ button, a, [role="button"],
   </div>
   <div class="field">
     <label>Activity</label>
-    <input type="text" id="retro-activity" placeholder="What were you doing?">
+    <div style="position:relative">
+      <input type="text" id="retro-activity" placeholder="What were you doing?"
+        autocomplete="off"
+        onfocus="showRetroSuggestions(this.value)"
+        oninput="showRetroSuggestions(this.value)"
+        onblur="setTimeout(hideRetroSuggestions,150)"
+        onkeydown="handleRetroKey(event)">
+      <div class="hero-suggestions" id="retro-suggestions" style="display:none"></div>
+    </div>
   </div>
   <div id="retro-chips-wrap" style="margin-bottom:12px;display:none">
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Recent</div>
@@ -2880,8 +2888,9 @@ function showLogForm() {
 
 // ── Retroactive logging ──
 let retroEnergy = '';
-let editingEntryId = null;   // id of entry being edited (null = new entry)
-let editingEntryBase = null; // { startDate, crossesMidnight } for timestamp reconstruction
+let editingEntryId = null;     // id of entry being edited (null = new entry)
+let editingMergedIds = null;  // [id, ...] when editing a merged (×N) display block
+let editingEntryBase = null;  // { startDate, crossesMidnight } for timestamp reconstruction
 function populateRetroChips() {
   // Build unique recent activities (last 10 distinct, preserving energy type)
   const seen = new Set();
@@ -2974,16 +2983,34 @@ function saveRetroEntry() {
   }
 
   if (editingEntryId !== null) {
-    // Update existing entry — if it now spans midnight, split it
-    const idx = entries.findIndex(e => e.id === editingEntryId);
-    if (idx !== -1) {
+    if (editingMergedIds && editingMergedIds.length > 1) {
+      // Merged block edit: remove all sub-entries, insert one combined entry
+      const mergedIdSet = new Set(editingMergedIds);
+      const firstId = editingMergedIds[0];
+      // Remove all sub-entries except first (we'll reuse first slot or just filter)
+      // Remove all, then push new entry/entries
+      for (let i = entries.length - 1; i >= 0; i--) {
+        if (mergedIdSet.has(entries[i].id)) entries.splice(i, 1);
+      }
       if (spansMidnight) {
-        // Replace the original with the pre-midnight part; push a new next-day entry
-        entries[idx] = makeEntry(midnight - 1, midnight, tsStart, startDateKey);
+        entries.push(makeEntry(midnight - 1, midnight, tsStart, startDateKey));
         entries.push(makeEntry(tsEnd, tsEnd, midnight, endDateKey));
       } else {
-        entries[idx] = makeEntry(entries[idx].id, tsEnd, tsStart, startDateKey);
-        entries[idx].updatedAt = Date.now();
+        entries.push(makeEntry(firstId, tsEnd, tsStart, startDateKey));
+      }
+      editingMergedIds = null;
+    } else {
+      // Update single existing entry — if it now spans midnight, split it
+      const idx = entries.findIndex(e => e.id === editingEntryId);
+      if (idx !== -1) {
+        if (spansMidnight) {
+          // Replace the original with the pre-midnight part; push a new next-day entry
+          entries[idx] = makeEntry(midnight - 1, midnight, tsStart, startDateKey);
+          entries.push(makeEntry(tsEnd, tsEnd, midnight, endDateKey));
+        } else {
+          entries[idx] = makeEntry(entries[idx].id, tsEnd, tsStart, startDateKey);
+          entries[idx].updatedAt = Date.now();
+        }
       }
     }
     editingEntryId = null;
@@ -3319,15 +3346,15 @@ function mergeConsecutiveForDisplay(sorted) {
   if (!sorted.length) return sorted;
   const MAX_GAP_MS = 5 * 60000;
   const out = [];
-  let g = { ...sorted[0], _mergeCount: 1 };
+  let g = { ...sorted[0], _mergeCount: 1, _mergedIds: [sorted[0].id] };
   for (let i = 1; i < sorted.length; i++) {
     const e = sorted[i];
     const gap = (e.tsStart || e.ts) - g.ts;
     if (e.activity === g.activity && e.energy === g.energy && gap >= 0 && gap <= MAX_GAP_MS) {
-      g = { ...g, ts: e.ts, blockIntervalMin: Math.round((e.ts - (g.tsStart || g.ts)) / 60000), _mergeCount: g._mergeCount + 1 };
+      g = { ...g, ts: e.ts, blockIntervalMin: Math.round((e.ts - (g.tsStart || g.ts)) / 60000), _mergeCount: g._mergeCount + 1, _mergedIds: [...g._mergedIds, e.id] };
     } else {
       out.push(g);
-      g = { ...e, _mergeCount: 1 };
+      g = { ...e, _mergeCount: 1, _mergedIds: [e.id] };
     }
   }
   out.push(g);
@@ -3754,9 +3781,40 @@ function openEditEntry(id) {
   setTimeout(() => document.getElementById('retro-activity').focus(), 250);
 }
 
+// Opens the edit modal for a merged (×N) display block.
+// idsStr = comma-separated string of all sub-entry IDs; tsS/tsE = full merged range timestamps.
+function openEditMergedEntry(idsStr, tsS, tsE) {
+  const ids = idsStr.split(',').map(Number);
+  const firstEntry = entries.find(e => e.id === ids[0]);
+  if (!firstEntry) return;
+
+  editingEntryId = ids[0];
+  editingMergedIds = ids;
+
+  const [sh, sm] = tzHHMM(tsS).split(':').map(Number);
+  const [eh, em] = tzHHMM(tsE).split(':').map(Number);
+  const crossesMidnight = eh * 60 + em < sh * 60 + sm;
+  editingEntryBase = { startDate: new Date(tsS), crossesMidnight };
+
+  retroEnergy = firstEntry.energy || '';
+  document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
+  if (retroEnergy) document.querySelectorAll(`#retro-overlay .energy-btn.${retroEnergy}`).forEach(b => b.classList.add('selected'));
+  document.getElementById('retro-activity').value = firstEntry.activity || '';
+  document.getElementById('retro-modal-tag').textContent = 'EDIT BLOCK';
+  document.getElementById('retro-modal-title').textContent = `Edit block (×${ids.length})`;
+  populateRetroChips();
+
+  document.getElementById('retro-start').value = tzHHMM(tsS);
+  document.getElementById('retro-end').value   = tzHHMM(tsE);
+  document.getElementById('retro-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('retro-activity').focus(), 250);
+}
+
 function cancelRetroEdit() {
   editingEntryId = null;
+  editingMergedIds = null;
   editingEntryBase = null;
+  hideRetroSuggestions();
   document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
   document.getElementById('retro-modal-title').textContent = 'What were you doing?';
   closeModal('retro-overlay');
@@ -3790,7 +3848,10 @@ function renderEntryRow(item) {
   const mergeTag = item._mergeCount > 1
     ? `<span style="font-size:10px;color:var(--muted);font-weight:600;margin-left:4px;opacity:0.7">×${item._mergeCount}</span>`
     : '';
-  return `<div class="tl-row" onclick="openEditEntry(${item.id})" style="cursor:pointer">
+  const editCall = item._mergeCount > 1
+    ? `openEditMergedEntry('${item._mergedIds.join(',')}',${item.tsStart || item.ts},${item.ts})`
+    : `openEditEntry(${item.id})`;
+  return `<div class="tl-row" onclick="${editCall}" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
@@ -4049,6 +4110,62 @@ function handleHeroKey(e) {
     hideHeroSuggestions();
   } else if (e.key === 'Enter') {
     startFromHero();
+  }
+}
+
+// ── Retro activity suggestions (same data as hero suggestions) ──
+let _retroSugIndex = -1;
+
+function showRetroSuggestions(filter) {
+  const el = document.getElementById('retro-suggestions');
+  if (!el) return;
+  const { recent, presets } = buildHeroSuggestions(filter);
+  if (!recent.length && !presets.length) { el.style.display = 'none'; return; }
+  _retroSugIndex = -1;
+  let html = '';
+  if (recent.length) {
+    if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
+    html += recent.slice(0, filter ? 8 : 6).map(t =>
+      `<div class="hero-sug-item" onmousedown="selectRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
+    ).join('');
+  }
+  if (presets.length) {
+    html += `<div class="hero-sug-label">Presets</div>`;
+    html += presets.map(t =>
+      `<div class="hero-sug-item" onmousedown="selectRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
+    ).join('');
+  }
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+function hideRetroSuggestions() {
+  const el = document.getElementById('retro-suggestions');
+  if (el) el.style.display = 'none';
+  _retroSugIndex = -1;
+}
+
+function selectRetroSuggestion(e, task) {
+  e.preventDefault();
+  document.getElementById('retro-activity').value = task;
+  hideRetroSuggestions();
+}
+
+function handleRetroKey(e) {
+  const el = document.getElementById('retro-suggestions');
+  const items = el ? el.querySelectorAll('.hero-sug-item') : [];
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _retroSugIndex = Math.min(_retroSugIndex + 1, items.length - 1);
+    items.forEach((it, i) => it.style.background = i === _retroSugIndex ? 'var(--deep-dim)' : '');
+    if (items[_retroSugIndex]) document.getElementById('retro-activity').value = items[_retroSugIndex].textContent;
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _retroSugIndex = Math.max(_retroSugIndex - 1, -1);
+    items.forEach((it, i) => it.style.background = i === _retroSugIndex ? 'var(--deep-dim)' : '');
+    if (_retroSugIndex >= 0 && items[_retroSugIndex]) document.getElementById('retro-activity').value = items[_retroSugIndex].textContent;
+  } else if (e.key === 'Escape') {
+    hideRetroSuggestions();
   }
 }
 
@@ -4738,7 +4855,7 @@ function renderWeekOverview(days) {
 }
 
 function renderDayDetail(day) {
-  const dayE = day.entries.filter(e=>!e.missed&&!e.away);
+  const dayE = day.entries.filter(e=>!e.missed);
   const deepHrs = computeDeepHrs(dayE);
   const totalMins = dayE.reduce((s,e)=>s+entryMins(e),0);
   const onPlanE = dayE.filter(e=>e.onPlan!==null);
