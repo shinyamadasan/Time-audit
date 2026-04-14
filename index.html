@@ -3170,7 +3170,7 @@ function dayEndTs(dateKey) {
 }
 function setViewDate(dateKey) {
   viewingDateKey = dateKey;
-  _todayRenderKey = ''; // force full re-render
+  _todayRenderKey = '__FORCE__'; // sentinel: forces re-render even for empty days
   renderToday();
   document.getElementById('date-picker-dropdown').style.display = 'none';
 }
@@ -3808,10 +3808,10 @@ function renderToday() {
 
   const _tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const _viewKey = getViewingDateKey();
-  const _viewTs = new Date(_viewKey + 'T12:00:00'); // noon on that day (safe for display)
+  // tzParseTime gives noon on that date in the user's own timezone — safe for Intl display
   document.getElementById('today-date').textContent = new Intl.DateTimeFormat('en-US', {
     timeZone: _tz, weekday: 'long', month: 'long', day: 'numeric'
-  }).format(_viewTs);
+  }).format(tzParseTime(_viewKey, '12:00'));
   // Show/hide "back to today" button
   const backBtn = document.getElementById('back-to-today-btn');
   if (backBtn) backBtn.style.display = isViewingToday() ? 'none' : 'inline-flex';
