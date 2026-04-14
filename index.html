@@ -172,7 +172,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .hero-input:focus{border-color:var(--deep);box-shadow:0 0 0 3px rgba(76,199,240,0.1)}
 .hero-input-wrap{position:relative;flex:1}
 .hero-input-wrap .hero-input{width:100%}
-.hero-suggestions{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);max-height:220px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,0.4)}
+.hero-suggestions{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);max-height:320px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,0.4)}
 .hero-sug-item{padding:10px 14px;font-size:13px;font-weight:500;cursor:pointer;border-bottom:1px solid var(--border);color:var(--text);transition:background 0.1s,color 0.1s}
 .hero-sug-item:last-child{border-bottom:none}
 .hero-sug-item:hover{background:var(--deep-dim);color:var(--deep)}
@@ -4055,11 +4055,10 @@ function buildHeroSuggestions(filter) {
     if (e.missed || e.away || !e.activity || e.deleted) continue;
     const key = e.activity.split(' (Output:')[0].trim();
     if (!seen.has(key)) { seen.add(key); recent.push(key); }
-    if (recent.length >= 20) break;
   }
   const presets = (settings.presets || []).map(p => p.label).filter(l => !seen.has(l));
   const all = [...recent, ...presets];
-  if (!filter) return { recent, presets: presets.slice(0, 5) };
+  if (!filter) return { recent, presets };
   const q = filter.toLowerCase();
   const matched = all.filter(t => t.toLowerCase().includes(q));
   return { recent: matched, presets: [] };
@@ -4073,7 +4072,7 @@ function showHeroSuggestions(filter) {
   let html = '';
   if (recent.length) {
     if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
-    html += recent.slice(0, filter ? 8 : 6).map(t =>
+    html += recent.map(t =>
       `<div class="hero-sug-item" onmousedown="selectHeroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
     ).join('');
   }
@@ -4133,7 +4132,7 @@ function showRetroSuggestions(filter) {
   let html = '';
   if (recent.length) {
     if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
-    html += recent.slice(0, filter ? 8 : 6).map(t =>
+    html += recent.map(t =>
       `<div class="hero-sug-item" onmousedown="selectRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
     ).join('');
   }
@@ -4189,7 +4188,7 @@ function showQuickRetroSuggestions(filter) {
   let html = '';
   if (recent.length) {
     if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
-    html += recent.slice(0, filter ? 8 : 6).map(t =>
+    html += recent.map(t =>
       `<div class="hero-sug-item" onmousedown="selectQuickRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${t}</div>`
     ).join('');
   }
