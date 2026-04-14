@@ -478,8 +478,8 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 .shake{animation:shake 0.3s ease}
 .gap-time-input{background:none;border:none;border-bottom:1px solid var(--border2);color:var(--muted);
-  font-family:var(--mono);font-size:11px;padding:2px 2px;cursor:pointer;outline:none;width:68px;
-  color-scheme:dark}
+  font-family:var(--mono);font-size:11px;padding:2px 2px;cursor:text;outline:none;width:46px;
+  text-align:center}
 .gap-time-input:focus,.gap-time-input:hover{border-bottom-color:var(--deep);color:var(--text)}
 
 .empty{padding:36px 16px;text-align:center;color:var(--muted);font-size:13px}
@@ -3391,8 +3391,9 @@ function getChunkTimes(cardIdx) {
   const dateKey     = getDateInTZ(gapTsStart, tz);
   const si = document.getElementById(`gap-start-${cardIdx}`);
   const ei = document.getElementById(`gap-end-${cardIdx}`);
-  let ts0 = si?.value ? tzParseTime(dateKey, si.value) : gapTsStart;
-  let ts1 = ei?.value ? tzParseTime(dateKey, ei.value) : gapTsEnd;
+  const isHHMM = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+  let ts0 = (si?.value && isHHMM(si.value)) ? tzParseTime(dateKey, si.value) : gapTsStart;
+  let ts1 = (ei?.value && isHHMM(ei.value)) ? tzParseTime(dateKey, ei.value) : gapTsEnd;
   if (ts1 <= ts0) ts1 += 86400000; // midnight crossing
   ts0 = Math.max(ts0, gapTsStart);
   ts1 = Math.min(ts1, gapTsEnd);
@@ -3496,7 +3497,7 @@ function renderGapsList(gaps) {
     const endVal   = tzHHMM(rawEnd);
 
     const primaryBtns = PRIMARY.map(p =>
-      `<button onmousedown="logGapChunk(${i},'${p.activity}','${p.energy}')"
+      `<button onclick="logGapChunk(${i},'${p.activity}','${p.energy}')"
         style="flex:1;padding:10px 4px;background:${p.bg};border:1px solid var(--border2);
                border-radius:8px;color:${p.color};font-family:var(--head);font-size:11px;
                font-weight:700;cursor:pointer;text-align:center;line-height:1.4">${p.label}</button>`
@@ -3505,13 +3506,13 @@ function renderGapsList(gaps) {
     const taskChips = recentTasks.map(t => {
       const safe  = t.activity.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const short = t.activity.length > 20 ? t.activity.slice(0,20) + '…' : t.activity;
-      return `<button onmousedown="logGapChunk(${i},'${safe}','${t.energy}')"
+      return `<button onclick="logGapChunk(${i},'${safe}','${t.energy}')"
         class="energy-btn ${t.energy}"
         style="padding:6px 10px;font-size:11px;font-weight:600;flex-shrink:0">${short}</button>`;
     }).join('');
 
     const awayBtns = AWAY.map(a =>
-      `<button onmousedown="logGapChunk(${i},'${a.activity}','${a.energy}')"
+      `<button onclick="logGapChunk(${i},'${a.activity}','${a.energy}')"
         style="flex:1;min-width:0;padding:6px 4px;background:var(--bg4);border:1px solid var(--border2);
                border-radius:6px;color:var(--muted);font-family:var(--head);font-size:10px;
                font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.label}</button>`
@@ -3523,11 +3524,13 @@ function renderGapsList(gaps) {
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.07em">${header}</div>
           <div style="display:flex;align-items:center;gap:4px;margin-top:4px">
-            <input type="time" id="gap-start-${i}" class="gap-time-input" value="${startVal}"
-              onchange="updateGapDuration(${i})" title="Adjust start time">
+            <input type="text" id="gap-start-${i}" class="gap-time-input" value="${startVal}"
+              placeholder="HH:MM" maxlength="5" autocomplete="off"
+              oninput="updateGapDuration(${i})" title="24h time, e.g. 14:30">
             <span style="color:var(--muted2);font-size:11px">–</span>
-            <input type="time" id="gap-end-${i}" class="gap-time-input" value="${endVal}"
-              onchange="updateGapDuration(${i})" title="Adjust end time">
+            <input type="text" id="gap-end-${i}" class="gap-time-input" value="${endVal}"
+              placeholder="HH:MM" maxlength="5" autocomplete="off"
+              oninput="updateGapDuration(${i})" title="24h time, e.g. 14:30">
           </div>
         </div>
         <div id="gap-dur-${i}" style="background:var(--distraction-dim);color:var(--distraction);
