@@ -1179,10 +1179,6 @@ button, a, [role="button"],
       <div class="setting-control"><input type="number" id="set-exitdelay" value="10" min="3" max="60" onchange="saveSettings()"></div>
     </div>
     <div class="setting-row">
-      <div><div class="setting-label">Work day starts at</div><div class="setting-sub">Gap tracking begins from this time — even with no entries</div></div>
-      <div class="setting-control"><input type="time" id="set-workdaystart" value="09:00" onchange="saveSettings()" style="width:auto"></div>
-    </div>
-    <div class="setting-row">
       <div><div class="setting-label">Work day timezone</div><div class="setting-sub">When does your day start/end — set once, syncs to all devices</div></div>
       <div class="setting-control">
         <select id="set-timezone" onchange="saveSettings()" style="width:auto;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 7px;border-radius:6px;outline:none">
@@ -1704,7 +1700,7 @@ button, a, [role="button"],
 // ══════════════════════════════════════════════════════
 let currentTask = '';
 let entries = [];
-let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workDayStart:'09:00', activityColors:{}, coachTone:'analyst' };
+let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst' };
 let reviews = {};
 let weeklyReviews = {};
 let intention = '';
@@ -3076,10 +3072,19 @@ function triggerPenaltyMode() {
 }
 
 function deleteEntry(id) {
-  entries=entries.filter(e=>e.id!==id);
-  persist(); renderToday(); renderWeek(); renderWeekTable();
-  // Explicitly remove from Firebase so it doesn't come back on the next sync
-  if (fbRoomRef && roomCode) fbDb.ref(`rooms/${roomCode}/entries/e_${id}`).remove();
+  // Tombstone instead of filter — lets Firebase and other devices know this entry is gone.
+  // Filtering it out would create a race: the sync listener sees it "missing" locally and re-adds it.
+  const entry = entries.find(e => e.id === id);
+  if (entry) {
+    entry.deleted = true;
+    entry.updatedAt = Date.now();
+  }
+  persist();
+  // Push tombstone to Firebase so other devices stop syncing this entry back
+  if (fbRoomRef && roomCode && entry) {
+    fbDb.ref(`rooms/${roomCode}/entries/e_${id}`).set(entry);
+  }
+  renderToday(); renderWeek(); renderWeekTable();
 }
 
 function startSprint() {
@@ -3154,11 +3159,12 @@ function getIdentityLevelWithEmoji(score) {
   return "Drifting 🔴";
 }
 
-// Returns today's work day start as a Unix timestamp
+// Returns today's work day start as a Unix timestamp.
+// Anchored to the first real entry of the day so entries logged at any hour are covered.
 function getWorkDayStartTs() {
-  const [h, m] = (settings.workDayStart || '09:00').split(':').map(Number);
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0).getTime();
+  const todayEntries = getTodayEntries().filter(e => !e.missed && (e.tsStart || e.ts));
+  if (!todayEntries.length) return Date.now(); // no entries yet → no gaps to show
+  return Math.min(...todayEntries.map(e => e.tsStart || e.ts));
 }
 
 // ── Overlap clipping: display-only shallow copies, earlier block clipped to next block's start ──
@@ -4379,7 +4385,6 @@ function renderSettings() {
   document.getElementById('set-rate').value=settings.targetRate;
   document.getElementById('set-deepgoal').value=settings.deepGoal;
   document.getElementById('set-exitdelay').value=settings.exitDelay||10;
-  document.getElementById('set-workdaystart').value=settings.workDayStart||'09:00';
   document.getElementById('set-timezone').value=settings.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
   const toneEl = document.getElementById('set-coach-tone');
   toneEl.value = settings.coachTone || 'analyst';
@@ -4430,7 +4435,6 @@ function saveSettings(){
   settings.targetRate=parseInt(document.getElementById('set-rate').value)||250;
   settings.deepGoal=parseInt(document.getElementById('set-deepgoal').value)||20;
   settings.exitDelay=parseInt(document.getElementById('set-exitdelay').value)||10;
-  settings.workDayStart=document.getElementById('set-workdaystart').value||'09:00';
   settings.timezone=document.getElementById('set-timezone').value;
   settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
   renderTonePreview();

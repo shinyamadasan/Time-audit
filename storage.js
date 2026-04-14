@@ -83,13 +83,13 @@ function toDateKey(d) {
 
 function getTodayEntries() {
   const k = toDateKey(new Date());
-  return entries.filter(e => e.date === k);
+  return entries.filter(e => e.date === k && !e.deleted);
 }
 
 function getWeekEntries(offset=0) {
   const days = getWeekDays(offset);
   const keys = new Set(days.map(d => d.key));
-  return entries.filter(e => keys.has(e.date));
+  return entries.filter(e => keys.has(e.date) && !e.deleted);
 }
 
 function getWeekDays(offset=0) {
@@ -105,7 +105,7 @@ function getWeekDays(offset=0) {
     const key = toDateKey(d);
     const isToday = key === toDateKey(new Date());
     const isFuture = d > today;
-    const dayE = entries.filter(e => e.date === key && !e.missed && !e.away);
+    const dayE = entries.filter(e => e.date === key && !e.missed && !e.away && !e.deleted);
     days.push({key, label:DAY[d.getDay()]||'?', isToday, isFuture, hasData:dayE.length>0, entries:dayE, date:d});
   }
   return days;
@@ -122,7 +122,7 @@ function getWeekKey(d) {
 
 function getEntriesForWeekKey(weekKey) {
   return entries.filter(e => {
-    if (!e.date) return false;
+    if (!e.date || e.deleted) return false;
     const d = new Date(e.date + 'T12:00:00');
     return getWeekKey(d) === weekKey;
   });
@@ -134,7 +134,7 @@ function getMonthEntries(offset=0) {
   const year = d.getFullYear(), month = d.getMonth();
   return entries.filter(e => {
     const ed = new Date(e.ts);
-    return ed.getFullYear()===year && ed.getMonth()===month && !e.missed && !e.away;
+    return ed.getFullYear()===year && ed.getMonth()===month && !e.missed && !e.away && !e.deleted;
   });
 }
 
@@ -406,12 +406,13 @@ function startSync() {
       if (!re || !re.id) return;
       const local = localMap.get(re.id);
       if (!local) {
-        // New entry from remote — add it
+        // New entry from remote — skip tombstones, add live entries
+        if (re.deleted) return;
         if (!re.updatedAt) re.updatedAt = re.ts || Date.now();
         entries.push(re);
         changed = true;
       } else {
-        // Conflict: prefer whichever version is newer
+        // Conflict: prefer whichever version is newer (deleted flag propagates too)
         const remoteV = re.updatedAt || re.ts || 0;
         const localV  = local.updatedAt || local.ts || 0;
         if (remoteV > localV) {
