@@ -3519,7 +3519,11 @@ function renderToday() {
     } else {
       // Sort chronologically, clip overlaps, then interleave gaps
       const sorted  = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-      const clipped = clipOverlapsForDisplay(sorted);
+      const clipped = clipOverlapsForDisplay(sorted).filter(e => {
+        // Drop entries that were clipped down to 0 minutes — they're invisible and confusing
+        const dur = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 1);
+        return dur > 0;
+      });
       const gaps    = computeGaps(todayE);
       const combined = [...clipped, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
       tlEl.innerHTML = renderTimelineCombined(combined);
@@ -3558,7 +3562,8 @@ function renderToday() {
       return;
     }
 
-    listEl.innerHTML = todayE.slice(0, 6).map(e => {
+    const sortedRecent = [...todayE].sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
+    listEl.innerHTML = sortedRecent.slice(0, 6).map(e => {
   const duration = e.segments
     ? Math.round(e.segments.reduce((sum, s) => sum + s.duration, 0) / 60)
     : e.tsStart
