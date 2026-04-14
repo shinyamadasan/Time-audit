@@ -266,7 +266,7 @@ function generateInsights(data) {
 
   // 2. Dominant category
   const cats = {
-    'Deep work': deep, 'Shallow work': shallow, 'Scheduled': nine5,
+    'Deep work': deep, 'Shallow work': shallow, 'Scheduled work': nine5,
     Errands: errands, Learning: learning, Exercise: exercise,
     Social: social, Recovery: recovery, Waste: waste
   };
@@ -563,7 +563,7 @@ function buildDailySummaryHTML(s) {
       </div>
     </div>
     <div class="ds-split-label">
-      <span>Deep · Shallow · Scheduled · Errands · Learning · Exercise · Social · Recovery · Waste</span>
+      <span>Deep · Shallow · Scheduled work · Errands · Learning · Exercise · Social · Recovery · Waste</span>
       <span>${fmtDur(s.totalMin)} tracked</span>
     </div>
     <div class="ds-split-bar">${splitBar}</div>
