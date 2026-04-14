@@ -3680,7 +3680,7 @@ function logAwayBlock(tsStart, tsEnd, activity, energy, gapIndex) {
 
 function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
   editingEntryId = null;
-  editingEntryBase = null;
+  editingEntryBase = { startDate: new Date(tsStart), crossesMidnight: false };
   document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
   document.getElementById('retro-modal-title').textContent = 'What were you doing?';
   retroEnergy = '';
