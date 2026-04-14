@@ -371,12 +371,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .focus-overlay{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:12px;opacity:0;pointer-events:none;transition:opacity 0.3s;padding:24px}
 .focus-overlay.open{opacity:1;pointer-events:all}
-.focus-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted)}
-.focus-intention-text{font-size:22px;color:var(--text);text-align:center;max-width:340px;font-weight:700;line-height:1.3}
+.focus-label{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted)}
+.focus-intention-text{font-size:26px;color:var(--text);text-align:center;max-width:340px;font-weight:700;line-height:1.3}
 .focus-countdown-big{font-family:var(--mono);font-size:108px;font-weight:500;color:var(--text);letter-spacing:-4px;line-height:1}
-.focus-next{font-size:13px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)}
-.focus-task-input{background:none;border:none;border-bottom:1px solid var(--border2);color:var(--text);font-size:20px;font-weight:600;text-align:center;width:100%;max-width:340px;padding:6px 0;outline:none;font-family:var(--head)}
-.focus-task-input::placeholder{color:var(--muted)}
+.focus-next{font-size:15px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)}
+.focus-task-input{background:none;border:none;border-bottom:2px solid var(--border2);color:var(--text);font-size:24px;font-weight:700;text-align:center;width:100%;max-width:360px;padding:8px 0;outline:none;font-family:var(--head)}
+.focus-task-input:focus{border-bottom-color:var(--deep)}
+.focus-task-input::placeholder{color:var(--muted);font-weight:400}
 .focus-exit-wrap{position:absolute;top:calc(var(--safe-top) + 16px);right:16px}
 .focus-exit-countdown{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;margin-top:4px}
 
@@ -1560,23 +1561,23 @@ button, a, [role="button"],
   <div class="focus-next" id="focus-phase-sub">work session</div>
 
   <!-- Editable settings (shown when idle) -->
-  <div id="focus-settings-row" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-top:10px">
+  <div id="focus-settings-row" style="display:flex;align-items:center;gap:10px;font-size:15px;color:var(--muted);margin-top:14px">
     <span>Work</span>
     <input type="number" id="pomo-work-min" value="25" min="1" max="120"
-      style="width:42px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:6px;padding:4px 6px;font-size:13px;text-align:center">
+      style="width:52px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:8px;padding:6px 8px;font-size:16px;text-align:center">
     <span>min · Break</span>
     <input type="number" id="pomo-break-min" value="5" min="1" max="60"
-      style="width:42px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:6px;padding:4px 6px;font-size:13px;text-align:center">
+      style="width:52px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:8px;padding:6px 8px;font-size:16px;text-align:center">
     <span>min</span>
   </div>
 
   <!-- Deep work progress bar -->
-  <div style="width:100%;max-width:280px;margin-top:18px">
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px">
+  <div style="width:100%;max-width:300px;margin-top:20px">
+    <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:6px">
       <span>Deep work today</span>
       <span id="focus-deep-label">0 / 0 blocks</span>
     </div>
-    <div style="background:var(--bg3);border-radius:99px;height:5px;overflow:hidden">
+    <div style="background:var(--bg3);border-radius:99px;height:6px;overflow:hidden">
       <div id="focus-deep-bar" style="height:100%;background:var(--deep);border-radius:99px;width:0%;transition:width 0.5s"></div>
     </div>
   </div>
@@ -2630,10 +2631,11 @@ function enterFocusMode() {
   pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min')?.value) || 25;
   pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min')?.value) || 5;
 
-  // Pre-fill task input with current task if available
+  // Always start with empty input — user should consciously name their focus session
   const taskInput = document.getElementById('focus-task-input');
-  taskInput.value = currentTask || intention || '';
+  taskInput.value = '';
   taskInput.style.display = 'block';
+  setTimeout(() => taskInput.focus(), 300);
   document.getElementById('focus-intention-text').style.display = 'none';
 
   document.getElementById('focus-overlay').classList.add('open');
