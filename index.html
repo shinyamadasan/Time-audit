@@ -1025,16 +1025,11 @@ button, a, [role="button"],
   <div class="quick-retro-bar" style="flex-wrap:wrap;gap:6px">
     <input class="quick-retro-input" id="retro-task" placeholder="What did you do?"
       onkeydown="if(event.key==='Enter')quickRetroLog()" style="flex:1;min-width:120px">
-    <input type="time" id="retro-time" class="quick-retro-sel" style="flex-shrink:0">
-    <select class="quick-retro-sel" id="retro-dur">
-      <option value="15">15m</option>
-      <option value="30" selected>30m</option>
-      <option value="45">45m</option>
-      <option value="60">1h</option>
-      <option value="90">1h 30m</option>
-      <option value="120">2h</option>
-      <option value="180">3h</option>
-    </select>
+    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+      <input type="time" id="retro-qstart" class="quick-retro-sel">
+      <span style="color:var(--muted);font-size:11px;user-select:none">–</span>
+      <input type="time" id="retro-qend" class="quick-retro-sel">
+    </div>
     <button class="btn sm primary" onclick="quickRetroLog()">Log</button>
   </div>
 
@@ -3797,20 +3792,27 @@ function quickRetroLog() {
   const taskInput = document.getElementById('retro-task');
   const task = taskInput.value.trim();
   if (!task) { showToast('What did you do?'); taskInput.focus(); return; }
-  const dur = parseInt(document.getElementById('retro-dur').value) || 30;
-  const timeVal = document.getElementById('retro-time').value; // "HH:MM"
-  let tsStart;
-  if (timeVal) {
-    const [h, m] = timeVal.split(':').map(Number);
-    const d = new Date();
-    d.setHours(h, m, 0, 0);
-    tsStart = d.getTime();
-    // If the time is in the future, assume it was yesterday
-    if (tsStart > Date.now()) tsStart -= 86400000;
+
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const startVal = document.getElementById('retro-qstart').value; // "HH:MM"
+  const endVal   = document.getElementById('retro-qend').value;   // "HH:MM"
+
+  let tsStart, tsEnd;
+  if (startVal && endVal) {
+    tsStart = tzParseTime(todayKey, startVal);
+    tsEnd   = tzParseTime(todayKey, endVal);
+    if (tsEnd <= tsStart) tsEnd += 86400000; // midnight crossing
+  } else if (startVal) {
+    tsStart = tzParseTime(todayKey, startVal);
+    tsEnd   = Math.min(Date.now(), tsStart + 30 * 60000);
+    if (tsEnd <= tsStart) tsEnd = tsStart + 30 * 60000;
   } else {
-    tsStart = Date.now() - dur * 60000;
+    tsEnd   = Date.now();
+    tsStart = tsEnd - 30 * 60000;
   }
-  const tsEnd = tsStart + dur * 60000;
+  const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
+
   const entry = {
     id: tsEnd, ts: tsEnd, tsStart,
     blockIntervalMin: dur,
@@ -3824,7 +3826,11 @@ function quickRetroLog() {
   entries.sort((a, b) => b.ts - a.ts);
   persist(); renderToday(); syncEntries();
   taskInput.value = '';
-  document.getElementById('retro-time').value = '';
+  // Reset times to a fresh window ending at now
+  const nowStr = tzHHMM(Date.now());
+  const thirtyAgoStr = tzHHMM(Date.now() - 30 * 60000);
+  document.getElementById('retro-qstart').value = thirtyAgoStr;
+  document.getElementById('retro-qend').value   = nowStr;
   showToast(`Logged: ${task} · ${fmtDur(dur)}`);
 }
 
@@ -5168,8 +5174,13 @@ function cancelNativePing() {
 
 // Pre-fill intention from load()
 if (intention) document.getElementById('intention').value = intention;
-// Pre-fill retro time with current time
-(function(){ const el = document.getElementById('retro-time'); if(el) el.value = tzHHMM(Date.now()); })();
+// Pre-fill quick retro bar: start = 30m ago, end = now
+(function(){
+  const s = document.getElementById('retro-qstart');
+  const e = document.getElementById('retro-qend');
+  if (s) s.value = tzHHMM(Date.now() - 30 * 60000);
+  if (e) e.value = tzHHMM(Date.now());
+})();
 // Restore hero UI state on page load
 if (running && lastTaskForRepeat) {
   taskStartTime = timerStartedAt || Date.now();
