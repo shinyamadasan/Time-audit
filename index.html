@@ -477,6 +477,10 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   font-weight:700;cursor:pointer;padding:0;flex-shrink:0}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 .shake{animation:shake 0.3s ease}
+.gap-time-input{background:none;border:none;border-bottom:1px solid var(--border2);color:var(--muted);
+  font-family:var(--mono);font-size:11px;padding:2px 2px;cursor:pointer;outline:none;width:68px;
+  color-scheme:dark}
+.gap-time-input:focus,.gap-time-input:hover{border-bottom-color:var(--deep);color:var(--text)}
 
 .empty{padding:36px 16px;text-align:center;color:var(--muted);font-size:13px}
 .empty-icon{font-size:26px;margin-bottom:6px;display:block}
@@ -3376,8 +3380,41 @@ function logInstantBlock(tsStart, tsEnd, activity, energy, gapIndex) {
   }
 }
 
-// Expand the "Type activity..." button into an inline input within the gap card
-function expandGapInput(cardIdx, ts0, ts1) {
+// Read the current (possibly user-adjusted) time range for a gap card.
+// Falls back to the original gap bounds stored as data attributes.
+function getChunkTimes(cardIdx) {
+  const card = document.getElementById(`gap-item-${cardIdx}`);
+  if (!card) return null;
+  const tz          = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const gapTsStart  = parseInt(card.dataset.tsStart);
+  const gapTsEnd    = card.dataset.isCurrent === 'true' ? Date.now() : parseInt(card.dataset.tsEnd);
+  const dateKey     = getDateInTZ(gapTsStart, tz);
+  const si = document.getElementById(`gap-start-${cardIdx}`);
+  const ei = document.getElementById(`gap-end-${cardIdx}`);
+  let ts0 = si?.value ? tzParseTime(dateKey, si.value) : gapTsStart;
+  let ts1 = ei?.value ? tzParseTime(dateKey, ei.value) : gapTsEnd;
+  if (ts1 <= ts0) ts1 += 86400000; // midnight crossing
+  ts0 = Math.max(ts0, gapTsStart);
+  ts1 = Math.min(ts1, gapTsEnd);
+  return { ts0, ts1 };
+}
+
+function updateGapDuration(cardIdx) {
+  const t = getChunkTimes(cardIdx);
+  if (!t) return;
+  const dur = Math.max(0, Math.round((t.ts1 - t.ts0) / 60000));
+  const badge = document.getElementById(`gap-dur-${cardIdx}`);
+  if (badge) badge.textContent = fmtDur(dur);
+}
+
+function logGapChunk(cardIdx, activity, energy) {
+  const t = getChunkTimes(cardIdx);
+  if (!t) return;
+  if (t.ts1 <= t.ts0) { showToast('End time must be after start time'); return; }
+  logInstantBlock(t.ts0, t.ts1, activity, energy, cardIdx);
+}
+
+function expandGapInput(cardIdx) {
   const wrap = document.getElementById(`gap-type-wrap-${cardIdx}`);
   if (!wrap) return;
   const CATS = [
@@ -3387,13 +3424,13 @@ function expandGapInput(cardIdx, ts0, ts1) {
   ];
   wrap.innerHTML = `
     <input id="gap-inline-${cardIdx}" type="text" placeholder="e.g. Gym, Reading, Cooking…"
-      onkeydown="handleGapInlineKey(event,${cardIdx},${ts0},${ts1})"
+      onkeydown="handleGapInlineKey(event,${cardIdx})"
       style="width:100%;padding:10px 12px;background:var(--bg4);border:1.5px solid var(--deep);
              border-radius:8px;color:var(--text);font-family:var(--head);font-size:13px;
              outline:none;margin-bottom:8px;display:block">
     <div style="display:flex;gap:6px">
       ${CATS.map(p =>
-        `<button onmousedown="logGapInlineEntry(${cardIdx},${ts0},${ts1},'${p.e}')"
+        `<button onmousedown="logGapInlineEntry(${cardIdx},'${p.e}')"
           style="flex:1;padding:8px 4px;background:${p.bg};border:1px solid var(--border2);
                  border-radius:8px;color:${p.c};font-family:var(--head);font-size:11px;
                  font-weight:700;cursor:pointer;text-align:center">${p.label}</button>`
@@ -3402,12 +3439,12 @@ function expandGapInput(cardIdx, ts0, ts1) {
   setTimeout(() => document.getElementById(`gap-inline-${cardIdx}`)?.focus(), 30);
 }
 
-function handleGapInlineKey(event, cardIdx, ts0, ts1) {
-  if (event.key === 'Enter') { event.preventDefault(); logGapInlineEntry(cardIdx, ts0, ts1, 'shallow'); }
+function handleGapInlineKey(event, cardIdx) {
+  if (event.key === 'Enter') { event.preventDefault(); logGapInlineEntry(cardIdx, 'shallow'); }
   if (event.key === 'Escape') renderGapsList(computeGaps(getTodayEntries()));
 }
 
-function logGapInlineEntry(cardIdx, ts0, ts1, energy) {
+function logGapInlineEntry(cardIdx, energy) {
   const input = document.getElementById(`gap-inline-${cardIdx}`);
   const activity = input?.value.trim();
   if (!activity) {
@@ -3416,7 +3453,7 @@ function logGapInlineEntry(cardIdx, ts0, ts1, energy) {
     input?.focus();
     return;
   }
-  logInstantBlock(ts0, ts1, activity, energy, cardIdx);
+  logGapChunk(cardIdx, activity, energy);
 }
 
 function renderGapsList(gaps) {
@@ -3451,14 +3488,15 @@ function renderGapsList(gaps) {
   ];
 
   document.getElementById('gaps-list').innerHTML = chunks.map((g, i) => {
-    const ts0      = g.tsStart;
-    const ts1      = Math.round(g.isCurrent ? Date.now() : g.ts);
-    const endLabel = g.isCurrent ? 'now' : tzTime(g.ts);
+    const isCur    = g.isCurrent;
+    const rawEnd   = Math.round(isCur ? Date.now() : g.ts);
     const header   = g.periodName || 'Untracked';
     const durLabel = fmtDur(g.gapMin);
+    const startVal = tzHHMM(g.tsStart);
+    const endVal   = tzHHMM(rawEnd);
 
     const primaryBtns = PRIMARY.map(p =>
-      `<button onmousedown="logInstantBlock(${ts0},${ts1},'${p.activity}','${p.energy}',${i})"
+      `<button onmousedown="logGapChunk(${i},'${p.activity}','${p.energy}')"
         style="flex:1;padding:10px 4px;background:${p.bg};border:1px solid var(--border2);
                border-radius:8px;color:${p.color};font-family:var(--head);font-size:11px;
                font-weight:700;cursor:pointer;text-align:center;line-height:1.4">${p.label}</button>`
@@ -3467,26 +3505,33 @@ function renderGapsList(gaps) {
     const taskChips = recentTasks.map(t => {
       const safe  = t.activity.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const short = t.activity.length > 20 ? t.activity.slice(0,20) + '…' : t.activity;
-      return `<button onmousedown="logInstantBlock(${ts0},${ts1},'${safe}','${t.energy}',${i})"
+      return `<button onmousedown="logGapChunk(${i},'${safe}','${t.energy}')"
         class="energy-btn ${t.energy}"
         style="padding:6px 10px;font-size:11px;font-weight:600;flex-shrink:0">${short}</button>`;
     }).join('');
 
     const awayBtns = AWAY.map(a =>
-      `<button onmousedown="logInstantBlock(${ts0},${ts1},'${a.activity}','${a.energy}',${i})"
+      `<button onmousedown="logGapChunk(${i},'${a.activity}','${a.energy}')"
         style="flex:1;min-width:0;padding:6px 4px;background:var(--bg4);border:1px solid var(--border2);
                border-radius:6px;color:var(--muted);font-family:var(--head);font-size:10px;
                font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.label}</button>`
     ).join('');
 
-    return `<div id="gap-item-${i}" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden">
+    return `<div id="gap-item-${i}" data-ts-start="${g.tsStart}" data-ts-end="${rawEnd}" data-is-current="${isCur}"
+        style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;gap:10px">
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.07em">${header}</div>
-          <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">${tzTime(g.tsStart)} – ${endLabel}</div>
+          <div style="display:flex;align-items:center;gap:4px;margin-top:4px">
+            <input type="time" id="gap-start-${i}" class="gap-time-input" value="${startVal}"
+              onchange="updateGapDuration(${i})" title="Adjust start time">
+            <span style="color:var(--muted2);font-size:11px">–</span>
+            <input type="time" id="gap-end-${i}" class="gap-time-input" value="${endVal}"
+              onchange="updateGapDuration(${i})" title="Adjust end time">
+          </div>
         </div>
-        <div style="background:var(--distraction-dim);color:var(--distraction);font-size:12px;font-weight:700;
-                    padding:4px 12px;border-radius:999px;flex-shrink:0">${durLabel}</div>
+        <div id="gap-dur-${i}" style="background:var(--distraction-dim);color:var(--distraction);
+             font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;flex-shrink:0">${durLabel}</div>
       </div>
       <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 8px">What were you mostly doing?</div>
@@ -3497,7 +3542,7 @@ function renderGapsList(gaps) {
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 6px">Or specifically:</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${taskChips}</div>
         <div id="gap-type-wrap-${i}">
-          <button onmousedown="expandGapInput(${i},${ts0},${ts1})"
+          <button onmousedown="expandGapInput(${i})"
             style="width:100%;padding:8px;background:none;border:1px solid var(--border2);
                    border-radius:6px;color:var(--muted);font-family:var(--head);font-size:11px;
                    font-weight:600;cursor:pointer">+ Type activity...</button>
@@ -3505,7 +3550,7 @@ function renderGapsList(gaps) {
       </div>` : `
       <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
         <div id="gap-type-wrap-${i}">
-          <button onmousedown="expandGapInput(${i},${ts0},${ts1})"
+          <button onmousedown="expandGapInput(${i})"
             style="width:100%;padding:10px;background:var(--bg4);border:1px solid var(--border2);
                    border-radius:6px;color:var(--text);font-family:var(--head);font-size:12px;
                    font-weight:600;cursor:pointer">+ Type activity...</button>
