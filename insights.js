@@ -22,7 +22,7 @@ function analyzeBehavior(entry, todayE) {
   const totalMin = real.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
   const deepPct  = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
   const distPct  = totalMin > 0 ? Math.round(distMin / totalMin * 100) : 0;
-  const hour     = new Date().getHours();
+  const hour     = tzHour(Date.now());
 
   // ── How many consecutive entries from the top (most recent) are waste? ──
   let distStreak = 0;
@@ -254,7 +254,7 @@ function generateInsights(data) {
   const parts = [
     deep     > 0 ? `deep work (${fmt(deep)})`       : null,
     shallow  > 0 ? `shallow work (${fmt(shallow)})`  : null,
-    nine5    > 0 ? `9-5 (${fmt(nine5)})`             : null,
+    nine5    > 0 ? `scheduled (${fmt(nine5)})`        : null,
     errands  > 0 ? `errands (${fmt(errands)})`        : null,
     learning > 0 ? `learning (${fmt(learning)})`      : null,
     exercise > 0 ? `exercise (${fmt(exercise)})`      : null,
@@ -266,7 +266,7 @@ function generateInsights(data) {
 
   // 2. Dominant category
   const cats = {
-    'Deep work': deep, 'Shallow work': shallow, '9-5': nine5,
+    'Deep work': deep, 'Shallow work': shallow, 'Scheduled': nine5,
     Errands: errands, Learning: learning, Exercise: exercise,
     Social: social, Recovery: recovery, Waste: waste
   };
@@ -303,7 +303,7 @@ function renderAwarenessSignal() {
 
   const todayE = getTodayEntries().filter(e => !e.missed);
   const tone   = settings.coachTone || 'analyst';
-  const hour   = new Date().getHours();
+  const hour   = tzHour(Date.now());
 
   if (!todayE.length && hour < 10) { el.style.display = 'none'; return; }
 
@@ -319,7 +319,7 @@ function renderAwarenessSignal() {
   // Peak focus hour
   const hourBuckets = {};
   real.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
-    const h = new Date(e.tsStart).getHours();
+    const h = tzHour(e.tsStart);
     hourBuckets[h] = (hourBuckets[h] || 0) + (e.blockIntervalMin || 0);
   });
   let peakHour = null, peakHourMin = 0;
@@ -563,7 +563,7 @@ function buildDailySummaryHTML(s) {
       </div>
     </div>
     <div class="ds-split-label">
-      <span>Deep · Shallow · 9-5 · Errands · Learning · Exercise · Social · Recovery · Waste</span>
+      <span>Deep · Shallow · Scheduled · Errands · Learning · Exercise · Social · Recovery · Waste</span>
       <span>${fmtDur(s.totalMin)} tracked</span>
     </div>
     <div class="ds-split-bar">${splitBar}</div>
@@ -614,7 +614,7 @@ function computeInsights(weekKey) {
   // Peak focus hour
   const hourBuckets = {};
   we.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
-    const hr = new Date(e.tsStart).getHours();
+    const hr = tzHour(e.tsStart);
     hourBuckets[hr] = (hourBuckets[hr] || 0) + (e.blockIntervalMin || 0);
   });
   let peakHour = null, peakMin = 0;
