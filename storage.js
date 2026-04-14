@@ -135,6 +135,12 @@ function tzParseTime(dateKey, hhmm) {
     ts += diff;
     if (diff === 0) break;
   }
+  // For UTC+ timezones the naive guess can converge to the right wall-clock time
+  // but on the wrong calendar date (one day ahead). Detect and correct.
+  const landed = getDateInTZ(ts);
+  if (landed !== dateKey) {
+    ts += (landed < dateKey ? 1 : -1) * 24 * 60 * 60 * 1000;
+  }
   return ts;
 }
 
