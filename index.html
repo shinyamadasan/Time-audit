@@ -4730,7 +4730,10 @@ function quickRetroLog() {
   const spansMidnight = startDateKey !== endDateKey;
   const midnight = spansMidnight ? tzParseTime(endDateKey, '00:00') : null;
 
-  const learnedEng = (settings.learnedEnergy || {})[task] || 'shallow';
+  // Energy resolution: 1) learned waste/distraction pattern, 2) most recent entry for same activity, 3) shallow
+  const _learnedWaste = (settings.learnedEnergy || {})[task];
+  const _prevEntry = !_learnedWaste ? entries.find(e => !e.missed && !e.deleted && e.activity === task && e.energy) : null;
+  const learnedEng = _learnedWaste || (_prevEntry ? _prevEntry.energy : null) || 'shallow';
 
   function makeQEntry(id, ts, tsS, dateKey) {
     const blkDur = Math.round((ts - tsS) / 60000);
