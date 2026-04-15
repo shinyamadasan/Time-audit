@@ -5674,23 +5674,31 @@ function openReflectionsHistory() {
   const el = document.getElementById('reflections-history-list');
   if (!el) return;
 
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+
   const days = [];
   for (let i = 0; i < 30; i++) {
-    const d = new Date(Date.now() - i * 86400000);
-    const k = toDateKey(d);
-    days.push({ key: k, date: d, r: reviews[k] || null });
+    const k = getDateInTZ(Date.now() - i * 86400000, tz);
+    days.push({ key: k, r: reviews[k] || null });
   }
-  const hasDays = days.some(d => d.r);
 
-  if (!hasDays) {
+  // Use settings.timezone for all label formatting — never device local time
+  const fmt = k => {
+    const [y, m, d] = k.split('-').map(Number);
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, weekday: 'short', month: 'short', day: 'numeric'
+    }).format(new Date(y, m - 1, d, 12, 0, 0)); // noon local avoids DST edge
+  };
+
+  const hasContent = days.some(d => d.r || computeDailySummary(d.key));
+  if (!hasContent) {
     el.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:8px 0">No reflections yet. Complete your first review tonight.</div>`;
   } else {
-    const fmt = d => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    const todayKey = toDateKey(new Date());
 
     el.innerHTML = days.map(({ key, date, r }) => {
       const isToday = key === todayKey;
-      const label = isToday ? 'Today' : fmt(date);
+      const label = isToday ? `Today · ${fmt(key)}` : fmt(key);
       const s = computeDailySummary(key);
       const statsHtml = s
         ? `<span style="font-family:var(--mono);font-size:11px;color:var(--deep)">${s.deepHrs}h deep</span>
@@ -5746,7 +5754,8 @@ function renderYesterdayPromise() {
 
   if (!isViewingToday()) { el.style.display = 'none'; return; }
 
-  const yesterdayKey = toDateKey(new Date(Date.now() - 86400000));
+  const _tz2 = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const yesterdayKey = getDateInTZ(Date.now() - 86400000, _tz2);
   const r = reviews[yesterdayKey];
   const promise = r?.tomorrow?.trim();
   const waste   = r?.waste?.trim();
