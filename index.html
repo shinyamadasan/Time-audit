@@ -833,6 +833,13 @@ button, a, [role="button"],
 .signal-item-body{flex:1}
 .signal-item-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:2px}
 
+/* ── AI category hint ── */
+.ai-hint{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-top:7px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:999px;cursor:pointer;transition:border-color 0.15s}
+.ai-hint:hover{border-color:var(--border2)}
+.ai-hint-spark{font-size:10px;opacity:0.7}
+.ai-hint-cat{font-weight:600}
+.ai-hint-change{font-size:10px;color:var(--muted2);margin-left:2px}
+
 /* ── Yesterday's accountability card ── */
 .promise-banner{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:14px 15px;margin-bottom:12px}
 .promise-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
@@ -1094,7 +1101,7 @@ button, a, [role="button"],
       <input class="quick-retro-input" id="retro-task" placeholder="What did you do?"
         autocomplete="off"
         onfocus="showQuickRetroSuggestions(this.value)"
-        oninput="showQuickRetroSuggestions(this.value)"
+        oninput="showQuickRetroSuggestions(this.value);aiTrigger(this.value,'quick')"
         onblur="setTimeout(hideQuickRetroSuggestions,150)"
         onkeydown="handleQuickRetroKey(event)"
         style="width:100%;box-sizing:border-box">
@@ -1107,6 +1114,7 @@ button, a, [role="button"],
     </div>
     <button class="btn sm primary" onclick="quickRetroLog()">Log</button>
   </div>
+  <div id="quick-ai-hint" style="display:none;margin-bottom:8px"></div>
 
   <!-- Awareness Signal -->
   <div id="awareness-signal" style="display:none"></div>
@@ -1313,6 +1321,21 @@ button, a, [role="button"],
       </div>
     </div>
     <div id="coach-tone-preview" style="font-size:11px;color:var(--muted);font-style:italic;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"></div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-title">AI features</div>
+    <div class="setting-row" style="border-bottom:none">
+      <div>
+        <div class="setting-label">Gemini API key</div>
+        <div class="setting-sub">Free at aistudio.google.com · enables auto-category</div>
+      </div>
+      <div class="setting-control">
+        <input type="password" id="set-gemini-key" placeholder="AIza…" onchange="saveSettings()"
+          style="width:110px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 7px;border-radius:6px;outline:none">
+      </div>
+    </div>
+    <div id="ai-key-status" style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic"></div>
   </div>
 
   <div class="settings-section">
@@ -1526,7 +1549,7 @@ button, a, [role="button"],
   <div class="field">
     <label>Activity</label>
     <div style="display:flex;gap:6px">
-      <input type="text" id="f-activity" placeholder="or type it here…" style="flex:1">
+      <input type="text" id="f-activity" placeholder="or type it here…" style="flex:1" oninput="aiTrigger(this.value,'log')">
       <button class="voice-btn" id="voice-btn" onclick="startVoiceLog()" title="Voice input">🎤</button>
     </div>
   </div>
@@ -1542,6 +1565,7 @@ button, a, [role="button"],
     <button class="energy-btn recovery" onclick="setEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, sleep</span></button>
     <button class="energy-btn waste" onclick="setEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
   </div>
+  <div id="log-ai-hint" style="display:none"></div>
   <button class="detail-toggle" onclick="toggleDetail()"><span id="detail-arrow">▸</span> Add detail (DEA-P, $/hr)</button>
   <div class="detail-body" id="detail-body">
     <div class="field-row">
@@ -1677,7 +1701,7 @@ button, a, [role="button"],
       <input type="text" id="retro-activity" placeholder="What were you doing?"
         autocomplete="off"
         onfocus="showRetroSuggestions(this.value)"
-        oninput="showRetroSuggestions(this.value)"
+        oninput="showRetroSuggestions(this.value);aiTrigger(this.value,'retro')"
         onblur="setTimeout(hideRetroSuggestions,150)"
         onkeydown="handleRetroKey(event)">
       <div class="hero-suggestions" id="retro-suggestions" style="display:none"></div>
@@ -1699,6 +1723,7 @@ button, a, [role="button"],
     <button class="energy-btn recovery" onclick="setRetroEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, sleep</span></button>
     <button class="energy-btn waste" onclick="setRetroEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
   </div>
+  <div id="retro-ai-hint" style="display:none"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
     <button class="btn ghost" onclick="cancelRetroEdit()">Cancel</button>
     <button class="btn primary" onclick="saveRetroEntry()">Save</button>
@@ -1832,7 +1857,7 @@ button, a, [role="button"],
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
-let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22 };
+let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22, geminiKey:'' };
 let reviews = {};
 let weeklyReviews = {};
 let intention = '';
@@ -3057,9 +3082,10 @@ function openRetroLog() {
   setTimeout(() => document.getElementById('retro-activity').focus(), 250);
 }
 
-function setRetroEnergy(type) {
+function setRetroEnergy(type, fromAI) {
   retroEnergy = type;
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.toggle('selected', b.classList.contains(type)));
+  if (!fromAI) { const h = document.getElementById('retro-ai-hint'); if (h) h.style.display = 'none'; }
 }
 
 function saveRetroEntry() {
@@ -3168,12 +3194,13 @@ function dismissLog() {
   closeModal('log-overlay');
 }
 
-function setEnergy(type) {
+function setEnergy(type, fromAI) {
   selectedEnergy=type;
   document.querySelectorAll('#log-overlay .energy-btn').forEach(b=>b.classList.toggle('selected',b.classList.contains(type)));
   // Auto-set on-plan: distraction = off-plan, everything else = on-plan
   if (type === 'distraction' || type === 'waste') setOnPlan(false);
   else setOnPlan(true);
+  if (!fromAI) { const h = document.getElementById('log-ai-hint'); if (h) h.style.display = 'none'; }
 }
 function setOnPlan(val) {
   selectedOnPlan=val;
@@ -4579,7 +4606,7 @@ function quickRetroLog() {
   function makeQEntry(id, ts, tsS, dateKey) {
     const blkDur = Math.round((ts - tsS) / 60000);
     const e = { id, ts, tsStart: tsS, blockIntervalMin: blkDur,
-      date: dateKey, activity: task, energy: 'shallow',
+      date: dateKey, activity: task, energy: _quickAIEnergy || 'shallow',
       onPlan: true, retro: true, updatedAt: Date.now() };
     e.category = getBucket(e); e.originalLabel = e.energy || null;
     return e;
@@ -4610,6 +4637,9 @@ function quickRetroLog() {
     document.getElementById('retro-qend').value   = nowStr;
     showToast(`Logged: ${task} · ${fmtDur(dur)}`);
   }
+  // Reset AI state
+  _quickAIEnergy = null;
+  clearAIHint('quick');
 }
 
 // generateInsights, renderAwarenessSignal — moved to insights.js
@@ -5301,6 +5331,9 @@ function renderSettings() {
   document.getElementById('set-timezone').value=settings.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
   const rh = settings.reviewHour ?? 22;
   document.getElementById('set-review-hour').value = `${String(rh).padStart(2,'0')}:00`;
+  document.getElementById('set-gemini-key').value = settings.geminiKey || '';
+  const keyStatus = document.getElementById('ai-key-status');
+  if (keyStatus) keyStatus.textContent = settings.geminiKey ? '✓ AI auto-categorization active' : 'No key — AI features disabled';
   const toneEl = document.getElementById('set-coach-tone');
   toneEl.value = settings.coachTone || 'analyst';
   renderTonePreview();
@@ -5354,6 +5387,9 @@ function saveSettings(){
   settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
   const reviewTimeVal = document.getElementById('set-review-hour').value || '22:00';
   settings.reviewHour = parseInt(reviewTimeVal.split(':')[0], 10);
+  settings.geminiKey = document.getElementById('set-gemini-key').value.trim();
+  const keyStatus = document.getElementById('ai-key-status');
+  if (keyStatus) keyStatus.textContent = settings.geminiKey ? '✓ AI auto-categorization active' : 'No key — AI features disabled';
   renderTonePreview();
   // Sync interval back to Today tab input
   document.getElementById('interval-input').value = settings.intervalMin;
@@ -5364,6 +5400,100 @@ function saveSettings(){
 }
 function addPreset(){settings.presets.push({label:'New activity',energy:'shallow'});persist();renderSettings();}
 function removePreset(i){settings.presets.splice(i,1);persist();renderSettings();}
+
+// ══════════════════════════════════════════════════════
+// AI CATEGORIZATION  (Gemini 1.5 Flash · free tier)
+// ══════════════════════════════════════════════════════
+let _aiCache = {};
+let _aiDebounce = {};
+let _quickAIEnergy = null;
+
+const AI_LABELS = {
+  deep:'Deep Work', shallow:'Shallow Work', nine5:'Scheduled work',
+  errands:'Errands', learning:'Learning', exercise:'Exercise',
+  social:'Social', recovery:'Recovery', waste:'Waste'
+};
+const AI_COLORS = {
+  deep:'var(--deep)', shallow:'var(--shallow)', nine5:'var(--nine5)',
+  errands:'var(--errands)', learning:'var(--learning)', exercise:'var(--exercise)',
+  social:'var(--social)', recovery:'var(--break)', waste:'var(--distraction)'
+};
+
+function loadAICache() {
+  try { _aiCache = JSON.parse(localStorage.getItem('ta3-ai-cache') || '{}'); } catch(e) { _aiCache = {}; }
+}
+
+async function aiCategorize(activity) {
+  const key = activity.trim().toLowerCase();
+  if (key.length < 2) return null;
+  if (_aiCache[key]) return _aiCache[key];
+
+  const apiKey = settings.geminiKey;
+  if (!apiKey) return null;
+
+  try {
+    const prompt = `Classify this activity into exactly one category.\n\nActivity: "${activity}"\n\nCategories:\n- deep: focused creative or intellectual work (coding, writing, analysis, designing, building)\n- shallow: meetings, emails, calls, admin tasks, paperwork\n- nine5: fixed scheduled work obligations or shifts\n- errands: chores, shopping, real-world appointments, commute\n- learning: studying, courses, reading non-fiction, tutorials, practice\n- exercise: gym, sports, walking, running, physical training\n- social: socializing, parties, casual hangouts, non-work calls\n- recovery: sleep, rest, naps, meditation, eating, breaks\n- waste: distraction, procrastination, scrolling social media, mindless activity\n\nReply with ONLY the single category word, nothing else.`;
+
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ contents:[{ parts:[{ text: prompt }] }] }) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toLowerCase().replace(/[^a-z0-9]/g,'');
+    const valid = ['deep','shallow','nine5','errands','learning','exercise','social','recovery','waste'];
+    if (valid.includes(raw)) {
+      _aiCache[key] = raw;
+      localStorage.setItem('ta3-ai-cache', JSON.stringify(_aiCache));
+      return raw;
+    }
+  } catch(e) {}
+  return null;
+}
+
+function aiTrigger(activity, target) {
+  const key = activity.trim().toLowerCase();
+  if (_aiDebounce[target]) clearTimeout(_aiDebounce[target]);
+
+  // Instant from cache
+  if (key.length >= 2 && _aiCache[key]) { applyAI(_aiCache[key], target); return; }
+
+  // Clear hint if input too short
+  if (key.length < 3 || !settings.geminiKey) { clearAIHint(target); return; }
+
+  // Debounce API call 700ms
+  _aiDebounce[target] = setTimeout(async () => {
+    const cat = await aiCategorize(activity);
+    if (cat) applyAI(cat, target);
+  }, 700);
+}
+
+function applyAI(cat, target) {
+  const label = AI_LABELS[cat] || cat;
+  const color = AI_COLORS[cat] || 'var(--muted)';
+
+  if (target === 'retro') {
+    setRetroEnergy(cat, true);
+    const h = document.getElementById('retro-ai-hint');
+    if (h) { h.style.display = 'block'; h.innerHTML = `<span class="ai-hint" onclick="setRetroEnergy('${cat}')"><span class="ai-hint-spark">✦</span><span class="ai-hint-cat" style="color:${color}">${label}</span><span class="ai-hint-change">· tap to change</span></span>`; }
+  } else if (target === 'log') {
+    setEnergy(cat, true);
+    const h = document.getElementById('log-ai-hint');
+    if (h) { h.style.display = 'block'; h.innerHTML = `<span class="ai-hint" onclick="setEnergy('${cat}')"><span class="ai-hint-spark">✦</span><span class="ai-hint-cat" style="color:${color}">${label}</span><span class="ai-hint-change">· tap to change</span></span>`; }
+  } else if (target === 'quick') {
+    _quickAIEnergy = cat;
+    const h = document.getElementById('quick-ai-hint');
+    if (h) { h.style.display = 'block'; h.innerHTML = `<span class="ai-hint"><span class="ai-hint-spark">✦</span><span>Will log as</span><span class="ai-hint-cat" style="color:${color};margin-left:3px">${label}</span></span>`; }
+  }
+}
+
+function clearAIHint(target) {
+  const ids = { retro:'retro-ai-hint', log:'log-ai-hint', quick:'quick-ai-hint' };
+  if (target === 'quick') _quickAIEnergy = null;
+  const h = document.getElementById(ids[target]);
+  if (h) h.style.display = 'none';
+}
 
 // ══════════════════════════════════════════════════════
 // REVIEW
@@ -6089,6 +6219,7 @@ function startVoiceLog() {
 // INIT
 // ══════════════════════════════════════════════════════
 load();
+loadAICache();
 document.getElementById('interval-input').value = settings.intervalMin;
 // If timer was restored from localStorage, resume it
 if (running && timerStartedAt) {
