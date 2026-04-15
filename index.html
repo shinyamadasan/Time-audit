@@ -1172,6 +1172,12 @@ button, a, [role="button"],
     <div id="reflect-daily-summary"></div>
   </div>
 
+  <!-- Daily reflections -->
+  <div class="settings-section" id="reflect-daily-reviews-section">
+    <div class="settings-title">Daily reflections</div>
+    <div id="reflect-daily-reviews"></div>
+  </div>
+
   <!-- This week's patterns -->
   <div class="settings-section">
     <div class="settings-title">This week's numbers</div>
@@ -1241,6 +1247,13 @@ button, a, [role="button"],
     <div class="setting-row">
       <div><div class="setting-label">Focus block exit delay</div><div class="setting-sub">Seconds to wait before leaving focus</div></div>
       <div class="setting-control"><input type="number" id="set-exitdelay" value="10" min="3" max="60" onchange="saveSettings()"></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">EOD review time</div><div class="setting-sub">When to prompt your daily reflection</div></div>
+      <div class="setting-control">
+        <input type="time" id="set-review-hour" value="22:00" onchange="saveSettings()"
+          style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 7px;border-radius:6px;outline:none;width:auto">
+      </div>
     </div>
     <div class="setting-row">
       <div><div class="setting-label">Work day timezone</div><div class="setting-sub">When does your day start/end — set once, syncs to all devices</div></div>
@@ -1733,6 +1746,7 @@ button, a, [role="button"],
 
   <div class="field"><label>One win today</label><input type="text" id="rv-win" placeholder="What went well?"></div>
   <div class="field"><label>One waste today</label><input type="text" id="rv-waste" placeholder="What cost you time?"></div>
+  <div class="field"><label>How to avoid it next time</label><input type="text" id="rv-avoid" placeholder="e.g. Phone in another room..."></div>
   <div class="field"><label>Tomorrow's focus</label><input type="text" id="rv-tomorrow" placeholder="What will you focus on?"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
     <button class="btn ghost" onclick="closeModal('review-overlay')">Skip</button>
@@ -1782,7 +1796,7 @@ button, a, [role="button"],
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
-let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst' };
+let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22 };
 let reviews = {};
 let weeklyReviews = {};
 let intention = '';
@@ -5246,6 +5260,8 @@ function renderSettings() {
   document.getElementById('set-deepgoal').value=settings.deepGoal;
   document.getElementById('set-exitdelay').value=settings.exitDelay||10;
   document.getElementById('set-timezone').value=settings.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const rh = settings.reviewHour ?? 22;
+  document.getElementById('set-review-hour').value = `${String(rh).padStart(2,'0')}:00`;
   const toneEl = document.getElementById('set-coach-tone');
   toneEl.value = settings.coachTone || 'analyst';
   renderTonePreview();
@@ -5297,6 +5313,8 @@ function saveSettings(){
   settings.exitDelay=parseInt(document.getElementById('set-exitdelay').value)||10;
   settings.timezone=document.getElementById('set-timezone').value;
   settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
+  const reviewTimeVal = document.getElementById('set-review-hour').value || '22:00';
+  settings.reviewHour = parseInt(reviewTimeVal.split(':')[0], 10);
   renderTonePreview();
   // Sync interval back to Today tab input
   document.getElementById('interval-input').value = settings.intervalMin;
@@ -5314,7 +5332,19 @@ function removePreset(i){settings.presets.splice(i,1);persist();renderSettings()
 function openReview(){
   const k=toDateKey(new Date()),r=reviews[k]||{};
   document.getElementById('rv-win').value=r.win||'';
-  document.getElementById('rv-waste').value=r.waste||'';
+  // Pre-fill waste from actual data if not already written
+  if (!r.waste) {
+    const wasteMap={};
+    getTodayEntries().filter(e=>e.energy==='waste'&&e.activity).forEach(e=>{
+      const key=e.activity.split(' (Output:')[0];
+      wasteMap[key]=(wasteMap[key]||0)+(e.blockIntervalMin||0);
+    });
+    const worst=Object.entries(wasteMap).sort((a,b)=>b[1]-a[1])[0];
+    document.getElementById('rv-waste').value=worst?`${worst[0]} · ${worst[1]>=60?(worst[1]/60).toFixed(1)+'h':worst[1]+'m'}`:'';
+  } else {
+    document.getElementById('rv-waste').value=r.waste;
+  }
+  document.getElementById('rv-avoid').value=r.avoid||'';
   document.getElementById('rv-tomorrow').value=r.tomorrow||'';
   
   const todayE = getTodayEntries();
@@ -5333,14 +5363,14 @@ function openReview(){
 }
 function saveReview(){
   const k=toDateKey(new Date());
-  reviews[k]={win:document.getElementById('rv-win').value,waste:document.getElementById('rv-waste').value,tomorrow:document.getElementById('rv-tomorrow').value};
+  reviews[k]={win:document.getElementById('rv-win').value,waste:document.getElementById('rv-waste').value,avoid:document.getElementById('rv-avoid').value,tomorrow:document.getElementById('rv-tomorrow').value};
   const tom=document.getElementById('rv-tomorrow').value;
   if(tom){intention=tom;}
   persist();
   closeModal('review-overlay');
   showToast('Review saved ✓');
 }
-function checkReviewPrompt(){if(tzHour(Date.now())>=18&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
+function checkReviewPrompt(){const rh=settings.reviewHour??22;if(tzHour(Date.now())>=rh&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
 
 // ══════════════════════════════════════════════════════
 // REFLECT  — insights, weekly review, history
@@ -5535,7 +5565,59 @@ function renderReflectView() {
     planBadge.style.display = 'none';
   }
 
+  renderDailyReflections();
   renderReflectHistory();
+}
+
+function renderDailyReflections() {
+  const el = document.getElementById('reflect-daily-reviews');
+  const section = document.getElementById('reflect-daily-reviews-section');
+  if (!el) return;
+
+  // Collect last 14 days that have a review entry
+  const days = [];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(Date.now() - i * 86400000);
+    const k = toDateKey(d);
+    if (reviews[k]) days.push({ key: k, date: d, r: reviews[k] });
+  }
+
+  if (!days.length) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+
+  const fmt = d => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  el.innerHTML = days.map(({ key, date, r }) => {
+    const s = computeDailySummary(key);
+    const statsHtml = s
+      ? `<div style="display:flex;gap:10px;margin-bottom:10px">
+           <span style="font-family:var(--mono);font-size:11px;color:var(--deep)">${s.deepHrs}h deep</span>
+           <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">·</span>
+           <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${s.productivePct}% productive</span>
+           ${s.wastePct > 0 ? `<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">·</span>
+           <span style="font-family:var(--mono);font-size:11px;color:var(--distraction)">${s.wastePct}% waste</span>` : ''}
+         </div>`
+      : '';
+
+    const row = (label, color, value) => value
+      ? `<div style="margin-bottom:7px">
+           <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:${color};font-weight:600;margin-bottom:2px">${label}</div>
+           <div style="font-size:13px;color:var(--text);line-height:1.45">${value}</div>
+         </div>`
+      : '';
+
+    return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">${fmt(date)}</div>
+      ${statsHtml}
+      ${row('Win', 'var(--deep)', r.win)}
+      ${row('Waste', 'var(--distraction)', r.waste)}
+      ${row('How to avoid', 'var(--admin)', r.avoid)}
+      ${row("Tomorrow's focus", 'var(--shallow)', r.tomorrow)}
+    </div>`;
+  }).join('');
 }
 
 function saveWeeklyReview() {
