@@ -4176,6 +4176,7 @@ function toggleTlBucket(id) {
 let _todayRenderKey = '';
 
 function renderToday() {
+  resetRetroBar();
   const todayE = getViewingEntries();
   const realEntries = todayE.filter(e => !e.missed);
   const deepCount = realEntries.filter(e => e.energy === 'deep').length;
@@ -4754,20 +4755,14 @@ function quickRetroLog() {
     entries.sort((a, b) => b.ts - a.ts);
     persist(); renderToday(); syncEntries();
     taskInput.value = '';
-    const nowStr = tzHHMM(Date.now());
-    const thirtyAgoStr = tzHHMM(Date.now() - 30 * 60000);
-    document.getElementById('retro-qstart').value = thirtyAgoStr;
-    document.getElementById('retro-qend').value   = nowStr;
+    resetRetroBar();
     showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
   } else {
     entries.push(makeQEntry(tsEnd, tsEnd, tsStart, startDateKey));
     entries.sort((a, b) => b.ts - a.ts);
     persist(); renderToday(); syncEntries();
     taskInput.value = '';
-    const nowStr = tzHHMM(Date.now());
-    const thirtyAgoStr = tzHHMM(Date.now() - 30 * 60000);
-    document.getElementById('retro-qstart').value = thirtyAgoStr;
-    document.getElementById('retro-qend').value   = nowStr;
+    resetRetroBar();
     const wasteFlag = (learnedEng === 'waste' || learnedEng === 'distraction') ? ' ⚠ auto-flagged' : '';
     showToast(`Logged: ${task} · ${fmtDur(dur)}${wasteFlag}`);
   }
@@ -6502,13 +6497,21 @@ function cancelNativePing() {
 
 // Pre-fill intention from load()
 if (intention) document.getElementById('intention').value = intention;
-// Pre-fill quick retro bar: start = 30m ago, end = now
-(function(){
+// Pre-fill quick retro bar with smart gap defaults
+function resetRetroBar() {
   const s = document.getElementById('retro-qstart');
   const e = document.getElementById('retro-qend');
-  if (s) s.value = tzHHMM(Date.now() - 30 * 60000);
-  if (e) e.value = tzHHMM(Date.now());
-})();
+  if (!s || !e) return;
+  const nowMs = Date.now();
+  // Start = end of last logged entry; fall back to settings.intervalMin ago
+  const lastEnd = entries.filter(e => !e.missed && !e.deleted && e.ts)
+    .reduce((max, entry) => Math.max(max, entry.ts), 0);
+  const fallback = nowMs - (settings.intervalMin || 30) * 60000;
+  const startMs = lastEnd > 0 && lastEnd < nowMs ? lastEnd : fallback;
+  s.value = tzHHMM(startMs);
+  e.value = tzHHMM(nowMs);
+}
+resetRetroBar();
 // Restore hero UI state on page load
 if (running && lastTaskForRepeat) {
   taskStartTime = timerStartedAt || Date.now();
