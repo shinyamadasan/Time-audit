@@ -561,6 +561,19 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   transition:all 0.12s}
 .same-last-other:hover{border-color:var(--border3);color:var(--text)}
 
+/* ── Visual proportional timeline bar ── */
+.vtl-wrap{position:relative;margin-bottom:12px}
+.vtl-bar{height:26px;border-radius:6px;overflow:hidden;background:var(--bg4);position:relative}
+.vtl-seg{position:absolute;top:0;bottom:0;cursor:pointer;transition:filter 0.1s;min-width:2px}
+.vtl-seg:hover{filter:brightness(1.25)}
+.vtl-seg.untracked{background:repeating-linear-gradient(45deg,var(--bg3),var(--bg3) 3px,var(--bg4) 3px,var(--bg4) 6px)}
+.vtl-labels{display:flex;justify-content:space-between;margin-top:3px;font-family:var(--mono);font-size:9px;color:var(--muted)}
+/* ── Sleep log pill ── */
+.sleep-pill{display:none;width:100%;padding:9px 14px;background:rgba(148,163,184,0.08);
+  border:1px solid rgba(148,163,184,0.2);border-radius:var(--r);color:var(--muted);
+  font-family:var(--head);font-size:12px;font-weight:600;cursor:pointer;
+  text-align:left;margin-bottom:6px;transition:background 0.12s}
+.sleep-pill:hover{background:rgba(148,163,184,0.14)}
 /* ── Activity timeline ── */
 .tl-row{display:flex;align-items:stretch;gap:0;min-height:36px;position:relative}
 .tl-row+.tl-row{margin-top:3px}
@@ -1118,6 +1131,22 @@ button, a, [role="button"],
   <!-- Yesterday's promise banner -->
   <div id="yesterday-promise" style="display:none"></div>
 
+  <!-- Sleep quick log pill -->
+  <button id="sleep-pill-btn" class="sleep-pill" onclick="quickLogSleep()">
+    💤 <span id="sleep-pill-label">Log last night's sleep</span>
+    <span style="float:right;font-size:10px;opacity:0.6;font-weight:400">tap to prefill →</span>
+  </button>
+
+  <!-- Same as last — one tap log -->
+  <button id="same-as-last-btn" onclick="quickLogSameAsLast()" style="display:none;width:100%;padding:11px 16px;
+    background:var(--deep-dim);border:1px solid rgba(76,199,240,0.3);border-radius:var(--r);
+    color:var(--text);font-family:var(--head);font-size:13px;font-weight:600;cursor:pointer;
+    text-align:left;margin-bottom:6px;transition:background 0.12s">
+    <span style="color:var(--deep);margin-right:6px">↩</span>
+    <span id="same-as-last-label">Same as last</span>
+    <span style="float:right;font-size:11px;color:var(--muted);font-weight:400">1 tap · log &amp; continue</span>
+  </button>
+
   <!-- Quick retro log -->
   <div class="quick-retro-bar" style="flex-wrap:wrap;gap:6px">
     <div style="position:relative;flex:1;min-width:120px">
@@ -1137,6 +1166,7 @@ button, a, [role="button"],
     </div>
     <button class="btn sm primary" onclick="quickRetroLog()">Log</button>
   </div>
+  <div id="retro-waste-hint" style="display:none;font-size:11px;color:var(--distraction);padding:4px 2px 0;font-weight:500"></div>
 
   <!-- Awareness Signal -->
   <div id="awareness-signal" style="display:none"></div>
@@ -1156,6 +1186,11 @@ button, a, [role="button"],
       <span>Today's timeline</span>
       <span id="timeline-summary" style="font-family:var(--mono)"></span>
     </div>
+    <!-- Visual proportional bar -->
+    <div class="vtl-wrap" id="vtl-wrap" style="display:none">
+      <div class="vtl-bar" id="vtl-bar"></div>
+      <div class="vtl-labels"><span id="vtl-label-start"></span><span id="vtl-label-end"></span></div>
+    </div>
     <div id="timeline-blocks"></div>
   </div>
 
@@ -1167,9 +1202,9 @@ button, a, [role="button"],
       <div class="s-sub">today</div>
     </div>
     <div class="stat-card" style="flex:1;text-align:center">
-      <div class="s-label">Streak</div>
+      <div class="s-label">Deep streak</div>
       <div class="s-val" id="s-streak">0</div>
-      <div class="s-sub">days</div>
+      <div class="s-sub" id="s-streak-sub">days</div>
     </div>
     <div class="stat-card" style="flex:1;text-align:center">
       <div class="s-label">Identity</div>
@@ -2459,6 +2494,18 @@ function saveQuickEntry() {
   _doQuickSave(activity, qlEnergy);
 }
 
+function learnWastePattern(activity, energy) {
+  if (!activity) return;
+  const key = normalizeActivity(activity.trim());
+  if (!settings.learnedEnergy) settings.learnedEnergy = {};
+  if (energy === 'waste' || energy === 'distraction') {
+    settings.learnedEnergy[key] = energy;
+  } else {
+    // Explicitly saved as something non-waste → remove pattern trap
+    delete settings.learnedEnergy[key];
+  }
+}
+
 function _doQuickSave(activity, energy) {
   clearTimeout(snoozeTimer);
   clearTimeout(followupNotifTimer);
@@ -2476,6 +2523,7 @@ function _doQuickSave(activity, energy) {
     quickLogged: true
   };
   entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
+  learnWastePattern(activity, energy);
   entries.unshift(entry);
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
@@ -3123,6 +3171,7 @@ function saveRetroEntry() {
   const dur = Math.round((tsEnd - tsStart) / 60000);
 
   getActivityColor(activity);
+  learnWastePattern(activity, retroEnergy);
 
   // Detect midnight span: start and end on different calendar dates in user's TZ
   const startDateKey = toDateKey(new Date(tsStart));
@@ -3247,6 +3296,7 @@ function saveEntry() {
   entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
 
   getActivityColor(activity); // assign color on first save
+  learnWastePattern(activity, selectedEnergy);
   if (entry.energy === 'waste') switchState('distraction');
   entries.unshift(entry);
   stopAlertLoop();
@@ -3426,13 +3476,29 @@ function toggleDatePicker() {
 function computeDeepScore(arr){return arr.length?Math.round(arr.filter(e=>e.energy==='deep').length/arr.length*100):0;}
 function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(settings.intervalMin/60)).toFixed(1);}
 function computeStreak(){
+  // Deep work streak: consecutive days with ≥1 deep work block
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = Date.now();
   let s = 0;
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 90; i++) {
     const k = getDateInTZ(now - i * 86400000, tz);
-    if (entries.filter(e => !e.deleted && getDateInTZ(e.tsStart || e.ts, tz) === k).length >= 4) s++;
-    else if (i > 0) break;
+    const dayEntries = entries.filter(e => !e.deleted && !e.missed && getDateInTZ(e.tsStart || e.ts, tz) === k);
+    if (dayEntries.some(e => e.energy === 'deep')) s++;
+    else if (i > 0) break; // allow today to have no deep yet without breaking streak
+  }
+  return s;
+}
+function computeCleanStreak(){
+  // Clean-day streak: consecutive days with zero distraction/waste entries
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const now = Date.now();
+  let s = 0;
+  for (let i = 1; i <= 30; i++) { // start at yesterday so today-in-progress doesn't break it
+    const k = getDateInTZ(now - i * 86400000, tz);
+    const dayEntries = entries.filter(e => !e.deleted && !e.missed && getDateInTZ(e.tsStart || e.ts, tz) === k);
+    if (!dayEntries.length) break; // no data — stop
+    if (dayEntries.some(e => e.energy === 'distraction' || e.energy === 'waste')) break;
+    s++;
   }
   return s;
 }
@@ -4127,7 +4193,11 @@ function renderToday() {
 
   // Simplified stat row
   document.getElementById('s-deep').textContent = deepCount;
-  document.getElementById('s-streak').textContent = computeStreak();
+  const deepStreak = computeStreak();
+  document.getElementById('s-streak').textContent = deepStreak;
+  const cleanStreak = computeCleanStreak();
+  const streakSubEl = document.getElementById('s-streak-sub');
+  if (streakSubEl) streakSubEl.textContent = cleanStreak > 0 ? `days · ${cleanStreak}d clean` : 'days deep';
   const identScore = computeIdentityScore(todayE);
   document.getElementById('s-identity').textContent = getIdentityLevelWithEmoji(identScore);
 
@@ -4195,6 +4265,29 @@ function renderToday() {
     workStarted ? `${computeDeepHrs(todayE)}h deep · ${todayE.length} blocks${untrackedStr}` : '';
 
   const listEl = document.getElementById('recent-list');
+
+  // Same-as-last button: show if there are any non-missed entries (from any date)
+  const salBtn = document.getElementById('same-as-last-btn');
+  const salLabel = document.getElementById('same-as-last-label');
+  const lastRealEntry = [...entries].filter(e => !e.missed && e.activity).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts))[0];
+  if (salBtn && lastRealEntry) {
+    salLabel.textContent = lastRealEntry.activity;
+    salBtn.style.display = 'block';
+  } else if (salBtn) {
+    salBtn.style.display = 'none';
+  }
+
+  // Sleep pill: show if viewing today, it's before noon, and no sleep entry exists from last ~10 hours
+  const sleepPill = document.getElementById('sleep-pill-btn');
+  if (sleepPill) {
+    const nowH = new Date().getHours();
+    const tenHrsAgo = Date.now() - 10 * 3600000;
+    const hasSleep = entries.some(e => !e.missed && e.activity && e.activity.toLowerCase().includes('sleep') && (e.tsStart || e.ts) >= tenHrsAgo);
+    sleepPill.style.display = (isViewingToday() && nowH < 14 && !hasSleep) ? 'block' : 'none';
+  }
+
+  // Visual timeline bar
+  renderVisualTimeline(todayE);
 
   if (entriesChanged) {
     if (!todayE.length) {
@@ -4274,8 +4367,13 @@ function buildHeroSuggestions(filter) {
 // Build a single suggestion row with a dismiss ✕ button.
 function buildSugItem(task, selectCall) {
   const safe = task.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const learned = (settings.learnedEnergy || {})[task];
+  const wasteBadge = (learned === 'waste' || learned === 'distraction')
+    ? `<span style="font-size:9px;color:var(--distraction);font-weight:700;flex-shrink:0" title="Pattern trap">⚠</span>`
+    : '';
   return `<div class="hero-sug-item" style="display:flex;align-items:center;gap:4px" onmousedown="${selectCall}">
     <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${task}</span>
+    ${wasteBadge}
     <span onmousedown="event.stopPropagation();hideActivitySuggestion('${safe}')"
       style="font-size:10px;color:var(--muted2);padding:2px 6px;border-radius:4px;flex-shrink:0;cursor:pointer;line-height:1"
       title="Remove from suggestions">✕</span>
@@ -4469,19 +4567,33 @@ function showQuickRetroSuggestions(filter) {
   const el = document.getElementById('quick-retro-suggestions');
   if (!el) return;
   const { recent, presets } = buildHeroSuggestions(filter);
-  if (!recent.length && !presets.length) { el.style.display = 'none'; return; }
-  _quickRetroSugIndex = -1;
-  let html = '';
-  if (recent.length) {
-    if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
-    html += recent.map(t => buildSugItem(t, `selectQuickRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
+  if (!recent.length && !presets.length) { el.style.display = 'none'; }
+  else {
+    _quickRetroSugIndex = -1;
+    let html = '';
+    if (recent.length) {
+      if (!filter) html += `<div class="hero-sug-label">Recent</div>`;
+      html += recent.map(t => buildSugItem(t, `selectQuickRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
+    }
+    if (presets.length) {
+      html += `<div class="hero-sug-label">Presets</div>`;
+      html += presets.map(t => buildSugItem(t, `selectQuickRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
+    }
+    el.innerHTML = html;
+    el.style.display = 'block';
   }
-  if (presets.length) {
-    html += `<div class="hero-sug-label">Presets</div>`;
-    html += presets.map(t => buildSugItem(t, `selectQuickRetroSuggestion(event,'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')`) ).join('');
+  // Waste pattern hint
+  const hint = document.getElementById('retro-waste-hint');
+  if (hint) {
+    const typed = normalizeActivity((filter || '').trim());
+    const learned = typed ? (settings.learnedEnergy || {})[typed] : null;
+    if (learned) {
+      hint.innerHTML = `⚠ Pattern trap — you've logged <strong>${typed}</strong> as ${learned} before. Will auto-flag.`;
+      hint.style.display = 'block';
+    } else {
+      hint.style.display = 'none';
+    }
   }
-  el.innerHTML = html;
-  el.style.display = 'block';
 }
 
 function hideQuickRetroSuggestions() {
@@ -4618,16 +4730,19 @@ function quickRetroLog() {
   const spansMidnight = startDateKey !== endDateKey;
   const midnight = spansMidnight ? tzParseTime(endDateKey, '00:00') : null;
 
+  const learnedEng = (settings.learnedEnergy || {})[task] || 'shallow';
+
   function makeQEntry(id, ts, tsS, dateKey) {
     const blkDur = Math.round((ts - tsS) / 60000);
     const e = { id, ts, tsStart: tsS, blockIntervalMin: blkDur,
-      date: dateKey, activity: task, energy: 'shallow',
-      onPlan: true, retro: true, updatedAt: Date.now() };
+      date: dateKey, activity: task, energy: learnedEng,
+      onPlan: learnedEng !== 'waste' && learnedEng !== 'distraction', retro: true, updatedAt: Date.now() };
     e.category = getBucket(e); e.originalLabel = e.energy || null;
     return e;
   }
 
   getActivityColor(task);
+  learnWastePattern(task, learnedEng);
   if (spansMidnight) {
     const dur1 = Math.round((midnight - tsStart) / 60000);
     const dur2 = Math.round((tsEnd - midnight) / 60000);
@@ -4650,8 +4765,100 @@ function quickRetroLog() {
     const thirtyAgoStr = tzHHMM(Date.now() - 30 * 60000);
     document.getElementById('retro-qstart').value = thirtyAgoStr;
     document.getElementById('retro-qend').value   = nowStr;
-    showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+    const wasteFlag = (learnedEng === 'waste' || learnedEng === 'distraction') ? ' ⚠ auto-flagged' : '';
+    showToast(`Logged: ${task} · ${fmtDur(dur)}${wasteFlag}`);
   }
+}
+
+function quickLogSameAsLast() {
+  const last = [...entries].filter(e => !e.missed && e.activity).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts))[0];
+  if (!last) return;
+  const taskInput = document.getElementById('retro-task');
+  taskInput.value = last.activity;
+  quickRetroLog();
+}
+
+function quickLogSleep() {
+  const taskInput = document.getElementById('retro-task');
+  taskInput.value = 'Sleep';
+  // Pre-fill: 11pm last night → 7am today (adjust to within valid range)
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const viewKey = getViewingDateKey();
+  const nowMs = Date.now();
+  const nowH = new Date().getHours();
+  // Sleep start: 11pm yesterday
+  const yesterday = getDateInTZ(nowMs - 86400000, tz);
+  const sleepStart = tzParseTime(yesterday, '23:00');
+  // Sleep end: 7am today, but cap at now
+  const sleepEnd = Math.min(tzParseTime(viewKey, '07:00'), nowMs - 60000);
+  document.getElementById('retro-qstart').value = tzHHMM(sleepStart);
+  document.getElementById('retro-qend').value   = tzHHMM(sleepEnd > sleepStart ? sleepEnd : nowMs - 60000);
+  // Focus on the task input so user can adjust before logging
+  document.getElementById('retro-task').focus();
+  // Scroll to the retro bar so user can see the pre-filled times
+  document.getElementById('retro-task').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function renderVisualTimeline(todayE) {
+  const wrap = document.getElementById('vtl-wrap');
+  const bar  = document.getElementById('vtl-bar');
+  if (!wrap || !bar) return;
+
+  const realE = todayE.filter(e => !e.missed && (e.tsStart || e.ts));
+  if (!realE.length) { wrap.style.display = 'none'; return; }
+
+  // Time window: earliest start → now (or day end if viewing past)
+  const _dayNow = isViewingToday() ? Date.now() : dayEndTs(getViewingDateKey());
+  const windowStart = Math.min(...realE.map(e => e.tsStart || e.ts));
+  const windowEnd   = _dayNow;
+  const span = windowEnd - windowStart;
+  if (span <= 0) { wrap.style.display = 'none'; return; }
+
+  // Build segments sorted by start time
+  const sorted = [...realE].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+
+  // Build gaps between entries
+  const segments = [];
+  let cursor = windowStart;
+  for (const e of sorted) {
+    const s = e.tsStart || e.ts;
+    const end = e.ts;
+    if (s > cursor + 60000) {
+      segments.push({ start: cursor, end: s, isGap: true });
+    }
+    if (end > s) segments.push({ start: s, end, entry: e });
+    cursor = Math.max(cursor, end);
+  }
+  if (cursor < windowEnd - 60000) {
+    segments.push({ start: cursor, end: windowEnd, isGap: true });
+  }
+
+  const energyColors = {
+    deep: 'var(--deep)', shallow: 'var(--shallow)', admin: 'var(--admin)',
+    distraction: 'var(--distraction)', waste: 'var(--distraction)',
+    nine5: 'var(--nine5)', errands: 'var(--errands)', learning: 'var(--learning)',
+    exercise: 'var(--exercise)', social: 'var(--social)',
+    recovery: 'var(--break)', break: 'var(--break)', away: 'var(--away)'
+  };
+
+  bar.innerHTML = segments.map(seg => {
+    const left  = ((seg.start - windowStart) / span * 100).toFixed(3);
+    const width = ((seg.end - seg.start) / span * 100).toFixed(3);
+    if (seg.isGap) {
+      return `<div class="vtl-seg untracked" style="left:${left}%;width:${width}%" title="Untracked"></div>`;
+    }
+    const e = seg.entry;
+    const actColor = getActivityColor(e.activity);
+    const color = actColor || energyColors[e.energy] || 'var(--bg4)';
+    const dur = Math.round((e.ts - (e.tsStart || e.ts)) / 60000);
+    const label = `${e.activity || ''} · ${fmtDur(dur)}`;
+    const editCall = `openEditEntry(${e.id})`;
+    return `<div class="vtl-seg" style="left:${left}%;width:${width}%;background:${color}" title="${label.replace(/"/g,'&quot;')}" onclick="${editCall}"></div>`;
+  }).join('');
+
+  document.getElementById('vtl-label-start').textContent = localTime(windowStart);
+  document.getElementById('vtl-label-end').textContent   = isViewingToday() ? 'now' : localTime(windowEnd);
+  wrap.style.display = 'block';
 }
 
 // generateInsights, renderAwarenessSignal — moved to insights.js
@@ -5545,8 +5752,21 @@ function renderYesterdayPromise() {
   const waste   = r?.waste?.trim();
   const avoid   = r?.avoid?.trim();
 
+  // Pull actual waste/distraction entries from yesterday's data
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const yesterdayEntries = entries.filter(e =>
+    !e.missed && !e.deleted && getDateInTZ(e.tsStart || e.ts, tz) === yesterdayKey &&
+    (e.energy === 'waste' || e.energy === 'distraction') && e.activity
+  );
+  const wasteMap = {};
+  yesterdayEntries.forEach(e => {
+    const k = e.activity;
+    wasteMap[k] = (wasteMap[k] || 0) + (e.blockIntervalMin || settings.intervalMin || 30);
+  });
+  const wasteItems = Object.entries(wasteMap).sort((a, b) => b[1] - a[1]);
+
   // Need at least one field to show the card
-  if (!promise && !waste && !avoid) { el.style.display = 'none'; return; }
+  if (!promise && !waste && !avoid && !wasteItems.length) { el.style.display = 'none'; return; }
 
   const alreadySet = promise && intention.trim().toLowerCase() === promise.toLowerCase();
 
@@ -5559,10 +5779,15 @@ function renderYesterdayPromise() {
       </div>
     </div>` : '';
 
-  const wasteRow = waste ? `
+  // Auto-populated waste from actual entries (takes priority over manual field if richer)
+  const autoWasteContent = wasteItems.length
+    ? wasteItems.map(([act, min]) => `${act} (${min >= 60 ? (min/60).toFixed(1)+'h' : min+'m'})`).join(' · ')
+    : null;
+  const wasteContent = autoWasteContent || waste;
+  const wasteRow = wasteContent ? `
     <div class="promise-row waste">
-      <span class="promise-row-label">What you wasted time on</span>
-      <span class="promise-row-value">${waste}</span>
+      <span class="promise-row-label">⚠ Pattern traps from yesterday — watch these today</span>
+      <span class="promise-row-value">${wasteContent}</span>
     </div>` : '';
 
   const avoidRow = avoid ? `
