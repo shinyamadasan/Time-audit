@@ -960,7 +960,7 @@ button, a, [role="button"],
       <div class="hero-start-row">
         <div class="hero-input-wrap">
           <input class="hero-input" id="hero-task-input" placeholder="Name your task…"
-            autocomplete="off"
+            autocomplete="new-password" name="hero-task-field"
             onfocus="showHeroSuggestions(this.value)"
             oninput="showHeroSuggestions(this.value)"
             onblur="setTimeout(hideHeroSuggestions,150)"
@@ -1099,7 +1099,7 @@ button, a, [role="button"],
   <div class="quick-retro-bar" style="flex-wrap:wrap;gap:6px">
     <div style="position:relative;flex:1;min-width:120px">
       <input class="quick-retro-input" id="retro-task" placeholder="What did you do?"
-        autocomplete="off"
+        autocomplete="new-password" name="retro-task-field"
         onfocus="showQuickRetroSuggestions(this.value)"
         oninput="showQuickRetroSuggestions(this.value);aiTrigger(this.value,'quick')"
         onblur="setTimeout(hideQuickRetroSuggestions,150)"
@@ -1549,7 +1549,7 @@ button, a, [role="button"],
   <div class="field">
     <label>Activity</label>
     <div style="display:flex;gap:6px">
-      <input type="text" id="f-activity" placeholder="or type it here…" style="flex:1" oninput="aiTrigger(this.value,'log')">
+      <input type="text" id="f-activity" placeholder="or type it here…" style="flex:1" oninput="aiTrigger(this.value,'log')" autocomplete="new-password" name="log-activity-field">
       <button class="voice-btn" id="voice-btn" onclick="startVoiceLog()" title="Voice input">🎤</button>
     </div>
   </div>
@@ -1618,7 +1618,7 @@ button, a, [role="button"],
   <div class="focus-label" id="focus-phase-label">POMODORO</div>
   <div style="position:relative;width:100%;max-width:340px">
     <input class="focus-task-input" id="focus-task-input" placeholder="What are you focusing on?"
-      autocomplete="off"
+      autocomplete="new-password" name="focus-task-field"
       onfocus="showFocusSuggestions(this.value)"
       oninput="showFocusSuggestions(this.value)"
       onblur="setTimeout(hideFocusSuggestions,150)"
@@ -1699,7 +1699,7 @@ button, a, [role="button"],
     <label>Activity</label>
     <div style="position:relative">
       <input type="text" id="retro-activity" placeholder="What were you doing?"
-        autocomplete="off"
+        autocomplete="new-password" name="retro-activity-field"
         onfocus="showRetroSuggestions(this.value)"
         oninput="showRetroSuggestions(this.value);aiTrigger(this.value,'retro')"
         onblur="setTimeout(hideRetroSuggestions,150)"
