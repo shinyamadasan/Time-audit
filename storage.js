@@ -28,25 +28,39 @@ let connectedDevices = {};
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 const AWAY_BUCKETS = {
-  'Sleep':    'recovery',
-  'Eat':      'recovery',
-  'Rest':     'recovery',
-  'Walk':     'exercise',
-  'Exercise': 'exercise',
-  'Commute':  'nine5',
-  'Errand':   'errands',
-  'Personal': 'social',
+  'Sleep':      'recovery',   // Maintenance
+  'Eat':        'recovery',   // Maintenance
+  'Lunch':      'recovery',   // Maintenance
+  'Dinner':     'recovery',   // Maintenance
+  'Breakfast':  'recovery',   // Maintenance
+  'Rest':       'recovery',   // Maintenance
+  'Nap':        'recovery',   // Maintenance
+  'Grooming':   'recovery',   // Maintenance
+  'Shower':     'recovery',   // Maintenance
+  'Cooking':    'recovery',   // Maintenance
+  'Walk':       'exercise',
+  'Exercise':   'exercise',
+  'Gym':        'exercise',
+  'Run':        'exercise',
+  'Yoga':       'exercise',
+  'Commute':    'errands',
+  'Shopping':   'errands',
+  'Errand':     'errands',
+  'Appointment':'errands',
+  'Personal':   'social',
+  'Family':     'social',
+  'Friends':    'social',
 };
 
 const DEFAULT_PRESETS = [
   {label:'Email / Slack',energy:'shallow'},
   {label:'Deep work',energy:'deep'},
-  {label:'Sales call',energy:'deep'},
-  {label:'Admin task',energy:'nine5'},
-  {label:'Social media',energy:'waste'},
   {label:'Meeting',energy:'shallow'},
+  {label:'Job shift',energy:'nine5'},
+  {label:'Social media',energy:'waste'},
+  {label:'Lunch',energy:'recovery'},
   {label:'Content creation',energy:'deep'},
-  {label:'Client work',energy:'deep'},
+  {label:'Exercise',energy:'exercise'},
 ];
 
 // ══════════════════════════════════════════════════════
@@ -283,6 +297,9 @@ function load() {
   // Always sort by actual start time, newest first
   entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
   try { const s = JSON.parse(localStorage.getItem('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
+  // Dedicated timezone key wins over everything (Firebase can't overwrite it)
+  const savedTz = localStorage.getItem('ta3-tz');
+  if (savedTz) settings.timezone = savedTz;
   try { reviews = JSON.parse(localStorage.getItem('ta3-reviews') || '{}'); } catch(e){ reviews={}; }
   try { weeklyReviews = JSON.parse(localStorage.getItem('ta3-weekly-reviews') || '{}'); } catch(e){ weeklyReviews={}; }
   intention = localStorage.getItem('ta3-intention') || '';
