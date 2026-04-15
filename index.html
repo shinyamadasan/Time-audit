@@ -5440,7 +5440,7 @@ async function aiCategorize(activity) {
     const prompt = `Classify this activity into exactly one category.\n\nActivity: "${activity}"\n\nCategories:\n- deep: focused creative or intellectual work you chose to do (coding, writing, analysis, designing, building, strategy)\n- shallow: reactive communication and coordination (email, Slack, meetings, calls, standups, admin paperwork)\n- nine5: your primary job duties while on the clock — use this when it's your job/shift work and doesn't fit deep or shallow (scribing, nursing shifts, cleaning shift, factory work, teaching class)\n- errands: real-world logistics and life admin (shopping, commute, appointments, bills, picking up kids)\n- learning: intentional skill-building outside of job duties (courses, books, research, tutorials, podcasts to learn)\n- exercise: deliberate physical movement (gym, run, walk, yoga, sports, cycling)\n- social: time with people for personal connection (family time, friends, dates, social gatherings, parties)\n- recovery: body and life maintenance (sleep, meals, eating, grooming, shower, cooking for yourself, rest, naps)\n- waste: time you'd regret on reflection (doom-scrolling, mindless browsing, binge-watching without intention)\n\nReply with ONLY the single category word, nothing else.`;
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite-001:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=${apiKey}`,
       { method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ contents:[{ parts:[{ text: prompt }] }] }) }
     );
