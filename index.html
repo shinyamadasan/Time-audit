@@ -6257,7 +6257,9 @@ loadAICache();
 })();
 // Kill browser autofill — Chrome ignores autocomplete="new-password" on revisited pages.
 // readonly trick: Chrome won't autofill readonly fields; we remove it on focus.
+// Exclude password fields (Gemini key) — readonly breaks their save flow.
 document.querySelectorAll('input[autocomplete="new-password"]').forEach(el => {
+  if (el.type === 'password') return;
   el.setAttribute('readonly', true);
   el.addEventListener('focus', function() { this.removeAttribute('readonly'); });
 });
