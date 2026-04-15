@@ -833,6 +833,13 @@ button, a, [role="button"],
 .signal-item-body{flex:1}
 .signal-item-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:2px}
 
+/* ── Yesterday's promise ── */
+.promise-banner{background:linear-gradient(135deg,rgba(76,199,240,0.07) 0%,rgba(76,199,240,0.03) 100%);border:1px solid rgba(76,199,240,0.22);border-left:3px solid var(--deep);border-radius:var(--r2);padding:13px 14px;margin-bottom:12px}
+.promise-eyebrow{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--deep);margin-bottom:5px}
+.promise-text{font-size:15px;font-weight:700;color:var(--text);line-height:1.35;margin-bottom:6px}
+.promise-sub{font-size:12px;color:var(--muted);line-height:1.45}
+.promise-actions{display:flex;gap:7px;margin-top:10px}
+
 /* ── Daily Summary Card ── */
 .daily-summary{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:12px}
 .daily-summary.has-data{border-color:rgba(76,199,240,0.18)}
@@ -1068,6 +1075,9 @@ button, a, [role="button"],
 
   <!-- Behavioral Feedback Flash -->
   <div id="feedback-flash" style="display:none"></div>
+
+  <!-- Yesterday's promise banner -->
+  <div id="yesterday-promise" style="display:none"></div>
 
   <!-- Quick retro log -->
   <div class="quick-retro-bar" style="flex-wrap:wrap;gap:6px">
@@ -4122,6 +4132,9 @@ function renderToday() {
     banner.style.display = 'none';
   }
 
+  // Yesterday's promise
+  renderYesterdayPromise();
+
   // Daily summary card
   renderDailySummary();
 
@@ -5464,6 +5477,55 @@ function saveReview(){
   showToast('Review saved ✓');
 }
 function checkReviewPrompt(){const rh=settings.reviewHour??22;if(tzHour(Date.now())>=rh&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
+
+function renderYesterdayPromise() {
+  const el = document.getElementById('yesterday-promise');
+  if (!el) return;
+
+  const todayKey = toDateKey(new Date());
+  const yesterdayKey = toDateKey(new Date(Date.now() - 86400000));
+  const yReview = reviews[yesterdayKey];
+  const promise = yReview?.tomorrow?.trim();
+
+  // Hide if: no promise, or already dismissed today, or not viewing today
+  const dismissedKey = 'ta3-promise-dismissed-' + todayKey;
+  if (!promise || localStorage.getItem(dismissedKey) || !isViewingToday()) {
+    el.style.display = 'none';
+    return;
+  }
+
+  // Check if they're already on it — if intention matches the promise, tone changes
+  const alreadySet = intention.trim().toLowerCase() === promise.toLowerCase();
+
+  el.style.display = 'block';
+  el.innerHTML = `<div class="promise-banner">
+    <div class="promise-eyebrow">Yesterday you promised</div>
+    <div class="promise-text">"${promise}"</div>
+    <div class="promise-sub">${alreadySet ? "It's already your focus today. Stay on it." : "Are you going to follow through today?"}</div>
+    <div class="promise-actions">
+      ${!alreadySet ? `<button class="btn sm primary" onclick="applyPromiseAsIntention()">Set as today's focus</button>` : ''}
+      <button class="btn sm ghost" onclick="dismissYesterdayPromise()">Got it</button>
+    </div>
+  </div>`;
+}
+
+function applyPromiseAsIntention() {
+  const yesterdayKey = toDateKey(new Date(Date.now() - 86400000));
+  const promise = reviews[yesterdayKey]?.tomorrow?.trim();
+  if (!promise) return;
+  intention = promise;
+  document.getElementById('intention').value = promise;
+  persist();
+  dismissYesterdayPromise();
+  showToast('Focus set ✓');
+}
+
+function dismissYesterdayPromise() {
+  const todayKey = toDateKey(new Date());
+  localStorage.setItem('ta3-promise-dismissed-' + todayKey, '1');
+  const el = document.getElementById('yesterday-promise');
+  if (el) el.style.display = 'none';
+}
 
 // ══════════════════════════════════════════════════════
 // REFLECT  — insights, weekly review, history
