@@ -526,19 +526,28 @@ function buildDailySummaryHTML(s) {
 
   // Split bar — all 9 categories
   const segs = [
-    { cls: 'deep',     pct: s.deepPct },
-    { cls: 'shallow',  pct: s.shallowPct },
-    { cls: 'nine5',    pct: s.nine5Pct },
-    { cls: 'errands',  pct: s.errandsPct },
-    { cls: 'learning', pct: s.learningPct },
-    { cls: 'exercise', pct: s.exercisePct },
-    { cls: 'social',   pct: s.socialPct },
-    { cls: 'recovery', pct: s.recoveryPct },
-    { cls: 'waste',    pct: s.wastePct },
+    { cls: 'deep',     label: 'Deep',           pct: s.deepPct,     min: s.deepMin },
+    { cls: 'shallow',  label: 'Shallow',         pct: s.shallowPct,  min: s.shallowMin },
+    { cls: 'nine5',    label: 'Scheduled work',  pct: s.nine5Pct,    min: s.nine5Min },
+    { cls: 'errands',  label: 'Errands',         pct: s.errandsPct,  min: s.errandsMin },
+    { cls: 'learning', label: 'Learning',        pct: s.learningPct, min: s.learningMin },
+    { cls: 'exercise', label: 'Exercise',        pct: s.exercisePct, min: s.exerciseMin },
+    { cls: 'social',   label: 'Social',          pct: s.socialPct,   min: s.socialMin },
+    { cls: 'recovery', label: 'Recovery',        pct: s.recoveryPct, min: s.recoveryMin },
+    { cls: 'waste',    label: 'Waste',           pct: s.wastePct,    min: s.wasteMin },
   ].filter(seg => seg.pct > 0);
 
   const splitBar = segs.map(seg =>
-    `<div class="ds-split-seg ${seg.cls}" style="width:${seg.pct}%"></div>`
+    `<div class="ds-split-seg ${seg.cls}" style="width:${seg.pct}%" title="${seg.label}: ${fmtDur(seg.min)} (${seg.pct}%)"></div>`
+  ).join('');
+
+  const legend = segs.map(seg =>
+    `<div class="ds-legend-item">
+      <span class="ds-legend-dot ${seg.cls}"></span>
+      <span class="ds-legend-name">${seg.label}</span>
+      <span class="ds-legend-time">${fmtDur(seg.min)}</span>
+      <span class="ds-legend-pct">${seg.pct}%</span>
+    </div>`
   ).join('');
 
   const insight = getDailySummaryInsight(s);
@@ -562,11 +571,12 @@ function buildDailySummaryHTML(s) {
         <div class="ds-metric-label">Waste</div>
       </div>
     </div>
-    <div class="ds-split-label">
-      <span>Deep · Shallow · Scheduled work · Errands · Learning · Exercise · Social · Recovery · Waste</span>
-      <span>${fmtDur(s.totalMin)} tracked</span>
+    <div class="ds-breakdown-header">
+      <span class="ds-breakdown-title">Time breakdown</span>
+      <span class="ds-breakdown-total">${fmtDur(s.totalMin)} tracked</span>
     </div>
     <div class="ds-split-bar">${splitBar}</div>
+    <div class="ds-legend">${legend}</div>
     ${peakHtml}
     <div class="ds-insight">${insight}</div>`;
 }
