@@ -382,6 +382,35 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .focus-exit-wrap{position:absolute;top:calc(var(--safe-top) + 16px);right:16px}
 .focus-exit-countdown{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;margin-top:4px}
 
+/* ── Onboarding ── */
+.ob-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.92);display:flex;align-items:flex-end;
+  justify-content:center;z-index:200;padding:0;opacity:0;pointer-events:none;transition:opacity 0.25s}
+.ob-overlay.open{opacity:1;pointer-events:all}
+.ob-sheet{background:var(--bg2);border:1px solid var(--border2);border-radius:20px 20px 0 0;
+  width:100%;max-width:480px;padding:32px 24px 40px;transform:translateY(40px);transition:transform 0.3s}
+.ob-overlay.open .ob-sheet{transform:translateY(0)}
+.ob-step{display:none}.ob-step.active{display:block}
+.ob-icon{font-size:48px;margin-bottom:16px;line-height:1}
+.ob-title{font-size:22px;font-weight:800;letter-spacing:-0.3px;margin-bottom:8px}
+.ob-body{font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:24px}
+.ob-body strong{color:var(--text)}
+.ob-cats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:14px 0}
+.ob-cat{display:flex;align-items:center;gap:8px;font-size:12px;padding:7px 10px;
+  background:var(--bg3);border-radius:8px}
+.ob-cat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ob-cat-name{font-weight:600;color:var(--text)}
+.ob-cat-desc{font-size:11px;color:var(--muted);margin-left:auto}
+.ob-dots{display:flex;gap:6px;justify-content:center;margin-bottom:20px}
+.ob-dot{width:6px;height:6px;border-radius:50%;background:var(--bg4);transition:background 0.2s}
+.ob-dot.active{background:var(--deep);width:18px;border-radius:3px}
+.ob-actions{display:flex;gap:10px}
+.ob-next{flex:1;padding:13px;background:var(--deep);color:#0b0b0c;border:none;border-radius:10px;
+  font-family:var(--head);font-size:14px;font-weight:700;cursor:pointer;transition:background 0.15s}
+.ob-next:hover{background:#7dd9f7}
+.ob-skip{padding:13px 16px;background:none;border:1px solid var(--border2);border-radius:10px;
+  font-family:var(--head);font-size:13px;color:var(--muted);cursor:pointer}
+.ob-skip:hover{color:var(--text)}
+
 /* ── Review modal ── */
 .review-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;
   justify-content:center;z-index:110;padding:20px;opacity:0;pointer-events:none;transition:opacity 0.2s}
@@ -1249,7 +1278,10 @@ button, a, [role="button"],
 
 <!-- ══ SETTINGS ══ -->
 <div class="view" id="view-settings">
-  <div class="page-header"><div class="page-title">Settings</div></div>
+  <div class="page-header">
+    <div class="page-title">Settings</div>
+    <button class="btn sm ghost" onclick="openOnboarding()" style="font-size:11px">? How to use</button>
+  </div>
 
   <div class="settings-section">
     <div class="settings-title">Performance targets</div>
@@ -6280,6 +6312,114 @@ setTimeout(() => {
 }, 1200);
 // Refresh timeline every 60s so "Since last log" gap stays current
 setInterval(() => { if (!running && !breakActive) renderToday(); }, 60000);
+
+// ══════════════════════════════════════════════════════
+// ONBOARDING
+// ══════════════════════════════════════════════════════
+let _obStep = 0;
+const OB_STEPS = 4;
+
+function openOnboarding() {
+  _obStep = 0;
+  _renderObStep();
+  document.getElementById('ob-overlay').classList.add('open');
+}
+
+function closeOnboarding() {
+  document.getElementById('ob-overlay').classList.remove('open');
+  localStorage.setItem('ta3-onboarded', '1');
+}
+
+function obNext() {
+  _obStep++;
+  if (_obStep >= OB_STEPS) { closeOnboarding(); return; }
+  _renderObStep();
+}
+
+function _renderObStep() {
+  document.querySelectorAll('.ob-step').forEach((el, i) => {
+    el.classList.toggle('active', i === _obStep);
+  });
+  document.querySelectorAll('.ob-dot').forEach((el, i) => {
+    el.classList.toggle('active', i === _obStep);
+  });
+  const nextBtn = document.getElementById('ob-next-btn');
+  nextBtn.textContent = _obStep === OB_STEPS - 1 ? "Let's go" : 'Next';
+  document.getElementById('ob-skip-btn').style.display = _obStep === OB_STEPS - 1 ? 'none' : '';
+}
+
+// Show on first visit
+if (!localStorage.getItem('ta3-onboarded')) {
+  setTimeout(openOnboarding, 400);
+}
 </script>
+
+<!-- ══ ONBOARDING ══ -->
+<div class="ob-overlay" id="ob-overlay">
+<div class="ob-sheet">
+
+  <!-- Step 0: Welcome -->
+  <div class="ob-step active">
+    <div class="ob-icon">⏱</div>
+    <div class="ob-title">Welcome to ChronaSense</div>
+    <div class="ob-body">Most people think they know where their time goes.<br><br>
+    They're wrong.<br><br>
+    ChronaSense pings you every 30 minutes and asks one question: <strong>what were you just doing?</strong> Over time, the truth becomes impossible to ignore.</div>
+  </div>
+
+  <!-- Step 1: The loop -->
+  <div class="ob-step">
+    <div class="ob-icon">🔔</div>
+    <div class="ob-title">The core loop</div>
+    <div class="ob-body">
+      <strong>1. Start the timer</strong> — tap the big button on Today tab.<br><br>
+      <strong>2. Work normally</strong> — every 30 minutes (or your set interval) you get a ping.<br><br>
+      <strong>3. Log it</strong> — type what you did and pick a category. Takes 5 seconds.<br><br>
+      That's it. Do this for a week and patterns emerge.
+    </div>
+  </div>
+
+  <!-- Step 2: Categories -->
+  <div class="ob-step">
+    <div class="ob-icon">🗂</div>
+    <div class="ob-title">9 categories</div>
+    <div class="ob-body">Every block you log gets one label. Pick the closest fit — don't overthink it.</div>
+    <div class="ob-cats">
+      <div class="ob-cat"><span class="ob-cat-dot" style="background:var(--deep)"></span><span class="ob-cat-name">Deep Work</span></div>
+      <div class="ob-cat"><span class="ob-cat-dot" style="background:var(--shallow)"></span><span class="ob-cat-name">Shallow Work</span></div>
+      <div class="ob-cat"><span class="ob-cat-dot" style="background:var(--nine5)"></span><span class="ob-cat-name">Job Work</span></div>
+      <div class="ob-cat"><span class="ob-cat-dot" style="background:var(--learning)"></span><span class="ob-cat-name">Learning</span></div>
+      <div class="ob-cat"><span class="ob-cat-dot" style="background:var(--exercise)"></span><span class="ob-cat-name">Exercise</span></div>
+      <div class="ob-cat"><span class="ob-cat-dot" style="background:var(--social)"></span><span class="ob-cat-name">Social</span></div>
+      <div class="ob-cat"><span class="ob-cat-dot" style="background:var(--break)"></span><span class="ob-cat-name">Maintenance</span></div>
+      <div class="ob-cat"><span class="ob-cat-dot" style="background:var(--errands)"></span><span class="ob-cat-name">Errands</span></div>
+      <div class="ob-cat"><span class="ob-cat-dot" style="background:var(--distraction)"></span><span class="ob-cat-name">Waste</span></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Setup -->
+  <div class="ob-step">
+    <div class="ob-icon">⚙️</div>
+    <div class="ob-title">One thing before you start</div>
+    <div class="ob-body">
+      Go to <strong>Settings</strong> and set your <strong>timezone</strong> — this makes sure your day starts and ends at the right time.<br><br>
+      You can also adjust the ping interval (default is 30 min) and your deep work goal.<br><br>
+      You can replay this guide anytime from Settings.
+    </div>
+  </div>
+
+  <div class="ob-dots">
+    <div class="ob-dot active"></div>
+    <div class="ob-dot"></div>
+    <div class="ob-dot"></div>
+    <div class="ob-dot"></div>
+  </div>
+  <div class="ob-actions">
+    <button class="ob-skip" id="ob-skip-btn" onclick="closeOnboarding()">Skip</button>
+    <button class="ob-next" id="ob-next-btn" onclick="obNext()">Next</button>
+  </div>
+</div>
+</div>
+
 </body>
 </html>
