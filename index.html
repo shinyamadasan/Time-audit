@@ -5388,6 +5388,7 @@ function saveSettings(){
   const reviewTimeVal = document.getElementById('set-review-hour').value || '22:00';
   settings.reviewHour = parseInt(reviewTimeVal.split(':')[0], 10);
   settings.geminiKey = document.getElementById('set-gemini-key').value.trim();
+  settings._savedAt = Date.now();
   const keyStatus = document.getElementById('ai-key-status');
   if (keyStatus) keyStatus.textContent = settings.geminiKey ? '✓ AI auto-categorization active' : 'No key — AI features disabled';
   renderTonePreview();
