@@ -4603,10 +4603,13 @@ function quickRetroLog() {
   const spansMidnight = startDateKey !== endDateKey;
   const midnight = spansMidnight ? tzParseTime(endDateKey, '00:00') : null;
 
+  // Use AI suggestion — check cache synchronously so fast loggers don't miss it
+  const resolvedEnergy = _quickAIEnergy || _aiCache[task.trim().toLowerCase()] || 'shallow';
+
   function makeQEntry(id, ts, tsS, dateKey) {
     const blkDur = Math.round((ts - tsS) / 60000);
     const e = { id, ts, tsStart: tsS, blockIntervalMin: blkDur,
-      date: dateKey, activity: task, energy: _quickAIEnergy || 'shallow',
+      date: dateKey, activity: task, energy: resolvedEnergy,
       onPlan: true, retro: true, updatedAt: Date.now() };
     e.category = getBucket(e); e.originalLabel = e.energy || null;
     return e;
