@@ -5389,10 +5389,12 @@ function saveSettings(){
   settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
   const reviewTimeVal = document.getElementById('set-review-hour').value || '22:00';
   settings.reviewHour = parseInt(reviewTimeVal.split(':')[0], 10);
+  const prevKey = settings.geminiKey;
   settings.geminiKey = document.getElementById('set-gemini-key').value.trim();
   settings._savedAt = Date.now();
   const keyStatus = document.getElementById('ai-key-status');
   if (keyStatus) keyStatus.textContent = settings.geminiKey ? '✓ AI auto-categorization active' : 'No key — AI features disabled';
+  if (settings.geminiKey && settings.geminiKey !== prevKey) showToast('AI key saved — type an activity to test it');
   renderTonePreview();
   // Sync interval back to Today tab input
   document.getElementById('interval-input').value = settings.intervalMin;
@@ -5442,7 +5444,12 @@ async function aiCategorize(activity) {
       { method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ contents:[{ parts:[{ text: prompt }] }] }) }
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errData = await res.json().catch(()=>({}));
+      const errMsg = errData?.error?.message || `HTTP ${res.status}`;
+      showToast(`AI error: ${errMsg}`);
+      return null;
+    }
     const data = await res.json();
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toLowerCase().replace(/[^a-z0-9]/g,'');
     const valid = ['deep','shallow','nine5','errands','learning','exercise','social','recovery','waste'];
@@ -5451,7 +5458,11 @@ async function aiCategorize(activity) {
       localStorage.setItem('ta3-ai-cache', JSON.stringify(_aiCache));
       return raw;
     }
-  } catch(e) {}
+    console.warn('[AI] Unexpected response:', raw, data);
+  } catch(e) {
+    showToast(`AI failed: ${e.message}`);
+    console.error('[AI] Error:', e);
+  }
   return null;
 }
 
@@ -6241,13 +6252,18 @@ loadAICache();
     }
   }
 })();
-// Kill browser autofill — browsers ignore autocomplete="new-password" on re-visit
+// Kill browser autofill — Chrome ignores autocomplete="new-password" on revisited pages.
+// readonly trick: Chrome won't autofill readonly fields; we remove it on focus.
+document.querySelectorAll('input[autocomplete="new-password"]').forEach(el => {
+  el.setAttribute('readonly', true);
+  el.addEventListener('focus', function() { this.removeAttribute('readonly'); });
+});
+// Belt-and-suspenders: also clear at 800ms in case Chrome fires autofill late
 setTimeout(() => {
-  ['hero-task-input','retro-task','retro-activity','f-activity','focus-task-input','set-gemini-key'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el && el.type !== 'password') el.value = '';
+  document.querySelectorAll('input[autocomplete="new-password"]').forEach(el => {
+    if (el.type !== 'password' && !el.matches(':focus')) el.value = '';
   });
-}, 150);
+}, 800);
 document.getElementById('interval-input').value = settings.intervalMin;
 // If timer was restored from localStorage, resume it
 if (running && timerStartedAt) {
