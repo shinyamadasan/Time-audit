@@ -535,7 +535,12 @@ function startSync() {
 
   fbDb.ref(`rooms/${roomCode}/settings`).on('value', snap => {
     const val = snap.val();
-    if (val && val.timezone && val.timezone !== settings.timezone) {
+    if (!val) return;
+    // Only apply remote settings if they were saved MORE RECENTLY than local ones.
+    // This prevents a stale Firebase value from overwriting a timezone the user just changed.
+    const remoteTs = val._savedAt || 0;
+    const localTs  = settings._savedAt || 0;
+    if (remoteTs > localTs && val.timezone && val.timezone !== settings.timezone) {
       settings.timezone = val.timezone;
       persist();
       renderToday();
