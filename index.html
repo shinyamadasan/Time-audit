@@ -833,12 +833,21 @@ button, a, [role="button"],
 .signal-item-body{flex:1}
 .signal-item-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:2px}
 
-/* ── Yesterday's promise ── */
-.promise-banner{background:linear-gradient(135deg,rgba(76,199,240,0.07) 0%,rgba(76,199,240,0.03) 100%);border:1px solid rgba(76,199,240,0.22);border-left:3px solid var(--deep);border-radius:var(--r2);padding:13px 14px;margin-bottom:12px}
-.promise-eyebrow{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--deep);margin-bottom:5px}
-.promise-text{font-size:15px;font-weight:700;color:var(--text);line-height:1.35;margin-bottom:6px}
-.promise-sub{font-size:12px;color:var(--muted);line-height:1.45}
-.promise-actions{display:flex;gap:7px;margin-top:10px}
+/* ── Yesterday's accountability card ── */
+.promise-banner{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:14px 15px;margin-bottom:12px}
+.promise-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.promise-header-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)}
+.promise-row{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border-radius:var(--r);margin-bottom:6px}
+.promise-row:last-of-type{margin-bottom:0}
+.promise-row-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em}
+.promise-row-value{font-size:13px;font-weight:600;color:var(--text);line-height:1.4}
+.promise-row.focus{background:rgba(76,199,240,0.08);border:1px solid rgba(76,199,240,0.18)}
+.promise-row.focus .promise-row-label{color:var(--deep)}
+.promise-row.waste{background:rgba(255,107,107,0.08);border:1px solid rgba(255,107,107,0.18)}
+.promise-row.waste .promise-row-label{color:var(--distraction)}
+.promise-row.avoid{background:rgba(249,199,79,0.08);border:1px solid rgba(249,199,79,0.18)}
+.promise-row.avoid .promise-row-label{color:var(--admin)}
+.promise-set-btn{font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid rgba(76,199,240,0.3);background:rgba(76,199,240,0.1);color:var(--deep);cursor:pointer;font-family:var(--head);white-space:nowrap}
 
 /* ── Daily Summary Card ── */
 .daily-summary{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:12px}
@@ -5482,30 +5491,47 @@ function renderYesterdayPromise() {
   const el = document.getElementById('yesterday-promise');
   if (!el) return;
 
-  const todayKey = toDateKey(new Date());
+  if (!isViewingToday()) { el.style.display = 'none'; return; }
+
   const yesterdayKey = toDateKey(new Date(Date.now() - 86400000));
-  const yReview = reviews[yesterdayKey];
-  const promise = yReview?.tomorrow?.trim();
+  const r = reviews[yesterdayKey];
+  const promise = r?.tomorrow?.trim();
+  const waste   = r?.waste?.trim();
+  const avoid   = r?.avoid?.trim();
 
-  // Hide if: no promise, or already dismissed today, or not viewing today
-  const dismissedKey = 'ta3-promise-dismissed-' + todayKey;
-  if (!promise || localStorage.getItem(dismissedKey) || !isViewingToday()) {
-    el.style.display = 'none';
-    return;
-  }
+  // Need at least one field to show the card
+  if (!promise && !waste && !avoid) { el.style.display = 'none'; return; }
 
-  // Check if they're already on it — if intention matches the promise, tone changes
-  const alreadySet = intention.trim().toLowerCase() === promise.toLowerCase();
+  const alreadySet = promise && intention.trim().toLowerCase() === promise.toLowerCase();
+
+  const focusRow = promise ? `
+    <div class="promise-row focus">
+      <span class="promise-row-label">Today's focus you set yesterday</span>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+        <span class="promise-row-value" style="flex:1">"${promise}"</span>
+        ${!alreadySet ? `<button class="promise-set-btn" onclick="applyPromiseAsIntention()">Set focus</button>` : `<span style="font-size:10px;color:var(--deep);font-weight:600">✓ active</span>`}
+      </div>
+    </div>` : '';
+
+  const wasteRow = waste ? `
+    <div class="promise-row waste">
+      <span class="promise-row-label">What you wasted time on</span>
+      <span class="promise-row-value">${waste}</span>
+    </div>` : '';
+
+  const avoidRow = avoid ? `
+    <div class="promise-row avoid">
+      <span class="promise-row-label">How you said you'd avoid it</span>
+      <span class="promise-row-value">${avoid}</span>
+    </div>` : '';
 
   el.style.display = 'block';
   el.innerHTML = `<div class="promise-banner">
-    <div class="promise-eyebrow">Yesterday you promised</div>
-    <div class="promise-text">"${promise}"</div>
-    <div class="promise-sub">${alreadySet ? "It's already your focus today. Stay on it." : "Are you going to follow through today?"}</div>
-    <div class="promise-actions">
-      ${!alreadySet ? `<button class="btn sm primary" onclick="applyPromiseAsIntention()">Set as today's focus</button>` : ''}
-      <button class="btn sm ghost" onclick="dismissYesterdayPromise()">Got it</button>
+    <div class="promise-header">
+      <span class="promise-header-title">Yesterday's accountability</span>
+      <button class="btn sm ghost" onclick="openReview('${yesterdayKey}')" style="font-size:10px;padding:3px 9px">Edit</button>
     </div>
+    ${wasteRow}${avoidRow}${focusRow}
   </div>`;
 }
 
@@ -5516,15 +5542,8 @@ function applyPromiseAsIntention() {
   intention = promise;
   document.getElementById('intention').value = promise;
   persist();
-  dismissYesterdayPromise();
+  renderYesterdayPromise();
   showToast('Focus set ✓');
-}
-
-function dismissYesterdayPromise() {
-  const todayKey = toDateKey(new Date());
-  localStorage.setItem('ta3-promise-dismissed-' + todayKey, '1');
-  const el = document.getElementById('yesterday-promise');
-  if (el) el.style.display = 'none';
 }
 
 // ══════════════════════════════════════════════════════
