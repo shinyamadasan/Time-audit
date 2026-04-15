@@ -906,6 +906,7 @@ button, a, [role="button"],
       </div>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
+      <button class="btn sm ghost" onclick="openReflectionsHistory()">Reflections</button>
       <button class="btn sm ghost" onclick="openReview()">Review</button>
       <button class="btn sm ghost" onclick="enterFocusMode()" title="Focus / Pomodoro mode">⊙ Focus</button>
     </div>
@@ -1731,11 +1732,27 @@ button, a, [role="button"],
   </div>
 </div></div>
 
+<!-- ══ REFLECTIONS HISTORY MODAL ══ -->
+<div class="review-overlay" id="reflections-history-overlay" onclick="overlayClose(event,'reflections-history-overlay')">
+<div class="review-modal" style="max-height:80vh;overflow-y:auto">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--deep);font-weight:700;margin-bottom:3px">Daily reflections</div>
+      <div style="font-size:16px;font-weight:700">Past entries</div>
+    </div>
+    <button class="btn sm ghost" onclick="closeModal('reflections-history-overlay')">Close</button>
+  </div>
+  <div id="reflections-history-list"></div>
+</div></div>
+
 <!-- ══ REVIEW MODAL ══ -->
 <div class="review-overlay" id="review-overlay" onclick="overlayClose(event,'review-overlay')">
 <div class="review-modal">
-  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--deep);font-weight:700;margin-bottom:5px">End of day</div>
-  <div style="font-size:18px;font-weight:700;margin-bottom:18px">60-second reflection</div>
+  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--deep);font-weight:700;margin-bottom:3px">End of day</div>
+  <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:16px">
+    <div style="font-size:18px;font-weight:700">60-second reflection</div>
+    <div id="rv-date-label" style="font-size:12px;color:var(--muted)"></div>
+  </div>
 
   <!-- REALITY SCORE UI -->
   <div id="reality-score-wrap" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:12px;text-align:center;margin-bottom:16px">
@@ -5329,45 +5346,121 @@ function removePreset(i){settings.presets.splice(i,1);persist();renderSettings()
 // ══════════════════════════════════════════════════════
 // REVIEW
 // ══════════════════════════════════════════════════════
-function openReview(){
-  const k=toDateKey(new Date()),r=reviews[k]||{};
-  document.getElementById('rv-win').value=r.win||'';
-  // Pre-fill waste from actual data if not already written
-  if (!r.waste) {
-    const wasteMap={};
-    getTodayEntries().filter(e=>e.energy==='waste'&&e.activity).forEach(e=>{
-      const key=e.activity.split(' (Output:')[0];
-      wasteMap[key]=(wasteMap[key]||0)+(e.blockIntervalMin||0);
-    });
-    const worst=Object.entries(wasteMap).sort((a,b)=>b[1]-a[1])[0];
-    document.getElementById('rv-waste').value=worst?`${worst[0]} · ${worst[1]>=60?(worst[1]/60).toFixed(1)+'h':worst[1]+'m'}`:'';
-  } else {
-    document.getElementById('rv-waste').value=r.waste;
+let _reviewDateKey = null; // which date is currently open in the review modal
+
+function openReview(dateKey) {
+  _reviewDateKey = dateKey || toDateKey(new Date());
+  const isToday = _reviewDateKey === toDateKey(new Date());
+  const r = reviews[_reviewDateKey] || {};
+
+  // Date label in modal header
+  const dateLabel = document.getElementById('rv-date-label');
+  if (dateLabel) {
+    if (isToday) {
+      dateLabel.textContent = '';
+    } else {
+      const d = new Date(_reviewDateKey + 'T12:00:00');
+      dateLabel.textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    }
   }
-  document.getElementById('rv-avoid').value=r.avoid||'';
-  document.getElementById('rv-tomorrow').value=r.tomorrow||'';
-  
-  const todayE = getTodayEntries();
-  const deepCount = todayE.filter(e => e.energy === 'deep').length;
-  const distCount = todayE.filter(e => e.energy === 'waste').length;
-  const realityScore = deepCount - distCount;
-  
+
+  document.getElementById('rv-win').value = r.win || '';
+
+  // Pre-fill waste from actual data if not yet written (today only)
+  if (!r.waste && isToday) {
+    const wasteMap = {};
+    getTodayEntries().filter(e => e.energy === 'waste' && e.activity).forEach(e => {
+      const key = e.activity.split(' (Output:')[0];
+      wasteMap[key] = (wasteMap[key] || 0) + (e.blockIntervalMin || 0);
+    });
+    const worst = Object.entries(wasteMap).sort((a, b) => b[1] - a[1])[0];
+    document.getElementById('rv-waste').value = worst ? `${worst[0]} · ${worst[1] >= 60 ? (worst[1]/60).toFixed(1)+'h' : worst[1]+'m'}` : '';
+  } else {
+    document.getElementById('rv-waste').value = r.waste || '';
+  }
+
+  document.getElementById('rv-avoid').value = r.avoid || '';
+  document.getElementById('rv-tomorrow').value = r.tomorrow || '';
+
+  // Reality score — use entries for that date
+  const dayE = entries.filter(e => !e.missed && !e.deleted && getDateInTZ(e.tsStart || e.ts) === _reviewDateKey);
+  const realityScore = dayE.filter(e => e.energy === 'deep').length - dayE.filter(e => e.energy === 'waste').length;
   const rsVal = document.getElementById('reality-score-val');
   const rsSub = document.getElementById('reality-score-sub');
   rsVal.textContent = realityScore > 0 ? '+' + realityScore : realityScore;
   rsVal.style.color = realityScore >= 0 ? 'var(--deep)' : 'var(--distraction)';
   rsSub.textContent = realityScore >= 0 ? 'You moved forward' : 'You regressed';
   rsSub.style.color = realityScore >= 0 ? 'var(--deep)' : 'var(--distraction)';
-  
+
   document.getElementById('review-overlay').classList.add('open');
 }
+
+function openReflectionsHistory() {
+  const el = document.getElementById('reflections-history-list');
+  if (!el) return;
+
+  const days = [];
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(Date.now() - i * 86400000);
+    const k = toDateKey(d);
+    days.push({ key: k, date: d, r: reviews[k] || null });
+  }
+  const hasDays = days.some(d => d.r);
+
+  if (!hasDays) {
+    el.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:8px 0">No reflections yet. Complete your first review tonight.</div>`;
+  } else {
+    const fmt = d => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const todayKey = toDateKey(new Date());
+
+    el.innerHTML = days.map(({ key, date, r }) => {
+      const isToday = key === todayKey;
+      const label = isToday ? 'Today' : fmt(date);
+      const s = computeDailySummary(key);
+      const statsHtml = s
+        ? `<span style="font-family:var(--mono);font-size:11px;color:var(--deep)">${s.deepHrs}h deep</span>
+           <span style="color:var(--border2);margin:0 4px">|</span>
+           <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${s.productivePct}% productive</span>`
+        : '';
+
+      if (!r) {
+        // No reflection — show empty state with button to add
+        if (!s) return ''; // no data at all, skip
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px">${label}</div>
+            <div>${statsHtml}</div>
+          </div>
+          <button class="btn sm ghost" onmousedown="closeModal('reflections-history-overlay');setTimeout(()=>openReview('${key}'),120)">Add</button>
+        </div>`;
+      }
+
+      const snippet = r.win ? `"${r.win.slice(0, 50)}${r.win.length > 50 ? '…' : ''}"` : r.waste ? r.waste.slice(0,50) : 'Saved';
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <div>
+            <span style="font-size:12px;font-weight:600;color:var(--text)">${label}</span>
+            ${statsHtml ? `<span style="margin-left:8px">${statsHtml}</span>` : ''}
+          </div>
+          <button class="btn sm ghost" onmousedown="closeModal('reflections-history-overlay');setTimeout(()=>openReview('${key}'),120)">Edit</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted);font-style:italic">${snippet}</div>
+      </div>`;
+    }).filter(Boolean).join('');
+  }
+
+  document.getElementById('reflections-history-overlay').classList.add('open');
+}
+
 function saveReview(){
-  const k=toDateKey(new Date());
+  const k = _reviewDateKey || toDateKey(new Date());
+  const isToday = k === toDateKey(new Date());
   reviews[k]={win:document.getElementById('rv-win').value,waste:document.getElementById('rv-waste').value,avoid:document.getElementById('rv-avoid').value,tomorrow:document.getElementById('rv-tomorrow').value};
-  const tom=document.getElementById('rv-tomorrow').value;
-  if(tom){intention=tom;}
+  // Only update tomorrow's intention when saving today's review
+  if (isToday) { const tom=document.getElementById('rv-tomorrow').value; if(tom) intention=tom; }
   persist();
   closeModal('review-overlay');
+  if (document.getElementById('reflect-daily-reviews')) renderDailyReflections();
   showToast('Review saved ✓');
 }
 function checkReviewPrompt(){const rh=settings.reviewHour??22;if(tzHour(Date.now())>=rh&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
@@ -5610,7 +5703,10 @@ function renderDailyReflections() {
       : '';
 
     return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;margin-bottom:8px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">${fmt(date)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">${fmt(date)}</div>
+        <button class="btn sm ghost" onclick="openReview('${key}')">Edit</button>
+      </div>
       ${statsHtml}
       ${row('Win', 'var(--deep)', r.win)}
       ${row('Waste', 'var(--distraction)', r.waste)}
