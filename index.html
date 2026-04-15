@@ -378,6 +378,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .focus-task-input{background:none;border:none;border-bottom:2px solid var(--border2);color:var(--text);font-size:24px;font-weight:700;text-align:center;width:100%;max-width:360px;padding:8px 0;outline:none;font-family:var(--head)}
 .focus-task-input:focus{border-bottom-color:var(--deep)}
 .focus-task-input::placeholder{color:var(--muted);font-weight:400}
+.focus-task-input.focus-task-error{border-bottom-color:var(--distraction);animation:shake 0.35s ease}
 .focus-exit-wrap{position:absolute;top:calc(var(--safe-top) + 16px);right:16px}
 .focus-exit-countdown{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;margin-top:4px}
 
@@ -847,8 +848,25 @@ button, a, [role="button"],
 .ds-metric-val.warn{color:var(--admin)}
 .ds-metric-val.bad{color:var(--distraction)}
 .ds-metric-label{font-size:9px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-top:3px;font-weight:600}
-.ds-split-label{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:4px}
-.ds-split-bar{display:flex;height:7px;border-radius:4px;overflow:hidden;margin-bottom:10px;gap:1px;background:var(--bg4)}
+.ds-breakdown-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.ds-breakdown-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted)}
+.ds-breakdown-total{font-family:var(--mono);font-size:11px;color:var(--muted2)}
+.ds-split-bar{display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:10px;gap:2px;background:var(--bg4)}
+.ds-legend{display:flex;flex-wrap:wrap;gap:5px 14px;margin-bottom:10px}
+.ds-legend-item{display:flex;align-items:center;gap:5px}
+.ds-legend-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.ds-legend-dot.deep{background:var(--deep)}
+.ds-legend-dot.shallow{background:var(--shallow)}
+.ds-legend-dot.nine5{background:var(--nine5)}
+.ds-legend-dot.errands{background:var(--errands)}
+.ds-legend-dot.learning{background:var(--learning)}
+.ds-legend-dot.exercise{background:var(--exercise)}
+.ds-legend-dot.social{background:var(--social)}
+.ds-legend-dot.recovery{background:var(--break)}
+.ds-legend-dot.waste{background:var(--distraction)}
+.ds-legend-name{font-size:11px;color:var(--text)}
+.ds-legend-time{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:1px}
+.ds-legend-pct{font-size:10px;color:var(--muted2);font-family:var(--mono)}
 .ds-split-seg{height:100%;min-width:0;transition:width 0.5s cubic-bezier(0.4,0,0.2,1)}
 .ds-split-seg.deep{background:var(--deep)}
 .ds-split-seg.shallow{background:var(--shallow)}
@@ -2490,7 +2508,14 @@ function startPomodoro() {
 
   // Capture task from input and switch to static display
   const taskInput = document.getElementById('focus-task-input');
-  const focusTask = taskInput.value.trim() || currentTask || intention || 'Deep work';
+  const focusTask = taskInput.value.trim();
+  if (!focusTask) {
+    taskInput.classList.add('focus-task-error');
+    taskInput.placeholder = 'Name your focus session first';
+    taskInput.focus();
+    setTimeout(() => { taskInput.classList.remove('focus-task-error'); taskInput.placeholder = 'What are you focusing on?'; }, 2000);
+    return;
+  }
   taskInput.style.display = 'none';
   const intentionEl = document.getElementById('focus-intention-text');
   intentionEl.textContent = focusTask;
@@ -3611,6 +3636,9 @@ function logGapChunk(cardIdx, activity, energy) {
   logInstantBlock(t.ts0, t.ts1, activity, energy, cardIdx);
 }
 
+let _gapSugIndex = -1;
+let _gapSugCardIdx = null;
+
 function expandGapInput(cardIdx) {
   const wrap = document.getElementById(`gap-type-wrap-${cardIdx}`);
   if (!wrap) return;
@@ -3620,11 +3648,17 @@ function expandGapInput(cardIdx) {
     { label: 'Waste',    e: 'waste',    c: 'var(--distraction)' },
   ];
   wrap.innerHTML = `
-    <input id="gap-inline-${cardIdx}" type="text" placeholder="e.g. Gym, Reading, Cooking…"
-      onkeydown="handleGapInlineKey(event,${cardIdx})"
-      style="width:100%;padding:10px 12px;background:var(--bg4);border:1.5px solid var(--deep);
-             border-radius:8px;color:var(--text);font-family:var(--head);font-size:13px;
-             outline:none;margin-bottom:8px;display:block;box-sizing:border-box">
+    <div style="position:relative;margin-bottom:8px">
+      <input id="gap-inline-${cardIdx}" type="text" placeholder="e.g. Gym, Reading, Cooking…"
+        onfocus="showGapSuggestions(${cardIdx},this.value)"
+        oninput="showGapSuggestions(${cardIdx},this.value)"
+        onblur="setTimeout(()=>hideGapSuggestions(${cardIdx}),150)"
+        onkeydown="handleGapInlineKey(event,${cardIdx})"
+        style="width:100%;padding:10px 12px;background:var(--bg4);border:1.5px solid var(--deep);
+               border-radius:8px;color:var(--text);font-family:var(--head);font-size:13px;
+               outline:none;display:block;box-sizing:border-box">
+      <div id="gap-suggestions-${cardIdx}" class="hero-suggestions" style="display:none"></div>
+    </div>
     <div style="display:flex;align-items:center;gap:6px">
       <span style="font-size:10px;color:var(--muted);font-weight:600;white-space:nowrap">Save as:</span>
       ${CATS.map(p =>
@@ -3634,12 +3668,54 @@ function expandGapInput(cardIdx) {
                  font-weight:600;cursor:pointer">${p.label}</button>`
       ).join('')}
     </div>`;
+  _gapSugCardIdx = cardIdx;
   setTimeout(() => document.getElementById(`gap-inline-${cardIdx}`)?.focus(), 30);
 }
 
+function showGapSuggestions(cardIdx, filter) {
+  const el = document.getElementById(`gap-suggestions-${cardIdx}`);
+  if (!el) return;
+  _gapSugCardIdx = cardIdx;
+  _gapSugIndex = -1;
+  const items = buildHeroSuggestions(filter || '');
+  if (!items.length) { el.style.display = 'none'; return; }
+  el.innerHTML = items.map(t => buildSugItem(t, `selectGapSuggestion(event,${cardIdx},'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')` )).join('');
+  el.style.display = 'block';
+}
+
+function hideGapSuggestions(cardIdx) {
+  const el = document.getElementById(`gap-suggestions-${cardIdx}`);
+  if (el) el.style.display = 'none';
+}
+
+function selectGapSuggestion(e, cardIdx, task) {
+  e.preventDefault();
+  const inp = document.getElementById(`gap-inline-${cardIdx}`);
+  if (inp) inp.value = task;
+  hideGapSuggestions(cardIdx);
+}
+
 function handleGapInlineKey(event, cardIdx) {
-  if (event.key === 'Enter') { event.preventDefault(); logGapInlineEntry(cardIdx, 'shallow'); }
-  if (event.key === 'Escape') renderGapsList(computeGaps(getTodayEntries()));
+  const el = document.getElementById(`gap-suggestions-${cardIdx}`);
+  const items = el ? [...el.querySelectorAll('.hero-sug-item')] : [];
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    _gapSugIndex = Math.min(_gapSugIndex + 1, items.length - 1);
+    items.forEach((it, i) => it.style.background = i === _gapSugIndex ? 'var(--deep-dim)' : '');
+    if (items[_gapSugIndex]) document.getElementById(`gap-inline-${cardIdx}`).value = items[_gapSugIndex].querySelector('span')?.textContent || items[_gapSugIndex].textContent;
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    _gapSugIndex = Math.max(_gapSugIndex - 1, -1);
+    items.forEach((it, i) => it.style.background = i === _gapSugIndex ? 'var(--deep-dim)' : '');
+    if (_gapSugIndex >= 0 && items[_gapSugIndex]) document.getElementById(`gap-inline-${cardIdx}`).value = items[_gapSugIndex].querySelector('span')?.textContent || items[_gapSugIndex].textContent;
+  } else if (event.key === 'Escape') {
+    hideGapSuggestions(cardIdx);
+    renderGapsList(computeGaps(getTodayEntries()));
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    hideGapSuggestions(cardIdx);
+    logGapInlineEntry(cardIdx, 'shallow');
+  }
 }
 
 function logGapInlineEntry(cardIdx, energy) {
