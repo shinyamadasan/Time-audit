@@ -299,7 +299,14 @@ function load() {
   try { const s = JSON.parse(localStorage.getItem('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
   // Dedicated timezone key wins over everything (Firebase can't overwrite it)
   const savedTz = localStorage.getItem('ta3-tz');
-  if (savedTz) settings.timezone = savedTz;
+  if (savedTz) {
+    settings.timezone = savedTz;
+  } else {
+    // First load with new system — auto-detect from browser and lock it in
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    settings.timezone = browserTz;
+    localStorage.setItem('ta3-tz', browserTz);
+  }
   try { reviews = JSON.parse(localStorage.getItem('ta3-reviews') || '{}'); } catch(e){ reviews={}; }
   try { weeklyReviews = JSON.parse(localStorage.getItem('ta3-weekly-reviews') || '{}'); } catch(e){ weeklyReviews={}; }
   intention = localStorage.getItem('ta3-intention') || '';
