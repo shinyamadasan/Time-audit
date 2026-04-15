@@ -1331,7 +1331,7 @@ button, a, [role="button"],
         <div class="setting-sub">Free at aistudio.google.com · enables auto-category</div>
       </div>
       <div class="setting-control">
-        <input type="password" id="set-gemini-key" placeholder="AIza…" onchange="saveSettings()"
+        <input type="password" id="set-gemini-key" placeholder="AIza…" oninput="saveSettings()"
           style="width:110px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 7px;border-radius:6px;outline:none">
       </div>
     </div>
@@ -1455,15 +1455,15 @@ button, a, [role="button"],
     </div>
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin:10px 0 6px">Category</div>
     <div class="energy-grid">
-      <button class="energy-btn nine5" onclick="setQlEnergy('nine5')"><span class="e-name">Scheduled work</span><span class="e-desc">Fixed, recurring work</span></button>
-      <button class="energy-btn deep" onclick="setQlEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
-      <button class="energy-btn shallow" onclick="setQlEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
-      <button class="energy-btn errands" onclick="setQlEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
-      <button class="energy-btn learning" onclick="setQlEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Study, growth</span></button>
-      <button class="energy-btn exercise" onclick="setQlEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Movement, sports</span></button>
-      <button class="energy-btn social" onclick="setQlEnergy('social')"><span class="e-name">Social</span><span class="e-desc">People, connection</span></button>
-      <button class="energy-btn recovery" onclick="setQlEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, sleep</span></button>
-      <button class="energy-btn waste" onclick="setQlEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
+      <button class="energy-btn nine5" onclick="setQlEnergy('nine5')"><span class="e-name">Job Work</span><span class="e-desc">Your shift, on the clock</span></button>
+      <button class="energy-btn deep" onclick="setQlEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Coding, writing, designing</span></button>
+      <button class="energy-btn shallow" onclick="setQlEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Email, Slack, meetings, calls</span></button>
+      <button class="energy-btn errands" onclick="setQlEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Shopping, commute, appointments</span></button>
+      <button class="energy-btn learning" onclick="setQlEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Courses, books, research</span></button>
+      <button class="energy-btn exercise" onclick="setQlEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Gym, run, walk, yoga</span></button>
+      <button class="energy-btn social" onclick="setQlEnergy('social')"><span class="e-name">Social</span><span class="e-desc">Family, friends, gatherings</span></button>
+      <button class="energy-btn recovery" onclick="setQlEnergy('recovery')"><span class="e-name">Maintenance</span><span class="e-desc">Sleep, meals, grooming, rest</span></button>
+      <button class="energy-btn waste" onclick="setQlEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">Doom-scroll, binge, regret it</span></button>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
       <button class="btn ghost" onclick="dismissQuickLog()">Skip</button>
@@ -1555,15 +1555,15 @@ button, a, [role="button"],
   </div>
   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
   <div class="energy-grid">
-    <button class="energy-btn nine5" onclick="setEnergy('nine5')"><span class="e-name">Scheduled work</span><span class="e-desc">Fixed, recurring work</span></button>
-    <button class="energy-btn deep" onclick="setEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
-    <button class="energy-btn shallow" onclick="setEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
-    <button class="energy-btn errands" onclick="setEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
-    <button class="energy-btn learning" onclick="setEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Study, growth</span></button>
-    <button class="energy-btn exercise" onclick="setEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Movement, sports</span></button>
-    <button class="energy-btn social" onclick="setEnergy('social')"><span class="e-name">Social</span><span class="e-desc">People, connection</span></button>
-    <button class="energy-btn recovery" onclick="setEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, sleep</span></button>
-    <button class="energy-btn waste" onclick="setEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
+    <button class="energy-btn nine5" onclick="setEnergy('nine5')"><span class="e-name">Job Work</span><span class="e-desc">Your shift, on the clock</span></button>
+    <button class="energy-btn deep" onclick="setEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Coding, writing, designing</span></button>
+    <button class="energy-btn shallow" onclick="setEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Email, Slack, meetings, calls</span></button>
+    <button class="energy-btn errands" onclick="setEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Shopping, commute, appointments</span></button>
+    <button class="energy-btn learning" onclick="setEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Courses, books, research</span></button>
+    <button class="energy-btn exercise" onclick="setEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Gym, run, walk, yoga</span></button>
+    <button class="energy-btn social" onclick="setEnergy('social')"><span class="e-name">Social</span><span class="e-desc">Family, friends, gatherings</span></button>
+    <button class="energy-btn recovery" onclick="setEnergy('recovery')"><span class="e-name">Maintenance</span><span class="e-desc">Sleep, meals, grooming, rest</span></button>
+    <button class="energy-btn waste" onclick="setEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">Doom-scroll, binge, regret it</span></button>
   </div>
   <div id="log-ai-hint" style="display:none"></div>
   <button class="detail-toggle" onclick="toggleDetail()"><span id="detail-arrow">▸</span> Add detail (DEA-P, $/hr)</button>
@@ -1713,15 +1713,15 @@ button, a, [role="button"],
   </div>
   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
   <div class="energy-grid">
-    <button class="energy-btn nine5" onclick="setRetroEnergy('nine5')"><span class="e-name">Scheduled work</span><span class="e-desc">Fixed, recurring work</span></button>
-    <button class="energy-btn deep" onclick="setRetroEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Focused, high-value</span></button>
-    <button class="energy-btn shallow" onclick="setRetroEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Reactive, low-skill</span></button>
-    <button class="energy-btn errands" onclick="setRetroEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Tasks, logistics</span></button>
-    <button class="energy-btn learning" onclick="setRetroEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Study, growth</span></button>
-    <button class="energy-btn exercise" onclick="setRetroEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Movement, sports</span></button>
-    <button class="energy-btn social" onclick="setRetroEnergy('social')"><span class="e-name">Social</span><span class="e-desc">People, connection</span></button>
-    <button class="energy-btn recovery" onclick="setRetroEnergy('recovery')"><span class="e-name">Recovery</span><span class="e-desc">Rest, meals, sleep</span></button>
-    <button class="energy-btn waste" onclick="setRetroEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">You already know</span></button>
+    <button class="energy-btn nine5" onclick="setRetroEnergy('nine5')"><span class="e-name">Job Work</span><span class="e-desc">Your shift, on the clock</span></button>
+    <button class="energy-btn deep" onclick="setRetroEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Coding, writing, designing</span></button>
+    <button class="energy-btn shallow" onclick="setRetroEnergy('shallow')"><span class="e-name">Shallow Work</span><span class="e-desc">Email, Slack, meetings, calls</span></button>
+    <button class="energy-btn errands" onclick="setRetroEnergy('errands')"><span class="e-name">Errands</span><span class="e-desc">Shopping, commute, appointments</span></button>
+    <button class="energy-btn learning" onclick="setRetroEnergy('learning')"><span class="e-name">Learning</span><span class="e-desc">Courses, books, research</span></button>
+    <button class="energy-btn exercise" onclick="setRetroEnergy('exercise')"><span class="e-name">Exercise</span><span class="e-desc">Gym, run, walk, yoga</span></button>
+    <button class="energy-btn social" onclick="setRetroEnergy('social')"><span class="e-name">Social</span><span class="e-desc">Family, friends, gatherings</span></button>
+    <button class="energy-btn recovery" onclick="setRetroEnergy('recovery')"><span class="e-name">Maintenance</span><span class="e-desc">Sleep, meals, grooming, rest</span></button>
+    <button class="energy-btn waste" onclick="setRetroEnergy('waste')"><span class="e-name">Waste</span><span class="e-desc">Doom-scroll, binge, regret it</span></button>
   </div>
   <div id="retro-ai-hint" style="display:none"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
@@ -2881,7 +2881,7 @@ function formatEnergyLabel(energy) {
     exercise: 'Exercise',
     errands: 'Errands',
     waste: 'Waste',
-    nine5: 'Scheduled work',
+    nine5: 'Job Work',
     learning: 'Learning',
     social: 'Social',
     distraction: 'Distraction'
@@ -3422,7 +3422,7 @@ function computeStreak(){
   return s;
 }
 
-const eLabel={deep:'Deep',shallow:'Shallow',nine5:'Scheduled work',errands:'Errands',learning:'Learning',exercise:'Exercise',social:'Social',recovery:'Recovery',waste:'Waste',admin:'Admin',distraction:'Distraction',break:'Break',away:'Away'};
+const eLabel={deep:'Deep',shallow:'Shallow',nine5:'Job Work',errands:'Errands',learning:'Learning',exercise:'Exercise',social:'Social',recovery:'Maintenance',waste:'Waste',admin:'Admin',distraction:'Distraction',break:'Break',away:'Away'};
 const ACTIVITY_PALETTE = [
   '#7dd3fc','#86efac','#fcd34d','#f9a8d4','#a5b4fc','#6ee7b7','#fb923c','#e879f9',
   '#38bdf8','#4ade80','#facc15','#f472b6','#818cf8','#34d399','#fb7185','#a78bfa',
@@ -5022,7 +5022,7 @@ function renderEnergySplit(el, entriesArr) {
     social:'var(--social)',recovery:'var(--break)',waste:'var(--distraction)'
   };
   const energyLabels = {
-    deep:'Deep work',shallow:'Shallow work',nine5:'Scheduled work',
+    deep:'Deep work',shallow:'Shallow work',nine5:'Job Work',
     errands:'Errands',learning:'Learning',exercise:'Exercise',
     social:'Social',recovery:'Recovery',waste:'Waste'
   };
@@ -5181,7 +5181,7 @@ function renderWeekOverview(days) {
             <option value="">All types</option>
             <option value="deep">Deep work</option>
             <option value="shallow">Shallow work</option>
-            <option value="nine5">Scheduled work</option>
+            <option value="nine5">Job Work</option>
             <option value="errands">Errands</option>
             <option value="learning">Learning</option>
             <option value="exercise">Exercise</option>
@@ -5384,6 +5384,8 @@ function saveSettings(){
   settings.deepGoal=parseInt(document.getElementById('set-deepgoal').value)||20;
   settings.exitDelay=parseInt(document.getElementById('set-exitdelay').value)||10;
   settings.timezone=document.getElementById('set-timezone').value;
+  // Dedicated key so Firebase can never silently overwrite the local timezone
+  localStorage.setItem('ta3-tz', settings.timezone);
   settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
   const reviewTimeVal = document.getElementById('set-review-hour').value || '22:00';
   settings.reviewHour = parseInt(reviewTimeVal.split(':')[0], 10);
@@ -5410,7 +5412,7 @@ let _aiDebounce = {};
 let _quickAIEnergy = null;
 
 const AI_LABELS = {
-  deep:'Deep Work', shallow:'Shallow Work', nine5:'Scheduled work',
+  deep:'Deep Work', shallow:'Shallow Work', nine5:'Job Work',
   errands:'Errands', learning:'Learning', exercise:'Exercise',
   social:'Social', recovery:'Recovery', waste:'Waste'
 };
@@ -5433,7 +5435,7 @@ async function aiCategorize(activity) {
   if (!apiKey) return null;
 
   try {
-    const prompt = `Classify this activity into exactly one category.\n\nActivity: "${activity}"\n\nCategories:\n- deep: focused creative or intellectual work (coding, writing, analysis, designing, building)\n- shallow: meetings, emails, calls, admin tasks, paperwork\n- nine5: fixed scheduled work obligations or shifts\n- errands: chores, shopping, real-world appointments, commute\n- learning: studying, courses, reading non-fiction, tutorials, practice\n- exercise: gym, sports, walking, running, physical training\n- social: socializing, parties, casual hangouts, non-work calls\n- recovery: sleep, rest, naps, meditation, eating, breaks\n- waste: distraction, procrastination, scrolling social media, mindless activity\n\nReply with ONLY the single category word, nothing else.`;
+    const prompt = `Classify this activity into exactly one category.\n\nActivity: "${activity}"\n\nCategories:\n- deep: focused creative or intellectual work you chose to do (coding, writing, analysis, designing, building, strategy)\n- shallow: reactive communication and coordination (email, Slack, meetings, calls, standups, admin paperwork)\n- nine5: your primary job duties while on the clock — use this when it's your job/shift work and doesn't fit deep or shallow (scribing, nursing shifts, cleaning shift, factory work, teaching class)\n- errands: real-world logistics and life admin (shopping, commute, appointments, bills, picking up kids)\n- learning: intentional skill-building outside of job duties (courses, books, research, tutorials, podcasts to learn)\n- exercise: deliberate physical movement (gym, run, walk, yoga, sports, cycling)\n- social: time with people for personal connection (family time, friends, dates, social gatherings, parties)\n- recovery: body and life maintenance (sleep, meals, eating, grooming, shower, cooking for yourself, rest, naps)\n- waste: time you'd regret on reflection (doom-scrolling, mindless browsing, binge-watching without intention)\n\nReply with ONLY the single category word, nothing else.`;
 
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
@@ -6221,6 +6223,31 @@ function startVoiceLog() {
 // ══════════════════════════════════════════════════════
 load();
 loadAICache();
+// Initialize timezone select immediately from saved settings (not just when Settings tab opens)
+(function initTimezoneSelect() {
+  const sel = document.getElementById('set-timezone');
+  if (!sel) return;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Try exact match first, then partial match
+  let matched = false;
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === tz) { sel.selectedIndex = i; matched = true; break; }
+  }
+  if (!matched) {
+    // Fallback: find closest region match
+    const region = tz.split('/')[0];
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value.startsWith(region)) { sel.selectedIndex = i; break; }
+    }
+  }
+})();
+// Kill browser autofill — browsers ignore autocomplete="new-password" on re-visit
+setTimeout(() => {
+  ['hero-task-input','retro-task','retro-activity','f-activity','focus-task-input','set-gemini-key'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.type !== 'password') el.value = '';
+  });
+}, 150);
 document.getElementById('interval-input').value = settings.intervalMin;
 // If timer was restored from localStorage, resume it
 if (running && timerStartedAt) {
