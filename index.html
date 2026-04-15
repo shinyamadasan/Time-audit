@@ -2311,6 +2311,8 @@ function doPing() {
   remaining = totalSecs;
   updateRing();
   scheduleNativePing(totalSecs); // reschedule next ping
+  swCancelPing(); // JS handled it — cancel any SW backup
+  if (document.hidden) swSchedulePing(); // tab still hidden — schedule next SW backup
 
   // Notification — once, not looping
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -6312,6 +6314,47 @@ setTimeout(() => {
 }, 1200);
 // Refresh timeline every 60s so "Since last log" gap stays current
 setInterval(() => { if (!running && !breakActive) renderToday(); }, 60000);
+
+// ══════════════════════════════════════════════════════
+// SERVICE WORKER — background ping notifications
+// ══════════════════════════════════════════════════════
+let _swReg = null;
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js')
+    .then(reg => {
+      _swReg = reg;
+      console.log('[SW] Registered');
+    })
+    .catch(e => console.warn('[SW] Registration failed', e));
+
+  // Listen for messages from SW (e.g. notification tap → open log)
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data?.action === 'open-log') openQuickLog();
+  });
+}
+
+// Schedule a SW backup ping (called when page becomes hidden or timer resets)
+function swSchedulePing() {
+  if (!_swReg?.active || !running || breakActive) return;
+  _swReg.active.postMessage({ action: 'schedule-ping', delayMs: remaining * 1000 });
+}
+
+// Cancel the SW backup ping (called when page is visible — JS timer handles it)
+function swCancelPing() {
+  navigator.serviceWorker?.ready.then(reg => {
+    reg.active?.postMessage({ action: 'cancel-ping' });
+  });
+}
+
+// When tab is hidden: hand off to SW. When visible: cancel SW, JS takes over.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    swSchedulePing();
+  } else {
+    swCancelPing();
+  }
+});
 
 // ══════════════════════════════════════════════════════
 // ONBOARDING
