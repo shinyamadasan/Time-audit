@@ -4241,7 +4241,21 @@ function applyContextualVisibility(todayE) {
   );
   const showSleep = isToday && isMorning && !hasSleep;
   const sleepPill = document.getElementById('sleep-pill-btn');
-  if (sleepPill) sleepPill.style.display = showSleep ? 'block' : 'none';
+  if (sleepPill) {
+    sleepPill.style.display = showSleep ? 'block' : 'none';
+    if (showSleep) {
+      // Find most recent previous sleep entry to preview times
+      const prevSleepEntry = entries
+        .filter(e => !e.missed && !e.deleted && e.activity?.toLowerCase().includes('sleep') && e.tsStart)
+        .sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts))[0];
+      const pillLabel = document.getElementById('sleep-pill-label');
+      if (pillLabel) {
+        pillLabel.textContent = prevSleepEntry
+          ? `Last night's sleep · ${tzHHMM(prevSleepEntry.tsStart)} – ${tzHHMM(prevSleepEntry.ts)}`
+          : 'Log last night\'s sleep';
+      }
+    }
+  }
 
   // ── Same-as-last ────────────────────────────────────────────────────────
   // Show when today and there's a previous entry to repeat
@@ -4936,21 +4950,29 @@ function quickLogSameAsLast() {
 function quickLogSleep() {
   const taskInput = document.getElementById('retro-task');
   taskInput.value = 'Sleep';
-  // Pre-fill: 11pm last night → 7am today (adjust to within valid range)
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const viewKey = getViewingDateKey();
   const nowMs = Date.now();
-  const nowH = new Date().getHours();
-  // Sleep start: 11pm yesterday
   const yesterday = getDateInTZ(nowMs - 86400000, tz);
-  const sleepStart = tzParseTime(yesterday, '23:00');
-  // Sleep end: 7am today, but cap at now
-  const sleepEnd = Math.min(tzParseTime(viewKey, '07:00'), nowMs - 60000);
-  document.getElementById('retro-qstart').value = tzHHMM(sleepStart);
-  document.getElementById('retro-qend').value   = tzHHMM(sleepEnd > sleepStart ? sleepEnd : nowMs - 60000);
-  // Focus on the task input so user can adjust before logging
+
+  // Priority 1: copy previous sleep entry's clock times
+  const prevSleep = entries
+    .filter(e => !e.missed && !e.deleted && e.activity?.toLowerCase().includes('sleep') && e.tsStart)
+    .sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts))[0];
+
+  if (prevSleep) {
+    // Re-use the same HH:MM times — user likely slept at a similar time
+    document.getElementById('retro-qstart').value = tzHHMM(prevSleep.tsStart);
+    document.getElementById('retro-qend').value   = tzHHMM(Math.min(prevSleep.ts, nowMs - 60000));
+  } else {
+    // Fallback: 11pm last night → 7am today
+    const sleepStart = tzParseTime(yesterday, '23:00');
+    const sleepEnd   = Math.min(tzParseTime(viewKey, '07:00'), nowMs - 60000);
+    document.getElementById('retro-qstart').value = tzHHMM(sleepStart);
+    document.getElementById('retro-qend').value   = tzHHMM(sleepEnd > sleepStart ? sleepEnd : nowMs - 60000);
+  }
+
   document.getElementById('retro-task').focus();
-  // Scroll to the retro bar so user can see the pre-filled times
   document.getElementById('retro-task').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
