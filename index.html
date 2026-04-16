@@ -196,6 +196,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .quick-retro-input{flex:1;font-family:var(--head);font-size:13px;padding:7px 11px;border-radius:8px;border:1.5px solid var(--border2);background:var(--bg3);color:var(--text);outline:none;min-width:120px;transition:border-color 0.15s}
 .quick-retro-input:focus{border-color:var(--deep)}
 .quick-retro-sel{font-family:var(--head);font-size:11px;padding:6px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex-shrink:0}
+/* Inline time inputs — always visible, minimal chrome */
+.retro-time-inline{font-family:var(--mono);font-size:12px;color:var(--muted);
+  background:var(--bg3);border:1px solid var(--border2);border-radius:8px;
+  padding:6px 8px;outline:none;cursor:pointer;flex-shrink:0;
+  transition:border-color 0.15s,color 0.15s;-webkit-tap-highlight-color:transparent;
+  font-size:16px} /* 16px prevents iOS zoom */
+.retro-time-inline:focus,.retro-time-inline:hover{border-color:var(--deep);color:var(--text)}
 .switch-list-item{padding:10px 13px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;background:var(--bg3);border:1px solid var(--border);transition:all 0.12s;color:var(--text)}
 .switch-list-item:hover{background:var(--deep-dim);border-color:var(--deep);color:var(--deep)}
 
@@ -1190,20 +1197,11 @@ button, a, [role="button"],
         style="width:100%;box-sizing:border-box">
       <div class="hero-suggestions" id="quick-retro-suggestions" style="display:none"></div>
     </div>
-    <!-- Collapsed time display — tap to expand -->
-    <div id="retro-time-collapsed" onclick="expandRetroTimes()"
-      style="display:flex;align-items:center;gap:4px;flex-shrink:0;cursor:pointer;
-             padding:6px 10px;border-radius:8px;border:1px solid var(--border2);
-             background:var(--bg3);transition:border-color 0.15s">
-      <span style="font-family:var(--mono);font-size:12px;color:var(--muted)" id="retro-time-display">—</span>
-      <span style="font-size:9px;color:var(--muted2);margin-left:2px">✎</span>
-    </div>
-    <!-- Expanded time pickers — hidden by default -->
-    <div id="retro-time-expanded" style="display:none;align-items:center;gap:4px;flex-shrink:0">
-      <input type="time" id="retro-qstart" class="quick-retro-sel" onchange="updateRetroTimeDisplay()">
+    <!-- Inline time inputs — always visible, styled like text -->
+    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+      <input type="time" id="retro-qstart" class="retro-time-inline">
       <span style="color:var(--muted);font-size:11px;user-select:none">–</span>
-      <input type="time" id="retro-qend" class="quick-retro-sel" onchange="updateRetroTimeDisplay()">
-      <button onclick="collapseRetroTimes()" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">✕</button>
+      <input type="time" id="retro-qend" class="retro-time-inline">
     </div>
     <button class="btn sm primary" onclick="quickRetroLog()">Log</button>
   </div>
@@ -4258,7 +4256,10 @@ function applyContextualVisibility(todayE) {
     if (salTimeEl) {
       const endTs = lastRealEntry.ts || lastRealEntry.tsStart;
       const minsAgo = Math.round((Date.now() - endTs) / 60000);
-      salTimeEl.textContent = minsAgo < 90 ? `${minsAgo}m ago` : tzHHMM(endTs);
+      if (minsAgo <= 0) salTimeEl.textContent = 'just now';
+      else if (minsAgo < 60) salTimeEl.textContent = `${minsAgo}m ago`;
+      else if (minsAgo < 1440) salTimeEl.textContent = `${Math.round(minsAgo / 60)}h ago`;
+      else salTimeEl.textContent = 'yesterday';
     }
     salBtn.style.display = 'flex';
   } else if (salBtn) {
@@ -6617,36 +6618,23 @@ function resetRetroBar() {
   const e = document.getElementById('retro-qend');
   if (!s || !e) return;
   const nowMs = Date.now();
-  const lastEnd = entries.filter(e => !e.missed && !e.deleted && e.ts)
-    .reduce((max, entry) => Math.max(max, entry.ts), 0);
+  // Use the most recent entry's end time — but clamp to now so future-dated
+  // entries (typo'd times) don't break the fallback
+  const lastEntry = entries
+    .filter(en => !en.missed && !en.deleted && en.ts)
+    .sort((a, b) => b.ts - a.ts)[0];
+  const rawLastEnd = lastEntry?.ts || 0;
+  const lastEnd = Math.min(rawLastEnd, nowMs); // clamp to now
   const fallback = nowMs - (settings.intervalMin || 30) * 60000;
-  const startMs = lastEnd > 0 && lastEnd < nowMs ? lastEnd : fallback;
+  const startMs = lastEnd > 0 ? lastEnd : fallback;
   s.value = tzHHMM(startMs);
   e.value = tzHHMM(nowMs);
-  // Reset to collapsed state and update display
-  collapseRetroTimes();
   updateRetroTimeDisplay();
 }
 
-function updateRetroTimeDisplay() {
-  const s = document.getElementById('retro-qstart');
-  const e = document.getElementById('retro-qend');
-  const disp = document.getElementById('retro-time-display');
-  if (!s || !e || !disp) return;
-  disp.textContent = s.value && e.value ? `${s.value} – ${e.value}` : '—';
-}
-
-function expandRetroTimes() {
-  document.getElementById('retro-time-collapsed').style.display = 'none';
-  document.getElementById('retro-time-expanded').style.display = 'flex';
-}
-
-function collapseRetroTimes() {
-  const collapsed = document.getElementById('retro-time-collapsed');
-  const expanded = document.getElementById('retro-time-expanded');
-  if (collapsed) collapsed.style.display = 'flex';
-  if (expanded) expanded.style.display = 'none';
-}
+function updateRetroTimeDisplay() { /* no-op — inputs are always visible */ }
+function expandRetroTimes() { /* no-op */ }
+function collapseRetroTimes() { /* no-op */ }
 resetRetroBar();
 // Restore hero UI state on page load
 if (running && lastTaskForRepeat) {
