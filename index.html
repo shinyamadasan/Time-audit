@@ -5366,7 +5366,7 @@ function renderEnergySplit(el, entriesArr) {
   }).join('') || `<div style="color:var(--muted);font-size:12px">No data</div>`;
 }
 
-function renderTopActivities(el, entriesArr, limit=8) {
+function renderTopActivities(el, entriesArr, limit=8, days=null) {
   const actMap = {};
   entriesArr.filter(e=>!e.missed).forEach(e=>{
     const key = e.activity.split(' (Output')[0];
@@ -5381,18 +5381,47 @@ function renderTopActivities(el, entriesArr, limit=8) {
     errands:'var(--errands)',learning:'var(--learning)',exercise:'var(--exercise)',
     social:'var(--social)',recovery:'var(--break)',waste:'var(--distraction)'
   };
+
   el.innerHTML = top.length ? top.map(([act,data])=>{
-    const w = Math.round(data.mins/maxMins*100);
+    const totalW = Math.round(data.mins/maxMins*100);
     const color = getActivityColor(act)||energyColors[data.energy]||'var(--deep)';
     const label = data.mins>=60?(Math.round(data.mins/6)/10).toFixed(1)+'h':data.mins+'m';
-    return `<div style="margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+
+    let barHTML;
+    if (days && days.length) {
+      // Segmented bar — one segment per day, proportional to that day's minutes for this activity
+      const dayMins = days.map(d => {
+        const m = d.entries.filter(e=>!e.missed && e.activity.split(' (Output')[0]===act).reduce((s,e)=>s+entryMins(e),0);
+        return { key: d.key, label: d.label, mins: m };
+      });
+      const segments = dayMins.map((d, idx) => {
+        if (!d.mins) return '';
+        const segW = d.mins / maxMins * 100;
+        const opacity = 0.55 + (idx / Math.max(days.length - 1, 1)) * 0.45; // subtle day variation
+        const radius = `border-radius:${idx===0?'4px 0 0 4px':'0'}${idx===dayMins.length-1?' 4px 4px 0 0':''}`;
+        return `<div onclick="event.stopPropagation();setViewDate('${d.key}');showView('today')"
+          title="${d.label}: ${d.mins>=60?(Math.round(d.mins/6)/10).toFixed(1)+'h':d.mins+'m'}"
+          style="height:100%;width:${segW}%;background:${color};opacity:${opacity.toFixed(2)};
+                 cursor:pointer;flex-shrink:0;border-right:1px solid rgba(0,0,0,0.25);
+                 transition:opacity 0.15s;box-sizing:border-box"
+          onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity='${opacity.toFixed(2)}'"></div>`;
+      }).join('');
+      barHTML = `<div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;display:flex">
+        ${segments}
+      </div>`;
+    } else {
+      barHTML = `<div style="height:6px;background:var(--bg4);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${totalW}%;background:${color};border-radius:4px;transition:width 0.3s"></div>
+      </div>`;
+    }
+
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
         <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%">${act}</span>
         <span style="color:var(--muted);font-family:var(--mono);flex-shrink:0">${label}</span>
       </div>
-      <div style="height:6px;background:var(--bg4);border-radius:4px;overflow:hidden">
-        <div style="height:100%;width:${w}%;background:${color};border-radius:4px;transition:width 0.3s"></div>
-      </div></div>`;
+      ${barHTML}
+    </div>`;
   }).join('') : '<div style="color:var(--muted);font-size:12px">No data</div>';
 }
 
@@ -5524,7 +5553,7 @@ function renderWeekOverview(days) {
     </div>`;
 
   renderEnergySplit(document.getElementById('w-energy-split-week'), weekE);
-  renderTopActivities(document.getElementById('w-top-acts-week'), weekE);
+  renderTopActivities(document.getElementById('w-top-acts-week'), weekE, 8, days);
 
   // Populate activity dropdown
   const actMap2 = {};
