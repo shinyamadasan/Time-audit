@@ -4474,6 +4474,12 @@ function selectRetroSuggestion(e, task) {
   e.preventDefault();
   document.getElementById('retro-activity').value = task;
   hideRetroSuggestions();
+  // Auto-select energy: learned waste pattern first, then most recent matching entry
+  const key = normalizeActivity(task);
+  const learned = (settings.learnedEnergy || {})[key];
+  const prev = !learned ? entries.find(en => !en.missed && !en.deleted && en.activity === task && en.energy) : null;
+  const eng = learned || (prev ? prev.energy : null);
+  if (eng) setRetroEnergy(eng);
 }
 
 function handleRetroKey(e) {
@@ -4595,6 +4601,15 @@ function selectQuickRetroSuggestion(e, task) {
   e.preventDefault();
   document.getElementById('retro-task').value = task;
   hideQuickRetroSuggestions();
+  // Auto-select energy in the quick retro bar selector
+  const key = normalizeActivity(task);
+  const learned = (settings.learnedEnergy || {})[key];
+  const prev = !learned ? entries.find(en => !en.missed && !en.deleted && en.activity === task && en.energy) : null;
+  const eng = learned || (prev ? prev.energy : null);
+  if (eng) {
+    const sel = document.getElementById('retro-energy');
+    if (sel) sel.value = eng;
+  }
 }
 
 function handleQuickRetroKey(e) {
