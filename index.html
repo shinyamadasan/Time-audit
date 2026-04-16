@@ -5522,27 +5522,35 @@ function renderWeekOverview(days) {
       </div>
     </div>
 
-    <!-- Day bars — clickable, stacked by energy type -->
+    <!-- Day bars — work vs distraction (deep / shallow+job / waste) -->
     <div class="w-card">
-      <div class="w-card-title">Hours by day <span style="font-weight:400;color:var(--muted2)">(tap a day to drill in)</span></div>
+      <div class="w-card-title">Work vs distraction <span style="font-weight:400;color:var(--muted2)">(tap a day to drill in)</span></div>
       <div style="display:flex;align-items:flex-end;gap:6px;height:80px">
         ${(()=>{
-          const STACK = [
-            {k:'deep',c:'var(--deep)'},{k:'nine5',c:'var(--nine5)'},{k:'shallow',c:'var(--shallow)'},
-            {k:'learning',c:'var(--learning)'},{k:'exercise',c:'var(--exercise)'},{k:'social',c:'var(--social)'},
-            {k:'errands',c:'var(--errands)'},{k:'recovery',c:'var(--break)'},{k:'waste',c:'var(--distraction)'}
+          // Only count deep, shallow/job work, and waste — ignore sleep/maintenance/errands
+          const FOCUS = [
+            {k:'deep',    c:'var(--deep)'},
+            {k:'nine5',   c:'var(--nine5)'},
+            {k:'shallow', c:'var(--shallow)'},
+            {k:'waste',   c:'var(--distraction)'},
           ];
+          const focusKeys = new Set(FOCUS.map(f=>f.k));
+          const maxFocusH = Math.max(...days.map(d=>
+            d.entries.filter(e=>!e.missed&&focusKeys.has(e.energy)).reduce((s,e)=>s+entryMins(e),0)/60
+          ), 0.5);
           return days.map(d=>{
-            const totalH = d.entries.filter(e=>!e.missed).reduce((s,e)=>s+entryMins(e),0)/60;
-            const barH = Math.max(4,Math.round(totalH/maxTotal*72));
+            const focusEntries = d.entries.filter(e=>!e.missed&&focusKeys.has(e.energy));
+            const focusH = focusEntries.reduce((s,e)=>s+entryMins(e),0)/60;
+            const barH = Math.max(focusH>0?8:3, Math.round(focusH/maxFocusH*72));
             const energyMins = {};
-            d.entries.filter(e=>!e.missed&&e.energy).forEach(e=>{ energyMins[e.energy]=(energyMins[e.energy]||0)+entryMins(e); });
-            const totalMin = Object.values(energyMins).reduce((s,v)=>s+v,0)||1;
-            const segments = STACK.filter(s=>energyMins[s.k]).map(s=>
-              `<div style="width:100%;height:${Math.round(energyMins[s.k]/totalMin*100)}%;background:${s.c};flex-shrink:0"></div>`
+            focusEntries.forEach(e=>{ energyMins[e.energy]=(energyMins[e.energy]||0)+entryMins(e); });
+            const totalFocusMin = focusEntries.reduce((s,e)=>s+entryMins(e),0)||1;
+            const segments = FOCUS.filter(f=>energyMins[f.k]).map(f=>
+              `<div style="width:100%;height:${Math.round(energyMins[f.k]/totalFocusMin*100)}%;background:${f.c};flex-shrink:0"></div>`
             ).join('');
+            const label = focusH>=1?(Math.round(focusH*10)/10)+'h':focusH>0?Math.round(focusH*60)+'m':'';
             return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end;cursor:pointer" onclick="selectWeekDay('${d.key}')">
-              <div style="font-size:9px;font-family:var(--mono);color:${d.isToday?'var(--deep)':'var(--muted)'}">${totalH>0?(Math.round(totalH*10)/10)+'h':''}</div>
+              <div style="font-size:9px;font-family:var(--mono);color:${d.isToday?'var(--deep)':'var(--muted)'}">${label}</div>
               <div style="width:100%;border-radius:4px 4px 0 0;overflow:hidden;height:${barH}px;display:flex;flex-direction:column-reverse;transition:height 0.3s">
                 ${segments||`<div style="width:100%;height:100%;background:var(--bg4)"></div>`}
               </div>
@@ -5553,18 +5561,11 @@ function renderWeekOverview(days) {
       <div style="display:flex;gap:6px;margin-top:6px">
         ${days.map(d=>`<div style="flex:1;text-align:center;font-size:9px;color:${d.isToday?'var(--deep)':'var(--muted)'};font-family:var(--mono);font-weight:${d.isToday?'700':'400'};cursor:pointer" onclick="selectWeekDay('${d.key}')">${d.label}</div>`).join('')}
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:10px;font-size:10px;color:var(--muted)">
-        ${(()=>{
-          const LEGEND=[
-            {k:'deep',c:'var(--deep)',l:'Deep'},{k:'nine5',c:'var(--nine5)',l:'Job Work'},{k:'shallow',c:'var(--shallow)',l:'Shallow'},
-            {k:'learning',c:'var(--learning)',l:'Learning'},{k:'exercise',c:'var(--exercise)',l:'Exercise'},{k:'social',c:'var(--social)',l:'Social'},
-            {k:'errands',c:'var(--errands)',l:'Errands'},{k:'recovery',c:'var(--break)',l:'Maintenance'},{k:'waste',c:'var(--distraction)',l:'Waste'}
-          ];
-          const usedKeys=new Set(weekE.filter(e=>!e.missed&&e.energy).map(e=>e.energy));
-          return LEGEND.filter(l=>usedKeys.has(l.k)).map(l=>
-            `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${l.c};margin-right:4px"></span>${l.l}</span>`
-          ).join('');
-        })()}
+      <div style="display:flex;gap:12px;margin-top:10px;font-size:10px;color:var(--muted)">
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--deep);margin-right:4px"></span>Deep</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--nine5);margin-right:4px"></span>Job Work</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--shallow);margin-right:4px"></span>Shallow</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--distraction);margin-right:4px"></span>Waste</span>
       </div>
     </div>
 
