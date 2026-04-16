@@ -1170,11 +1170,11 @@ button, a, [role="button"],
   <!-- Same as last — primary CTA -->
   <button id="same-as-last-btn" onclick="quickLogSameAsLast()" class="sal-card" style="display:none">
     <div class="sal-left">
-      <div class="sal-label">Same as last</div>
+      <div class="sal-label">Log again</div>
       <div class="sal-activity" id="same-as-last-label">—</div>
     </div>
     <div class="sal-right">
-      <div class="sal-action">1 tap log →</div>
+      <div class="sal-action">tap to log →</div>
       <div class="sal-time" id="same-as-last-time"></div>
     </div>
   </button>
@@ -4897,9 +4897,35 @@ function quickRetroLog() {
 function quickLogSameAsLast() {
   const last = [...entries].filter(e => !e.missed && e.activity).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts))[0];
   if (!last) return;
-  const taskInput = document.getElementById('retro-task');
-  taskInput.value = last.activity;
-  quickRetroLog();
+  // Log directly — never touch the retro bar input so the user's typing is preserved
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getViewingDateKey();
+  const startVal = document.getElementById('retro-qstart').value;
+  const endVal   = document.getElementById('retro-qend').value;
+  let tsStart, tsEnd;
+  if (startVal && endVal) {
+    tsStart = tzParseTime(todayKey, startVal);
+    tsEnd   = tzParseTime(todayKey, endVal);
+    if (tsEnd <= tsStart) tsEnd += 86400000;
+  } else {
+    tsEnd   = Date.now();
+    tsStart = tsEnd - (settings.intervalMin || 30) * 60000;
+  }
+  const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
+  const activity = normalizeActivity(last.activity);
+  const energy = last.energy || 'shallow';
+  const dateKey = toDateKey(new Date(tsStart));
+  const entry = { id: Date.now(), ts: tsEnd, tsStart, blockIntervalMin: dur,
+    date: dateKey, activity, energy, onPlan: energy !== 'waste' && energy !== 'distraction',
+    retro: true, updatedAt: Date.now() };
+  entry.category = getBucket(entry); entry.originalLabel = energy;
+  getActivityColor(activity);
+  learnWastePattern(activity, energy);
+  entries.push(entry);
+  entries.sort((a, b) => b.ts - a.ts);
+  persist(); renderToday(); syncEntries();
+  showToast(`Logged · ${activity} · ${fmtDur(dur)}`, false, energy);
+  resetRetroBar();
 }
 
 function quickLogSleep() {
