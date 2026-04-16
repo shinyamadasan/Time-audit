@@ -561,13 +561,6 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   transition:all 0.12s}
 .same-last-other:hover{border-color:var(--border3);color:var(--text)}
 
-/* ── Visual proportional timeline bar ── */
-.vtl-wrap{position:relative;margin-bottom:12px}
-.vtl-bar{height:26px;border-radius:6px;overflow:hidden;background:var(--bg4);position:relative}
-.vtl-seg{position:absolute;top:0;bottom:0;cursor:pointer;transition:filter 0.1s;min-width:2px}
-.vtl-seg:hover{filter:brightness(1.25)}
-.vtl-seg.untracked{background:repeating-linear-gradient(45deg,var(--bg3),var(--bg3) 3px,var(--bg4) 3px,var(--bg4) 6px)}
-.vtl-labels{display:flex;justify-content:space-between;margin-top:3px;font-family:var(--mono);font-size:9px;color:var(--muted)}
 /* ── Sleep log pill ── */
 .sleep-pill{display:none;width:100%;padding:9px 14px;background:rgba(148,163,184,0.08);
   border:1px solid rgba(148,163,184,0.2);border-radius:var(--r);color:var(--muted);
@@ -1185,11 +1178,6 @@ button, a, [role="button"],
     <div class="section-label">
       <span>Today's timeline</span>
       <span id="timeline-summary" style="font-family:var(--mono)"></span>
-    </div>
-    <!-- Visual proportional bar -->
-    <div class="vtl-wrap" id="vtl-wrap" style="display:none">
-      <div class="vtl-bar" id="vtl-bar"></div>
-      <div class="vtl-labels"><span id="vtl-label-start"></span><span id="vtl-label-end"></span></div>
     </div>
     <div id="timeline-blocks"></div>
   </div>
@@ -4287,8 +4275,6 @@ function renderToday() {
     sleepPill.style.display = (isViewingToday() && nowH < 14 && !hasSleep) ? 'block' : 'none';
   }
 
-  // Visual timeline bar
-  renderVisualTimeline(todayE);
 
   if (entriesChanged) {
     if (!todayE.length) {
@@ -4797,67 +4783,6 @@ function quickLogSleep() {
   document.getElementById('retro-task').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-function renderVisualTimeline(todayE) {
-  const wrap = document.getElementById('vtl-wrap');
-  const bar  = document.getElementById('vtl-bar');
-  if (!wrap || !bar) return;
-
-  const realE = todayE.filter(e => !e.missed && (e.tsStart || e.ts));
-  if (!realE.length) { wrap.style.display = 'none'; return; }
-
-  // Time window: earliest start → now (or day end if viewing past)
-  const _dayNow = isViewingToday() ? Date.now() : dayEndTs(getViewingDateKey());
-  const windowStart = Math.min(...realE.map(e => e.tsStart || e.ts));
-  const windowEnd   = _dayNow;
-  const span = windowEnd - windowStart;
-  if (span <= 0) { wrap.style.display = 'none'; return; }
-
-  // Build segments sorted by start time
-  const sorted = [...realE].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-
-  // Build gaps between entries
-  const segments = [];
-  let cursor = windowStart;
-  for (const e of sorted) {
-    const s = e.tsStart || e.ts;
-    const end = e.ts;
-    if (s > cursor + 60000) {
-      segments.push({ start: cursor, end: s, isGap: true });
-    }
-    if (end > s) segments.push({ start: s, end, entry: e });
-    cursor = Math.max(cursor, end);
-  }
-  if (cursor < windowEnd - 60000) {
-    segments.push({ start: cursor, end: windowEnd, isGap: true });
-  }
-
-  const energyColors = {
-    deep: 'var(--deep)', shallow: 'var(--shallow)', admin: 'var(--admin)',
-    distraction: 'var(--distraction)', waste: 'var(--distraction)',
-    nine5: 'var(--nine5)', errands: 'var(--errands)', learning: 'var(--learning)',
-    exercise: 'var(--exercise)', social: 'var(--social)',
-    recovery: 'var(--break)', break: 'var(--break)', away: 'var(--away)'
-  };
-
-  bar.innerHTML = segments.map(seg => {
-    const left  = ((seg.start - windowStart) / span * 100).toFixed(3);
-    const width = ((seg.end - seg.start) / span * 100).toFixed(3);
-    if (seg.isGap) {
-      return `<div class="vtl-seg untracked" style="left:${left}%;width:${width}%" title="Untracked"></div>`;
-    }
-    const e = seg.entry;
-    const actColor = getActivityColor(e.activity);
-    const color = actColor || energyColors[e.energy] || 'var(--bg4)';
-    const dur = Math.round((e.ts - (e.tsStart || e.ts)) / 60000);
-    const label = `${e.activity || ''} · ${fmtDur(dur)}`;
-    const editCall = `openEditEntry(${e.id})`;
-    return `<div class="vtl-seg" style="left:${left}%;width:${width}%;background:${color}" title="${label.replace(/"/g,'&quot;')}" onclick="${editCall}"></div>`;
-  }).join('');
-
-  document.getElementById('vtl-label-start').textContent = localTime(windowStart);
-  document.getElementById('vtl-label-end').textContent   = isViewingToday() ? 'now' : localTime(windowEnd);
-  wrap.style.display = 'block';
-}
 
 // generateInsights, renderAwarenessSignal — moved to insights.js
 
