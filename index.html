@@ -88,7 +88,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .ring-wrap{position:relative;width:88px;height:88px;flex-shrink:0}
 .ring-wrap svg{transform:rotate(-90deg)}
 .ring-bg{fill:none;stroke:rgba(255,255,255,0.06);stroke-width:6}
-.ring-fg{fill:none;stroke:var(--deep);stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset 0.9s linear}
+.ring-fg{fill:none;stroke:var(--deep);stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset 0.9s cubic-bezier(0.4,0,0.2,1)}
 .ring-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
 .ring-pct{font-family:var(--mono);font-size:11px;color:var(--muted);display:block}
 .timer-countdown{font-family:var(--mono);font-size:36px;font-weight:500;color:var(--text);letter-spacing:-1px;line-height:1}
@@ -179,7 +179,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .hero-sug-label{font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);padding:8px 14px 4px;font-weight:600}
 .hero-active-top{display:flex;align-items:center;gap:18px;margin-bottom:16px}
 .hero-ring-wrap{position:relative;flex-shrink:0}
-.hero-ring-wrap svg{display:block;transform:rotate(-90deg);filter:drop-shadow(0 0 8px rgba(76,199,240,0.35))}
+.hero-ring-wrap svg{display:block;transform:rotate(-90deg);filter:drop-shadow(0 0 10px rgba(76,199,240,0.45));transition:filter 0.4s ease}
+.activity-hero:not(.tracking) .hero-ring-wrap svg{filter:none}
 .hero-ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
 .hero-ring-secs{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--deep);line-height:1}
 .hero-ring-label{font-family:var(--mono);font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em}
@@ -510,6 +511,10 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 .shake{animation:shake 0.3s ease}
 #date-picker-dropdown > div:hover{background:var(--bg4) !important}
+.hdr-menu-item{padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);
+  transition:background 0.1s;-webkit-tap-highlight-color:transparent}
+.hdr-menu-item:hover{background:var(--bg3)}
+.hdr-more-btn:hover{background:var(--bg3) !important;color:var(--text) !important}
 .gap-time-input{background:none;border:none;border-bottom:1px solid var(--border2);color:var(--muted);
   font-family:var(--mono);font-size:12px;padding:3px 2px;cursor:text;outline:none;width:44px;
   text-align:center;letter-spacing:0.04em}
@@ -573,7 +578,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-row+.tl-row{margin-top:1px;border-top:1px solid var(--border)}
 .tl-time{width:54px;font-family:var(--mono);font-size:10px;color:var(--muted);
   padding-top:13px;flex-shrink:0;text-align:right;padding-right:8px}
-.tl-bar-col{width:4px;flex-shrink:0;border-radius:2px;margin:3px 8px 3px 0}
+.tl-bar-col{width:6px;flex-shrink:0;border-radius:3px;margin:3px 10px 3px 0}
 .tl-bar-col.deep{background:var(--deep)}.tl-bar-col.shallow{background:var(--shallow)}
 .tl-bar-col.admin{background:var(--admin)}.tl-bar-col.distraction{background:var(--distraction)}.tl-bar-col.waste{background:var(--distraction)}
 .tl-bar-col.nine5{background:var(--nine5)}.tl-bar-col.errands{background:var(--errands)}.tl-bar-col.learning{background:var(--learning)}.tl-bar-col.exercise{background:var(--exercise)}.tl-bar-col.social{background:var(--social)}
@@ -581,7 +586,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .tl-bar-col.break{background:var(--break)}.tl-bar-col.recovery{background:var(--break)}.tl-bar-col.away{background:var(--away)}
 .tl-content{flex:1;min-width:0;padding:9px 0 9px 0}
 .tl-activity{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
-.tl-meta{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px}
+.tl-meta{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px}
 .tl-badge{display:inline-block;font-size:9px;font-family:var(--mono);padding:1px 6px;
   border-radius:999px;font-weight:600;margin-left:4px;vertical-align:middle}
 .tl-badge.deep{background:var(--deep-dim);color:var(--deep)}
@@ -672,6 +677,10 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   background:var(--deep-dim2);color:var(--deep);cursor:pointer;font-family:var(--head);font-weight:600;
   white-space:nowrap;transition:background 0.12s}
 .log-gap-btn:hover{background:var(--deep-dim)}
+
+/* ── Hero state transitions ── */
+@keyframes hero-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.hero-panel-enter{animation:hero-in 0.22s cubic-bezier(0.34,1.1,0.64,1) both}
 
 /* ── Break active banner ── */
 .break-active-row{margin-top:12px;background:var(--break-dim);border:1px solid rgba(167,139,250,0.3);
@@ -943,25 +952,34 @@ button, a, [role="button"],
 <!-- ══ TODAY ══ -->
 <div class="view active" id="view-today">
   <div class="page-header" style="position:relative">
-    <div>
+    <div style="display:flex;align-items:center;gap:8px">
       <div style="display:flex;align-items:center;gap:6px">
         <div style="font-size:19px;font-weight:800;line-height:1;cursor:pointer;user-select:none"
              id="today-date" onclick="toggleDatePicker()" title="Browse other days">—</div>
         <span onclick="toggleDatePicker()" style="font-size:12px;color:var(--muted);cursor:pointer;user-select:none;line-height:1;padding-top:2px">▾</span>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
-        <div class="page-title">Daily Focus</div>
-        <button id="back-to-today-btn" onclick="setViewDate(null)"
-          style="display:none;padding:2px 8px;background:var(--deep);color:#fff;border:none;
-                 border-radius:999px;font-size:10px;font-weight:700;cursor:pointer;font-family:var(--head)">
-          ← Today
-        </button>
-      </div>
+      <button id="back-to-today-btn" onclick="setViewDate(null)"
+        style="display:none;padding:2px 8px;background:var(--deep);color:#fff;border:none;
+               border-radius:999px;font-size:10px;font-weight:700;cursor:pointer;font-family:var(--head)">
+        ← Today
+      </button>
     </div>
-    <div style="display:flex;gap:6px;align-items:center">
-      <button class="btn sm ghost" onclick="openReflectionsHistory()">Reflections</button>
-      <button class="btn sm ghost" onclick="openReview()">Review</button>
-      <button class="btn sm ghost" onclick="enterFocusMode()" title="Focus / Pomodoro mode">⊙ Focus</button>
+    <div style="display:flex;gap:6px;align-items:center;position:relative">
+      <button class="btn sm" onclick="enterFocusMode()" title="Focus mode"
+        style="padding:7px 12px;border-color:rgba(76,199,240,0.3);color:var(--deep);background:var(--deep-dim2)">⊙ Focus</button>
+      <button class="hdr-more-btn" id="hdr-more-btn" onclick="toggleHdrMenu()"
+        style="width:32px;height:32px;border-radius:50%;background:none;border:1px solid var(--border2);
+               color:var(--muted);font-size:16px;cursor:pointer;display:flex;align-items:center;
+               justify-content:center;line-height:1;font-family:var(--head);flex-shrink:0;
+               transition:background 0.12s,color 0.12s">···</button>
+      <div id="hdr-menu"
+        style="display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:300;
+               min-width:160px;background:var(--bg2);border:1px solid var(--border2);
+               border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden">
+        <div class="hdr-menu-item" onclick="openReflectionsHistory();toggleHdrMenu()">Reflections</div>
+        <div class="hdr-menu-item" onclick="openReview();toggleHdrMenu()">Review day</div>
+        <div class="hdr-menu-item" onclick="showView('settings');toggleHdrMenu()">Settings</div>
+      </div>
     </div>
     <!-- Date picker dropdown -->
     <div id="date-picker-dropdown"
@@ -1109,6 +1127,14 @@ button, a, [role="button"],
 
   </div>
 
+  <!-- Daily commitment bar -->
+  <div class="commit-bar" id="commit-bar">
+    <div style="font-size:12px;color:var(--muted);flex-shrink:0">Goal</div>
+    <div class="commit-progress"><div class="commit-fill" id="commit-fill" style="width:0%"></div></div>
+    <div class="commit-label" id="commit-label">0 / 0</div>
+    <button class="btn sm ghost" style="flex-shrink:0;font-size:11px" onclick="setDailyCommitment()">Set</button>
+  </div>
+
   <!-- Continue banner -->
   <div class="continue-banner" id="continue-banner">
     <div style="flex:1">
@@ -1160,19 +1186,18 @@ button, a, [role="button"],
     </div>
     <button class="btn sm primary" onclick="quickRetroLog()">Log</button>
   </div>
-  <div id="retro-waste-hint" style="display:none;font-size:11px;color:var(--distraction);padding:4px 2px 0;font-weight:500"></div>
+  <div id="retro-waste-hint" style="display:none"></div>
 
   <!-- Awareness Signal -->
   <div id="awareness-signal" style="display:none"></div>
 
-  <!-- Untracked warning banner — shows whenever there are gaps -->
-  <div id="untracked-banner" style="display:none;background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.25);border-radius:var(--r2);padding:12px 14px;margin-bottom:12px;align-items:center;gap:10px">
-    <div style="font-size:20px;flex-shrink:0">⚠️</div>
+  <!-- Untracked banner — neutral, non-alarming -->
+  <div id="untracked-banner" style="display:none;background:var(--bg2);box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);padding:11px 14px;margin-bottom:12px;align-items:center;gap:10px">
     <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:700;color:var(--distraction)" id="untracked-banner-text">2h untracked today</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:2px">Your timeline has gaps — tap to fill them in</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text)" id="untracked-banner-text">2h not yet logged</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:1px">Fill in the gaps when you have a moment</div>
     </div>
-    <button class="btn sm" style="border-color:rgba(255,107,107,0.3);color:var(--distraction);flex-shrink:0" onclick="scrollToTimeline()">Fill gaps ↓</button>
+    <button class="btn sm ghost" style="flex-shrink:0;font-size:11px" onclick="scrollToTimeline()">Fill gaps ↓</button>
   </div>
 
   <div class="timeline-section">
@@ -1202,14 +1227,6 @@ button, a, [role="button"],
   </div>
   <!-- Daily Summary Card -->
   <div class="daily-summary" id="daily-summary" style="display:none"></div>
-
-  <!-- Daily commitment bar -->
-  <div class="commit-bar" id="commit-bar">
-    <div style="font-size:12px;color:var(--muted);flex-shrink:0">Goal</div>
-    <div class="commit-progress"><div class="commit-fill" id="commit-fill" style="width:0%"></div></div>
-    <div class="commit-label" id="commit-label">0 / 0</div>
-    <button class="btn sm ghost" style="flex-shrink:0;font-size:11px" onclick="setDailyCommitment()">Set</button>
-  </div>
 
   <div class="page-header" style="margin-bottom:8px">
     <div class="page-title">Recent entries</div>
@@ -2082,9 +2099,7 @@ async function _startTimer(task) {
   running = true;
   switchState('deep');
   // Hero UI: show active state
-  document.getElementById('hero-idle').style.display = 'none';
-  document.getElementById('hero-active').style.display = 'block';
-  document.getElementById('hero-away').style.display = 'none';
+  showHeroState('active');
   document.getElementById('hero-task-name').textContent = task;
   document.getElementById('hero-elapsed').textContent = '0';
   const secsEl = document.getElementById('hero-ring-secs');
@@ -2155,9 +2170,7 @@ function resetTimer() {
   document.getElementById('timer-status').textContent = 'Ready';
   currentTask = ''; updateTimerTaskLabel();
   // Hero UI: back to idle
-  document.getElementById('hero-active').style.display = 'none';
-  document.getElementById('hero-away').style.display = 'none';
-  document.getElementById('hero-idle').style.display = 'block';
+  showHeroState('idle');
   document.getElementById('hero-task-input').value = '';
   document.getElementById('switch-panel').style.display = 'none';
   document.getElementById('activity-hero').classList.remove('tracking');
@@ -4165,6 +4178,24 @@ function toggleTlBucket(id) {
 // Cache key — skip expensive innerHTML work when today's entries haven't changed
 let _todayRenderKey = '';
 
+// ── Hero state helper — animated transitions ──────────────────────────────
+function showHeroState(state) {
+  const panels = { idle: 'hero-idle', active: 'hero-active', away: 'hero-away' };
+  Object.entries(panels).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (key === state) {
+      el.style.display = 'block';
+      el.classList.remove('hero-panel-enter');
+      void el.offsetWidth; // force reflow so animation restarts
+      el.classList.add('hero-panel-enter');
+    } else {
+      el.style.display = 'none';
+      el.classList.remove('hero-panel-enter');
+    }
+  });
+}
+
 function renderToday() {
   resetRetroBar();
   const todayE = getViewingEntries();
@@ -4583,7 +4614,7 @@ function showQuickRetroSuggestions(filter) {
     const typed = normalizeActivity((filter || '').trim());
     const learned = typed ? (settings.learnedEnergy || {})[typed] : null;
     if (learned) {
-      hint.innerHTML = `⚠ Pattern trap — you've logged <strong>${typed}</strong> as ${learned} before. Will auto-flag.`;
+      hint.innerHTML = `<div style="display:flex;align-items:center;gap:8px;background:var(--distraction-dim);border:1px solid rgba(255,107,107,0.25);border-radius:var(--r);padding:8px 12px;margin-top:6px"><span style="font-size:14px;flex-shrink:0">⚠️</span><span style="font-size:12px;font-weight:600;color:var(--distraction)">Pattern trap · <strong>${typed}</strong> is usually ${learned} for you — will auto-tag</span></div>`;
       hint.style.display = 'block';
     } else {
       hint.style.display = 'none';
@@ -4880,8 +4911,7 @@ function doSwitchFromBanner() {
   taskStartTime = null;
   cancelNativePing();
   // Show hero-idle
-  document.getElementById('hero-active').style.display = 'none';
-  document.getElementById('hero-idle').style.display = 'block';
+  showHeroState('idle');
   document.getElementById('switch-panel').style.display = 'none';
   const heroInput = document.getElementById('hero-task-input');
   if (heroInput) { heroInput.value = ''; setTimeout(() => heroInput.focus(), 100); }
@@ -4890,6 +4920,20 @@ function doSwitchFromBanner() {
 
 // ══════════════════════════════════════════════════════
 // AWAY TRACKING
+function toggleHdrMenu() {
+  const menu = document.getElementById('hdr-menu');
+  const isOpen = menu.style.display !== 'none';
+  menu.style.display = isOpen ? 'none' : 'block';
+}
+// Close hdr menu on outside click
+document.addEventListener('click', e => {
+  const menu = document.getElementById('hdr-menu');
+  const btn = document.getElementById('hdr-more-btn');
+  if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+    menu.style.display = 'none';
+  }
+});
+
 function toggleIdleAwayPicker() {
   const picker = document.getElementById('idle-away-picker');
   const isOpen = picker.classList.contains('show');
@@ -4926,8 +4970,7 @@ function toggleAway() {
     awayStartTime = null;
     awayLabel = 'Away';
     // Hero UI: back to idle
-    document.getElementById('hero-away').style.display = 'none';
-    document.getElementById('hero-idle').style.display = 'block';
+    showHeroState('idle');
     const btn = document.getElementById('away-btn');
     btn.textContent = '⊙ Away';
     btn.style.borderColor = 'var(--away)';
@@ -4984,9 +5027,7 @@ function startAway(label) {
   awayStartTime = Date.now();
   awayLabel = label;
   // Hero UI: show away state
-  document.getElementById('hero-active').style.display = 'none';
-  document.getElementById('hero-idle').style.display = 'none';
-  document.getElementById('hero-away').style.display = 'block';
+  showHeroState('away');
   document.getElementById('hero-away-label').textContent = label;
   document.getElementById('hero-away-elapsed').textContent = '0m';
   // Away elapsed ticker
