@@ -35,7 +35,7 @@
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bottom:env(safe-area-inset-bottom,0px);
 }
-body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:100vh;overflow-x:hidden;padding-top:var(--safe-top)}
+body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:100vh;overflow-x:hidden;padding-top:var(--safe-top);font-variant-numeric:tabular-nums}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
@@ -60,7 +60,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 
 /* ── Page header ── */
 .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
-.page-title{font-size:11px;font-weight:600;text-transform:none;letter-spacing:0.02em;color:var(--muted)}
+.page-title{font-size:11px;font-weight:600;text-transform:none;letter-spacing:0.02em;color:var(--muted);font-family:var(--mono)}
 
 /* ── Sync status pill ── */
 .sync-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--mono);
@@ -616,7 +616,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 
 /* ── Week stat card ── */
 .w-stat{background:var(--bg2);border:none;box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);padding:14px 12px;text-align:center}
-.w-stat-num{font-size:26px;font-weight:800;font-family:var(--mono);line-height:1}
+.w-stat-num{font-size:26px;font-weight:700;font-family:var(--mono);line-height:1}
 .w-stat-label{font-size:10px;color:var(--muted);text-transform:none;letter-spacing:0.02em;margin-top:4px}
 .w-card{background:var(--bg2);border:none;box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);padding:14px;margin-bottom:10px}
 .w-card-title{font-size:11px;font-weight:600;text-transform:none;letter-spacing:0.02em;color:var(--muted);margin-bottom:10px}
@@ -5207,7 +5207,7 @@ function renderWeek() {
       background:${isActive?'var(--deep)':'transparent'};color:${isActive?'#000':'var(--fg)'};
       font-size:11px;font-weight:600;cursor:pointer;text-align:center;line-height:1.3;
       ${d.isToday&&!isActive?'border-color:var(--deep);color:var(--deep)':''}">
-      <div>${dayName}</div><div style="font-size:13px">${dayNum}</div>
+      <div>${dayName}</div><div style="font-size:13px;font-family:var(--mono)">${dayNum}</div>
     </button>`;
   }).join('') : '';
 
@@ -5218,7 +5218,7 @@ function renderWeek() {
       <button class="day-tab ${!isMonth?'active':''}" onclick="setWeekMode('week')">Week</button>
       <button class="day-tab ${isMonth?'active':''}" onclick="setWeekMode('month')">Month</button>
       <button class="day-tab" onclick="shiftRange(-1)" style="padding:7px 10px">‹</button>
-      <span style="font-size:11px;color:var(--muted);padding:7px 4px;white-space:nowrap;flex:1;text-align:center">${getRangeLabel()}</span>
+      <span style="font-size:11px;color:var(--muted);padding:7px 4px;white-space:nowrap;flex:1;text-align:center;font-family:var(--mono)">${getRangeLabel()}</span>
       <button class="day-tab" onclick="shiftRange(1)" ${weekRangeOffset===0?'disabled style="opacity:0.3"':''}style="padding:7px 10px">›</button>
     </div>
     ${!isMonth ? `<div style="display:flex;gap:4px;width:100%;margin-top:6px">
