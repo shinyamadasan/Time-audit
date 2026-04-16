@@ -1101,6 +1101,7 @@ button, a, [role="button"],
             </div>
           </div>
         </div>
+        <button class="btn sm" onclick="stopAndLog()" style="border-color:var(--distraction);color:var(--distraction)">■ Stop</button>
       </div>
 
       <!-- Inline switch panel -->
@@ -2206,6 +2207,36 @@ function resetTimer() {
   document.getElementById('switch-panel').style.display = 'none';
   document.getElementById('activity-hero').classList.remove('tracking');
   updateRing(); syncTimerState();
+}
+
+// ══════════════════════════════════════════════════════
+// STOP & LOG CURRENT BLOCK
+// ══════════════════════════════════════════════════════
+function stopAndLog() {
+  if (!running) { resetTimer(); return; }
+  const tsEnd = Date.now();
+  const tsStart = blockStartTime || (tsEnd - (settings.intervalMin || 30) * 60000);
+  const dur = Math.round((tsEnd - tsStart) / 60000);
+  const task = currentTask || intention || 'Work block';
+  const prevEnergy = entries.find(e => !e.missed && !e.deleted && !e.break && e.energy)?.energy || 'deep';
+  if (dur >= 1) {
+    const entry = {
+      id: tsEnd, ts: tsEnd, tsStart,
+      blockIntervalMin: dur,
+      date: toDateKey(new Date()),
+      activity: task, energy: prevEnergy,
+      onPlan: true, retro: false
+    };
+    entry.category = getBucket(entry);
+    entry.originalLabel = prevEnergy;
+    getActivityColor(task);
+    entries.push(entry);
+    entries.sort((a, b) => b.ts - a.ts);
+    lastTaskForRepeat = task;
+    persist(); renderToday(); syncEntries();
+    showToast(`Logged · ${task} · ${fmtDur(dur)}`);
+  }
+  resetTimer();
 }
 
 // ══════════════════════════════════════════════════════
