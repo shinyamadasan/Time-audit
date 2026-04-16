@@ -552,20 +552,21 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   padding:8px 16px;font-family:var(--head);font-size:12px;font-weight:700;
   cursor:pointer;flex-shrink:0;margin-left:12px}
 
-/* ── Same-as-last hero chip ── */
-.same-last-btn{width:100%;padding:14px 16px;background:var(--deep);
-  border:none;border-radius:var(--r);
-  color:var(--bg);font-family:var(--head);font-size:14px;font-weight:700;
-  cursor:pointer;text-align:center;margin-bottom:10px;display:none;
-  transition:background 0.12s;letter-spacing:0.01em}
-.same-last-btn:hover{background:#d8ff5c}
-.same-last-btn .sl-sub{display:block;font-size:11px;font-weight:500;opacity:0.65;margin-top:2px}
-.same-last-other{width:100%;padding:8px 14px;background:none;
-  border:1px solid var(--border2);border-radius:var(--r);
-  color:var(--muted);font-family:var(--head);font-size:12px;font-weight:500;
-  cursor:pointer;text-align:center;margin-bottom:12px;display:none;
-  transition:all 0.12s}
-.same-last-other:hover{border-color:var(--border3);color:var(--text)}
+/* ── Same-as-last card (primary CTA) ── */
+.sal-card{width:100%;display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px;background:var(--bg2);
+  box-shadow:0 0 0 1.5px rgba(76,199,240,0.3),0 2px 12px rgba(76,199,240,0.08);
+  border:none;border-radius:var(--r2);cursor:pointer;text-align:left;
+  margin-bottom:10px;transition:box-shadow 0.15s,background 0.15s;
+  font-family:var(--head);-webkit-tap-highlight-color:transparent}
+.sal-card:hover{background:var(--bg3);box-shadow:0 0 0 1.5px rgba(76,199,240,0.5),0 4px 16px rgba(76,199,240,0.12)}
+.sal-card:active{transform:scale(0.99)}
+.sal-left{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sal-label{font-size:10px;font-weight:700;color:var(--deep);letter-spacing:0.04em;text-transform:uppercase}
+.sal-activity{font-size:16px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sal-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;margin-left:12px}
+.sal-action{font-size:12px;font-weight:600;color:var(--deep)}
+.sal-time{font-size:11px;color:var(--muted);font-family:var(--mono)}
 
 /* ── Sleep log pill ── */
 .sleep-pill{display:none;width:100%;padding:9px 14px;background:rgba(148,163,184,0.08);
@@ -681,6 +682,14 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 /* ── Hero state transitions ── */
 @keyframes hero-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .hero-panel-enter{animation:hero-in 0.22s cubic-bezier(0.34,1.1,0.64,1) both}
+
+/* ── Timeline new entry slide-in ── */
+@keyframes tl-entry-in{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
+.tl-row-new{animation:tl-entry-in 0.28s cubic-bezier(0.34,1.1,0.64,1) both}
+
+/* ── Stat value tick ── */
+@keyframes stat-tick{0%{transform:scale(1)}40%{transform:scale(1.22)}100%{transform:scale(1)}}
+.stat-tick{animation:stat-tick 0.3s cubic-bezier(0.34,1.1,0.64,1)}
 
 /* ── Break active banner ── */
 .break-active-row{margin-top:12px;background:var(--break-dim);border:1px solid rgba(167,139,250,0.3);
@@ -832,7 +841,7 @@ button, a, [role="button"],
 .switch-list-item { transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
 
 /* Ring fill */
-.ring-fg { transition: stroke-dashoffset 0.9s linear; }
+.ring-fg { transition: stroke-dashoffset 0.9s cubic-bezier(0.4,0,0.2,1), stroke 0.4s ease; }
 
 /* Commit bar / week progress fill */
 .commit-fill, .week-progress-fill, .reflect-goal-fill, .fbo-progress-fill {
@@ -1151,20 +1160,22 @@ button, a, [role="button"],
   <!-- Yesterday's promise banner -->
   <div id="yesterday-promise" style="display:none"></div>
 
+  <!-- Same as last — primary CTA -->
+  <button id="same-as-last-btn" onclick="quickLogSameAsLast()" class="sal-card" style="display:none">
+    <div class="sal-left">
+      <div class="sal-label">Same as last</div>
+      <div class="sal-activity" id="same-as-last-label">—</div>
+    </div>
+    <div class="sal-right">
+      <div class="sal-action">1 tap log →</div>
+      <div class="sal-time" id="same-as-last-time"></div>
+    </div>
+  </button>
+
   <!-- Sleep quick log pill -->
   <button id="sleep-pill-btn" class="sleep-pill" onclick="quickLogSleep()">
     💤 <span id="sleep-pill-label">Log last night's sleep</span>
     <span style="float:right;font-size:10px;opacity:0.6;font-weight:400">tap to prefill →</span>
-  </button>
-
-  <!-- Same as last — one tap log -->
-  <button id="same-as-last-btn" onclick="quickLogSameAsLast()" style="display:none;width:100%;padding:11px 16px;
-    background:var(--deep-dim);border:1px solid rgba(76,199,240,0.3);border-radius:var(--r);
-    color:var(--text);font-family:var(--head);font-size:13px;font-weight:600;cursor:pointer;
-    text-align:left;margin-bottom:6px;transition:background 0.12s">
-    <span style="color:var(--deep);margin-right:6px">↩</span>
-    <span id="same-as-last-label">Same as last</span>
-    <span style="float:right;font-size:11px;color:var(--muted);font-weight:400">1 tap · log &amp; continue</span>
   </button>
 
   <!-- Quick retro log -->
@@ -1179,10 +1190,20 @@ button, a, [role="button"],
         style="width:100%;box-sizing:border-box">
       <div class="hero-suggestions" id="quick-retro-suggestions" style="display:none"></div>
     </div>
-    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-      <input type="time" id="retro-qstart" class="quick-retro-sel">
+    <!-- Collapsed time display — tap to expand -->
+    <div id="retro-time-collapsed" onclick="expandRetroTimes()"
+      style="display:flex;align-items:center;gap:4px;flex-shrink:0;cursor:pointer;
+             padding:6px 10px;border-radius:8px;border:1px solid var(--border2);
+             background:var(--bg3);transition:border-color 0.15s">
+      <span style="font-family:var(--mono);font-size:12px;color:var(--muted)" id="retro-time-display">—</span>
+      <span style="font-size:9px;color:var(--muted2);margin-left:2px">✎</span>
+    </div>
+    <!-- Expanded time pickers — hidden by default -->
+    <div id="retro-time-expanded" style="display:none;align-items:center;gap:4px;flex-shrink:0">
+      <input type="time" id="retro-qstart" class="quick-retro-sel" onchange="updateRetroTimeDisplay()">
       <span style="color:var(--muted);font-size:11px;user-select:none">–</span>
-      <input type="time" id="retro-qend" class="quick-retro-sel">
+      <input type="time" id="retro-qend" class="quick-retro-sel" onchange="updateRetroTimeDisplay()">
+      <button onclick="collapseRetroTimes()" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">✕</button>
     </div>
     <button class="btn sm primary" onclick="quickRetroLog()">Log</button>
   </div>
@@ -1991,7 +2012,19 @@ function updateRing() {
   // Ring fills UP as elapsed time grows
   const pct = remaining / totalSecs;
   ring.style.strokeDashoffset = CIRCUM * pct;
-  ring.style.stroke = currentState === 'distraction' ? '#ff6b6b' : 'var(--deep)';
+  const _energyStroke = {
+    deep:'#4cc7f0', shallow:'#6fb3f2', admin:'#f9c74f',
+    nine5:'#f9c74f', errands:'#94a3b8', learning:'#34d399',
+    exercise:'#fb923c', social:'#f472b6', recovery:'#a78bfa',
+    distraction:'#ff6b6b', waste:'#ff6b6b'
+  };
+  const ringColor = _energyStroke[currentState] || '#4cc7f0';
+  ring.style.stroke = ringColor;
+  // Tint the ring glow to match energy color
+  const heroRingWrapSvg = ring.closest('svg');
+  if (heroRingWrapSvg) heroRingWrapSvg.style.filter = running
+    ? `drop-shadow(0 0 10px ${ringColor}88)`
+    : 'none';
 
   // Live seconds in ring center: show time elapsed in current block (MM:SS)
   const blockElapsedSecs = totalSecs - remaining;
@@ -2527,6 +2560,7 @@ function _doQuickSave(activity, energy) {
   entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
   learnWastePattern(activity, energy);
   entries.unshift(entry);
+  _lastLoggedEntryId = entry.id;
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
   persist(); renderToday(); syncEntries();
@@ -3246,7 +3280,7 @@ function saveRetroEntry() {
       entries.sort((a,b) => b.ts - a.ts);
       persist(); renderToday(); syncEntries();
       closeModal('retro-overlay');
-      showToast(`Logged retroactively · ${fmtDur(dur)}`);
+      showToast(`Logged retroactively · ${fmtDur(dur)}`, false, retroEnergy);
     }
   }
 }
@@ -4130,7 +4164,7 @@ function renderEntryRow(item) {
   const editCall = item._mergeCount > 1
     ? `openEditMergedEntry('${item._mergedIds.join(',')}',${item.tsStart || item.ts},${item.ts})`
     : `openEditEntry(${item.id})`;
-  return `<div class="tl-row" onclick="${editCall}" style="cursor:pointer">
+  return `<div class="tl-row" data-entry-id="${item.id}" onclick="${editCall}" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
@@ -4177,6 +4211,21 @@ function toggleTlBucket(id) {
 
 // Cache key — skip expensive innerHTML work when today's entries haven't changed
 let _todayRenderKey = '';
+// Track the most recently logged entry ID for slide-in animation
+let _lastLoggedEntryId = null;
+
+// Animate stat card value if it changed
+function setStatVal(id, val) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const prev = el.textContent;
+  el.textContent = val;
+  if (String(val) !== String(prev)) {
+    el.classList.remove('stat-tick');
+    void el.offsetWidth;
+    el.classList.add('stat-tick');
+  }
+}
 
 // ── Hero state helper — animated transitions ──────────────────────────────
 function showHeroState(state) {
@@ -4213,10 +4262,10 @@ function renderToday() {
   if (backBtn) backBtn.style.display = isViewingToday() ? 'none' : 'inline-flex';
   document.getElementById('intention').value = intention;
 
-  // Simplified stat row
-  document.getElementById('s-deep').textContent = deepCount;
+  // Simplified stat row — animate value if it changed
+  setStatVal('s-deep', deepCount);
   const deepStreak = computeStreak();
-  document.getElementById('s-streak').textContent = deepStreak;
+  setStatVal('s-streak', deepStreak);
   const cleanStreak = computeCleanStreak();
   const streakSubEl = document.getElementById('s-streak-sub');
   if (streakSubEl) streakSubEl.textContent = cleanStreak > 0 ? `days · ${cleanStreak}d clean` : 'days deep';
@@ -4257,6 +4306,16 @@ function renderToday() {
       const gaps    = computeGaps(todayE, _dayNow);
       const combined = [...mergedDisplay, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
       tlEl.innerHTML = renderTimelineCombined(combined);
+      // Animate the most recently logged entry
+      if (_lastLoggedEntryId) {
+        const newRow = tlEl.querySelector(`[data-entry-id="${_lastLoggedEntryId}"]`);
+        if (newRow) {
+          newRow.classList.remove('tl-row-new');
+          void newRow.offsetWidth;
+          newRow.classList.add('tl-row-new');
+        }
+        _lastLoggedEntryId = null;
+      }
     }
   }
 
@@ -4294,7 +4353,14 @@ function renderToday() {
   const lastRealEntry = [...entries].filter(e => !e.missed && e.activity).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts))[0];
   if (salBtn && lastRealEntry) {
     salLabel.textContent = lastRealEntry.activity;
-    salBtn.style.display = 'block';
+    // Show time context on the right side
+    const salTimeEl = document.getElementById('same-as-last-time');
+    if (salTimeEl) {
+      const endTs = lastRealEntry.ts || lastRealEntry.tsStart;
+      const minsAgo = Math.round((Date.now() - endTs) / 60000);
+      salTimeEl.textContent = minsAgo < 90 ? `${minsAgo}m ago` : tzHHMM(endTs);
+    }
+    salBtn.style.display = 'flex';
   } else if (salBtn) {
     salBtn.style.display = 'none';
   }
@@ -4792,13 +4858,15 @@ function quickRetroLog() {
     resetRetroBar();
     showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
   } else {
-    entries.push(makeQEntry(tsEnd, tsEnd, tsStart, startDateKey));
+    const _qEntry = makeQEntry(tsEnd, tsEnd, tsStart, startDateKey);
+    _lastLoggedEntryId = _qEntry.id;
+    entries.push(_qEntry);
     entries.sort((a, b) => b.ts - a.ts);
     persist(); renderToday(); syncEntries();
     taskInput.value = '';
     resetRetroBar();
     const wasteFlag = (learnedEng === 'waste' || learnedEng === 'distraction') ? ' ⚠ auto-flagged' : '';
-    showToast(`Logged: ${task} · ${fmtDur(dur)}${wasteFlag}`);
+    showToast(`Logged: ${task} · ${fmtDur(dur)}${wasteFlag}`, false, learnedEng);
   }
 }
 
@@ -6175,9 +6243,18 @@ function updateLiveCost() {
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 function overlayClose(e,id){if(e.target.id===id)closeModal(id);}
 let _toastTimer = null;
-function showToast(msg, withUndo) {
+function showToast(msg, withUndo, energy) {
   const t = document.getElementById('toast');
   if (_toastTimer) clearTimeout(_toastTimer);
+  // Energy-colored left border
+  const _toastColors = {
+    deep:'#4cc7f0', shallow:'#6fb3f2', admin:'#f9c74f', nine5:'#f9c74f',
+    errands:'#94a3b8', learning:'#34d399', exercise:'#fb923c', social:'#f472b6',
+    recovery:'#a78bfa', distraction:'#ff6b6b', waste:'#ff6b6b'
+  };
+  t.style.borderLeft = energy && _toastColors[energy]
+    ? `3px solid ${_toastColors[energy]}`
+    : '3px solid transparent';
   if (withUndo) {
     t.innerHTML = `<span>${msg}</span><button class="toast-undo-btn" onclick="undoLastInstantLog()">Undo</button>`;
     t.classList.add('has-undo');
@@ -6486,13 +6563,35 @@ function resetRetroBar() {
   const e = document.getElementById('retro-qend');
   if (!s || !e) return;
   const nowMs = Date.now();
-  // Start = end of last logged entry; fall back to settings.intervalMin ago
   const lastEnd = entries.filter(e => !e.missed && !e.deleted && e.ts)
     .reduce((max, entry) => Math.max(max, entry.ts), 0);
   const fallback = nowMs - (settings.intervalMin || 30) * 60000;
   const startMs = lastEnd > 0 && lastEnd < nowMs ? lastEnd : fallback;
   s.value = tzHHMM(startMs);
   e.value = tzHHMM(nowMs);
+  // Reset to collapsed state and update display
+  collapseRetroTimes();
+  updateRetroTimeDisplay();
+}
+
+function updateRetroTimeDisplay() {
+  const s = document.getElementById('retro-qstart');
+  const e = document.getElementById('retro-qend');
+  const disp = document.getElementById('retro-time-display');
+  if (!s || !e || !disp) return;
+  disp.textContent = s.value && e.value ? `${s.value} – ${e.value}` : '—';
+}
+
+function expandRetroTimes() {
+  document.getElementById('retro-time-collapsed').style.display = 'none';
+  document.getElementById('retro-time-expanded').style.display = 'flex';
+}
+
+function collapseRetroTimes() {
+  const collapsed = document.getElementById('retro-time-collapsed');
+  const expanded = document.getElementById('retro-time-expanded');
+  if (collapsed) collapsed.style.display = 'flex';
+  if (expanded) expanded.style.display = 'none';
 }
 resetRetroBar();
 // Restore hero UI state on page load
