@@ -1742,8 +1742,8 @@ button, a, [role="button"],
 <div class="modal">
   <div class="modal-handle"></div>
   <div class="modal-tag">UNLOGGED TIME</div>
-  <div class="modal-title">Reconstruct your day</div>
-  <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Each block below is untracked time. Tap once to fill it.</div>
+  <div class="modal-title">Fill in the gaps</div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Tap a block to log it, or use the quick away buttons.</div>
   <div id="gaps-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:4px"></div>
   <div style="display:flex;justify-content:flex-end;margin-top:16px">
     <button class="btn ghost" onclick="closeModal('gaps-overlay')">Done</button>
@@ -3132,6 +3132,7 @@ let retroEnergy = '';
 let editingEntryId = null;     // id of entry being edited (null = new entry)
 let editingMergedIds = null;  // [id, ...] when editing a merged (×N) display block
 let editingEntryBase = null;  // { startDate, crossesMidnight } for timestamp reconstruction
+let _openedFromGaps = false;  // true when retro-overlay was opened from the gaps picker
 function populateRetroChips() {
   // Build unique recent activities (last 10 distinct, preserving energy type)
   const seen = new Set();
@@ -3263,6 +3264,7 @@ function saveRetroEntry() {
     document.getElementById('retro-modal-title').textContent = 'What were you doing?';
     closeModal('retro-overlay');
     showToast(spansMidnight ? 'Split at midnight · block updated' : 'Block updated');
+    if (_openedFromGaps) { _openedFromGaps = false; setTimeout(openGapsPicker, 200); }
   } else {
     if (spansMidnight) {
       entries.push(makeEntry(midnight - 1, midnight, tsStart, startDateKey));
@@ -3273,12 +3275,14 @@ function saveRetroEntry() {
       const dur1 = Math.round((midnight - tsStart) / 60000);
       const dur2 = Math.round((tsEnd - midnight) / 60000);
       showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
+      if (_openedFromGaps) { _openedFromGaps = false; setTimeout(openGapsPicker, 200); }
     } else {
       entries.push(makeEntry(tsEnd, tsEnd, tsStart, startDateKey));
       entries.sort((a,b) => b.ts - a.ts);
       persist(); renderToday(); syncEntries();
       closeModal('retro-overlay');
       showToast(`Logged retroactively · ${fmtDur(dur)}`, false, retroEnergy);
+      if (_openedFromGaps) { _openedFromGaps = false; setTimeout(openGapsPicker, 200); }
     }
   }
 }
@@ -3923,18 +3927,6 @@ function logGapInlineEntry(cardIdx, energy) {
 }
 
 function renderGapsList(gaps) {
-  // Collect up to 4 recent unique non-away tasks for quick-fill chips
-  const seen = new Set();
-  const recentTasks = [];
-  for (const e of entries) {
-    if (e.deleted || e.away || e.missed || !e.activity || !e.energy) continue;
-    if (!seen.has(e.activity)) {
-      seen.add(e.activity);
-      recentTasks.push({ activity: e.activity, energy: e.energy });
-    }
-    if (recentTasks.length >= 4) break;
-  }
-
   // Expand each gap into period-sized chunks
   const chunks = gaps.flatMap(g => splitGapIntoChunks(g));
 
@@ -3943,14 +3935,6 @@ function renderGapsList(gaps) {
     { label: '🚗 Commute', activity: 'Commute',        energy: 'shallow'  },
     { label: '☕ Break',   activity: 'Break',          energy: 'recovery' },
     { label: '📵 Offline', activity: 'Offline / Away', energy: 'shallow'  },
-  ];
-  const PRIMARY = [
-    { label: '💼 Work',     activity: 'Work',     energy: 'shallow',
-      bg: 'var(--bg4)', color: 'var(--text)' },
-    { label: '😴 Maintenance', activity: 'Maintenance', energy: 'recovery',
-      bg: 'var(--break-dim)', color: 'var(--break)' },
-    { label: '📺 Waste',    activity: 'Waste',    energy: 'waste',
-      bg: 'var(--distraction-dim)', color: 'var(--distraction)' },
   ];
 
   document.getElementById('gaps-list').innerHTML = chunks.map((g, i) => {
@@ -3961,70 +3945,28 @@ function renderGapsList(gaps) {
     const startVal = tzHHMM(g.tsStart);
     const endVal   = tzHHMM(rawEnd);
 
-    const primaryBtns = PRIMARY.map(p =>
-      `<button onclick="logGapChunk(${i},'${p.activity}','${p.energy}')"
-        style="flex:1;padding:10px 4px;background:${p.bg};border:1px solid var(--border2);
-               border-radius:8px;color:${p.color};font-family:var(--head);font-size:11px;
-               font-weight:700;cursor:pointer;text-align:center;line-height:1.4">${p.label}</button>`
-    ).join('');
-
-    const taskChips = recentTasks.map(t => {
-      const safe  = t.activity.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      const short = t.activity.length > 20 ? t.activity.slice(0,20) + '…' : t.activity;
-      return `<button onclick="logGapChunk(${i},'${safe}','${t.energy}')"
-        class="energy-btn ${t.energy}"
-        style="padding:6px 10px;font-size:11px;font-weight:600;flex-shrink:0">${short}</button>`;
-    }).join('');
-
     const awayBtns = AWAY.map(a =>
-      `<button onclick="logGapChunk(${i},'${a.activity}','${a.energy}')"
+      `<button onclick="event.stopPropagation();logGapChunk(${i},'${a.activity}','${a.energy}')"
         style="flex:1;min-width:0;padding:6px 4px;background:var(--bg4);border:1px solid var(--border2);
                border-radius:6px;color:var(--muted);font-family:var(--head);font-size:10px;
                font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.label}</button>`
     ).join('');
 
     return `<div id="gap-item-${i}" data-ts-start="${g.tsStart}" data-ts-end="${rawEnd}" data-is-current="${isCur}"
-        style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden">
+        onclick="closeModal('gaps-overlay');openRetroLogPrefilled(${g.tsStart},${rawEnd},'','',true)"
+        style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden;cursor:pointer">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;gap:10px">
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.07em">${header}</div>
-          <div style="display:flex;align-items:center;gap:4px;margin-top:4px">
-            <input type="time" id="gap-start-${i}" class="quick-retro-sel"
-              value="${startVal}" autocomplete="off"
-              onchange="updateGapDuration(${i})">
-            <span style="color:var(--muted2);font-size:11px">–</span>
-            <input type="time" id="gap-end-${i}" class="quick-retro-sel"
-              value="${endVal}" autocomplete="off"
-              onchange="updateGapDuration(${i})">
-          </div>
+          <div style="font-size:13px;font-weight:600;color:var(--muted);margin-top:3px;font-family:var(--mono)">${startVal} – ${endVal}</div>
         </div>
-        <div id="gap-dur-${i}" style="background:var(--distraction-dim);color:var(--distraction);
-             font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;flex-shrink:0">${durLabel}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div style="background:var(--distraction-dim);color:var(--distraction);
+               font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px">${durLabel}</div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
       </div>
-      <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 8px">What were you mostly doing?</div>
-        <div style="display:flex;gap:6px">${primaryBtns}</div>
-      </div>
-      ${recentTasks.length ? `
-      <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 6px">Or specifically:</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${taskChips}</div>
-        <div id="gap-type-wrap-${i}">
-          <button onmousedown="expandGapInput(${i})"
-            style="width:100%;padding:8px;background:none;border:1px solid var(--border2);
-                   border-radius:6px;color:var(--muted);font-family:var(--head);font-size:11px;
-                   font-weight:600;cursor:pointer">+ Type activity...</button>
-        </div>
-      </div>` : `
-      <div style="padding:0 10px 10px;border-top:1px solid var(--border)">
-        <div id="gap-type-wrap-${i}">
-          <button onmousedown="expandGapInput(${i})"
-            style="width:100%;padding:10px;background:var(--bg4);border:1px solid var(--border2);
-                   border-radius:6px;color:var(--text);font-family:var(--head);font-size:12px;
-                   font-weight:600;cursor:pointer">+ Type activity...</button>
-        </div>
-      </div>`}
-      <div style="padding:0 10px 12px;border-top:1px solid var(--border)">
+      <div style="padding:0 10px 10px;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 6px">I was away:</div>
         <div style="display:flex;gap:6px">${awayBtns}</div>
       </div>
@@ -4037,9 +3979,10 @@ function logAwayBlock(tsStart, tsEnd, activity, energy, gapIndex) {
   logInstantBlock(tsStart, tsEnd, activity, energy, gapIndex);
 }
 
-function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
+function openRetroLogPrefilled(tsStart, tsEnd, activity, energy, fromGaps) {
   editingEntryId = null;
   editingEntryBase = { startDate: new Date(tsStart), crossesMidnight: false };
+  _openedFromGaps = !!fromGaps;
   document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
   document.getElementById('retro-modal-title').textContent = 'What were you doing?';
   retroEnergy = '';
