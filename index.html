@@ -4248,8 +4248,8 @@ function applyContextualVisibility(todayE) {
   const salBtn = document.getElementById('same-as-last-btn');
   const salLabel = document.getElementById('same-as-last-label');
   const lastRealEntry = [...entries]
-    .filter(e => !e.missed && e.activity)
-    .sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts))[0];
+    .filter(e => !e.missed && !e.deleted && e.activity)
+    .sort((a, b) => b.ts - a.ts)[0];
   if (salBtn && lastRealEntry && isToday) {
     salLabel.textContent = lastRealEntry.activity;
     const salTimeEl = document.getElementById('same-as-last-time');
@@ -4926,7 +4926,7 @@ function quickRetroLog() {
 }
 
 function quickLogSameAsLast() {
-  const last = [...entries].filter(e => !e.missed && e.activity).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts))[0];
+  const last = [...entries].filter(e => !e.missed && !e.deleted && e.activity).sort((a, b) => b.ts - a.ts)[0];
   if (!last) return;
   // Log directly — never touch the retro bar input so the user's typing is preserved
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
