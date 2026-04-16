@@ -5387,40 +5387,49 @@ function renderTopActivities(el, entriesArr, limit=8, days=null) {
     const color = getActivityColor(act)||energyColors[data.energy]||'var(--deep)';
     const label = data.mins>=60?(Math.round(data.mins/6)/10).toFixed(1)+'h':data.mins+'m';
 
-    let barHTML;
+    let barHTML, dayLineHTML = '';
     if (days && days.length) {
       // Segmented bar — one segment per day, proportional to that day's minutes for this activity
       const dayMins = days.map(d => {
         const m = d.entries.filter(e=>!e.missed && e.activity.split(' (Output')[0]===act).reduce((s,e)=>s+entryMins(e),0);
         return { key: d.key, label: d.label, mins: m };
       });
+      const activeDays = dayMins.filter(d => d.mins > 0);
       const segments = dayMins.map((d, idx) => {
         if (!d.mins) return '';
         const segW = d.mins / maxMins * 100;
-        const opacity = 0.55 + (idx / Math.max(days.length - 1, 1)) * 0.45; // subtle day variation
-        const radius = `border-radius:${idx===0?'4px 0 0 4px':'0'}${idx===dayMins.length-1?' 4px 4px 0 0':''}`;
+        const opacity = 0.55 + (idx / Math.max(days.length - 1, 1)) * 0.45;
         return `<div onclick="event.stopPropagation();setViewDate('${d.key}');showView('today')"
-          title="${d.label}: ${d.mins>=60?(Math.round(d.mins/6)/10).toFixed(1)+'h':d.mins+'m'}"
           style="height:100%;width:${segW}%;background:${color};opacity:${opacity.toFixed(2)};
-                 cursor:pointer;flex-shrink:0;border-right:1px solid rgba(0,0,0,0.25);
-                 transition:opacity 0.15s;box-sizing:border-box"
-          onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity='${opacity.toFixed(2)}'"></div>`;
+                 cursor:pointer;flex-shrink:0;border-right:1.5px solid rgba(0,0,0,0.3);
+                 box-sizing:border-box"></div>`;
       }).join('');
-      barHTML = `<div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;display:flex">
+      barHTML = `<div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;display:flex;margin-bottom:5px">
         ${segments}
       </div>`;
+      // Day breakdown line — clickable chips, only days with data
+      dayLineHTML = activeDays.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px 8px">
+        ${activeDays.map(d => {
+          const dl = d.mins >= 60 ? (Math.round(d.mins/6)/10).toFixed(1)+'h' : d.mins+'m';
+          return `<span onclick="event.stopPropagation();setViewDate('${d.key}');showView('today')"
+            style="font-size:10px;font-family:var(--mono);color:var(--muted);cursor:pointer;
+                   white-space:nowrap;display:inline-flex;align-items:center;gap:3px">
+            <span style="width:6px;height:6px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0"></span>
+            ${d.label} ${dl}</span>`;
+        }).join('')}
+      </div>` : '';
     } else {
       barHTML = `<div style="height:6px;background:var(--bg4);border-radius:4px;overflow:hidden">
         <div style="height:100%;width:${totalW}%;background:${color};border-radius:4px;transition:width 0.3s"></div>
       </div>`;
     }
 
-    return `<div style="margin-bottom:10px">
+    return `<div style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
         <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%">${act}</span>
         <span style="color:var(--muted);font-family:var(--mono);flex-shrink:0">${label}</span>
       </div>
-      ${barHTML}
+      ${barHTML}${dayLineHTML}
     </div>`;
   }).join('') : '<div style="color:var(--muted);font-size:12px">No data</div>';
 }
