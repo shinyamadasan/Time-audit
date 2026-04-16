@@ -2976,7 +2976,7 @@ function formatEnergyLabel(energy) {
   return ({
     deep: 'Deep Work',
     shallow: 'Shallow Work',
-    recovery: 'Recovery',
+    recovery: 'Maintenance',
     exercise: 'Exercise',
     errands: 'Errands',
     waste: 'Waste',
@@ -3836,7 +3836,7 @@ function expandGapInput(cardIdx) {
   if (!wrap) return;
   const CATS = [
     { label: 'Work',     e: 'shallow',  c: 'var(--text)'        },
-    { label: 'Recovery', e: 'recovery', c: 'var(--break)'       },
+    { label: 'Maintenance', e: 'recovery', c: 'var(--break)'       },
     { label: 'Waste',    e: 'waste',    c: 'var(--distraction)' },
   ];
   wrap.innerHTML = `
@@ -3947,7 +3947,7 @@ function renderGapsList(gaps) {
   const PRIMARY = [
     { label: '💼 Work',     activity: 'Work',     energy: 'shallow',
       bg: 'var(--bg4)', color: 'var(--text)' },
-    { label: '😴 Recovery', activity: 'Recovery', energy: 'recovery',
+    { label: '😴 Maintenance', activity: 'Maintenance', energy: 'recovery',
       bg: 'var(--break-dim)', color: 'var(--break)' },
     { label: '📺 Waste',    activity: 'Waste',    energy: 'waste',
       bg: 'var(--distraction-dim)', color: 'var(--distraction)' },
@@ -5347,7 +5347,7 @@ function renderEnergySplit(el, entriesArr) {
   const energyLabels = {
     deep:'Deep work',shallow:'Shallow work',nine5:'Job Work',
     errands:'Errands',learning:'Learning',exercise:'Exercise',
-    social:'Social',recovery:'Recovery',waste:'Waste'
+    social:'Social',recovery:'Maintenance',waste:'Waste'
   };
   el.innerHTML = Object.entries(energyMins).filter(([,m])=>m>0).map(([type,mins])=>{
     const pct = Math.round(mins/total*100);
@@ -5509,7 +5509,7 @@ function renderWeekOverview(days) {
             <option value="learning">Learning</option>
             <option value="exercise">Exercise</option>
             <option value="social">Social</option>
-            <option value="recovery">Recovery</option>
+            <option value="recovery">Maintenance</option>
             <option value="waste">Waste</option>
           </select>
           <select id="filter-activity" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
@@ -5679,7 +5679,7 @@ function renderSettings() {
       <option value="learning" ${p.energy==='learning'?'selected':''}>Learning</option>
       <option value="exercise" ${p.energy==='exercise'?'selected':''}>Exercise</option>
       <option value="social" ${p.energy==='social'?'selected':''}>Social</option>
-      <option value="recovery" ${p.energy==='recovery'?'selected':''}>Recovery</option>
+      <option value="recovery" ${p.energy==='recovery'?'selected':''}>Maintenance</option>
       <option value="waste" ${p.energy==='waste'?'selected':''}>Waste</option>
     </select>
     <button class="btn sm ghost" onclick="removePreset(${i})">✕</button>
