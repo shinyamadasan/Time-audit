@@ -4211,6 +4211,90 @@ function toggleTlBucket(id) {
 
 // Cache key — skip expensive innerHTML work when today's entries haven't changed
 let _todayRenderKey = '';
+
+// ── Contextual visibility ─────────────────────────────────────────────────
+// Shows the highest-signal element for the current moment.
+// Rules:
+//   MORNING  (<11am)  : yesterday promise (if content) → sleep pill → same-as-last
+//                       daily summary hidden unless 5+ entries
+//   MIDDAY   (11–17)  : same-as-last → daily summary if 4+ entries
+//                       sleep pill hidden, yesterday promise hidden
+//   EVENING  (17+)    : daily summary first, then same-as-last
+//                       sleep pill hidden, yesterday promise hidden
+//   PAST DAY          : daily summary only
+function applyContextualVisibility(todayE) {
+  const isToday = isViewingToday();
+  const nowH = new Date().getHours();
+  const nonMissed = (isToday ? todayE : entries.filter(e =>
+    getDateInTZ(e.tsStart || e.ts) === getViewingDateKey()
+  )).filter(e => !e.missed && !e.deleted);
+  const entryCount = nonMissed.length;
+
+  const isMorning = nowH < 11;
+  const isEvening = nowH >= 17;
+
+  // ── Sleep pill ──────────────────────────────────────────────────────────
+  // Only morning + today + sleep not yet logged
+  const tenHrsAgo = Date.now() - 10 * 3600000;
+  const hasSleep = entries.some(e =>
+    !e.missed && e.activity &&
+    e.activity.toLowerCase().includes('sleep') &&
+    (e.tsStart || e.ts) >= tenHrsAgo
+  );
+  const showSleep = isToday && isMorning && !hasSleep;
+  const sleepPill = document.getElementById('sleep-pill-btn');
+  if (sleepPill) sleepPill.style.display = showSleep ? 'block' : 'none';
+
+  // ── Same-as-last ────────────────────────────────────────────────────────
+  // Show when today and there's a previous entry to repeat
+  const salBtn = document.getElementById('same-as-last-btn');
+  const salLabel = document.getElementById('same-as-last-label');
+  const lastRealEntry = [...entries]
+    .filter(e => !e.missed && e.activity)
+    .sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts))[0];
+  if (salBtn && lastRealEntry && isToday) {
+    salLabel.textContent = lastRealEntry.activity;
+    const salTimeEl = document.getElementById('same-as-last-time');
+    if (salTimeEl) {
+      const endTs = lastRealEntry.ts || lastRealEntry.tsStart;
+      const minsAgo = Math.round((Date.now() - endTs) / 60000);
+      salTimeEl.textContent = minsAgo < 90 ? `${minsAgo}m ago` : tzHHMM(endTs);
+    }
+    salBtn.style.display = 'flex';
+  } else if (salBtn) {
+    salBtn.style.display = 'none';
+  }
+
+  // ── Yesterday's promise ─────────────────────────────────────────────────
+  // Only morning (before 2pm) on today's view — it's actionable then, noise later
+  if (!isToday || nowH >= 14) {
+    const yp = document.getElementById('yesterday-promise');
+    if (yp) yp.style.display = 'none';
+  } else {
+    renderYesterdayPromise();
+  }
+
+  // ── Daily summary ───────────────────────────────────────────────────────
+  // Past day: always show if data exists
+  // Evening (5pm+): show when 3+ entries
+  // Midday: show when 4+ entries
+  // Morning: show when 5+ entries (day is young, summary not meaningful yet)
+  const summaryThreshold = !isToday ? 1 : isEvening ? 3 : isMorning ? 5 : 4;
+  if (entryCount >= summaryThreshold) {
+    renderDailySummary();
+  } else {
+    const card = document.getElementById('daily-summary');
+    if (card) card.style.display = 'none';
+  }
+
+  // ── Awareness signal ────────────────────────────────────────────────────
+  // Only show when there are enough entries to generate meaningful insights
+  const sigEl = document.getElementById('awareness-signal');
+  if (sigEl && entryCount < 2) {
+    sigEl.style.display = 'none';
+  }
+  // (renderAwarenessSignal is called separately and handles its own content)
+}
 // Track the most recently logged entry ID for slide-in animation
 let _lastLoggedEntryId = null;
 
@@ -4334,11 +4418,8 @@ function renderToday() {
     banner.style.display = 'none';
   }
 
-  // Yesterday's promise
-  renderYesterdayPromise();
-
-  // Daily summary card
-  renderDailySummary();
+  // ── Contextual visibility: show the right element for this moment ──
+  applyContextualVisibility(todayE);
 
   // Timeline summary
   const untrackedStr = untrackedMin > 0 ? ` · ${Math.round(untrackedMin/60*10)/10}h unlogged` : ' · fully logged ✓';
@@ -4346,33 +4427,6 @@ function renderToday() {
     workStarted ? `${computeDeepHrs(todayE)}h deep · ${todayE.length} blocks${untrackedStr}` : '';
 
   const listEl = document.getElementById('recent-list');
-
-  // Same-as-last button: show if there are any non-missed entries (from any date)
-  const salBtn = document.getElementById('same-as-last-btn');
-  const salLabel = document.getElementById('same-as-last-label');
-  const lastRealEntry = [...entries].filter(e => !e.missed && e.activity).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts))[0];
-  if (salBtn && lastRealEntry) {
-    salLabel.textContent = lastRealEntry.activity;
-    // Show time context on the right side
-    const salTimeEl = document.getElementById('same-as-last-time');
-    if (salTimeEl) {
-      const endTs = lastRealEntry.ts || lastRealEntry.tsStart;
-      const minsAgo = Math.round((Date.now() - endTs) / 60000);
-      salTimeEl.textContent = minsAgo < 90 ? `${minsAgo}m ago` : tzHHMM(endTs);
-    }
-    salBtn.style.display = 'flex';
-  } else if (salBtn) {
-    salBtn.style.display = 'none';
-  }
-
-  // Sleep pill: show if viewing today, it's before noon, and no sleep entry exists from last ~10 hours
-  const sleepPill = document.getElementById('sleep-pill-btn');
-  if (sleepPill) {
-    const nowH = new Date().getHours();
-    const tenHrsAgo = Date.now() - 10 * 3600000;
-    const hasSleep = entries.some(e => !e.missed && e.activity && e.activity.toLowerCase().includes('sleep') && (e.tsStart || e.ts) >= tenHrsAgo);
-    sleepPill.style.display = (isViewingToday() && nowH < 14 && !hasSleep) ? 'block' : 'none';
-  }
 
 
   if (entriesChanged) {
