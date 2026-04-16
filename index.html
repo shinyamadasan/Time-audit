@@ -5491,29 +5491,49 @@ function renderWeekOverview(days) {
       </div>
     </div>
 
-    <!-- Day bars — clickable -->
+    <!-- Day bars — clickable, stacked by energy type -->
     <div class="w-card">
       <div class="w-card-title">Hours by day <span style="font-weight:400;color:var(--muted2)">(tap a day to drill in)</span></div>
       <div style="display:flex;align-items:flex-end;gap:6px;height:80px">
-        ${days.map(d=>{
-          const totalH = d.entries.reduce((s,e)=>s+entryMins(e),0)/60;
-          const deepH = computeDeepHrs(d.entries);
-          const barH = Math.max(4,Math.round(totalH/maxTotal*72));
-          const deepPct = totalH>0?Math.round(deepH/totalH*100):0;
-          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end;cursor:pointer" onclick="selectWeekDay('${d.key}')">
-            <div style="font-size:9px;font-family:var(--mono);color:${d.isToday?'var(--deep)':'var(--muted)'}">${totalH>0?(Math.round(totalH*10)/10)+'h':''}</div>
-            <div style="width:100%;border-radius:4px 4px 0 0;position:relative;overflow:hidden;height:${barH}px;background:var(--bg4);transition:height 0.3s">
-              <div style="position:absolute;bottom:0;left:0;right:0;height:${deepPct}%;background:var(--deep);border-radius:4px 4px 0 0"></div>
-            </div>
-          </div>`;
-        }).join('')}
+        ${(()=>{
+          const STACK = [
+            {k:'deep',c:'var(--deep)'},{k:'nine5',c:'var(--nine5)'},{k:'shallow',c:'var(--shallow)'},
+            {k:'learning',c:'var(--learning)'},{k:'exercise',c:'var(--exercise)'},{k:'social',c:'var(--social)'},
+            {k:'errands',c:'var(--errands)'},{k:'recovery',c:'var(--break)'},{k:'waste',c:'var(--distraction)'}
+          ];
+          return days.map(d=>{
+            const totalH = d.entries.filter(e=>!e.missed).reduce((s,e)=>s+entryMins(e),0)/60;
+            const barH = Math.max(4,Math.round(totalH/maxTotal*72));
+            const energyMins = {};
+            d.entries.filter(e=>!e.missed&&e.energy).forEach(e=>{ energyMins[e.energy]=(energyMins[e.energy]||0)+entryMins(e); });
+            const totalMin = Object.values(energyMins).reduce((s,v)=>s+v,0)||1;
+            const segments = STACK.filter(s=>energyMins[s.k]).map(s=>
+              `<div style="width:100%;height:${Math.round(energyMins[s.k]/totalMin*100)}%;background:${s.c};flex-shrink:0"></div>`
+            ).join('');
+            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end;cursor:pointer" onclick="selectWeekDay('${d.key}')">
+              <div style="font-size:9px;font-family:var(--mono);color:${d.isToday?'var(--deep)':'var(--muted)'}">${totalH>0?(Math.round(totalH*10)/10)+'h':''}</div>
+              <div style="width:100%;border-radius:4px 4px 0 0;overflow:hidden;height:${barH}px;display:flex;flex-direction:column-reverse;transition:height 0.3s">
+                ${segments||`<div style="width:100%;height:100%;background:var(--bg4)"></div>`}
+              </div>
+            </div>`;
+          }).join('');
+        })()}
       </div>
       <div style="display:flex;gap:6px;margin-top:6px">
         ${days.map(d=>`<div style="flex:1;text-align:center;font-size:9px;color:${d.isToday?'var(--deep)':'var(--muted)'};font-family:var(--mono);font-weight:${d.isToday?'700':'400'};cursor:pointer" onclick="selectWeekDay('${d.key}')">${d.label}</div>`).join('')}
       </div>
-      <div style="display:flex;gap:12px;margin-top:10px;font-size:10px;color:var(--muted)">
-        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--deep);margin-right:4px"></span>Deep</span>
-        <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--bg4);margin-right:4px"></span>Other</span>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:10px;font-size:10px;color:var(--muted)">
+        ${(()=>{
+          const LEGEND=[
+            {k:'deep',c:'var(--deep)',l:'Deep'},{k:'nine5',c:'var(--nine5)',l:'Job Work'},{k:'shallow',c:'var(--shallow)',l:'Shallow'},
+            {k:'learning',c:'var(--learning)',l:'Learning'},{k:'exercise',c:'var(--exercise)',l:'Exercise'},{k:'social',c:'var(--social)',l:'Social'},
+            {k:'errands',c:'var(--errands)',l:'Errands'},{k:'recovery',c:'var(--break)',l:'Maintenance'},{k:'waste',c:'var(--distraction)',l:'Waste'}
+          ];
+          const usedKeys=new Set(weekE.filter(e=>!e.missed&&e.energy).map(e=>e.energy));
+          return LEGEND.filter(l=>usedKeys.has(l.k)).map(l=>
+            `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${l.c};margin-right:4px"></span>${l.l}</span>`
+          ).join('');
+        })()}
       </div>
     </div>
 
@@ -5526,9 +5546,9 @@ function renderWeekOverview(days) {
       <div class="w-card" style="margin:0">
         <div class="w-card-title">Highlights</div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Best day</div><div style="font-size:13px;font-weight:700">${bestDay.entries.length?computeDeepHrs(bestDay.entries)+'h — '+bestDay.label:'—'}</div></div>
-          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Avg deep/day</div><div style="font-size:13px;font-weight:700">${avgDeep}</div></div>
-          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Distraction cost</div><div style="font-size:13px;font-weight:700;color:var(--distraction)">$${distractionCost}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Best day</div><div style="font-size:13px;font-weight:600;font-family:var(--mono)">${bestDay.entries.length?computeDeepHrs(bestDay.entries)+'h — '+bestDay.label:'—'}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Avg deep/day</div><div style="font-size:13px;font-weight:600;font-family:var(--mono)">${avgDeep}</div></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Distraction cost</div><div style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--distraction)">$${distractionCost}</div></div>
         </div>
       </div>
     </div>
