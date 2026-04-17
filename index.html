@@ -187,6 +187,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .hero-task-name{font-size:18px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);letter-spacing:-0.2px}
 .hero-elapsed{font-size:28px;font-weight:500;color:var(--deep);font-family:var(--mono);margin-top:2px;letter-spacing:-1px;line-height:1}
 .hero-elapsed-unit{font-size:13px;font-weight:400;color:var(--muted);margin-left:2px}
+.hero-time-meta{font-size:11px;color:var(--muted);margin-top:3px;letter-spacing:0.01em}
 .hero-live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--deep);margin-right:5px;animation:livepulse 2s ease-in-out infinite;vertical-align:middle}
 @keyframes livepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.7)}}
 .hero-status{font-size:11px;color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:4px}
@@ -1085,8 +1086,9 @@ button, a, [role="button"],
         <div style="flex:1;min-width:0">
           <div class="hero-task-name" id="hero-task-name">—</div>
           <div style="display:flex;align-items:baseline;gap:0;margin-top:4px">
-            <div class="hero-elapsed" id="hero-elapsed">0</div><span class="hero-elapsed-unit">m on task</span>
+            <div class="hero-elapsed" id="hero-elapsed">0m</div><span class="hero-elapsed-unit" id="hero-elapsed-unit"> on task</span>
           </div>
+          <div class="hero-time-meta" id="hero-time-meta"></div>
           <div class="hero-status"><span class="hero-live-dot"></span><span id="timer-status">Tracking</span></div>
         </div>
         <div id="live-cost-active" class="hero-cost"></div>
@@ -2044,10 +2046,27 @@ function updateRing() {
   const secsEl = document.getElementById('hero-ring-secs');
   if (secsEl) secsEl.textContent = `${bm}:${String(bs).padStart(2,'0')}`;
 
-  // Hero: total elapsed on this task (whole minutes)
-  const totalElapsedMin = taskStartTime ? Math.max(0, Math.floor((Date.now() - taskStartTime) / 60000)) : 0;
+  // Hero: total elapsed on this task
+  const _now2 = Date.now();
+  const totalElapsedMin = taskStartTime ? Math.max(0, Math.floor((_now2 - taskStartTime) / 60000)) : 0;
   const elEl = document.getElementById('hero-elapsed');
-  if (elEl) elEl.textContent = totalElapsedMin;
+  const unitEl = document.getElementById('hero-elapsed-unit');
+  if (elEl) {
+    if (totalElapsedMin >= 60) {
+      const h = Math.floor(totalElapsedMin / 60), m = totalElapsedMin % 60;
+      elEl.textContent = m > 0 ? `${h}h ${m}m` : `${h}h`;
+    } else {
+      elEl.textContent = `${totalElapsedMin}m`;
+    }
+    if (unitEl) unitEl.textContent = ' on task';
+  }
+  const metaEl = document.getElementById('hero-time-meta');
+  if (metaEl && taskStartTime) {
+    const fmt12 = t => { const d = new Date(t), h = d.getHours(), m = d.getMinutes(), ap = h >= 12 ? 'PM' : 'AM'; return `${h%12||12}:${String(m).padStart(2,'0')} ${ap}`; };
+    metaEl.textContent = `Started ${fmt12(taskStartTime)}  ·  Now ${fmt12(_now2)}`;
+  } else if (metaEl) {
+    metaEl.textContent = '';
+  }
 
   const nameEl = document.getElementById('hero-task-name');
   if (nameEl && currentTask) nameEl.textContent = currentTask;
@@ -2145,7 +2164,9 @@ async function _startTimer(task) {
   // Hero UI: show active state
   showHeroState('active');
   document.getElementById('hero-task-name').textContent = task;
-  document.getElementById('hero-elapsed').textContent = '0';
+  document.getElementById('hero-elapsed').textContent = '0m';
+  const _metaEl = document.getElementById('hero-time-meta');
+  if (_metaEl) _metaEl.textContent = '';
   const secsEl = document.getElementById('hero-ring-secs');
   if (secsEl) secsEl.textContent = '0:00';
   document.getElementById('activity-hero').classList.add('tracking');
