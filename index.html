@@ -5536,27 +5536,32 @@ function renderUnloggedHours(el, days) {
     return { key: d.key, label: d.label, unloggedMins, availableMins, idx };
   });
 
+  const DAY_COLORS = [
+    'var(--deep)','var(--social)','var(--nine5)','var(--learning)',
+    'var(--exercise)','var(--shallow)','var(--errands)'
+  ];
+
   const activeDays = dayData.filter(d => d.unloggedMins > 0);
   const maxMins = Math.max(...dayData.map(d => d.unloggedMins), 1);
   const totalUnlogged = dayData.reduce((s, d) => s + d.unloggedMins, 0);
   const totalLabel = totalUnlogged >= 60 ? (Math.round(totalUnlogged/6)/10).toFixed(1)+'h' : totalUnlogged+'m';
-  const color = 'var(--muted)';
 
   const segments = dayData.map((d, idx) => {
     if (!d.unloggedMins) return '';
     const segW = d.unloggedMins / maxMins * 100;
-    const opacity = 0.4 + (idx / Math.max(dayData.length - 1, 1)) * 0.35;
+    const color = DAY_COLORS[idx % DAY_COLORS.length];
     return `<div onclick="event.stopPropagation();setViewDate('${d.key}');showView('today')"
-      style="height:100%;width:${segW}%;background:${color};opacity:${opacity.toFixed(2)};
+      style="height:100%;width:${segW}%;background:${color};opacity:0.75;
              cursor:pointer;flex-shrink:0;border-right:1.5px solid rgba(0,0,0,0.3);box-sizing:border-box"></div>`;
   }).join('');
 
   const dayChips = activeDays.map(d => {
+    const color = DAY_COLORS[d.idx % DAY_COLORS.length];
     const dl = d.unloggedMins >= 60 ? (Math.round(d.unloggedMins/6)/10).toFixed(1)+'h' : d.unloggedMins+'m';
     return `<span onclick="event.stopPropagation();setViewDate('${d.key}');showView('today')"
       style="font-size:10px;font-family:var(--mono);color:var(--muted);cursor:pointer;
              white-space:nowrap;display:inline-flex;align-items:center;gap:3px">
-      <span style="width:6px;height:6px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;opacity:0.5"></span>
+      <span style="width:6px;height:6px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0"></span>
       ${d.label} ${dl}</span>`;
   }).join('');
 
