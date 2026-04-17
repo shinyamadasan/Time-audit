@@ -5515,6 +5515,61 @@ function renderTopActivities(el, entriesArr, limit=8, days=null) {
   }).join('') : '<div style="color:var(--muted);font-size:12px">No data</div>';
 }
 
+function renderUnloggedHours(el, days) {
+  if (!days || !days.length) { el.innerHTML = ''; return; }
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const now = Date.now();
+
+  const dayData = days.map((d, idx) => {
+    const isToday = d.key === todayKey;
+    // Available minutes: full 24h for past days, elapsed time for today
+    const dayStart = (() => { const [y,mo,dy] = d.key.split('-').map(Number); return new Date(Date.UTC(y,mo-1,dy)).getTime() - (new Date().getTimezoneOffset()*60000); })();
+    const dayStartTs = (() => {
+      try { return typeof tzParseTime === 'function' ? tzParseTime(d.key,'00:00') : dayStart; } catch(e) { return dayStart; }
+    })();
+    const availableMins = isToday
+      ? Math.max(0, Math.round((now - dayStartTs) / 60000))
+      : 24 * 60;
+    const loggedMins = d.entries.filter(e => !e.deleted).reduce((s, e) => s + entryMins(e), 0);
+    const unloggedMins = Math.max(0, availableMins - loggedMins);
+    return { key: d.key, label: d.label, unloggedMins, availableMins, idx };
+  });
+
+  const activeDays = dayData.filter(d => d.unloggedMins > 0);
+  const maxMins = Math.max(...dayData.map(d => d.unloggedMins), 1);
+  const totalUnlogged = dayData.reduce((s, d) => s + d.unloggedMins, 0);
+  const totalLabel = totalUnlogged >= 60 ? (Math.round(totalUnlogged/6)/10).toFixed(1)+'h' : totalUnlogged+'m';
+  const color = 'var(--muted)';
+
+  const segments = dayData.map((d, idx) => {
+    if (!d.unloggedMins) return '';
+    const segW = d.unloggedMins / maxMins * 100;
+    const opacity = 0.4 + (idx / Math.max(dayData.length - 1, 1)) * 0.35;
+    return `<div onclick="event.stopPropagation();setViewDate('${d.key}');showView('today')"
+      style="height:100%;width:${segW}%;background:${color};opacity:${opacity.toFixed(2)};
+             cursor:pointer;flex-shrink:0;border-right:1.5px solid rgba(0,0,0,0.3);box-sizing:border-box"></div>`;
+  }).join('');
+
+  const dayChips = activeDays.map(d => {
+    const dl = d.unloggedMins >= 60 ? (Math.round(d.unloggedMins/6)/10).toFixed(1)+'h' : d.unloggedMins+'m';
+    return `<span onclick="event.stopPropagation();setViewDate('${d.key}');showView('today')"
+      style="font-size:10px;font-family:var(--mono);color:var(--muted);cursor:pointer;
+             white-space:nowrap;display:inline-flex;align-items:center;gap:3px">
+      <span style="width:6px;height:6px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;opacity:0.5"></span>
+      ${d.label} ${dl}</span>`;
+  }).join('');
+
+  el.innerHTML = `<div style="margin-bottom:4px">
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+      <span style="font-weight:500;color:var(--muted)">Unlogged time</span>
+      <span style="color:var(--muted);font-family:var(--mono)">${totalLabel}</span>
+    </div>
+    <div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;display:flex;margin-bottom:5px">${segments}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px 8px">${dayChips}</div>
+  </div>`;
+}
+
 function renderEntryList(el, entriesArr) {
   if (!entriesArr.length) { el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries.</div>'; return; }
   const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)',break:'var(--break)'};
@@ -5638,6 +5693,9 @@ function renderWeekOverview(days) {
     <!-- Top activities -->
     <div class="w-card"><div class="w-card-title">Top activities this week</div><div id="w-top-acts-week"></div></div>
 
+    <!-- Unlogged hours -->
+    <div class="w-card"><div class="w-card-title">Unlogged hours this week</div><div id="w-unlogged-week"></div></div>
+
     <!-- All entries filter + list -->
     <div class="w-card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -5665,6 +5723,7 @@ function renderWeekOverview(days) {
 
   renderEnergySplit(document.getElementById('w-energy-split-week'), weekE);
   renderTopActivities(document.getElementById('w-top-acts-week'), weekE, 8, days);
+  renderUnloggedHours(document.getElementById('w-unlogged-week'), days);
 
   // Populate activity dropdown
   const actMap2 = {};
