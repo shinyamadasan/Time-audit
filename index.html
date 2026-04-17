@@ -2589,19 +2589,39 @@ function _doQuickSave(activity, energy) {
   stopAlertLoop();
   if (!activity) activity = energy;
   const _now = Date.now();
-  const entry = {
-    id: _now, ts: _now, updatedAt: _now,
-    tsStart: blockStartTime || (_now - totalSecs * 1000),
-    blockIntervalMin: settings.intervalMin,
-    date: toDateKey(new Date()),
-    activity, energy,
-    onPlan: energy !== 'distraction' && energy !== 'waste',
-    quickLogged: true
-  };
-  entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
-  learnWastePattern(activity, energy);
-  entries.unshift(entry);
-  _lastLoggedEntryId = entry.id;
+  const tsStart = blockStartTime || (_now - totalSecs * 1000);
+
+  // If the previous entry is the same activity+energy and ended right where
+  // this block starts (within 2 min tolerance), extend it instead of creating
+  // a new fragment — keeps "Still on: X" as one continuous block.
+  const SEAM_TOLERANCE_MS = 2 * 60 * 1000;
+  const prev = entries.find(e => !e.missed && !e.deleted && e.activity && !e.away);
+  const canExtend = prev &&
+    prev.activity === activity &&
+    prev.energy === energy &&
+    Math.abs(prev.ts - tsStart) <= SEAM_TOLERANCE_MS;
+
+  if (canExtend) {
+    prev.ts = _now;
+    prev.blockIntervalMin = Math.round((_now - (prev.tsStart || tsStart)) / 60000);
+    prev.updatedAt = _now;
+    learnWastePattern(activity, energy);
+    _lastLoggedEntryId = prev.id;
+  } else {
+    const entry = {
+      id: _now, ts: _now, updatedAt: _now, tsStart,
+      blockIntervalMin: Math.round((_now - tsStart) / 60000) || settings.intervalMin,
+      date: toDateKey(new Date()),
+      activity, energy,
+      onPlan: energy !== 'distraction' && energy !== 'waste',
+      quickLogged: true
+    };
+    entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
+    learnWastePattern(activity, energy);
+    entries.unshift(entry);
+    _lastLoggedEntryId = entry.id;
+  }
+
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
   persist(); renderToday(); syncEntries();
@@ -3156,11 +3176,9 @@ function saveLastEntry() {
   const activity = btn.dataset.lastActivity;
   const energy = btn.dataset.lastEnergy;
   if (!activity) return;
-  // Pre-fill and immediately save
-  document.getElementById('f-activity').value = activity;
-  setEnergy(energy);
-  setOnPlan(energy !== 'distraction' && energy !== 'waste');
-  saveEntry();
+  // Route through _doQuickSave so consecutive same-activity pings merge into one block
+  _doQuickSave(activity, energy);
+  closeModal('log-overlay');
 }
 
 function showLogForm() {
