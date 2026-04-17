@@ -2062,8 +2062,7 @@ function updateRing() {
   }
   const metaEl = document.getElementById('hero-time-meta');
   if (metaEl && taskStartTime) {
-    const fmt12 = t => { const d = new Date(t), h = d.getHours(), m = d.getMinutes(), ap = h >= 12 ? 'PM' : 'AM'; return `${h%12||12}:${String(m).padStart(2,'0')} ${ap}`; };
-    metaEl.textContent = `Started ${fmt12(taskStartTime)}  ·  Now ${fmt12(_now2)}`;
+    metaEl.textContent = `Started ${tzTime(taskStartTime)}  ·  Now ${tzTime(_now2)}`;
   } else if (metaEl) {
     metaEl.textContent = '';
   }
