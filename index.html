@@ -5542,13 +5542,13 @@ function renderUnloggedHours(el, days) {
   ];
 
   const activeDays = dayData.filter(d => d.unloggedMins > 0);
-  const maxMins = Math.max(...dayData.map(d => d.unloggedMins), 1);
   const totalUnlogged = dayData.reduce((s, d) => s + d.unloggedMins, 0);
   const totalLabel = totalUnlogged >= 60 ? (Math.round(totalUnlogged/6)/10).toFixed(1)+'h' : totalUnlogged+'m';
 
+  // Stacked bar: each day is a proportional slice of the total so all days are visible
   const segments = dayData.map((d, idx) => {
     if (!d.unloggedMins) return '';
-    const segW = d.unloggedMins / maxMins * 100;
+    const segW = (d.unloggedMins / Math.max(totalUnlogged, 1)) * 100;
     const color = DAY_COLORS[idx % DAY_COLORS.length];
     return `<div onclick="event.stopPropagation();setViewDate('${d.key}');showView('today')"
       style="height:100%;width:${segW}%;background:${color};opacity:0.75;
