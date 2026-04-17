@@ -3340,7 +3340,7 @@ function saveRetroEntry() {
     editingEntryId = null;
     editingEntryBase = null;
     entries.sort((a,b) => b.ts - a.ts);
-    persist(); renderToday(); syncEntries();
+    persist(); renderToday(); renderWeek(); syncEntries();
     document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
     document.getElementById('retro-modal-title').textContent = 'What were you doing?';
     closeModal('retro-overlay');
@@ -5589,6 +5589,7 @@ function renderEntryList(el, entriesArr) {
         <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
       </div>
       <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
+      <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0;font-size:10px" onclick="openEditEntry(${e.id})">Edit</button>
       <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
     </div>`;
   }).join('');
