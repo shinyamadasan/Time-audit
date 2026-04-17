@@ -256,7 +256,7 @@ function persist() {
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
   localStorage.setItem('ta3-lv', Date.now()); // local version — used to detect unsynced changes
   if (running && timerStartedAt) {
-    localStorage.setItem('ta3-timer', JSON.stringify({timerStartedAt, totalSecs, running: true, lastTask: lastTaskForRepeat}));
+    localStorage.setItem('ta3-timer', JSON.stringify({timerStartedAt, totalSecs, running: true, lastTask: lastTaskForRepeat, currentTask, taskStartTime}));
   } else {
     localStorage.removeItem('ta3-timer');
   }
@@ -311,6 +311,8 @@ function load() {
         remaining = Math.max(0, totalSecs - elapsed);
         running = true;
         lastTaskForRepeat = saved.lastTask || '';
+        if (saved.currentTask) currentTask = saved.currentTask;
+        if (saved.taskStartTime) taskStartTime = saved.taskStartTime;
       }
     }
   } catch(e) {}

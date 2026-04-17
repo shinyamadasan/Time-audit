@@ -2227,9 +2227,9 @@ function resetTimer() {
 function stopAndLog() {
   if (!running) { resetTimer(); return; }
   const tsEnd = Date.now();
-  const tsStart = blockStartTime || (tsEnd - (settings.intervalMin || 30) * 60000);
+  const tsStart = taskStartTime || blockStartTime || (tsEnd - (settings.intervalMin || 30) * 60000);
   const dur = Math.round((tsEnd - tsStart) / 60000);
-  const task = currentTask || intention || 'Work block';
+  const task = currentTask || lastTaskForRepeat || 'Work block';
   const prevEnergy = entries.find(e => !e.missed && !e.deleted && !e.break && e.energy)?.energy || 'deep';
   if (dur >= 1) {
     const entry = {
