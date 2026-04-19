@@ -6865,6 +6865,7 @@ updateRing();
 renderToday();
 initAutoSync();
 initNativeNotifications();
+initPhoneUsageTracking();
 
 // Auto-start "PC Time" on fresh browser open (not on refresh, not on mobile)
 if (!isNative && !running && !sessionStorage.getItem('ta3-session-started')) {
@@ -7079,6 +7080,125 @@ if (!localStorage.getItem('ta3-onboarded')) {
   </div>
 </div>
 </div>
+
+
+<script>
+// ── Phone Usage Tracking (Android only) ──────────────────────────────────
+// Uses the native UsageStats plugin to pull exact app open/close events
+// and auto-create entries for social/entertainment app use.
+
+const TRACKED_APPS = {
+  'com.instagram.android':        'Instagram',
+  'com.zhiliaoapp.musically':     'TikTok',
+  'com.ss.android.ugc.trill':     'TikTok',
+  'com.google.android.youtube':   'YouTube',
+  'com.facebook.katana':          'Facebook',
+  'com.twitter.android':          'Twitter/X',
+  'com.snapchat.android':         'Snapchat',
+  'com.reddit.frontpage':         'Reddit',
+  'com.pinterest':                'Pinterest',
+  'com.google.android.apps.tachyon': 'Google Meet',
+  'org.telegram.messenger':       'Telegram',
+  'com.whatsapp':                 'WhatsApp',
+};
+
+const PHONE_USAGE_KEY = 'ta3-phone-usage-last-sync';
+const MIN_SESSION_MS  = 2 * 60 * 1000;  // ignore sessions under 2 min
+
+async function initPhoneUsageTracking() {
+  if (!isNative) return;
+  const UsageStats = window.Capacitor?.Plugins?.UsageStats;
+  if (!UsageStats) return;
+
+  const { granted } = await UsageStats.hasPermission().catch(() => ({ granted: false }));
+  if (!granted) {
+    // Show a one-time prompt to grant permission
+    const key = 'ta3-usage-permission-asked';
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, '1');
+      setTimeout(() => {
+        if (confirm('Allow ChronaSense to automatically log your phone app usage?\n\nTap OK to open Settings, then enable "ChronaSense" under Usage Access.')) {
+          UsageStats.requestPermission();
+        }
+      }, 3000);
+    }
+    return;
+  }
+
+  await syncPhoneUsage(UsageStats);
+  // Re-sync every 15 minutes while app is open
+  setInterval(() => syncPhoneUsage(UsageStats), 15 * 60 * 1000);
+}
+
+async function syncPhoneUsage(UsageStats) {
+  const lastSync = parseInt(localStorage.getItem(PHONE_USAGE_KEY) || '0');
+  const now = Date.now();
+  // Look back at most 24h, but start from last sync point
+  const startTime = Math.max(lastSync || (now - 24 * 60 * 60 * 1000), now - 24 * 60 * 60 * 1000);
+
+  const { events } = await UsageStats.queryEvents({ startTime, endTime: now }).catch(() => ({ events: [] }));
+  if (!events?.length) return;
+
+  // Reconstruct sessions: pair FOREGROUND(1) → BACKGROUND(2) events per app
+  const sessions = buildSessions(events);
+  let added = 0;
+
+  for (const s of sessions) {
+    const appName = TRACKED_APPS[s.pkg];
+    if (!appName) continue;
+    if (s.durationMs < MIN_SESSION_MS) continue;
+
+    // Skip if we already have an entry covering this time range
+    const alreadyLogged = entries.some(e =>
+      !e.deleted && e.phoneUsage &&
+      e.activity === appName &&
+      Math.abs((e.tsStart || e.ts) - s.start) < 60000
+    );
+    if (alreadyLogged) continue;
+
+    const entry = {
+      id: s.start,
+      ts: s.end,
+      tsStart: s.start,
+      updatedAt: now,
+      blockIntervalMin: Math.round(s.durationMs / 60000),
+      date: toDateKey(new Date(s.start)),
+      activity: appName,
+      energy: 'waste',
+      onPlan: false,
+      retro: true,
+      phoneUsage: true,
+      quickLogged: true,
+    };
+    entry.category = getBucket(entry);
+    entry.originalLabel = entry.energy;
+    entries.unshift(entry);
+    added++;
+  }
+
+  if (added > 0) {
+    persist(); renderToday(); syncEntries();
+    showToast(`Auto-logged ${added} phone session${added > 1 ? 's' : ''}`);
+  }
+  localStorage.setItem(PHONE_USAGE_KEY, String(now));
+}
+
+function buildSessions(events) {
+  // events: [{pkg, type, ts}]  type 1=foreground, 2=background
+  const open = {};   // pkg → foreground timestamp
+  const sessions = [];
+  for (const ev of events) {
+    if (ev.type === 1) {
+      open[ev.pkg] = ev.ts;
+    } else if (ev.type === 2 && open[ev.pkg]) {
+      sessions.push({ pkg: ev.pkg, start: open[ev.pkg], end: ev.ts, durationMs: ev.ts - open[ev.pkg] });
+      delete open[ev.pkg];
+    }
+  }
+  // Any apps still in foreground at query end — leave open, don't log yet
+  return sessions;
+}
+</script>
 
 </body>
 </html>
