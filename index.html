@@ -6865,6 +6865,12 @@ updateRing();
 renderToday();
 initAutoSync();
 initNativeNotifications();
+
+// Auto-start "PC Time" on fresh browser open (not on refresh, not on mobile)
+if (!isNative && !running && !sessionStorage.getItem('ta3-session-started')) {
+  sessionStorage.setItem('ta3-session-started', '1');
+  setTimeout(() => _startTimer('PC Time'), 800);
+}
 initUrlSchemeHandler();
 
 // ── URL scheme handler: chronasense://start?task=Main+work&energy=deep ──
