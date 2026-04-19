@@ -7131,22 +7131,39 @@ const TRACKED_APPS = {
 const PHONE_USAGE_KEY = 'ta3-phone-usage-last-sync';
 const MIN_SESSION_MS  = 2 * 60 * 1000;  // ignore sessions under 2 min
 
+async function getUsageStatsPlugin() {
+  if (!isNative) return null;
+  // Capacitor 8: plugins registered via registerPlugin() in MainActivity
+  // are available under window.Capacitor.Plugins
+  const p = window.Capacitor?.Plugins?.UsageStats;
+  if (p) return p;
+  // Fallback: try nativeBridge directly
+  try {
+    const { registerPlugin } = await import('https://cdn.jsdelivr.net/npm/@capacitor/core@8/dist/index.esm.js').catch(()=>({}));
+    if (registerPlugin) {
+      const plugin = registerPlugin('UsageStats');
+      if (plugin) return plugin;
+    }
+  } catch(e) {}
+  return null;
+}
+
 async function initPhoneUsageTracking() {
-  if (!isNative) { return; }
-  const UsageStats = window.Capacitor?.Plugins?.UsageStats;
+  if (!isNative) return;
+  const UsageStats = await getUsageStatsPlugin();
   if (!UsageStats) {
     showToast('⚠ UsageStats plugin not found — rebuild APK');
     return;
   }
 
-  const permResult = await UsageStats.hasPermission().catch(e => { showToast('⚠ hasPermission error: ' + e); return { granted: false }; });
+  const permResult = await UsageStats.hasPermission().catch(e => {
+    showToast('⚠ hasPermission error: ' + String(e));
+    return { granted: false };
+  });
+
   if (!permResult.granted) {
-    localStorage.removeItem('ta3-usage-permission-asked'); // always re-prompt until granted
-    setTimeout(() => {
-      if (confirm('Allow ChronaSense to automatically log your phone app usage?\n\nTap OK to open Settings, then enable "ChronaSense" under Usage Access.')) {
-        UsageStats.requestPermission();
-      }
-    }, 2000);
+    // confirm() is blocked in Capacitor 8 — show in-app banner instead
+    showPhoneUsageBanner(UsageStats);
     return;
   }
 
@@ -7154,16 +7171,40 @@ async function initPhoneUsageTracking() {
   setInterval(() => syncPhoneUsage(UsageStats), 15 * 60 * 1000);
 }
 
+function showPhoneUsageBanner(UsageStats) {
+  const existing = document.getElementById('phone-usage-banner');
+  if (existing) return;
+  const banner = document.createElement('div');
+  banner.id = 'phone-usage-banner';
+  banner.style.cssText = `position:fixed;bottom:80px;left:12px;right:12px;background:var(--bg3);
+    border:1.5px solid var(--deep);border-radius:12px;padding:14px 16px;z-index:9999;
+    box-shadow:0 4px 20px rgba(0,0,0,0.4)`;
+  banner.innerHTML = `
+    <div style="font-size:13px;font-weight:700;margin-bottom:6px">Auto-track phone usage?</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
+      ChronaSense can automatically log Instagram, YouTube, TikTok and more.
+      Tap Allow to open Settings and enable Usage Access for ChronaSense.
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn sm" style="flex:1" onclick="
+        document.getElementById('phone-usage-banner').remove();
+        window.Capacitor.Plugins.UsageStats.requestPermission();
+      ">Allow</button>
+      <button class="btn sm ghost" onclick="document.getElementById('phone-usage-banner').remove()">Not now</button>
+    </div>`;
+  document.body.appendChild(banner);
+}
+
 // Called from Settings page to manually grant/sync
 async function requestPhoneUsagePermission() {
-  const UsageStats = window.Capacitor?.Plugins?.UsageStats;
+  const UsageStats = await getUsageStatsPlugin();
   if (!UsageStats) { showToast('Only available in the Android app'); return; }
   const { granted } = await UsageStats.hasPermission().catch(() => ({ granted: false }));
   if (granted) {
     await syncPhoneUsage(UsageStats);
-    showToast('Phone usage synced');
+    showToast('Phone usage synced ✓');
   } else {
-    UsageStats.requestPermission();
+    showPhoneUsageBanner(UsageStats);
   }
 }
 
