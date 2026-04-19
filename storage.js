@@ -576,15 +576,41 @@ function startSync() {
   fbDb.ref(`rooms/${roomCode}/settings`).on('value', snap => {
     const val = snap.val();
     if (!val) return;
-    // Only apply remote settings if they were saved MORE RECENTLY than local ones.
-    // This prevents a stale Firebase value from overwriting a timezone the user just changed.
     const remoteTs = val._savedAt || 0;
     const localTs  = settings._savedAt || 0;
-    if (remoteTs > localTs && val.timezone && val.timezone !== settings.timezone) {
-      settings.timezone = val.timezone;
-      persist();
+    if (remoteTs > localTs) {
+      settings = { ...settings, ...val };
+      localStorage.setItem('ta3-settings', JSON.stringify(settings));
+      if (val.timezone) localStorage.setItem('ta3-tz', val.timezone);
       renderToday();
+      renderSettings();
     }
+  });
+
+  fbDb.ref(`rooms/${roomCode}/reviews`).on('value', snap => {
+    const val = snap.val();
+    if (!val) return;
+    let changed = false;
+    Object.entries(val).forEach(([date, review]) => {
+      if (!reviews[date] || (review._savedAt || 0) > (reviews[date]._savedAt || 0)) {
+        reviews[date] = review;
+        changed = true;
+      }
+    });
+    if (changed) { localStorage.setItem('ta3-reviews', JSON.stringify(reviews)); renderToday(); }
+  });
+
+  fbDb.ref(`rooms/${roomCode}/weeklyReviews`).on('value', snap => {
+    const val = snap.val();
+    if (!val) return;
+    let changed = false;
+    Object.entries(val).forEach(([week, review]) => {
+      if (!weeklyReviews[week] || (review._savedAt || 0) > (weeklyReviews[week]._savedAt || 0)) {
+        weeklyReviews[week] = review;
+        changed = true;
+      }
+    });
+    if (changed) { localStorage.setItem('ta3-weekly-reviews', JSON.stringify(weeklyReviews)); }
   });
 
   fbDb.ref(`rooms/${roomCode}/devices`).on('value', snap => {
@@ -659,6 +685,8 @@ function disconnectSync() {
     fbDb.ref(`rooms/${roomCode}/devices`).off();
     fbDb.ref(`rooms/${roomCode}/settings`).off();
     fbDb.ref(`rooms/${roomCode}/breakState`).off();
+    fbDb.ref(`rooms/${roomCode}/reviews`).off();
+    fbDb.ref(`rooms/${roomCode}/weeklyReviews`).off();
     if (fbRoomRef) fbRoomRef.off();
     fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).onDisconnect().cancel();
     fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).remove();
@@ -737,6 +765,8 @@ function joinRoom() {
     fbDb.ref(`rooms/${roomCode}/intention`).off();
     fbDb.ref(`rooms/${roomCode}/devices`).off();
     fbDb.ref(`rooms/${roomCode}/breakState`).off();
+    fbDb.ref(`rooms/${roomCode}/reviews`).off();
+    fbDb.ref(`rooms/${roomCode}/weeklyReviews`).off();
     if (fbRoomRef) fbRoomRef.off();
     fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).remove();
   }
