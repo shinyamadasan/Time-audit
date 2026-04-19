@@ -362,6 +362,15 @@ function initAutoSync() {
     });
   }
 
+  // Handle redirect result from web sign-in (Chrome etc.)
+  if (!window.Capacitor?.isNativePlatform()) {
+    firebase.auth().getRedirectResult().catch(err => {
+      if (err && err.code !== 'auth/no-auth-event') {
+        showToast('Sign-in failed: ' + (err.message || err.code));
+      }
+    });
+  }
+
   // Auth state drives everything — signed in = synced, signed out = show login
   firebase.auth().onAuthStateChanged(user => {
     if (user) {
@@ -390,11 +399,18 @@ function initAutoSync() {
 
 async function signIn() {
   try {
-    const googleUser = await window.Capacitor.Plugins.GoogleAuth.signIn();
-    const credential = firebase.auth.GoogleAuthProvider.credential(
-      googleUser.authentication.idToken
-    );
-    await firebase.auth().signInWithCredential(credential);
+    if (window.Capacitor?.isNativePlatform()) {
+      // Native Android app — use Capacitor Google Auth plugin
+      const googleUser = await window.Capacitor.Plugins.GoogleAuth.signIn();
+      const credential = firebase.auth.GoogleAuthProvider.credential(
+        googleUser.authentication.idToken
+      );
+      await firebase.auth().signInWithCredential(credential);
+    } else {
+      // Web browser — use Firebase redirect (works in all browsers including Chrome)
+      const provider = new firebase.auth.GoogleAuthProvider();
+      await firebase.auth().signInWithRedirect(provider);
+    }
   } catch (err) {
     if (err && err.error !== 'popup_closed_by_user') {
       showToast('Sign-in failed: ' + (err.error || err.message || ''));
