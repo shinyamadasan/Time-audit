@@ -514,13 +514,18 @@ function startSync() {
         fbTimerReceived = true;
       }
     } else if (!data.running) {
-      if (data.pausedRemaining != null) remaining = data.pausedRemaining;
-      if (running) {
-        running = false; clearInterval(ticker); ticker = null;
-        document.getElementById('main-btn').textContent = 'Resume';
-        document.getElementById('timer-status').textContent = 'Paused (synced)';
-      }
       fbTimerReceived = true;
+      if (data.stopped) {
+        // Full stop from another device — reset completely
+        if (running || taskStartTime) resetTimer();
+      } else {
+        if (data.pausedRemaining != null) remaining = data.pausedRemaining;
+        if (running) {
+          running = false; clearInterval(ticker); ticker = null;
+          document.getElementById('main-btn').textContent = 'Resume';
+          document.getElementById('timer-status').textContent = 'Paused (synced)';
+        }
+      }
     }
     if (data.intervalSecs) { totalSecs = data.intervalSecs; settings.intervalMin = data.intervalSecs/60; }
     updateRing();
