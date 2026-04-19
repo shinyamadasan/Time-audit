@@ -1,5 +1,26 @@
 # ChronaSense — Changelog
 
+## [0.4.0] — 2026-04-19
+### Added
+- **Phone usage auto-tracking (Android)** — detects Instagram, YouTube, TikTok, Facebook, Twitter/X, Reddit, Snapchat, Pinterest, Netflix, Google Meet, Telegram, WhatsApp, Chrome and more via Android UsageStats API. Sessions logged automatically every 15 minutes.
+- **Browser extension (Chrome/Edge)** — silent background tracker logs active browser tabs to your account. Supports YouTube, Reddit, LinkedIn, Notion, GitHub, Figma, Slack and more. Sign in with Google once, works for multiple users each with their own account.
+- **URL scheme shortcuts** — `chronasense://start?task=X` starts the timer, `chronasense://quicklog?task=X&energy=Y` instantly logs a past block. Use with home screen launchers or Tasker.
+- **PC Time auto-start** — timer starts automatically as "PC Time" when Edge/Chrome opens, so no time is lost before you set a task.
+- **2-way full sync** — timer start/stop/task name, Away state, Settings, Reviews, and Weekly Plans all sync instantly across all devices via Firebase.
+- **Edit buttons on entries** — pencil icon on Today timeline and Week all-entries list to edit past logs.
+- **Unlogged hours card** — stacked bar below Top Activities showing unlogged time per day this week.
+- **Timer block details** — shows start time, current time, and elapsed in h+m format.
+- **Onboarding updated** — new steps covering phone tracking, browser extension, and URL shortcuts.
+
+### Fixed
+- Phone auto-logs skip time windows already covered by manual entries (manual always wins)
+- Stop syncs correctly as full reset (not pause) across devices
+- Away state syncs to other devices in real time
+- Settings sync now applies all fields, not just timezone
+- Reviews and weekly plans sync bidirectionally by timestamp
+
+---
+
 ## [0.3.0] — 2026-04-09
 ### Added
 - Pomodoro focus mode (25/5 default, adjustable work/break durations)

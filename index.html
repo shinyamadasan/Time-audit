@@ -691,6 +691,15 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 /* ── Untracked blocks in timeline ── */
 .tl-untracked-row .tl-activity{color:var(--muted)}
 .tl-bar-untracked{background:var(--away);opacity:0.35}
+
+/* ── PC Time sub-activities ── */
+.pc-sub-list{margin-top:8px;display:flex;flex-direction:column;gap:4px}
+.pc-sub-row{display:flex;align-items:center;gap:7px;font-size:11px}
+.pc-sub-track{flex:1;height:5px;background:var(--bg4);border-radius:3px;overflow:hidden}
+.pc-sub-fill{height:100%;border-radius:3px;background:var(--shallow);opacity:0.8}
+.pc-sub-fill.untracked{background:var(--muted);opacity:0.25}
+.pc-sub-name{width:90px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-sub-dur{width:32px;text-align:right;color:var(--muted);font-family:var(--mono);font-size:10px;flex-shrink:0}
 .tl-badge-untracked{background:rgba(148,163,184,0.15);color:var(--away);border-radius:4px;font-size:9px;font-weight:700;padding:2px 6px;margin-left:6px;letter-spacing:0.04em}
 /* keep .tl-bar-gap for any legacy missed entries */
 .tl-bar-gap{background:repeating-linear-gradient(45deg,var(--bg4),var(--bg4) 3px,transparent 3px,transparent 7px)!important}
@@ -4205,6 +4214,45 @@ function renderEntryRow(item) {
   const editCall = item._mergeCount > 1
     ? `openEditMergedEntry('${item._mergedIds.join(',')}',${item.tsStart || item.ts},${item.ts})`
     : `openEditEntry(${item.id})`;
+
+  // PC Time with browser sub-activities
+  if (item._subActivities?.length) {
+    const totalMs   = item.ts - (item.tsStart || (item.ts - dur * 60000));
+    const subTotalMs = item._subActivities.reduce((s, a) => s + (a.ts - (a.tsStart || a.ts)), 0);
+    const untrackedMs = Math.max(0, totalMs - subTotalMs);
+    const subRows = item._subActivities
+      .sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts))
+      .map(a => {
+        const aDur = Math.round((a.ts - (a.tsStart || a.ts)) / 60000);
+        const pct  = Math.round((a.ts - (a.tsStart || a.ts)) / totalMs * 100);
+        const aColor = getActivityColor(a.activity);
+        const fillStyle = aColor ? `background:${aColor};opacity:0.85` : '';
+        return `<div class="pc-sub-row">
+          <span class="pc-sub-name">${a.activity}</span>
+          <div class="pc-sub-track"><div class="pc-sub-fill" style="width:${pct}%;${fillStyle}"></div></div>
+          <span class="pc-sub-dur">${fmtDur(aDur)}</span>
+        </div>`;
+      }).join('');
+    const untrackedMin = Math.round(untrackedMs / 60000);
+    const untrackedPct = Math.round(untrackedMs / totalMs * 100);
+    const untrackedRow = untrackedMin > 0
+      ? `<div class="pc-sub-row">
+          <span class="pc-sub-name" style="color:var(--muted2)">untracked</span>
+          <div class="pc-sub-track"><div class="pc-sub-fill untracked" style="width:${untrackedPct}%"></div></div>
+          <span class="pc-sub-dur" style="color:var(--muted2)">${fmtDur(untrackedMin)}</span>
+        </div>` : '';
+    return `<div class="tl-row" data-entry-id="${item.id}" style="cursor:pointer;align-items:flex-start;padding-top:10px;padding-bottom:10px" onclick="${editCall}">
+      <div class="tl-time" style="padding-top:2px">${localTime(item.tsStart || item.ts)}</div>
+      <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle} style="margin-top:2px"></div>
+      <div class="tl-content" style="flex:1;min-width:0">
+        <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span></div>
+        <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}</div>
+        <div class="pc-sub-list">${subRows}${untrackedRow}</div>
+      </div>
+      <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
+    </div>`;
+  }
+
   return `<div class="tl-row" data-entry-id="${item.id}" onclick="${editCall}" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
@@ -4447,7 +4495,23 @@ function renderToday() {
       const _dayNow = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
       const gaps    = computeGaps(todayE, _dayNow);
       const combined = [...mergedDisplay, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-      tlEl.innerHTML = renderTimelineCombined(combined);
+      // Attach browser extension sessions as sub-activities on PC Time entries
+      const nestedBrowserIds = new Set();
+      combined.forEach(item => {
+        if (item.isGap || item.activity !== 'PC Time' || item.browserUsage) return;
+        const pcStart = item.tsStart || (item.ts - (item.blockIntervalMin || 0) * 60000);
+        const pcEnd   = item.ts;
+        const subs = combined.filter(o =>
+          !o.isGap && o.browserUsage &&
+          (o.tsStart || o.ts) >= pcStart && o.ts <= pcEnd
+        );
+        if (subs.length) {
+          item._subActivities = subs;
+          subs.forEach(s => nestedBrowserIds.add(s.id));
+        }
+      });
+      const displayCombined = combined.filter(item => item.isGap || !nestedBrowserIds.has(item.id));
+      tlEl.innerHTML = renderTimelineCombined(displayCombined);
       // Animate the most recently logged entry
       if (_lastLoggedEntryId) {
         const newRow = tlEl.querySelector(`[data-entry-id="${_lastLoggedEntryId}"]`);
@@ -7002,7 +7066,7 @@ document.addEventListener('visibilitychange', () => {
 // ONBOARDING
 // ══════════════════════════════════════════════════════
 let _obStep = 0;
-const OB_STEPS = 4;
+const OB_STEPS = 6;
 
 function openOnboarding() {
   _obStep = 0;
@@ -7082,7 +7146,33 @@ if (!localStorage.getItem('ta3-onboarded')) {
     </div>
   </div>
 
-  <!-- Step 3: Setup -->
+  <!-- Step 3: Auto-tracking -->
+  <div class="ob-step">
+    <div class="ob-icon">📱</div>
+    <div class="ob-title">Auto-track phone &amp; PC</div>
+    <div class="ob-body">
+      ChronaSense can fill in gaps automatically:<br><br>
+      <strong>Phone (Android)</strong> — detects when you open YouTube, Instagram, TikTok and other apps. Sessions are logged automatically. Grant permission when prompted.<br><br>
+      <strong>PC (Browser)</strong> — install the <strong>Chronasense browser extension</strong> for Chrome/Edge. It silently logs which sites you're on and syncs to your account.<br><br>
+      Auto-logged entries never overwrite your manual logs — they only fill unlogged gaps.
+    </div>
+  </div>
+
+  <!-- Step 4: URL shortcuts -->
+  <div class="ob-step">
+    <div class="ob-icon">🔗</div>
+    <div class="ob-title">Home screen shortcuts</div>
+    <div class="ob-body">
+      Add quick-start buttons to your home screen using these URL schemes:<br><br>
+      <strong>chronasense://start?task=Work</strong><br>
+      <span style="font-size:12px;color:var(--muted)">Starts the timer with "Work" pre-filled</span><br><br>
+      <strong>chronasense://quicklog?task=Gym&amp;energy=invest</strong><br>
+      <span style="font-size:12px;color:var(--muted)">Instantly logs a past block without starting the timer</span><br><br>
+      Use any app launcher (e.g. Tasker, KWGT, iOS Shortcuts) to create one-tap buttons.
+    </div>
+  </div>
+
+  <!-- Step 5: Setup -->
   <div class="ob-step">
     <div class="ob-icon">⚙️</div>
     <div class="ob-title">One thing before you start</div>
@@ -7095,6 +7185,8 @@ if (!localStorage.getItem('ta3-onboarded')) {
 
   <div class="ob-dots">
     <div class="ob-dot active"></div>
+    <div class="ob-dot"></div>
+    <div class="ob-dot"></div>
     <div class="ob-dot"></div>
     <div class="ob-dot"></div>
     <div class="ob-dot"></div>
@@ -7211,8 +7303,8 @@ async function requestPhoneUsagePermission() {
 async function syncPhoneUsage(UsageStats) {
   const lastSync = parseInt(localStorage.getItem(PHONE_USAGE_KEY) || '0');
   const now = Date.now();
-  // Look back at most 24h, but start from last sync point
-  const startTime = Math.max(lastSync || (now - 24 * 60 * 60 * 1000), now - 24 * 60 * 60 * 1000);
+  const MAX_LOOKBACK = 14 * 24 * 60 * 60 * 1000; // Android keeps 14 days of usage stats
+  const startTime = lastSync ? Math.max(lastSync, now - MAX_LOOKBACK) : (now - MAX_LOOKBACK);
 
   const { events } = await UsageStats.queryEvents({ startTime, endTime: now }).catch(() => ({ events: [] }));
   if (!events?.length) return;
@@ -7226,13 +7318,22 @@ async function syncPhoneUsage(UsageStats) {
     if (!appName) continue;
     if (s.durationMs < MIN_SESSION_MS) continue;
 
-    // Skip if we already have an entry covering this time range
+    // Skip duplicate phone sessions
     const alreadyLogged = entries.some(e =>
       !e.deleted && e.phoneUsage &&
       e.activity === appName &&
       Math.abs((e.tsStart || e.ts) - s.start) < 60000
     );
     if (alreadyLogged) continue;
+
+    // Skip if a manual entry overlaps this window (manual entries win)
+    const entryOverlaps = entries.some(e => {
+      if (e.deleted || e.phoneUsage) return false;
+      const eEnd = e.ts;
+      const eStart = e.tsStart || (e.ts - (e.blockIntervalMin || 0) * 60000);
+      return s.start < eEnd && s.end > eStart;
+    });
+    if (entryOverlaps) continue;
 
     const entry = {
       id: s.start,
