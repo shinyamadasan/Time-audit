@@ -2243,7 +2243,9 @@ function resetTimer() {
   document.getElementById('hero-task-input').value = '';
   document.getElementById('switch-panel').style.display = 'none';
   document.getElementById('activity-hero').classList.remove('tracking');
-  updateRing(); syncTimerState();
+  updateRing();
+  // Push stopped:true so other devices fully reset instead of just pausing
+  if (fbRoomRef) fbRoomRef.update({ timer: { running: false, stopped: true, ownerDeviceId: null, lastTask: null } });
 }
 
 // ══════════════════════════════════════════════════════
