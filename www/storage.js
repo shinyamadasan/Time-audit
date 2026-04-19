@@ -362,15 +362,6 @@ function initAutoSync() {
     });
   }
 
-  // Handle redirect result from web sign-in (Chrome etc.)
-  if (!window.Capacitor?.isNativePlatform()) {
-    firebase.auth().getRedirectResult().catch(err => {
-      if (err && err.code !== 'auth/no-auth-event') {
-        showToast('Sign-in failed: ' + (err.message || err.code));
-      }
-    });
-  }
-
   // Auth state drives everything — signed in = synced, signed out = show login
   firebase.auth().onAuthStateChanged(user => {
     if (user) {
@@ -407,9 +398,9 @@ async function signIn() {
       );
       await firebase.auth().signInWithCredential(credential);
     } else {
-      // Web browser — use Firebase redirect (works in all browsers including Chrome)
+      // Web browser — use Firebase popup (works in Chrome, Edge, Safari)
       const provider = new firebase.auth.GoogleAuthProvider();
-      await firebase.auth().signInWithRedirect(provider);
+      await firebase.auth().signInWithPopup(provider);
     }
   } catch (err) {
     if (err && err.error !== 'popup_closed_by_user') {
