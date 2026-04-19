@@ -4215,42 +4215,46 @@ function renderEntryRow(item) {
     ? `openEditMergedEntry('${item._mergedIds.join(',')}',${item.tsStart || item.ts},${item.ts})`
     : `openEditEntry(${item.id})`;
 
-  // PC Time with browser sub-activities
+  // PC Time with browser sub-activities — render as individual rows
   if (item._subActivities?.length) {
-    const totalMs   = item.ts - (item.tsStart || (item.ts - dur * 60000));
-    const subTotalMs = item._subActivities.reduce((s, a) => s + (a.ts - (a.tsStart || a.ts)), 0);
-    const untrackedMs = Math.max(0, totalMs - subTotalMs);
-    const subRows = item._subActivities
-      .sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts))
-      .map(a => {
-        const aDur = Math.round((a.ts - (a.tsStart || a.ts)) / 60000);
-        const pct  = Math.round((a.ts - (a.tsStart || a.ts)) / totalMs * 100);
-        const aColor = getActivityColor(a.activity);
-        const fillStyle = aColor ? `background:${aColor};opacity:0.85` : '';
-        return `<div class="pc-sub-row">
-          <span class="pc-sub-name">${a.activity}</span>
-          <div class="pc-sub-track"><div class="pc-sub-fill" style="width:${pct}%;${fillStyle}"></div></div>
-          <span class="pc-sub-dur">${fmtDur(aDur)}</span>
-        </div>`;
-      }).join('');
-    const untrackedMin = Math.round(untrackedMs / 60000);
-    const untrackedPct = Math.round(untrackedMs / totalMs * 100);
-    const untrackedRow = untrackedMin > 0
-      ? `<div class="pc-sub-row">
-          <span class="pc-sub-name" style="color:var(--muted2)">untracked</span>
-          <div class="pc-sub-track"><div class="pc-sub-fill untracked" style="width:${untrackedPct}%"></div></div>
-          <span class="pc-sub-dur" style="color:var(--muted2)">${fmtDur(untrackedMin)}</span>
-        </div>` : '';
-    return `<div class="tl-row" data-entry-id="${item.id}" style="cursor:pointer;align-items:flex-start;padding-top:10px;padding-bottom:10px" onclick="${editCall}">
-      <div class="tl-time" style="padding-top:2px">${localTime(item.tsStart || item.ts)}</div>
-      <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle} style="margin-top:2px"></div>
-      <div class="tl-content" style="flex:1;min-width:0">
-        <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span></div>
-        <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}</div>
-        <div class="pc-sub-list">${subRows}${untrackedRow}</div>
-      </div>
-      <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
-    </div>`;
+    const pcStart = item.tsStart || (item.ts - dur * 60000);
+    const subs    = [...item._subActivities].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+    const rows    = [];
+    let cursor    = pcStart;
+
+    const pcRow = (tStart, tEnd, subActivity) => {
+      const rDur      = Math.round((tEnd - tStart) / 60000);
+      const rColor    = subActivity ? getActivityColor(subActivity) : null;
+      const rBarStyle = rColor ? `style="background:${rColor}"` : barStyle;
+      const rClass    = rColor ? '' : energyClass;
+      const rLabel    = subActivity
+        ? `PC time <span style="color:var(--muted);font-weight:400">· ${subActivity}</span>`
+        : `PC time <span style="color:var(--muted2);font-weight:400">· untracked</span>`;
+      const rClick    = subActivity
+        ? `openEditEntry(${subs.find(s => s.activity === subActivity && (s.tsStart||s.ts) === tStart)?.id || item.id})`
+        : editCall;
+      return `<div class="tl-row" data-entry-id="${item.id}" onclick="${rClick}" style="cursor:pointer">
+        <div class="tl-time">${localTime(tStart)}</div>
+        <div class="tl-bar-col ${rClass}" ${rBarStyle}></div>
+        <div class="tl-content">
+          <div class="tl-activity">${rLabel}<span class="tl-badge ${rColor ? '' : energyClass}" ${rColor ? `style="background:${rColor}22;color:${rColor};border-radius:4px"` : badgeStyle}>${label}</span></div>
+          <div class="tl-meta">${localTime(tStart)} – ${localTime(tEnd)} · ${fmtDur(rDur)}</div>
+        </div>
+        <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
+      </div>`;
+    };
+
+    for (const sub of subs) {
+      const subStart = sub.tsStart || sub.ts;
+      const gapMin   = Math.round((subStart - cursor) / 60000);
+      if (gapMin >= 1) rows.push(pcRow(cursor, subStart, null));
+      rows.push(pcRow(subStart, sub.ts, sub.activity));
+      cursor = sub.ts;
+    }
+    const trailingMin = Math.round((item.ts - cursor) / 60000);
+    if (trailingMin >= 1) rows.push(pcRow(cursor, item.ts, null));
+
+    return rows.join('');
   }
 
   return `<div class="tl-row" data-entry-id="${item.id}" onclick="${editCall}" style="cursor:pointer">
