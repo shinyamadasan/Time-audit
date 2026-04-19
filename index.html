@@ -2046,7 +2046,7 @@ function expandPCTimeEntries(entriesArr) {
           const subStart = sub.tsStart || sub.ts;
           const gapMin   = Math.round((subStart - cursor) / 60000);
           if (gapMin >= 1) result.push({ ...e, id: e.id+'_g'+cursor, tsStart: cursor, ts: subStart, activity: 'PC time · untracked', _synthetic: true });
-          result.push({ ...sub, activity: `PC time · ${sub.activity}`, _pcSub: true });
+          result.push({ ...sub, id: sub.id + '_pc', activity: `PC time · ${sub.activity}`, _pcSub: true });
           nestedIds.add(sub.id);
           cursor = sub.ts;
         }
