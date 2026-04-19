@@ -4491,6 +4491,7 @@ function renderToday() {
       // Pre-compute sub-activities BEFORE clipping using original time windows
       const browserEntries   = sorted.filter(e => e.browserUsage);
       const pcTimeEntries    = sorted.filter(e => e.activity === 'PC Time' && !e.browserUsage);
+      console.log('[PCTime] browserEntries:', browserEntries.map(e=>e.activity+'|'+e.browserUsage), 'pcEntries:', pcTimeEntries.map(e=>e.activity));
       const nestedBrowserIds = new Set();
       const pcSubMap         = new Map();
       pcTimeEntries.forEach(pc => {
