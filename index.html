@@ -2045,13 +2045,13 @@ function expandPCTimeEntries(entriesArr) {
         for (const sub of subs) {
           const subStart = sub.tsStart || sub.ts;
           const gapMin   = Math.round((subStart - cursor) / 60000);
-          if (gapMin >= 1) result.push({ ...e, id: e.id+'_g'+cursor, tsStart: cursor, ts: subStart, activity: 'PC time · untracked', _synthetic: true });
+          if (gapMin >= 1) result.push({ ...e, id: e.id+'_g'+cursor, tsStart: cursor, ts: subStart, activity: 'PC time', _synthetic: true });
           result.push({ ...sub, id: sub.id + '_pc', activity: `PC time · ${sub.activity}`, _pcSub: true });
           nestedIds.add(sub.id);
           cursor = sub.ts;
         }
         const trailMin = Math.round((pcEnd - cursor) / 60000);
-        if (trailMin >= 1) result.push({ ...e, id: e.id+'_t'+cursor, tsStart: cursor, ts: pcEnd, activity: 'PC time · untracked', _synthetic: true });
+        if (trailMin >= 1) result.push({ ...e, id: e.id+'_t'+cursor, tsStart: cursor, ts: pcEnd, activity: 'PC time', _synthetic: true });
         nestedIds.add(e.id);
         continue;
       }
@@ -3681,7 +3681,14 @@ const ACTIVITY_PALETTE = [
   '#22d3ee','#86efac','#fbbf24','#ec4899','#6366f1','#10b981','#f97316','#d946ef'
 ];
 function getActivityColor(activity) {
-  if (!activity || ['Break','Away','Lunch','Walk','Exercise','Commute','Rest','Errand','Personal','Sleep','Offline / Away'].includes(activity)) return null;
+  if (!activity) return null;
+  // For "PC time · X" entries, look up color using sub-activity name
+  if (activity.startsWith('PC time · ') || activity.startsWith('PC Time · ')) {
+    const sub = activity.split(' · ')[1];
+    if (!sub) return null;
+    return getActivityColor(sub);
+  }
+  if (['Break','Away','Lunch','Walk','Exercise','Commute','Rest','Errand','Personal','Sleep','Offline / Away'].includes(activity)) return null;
   if (!settings.activityColors) settings.activityColors = {};
   if (!settings.activityColors[activity]) {
     const idx = Object.keys(settings.activityColors).length;
@@ -4264,7 +4271,7 @@ function renderEntryRow(item) {
       const rClass    = rColor ? '' : energyClass;
       const rLabel    = subActivity
         ? `PC time <span style="color:var(--muted);font-weight:400">· ${subActivity}</span>`
-        : `PC time <span style="color:var(--muted2);font-weight:400">· untracked</span>`;
+        : `PC time`;
       const rClick    = subActivity
         ? `openEditEntry(${subs.find(s => s.activity === subActivity && (s.tsStart||s.ts) === tStart)?.id || item.id})`
         : editCall;
