@@ -5192,6 +5192,7 @@ function toggleAway() {
     btn.style.color = 'var(--away)';
     document.getElementById('timer-status').textContent = 'Ready';
     persist(); renderToday(); syncEntries();
+    if (fbRoomRef) fbRoomRef.update({ awayState: { active: false } });
     showToast(`${entry.activity} logged · ${fmtDur(dur)}`);
   } else {
     // Toggle the away picker
@@ -5241,6 +5242,7 @@ function startAway(label) {
   awayActive = true;
   awayStartTime = Date.now();
   awayLabel = label;
+  if (fbRoomRef) fbRoomRef.update({ awayState: { active: true, label, startedAt: awayStartTime, startedBy: syncedDeviceId } });
   // Hero UI: show away state
   showHeroState('away');
   document.getElementById('hero-away-label').textContent = label;
