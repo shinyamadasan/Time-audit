@@ -5573,7 +5573,7 @@ function renderEnergySplit(el, entriesArr) {
 
 function renderTopActivities(el, entriesArr, limit=8, days=null) {
   const actMap = {};
-  entriesArr.filter(e=>!e.missed).forEach(e=>{
+  expandPCTimeEntries(entriesArr.filter(e=>!e.missed)).forEach(e=>{
     const key = e.activity.split(' (Output')[0];
     const m = entryMins(e);
     if(!actMap[key]) actMap[key]={mins:0,energy:e.energy};
