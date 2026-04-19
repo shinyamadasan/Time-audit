@@ -644,6 +644,31 @@ function startSync() {
     }
   });
 
+  fbDb.ref(`rooms/${roomCode}/awayState`).on('value', snap => {
+    const data = snap.val();
+    if (!data || data.startedBy === syncedDeviceId) return;
+    if (data.active && data.label && !awayActive) {
+      // Remote started away — mirror it
+      awayActive = true;
+      awayStartTime = data.startedAt || Date.now();
+      awayLabel = data.label;
+      showHeroState('away');
+      document.getElementById('hero-away-label').textContent = data.label;
+      clearInterval(awayElapsedTicker);
+      awayElapsedTicker = setInterval(() => {
+        const s = Math.floor((Date.now() - awayStartTime) / 1000);
+        const el = document.getElementById('hero-away-elapsed');
+        if (el) el.textContent = `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+      }, 1000);
+      document.getElementById('timer-status').textContent = `Away · ${data.label} · synced`;
+    } else if (!data.active && awayActive) {
+      // Remote ended away — clear local away UI (entry already logged on originating device)
+      clearInterval(awayElapsedTicker);
+      awayActive = false; awayStartTime = null; awayLabel = 'Away';
+      showHeroState('idle');
+    }
+  });
+
   updateSyncPill('connected', 'synced');
   syncEntries();
   localStorage.setItem('ta3-last-sync', Date.now());
@@ -687,6 +712,7 @@ function disconnectSync() {
     fbDb.ref(`rooms/${roomCode}/breakState`).off();
     fbDb.ref(`rooms/${roomCode}/reviews`).off();
     fbDb.ref(`rooms/${roomCode}/weeklyReviews`).off();
+    fbDb.ref(`rooms/${roomCode}/awayState`).off();
     if (fbRoomRef) fbRoomRef.off();
     fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).onDisconnect().cancel();
     fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).remove();
@@ -767,6 +793,7 @@ function joinRoom() {
     fbDb.ref(`rooms/${roomCode}/breakState`).off();
     fbDb.ref(`rooms/${roomCode}/reviews`).off();
     fbDb.ref(`rooms/${roomCode}/weeklyReviews`).off();
+    fbDb.ref(`rooms/${roomCode}/awayState`).off();
     if (fbRoomRef) fbRoomRef.off();
     fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).remove();
   }
