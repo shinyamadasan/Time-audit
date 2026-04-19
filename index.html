@@ -6874,45 +6874,36 @@ if (!isNative && !running && !sessionStorage.getItem('ta3-session-started')) {
 initUrlSchemeHandler();
 
 // ── URL scheme handler: chronasense://start?task=Main+work&energy=deep ──
+function handleDeepLink(url) {
+  try {
+    const u = new URL(url);
+    const task = u.searchParams.get('task');
+    const energy = u.searchParams.get('energy') || null;
+    if (!task) return;
+    const action = u.host || u.pathname.replace(/^\/+/, '');
+    if (action === 'start') {
+      if (running) {
+        currentTask = task; lastTaskForRepeat = task;
+        document.getElementById('hero-task-name').textContent = task;
+        persist(); showToast(`Switched to · ${task}`);
+      } else {
+        setTimeout(() => _startTimer(task), 300);
+      }
+    } else if (action === 'quicklog') {
+      setTimeout(() => _doQuickSave(task, energy || 'waste'), 300);
+    }
+  } catch(e) {}
+}
+
 async function initUrlSchemeHandler() {
   if (!isNative) return;
   try {
-    const { App } = await import('https://cdn.jsdelivr.net/npm/@capacitor/app/dist/esm/index.js').catch(()=>({}));
+    const capApp = window.Capacitor?.Plugins?.App;
+    const App = capApp || (await import('https://cdn.jsdelivr.net/npm/@capacitor/app/dist/esm/index.js').catch(()=>({}))).App;
     if (!App) return;
-    const handleUrl = (url) => {
-      try {
-        // Support both chronasense://start?task=... and chronasense://quicklog?...
-        const u = new URL(url);
-        const task = u.searchParams.get('task');
-        const energy = u.searchParams.get('energy') || null;
-        if (!task) return;
-        if (u.host === 'start' || u.host === 'quicklog') {
-          if (running) {
-            // Already tracking — switch task
-            currentTask = task;
-            lastTaskForRepeat = task;
-            document.getElementById('hero-task-name').textContent = task;
-            persist();
-            showToast(`Switched to · ${task}`);
-          } else {
-            _startTimer(task);
-          }
-          if (energy) {
-            // If energy/type passed (e.g. waste), log it immediately as a quick entry
-            // rather than starting the timer
-            if (u.host === 'quicklog') {
-              _doQuickSave(task, energy);
-              showToast(`Logged · ${task}`);
-            }
-          }
-        }
-      } catch(e) {}
-    };
-    // Handle URL when app is already open
-    App.addListener('appUrlOpen', (data) => handleUrl(data.url));
-    // Handle URL that launched the app cold
+    App.addListener('appUrlOpen', (data) => handleDeepLink(data.url));
     const launchUrl = await App.getLaunchUrl().catch(()=>null);
-    if (launchUrl?.url) handleUrl(launchUrl.url);
+    if (launchUrl?.url) handleDeepLink(launchUrl.url);
   } catch(e) {}
 }
 
