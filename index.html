@@ -6952,10 +6952,11 @@ updateRing();
 renderToday();
 initAutoSync();
 initNativeNotifications();
-// Auto-start "PC Time" on fresh browser open (not on refresh, not on mobile)
+// Auto-start "PC Time" on fresh browser open (desktop only, not mobile browsers)
 // Wait up to 5s for Firebase to tell us if a timer is already running elsewhere.
 // If Firebase says a timer is running, adopt that — don't overwrite it.
-if (!isNative && !running && !sessionStorage.getItem('ta3-session-started')) {
+const isMobileBrowser = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent) && !isNative;
+if (!isNative && !isMobileBrowser && !running && !sessionStorage.getItem('ta3-session-started')) {
   sessionStorage.setItem('ta3-session-started', '1');
   const _pcTimeStart = () => { if (!running) _startTimer('PC Time'); };
   // If Firebase responds within 5s and timer is already running, skip auto-start

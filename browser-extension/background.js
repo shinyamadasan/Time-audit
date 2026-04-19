@@ -212,10 +212,10 @@ function flushAndRestart() {
 async function logSession(domain, title, startTs, endTs, durationMs) {
   console.log('[Chronasense] logSession uid:', uid, 'domain:', domain);
   if (!uid) { console.warn('[Chronasense] not logged in, skipping'); return; }
-
-  // Always refresh token before writing — idToken expires after 1 hour
-  await refreshAuthToken();
-  if (!authToken) { console.warn('[Chronasense] could not refresh token, skipping'); return; }
+  if (!authToken) {
+    const ok = await refreshAuthToken();
+    if (!ok) { console.warn('[Chronasense] no token and refresh failed, skipping'); return; }
+  }
 
   const appName = trackedSites[domain]?.label || domain;
   const entry = {
@@ -237,30 +237,29 @@ async function logSession(domain, title, startTs, endTs, durationMs) {
   entry.originalLabel = entry.energy;
 
   const path = `rooms/uid_${uid}/entries/${startTs}`;
-  const url  = `${FIREBASE_CONFIG.databaseURL}${path}.json?auth=${authToken}`;
+  const doWrite = () => fetch(
+    `${FIREBASE_CONFIG.databaseURL}${path}.json?auth=${authToken}`,
+    { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }
+  );
 
   try {
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(entry)
-    });
+    let res = await doWrite();
     console.log('[Chronasense] Firebase write status:', res.status);
-    if (res.status !== 200) { const t = await res.text(); console.warn('[Chronasense] Firebase error body:', t); }
     if (res.status === 401) {
-      // Token expired — refresh and retry once
+      console.log('[Chronasense] token expired, refreshing…');
       const ok = await refreshAuthToken();
       if (ok) {
-        await fetch(`${FIREBASE_CONFIG.databaseURL}${path}.json?auth=${authToken}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(entry)
-        });
+        res = await doWrite();
+        console.log('[Chronasense] retry write status:', res.status);
+      } else {
+        console.warn('[Chronasense] refresh failed, session lost');
       }
+    } else if (res.status !== 200) {
+      const t = await res.text();
+      console.warn('[Chronasense] Firebase error body:', t);
     }
   } catch (e) {
-    // Network error — queue for retry (simple: ignore for now, next sync will catch)
-    console.warn('Chronasense: failed to log session', e);
+    console.warn('[Chronasense] network error logging session:', e);
   }
 }
 
