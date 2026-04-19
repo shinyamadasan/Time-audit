@@ -2026,6 +2026,41 @@ function normalizeActivity(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// Expand PC Time entries into "PC time · X" sub-rows, removing nested browser entries
+function expandPCTimeEntries(entriesArr) {
+  const browserEntries = entriesArr.filter(e => e.browserUsage && !e.deleted);
+  const nestedIds = new Set();
+  const result = [];
+
+  for (const e of entriesArr) {
+    if (e.deleted) continue;
+    if (e.activity?.toLowerCase() === 'pc time' && !e.browserUsage) {
+      const pcStart = e.tsStart || (e.ts - (e.blockIntervalMin || 0) * 60000);
+      const pcEnd   = e.ts;
+      const subs    = browserEntries
+        .filter(b => { const bs = b.tsStart || b.ts; return bs >= pcStart && b.ts <= pcEnd; })
+        .sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+      if (subs.length) {
+        let cursor = pcStart;
+        for (const sub of subs) {
+          const subStart = sub.tsStart || sub.ts;
+          const gapMin   = Math.round((subStart - cursor) / 60000);
+          if (gapMin >= 1) result.push({ ...e, id: e.id+'_g'+cursor, tsStart: cursor, ts: subStart, activity: 'PC time · untracked', _synthetic: true });
+          result.push({ ...sub, activity: `PC time · ${sub.activity}`, _pcSub: true });
+          nestedIds.add(sub.id);
+          cursor = sub.ts;
+        }
+        const trailMin = Math.round((pcEnd - cursor) / 60000);
+        if (trailMin >= 1) result.push({ ...e, id: e.id+'_t'+cursor, tsStart: cursor, ts: pcEnd, activity: 'PC time · untracked', _synthetic: true });
+        nestedIds.add(e.id);
+        continue;
+      }
+    }
+    if (!nestedIds.has(e.id)) result.push(e);
+  }
+  return result.filter(e => !nestedIds.has(e.id));
+}
+
 function fmtDur(min) {
   if (min < 60) return `${min}m`;
   const h = Math.floor(min / 60);
@@ -4574,7 +4609,7 @@ function renderToday() {
       return;
     }
 
-    const sortedRecent = [...todayE].sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
+    const sortedRecent = expandPCTimeEntries([...todayE]).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
     listEl.innerHTML = sortedRecent.slice(0, 6).map(e => {
   const duration = e.segments
     ? Math.round(e.segments.reduce((sum, s) => sum + s.duration, 0) / 60)
@@ -5667,7 +5702,8 @@ function renderUnloggedHours(el, days) {
 function renderEntryList(el, entriesArr) {
   if (!entriesArr.length) { el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries.</div>'; return; }
   const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)',break:'var(--break)'};
-  el.innerHTML = entriesArr.sort((a,b)=>(b.tsStart||b.ts)-(a.tsStart||a.ts)).map(e=>{
+  const expanded = expandPCTimeEntries(entriesArr);
+  el.innerHTML = expanded.sort((a,b)=>(b.tsStart||b.ts)-(a.tsStart||a.ts)).map(e=>{
     const dur = entryMins(e);
     const time = e.tsStart?`${localTime(e.tsStart)} – ${localTime(e.ts)}`:localTime(e.ts);
     const color = getActivityColor(e.activity)||energyColors[e.energy]||'var(--muted)';
@@ -5898,7 +5934,7 @@ function renderDayDetail(day) {
 function renderWeekTable() {
   const energyFilter = document.getElementById('filter-energy')?.value || '';
   const actFilter = document.getElementById('filter-activity')?.value || '';
-  let filtered = getWeekEntries(weekRangeOffset).filter(e=>!e.missed);
+  let filtered = expandPCTimeEntries(getWeekEntries(weekRangeOffset).filter(e=>!e.missed));
   if (energyFilter) filtered = filtered.filter(e=>e.energy===energyFilter);
   if (actFilter) filtered = filtered.filter(e=>e.activity.startsWith(actFilter));
 
