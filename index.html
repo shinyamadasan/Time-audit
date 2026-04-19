@@ -1973,6 +1973,7 @@ let blockSegments = [];
 let focusExitTimer = null;
 let focusBlockCountdown = null;
 let fbApp = null, fbDb = null, fbRoomRef = null, roomCode = '';
+let fbTimerReceived = false; // set to true once Firebase sends us timer state
 let currentUser = null;
 let timerStartedAt = null;
 let snoozesUsedToday = 0;
@@ -6872,9 +6873,20 @@ initNativeNotifications();
 initPhoneUsageTracking();
 
 // Auto-start "PC Time" on fresh browser open (not on refresh, not on mobile)
+// Wait up to 5s for Firebase to tell us if a timer is already running elsewhere.
+// If Firebase says a timer is running, adopt that — don't overwrite it.
 if (!isNative && !running && !sessionStorage.getItem('ta3-session-started')) {
   sessionStorage.setItem('ta3-session-started', '1');
-  setTimeout(() => _startTimer('PC Time'), 800);
+  const _pcTimeStart = () => { if (!running) _startTimer('PC Time'); };
+  // If Firebase responds within 5s and timer is already running, skip auto-start
+  const _pcTimeFallback = setTimeout(_pcTimeStart, 5000);
+  const _pcTimeCheck = setInterval(() => {
+    if (fbTimerReceived) {
+      clearInterval(_pcTimeCheck);
+      clearTimeout(_pcTimeFallback);
+      if (!running) _startTimer('PC Time');
+    }
+  }, 200);
 }
 initUrlSchemeHandler();
 

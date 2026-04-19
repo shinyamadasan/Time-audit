@@ -481,13 +481,19 @@ function startSync() {
       timerStartedAt = data.startedAt;
       totalSecs = data.intervalSecs;
       remaining = Math.max(0, totalSecs - elapsed);
+      // Sync task name from Firebase if remote has one
+      if (data.lastTask && data.lastTask !== currentTask) {
+        currentTask = data.lastTask;
+        lastTaskForRepeat = data.lastTask;
+        const nameEl = document.getElementById('hero-task-name');
+        if (nameEl) nameEl.textContent = data.lastTask;
+      }
       if (!running) {
         running = true;
         settings.intervalMin = data.intervalSecs / 60;
         document.getElementById('interval-input').value = settings.intervalMin;
         document.getElementById('main-btn').textContent = 'Break';
         document.getElementById('timer-status').textContent = `Synced · pinging every ${settings.intervalMin} min`;
-        // Show hero-active when synced timer starts
         const task = currentTask || lastTaskForRepeat || 'Work';
         if (!taskStartTime) taskStartTime = timerStartedAt || Date.now();
         document.getElementById('hero-idle').style.display = 'none';
@@ -500,10 +506,12 @@ function startSync() {
             remaining <= 0 ? doPing() : updateRing();
           }, 1000);
         }
+        fbTimerReceived = true;
       } else {
         // Already running — just re-sync remaining without restarting ticker
         remaining = Math.max(0, totalSecs - elapsed);
         updateRing();
+        fbTimerReceived = true;
       }
     } else if (!data.running) {
       if (data.pausedRemaining != null) remaining = data.pausedRemaining;
@@ -512,6 +520,7 @@ function startSync() {
         document.getElementById('main-btn').textContent = 'Resume';
         document.getElementById('timer-status').textContent = 'Paused (synced)';
       }
+      fbTimerReceived = true;
     }
     if (data.intervalSecs) { totalSecs = data.intervalSecs; settings.intervalMin = data.intervalSecs/60; }
     updateRing();
@@ -614,7 +623,7 @@ function syncTimerState() {
   if (!fbRoomRef) return;
   fbRoomRef.update({
     timer: {
-      running,
+      lastTask: currentTask || lastTaskForRepeat || null,      running,
       intervalSecs: totalSecs,
       startedAt: running ? Date.now() - (totalSecs - remaining) * 1000 : null,
       pausedRemaining: running ? null : remaining,
