@@ -1384,6 +1384,10 @@ button, a, [role="button"],
       </div>
     </div>
     <div class="setting-row">
+      <div><div class="setting-label">Phone usage tracking</div><div class="setting-sub">Auto-log Instagram, YouTube, TikTok etc. Grant access or sync now</div></div>
+      <div class="setting-control"><button class="btn sm" onclick="requestPhoneUsagePermission()">Grant / Sync</button></div>
+    </div>
+    <div class="setting-row">
       <div><div class="setting-label">Work day timezone</div><div class="setting-sub">When does your day start/end — set once, syncs to all devices</div></div>
       <div class="setting-control">
         <select id="set-timezone" onchange="saveSettings()" style="width:auto;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 7px;border-radius:6px;outline:none">
@@ -7107,28 +7111,39 @@ const PHONE_USAGE_KEY = 'ta3-phone-usage-last-sync';
 const MIN_SESSION_MS  = 2 * 60 * 1000;  // ignore sessions under 2 min
 
 async function initPhoneUsageTracking() {
-  if (!isNative) return;
+  if (!isNative) { return; }
   const UsageStats = window.Capacitor?.Plugins?.UsageStats;
-  if (!UsageStats) return;
+  if (!UsageStats) {
+    showToast('⚠ UsageStats plugin not found — rebuild APK');
+    return;
+  }
 
-  const { granted } = await UsageStats.hasPermission().catch(() => ({ granted: false }));
-  if (!granted) {
-    // Show a one-time prompt to grant permission
-    const key = 'ta3-usage-permission-asked';
-    if (!localStorage.getItem(key)) {
-      localStorage.setItem(key, '1');
-      setTimeout(() => {
-        if (confirm('Allow ChronaSense to automatically log your phone app usage?\n\nTap OK to open Settings, then enable "ChronaSense" under Usage Access.')) {
-          UsageStats.requestPermission();
-        }
-      }, 3000);
-    }
+  const permResult = await UsageStats.hasPermission().catch(e => { showToast('⚠ hasPermission error: ' + e); return { granted: false }; });
+  if (!permResult.granted) {
+    localStorage.removeItem('ta3-usage-permission-asked'); // always re-prompt until granted
+    setTimeout(() => {
+      if (confirm('Allow ChronaSense to automatically log your phone app usage?\n\nTap OK to open Settings, then enable "ChronaSense" under Usage Access.')) {
+        UsageStats.requestPermission();
+      }
+    }, 2000);
     return;
   }
 
   await syncPhoneUsage(UsageStats);
-  // Re-sync every 15 minutes while app is open
   setInterval(() => syncPhoneUsage(UsageStats), 15 * 60 * 1000);
+}
+
+// Called from Settings page to manually grant/sync
+async function requestPhoneUsagePermission() {
+  const UsageStats = window.Capacitor?.Plugins?.UsageStats;
+  if (!UsageStats) { showToast('Only available in the Android app'); return; }
+  const { granted } = await UsageStats.hasPermission().catch(() => ({ granted: false }));
+  if (granted) {
+    await syncPhoneUsage(UsageStats);
+    showToast('Phone usage synced');
+  } else {
+    UsageStats.requestPermission();
+  }
 }
 
 async function syncPhoneUsage(UsageStats) {
