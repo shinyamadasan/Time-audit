@@ -6059,10 +6059,11 @@ function openReflectionsHistory() {
 function saveReview(){
   const k = _reviewDateKey || toDateKey(new Date());
   const isToday = k === toDateKey(new Date());
-  reviews[k]={win:document.getElementById('rv-win').value,waste:document.getElementById('rv-waste').value,avoid:document.getElementById('rv-avoid').value,tomorrow:document.getElementById('rv-tomorrow').value};
+  reviews[k]={win:document.getElementById('rv-win').value,waste:document.getElementById('rv-waste').value,avoid:document.getElementById('rv-avoid').value,tomorrow:document.getElementById('rv-tomorrow').value,_savedAt:Date.now()};
   // Only update tomorrow's intention when saving today's review
   if (isToday) { const tom=document.getElementById('rv-tomorrow').value; if(tom) intention=tom; }
   persist();
+  if (fbRoomRef) fbRoomRef.update({ [`reviews/${k}`]: reviews[k] });
   closeModal('review-overlay');
   if (document.getElementById('reflect-daily-reviews')) renderDailyReflections();
   showToast('Review saved ✓');
@@ -6406,10 +6407,12 @@ function saveWeeklyReview() {
   weeklyReviews[weekKey].drain      = document.getElementById('wr-drain').value.trim();
   weeklyReviews[weekKey].nextweek   = document.getElementById('wr-nextweek').value.trim();
   weeklyReviews[weekKey].savedAt    = Date.now();
+  weeklyReviews[weekKey]._savedAt   = Date.now();
   // Snapshot the week's key stats alongside the reflection
   const ins = computeInsights(weekKey);
   if (ins) weeklyReviews[weekKey].stats = { deepHrs: ins.deepHrs, deepPct: ins.deepPct, wasteMin: ins.wasteMin, worstDist: ins.worstDist, topActivity: ins.topActivity };
   persist();
+  if (fbRoomRef) fbRoomRef.update({ [`weeklyReviews/${weekKey}`]: weeklyReviews[weekKey] });
   const reviewBadge = document.getElementById('weekly-review-saved');
   reviewBadge.textContent = '✓ Saved ' + formatSavedAt(weeklyReviews[weekKey].savedAt);
   reviewBadge.style.display = 'inline';
@@ -6427,9 +6430,11 @@ function saveWeeklyPlan() {
     p3:       document.getElementById('wp-p3').value.trim(),
     deepgoal: document.getElementById('wp-deepgoal').value.trim(),
     avoid:    document.getElementById('wp-avoid').value.trim(),
-    savedAt:  Date.now()
+    savedAt:  Date.now(),
+    _savedAt: Date.now()
   };
   persist();
+  if (fbRoomRef) fbRoomRef.update({ [`weeklyReviews/${nextWeekKey}`]: weeklyReviews[nextWeekKey] });
   const planBadge = document.getElementById('weekly-plan-saved');
   planBadge.textContent = '✓ Saved ' + formatSavedAt(weeklyReviews[nextWeekKey].plan.savedAt);
   planBadge.style.display = 'inline';
