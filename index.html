@@ -6952,8 +6952,6 @@ updateRing();
 renderToday();
 initAutoSync();
 initNativeNotifications();
-initPhoneUsageTracking();
-
 // Auto-start "PC Time" on fresh browser open (not on refresh, not on mobile)
 // Wait up to 5s for Firebase to tell us if a timer is already running elsewhere.
 // If Firebase says a timer is running, adopt that — don't overwrite it.
@@ -7386,6 +7384,8 @@ function buildSessions(events) {
   // Any apps still in foreground at query end — leave open, don't log yet
   return sessions;
 }
+
+initPhoneUsageTracking();
 </script>
 
 </body>
