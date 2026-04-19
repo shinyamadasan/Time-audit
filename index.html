@@ -4485,33 +4485,43 @@ function renderToday() {
     if (!todayE.length) {
       tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
     } else {
-      // Sort chronologically, clip overlaps, drop 0m, merge consecutive same-activity, interleave gaps
-      const sorted  = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-      const clipped = clipOverlapsForDisplay(sorted).filter(e => {
+      // Sort chronologically
+      const sorted = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+
+      // Pre-compute sub-activities BEFORE clipping using original time windows
+      const browserEntries   = sorted.filter(e => e.browserUsage);
+      const pcTimeEntries    = sorted.filter(e => e.activity === 'PC Time' && !e.browserUsage);
+      const nestedBrowserIds = new Set();
+      const pcSubMap         = new Map();
+      pcTimeEntries.forEach(pc => {
+        const pcStart = pc.tsStart || (pc.ts - (pc.blockIntervalMin || 0) * 60000);
+        const pcEnd   = pc.ts;
+        const subs = browserEntries.filter(b => {
+          const bStart = b.tsStart || b.ts;
+          return bStart >= pcStart && b.ts <= pcEnd;
+        });
+        if (subs.length) {
+          pcSubMap.set(pc.id, subs);
+          subs.forEach(s => nestedBrowserIds.add(s.id));
+        }
+      });
+
+      // Remove nested browser entries before clipping so they don't cause overlap display issues
+      const sortedForDisplay = sorted.filter(e => !nestedBrowserIds.has(e.id));
+      const clipped = clipOverlapsForDisplay(sortedForDisplay).filter(e => {
         const dur = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 1);
         return dur > 0;
       });
       const mergedDisplay = mergeConsecutiveForDisplay(clipped);
       const _dayNow = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
-      const gaps    = computeGaps(todayE, _dayNow);
+      const gaps    = computeGaps(todayE.filter(e => !nestedBrowserIds.has(e.id)), _dayNow);
       const combined = [...mergedDisplay, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-      // Attach browser extension sessions as sub-activities on PC Time entries
-      const nestedBrowserIds = new Set();
+
+      // Attach sub-activities to PC Time entries
       combined.forEach(item => {
-        if (item.isGap || item.activity !== 'PC Time' || item.browserUsage) return;
-        const pcStart = item.tsStart || (item.ts - (item.blockIntervalMin || 0) * 60000);
-        const pcEnd   = item.ts;
-        const subs = combined.filter(o =>
-          !o.isGap && o.browserUsage &&
-          (o.tsStart || o.ts) >= pcStart && o.ts <= pcEnd
-        );
-        if (subs.length) {
-          item._subActivities = subs;
-          subs.forEach(s => nestedBrowserIds.add(s.id));
-        }
+        if (!item.isGap && pcSubMap.has(item.id)) item._subActivities = pcSubMap.get(item.id);
       });
-      const displayCombined = combined.filter(item => item.isGap || !nestedBrowserIds.has(item.id));
-      tlEl.innerHTML = renderTimelineCombined(displayCombined);
+      tlEl.innerHTML = renderTimelineCombined(combined);
       // Animate the most recently logged entry
       if (_lastLoggedEntryId) {
         const newRow = tlEl.querySelector(`[data-entry-id="${_lastLoggedEntryId}"]`);
