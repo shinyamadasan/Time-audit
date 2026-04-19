@@ -559,18 +559,6 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .voice-btn.recording{background:var(--distraction-dim);border-color:var(--distraction);
   color:var(--distraction);animation:pulse 0.8s infinite}
 
-/* ── Ping enforcement banner ── */
-.ping-banner{position:fixed;top:0;left:0;right:0;z-index:350;
-  background:var(--distraction);padding:10px 16px;
-  display:flex;align-items:center;justify-content:space-between;
-  transform:translateY(-100%);transition:transform 0.3s;
-  padding-top:calc(10px + var(--safe-top))}
-.ping-banner.show{transform:translateY(0)}
-.ping-banner-text{font-size:13px;font-weight:700;color:#fff;flex:1}
-.ping-banner-sub{font-size:11px;color:rgba(255,255,255,0.75);margin-top:1px}
-.ping-banner-btn{background:#fff;color:var(--distraction);border:none;border-radius:6px;
-  padding:8px 16px;font-family:var(--head);font-size:12px;font-weight:700;
-  cursor:pointer;flex-shrink:0;margin-left:12px}
 
 /* ── Same-as-last card (primary CTA) ── */
 .sal-card{width:100%;display:flex;align-items:center;justify-content:space-between;
@@ -1175,14 +1163,11 @@ button, a, [role="button"],
     <button class="btn sm ghost" style="flex-shrink:0;font-size:11px" onclick="setDailyCommitment()">Set</button>
   </div>
 
-  <!-- Continue banner -->
-  <div class="continue-banner" id="continue-banner">
+  <!-- Continue banner removed — auto-logging handles this now -->
+  <div class="continue-banner" id="continue-banner" style="display:none">
     <div style="flex:1">
-      <div class="continue-banner-text" id="continue-banner-text">✓ Block done</div>
-      <div class="continue-banner-sub" id="continue-banner-sub">Auto-continuing in 30s</div>
+      <div class="continue-banner-text" id="continue-banner-text"></div>
     </div>
-    <button class="btn sm" id="continue-banner-btn" onclick="doContinueBlock()" style="border-color:var(--deep);color:var(--deep)">▶ Continue</button>
-    <button class="btn sm ghost" onclick="doSwitchFromBanner()">↷ Switch</button>
   </div>
 
   <!-- Behavioral Feedback Flash -->
@@ -1925,14 +1910,6 @@ button, a, [role="button"],
   </div>
 </div>
 
-<!-- ══ PING ENFORCEMENT BANNER ══ -->
-<div class="ping-banner" id="ping-banner">
-  <div>
-    <div class="ping-banner-text">⏱ Block complete — log it now</div>
-    <div class="ping-banner-sub" id="ping-banner-sub">Tap to open log</div>
-  </div>
-  <button class="ping-banner-btn" onclick="openQuickLog()">Log it</button>
-</div>
 
 <div class="toast" id="toast"></div>
 <!-- place this BEFORE <script> -->
@@ -2470,64 +2447,83 @@ function stopAlertLoop() {
   if (alertLoop) { clearInterval(alertLoop); alertLoop = null; }
 }
 
-function showPingBanner(pingNum) {
-  const b = document.getElementById('ping-banner');
-  const streak = getTodayEntries().filter(e=>!e.missed).length;
-  document.getElementById('ping-banner-sub').textContent =
-    `Block #${pingNum}${streak > 1 ? ' · ' + streak + '-block streak' : ''} · ${tzTime(Date.now())}`;
-  b.classList.add('show');
-}
-function hidePingBanner() {
-  document.getElementById('ping-banner').classList.remove('show');
-}
+function showPingBanner() {}
+function hidePingBanner() {}
 
 function doPing() {
-  // Don't ping during a break
   if (breakActive) { timerStartedAt = Date.now(); remaining = totalSecs; updateRing(); return; }
-  // Only the device that started the timer handles the ping UI
   if (timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId) {
     timerStartedAt = Date.now(); remaining = totalSecs; updateRing(); return;
   }
+
   pingCount++;
-  timerStartedAt = Date.now();
-  remaining = totalSecs;
-  updateRing();
-  scheduleNativePing(totalSecs); // reschedule next ping
-  swCancelPing(); // JS handled it — cancel any SW backup
-  if (document.hidden) swSchedulePing(); // tab still hidden — schedule next SW backup
-
-  // Notification — once, not looping
-  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-    try {
-      const n = new Notification('⏱ Block Complete', { body: 'Tap to log — 3 min grace window', requireInteraction: true });
-      n.onclick = () => { window.focus(); openQuickLog(); };
-    } catch(e) {}
-  }
-
-  // Sound plays ONCE
-  playAlert(2, 400);
-  document.title = '⏱ LOG NOW — ChronaSense';
-  window.focus();
-
-  // Close last segment
   const now = Date.now();
-  if (currentState) blockSegments.push({ state: currentState, duration: Math.round((now - lastStateChange) / 1000) });
-  let totals = { deep:0, distraction:0, shallow:0, admin:0 };
-  blockSegments.forEach(s => { if(totals[s.state]!==undefined) totals[s.state] += s.duration; });
 
+  // Save block start BEFORE resetting
+  const prevBlockStart = blockStartTime || (now - totalSecs * 1000);
+
+  // Reset timer for next block
+  timerStartedAt = now;
+  remaining = totalSecs;
+  if (currentState) blockSegments.push({ state: currentState, duration: Math.round((now - lastStateChange) / 1000) });
   blockSegments = [];
   currentState = 'deep';
   lastStateChange = now;
-  blockStartTime = now; // reset for next block
+  blockStartTime = now;
 
-  persist();
-  renderToday();
-  syncEntries();
-  showPingBanner(pingCount);
+  updateRing();
+  scheduleNativePing(totalSecs);
+  swCancelPing();
+  if (document.hidden) swSchedulePing();
 
-  // Show continue banner — auto-logs and continues after 30s
-  clearTimeout(snoozeTimer);
-  showContinueBanner(currentTask || lastTaskForRepeat || intention || 'Work');
+  // Sound
+  playAlert(2, 400);
+  document.title = 'ChronaSense';
+
+  // Auto-log the completed block
+  const task   = currentTask || lastTaskForRepeat || intention || 'Work';
+  const lastEntry = entries.find(e => !e.missed && !e.deleted && !e.break && !e.away);
+  const energy = lastEntry?.energy || 'shallow';
+  autoLogBlock(task, energy, prevBlockStart, now);
+}
+
+function autoLogBlock(activity, energy, tsStart, tsEnd) {
+  if (!activity) activity = 'Work';
+  const dur = Math.round((tsEnd - tsStart) / 60000);
+  if (dur < 1) return;
+
+  const SEAM_TOLERANCE_MS = 2 * 60 * 1000;
+  const prev = entries.find(e => !e.missed && !e.deleted && e.activity && !e.away);
+  const canExtend = prev &&
+    prev.activity === activity &&
+    prev.energy === energy &&
+    Math.abs(prev.ts - tsStart) <= SEAM_TOLERANCE_MS;
+
+  if (canExtend) {
+    prev.ts = tsEnd;
+    prev.blockIntervalMin = Math.round((tsEnd - (prev.tsStart || tsStart)) / 60000);
+    prev.updatedAt = tsEnd;
+    _lastLoggedEntryId = prev.id;
+  } else {
+    const entry = {
+      id: tsEnd, ts: tsEnd, updatedAt: tsEnd, tsStart,
+      blockIntervalMin: dur,
+      date: toDateKey(new Date(tsStart)),
+      activity, energy,
+      onPlan: energy !== 'distraction' && energy !== 'waste',
+      quickLogged: true, autoLogged: true
+    };
+    entry.category = getBucket(entry);
+    entry.originalLabel = entry.energy || null;
+    learnWastePattern(activity, energy);
+    entries.unshift(entry);
+    _lastLoggedEntryId = entry.id;
+  }
+
+  persist(); renderToday(); syncEntries();
+  showToast(`Auto-logged: ${activity} · ${fmtDur(dur)}`);
+  checkReviewPrompt();
+  checkEscalation();
 }
 
 // ══════════════════════════════════════════════════════
@@ -5204,55 +5200,10 @@ function useChip(idx) {
   }
 }
 
-// ══════════════════════════════════════════════════════
-// CONTINUE BANNER
-// ══════════════════════════════════════════════════════
-function showContinueBanner(task) {
-  clearInterval(continueBannerTimer);
-  continueBannerCountdown = 30;
-  const shortTask = task.length > 28 ? task.slice(0, 28) + '…' : task;
-  document.getElementById('continue-banner-text').textContent = `✓ Block done · auto-continuing in ${continueBannerCountdown}s`;
-  document.getElementById('continue-banner-btn').textContent = `▶ Continue "${shortTask}"`;
-  document.getElementById('continue-banner').classList.add('show');
-  continueBannerTimer = setInterval(() => {
-    continueBannerCountdown--;
-    if (continueBannerCountdown <= 0) {
-      clearInterval(continueBannerTimer);
-      doContinueBlock();
-      return;
-    }
-    document.getElementById('continue-banner-text').textContent = `✓ Block done · auto-continuing in ${continueBannerCountdown}s`;
-  }, 1000);
-}
-
-function hideContinueBanner() {
-  clearInterval(continueBannerTimer);
-  document.getElementById('continue-banner').classList.remove('show');
-}
-
-function doContinueBlock() {
-  hideContinueBanner();
-  const lastEnergy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
-  const task = currentTask || lastTaskForRepeat || intention || 'Work';
-  _doQuickSave(task, lastEnergy);
-}
-
-function doSwitchFromBanner() {
-  hideContinueBanner();
-  clearTimeout(snoozeTimer);
-  // Stop timer — user will start fresh task
-  running = false;
-  clearInterval(ticker); ticker = null;
-  timerStartedAt = null;
-  taskStartTime = null;
-  cancelNativePing();
-  // Show hero-idle
-  showHeroState('idle');
-  document.getElementById('switch-panel').style.display = 'none';
-  const heroInput = document.getElementById('hero-task-input');
-  if (heroInput) { heroInput.value = ''; setTimeout(() => heroInput.focus(), 100); }
-  showToast('Type your next task and tap Start');
-}
+function showContinueBanner() {}
+function hideContinueBanner() { clearInterval(continueBannerTimer); }
+function doContinueBlock() {}
+function doSwitchFromBanner() {}
 
 // ══════════════════════════════════════════════════════
 // AWAY TRACKING
