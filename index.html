@@ -1953,6 +1953,22 @@ button, a, [role="button"],
   </div>
 </div></div>
 
+<!-- ── Timer recovery prompt ── -->
+<div id="recovery-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9998;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#16213e;border-radius:16px;padding:24px;max-width:340px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.6)">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#00E5FF;font-weight:700;margin-bottom:6px">Timer was running</div>
+    <div id="recovery-msg" style="font-size:13px;color:#94A3B8;line-height:1.65;margin-bottom:20px"></div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button onclick="handleRecovery(true)" style="background:#1E88E5;color:#EAF2FF;border:none;border-radius:10px;padding:12px 16px;font-size:13px;font-weight:600;cursor:pointer;text-align:left;line-height:1.4">
+        ✓ Yes, I closed it intentionally<br><span style="font-weight:400;font-size:11px;opacity:0.8">Log the session up to that time &amp; stop the timer</span>
+      </button>
+      <button onclick="handleRecovery(false)" style="background:#1a2238;color:#EAF2FF;border:1px solid #2d3a52;border-radius:10px;padding:12px 16px;font-size:13px;font-weight:600;cursor:pointer;text-align:left;line-height:1.4">
+        ↩ No, it was accidental<br><span style="font-weight:400;font-size:11px;opacity:0.8">Keep the timer running as if it never stopped</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Daily sleep reminder ── -->
 <div class="review-overlay" id="sleep-reminder-overlay" style="display:none">
 <div class="review-modal">
@@ -2280,6 +2296,7 @@ async function _startTimer(task) {
   scheduleNativePing(totalSecs);
   if ((task || '').toLowerCase() === 'pc time') startPCTimeLive();
   else stopPCTimeLive();
+  _startHeartbeat();
   persist();
   syncTimerState();
 }
@@ -2318,6 +2335,7 @@ function playAlert(times = 2, gap = 600) {
 }
 function resetTimer() {
   running = false; clearInterval(ticker); ticker = null;
+  _stopHeartbeat();
   cancelNativePing();
   if (breakActive) { clearInterval(breakTicker); breakTicker = null; breakActive = false; document.getElementById('break-active-row').classList.remove('show'); }
   taskStartTime = null;
@@ -2850,8 +2868,78 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// ── Heartbeat: written every 15s while timer runs so we can detect unexpected closures ──
+let _heartbeatTicker = null;
+function _startHeartbeat() {
+  clearInterval(_heartbeatTicker);
+  localStorage.setItem('ta3-heartbeat-ts', Date.now());
+  _heartbeatTicker = setInterval(() => {
+    if (running) localStorage.setItem('ta3-heartbeat-ts', Date.now());
+  }, 15000);
+}
+function _stopHeartbeat() {
+  clearInterval(_heartbeatTicker);
+  _heartbeatTicker = null;
+  localStorage.removeItem('ta3-heartbeat-ts');
+}
+
+function showRecoveryModal() {
+  const s = window._timerRecoveryState;
+  if (!s) return;
+  const shutdownTime = new Date(s.shutdownTs);
+  const taskStart = s.taskStartTime || s.timerStartedAt;
+  const dur = Math.round((s.shutdownTs - taskStart) / 60000);
+  const timeStr = shutdownTime.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  const ago = Math.round((Date.now() - s.shutdownTs) / 60000);
+  const agoStr = ago < 60 ? `${ago}m ago` : `${Math.round(ago/60)}h ago`;
+  document.getElementById('recovery-msg').innerHTML =
+    `<strong style="color:#EAF2FF">${s.task}</strong> was tracking when the app closed at <strong style="color:#EAF2FF">${timeStr}</strong> (${agoStr}).<br><br>` +
+    `Session so far: <strong style="color:#00E5FF">${dur >= 1 ? dur + ' min' : 'under 1 min'}</strong>.`;
+  const el = document.getElementById('recovery-overlay');
+  el.style.display = 'flex';
+}
+
+function handleRecovery(intentional) {
+  document.getElementById('recovery-overlay').style.display = 'none';
+  const s = window._timerRecoveryState;
+  window._timerRecoveryState = null;
+  if (!s) return;
+
+  if (intentional) {
+    const tsEnd = s.shutdownTs;
+    const tsStart = s.taskStartTime || s.timerStartedAt;
+    const dur = Math.round((tsEnd - tsStart) / 60000);
+    const task = s.task || 'Work block';
+    const prevEnergy = entries.find(e => !e.missed && !e.deleted && !e.break && e.energy)?.energy || 'deep';
+    if (dur >= 1) {
+      const entry = {
+        id: tsEnd, ts: tsEnd, tsStart,
+        blockIntervalMin: dur,
+        date: toDateKey(new Date(tsEnd)),
+        activity: task, energy: prevEnergy,
+        onPlan: true, retro: false
+      };
+      entry.category = getBucket(entry);
+      entry.originalLabel = prevEnergy;
+      entries.push(entry);
+      entries.sort((a, b) => b.ts - a.ts);
+      persist(); renderToday(); syncEntries();
+      showToast(`Logged · ${task} · ${fmtDur(dur)}`);
+    }
+    _stopHeartbeat();
+    resetTimer();
+  } else {
+    // Accidental — timer already restored in load(), just restart the heartbeat
+    _startHeartbeat();
+    showToast(`Timer resumed · ${s.task}`);
+  }
+}
+
 window.addEventListener('beforeunload', e => {
-  if (running) { e.preventDefault(); e.returnValue = 'Your focus timer is running. Leave anyway?'; return e.returnValue; }
+  if (running) {
+    localStorage.setItem('ta3-heartbeat-ts', Date.now()); // final timestamp before close
+    e.preventDefault(); e.returnValue = 'Your focus timer is running. Leave anyway?'; return e.returnValue;
+  }
 });
 
 
@@ -7070,6 +7158,8 @@ if (running && timerStartedAt) {
     remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
     remaining <= 0 ? doPing() : updateRing();
   }, 1000);
+  // Show recovery prompt if the app was closed unexpectedly
+  if (window._timerRecoveryState) setTimeout(showRecoveryModal, 600);
 } else {
   totalSecs = settings.intervalMin * 60;
   remaining = totalSecs;
