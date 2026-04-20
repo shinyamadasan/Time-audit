@@ -3672,32 +3672,6 @@ function saveEntry() {
   }
 }
 
-function triggerPenaltyMode() {
-  showFocusBlocker("Penalty activated: 60-min forced deep work");
-
-  settings.intervalMin = 60;
-  totalSecs = 60 * 60;
-  remaining = totalSecs;
-
-  currentTask = "Penalty deep work (recovery)";
-  document.getElementById('interval-input').value = 60;
-  updateRing();
-  closeModal('log-overlay');
-  
-  if (!running) {
-     running = true;
-     document.getElementById('main-btn').textContent = 'Break';
-     document.getElementById('timer-status').textContent = `Penalty mode`;
-     timerStartedAt = Date.now();
-     if(!ticker) ticker = setInterval(() => {
-       remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-       remaining <= 0 ? doPing() : updateRing();
-     }, 1000);
-     syncTimerState();
-  } else {
-     syncTimerState();
-  }
-}
 
 function deleteEntry(id) {
   // Tombstone instead of filter — lets Firebase and other devices know this entry is gone.

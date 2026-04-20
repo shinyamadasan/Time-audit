@@ -8,8 +8,10 @@ let trackedSites = {};  // loaded from storage, merges defaults + custom
 let userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;  // fallback to device
 
 // ── Startup ──
+// Called on install/update AND on every service worker restart (MV3 workers are killed after inactivity)
 chrome.runtime.onStartup.addListener(init);
 chrome.runtime.onInstalled.addListener(init);
+init(); // also run immediately on every service worker start to restore uid/authToken
 
 async function init() {
   const stored = await chrome.storage.local.get(['uid', 'authToken', 'customSites', 'removedSites', 'userTimezone']);
@@ -17,8 +19,21 @@ async function init() {
   authToken    = stored.authToken    || null;
   userTimezone = stored.userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   loadTrackedSites(stored.customSites || {}, stored.removedSites || []);
-  if (uid) startTracking();
+  if (uid) {
+    chrome.alarms.create('flush', { periodInMinutes: 5 });
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      if (tabs[0]) recordStart(tabs[0].url, tabs[0].title);
+    });
+  }
 }
+
+// ── Tab listeners registered at top level so they survive service worker restarts ──
+chrome.tabs.onActivated.addListener(onTabActivated);
+chrome.tabs.onUpdated.addListener(onTabUpdated);
+chrome.windows.onFocusChanged.addListener(onFocusChanged);
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'flush') flushAndRestart();
+});
 
 function loadTrackedSites(customSites, removedSites) {
   trackedSites = {};
@@ -136,35 +151,28 @@ async function refreshAuthToken() {
 
 // ── Tab tracking ──
 function startTracking() {
-  chrome.tabs.onActivated.addListener(onTabActivated);
-  chrome.tabs.onUpdated.addListener(onTabUpdated);
-  chrome.windows.onFocusChanged.addListener(onFocusChanged);
-
-  // Flush any open session every 5 min in case tab stays open a long time
   chrome.alarms.create('flush', { periodInMinutes: 5 });
-  chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === 'flush') flushAndRestart();
-  });
-
-  // Capture current tab right away
   chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
     if (tabs[0]) recordStart(tabs[0].url, tabs[0].title);
   });
 }
 
 function onTabActivated(info) {
+  if (!uid) return;
   chrome.tabs.get(info.tabId, (tab) => {
     if (tab) switchTab(tab.url, tab.title);
   });
 }
 
 function onTabUpdated(tabId, changeInfo, tab) {
+  if (!uid) return;
   if (changeInfo.status === 'complete' && tab.active) {
     switchTab(tab.url, tab.title);
   }
 }
 
 function onFocusChanged(windowId) {
+  if (!uid) return;
   if (windowId === chrome.windows.WINDOW_ID_NONE) {
     flushActiveTab();
   } else {
