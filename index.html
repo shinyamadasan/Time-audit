@@ -1399,9 +1399,29 @@ button, a, [role="button"],
         </select>
       </div>
     </div>
+    <div class="setting-row">
+      <div><div class="setting-label">Usual sleep time</div><div class="setting-sub">When you typically fall asleep</div></div>
+      <div class="setting-control"><input type="time" id="set-sleep-time" onchange="saveSettings()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:11px;padding:5px 7px;border-radius:6px;outline:none"></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">Usual wake time</div><div class="setting-sub">When you typically wake up</div></div>
+      <div class="setting-control"><input type="time" id="set-wake-time" onchange="saveSettings()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:11px;padding:5px 7px;border-radius:6px;outline:none"></div>
+    </div>
+    <div class="setting-row" style="border-bottom:none">
+      <div><div class="setting-label">Sleep reminder</div><div class="setting-sub">When to prompt you to confirm sleep</div></div>
+      <div class="setting-control">
+        <select id="set-sleep-reminder-min" onchange="saveSettings()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:11px;padding:5px 7px;border-radius:6px;outline:none">
+          <option value="0">At wake time</option>
+          <option value="15">15 min after</option>
+          <option value="30">30 min after</option>
+          <option value="60">1 hr after</option>
+          <option value="120">2 hrs after</option>
+        </select>
+      </div>
+    </div>
   </div>
 
-  
+
 
   <div class="settings-section">
     <div class="settings-title">Identity</div>
@@ -1910,6 +1930,55 @@ button, a, [role="button"],
 </div>
 
 
+<!-- ── Sleep setup (onboarding) ── -->
+<div class="review-overlay" id="sleep-setup-overlay" style="display:none">
+<div class="review-modal">
+  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--deep);font-weight:700;margin-bottom:3px">One-time setup</div>
+  <div style="font-size:18px;font-weight:700;margin-bottom:6px">Sleep tracking</div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:16px">ChronaSense will auto-log your sleep daily. Set your usual schedule — you can adjust any day.</div>
+  <div class="field"><label>I usually fall asleep at</label><input type="time" id="setup-sleep-time" value="23:00"></div>
+  <div class="field"><label>I usually wake up at</label><input type="time" id="setup-wake-time" value="07:00"></div>
+  <div class="field"><label>Remind me to confirm sleep</label>
+    <select id="setup-reminder-min" style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;padding:8px 10px;border-radius:var(--r);outline:none">
+      <option value="0">Right at wake time</option>
+      <option value="15">15 min after waking</option>
+      <option value="30" selected>30 min after waking</option>
+      <option value="60">1 hour after waking</option>
+      <option value="120">2 hours after waking</option>
+    </select>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+    <button class="btn ghost" onclick="skipSleepSetup()">Skip for now</button>
+    <button class="btn primary" onclick="saveSleepSetup()">Save</button>
+  </div>
+</div></div>
+
+<!-- ── Daily sleep reminder ── -->
+<div class="review-overlay" id="sleep-reminder-overlay" style="display:none">
+<div class="review-modal">
+  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--deep);font-weight:700;margin-bottom:3px">Sleep log</div>
+  <div style="font-size:18px;font-weight:700;margin-bottom:16px">Log last night's sleep?</div>
+  <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:14px;margin-bottom:14px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Adjust if needed:</div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Fell asleep</div>
+        <input type="time" id="remind-sleep-time" style="background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:6px 8px;border-radius:6px;outline:none">
+      </div>
+      <div style="color:var(--muted);font-size:16px;padding-top:14px">→</div>
+      <div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Woke up</div>
+        <input type="time" id="remind-wake-time" style="background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:6px 8px;border-radius:6px;outline:none">
+      </div>
+      <div style="padding-top:14px;font-size:12px;color:var(--deep);font-weight:600" id="remind-duration"></div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button class="btn ghost" onclick="skipSleepReminder()">Skip today</button>
+    <button class="btn primary" onclick="confirmSleepLog()">Log sleep</button>
+  </div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 <!-- place this BEFORE <script> -->
 <audio id="focus-music" loop>
@@ -1930,12 +1999,13 @@ button, a, [role="button"],
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
-let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22 };
+let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22, sleepTime:'23:00', wakeTime:'07:00', sleepReminderMin:30, sleepSetupDone:false };
 let reviews = {};
 let weeklyReviews = {};
 let intention = '';
 let running = false;
 let ticker = null;
+let pcTimeLiveTicker = null;
 let totalSecs = 1800;
 let remaining = 1800;
 let distractionDebt = 0;
@@ -2208,6 +2278,8 @@ async function _startTimer(task) {
     remaining <= 0 ? doPing() : updateRing();
   }, 1000);
   scheduleNativePing(totalSecs);
+  if ((task || '').toLowerCase() === 'pc time') startPCTimeLive();
+  else stopPCTimeLive();
   persist();
   syncTimerState();
 }
@@ -2479,11 +2551,27 @@ function doPing() {
   playAlert(2, 400);
   document.title = 'ChronaSense';
 
-  // Auto-log the completed block
-  const task   = currentTask || lastTaskForRepeat || intention || 'Work';
-  const lastEntry = entries.find(e => !e.missed && !e.deleted && !e.break && !e.away);
-  const energy = lastEntry?.energy || 'shallow';
-  autoLogBlock(task, energy, prevBlockStart, now);
+}
+
+function startPCTimeLive() {
+  clearInterval(pcTimeLiveTicker);
+  pcTimeLiveTicker = setInterval(() => {
+    if (!running || (currentTask || '').toLowerCase() !== 'pc time') {
+      clearInterval(pcTimeLiveTicker);
+      pcTimeLiveTicker = null;
+      return;
+    }
+    const now = Date.now();
+    const tsStart = blockStartTime || (now - totalSecs * 1000);
+    const lastEntry = entries.find(e => !e.missed && !e.deleted && !e.break && !e.away);
+    const energy = lastEntry?.energy || 'shallow';
+    autoLogBlock('PC Time', energy, tsStart, now);
+  }, 60000);
+}
+
+function stopPCTimeLive() {
+  clearInterval(pcTimeLiveTicker);
+  pcTimeLiveTicker = null;
 }
 
 function autoLogBlock(activity, energy, tsStart, tsEnd) {
@@ -5943,6 +6031,9 @@ function renderSettings() {
   document.getElementById('set-deepgoal').value=settings.deepGoal;
   document.getElementById('set-exitdelay').value=settings.exitDelay||10;
   document.getElementById('set-timezone').value=settings.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  document.getElementById('set-sleep-time').value=settings.sleepTime||'23:00';
+  document.getElementById('set-wake-time').value=settings.wakeTime||'07:00';
+  document.getElementById('set-sleep-reminder-min').value=String(settings.sleepReminderMin??30);
   const rh = settings.reviewHour ?? 22;
   document.getElementById('set-review-hour').value = `${String(rh).padStart(2,'0')}:00`;
   const toneEl = document.getElementById('set-coach-tone');
@@ -5995,6 +6086,9 @@ function saveSettings(){
   settings.deepGoal=parseInt(document.getElementById('set-deepgoal').value)||20;
   settings.exitDelay=parseInt(document.getElementById('set-exitdelay').value)||10;
   settings.timezone=document.getElementById('set-timezone').value;
+  settings.sleepTime=document.getElementById('set-sleep-time').value||'23:00';
+  settings.wakeTime=document.getElementById('set-wake-time').value||'07:00';
+  settings.sleepReminderMin=parseInt(document.getElementById('set-sleep-reminder-min').value)||30;
   // Dedicated key so Firebase can never silently overwrite the local timezone
   localStorage.setItem('ta3-tz', settings.timezone);
   settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
@@ -6142,6 +6236,162 @@ function saveReview(){
   if (document.getElementById('reflect-daily-reviews')) renderDailyReflections();
   showToast('Review saved ✓');
 }
+// ── Sleep tracking ──────────────────────────────────────
+function makeDateAtTime(dateKey, hhmm) {
+  // Returns timestamp for dateKey at hhmm in user's timezone (best-effort)
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const approxUtc = new Date(`${dateKey}T${hhmm}:00Z`).getTime();
+  const tzParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(new Date(approxUtc));
+  const tzH = parseInt(tzParts.find(p => p.type === 'hour').value) % 24;
+  const tzM = parseInt(tzParts.find(p => p.type === 'minute').value);
+  const [wantH, wantM] = hhmm.split(':').map(Number);
+  const offsetMs = ((wantH * 60 + wantM) - (tzH * 60 + tzM)) * 60000;
+  return approxUtc + offsetMs;
+}
+
+function prevDateKey(dateKey) {
+  const d = new Date(dateKey + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function getSleepDefaults() {
+  const sleepHHMM = settings.sleepTime || '23:00';
+  const wakeHHMM  = settings.wakeTime  || '07:00';
+  const todayKey  = toDateKey(new Date());
+  const wakeTs    = makeDateAtTime(todayKey, wakeHHMM);
+  const [sH] = sleepHHMM.split(':').map(Number);
+  const [wH] = wakeHHMM.split(':').map(Number);
+  // If sleep hour > wake hour (spans midnight) → sleep was yesterday
+  const sleepDateKey = sH > wH ? prevDateKey(todayKey) : todayKey;
+  const sleepTs = makeDateAtTime(sleepDateKey, sleepHHMM);
+  return { sleepTs, wakeTs };
+}
+
+function fmtSleepDur(sleepTs, wakeTs) {
+  const mins = Math.round((wakeTs - sleepTs) / 60000);
+  if (mins <= 0) return '';
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return h > 0 ? `${h}h ${m > 0 ? m + 'm' : ''}`.trim() : `${m}m`;
+}
+
+function logSleepEntry(sleepTs, wakeTs) {
+  if (wakeTs <= sleepTs) { showToast('Wake time must be after sleep time'); return; }
+  const dur = Math.round((wakeTs - sleepTs) / 60000);
+  const alreadyLogged = entries.some(e =>
+    !e.deleted && e.activity === 'Sleep' &&
+    Math.abs((e.tsStart || e.ts) - sleepTs) < 30 * 60000
+  );
+  if (alreadyLogged) { showToast('Sleep already logged for this time'); return; }
+  const entry = {
+    id: sleepTs, ts: wakeTs, tsStart: sleepTs, updatedAt: Date.now(),
+    blockIntervalMin: dur, date: toDateKey(new Date(sleepTs)),
+    activity: 'Sleep', energy: 'recovery', category: 'recovery',
+    away: true, autoLogged: true, quickLogged: true, onPlan: false, retro: false
+  };
+  entries.unshift(entry);
+  persist(); renderToday(); syncEntries();
+  showToast(`Sleep logged · ${fmtSleepDur(sleepTs, wakeTs)}`);
+  localStorage.setItem('ta3-sleep-reminded', toDateKey(new Date()));
+}
+
+function checkSleepSetup() {
+  if (!settings.sleepSetupDone) {
+    setTimeout(() => {
+      document.getElementById('sleep-setup-overlay').style.display = 'flex';
+    }, 1500);
+  }
+}
+
+function saveSleepSetup() {
+  settings.sleepTime = document.getElementById('setup-sleep-time').value || '23:00';
+  settings.wakeTime  = document.getElementById('setup-wake-time').value  || '07:00';
+  settings.sleepReminderMin = parseInt(document.getElementById('setup-reminder-min').value) || 30;
+  settings.sleepSetupDone = true;
+  persist();
+  if (fbRoomRef) fbRoomRef.update({ settings });
+  document.getElementById('sleep-setup-overlay').style.display = 'none';
+  showToast('Sleep schedule saved');
+}
+
+function skipSleepSetup() {
+  settings.sleepSetupDone = true;
+  persist();
+  if (fbRoomRef) fbRoomRef.update({ settings });
+  document.getElementById('sleep-setup-overlay').style.display = 'none';
+}
+
+function checkSleepReminder() {
+  if (!settings.sleepSetupDone) return;
+  const todayKey = toDateKey(new Date());
+  if (localStorage.getItem('ta3-sleep-reminded') === todayKey) return;
+  // Check if already logged sleep today
+  const alreadyLogged = entries.some(e => !e.deleted && e.activity === 'Sleep' && e.date === todayKey);
+  if (alreadyLogged) { localStorage.setItem('ta3-sleep-reminded', todayKey); return; }
+  // Check if it's time to show reminder (wakeTime + reminderMin)
+  const [wH, wM] = (settings.wakeTime || '07:00').split(':').map(Number);
+  const reminderMin = settings.sleepReminderMin ?? 30;
+  const nowMinutes = tzHour(Date.now()) * 60 + (() => {
+    const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, minute: '2-digit' }).formatToParts(new Date());
+    return parseInt(p.find(x => x.type === 'minute').value);
+  })();
+  const triggerMin = wH * 60 + wM + reminderMin;
+  if (nowMinutes >= triggerMin) {
+    setTimeout(() => openSleepReminder(), 1000);
+  }
+}
+
+function openSleepReminder() {
+  const { sleepTs, wakeTs } = getSleepDefaults();
+  const toHHMM = ts => {
+    const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(ts));
+    const h = String(parseInt(p.find(x=>x.type==='hour').value) % 24).padStart(2,'0');
+    const m = p.find(x=>x.type==='minute').value.padStart(2,'0');
+    return `${h}:${m}`;
+  };
+  document.getElementById('remind-sleep-time').value = toHHMM(sleepTs);
+  document.getElementById('remind-wake-time').value  = toHHMM(wakeTs);
+  document.getElementById('remind-duration').textContent = fmtSleepDur(sleepTs, wakeTs);
+  const updateDur = () => {
+    const s = document.getElementById('remind-sleep-time').value;
+    const w = document.getElementById('remind-wake-time').value;
+    if (s && w) {
+      const todayKey = toDateKey(new Date());
+      const [sH] = s.split(':').map(Number);
+      const [wH2] = w.split(':').map(Number);
+      const sDate = sH > wH2 ? prevDateKey(todayKey) : todayKey;
+      const st = makeDateAtTime(sDate, s);
+      const wt = makeDateAtTime(todayKey, w);
+      document.getElementById('remind-duration').textContent = fmtSleepDur(st, wt);
+    }
+  };
+  document.getElementById('remind-sleep-time').oninput = updateDur;
+  document.getElementById('remind-wake-time').oninput  = updateDur;
+  document.getElementById('sleep-reminder-overlay').style.display = 'flex';
+}
+
+function confirmSleepLog() {
+  const s = document.getElementById('remind-sleep-time').value;
+  const w = document.getElementById('remind-wake-time').value;
+  const todayKey = toDateKey(new Date());
+  const [sH] = s.split(':').map(Number);
+  const [wH2] = w.split(':').map(Number);
+  const sDate = sH > wH2 ? prevDateKey(todayKey) : todayKey;
+  const sleepTs = makeDateAtTime(sDate, s);
+  const wakeTs  = makeDateAtTime(todayKey, w);
+  document.getElementById('sleep-reminder-overlay').style.display = 'none';
+  logSleepEntry(sleepTs, wakeTs);
+}
+
+function skipSleepReminder() {
+  localStorage.setItem('ta3-sleep-reminded', toDateKey(new Date()));
+  document.getElementById('sleep-reminder-overlay').style.display = 'none';
+}
+
 function checkReviewPrompt(){const rh=settings.reviewHour??22;if(tzHour(Date.now())>=rh&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
 
 function renderYesterdayPromise() {
@@ -6951,6 +7201,7 @@ updateRing();
 renderToday();
 initAutoSync();
 initNativeNotifications();
+setTimeout(() => { checkSleepSetup(); checkSleepReminder(); }, 2000);
 // Auto-start "PC Time" on fresh browser open (desktop only, not mobile browsers)
 // Wait up to 5s for Firebase to tell us if a timer is already running elsewhere.
 // If Firebase says a timer is running, adopt that — don't overwrite it.

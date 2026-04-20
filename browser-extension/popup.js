@@ -42,6 +42,18 @@ document.getElementById('btn-open-settings').addEventListener('click', () => {
   renderSiteList();
 });
 
+// Pre-fill domain if notification "Track this" was clicked
+chrome.storage.local.get(['pendingAddDomain'], ({ pendingAddDomain }) => {
+  if (pendingAddDomain) {
+    chrome.storage.local.remove('pendingAddDomain');
+    viewMain.style.display     = 'none';
+    viewSettings.style.display = 'block';
+    document.getElementById('input-domain').value = pendingAddDomain;
+    document.getElementById('input-label').focus();
+    renderSiteList();
+  }
+});
+
 document.getElementById('btn-back').addEventListener('click', () => {
   viewSettings.style.display = 'none';
   viewMain.style.display     = 'block';
