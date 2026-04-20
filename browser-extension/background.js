@@ -180,13 +180,8 @@ function switchTab(url, title) {
 }
 
 function recordStart(url, title) {
-  const domain = getDomain(url);
-  if (!domain || !trackedSites[domain]) {
-    console.log('[Chronasense] not tracked:', url);
-    activeTab = null;
-    return;
-  }
-  console.log('[Chronasense] started tracking:', domain);
+  const domain = getAnyDomain(url);
+  if (!domain) { activeTab = null; return; }
   const now = Date.now();
   activeTab = { url, title, domain, startedAt: now, sessionId: now };
 }
@@ -197,9 +192,12 @@ function flushActiveTab() {
   const durationMs = now - activeTab.startedAt;
   const tab = activeTab;
   activeTab = null;
-  console.log('[Chronasense] flush:', tab.domain, Math.round(durationMs/1000)+'s', durationMs >= MIN_SESSION_MS ? '→ logging' : '→ too short, skipped');
-  if (durationMs >= MIN_SESSION_MS) {
+  if (durationMs < MIN_SESSION_MS) return;
+  if (trackedSites[tab.domain]) {
+    console.log('[Chronasense] flush:', tab.domain, Math.round(durationMs/1000)+'s → logging');
     logSession(tab.domain, tab.title, tab.sessionId, now, now - tab.sessionId);
+  } else {
+    maybeNotifyUnknown(tab.domain, durationMs);
   }
 }
 
@@ -207,13 +205,46 @@ function flushAndRestart() {
   if (!activeTab) return;
   const now = Date.now();
   const durationMs = now - activeTab.startedAt;
-  if (durationMs >= MIN_SESSION_MS) {
-    // Upsert the same entry (sessionId stays constant) with updated total duration
+  if (durationMs >= MIN_SESSION_MS && trackedSites[activeTab.domain]) {
     logSession(activeTab.domain, activeTab.title, activeTab.sessionId, now, now - activeTab.sessionId);
   }
-  // Keep same sessionId so next flush overwrites the same Firebase entry
   activeTab = { ...activeTab, startedAt: now };
 }
+
+async function maybeNotifyUnknown(domain, durationMs) {
+  const stored = await chrome.storage.local.get(['dismissedSites']);
+  const dismissed = stored.dismissedSites || [];
+  if (dismissed.includes(domain)) return;
+
+  const mins = Math.round(durationMs / 60000);
+  chrome.notifications.create(`unknown:${domain}`, {
+    type: 'basic',
+    iconUrl: chrome.runtime.getURL('icon128.png'),
+    title: 'Untracked site',
+    message: `You spent ${mins}m on ${domain}. Add to Chronasense tracking?`,
+    buttons: [{ title: 'Track this' }, { title: 'Never ask' }],
+    requireInteraction: true
+  });
+}
+
+chrome.notifications.onButtonClicked.addListener(async (notifId, btnIndex) => {
+  if (!notifId.startsWith('unknown:')) return;
+  const domain = notifId.slice(8);
+  chrome.notifications.clear(notifId);
+  if (btnIndex === 0) {
+    // Pre-fill popup and open it
+    await chrome.storage.local.set({ pendingAddDomain: domain });
+    chrome.action.openPopup().catch(() => {
+      // openPopup() may fail if not user-initiated — store for next popup open
+    });
+  } else {
+    // Never ask again for this domain
+    const stored = await chrome.storage.local.get(['dismissedSites']);
+    const dismissed = stored.dismissedSites || [];
+    if (!dismissed.includes(domain)) dismissed.push(domain);
+    await chrome.storage.local.set({ dismissedSites: dismissed });
+  }
+});
 
 // ── Firebase logging ──
 async function logSession(domain, title, startTs, endTs, durationMs) {
@@ -279,6 +310,19 @@ function getDomain(url) {
       if (h === domain || h.endsWith('.' + domain)) return domain;
     }
     return null;
+  } catch { return null; }
+}
+
+function getAnyDomain(url) {
+  try {
+    const h = new URL(url).hostname.replace(/^www\./, '');
+    if (!h || h === 'newtab' || url.startsWith('chrome://') || url.startsWith('edge://') || url.startsWith('about:')) return null;
+    // Check if it matches a tracked site (use canonical domain key)
+    if (trackedSites[h]) return h;
+    for (const domain of Object.keys(trackedSites)) {
+      if (h === domain || h.endsWith('.' + domain)) return domain;
+    }
+    return h; // Unknown domain — return as-is
   } catch { return null; }
 }
 
