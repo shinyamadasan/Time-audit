@@ -5,15 +5,17 @@ let activeTab  = null;
 let authToken  = null;
 let uid        = null;
 let trackedSites = {};  // loaded from storage, merges defaults + custom
+let userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;  // fallback to device
 
 // ── Startup ──
 chrome.runtime.onStartup.addListener(init);
 chrome.runtime.onInstalled.addListener(init);
 
 async function init() {
-  const stored = await chrome.storage.local.get(['uid', 'authToken', 'customSites', 'removedSites']);
-  uid       = stored.uid       || null;
-  authToken = stored.authToken || null;
+  const stored = await chrome.storage.local.get(['uid', 'authToken', 'customSites', 'removedSites', 'userTimezone']);
+  uid          = stored.uid          || null;
+  authToken    = stored.authToken    || null;
+  userTimezone = stored.userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   loadTrackedSites(stored.customSites || {}, stored.removedSites || []);
   if (uid) startTracking();
 }
@@ -91,6 +93,8 @@ export async function signIn() {
     uid       = fbData.localId;
     authToken = fbData.idToken;
     await chrome.storage.local.set({ uid, authToken, email: userInfo.email, googleToken, fbRefreshToken: fbData.refreshToken });
+    // Fetch user's timezone from their Firebase settings
+    fetchUserTimezone(fbData.localId, fbData.idToken);
     startTracking();
     return { uid, email: userInfo.email };
   } catch (e) {
@@ -111,7 +115,7 @@ export async function signOut() {
 async function refreshAuthToken() {
   try {
     const stored = await chrome.storage.local.get(['fbRefreshToken']);
-    if (!stored.fbRefreshToken) return false;
+    if (!stored.fbRefreshToken) { console.warn('[Chronasense] no refresh token stored — please sign out and sign back in'); return false; }
     const res = await fetch(
       `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_CONFIG.apiKey}`,
       {
@@ -183,17 +187,19 @@ function recordStart(url, title) {
     return;
   }
   console.log('[Chronasense] started tracking:', domain);
-  activeTab = { url, title, domain, startedAt: Date.now() };
+  const now = Date.now();
+  activeTab = { url, title, domain, startedAt: now, sessionId: now };
 }
 
 function flushActiveTab() {
   if (!activeTab) return;
-  const durationMs = Date.now() - activeTab.startedAt;
+  const now = Date.now();
+  const durationMs = now - activeTab.startedAt;
   const tab = activeTab;
   activeTab = null;
   console.log('[Chronasense] flush:', tab.domain, Math.round(durationMs/1000)+'s', durationMs >= MIN_SESSION_MS ? '→ logging' : '→ too short, skipped');
   if (durationMs >= MIN_SESSION_MS) {
-    logSession(tab.domain, tab.title, tab.startedAt, Date.now(), durationMs);
+    logSession(tab.domain, tab.title, tab.sessionId, now, now - tab.sessionId);
   }
 }
 
@@ -202,9 +208,10 @@ function flushAndRestart() {
   const now = Date.now();
   const durationMs = now - activeTab.startedAt;
   if (durationMs >= MIN_SESSION_MS) {
-    logSession(activeTab.domain, activeTab.title, activeTab.startedAt, now, durationMs);
+    // Upsert the same entry (sessionId stays constant) with updated total duration
+    logSession(activeTab.domain, activeTab.title, activeTab.sessionId, now, now - activeTab.sessionId);
   }
-  // Restart the segment
+  // Keep same sessionId so next flush overwrites the same Firebase entry
   activeTab = { ...activeTab, startedAt: now };
 }
 
@@ -275,8 +282,21 @@ function getDomain(url) {
   } catch { return null; }
 }
 
+async function fetchUserTimezone(uidVal, token) {
+  try {
+    const url = `${FIREBASE_CONFIG.databaseURL}rooms/uid_${uidVal}/settings/timezone.json?auth=${token}`;
+    const res  = await fetch(url);
+    const tz   = await res.json();
+    if (tz && typeof tz === 'string') {
+      userTimezone = tz;
+      await chrome.storage.local.set({ userTimezone: tz });
+      console.log('[Chronasense] timezone set to', tz);
+    }
+  } catch (e) { console.warn('[Chronasense] could not fetch timezone', e); }
+}
+
 function toDateKey(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return new Intl.DateTimeFormat('en-CA', { timeZone: userTimezone }).format(d);
 }
 
 function getBucket(entry) {
