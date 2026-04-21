@@ -4440,6 +4440,7 @@ function renderToday() {
   applyContextualVisibility(todayE);
 
   // Timeline summary
+  const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(todayE)) : todayE.length > 0;
   document.getElementById('timeline-summary').textContent =
     workStarted ? `${computeDeepHrs(todayE)}h deep · ${todayE.length} blocks` : '';
 
