@@ -158,21 +158,18 @@ function startTracking() {
 }
 
 function onTabActivated(info) {
-  if (!uid) return;
   chrome.tabs.get(info.tabId, (tab) => {
     if (tab) switchTab(tab.url, tab.title);
   });
 }
 
 function onTabUpdated(tabId, changeInfo, tab) {
-  if (!uid) return;
   if (changeInfo.status === 'complete' && tab.active) {
     switchTab(tab.url, tab.title);
   }
 }
 
 function onFocusChanged(windowId) {
-  if (!uid) return;
   if (windowId === chrome.windows.WINDOW_ID_NONE) {
     flushActiveTab();
   } else {

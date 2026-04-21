@@ -1219,14 +1219,7 @@ button, a, [role="button"],
   <!-- Awareness Signal -->
   <div id="awareness-signal" style="display:none"></div>
 
-  <!-- Untracked banner — neutral, non-alarming -->
-  <div id="untracked-banner" style="display:none;background:var(--bg2);box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);padding:11px 14px;margin-bottom:12px;align-items:center;gap:10px">
-    <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:600;color:var(--text)" id="untracked-banner-text">2h not yet logged</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:1px">Fill in the gaps when you have a moment</div>
-    </div>
-    <button class="btn sm ghost" style="flex-shrink:0;font-size:11px" onclick="scrollToTimeline()">Fill gaps ↓</button>
-  </div>
+
 
   <div class="timeline-section">
     <div class="section-label">
@@ -1517,10 +1510,7 @@ button, a, [role="button"],
   <button class="nav-btn" id="nav-week" onclick="showView('week')">
     <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Week
   </button>
-  <button class="nav-log" id="nav-past-btn" onclick="openGapsPicker()" style="display:none">
-    <div class="nav-log-inner" style="background:var(--distraction);color:#fff">+ Past block</div>
-  </button>
-  <button class="nav-btn" id="nav-reflect" onclick="showView('reflect');renderReflectView()">
+<button class="nav-btn" id="nav-reflect" onclick="showView('reflect');renderReflectView()">
     <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>Reflect
   </button>
   <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
@@ -1769,18 +1759,6 @@ button, a, [role="button"],
 </div>
 
 <!-- ══ RETROACTIVE LOG MODAL ══ -->
-<!-- ══ GAPS PICKER ══ -->
-<div class="overlay" id="gaps-overlay" onclick="if(event.target.id==='gaps-overlay')closeModal('gaps-overlay')">
-<div class="modal">
-  <div class="modal-handle"></div>
-  <div class="modal-tag">UNLOGGED TIME</div>
-  <div class="modal-title">Fill in the gaps</div>
-  <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Tap a block to log it, or use the quick away buttons.</div>
-  <div id="gaps-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:4px"></div>
-  <div style="display:flex;justify-content:flex-end;margin-top:16px">
-    <button class="btn ghost" onclick="closeModal('gaps-overlay')">Done</button>
-  </div>
-</div></div>
 
 <div class="overlay" id="retro-overlay" onclick="if(event.target.id==='retro-overlay')closeModal('retro-overlay')">
 <div class="modal">
@@ -2452,6 +2430,29 @@ function startBreakCustom() {
 
 function startBreak(mins) {
   closeModal('break-overlay');
+
+  // Auto-log the current task up to now before pausing
+  if (running && currentTask) {
+    const tsEnd = Date.now();
+    const tsStart = taskStartTime || blockStartTime || (tsEnd - totalSecs * 1000);
+    const dur = Math.round((tsEnd - tsStart) / 60000);
+    const prevEnergy = entries.find(e => !e.missed && !e.deleted && !e.break && e.energy)?.energy || 'deep';
+    if (dur >= 1) {
+      const workEntry = {
+        id: tsEnd, ts: tsEnd, tsStart,
+        blockIntervalMin: dur,
+        date: toDateKey(new Date()),
+        activity: currentTask, energy: prevEnergy,
+        onPlan: true, retro: false
+      };
+      workEntry.category = getBucket(workEntry);
+      workEntry.originalLabel = prevEnergy;
+      entries.unshift(workEntry);
+      persist(); renderToday(); syncEntries();
+      showToast(`Logged · ${currentTask} · ${fmtDur(dur)}`);
+    }
+  }
+
   breakStartTs = Date.now();
   breakEndsAt = Date.now() + mins * 60000;
   breakActive = true;
@@ -2599,10 +2600,12 @@ function autoLogBlock(activity, energy, tsStart, tsEnd) {
 
   const SEAM_TOLERANCE_MS = 2 * 60 * 1000;
   const prev = entries.find(e => !e.missed && !e.deleted && e.activity && !e.away);
+  const prevStart = prev ? (prev.tsStart || prev.ts) : 0;
   const canExtend = prev &&
     prev.activity === activity &&
     prev.energy === energy &&
-    Math.abs(prev.ts - tsStart) <= SEAM_TOLERANCE_MS;
+    tsStart >= prevStart - SEAM_TOLERANCE_MS &&
+    tsStart <= prev.ts + SEAM_TOLERANCE_MS;
 
   if (canExtend) {
     prev.ts = tsEnd;
@@ -2768,10 +2771,12 @@ function _doQuickSave(activity, energy) {
   // a new fragment — keeps "Still on: X" as one continuous block.
   const SEAM_TOLERANCE_MS = 2 * 60 * 1000;
   const prev = entries.find(e => !e.missed && !e.deleted && e.activity && !e.away);
+  const prevStart2 = prev ? (prev.tsStart || prev.ts) : 0;
   const canExtend = prev &&
     prev.activity === activity &&
     prev.energy === energy &&
-    Math.abs(prev.ts - tsStart) <= SEAM_TOLERANCE_MS;
+    tsStart >= prevStart2 - SEAM_TOLERANCE_MS &&
+    tsStart <= prev.ts + SEAM_TOLERANCE_MS;
 
   if (canExtend) {
     prev.ts = _now;
@@ -3435,7 +3440,6 @@ let retroEnergy = '';
 let editingEntryId = null;     // id of entry being edited (null = new entry)
 let editingMergedIds = null;  // [id, ...] when editing a merged (×N) display block
 let editingEntryBase = null;  // { startDate, crossesMidnight } for timestamp reconstruction
-let _openedFromGaps = false;  // true when retro-overlay was opened from the gaps picker
 function populateRetroChips() {
   // Build unique recent activities (last 10 distinct, preserving energy type)
   const seen = new Set();
@@ -3567,7 +3571,6 @@ function saveRetroEntry() {
     document.getElementById('retro-modal-title').textContent = 'What were you doing?';
     closeModal('retro-overlay');
     showToast(spansMidnight ? 'Split at midnight · block updated' : 'Block updated');
-    if (_openedFromGaps) { _openedFromGaps = false; setTimeout(openGapsPicker, 200); }
   } else {
     if (spansMidnight) {
       entries.push(makeEntry(midnight - 1, midnight, tsStart, startDateKey));
@@ -3578,15 +3581,13 @@ function saveRetroEntry() {
       const dur1 = Math.round((midnight - tsStart) / 60000);
       const dur2 = Math.round((tsEnd - midnight) / 60000);
       showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
-      if (_openedFromGaps) { _openedFromGaps = false; setTimeout(openGapsPicker, 200); }
-    } else {
+      } else {
       entries.push(makeEntry(tsEnd, tsEnd, tsStart, startDateKey));
       entries.sort((a,b) => b.ts - a.ts);
       persist(); renderToday(); syncEntries();
       closeModal('retro-overlay');
       showToast(`Logged retroactively · ${fmtDur(dur)}`, false, retroEnergy);
-      if (_openedFromGaps) { _openedFromGaps = false; setTimeout(openGapsPicker, 200); }
-    }
+      }
   }
 }
 
@@ -3980,305 +3981,15 @@ function computeGaps(todayEntries, dayNow) {
   return gaps;
 }
 
-function computeUntrackedMin(todayEntries) {
-  return computeGaps(todayEntries).reduce((s, g) => s + g.gapMin, 0);
-}
 
 function scrollToTimeline() {
   document.getElementById('timeline-blocks').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// Open retro log pre-filled with exact gap times — one tap to fill a gap
-function openGapsPicker() {
-  const viewE = getViewingEntries();
-  const dayNow = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
-  const gaps = computeGaps(viewE, dayNow);
-  if (!gaps.length) { showToast('No unlogged gaps found'); return; }
-  renderGapsList(gaps);
-  document.getElementById('gaps-overlay').classList.add('open');
-}
 
-// Split a gap into named time-period chunks (Night/Morning/Afternoon/Evening).
-// Only kicks in for gaps > 3h; chunks < 20 min are discarded.
-function splitGapIntoChunks(gap) {
-  const MIN_TO_SPLIT_MS = 3 * 60 * 60 * 1000;
-  const MIN_CHUNK_MS    = 20 * 60 * 1000;
-  const tz  = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const end = gap.isCurrent ? Date.now() : gap.ts;
-  if (end - gap.tsStart <= MIN_TO_SPLIT_MS) return [gap];
-
-  const PERIODS = [
-    { name: 'Night',     h: 0  },
-    { name: 'Morning',   h: 6  },
-    { name: 'Afternoon', h: 12 },
-    { name: 'Evening',   h: 18 },
-    { name: 'Night',     h: 24 }, // sentinel for next midnight
-  ];
-
-  const dateKey = getDateInTZ(gap.tsStart, tz);
-  const bTimes  = PERIODS.map(p => {
-    const ts = tzParseTime(dateKey, String(p.h === 24 ? 0 : p.h).padStart(2,'0') + ':00');
-    return p.h === 24 ? ts + 86400000 : ts;
-  });
-
-  const chunks = [];
-  let cursor = gap.tsStart;
-  for (let i = 0; i < PERIODS.length - 1; i++) {
-    if (bTimes[i + 1] <= cursor || bTimes[i] >= end) continue;
-    const cs = Math.max(cursor, bTimes[i]);
-    const ce = Math.min(bTimes[i + 1], end);
-    if (ce - cs >= MIN_CHUNK_MS) {
-      chunks.push({ ...gap, tsStart: cs, ts: ce,
-        gapMin: Math.round((ce - cs) / 60000),
-        isCurrent: gap.isCurrent && ce >= end,
-        periodName: PERIODS[i].name });
-    }
-    cursor = ce;
-    if (cursor >= end) break;
-  }
-  return chunks.length >= 2 ? chunks : [gap];
-}
-
-// Unified instant-log: logs a block immediately without opening any form.
-// Used by primary choices, task chips, and away buttons.
-function logInstantBlock(tsStart, tsEnd, activity, energy, gapIndex) {
-  const dur = Math.round((tsEnd - tsStart) / 60000);
-  const awayActivities = new Set(['Sleep','Commute','Break','Offline / Away','Recovery']);
-  const entry = {
-    id: Date.now(), ts: tsEnd, tsStart,
-    blockIntervalMin: dur, date: toDateKey(new Date(tsStart)),
-    activity, energy, onPlan: energy !== 'waste',
-    ...(awayActivities.has(activity) ? { away: true } : { retro: true }),
-  };
-  entry.category = getBucket(entry);
-  entry.originalLabel = entry.energy || null;
-  getActivityColor(activity);
-  entries.unshift(entry);
-  _lastInstantLogId = entry.id;
-  persist(); renderToday(); syncEntries();
-  const remaining = computeGaps(getTodayEntries());
-  if (!remaining.length) {
-    closeModal('gaps-overlay');
-    showToast(`✓ ${activity} · All gaps filled!`, true);
-  } else {
-    renderGapsList(remaining);
-    showToast(`✓ ${activity}`, true);
-  }
-}
-
-// Read the current (possibly user-adjusted) time range for a gap card.
-// Falls back to the original gap bounds stored as data attributes.
-function getChunkTimes(cardIdx) {
-  const card = document.getElementById(`gap-item-${cardIdx}`);
-  if (!card) return null;
-  const tz         = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const gapTsStart = parseInt(card.dataset.tsStart);
-  const gapTsEnd   = card.dataset.isCurrent === 'true' ? Date.now() : parseInt(card.dataset.tsEnd);
-  // Use each end's own calendar date so midnight-spanning gaps are handled
-  // without a fragile +24h wrap that corrupts within-day adjustments.
-  const startDateKey = getDateInTZ(gapTsStart, tz);
-  const endDateKey   = getDateInTZ(gapTsEnd,   tz);
-  const si = document.getElementById(`gap-start-${cardIdx}`);
-  const ei = document.getElementById(`gap-end-${cardIdx}`);
-  const isHHMM = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
-  let ts0 = (si?.value && isHHMM(si.value)) ? tzParseTime(startDateKey, si.value) : gapTsStart;
-  let ts1 = (ei?.value && isHHMM(ei.value)) ? tzParseTime(endDateKey,   ei.value) : gapTsEnd;
-  // Clamp to gap bounds — never expand beyond original range
-  ts0 = Math.max(ts0, gapTsStart);
-  ts1 = Math.min(ts1, gapTsEnd);
-  return { ts0, ts1 };
-}
-
-function updateGapDuration(cardIdx) {
-  const t = getChunkTimes(cardIdx);
-  if (!t) return;
-  const dur = Math.max(0, Math.round((t.ts1 - t.ts0) / 60000));
-  const badge = document.getElementById(`gap-dur-${cardIdx}`);
-  if (badge) badge.textContent = fmtDur(dur);
-}
-
-// Auto-format a gap time text input to HH:MM as the user types digits.
-// Strips non-digits, auto-inserts ":" after the second digit.
-// Shows number-pad on mobile via inputmode=numeric so no AM/PM confusion.
-function gapTimeAutoFormat(el, cardIdx) {
-  let v = el.value.replace(/\D/g, '').slice(0, 4); // digits only, max 4
-  if (v.length >= 3) {
-    v = v.slice(0, 2) + ':' + v.slice(2, 4);
-  }
-  el.value = v;
-  updateGapDuration(cardIdx);
-}
-
-function logGapChunk(cardIdx, activity, energy) {
-  const t = getChunkTimes(cardIdx);
-  if (!t) return;
-  if (t.ts1 <= t.ts0) { showToast('End time must be after start time'); return; }
-  logInstantBlock(t.ts0, t.ts1, activity, energy, cardIdx);
-}
-
-let _gapSugIndex = -1;
-let _gapSugCardIdx = null;
-
-function expandGapInput(cardIdx) {
-  const wrap = document.getElementById(`gap-type-wrap-${cardIdx}`);
-  if (!wrap) return;
-  const CATS = [
-    { label: 'Work',     e: 'shallow',  c: 'var(--text)'        },
-    { label: 'Maintenance', e: 'recovery', c: 'var(--break)'       },
-    { label: 'Waste',    e: 'waste',    c: 'var(--distraction)' },
-  ];
-  wrap.innerHTML = `
-    <div style="position:relative;margin-bottom:8px">
-      <input id="gap-inline-${cardIdx}" type="text" placeholder="e.g. Gym, Reading, Cooking…"
-        onfocus="showGapSuggestions(${cardIdx},this.value)"
-        oninput="showGapSuggestions(${cardIdx},this.value)"
-        onblur="setTimeout(()=>hideGapSuggestions(${cardIdx}),150)"
-        onkeydown="handleGapInlineKey(event,${cardIdx})"
-        style="width:100%;padding:10px 12px;background:var(--bg4);border:1.5px solid var(--deep);
-               border-radius:8px;color:var(--text);font-family:var(--head);font-size:13px;
-               outline:none;display:block;box-sizing:border-box">
-      <div id="gap-suggestions-${cardIdx}" class="hero-suggestions" style="display:none"></div>
-    </div>
-    <div style="display:flex;align-items:center;gap:6px">
-      <span style="font-size:10px;color:var(--muted);font-weight:600;white-space:nowrap">Save as:</span>
-      ${CATS.map(p =>
-        `<button onmousedown="logGapInlineEntry(${cardIdx},'${p.e}')"
-          style="padding:5px 12px;background:none;border:1px solid var(--border2);
-                 border-radius:999px;color:${p.c};font-family:var(--head);font-size:11px;
-                 font-weight:600;cursor:pointer">${p.label}</button>`
-      ).join('')}
-    </div>`;
-  _gapSugCardIdx = cardIdx;
-  setTimeout(() => document.getElementById(`gap-inline-${cardIdx}`)?.focus(), 30);
-}
-
-function showGapSuggestions(cardIdx, filter) {
-  const el = document.getElementById(`gap-suggestions-${cardIdx}`);
-  if (!el) return;
-  _gapSugCardIdx = cardIdx;
-  _gapSugIndex = -1;
-  const items = buildHeroSuggestions(filter || '');
-  if (!items.length) { el.style.display = 'none'; return; }
-  el.innerHTML = items.map(t => buildSugItem(t, `selectGapSuggestion(event,${cardIdx},'${t.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')` )).join('');
-  el.style.display = 'block';
-}
-
-function hideGapSuggestions(cardIdx) {
-  const el = document.getElementById(`gap-suggestions-${cardIdx}`);
-  if (el) el.style.display = 'none';
-}
-
-function selectGapSuggestion(e, cardIdx, task) {
-  e.preventDefault();
-  const inp = document.getElementById(`gap-inline-${cardIdx}`);
-  if (inp) inp.value = task;
-  hideGapSuggestions(cardIdx);
-}
-
-function handleGapInlineKey(event, cardIdx) {
-  const el = document.getElementById(`gap-suggestions-${cardIdx}`);
-  const items = el ? [...el.querySelectorAll('.hero-sug-item')] : [];
-  if (event.key === 'ArrowDown') {
-    event.preventDefault();
-    _gapSugIndex = Math.min(_gapSugIndex + 1, items.length - 1);
-    items.forEach((it, i) => it.style.background = i === _gapSugIndex ? 'var(--deep-dim)' : '');
-    if (items[_gapSugIndex]) document.getElementById(`gap-inline-${cardIdx}`).value = items[_gapSugIndex].querySelector('span')?.textContent || items[_gapSugIndex].textContent;
-  } else if (event.key === 'ArrowUp') {
-    event.preventDefault();
-    _gapSugIndex = Math.max(_gapSugIndex - 1, -1);
-    items.forEach((it, i) => it.style.background = i === _gapSugIndex ? 'var(--deep-dim)' : '');
-    if (_gapSugIndex >= 0 && items[_gapSugIndex]) document.getElementById(`gap-inline-${cardIdx}`).value = items[_gapSugIndex].querySelector('span')?.textContent || items[_gapSugIndex].textContent;
-  } else if (event.key === 'Escape') {
-    hideGapSuggestions(cardIdx);
-    renderGapsList(computeGaps(getTodayEntries()));
-  } else if (event.key === 'Enter') {
-    event.preventDefault();
-    hideGapSuggestions(cardIdx);
-    logGapInlineEntry(cardIdx, 'shallow');
-  }
-}
-
-function logGapInlineEntry(cardIdx, energy) {
-  const input = document.getElementById(`gap-inline-${cardIdx}`);
-  const activity = input?.value.trim();
-  if (!activity) {
-    input?.classList.add('shake');
-    setTimeout(() => input?.classList.remove('shake'), 350);
-    input?.focus();
-    return;
-  }
-  logGapChunk(cardIdx, activity, energy);
-}
-
-function renderGapsList(gaps) {
-  // Build top 8 most-done activities from history (by frequency)
-  const freq = {};
-  const energyFor = {};
-  for (const e of entries) {
-    if (e.deleted || e.missed || !e.activity || !e.energy) continue;
-    const key = e.activity;
-    freq[key] = (freq[key] || 0) + 1;
-    if (!energyFor[key]) energyFor[key] = e.energy;
-  }
-  const topActivities = Object.entries(freq)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([activity]) => ({ activity, energy: energyFor[activity] }));
-
-  // Expand each gap into period-sized chunks
-  const chunks = gaps.flatMap(g => splitGapIntoChunks(g));
-
-  document.getElementById('gaps-list').innerHTML = chunks.map((g, i) => {
-    const isCur    = g.isCurrent;
-    const rawEnd   = Math.round(isCur ? Date.now() : g.ts);
-    const header   = g.periodName || 'Untracked';
-    const durLabel = fmtDur(g.gapMin);
-    const startVal = tzHHMM(g.tsStart);
-    const endVal   = tzHHMM(rawEnd);
-
-    const quickBtns = topActivities.map(a => {
-      const safe  = a.activity.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      const short = a.activity.length > 14 ? a.activity.slice(0,14) + '…' : a.activity;
-      return `<button onclick="event.stopPropagation();logGapChunk(${i},'${safe}','${a.energy}')"
-        style="padding:6px 10px;background:var(--bg4);border:1px solid var(--border2);
-               border-radius:6px;color:var(--text);font-family:var(--head);font-size:11px;
-               font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${short}</button>`;
-    }).join('');
-
-    const quickSection = topActivities.length ? `
-      <div style="padding:0 10px 10px;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted2);font-weight:600;padding:8px 0 6px">Quick log:</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">${quickBtns}</div>
-      </div>` : '';
-
-    return `<div id="gap-item-${i}" data-ts-start="${g.tsStart}" data-ts-end="${rawEnd}" data-is-current="${isCur}"
-        onclick="closeModal('gaps-overlay');openRetroLogPrefilled(${g.tsStart},${rawEnd},'','',true)"
-        style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden;cursor:pointer">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;gap:10px">
-        <div>
-          <div style="font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.07em">${header}</div>
-          <div style="font-size:13px;font-weight:600;color:var(--muted);margin-top:3px;font-family:var(--mono)">${startVal} – ${endVal}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-          <div style="background:var(--distraction-dim);color:var(--distraction);
-               font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px">${durLabel}</div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-        </div>
-      </div>
-      ${quickSection}
-    </div>`;
-  }).join('');
-}
-
-// Kept for backward compat; delegates to logInstantBlock
-function logAwayBlock(tsStart, tsEnd, activity, energy, gapIndex) {
-  logInstantBlock(tsStart, tsEnd, activity, energy, gapIndex);
-}
-
-function openRetroLogPrefilled(tsStart, tsEnd, activity, energy, fromGaps) {
+function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
   editingEntryId = null;
   editingEntryBase = { startDate: new Date(tsStart), crossesMidnight: false };
-  _openedFromGaps = !!fromGaps;
   document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
   document.getElementById('retro-modal-title').textContent = 'What were you doing?';
   retroEnergy = '';
@@ -4727,20 +4438,6 @@ function renderToday() {
     }
   }
 
-  // Untracked banner + past block nav button
-  const _dayNowB = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
-  const untrackedMin = computeGaps(todayE, _dayNowB).reduce((s, g) => s + g.gapMin, 0);
-  const banner = document.getElementById('untracked-banner');
-  const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(todayE)) : todayE.length > 0;
-  document.getElementById('nav-past-btn').style.display = (untrackedMin >= 10 && workStarted) ? 'flex' : 'none';
-  if (untrackedMin >= 10 && workStarted) {
-    const h = Math.floor(untrackedMin / 60), m = untrackedMin % 60;
-    document.getElementById('untracked-banner-text').textContent =
-      (h > 0 ? `${h}h ${m}m` : `${m}m`) + (isViewingToday() ? ' untracked today' : ' untracked that day');
-    banner.style.display = 'flex';
-  } else {
-    banner.style.display = 'none';
-  }
 
   // ── Contextual visibility: show the right element for this moment ──
   applyContextualVisibility(todayE);
@@ -5821,8 +5518,8 @@ function renderEntryList(el, entriesArr) {
         <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
       </div>
       <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
-      <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0;font-size:13px;opacity:0.6" onclick="openEditEntry(${e.id})">✎</button>
-      <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
+      <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0;font-size:13px;opacity:0.6" onclick="openEditEntry(${e._synthetic ? '' : e.id})" ${e._synthetic ? 'disabled style="opacity:0.2;cursor:default;padding:2px 6px;flex-shrink:0;font-size:13px"' : ''}>✎</button>
+      ${e._synthetic ? '' : `<button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e._pcSub ? String(e.id).replace('_pc','') : e.id})">✕</button>`}
     </div>`;
   }).join('');
 }
@@ -6102,13 +5799,14 @@ function renderSettings() {
   toneEl.value = settings.coachTone || 'analyst';
   renderTonePreview();
   document.getElementById('settings-stats').textContent=`${entries.length} total entries · ${getWeekEntries().length} this week`;
-  const datesWithEntries = [...new Set(entries.map(e=>e.date))].sort().reverse();
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const datesWithEntries = [...new Set(entries.filter(e=>!e.deleted).map(e=>getDateInTZ(e.tsStart||e.ts,tz)))].sort().reverse();
   const todayKey = toDateKey(new Date());
   const clearSel = document.getElementById('clear-day-select');
   clearSel.innerHTML = datesWithEntries.length
     ? datesWithEntries.map(d => {
         const label = d === todayKey ? 'Today' : new Date(d+'T12:00:00').toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
-        const count = entries.filter(e=>e.date===d).length;
+        const count = entries.filter(e=>!e.deleted && getDateInTZ(e.tsStart||e.ts,tz)===d).length;
         return `<option value="${d}">${label} (${count} entries)</option>`;
       }).join('')
     : '<option value="">No entries</option>';
@@ -6918,32 +6616,12 @@ function showToast(msg, withUndo, energy) {
   t.style.borderLeft = energy && _toastColors[energy]
     ? `3px solid ${_toastColors[energy]}`
     : '3px solid transparent';
-  if (withUndo) {
-    t.innerHTML = `<span>${msg}</span><button class="toast-undo-btn" onclick="undoLastInstantLog()">Undo</button>`;
-    t.classList.add('has-undo');
-    _toastTimer = setTimeout(() => { t.classList.remove('show','has-undo'); }, 5000);
-  } else {
-    t.innerHTML = `<span>${msg}</span>`;
-    t.classList.remove('has-undo');
-    _toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
-  }
+  t.innerHTML = `<span>${msg}</span>`;
+  t.classList.remove('has-undo');
+  _toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
   t.classList.add('show');
 }
 
-let _lastInstantLogId = null;
-function undoLastInstantLog() {
-  document.getElementById('toast').classList.remove('show','has-undo');
-  if (_lastInstantLogId === null) return;
-  const idx = entries.findIndex(e => e.id === _lastInstantLogId);
-  if (idx !== -1) { entries.splice(idx, 1); persist(); renderToday(); syncEntries(); }
-  _lastInstantLogId = null;
-  // Re-open the gaps modal with the restored gap
-  const gaps = computeGaps(getTodayEntries());
-  if (gaps.length) {
-    renderGapsList(gaps);
-    document.getElementById('gaps-overlay').classList.add('open');
-  }
-}
 
 function exportCSV() {
   if (!entries.length){showToast('No entries to export');return;}
@@ -6968,16 +6646,15 @@ function clearSelectedDay(){
   const sel = document.getElementById('clear-day-select');
   const dateKey = sel?.value;
   if (!dateKey) return;
-  const count = entries.filter(e=>e.date===dateKey).length;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const toDelete = entries.filter(e => !e.deleted && getDateInTZ(e.tsStart || e.ts, tz) === dateKey);
   const label = new Date(dateKey+'T12:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
-  if (!confirm(`Clear all ${count} entries for ${label}? This cannot be undone.`)) return;
-  const ids = new Set(entries.filter(e=>e.date===dateKey).map(e=>'e_'+e.id));
-  entries = entries.filter(e=>e.date!==dateKey);
+  if (!confirm(`Clear all ${toDelete.length} entries for ${label}? This cannot be undone.`)) return;
+  const now = Date.now();
+  toDelete.forEach(e => { e.deleted = true; e.updatedAt = now; });
   persist(); renderToday(); renderWeek(); renderWeekTable(); renderSettings();
-  if (fbRoomRef && ids.size) {
-    const updates={};
-    ids.forEach(id=>{ updates['entries/'+id]=null; });
-    fbRoomRef.update(updates);
+  if (fbRoomRef && roomCode) {
+    toDelete.forEach(e => fbDb.ref(`rooms/${roomCode}/entries/e_${e.id}`).set(e));
   }
   showToast(`${label} cleared`);
 }
@@ -7007,7 +6684,7 @@ document.getElementById('intention').addEventListener('blur', function(){ syncIn
 // KEYBOARD
 // ══════════════════════════════════════════════════════
 document.addEventListener('keydown', e => {
-  if(e.key==='Escape'){ dismissLog(); closeModal('precommit-overlay'); closeModal('review-overlay'); closeModal('gaps-overlay'); if(focusModeOn) tryExitFocusMode(); }
+  if(e.key==='Escape'){ dismissLog(); closeModal('precommit-overlay'); closeModal('review-overlay'); if(focusModeOn) tryExitFocusMode(); }
   if(e.key==='l' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='TEXTAREA') openLog();
 });
 
@@ -7333,13 +7010,6 @@ document.addEventListener('click', e => {
     dd.style.display = 'none';
   }
 });
-// On load: if significant untracked time exists, prompt to fill gaps
-setTimeout(() => {
-  const workStarted = Date.now() > getWorkDayStartTs();
-  if (workStarted && computeUntrackedMin(getTodayEntries()) >= 10) {
-    openGapsPicker();
-  }
-}, 1200);
 // Refresh timeline every 60s so "Since last log" gap stays current
 setInterval(() => { if (!running && !breakActive) renderToday(); }, 60000);
 
