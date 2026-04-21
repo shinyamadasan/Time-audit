@@ -14,15 +14,28 @@ chrome.runtime.onInstalled.addListener(init);
 init(); // also run immediately on every service worker start to restore uid/authToken
 
 async function init() {
-  const stored = await chrome.storage.local.get(['uid', 'authToken', 'customSites', 'removedSites', 'userTimezone']);
+  const stored = await chrome.storage.local.get(['uid', 'authToken', 'customSites', 'removedSites', 'userTimezone', 'activeTab']);
   uid          = stored.uid          || null;
   authToken    = stored.authToken    || null;
   userTimezone = stored.userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   loadTrackedSites(stored.customSites || {}, stored.removedSites || []);
+
+  // Restore active session so SW restarts don't create duplicate entries
+  if (stored.activeTab) activeTab = stored.activeTab;
+
   if (uid) {
     chrome.alarms.create('flush', { periodInMinutes: 5 });
     chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-      if (tabs[0]) recordStart(tabs[0].url, tabs[0].title);
+      if (!tabs[0]) return;
+      const currentDomain = getAnyDomain(tabs[0].url);
+      if (activeTab && activeTab.domain === currentDomain) {
+        // Same site — continue the existing session, just refresh url/title
+        activeTab.url   = tabs[0].url;
+        activeTab.title = tabs[0].title;
+      } else {
+        // Different site or no stored session — flush old and start fresh
+        switchTab(tabs[0].url, tabs[0].title);
+      }
     });
   }
 }
@@ -186,9 +199,10 @@ function switchTab(url, title) {
 
 function recordStart(url, title) {
   const domain = getAnyDomain(url);
-  if (!domain) { activeTab = null; return; }
+  if (!domain) { activeTab = null; chrome.storage.local.remove('activeTab'); return; }
   const now = Date.now();
   activeTab = { url, title, domain, startedAt: now, sessionId: now };
+  chrome.storage.local.set({ activeTab });
 }
 
 function flushActiveTab() {
@@ -197,6 +211,7 @@ function flushActiveTab() {
   const durationMs = now - activeTab.startedAt;
   const tab = activeTab;
   activeTab = null;
+  chrome.storage.local.remove('activeTab');
   if (durationMs < MIN_SESSION_MS) return;
   if (trackedSites[tab.domain]) {
     console.log('[Chronasense] flush:', tab.domain, Math.round(durationMs/1000)+'s → logging');
@@ -214,6 +229,7 @@ function flushAndRestart() {
     logSession(activeTab.domain, activeTab.title, activeTab.sessionId, now, now - activeTab.sessionId);
   }
   activeTab = { ...activeTab, startedAt: now };
+  chrome.storage.local.set({ activeTab });
 }
 
 async function maybeNotifyUnknown(domain, durationMs) {

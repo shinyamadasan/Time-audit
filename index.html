@@ -2599,11 +2599,9 @@ function autoLogBlock(activity, energy, tsStart, tsEnd) {
   if (dur < 1) return;
 
   const SEAM_TOLERANCE_MS = 2 * 60 * 1000;
-  const prev = entries.find(e => !e.missed && !e.deleted && e.activity && !e.away);
+  const prev = entries.find(e => !e.missed && !e.deleted && e.activity === activity && e.energy === energy && !e.away);
   const prevStart = prev ? (prev.tsStart || prev.ts) : 0;
   const canExtend = prev &&
-    prev.activity === activity &&
-    prev.energy === energy &&
     tsStart >= prevStart - SEAM_TOLERANCE_MS &&
     tsStart <= prev.ts + SEAM_TOLERANCE_MS;
 
@@ -4393,7 +4391,6 @@ function renderToday() {
       // Pre-compute sub-activities BEFORE clipping using original time windows
       const browserEntries   = sorted.filter(e => e.browserUsage);
       const pcTimeEntries    = sorted.filter(e => e.activity?.toLowerCase() === 'pc time' && !e.browserUsage);
-      console.log('[PCTime] browserEntries:', browserEntries.map(e=>e.activity+'|'+e.browserUsage), 'pcEntries:', pcTimeEntries.map(e=>e.activity));
       const nestedBrowserIds = new Set();
       const pcSubMap         = new Map();
       pcTimeEntries.forEach(pc => {
@@ -4443,9 +4440,8 @@ function renderToday() {
   applyContextualVisibility(todayE);
 
   // Timeline summary
-  const untrackedStr = untrackedMin > 0 ? ` · ${Math.round(untrackedMin/60*10)/10}h unlogged` : ' · fully logged ✓';
   document.getElementById('timeline-summary').textContent =
-    workStarted ? `${computeDeepHrs(todayE)}h deep · ${todayE.length} blocks${untrackedStr}` : '';
+    workStarted ? `${computeDeepHrs(todayE)}h deep · ${todayE.length} blocks` : '';
 
   const listEl = document.getElementById('recent-list');
 
