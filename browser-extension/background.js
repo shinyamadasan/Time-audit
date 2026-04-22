@@ -1,4 +1,4 @@
-import { FIREBASE_CONFIG, TRACKED_SITES, MIN_SESSION_MS } from './firebase-config.js';
+import { FIREBASE_CONFIG, TRACKED_SITES, MIN_SESSION_MS, MERGE_WINDOW_MS } from './firebase-config.js';
 
 // ── State ──
 let activeTab  = null;
@@ -6,6 +6,7 @@ let authToken  = null;
 let uid        = null;
 let trackedSites = {};  // loaded from storage, merges defaults + custom
 let userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;  // fallback to device
+let lastSessionByDomain = {};  // domain → { startTs, endTs } for merge window
 
 // ── Startup ──
 // Called on install/update AND on every service worker restart (MV3 workers are killed after inactivity)
@@ -14,11 +15,12 @@ chrome.runtime.onInstalled.addListener(init);
 init(); // also run immediately on every service worker start to restore uid/authToken
 
 async function init() {
-  const stored = await chrome.storage.local.get(['uid', 'authToken', 'customSites', 'removedSites', 'userTimezone', 'activeTab']);
+  const stored = await chrome.storage.local.get(['uid', 'authToken', 'customSites', 'removedSites', 'userTimezone', 'activeTab', 'lastSessionByDomain']);
   uid          = stored.uid          || null;
   authToken    = stored.authToken    || null;
   userTimezone = stored.userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   loadTrackedSites(stored.customSites || {}, stored.removedSites || []);
+  if (stored.lastSessionByDomain) lastSessionByDomain = stored.lastSessionByDomain;
 
   // Restore active session so SW restarts don't create duplicate entries
   if (stored.activeTab) activeTab = stored.activeTab;
@@ -51,14 +53,18 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 function loadTrackedSites(customSites, removedSites) {
   trackedSites = {};
   // Add defaults (skip removed ones)
-  for (const [domain, label] of Object.entries(TRACKED_SITES)) {
+  for (const [domain, cfg] of Object.entries(TRACKED_SITES)) {
     if (!removedSites.includes(domain)) {
-      trackedSites[domain] = { label, custom: false };
+      const label  = typeof cfg === 'string' ? cfg : cfg.label;
+      const energy = typeof cfg === 'string' ? 'waste' : (cfg.energy || 'waste');
+      trackedSites[domain] = { label, energy, custom: false };
     }
   }
-  // Add custom sites
-  for (const [domain, label] of Object.entries(customSites)) {
-    trackedSites[domain] = { label, custom: true };
+  // Add custom sites (stored as plain strings or objects)
+  for (const [domain, cfg] of Object.entries(customSites)) {
+    const label  = typeof cfg === 'string' ? cfg : cfg.label;
+    const energy = typeof cfg === 'string' ? 'waste' : (cfg.energy || 'waste');
+    trackedSites[domain] = { label, energy, custom: true };
   }
 }
 
@@ -269,24 +275,36 @@ chrome.notifications.onButtonClicked.addListener(async (notifId, btnIndex) => {
 
 // ── Firebase logging ──
 async function logSession(domain, title, startTs, endTs, durationMs) {
-  console.log('[Chronasense] logSession uid:', uid, 'domain:', domain);
   if (!uid) { console.warn('[Chronasense] not logged in, skipping'); return; }
   if (!authToken) {
     const ok = await refreshAuthToken();
     if (!ok) { console.warn('[Chronasense] no token and refresh failed, skipping'); return; }
   }
 
-  const appName = trackedSites[domain]?.label || domain;
+  const site    = trackedSites[domain] || {};
+  const appName = site.label || domain;
+  const energy  = site.energy || 'waste';
+
+  // Merge with recent session for the same domain within the merge window
+  const last = lastSessionByDomain[domain];
+  let entryStartTs = startTs;
+  if (last && (startTs - last.endTs) <= MERGE_WINDOW_MS) {
+    entryStartTs = last.startTs; // extend the existing entry
+  }
+  lastSessionByDomain[domain] = { startTs: entryStartTs, endTs };
+  chrome.storage.local.set({ lastSessionByDomain });
+
+  const totalDuration = endTs - entryStartTs;
   const entry = {
-    id: startTs,
+    id: entryStartTs,
     ts: endTs,
-    tsStart: startTs,
+    tsStart: entryStartTs,
     updatedAt: endTs,
-    blockIntervalMin: Math.round(durationMs / 60000),
-    date: toDateKey(new Date(startTs)),
+    blockIntervalMin: Math.round(totalDuration / 60000),
+    date: toDateKey(new Date(entryStartTs)),
     activity: appName,
-    energy: 'waste',
-    onPlan: false,
+    energy,
+    onPlan: energy !== 'waste',
     retro: true,
     browserUsage: true,
     quickLogged: true,
@@ -295,7 +313,7 @@ async function logSession(domain, title, startTs, endTs, durationMs) {
   entry.category = getBucket(entry);
   entry.originalLabel = entry.energy;
 
-  const path = `rooms/uid_${uid}/entries/${startTs}`;
+  const path = `rooms/uid_${uid}/entries/${entryStartTs}`;
   const doWrite = () => fetch(
     `${FIREBASE_CONFIG.databaseURL}${path}.json?auth=${authToken}`,
     { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }
@@ -365,10 +383,13 @@ function toDateKey(d) {
 }
 
 function getBucket(entry) {
-  const e = entry.energy;
-  if (e === 'waste') return 'Waste';
-  if (e === 'invest') return 'Invest';
-  return 'Neutral';
+  switch (entry.energy) {
+    case 'deep':     return 'deep_work';
+    case 'shallow':  return 'shallow_work';
+    case 'waste':    return 'waste';
+    case 'recovery': return 'recovery';
+    default:         return 'waste';
+  }
 }
 
 // ── Message bridge (popup ↔ background) ──

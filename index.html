@@ -2435,22 +2435,8 @@ function startBreak(mins) {
   if (running && currentTask) {
     const tsEnd = Date.now();
     const tsStart = taskStartTime || blockStartTime || (tsEnd - totalSecs * 1000);
-    const dur = Math.round((tsEnd - tsStart) / 60000);
     const prevEnergy = entries.find(e => !e.missed && !e.deleted && !e.break && e.energy)?.energy || 'deep';
-    if (dur >= 1) {
-      const workEntry = {
-        id: tsEnd, ts: tsEnd, tsStart,
-        blockIntervalMin: dur,
-        date: toDateKey(new Date()),
-        activity: currentTask, energy: prevEnergy,
-        onPlan: true, retro: false
-      };
-      workEntry.category = getBucket(workEntry);
-      workEntry.originalLabel = prevEnergy;
-      entries.unshift(workEntry);
-      persist(); renderToday(); syncEntries();
-      showToast(`Logged · ${currentTask} · ${fmtDur(dur)}`);
-    }
+    autoLogBlock(currentTask, prevEnergy, tsStart, tsEnd);
   }
 
   breakStartTs = Date.now();
@@ -2895,9 +2881,10 @@ function showRecoveryModal() {
   const timeStr = shutdownTime.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
   const ago = Math.round((Date.now() - s.shutdownTs) / 60000);
   const agoStr = ago < 60 ? `${ago}m ago` : `${Math.round(ago/60)}h ago`;
+  const expiredNote = s.timerExpired ? `<br><br><span style="color:var(--muted);font-size:12px">The ping timer also expired while you were away.</span>` : '';
   document.getElementById('recovery-msg').innerHTML =
     `<strong style="color:#EAF2FF">${s.task}</strong> was tracking when the app closed at <strong style="color:#EAF2FF">${timeStr}</strong> (${agoStr}).<br><br>` +
-    `Session so far: <strong style="color:#00E5FF">${dur >= 1 ? dur + ' min' : 'under 1 min'}</strong>.`;
+    `Session logged so far: <strong style="color:#00E5FF">${dur >= 1 ? dur + ' min' : 'under 1 min'}</strong>.${expiredNote}`;
   const el = document.getElementById('recovery-overlay');
   el.style.display = 'flex';
 }
@@ -2909,32 +2896,24 @@ function handleRecovery(intentional) {
   if (!s) return;
 
   if (intentional) {
+    // Log only up to the shutdown time, then stop
     const tsEnd = s.shutdownTs;
     const tsStart = s.taskStartTime || s.timerStartedAt;
-    const dur = Math.round((tsEnd - tsStart) / 60000);
     const task = s.task || 'Work block';
     const prevEnergy = entries.find(e => !e.missed && !e.deleted && !e.break && e.energy)?.energy || 'deep';
-    if (dur >= 1) {
-      const entry = {
-        id: tsEnd, ts: tsEnd, tsStart,
-        blockIntervalMin: dur,
-        date: toDateKey(new Date(tsEnd)),
-        activity: task, energy: prevEnergy,
-        onPlan: true, retro: false
-      };
-      entry.category = getBucket(entry);
-      entry.originalLabel = prevEnergy;
-      entries.push(entry);
-      entries.sort((a, b) => b.ts - a.ts);
-      persist(); renderToday(); syncEntries();
-      showToast(`Logged · ${task} · ${fmtDur(dur)}`);
-    }
+    autoLogBlock(task, prevEnergy, tsStart, tsEnd);
     _stopHeartbeat();
     resetTimer();
   } else {
-    // Accidental — timer already restored in load(), just restart the heartbeat
-    _startHeartbeat();
-    showToast(`Timer resumed · ${s.task}`);
+    if (s.timerExpired) {
+      // Timer expired while away — trigger the ping now so they can log
+      _stopHeartbeat();
+      doPing();
+    } else {
+      // Accidental close, timer still valid — resume and restart heartbeat
+      _startHeartbeat();
+      showToast(`Timer resumed · ${s.task}`);
+    }
   }
 }
 
@@ -6797,6 +6776,26 @@ setTimeout(() => {
   });
 }, 800);
 document.getElementById('interval-input').value = settings.intervalMin;
+
+// ── Detect unexpected closure via heartbeat ──
+(function() {
+  const hbTs = parseInt(localStorage.getItem('ta3-heartbeat-ts') || '0');
+  if (!hbTs) return;
+  const gap = Date.now() - hbTs;
+  if (gap < 2 * 60 * 1000) return; // ignore quick refreshes
+  let savedTimer = null;
+  try { savedTimer = JSON.parse(localStorage.getItem('ta3-timer') || 'null'); } catch(e) {}
+  const task = currentTask || lastTaskForRepeat || savedTimer?.currentTask || savedTimer?.lastTask || 'Work block';
+  const tStart = taskStartTime || timerStartedAt || savedTimer?.taskStartTime || savedTimer?.timerStartedAt || hbTs;
+  window._timerRecoveryState = {
+    shutdownTs: hbTs,
+    task,
+    timerStartedAt: timerStartedAt || savedTimer?.timerStartedAt,
+    taskStartTime: tStart,
+    timerExpired: !running
+  };
+})();
+
 // If timer was restored from localStorage, resume it
 if (running && timerStartedAt) {
   document.getElementById('main-btn').textContent = 'Break';
@@ -6806,12 +6805,12 @@ if (running && timerStartedAt) {
     remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
     remaining <= 0 ? doPing() : updateRing();
   }, 1000);
-  // Show recovery prompt if the app was closed unexpectedly
-  if (window._timerRecoveryState) setTimeout(showRecoveryModal, 600);
 } else {
   totalSecs = settings.intervalMin * 60;
   remaining = totalSecs;
 }
+// Show recovery prompt after UI is ready (works for both running and expired timer)
+if (window._timerRecoveryState) setTimeout(showRecoveryModal, 600);
 // ── Capacitor Local Notifications (native ping when backgrounded) ──
 const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 let LocalNotifications = null;
