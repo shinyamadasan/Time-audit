@@ -3017,6 +3017,9 @@ function startPomodoro() {
 function tickPomodoro() {
   pomodoroRemaining = Math.max(0, pomodoroRemaining - 1);
   setPomodoroCountdown(pomodoroRemaining);
+  if (pomodoroPhase === 'work' && pomodoroRemaining === _OUTRO_LEAD_SEC) {
+    _startWorkOutro();
+  }
   if (pomodoroRemaining <= 0) {
     pomodoroPhase === 'work' ? endWorkSession() : endPomodoroBreak();
   }
@@ -3051,6 +3054,7 @@ function endWorkSession() {
   // Start break
   pomodoroPhase = 'break';
   pomodoroRemaining = pomodoroBreakMin * 60;
+  _enterBreakMusic();
   document.getElementById('focus-phase-label').textContent = 'BREAK ☕';
   document.getElementById('focus-phase-sub').textContent = `take a breather · ${pomodoroBreakMin} min`;
 
@@ -3065,6 +3069,7 @@ function endWorkSession() {
 function endPomodoroBreak() {
   clearInterval(pomodoroTimer);
   pomodoroPhase = 'idle';
+  _exitBreakMusic();
   playAlertSound();
 
   document.getElementById('focus-phase-label').textContent = 'BREAK DONE';
@@ -3082,6 +3087,7 @@ function endPomodoroBreak() {
 
 function skipBreak() {
   clearInterval(pomodoroTimer);
+  _skipBreakMusic();
   startPomodoro();
 }
 
@@ -3163,6 +3169,11 @@ let _focusMusicVolume = parseFloat(localStorage.getItem('ta3-focus-vol') || '0.3
 let _lofiTrackIdx = 0;
 let _shuffleMode = localStorage.getItem('ta3-focus-shuffle') === '1';
 let _shuffleQueue = [];
+let _inBreakMode = false;
+let _outroActive = false;
+const _BREAK_TRANSITION = 'Sounds/natureseye-trapped-introoutro-144328.mp3';
+const _BREAK_LOOP       = 'Sounds/nickpanekaiassets-atom-bomb-jig-energetic-big-band-swing-instrumental-318351.mp3';
+const _OUTRO_LEAD_SEC   = 19; // seconds before session end to start the outro
 
 function _nextTrackIdx() {
   if (_LOFI_TRACKS.length === 1) return 0;
@@ -3182,14 +3193,45 @@ function _nextTrackIdx() {
 function _updateTrackLabel() {
   const el = document.getElementById('focus-playlist-label');
   if (!el) return;
-  if (_LOFI_TRACKS.length <= 1) { el.textContent = ''; return; }
-  el.textContent = `track ${_lofiTrackIdx + 1} / ${_LOFI_TRACKS.length} · ${_shuffleMode ? 'shuffle' : 'order'}`;
+  if (_LOFI_TRACKS.length <= 1) { el.textContent = _inBreakMode ? 'break ☕' : ''; return; }
+  const mode = _inBreakMode ? 'break ☕' : (_shuffleMode ? 'shuffle' : 'order');
+  el.textContent = `track ${_lofiTrackIdx + 1} / ${_LOFI_TRACKS.length} · ${mode}`;
 }
 
-function startFocusMusic() {
+function _startWorkOutro() {
+  if (_outroActive) return;
+  _outroActive = true;
   const mp3 = document.getElementById('focus-music');
   mp3.onended = null;
-  mp3.src = _LOFI_TRACKS[_lofiTrackIdx];
+  mp3.loop = false;
+  mp3.src = _BREAK_TRANSITION;
+  mp3.volume = _focusMusicVolume;
+  mp3.play().catch(() => {});
+  _updateTrackLabel();
+}
+
+function _enterBreakMusic() {
+  // Outro already played — just fire the beep and start the break loop
+  _inBreakMode = true;
+  _outroActive = false;
+  const mp3 = document.getElementById('focus-music');
+  mp3.onended = null;
+  mp3.loop = false;
+  mp3.src = _BREAK_LOOP;
+  mp3.volume = _focusMusicVolume;
+  mp3.loop = true;
+  mp3.play().catch(() => {});
+  _updateTrackLabel();
+}
+
+function _exitBreakMusic() {
+  // Natural break end: play transition track as "session start" signal, then resume lo-fi
+  _inBreakMode = false;
+  _outroActive = false;
+  const mp3 = document.getElementById('focus-music');
+  mp3.onended = null;
+  mp3.loop = false;
+  mp3.src = _BREAK_TRANSITION;
   mp3.volume = _focusMusicVolume;
   mp3.onended = () => {
     _lofiTrackIdx = _nextTrackIdx();
@@ -3199,7 +3241,38 @@ function startFocusMusic() {
   _updateTrackLabel();
 }
 
+function _skipBreakMusic() {
+  // Skip break: straight back to lo-fi, no intro
+  _inBreakMode = false;
+  _outroActive = false;
+  const mp3 = document.getElementById('focus-music');
+  mp3.onended = null;
+  mp3.loop = false;
+  _lofiTrackIdx = _nextTrackIdx();
+  startFocusMusic();
+}
+
+function _effectiveVolume() {
+  return _focusMusicVolume;
+}
+
+function startFocusMusic() {
+  const mp3 = document.getElementById('focus-music');
+  mp3.onended = null;
+  mp3.loop = false;
+  mp3.src = _LOFI_TRACKS[_lofiTrackIdx];
+  mp3.volume = _effectiveVolume();
+  mp3.onended = () => {
+    _lofiTrackIdx = _nextTrackIdx();
+    startFocusMusic();
+  };
+  mp3.play().catch(() => {});
+  _updateTrackLabel();
+}
+
 function stopFocusMusic() {
+  _inBreakMode = false;
+  _outroActive = false;
   const mp3 = document.getElementById('focus-music');
   mp3.onended = null;
   mp3.pause();
@@ -3209,7 +3282,7 @@ function stopFocusMusic() {
 function setFocusMusicVolume(val) {
   _focusMusicVolume = parseFloat(val);
   localStorage.setItem('ta3-focus-vol', val);
-  document.getElementById('focus-music').volume = _focusMusicVolume;
+  document.getElementById('focus-music').volume = _effectiveVolume();
 }
 
 function toggleFocusPlaylist() {
@@ -4013,8 +4086,9 @@ function clipOverlapsForDisplay(ascSorted) {
     const curr = result[i];
     const next = result[i + 1];
     const nextStart = next.tsStart || next.ts;
-    if (curr.ts > nextStart) {
-      // Earlier block overruns next block's start — clip it
+    if (curr.ts > nextStart && next.ts > curr.ts) {
+      // Partial overlap only — clip curr to where next begins
+      // Skip when next is fully contained within curr (next.ts <= curr.ts)
       curr.ts = nextStart;
       const startMs = curr.tsStart || (curr.ts - (curr.blockIntervalMin || 1) * 60000);
       curr.blockIntervalMin = Math.max(1, Math.round((curr.ts - startMs) / 60000));
@@ -4528,19 +4602,28 @@ function renderToday() {
 
       // Pre-compute sub-activities BEFORE clipping using original time windows
       const browserEntries   = sorted.filter(e => e.browserUsage);
-      const pcTimeEntries    = sorted.filter(e => e.activity?.toLowerCase() === 'pc time' && !e.browserUsage);
       const nestedBrowserIds = new Set();
       const pcSubMap         = new Map();
-      pcTimeEntries.forEach(pc => {
-        const pcStart = pc.tsStart || (pc.ts - (pc.blockIntervalMin || 0) * 60000);
-        const pcEnd   = pc.ts;
+      // Nest browser entries inside any non-browser entry that fully contains them
+      // (covers PC Time entries AND focus session entries)
+      const containerEntries = sorted
+        .filter(e => !e.browserUsage)
+        .sort((a, b) => {
+          const dA = a.tsStart ? (a.ts - a.tsStart) : (a.blockIntervalMin || 0) * 60000;
+          const dB = b.tsStart ? (b.ts - b.tsStart) : (b.blockIntervalMin || 0) * 60000;
+          return dB - dA; // longest containers get priority
+        });
+      containerEntries.forEach(container => {
+        const cStart = container.tsStart || (container.ts - (container.blockIntervalMin || 0) * 60000);
+        const cEnd   = container.ts;
         const subs = browserEntries.filter(b => {
+          if (nestedBrowserIds.has(b.id)) return false;
           const bStart = b.tsStart || b.ts;
-          return bStart >= pcStart && b.ts <= pcEnd;
+          return bStart >= cStart && b.ts <= cEnd;
         });
         if (subs.length) {
-          pcSubMap.set(pc.id, subs);
-          subs.forEach(s => nestedBrowserIds.add(s.id));
+          if (!pcSubMap.has(container.id)) pcSubMap.set(container.id, []);
+          subs.forEach(s => { pcSubMap.get(container.id).push(s); nestedBrowserIds.add(s.id); });
         }
       });
 
@@ -4555,7 +4638,7 @@ function renderToday() {
       const gaps    = computeGaps(todayE.filter(e => !nestedBrowserIds.has(e.id)), _dayNow);
       const combined = [...mergedDisplay, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
 
-      // Attach sub-activities to PC Time entries
+      // Attach nested browser sub-activities to their container entries
       combined.forEach(item => {
         if (!item.isGap && pcSubMap.has(item.id)) item._subActivities = pcSubMap.get(item.id);
       });
