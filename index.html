@@ -1756,17 +1756,12 @@ button, a, [role="button"],
   <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:18px">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center">
       <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center">
-        <button class="focus-music-btn active" data-sid="lofi"   onclick="selectFocusMusic('lofi',this)">🎵 Lo-fi</button>
-        <button class="focus-music-btn"        data-sid="white"  onclick="selectFocusMusic('white',this)">〰 White</button>
-        <button class="focus-music-btn"        data-sid="brown"  onclick="selectFocusMusic('brown',this)">🌊 Brown</button>
-        <button class="focus-music-btn"        data-sid="rain"   onclick="selectFocusMusic('rain',this)">🌧 Rain</button>
-        <button class="focus-music-btn"        data-sid="cafe"   onclick="selectFocusMusic('cafe',this)">☕ Café</button>
-        <button class="focus-music-btn"        data-sid="none"   onclick="selectFocusMusic('none',this)">🔇 Off</button>
-        <button class="focus-music-btn"        id="focus-playlist-btn" onclick="toggleFocusPlaylist()">↻ Mix</button>
+        <button class="focus-music-btn active" id="focus-playlist-btn" onclick="toggleFocusPlaylist()">↻ Shuffle</button>
+        <button class="focus-music-btn" id="focus-music-off-btn" onclick="selectFocusMusicOff()">🔇 Off</button>
       </div>
       <input type="range" min="0" max="1" step="0.05" value="0.3" id="focus-vol-slider"
         oninput="setFocusMusicVolume(this.value)"
-        style="width:64px;accent-color:var(--deep);cursor:pointer">
+        style="width:80px;accent-color:var(--deep);cursor:pointer">
     </div>
     <div id="focus-playlist-label" style="font-size:10px;color:var(--muted);letter-spacing:0.04em;min-height:14px"></div>
   </div>
@@ -1997,8 +1992,7 @@ button, a, [role="button"],
 
 <div class="toast" id="toast"></div>
 <!-- place this BEFORE <script> -->
-<audio id="focus-music" loop>
-  <source src="Sounds/focus.mp3" type="audio/mpeg">
+<audio id="focus-music">
 </audio>
 
 <!-- Firebase Compat SDK -->
@@ -3106,190 +3100,142 @@ function playAlertSound() {
 
 let pomodoroWasPaused = false; // track if we paused the main timer
 
-// ── Focus music ───────────────────────────────────────────────────────────────
-let _focusAudioCtx = null;
-let _focusAudioNodes = [];
-let _focusGainNode = null;
-let _currentFocusMusicId = localStorage.getItem('ta3-focus-music') || 'lofi';
+// ── Focus music (MP3 playlist) ────────────────────────────────────────────────
+// Drop lo-fi tracks into Sounds/ named focus.mp3, focus2.mp3, focus3.mp3, …
+// Free lo-fi tracks: pixabay.com/music · freemusicarchive.org · incompetech.com
+const _LOFI_TRACKS = [
+  'Sounds/focus.mp3',
+  'Sounds/pulsebox-lofi-melody-522894.mp3',
+  'Sounds/pulsebox-lofi-production-522875.mp3',
+  'Sounds/the_mountain-lofi-lofi-music-496553.mp3',
+  'Sounds/pulsebox-lofi-vlog-522887.mp3',
+  'Sounds/pulsebox-lofi-slow-522877.mp3',
+  'Sounds/pulsebox-lofi-drums-522891.mp3',
+  'Sounds/watermello-lofi-lofi-girl-lofi-chill-484610.mp3',
+  'Sounds/pulsebox-lofi-blog-522886.mp3',
+  'Sounds/pulsebox-lofi-cinematic-522892.mp3',
+  'Sounds/watermello-lofi-chill-lofi-girl-lofi-488388.mp3',
+  'Sounds/mondamusic-lofi-lofi-girl-lofi-chill-512853.mp3',
+  'Sounds/pulsebox-lofi-study-522878.mp3',
+  'Sounds/pulsebox-lofi-night-522890.mp3',
+  'Sounds/pulsebox-lofi-smooth-522876.mp3',
+  'Sounds/pulsebox-lofi-retro-522893.mp3',
+  'Sounds/fassounds-lofi-study-calm-peaceful-chill-hop-112191.mp3',
+  'Sounds/fassounds-good-night-lofi-cozy-chill-music-160166.mp3',
+  'Sounds/pulsebox-lofi-ambient-522898.mp3',
+  'Sounds/pulsebox-lofi-video-522883.mp3',
+  'Sounds/pulsebox-lofi-chill-522885.mp3',
+  'Sounds/lemonmusiclab-lofi-lofi-music-499264.mp3',
+  'Sounds/leberch-lofi-hip-hop-519408.mp3',
+  'Sounds/pulsebox-lofi-mellow-522897.mp3',
+  'Sounds/pulsebox-lofi-vinyl-522882.mp3',
+  'Sounds/pulsebox-lofi-instrumental-522889.mp3',
+  'Sounds/monume-lofi-lofi-girl-lofi-chill-509453.mp3',
+  'Sounds/mondamusic-lofi-beats-499181.mp3',
+  'Sounds/monume-lofi-lofi-girl-lofi-chill-519232.mp3',
+  'Sounds/leberch-lofi-516620.mp3',
+  'Sounds/pulsebox-lofi-atmosphere-522881.mp3',
+  'Sounds/pulsebox-lofi-cozy-522874.mp3',
+  'Sounds/pulsebox-lofi-walking-522873.mp3',
+  'Sounds/pulsebox-lofi-hip-hop-522884.mp3',
+  'Sounds/pulsebox-lofi-calm-522888.mp3',
+  'Sounds/atlasaudio-sad-lofi-516966.mp3',
+  'Sounds/mondamusic-lofi-chill-lofi-girl-491690.mp3',
+  'Sounds/freemusicforvideo-lofi-chill-music-495628.mp3',
+  'Sounds/bfcmusic-lofi-lo-fi-511230.mp3',
+  'Sounds/playstarz_music-lofi-chill-lofi-girl-lofi-490880.mp3',
+  'Sounds/solarflex-lofi-lofi-girl-lofi-chill-515513.mp3',
+  'Sounds/mondamusic-lofi-chill-491719.mp3',
+  'Sounds/vibehorn-lofi-beat-lo-fi-music-512500.mp3',
+  'Sounds/vibehorn-lofi-chill-music-496931.mp3',
+  'Sounds/mondamusic-lofi-chill-chill-512854.mp3',
+  'Sounds/lofi_music_library-lofi-girl-chill-lofi-beats-lofi-ambient-461871.mp3',
+  'Sounds/paulyudin-lofi-lofi-chill-lofi-girl-482399.mp3',
+  'Sounds/sonican-lo-fi-music-loop-sentimental-jazzy-love-473154.mp3',
+  'Sounds/monume-lofi-chill-chill-509496.mp3',
+  'Sounds/mondamusic-lofi-chill-487321.mp3',
+  'Sounds/lofi_music_library-coffee-lofi-chill-lofi-ambient-458901.mp3',
+  'Sounds/lofi_music_library-coffee-lofi-lofi-music-chill-ambient-458900.mp3',
+  'Sounds/delosound-lofi-lofi-chill-lofi-girl-466467.mp3',
+  'Sounds/aventure-lofi-chill-nostalgic-469629.mp3',
+];
 let _focusMusicVolume = parseFloat(localStorage.getItem('ta3-focus-vol') || '0.3');
+let _lofiTrackIdx = 0;
+let _shuffleMode = localStorage.getItem('ta3-focus-shuffle') === '1';
+let _shuffleQueue = [];
 
-// Playlist / rotate
-const _PLAYLIST = ['lofi', 'rain', 'brown', 'cafe', 'white'];
-const _PLAYLIST_NAMES = {lofi:'Lo-fi', rain:'Rain', brown:'Brown', cafe:'Café', white:'White'};
-const _PLAYLIST_INTERVAL_MS = 15 * 60 * 1000;
-let _playlistMode = localStorage.getItem('ta3-focus-playlist') === '1';
-let _playlistTimer = null;
-let _playlistRemaining = 0;
+function _nextTrackIdx() {
+  if (_LOFI_TRACKS.length === 1) return 0;
+  if (_shuffleMode) {
+    if (!_shuffleQueue.length) {
+      _shuffleQueue = [...Array(_LOFI_TRACKS.length).keys()].filter(i => i !== _lofiTrackIdx);
+      for (let i = _shuffleQueue.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [_shuffleQueue[i], _shuffleQueue[j]] = [_shuffleQueue[j], _shuffleQueue[i]];
+      }
+    }
+    return _shuffleQueue.pop();
+  }
+  return (_lofiTrackIdx + 1) % _LOFI_TRACKS.length;
+}
+
+function _updateTrackLabel() {
+  const el = document.getElementById('focus-playlist-label');
+  if (!el) return;
+  if (_LOFI_TRACKS.length <= 1) { el.textContent = ''; return; }
+  el.textContent = `track ${_lofiTrackIdx + 1} / ${_LOFI_TRACKS.length} · ${_shuffleMode ? 'shuffle' : 'order'}`;
+}
+
+function startFocusMusic() {
+  const mp3 = document.getElementById('focus-music');
+  mp3.onended = null;
+  mp3.src = _LOFI_TRACKS[_lofiTrackIdx];
+  mp3.volume = _focusMusicVolume;
+  mp3.onended = () => {
+    _lofiTrackIdx = _nextTrackIdx();
+    startFocusMusic();
+  };
+  mp3.play().catch(() => {});
+  _updateTrackLabel();
+}
 
 function stopFocusMusic() {
   const mp3 = document.getElementById('focus-music');
-  mp3.pause(); mp3.currentTime = 0;
-  _focusAudioNodes.forEach(n => { try { n.stop(); } catch(e) {} });
-  _focusAudioNodes = [];
-  _focusGainNode = null;
+  mp3.onended = null;
+  mp3.pause();
+  mp3.currentTime = 0;
 }
 
 function setFocusMusicVolume(val) {
   _focusMusicVolume = parseFloat(val);
   localStorage.setItem('ta3-focus-vol', val);
   document.getElementById('focus-music').volume = _focusMusicVolume;
-  if (_focusGainNode) _focusGainNode.gain.value = _focusMusicVolume;
-}
-
-function _buildAudioNodes(id) {
-  if (!_focusAudioCtx) _focusAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  if (_focusAudioCtx.state === 'suspended') _focusAudioCtx.resume();
-  const gain = _focusAudioCtx.createGain();
-  gain.connect(_focusAudioCtx.destination);
-  const sr = _focusAudioCtx.sampleRate;
-  const bufLen = sr * 4;
-  const buf = _focusAudioCtx.createBuffer(1, bufLen, sr);
-  const data = buf.getChannelData(0);
-  if (id === 'white') {
-    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
-  } else if (id === 'brown' || id === 'cafe') {
-    let last = 0;
-    for (let i = 0; i < bufLen; i++) {
-      const w = Math.random() * 2 - 1;
-      data[i] = (last + 0.02 * w) / 1.02;
-      last = data[i];
-      data[i] *= 3.5;
-    }
-  } else if (id === 'rain') {
-    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
-  }
-  const src = _focusAudioCtx.createBufferSource();
-  src.buffer = buf; src.loop = true;
-  if (id === 'rain') {
-    const f = _focusAudioCtx.createBiquadFilter();
-    f.type = 'bandpass'; f.frequency.value = 1400; f.Q.value = 0.25;
-    src.connect(f); f.connect(gain);
-  } else if (id === 'cafe') {
-    const f = _focusAudioCtx.createBiquadFilter();
-    f.type = 'lowpass'; f.frequency.value = 500;
-    src.connect(f); f.connect(gain);
-  } else {
-    src.connect(gain);
-  }
-  return { src, gain };
-}
-
-function startFocusMusic(id, fadeInMs) {
-  stopFocusMusic();
-  if (id === 'none') return;
-  const FADE = (fadeInMs || 0) / 1000;
-  if (id === 'lofi') {
-    const mp3 = document.getElementById('focus-music');
-    mp3.volume = FADE > 0 ? 0 : _focusMusicVolume;
-    mp3.play().catch(() => {});
-    if (FADE > 0) {
-      let v = 0; const target = _focusMusicVolume; const steps = 20; const stepMs = (FADE * 1000) / steps;
-      const iv = setInterval(() => { v = Math.min(target, v + target / steps); mp3.volume = v; if (v >= target) clearInterval(iv); }, stepMs);
-    }
-    return;
-  }
-  const { src, gain } = _buildAudioNodes(id);
-  if (FADE > 0 && _focusAudioCtx) {
-    gain.gain.setValueAtTime(0, _focusAudioCtx.currentTime);
-    gain.gain.linearRampToValueAtTime(_focusMusicVolume, _focusAudioCtx.currentTime + FADE);
-  } else {
-    gain.gain.value = _focusMusicVolume;
-  }
-  src.start();
-  _focusGainNode = gain;
-  _focusAudioNodes = [src];
-}
-
-function _crossfadeToMusic(id) {
-  const FADE_S = 1.5;
-  const mp3 = document.getElementById('focus-music');
-  // Fade out old Web Audio
-  if (_focusGainNode && _focusAudioCtx) {
-    const oldGain = _focusGainNode; const oldNodes = [..._focusAudioNodes];
-    oldGain.gain.linearRampToValueAtTime(0, _focusAudioCtx.currentTime + FADE_S);
-    _focusGainNode = null; _focusAudioNodes = [];
-    setTimeout(() => { oldNodes.forEach(n => { try { n.stop(); } catch(e) {} }); }, (FADE_S + 0.2) * 1000);
-  }
-  // Fade out MP3
-  if (!mp3.paused) {
-    const startVol = mp3.volume; const steps = 15; const stepMs = (FADE_S * 1000) / steps; let step = 0;
-    const iv = setInterval(() => {
-      step++; mp3.volume = Math.max(0, startVol * (1 - step / steps));
-      if (step >= steps) { clearInterval(iv); mp3.pause(); mp3.currentTime = 0; mp3.volume = _focusMusicVolume; }
-    }, stepMs);
-  }
-  setTimeout(() => startFocusMusic(id, FADE_S * 1000), FADE_S * 1000);
-}
-
-function _syncMusicBtns() {
-  document.querySelectorAll('.focus-music-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.sid === _currentFocusMusicId && !_playlistMode));
-  const pb = document.getElementById('focus-playlist-btn');
-  if (pb) pb.classList.toggle('active', _playlistMode);
-}
-
-function _updatePlaylistLabel() {
-  const el = document.getElementById('focus-playlist-label');
-  if (!el) return;
-  if (!_playlistMode || !_playlistRemaining) { el.textContent = ''; return; }
-  const mins = Math.ceil(_playlistRemaining / 60000);
-  const idx = _PLAYLIST.indexOf(_currentFocusMusicId);
-  const nextId = _PLAYLIST[(idx + 1) % _PLAYLIST.length];
-  el.textContent = `next: ${_PLAYLIST_NAMES[nextId]} in ${mins}m`;
-}
-
-function _clearPlaylistTimer() {
-  if (_playlistTimer) { clearInterval(_playlistTimer); _playlistTimer = null; }
-  _playlistRemaining = 0;
-  _updatePlaylistLabel();
-}
-
-function _schedulePlaylistRotation() {
-  _clearPlaylistTimer();
-  _playlistRemaining = _PLAYLIST_INTERVAL_MS;
-  _updatePlaylistLabel();
-  _playlistTimer = setInterval(() => {
-    _playlistRemaining -= 60000;
-    if (_playlistRemaining <= 0) {
-      const nextIdx = (_PLAYLIST.indexOf(_currentFocusMusicId) + 1) % _PLAYLIST.length;
-      _currentFocusMusicId = _PLAYLIST[nextIdx];
-      localStorage.setItem('ta3-focus-music', _currentFocusMusicId);
-      _crossfadeToMusic(_currentFocusMusicId);
-      _schedulePlaylistRotation();
-    } else {
-      _updatePlaylistLabel();
-    }
-  }, 60000);
 }
 
 function toggleFocusPlaylist() {
-  _playlistMode = !_playlistMode;
-  localStorage.setItem('ta3-focus-playlist', _playlistMode ? '1' : '0');
-  if (_playlistMode) {
-    // If current is 'none' or not in playlist, start from beginning
-    if (!_PLAYLIST.includes(_currentFocusMusicId)) {
-      _currentFocusMusicId = _PLAYLIST[0];
-      localStorage.setItem('ta3-focus-music', _currentFocusMusicId);
-      startFocusMusic(_currentFocusMusicId);
-    }
-    _schedulePlaylistRotation();
-  } else {
-    _clearPlaylistTimer();
-    startFocusMusic(_currentFocusMusicId);
-  }
-  _syncMusicBtns();
+  _shuffleMode = !_shuffleMode;
+  _shuffleQueue = [];
+  localStorage.setItem('ta3-focus-shuffle', _shuffleMode ? '1' : '0');
+  const btn = document.getElementById('focus-playlist-btn');
+  if (btn) btn.classList.toggle('active', _shuffleMode);
+  document.getElementById('focus-music-off-btn')?.classList.remove('active');
+  // Resume music if it was stopped
+  const mp3 = document.getElementById('focus-music');
+  if (mp3.paused) startFocusMusic();
+  _updateTrackLabel();
 }
 
-function selectFocusMusic(id, btnEl) {
-  _playlistMode = false;
-  localStorage.setItem('ta3-focus-playlist', '0');
-  _clearPlaylistTimer();
-  _currentFocusMusicId = id;
-  localStorage.setItem('ta3-focus-music', id);
-  _syncMusicBtns();
-  document.querySelectorAll('.focus-music-btn').forEach(b => b.classList.remove('active'));
-  btnEl.classList.add('active');
-  startFocusMusic(id);
+function selectFocusMusicOff() {
+  stopFocusMusic();
+  const btn = document.getElementById('focus-music-off-btn');
+  document.getElementById('focus-playlist-btn').classList.remove('active');
+  if (btn) btn.classList.add('active');
+}
+
+function resumeFocusMusic() {
+  const offBtn = document.getElementById('focus-music-off-btn');
+  if (offBtn) offBtn.classList.remove('active');
+  startFocusMusic();
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -3317,15 +3263,15 @@ function enterFocusMode() {
     resetTimer();
   }
 
-  // Restore saved music track + volume + playlist mode in UI
-  _currentFocusMusicId = localStorage.getItem('ta3-focus-music') || 'lofi';
+  // Restore volume + shuffle state
   _focusMusicVolume = parseFloat(localStorage.getItem('ta3-focus-vol') || '0.3');
-  _playlistMode = localStorage.getItem('ta3-focus-playlist') === '1';
+  _shuffleMode = localStorage.getItem('ta3-focus-shuffle') === '1';
   const volSlider = document.getElementById('focus-vol-slider');
   if (volSlider) volSlider.value = _focusMusicVolume;
-  _syncMusicBtns();
-  startFocusMusic(_currentFocusMusicId);
-  if (_playlistMode) _schedulePlaylistRotation();
+  const pb = document.getElementById('focus-playlist-btn');
+  if (pb) pb.classList.toggle('active', _shuffleMode);
+  document.getElementById('focus-music-off-btn')?.classList.remove('active');
+  startFocusMusic();
   focusModeOn = true;
   pomodoroCount = 0;
   pomodoroPhase = 'idle';
@@ -3385,7 +3331,6 @@ function confirmExitFocus() {
   clearInterval(pomodoroTimer);
   pomodoroPhase = 'idle';
   stopFocusMusic();
-  _clearPlaylistTimer();
   focusModeOn = false;
   document.getElementById('focus-overlay').classList.remove('open');
   // Resume main timer if it was paused for pomodoro
