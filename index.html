@@ -2588,8 +2588,8 @@ function startPCTimeLive() {
     }
     const now = Date.now();
     const tsStart = blockStartTime || (now - totalSecs * 1000);
-    const lastEntry = entries.find(e => !e.missed && !e.deleted && !e.break && !e.away);
-    const energy = lastEntry?.energy || 'shallow';
+    const lastEntry = entries.find(e => !e.missed && !e.deleted && !e.break && !e.away && !e.browserUsage);
+    const energy = lastEntry?.energy || 'deep';
     autoLogBlock('PC Time', energy, tsStart, now);
   }, 60000);
 }
@@ -4644,7 +4644,7 @@ function renderToday() {
         .sort((a, b) => {
           const dA = a.tsStart ? (a.ts - a.tsStart) : (a.blockIntervalMin || 0) * 60000;
           const dB = b.tsStart ? (b.ts - b.tsStart) : (b.blockIntervalMin || 0) * 60000;
-          return dB - dA; // longest containers get priority
+          return dA - dB; // shortest containers get priority (tightest fit)
         });
       containerEntries.forEach(container => {
         const cStart = container.tsStart || (container.ts - (container.blockIntervalMin || 0) * 60000);
