@@ -3001,6 +3001,7 @@ function startPomodoro() {
   const intentionEl = document.getElementById('focus-intention-text');
   intentionEl.textContent = focusTask;
   intentionEl.style.display = 'block';
+  currentTask = focusTask;
 
   // Pause main timer to avoid two countdowns fighting
   if (running) {
