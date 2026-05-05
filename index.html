@@ -1731,14 +1731,18 @@ button, a, [role="button"],
   <div class="focus-next" id="focus-phase-sub">work session</div>
 
   <!-- Editable settings (shown when idle) -->
-  <div id="focus-settings-row" style="display:flex;align-items:center;gap:10px;font-size:15px;color:var(--muted);margin-top:14px">
-    <span>Work</span>
-    <input type="number" id="pomo-work-min" value="25" min="1" max="120"
-      style="width:52px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:8px;padding:6px 8px;font-size:16px;text-align:center">
-    <span>min · Break</span>
-    <input type="number" id="pomo-break-min" value="5" min="1" max="60"
-      style="width:52px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:8px;padding:6px 8px;font-size:16px;text-align:center">
-    <span>min</span>
+  <div id="focus-settings-row" style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:14px">
+    <div style="display:flex;align-items:center;gap:10px;font-size:15px;color:var(--muted)">
+      <span>Work</span>
+      <input type="number" id="pomo-work-min" value="25" min="1" max="120"
+        style="width:52px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:8px;padding:6px 8px;font-size:16px;text-align:center">
+      <span>min · Break</span>
+      <input type="number" id="pomo-break-min" value="5" min="1" max="60"
+        style="width:52px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:8px;padding:6px 8px;font-size:16px;text-align:center">
+      <span>min</span>
+    </div>
+    <button id="pomo-autostart-btn" class="focus-music-btn" onclick="togglePomodoroAutoStart()"
+      style="font-size:12px">↺ Auto-start next session</button>
   </div>
 
   <!-- Deep work progress bar -->
@@ -3072,6 +3076,11 @@ function endPomodoroBreak() {
   _exitBreakMusic();
   playAlertSound();
 
+  if (_pomodoroAutoStart) {
+    startPomodoro();
+    return;
+  }
+
   document.getElementById('focus-phase-label').textContent = 'BREAK DONE';
   document.getElementById('focus-phase-sub').textContent = 'ready for the next one?';
   document.getElementById('focus-settings-row').style.display = 'flex';
@@ -3104,7 +3113,14 @@ function playAlertSound() {
   } catch(e) {}
 }
 
-let pomodoroWasPaused = false; // track if we paused the main timer
+let pomodoroWasPaused = false;
+let _pomodoroAutoStart = localStorage.getItem('ta3-pomo-auto') === '1';
+
+function togglePomodoroAutoStart() {
+  _pomodoroAutoStart = !_pomodoroAutoStart;
+  localStorage.setItem('ta3-pomo-auto', _pomodoroAutoStart ? '1' : '0');
+  document.getElementById('pomo-autostart-btn')?.classList.toggle('active', _pomodoroAutoStart);
+}
 
 // ── Focus music (MP3 playlist) ────────────────────────────────────────────────
 // Drop lo-fi tracks into Sounds/ named focus.mp3, focus2.mp3, focus3.mp3, …
@@ -3259,10 +3275,23 @@ function _effectiveVolume() {
 function startFocusMusic() {
   const mp3 = document.getElementById('focus-music');
   mp3.onended = null;
+  mp3.onerror = null;
   mp3.loop = false;
   mp3.src = _LOFI_TRACKS[_lofiTrackIdx];
   mp3.volume = _effectiveVolume();
+  mp3.onerror = () => {
+    // Track failed to load — skip to next instead of going silent
+    _lofiTrackIdx = _nextTrackIdx();
+    startFocusMusic();
+  };
   mp3.onended = () => {
+    // If < 3 min left, don't start a new track the outro will just cut off —
+    // loop the current one until _startWorkOutro takes over at 17s
+    if (pomodoroPhase === 'work' && pomodoroRemaining > 0 && pomodoroRemaining < 3 * 60) {
+      mp3.currentTime = 0;
+      mp3.play().catch(() => {});
+      return;
+    }
     _lofiTrackIdx = _nextTrackIdx();
     startFocusMusic();
   };
@@ -3275,6 +3304,8 @@ function stopFocusMusic() {
   _outroActive = false;
   const mp3 = document.getElementById('focus-music');
   mp3.onended = null;
+  mp3.onerror = null;
+  mp3.loop = false;
   mp3.pause();
   mp3.currentTime = 0;
 }
@@ -3344,6 +3375,7 @@ function enterFocusMode() {
   const pb = document.getElementById('focus-playlist-btn');
   if (pb) pb.classList.toggle('active', _shuffleMode);
   document.getElementById('focus-music-off-btn')?.classList.remove('active');
+  _lofiTrackIdx = Math.floor(Math.random() * _LOFI_TRACKS.length);
   startFocusMusic();
   focusModeOn = true;
   pomodoroCount = 0;
@@ -3358,6 +3390,7 @@ function enterFocusMode() {
   setTimeout(() => taskInput.focus(), 300);
   document.getElementById('focus-intention-text').style.display = 'none';
 
+  document.getElementById('pomo-autostart-btn')?.classList.toggle('active', _pomodoroAutoStart);
   document.getElementById('focus-overlay').classList.add('open');
   document.getElementById('focus-phase-label').textContent = 'POMODORO';
   document.getElementById('focus-phase-sub').textContent = 'set your timer and go';
