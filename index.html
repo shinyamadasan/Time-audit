@@ -984,20 +984,33 @@ button, a, [role="button"],
 
 /* ── Desktop panels (left + right) ── */
 #side-panel,#left-panel{display:none}
-.sp-card{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:14px}
+.sp-card{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:14px;margin-bottom:10px}
+.sp-card:last-child{margin-bottom:0}
 .sp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-bottom:10px}
 @media(min-width:1100px){
-  #side-panel,#left-panel{
-    flex-direction:column;gap:10px;
-    position:fixed;top:16px;
-    width:clamp(170px,calc(50vw - 358px),220px);
+  #desktop-layout{
+    display:grid;
+    grid-template-columns:minmax(0,220px) minmax(0,680px) minmax(0,220px);
+    gap:16px;
+    max-width:1152px;
+    margin:0 auto;
+    padding:16px 16px 0;
+    align-items:start;
+  }
+  .app{grid-column:2;grid-row:1;max-width:none;margin:0}
+  #left-panel{
+    grid-column:1;grid-row:1;
+    display:flex!important;flex-direction:column;
+    position:sticky;top:16px;
     max-height:calc(100vh - 32px);overflow-y:auto;
-    padding-bottom:24px;
+  }
+  #side-panel{
+    grid-column:3;grid-row:1;
+    display:flex!important;flex-direction:column;
+    position:sticky;top:16px;
+    max-height:calc(100vh - 32px);overflow-y:auto;
   }
   #side-panel::-webkit-scrollbar,#left-panel::-webkit-scrollbar{width:0}
-  #side-panel{left:calc(50% + 350px)}
-  #left-panel{right:calc(50% + 350px)}
-  /* left-panel always hidden; side-panel + nav controlled by showView() */
 }
 .lp-nav-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:none;border:none;border-radius:10px;color:var(--muted);font-family:var(--head);font-size:13px;font-weight:500;cursor:pointer;text-align:left;transition:color 0.15s,background 0.15s}
 .lp-nav-btn.active{color:var(--deep);background:var(--deep-dim)}
@@ -1007,6 +1020,7 @@ button, a, [role="button"],
 </style>
 </head>
 <body>
+<div id="desktop-layout">
 <div class="app">
 
 <!-- ══ TODAY ══ -->
@@ -1316,18 +1330,6 @@ button, a, [role="button"],
     </div>
   </div>
   <div id="recent-list"></div>
-
-  <!-- Streak calendar -->
-  <div class="settings-section">
-    <div class="settings-title">Consistency — last 60 days</div>
-    <div id="reflect-streak-cal"></div>
-  </div>
-
-  <!-- Focus heatmap -->
-  <div class="settings-section">
-    <div class="settings-title">Focus heatmap — when do you actually work?</div>
-    <div id="reflect-heatmap"></div>
-  </div>
 </div>
 
 <!-- ══ WEEK ══ -->
@@ -1581,27 +1583,8 @@ button, a, [role="button"],
 <!-- ══ DESKTOP LEFT PANEL ══ -->
 <aside id="left-panel">
   <div class="sp-card">
-    <div style="font-size:12px;font-weight:800;color:var(--deep);letter-spacing:.1em;margin-bottom:16px;padding:2px 4px">CHRONASENSE</div>
-    <button class="lp-nav-btn active" id="lp-nav-today" onclick="showView('today')">
-      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>Today
-    </button>
-    <button class="lp-nav-btn" id="lp-nav-week" onclick="showView('week')">
-      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Week
-    </button>
-    <button class="lp-nav-btn" id="lp-nav-reflect" onclick="showView('reflect');renderReflectView()">
-      <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>Reflect
-    </button>
-    <button class="lp-nav-btn" id="lp-nav-settings" onclick="showView('settings')">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>Settings
-    </button>
-  </div>
-  <div class="sp-card">
-    <div class="sp-label">Now</div>
-    <div id="lp-now-content"><div style="font-size:12px;color:var(--muted)">Not tracking</div></div>
-  </div>
-  <div class="sp-card">
-    <div class="sp-label">Daily goal</div>
-    <div id="lp-goal-content"><div style="font-size:11px;color:var(--muted)">No goal set</div></div>
+    <div class="sp-label">Consistency — 60 days</div>
+    <div id="reflect-streak-cal"></div>
   </div>
 </aside>
 
@@ -1619,7 +1602,12 @@ button, a, [role="button"],
     <div class="sp-label">Streaks</div>
     <div id="sp-streak-content"></div>
   </div>
+  <div class="sp-card">
+    <div class="sp-label">Focus heatmap</div>
+    <div id="reflect-heatmap"></div>
+  </div>
 </aside>
+</div><!-- #desktop-layout -->
 
 <!-- ══ SIGN-IN OVERLAY ══ -->
 <div class="signin-overlay" id="signin-overlay">
@@ -3635,10 +3623,7 @@ function showView(name) {
   if (name==='week') renderWeek();
   if (name==='settings') renderSettings();
 
-  const isDesktop = window.innerWidth >= 1100;
-  document.getElementById('left-panel').style.display = 'none';
-  document.getElementById('side-panel').style.display = isDesktop && name === 'today' ? 'flex' : 'none';
-  if (name === 'today') renderSidePanel();
+  if (window.innerWidth >= 1100) { renderSidePanel(); renderStreakCalendar(); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -5244,8 +5229,6 @@ function renderToday() {
       listEl.innerHTML = '<div class="empty"><span class="empty-icon">⏱</span>Start the timer and log your first block.</div>';
       renderRecentChips();
       renderAwarenessSignal();
-      renderStreakCalendar();
-      renderFocusHeatmap();
       return;
     }
 
@@ -5292,6 +5275,7 @@ function renderToday() {
   renderStreakCalendar();
   renderFocusHeatmap();
 }
+
 
 // ══════════════════════════════════════════════════════
 // HERO UI ACTIONS
