@@ -973,6 +973,8 @@ button, a, [role="button"],
 .ds-peak{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px}
 .ds-peak-badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--deep-dim);color:var(--deep);white-space:nowrap}
 .ds-insight{font-size:12px;color:var(--muted);line-height:1.55;padding-top:9px;border-top:1px solid var(--border);font-style:italic;font-family:var(--mono)}
+.sb-val{font-size:20px;font-weight:700;font-family:var(--mono);line-height:1}
+.sb-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
 
 /* ── Desktop panels (left + right) ── */
 #side-panel,#left-panel{display:none}
@@ -1051,6 +1053,30 @@ button, a, [role="button"],
   <button id="main-btn" style="display:none" onclick="toggleTimer()"></button>
   <button id="switch-btn" style="display:none" onclick="openSwitchPanel()"></button>
   <button id="break-btn" style="display:none"></button>
+
+  <!-- ── Status banner ── -->
+  <div id="status-banner" style="display:none;align-items:center;justify-content:space-between;gap:12px;border-radius:14px;padding:13px 16px;margin-bottom:14px;flex-wrap:wrap">
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+      <div>
+        <div class="sb-val" id="sb-deep-val">—</div>
+        <div class="sb-lbl">deep today</div>
+      </div>
+      <div style="width:1px;height:28px;background:var(--border2);flex-shrink:0"></div>
+      <div>
+        <div class="sb-val" id="sb-left-val">—</div>
+        <div class="sb-lbl">left in day</div>
+      </div>
+      <div style="width:1px;height:28px;background:var(--border2);flex-shrink:0"></div>
+      <div>
+        <div class="sb-val" id="sb-needed-val">—</div>
+        <div class="sb-lbl" id="sb-needed-label">to goal</div>
+      </div>
+    </div>
+    <div id="sb-status-pill"></div>
+  </div>
+
+  <!-- ── Day bar ── -->
+  <div id="day-bar" style="display:none;margin-bottom:16px"></div>
 
   <!-- ── Activity Hero ── -->
   <div class="activity-hero" id="activity-hero">
@@ -4663,6 +4689,84 @@ function showHeroState(state) {
   });
 }
 
+function renderStatusBanner(todayE) {
+  const banner = document.getElementById('status-banner');
+  if (!banner) return;
+  if (!isViewingToday() || !todayE.filter(e => !e.missed).length) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  // Actual deep minutes from real entry durations
+  const deepMins = todayE
+    .filter(e => e.energy === 'deep' && !e.missed && !e.deleted && !e.break && !e.away)
+    .reduce((s, e) => s + (e.tsStart
+      ? Math.round((e.ts - e.tsStart) / 60000)
+      : (e.blockIntervalMin || settings.intervalMin || 30)), 0);
+  const deepHrs = deepMins / 60;
+
+  // Daily goal = weekly goal / 5
+  const dailyGoalHrs = (settings.deepGoal || 20) / 5;
+
+  // Current time and sleep time in user's timezone
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const nowParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(new Date());
+  const curH = parseInt(nowParts.find(p => p.type === 'hour').value) % 24;
+  const curM = parseInt(nowParts.find(p => p.type === 'minute').value);
+  const nowMins = curH * 60 + curM;
+  const [sleepH, sleepM] = (settings.sleepTime || '23:00').split(':').map(Number);
+  const minsLeft = Math.max(0, sleepH * 60 + sleepM - nowMins);
+  const hrsLeft = minsLeft / 60;
+
+  // Status logic
+  const hrsNeeded = Math.max(0, dailyGoalHrs - deepHrs);
+  const goalHit   = deepHrs >= dailyGoalHrs;
+  const onTrack   = goalHit || hrsNeeded <= hrsLeft;
+
+  const fmtH = h => h >= 1 ? `${h.toFixed(1)}h` : `${Math.round(h * 60)}m`;
+
+  let bgColor, borderColor, pillBg, pillColor, statusText;
+  if (goalHit) {
+    bgColor = 'rgba(76,199,240,0.07)'; borderColor = 'rgba(76,199,240,0.25)';
+    pillBg = 'rgba(76,199,240,0.15)'; pillColor = 'var(--deep)';
+    statusText = 'Goal hit ✓';
+  } else if (onTrack) {
+    bgColor = 'rgba(52,211,153,0.07)'; borderColor = 'rgba(52,211,153,0.25)';
+    pillBg = 'rgba(52,211,153,0.15)'; pillColor = '#34d399';
+    statusText = 'On track';
+  } else {
+    bgColor = 'rgba(255,107,107,0.07)'; borderColor = 'rgba(255,107,107,0.25)';
+    pillBg = 'rgba(255,107,107,0.12)'; pillColor = 'var(--distraction)';
+    statusText = 'Behind';
+  }
+
+  banner.style.cssText = `display:flex;align-items:center;justify-content:space-between;gap:12px;background:${bgColor};border:1px solid ${borderColor};border-radius:14px;padding:13px 16px;margin-bottom:14px;flex-wrap:wrap`;
+
+  const deepValEl = document.getElementById('sb-deep-val');
+  deepValEl.textContent = fmtH(deepHrs);
+  deepValEl.style.color = goalHit ? 'var(--deep)' : onTrack ? '#34d399' : 'var(--distraction)';
+
+  document.getElementById('sb-left-val').textContent = minsLeft > 0 ? fmtH(hrsLeft) : '—';
+
+  const neededEl    = document.getElementById('sb-needed-val');
+  const neededLblEl = document.getElementById('sb-needed-label');
+  if (goalHit) {
+    neededEl.textContent = `+${fmtH(deepHrs - dailyGoalHrs)}`;
+    neededEl.style.color = 'var(--deep)';
+    neededLblEl.textContent = 'over goal';
+  } else {
+    neededEl.textContent = fmtH(hrsNeeded);
+    neededEl.style.color = onTrack ? 'var(--text)' : 'var(--distraction)';
+    neededLblEl.textContent = 'to goal';
+  }
+
+  const pill = document.getElementById('sb-status-pill');
+  pill.textContent = statusText;
+  pill.style.cssText = `font-size:11px;font-weight:700;letter-spacing:.05em;padding:6px 14px;border-radius:999px;white-space:nowrap;background:${pillBg};color:${pillColor}`;
+}
+
 function renderLeftPanel() {
   if (window.innerWidth < 1100) return;
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -4972,6 +5076,7 @@ function renderToday() {
 
   renderRecentChips();
   renderAwarenessSignal();
+  renderStatusBanner(todayE);
   renderSidePanel();
   renderLeftPanel();
 }
@@ -7451,6 +7556,7 @@ initAutoSync();
 initNativeNotifications();
 setTimeout(() => { checkSleepSetup(); checkSleepReminder(); }, 2000);
 setInterval(checkSleepReminder, 5 * 60 * 1000); // re-check every 5 min until sleep is logged
+setInterval(() => { if (isViewingToday()) renderStatusBanner(getViewingEntries()); }, 60000);
 // Auto-start "PC Time" on fresh browser open (desktop only, not mobile browsers)
 // Wait up to 5s for Firebase to tell us if a timer is already running elsewhere.
 // If Firebase says a timer is running, adopt that — don't overwrite it.
