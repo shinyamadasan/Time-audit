@@ -1350,6 +1350,12 @@ button, a, [role="button"],
     <div id="reflect-week-compare"></div>
   </div>
 
+  <!-- Focus heatmap -->
+  <div class="settings-section">
+    <div class="settings-title">Focus heatmap — when do you actually do deep work?</div>
+    <div id="reflect-heatmap"></div>
+  </div>
+
   <!-- Today's Daily Summary -->
   <div class="settings-section" id="reflect-daily-section">
     <div class="settings-title">Today's summary</div>
@@ -7271,6 +7277,90 @@ function renderHonestSummary() {
   el.innerHTML = `<p style="font-size:13.5px;line-height:1.7;color:var(--text)">${sentences.join(' ')}</p>`;
 }
 
+function renderFocusHeatmap() {
+  const el = document.getElementById('reflect-heatmap');
+  if (!el) return;
+
+  // Build (dow 0=Mon…6=Sun, hour 0-23) buckets from ALL deep-work entries
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // buckets[dow][hour] = total deep-work minutes
+  const buckets = Array.from({length: 7}, () => new Array(24).fill(0));
+  let hasData = false;
+
+  for (const e of entries) {
+    if (e.deleted || e.missed || e.energy !== 'deep') continue;
+    const ts = e.tsStart || e.ts;
+    if (!ts) continue;
+    const rawDow = tzDow(ts); // 0=Sun…6=Sat
+    const dow = rawDow === 0 ? 6 : rawDow - 1; // remap to Mon=0…Sun=6
+    const hour = tzHour(ts);
+    buckets[dow][hour] += (e.blockIntervalMin || 0);
+    hasData = true;
+  }
+
+  if (!hasData) {
+    el.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:4px 0">No deep work logged yet — heatmap builds over time.</div>`;
+    return;
+  }
+
+  // Find max for normalisation
+  const maxVal = Math.max(1, ...buckets.flat());
+
+  const cellColor = (mins) => {
+    if (mins === 0) return 'var(--bg3)';
+    const t = mins / maxVal;
+    if (t >= 0.75) return 'var(--deep)';
+    if (t >= 0.45) return 'rgba(76,199,240,0.65)';
+    if (t >= 0.2)  return 'rgba(76,199,240,0.35)';
+    return 'rgba(76,199,240,0.15)';
+  };
+
+  const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  // Show hour label every 3 hours, right-aligned
+  const hourLabel = h => (h % 3 === 0) ? `${h === 0 ? '12am' : h < 12 ? h+'am' : h === 12 ? '12pm' : (h-12)+'pm'}` : '';
+
+  // Grid: rows=hours(0-23), cols=days(Mon-Sun)
+  // Layout: label col + 7 day cols
+  const CELL_W = 32, CELL_H = 13, GAP = 2, LABEL_W = 32;
+  const gridW = LABEL_W + 7 * (CELL_W + GAP);
+
+  let html = `<div style="overflow-x:auto;padding-bottom:4px"><div style="min-width:${gridW}px">`;
+
+  // Header row: day labels
+  html += `<div style="display:flex;margin-left:${LABEL_W}px;gap:${GAP}px;margin-bottom:${GAP}px">`;
+  dayLabels.forEach(d => {
+    html += `<div style="width:${CELL_W}px;text-align:center;font-size:10px;color:var(--muted);font-family:var(--mono)">${d}</div>`;
+  });
+  html += `</div>`;
+
+  // Hour rows
+  for (let h = 0; h < 24; h++) {
+    html += `<div style="display:flex;align-items:center;gap:${GAP}px;margin-bottom:${GAP}px">`;
+    // Hour label
+    html += `<div style="width:${LABEL_W}px;text-align:right;padding-right:6px;font-size:9px;color:var(--muted2);font-family:var(--mono);line-height:${CELL_H}px">${hourLabel(h)}</div>`;
+    // 7 day cells
+    for (let d = 0; d < 7; d++) {
+      const mins = buckets[d][h];
+      const bg = cellColor(mins);
+      const tip = mins > 0 ? `${dayLabels[d]} ${h}:00 — ${mins}m deep` : '';
+      html += `<div style="width:${CELL_W}px;height:${CELL_H}px;border-radius:3px;background:${bg}" title="${tip}"></div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Legend
+  html += `<div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+    <span style="font-size:10px;color:var(--muted2)">Less</span>
+    ${['var(--bg3)','rgba(76,199,240,0.15)','rgba(76,199,240,0.35)','rgba(76,199,240,0.65)','var(--deep)'].map(c =>
+      `<div style="width:12px;height:12px;border-radius:3px;background:${c}"></div>`
+    ).join('')}
+    <span style="font-size:10px;color:var(--muted2)">More</span>
+  </div>`;
+
+  html += `</div></div>`;
+  el.innerHTML = html;
+}
+
 function renderWeekComparison() {
   const el = document.getElementById('reflect-week-compare');
   if (!el) return;
@@ -7338,6 +7428,7 @@ function renderReflectView() {
   renderStreakCalendar();
   renderHonestSummary();
   renderWeekComparison();
+  renderFocusHeatmap();
 
   // ── Daily summary ──
   renderDailySummary();
