@@ -990,27 +990,24 @@ button, a, [role="button"],
 @media(min-width:1100px){
   #desktop-layout{
     display:grid;
-    grid-template-columns:minmax(0,220px) minmax(0,680px) minmax(0,220px);
+    grid-template-columns:200px 1fr 200px;
     gap:16px;
-    max-width:1152px;
-    margin:0 auto;
-    padding:16px 16px 0;
+    padding:16px;
     align-items:start;
   }
-  .app{grid-column:2;grid-row:1;max-width:none;margin:0}
+  .app{grid-column:2;grid-row:1;max-width:680px;width:100%;margin:0;justify-self:center}
   #left-panel{
     grid-column:1;grid-row:1;
-    display:flex!important;flex-direction:column;
+    display:flex!important;flex-direction:column;gap:10px;
     position:sticky;top:16px;
-    max-height:calc(100vh - 32px);overflow-y:auto;
   }
   #side-panel{
     grid-column:3;grid-row:1;
-    display:flex!important;flex-direction:column;
+    display:flex!important;flex-direction:column;gap:10px;
     position:sticky;top:16px;
-    max-height:calc(100vh - 32px);overflow-y:auto;
   }
-  #side-panel::-webkit-scrollbar,#left-panel::-webkit-scrollbar{width:0}
+  /* Hide center-only widgets on desktop — shown in panels instead */
+  #status-banner,#day-bar{display:none!important}
 }
 .lp-nav-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:none;border:none;border-radius:10px;color:var(--muted);font-family:var(--head);font-size:13px;font-weight:500;cursor:pointer;text-align:left;transition:color 0.15s,background 0.15s}
 .lp-nav-btn.active{color:var(--deep);background:var(--deep-dim)}
@@ -1590,6 +1587,11 @@ button, a, [role="button"],
 
 <!-- ══ DESKTOP SIDE PANEL ══ -->
 <aside id="side-panel">
+  <div class="sp-card">
+    <div class="sp-label">Today's goal</div>
+    <div id="sp-status-content"></div>
+    <div id="sp-day-bar" style="margin-top:10px"></div>
+  </div>
   <div class="sp-card">
     <div class="sp-label">Today's energy</div>
     <div id="sp-energy-bars"><div style="font-size:11px;color:var(--muted)">Loading…</div></div>
@@ -4808,8 +4810,8 @@ const _DAY_BAR_COLORS = {
   errands:'#94a3b8', away:'#94a3b8',
 };
 
-function renderDayBar(todayE) {
-  const el = document.getElementById('day-bar');
+function renderDayBar(todayE, el) {
+  el = el || document.getElementById('day-bar');
   if (!el) return;
 
   const todayKey = getViewingDateKey();
@@ -5016,6 +5018,28 @@ function renderSidePanel() {
   const todayKey = getDateInTZ(Date.now(), tz);
   const byDate = _buildEntriesByDate(tz);
   const todayE = byDate.get(todayKey) || [];
+
+  // ── Status card (goal progress + day bar) ──
+  const spStatus = document.getElementById('sp-status-content');
+  if (spStatus) {
+    const deepMins = todayE.filter(e=>e.energy==='deep').reduce((s,e)=>s+(e.blockIntervalMin||0),0);
+    const dailyGoalMins = (settings.deepGoal||20)/5*60;
+    const pct = dailyGoalMins>0 ? Math.min(100,Math.round(deepMins/dailyGoalMins*100)) : 0;
+    const deepStr = deepMins>=60?`${(deepMins/60).toFixed(1)}h`:`${deepMins}m`;
+    const goalStr = dailyGoalMins>=60?`${(dailyGoalMins/60).toFixed(1)}h`:`${dailyGoalMins}m`;
+    const color = pct>=100?'var(--deep)':pct>=60?'var(--deep)':'var(--distraction)';
+    spStatus.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+        <span style="font-size:22px;font-family:var(--mono);color:${color}">${deepStr}</span>
+        <span style="font-size:11px;color:var(--muted)">/ ${goalStr} goal</span>
+      </div>
+      <div style="height:4px;background:var(--bg4);border-radius:2px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:width 0.4s"></div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:5px">${pct}% of daily goal</div>`;
+  }
+  const spDayBar = document.getElementById('sp-day-bar');
+  if (spDayBar) renderDayBar(todayE, spDayBar);
 
   // ── Energy breakdown ──
   const cats = [
