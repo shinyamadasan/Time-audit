@@ -2664,6 +2664,8 @@ function stopAlertLoop() {
 function showPingBanner() {}
 function hidePingBanner() {}
 
+// ⚠ DANGER: timerOwnerDeviceId guard prevents non-owner devices from firing pings in a shared-room session.
+// Removing it causes both devices to ping simultaneously and log duplicate entries.
 function doPing() {
   if (breakActive) { timerStartedAt = Date.now(); remaining = totalSecs; updateRing(); return; }
   if (timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId) {
@@ -2996,6 +2998,8 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ── Heartbeat: written every 15s while timer runs so we can detect unexpected closures ──
+// ⚠ DANGER: _stopHeartbeat() MUST be called on every clean exit path (resetTimer, stopAndLog, confirmExitFocus).
+// If the key is not removed, the next session always shows a false recovery modal regardless of whether a crash occurred.
 let _heartbeatTicker = null;
 function _startHeartbeat() {
   clearInterval(_heartbeatTicker);
@@ -3700,6 +3704,8 @@ function getWorkDayStartTs(entriesOverride) {
 }
 
 // ── Overlap clipping: display-only shallow copies, earlier block clipped to next block's start ──
+// ⚠ DANGER: operates on shallow copies only — never pass raw entries or mutations will corrupt stored data permanently.
+// Clip logic is intentional: partial overlaps are trimmed; fully-contained entries are left untouched (next.ts <= curr.ts check).
 function clipOverlapsForDisplay(ascSorted) {
   if (ascSorted.length < 2) return ascSorted;
   const result = ascSorted.map(e => ({ ...e })); // shallow copies — never mutates stored data
@@ -3721,6 +3727,7 @@ function clipOverlapsForDisplay(ascSorted) {
 // ── Merge consecutive same-activity entries for display ──
 // Display-only: never mutates stored entries.
 // Two entries merge if they share activity+energy and the gap between them is < 5 min.
+// ⚠ DANGER: _mergedIds must be preserved on every merged group — openEditMergedEntry() depends on it to know which entries to update together.
 function mergeConsecutiveForDisplay(sorted) {
   if (!sorted.length) return sorted;
   const MAX_GAP_MS = 5 * 60000;
@@ -3742,6 +3749,7 @@ function mergeConsecutiveForDisplay(sorted) {
 
 // ── Gap detection: anchored to work day start, not first entry ──
 // This means: even if you never opened the app, gaps show from your start time.
+// ⚠ DANGER: anchor is intentional — do not change to first-entry anchor or gaps disappear for days with no morning logging.
 function computeGaps(todayEntries, dayNow) {
   const MIN_GAP_MIN = 5;
   const workStart = getWorkDayStartTs(todayEntries);
@@ -4031,7 +4039,9 @@ function toggleTlBucket(id) {
 
 // _renderTodayPending, scheduleRenderToday — moved to storage.js
 
-// Cache key — skip expensive innerHTML work when today's entries haven't changed
+// Cache key — skip expensive innerHTML work when today's entries haven't changed.
+// ⚠ DANGER: setViewDate() sets this to '__FORCE__' (a sentinel) to force re-render on empty days.
+// An empty day produces key '' which equals the initial value — without the sentinel, switching to an empty past day shows stale UI.
 let _todayRenderKey = '';
 
 // ── Contextual visibility ─────────────────────────────────────────────────
@@ -7297,6 +7307,8 @@ setTimeout(() => {
 document.getElementById('interval-input').value = settings.intervalMin;
 
 // ── Detect unexpected closure via heartbeat ──
+// ⚠ DANGER: runs once at boot as an IIFE — do not move, wrap, or defer it.
+// The 2-minute threshold intentionally ignores quick refreshes; lowering it spams the recovery modal on every normal page reload.
 (function() {
   const hbTs = parseInt(localStorage.getItem('ta3-heartbeat-ts') || '0');
   if (!hbTs) return;
@@ -7315,7 +7327,9 @@ document.getElementById('interval-input').value = settings.intervalMin;
   };
 })();
 
-// If timer was restored from localStorage, resume it
+// If timer was restored from localStorage, resume it.
+// ⚠ DANGER: the !ticker guard prevents double-ticking if storage.js already started the interval during load.
+// Removing it causes two simultaneous tickers — pings fire at double rate and remaining counts down twice as fast.
 if (running && timerStartedAt) {
   document.getElementById('main-btn').textContent = 'Break';
   document.getElementById('timer-status').textContent = `Pinging every ${settings.intervalMin} min (restored)`;
