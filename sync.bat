@@ -22,6 +22,9 @@ copy /Y "%SRC%" "%WWW%\index.html" || echo WARNING: Copy index.html to www faile
 for %%f in ("%APP_DIR%\*.js") do (
   copy /Y "%%f" "%WWW%\%%~nxf" || echo WARNING: Copy %%~nxf to www failed
 )
+for %%f in ("%APP_DIR%\*.css") do (
+  copy /Y "%%f" "%WWW%\%%~nxf" || echo WARNING: Copy %%~nxf to www failed
+)
 if exist "%APP_DIR%\Sounds" (
   if not exist "%WWW%\Sounds" mkdir "%WWW%\Sounds"
   copy /Y "%APP_DIR%\Sounds\*.*" "%WWW%\Sounds\" > nul || echo WARNING: Copy Sounds to www failed
@@ -41,7 +44,7 @@ if errorlevel 1 (
 
 echo.
 echo [3/3] Pushing to GitHub (web app)...
-git add index.html *.js CHANGELOG.md Sounds
+git add index.html *.js *.css CHANGELOG.md Sounds
 git status
 git commit -m "Update app"
 if errorlevel 1 (
