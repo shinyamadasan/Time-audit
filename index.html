@@ -987,10 +987,8 @@ button, a, [role="button"],
 .sp-card{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:14px}
 .sp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-bottom:10px}
 @media(min-width:1100px){
-  .nav{display:none}
-  .view{padding-bottom:40px!important}
   #side-panel,#left-panel{
-    display:flex;flex-direction:column;gap:10px;
+    flex-direction:column;gap:10px;
     position:fixed;top:16px;
     width:clamp(170px,calc(50vw - 358px),220px);
     max-height:calc(100vh - 32px);overflow-y:auto;
@@ -999,6 +997,7 @@ button, a, [role="button"],
   #side-panel::-webkit-scrollbar,#left-panel::-webkit-scrollbar{width:0}
   #side-panel{left:calc(50% + 350px)}
   #left-panel{right:calc(50% + 350px)}
+  /* panels + nav visibility controlled by JS via showView() */
 }
 .lp-nav-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:none;border:none;border-radius:10px;color:var(--muted);font-family:var(--head);font-size:13px;font-weight:500;cursor:pointer;text-align:left;transition:color 0.15s,background 0.15s}
 .lp-nav-btn.active{color:var(--deep);background:var(--deep-dim)}
@@ -3635,7 +3634,13 @@ function showView(name) {
   if (name==='today') renderToday();
   if (name==='week') renderWeek();
   if (name==='settings') renderSettings();
-  if (name !== 'today') { renderSidePanel(); renderLeftPanel(); }
+
+  const isDesktop = window.innerWidth >= 1100;
+  const showPanels = isDesktop && name === 'today';
+  document.getElementById('left-panel').style.display = showPanels ? 'flex' : 'none';
+  document.getElementById('side-panel').style.display = showPanels ? 'flex' : 'none';
+  document.querySelector('.nav').style.display = isDesktop && name === 'today' ? 'none' : '';
+  if (name === 'today') { renderSidePanel(); renderLeftPanel(); }
 }
 
 // ══════════════════════════════════════════════════════
