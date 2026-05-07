@@ -973,6 +973,22 @@ button, a, [role="button"],
 .ds-peak{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px}
 .ds-peak-badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--deep-dim);color:var(--deep);white-space:nowrap}
 .ds-insight{font-size:12px;color:var(--muted);line-height:1.55;padding-top:9px;border-top:1px solid var(--border);font-style:italic;font-family:var(--mono)}
+
+/* ── Desktop side panel ── */
+#side-panel{display:none}
+@media(min-width:1100px){
+  #side-panel{
+    display:flex;flex-direction:column;gap:10px;
+    position:fixed;top:20px;
+    left:calc(50% + 350px);
+    width:clamp(180px,calc(50vw - 358px),240px);
+    max-height:calc(100vh - 110px);overflow-y:auto;
+    padding-bottom:24px;
+  }
+  #side-panel::-webkit-scrollbar{width:0}
+  .sp-card{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:14px}
+  .sp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-bottom:10px}
+}
 </style>
 </head>
 <body>
@@ -1493,6 +1509,22 @@ button, a, [role="button"],
 
 </div><!-- .app -->
 
+<!-- ══ DESKTOP SIDE PANEL ══ -->
+<aside id="side-panel">
+  <div class="sp-card">
+    <div class="sp-label">Today's energy</div>
+    <div id="sp-energy-bars"><div style="font-size:11px;color:var(--muted)">Loading…</div></div>
+  </div>
+  <div class="sp-card">
+    <div class="sp-label">This week · deep hours</div>
+    <div id="sp-week-bars"></div>
+  </div>
+  <div class="sp-card">
+    <div class="sp-label">Streaks</div>
+    <div id="sp-streak-content"></div>
+  </div>
+</aside>
+
 <!-- ══ SIGN-IN OVERLAY ══ -->
 <div class="signin-overlay" id="signin-overlay">
   <div class="signin-logo">⏱</div>
@@ -1989,7 +2021,7 @@ button, a, [role="button"],
     </div>
   </div>
   <div style="display:flex;gap:8px;justify-content:flex-end">
-    <button class="btn ghost" onclick="skipSleepReminder()">Skip today</button>
+    <button class="btn ghost" onclick="snoozeSleepReminder()">Snooze 10 min</button>
     <button class="btn primary" onclick="confirmSleepLog()">Log sleep</button>
   </div>
 </div></div>
@@ -3504,6 +3536,7 @@ function showView(name) {
   if (name==='today') renderToday();
   if (name==='week') renderWeek();
   if (name==='settings') renderSettings();
+  if (name !== 'today') renderSidePanel(); // renderToday() already calls it
 }
 
 // ══════════════════════════════════════════════════════
@@ -4034,14 +4067,25 @@ function toggleDatePicker() {
 }
 function computeDeepScore(arr){return arr.length?Math.round(arr.filter(e=>e.energy==='deep').length/arr.length*100):0;}
 function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(settings.intervalMin/60)).toFixed(1);}
+function _buildEntriesByDate(tz) {
+  const map = new Map();
+  for (const e of entries) {
+    if (e.deleted || e.missed) continue;
+    const k = getDateInTZ(e.tsStart || e.ts, tz);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(e);
+  }
+  return map;
+}
 function computeStreak(){
   // Deep work streak: consecutive days with ≥1 deep work block
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = Date.now();
+  const byDate = _buildEntriesByDate(tz);
   let s = 0;
   for (let i = 0; i < 90; i++) {
     const k = getDateInTZ(now - i * 86400000, tz);
-    const dayEntries = entries.filter(e => !e.deleted && !e.missed && getDateInTZ(e.tsStart || e.ts, tz) === k);
+    const dayEntries = byDate.get(k) || [];
     if (dayEntries.some(e => e.energy === 'deep')) s++;
     else if (i > 0) break; // allow today to have no deep yet without breaking streak
   }
@@ -4051,10 +4095,11 @@ function computeCleanStreak(){
   // Clean-day streak: consecutive days with zero distraction/waste entries
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = Date.now();
+  const byDate = _buildEntriesByDate(tz);
   let s = 0;
   for (let i = 1; i <= 30; i++) { // start at yesterday so today-in-progress doesn't break it
     const k = getDateInTZ(now - i * 86400000, tz);
-    const dayEntries = entries.filter(e => !e.deleted && !e.missed && getDateInTZ(e.tsStart || e.ts, tz) === k);
+    const dayEntries = byDate.get(k) || [];
     if (!dayEntries.length) break; // no data — stop
     if (dayEntries.some(e => e.energy === 'distraction' || e.energy === 'waste')) break;
     s++;
@@ -4581,6 +4626,99 @@ function showHeroState(state) {
   });
 }
 
+function renderSidePanel() {
+  if (window.innerWidth < 1100) return;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const byDate = _buildEntriesByDate(tz);
+  const todayE = byDate.get(todayKey) || [];
+
+  // ── Energy breakdown ──
+  const cats = [
+    {key:'deep',label:'Deep',color:'var(--deep)'},
+    {key:'learning',label:'Learning',color:'var(--learning)'},
+    {key:'nine5',label:'Job Work',color:'var(--nine5)'},
+    {key:'shallow',label:'Shallow',color:'var(--shallow)'},
+    {key:'exercise',label:'Exercise',color:'var(--exercise)'},
+    {key:'social',label:'Social',color:'var(--social)'},
+    {key:'errands',label:'Errands',color:'var(--errands)'},
+    {key:'waste',label:'Waste',color:'var(--distraction)'},
+    {key:'distraction',label:'Distraction',color:'var(--distraction)'},
+  ];
+  const mins = {};
+  let totalMins = 0;
+  for (const e of todayE) {
+    if (e.break || e.away || e.browserUsage) continue;
+    const dur = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 0);
+    const cat = e.energy || 'shallow';
+    mins[cat] = (mins[cat] || 0) + dur;
+    totalMins += dur;
+  }
+  const energyHTML = totalMins > 0
+    ? cats.filter(c => mins[c.key]).map(c => {
+        const m = mins[c.key];
+        const pct = Math.round(m / totalMins * 100);
+        return `<div style="margin-bottom:9px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="font-size:11px;color:var(--muted)">${c.label}</span>
+            <span style="font-size:11px;color:var(--text);font-family:var(--mono)">${fmtDur(m)}</span>
+          </div>
+          <div style="height:3px;background:var(--bg4);border-radius:2px">
+            <div style="height:100%;width:${pct}%;background:${c.color};border-radius:2px"></div>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div style="font-size:11px;color:var(--muted)">Nothing logged yet today</div>';
+  const spEnergy = document.getElementById('sp-energy-bars');
+  if (spEnergy) spEnergy.innerHTML = energyHTML;
+
+  // ── Week bars (last 7 days, deep hours) ──
+  const weekDays = ['S','M','T','W','T','F','S'];
+  const bars = [];
+  for (let i = 6; i >= 0; i--) {
+    const k = getDateInTZ(Date.now() - i * 86400000, tz);
+    const dayE = byDate.get(k) || [];
+    const deepMins = dayE
+      .filter(e => e.energy === 'deep' || e.energy === 'learning')
+      .reduce((s, e) => s + (e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 0)), 0);
+    const dow = new Date(k + 'T12:00:00').getDay();
+    bars.push({deepMins, label: weekDays[dow], isToday: k === todayKey});
+  }
+  const maxMins = Math.max(...bars.map(b => b.deepMins), 60);
+  const spWeek = document.getElementById('sp-week-bars');
+  if (spWeek) spWeek.innerHTML = `
+    <div style="display:flex;align-items:flex-end;gap:4px;height:64px">
+      ${bars.map(b => {
+        const h = b.deepMins > 0 ? Math.max(Math.round(b.deepMins / maxMins * 52), 3) : 0;
+        const hrs = (b.deepMins / 60).toFixed(1);
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+          <div title="${hrs}h deep" style="width:100%;height:${h}px;background:${b.isToday ? 'var(--deep)' : 'var(--bg4)'};border:${b.deepMins > 0 && !b.isToday ? '1px solid var(--deep-dim)' : 'none'};border-radius:3px 3px 0 0;margin-top:auto"></div>
+          <div style="font-size:9px;color:${b.isToday ? 'var(--deep)' : 'var(--muted)'};font-weight:${b.isToday ? 700 : 400}">${b.label}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px">
+      <span style="font-size:10px;color:var(--muted)">0h</span>
+      <span style="font-size:10px;color:var(--muted)">${(maxMins/60).toFixed(1)}h</span>
+    </div>`;
+
+  // ── Streaks ──
+  const streak = computeStreak();
+  const cleanStreak = computeCleanStreak();
+  const spStreak = document.getElementById('sp-streak-content');
+  if (spStreak) spStreak.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="background:var(--deep-dim);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--deep);font-family:var(--mono)">${streak}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">day streak</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--text);font-family:var(--mono)">${cleanStreak}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">days clean</div>
+      </div>
+    </div>`;
+}
+
 function renderToday() {
   resetRetroBar();
   const todayE = getViewingEntries();
@@ -4746,6 +4884,7 @@ function renderToday() {
 
   renderRecentChips();
   renderAwarenessSignal();
+  renderSidePanel();
 }
 
 // ══════════════════════════════════════════════════════
@@ -6338,21 +6477,26 @@ function skipSleepSetup() {
 function checkSleepReminder() {
   if (!settings.sleepSetupDone) return;
   const todayKey = toDateKey(new Date());
+  // Stop if already logged (or confirmed) today
   if (localStorage.getItem('ta3-sleep-reminded') === todayKey) return;
-  // Check if already logged sleep today
   const alreadyLogged = entries.some(e => !e.deleted && e.activity === 'Sleep' && e.date === todayKey);
   if (alreadyLogged) { localStorage.setItem('ta3-sleep-reminded', todayKey); return; }
-  // Check if it's time to show reminder (wakeTime + reminderMin)
+  // Stop if currently snoozed
+  const snoozeUntil = parseInt(localStorage.getItem('ta3-sleep-snooze') || '0');
+  if (Date.now() < snoozeUntil) return;
+  // Don't show if the overlay is already open
+  if (document.getElementById('sleep-reminder-overlay').style.display !== 'none') return;
+  // Check if it's past trigger time (wakeTime + reminderMin)
   const [wH, wM] = (settings.wakeTime || '07:00').split(':').map(Number);
   const reminderMin = settings.sleepReminderMin ?? 30;
-  const nowMinutes = tzHour(Date.now()) * 60 + (() => {
-    const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, minute: '2-digit' }).formatToParts(new Date());
-    return parseInt(p.find(x => x.type === 'minute').value);
-  })();
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
+  const nowH = parseInt(p.find(x => x.type === 'hour').value) % 24;
+  const nowM = parseInt(p.find(x => x.type === 'minute').value);
+  const nowMinutes = nowH * 60 + nowM;
   const triggerMin = wH * 60 + wM + reminderMin;
   if (nowMinutes >= triggerMin) {
-    setTimeout(() => openSleepReminder(), 1000);
+    openSleepReminder();
   }
 }
 
@@ -6395,12 +6539,14 @@ function confirmSleepLog() {
   const sDate = sH > wH2 ? prevDateKey(todayKey) : todayKey;
   const sleepTs = makeDateAtTime(sDate, s);
   const wakeTs  = makeDateAtTime(todayKey, w);
+  localStorage.setItem('ta3-sleep-reminded', toDateKey(new Date()));
+  localStorage.removeItem('ta3-sleep-snooze');
   document.getElementById('sleep-reminder-overlay').style.display = 'none';
   logSleepEntry(sleepTs, wakeTs);
 }
 
-function skipSleepReminder() {
-  localStorage.setItem('ta3-sleep-reminded', toDateKey(new Date()));
+function snoozeSleepReminder() {
+  localStorage.setItem('ta3-sleep-snooze', String(Date.now() + 10 * 60 * 1000));
   document.getElementById('sleep-reminder-overlay').style.display = 'none';
 }
 
@@ -7215,6 +7361,7 @@ renderToday();
 initAutoSync();
 initNativeNotifications();
 setTimeout(() => { checkSleepSetup(); checkSleepReminder(); }, 2000);
+setInterval(checkSleepReminder, 5 * 60 * 1000); // re-check every 5 min until sleep is logged
 // Auto-start "PC Time" on fresh browser open (desktop only, not mobile browsers)
 // Wait up to 5s for Firebase to tell us if a timer is already running elsewhere.
 // If Firebase says a timer is running, adopt that — don't overwrite it.
