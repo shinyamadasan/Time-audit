@@ -1289,7 +1289,13 @@ button, a, [role="button"],
 
   <div class="timeline-section">
     <div class="section-label">
-      <span>Today's timeline</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button onclick="navigateDateBy(-1)" title="Previous day"
+          style="background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 2px;line-height:1;font-family:var(--head)">‹</button>
+        <span id="timeline-date-label">Today's timeline</span>
+        <button id="timeline-nav-next" onclick="navigateDateBy(1)" title="Next day"
+          style="background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 2px;line-height:1;font-family:var(--head);display:none">›</button>
+      </div>
       <span id="timeline-summary" style="font-family:var(--mono)"></span>
     </div>
     <div id="timeline-blocks"></div>
@@ -5235,6 +5241,16 @@ function renderToday() {
 
   // ── Contextual visibility: show the right element for this moment ──
   applyContextualVisibility(todayE);
+
+  // Timeline label + nav
+  const _todayKey2 = getDateInTZ(Date.now(), _tz);
+  const _vk = getViewingDateKey();
+  const _diffDays = Math.round((new Date(_todayKey2) - new Date(_vk)) / 86400000);
+  const _tlLabel = _diffDays === 0 ? "Today's timeline"
+    : _diffDays === 1 ? "Yesterday's timeline"
+    : new Intl.DateTimeFormat('en-US',{timeZone:_tz,weekday:'long',month:'short',day:'numeric'}).format(new Date(_vk + 'T12:00:00')) + "'s timeline";
+  document.getElementById('timeline-date-label').textContent = _tlLabel;
+  document.getElementById('timeline-nav-next').style.display = isViewingToday() ? 'none' : '';
 
   // Timeline summary
   const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(todayE)) : todayE.length > 0;
