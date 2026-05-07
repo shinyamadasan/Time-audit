@@ -19,6 +19,16 @@ then read only that section.
 - Scope every change to the smallest possible section
 - After changes: confirm what was modified and what was not touched
 
+## Keeping CODEMAP.md current
+After every session, update CODEMAP.md if any of these happened:
+- A function was added, renamed, or deleted → update the function list in its section
+- A function moved between sections → update both sections + line ranges
+- A new feature area was added → add a new section block
+- A section was extracted to its own file → replace with "EXTRACTED → filename.js" stub and list its functions + dependencies
+- Line numbers shifted significantly → update the `Lines:` range for affected sections
+
+Do NOT update CODEMAP.md for: bug fixes, UI copy changes, adding tracks/colors/presets to existing arrays, or any change that doesn't move logic.
+
 ## Key Files
 - index.html — main app (use CODEMAP.md to navigate, do not read in full)
 - storage.js — Firebase sync and persistence
