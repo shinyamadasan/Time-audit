@@ -158,12 +158,15 @@ function tzParseTime(dateKey, hhmm) {
   return ts;
 }
 
+const _dateInTZFmtCache = new Map();
 function getDateInTZ(ts, tz) {
   // Canonical "what calendar date is this UTC timestamp on?" in the user's timezone.
   // Always derive from the UTC timestamp — never trust the stored e.date field, which
   // may have been written with a different (or absent) timezone setting.
   tz = tz || settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return new Intl.DateTimeFormat('en-CA', {timeZone: tz}).format(new Date(ts));
+  let fmt = _dateInTZFmtCache.get(tz);
+  if (!fmt) { fmt = new Intl.DateTimeFormat('en-CA', {timeZone: tz}); _dateInTZFmtCache.set(tz, fmt); }
+  return fmt.format(new Date(ts));
 }
 
 function getTodayEntries() {
