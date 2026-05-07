@@ -1316,6 +1316,18 @@ button, a, [role="button"],
     </div>
   </div>
   <div id="recent-list"></div>
+
+  <!-- Streak calendar -->
+  <div class="settings-section">
+    <div class="settings-title">Consistency — last 60 days</div>
+    <div id="reflect-streak-cal"></div>
+  </div>
+
+  <!-- Focus heatmap -->
+  <div class="settings-section">
+    <div class="settings-title">Focus heatmap — when do you actually work?</div>
+    <div id="reflect-heatmap"></div>
+  </div>
 </div>
 
 <!-- ══ WEEK ══ -->
@@ -1337,12 +1349,6 @@ button, a, [role="button"],
 <div class="view" id="view-reflect">
   <div class="page-header"><div class="page-title">Reflect</div></div>
 
-  <!-- Streak calendar -->
-  <div class="settings-section">
-    <div class="settings-title">Consistency — last 60 days</div>
-    <div id="reflect-streak-cal"></div>
-  </div>
-
   <!-- Honest summary -->
   <div class="settings-section">
     <div class="settings-title">This week in plain English</div>
@@ -1353,12 +1359,6 @@ button, a, [role="button"],
   <div class="settings-section">
     <div class="settings-title">This week vs last week</div>
     <div id="reflect-week-compare"></div>
-  </div>
-
-  <!-- Focus heatmap -->
-  <div class="settings-section">
-    <div class="settings-title">Focus heatmap — when do you actually do deep work?</div>
-    <div id="reflect-heatmap"></div>
   </div>
 
   <!-- Today's Daily Summary -->
@@ -5244,6 +5244,8 @@ function renderToday() {
       listEl.innerHTML = '<div class="empty"><span class="empty-icon">⏱</span>Start the timer and log your first block.</div>';
       renderRecentChips();
       renderAwarenessSignal();
+      renderStreakCalendar();
+      renderFocusHeatmap();
       return;
     }
 
@@ -5287,7 +5289,8 @@ function renderToday() {
   renderDayBar(todayE);
   renderStatusBanner(todayE);
   renderSidePanel();
-  renderLeftPanel();
+  renderStreakCalendar();
+  renderFocusHeatmap();
 }
 
 // ══════════════════════════════════════════════════════
@@ -7431,10 +7434,8 @@ function renderReflectView() {
   const weekKey = getWeekKey(now);
 
   // ── New sections ──
-  renderStreakCalendar();
   renderHonestSummary();
   renderWeekComparison();
-  renderFocusHeatmap();
 
   // ── Daily summary ──
   renderDailySummary();
