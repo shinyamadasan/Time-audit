@@ -7236,45 +7236,43 @@ function renderHonestSummary() {
     return;
   }
 
-  const deepGoalWeeklyMins = (settings.deepGoal || 20) * 60;
-  const pctOfGoal = deepGoalWeeklyMins > 0 ? Math.round(ins.deepMin / deepGoalWeeklyMins * 100) : 0;
-  const deepHrsStr = ins.deepMin >= 60 ? `${(ins.deepMin/60).toFixed(1)}h` : `${ins.deepMin}m`;
-  const goalHrs = (settings.deepGoal || 20) + 'h';
+  const fmtM = m => m >= 60 ? `${(m/60).toFixed(1)}h` : `${m}m`;
+  const deepGoalMins = (settings.deepGoal || 20) * 60;
+  const pctOfGoal = deepGoalMins > 0 ? Math.round(ins.deepMin / deepGoalMins * 100) : 0;
+  const wastePct = ins.totalMin > 0 ? Math.round(ins.wasteMin / ins.totalMin * 100) : 0;
 
-  const sentences = [];
+  const parts = [];
 
-  // Deep work sentence
-  if (pctOfGoal >= 100) sentences.push(`You've hit your ${goalHrs} weekly deep work goal with ${deepHrsStr} logged — great week.`);
-  else if (pctOfGoal >= 60) sentences.push(`You've done ${deepHrsStr} of deep work so far — ${pctOfGoal}% of your ${goalHrs} goal with days to go.`);
-  else if (pctOfGoal >= 30) sentences.push(`${deepHrsStr} of deep work this week. You're at ${pctOfGoal}% of your ${goalHrs} goal — there's ground to recover.`);
-  else sentences.push(`Only ${deepHrsStr} of deep work logged so far — ${pctOfGoal}% of your ${goalHrs} goal. This week needs a push.`);
-
-  // Trend vs last week
+  // Lead: deep work + goal + trend in one punch
+  let lead = `${fmtM(ins.deepMin)} deep`;
   if (last && last.deepMin > 0) {
-    const delta = ins.deepMin - last.deepMin;
-    const deltaStr = Math.abs(delta) >= 60 ? `${(Math.abs(delta)/60).toFixed(1)}h` : `${Math.abs(delta)}m`;
-    if (delta > 30) sentences.push(`That's ${deltaStr} more deep work than last week — trending up.`);
-    else if (delta < -30) sentences.push(`That's ${deltaStr} less than last week — trending down.`);
+    const d = ins.deepMin - last.deepMin;
+    if (Math.abs(d) >= 30) {
+      const pct = Math.abs(Math.round(d / last.deepMin * 100));
+      lead += `, ${d > 0 ? 'up' : 'down'} ${pct}% from last week`;
+    }
   }
+  lead += ` — ${pctOfGoal}% of your ${fmtM(deepGoalMins)} goal.`;
+  parts.push(lead);
 
-  // Waste sentence
-  if (ins.wasteMin >= 60) {
-    const wasteStr = `${(ins.wasteMin/60).toFixed(1)}h`;
-    if (ins.worstDist !== '—') sentences.push(`${wasteStr} went to distractions — "${ins.worstDist}" was the main culprit.`);
-    else sentences.push(`${wasteStr} logged as waste this week.`);
-  } else if (ins.wasteMin > 0) {
-    sentences.push(`Only ${ins.wasteMin}m of distractions — solid discipline.`);
+  // Waste: name the culprit and its cost
+  if (ins.wasteMin >= 30) {
+    let wasteLine = `${fmtM(ins.wasteMin)} lost to distractions (${wastePct}% of tracked time).`;
+    if (ins.worstDist !== '—' && ins.worstDistMin >= 20) {
+      wasteLine = `${fmtM(ins.wasteMin)} lost to distractions — ${ins.worstDist} alone cost you ${fmtM(ins.worstDistMin)}.`;
+    }
+    parts.push(wasteLine);
   } else {
-    sentences.push(`Zero waste logged — clean week so far.`);
+    parts.push(`Only ${ins.wasteMin > 0 ? fmtM(ins.wasteMin) : 'zero'} wasted — clean week.`);
   }
 
-  // Best day + peak hour
-  const extras = [];
-  if (ins.bestDay !== '—') extras.push(`Best day: ${ins.bestDay}`);
-  if (ins.peakHourLabel !== '—') extras.push(`peak focus at ${ins.peakHourLabel}`);
-  if (extras.length) sentences.push(extras.join(', ') + '.');
+  // Best day + peak hour on one line
+  const rhythm = [];
+  if (ins.bestDay !== '—') rhythm.push(`Best day: ${ins.bestDay} (${fmtM(ins.bestDayMin)} deep)`);
+  if (ins.peakHourLabel !== '—') rhythm.push(`sharpest at ${ins.peakHourLabel}`);
+  if (rhythm.length) parts.push(rhythm.join(', ') + '.');
 
-  el.innerHTML = `<p style="font-size:13.5px;line-height:1.7;color:var(--text)">${sentences.join(' ')}</p>`;
+  el.innerHTML = `<p style="font-size:13.5px;line-height:1.75;color:var(--text)">${parts.join(' ')}</p>`;
 }
 
 function renderFocusHeatmap() {
@@ -7375,48 +7373,42 @@ function renderWeekComparison() {
     return;
   }
 
-  const fmtH = m => m >= 60 ? `${(m/60).toFixed(1)}h` : `${m}m`;
+  const fmtH = m => m == null ? '—' : m >= 60 ? `${(m/60).toFixed(1)}h` : `${m}m`;
+  const pctChange = (a, b) => (b && b > 0) ? Math.round((a - b) / b * 100) : null;
+
   const delta = (a, b, lowerIsBetter) => {
-    if (a === null || b === null) return '';
+    if (a == null || b == null || b === 0) return '';
     const d = a - b;
-    if (Math.abs(d) < 5) return `<span style="color:var(--muted);font-size:11px">≈ same</span>`;
+    if (Math.abs(d) < 5) return `<span style="color:var(--muted)">≈ same</span>`;
+    const pct = Math.abs(Math.round(d / b * 100));
     const better = lowerIsBetter ? d < 0 : d > 0;
     const color = better ? 'var(--deep)' : 'var(--distraction)';
     const arrow = d > 0 ? '↑' : '↓';
-    return `<span style="color:${color};font-size:11px">${arrow} ${fmtH(Math.abs(d))}</span>`;
+    return `<span style="color:${color}">${arrow} ${fmtH(Math.abs(d))} (${pct}%)</span>`;
   };
 
-  const card = (label, thisVal, lastVal, lowerIsBetter, color) => {
+  const card = (label, thisVal, lastVal, lowerIsBetter, accent) => {
     const dTag = delta(thisVal, lastVal, lowerIsBetter);
-    const thisStr = thisVal !== null ? fmtH(thisVal) : '—';
-    const lastStr = lastVal !== null ? fmtH(lastVal) : '—';
-    return `<div style="background:var(--bg2);border-radius:var(--r);padding:14px 16px;flex:1;min-width:120px">
+    return `<div style="background:var(--bg2);border-radius:var(--r);padding:14px 16px;flex:1;min-width:130px">
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;font-weight:600">${label}</div>
-      <div style="display:flex;justify-content:space-between;align-items:flex-end">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:8px">
         <div>
           <div style="font-size:10px;color:var(--muted2);margin-bottom:2px">This week</div>
-          <div style="font-size:22px;font-family:var(--mono);color:${color}">${thisStr}</div>
+          <div style="font-size:22px;font-family:var(--mono);color:${accent};line-height:1">${fmtH(thisVal)}</div>
         </div>
         <div style="text-align:right">
           <div style="font-size:10px;color:var(--muted2);margin-bottom:2px">Last week</div>
-          <div style="font-size:16px;font-family:var(--mono);color:var(--muted)">${lastStr}</div>
+          <div style="font-size:16px;font-family:var(--mono);color:var(--muted);line-height:1">${fmtH(lastVal)}</div>
         </div>
       </div>
-      ${dTag ? `<div style="margin-top:8px">${dTag} vs last week</div>` : ''}
+      ${dTag ? `<div style="margin-top:10px;font-size:12px;font-family:var(--mono)">${dTag}</div>` : ''}
     </div>`;
   };
 
-  const deepThis = ins ? ins.deepMin : null;
-  const deepLast = last ? last.deepMin : null;
-  const wasteThis = ins ? ins.wasteMin : null;
-  const wasteLast = last ? last.wasteMin : null;
-  const prodThis = ins ? ins.productiveMin : null;
-  const prodLast = last ? last.productiveMin : null;
-
   el.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap">
-    ${card('Deep work', deepThis, deepLast, false, 'var(--deep)')}
-    ${card('Productive', prodThis, prodLast, false, 'var(--shallow)')}
-    ${card('Waste', wasteThis, wasteLast, true, 'var(--distraction)')}
+    ${card('Deep work', ins?.deepMin ?? null, last?.deepMin ?? null, false, 'var(--deep)')}
+    ${card('Productive', ins?.productiveMin ?? null, last?.productiveMin ?? null, false, 'var(--shallow)')}
+    ${card('Waste', ins?.wasteMin ?? null, last?.wasteMin ?? null, true, 'var(--distraction)')}
   </div>`;
 }
 
