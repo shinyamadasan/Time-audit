@@ -1,0 +1,22 @@
+{
+  "name": "time-audit",
+  "version": "1.0.0",
+  "description": "Time Audit - personal time tracking app",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo \"No build step needed\"",
+    "sync": "npx cap sync",
+    "android": "npx cap run android",
+    "open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
+    "@capacitor/local-notifications": "^8.0.2",
+    "@codetrix-studio/capacitor-google-auth": "3.4.0-rc.4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5"
+  }
+}
