@@ -1,0 +1,431 @@
+# ChronaSense — CODEMAP
+> index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
+
+---
+
+## FILE OVERVIEW
+
+| Block | Lines | Notes |
+|-------|-------|-------|
+| `<style>` CSS | 1–1018 | All styles inline |
+| HTML structure | 1019–2128 | Views, overlays, panels, nav |
+| Main `<script>` | 2129–7612 | All app logic |
+| Second `<script>` | 7740–7895 | Onboarding init + phone-usage tracking |
+
+**External files loaded (in order):**
+- `firebase-app-compat.js` / `firebase-database-compat.js` / `firebase-auth-compat.js` — CDN, line 2123–2125
+- `storage.js` — line 2126 → **EXTRACTED** (see below)
+- `insights.js` — line 2127 → **EXTRACTED** (see below)
+- `focus-mode.js` — line 7614 → **EXTRACTED** (see below)
+
+---
+
+## EXTRACTED FILES
+
+### storage.js
+Lines: external file
+Purpose: All localStorage/Firebase persistence, data loading, and cross-device sync helpers.
+Functions: `persist()`, `syncEntries()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
+Variables: (managed internally)
+Depends on: Firebase SDK globals
+
+### insights.js
+Lines: external file
+Purpose: Weekly insight computation (deep hours, waste patterns, best day, peak hour).
+Functions: `computeInsights(weekKey)`
+Variables: (managed internally)
+Depends on: `entries` global, `storage.js` helpers
+
+### focus-mode.js
+Lines: external file
+Purpose: All Pomodoro timer, lo-fi music, focus blocker overlay, and focus task suggestions.
+Functions: `enterFocusMode()`, `tryExitFocusMode()`, `exitFocusConfirm()`, `confirmExitFocus()`, `startPomodoro()`, `tickPomodoro()`, `endWorkSession()`, `endPomodoroBreak()`, `skipBreak()`, `playAlertSound()`, `setPomodoroCountdown()`, `renderPomoDots()`, `updateFocusDeepBar()`, `togglePomodoroAutoStart()`, `startFocusMusic()`, `stopFocusMusic()`, `setFocusMusicVolume()`, `toggleFocusPlaylist()`, `selectFocusMusicOff()`, `resumeFocusMusic()`, `_nextTrackIdx()`, `_updateTrackLabel()`, `_startWorkOutro()`, `_enterBreakMusic()`, `_exitBreakMusic()`, `_skipBreakMusic()`, `_effectiveVolume()`, `showFocusBlocker()`, `requestExitFocus()`, `returnToFocus()`, `showFocusSuggestions()`, `hideFocusSuggestions()`, `selectFocusSuggestion()`, `handleFocusKey()`
+Variables: `focusModeOn`, `focusBlockCountdown`, `pomodoroPhase`, `pomodoroTimer`, `pomodoroRemaining`, `pomodoroWorkMin`, `pomodoroBreakMin`, `pomodoroCount`, `focusStartTime`, `pomodoroWasPaused`, `_pomodoroAutoStart`, `_focusMusicVolume`, `_lofiTrackIdx`, `_shuffleMode`, `_shuffleQueue`, `_inBreakMode`, `_outroActive`, `_focusSugIndex`, `_LOFI_TRACKS`, `_BREAK_TRANSITION`, `_BREAK_LOOP`, `_OUTRO_LEAD_SEC`
+Depends on: `entries`, `settings`, `running`, `ticker`, `blockStartTime`, `currentTask`, `intention`, `lastTaskForRepeat`, `timerStartedAt`, `totalSecs`, `remaining`, `dailyCommitment`, `persist()`, `syncEntries()`, `showToast()`, `resetTimer()`, `getTodayEntries()`, `getActivityColor()`, `toDateKey()`, `fmtDur()`, `getBucket()`, `renderToday()`, `updateRing()`, `doPing()`, `buildHeroSuggestions()`, `buildSugItem()`
+
+---
+
+## CSS SECTIONS
+
+## [CSS — Base & Layout]
+Lines: 1–46
+Purpose: CSS custom properties (color tokens, spacing), body reset, scrollbar.
+Functions: —
+Variables: `--deep`, `--bg`, `--bg2`–`--bg4`, `--border`, `--border2`, `--muted`, `--muted2`, `--text`, `--head`, `--mono`, `--r`, `--safe-bottom`, `--ring-sz`, `--distraction`, `--waste`, `--recovery`, `--exercise`, `--errands`
+Depends on: —
+
+## [CSS — Component Styles]
+Lines: 47–983
+Purpose: All visual styling for nav, timer ring, entry rows, modals, overlays, hero states, week view, reflect view, settings, focus overlay, onboarding.
+Functions: —
+Variables: (animations) `shake`, `tickAnim`, `slideInEntry`, `lpPulse`
+Depends on: CSS base variables
+
+## [CSS — Desktop Panels]
+Lines: 985–1014
+Purpose: Side panel cards (`#left-panel`, `#side-panel`) and the `@media(min-width:1100px)` grid that activates them.
+Functions: —
+Variables: `.sp-card`, `.sp-label`
+Depends on: —
+
+---
+
+## HTML SECTIONS
+
+## [HTML — Today View]
+Lines: 1020–1332
+Purpose: All markup for the Today tab: header with date picker, status banner, day bar, hero section (idle/active/away states), commit bar, same-as-last CTA, sleep pill, quick-retro bar, awareness signal, timeline, stat cards, recent entries list.
+Functions: —
+Key IDs: `view-today`, `today-date`, `date-picker-dropdown`, `status-banner`, `day-bar`, `activity-hero`, `hero-idle`, `hero-active`, `hero-away`, `commit-bar`, `same-as-last-btn`, `sleep-pill-btn`, `quick-retro-bar`, `awareness-signal`, `timeline-section`, `timeline-blocks`, `timeline-date-label`, `timeline-summary`, `recent-list`
+Depends on: —
+
+## [HTML — Week / Reflect / Settings Views]
+Lines: 1335–1578
+Purpose: Markup for the Week tab (day tabs, energy split, top activities), Reflect tab (honest summary, week comparison, reflections, weekly review), and Settings tab (timezone, intervals, presets, data management).
+Functions: —
+Key IDs: `view-week`, `view-reflect`, `view-settings`, `reflect-streak-cal` (streak cal mount), `reflect-heatmap` (heatmap mount)
+Depends on: —
+
+## [HTML — Desktop Side Panels]
+Lines: 1579–1613
+Purpose: Left panel (60-day streak calendar) and right panel (goal, energy breakdown, week bars, streaks, heatmap) shown only on ≥1100px screens.
+Functions: —
+Key IDs: `left-panel`, `side-panel`, `sp-status-content`, `sp-day-bar`, `sp-energy-bars`, `sp-week-bars`, `sp-streak-content`
+Depends on: —
+
+## [HTML — Overlays & Modals]
+Lines: 1616–1812
+Purpose: Sign-in overlay, bottom nav, quick-log ping modal, pre-commit modal (task naming before starting timer).
+Functions: —
+Key IDs: `signin-overlay`, `nav`, `quicklog-overlay`, `precommit-overlay`
+Depends on: —
+
+## [HTML — Focus Mode Overlays]
+Lines: 1813–1900
+Purpose: Focus block overlay (shows when user leaves focus mode) and focus overlay (Pomodoro timer UI, music controls, task input).
+Functions: —
+Key IDs: `focus-block-overlay`, `focus-overlay`, `focus-task-input`, `focus-suggestions`, `focus-countdown`, `focus-pomo-dots`, `focus-music` (audio element)
+Depends on: focus-mode.js
+
+## [HTML — Review, Sleep, Away, Break, Sync Modals]
+Lines: 1901–2119
+Purpose: Remaining overlay HTML — day review modal, sleep reminder modal, away picker, break modal, hdr-menu dropdown, reflections history modal, the `<audio>` element.
+Functions: —
+Key IDs: `review-overlay`, `sleep-reminder-overlay`, `away-picker`, `break-modal`, `hdr-menu`, `reflections-history-overlay`
+Depends on: —
+
+---
+
+## JAVASCRIPT SECTIONS
+
+## [State — Global Variables]
+Lines: 2129–2196
+Purpose: All top-level mutable state and one-time constants shared across the entire app.
+Functions: —
+Variables: `currentTask`, `viewingDateKey`, `entries`, `settings`, `reviews`, `weeklyReviews`, `intention`, `running`, `ticker`, `pcTimeLiveTicker`, `totalSecs`, `remaining`, `distractionDebt`, `pingCount`, `sortKey`, `sortDir`, `selectedEnergy`, `selectedOnPlan`, `QUICK_ACTIVITY_OPTIONS`, `blockStartTime`, `lastStateChange`, `currentState`, `blockSegments`, `focusExitTimer`, `fbApp`, `fbDb`, `fbRoomRef`, `roomCode`, `fbTimerReceived`, `currentUser`, `timerStartedAt`, `snoozesUsedToday`, `snoozeTimer`, `quickLogBusy`, `switchingTask`, `dailyCommitment`, `lastTaskForRepeat`, `breakActive`, `breakEndsAt`, `breakTicker`, `breakStartTs`, `timerOwnerDeviceId`, `awayActive`, `awayStartTime`, `awayLabel`, `continueBannerTimer`, `continueBannerCountdown`, `recentChipTasks`, `taskStartTime`, `awayElapsedTicker`, `CIRCUM`
+Depends on: —
+
+## [Timer — Core Interval Tracking]
+Lines: 2197–2476
+Purpose: Start/stop/reset the 30-min countdown ring, pre-commit modal for naming tasks, state switching, heartbeat, and the `beforeunload` guard.
+Functions: `fmt()`, `normalizeActivity()`, `expandPCTimeEntries()`, `fmtDur()`, `updateRing()`, `toggleTimer()`, `continueLastTask()`, `switchToNewTask()`, `confirmPreCommit()`, `updateTimerTaskLabel()`, `_startTimer()`, `switchState()`, `playAlert()`, `resetTimer()`, `stopAndLog()`, `switchTaskMidBlock()`
+Variables: `CIRCUM` (314.2 SVG circumference)
+Depends on: State globals, `persist()`, `syncEntries()`, `showToast()`, `renderToday()`, Firebase sync section
+
+## [Break Tracking]
+Lines: 2477–2554
+Purpose: Break modal, custom/preset break durations, countdown display, early break end.
+Functions: `openBreakModal()`, `startBreakCustom()`, `startBreak()`, `_updateBreakDisplay()`, `endBreak()`
+Variables: `breakActive`, `breakEndsAt`, `breakTicker`, `breakStartTs`
+Depends on: Timer section (`resetTimer`, `running`), `renderToday()`
+
+## [Ping & Quick-Log Modal]
+Lines: 2555–2960
+Purpose: Ping delivery (sound + modal), PC Time live tracking, quick-log UI (same-as-last, energy chips, full form), snooze, behavioral feedback flash.
+Functions: `stopAlertLoop()`, `showPingBanner()`, `hidePingBanner()`, `doPing()`, `startPCTimeLive()`, `stopPCTimeLive()`, `autoLogBlock()`, `openQuickLog()`, `setQlEnergy()`, `populateQlChips()`, `showQuickForm()`, `quickSaveLast()`, `saveQuickEntry()`, `learnWastePattern()`, `_doQuickSave()`, `dismissQuickLog()`, `snoozeLog()`, `showLogFeedback()`, `fireBehavioralFeedback()`
+Variables: `alertLoop`, `qlEnergy`, `quickLogBusy`, `snoozesUsedToday`, `snoozeTimer`, `_feedbackTimer`
+Depends on: Timer section, State globals, `persist()`, `syncEntries()`, `entries`, `renderToday()`, `showToast()`, Native notifications section
+
+## [Daily Commitment / Goal]
+Lines: 2961–2984
+Purpose: Set and save the daily deep-work goal (number of blocks).
+Functions: `setDailyCommitment()`, `setCommitmentQuick()`, `saveCommitment()`
+Variables: `dailyCommitment`
+Depends on: `persist()`, `renderToday()`
+
+## [Heartbeat / Session Persistence]
+Lines: 2985–3065
+Purpose: Write a heartbeat timestamp every 15 s so unexpected-close can be detected on next open; `beforeunload` guard warning.
+Functions: `_startHeartbeat()`, `_stopHeartbeat()`
+Variables: `_heartbeatTicker`
+Depends on: `running`, localStorage
+
+## [View Management]
+Lines: 3066–3083
+Purpose: Tab switching — activate the correct view div, highlight the nav button, trigger view-specific renders.
+Functions: `showView()`
+Variables: —
+Depends on: `renderToday()`, `renderWeek()`, `renderSettings()`, `renderSidePanel()`, `renderStreakCalendar()`
+
+## [Utility — Formatting & Quick Actions]
+Lines: 3084–3160
+Purpose: Recent-log helpers, quick-action grid rendering, entry-time aggregation, energy label formatting.
+Functions: `getRecentLogOptions()`, `formatEnergyLabel()`, `renderQuickActionGrid()`, `renderRecentTaskGrid()`, `saveLogChoice()`, `getTimeByActivity()`
+Variables: `QUICK_ACTIVITY_OPTIONS`
+Depends on: `entries`, `persist()`
+
+## [Entry Logging & Editing]
+Lines: 3161–3520
+Purpose: Full retro log modal — open, energy selection, time-range inputs, save new entry, edit existing entry, delete entry, merge-edit multiple entries.
+Functions: `openLog()`, `saveLastEntry()`, `showLogForm()`, `populateRetroChips()`, `openRetroLog()`, `setRetroEnergy()`, `saveRetroEntry()`, `dismissLog()`, `setEnergy()`, `setOnPlan()`, `toggleDetail()`, `saveEntry()`, `deleteEntry()`, `openRetroLogPrefilled()`, `openEditEntry()`, `openEditMergedEntry()`, `cancelRetroEdit()`, `renderEntryRow()`, `renderGapRow()`, `renderTimelineCombined()`, `toggleTlBucket()`
+Variables: `retroEnergy`, `editingEntryId`, `editingMergedIds`, `editingEntryBase`, `logIsPing`, `tlExpandedBuckets`
+Depends on: `entries`, `persist()`, `syncEntries()`, `showToast()`, `renderToday()`, `getActivityColor()`, `toDateKey()`, `getBucket()`
+
+## [Timeline Helpers]
+Lines: 3521–3608
+Purpose: Work-day start detection, timeline display preprocessing — overlap clipping, consecutive-entry merging, gap computation, scroll-to.
+Functions: `getWorkDayStartTs()`, `clipOverlapsForDisplay()`, `mergeConsecutiveForDisplay()`, `computeGaps()`, `scrollToTimeline()`, `localTime()`
+Variables: —
+Depends on: `entries`, `settings` (timezone)
+
+## [Date Picker & Navigation]
+Lines: 3543–3608
+Purpose: Browse past days in the Today view — get/set viewing date, navigate by delta, build the 14-day dropdown list.
+Functions: `getViewingDateKey()`, `getViewingEntries()`, `isViewingToday()`, `dayEndTs()`, `setViewDate()`, `navigateDateBy()`, `toggleDatePicker()`
+Variables: `viewingDateKey`
+Depends on: `entries`, `getDateInTZ()`, `renderToday()`
+
+## [Statistics & Scoring]
+Lines: 3609–3700
+Purpose: Per-array metrics: deep score %, deep hours, consecutive-day streaks, identity score + level label.
+Functions: `computeDeepScore()`, `computeDeepHrs()`, `computeStreak()`, `computeCleanStreak()`, `computeIdentityScore()`, `getIdentityLevelWithEmoji()`
+Variables: —
+Depends on: `entries`, `getDateInTZ()`, `toDateKey()`
+
+## [Activity Color Management]
+Lines: 3651–3700
+Purpose: Assign and retrieve a stable hex color per custom activity name; persist color map.
+Functions: `getActivityColor()`
+Variables: `ACTIVITY_PALETTE`, `eLabel`
+Depends on: `settings`, `persist()`
+
+## [Today View — Rendering]
+Lines: 3701–4766
+Purpose: Main `renderToday()` and all its sub-renders: day bar, status banner, timeline (blocks + gaps), stat cards, recent entries list, contextual-visibility rules, hero state machine, same-as-last CTA, awareness signal, side-panel refresh trigger.
+Functions: `renderToday()`, `renderDayBar()`, `renderStatusBanner()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderSidePanel()`, `renderLeftPanel()`
+Variables: `_todayRenderKey`, `_lastLoggedEntryId`
+Depends on: Timeline helpers, Statistics, Entry logging, Date picker, `persist()`, `renderStreakCalendar()`, `renderFocusHeatmap()`
+
+## [Hero Prompt & Task Suggestions]
+Lines: 4767–4885
+Purpose: "Name your task" hero input — start timer from hero, suggestion dropdown (recent + presets), keyboard navigation, dismiss individual suggestions.
+Functions: `startFromHero()`, `buildHeroSuggestions()`, `buildSugItem()`, `hideActivitySuggestion()`, `showHeroSuggestions()`, `hideHeroSuggestions()`, `selectHeroSuggestion()`, `handleHeroKey()`
+Variables: `_heroSugIndex`
+Depends on: Timer section (`_startTimer`), `settings`, `entries`
+
+## [Retro Log Suggestions]
+Lines: 4886–4943
+Purpose: Suggestion dropdown for the retroactive log modal's activity input, with auto-energy inference from past usage.
+Functions: `showRetroSuggestions()`, `hideRetroSuggestions()`, `selectRetroSuggestion()`, `handleRetroKey()`
+Variables: `_retroSugIndex`
+Depends on: `buildHeroSuggestions()`, `buildSugItem()`, Entry logging section
+
+## [Quick-Retro Bar]
+Lines: 4944–5162
+Purpose: The inline "log a past block" bar on the Today tab — text + time inputs, suggestion dropdown with waste-pattern hints, save handler.
+Functions: `showQuickRetroSuggestions()`, `hideQuickRetroSuggestions()`, `selectQuickRetroSuggestion()`, `handleQuickRetroKey()`, `quickRetroLog()`
+Variables: `_quickRetroSugIndex`
+Depends on: `buildHeroSuggestions()`, `buildSugItem()`, `entries`, `persist()`, `syncEntries()`, `renderToday()`
+
+## [Task Switching Panel]
+Lines: 5023–5092
+Purpose: In-hero switch-task panel (filter list of recent tasks, confirm switch mid-block).
+Functions: `openSwitchPanel()`, `renderSwitchList()`, `fillSwitch()`, `filterSwitchList()`, `confirmSwitch()`, `switchToTask()`
+Variables: `_switchTasks`
+Depends on: Timer section (`switchTaskMidBlock`), `entries`
+
+## [Quick-Log Special Shortcuts]
+Lines: 5162–5266
+Purpose: One-tap shortcuts on the Today tab — "log same as last" button and the sleep quick-log pill.
+Functions: `quickLogSameAsLast()`, `quickLogSleep()`
+Variables: —
+Depends on: `entries`, `persist()`, `syncEntries()`, `renderToday()`, `showToast()`
+
+## [Away & Status Management]
+Lines: 5267–5415
+Purpose: Header menu toggle, idle away-picker dropdown, toggle away on/off, start named away session (Sleep, Eat, Walk, etc.) with elapsed ticker.
+Functions: `toggleHdrMenu()`, `toggleIdleAwayPicker()`, `toggleAway()`, `startAway()`, `showContinueBanner()`, `hideContinueBanner()`, `doContinueBlock()`, `doSwitchFromBanner()`
+Variables: `awayActive`, `awayStartTime`, `awayLabel`, `awayElapsedTicker`, `continueBannerTimer`, `continueBannerCountdown`
+Depends on: `persist()`, `syncEntries()`, `renderToday()`, `entries`
+
+## [Week View]
+Lines: 5416–6082
+Purpose: Week and month overview — day tab navigation, energy split chart, top-activities list, untracked-hours summary, sortable entries table, single-day detail drilldown.
+Functions: `renderWeek()`, `setWeekMode()`, `shiftRange()`, `selectWeekDay()`, `renderMonthOverview()`, `entryMins()`, `renderEnergySplit()`, `renderTopActivities()`, `renderUnloggedHours()`, `renderEntryList()`, `renderWeekOverview()`, `renderDayDetail()`, `renderWeekTable()`, `sortBy()`
+Variables: `weekSelectedDay`, `weekRangeOffset`, `sortKey`, `sortDir`
+Depends on: `entries`, Statistics section, `getDateInTZ()`, `toDateKey()`, `computeInsights()`
+
+## [Sleep Tracking]
+Lines: 6083–6211
+Purpose: Sleep reminder logic, sleep-setup modal, sleep entry logging, duration formatting.
+Functions: `makeDateAtTime()`, `prevDateKey()`, `getSleepDefaults()`, `fmtSleepDur()`, `logSleepEntry()`, `checkSleepSetup()`, `saveSleepSetup()`, `skipSleepSetup()`, `checkSleepReminder()`, `openSleepReminder()`, `confirmSleepLog()`, `snoozeSleepReminder()`
+Variables: —
+Depends on: `entries`, `settings`, `persist()`, `renderToday()`
+
+## [Day Review Modal]
+Lines: 6212–6454
+Purpose: Open and save the end-of-day reflection for any date; render yesterday's promise accountability banner; format week labels and save timestamps.
+Functions: `openReview()`, `saveReview()`, `renderYesterdayPromise()`, `applyPromiseAsIntention()`, `formatWeekLabel()`, `formatSavedAt()`, `computeDailySummary()`, `renderDailySummary()`
+Variables: `_reviewDateKey`
+Depends on: `reviews`, `entries`, `persist()`, `renderToday()`, Statistics section
+
+## [Reflect View]
+Lines: 6455–6999
+Purpose: Reflect tab render — honest summary card, week-over-week comparison, streak calendar (60-day heatmap), focus heatmap (hour×day), daily reflection cards, reflections history modal.
+Functions: `renderReflectView()`, `renderHonestSummary()`, `renderWeekComparison()`, `renderStreakCalendar()`, `renderFocusHeatmap()`, `renderDailyReflections()`, `openReflectionsHistory()`, `renderReflectHistory()`, `saveWeeklyReview()`, `saveWeeklyPlan()`
+Variables: —
+Depends on: `entries`, `reviews`, `weeklyReviews`, Statistics section, `computeInsights()`, `getDateInTZ()`, `tzDow()`, `tzHour()`
+
+## [Settings View]
+Lines: 7000–7076
+Purpose: Render settings form (timezone, ping interval, deep-work goal, presets, coach tone, exit delay, review hour, sleep times, sync, account); save handler; add/remove presets.
+Functions: `renderSettings()`, `saveSettings()`, `addPreset()`, `removePreset()`, `renderTonePreview()`
+Variables: `TONE_PREVIEWS`
+Depends on: `settings`, `persist()`, `syncEntries()`, Firebase auth section
+
+## [Sync & Firebase UI]
+Lines: 7076–7098
+Purpose: Sync connect button, instructions toggle, live cost display update.
+Functions: `toggleSyncInstructions()`, `connectSync()`, `updateLiveCost()`
+Variables: —
+Depends on: `fbDb`, `fbRoomRef`, storage.js sync helpers
+
+## [Overlay, Toast & Modal Utilities]
+Lines: 7098–7120
+Purpose: Generic close-modal helper, background-click close, and toast notification (with optional undo action).
+Functions: `closeModal()`, `overlayClose()`, `showToast()`
+Variables: `_toastTimer`
+Depends on: —
+
+## [Export & Data Management]
+Lines: 7121–7171
+Purpose: CSV export, clear-all entries (with confirm), clear a single selected day.
+Functions: `exportCSV()`, `clearAll()`, `clearSelectedDay()`, `clearTodayOnly()`
+Variables: —
+Depends on: `entries`, `persist()`, `syncEntries()`, `renderToday()`
+
+## [PWA Installation]
+Lines: 7172–7218
+Purpose: Service Worker registration, PWA install-prompt banner, iOS install hint, `beforeinstallprompt` capture.
+Functions: `showInstallBanner()`, `installApp()`, `dismissInstall()`
+Variables: `swCode`, `isIOS`, `isStandalone`, `installDismissed`, `deferredPrompt`, `_swReg`
+Depends on: Service Worker scheduler section
+
+## [Voice Input]
+Lines: 7219–7260
+Purpose: Voice-recognition entry logging (Web Speech API → parse activity + energy keywords).
+Functions: `startVoiceLog()`
+Variables: `VOICE_ENERGY_KEYWORDS`
+Depends on: Entry logging section, `saveRetroEntry()`
+
+## [Heartbeat Crash Detection]
+Lines: 7261–7332
+Purpose: On app load, check for unclean shutdown (heartbeat timestamp in localStorage without proper reset) and offer to log the lost time.
+Functions: (IIFE — runs once on load)
+Variables: —
+Depends on: `entries`, `persist()`, `renderToday()`
+
+## [Native Notifications (Capacitor)]
+Lines: 7333–7481
+Purpose: Capacitor `LocalNotifications` setup, schedule/cancel ping notifications, schedule follow-up notification after task start.
+Functions: `initNativeNotifications()`, `scheduleNativePing()`, `scheduleFollowUpPing()`, `cancelNativePing()`
+Variables: `isNative`, `LocalNotifications`, `PING_NOTIF_ID`, `PING_FOLLOWUP_ID`, `followupNotifTimer`
+Depends on: Capacitor plugin globals
+
+## [URL Scheme / Deep Link Handler]
+Lines: 7482–7532
+Purpose: Handle `chronasense://` URLs opened from notifications or other apps (start timer, open quick log, set task).
+Functions: `handleDeepLink()`, `initUrlSchemeHandler()`
+Variables: `isMobileBrowser`
+Depends on: Timer section, Ping section, Capacitor `App` plugin
+
+## [Service Worker Ping Scheduler]
+Lines: 7533–7573
+Purpose: Post messages to the Service Worker to schedule or cancel the next ping alarm.
+Functions: `swSchedulePing()`, `swCancelPing()`
+Variables: `_swReg`
+Depends on: PWA Installation section
+
+## [Onboarding]
+Lines: 7574–7612 (first script) + 7615–7740 (HTML) + 7740–7760 (second script init)
+Purpose: 5-step onboarding overlay shown on first visit — step navigation, step rendering, completion handler.
+Functions: `openOnboarding()`, `closeOnboarding()`, `obNext()`, `_renderObStep()`
+Variables: `_obStep`, `OB_STEPS`
+Depends on: `persist()`, `showView()`
+
+## [Phone Usage Tracking (Android)]
+Lines: 7761–7895
+Purpose: Request Android UsageStats permission, poll app-usage events, reconstruct sessions from FOREGROUND/BACKGROUND events, auto-log sessions above minimum duration.
+Functions: `initPhoneUsageTracking()`, `getUsageStatsPlugin()`, `showPhoneUsageBanner()`, `requestPhoneUsagePermission()`, `syncPhoneUsage()`, `buildSessions()`
+Variables: `TRACKED_APPS`, `PHONE_USAGE_KEY`, `MIN_SESSION_MS`
+Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
+
+---
+
+## QUICK LOOKUP TABLE
+
+| I want to change… | Read section | Lines |
+|---|---|---|
+| Timer ring / countdown display | Timer — Core Interval Tracking | 2197–2476 |
+| Pre-commit modal (name task before starting) | Timer — Core Interval Tracking | 2197–2476 |
+| Break timer (5/15/30 min breaks) | Break Tracking | 2477–2554 |
+| Ping sound / ping modal (same-as-last, quick chips) | Ping & Quick-Log Modal | 2555–2960 |
+| Behavioral feedback flash after logging | Ping & Quick-Log Modal | 2555–2960 |
+| Daily deep-work goal / commitment | Daily Commitment / Goal | 2961–2984 |
+| Crash/heartbeat recovery on reopen | Heartbeat / Session Persistence | 2985–3065 |
+| Tab switching (Today / Week / Reflect / Settings) | View Management | 3066–3083 |
+| Quick-action preset buttons | Utility — Formatting & Quick Actions | 3084–3160 |
+| Retro log modal (energy, time range, save, edit, delete) | Entry Logging & Editing | 3161–3520 |
+| Timeline gap detection / overlap clipping | Timeline Helpers | 3521–3608 |
+| Browse yesterday / past days | Date Picker & Navigation | 3543–3608 |
+| Streak count / deep hours % / identity score | Statistics & Scoring | 3609–3700 |
+| Custom activity colors | Activity Color Management | 3651–3700 |
+| Today view full re-render | Today View — Rendering | 3701–4766 |
+| Day bar (colored hour-by-hour bar) | Today View — Rendering | 3701–4766 |
+| Status banner (deep today / time left / to goal) | Today View — Rendering | 3701–4766 |
+| Desktop right panel (goal, energy, week bars) | Today View — Rendering → `renderSidePanel()` | ~4468 |
+| Desktop left panel (streak calendar) | Today View — Rendering → `renderLeftPanel()` | ~4417 |
+| Hero task input / start-from-hero | Hero Prompt & Task Suggestions | 4767–4885 |
+| Task suggestion dropdown (hero) | Hero Prompt & Task Suggestions | 4767–4885 |
+| Retro modal suggestion dropdown | Retro Log Suggestions | 4886–4943 |
+| Quick-retro bar (inline past-block logger) | Quick-Retro Bar | 4944–5162 |
+| Task switch panel (mid-block) | Task Switching Panel | 5023–5092 |
+| "Log same as last" CTA / sleep pill shortcut | Quick-Log Special Shortcuts | 5162–5266 |
+| Away mode (Sleep, Eat, Walk…) | Away & Status Management | 5267–5415 |
+| Week view (energy split, top activities, table) | Week View | 5416–6082 |
+| Month overview | Week View → `renderMonthOverview()` | ~5490 |
+| Sleep reminder / sleep entry logging | Sleep Tracking | 6083–6211 |
+| Yesterday's promise / day review modal | Day Review Modal | 6212–6454 |
+| Honest summary card (Reflect tab) | Reflect View | 6455–6999 |
+| Week comparison (this vs last week) | Reflect View → `renderWeekComparison()` | ~6795 |
+| 60-day streak calendar | Reflect View → `renderStreakCalendar()` | ~5575 |
+| Focus heatmap (hour × day grid) | Reflect View → `renderFocusHeatmap()` | ~6711 |
+| Daily reflection cards | Reflect View → `renderDailyReflections()` | ~6928 |
+| Weekly review form (wins, waste, change) | Reflect View → `saveWeeklyReview()` | ~6982 |
+| Settings form (timezone, interval, presets…) | Settings View | 7000–7076 |
+| Toast notifications | Overlay, Toast & Modal Utilities | 7098–7120 |
+| CSV export / clear data | Export & Data Management | 7121–7171 |
+| PWA install banner / Service Worker setup | PWA Installation | 7172–7218 |
+| Voice logging | Voice Input | 7219–7260 |
+| Push notifications (Capacitor) | Native Notifications (Capacitor) | 7333–7481 |
+| `chronasense://` deep links | URL Scheme / Deep Link Handler | 7482–7532 |
+| SW ping scheduling | Service Worker Ping Scheduler | 7533–7573 |
+| Onboarding flow | Onboarding | 7574–7612 |
+| Android app-usage auto-logging | Phone Usage Tracking (Android) | 7761–7895 |
+| Pomodoro timer / session control | focus-mode.js | EXTRACTED |
+| Lo-fi music / playlist | focus-mode.js | EXTRACTED |
+| Focus mode blocker overlay | focus-mode.js | EXTRACTED |
+| Persistence / Firebase sync | storage.js | EXTRACTED |
+| Weekly insight computation | insights.js | EXTRACTED |
+| Color tokens / dark theme variables | CSS — Base & Layout | 1–46 |
+| Desktop side panel layout / breakpoint | CSS — Desktop Panels | 985–1014 |
