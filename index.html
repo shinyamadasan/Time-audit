@@ -1083,7 +1083,8 @@ button, a, [role="button"],
 
     <!-- Idle state -->
     <div id="hero-idle">
-      <div class="hero-prompt">What are you working on?</div>
+      <div class="hero-prompt" id="hero-context-prompt">What are you working on?</div>
+      <div id="hero-context-sub" style="font-size:13px;color:var(--muted);margin:-6px 0 14px;line-height:1.45;display:none"></div>
       <div class="hero-start-row">
         <div class="hero-input-wrap">
           <input class="hero-input" id="hero-task-input" placeholder="Name your task…"
@@ -4689,6 +4690,174 @@ function showHeroState(state) {
   });
 }
 
+function getContextualPrompt(todayE) {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(new Date());
+  const curH = parseInt(parts.find(p => p.type === 'hour').value) % 24;
+  const curM = parseInt(parts.find(p => p.type === 'minute').value);
+  const nowMins = curH * 60 + curM;
+  const [sleepH, sleepM] = (settings.sleepTime || '23:00').split(':').map(Number);
+  const minsLeft = Math.max(0, sleepH * 60 + sleepM - nowMins);
+  const hrsLeft = minsLeft / 60;
+
+  const realEntries = todayE.filter(e => !e.missed && !e.deleted);
+  const deepEntries = realEntries.filter(e => e.energy === 'deep');
+  const deepMins = deepEntries.reduce((s, e) =>
+    s + (e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || settings.intervalMin || 30)), 0);
+  const deepHrs = deepMins / 60;
+  const dailyGoalHrs = (settings.deepGoal || 20) / 5;
+  const hasGoal = (settings.deepGoal || 0) > 0;
+  const hrsNeeded = Math.max(0, dailyGoalHrs - deepHrs);
+  const goalHit = hasGoal && deepHrs >= dailyGoalHrs;
+  const onTrack = goalHit || !hasGoal || hrsNeeded <= hrsLeft;
+
+  const fmtH = h => h >= 1 ? `${h.toFixed(1)}h` : `${Math.round(h * 60)}m`;
+  const sessionLabel = h => h >= 1.5 ? '90-min session' : h >= 1 ? '60-min session' : '45-min block';
+
+  // Workday done
+  if (minsLeft <= 0) return {
+    prompt: "Workday's done.",
+    sub: "Log anything you missed, then close out your day."
+  };
+
+  // Goal already hit
+  if (goalHit) return {
+    prompt: "Goal done.",
+    sub: `You've hit ${fmtH(deepHrs)} of deep work. Anything else worth the energy?`
+  };
+
+  // No entries yet
+  if (!realEntries.length) {
+    if (curH < 10) return { prompt: "Morning.", sub: "What's your #1 priority today?" };
+    if (curH < 14) return { prompt: "Still early enough.", sub: "Nothing logged yet — what are you working on?" };
+    return { prompt: "Afternoon check-in.", sub: "Nothing logged yet. Start something now." };
+  }
+
+  // Has entries but no deep work
+  if (!deepEntries.length) {
+    if (curH < 12) return {
+      prompt: "Best focus window.",
+      sub: "Your sharpest hours are right now. What's the most important thing?"
+    };
+    if (curH < 17) return {
+      prompt: "No deep work yet.",
+      sub: "One focused hour now changes the trajectory of your day."
+    };
+    return {
+      prompt: "Running late.",
+      sub: `${Math.round(minsLeft)}min left. A focused session still counts.`
+    };
+  }
+
+  // Behind — can't catch up
+  if (hasGoal && !onTrack) return {
+    prompt: "Behind.",
+    sub: `${fmtH(hrsNeeded - hrsLeft)} short of today's goal even if you focus the rest of the day. Do what you can.`
+  };
+
+  // Behind — can still catch up
+  if (hasGoal && hrsNeeded > 0.25) return {
+    prompt: "Still on track.",
+    sub: `Need ${fmtH(hrsNeeded)} more. A ${sessionLabel(hrsNeeded)} now gets you there.`
+  };
+
+  // Doing well
+  return { prompt: "Good momentum.", sub: "What's next?" };
+}
+
+function updateHeroPrompt(todayE) {
+  const promptEl = document.getElementById('hero-context-prompt');
+  const subEl    = document.getElementById('hero-context-sub');
+  if (!promptEl || !isViewingToday()) return;
+  const { prompt, sub } = getContextualPrompt(todayE);
+  promptEl.textContent = prompt;
+  if (sub) { subEl.textContent = sub; subEl.style.display = 'block'; }
+  else      { subEl.style.display = 'none'; }
+}
+
+const _DAY_BAR_COLORS = {
+  deep:'#4cc7f0', shallow:'#6fb3f2', learning:'#34d399',
+  nine5:'#f9c74f', exercise:'#fb923c', social:'#f472b6',
+  waste:'#ff6b6b', distraction:'#ff6b6b',
+  break:'#a78bfa', recovery:'#a78bfa',
+  errands:'#94a3b8', away:'#94a3b8',
+};
+
+function renderDayBar(todayE) {
+  const el = document.getElementById('day-bar');
+  if (!el) return;
+
+  const todayKey = getViewingDateKey();
+  const realEntries = todayE.filter(e => !e.missed && !e.deleted && !e.browserUsage && e.tsStart);
+  if (!realEntries.length) { el.style.display = 'none'; return; }
+
+  // Day span — wake to sleep, extended if entries fall outside
+  const wakeTs  = tzParseTime(todayKey, settings.wakeTime  || '07:00');
+  const sleepTs = tzParseTime(todayKey, settings.sleepTime || '23:00');
+  const firstTs = Math.min(...realEntries.map(e => e.tsStart));
+  const barStart = Math.min(wakeTs, firstTs);
+  const barEnd   = isViewingToday() ? Math.min(Math.max(Date.now(), sleepTs), sleepTs) : sleepTs;
+  // For today, show up to now (capped at sleep time)
+  const nowTs = isViewingToday() ? Math.min(Date.now(), sleepTs) : sleepTs;
+  const spanMs = barEnd - barStart;
+  if (spanMs <= 0) { el.style.display = 'none'; return; }
+
+  const pct = ms => Math.max(0, Math.min(100, (ms - barStart) / spanMs * 100));
+
+  // Build non-overlapping segments sorted by start
+  const sorted = [...realEntries].sort((a, b) => a.tsStart - b.tsStart);
+  const segments = [];
+  let cursor = barStart;
+
+  for (const e of sorted) {
+    const s = Math.max(e.tsStart, barStart);
+    const end = Math.min(e.ts, barEnd);
+    if (s >= end || s < cursor) continue;
+    if (s > cursor) segments.push({ s: cursor, e: s, gap: true });
+    segments.push({ s, e: end, gap: false, color: _DAY_BAR_COLORS[e.energy] || '#555', label: e.activity || e.energy });
+    cursor = end;
+  }
+  // Remaining time to now = untracked gap
+  if (cursor < nowTs) segments.push({ s: cursor, e: nowTs, gap: true });
+
+  // Segment bars
+  const bars = segments.map(seg => {
+    const left  = pct(seg.s);
+    const right = pct(seg.e);
+    const w = right - left;
+    if (w < 0.15) return '';
+    const bg = seg.gap ? 'var(--bg3)' : seg.color;
+    const title = seg.gap ? 'Untracked' : seg.label;
+    return `<div title="${title}" style="position:absolute;left:${left.toFixed(2)}%;width:${w.toFixed(2)}%;top:0;bottom:0;background:${bg};${seg.gap ? '' : 'opacity:0.88'}"></div>`;
+  }).join('');
+
+  // Now marker
+  const nowMarker = isViewingToday() && Date.now() > barStart && Date.now() < barEnd
+    ? `<div style="position:absolute;left:${pct(Date.now()).toFixed(2)}%;top:-3px;bottom:-3px;width:2px;background:white;border-radius:1px;opacity:0.7;z-index:2"></div>`
+    : '';
+
+  // Hour tick labels every 2h
+  const [startH] = (settings.wakeTime || '07:00').split(':').map(Number);
+  const [endH]   = (settings.sleepTime || '23:00').split(':').map(Number);
+  let ticks = '';
+  for (let h = Math.ceil(startH / 2) * 2; h <= endH; h += 2) {
+    const ts = tzParseTime(todayKey, `${String(h).padStart(2,'0')}:00`);
+    const left = pct(ts);
+    if (left < 1 || left > 99) continue;
+    const lbl = h === 0 || h === 24 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h-12}pm`;
+    ticks += `<div style="position:absolute;left:${left.toFixed(1)}%;transform:translateX(-50%);font-size:9px;color:var(--muted2);white-space:nowrap;top:0">${lbl}</div>`;
+  }
+
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div style="position:relative;height:26px;border-radius:8px;overflow:hidden;background:var(--bg3)">
+      ${bars}${nowMarker}
+    </div>
+    <div style="position:relative;height:16px;margin-top:2px">${ticks}</div>`;
+}
+
 function renderStatusBanner(todayE) {
   const banner = document.getElementById('status-banner');
   if (!banner) return;
@@ -5076,6 +5245,8 @@ function renderToday() {
 
   renderRecentChips();
   renderAwarenessSignal();
+  updateHeroPrompt(todayE);
+  renderDayBar(todayE);
   renderStatusBanner(todayE);
   renderSidePanel();
   renderLeftPanel();
@@ -7556,7 +7727,7 @@ initAutoSync();
 initNativeNotifications();
 setTimeout(() => { checkSleepSetup(); checkSleepReminder(); }, 2000);
 setInterval(checkSleepReminder, 5 * 60 * 1000); // re-check every 5 min until sleep is logged
-setInterval(() => { if (isViewingToday()) renderStatusBanner(getViewingEntries()); }, 60000);
+setInterval(() => { if (isViewingToday()) { const e = getViewingEntries(); updateHeroPrompt(e); renderDayBar(e); renderStatusBanner(e); } }, 60000);
 // Auto-start "PC Time" on fresh browser open (desktop only, not mobile browsers)
 // Wait up to 5s for Firebase to tell us if a timer is already running elsewhere.
 // If Firebase says a timer is running, adopt that — don't overwrite it.
