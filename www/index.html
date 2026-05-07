@@ -988,23 +988,18 @@ button, a, [role="button"],
 .sp-card:last-child{margin-bottom:0}
 .sp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-bottom:10px}
 @media(min-width:1100px){
-  #desktop-layout{
-    display:grid;
-    grid-template-columns:200px 1fr 200px;
-    gap:16px;
-    padding:16px;
-    align-items:start;
-  }
-  .app{grid-column:2;grid-row:1;max-width:680px;width:100%;margin:0;justify-self:center}
+  body{padding-left:232px;padding-right:232px}
   #left-panel{
-    grid-column:1;grid-row:1;
-    display:flex!important;flex-direction:column;gap:10px;
-    position:sticky;top:16px;
+    position:fixed;left:0;top:0;width:220px;height:100vh;
+    overflow-y:auto;padding:12px;box-sizing:border-box;
+    background:var(--bg);border-right:1px solid var(--border);
+    display:flex!important;flex-direction:column;gap:8px;z-index:40;
   }
   #side-panel{
-    grid-column:3;grid-row:1;
-    display:flex!important;flex-direction:column;gap:10px;
-    position:sticky;top:16px;
+    position:fixed;right:0;top:0;width:220px;height:100vh;
+    overflow-y:auto;padding:12px;box-sizing:border-box;
+    background:var(--bg);border-left:1px solid var(--border);
+    display:flex!important;flex-direction:column;gap:8px;z-index:40;
   }
   /* Hide center-only widgets on desktop — shown in panels instead */
   #status-banner,#day-bar{display:none!important}
