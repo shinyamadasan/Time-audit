@@ -1,0 +1,40 @@
+# Development Rules
+
+This is a long-term production project.
+
+PRIORITIES:
+1. Stability
+2. Maintainability
+3. Incremental improvement
+4. Non-destructive edits
+
+BEFORE LARGE CHANGES:
+- explain plan first
+- identify affected files
+- create a git checkpoint recommendation
+
+NEVER:
+- delete files unless explicitly instructed
+- rewrite the entire architecture
+- remove working functionality
+- rename major folders without approval
+- make broad "cleanup" refactors
+- overwrite existing features recklessly
+
+ALWAYS:
+- prefer small incremental edits
+- preserve backwards compatibility
+- minimize scope of changes
+- explain tradeoffs
+- keep code readable and modular
+
+GIT SAFETY:
+Before major edits, recommend:
+git add .
+git commit -m "checkpoint"
+
+For risky experiments:
+- suggest creating a new branch
+
+When uncertain:
+- ask before destructive operations
