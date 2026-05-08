@@ -445,7 +445,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 .insight-card .i-label{font-size:10px;text-transform:none;letter-spacing:0.02em;color:var(--muted);font-weight:600;margin-bottom:5px}
 .insight-card .i-val{font-size:16px;font-weight:600;color:var(--text)}
 .insight-card .i-sub{font-size:11px;color:var(--muted);margin-top:2px}
-.full-table{background:var(--bg2);border:none;box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);overflow:hidden}
+.full-table{background:var(--bg2);border:none;box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);overflow-x:auto;overflow-y:hidden}
 .ft-header{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .ft-title{font-size:10px;font-weight:600;text-transform:none;letter-spacing:0.02em;color:var(--muted)}
 table{width:100%;border-collapse:collapse;font-size:12px}
@@ -531,8 +531,10 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .empty{padding:36px 16px;text-align:center;color:var(--muted);font-size:13px}
 .empty-icon{font-size:26px;margin-bottom:6px;display:block}
 
-@media(max-width:380px){
+@media(max-width:480px){
   .stats-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:380px){
   .timer-countdown{font-size:30px}
 }
 
@@ -1011,3 +1013,17 @@ button, a, [role="button"],
 .lp-nav-btn:hover:not(.active){color:var(--text);background:var(--bg3)}
 .lp-nav-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
 @keyframes lpPulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* ── Utility classes ── */
+.flex-1{flex:1}
+.flex-min{flex:1;min-width:0}
+.m0{margin:0}
+.hint{font-size:11px;color:var(--muted)}
+.note{font-size:12px;color:var(--muted)}
+.stat-label{font-size:10px;color:var(--muted);margin-bottom:2px}
+.meta{font-size:10px;color:var(--muted2)}
+.field-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px}
+.btn-away{border-color:var(--away);color:var(--away)}
+.w-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.w-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+@media(max-width:380px){.w-grid-3{grid-template-columns:1fr}}

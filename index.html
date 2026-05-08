@@ -117,11 +117,11 @@
       <div class="chips-row" id="recent-chips"></div>
       <div style="display:flex;align-items:center;gap:6px;margin-top:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border)">
         <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;flex-shrink:0">Away:</span>
-        <button class="btn sm ghost" onclick="startAway('Sleep')" style="border-color:var(--away);color:var(--away)">💤 Sleep</button>
-        <button class="btn sm ghost" onclick="startAway('Eat')" style="border-color:var(--away);color:var(--away)">🍽 Eat</button>
-        <button class="btn sm ghost" onclick="startAway('Walk')" style="border-color:var(--away);color:var(--away)">🚶 Walk</button>
+        <button class="btn sm ghost btn-away" onclick="startAway('Sleep')">💤 Sleep</button>
+        <button class="btn sm ghost btn-away" onclick="startAway('Eat')">🍽 Eat</button>
+        <button class="btn sm ghost btn-away" onclick="startAway('Walk')">🚶 Walk</button>
         <div style="position:relative">
-          <button class="btn sm ghost" id="idle-away-btn" onclick="toggleIdleAwayPicker()" style="border-color:var(--away);color:var(--away)">⊙ More…</button>
+          <button class="btn sm ghost btn-away" id="idle-away-btn" onclick="toggleIdleAwayPicker()">⊙ More…</button>
           <div class="away-dropdown" id="idle-away-picker">
             <div class="away-dropdown-item" onclick="startAway('Exercise')">🏋 Exercise</div>
             <div class="away-dropdown-item" onclick="startAway('Commute')">🚗 Commute</div>
@@ -151,7 +151,7 @@
             <div class="hero-ring-label">block</div>
           </div>
         </div>
-        <div style="flex:1;min-width:0">
+        <div class="flex-min">
           <div class="hero-task-name" id="hero-task-name">—</div>
           <div style="display:flex;align-items:baseline;gap:0;margin-top:4px">
             <div class="hero-elapsed" id="hero-elapsed">0m</div><span class="hero-elapsed-unit" id="hero-elapsed-unit"> on task</span>
@@ -166,7 +166,7 @@
         <button class="btn sm" onclick="openSwitchPanel()">↷ Switch</button>
         <button class="btn sm" onclick="openBreakModal()" style="border-color:var(--break);color:var(--break)">☕ Break</button>
         <div style="position:relative">
-          <button class="btn sm" id="away-btn" onclick="toggleAway()" style="border-color:var(--away);color:var(--away)">⊙ Away</button>
+          <button class="btn sm btn-away" id="away-btn" onclick="toggleAway()">⊙ Away</button>
           <!-- Away dropdown -->
           <div class="away-dropdown" id="away-picker">
             <div class="away-dropdown-item" onclick="startAway('Eat')">🍽 Eat</div>
@@ -201,7 +201,7 @@
     <div id="hero-away" style="display:none">
       <div class="hero-active-top">
         <div style="width:80px;height:80px;border-radius:50%;background:var(--away-dim);border:2px solid rgba(148,163,184,0.3);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">⊙</div>
-        <div style="flex:1;min-width:0">
+        <div class="flex-min">
           <div class="hero-task-name" id="hero-away-label">Away</div>
           <div style="display:flex;align-items:baseline;gap:0;margin-top:4px">
             <div class="hero-elapsed" id="hero-away-elapsed" style="color:var(--away);font-size:22px">0:00</div>
@@ -217,7 +217,7 @@
     <!-- Break active row -->
     <div class="break-active-row" id="break-active-row">
       <div class="b-icon">☕</div>
-      <div style="flex:1">
+      <div class="flex-1">
         <div class="b-label">Break in progress</div>
         <div class="b-sub">Timer resumes in <span id="break-countdown-text">--:--</span></div>
       </div>
@@ -239,7 +239,7 @@
 
   <!-- Continue banner removed — auto-logging handles this now -->
   <div class="continue-banner" id="continue-banner" style="display:none">
-    <div style="flex:1">
+    <div class="flex-1">
       <div class="continue-banner-text" id="continue-banner-text"></div>
     </div>
   </div>
@@ -543,7 +543,7 @@
     <div id="auth-signed-in" style="display:none">
       <div style="display:flex;align-items:center;gap:12px;padding:10px 0 12px;border-bottom:1px solid var(--border)">
         <img id="auth-avatar" src="" width="40" height="40" style="border-radius:50%;border:2px solid var(--border2);display:none">
-        <div style="flex:1;min-width:0">
+        <div class="flex-min">
           <div id="auth-name" style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
           <div id="auth-email" style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
         </div>
@@ -602,9 +602,9 @@
       <div id="partner-connected" style="display:none">
         <div style="display:flex;align-items:center;gap:12px;padding:10px 0 12px;border-bottom:1px solid var(--border);margin-bottom:12px">
           <div style="width:36px;height:36px;border-radius:50%;background:var(--deep-dim);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">👤</div>
-          <div style="flex:1;min-width:0">
+          <div class="flex-min">
             <div id="partner-settings-name" style="font-size:14px;font-weight:600"></div>
-            <div style="font-size:11px;color:var(--muted)">Accountability partner · active</div>
+            <div class="hint">Accountability partner · active</div>
           </div>
           <button class="btn sm danger" onclick="removePair()">Remove</button>
         </div>
@@ -645,7 +645,7 @@
   </div>
   <div class="sp-card">
     <div class="sp-label">Today's energy</div>
-    <div id="sp-energy-bars"><div style="font-size:11px;color:var(--muted)">Loading…</div></div>
+    <div id="sp-energy-bars"><div class="hint">Loading…</div></div>
   </div>
   <div class="sp-card">
     <div class="sp-label">This week · deep hours</div>
@@ -712,7 +712,7 @@
   </div>
   <div id="ql-form-body">
     <div id="ql-chips-wrap" style="display:none;margin-bottom:10px">
-      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Recent</div>
+      <div class="field-label">Recent</div>
       <div class="presets-scroll" id="ql-chips"></div>
     </div>
     <div class="field">
@@ -765,14 +765,14 @@
       <div id="pc-last-task" style="font-size:15px;font-weight:700;color:var(--text)"></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:4px">
-      <button class="btn ghost" style="flex:1" onclick="closeModal('precommit-overlay')">Cancel</button>
+      <button class="btn ghost flex-1" onclick="closeModal('precommit-overlay')">Cancel</button>
       <button class="btn sm" style="flex:1;border-color:var(--border3);color:var(--muted)" onclick="switchToNewTask()">Different task</button>
-      <button class="btn primary" style="flex:1" id="pc-continue-btn" onclick="continueLastTask()">Continue →</button>
+      <button class="btn primary flex-1" id="pc-continue-btn" onclick="continueLastTask()">Continue →</button>
     </div>
   </div>
   <div id="pc-new-task-actions" style="display:none;gap:8px;margin-top:18px">
-    <button class="btn ghost" style="flex:1" onclick="closeModal('precommit-overlay')">Cancel</button>
-    <button class="btn primary" style="flex:1" onclick="confirmPreCommit()">Start timer</button>
+    <button class="btn ghost flex-1" onclick="closeModal('precommit-overlay')">Cancel</button>
+    <button class="btn primary flex-1" onclick="confirmPreCommit()">Start timer</button>
   </div>
 </div></div>
 
@@ -788,7 +788,7 @@
   </div>
   <div class="distraction-warning" id="distraction-warning">
     <div style="font-size:13px;font-weight:700;color:var(--distraction);margin-bottom:4px">2 distraction blocks in a row ⚡</div>
-    <div style="font-size:12px;color:var(--muted)">Want to reset with a focused sprint?</div>
+    <div class="note">Want to reset with a focused sprint?</div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button class="btn sm ghost" onclick="document.getElementById('distraction-warning').classList.remove('show')">Dismiss</button>
     </div>
@@ -808,17 +808,17 @@
   </div>
   <div id="log-form-body">
   <div style="margin-bottom:6px">
-    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Quick pick</div>
+    <div class="field-label">Quick pick</div>
     <div class="presets-scroll" id="preset-chips"></div>
   </div>
   <div class="field">
     <label>Activity</label>
     <div style="display:flex;gap:6px">
-      <input type="text" id="f-activity" placeholder="or type it here…" style="flex:1" autocomplete="new-password" name="log-activity-field">
+      <input type="text" id="f-activity" placeholder="or type it here…" class="flex-1" autocomplete="new-password" name="log-activity-field">
       <button class="voice-btn" id="voice-btn" onclick="startVoiceLog()" title="Voice input">🎤</button>
     </div>
   </div>
-  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
+  <div class="field-label">Category</div>
   <div class="energy-grid">
     <button class="energy-btn nine5" onclick="setEnergy('nine5')"><span class="e-name">Job Work</span><span class="e-desc">Your shift, on the clock</span></button>
     <button class="energy-btn deep" onclick="setEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Coding, writing, designing</span></button>
@@ -978,10 +978,10 @@
     </div>
   </div>
   <div id="retro-chips-wrap" style="margin-bottom:12px;display:none">
-    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Recent</div>
+    <div class="field-label">Recent</div>
     <div class="presets-scroll" id="retro-chips"></div>
   </div>
-  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;margin-bottom:6px">Category</div>
+  <div class="field-label">Category</div>
   <div class="energy-grid">
     <button class="energy-btn nine5" onclick="setRetroEnergy('nine5')"><span class="e-name">Job Work</span><span class="e-desc">Your shift, on the clock</span></button>
     <button class="energy-btn deep" onclick="setRetroEnergy('deep')"><span class="e-name">Deep Work</span><span class="e-desc">Coding, writing, designing</span></button>
@@ -1040,8 +1040,8 @@
     <input type="number" id="commitment-custom" min="1" max="20" placeholder="e.g. 6">
   </div>
   <div style="display:flex;gap:8px;margin-top:16px">
-    <button class="btn ghost" style="flex:1" onclick="closeModal('commitment-overlay')">Cancel</button>
-    <button class="btn primary" style="flex:1" onclick="saveCommitment()">Commit</button>
+    <button class="btn ghost flex-1" onclick="closeModal('commitment-overlay')">Cancel</button>
+    <button class="btn primary flex-1" onclick="saveCommitment()">Commit</button>
   </div>
 </div></div>
 
@@ -1064,7 +1064,7 @@
   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--deep);font-weight:700;margin-bottom:3px">End of day</div>
   <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:16px">
     <div style="font-size:18px;font-weight:700">60-second reflection</div>
-    <div id="rv-date-label" style="font-size:12px;color:var(--muted)"></div>
+    <div id="rv-date-label" class="note"></div>
   </div>
 
   <!-- REALITY SCORE UI -->
@@ -3592,16 +3592,16 @@ function renderLeftPanel() {
           <span style="width:7px;height:7px;border-radius:50%;background:var(--deep);flex-shrink:0;animation:lpPulse 2s infinite"></span>
           <span style="font-size:13px;font-weight:600;color:var(--deep);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${taskText}</span>
         </div>
-        <div style="font-size:11px;color:var(--muted)">Pomodoro · Focus</div>`;
+        <div class="hint">Pomodoro · Focus</div>`;
     } else if (running && currentTask) {
       nowEl.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
           <span style="width:7px;height:7px;border-radius:50%;background:var(--deep);flex-shrink:0;animation:lpPulse 2s infinite"></span>
           <span style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${currentTask}</span>
         </div>
-        <div style="font-size:11px;color:var(--muted)">Timer running</div>`;
+        <div class="hint">Timer running</div>`;
     } else {
-      nowEl.innerHTML = `<div style="font-size:12px;color:var(--muted)">Not tracking</div>`;
+      nowEl.innerHTML = `<div class="note">Not tracking</div>`;
     }
   }
 
@@ -3614,14 +3614,14 @@ function renderLeftPanel() {
       goalEl.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px">
           <span style="font-size:22px;font-weight:700;color:var(--deep);font-family:var(--mono)">${deepCount}</span>
-          <span style="font-size:11px;color:var(--muted)">/ ${goal} blocks</span>
+          <span class="hint">/ ${goal} blocks</span>
         </div>
         <div style="height:4px;background:var(--bg4);border-radius:2px;margin-bottom:5px">
           <div style="height:100%;width:${pct}%;background:var(--deep);border-radius:2px"></div>
         </div>
         <div style="font-size:10px;color:var(--muted)">${pct}% of daily goal</div>`;
     } else {
-      goalEl.innerHTML = `<div style="font-size:11px;color:var(--muted)">No goal set — go to Settings</div>`;
+      goalEl.innerHTML = `<div class="hint">No goal set — go to Settings</div>`;
     }
   }
 }
@@ -3645,7 +3645,7 @@ function renderSidePanel() {
     spStatus.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
         <span style="font-size:22px;font-family:var(--mono);color:${color}">${deepStr}</span>
-        <span style="font-size:11px;color:var(--muted)">/ ${goalStr} goal</span>
+        <span class="hint">/ ${goalStr} goal</span>
       </div>
       <div style="height:4px;background:var(--bg4);border-radius:2px;overflow:hidden">
         <div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:width 0.4s"></div>
@@ -3682,7 +3682,7 @@ function renderSidePanel() {
         const pct = Math.round(m / totalMins * 100);
         return `<div style="margin-bottom:9px">
           <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-            <span style="font-size:11px;color:var(--muted)">${c.label}</span>
+            <span class="hint">${c.label}</span>
             <span style="font-size:11px;color:var(--text);font-family:var(--mono)">${fmtDur(m)}</span>
           </div>
           <div style="height:3px;background:var(--bg4);border-radius:2px">
@@ -3690,7 +3690,7 @@ function renderSidePanel() {
           </div>
         </div>`;
       }).join('')
-    : '<div style="font-size:11px;color:var(--muted)">Nothing logged yet today</div>';
+    : '<div class="hint">Nothing logged yet today</div>';
   const spEnergy = document.getElementById('sp-energy-bars');
   if (spEnergy) spEnergy.innerHTML = energyHTML;
 
@@ -3729,7 +3729,7 @@ function renderSidePanel() {
   const cleanStreak = computeCleanStreak();
   const spStreak = document.getElementById('sp-streak-content');
   if (spStreak) spStreak.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div class="w-grid-2 m0">
       <div style="background:var(--deep-dim);border-radius:10px;padding:10px;text-align:center">
         <div style="font-size:22px;font-weight:700;color:var(--deep);font-family:var(--mono)">${streak}</div>
         <div style="font-size:10px;color:var(--muted);margin-top:2px">day streak</div>
@@ -4618,7 +4618,7 @@ function renderMonthOverview(monthE, monthDate) {
 
   const content = document.getElementById('week-content');
   content.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+    <div class="w-grid-3">
       <div class="w-stat"><div class="w-stat-num" style="color:var(--deep)">${deepHrs}</div><div class="w-stat-label">Deep hrs</div></div>
       <div class="w-stat"><div class="w-stat-num">${(Math.round(totalMins/6)/10).toFixed(1)}</div><div class="w-stat-label">Total hrs</div></div>
       <div class="w-stat"><div class="w-stat-num">${onPlanPct}</div><div class="w-stat-label">On-plan</div></div>
@@ -4635,13 +4635,13 @@ function renderMonthOverview(monthE, monthDate) {
           </div>`).join('')}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-      <div class="w-card" style="margin:0"><div class="w-card-title">Time split</div><div id="w-energy-split-month"></div></div>
-      <div class="w-card" style="margin:0">
+    <div class="w-grid-2">
+      <div class="w-card m0"><div class="w-card-title">Time split</div><div id="w-energy-split-month"></div></div>
+      <div class="w-card m0">
         <div class="w-card-title">Highlights</div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Distraction cost</div><div style="font-size:13px;font-weight:700;color:var(--distraction)">$${distractionCost}</div></div>
-          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Days tracked</div><div style="font-size:13px;font-weight:700">${dayBars.filter(d=>d.hasData).length}</div></div>
+          <div><div class="stat-label">Distraction cost</div><div style="font-size:13px;font-weight:700;color:var(--distraction)">$${distractionCost}</div></div>
+          <div><div class="stat-label">Days tracked</div><div style="font-size:13px;font-weight:700">${dayBars.filter(d=>d.hasData).length}</div></div>
         </div>
       </div>
     </div>
@@ -4833,7 +4833,7 @@ function renderEntryList(el, entriesArr) {
     const color = getActivityColor(e.activity)||energyColors[e.energy]||'var(--muted)';
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
       <div style="width:3px;height:34px;border-radius:2px;background:${color};flex-shrink:0"></div>
-      <div style="flex:1;min-width:0">
+      <div class="flex-min">
         <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.activity}</div>
         <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
       </div>
@@ -4861,7 +4861,7 @@ function renderWeekOverview(days) {
   const content = document.getElementById('week-content');
   content.innerHTML = `
     <!-- 3 hero stats -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+    <div class="w-grid-3">
       <div class="w-stat"><div class="w-stat-num" style="color:var(--deep)">${deepHrs}</div><div class="w-stat-label">Deep hrs</div></div>
       <div class="w-stat"><div class="w-stat-num">${(Math.round(totalMins/6)/10).toFixed(1)}</div><div class="w-stat-label">Total hrs</div></div>
       <div class="w-stat"><div class="w-stat-num">${onPlanPct}</div><div class="w-stat-label">On-plan</div></div>
@@ -4870,7 +4870,7 @@ function renderWeekOverview(days) {
     <!-- Goal progress -->
     <div class="w-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="w-card-title" style="margin:0">Deep work goal</div>
+        <div class="w-card-title m0">Deep work goal</div>
         <div style="font-size:12px;font-family:var(--mono);color:var(--deep)">${deepHrs} / ${goal}h · ${pct}%</div>
       </div>
       <div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden">
@@ -4930,17 +4930,17 @@ function renderWeekOverview(days) {
     </div>
 
     <!-- Split + highlights -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-      <div class="w-card" style="margin:0">
+    <div class="w-grid-2">
+      <div class="w-card m0">
         <div class="w-card-title">Time split</div>
         <div id="w-energy-split-week"></div>
       </div>
-      <div class="w-card" style="margin:0">
+      <div class="w-card m0">
         <div class="w-card-title">Highlights</div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Best day</div><div style="font-size:13px;font-weight:600;font-family:var(--mono)">${bestDay.entries.length?computeDeepHrs(bestDay.entries)+'h — '+bestDay.label:'—'}</div></div>
-          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Avg deep/day</div><div style="font-size:13px;font-weight:600;font-family:var(--mono)">${avgDeep}</div></div>
-          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Distraction cost</div><div style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--distraction)">$${distractionCost}</div></div>
+          <div><div class="stat-label">Best day</div><div style="font-size:13px;font-weight:600;font-family:var(--mono)">${bestDay.entries.length?computeDeepHrs(bestDay.entries)+'h — '+bestDay.label:'—'}</div></div>
+          <div><div class="stat-label">Avg deep/day</div><div style="font-size:13px;font-weight:600;font-family:var(--mono)">${avgDeep}</div></div>
+          <div><div class="stat-label">Distraction cost</div><div style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--distraction)">$${distractionCost}</div></div>
         </div>
       </div>
     </div>
@@ -4954,7 +4954,7 @@ function renderWeekOverview(days) {
     <!-- All entries filter + list -->
     <div class="w-card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div class="w-card-title" style="margin:0">All entries</div>
+        <div class="w-card-title m0">All entries</div>
         <div style="display:flex;gap:6px">
           <select id="filter-energy" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:11px;padding:4px 7px;border-radius:6px;outline:none" onchange="renderWeekTable()">
             <option value="">All types</option>
@@ -5008,7 +5008,7 @@ function renderDayDetail(day) {
   const content = document.getElementById('week-content');
   content.innerHTML = `
     <!-- 3 hero stats -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+    <div class="w-grid-3">
       <div class="w-stat"><div class="w-stat-num" style="color:var(--deep)">${deepHrs}</div><div class="w-stat-label">Deep hrs</div></div>
       <div class="w-stat"><div class="w-stat-num">${(Math.round(totalMins/6)/10).toFixed(1)}</div><div class="w-stat-label">Total hrs</div></div>
       <div class="w-stat"><div class="w-stat-num">${onPlanPct}</div><div class="w-stat-label">On-plan</div></div>
@@ -5017,7 +5017,7 @@ function renderDayDetail(day) {
     <!-- Time of day breakdown -->
     <div class="w-card">
       <div class="w-card-title">When was I focused?</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div class="w-grid-3 m0">
         ${[['Morning','🌅',morning,morningDeep],['Afternoon','☀️',afternoon,aftDeep],['Evening','🌙',evening,eveDeep]].map(([label,icon,arr,deep])=>`
           <div style="background:var(--bg3);border-radius:var(--r);padding:10px;text-align:center">
             <div style="font-size:18px;margin-bottom:4px">${icon}</div>
@@ -5029,17 +5029,17 @@ function renderDayDetail(day) {
     </div>
 
     <!-- Energy split + distraction -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-      <div class="w-card" style="margin:0">
+    <div class="w-grid-2">
+      <div class="w-card m0">
         <div class="w-card-title">Time split</div>
         <div id="w-energy-split-day"></div>
       </div>
-      <div class="w-card" style="margin:0">
+      <div class="w-card m0">
         <div class="w-card-title">Day stats</div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Blocks logged</div><div style="font-size:13px;font-weight:700">${dayE.length}</div></div>
-          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Distraction time</div><div style="font-size:13px;font-weight:700;color:${distractionMins>0?'var(--distraction)':'var(--text)'}">${distractionMins>0?distractionMins+'m':'none'}</div></div>
-          <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Distraction cost</div><div style="font-size:13px;font-weight:700;color:var(--distraction)">$${Math.round(distractionMins/60*settings.targetRate)}</div></div>
+          <div><div class="stat-label">Blocks logged</div><div style="font-size:13px;font-weight:700">${dayE.length}</div></div>
+          <div><div class="stat-label">Distraction time</div><div style="font-size:13px;font-weight:700;color:${distractionMins>0?'var(--distraction)':'var(--text)'}">${distractionMins>0?distractionMins+'m':'none'}</div></div>
+          <div><div class="stat-label">Distraction cost</div><div style="font-size:13px;font-weight:700;color:var(--distraction)">$${Math.round(distractionMins/60*settings.targetRate)}</div></div>
         </div>
       </div>
     </div>
@@ -5089,7 +5089,7 @@ function renderWeekTable() {
         const color = getActivityColor(e.activity)||energyColors[e.energy]||'var(--muted)';
         return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
           <div style="width:3px;height:32px;border-radius:2px;background:${color};flex-shrink:0"></div>
-          <div style="flex:1;min-width:0">
+          <div class="flex-min">
             <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.activity}</div>
             <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
           </div>
@@ -5518,7 +5518,7 @@ function renderYesterdayPromise() {
     <div class="promise-row focus">
       <span class="promise-row-label">Today's focus you set yesterday</span>
       <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
-        <span class="promise-row-value" style="flex:1">"${promise}"</span>
+        <span class="promise-row-value flex-1">"${promise}"</span>
         ${!alreadySet ? `<button class="promise-set-btn" onclick="applyPromiseAsIntention()">Set focus</button>` : `<span style="font-size:10px;color:var(--deep);font-weight:600">✓ active</span>`}
       </div>
     </div>` : '';
@@ -5752,10 +5752,10 @@ function renderStreakCalendar() {
 
   // Legend
   const legend = `<div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
-    <div style="display:flex;gap:4px;align-items:center"><div style="width:10px;height:10px;border-radius:2px;background:var(--bg3)"></div><span style="font-size:10px;color:var(--muted2)">No data</span></div>
-    <div style="display:flex;gap:4px;align-items:center"><div style="width:10px;height:10px;border-radius:2px;background:rgba(76,199,240,0.28)"></div><span style="font-size:10px;color:var(--muted2)">&lt;50% goal</span></div>
-    <div style="display:flex;gap:4px;align-items:center"><div style="width:10px;height:10px;border-radius:2px;background:var(--deep)"></div><span style="font-size:10px;color:var(--muted2)">Goal hit</span></div>
-    <div style="display:flex;gap:4px;align-items:center"><div style="width:10px;height:10px;border-radius:2px;background:rgba(255,107,107,0.3)"></div><span style="font-size:10px;color:var(--muted2)">Waste-heavy</span></div>
+    <div style="display:flex;gap:4px;align-items:center"><div style="width:10px;height:10px;border-radius:2px;background:var(--bg3)"></div><span class="meta">No data</span></div>
+    <div style="display:flex;gap:4px;align-items:center"><div style="width:10px;height:10px;border-radius:2px;background:rgba(76,199,240,0.28)"></div><span class="meta">&lt;50% goal</span></div>
+    <div style="display:flex;gap:4px;align-items:center"><div style="width:10px;height:10px;border-radius:2px;background:var(--deep)"></div><span class="meta">Goal hit</span></div>
+    <div style="display:flex;gap:4px;align-items:center"><div style="width:10px;height:10px;border-radius:2px;background:rgba(255,107,107,0.3)"></div><span class="meta">Waste-heavy</span></div>
   </div>`;
 
   el.innerHTML = `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">
@@ -5890,11 +5890,11 @@ function renderFocusHeatmap() {
 
   // Legend
   html += `<div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
-    <span style="font-size:10px;color:var(--muted2)">Less</span>
+    <span class="meta">Less</span>
     ${['var(--bg3)','rgba(76,199,240,0.15)','rgba(76,199,240,0.35)','rgba(76,199,240,0.65)','var(--deep)'].map(c =>
       `<div style="width:12px;height:12px;border-radius:3px;background:${c}"></div>`
     ).join('')}
-    <span style="font-size:10px;color:var(--muted2)">More</span>
+    <span class="meta">More</span>
   </div>`;
 
   html += `</div></div>`;
@@ -6967,9 +6967,9 @@ if (!localStorage.getItem('ta3-onboarded')) {
     <div class="ob-body">
       Add quick-start buttons to your home screen using these URL schemes:<br><br>
       <strong>chronasense://start?task=Work</strong><br>
-      <span style="font-size:12px;color:var(--muted)">Starts the timer with "Work" pre-filled</span><br><br>
+      <span class="note">Starts the timer with "Work" pre-filled</span><br><br>
       <strong>chronasense://quicklog?task=Gym&amp;energy=invest</strong><br>
-      <span style="font-size:12px;color:var(--muted)">Instantly logs a past block without starting the timer</span><br><br>
+      <span class="note">Instantly logs a past block without starting the timer</span><br><br>
       Use any app launcher (e.g. Tasker, KWGT, iOS Shortcuts) to create one-tap buttons.
     </div>
   </div>
@@ -7080,7 +7080,7 @@ function showPhoneUsageBanner(UsageStats) {
       Tap Allow to open Settings and enable Usage Access for ChronaSense.
     </div>
     <div style="display:flex;gap:8px">
-      <button class="btn sm" style="flex:1" onclick="
+      <button class="btn sm flex-1" onclick="
         document.getElementById('phone-usage-banner').remove();
         window.Capacitor.Plugins.UsageStats.requestPermission();
       ">Allow</button>
