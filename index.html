@@ -2777,6 +2777,10 @@ function getIdentityLevelWithEmoji(score) {
 // ── Overlap clipping: display-only shallow copies, earlier block clipped to next block's start ──
 // ⚠ DANGER: operates on shallow copies only — never pass raw entries or mutations will corrupt stored data permanently.
 // Clip logic is intentional: partial overlaps are trimmed; fully-contained entries are left untouched (next.ts <= curr.ts check).
+/** Shallow-copies entries and clips partial overlaps. DANGER: do not pass raw entries — mutates copies only.
+ * @param {Array} ascSorted entries sorted ascending by start time @returns {Array} clipped shallow copies */
+/** Clips partial overlaps. DANGER: operates on shallow copies only — never mutate stored entries.
+ * @param {Array} ascSorted ascending by start time @returns {Array} clipped shallow copies */
 function clipOverlapsForDisplay(ascSorted) {
   if (ascSorted.length < 2) return ascSorted;
   const result = ascSorted.map(e => ({ ...e })); // shallow copies — never mutates stored data
@@ -2821,6 +2825,7 @@ function mergeConsecutiveForDisplay(sorted) {
 // ── Gap detection: anchored to work day start, not first entry ──
 // This means: even if you never opened the app, gaps show from your start time.
 // ⚠ DANGER: anchor is intentional — do not change to first-entry anchor or gaps disappear for days with no morning logging.
+/** @param {Array} todayEntries @param {number} [dayNow] end-of-day ts for past days @returns {Array} gap items */
 function computeGaps(todayEntries, dayNow) {
   // MIN_GAP_MIN defined in storage.js
   const workStart = getWorkDayStartTs(todayEntries);
@@ -3095,6 +3100,7 @@ function renderTimelineCombined(combined) {
   return combined.map(item => item.isGap ? renderGapRow(item) : renderEntryRow(item)).join('');
 }
 
+/** @param {Object} e entry @returns {string} HTML for a recent-list row */
 function buildEntryRowHTML(e) {
   const duration = e.segments
     ? Math.round(e.segments.reduce((sum, s) => sum + s.duration, 0) / 60)
@@ -3128,6 +3134,7 @@ function buildEntryRowHTML(e) {
 
 // Sorts, clips, merges, and gaps today's entries into the combined array for renderTimelineCombined.
 // Handles nested browser sub-activities (pcSubMap) and attaches them to their container entries.
+/** @param {Array} todayE entries for the viewed day @returns {Array} combined display items (entries + gaps) */
 function assembleTodayTimeline(todayE) {
   const sorted = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
   const browserEntries   = sorted.filter(e => e.browserUsage);
@@ -3734,6 +3741,7 @@ function renderSidePanel() {
     </div>`;
 }
 
+/** Re-renders the Today view: stats, commitment bar, timeline, recent list, and all sub-components. */
 function renderToday() {
   resetRetroBar();
   const todayE = getViewingEntries();
