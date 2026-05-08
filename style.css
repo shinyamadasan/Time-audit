@@ -637,11 +637,14 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   background:none;border:none;cursor:pointer;font-family:var(--head);text-align:center;padding:4px}
 
 /* ── Daily commitment bar ── */
-.commit-bar{background:var(--bg2);border:none;box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);
+.commit-bar{background:var(--bg2);border:1px solid var(--border2);box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);
   padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px}
-.commit-progress{flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden}
-.commit-fill{height:100%;border-radius:3px;background:var(--deep);transition:width 0.4s}
-.commit-label{font-size:12px;font-family:var(--mono);color:var(--muted);white-space:nowrap}
+.commit-bar.no-goal{border-color:rgba(76,199,240,0.35);cursor:pointer}
+.commit-bar.no-goal .commit-label{color:var(--deep);font-weight:600}
+.commit-bar.no-goal .btn{background:var(--deep-dim);border-color:rgba(76,199,240,0.5);color:var(--deep)}
+.commit-progress{flex:1;height:10px;background:var(--bg4);border-radius:5px;overflow:hidden}
+.commit-fill{height:100%;border-radius:5px;background:var(--deep);transition:width 0.4s}
+.commit-label{font-size:12px;font-family:var(--mono);color:var(--text);white-space:nowrap}
 
 /* ── Log feedback flash ── */
 @keyframes ring-flash{0%,100%{opacity:1}50%{opacity:0.4}}

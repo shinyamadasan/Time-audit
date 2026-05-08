@@ -253,11 +253,12 @@
   <!-- Same as last — primary CTA -->
   <button id="same-as-last-btn" onclick="quickLogSameAsLast()" class="sal-card" style="display:none">
     <div class="sal-left">
-      <div class="sal-label">Log again</div>
+      <div class="sal-label">Forgot to log?</div>
       <div class="sal-activity" id="same-as-last-label">—</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">Different task? Use the bar below ↓</div>
     </div>
     <div class="sal-right">
-      <div class="sal-action">tap to log →</div>
+      <div class="sal-action">log last 30 min + start →</div>
       <div class="sal-time" id="same-as-last-time"></div>
     </div>
   </button>
@@ -324,6 +325,7 @@
     <div class="stat-card" style="flex:1;text-align:center">
       <div class="s-label">Identity</div>
       <div class="s-val" id="s-identity" style="font-size:13px">—</div>
+      <div class="s-sub" id="s-identity-sub" style="margin-top:3px;line-height:1.3"></div>
     </div>
   </div>
   <div class="page-header" style="margin-bottom:8px">
@@ -2763,7 +2765,7 @@ function getActivityColor(activity) {
   return settings.activityColors[activity];
 }
 function computeIdentityScore(arr) {
-  return arr.filter(e => e.onPlan === true && e.energy === 'deep').length;
+  return arr.filter(e => e.energy === 'deep').length;
 }
 function getIdentityLevelWithEmoji(score) {
   if (score >= 8) return "Operator 🟢";
@@ -3692,7 +3694,22 @@ function renderToday() {
   const streakSubEl = document.getElementById('s-streak-sub');
   if (streakSubEl) streakSubEl.textContent = cleanStreak > 0 ? `days · ${cleanStreak}d clean` : 'days deep';
   const identScore = computeIdentityScore(todayE);
-  document.getElementById('s-identity').textContent = getIdentityLevelWithEmoji(identScore);
+  const identEl = document.getElementById('s-identity');
+  const identSubEl = document.getElementById('s-identity-sub');
+  identEl.textContent = getIdentityLevelWithEmoji(identScore);
+  if (identScore >= 8) {
+    identEl.style.color = 'var(--deep)';
+    if (identSubEl) identSubEl.textContent = 'Peak form';
+  } else if (identScore >= 5) {
+    identEl.style.color = '#f9c74f';
+    if (identSubEl) identSubEl.textContent = `${8 - identScore} more to Operator`;
+  } else if (identScore >= 3) {
+    identEl.style.color = '#fb923c';
+    if (identSubEl) identSubEl.textContent = `${5 - identScore} more to Builder`;
+  } else {
+    identEl.style.color = 'var(--distraction)';
+    if (identSubEl) identSubEl.textContent = `${3 - identScore} deep block${3 - identScore === 1 ? '' : 's'} to Trying`;
+  }
 
   // Daily commitment bar
   if (dailyCommitment > 0) {
@@ -3700,10 +3717,12 @@ function renderToday() {
     document.getElementById('commit-fill').style.width = pct + '%';
     document.getElementById('commit-label').textContent = `${deepCount} / ${dailyCommitment} deep`;
     document.getElementById('commit-bar').style.display = 'flex';
+    document.getElementById('commit-bar').classList.remove('no-goal');
   } else {
-    document.getElementById('commit-bar').style.display = 'flex'; // always show so user can set it
+    document.getElementById('commit-bar').style.display = 'flex';
     document.getElementById('commit-fill').style.width = '0%';
-    document.getElementById('commit-label').textContent = 'Set a goal';
+    document.getElementById('commit-label').textContent = 'Set your daily goal';
+    document.getElementById('commit-bar').classList.add('no-goal');
   }
 
   // Cache key — only rebuild timeline/list DOM when today's entries actually change
@@ -4277,8 +4296,9 @@ function quickLogSameAsLast() {
   entries.push(entry);
   entries.sort((a, b) => b.ts - a.ts);
   persist(); renderToday(); syncEntries();
-  showToast(`Logged · ${activity} · ${fmtDur(dur)}`, false, energy);
+  showToast(`Logged · ${activity} · ${fmtDur(dur)} · timer started`, false, energy);
   resetRetroBar();
+  if (!running) _startTimer(activity);
 }
 
 function quickLogSleep() {
