@@ -2636,13 +2636,7 @@ function isViewingToday() {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   return getViewingDateKey() === getDateInTZ(Date.now(), tz);
 }
-// End of day as UTC ms for a YYYY-MM-DD key (= start of next calendar day - 1 ms)
-function dayEndTs(dateKey) {
-  const [y, mo, d] = dateKey.split('-').map(Number);
-  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const nextKey = `${y}-${String(mo).padStart(2,'0')}-${String(d+1).padStart(2,'0')}`;
-  return tzParseTime(nextKey, '00:00') - 1;
-}
+// dayEndTs — moved to storage.js
 function setViewDate(dateKey) {
   viewingDateKey = dateKey;
   _todayRenderKey = '__FORCE__'; // sentinel: forces re-render even for empty days
@@ -2775,13 +2769,7 @@ function getIdentityLevelWithEmoji(score) {
   return "Drifting 🔴";
 }
 
-// Returns today's work day start as a Unix timestamp.
-// Anchored to the first real entry of the day so entries logged at any hour are covered.
-function getWorkDayStartTs(entriesOverride) {
-  const todayEntries = (entriesOverride || getTodayEntries()).filter(e => !e.missed && (e.tsStart || e.ts));
-  if (!todayEntries.length) return Date.now(); // no entries yet → no gaps to show
-  return Math.min(...todayEntries.map(e => e.tsStart || e.ts));
-}
+// getWorkDayStartTs — moved to storage.js
 
 // ── Overlap clipping: display-only shallow copies, earlier block clipped to next block's start ──
 // ⚠ DANGER: operates on shallow copies only — never pass raw entries or mutations will corrupt stored data permanently.

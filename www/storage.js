@@ -898,3 +898,20 @@ function tryAutoConnect() {
     console.error('Auto-connect failed:', e);
   }
 }
+
+// ── Date range helpers — moved from index.html ──────────────────────────────
+// End of day as UTC ms for a YYYY-MM-DD key (= start of next calendar day - 1 ms)
+function dayEndTs(dateKey) {
+  const [y, mo, d] = dateKey.split('-').map(Number);
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const nextKey = `${y}-${String(mo).padStart(2,'0')}-${String(d+1).padStart(2,'0')}`;
+  return tzParseTime(nextKey, '00:00') - 1;
+}
+
+// Earliest entry timestamp for the work day — used as the gap anchor by computeGaps.
+// ⚠ ANCHOR: computeGaps() depends on this; changing it shifts where gaps appear on the timeline.
+function getWorkDayStartTs(entriesOverride) {
+  const todayEntries = (entriesOverride || getTodayEntries()).filter(e => !e.missed && (e.tsStart || e.ts));
+  if (!todayEntries.length) return Date.now();
+  return Math.min(...todayEntries.map(e => e.tsStart || e.ts));
+}
