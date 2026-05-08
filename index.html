@@ -1828,6 +1828,7 @@ function openQuickLog() {
   const continueBtn = document.getElementById('ql-continue-btn');
   const otherBtn = document.getElementById('ql-other-btn');
   const formBody = document.getElementById('ql-form-body');
+  const qlQuickLane = document.getElementById('ql-quick-actions').closest('.quick-lane');
   if (last) {
     document.getElementById('ql-last-label').textContent = last.activity.split(' (Output:')[0].substring(0, 32);
     continueBtn.dataset.lastActivity = last.activity;
@@ -1835,10 +1836,12 @@ function openQuickLog() {
     continueBtn.style.display = 'block';
     otherBtn.style.display = 'block';
     formBody.style.display = 'none';
+    if (qlQuickLane) qlQuickLane.style.display = 'none';
   } else {
     continueBtn.style.display = 'none';
     otherBtn.style.display = 'none';
     formBody.style.display = 'block';
+    if (qlQuickLane) qlQuickLane.style.display = '';
   }
 
   renderQuickActionGrid('ql-quick-actions', option => {
@@ -1894,6 +1897,8 @@ function showQuickForm() {
   document.getElementById('ql-continue-btn').style.display = 'none';
   document.getElementById('ql-other-btn').style.display = 'none';
   document.getElementById('ql-form-body').style.display = 'block';
+  const qlQuickLane = document.getElementById('ql-quick-actions').closest('.quick-lane');
+  if (qlQuickLane) qlQuickLane.style.display = '';
   setTimeout(() => document.getElementById('ql-activity').focus(), 100);
 }
 
