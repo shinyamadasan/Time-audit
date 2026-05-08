@@ -12,13 +12,14 @@
 //   updateLiveCost(), doPing(), _updateBreakDisplay(), endBreak()
 // ══════════════════════════════════════════════════════
 
-// ── Firebase config ──
+// ── App config ──
 const firebaseConfig = {
   apiKey: "AIzaSyDQeoZ1o1uz7adi1fLQiC6VKFCJ-6q8kgA",
   authDomain: "time-audit-3c3da.firebaseapp.com",
   databaseURL: "https://time-audit-3c3da-default-rtdb.asia-southeast1.firebasedatabase.app/",
   projectId: "time-audit-3c3da"
 };
+const GOOGLE_CLIENT_ID = '548433155531-r93hucpo6pa8darnjm5tioj1rgg4vn6s.apps.googleusercontent.com';
 
 let syncedDeviceId = localStorage.getItem('ta3-device-id') || ('device_' + Math.random().toString(36).slice(2,8));
 localStorage.setItem('ta3-device-id', syncedDeviceId);
@@ -359,7 +360,7 @@ function initAutoSync() {
   // Initialize Google Auth once at startup
   if (window.Capacitor && window.Capacitor.Plugins.GoogleAuth) {
     window.Capacitor.Plugins.GoogleAuth.initialize({
-      clientId: '548433155531-r93hucpo6pa8darnjm5tioj1rgg4vn6s.apps.googleusercontent.com',
+      clientId: GOOGLE_CLIENT_ID,
       scopes: ['profile', 'email'],
       grantOfflineAccess: true
     });
