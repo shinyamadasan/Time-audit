@@ -76,6 +76,8 @@ const DEFAULT_PRESETS = [
 // ══════════════════════════════════════════════════════
 // BUCKET CLASSIFICATION
 // ══════════════════════════════════════════════════════
+/** @param {{energy:string, activity:string}} entry @returns {string|null} bucket category string */
+/** @param {{energy:string,activity:string}} entry @returns {string|null} */
 function getBucket(entry) {
   if (!entry) return null;
   switch (entry.energy) {
@@ -100,6 +102,7 @@ function getBucket(entry) {
 // ══════════════════════════════════════════════════════
 // DATE & QUERY UTILS
 // ══════════════════════════════════════════════════════
+/** @param {Date} d @returns {string} YYYY-MM-DD in user timezone */
 function toDateKey(d) {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   return new Intl.DateTimeFormat('en-CA', {timeZone: tz}).format(d);
@@ -110,6 +113,7 @@ function toDateKey(d) {
 // Never use Date.getHours() / .getDay() / .getMonth() directly — those
 // return device-local values and break multi-device, multi-timezone setups.
 
+/** @param {number} ts UTC ms @returns {string} "9:30 AM" in user timezone */
 function tzTime(ts) {
   // "9:30 AM" in user's timezone, for display
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -147,6 +151,7 @@ function tzDow(ts) {
   );
 }
 
+/** @param {string} dateKey YYYY-MM-DD @param {string} hhmm "HH:MM" wall-clock @returns {number} UTC ms */
 function tzParseTime(dateKey, hhmm) {
   // Convert a wall-clock "HH:MM" time on dateKey (YYYY-MM-DD, in user's timezone)
   // to a UTC timestamp. Iterates to self-correct for timezone offset.
@@ -169,6 +174,7 @@ function tzParseTime(dateKey, hhmm) {
 }
 
 const _dateInTZFmtCache = new Map();
+/** @param {number} ts UTC ms @param {string} [tz] @returns {string} YYYY-MM-DD */
 function getDateInTZ(ts, tz) {
   // Canonical "what calendar date is this UTC timestamp on?" in the user's timezone.
   // Always derive from the UTC timestamp — never trust the stored e.date field, which
@@ -179,6 +185,7 @@ function getDateInTZ(ts, tz) {
   return fmt.format(new Date(ts));
 }
 
+/** @returns {Array} entries for today in user timezone, newest first */
 function getTodayEntries() {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const todayKey = getDateInTZ(Date.now(), tz);
@@ -190,6 +197,7 @@ function getTodayEntries() {
   });
 }
 
+/** @param {string} dateKey YYYY-MM-DD @returns {Array} */
 function getEntriesForDate(dateKey) {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   return entries.filter(e => {
@@ -272,6 +280,7 @@ function scheduleRenderToday() {
 // ══════════════════════════════════════════════════════
 // PERSIST / LOAD
 // ══════════════════════════════════════════════════════
+/** Saves entries, settings, and commitment to localStorage then schedules a render. */
 function persist() {
   // Always store entries in strict chronological order (newest first)
   entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
@@ -768,6 +777,7 @@ let _partnerListener = null;
 let _nudgesRef      = null;
 let _partnerUidRef  = null;
 
+/** Removes all active Firebase room listeners. Call before switching rooms or signing out. */
 function teardownRoomListeners() {
   if (!fbDb || !roomCode) return;
   const paths = ['timer','entries','intention','devices','settings','breakState','reviews','weeklyReviews','awayState'];
@@ -915,6 +925,7 @@ const DATE_KEY_RE  = /^\d{4}-\d{2}-\d{2}$/;
 
 // Warns to console if a newly created entry is missing required fields.
 // Never throws — validation is defensive only; a malformed entry is better than a crash.
+/** Warns to console if a newly created entry is missing required fields. Never throws. @param {Object} entry */
 function validateEntry(entry) {
   const problems = [];
   if (typeof entry.id !== 'number' || entry.id <= 0)        problems.push('id invalid');
@@ -928,12 +939,16 @@ function validateEntry(entry) {
 
 // ── Goal helpers ─────────────────────────────────────────────────────────────
 // settings.deepGoal is stored as hours/week. All daily calculations must use these helpers.
+/** @returns {number} daily deep-work goal in hours (settings.deepGoal / WORK_DAYS_PER_WEEK) */
 function getDailyGoalHrs()  { return (settings.deepGoal || 0) / WORK_DAYS_PER_WEEK; }
+/** @returns {number} daily deep-work goal in minutes */
 function getDailyGoalMins() { return getDailyGoalHrs() * 60; }
+/** @returns {number} weekly deep-work goal in minutes */
 function getWeeklyGoalMins(){ return (settings.deepGoal || 0) * 60; }
 
 // ── Date range helpers — moved from index.html ──────────────────────────────
 // End of day as UTC ms for a YYYY-MM-DD key (= start of next calendar day - 1 ms)
+/** @param {string} dateKey YYYY-MM-DD @returns {number} UTC ms at end of that calendar day */
 function dayEndTs(dateKey) {
   const [y, mo, d] = dateKey.split('-').map(Number);
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -943,6 +958,7 @@ function dayEndTs(dateKey) {
 
 // Earliest entry timestamp for the work day — used as the gap anchor by computeGaps.
 // ⚠ ANCHOR: computeGaps() depends on this; changing it shifts where gaps appear on the timeline.
+/** @param {Array} [entriesOverride] @returns {number} UTC ms of earliest entry — gap anchor for computeGaps */
 function getWorkDayStartTs(entriesOverride) {
   const todayEntries = (entriesOverride || getTodayEntries()).filter(e => !e.missed && (e.tsStart || e.ts));
   if (!todayEntries.length) return Date.now();

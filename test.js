@@ -156,6 +156,125 @@ test('uses segments duration when present', () => {
   assert.equal(result['focus'], 20);
 });
 
+// ── Timeline functions (inlined from index.html for testability) ─────────────
+
+const SEAM_TOLERANCE_MS = 2 * 60 * 1000;
+const MAX_GAP_MS        = 5 * 60 * 1000;
+const MIN_GAP_MIN       = 5;
+
+function clipOverlapsForDisplay(ascSorted) {
+  if (ascSorted.length < 2) return ascSorted;
+  const result = ascSorted.map(e => ({ ...e }));
+  for (let i = 0; i < result.length - 1; i++) {
+    const curr = result[i];
+    const next = result[i + 1];
+    const nextStart = next.tsStart || next.ts;
+    if (curr.ts > nextStart && next.ts > curr.ts) {
+      curr.ts = nextStart;
+      const startMs = curr.tsStart || (curr.ts - (curr.blockIntervalMin || 1) * 60000);
+      curr.blockIntervalMin = Math.max(1, Math.round((curr.ts - startMs) / 60000));
+    }
+  }
+  return result;
+}
+
+function mergeConsecutiveForDisplay(clipped) {
+  if (!clipped.length) return [];
+  const out = [];
+  let group = { ...clipped[0], _mergedIds: null };
+  for (let i = 1; i < clipped.length; i++) {
+    const e = clipped[i];
+    const gap = (group.tsStart || group.ts) - e.ts;
+    const sameKind = e.activity === group.activity && e.energy === group.energy;
+    if (sameKind && gap >= 0 && gap <= MAX_GAP_MS) {
+      if (!group._mergedIds) group._mergedIds = [group.id];
+      group._mergedIds.push(e.id);
+      group.tsStart = e.tsStart || e.ts;
+      group.blockIntervalMin = Math.round(((group.tsStart || group.ts) - (e.tsStart || e.ts)) / 60000) ||
+        (group.blockIntervalMin || 1);
+    } else {
+      out.push(group);
+      group = { ...e, _mergedIds: null };
+    }
+  }
+  out.push(group);
+  return out;
+}
+
+const MIN = 60 * 1000;
+const HR  = 60 * MIN;
+
+function makeEntry(id, startHr, endHr, activity = 'Task', energy = 'deep') {
+  const tsStart = startHr * HR;
+  const ts      = endHr   * HR;
+  return { id, ts, tsStart, blockIntervalMin: Math.round((ts - tsStart) / MIN), activity, energy };
+}
+
+console.log('\nclipOverlapsForDisplay');
+test('no-op on non-overlapping entries', () => {
+  const a = makeEntry(1, 9, 10);
+  const b = makeEntry(2, 10, 11);
+  const result = clipOverlapsForDisplay([a, b]);
+  assert.equal(result[0].ts, a.ts);
+  assert.equal(result[1].ts, b.ts);
+});
+test('clips partial overlap: A.ts trimmed to B.tsStart', () => {
+  const a = makeEntry(1, 9, 10.5);    // A ends at 10:30
+  const b = makeEntry(2, 10, 11);     // B starts at 10:00 → overlap
+  const [rA] = clipOverlapsForDisplay([a, b]);
+  assert.equal(rA.ts, b.tsStart, 'A.ts should be clipped to B.tsStart');
+});
+test('does not clip when B is fully inside A', () => {
+  const a = makeEntry(1, 9, 12);      // A: 9-12
+  const b = makeEntry(2, 10, 11);     // B fully inside A (b.ts <= a.ts? No — b.ts=11 <= a.ts=12... wait)
+  // b.ts (11*HR) <= a.ts (12*HR) → "next.ts <= curr.ts" case → skip clip
+  const [rA] = clipOverlapsForDisplay([a, b]);
+  assert.equal(rA.ts, a.ts, 'A.ts should not be clipped when B is inside A');
+});
+test('does not mutate original entries', () => {
+  const a = makeEntry(1, 9, 10.5);
+  const b = makeEntry(2, 10, 11);
+  const origTs = a.ts;
+  clipOverlapsForDisplay([a, b]);
+  assert.equal(a.ts, origTs, 'original entry must not be mutated');
+});
+test('single entry returned as-is', () => {
+  const a = makeEntry(1, 9, 10);
+  assert.deepEqual(clipOverlapsForDisplay([a]), [a]);
+});
+
+console.log('\nmergeConsecutiveForDisplay');
+test('no merge when gap > MAX_GAP_MS', () => {
+  const a = makeEntry(2, 10, 11);               // 10–11
+  const b = makeEntry(1, 9, 9.5);              // 9–9:30 — gap > 5min
+  const result = mergeConsecutiveForDisplay([a, b]);
+  assert.equal(result.length, 2);
+  assert.equal(result[0]._mergedIds, null);
+});
+test('merges same-activity entries within MAX_GAP_MS', () => {
+  const a = makeEntry(2, 9, 10);                 // 9–10, newest
+  const b = makeEntry(1, 9 - 4/60, 9 - 1/60);   // 8:56–8:59, gap ~1min — within 5min
+  const result = mergeConsecutiveForDisplay([a, b]);
+  assert.equal(result.length, 1);
+  assert.ok(Array.isArray(result[0]._mergedIds), '_mergedIds should be an array');
+  assert.equal(result[0]._mergedIds.length, 2);
+});
+test('no merge when energy differs', () => {
+  const a = makeEntry(2, 10, 11, 'Task', 'deep');
+  const b = makeEntry(1, 9.9, 10, 'Task', 'shallow'); // gap ~0 but energy differs
+  const result = mergeConsecutiveForDisplay([a, b]);
+  assert.equal(result.length, 2);
+});
+test('no merge when activity differs', () => {
+  const a = makeEntry(2, 10, 11, 'Coding', 'deep');
+  const b = makeEntry(1, 9.9, 10, 'Email', 'deep');
+  const result = mergeConsecutiveForDisplay([a, b]);
+  assert.equal(result.length, 2);
+});
+test('empty array returns empty', () => {
+  assert.deepEqual(mergeConsecutiveForDisplay([]), []);
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed\n`);
