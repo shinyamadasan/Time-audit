@@ -680,7 +680,8 @@ function startSync() {
   });
 
   // Listen for incoming nudges (ignore any that are older than 30s to skip history on connect)
-  fbDb.ref(`uid_${currentUser.uid}/nudges`).on('child_added', snap => {
+  _nudgesRef = fbDb.ref(`uid_${currentUser.uid}/nudges`);
+  _nudgesRef.on('child_added', snap => {
     const nudge = snap.val();
     if (!nudge || !nudge.ts || Date.now() - nudge.ts > 30000) { snap.ref.remove(); return; }
     showToast(`💪 ${nudge.from || 'Your partner'} is cheering you on!`);
@@ -688,7 +689,8 @@ function startSync() {
   });
 
   // Watch for partner connecting (handles the code-generator side who never calls connectPartner)
-  fbDb.ref(`uid_${currentUser.uid}/partnerUid`).on('value', snap => {
+  _partnerUidRef = fbDb.ref(`uid_${currentUser.uid}/partnerUid`);
+  _partnerUidRef.on('value', snap => {
     const remotePartnerUid = snap.val();
     const localPartnerUid = localStorage.getItem('ta3-partner-uid');
     if (remotePartnerUid) {
@@ -750,6 +752,20 @@ function publishPublicStats() {
 }
 
 let _partnerListener = null;
+let _nudgesRef      = null;
+let _partnerUidRef  = null;
+
+function teardownRoomListeners() {
+  if (!fbDb || !roomCode) return;
+  const paths = ['timer','entries','intention','devices','settings','breakState','reviews','weeklyReviews','awayState'];
+  paths.forEach(p => fbDb.ref(`rooms/${roomCode}/${p}`).off());
+  fbDb.ref('.info/connected').off();
+  if (fbRoomRef) fbRoomRef.off();
+  if (_nudgesRef)     { _nudgesRef.off();     _nudgesRef     = null; }
+  if (_partnerUidRef) { _partnerUidRef.off(); _partnerUidRef = null; }
+  if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
+}
+
 function initPartnerListener(partnerUid) {
   if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
   _partnerListener = fbDb.ref(`uid_${partnerUid}/public`);
@@ -768,17 +784,7 @@ function syncIntention(val) {
 function disconnectSync() {
   if (!confirm('Disconnect from room? Your data stays local.')) return;
   if (fbDb && roomCode) {
-    fbDb.ref('.info/connected').off();
-    fbDb.ref(`rooms/${roomCode}/timer`).off();
-    fbDb.ref(`rooms/${roomCode}/entries`).off();
-    fbDb.ref(`rooms/${roomCode}/intention`).off();
-    fbDb.ref(`rooms/${roomCode}/devices`).off();
-    fbDb.ref(`rooms/${roomCode}/settings`).off();
-    fbDb.ref(`rooms/${roomCode}/breakState`).off();
-    fbDb.ref(`rooms/${roomCode}/reviews`).off();
-    fbDb.ref(`rooms/${roomCode}/weeklyReviews`).off();
-    fbDb.ref(`rooms/${roomCode}/awayState`).off();
-    if (fbRoomRef) fbRoomRef.off();
+    teardownRoomListeners();
     fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).onDisconnect().cancel();
     fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).remove();
   }
@@ -850,16 +856,7 @@ function joinRoom() {
   if (code === roomCode) { showToast('Already in this room'); return; }
   // Tear down existing listeners
   if (fbDb && roomCode) {
-    fbDb.ref('.info/connected').off();
-    fbDb.ref(`rooms/${roomCode}/timer`).off();
-    fbDb.ref(`rooms/${roomCode}/entries`).off();
-    fbDb.ref(`rooms/${roomCode}/intention`).off();
-    fbDb.ref(`rooms/${roomCode}/devices`).off();
-    fbDb.ref(`rooms/${roomCode}/breakState`).off();
-    fbDb.ref(`rooms/${roomCode}/reviews`).off();
-    fbDb.ref(`rooms/${roomCode}/weeklyReviews`).off();
-    fbDb.ref(`rooms/${roomCode}/awayState`).off();
-    if (fbRoomRef) fbRoomRef.off();
+    teardownRoomListeners();
     fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).remove();
   }
   // Re-initialize Firebase if it never started
