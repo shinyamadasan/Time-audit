@@ -967,28 +967,35 @@ button, a, [role="button"],
 .sb-val{font-size:20px;font-weight:700;font-family:var(--mono);line-height:1}
 .sb-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
 
+/* ── Accountability partner card ── */
+.partner-card{display:flex;align-items:center;gap:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:12px 14px;margin-bottom:10px}
+.partner-avatar{width:36px;height:36px;border-radius:50%;background:var(--deep-dim);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.partner-info{flex:1;min-width:0}
+.partner-name{font-size:13px;font-weight:600;color:var(--text)}
+.partner-stats{font-size:11px;color:var(--muted);margin-top:2px}
+
 /* ── Desktop panels (left + right) ── */
 #side-panel,#left-panel{display:none}
 .sp-card{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:14px;margin-bottom:10px}
 .sp-card:last-child{margin-bottom:0}
 .sp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-bottom:10px}
 @media(min-width:1100px){
-  body{padding-left:232px;padding-right:232px}
   .app{max-width:none}
-  #left-panel{
+  body.view-today{padding-left:232px;padding-right:232px}
+  body.view-today #left-panel{
     position:fixed;left:0;top:0;width:220px;height:100vh;
     overflow-y:auto;padding:12px;box-sizing:border-box;
     background:var(--bg);border-right:1px solid var(--border);
     display:flex!important;flex-direction:column;gap:8px;z-index:40;
   }
-  #side-panel{
+  body.view-today #side-panel{
     position:fixed;right:0;top:0;width:220px;height:100vh;
     overflow-y:auto;padding:12px;box-sizing:border-box;
     background:var(--bg);border-left:1px solid var(--border);
     display:flex!important;flex-direction:column;gap:8px;z-index:40;
   }
-  /* Hide center-only widgets on desktop — shown in panels instead */
-  #status-banner,#day-bar{display:none!important}
+  body.view-today #status-banner,
+  body.view-today #day-bar{display:none!important}
 }
 .lp-nav-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:none;border:none;border-radius:10px;color:var(--muted);font-family:var(--head);font-size:13px;font-weight:500;cursor:pointer;text-align:left;transition:color 0.15s,background 0.15s}
 .lp-nav-btn.active{color:var(--deep);background:var(--deep-dim)}

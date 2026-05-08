@@ -679,6 +679,30 @@ function startSync() {
     }
   });
 
+  // Listen for incoming nudges (ignore any that are older than 30s to skip history on connect)
+  fbDb.ref(`uid_${currentUser.uid}/nudges`).on('child_added', snap => {
+    const nudge = snap.val();
+    if (!nudge || !nudge.ts || Date.now() - nudge.ts > 30000) { snap.ref.remove(); return; }
+    showToast(`💪 ${nudge.from || 'Your partner'} is cheering you on!`);
+    snap.ref.remove();
+  });
+
+  // Re-connect partner listener if we have a saved partner from a previous session
+  const _savedPartnerUid = localStorage.getItem('ta3-partner-uid');
+  if (_savedPartnerUid) {
+    initPartnerListener(_savedPartnerUid);
+    // Verify the pair is still active on Firebase
+    fbDb.ref(`uid_${currentUser.uid}/partnerUid`).once('value', snap => {
+      if (!snap.val()) {
+        localStorage.removeItem('ta3-partner-uid');
+        localStorage.removeItem('ta3-pair-code');
+        partnerData = null;
+        if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
+        if (typeof renderPartnerCard === 'function') renderPartnerCard();
+      }
+    });
+  }
+
   updateSyncPill('connected', 'synced');
   syncEntries();
   localStorage.setItem('ta3-last-sync', Date.now());
@@ -703,6 +727,31 @@ function syncEntries() {
   const updates = {};
   entries.forEach(e => { updates[`entries/e_${e.id}`] = e; });
   fbRoomRef.update(updates);
+  publishPublicStats();
+}
+
+function publishPublicStats() {
+  if (!fbDb || !currentUser) return;
+  const todayE = getTodayEntries().filter(e => !e.missed && !e.deleted);
+  const deepHrsToday = +(todayE.filter(e => e.energy === 'deep').length * (settings.intervalMin / 60)).toFixed(1);
+  fbDb.ref(`uid_${currentUser.uid}/public`).set({
+    deepHrsToday,
+    streak: computeStreak(),
+    name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Partner',
+    dateKey: toDateKey(new Date()),
+    updatedAt: Date.now()
+  });
+}
+
+let _partnerListener = null;
+function initPartnerListener(partnerUid) {
+  if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
+  _partnerListener = fbDb.ref(`uid_${partnerUid}/public`);
+  _partnerListener.on('value', snap => {
+    partnerData = snap.val();
+    if (typeof renderPartnerCard === 'function') renderPartnerCard();
+    if (typeof renderPartnerSettings === 'function') renderPartnerSettings();
+  });
 }
 
 function syncIntention(val) {

@@ -231,6 +231,9 @@
     <button class="btn sm ghost" style="flex-shrink:0;font-size:11px" onclick="setDailyCommitment()">Set</button>
   </div>
 
+  <!-- Accountability partner card -->
+  <div id="partner-card" style="display:none"></div>
+
   <!-- Continue banner removed — auto-logging handles this now -->
   <div class="continue-banner" id="continue-banner" style="display:none">
     <div style="flex:1">
@@ -562,6 +565,44 @@
         <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
         Continue with Google
       </button>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-title">Accountability Partner</div>
+    <div id="partner-signin-prompt" style="display:none;font-size:12px;color:var(--muted);padding:4px 0">Sign in to connect an accountability partner.</div>
+    <div id="partner-settings-body">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">Only your deep hours today and day streak are shared — no task names, no categories.</div>
+      <!-- No partner yet -->
+      <div id="partner-no-pair">
+        <div style="margin-bottom:14px">
+          <div class="setting-label" style="margin-bottom:6px">Your pair code</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div id="my-pair-code" style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--deep);letter-spacing:0.12em;flex:1">—</div>
+            <button class="btn sm ghost" onclick="generateMyPairCode()">Generate</button>
+            <button class="btn sm ghost" id="copy-pair-code-btn" onclick="copyPairCode()" style="display:none">Copy</button>
+          </div>
+        </div>
+        <div>
+          <div class="setting-label" style="margin-bottom:6px">Enter your partner's code</div>
+          <div style="display:flex;gap:8px">
+            <input id="partner-code-input" type="text" placeholder="ABC123" maxlength="6"
+              style="flex:1;font-family:var(--mono);font-size:14px;text-transform:uppercase;background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:8px 10px;border-radius:8px;outline:none;letter-spacing:0.1em">
+            <button class="btn sm" onclick="connectPartner()">Connect</button>
+          </div>
+        </div>
+      </div>
+      <!-- Partner connected -->
+      <div id="partner-connected" style="display:none">
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0 12px;border-bottom:1px solid var(--border);margin-bottom:12px">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--deep-dim);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">👤</div>
+          <div style="flex:1;min-width:0">
+            <div id="partner-settings-name" style="font-size:14px;font-weight:600"></div>
+            <div style="font-size:11px;color:var(--muted)">Accountability partner · active</div>
+          </div>
+          <button class="btn sm danger" onclick="removePair()">Remove</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1184,6 +1225,7 @@ let continueBannerCountdown = 0;
 let recentChipTasks = [];
 let taskStartTime = null;
 let awayElapsedTicker = null;
+let partnerData = null; // live data from accountability partner's public node
 // firebaseConfig, syncedDeviceId, connectedDevices — moved to storage.js
 
 const CIRCUM = 314.2;
@@ -2084,7 +2126,8 @@ function showView(name) {
   if (name==='week') renderWeek();
   if (name==='settings') renderSettings();
 
-  if (window.innerWidth >= 1100) { renderSidePanel(); renderStreakCalendar(); }
+  document.body.classList.toggle('view-today', name === 'today');
+  if (name === 'today' && window.innerWidth >= 1100) { renderSidePanel(); renderStreakCalendar(); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -2322,6 +2365,7 @@ function saveRetroEntry() {
   const activity = document.getElementById('retro-activity').value.trim();
   if (!activity) { showToast('Add an activity description'); return; }
   if (!retroEnergy) { showToast('Pick an energy type'); return; }
+  const _bulkOrigEnergy = editingEntryId !== null ? (entries.find(e => e.id === editingEntryId)?.energy || '') : '';
   const startVal = document.getElementById('retro-start').value;
   const endVal = document.getElementById('retro-end').value;
   if (!startVal || !endVal) { showToast('Set start and end time'); return; }
@@ -2395,6 +2439,28 @@ function saveRetroEntry() {
     document.getElementById('retro-modal-title').textContent = 'What were you doing?';
     closeModal('retro-overlay');
     showToast(spansMidnight ? 'Split at midnight · block updated' : 'Block updated');
+    if (_bulkOrigEnergy && retroEnergy !== _bulkOrigEnergy) {
+      const _norm = activity.toLowerCase();
+      const _others = entries.filter(e =>
+        !e.deleted &&
+        e.activity && e.activity.split(' (Output:')[0].trim().toLowerCase() === _norm &&
+        e.energy !== retroEnergy
+      );
+      if (_others.length > 0) {
+        const _lbl = formatEnergyLabel(retroEnergy);
+        if (confirm(`Update ${_others.length} other "${activity}" ${_others.length === 1 ? 'entry' : 'entries'} to ${_lbl}?`)) {
+          _others.forEach(e => {
+            e.energy = retroEnergy;
+            e.onPlan = retroEnergy !== 'distraction' && retroEnergy !== 'waste';
+            e.category = getBucket(e);
+            e.originalLabel = retroEnergy;
+            e.updatedAt = Date.now();
+          });
+          persist(); syncEntries(); renderToday(); renderWeek();
+          showToast(`${_others.length} other "${activity}" ${_others.length === 1 ? 'entry' : 'entries'} updated`);
+        }
+      }
+    }
   } else {
     if (spansMidnight) {
       entries.push(makeEntry(midnight - 1, midnight, tsStart, startDateKey));
@@ -3773,6 +3839,7 @@ function renderToday() {
   renderSidePanel();
   renderStreakCalendar();
   renderFocusHeatmap();
+  renderPartnerCard();
 }
 
 
@@ -5052,6 +5119,7 @@ function renderSettings() {
     <button class="btn sm ghost" onclick="removePreset(${i})">✕</button>
   </div>`).join('');
   updateSyncUI();
+  renderPartnerSettings();
 }
 
 const TONE_PREVIEWS = {
@@ -6088,6 +6156,131 @@ function renderReflectHistory() {
 // ══════════════════════════════════════════════════════
 // FIREBASE SYNC  (compat SDK only — no modular imports)
 // ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
+// ACCOUNTABILITY PARTNER
+// ══════════════════════════════════════════════════════
+function renderPartnerCard() {
+  const card = document.getElementById('partner-card');
+  if (!card) return;
+  if (!partnerData || !partnerData.name) { card.style.display = 'none'; return; }
+  const isToday = partnerData.dateKey === toDateKey(new Date());
+  const deepHrs = (isToday && partnerData.deepHrsToday != null) ? partnerData.deepHrsToday : null;
+  const streak = partnerData.streak || 0;
+  const lastNudge = settings._lastNudgeSent || 0;
+  const canNudge = Date.now() - lastNudge > 20 * 60 * 60 * 1000; // 20h cooldown
+  card.style.display = 'block';
+  card.innerHTML = `<div class="partner-card">
+    <div class="partner-avatar">👤</div>
+    <div class="partner-info">
+      <div class="partner-name">${partnerData.name}</div>
+      <div class="partner-stats">${
+        deepHrs !== null ? `${deepHrs}h deep today` : 'No data yet today'
+      }${streak > 0 ? ` · 🔥 ${streak}d streak` : ''}</div>
+    </div>
+    ${canNudge
+      ? `<button class="btn sm ghost" onclick="sendNudge()" style="flex-shrink:0">💪 Nudge</button>`
+      : `<span style="font-size:10px;color:var(--muted);flex-shrink:0">Nudged ✓</span>`
+    }
+  </div>`;
+}
+
+function renderPartnerSettings() {
+  const signInPrompt = document.getElementById('partner-signin-prompt');
+  const body = document.getElementById('partner-settings-body');
+  if (!signInPrompt || !body) return;
+  if (!currentUser) {
+    signInPrompt.style.display = 'block';
+    body.style.display = 'none';
+    return;
+  }
+  signInPrompt.style.display = 'none';
+  body.style.display = 'block';
+  const savedCode = localStorage.getItem('ta3-pair-code');
+  const partnerUid = localStorage.getItem('ta3-partner-uid');
+  if (savedCode && savedCode !== '—') {
+    document.getElementById('my-pair-code').textContent = savedCode;
+    document.getElementById('copy-pair-code-btn').style.display = 'inline-flex';
+  }
+  if (partnerUid && partnerData && partnerData.name) {
+    document.getElementById('partner-no-pair').style.display = 'none';
+    document.getElementById('partner-connected').style.display = 'block';
+    document.getElementById('partner-settings-name').textContent = partnerData.name;
+  } else {
+    document.getElementById('partner-no-pair').style.display = 'block';
+    document.getElementById('partner-connected').style.display = 'none';
+  }
+}
+
+function generateMyPairCode() {
+  if (!currentUser) { showToast('Sign in first'); return; }
+  const existing = localStorage.getItem('ta3-pair-code');
+  if (existing) { showToast('You already have a code — share it with your partner'); return; }
+  const code = Math.random().toString(36).slice(2,8).toUpperCase();
+  fbDb.ref(`pairs/${code}`).set({ creator: currentUser.uid, createdAt: Date.now() });
+  fbDb.ref(`uid_${currentUser.uid}/pairCode`).set(code);
+  localStorage.setItem('ta3-pair-code', code);
+  document.getElementById('my-pair-code').textContent = code;
+  document.getElementById('copy-pair-code-btn').style.display = 'inline-flex';
+  showToast('Code ready — share it with your partner');
+}
+
+function copyPairCode() {
+  const code = document.getElementById('my-pair-code').textContent;
+  if (!code || code === '—') return;
+  if (navigator.clipboard) navigator.clipboard.writeText(code).then(() => showToast('Code copied ✓'));
+  else showToast('Your code: ' + code);
+}
+
+function connectPartner() {
+  if (!currentUser) { showToast('Sign in first'); return; }
+  const code = (document.getElementById('partner-code-input').value || '').trim().toUpperCase();
+  if (code.length < 6) { showToast('Enter your partner\'s 6-character code'); return; }
+  fbDb.ref(`pairs/${code}`).once('value', snap => {
+    const pair = snap.val();
+    if (!pair) { showToast('Code not found — ask your partner to generate one'); return; }
+    if (pair.creator === currentUser.uid) { showToast('That\'s your own code — share it with a friend'); return; }
+    const partnerUid = pair.creator;
+    fbDb.ref(`pairs/${code}/partner`).set(currentUser.uid);
+    fbDb.ref(`uid_${currentUser.uid}/pairCode`).set(code);
+    fbDb.ref(`uid_${currentUser.uid}/partnerUid`).set(partnerUid);
+    fbDb.ref(`uid_${partnerUid}/partnerUid`).set(currentUser.uid);
+    localStorage.setItem('ta3-pair-code', code);
+    localStorage.setItem('ta3-partner-uid', partnerUid);
+    document.getElementById('partner-code-input').value = '';
+    initPartnerListener(partnerUid);
+    showToast('Partner connected 🤝');
+  });
+}
+
+function removePair() {
+  if (!confirm('Remove your accountability partner?')) return;
+  const partnerUid = localStorage.getItem('ta3-partner-uid');
+  const pairCode = localStorage.getItem('ta3-pair-code');
+  if (fbDb && currentUser) {
+    fbDb.ref(`uid_${currentUser.uid}/partnerUid`).remove();
+    fbDb.ref(`uid_${currentUser.uid}/pairCode`).remove();
+    if (pairCode) fbDb.ref(`pairs/${pairCode}`).remove();
+    if (partnerUid) fbDb.ref(`uid_${partnerUid}/partnerUid`).remove();
+  }
+  localStorage.removeItem('ta3-partner-uid');
+  localStorage.removeItem('ta3-pair-code');
+  partnerData = null;
+  renderPartnerCard();
+  renderPartnerSettings();
+  showToast('Partner removed');
+}
+
+function sendNudge() {
+  const partnerUid = localStorage.getItem('ta3-partner-uid');
+  if (!partnerUid || !fbDb || !currentUser) return;
+  const myName = currentUser.displayName || 'Your partner';
+  fbDb.ref(`uid_${partnerUid}/nudges`).push({ from: myName, ts: Date.now() });
+  settings._lastNudgeSent = Date.now();
+  persist();
+  renderPartnerCard();
+  showToast('Nudge sent 💪');
+}
+
 function toggleSyncInstructions(){
   const el=document.getElementById('sync-instructions');
   el.style.display=el.style.display==='none'?'block':'none';
@@ -6273,6 +6466,7 @@ function startVoiceLog() {
 // ══════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════
+document.body.classList.add('view-today'); // app starts on Today tab; showView() keeps this in sync
 load();
 // Initialize timezone select immediately from saved settings (not just when Settings tab opens)
 (function initTimezoneSelect() {
