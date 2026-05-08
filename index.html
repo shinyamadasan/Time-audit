@@ -1775,7 +1775,7 @@ function autoLogBlock(activity, energy, tsStart, tsEnd) {
   const dur = Math.round((tsEnd - tsStart) / 60000);
   if (dur < 1) return;
 
-  const SEAM_TOLERANCE_MS = 2 * 60 * 1000;
+  // SEAM_TOLERANCE_MS is defined in storage.js
   const prev = entries.find(e => !e.missed && !e.deleted && e.activity === activity && e.energy === energy && !e.away);
   const prevStart = prev ? (prev.tsStart || prev.ts) : 0;
   const canExtend = prev &&
@@ -1950,7 +1950,7 @@ function _doQuickSave(activity, energy) {
   // If the previous entry is the same activity+energy and ended right where
   // this block starts (within 2 min tolerance), extend it instead of creating
   // a new fragment — keeps "Still on: X" as one continuous block.
-  const SEAM_TOLERANCE_MS = 2 * 60 * 1000;
+  // SEAM_TOLERANCE_MS is defined in storage.js
   const prev = entries.find(e => !e.missed && !e.deleted && e.activity && !e.away);
   const prevStart2 = prev ? (prev.tsStart || prev.ts) : 0;
   const canExtend = prev &&
@@ -2801,7 +2801,7 @@ function clipOverlapsForDisplay(ascSorted) {
 // ⚠ DANGER: _mergedIds must be preserved on every merged group — openEditMergedEntry() depends on it to know which entries to update together.
 function mergeConsecutiveForDisplay(sorted) {
   if (!sorted.length) return sorted;
-  const MAX_GAP_MS = 5 * 60000;
+  // MAX_GAP_MS defined in storage.js
   const out = [];
   let g = { ...sorted[0], _mergeCount: 1, _mergedIds: [sorted[0].id] };
   for (let i = 1; i < sorted.length; i++) {
@@ -2822,7 +2822,7 @@ function mergeConsecutiveForDisplay(sorted) {
 // This means: even if you never opened the app, gaps show from your start time.
 // ⚠ DANGER: anchor is intentional — do not change to first-entry anchor or gaps disappear for days with no morning logging.
 function computeGaps(todayEntries, dayNow) {
-  const MIN_GAP_MIN = 5;
+  // MIN_GAP_MIN defined in storage.js
   const workStart = getWorkDayStartTs(todayEntries);
   const now = dayNow || Date.now();
   const isPast = !!dayNow;
@@ -3339,7 +3339,7 @@ function getContextualPrompt(todayE) {
   const deepMins = deepEntries.reduce((s, e) =>
     s + (e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || settings.intervalMin || 30)), 0);
   const deepHrs = deepMins / 60;
-  const dailyGoalHrs = (settings.deepGoal || 20) / 5;
+  const dailyGoalHrs = getDailyGoalHrs();
   const hasGoal = (settings.deepGoal || 0) > 0;
   const hrsNeeded = Math.max(0, dailyGoalHrs - deepHrs);
   const goalHit = hasGoal && deepHrs >= dailyGoalHrs;
@@ -3507,7 +3507,7 @@ function renderStatusBanner(todayE) {
   const deepHrs = deepMins / 60;
 
   // Daily goal = weekly goal / 5
-  const dailyGoalHrs = (settings.deepGoal || 20) / 5;
+  const dailyGoalHrs = getDailyGoalHrs();
 
   // Current time and sleep time in user's timezone
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -3630,7 +3630,7 @@ function renderSidePanel() {
   const spStatus = document.getElementById('sp-status-content');
   if (spStatus) {
     const deepMins = todayE.filter(e=>e.energy==='deep').reduce((s,e)=>s+(e.blockIntervalMin||0),0);
-    const dailyGoalMins = (settings.deepGoal||20)/5*60;
+    const dailyGoalMins = getDailyGoalMins();
     const pct = dailyGoalMins>0 ? Math.min(100,Math.round(deepMins/dailyGoalMins*100)) : 0;
     const deepStr = deepMins>=60?`${(deepMins/60).toFixed(1)}h`:`${deepMins}m`;
     const goalStr = dailyGoalMins>=60?`${(dailyGoalMins/60).toFixed(1)}h`:`${dailyGoalMins}m`;
@@ -5632,7 +5632,7 @@ function computeDailySummary(dateKey) {
   const peakHourLabel = peakHour !== null ? `${peakHour % 12 || 12}${peakHour < 12 ? 'am' : 'pm'}` : null;
 
   // Focus score 0–100
-  const dailyDeepGoalMin = ((settings.deepGoal || 20) / 5) * 60;
+  const dailyDeepGoalMin = getDailyGoalMins();
   const focusScore = Math.min(100, Math.round(
     deepPct * 0.5 +
     Math.min(deepMin / Math.max(dailyDeepGoalMin, 1), 1) * 30 +
@@ -5677,7 +5677,7 @@ function renderStreakCalendar() {
   const el = document.getElementById('reflect-streak-cal');
   if (!el) return;
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const dailyGoalMins = (settings.deepGoal || 20) / 5 * 60;
+  const dailyGoalMins = getDailyGoalMins();
   const byDate = _buildEntriesByDate(tz);
   const todayKey = getDateInTZ(Date.now(), tz);
 
@@ -5771,7 +5771,7 @@ function renderHonestSummary() {
   }
 
   const fmtM = m => m >= 60 ? `${(m/60).toFixed(1)}h` : `${m}m`;
-  const deepGoalMins = (settings.deepGoal || 20) * 60;
+  const deepGoalMins = getWeeklyGoalMins();
   const pctOfGoal = deepGoalMins > 0 ? Math.round(ins.deepMin / deepGoalMins * 100) : 0;
   const wastePct = ins.totalMin > 0 ? Math.round(ins.wasteMin / ins.totalMin * 100) : 0;
 
@@ -5960,12 +5960,10 @@ function renderReflectView() {
   // ── Insights ──
   const insightsEl = document.getElementById('reflect-insights');
   const ins = computeInsights(weekKey);
-  const deepGoal = settings.deepGoal || 20;
-
   if (!ins || ins.totalMin === 0) {
     insightsEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:8px 0">No data yet this week — start tracking to see your numbers.</div>`;
   } else {
-    const deepGoalPct = Math.min(100, Math.round(ins.deepMin / (deepGoal * 60) * 100));
+    const deepGoalPct = Math.min(100, Math.round(ins.deepMin / getWeeklyGoalMins() * 100));
     insightsEl.innerHTML = `
       <div class="reflect-stat-grid">
         <div class="reflect-stat good">
@@ -5973,7 +5971,7 @@ function renderReflectView() {
           <div class="reflect-stat-label">Deep work</div>
           <div class="reflect-stat-sub">${ins.deepPct}% of tracked time</div>
           <div class="reflect-goal-bar"><div class="reflect-goal-fill" style="width:${deepGoalPct}%"></div></div>
-          <div style="font-size:10px;color:var(--muted);margin-top:4px">Goal: ${deepGoal}h · ${deepGoalPct}% done</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Goal: ${settings.deepGoal || 0}h · ${deepGoalPct}% done</div>
         </div>
         <div class="reflect-stat ${ins.wasteMin > 0 ? 'bad' : ''}">
           <div class="reflect-stat-val">${ins.wasteMin >= 60 ? (ins.wasteMin/60).toFixed(1)+'h' : ins.wasteMin+'m'}</div>
