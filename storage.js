@@ -691,11 +691,13 @@ function startSync() {
   fbDb.ref(`uid_${currentUser.uid}/partnerUid`).on('value', snap => {
     const remotePartnerUid = snap.val();
     const localPartnerUid = localStorage.getItem('ta3-partner-uid');
-    if (remotePartnerUid && remotePartnerUid !== localPartnerUid) {
-      localStorage.setItem('ta3-partner-uid', remotePartnerUid);
-      initPartnerListener(remotePartnerUid);
+    if (remotePartnerUid) {
+      if (remotePartnerUid !== localPartnerUid) {
+        localStorage.setItem('ta3-partner-uid', remotePartnerUid);
+      }
+      if (!_partnerListener) initPartnerListener(remotePartnerUid);
       if (typeof renderPartnerSettings === 'function') renderPartnerSettings();
-    } else if (!remotePartnerUid && localPartnerUid) {
+    } else if (localPartnerUid) {
       // Partner was removed from the other side
       localStorage.removeItem('ta3-partner-uid');
       localStorage.removeItem('ta3-pair-code');
