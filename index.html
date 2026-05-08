@@ -3103,6 +3103,79 @@ function renderTimelineCombined(combined) {
   return combined.map(item => item.isGap ? renderGapRow(item) : renderEntryRow(item)).join('');
 }
 
+function buildEntryRowHTML(e) {
+  const duration = e.segments
+    ? Math.round(e.segments.reduce((sum, s) => sum + s.duration, 0) / 60)
+    : e.tsStart
+      ? Math.round((e.ts - e.tsStart) / 60000)
+      : (e.blockIntervalMin || settings.intervalMin);
+  const timeRange = e.tsStart
+    ? `${localTime(e.tsStart)} – ${localTime(e.ts)}`
+    : localTime(e.ts);
+  return `
+    <div class="entry-row">
+      <div class="entry-bar ${e.energy}"></div>
+      <div class="entry-main">
+        <div class="entry-activity">${e.activity}</div>
+        <div class="entry-meta">
+  ${timeRange} · ${fmtDur(duration)}
+  ${e.deap ? ' · ' + e.deap : ''}
+  ${e.rate ? ' · $' + e.rate + '/hr' : ''}
+</div>
+      </div>
+      <div class="entry-badges">
+        <span class="badge ${e.energy}">${eLabel[e.energy] || e.energy}</span>
+        ${e.onPlan === true ? '<span class="badge onplan">✓</span>' :
+          e.onPlan === false ? '<span class="badge offplan">✗</span>' : ''}
+      </div>
+      <button class="btn sm ghost" style="padding:3px 7px;font-size:13px;flex-shrink:0;opacity:0.6" onclick="openEditEntry(${e.id})">✎</button>
+      <button class="btn sm ghost" style="padding:3px 7px;font-size:11px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
+    </div>
+   `;
+}
+
+// Sorts, clips, merges, and gaps today's entries into the combined array for renderTimelineCombined.
+// Handles nested browser sub-activities (pcSubMap) and attaches them to their container entries.
+function assembleTodayTimeline(todayE) {
+  const sorted = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+  const browserEntries   = sorted.filter(e => e.browserUsage);
+  const nestedBrowserIds = new Set();
+  const pcSubMap         = new Map();
+  const containerEntries = sorted
+    .filter(e => !e.browserUsage)
+    .sort((a, b) => {
+      const dA = a.tsStart ? (a.ts - a.tsStart) : (a.blockIntervalMin || 0) * 60000;
+      const dB = b.tsStart ? (b.ts - b.tsStart) : (b.blockIntervalMin || 0) * 60000;
+      return dA - dB;
+    });
+  containerEntries.forEach(container => {
+    const cStart = container.tsStart || (container.ts - (container.blockIntervalMin || 0) * 60000);
+    const cEnd   = container.ts;
+    const subs = browserEntries.filter(b => {
+      if (nestedBrowserIds.has(b.id)) return false;
+      const bStart = b.tsStart || b.ts;
+      return bStart >= cStart && b.ts <= cEnd;
+    });
+    if (subs.length) {
+      if (!pcSubMap.has(container.id)) pcSubMap.set(container.id, []);
+      subs.forEach(s => { pcSubMap.get(container.id).push(s); nestedBrowserIds.add(s.id); });
+    }
+  });
+  const sortedForDisplay = sorted.filter(e => !nestedBrowserIds.has(e.id));
+  const clipped = clipOverlapsForDisplay(sortedForDisplay).filter(e => {
+    const dur = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 1);
+    return dur > 0;
+  });
+  const mergedDisplay = mergeConsecutiveForDisplay(clipped);
+  const _dayNow = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
+  const gaps    = computeGaps(todayE.filter(e => !nestedBrowserIds.has(e.id)), _dayNow);
+  const combined = [...mergedDisplay, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+  combined.forEach(item => {
+    if (!item.isGap && pcSubMap.has(item.id)) item._subActivities = pcSubMap.get(item.id);
+  });
+  return combined;
+}
+
 function toggleTlBucket(id) {
   if (tlExpandedBuckets.has(id)) { tlExpandedBuckets.delete(id); }
   else { tlExpandedBuckets.add(id); }
@@ -3736,51 +3809,7 @@ function renderToday() {
     if (!todayE.length) {
       tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
     } else {
-      // Sort chronologically
-      const sorted = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-
-      // Pre-compute sub-activities BEFORE clipping using original time windows
-      const browserEntries   = sorted.filter(e => e.browserUsage);
-      const nestedBrowserIds = new Set();
-      const pcSubMap         = new Map();
-      // Nest browser entries inside any non-browser entry that fully contains them
-      // (covers PC Time entries AND focus session entries)
-      const containerEntries = sorted
-        .filter(e => !e.browserUsage)
-        .sort((a, b) => {
-          const dA = a.tsStart ? (a.ts - a.tsStart) : (a.blockIntervalMin || 0) * 60000;
-          const dB = b.tsStart ? (b.ts - b.tsStart) : (b.blockIntervalMin || 0) * 60000;
-          return dA - dB; // shortest containers get priority (tightest fit)
-        });
-      containerEntries.forEach(container => {
-        const cStart = container.tsStart || (container.ts - (container.blockIntervalMin || 0) * 60000);
-        const cEnd   = container.ts;
-        const subs = browserEntries.filter(b => {
-          if (nestedBrowserIds.has(b.id)) return false;
-          const bStart = b.tsStart || b.ts;
-          return bStart >= cStart && b.ts <= cEnd;
-        });
-        if (subs.length) {
-          if (!pcSubMap.has(container.id)) pcSubMap.set(container.id, []);
-          subs.forEach(s => { pcSubMap.get(container.id).push(s); nestedBrowserIds.add(s.id); });
-        }
-      });
-
-      // Remove nested browser entries before clipping so they don't cause overlap display issues
-      const sortedForDisplay = sorted.filter(e => !nestedBrowserIds.has(e.id));
-      const clipped = clipOverlapsForDisplay(sortedForDisplay).filter(e => {
-        const dur = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 1);
-        return dur > 0;
-      });
-      const mergedDisplay = mergeConsecutiveForDisplay(clipped);
-      const _dayNow = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
-      const gaps    = computeGaps(todayE.filter(e => !nestedBrowserIds.has(e.id)), _dayNow);
-      const combined = [...mergedDisplay, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
-
-      // Attach nested browser sub-activities to their container entries
-      combined.forEach(item => {
-        if (!item.isGap && pcSubMap.has(item.id)) item._subActivities = pcSubMap.get(item.id);
-      });
+      const combined = assembleTodayTimeline(todayE);
       tlEl.innerHTML = renderTimelineCombined(combined);
       // Animate the most recently logged entry
       if (_lastLoggedEntryId) {
@@ -3826,37 +3855,7 @@ function renderToday() {
     }
 
     const sortedRecent = expandPCTimeEntries([...todayE]).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
-    listEl.innerHTML = sortedRecent.slice(0, 6).map(e => {
-  const duration = e.segments
-    ? Math.round(e.segments.reduce((sum, s) => sum + s.duration, 0) / 60)
-    : e.tsStart
-      ? Math.round((e.ts - e.tsStart) / 60000)
-      : (e.blockIntervalMin || settings.intervalMin);
-  const timeRange = e.tsStart
-    ? `${localTime(e.tsStart)} – ${localTime(e.ts)}`
-    : localTime(e.ts);
-
-  return `
-    <div class="entry-row">
-      <div class="entry-bar ${e.energy}"></div>
-      <div class="entry-main">
-        <div class="entry-activity">${e.activity}</div>
-        <div class="entry-meta">
-  ${timeRange} · ${fmtDur(duration)}
-  ${e.deap ? ' · ' + e.deap : ''}
-  ${e.rate ? ' · $' + e.rate + '/hr' : ''}
-</div>
-      </div>
-      <div class="entry-badges">
-        <span class="badge ${e.energy}">${eLabel[e.energy] || e.energy}</span>
-        ${e.onPlan === true ? '<span class="badge onplan">✓</span>' :
-          e.onPlan === false ? '<span class="badge offplan">✗</span>' : ''}
-      </div>
-      <button class="btn sm ghost" style="padding:3px 7px;font-size:13px;flex-shrink:0;opacity:0.6" onclick="openEditEntry(${e.id})">✎</button>
-      <button class="btn sm ghost" style="padding:3px 7px;font-size:11px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
-    </div>
-   `;
-    }).join('');
+    listEl.innerHTML = sortedRecent.slice(0, 6).map(buildEntryRowHTML).join('');
   } // end if (entriesChanged)
 
   renderRecentChips();
