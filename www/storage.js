@@ -687,21 +687,24 @@ function startSync() {
     snap.ref.remove();
   });
 
-  // Re-connect partner listener if we have a saved partner from a previous session
-  const _savedPartnerUid = localStorage.getItem('ta3-partner-uid');
-  if (_savedPartnerUid) {
-    initPartnerListener(_savedPartnerUid);
-    // Verify the pair is still active on Firebase
-    fbDb.ref(`uid_${currentUser.uid}/partnerUid`).once('value', snap => {
-      if (!snap.val()) {
-        localStorage.removeItem('ta3-partner-uid');
-        localStorage.removeItem('ta3-pair-code');
-        partnerData = null;
-        if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
-        if (typeof renderPartnerCard === 'function') renderPartnerCard();
-      }
-    });
-  }
+  // Watch for partner connecting (handles the code-generator side who never calls connectPartner)
+  fbDb.ref(`uid_${currentUser.uid}/partnerUid`).on('value', snap => {
+    const remotePartnerUid = snap.val();
+    const localPartnerUid = localStorage.getItem('ta3-partner-uid');
+    if (remotePartnerUid && remotePartnerUid !== localPartnerUid) {
+      localStorage.setItem('ta3-partner-uid', remotePartnerUid);
+      initPartnerListener(remotePartnerUid);
+      if (typeof renderPartnerSettings === 'function') renderPartnerSettings();
+    } else if (!remotePartnerUid && localPartnerUid) {
+      // Partner was removed from the other side
+      localStorage.removeItem('ta3-partner-uid');
+      localStorage.removeItem('ta3-pair-code');
+      partnerData = null;
+      if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
+      if (typeof renderPartnerCard === 'function') renderPartnerCard();
+      if (typeof renderPartnerSettings === 'function') renderPartnerSettings();
+    }
+  });
 
   updateSyncPill('connected', 'synced');
   syncEntries();
