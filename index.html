@@ -6201,10 +6201,10 @@ function renderPartnerSettings() {
     document.getElementById('my-pair-code').textContent = savedCode;
     document.getElementById('copy-pair-code-btn').style.display = 'inline-flex';
   }
-  if (partnerUid && partnerData && partnerData.name) {
+  if (partnerUid) {
     document.getElementById('partner-no-pair').style.display = 'none';
     document.getElementById('partner-connected').style.display = 'block';
-    document.getElementById('partner-settings-name').textContent = partnerData.name;
+    document.getElementById('partner-settings-name').textContent = partnerData?.name || 'Partner';
   } else {
     document.getElementById('partner-no-pair').style.display = 'block';
     document.getElementById('partner-connected').style.display = 'none';
@@ -6248,6 +6248,7 @@ function connectPartner() {
     localStorage.setItem('ta3-partner-uid', partnerUid);
     document.getElementById('partner-code-input').value = '';
     initPartnerListener(partnerUid);
+    renderPartnerSettings();
     showToast('Partner connected 🤝');
   });
 }
@@ -6686,6 +6687,34 @@ if (!isNative && !isMobileBrowser && !running && !sessionStorage.getItem('ta3-se
       if (!running) _startTimer('PC Time');
     }
   }, 200);
+}
+// Auto-start on mobile / native: focus input, show continue chip if returning user, fire after 2s
+if ((isNative || isMobileBrowser) && !running && !sessionStorage.getItem('ta3-session-started')) {
+  sessionStorage.setItem('ta3-session-started', '1');
+  const _heroInput = document.getElementById('hero-task-input');
+  const _promptEl = document.getElementById('hero-context-prompt');
+  const _chipsEl = document.getElementById('recent-chips');
+  setTimeout(() => { if (!running) _heroInput?.focus(); }, 400);
+  if (_promptEl) _promptEl.textContent = 'Starting your session…';
+
+  // If returning user, show a single "Continue" chip — don't pre-fill the input
+  let _continueChip = null;
+  if (lastTaskForRepeat && _chipsEl) {
+    _continueChip = document.createElement('button');
+    _continueChip.className = 'chip';
+    _continueChip.style.cssText = 'border-color:var(--deep);color:var(--deep)';
+    _continueChip.textContent = `▶ Continue "${lastTaskForRepeat}"`;
+    _continueChip.onclick = () => { clearTimeout(_autoTimer); _continueChip.remove(); _startTimer(lastTaskForRepeat); };
+    _chipsEl.prepend(_continueChip);
+  }
+
+  const _autoTimer = setTimeout(() => {
+    if (!running) {
+      if (_continueChip) _continueChip.remove();
+      const _task = _heroInput?.value.trim() || 'Work';
+      _startTimer(_task);
+    }
+  }, 2000);
 }
 initUrlSchemeHandler();
 
