@@ -899,6 +899,23 @@ function tryAutoConnect() {
   }
 }
 
+// ── Entry schema validation ──────────────────────────────────────────────────
+const VALID_ENERGY = new Set(['deep','shallow','admin','distraction','waste','break','away']);
+const DATE_KEY_RE  = /^\d{4}-\d{2}-\d{2}$/;
+
+// Warns to console if a newly created entry is missing required fields.
+// Never throws — validation is defensive only; a malformed entry is better than a crash.
+function validateEntry(entry) {
+  const problems = [];
+  if (typeof entry.id !== 'number' || entry.id <= 0)        problems.push('id invalid');
+  if (typeof entry.ts !== 'number' || entry.ts <= 0)        problems.push('ts invalid');
+  if (typeof entry.blockIntervalMin !== 'number' || entry.blockIntervalMin < 1) problems.push('blockIntervalMin < 1');
+  if (!entry.activity || typeof entry.activity !== 'string') problems.push('activity missing');
+  if (!VALID_ENERGY.has(entry.energy))                       problems.push(`energy "${entry.energy}" not recognised`);
+  if (!DATE_KEY_RE.test(entry.date))                         problems.push(`date "${entry.date}" not YYYY-MM-DD`);
+  if (problems.length) console.warn('[validateEntry]', problems.join('; '), entry);
+}
+
 // ── Date range helpers — moved from index.html ──────────────────────────────
 // End of day as UTC ms for a YYYY-MM-DD key (= start of next calendar day - 1 ms)
 function dayEndTs(dateKey) {

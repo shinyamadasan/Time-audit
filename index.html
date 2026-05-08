@@ -1545,6 +1545,7 @@ function stopAndLog() {
     entry.category = getBucket(entry);
     entry.originalLabel = prevEnergy;
     getActivityColor(task);
+    validateEntry(entry);
     entries.push(entry);
     entries.sort((a, b) => b.ts - a.ts);
     lastTaskForRepeat = task;
@@ -1798,6 +1799,7 @@ function autoLogBlock(activity, energy, tsStart, tsEnd) {
     entry.category = getBucket(entry);
     entry.originalLabel = entry.energy || null;
     learnWastePattern(activity, energy);
+    validateEntry(entry);
     entries.unshift(entry);
     _lastLoggedEntryId = entry.id;
   }
@@ -1974,6 +1976,7 @@ function _doQuickSave(activity, energy) {
     };
     entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
     learnWastePattern(activity, energy);
+    validateEntry(entry);
     entries.unshift(entry);
     _lastLoggedEntryId = entry.id;
   }
@@ -2408,6 +2411,7 @@ function saveRetroEntry() {
       date: dateKey, activity, energy: retroEnergy, onPlan, retro: true,
       updatedAt: Date.now() };
     e.category = getBucket(e); e.originalLabel = e.energy || null;
+    validateEntry(e);
     return e;
   }
 

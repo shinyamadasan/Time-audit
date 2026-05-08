@@ -172,6 +172,16 @@ Non-obvious choices baked into the code. Read before refactoring.
 
 ---
 
+## 18. `www/` is auto-generated — do not edit directly
+
+**Decision:** The `www/` folder is a build artifact copied from the project root by `sync.bat` (Windows) or `sync.sh` (Linux/Mac). It exists solely for Capacitor's Android build and mirrors the root files exactly.
+
+**Why:** Capacitor requires a `webDir` folder (`www/`) as the source for the Android WebView. Rather than maintaining two copies, `sync.bat`/`sync.sh` copies root → `www/` before each Android build. All editing happens at the root.
+
+**What NOT to do:** Do not edit files inside `www/` directly — they will be overwritten on the next sync. Do not commit `www/` changes manually; always run `sync.sh` (or `sync.bat` on Windows) to regenerate it, then commit the result.
+
+---
+
 ## 17. `timerOwnerDeviceId` guard in `doPing()`
 
 **Decision:** Each device generates a random `deviceId` stored in `localStorage`. The running timer also stores `timerOwnerDeviceId` — the device that started it. `doPing()` checks `timerOwnerDeviceId === deviceId` before logging a ping.
@@ -179,3 +189,13 @@ Non-obvious choices baked into the code. Read before refactoring.
 **Why:** ChronaSense has a shared-room Firebase feature where multiple devices see the same data. Without the guard, all connected devices would each log a ping on the same interval, inflating the entry count by N× the number of connected devices.
 
 **What NOT to do:** Do not remove this guard even if you think only one device will be used. It also protects against re-opened tabs in the same browser logging double entries.
+
+---
+
+## 18. `www/` is auto-generated — do not edit directly
+
+**Decision:** The `www/` folder is a build artifact copied from the project root by `sync.bat` (Windows) or `sync.sh` (Linux/Mac). It exists solely for Capacitor's Android build and mirrors the root files exactly.
+
+**Why:** Capacitor requires a `webDir` folder (`www/`) as the source for the Android WebView. Rather than maintaining two copies, `sync.bat`/`sync.sh` copies root → `www/` before each Android build. All editing happens at the root.
+
+**What NOT to do:** Do not edit files inside `www/` directly — they will be overwritten on the next sync. Do not commit `www/` changes manually; always run `sync.sh` (or `sync.bat` on Windows) to regenerate it, then commit the result.
