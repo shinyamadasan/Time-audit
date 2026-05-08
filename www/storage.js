@@ -743,6 +743,7 @@ function publishPublicStats() {
     deepHrsToday,
     streak: computeStreak(),
     name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Partner',
+    avatar: settings.avatar || '👤',
     dateKey: toDateKey(new Date()),
     updatedAt: Date.now()
   });
