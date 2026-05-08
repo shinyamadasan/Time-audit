@@ -28,6 +28,15 @@ let connectedDevices = {};
 // ── Shared constants ──
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
+// Time constants
+const SEAM_TOLERANCE_MS  = 2 * 60 * 1000;  // max gap between same-activity blocks to extend rather than create new
+const MAX_GAP_MS         = 5 * 60 * 1000;  // max gap between consecutive same-activity blocks to merge for display
+const MIN_GAP_MIN        = 5;               // minimum untracked gap (minutes) before showing a gap block
+const NUDGE_MAX_AGE_MS   = 30 * 1000;      // ignore incoming nudges older than this
+
+// Goal constants
+const WORK_DAYS_PER_WEEK = 5;              // divisor for converting settings.deepGoal (weekly hrs) to daily hrs
+
 const AWAY_BUCKETS = {
   'Sleep':      'recovery',   // Maintenance
   'Eat':        'recovery',   // Maintenance
@@ -300,6 +309,8 @@ function load() {
   });
   // Always sort by actual start time, newest first
   entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
+  // Validate schema — warns to console for any malformed entries without crashing
+  entries.forEach(e => { if (!e.missed && !e.deleted) validateEntry(e); });
   try { const s = JSON.parse(localStorage.getItem('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
   // Dedicated timezone key wins over everything (Firebase can't overwrite it)
   const savedTz = localStorage.getItem('ta3-tz');
@@ -556,6 +567,7 @@ function startSync() {
         // New entry from remote — skip tombstones, add live entries
         if (re.deleted) return;
         if (!re.updatedAt) re.updatedAt = re.ts || Date.now();
+        if (!re.missed) validateEntry(re);
         entries.push(re);
         changed = true;
       } else {
@@ -684,7 +696,7 @@ function startSync() {
   _nudgesRef = fbDb.ref(`uid_${currentUser.uid}/nudges`);
   _nudgesRef.on('child_added', snap => {
     const nudge = snap.val();
-    if (!nudge || !nudge.ts || Date.now() - nudge.ts > 30000) { snap.ref.remove(); return; }
+    if (!nudge || !nudge.ts || Date.now() - nudge.ts > NUDGE_MAX_AGE_MS) { snap.ref.remove(); return; }
     showToast(`💪 ${nudge.from || 'Your partner'} is cheering you on!`);
     snap.ref.remove();
   });
@@ -913,6 +925,12 @@ function validateEntry(entry) {
   if (!DATE_KEY_RE.test(entry.date))                         problems.push(`date "${entry.date}" not YYYY-MM-DD`);
   if (problems.length) console.warn('[validateEntry]', problems.join('; '), entry);
 }
+
+// ── Goal helpers ─────────────────────────────────────────────────────────────
+// settings.deepGoal is stored as hours/week. All daily calculations must use these helpers.
+function getDailyGoalHrs()  { return (settings.deepGoal || 0) / WORK_DAYS_PER_WEEK; }
+function getDailyGoalMins() { return getDailyGoalHrs() * 60; }
+function getWeeklyGoalMins(){ return (settings.deepGoal || 0) * 60; }
 
 // ── Date range helpers — moved from index.html ──────────────────────────────
 // End of day as UTC ms for a YYYY-MM-DD key (= start of next calendar day - 1 ms)
