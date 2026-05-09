@@ -1,0 +1,9 @@
+node_modules/
+android/
+.claude/
+resources/
+*.log
+*.tmp
+.DS_Store
+# Audio served from GitHub Pages — not bundled in APK
+www/Sounds/
