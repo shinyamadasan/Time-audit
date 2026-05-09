@@ -972,6 +972,12 @@ button, a, [role="button"],
 .sb-val{font-size:20px;font-weight:700;font-family:var(--mono);line-height:1}
 .sb-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
 
+/* ── Weekly schedule template rows ── */
+.tl-template-row{opacity:0.55;pointer-events:none}
+.tl-bar-template{background:repeating-linear-gradient(45deg,var(--border2),var(--border2) 3px,transparent 3px,transparent 7px);border-radius:2px}
+.tpl-day-btn{padding:5px 9px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--muted);font-size:12px;font-family:var(--mono);cursor:pointer;transition:background 0.15s,color 0.15s}
+.tpl-day-btn.on{background:var(--deep-dim);color:var(--deep);border-color:var(--deep)}
+
 /* ── Avatar picker ── */
 .avatar-picker{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .avatar-option{width:40px;height:40px;border-radius:10px;border:2px solid transparent;background:var(--bg3);font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:border-color 0.15s,background 0.15s}
