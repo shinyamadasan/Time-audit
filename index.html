@@ -2520,17 +2520,17 @@ function saveRetroEntry() {
       entries.push(makeEntry(midnight - 1, midnight, tsStart, startDateKey));
       entries.push(makeEntry(tsEnd, tsEnd, midnight, endDateKey));
       entries.sort((a,b) => b.ts - a.ts);
-      persist(); renderToday(); syncEntries();
-      closeModal('retro-overlay');
+      persist(); closeModal('retro-overlay');
       const dur1 = Math.round((midnight - tsStart) / 60000);
       const dur2 = Math.round((tsEnd - midnight) / 60000);
       showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
+      setTimeout(() => { renderToday(); syncEntries(); }, 0);
       } else {
       entries.push(makeEntry(tsEnd, tsEnd, tsStart, startDateKey));
       entries.sort((a,b) => b.ts - a.ts);
-      persist(); renderToday(); syncEntries();
-      closeModal('retro-overlay');
+      persist(); closeModal('retro-overlay');
       showToast(`Logged retroactively · ${fmtDur(dur)}`, false, retroEnergy);
+      setTimeout(() => { renderToday(); syncEntries(); }, 0);
       }
   }
 }
@@ -2590,8 +2590,8 @@ function saveEntry() {
   clearTimeout(snoozeTimer);
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
-  persist(); renderToday(); closeModal('log-overlay');
-  syncEntries();
+  persist(); closeModal('log-overlay');
+  setTimeout(() => { renderToday(); syncEntries(); }, 0);
   showLogFeedback(entry.energy);
   checkReviewPrompt();
   checkEscalation();
@@ -6249,6 +6249,10 @@ function renderReflectHistory() {
 // ══════════════════════════════════════════════════════
 function generateTemplateEntries(dateKey) {
   if (!settings.templates || !settings.templates.length) return [];
+  // Only show templates for today and the past 7 days (not older history)
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const cutoff = getDateInTZ(Date.now() - 7 * 24 * 60 * 60 * 1000, tz);
+  if (dateKey < cutoff) return [];
   const noon = tzParseTime(dateKey, '12:00');
   const dow = tzDow(noon);
   const realEntries = getEntriesForDate(dateKey).filter(e => !e.deleted && !e.missed);
