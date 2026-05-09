@@ -613,6 +613,41 @@
   </div>
 
   <div class="settings-section">
+    <div class="settings-title">Weekly Schedule</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">Block out fixed commitments. ChronaSense tracks the free time around them.</div>
+    <div id="template-list"></div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <input id="tpl-activity" type="text" placeholder="e.g. Job shift, Class, Gym"
+        style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:8px 10px;border-radius:8px;outline:none;margin-bottom:8px">
+      <select id="tpl-energy" style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:8px 10px;border-radius:8px;outline:none;margin-bottom:8px">
+        <option value="nine5">Job Work</option>
+        <option value="deep">Deep Work</option>
+        <option value="shallow">Shallow Work</option>
+        <option value="learning">Learning</option>
+        <option value="exercise">Exercise</option>
+        <option value="recovery">Maintenance</option>
+        <option value="errands">Errands</option>
+        <option value="social">Social</option>
+      </select>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="tpl-day-btn" data-day="1" onclick="toggleTplDay(this)">Mon</button>
+        <button class="tpl-day-btn" data-day="2" onclick="toggleTplDay(this)">Tue</button>
+        <button class="tpl-day-btn" data-day="3" onclick="toggleTplDay(this)">Wed</button>
+        <button class="tpl-day-btn" data-day="4" onclick="toggleTplDay(this)">Thu</button>
+        <button class="tpl-day-btn" data-day="5" onclick="toggleTplDay(this)">Fri</button>
+        <button class="tpl-day-btn" data-day="6" onclick="toggleTplDay(this)">Sat</button>
+        <button class="tpl-day-btn" data-day="0" onclick="toggleTplDay(this)">Sun</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <input type="time" id="tpl-start" style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 9px;border-radius:8px;outline:none">
+        <span style="color:var(--muted);font-size:12px">to</span>
+        <input type="time" id="tpl-end" style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 9px;border-radius:8px;outline:none">
+      </div>
+      <button class="btn sm" onclick="addTemplate()">+ Add block</button>
+    </div>
+  </div>
+
+  <div class="settings-section">
     <div class="settings-title">Data</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn sm" onclick="exportCSV()">Export CSV</button>
@@ -1182,7 +1217,7 @@
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
-let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22, sleepTime:'23:00', wakeTime:'07:00', sleepReminderMin:30, sleepSetupDone:false };
+let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22, sleepTime:'23:00', wakeTime:'07:00', sleepReminderMin:30, sleepSetupDone:false, templates:[] };
 let reviews = {};
 let weeklyReviews = {};
 let intention = '';
@@ -2997,6 +3032,19 @@ function cancelRetroEdit() {
 }
 
 function renderEntryRow(item) {
+  if (item.template) {
+    const dur = Math.round((item.ts - item.tsStart) / 60000);
+    const label = eLabel[item.energy] || item.energy;
+    return `<div class="tl-row tl-template-row">
+      <div class="tl-time">${localTime(item.tsStart)}</div>
+      <div class="tl-bar-col tl-bar-template"></div>
+      <div class="tl-content">
+        <div class="tl-activity">${item.activity}<span class="tl-badge" style="background:var(--bg3);color:var(--muted);border-radius:4px">${label}</span></div>
+        <div class="tl-meta">${localTime(item.tsStart)} – ${localTime(item.ts)} · ${fmtDur(dur)}</div>
+      </div>
+      <span style="font-size:11px;color:var(--muted2);padding:4px 6px;flex-shrink:0">📅</span>
+    </div>`;
+  }
   const energyClass = item.missed ? 'missed' : item.energy;
   const dur = item.tsStart
     ? Math.round((item.ts - item.tsStart) / 60000)
@@ -3168,7 +3216,8 @@ function assembleTodayTimeline(todayE) {
   const mergedDisplay = mergeConsecutiveForDisplay(clipped);
   const _dayNow = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
   const gaps    = computeGaps(todayE.filter(e => !nestedBrowserIds.has(e.id)), _dayNow);
-  const combined = [...mergedDisplay, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+  const templateEntries = generateTemplateEntries(getViewingDateKey());
+  const combined = [...mergedDisplay, ...gaps, ...templateEntries].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
   combined.forEach(item => {
     if (!item.isGap && pcSubMap.has(item.id)) item._subActivities = pcSubMap.get(item.id);
   });
@@ -5149,6 +5198,7 @@ function renderSettings() {
   updateSyncUI();
   renderAvatarPicker();
   renderPartnerSettings();
+  renderTemplateList();
 }
 
 const TONE_PREVIEWS = {
@@ -6183,6 +6233,87 @@ function renderReflectHistory() {
 // ══════════════════════════════════════════════════════
 // FIREBASE SYNC  (compat SDK only — no modular imports)
 // ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
+// WEEKLY SCHEDULE TEMPLATES
+// ══════════════════════════════════════════════════════
+function generateTemplateEntries(dateKey) {
+  if (!settings.templates || !settings.templates.length) return [];
+  const noon = tzParseTime(dateKey, '12:00');
+  const dow = tzDow(noon);
+  const realEntries = getEntriesForDate(dateKey).filter(e => !e.deleted && !e.missed);
+  const result = [];
+  for (const tpl of settings.templates) {
+    if (!tpl.enabled) continue;
+    if (!tpl.days.includes(dow)) continue;
+    const tsStart = tzParseTime(dateKey, tpl.startTime);
+    let tsEnd = tzParseTime(dateKey, tpl.endTime);
+    if (tsEnd <= tsStart) tsEnd += 24 * 60 * 60 * 1000;
+    const hasOverlap = realEntries.some(e => {
+      const eS = e.tsStart || (e.ts - (e.blockIntervalMin || settings.intervalMin) * 60000);
+      return eS < tsEnd && e.ts > tsStart;
+    });
+    if (hasOverlap) continue;
+    result.push({
+      id: `tpl_${tpl.id}_${dateKey}`,
+      ts: tsEnd, tsStart, date: dateKey,
+      blockIntervalMin: Math.round((tsEnd - tsStart) / 60000),
+      activity: tpl.activity, energy: tpl.energy,
+      template: true, onPlan: true
+    });
+  }
+  return result;
+}
+
+function renderTemplateList() {
+  const el = document.getElementById('template-list');
+  if (!el) return;
+  if (!settings.templates || !settings.templates.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:4px">No recurring blocks yet.</div>';
+    return;
+  }
+  const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  el.innerHTML = settings.templates.map((tpl, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${tpl.activity}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${tpl.days.map(d=>DAY_LABELS[d]).join(', ')} · ${tpl.startTime}–${tpl.endTime}</div>
+      </div>
+      <button class="btn sm ghost" onclick="removeTemplate(${i})">✕</button>
+    </div>`).join('');
+}
+
+function toggleTplDay(btn) {
+  btn.classList.toggle('on');
+}
+
+function addTemplate() {
+  const activity = document.getElementById('tpl-activity').value.trim();
+  if (!activity) { showToast('Add an activity name'); return; }
+  const energy = document.getElementById('tpl-energy').value;
+  const startTime = document.getElementById('tpl-start').value;
+  const endTime = document.getElementById('tpl-end').value;
+  if (!startTime || !endTime) { showToast('Set start and end time'); return; }
+  const days = [...document.querySelectorAll('.tpl-day-btn.on')].map(b => parseInt(b.dataset.day));
+  if (!days.length) { showToast('Select at least one day'); return; }
+  if (!settings.templates) settings.templates = [];
+  settings.templates.push({ id: Date.now().toString(36), activity, energy, days, startTime, endTime, enabled: true });
+  persist();
+  renderTemplateList();
+  renderToday();
+  document.getElementById('tpl-activity').value = '';
+  document.getElementById('tpl-start').value = '';
+  document.getElementById('tpl-end').value = '';
+  document.querySelectorAll('.tpl-day-btn').forEach(b => b.classList.remove('on'));
+  showToast('Recurring block added');
+}
+
+function removeTemplate(i) {
+  settings.templates.splice(i, 1);
+  persist();
+  renderTemplateList();
+  renderToday();
+}
+
 // ══════════════════════════════════════════════════════
 // AVATAR PICKER
 // ══════════════════════════════════════════════════════
