@@ -25,10 +25,8 @@ for %%f in ("%APP_DIR%\*.js") do (
 for %%f in ("%APP_DIR%\*.css") do (
   copy /Y "%%f" "%WWW%\%%~nxf" || echo WARNING: Copy %%~nxf to www failed
 )
-if exist "%APP_DIR%\Sounds" (
-  if not exist "%WWW%\Sounds" mkdir "%WWW%\Sounds"
-  copy /Y "%APP_DIR%\Sounds\*.*" "%WWW%\Sounds\" > nul || echo WARNING: Copy Sounds to www failed
-)
+:: Sounds are served from GitHub Pages (not bundled in APK — keeps APK ~12MB)
+:: Do NOT copy Sounds/ to www/
 
 echo.
 echo [2/3] Syncing to Android...

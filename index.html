@@ -1518,7 +1518,7 @@ function switchState(newState) {
 function playAlert(times = 2, gap = 600) {
   let count = 0;
   function playOnce() {
-    const audio = new Audio("Sounds/alert.mp3");
+    const audio = new Audio("https://shinyamadasan.github.io/Time-audit/Sounds/alert.mp3");
     audio.volume = 0.2;
     audio.play().catch(() => {
       // Fallback to Web Audio beep if file missing

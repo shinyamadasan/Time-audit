@@ -1,7 +1,8 @@
 // ChronaSense Service Worker
-// Handles background ping notifications when the tab is closed or hidden
+// Handles background ping notifications and audio asset caching
 
-const SW_VERSION = '1.0.0';
+const SW_VERSION = '1.1.0';
+const AUDIO_CACHE = 'chrona-audio-v1';
 
 let _pingTimer = null;
 
@@ -77,8 +78,30 @@ self.addEventListener('notificationclick', event => {
   );
 });
 
+// ── Audio caching (cache-first, network fallback) ─────────
+// Caches lo-fi tracks after first play so Focus Mode works offline.
+self.addEventListener('fetch', event => {
+  if (!event.request.url.includes('/Sounds/') || !event.request.url.endsWith('.mp3')) return;
+  event.respondWith(
+    caches.open(AUDIO_CACHE).then(cache =>
+      cache.match(event.request).then(cached => {
+        if (cached) return cached;
+        return fetch(event.request).then(response => {
+          if (response.ok) cache.put(event.request, response.clone());
+          return response;
+        });
+      })
+    )
+  );
+});
+
 // ── Install & activate ────────────────────────────────────
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => {
-  event.waitUntil(clients.claim());
+  // Clean up old audio caches on SW update
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k.startsWith('chrona-audio-') && k !== AUDIO_CACHE).map(k => caches.delete(k)))
+    ).then(() => clients.claim())
+  );
 });
