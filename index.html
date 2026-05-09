@@ -647,7 +647,7 @@
         <span style="color:var(--muted);font-size:13px;font-weight:600">→</span>
         <input type="time" id="tpl-end" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
       </div>
-      <button type="button" class="btn" style="width:100%;justify-content:center" onclick="addTemplate()">+ Add recurring block</button>
+      <button type="button" id="tpl-add-btn" class="btn" style="width:100%;justify-content:center" onclick="addTemplate()">+ Add recurring block</button>
     </div>
   </div>
 
@@ -6314,6 +6314,7 @@ function renderTemplateList() {
           <span style="font-size:11px;color:var(--muted)">${dur}</span>
         </div>
       </div>
+      <button type="button" onclick="editTemplate(${i})" style="background:none;border:none;color:var(--muted);font-size:15px;padding:10px 8px;cursor:pointer;flex-shrink:0;transition:color 0.15s" onmouseover="this.style.color='var(--deep)'" onmouseout="this.style.color='var(--muted)'">✎</button>
       <button type="button" onclick="removeTemplate(${i})" style="background:none;border:none;color:var(--muted);font-size:16px;padding:10px 12px;cursor:pointer;flex-shrink:0;transition:color 0.15s" onmouseover="this.style.color='var(--distraction)'" onmouseout="this.style.color='var(--muted)'">×</button>
     </div>`;
   }).join('');
@@ -6333,22 +6334,52 @@ function addTemplate() {
   const days = [...document.querySelectorAll('.tpl-day-btn.on')].map(b => parseInt(b.dataset.day));
   if (!days.length) { showToast('Select at least one day'); return; }
   if (!settings.templates) settings.templates = [];
-  settings.templates.push({ id: Date.now().toString(36), activity, energy, days, startTime, endTime, enabled: true });
+  const wasEditing = _editingTplIdx !== null;
+  if (wasEditing) {
+    // Update existing — preserve id and enabled flag
+    settings.templates[_editingTplIdx] = { ...settings.templates[_editingTplIdx], activity, energy, days, startTime, endTime };
+    _editingTplIdx = null;
+  } else {
+    settings.templates.push({ id: Date.now().toString(36), activity, energy, days, startTime, endTime, enabled: true });
+  }
   settings._savedAt = Date.now();
-  // Clear form and show toast immediately so the UI feels instant
+  // Clear form instantly so the UI feels responsive
   document.getElementById('tpl-activity').value = '';
   document.getElementById('tpl-start').value = '';
   document.getElementById('tpl-end').value = '';
   document.querySelectorAll('.tpl-day-btn').forEach(b => b.classList.remove('on'));
-  showToast('Recurring block added');
-  // Save and re-render after the toast (avoids perceived lag)
-  persist();
-  if (fbRoomRef) fbRoomRef.update({ settings });
-  renderTemplateList();
-  renderToday();
+  const addBtn = document.getElementById('tpl-add-btn');
+  if (addBtn) addBtn.textContent = '+ Add recurring block';
+  showToast(wasEditing ? 'Block updated' : 'Recurring block added');
+  // Defer save + re-render so the button response feels instant
+  setTimeout(() => {
+    persist();
+    if (fbRoomRef) fbRoomRef.update({ settings });
+    renderTemplateList();
+    renderToday();
+  }, 0);
+}
+
+let _editingTplIdx = null;
+
+function editTemplate(i) {
+  const tpl = settings.templates[i];
+  _editingTplIdx = i;
+  document.getElementById('tpl-activity').value = tpl.activity;
+  document.getElementById('tpl-energy').value = tpl.energy;
+  document.getElementById('tpl-start').value = tpl.startTime;
+  document.getElementById('tpl-end').value = tpl.endTime;
+  document.querySelectorAll('.tpl-day-btn').forEach(b =>
+    b.classList.toggle('on', tpl.days.includes(parseInt(b.dataset.day)))
+  );
+  const btn = document.getElementById('tpl-add-btn');
+  if (btn) btn.textContent = '✓ Save changes';
+  document.getElementById('tpl-activity').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('tpl-activity').focus();
 }
 
 function removeTemplate(i) {
+  if (_editingTplIdx === i) { _editingTplIdx = null; const btn = document.getElementById('tpl-add-btn'); if (btn) btn.textContent = '+ Add recurring block'; }
   settings.templates.splice(i, 1);
   settings._savedAt = Date.now();
   persist();
