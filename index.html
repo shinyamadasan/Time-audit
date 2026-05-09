@@ -2952,7 +2952,10 @@ function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
   if (energy) setRetroEnergy(energy);
   populateRetroChips();
   document.getElementById('retro-start').value = tzHHMM(tsStart);
-  document.getElementById('retro-end').value   = tzHHMM(Math.min(tsEnd, Date.now()));
+  // For template prefills (activity provided), use exact end time so the user sees the full block.
+  // For gap fills (no activity), cap at now — you can't log a block that hasn't happened yet.
+  const cappedEnd = activity ? tsEnd : Math.min(tsEnd, Date.now());
+  document.getElementById('retro-end').value   = tzHHMM(cappedEnd);
   document.getElementById('retro-overlay').classList.add('open');
   setTimeout(() => {
     const input = document.getElementById('retro-activity');
@@ -2961,9 +2964,10 @@ function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
 }
 
 function openEditEntry(id) {
-  const entry = entries.find(e => e.id === id);
+  const numId = Number(id);
+  const entry = entries.find(e => e.id === numId);
   if (!entry) return;
-  editingEntryId = id;
+  editingEntryId = numId;
 
   const tsS = entry.tsStart || (entry.ts - (entry.blockIntervalMin || settings.intervalMin) * 60000);
   const tsE = entry.ts;
@@ -3039,8 +3043,11 @@ function renderEntryRow(item) {
   if (item.template) {
     const dur = Math.round((item.ts - item.tsStart) / 60000);
     const label = eLabel[item.energy] || item.energy;
-    const safeActivity = item.activity.replace(/'/g, "\\'");
-    return `<div class="tl-row tl-template-row" onclick="openRetroLogPrefilled(${item.tsStart},${item.ts},'${safeActivity}','${item.energy}')">
+    const safeAct = item.activity.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    return `<div class="tl-row tl-template-row"
+      data-ts-start="${item.tsStart}" data-ts-end="${item.ts}"
+      data-activity="${safeAct}" data-energy="${item.energy}"
+      onclick="openRetroLogPrefilled(+this.dataset.tsStart,+this.dataset.tsEnd,this.dataset.activity,this.dataset.energy)">
       <div class="tl-time">${localTime(item.tsStart)}</div>
       <div class="tl-bar-col tl-bar-template"></div>
       <div class="tl-content">
