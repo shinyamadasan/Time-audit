@@ -973,10 +973,11 @@ button, a, [role="button"],
 .sb-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
 
 /* ── Weekly schedule template rows ── */
-.tl-template-row{opacity:0.55;pointer-events:none}
+.tl-template-row{opacity:0.6;cursor:pointer;transition:opacity 0.15s}
+.tl-template-row:hover{opacity:0.85}
 .tl-bar-template{background:repeating-linear-gradient(45deg,var(--border2),var(--border2) 3px,transparent 3px,transparent 7px);border-radius:2px}
-.tpl-day-btn{padding:5px 9px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--muted);font-size:12px;font-family:var(--mono);cursor:pointer;transition:background 0.15s,color 0.15s}
-.tpl-day-btn.on{background:var(--deep-dim);color:var(--deep);border-color:var(--deep)}
+.tpl-day-btn{padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg2);color:var(--muted);font-size:12px;font-family:var(--mono);cursor:pointer;transition:all 0.15s;user-select:none}
+.tpl-day-btn.on{background:var(--deep-dim);color:var(--deep);border-color:var(--deep);font-weight:600}
 
 /* ── Avatar picker ── */
 .avatar-picker{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
