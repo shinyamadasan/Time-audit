@@ -614,36 +614,40 @@
 
   <div class="settings-section">
     <div class="settings-title">Weekly Schedule</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">Block out fixed commitments. ChronaSense tracks the free time around them.</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Fixed commitments shown greyed-out in your timeline. Tap one to log reality.</div>
     <div id="template-list"></div>
-    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-      <input id="tpl-activity" type="text" placeholder="e.g. Job shift, Class, Gym"
-        style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:8px 10px;border-radius:8px;outline:none;margin-bottom:8px">
-      <select id="tpl-energy" style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:8px 10px;border-radius:8px;outline:none;margin-bottom:8px">
-        <option value="nine5">Job Work</option>
-        <option value="deep">Deep Work</option>
-        <option value="shallow">Shallow Work</option>
-        <option value="learning">Learning</option>
-        <option value="exercise">Exercise</option>
-        <option value="recovery">Maintenance</option>
-        <option value="errands">Errands</option>
-        <option value="social">Social</option>
+    <!-- Add form -->
+    <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-top:4px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:12px">New recurring block</div>
+      <input id="tpl-activity" type="text" placeholder="Activity name (e.g. Job shift, Class, Gym)"
+        style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:9px 11px;border-radius:8px;outline:none;margin-bottom:10px">
+      <select id="tpl-energy" style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:9px 11px;border-radius:8px;outline:none;margin-bottom:12px;appearance:none">
+        <option value="nine5">🟡 Job Work</option>
+        <option value="deep">🔵 Deep Work</option>
+        <option value="shallow">💠 Shallow Work</option>
+        <option value="learning">🟢 Learning</option>
+        <option value="exercise">🟠 Exercise</option>
+        <option value="recovery">🟣 Maintenance</option>
+        <option value="errands">⬜ Errands</option>
+        <option value="social">🩷 Social</option>
       </select>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-        <button class="tpl-day-btn" data-day="1" onclick="toggleTplDay(this)">Mon</button>
-        <button class="tpl-day-btn" data-day="2" onclick="toggleTplDay(this)">Tue</button>
-        <button class="tpl-day-btn" data-day="3" onclick="toggleTplDay(this)">Wed</button>
-        <button class="tpl-day-btn" data-day="4" onclick="toggleTplDay(this)">Thu</button>
-        <button class="tpl-day-btn" data-day="5" onclick="toggleTplDay(this)">Fri</button>
-        <button class="tpl-day-btn" data-day="6" onclick="toggleTplDay(this)">Sat</button>
-        <button class="tpl-day-btn" data-day="0" onclick="toggleTplDay(this)">Sun</button>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px">Days</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        <button type="button" class="tpl-day-btn" data-day="1" onclick="toggleTplDay(this)">Mon</button>
+        <button type="button" class="tpl-day-btn" data-day="2" onclick="toggleTplDay(this)">Tue</button>
+        <button type="button" class="tpl-day-btn" data-day="3" onclick="toggleTplDay(this)">Wed</button>
+        <button type="button" class="tpl-day-btn" data-day="4" onclick="toggleTplDay(this)">Thu</button>
+        <button type="button" class="tpl-day-btn" data-day="5" onclick="toggleTplDay(this)">Fri</button>
+        <button type="button" class="tpl-day-btn" data-day="6" onclick="toggleTplDay(this)">Sat</button>
+        <button type="button" class="tpl-day-btn" data-day="0" onclick="toggleTplDay(this)">Sun</button>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-        <input type="time" id="tpl-start" style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 9px;border-radius:8px;outline:none">
-        <span style="color:var(--muted);font-size:12px">to</span>
-        <input type="time" id="tpl-end" style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 9px;border-radius:8px;outline:none">
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px">Time range</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+        <input type="time" id="tpl-start" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
+        <span style="color:var(--muted);font-size:13px;font-weight:600">→</span>
+        <input type="time" id="tpl-end" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
       </div>
-      <button class="btn sm" onclick="addTemplate()">+ Add block</button>
+      <button type="button" class="btn" style="width:100%;justify-content:center" onclick="addTemplate()">+ Add recurring block</button>
     </div>
   </div>
 
@@ -3035,14 +3039,14 @@ function renderEntryRow(item) {
   if (item.template) {
     const dur = Math.round((item.ts - item.tsStart) / 60000);
     const label = eLabel[item.energy] || item.energy;
-    return `<div class="tl-row tl-template-row">
+    const safeActivity = item.activity.replace(/'/g, "\\'");
+    return `<div class="tl-row tl-template-row" onclick="openRetroLogPrefilled(${item.tsStart},${item.ts},'${safeActivity}','${item.energy}')">
       <div class="tl-time">${localTime(item.tsStart)}</div>
       <div class="tl-bar-col tl-bar-template"></div>
       <div class="tl-content">
         <div class="tl-activity">${item.activity}<span class="tl-badge" style="background:var(--bg3);color:var(--muted);border-radius:4px">${label}</span></div>
-        <div class="tl-meta">${localTime(item.tsStart)} – ${localTime(item.ts)} · ${fmtDur(dur)}</div>
+        <div class="tl-meta">${localTime(item.tsStart)} – ${localTime(item.ts)} · ${fmtDur(dur)} · <span style="color:var(--deep);font-weight:600">tap to log</span></div>
       </div>
-      <span style="font-size:11px;color:var(--muted2);padding:4px 6px;flex-shrink:0">📅</span>
     </div>`;
   }
   const energyClass = item.missed ? 'missed' : item.energy;
@@ -6268,18 +6272,40 @@ function renderTemplateList() {
   const el = document.getElementById('template-list');
   if (!el) return;
   if (!settings.templates || !settings.templates.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:4px">No recurring blocks yet.</div>';
+    el.innerHTML = '<div style="font-size:12px;color:var(--muted);font-style:italic;padding:4px 0 12px">No recurring blocks yet.</div>';
     return;
   }
   const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  el.innerHTML = settings.templates.map((tpl, i) => `
-    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:var(--text)">${tpl.activity}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${tpl.days.map(d=>DAY_LABELS[d]).join(', ')} · ${tpl.startTime}–${tpl.endTime}</div>
+  const ENERGY_COLOR = { nine5:'var(--nine5)', deep:'var(--deep)', shallow:'var(--shallow)', learning:'var(--learning)', exercise:'var(--exercise)', recovery:'var(--break)', errands:'var(--errands)', social:'var(--social)', waste:'var(--distraction)' };
+  const ENERGY_LABEL = { nine5:'Job Work', deep:'Deep Work', shallow:'Shallow Work', learning:'Learning', exercise:'Exercise', recovery:'Maintenance', errands:'Errands', social:'Social', waste:'Waste' };
+  el.innerHTML = settings.templates.map((tpl, i) => {
+    const color = ENERGY_COLOR[tpl.energy] || 'var(--muted)';
+    const energyLabel = ENERGY_LABEL[tpl.energy] || tpl.energy;
+    const sortedDays = [...tpl.days].sort((a,b)=>a-b);
+    const dayChips = sortedDays.map(d => `<span style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:1px 6px;font-size:10px;font-family:var(--mono);color:var(--muted)">${DAY_LABELS[d]}</span>`).join('');
+    const [sh, sm] = tpl.startTime.split(':').map(Number);
+    const [eh, em] = tpl.endTime.split(':').map(Number);
+    let mins = (eh * 60 + em) - (sh * 60 + sm);
+    if (mins <= 0) mins += 24 * 60;
+    const dur = mins >= 60 ? `${(mins/60).toFixed(mins%60===0?0:1)}h` : `${mins}m`;
+    return `
+    <div style="display:flex;border-radius:10px;border:1px solid var(--border2);overflow:hidden;margin-bottom:8px;background:var(--bg2)">
+      <div style="width:4px;background:${color};flex-shrink:0"></div>
+      <div style="flex:1;padding:10px 12px;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:5px">${tpl.activity}
+          <span style="font-size:10px;font-weight:500;color:${color};background:${color}22;border-radius:4px;padding:1px 6px;margin-left:4px">${energyLabel}</span>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+          ${dayChips}
+          <span style="color:var(--muted);font-size:10px">·</span>
+          <span style="font-size:11px;color:var(--muted);font-family:var(--mono)">${tpl.startTime} → ${tpl.endTime}</span>
+          <span style="color:var(--muted);font-size:10px">·</span>
+          <span style="font-size:11px;color:var(--muted)">${dur}</span>
+        </div>
       </div>
-      <button class="btn sm ghost" onclick="removeTemplate(${i})">✕</button>
-    </div>`).join('');
+      <button type="button" onclick="removeTemplate(${i})" style="background:none;border:none;color:var(--muted);font-size:16px;padding:10px 12px;cursor:pointer;flex-shrink:0;transition:color 0.15s" onmouseover="this.style.color='var(--distraction)'" onmouseout="this.style.color='var(--muted)'">×</button>
+    </div>`;
+  }).join('');
 }
 
 function toggleTplDay(btn) {
