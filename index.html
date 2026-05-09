@@ -6259,11 +6259,15 @@ function generateTemplateEntries(dateKey) {
     const tsStart = tzParseTime(dateKey, tpl.startTime);
     let tsEnd = tzParseTime(dateKey, tpl.endTime);
     if (tsEnd <= tsStart) tsEnd += 24 * 60 * 60 * 1000;
-    const hasOverlap = realEntries.some(e => {
-      const eS = e.tsStart || (e.ts - (e.blockIntervalMin || settings.intervalMin) * 60000);
-      return eS < tsEnd && e.ts > tsStart;
-    });
-    if (hasOverlap) continue;
+    // Only hide the template when logged entries cover ≥50% of its duration.
+    // A small incidental overlap (e.g. a browser-extension PC-time snippet) won't suppress it.
+    const tplDur = tsEnd - tsStart;
+    const covered = realEntries.reduce((acc, e) => {
+      const eS = Math.max(tsStart, e.tsStart || (e.ts - (e.blockIntervalMin || settings.intervalMin) * 60000));
+      const eE = Math.min(tsEnd, e.ts);
+      return acc + Math.max(0, eE - eS);
+    }, 0);
+    if (covered >= tplDur * 0.5) continue;
     result.push({
       id: `tpl_${tpl.id}_${dateKey}`,
       ts: tsEnd, tsStart, date: dateKey,
@@ -6331,15 +6335,17 @@ function addTemplate() {
   if (!settings.templates) settings.templates = [];
   settings.templates.push({ id: Date.now().toString(36), activity, energy, days, startTime, endTime, enabled: true });
   settings._savedAt = Date.now();
-  persist();
-  if (fbRoomRef) fbRoomRef.update({ settings });
-  renderTemplateList();
-  renderToday();
+  // Clear form and show toast immediately so the UI feels instant
   document.getElementById('tpl-activity').value = '';
   document.getElementById('tpl-start').value = '';
   document.getElementById('tpl-end').value = '';
   document.querySelectorAll('.tpl-day-btn').forEach(b => b.classList.remove('on'));
   showToast('Recurring block added');
+  // Save and re-render after the toast (avoids perceived lag)
+  persist();
+  if (fbRoomRef) fbRoomRef.update({ settings });
+  renderTemplateList();
+  renderToday();
 }
 
 function removeTemplate(i) {
