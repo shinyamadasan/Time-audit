@@ -6323,7 +6323,9 @@ function addTemplate() {
   if (!days.length) { showToast('Select at least one day'); return; }
   if (!settings.templates) settings.templates = [];
   settings.templates.push({ id: Date.now().toString(36), activity, energy, days, startTime, endTime, enabled: true });
+  settings._savedAt = Date.now();
   persist();
+  if (fbRoomRef) fbRoomRef.update({ settings });
   renderTemplateList();
   renderToday();
   document.getElementById('tpl-activity').value = '';
@@ -6335,7 +6337,9 @@ function addTemplate() {
 
 function removeTemplate(i) {
   settings.templates.splice(i, 1);
+  settings._savedAt = Date.now();
   persist();
+  if (fbRoomRef) fbRoomRef.update({ settings });
   renderTemplateList();
   renderToday();
 }
