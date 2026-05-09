@@ -652,6 +652,12 @@
   </div>
 
   <div class="settings-section">
+    <div class="settings-title">Daily Time Budgets</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Cap any category per day. You'll get a warning toast when you go over. Leave blank for no limit.</div>
+    <div id="budget-list"></div>
+  </div>
+
+  <div class="settings-section">
     <div class="settings-title">Data</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn sm" onclick="exportCSV()">Export CSV</button>
@@ -2026,6 +2032,7 @@ function _doQuickSave(activity, energy) {
   showLogFeedback(energy);
   checkReviewPrompt();
   checkEscalation();
+  checkBudget(energy);
 }
 
 function dismissQuickLog() {
@@ -2525,12 +2532,14 @@ function saveRetroEntry() {
       const dur2 = Math.round((tsEnd - midnight) / 60000);
       showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
       setTimeout(() => { renderToday(); syncEntries(); }, 0);
+      checkBudget(retroEnergy);
       } else {
       entries.push(makeEntry(tsEnd, tsEnd, tsStart, startDateKey));
       entries.sort((a,b) => b.ts - a.ts);
       persist(); closeModal('retro-overlay');
       showToast(`Logged retroactively · ${fmtDur(dur)}`, false, retroEnergy);
       setTimeout(() => { renderToday(); syncEntries(); }, 0);
+      checkBudget(retroEnergy);
       }
   }
 }
@@ -2562,6 +2571,23 @@ function toggleDetail() {
   const body=document.getElementById('detail-body'); body.classList.toggle('open');
   document.getElementById('detail-arrow').textContent=body.classList.contains('open')?'▾':'▸';
 }
+// ── Time Budget check ─────────────────────────────────────────────────────
+// Called after any save. If today's total for `energy` exceeds the cap in
+// settings.budgets, fires a warning toast 1.8 s after the log toast clears.
+function checkBudget(energy) {
+  if (!settings.budgets) return;
+  const budget = settings.budgets[energy];
+  if (!budget || budget <= 0) return;
+  const todayMins = getEntriesForDate(getViewingDateKey())
+    .filter(e => !e.deleted && !e.missed && e.energy === energy)
+    .reduce((sum, e) => sum + (e.blockIntervalMin || 0), 0);
+  if (todayMins < budget) return;
+  const label  = eLabel[energy] || energy;
+  const logged = todayMins >= 60 ? `${(todayMins / 60).toFixed(1)}h` : `${todayMins}m`;
+  const cap    = budget    >= 60 ? `${(budget    / 60).toFixed(1)}h` : `${budget}m`;
+  setTimeout(() => showToast(`⚠ ${label} limit reached — ${logged} logged today (cap ${cap})`), 1800);
+}
+
 function saveEntry() {
   const activity = normalizeActivity(document.getElementById('f-activity').value.trim());
   if (!activity){showToast('Add an activity description');return;}
@@ -2595,6 +2621,7 @@ function saveEntry() {
   showLogFeedback(entry.energy);
   checkReviewPrompt();
   checkEscalation();
+  checkBudget(entry.energy);
 
   // If mid-block switch: reset block start and open pre-commit for next task
   if (switchingTask) {
@@ -4312,6 +4339,7 @@ function quickRetroLog() {
     taskInput.value = '';
     resetRetroBar();
     showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
+    checkBudget(learnedEng);
   } else {
     const _qEntry = makeQEntry(tsEnd, tsEnd, tsStart, startDateKey);
     _lastLoggedEntryId = _qEntry.id;
@@ -4322,6 +4350,7 @@ function quickRetroLog() {
     resetRetroBar();
     const wasteFlag = (learnedEng === 'waste' || learnedEng === 'distraction') ? ' ⚠ auto-flagged' : '';
     showToast(`Logged: ${task} · ${fmtDur(dur)}${wasteFlag}`, false, learnedEng);
+    checkBudget(learnedEng);
   }
 }
 
@@ -5210,6 +5239,44 @@ function renderSettings() {
   renderAvatarPicker();
   renderPartnerSettings();
   renderTemplateList();
+  renderBudgets();
+}
+
+function saveBudget(energy, val) {
+  if (!settings.budgets) settings.budgets = {};
+  const mins = parseInt(val, 10);
+  if (mins > 0) settings.budgets[energy] = mins;
+  else delete settings.budgets[energy];
+  persist();
+}
+
+function renderBudgets() {
+  const el = document.getElementById('budget-list');
+  if (!el) return;
+  const ROWS = [
+    ['deep',     'var(--deep)',        'Deep Work'],
+    ['nine5',    'var(--nine5)',       'Job Work'],
+    ['shallow',  'var(--shallow)',     'Shallow Work'],
+    ['learning', 'var(--learning)',    'Learning'],
+    ['exercise', 'var(--exercise)',    'Exercise'],
+    ['recovery', 'var(--break)',       'Maintenance'],
+    ['errands',  'var(--errands)',     'Errands'],
+    ['social',   'var(--social)',      'Social'],
+    ['waste',    'var(--distraction)', 'Waste'],
+  ];
+  const b = settings.budgets || {};
+  el.innerHTML = ROWS.map(([energy, color, label]) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="width:3px;height:18px;border-radius:2px;background:${color};flex-shrink:0"></div>
+      <div style="flex:1;font-size:13px;color:var(--text)">${label}</div>
+      <input type="number" min="0" step="5" placeholder="—"
+        value="${b[energy] || ''}"
+        onchange="saveBudget('${energy}', this.value)"
+        style="width:64px;background:var(--bg2);border:1px solid var(--border2);color:var(--text);
+               font-family:var(--mono);font-size:13px;padding:5px 8px;border-radius:7px;
+               outline:none;text-align:right">
+      <span style="font-size:11px;color:var(--muted);white-space:nowrap">min/day</span>
+    </div>`).join('');
 }
 
 const TONE_PREVIEWS = {
