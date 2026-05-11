@@ -616,6 +616,13 @@ function startSync() {
       if (val.timezone) localStorage.setItem('ta3-tz', val.timezone);
       renderToday();
       renderSettings();
+    } else if ((val._templatesSavedAt || 0) > (settings._templatesSavedAt || 0)) {
+      // Remote has newer templates even if overall settings are older — accept just templates
+      settings.templates = val.templates || [];
+      settings._templatesSavedAt = val._templatesSavedAt;
+      localStorage.setItem('ta3-settings', JSON.stringify(settings));
+      renderToday();
+      if (document.getElementById('view-settings').classList.contains('active')) renderSettings();
     }
   });
 
@@ -920,7 +927,7 @@ function tryAutoConnect() {
 }
 
 // ── Entry schema validation ──────────────────────────────────────────────────
-const VALID_ENERGY = new Set(['deep','shallow','admin','distraction','waste','break','away']);
+const VALID_ENERGY = new Set(['deep','shallow','nine5','errands','learning','exercise','social','recovery','waste','admin','distraction','break','away']);
 const DATE_KEY_RE  = /^\d{4}-\d{2}-\d{2}$/;
 
 // Warns to console if a newly created entry is missing required fields.

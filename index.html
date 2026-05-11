@@ -381,6 +381,12 @@
     <div id="reflect-daily-reviews"></div>
   </div>
 
+  <!-- By project -->
+  <div class="settings-section" id="reflect-projects-section" style="display:none">
+    <div class="settings-title">By project / client</div>
+    <div id="reflect-projects"></div>
+  </div>
+
   <!-- This week's patterns -->
   <div class="settings-section">
     <div class="settings-title">This week's numbers</div>
@@ -658,6 +664,16 @@
   </div>
 
   <div class="settings-section">
+    <div class="settings-title">Ping Quiet Hours</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">No pings during these hours. Works overnight (e.g. 23:00 → 07:00). Leave blank to disable.</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="time" id="set-quiet-start" onchange="saveSettings()" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
+      <span style="color:var(--muted);font-size:13px;font-weight:600">→</span>
+      <input type="time" id="set-quiet-end" onchange="saveSettings()" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
+    </div>
+  </div>
+
+  <div class="settings-section">
     <div class="settings-title">Data</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn sm" onclick="exportCSV()">Export CSV</button>
@@ -895,6 +911,7 @@
       </div>
     </div>
     <div class="field"><label>Note</label><textarea id="f-note" placeholder="Optional context…"></textarea></div>
+    <div class="field"><label>Project / Client <span style="color:var(--muted);font-weight:400;font-size:11px">(optional)</span></label><input type="text" id="f-project" placeholder="e.g. Client A" autocomplete="off"></div>
   </div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
     <button class="btn ghost" id="log-cancel-btn" onclick="dismissLog()">Skip</button>
@@ -1025,6 +1042,10 @@
   <div id="retro-chips-wrap" style="margin-bottom:12px;display:none">
     <div class="field-label">Recent</div>
     <div class="presets-scroll" id="retro-chips"></div>
+  </div>
+  <div class="field" style="margin-bottom:12px">
+    <label>Project / Client <span style="color:var(--muted);font-weight:400;font-size:11px">(optional)</span></label>
+    <input type="text" id="retro-project" placeholder="e.g. Client A, Website redesign" autocomplete="off">
   </div>
   <div class="field-label">Category</div>
   <div class="energy-grid">
@@ -1767,6 +1788,7 @@ function doPing() {
   if (timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId) {
     timerStartedAt = Date.now(); remaining = totalSecs; updateRing(); return;
   }
+  if (isInQuietHours()) { timerStartedAt = Date.now(); remaining = totalSecs; updateRing(); return; }
 
   pingCount++;
   const now = Date.now();
@@ -2279,7 +2301,7 @@ function openLog(pingNum) {
   }
   logIsPing = !!pingNum;
   selectedEnergy=''; selectedOnPlan=null;
-  ['f-activity','f-note'].forEach(id=>document.getElementById(id).value='');
+  ['f-activity','f-note','f-project'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-deap').value='';
   document.getElementById('f-rate').value='';
   document.getElementById('detail-body').classList.remove('open');
@@ -2405,6 +2427,7 @@ function openRetroLog() {
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('retro-activity').value = '';
+  document.getElementById('retro-project').value = '';
   populateRetroChips();
   // Default: last block's end time as start, now as end
   const nowStr = tzHHMM(Date.now());
@@ -2450,12 +2473,14 @@ function saveRetroEntry() {
   const midnight = spansMidnight ? tzParseTime(endDateKey, '00:00') : null;
 
   const onPlan = retroEnergy !== 'distraction' && retroEnergy !== 'waste';
+  const project = document.getElementById('retro-project').value.trim();
 
   function makeEntry(id, ts, tsS, dateKey) {
     const blkDur = Math.round((ts - tsS) / 60000);
     const e = { id, ts, tsStart: tsS, blockIntervalMin: blkDur,
       date: dateKey, activity, energy: retroEnergy, onPlan, retro: true,
       updatedAt: Date.now() };
+    if (project) e.project = project;
     e.category = getBucket(e); e.originalLabel = e.energy || null;
     validateEntry(e);
     return e;
@@ -2604,6 +2629,7 @@ function saveEntry() {
     deap:document.getElementById('f-deap').value,
     rate:parseFloat(document.getElementById('f-rate').value)||null,
     note:document.getElementById('f-note').value.trim(),
+    project:document.getElementById('f-project').value.trim()||undefined,
   };
   entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
 
@@ -2976,6 +3002,7 @@ function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('retro-activity').value = activity || '';
+  document.getElementById('retro-project').value = '';
   if (energy) setRetroEnergy(energy);
   populateRetroChips();
   document.getElementById('retro-start').value = tzHHMM(tsStart);
@@ -3009,6 +3036,7 @@ function openEditEntry(id) {
     retroEnergy = '';
     document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
     document.getElementById('retro-activity').value = '';
+    document.getElementById('retro-project').value = '';
     document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
     document.getElementById('retro-modal-title').textContent = 'What were you doing?';
   } else {
@@ -3016,6 +3044,7 @@ function openEditEntry(id) {
     document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
     if (retroEnergy) document.querySelectorAll(`#retro-overlay .energy-btn.${retroEnergy}`).forEach(b => b.classList.add('selected'));
     document.getElementById('retro-activity').value = entry.activity || '';
+    document.getElementById('retro-project').value = entry.project || '';
     document.getElementById('retro-modal-tag').textContent = 'EDIT BLOCK';
     document.getElementById('retro-modal-title').textContent = 'Edit this block';
   }
@@ -3156,12 +3185,15 @@ function renderEntryRow(item) {
     return rows.join('');
   }
 
+  const projectPill = item.project
+    ? ` · <span style="font-size:10px;padding:1px 5px;border-radius:3px;background:var(--bg3);color:var(--muted)">${item.project}</span>`
+    : '';
   return `<div class="tl-row" data-entry-id="${item.id}" onclick="${editCall}" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
       <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span>${mergeTag}</div>
-      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}</div>
+      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}${projectPill}</div>
     </div>
     <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
   </div>`;
@@ -5202,6 +5234,8 @@ function renderSettings() {
   document.getElementById('set-sleep-time').value=settings.sleepTime||'23:00';
   document.getElementById('set-wake-time').value=settings.wakeTime||'07:00';
   document.getElementById('set-sleep-reminder-min').value=String(settings.sleepReminderMin??30);
+  document.getElementById('set-quiet-start').value=settings.quietStart||'';
+  document.getElementById('set-quiet-end').value=settings.quietEnd||'';
   const rh = settings.reviewHour ?? 22;
   document.getElementById('set-review-hour').value = `${String(rh).padStart(2,'0')}:00`;
   const toneEl = document.getElementById('set-coach-tone');
@@ -5240,6 +5274,15 @@ function renderSettings() {
   renderPartnerSettings();
   renderTemplateList();
   renderBudgets();
+}
+
+function isInQuietHours(ts) {
+  if (!settings.quietStart || !settings.quietEnd) return false;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const t = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false })
+    .format(ts ? new Date(ts) : new Date()).slice(0, 5);
+  const s = settings.quietStart, e = settings.quietEnd;
+  return s <= e ? (t >= s && t < e) : (t >= s || t < e);
 }
 
 function saveBudget(energy, val) {
@@ -5299,6 +5342,8 @@ function saveSettings(){
   settings.sleepTime=document.getElementById('set-sleep-time').value||'23:00';
   settings.wakeTime=document.getElementById('set-wake-time').value||'07:00';
   settings.sleepReminderMin=parseInt(document.getElementById('set-sleep-reminder-min').value)||30;
+  settings.quietStart=document.getElementById('set-quiet-start').value||'';
+  settings.quietEnd=document.getElementById('set-quiet-end').value||'';
   // Dedicated key so Firebase can never silently overwrite the local timezone
   localStorage.setItem('ta3-tz', settings.timezone);
   settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
@@ -6082,6 +6127,37 @@ function renderWeekComparison() {
   </div>`;
 }
 
+function renderProjectBreakdown() {
+  const el = document.getElementById('reflect-projects');
+  const section = document.getElementById('reflect-projects-section');
+  if (!el || !section) return;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const weekStart = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const map = {};
+  for (const e of entries) {
+    if (e.deleted || e.missed || !e.project) continue;
+    if ((e.tsStart || e.ts) < weekStart) continue;
+    map[e.project] = (map[e.project] || 0) + (e.blockIntervalMin || 0);
+  }
+  const rows = Object.entries(map).sort((a, b) => b[1] - a[1]);
+  if (!rows.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  const fmtH = m => m >= 60 ? `${(m/60).toFixed(1)}h` : `${m}m`;
+  const maxMins = rows[0][1];
+  el.innerHTML = rows.map(([project, mins]) => {
+    const pct = Math.round(mins / maxMins * 100);
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+        <span style="font-size:13px;color:var(--text);font-weight:500">${project}</span>
+        <span style="font-family:var(--mono);font-size:13px;color:var(--muted)">${fmtH(mins)}</span>
+      </div>
+      <div style="height:4px;background:var(--bg3);border-radius:2px">
+        <div style="height:4px;width:${pct}%;background:var(--deep);border-radius:2px"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function renderReflectView() {
   const now = new Date();
   const weekKey = getWeekKey(now);
@@ -6089,6 +6165,7 @@ function renderReflectView() {
   // ── New sections ──
   renderHonestSummary();
   renderWeekComparison();
+  renderProjectBreakdown();
 
   // ── Daily summary ──
   renderDailySummary();
@@ -6414,6 +6491,7 @@ function addTemplate() {
     settings.templates.push({ id: Date.now().toString(36), activity, energy, days, startTime, endTime, enabled: true });
   }
   settings._savedAt = Date.now();
+  settings._templatesSavedAt = Date.now();
   // Clear form instantly so the UI feels responsive
   document.getElementById('tpl-activity').value = '';
   document.getElementById('tpl-start').value = '';
@@ -6453,6 +6531,7 @@ function removeTemplate(i) {
   if (_editingTplIdx === i) { _editingTplIdx = null; const btn = document.getElementById('tpl-add-btn'); if (btn) btn.textContent = '+ Add recurring block'; }
   settings.templates.splice(i, 1);
   settings._savedAt = Date.now();
+  settings._templatesSavedAt = Date.now();
   persist();
   if (fbRoomRef) fbRoomRef.update({ settings });
   renderTemplateList();
@@ -6906,6 +6985,7 @@ async function initNativeNotifications() {
 
 function scheduleNativePing(inSeconds) {
   if (!isNative || !LocalNotifications) return;
+  if (isInQuietHours(Date.now() + inSeconds * 1000)) { cancelNativePing(); return; }
   const at = new Date(Date.now() + inSeconds * 1000);
   const task = lastTaskForRepeat ? lastTaskForRepeat.replace(/ \(Output:.*\)/,'') : null;
   LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }, { id: PING_FOLLOWUP_ID }] }).catch(()=>{});
@@ -7120,6 +7200,7 @@ if ('serviceWorker' in navigator) {
 // Schedule a SW backup ping (called when page becomes hidden or timer resets)
 function swSchedulePing() {
   if (!_swReg?.active || !running || breakActive) return;
+  if (isInQuietHours(Date.now() + remaining * 1000)) return;
   _swReg.active.postMessage({ action: 'schedule-ping', delayMs: remaining * 1000 });
 }
 
