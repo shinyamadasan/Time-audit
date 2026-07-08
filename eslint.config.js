@@ -1,4 +1,4 @@
-// Minimal ESLint config — no build step, runs via: npx eslint storage.js focus-mode.js insights.js
+// Minimal ESLint config — no build step, runs via: npx eslint storage.js focus-mode.js insights.js focus-wallet.js
 // Targets the extracted .js files only (not index.html which requires an HTML plugin).
 export default [
   {
@@ -22,7 +22,8 @@ export default [
         Capacitor: 'readonly',
         // App globals defined in index.html — consumed by storage.js, focus-mode.js, insights.js
         entries: 'writable', settings: 'writable', reviews: 'writable',
-        weeklyReviews: 'writable', intention: 'writable', dailyCommitment: 'writable',
+        weeklyReviews: 'writable', focusRedemptions: 'writable',
+        intention: 'writable', dailyCommitment: 'writable',
         snoozesUsedToday: 'writable', running: 'writable', timerStartedAt: 'writable',
         totalSecs: 'writable', remaining: 'writable', lastTaskForRepeat: 'writable',
         fbApp: 'writable', fbDb: 'writable', fbRoomRef: 'writable',

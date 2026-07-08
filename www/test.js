@@ -1,5 +1,8 @@
 // node test.js
 import assert from 'node:assert/strict';
+import './focus-wallet.js';
+
+const { computeFocusWallet, getFocusWalletWeekKey } = globalThis;
 
 // ── Extracted pure functions ────────────────────────────────────────────────
 
@@ -273,6 +276,84 @@ test('no merge when activity differs', () => {
 });
 test('empty array returns empty', () => {
   assert.deepEqual(mergeConsecutiveForDisplay([]), []);
+});
+
+// ── Focus Wallet functions (extracted to focus-wallet.js) ───────────────────
+
+const FW_WEEK = '2026-W02';
+const FW_MIN = 60 * 1000;
+
+function walletTs(dayOffset, hour, minute = 0) {
+  return Date.UTC(2026, 0, 5 + dayOffset, hour, minute, 0);
+}
+
+function walletEntry(id, dayOffset, hour, durationMin, activity, energy, extra = {}) {
+  const tsStart = walletTs(dayOffset, hour);
+  return {
+    id,
+    tsStart,
+    ts: tsStart + durationMin * FW_MIN,
+    blockIntervalMin: durationMin,
+    activity,
+    energy,
+    ...extra
+  };
+}
+
+console.log('\ngetFocusWalletWeekKey(date)');
+test('uses app week key format', () => {
+  assert.equal(getFocusWalletWeekKey(new Date(walletTs(0, 12))), FW_WEEK);
+});
+
+console.log('\ncomputeFocusWallet(entries, redemptions)');
+test('live deep work earns base points plus focus bonus', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('d1', 0, 9, 60, 'Build feature', 'deep')
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.earned, 17);
+  assert.equal(wallet.balance, 17);
+});
+
+test('retro deep work earns half credit and no live bonus', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('d1', 0, 9, 60, 'Build feature', 'deep', { retro: true })
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.earned, 6);
+  assert.equal(wallet.balance, 6);
+});
+
+test('waste costs are capped per day', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('w1', 0, 9, 300, 'Scroll', 'waste')
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.autoCosts, 20);
+  assert.equal(wallet.balance, -20);
+});
+
+test('first three sports sessions are free, then session four and five cost points', () => {
+  const entries = [0, 1, 2, 3, 4].map(i =>
+    walletEntry(`s${i}`, i, 18, 60, 'Pickleball', 'exercise')
+  );
+  const wallet = computeFocusWallet(entries, [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.sportsSessions, 5);
+  assert.equal(wallet.autoCosts, 35);
+});
+
+test('long sports sessions cost points even inside free session count', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('s1', 0, 18, 180, 'Basketball', 'exercise')
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.autoCosts, 10);
+});
+
+test('reward redemptions subtract from the same week balance', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('d1', 0, 9, 60, 'Build feature', 'deep')
+  ], [
+    { id: 'r1', weekKey: FW_WEEK, label: 'Movie', points: 15, createdAt: walletTs(5, 19) }
+  ], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.redeemed, 15);
+  assert.equal(wallet.balance, 2);
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────────

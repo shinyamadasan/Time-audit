@@ -2,7 +2,7 @@
 // storage.js — persistence, Firebase sync, and data queries
 //
 // Depends on globals defined in index.html:
-//   entries, settings, reviews, weeklyReviews, intention,
+//   entries, settings, reviews, weeklyReviews, focusRedemptions, intention,
 //   dailyCommitment, snoozesUsedToday, running, timerStartedAt,
 //   totalSecs, remaining, lastTaskForRepeat,
 //   fbApp, fbDb, fbRoomRef, roomCode, timerOwnerDeviceId,
@@ -288,6 +288,7 @@ function persist() {
   localStorage.setItem('ta3-settings', JSON.stringify(settings));
   localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
   localStorage.setItem('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
+  localStorage.setItem('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
   localStorage.setItem('ta3-intention', intention);
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
   localStorage.setItem('ta3-lv', Date.now()); // local version — used to detect unsynced changes
@@ -333,6 +334,8 @@ function load() {
   }
   try { reviews = JSON.parse(localStorage.getItem('ta3-reviews') || '{}'); } catch(e){ reviews={}; }
   try { weeklyReviews = JSON.parse(localStorage.getItem('ta3-weekly-reviews') || '{}'); } catch(e){ weeklyReviews={}; }
+  try { focusRedemptions = JSON.parse(localStorage.getItem('ta3-focus-redemptions') || '[]'); } catch { focusRedemptions=[]; }
+  if (!Array.isArray(focusRedemptions)) focusRedemptions = [];
   intention = localStorage.getItem('ta3-intention') || '';
   if (!settings.presets?.length) settings.presets = DEFAULT_PRESETS;
   // Pre-fill intention from yesterday's "tomorrow" field if today's is empty
@@ -652,6 +655,27 @@ function startSync() {
     if (changed) { localStorage.setItem('ta3-weekly-reviews', JSON.stringify(weeklyReviews)); }
   });
 
+  fbDb.ref(`rooms/${roomCode}/focusRedemptions`).on('value', snap => {
+    const val = snap.val();
+    if (!val) return;
+    let changed = false;
+    Object.values(val).forEach(item => {
+      if (!item || !item.id) return;
+      const local = focusRedemptions.find(r => r.id === item.id);
+      if (!local) {
+        if (!item.deleted) focusRedemptions.push(item);
+        changed = true;
+      } else if ((item.updatedAt || item.createdAt || 0) > (local.updatedAt || local.createdAt || 0)) {
+        Object.assign(local, item);
+        changed = true;
+      }
+    });
+    if (changed) {
+      localStorage.setItem('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
+      renderToday();
+    }
+  });
+
   fbDb.ref(`rooms/${roomCode}/devices`).on('value', snap => {
     connectedDevices = snap.val() || {};
     updateSyncUI();
@@ -741,6 +765,7 @@ function startSync() {
 
   updateSyncPill('connected', 'synced');
   syncEntries();
+  syncFocusRedemptions();
   localStorage.setItem('ta3-last-sync', Date.now());
   showToast('Synced ✓');
 }
@@ -766,6 +791,15 @@ function syncEntries() {
   publishPublicStats();
 }
 
+function syncFocusRedemptions() {
+  if (!fbRoomRef) return;
+  const updates = {};
+  focusRedemptions.forEach(item => {
+    if (item && item.id) updates[`focusRedemptions/r_${item.id}`] = item;
+  });
+  if (Object.keys(updates).length) fbRoomRef.update(updates);
+}
+
 function publishPublicStats() {
   if (!fbDb || !currentUser) return;
   const todayE = getTodayEntries().filter(e => !e.missed && !e.deleted);
@@ -787,7 +821,7 @@ let _partnerUidRef  = null;
 /** Removes all active Firebase room listeners. Call before switching rooms or signing out. */
 function teardownRoomListeners() {
   if (!fbDb || !roomCode) return;
-  const paths = ['timer','entries','intention','devices','settings','breakState','reviews','weeklyReviews','awayState'];
+  const paths = ['timer','entries','intention','devices','settings','breakState','reviews','weeklyReviews','focusRedemptions','awayState'];
   paths.forEach(p => fbDb.ref(`rooms/${roomCode}/${p}`).off());
   fbDb.ref('.info/connected').off();
   if (fbRoomRef) fbRoomRef.off();
