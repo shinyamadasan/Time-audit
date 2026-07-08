@@ -1227,7 +1227,7 @@
 <div class="review-modal">
   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--deep);font-weight:700;margin-bottom:3px">One-time setup</div>
   <div style="font-size:18px;font-weight:700;margin-bottom:6px">Sleep tracking</div>
-  <div style="font-size:12px;color:var(--muted);margin-bottom:16px">ChronaSense will auto-log your sleep daily. Set your usual schedule — you can adjust any day.</div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:16px">ChronaSense will remind you to confirm sleep daily. Set your usual schedule — you can adjust any day.</div>
   <div class="field"><label>I usually fall asleep at</label><input type="time" id="setup-sleep-time" value="23:00"></div>
   <div class="field"><label>I usually wake up at</label><input type="time" id="setup-wake-time" value="07:00"></div>
   <div class="field"><label>Remind me to confirm sleep</label>
@@ -1265,7 +1265,7 @@
 <div class="review-overlay" id="sleep-reminder-overlay" style="display:none">
 <div class="review-modal">
   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--deep);font-weight:700;margin-bottom:3px">Sleep log</div>
-  <div style="font-size:18px;font-weight:700;margin-bottom:16px">Log last night's sleep?</div>
+  <div style="font-size:18px;font-weight:700;margin-bottom:16px">Confirm last night's sleep?</div>
   <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:14px;margin-bottom:14px">
     <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Adjust if needed:</div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -1283,7 +1283,7 @@
   </div>
   <div style="display:flex;gap:8px;justify-content:flex-end">
     <button class="btn ghost" onclick="snoozeSleepReminder()">Snooze 10 min</button>
-    <button class="btn primary" onclick="confirmSleepLog()">Log sleep</button>
+    <button class="btn primary" onclick="confirmSleepLog()">Confirm sleep</button>
   </div>
 </div></div>
 
@@ -2915,17 +2915,16 @@ function saveEntry() {
 function deleteEntry(id) {
   // Tombstone instead of filter — lets Firebase and other devices know this entry is gone.
   // Filtering it out would create a race: the sync listener sees it "missing" locally and re-adds it.
-  const entry = entries.find(e => e.id === id);
-  if (entry) {
-    entry.deleted = true;
-    entry.updatedAt = Date.now();
-  }
+  const entryId = typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : id;
+  const entry = entries.find(e => e.id === entryId);
+  if (!entry) { showToast('Entry not found'); return; }
+  entry.deleted = true;
+  entry.updatedAt = Date.now();
   persist();
-  // Push tombstone to Firebase so other devices stop syncing this entry back
-  if (fbRoomRef && roomCode && entry) {
-    fbDb.ref(`rooms/${roomCode}/entries/e_${id}`).set(entry);
-  }
+  _todayRenderKey = '__FORCE__';
+  syncEntries();
   renderToday(); renderWeek(); renderWeekTable();
+  showToast(`Deleted ${entry.activity || 'entry'}`);
 }
 
 function startSprint() {
@@ -3587,8 +3586,8 @@ function buildEntryRowHTML(e) {
         ${e.onPlan === true ? '<span class="badge onplan">✓</span>' :
           e.onPlan === false ? '<span class="badge offplan">✗</span>' : ''}
       </div>
-      <button class="btn sm ghost" style="padding:3px 7px;font-size:13px;flex-shrink:0;opacity:0.6" onclick="openEditEntry(${e.id})">✎</button>
-      <button class="btn sm ghost" style="padding:3px 7px;font-size:11px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
+      <button class="btn sm ghost" style="padding:3px 7px;font-size:13px;flex-shrink:0;opacity:0.6" onclick="event.stopPropagation(); openEditEntry(${e.id})">✎</button>
+      <button class="btn sm ghost" style="padding:3px 7px;font-size:11px;flex-shrink:0" onclick="event.stopPropagation(); deleteEntry(${e.id})">✕</button>
     </div>
    `;
 }
@@ -5293,8 +5292,8 @@ function renderEntryList(el, entriesArr) {
         <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
       </div>
       <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
-      <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0;font-size:13px;opacity:0.6" onclick="openEditEntry(${e._synthetic ? '' : e.id})" ${e._synthetic ? 'disabled style="opacity:0.2;cursor:default;padding:2px 6px;flex-shrink:0;font-size:13px"' : ''}>✎</button>
-      ${e._synthetic ? '' : `<button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e._pcSub ? String(e.id).replace('_pc','') : e.id})">✕</button>`}
+      <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0;font-size:13px;opacity:0.6" onclick="event.stopPropagation(); openEditEntry(${e._synthetic ? '' : e.id})" ${e._synthetic ? 'disabled style="opacity:0.2;cursor:default;padding:2px 6px;flex-shrink:0;font-size:13px"' : ''}>✎</button>
+      ${e._synthetic ? '' : `<button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="event.stopPropagation(); deleteEntry(${e._pcSub ? String(e.id).replace('_pc','') : e.id})">✕</button>`}
     </div>`;
   }).join('');
 }
@@ -5550,8 +5549,8 @@ function renderWeekTable() {
             <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
           </div>
           <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
-          <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0;font-size:13px;opacity:0.6" onclick="openEditEntry(${e.id})">✎</button>
-          <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="deleteEntry(${e.id})">✕</button>
+          <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0;font-size:13px;opacity:0.6" onclick="event.stopPropagation(); openEditEntry(${e.id})">✎</button>
+          <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="event.stopPropagation(); deleteEntry(${e.id})">✕</button>
         </div>`;
       }).join('')}
     </div>`;
@@ -5978,6 +5977,8 @@ function confirmSleepLog() {
   const sDate = sH > wH2 ? prevDateKey(todayKey) : todayKey;
   const sleepTs = makeDateAtTime(sDate, s);
   const wakeTs  = makeDateAtTime(todayKey, w);
+  const dur = Math.round((wakeTs - sleepTs) / 60000);
+  if (dur >= 11 * 60 && !confirm(`This will log ${fmtSleepDur(sleepTs, wakeTs)} of sleep. Confirm?`)) return;
   localStorage.setItem('ta3-sleep-reminded', toDateKey(new Date()));
   localStorage.removeItem('ta3-sleep-snooze');
   document.getElementById('sleep-reminder-overlay').style.display = 'none';
