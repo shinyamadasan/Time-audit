@@ -803,8 +803,9 @@ function syncFocusRedemptions() {
 function publishPublicStats() {
   if (!fbDb || !currentUser) return;
   const todayE = getTodayEntries().filter(e => !e.missed && !e.deleted);
+  const todayKey = getDateInTZ(Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
   const deepMinsToday = typeof sumEnergyMinutes === 'function'
-    ? sumEnergyMinutes(todayE, 'deep')
+    ? sumEnergyMinutes(todayE, 'deep', todayKey)
     : todayE.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || settings.intervalMin || 30), 0);
   const deepHrsToday = +(deepMinsToday / 60).toFixed(1);
   fbDb.ref(`uid_${currentUser.uid}/public`).set({

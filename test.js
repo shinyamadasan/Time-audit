@@ -33,26 +33,36 @@ function testEntryDurationMinutes(entry, fallbackMin = 30) {
   return entry.blockIntervalMin || fallbackMin;
 }
 
-function sumEntryMinutes(entriesArr, predicate, intervalMin = 30) {
+function sumEntryMinutes(entriesArr, predicate, intervalMin = 30, dateKeyFilter = null) {
   const byDate = new Map();
-  let fallbackTotal = 0;
+  const fallbackMinsByDate = new Map();
   entriesArr.forEach(entry => {
     if (!entry || entry.deleted || entry.missed) return;
     if (predicate && !predicate(entry)) return;
     if (!entry.ts) {
-      fallbackTotal += testEntryDurationMinutes(entry, intervalMin);
+      const fallbackKey = entry.date || null;
+      if (!dateKeyFilter || fallbackKey === dateKeyFilter) {
+        const key = fallbackKey || dateKeyFilter || '__fallback__';
+        fallbackMinsByDate.set(key, (fallbackMinsByDate.get(key) || 0) + testEntryDurationMinutes(entry, intervalMin));
+      }
       return;
     }
     const end = entry.ts;
     const start = entry.tsStart || end - testEntryDurationMinutes(entry, intervalMin) * 60000;
     if (end <= start) return;
-    const dateKey = new Date(start).toISOString().slice(0, 10);
-    const dayStart = Date.parse(dateKey + 'T00:00:00.000Z');
-    const dayEnd = Date.parse(testDateKeyPlusDays(dateKey, 1) + 'T00:00:00.000Z');
-    const clipped = { start: Math.max(start, dayStart), end: Math.min(end, dayEnd) };
-    if (clipped.end <= clipped.start) return;
-    if (!byDate.has(dateKey)) byDate.set(dateKey, []);
-    byDate.get(dateKey).push(clipped);
+    let cursor = start;
+    let guard = 0;
+    while (cursor < end && guard++ < 370) {
+      const dateKey = new Date(cursor).toISOString().slice(0, 10);
+      const dayStart = Date.parse(dateKey + 'T00:00:00.000Z');
+      const dayEnd = Date.parse(testDateKeyPlusDays(dateKey, 1) + 'T00:00:00.000Z');
+      const clipped = { start: Math.max(start, dayStart), end: Math.min(end, dayEnd) };
+      if (clipped.end > clipped.start && (!dateKeyFilter || dateKey === dateKeyFilter)) {
+        if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+        byDate.get(dateKey).push(clipped);
+      }
+      cursor = Math.max(dayEnd, cursor + 60000);
+    }
   });
 
   let totalMs = 0;
@@ -69,11 +79,13 @@ function sumEntryMinutes(entriesArr, predicate, intervalMin = 30) {
     });
     if (current) totalMs += current.end - current.start;
   });
+  let fallbackTotal = 0;
+  fallbackMinsByDate.forEach(mins => { fallbackTotal += mins; });
   return fallbackTotal + Math.round(totalMs / 60000);
 }
 
-function computeDeepHrs(arr, intervalMin = 30) {
-  return +(sumEntryMinutes(arr, e => e.energy === 'deep', intervalMin) / 60).toFixed(1);
+function computeDeepHrs(arr, intervalMin = 30, dateKey = null) {
+  return +(sumEntryMinutes(arr, e => e.energy === 'deep', intervalMin, dateKey) / 60).toFixed(1);
 }
 
 function computeIdentityScore(arr) {
@@ -170,11 +182,20 @@ test('overlapping deep entries count occupied time once', () => {
   ];
   assert.equal(computeDeepHrs(arr), 4.0);
 });
-test('single deep entry is clipped to its start calendar day', () => {
+test('single deep entry splits across calendar days', () => {
   const arr = [
     {energy:'deep', tsStart: Date.UTC(2026, 0, 5, 0), ts: Date.UTC(2026, 0, 6, 4)},
   ];
-  assert.equal(computeDeepHrs(arr), 24.0);
+  assert.equal(computeDeepHrs(arr), 28.0);
+  assert.equal(computeDeepHrs(arr, 30, '2026-01-05'), 24.0);
+  assert.equal(computeDeepHrs(arr, 30, '2026-01-06'), 4.0);
+});
+test('day-specific activity sum caps a 28h entry to that calendar day', () => {
+  const arr = [
+    {activity:'PC Time', energy:'deep', tsStart: Date.UTC(2026, 0, 5, 0), ts: Date.UTC(2026, 0, 6, 4)},
+  ];
+  assert.equal(sumEntryMinutes(arr, e => e.activity === 'PC Time', 30, '2026-01-05'), 24 * 60);
+  assert.equal(sumEntryMinutes(arr, e => e.activity === 'PC Time', 30, '2026-01-06'), 4 * 60);
 });
 
 console.log('\ncomputeIdentityScore(arr)');
