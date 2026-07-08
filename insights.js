@@ -10,6 +10,18 @@
 
 // ── Per-entry feedback flash (called after each log) ──
 
+function _insightMinutes(arr, predicate) {
+  if (typeof sumEntryMinutes === 'function') return sumEntryMinutes(arr, predicate);
+  return (arr || [])
+    .filter(e => !predicate || predicate(e))
+    .reduce((s, e) => s + (e.blockIntervalMin || settings.intervalMin || 30), 0);
+}
+
+function _insightEnergyMinutes(arr, energy) {
+  if (typeof sumEnergyMinutes === 'function') return sumEnergyMinutes(arr, energy);
+  return _insightMinutes(arr, e => e.energy === energy);
+}
+
 function analyzeBehavior(entry, todayE) {
   const tone = settings.coachTone || 'analyst';
   const T = (a, c, m) => ({ analyst: a, coach: c, mirror: m })[tone] || a;
@@ -17,9 +29,9 @@ function analyzeBehavior(entry, todayE) {
   const real = todayE;
   const deepEntries = real.filter(e => e.energy === 'deep');
   const distEntries = real.filter(e => e.energy === 'waste');
-  const deepMin  = deepEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const distMin  = distEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const totalMin = real.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const deepMin  = _insightEnergyMinutes(real, 'deep');
+  const distMin  = _insightEnergyMinutes(real, 'waste');
+  const totalMin = _insightMinutes(real);
   const deepPct  = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
   const distPct  = totalMin > 0 ? Math.round(distMin / totalMin * 100) : 0;
   const hour     = tzHour(Date.now());
@@ -102,7 +114,7 @@ function analyzeBehavior(entry, todayE) {
 
   // === DEEP WORK entries ===
   if (entry.energy === 'deep') {
-    const blockDur = entry.blockIntervalMin || 0;
+    const blockDur = _insightMinutes([entry]);
     const deepHrsStr = deepMin >= 60 ? `${(deepMin/60).toFixed(1)}h` : `${deepMin}m`;
 
     // Just recovered from a distraction streak
@@ -308,10 +320,10 @@ function renderAwarenessSignal() {
   if (!todayE.length && hour < 10) { el.style.display = 'none'; return; }
 
   const real     = todayE;
-  const totalMin = real.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const deepMin  = real.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const distMin  = real.filter(e => e.energy === 'waste').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const recovMin = real.filter(e => e.energy === 'recovery').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const totalMin = _insightMinutes(real);
+  const deepMin  = _insightEnergyMinutes(real, 'deep');
+  const distMin  = _insightEnergyMinutes(real, 'waste');
+  const recovMin = _insightEnergyMinutes(real, 'recovery');
   const deepPct  = totalMin > 0 ? Math.round(deepMin / totalMin * 100) : 0;
   const distPct  = totalMin > 0 ? Math.round(distMin / totalMin * 100) : 0;
   const deepHrs  = (deepMin / 60).toFixed(1);
@@ -587,8 +599,8 @@ function computeInsights(weekKey) {
   const we = getEntriesForWeekKey(weekKey).filter(e => !e.missed);
   if (!we.length) return null;
 
-  const totalMin = we.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-  const minFor = key => we.filter(e => e.energy === key).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const totalMin = _insightMinutes(we);
+  const minFor = key => _insightEnergyMinutes(we, key);
   const deepMin     = minFor('deep');
   const shallowMin  = minFor('shallow');
   const nine5Min    = minFor('nine5');
@@ -634,11 +646,16 @@ function computeInsights(weekKey) {
   // Best day (most deep work)
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const dayBuckets = {};
-  we.filter(e => e.energy === 'deep').forEach(e => {
-    dayBuckets[e.date] = (dayBuckets[e.date] || 0) + (e.blockIntervalMin || 0);
+  we.forEach(e => {
+    const key = getDateInTZ(e.tsStart || e.ts);
+    if (!dayBuckets[key]) dayBuckets[key] = [];
+    dayBuckets[key].push(e);
   });
   let bestDay = '—', bestDayMin = 0;
-  Object.entries(dayBuckets).forEach(([d, m]) => { if (m > bestDayMin) { bestDayMin = m; bestDay = dayNames[new Date(d+'T12:00:00').getDay()]; } });
+  Object.entries(dayBuckets).forEach(([d, dayEntries]) => {
+    const m = _insightEnergyMinutes(dayEntries, 'deep');
+    if (m > bestDayMin) { bestDayMin = m; bestDay = dayNames[new Date(d+'T12:00:00').getDay()]; }
+  });
 
   return { totalMin, deepMin, deepHrs, deepPct, shallowMin, nine5Min, errandsMin, learningMin, exerciseMin, socialMin, recoveryMin, wasteMin,
            productiveMin, wastePct,
