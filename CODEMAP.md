@@ -13,11 +13,11 @@
 | Second `<script>` | 7740–7895 | Onboarding init + phone-usage tracking |
 
 **External files loaded (in order):**
-- `firebase-app-compat.js` / `firebase-database-compat.js` / `firebase-auth-compat.js` — CDN, line 1284–1286
-- `storage.js` — line 1287 → **EXTRACTED** (see below)
-- `insights.js` — line 1288 → **EXTRACTED** (see below)
-- `focus-wallet.js` — line 1289 → **EXTRACTED** (see below)
-- `focus-mode.js` — line 7416 → **EXTRACTED** (see below)
+- `firebase-app-compat.js` / `firebase-database-compat.js` / `firebase-auth-compat.js` — CDN, line 1296–1298
+- `storage.js` — line 1299 → **EXTRACTED** (see below)
+- `insights.js` — line 1300 → **EXTRACTED** (see below)
+- `focus-wallet.js` — line 1301 → **EXTRACTED** (see below)
+- `focus-mode.js` — line 7506 → **EXTRACTED** (see below)
 
 ---
 
@@ -39,7 +39,7 @@ Depends on: `entries` global, `storage.js` helpers
 
 ### focus-wallet.js
 Lines: external file
-Purpose: Pure Focus Wallet scoring rules: compute weekly earned points, waste/sports costs, reward redemption spend, and current balance.
+Purpose: Pure Focus Wallet scoring rules: compute weekly earned points, waste/sports costs, reward redemption spend, carried negative debt, and current balance.
 Functions: `getFocusWalletSettings()`, `getFocusWalletWeekKey()`, `getFocusWalletEntryDurationMin()`, `isFocusWalletSportsEntry()`, `computeFocusWallet()`
 Variables: `DEFAULT_FOCUS_WALLET_SETTINGS`
 Depends on: no app globals; attaches helpers to `globalThis`
@@ -103,7 +103,7 @@ Depends on: —
 
 ## [HTML — Overlays & Modals]
 Lines: 1616–1812
-Purpose: Sign-in overlay, bottom nav, quick-log ping modal, pre-commit modal (task naming before starting timer), daily commitment modal, Focus Wallet spend modal.
+Purpose: Sign-in overlay, bottom nav, quick-log ping modal, pre-commit modal (task naming before starting timer), daily commitment modal, Focus Wallet reward-log modal.
 Functions: —
 Key IDs: `signin-overlay`, `nav`, `quicklog-overlay`, `precommit-overlay`, `commitment-overlay`, `focus-wallet-overlay`
 Depends on: —
@@ -162,11 +162,11 @@ Variables: `dailyCommitment`
 Depends on: `persist()`, `renderToday()`
 
 ## [Focus Wallet]
-Lines: 2161–2268
-Purpose: Weekly Focus Wallet UI bridge: compute current balance from entries/redemptions, render the Today card and spend modal, and store reward purchases.
-Functions: `getCurrentFocusWallet()`, `formatFocusPoints()`, `focusWalletEscape()`, `renderFocusWallet()`, `openFocusWallet()`, `spendFocusPoints()`, `spendCustomFocusPoints()`
+Lines: 2173–2353
+Purpose: Weekly Focus Wallet UI bridge: compute current balance from entries/redemptions, render the Today card and reward modal, create linked time entries + wallet redemptions, and allow negative focus debt.
+Functions: `getCurrentFocusWallet()`, `formatFocusPoints()`, `focusWalletEscape()`, `renderFocusWallet()`, `openFocusWallet()`, `selectFocusRewardPreset()`, `getFocusRewardEndTs()`, `renderFocusRewardPreview()`, `logFocusReward()`
 Variables: `focusRedemptions`
-Depends on: `computeFocusWallet()`, `getDateInTZ()`, `getWeekKey()`, `persist()`, `syncFocusRedemptions()`, `showToast()`
+Depends on: `computeFocusWallet()`, `getDateInTZ()`, `getWeekKey()`, `tzHHMM()`, `tzParseTime()`, `normalizeActivity()`, `getBucket()`, `validateEntry()`, `persist()`, `syncEntries()`, `syncFocusRedemptions()`, `showToast()`
 
 ## [Heartbeat / Session Persistence]
 Lines: 3000–3068
@@ -397,7 +397,7 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Ping sound / ping modal (same-as-last, quick chips) | Ping & Quick-Log Modal | 2555–2960 |
 | Behavioral feedback flash after logging | Ping & Quick-Log Modal | 2555–2960 |
 | Daily deep-work goal / commitment | Daily Commitment / Goal | 2961–2984 |
-| Focus Wallet points / weekend rewards | Focus Wallet + focus-wallet.js | 2161–2268 + EXTRACTED |
+| Focus Wallet points / weekend rewards | Focus Wallet + focus-wallet.js | 2173–2353 + EXTRACTED |
 | Crash/heartbeat recovery on reopen | Heartbeat / Session Persistence | 2985–3065 |
 | Tab switching (Today / Week / Reflect / Settings) | View Management | 3066–3083 |
 | Quick-action preset buttons | Utility — Formatting & Quick Actions | 3084–3160 |

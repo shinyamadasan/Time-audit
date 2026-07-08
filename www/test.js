@@ -356,6 +356,31 @@ test('reward redemptions subtract from the same week balance', () => {
   assert.equal(wallet.balance, 2);
 });
 
+test('reward redemptions can make the balance negative', () => {
+  const wallet = computeFocusWallet([], [
+    { id: 'r1', weekKey: FW_WEEK, label: 'Movie', points: 25, createdAt: walletTs(5, 19) }
+  ], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.redeemed, 25);
+  assert.equal(wallet.balance, -25);
+});
+
+test('negative debt carries forward, but prior surplus does not', () => {
+  const nextWeek = '2026-W03';
+  const debtWallet = computeFocusWallet([
+    walletEntry('d1', 7, 9, 60, 'Build feature', 'deep')
+  ], [
+    { id: 'r1', weekKey: FW_WEEK, label: 'Movie', points: 40, createdAt: walletTs(5, 19) }
+  ], { intervalMin: 30 }, nextWeek);
+  assert.equal(debtWallet.carriedDebt, -40);
+  assert.equal(debtWallet.balance, -23);
+
+  const surplusWallet = computeFocusWallet([
+    walletEntry('d1', 0, 9, 60, 'Build feature', 'deep')
+  ], [], { intervalMin: 30 }, nextWeek);
+  assert.equal(surplusWallet.carriedDebt, 0);
+  assert.equal(surplusWallet.balance, 0);
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed\n`);
