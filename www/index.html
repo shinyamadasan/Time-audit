@@ -1136,24 +1136,36 @@
 <div class="modal">
   <div class="modal-handle"></div>
   <div class="modal-tag">FOCUS WALLET</div>
-  <div class="modal-title">Spend focus points</div>
+  <div class="modal-title">Log reward</div>
   <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:12px;margin-bottom:14px">
     <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Available this week</div>
     <div id="fw-modal-balance" style="font-family:var(--mono);font-size:26px;font-weight:700;color:var(--deep)">0 pts</div>
     <div id="fw-modal-summary" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-    <button class="btn" onclick="spendFocusPoints('Movie',25,'movie')">Movie<br><span style="font-size:11px;color:var(--muted)">25 pts</span></button>
-    <button class="btn" onclick="spendFocusPoints('Night out',60,'night-out')">Night out<br><span style="font-size:11px;color:var(--muted)">60 pts</span></button>
-    <button class="btn" onclick="spendFocusPoints('Extra sports',25,'sports')">Extra sports<br><span style="font-size:11px;color:var(--muted)">25 pts</span></button>
-    <button class="btn" onclick="spendFocusPoints('Small treat',15,'treat')">Small treat<br><span style="font-size:11px;color:var(--muted)">15 pts</span></button>
+  <div style="font-size:11px;color:var(--muted);line-height:1.45;margin-bottom:10px">
+    Pick a default, tweak the time if needed, and log it. Sports are time entries first; wallet cost is automatic after 3 weekly sessions.
   </div>
-  <div class="field"><label>Custom reward</label><input type="text" id="fw-custom-label" placeholder="e.g. dinner with friends"></div>
-  <div class="field"><label>Point cost</label><input type="number" id="fw-custom-points" min="1" step="1" placeholder="e.g. 40"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+    <button class="btn" onclick="selectFocusRewardPreset('Movie',25,120,'recovery','movie')">Movie<br><span style="font-size:11px;color:var(--muted)">2h · 25 pts</span></button>
+    <button class="btn" onclick="selectFocusRewardPreset('Night out',60,180,'social','night-out')">Night out<br><span style="font-size:11px;color:var(--muted)">3h · 60 pts</span></button>
+    <button class="btn" onclick="selectFocusRewardPreset('Pickleball',0,90,'exercise','sports')">Pickleball<br><span style="font-size:11px;color:var(--muted)">90m · auto</span></button>
+    <button class="btn" onclick="selectFocusRewardPreset('Basketball',0,90,'exercise','sports')">Basketball<br><span style="font-size:11px;color:var(--muted)">90m · auto</span></button>
+    <button class="btn" onclick="selectFocusRewardPreset('Small treat',15,30,'recovery','treat')">Small treat<br><span style="font-size:11px;color:var(--muted)">30m · 15 pts</span></button>
+    <button class="btn" onclick="selectFocusRewardPreset('Reward',0,30,'recovery','custom')">Custom<br><span style="font-size:11px;color:var(--muted)">edit below</span></button>
+  </div>
+  <div class="field"><label>Activity</label><input type="text" id="fw-reward-label" placeholder="e.g. movie" oninput="renderFocusRewardPreview()"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div class="field"><label>Duration (min)</label><input type="number" id="fw-reward-duration" min="1" max="720" step="5" oninput="renderFocusRewardPreview()"></div>
+    <div class="field"><label>Ended at</label><input type="time" id="fw-reward-end" oninput="renderFocusRewardPreview()"></div>
+  </div>
+  <div class="field"><label>Point cost</label><input type="number" id="fw-reward-points" min="0" step="1" oninput="renderFocusRewardPreview()"></div>
+  <input type="hidden" id="fw-reward-energy" value="recovery">
+  <input type="hidden" id="fw-reward-category" value="custom">
+  <div id="fw-debt-preview" style="font-size:12px;color:var(--muted);line-height:1.45;margin:-2px 0 12px"></div>
   <div id="fw-recent-breakdown" style="font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:14px"></div>
   <div style="display:flex;gap:8px">
     <button class="btn ghost flex-1" onclick="closeModal('focus-wallet-overlay')">Cancel</button>
-    <button class="btn primary flex-1" onclick="spendCustomFocusPoints()">Spend custom</button>
+    <button class="btn primary flex-1" onclick="logFocusReward()">Log reward</button>
   </div>
 </div></div>
 
@@ -2192,7 +2204,9 @@ function renderFocusWallet() {
   if (!wallet) { card.style.display = 'none'; return; }
 
   card.style.display = 'block';
-  document.getElementById('fw-balance').textContent = formatFocusPoints(wallet.balance);
+  const balanceEl = document.getElementById('fw-balance');
+  balanceEl.textContent = formatFocusPoints(wallet.balance);
+  balanceEl.style.color = wallet.balance < 0 ? 'var(--distraction)' : 'var(--deep)';
   document.getElementById('fw-earned').textContent = formatFocusPoints(wallet.earned);
   document.getElementById('fw-spent').textContent = formatFocusPoints(wallet.spent);
   const sportsFree = Math.min(wallet.sportsSessions, 3);
@@ -2200,15 +2214,21 @@ function renderFocusWallet() {
   document.getElementById('fw-sports').textContent = sportsExtra
     ? `${wallet.sportsSessions} used, ${sportsExtra} paid`
     : `${sportsFree}/3 free`;
-  document.getElementById('fw-note').textContent = wallet.balance > 0
-    ? 'Weekend fun comes from this balance. Deep work fills it; waste and extra sports drain it.'
-    : 'Earn points with focused work before spending on weekend rewards.';
+  document.getElementById('fw-note').textContent = wallet.balance < 0
+    ? `Focus debt: ${formatFocusPoints(Math.abs(wallet.balance))} pts. Log honestly, then earn it back.`
+    : wallet.balance > 0
+      ? 'Weekend fun comes from this balance. Deep work fills it; waste and extra sports drain it.'
+      : 'Log rewards honestly. If balance goes negative, it becomes focus debt.';
 
   const modalBalance = document.getElementById('fw-modal-balance');
-  if (modalBalance) modalBalance.textContent = `${formatFocusPoints(wallet.balance)} pts`;
+  if (modalBalance) {
+    modalBalance.textContent = `${formatFocusPoints(wallet.balance)} pts`;
+    modalBalance.style.color = wallet.balance < 0 ? 'var(--distraction)' : 'var(--deep)';
+  }
   const modalSummary = document.getElementById('fw-modal-summary');
   if (modalSummary) {
-    modalSummary.textContent = `Earned ${formatFocusPoints(wallet.earned)} · spent/costs ${formatFocusPoints(wallet.spent)} · week ${wallet.weekKey}`;
+    const debt = wallet.carriedDebt < 0 ? ` · carried debt ${formatFocusPoints(wallet.carriedDebt)}` : '';
+    modalSummary.textContent = `Earned ${formatFocusPoints(wallet.earned)} · spent/costs ${formatFocusPoints(wallet.spent)}${debt} · week ${wallet.weekKey}`;
   }
   const recent = document.getElementById('fw-recent-breakdown');
   if (recent) {
@@ -2217,49 +2237,119 @@ function renderFocusWallet() {
       ? rows.map(row => `<div style="display:flex;justify-content:space-between;gap:10px"><span>${focusWalletEscape(row.label)}</span><span style="font-family:var(--mono);color:${row.points >= 0 ? 'var(--deep)' : 'var(--distraction)'}">${row.points > 0 ? '+' : ''}${formatFocusPoints(row.points)}</span></div>`).join('')
       : 'No wallet activity yet this week.';
   }
+  renderFocusRewardPreview();
 }
 
 function openFocusWallet() {
+  if (!document.getElementById('fw-reward-label')?.value) {
+    selectFocusRewardPreset('Movie', 25, 120, 'recovery', 'movie');
+  } else {
+    const endEl = document.getElementById('fw-reward-end');
+    if (endEl) endEl.value = tzHHMM(Date.now());
+  }
   renderFocusWallet();
   document.getElementById('focus-wallet-overlay').classList.add('open');
 }
 
-function spendFocusPoints(label, points, category) {
-  const cost = Number(points);
-  if (!Number.isFinite(cost) || cost <= 0) { showToast('Enter a valid point cost'); return false; }
-  const wallet = getCurrentFocusWallet();
-  if (!wallet) return false;
-  if (wallet.balance < cost) {
-    showToast(`Need ${formatFocusPoints(cost - wallet.balance)} more focus points`);
-    return false;
-  }
-  const now = Date.now();
-  focusRedemptions.push({
-    id: `${now}_${Math.random().toString(36).slice(2, 8)}`,
-    weekKey: wallet.weekKey,
-    label: label || 'Reward',
-    category: category || 'reward',
-    points: cost,
-    createdAt: now,
-    updatedAt: now
-  });
-  persist();
-  if (typeof syncFocusRedemptions === 'function') syncFocusRedemptions();
-  renderFocusWallet();
-  closeModal('focus-wallet-overlay');
-  showToast(`Spent ${formatFocusPoints(cost)} pts on ${label || 'reward'}`);
-  return true;
+function selectFocusRewardPreset(label, points, durationMin, energy, category) {
+  document.getElementById('fw-reward-label').value = label || '';
+  document.getElementById('fw-reward-points').value = Number(points || 0);
+  document.getElementById('fw-reward-duration').value = Number(durationMin || 30);
+  document.getElementById('fw-reward-energy').value = energy || 'recovery';
+  document.getElementById('fw-reward-category').value = category || 'custom';
+  document.getElementById('fw-reward-end').value = tzHHMM(Date.now());
+  renderFocusRewardPreview();
 }
 
-function spendCustomFocusPoints() {
-  const labelEl = document.getElementById('fw-custom-label');
-  const pointsEl = document.getElementById('fw-custom-points');
-  const label = labelEl.value.trim() || 'Custom reward';
-  const points = Number(pointsEl.value);
-  if (spendFocusPoints(label, points, 'custom')) {
-    if (labelEl) labelEl.value = '';
-    if (pointsEl) pointsEl.value = '';
+function getFocusRewardEndTs() {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const endVal = document.getElementById('fw-reward-end').value;
+  if (!endVal) return Date.now();
+  let tsEnd = tzParseTime(todayKey, endVal);
+  if (tsEnd > Date.now() + 60000) tsEnd -= 86400000;
+  return Math.min(tsEnd, Date.now());
+}
+
+function renderFocusRewardPreview() {
+  const preview = document.getElementById('fw-debt-preview');
+  if (!preview) return;
+  const wallet = getCurrentFocusWallet();
+  if (!wallet) return;
+  const cost = Number(document.getElementById('fw-reward-points')?.value || 0);
+  const duration = Number(document.getElementById('fw-reward-duration')?.value || 0);
+  const after = wallet.balance - Math.max(0, Number.isFinite(cost) ? cost : 0);
+  const durationText = duration > 0 ? `${formatFocusPoints(duration)} min` : 'set a duration';
+  preview.style.color = after < 0 ? 'var(--distraction)' : 'var(--muted)';
+  preview.textContent = after < 0
+    ? `This logs ${durationText} and leaves ${formatFocusPoints(Math.abs(after))} pts of focus debt.`
+    : `This logs ${durationText}. Balance after: ${formatFocusPoints(after)} pts.`;
+}
+
+function logFocusReward() {
+  const label = normalizeActivity(document.getElementById('fw-reward-label').value.trim());
+  if (!label) { showToast('Name the reward'); return false; }
+  const durationMin = Math.round(Number(document.getElementById('fw-reward-duration').value));
+  if (!Number.isFinite(durationMin) || durationMin < 1) { showToast('Enter a valid duration'); return false; }
+  const points = Math.max(0, Number(document.getElementById('fw-reward-points').value || 0));
+  if (!Number.isFinite(points)) { showToast('Enter a valid point cost'); return false; }
+
+  const energy = document.getElementById('fw-reward-energy').value || 'recovery';
+  const category = document.getElementById('fw-reward-category').value || 'custom';
+  const tsEnd = getFocusRewardEndTs();
+  const tsStart = tsEnd - durationMin * 60000;
+  const now = Date.now();
+  const entryId = now;
+  const dateKey = getDateInTZ(tsStart, settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const entry = {
+    id: entryId,
+    ts: tsEnd,
+    tsStart,
+    blockIntervalMin: durationMin,
+    date: dateKey,
+    activity: label,
+    energy,
+    onPlan: energy !== 'waste' && energy !== 'distraction',
+    retro: true,
+    walletReward: true,
+    walletCategory: category,
+    walletPoints: points,
+    updatedAt: now
+  };
+  entry.category = getBucket(entry);
+  entry.originalLabel = entry.energy || null;
+  validateEntry(entry);
+  entries.push(entry);
+  getActivityColor(label);
+
+  let redemption = null;
+  if (points > 0) {
+    const weekKey = getWeekKey(new Date(dateKey + 'T12:00:00Z'));
+    redemption = {
+      id: `${now}_${Math.random().toString(36).slice(2, 8)}`,
+      weekKey,
+      entryId,
+      label,
+      category,
+      points,
+      happenedAt: tsEnd,
+      createdAt: now,
+      updatedAt: now
+    };
+    focusRedemptions.push(redemption);
   }
+
+  entries.sort((a, b) => b.ts - a.ts);
+  _lastLoggedEntryId = entry.id;
+  persist();
+  renderToday();
+  syncEntries();
+  if (redemption && typeof syncFocusRedemptions === 'function') syncFocusRedemptions();
+  closeModal('focus-wallet-overlay');
+  const wallet = getCurrentFocusWallet();
+  const debt = wallet && wallet.balance < 0 ? ` · ${formatFocusPoints(Math.abs(wallet.balance))} pts debt` : '';
+  showToast(`Logged ${label} · ${fmtDur(durationMin)}${points ? ` · ${formatFocusPoints(points)} pts` : ''}${debt}`);
+  return true;
 }
 
 // ══════════════════════════════════════════════════════
