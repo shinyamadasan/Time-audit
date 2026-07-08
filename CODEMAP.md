@@ -333,7 +333,7 @@ Depends on: `entries`, `persist()`, `syncEntries()`, `renderToday()`
 Lines: 7202–7228
 Purpose: Service Worker registration, PWA install-prompt banner, iOS install hint, `beforeinstallprompt` capture.
 Functions: `showInstallBanner()`, `installApp()`, `dismissInstall()`
-Variables: `swCode`, `isIOS`, `isStandalone`, `installDismissed`, `deferredPrompt`, `_swReg`
+Variables: `isIOS`, `isStandalone`, `installDismissed`, `deferredPrompt`, `_swReg`
 Depends on: Service Worker scheduler section
 
 ## [Voice Input]

@@ -1,8 +1,9 @@
 // ChronaSense Service Worker
 // Handles background ping notifications and audio asset caching
 
-const SW_VERSION = '1.1.0';
+const SW_VERSION = '1.1.1';
 const AUDIO_CACHE = 'chrona-audio-v1';
+const OLD_APP_SHELL_CACHE = 'ta3-sw';
 
 let _pingTimer = null;
 
@@ -98,10 +99,14 @@ self.addEventListener('fetch', event => {
 // ── Install & activate ────────────────────────────────────
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => {
-  // Clean up old audio caches on SW update
+  // Clean up old audio caches and the retired inline app-shell cache.
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k.startsWith('chrona-audio-') && k !== AUDIO_CACHE).map(k => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter(k => k === OLD_APP_SHELL_CACHE || (k.startsWith('chrona-audio-') && k !== AUDIO_CACHE))
+          .map(k => caches.delete(k))
+      )
     ).then(() => clients.claim())
   );
 });
