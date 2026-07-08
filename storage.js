@@ -584,6 +584,7 @@ function startSync() {
         changed = true;
       } else {
         // Conflict: prefer whichever version is newer (deleted flag propagates too)
+        if (local.deleted && !re.deleted) return;
         const remoteV = re.updatedAt || re.ts || 0;
         const localV  = local.updatedAt || local.ts || 0;
         if (remoteV > localV) {

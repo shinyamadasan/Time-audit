@@ -2967,8 +2967,8 @@ function getViewingDateKey() {
 function getViewingEntries() {
   return getEntriesForDateWindow(getViewingDateKey());
 }
-function clipEntryToDateForDisplay(entry, dateKey) {
-  if (!entry || entry.deleted) return null;
+function clipEntryToDateForDisplay(entry, dateKey, includeDeleted = false) {
+  if (!entry || (entry.deleted && !includeDeleted)) return null;
   const range = entryTimeRange(entry);
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   if (!range) {
@@ -2989,8 +2989,8 @@ function clipEntryToDateForDisplay(entry, dateKey) {
     _clippedToDate: dateKey
   };
 }
-function getEntriesForDateWindow(dateKey) {
-  return entries.map(e => clipEntryToDateForDisplay(e, dateKey)).filter(Boolean);
+function getEntriesForDateWindow(dateKey, includeDeleted = false) {
+  return entries.map(e => clipEntryToDateForDisplay(e, dateKey, includeDeleted)).filter(Boolean);
 }
 function isViewingToday() {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -6734,7 +6734,7 @@ function generateTemplateEntries(dateKey) {
   if (dateKey < cutoff) return [];
   const noon = tzParseTime(dateKey, '12:00');
   const dow = tzDow(noon);
-  const realEntries = getEntriesForDateWindow(dateKey).filter(e => !e.deleted && !e.missed);
+  const dayEntries = getEntriesForDateWindow(dateKey, true).filter(e => !e.missed);
   const result = [];
   for (const tpl of settings.templates) {
     if (!tpl.enabled) continue;
@@ -6745,7 +6745,12 @@ function generateTemplateEntries(dateKey) {
     // Only hide the template when logged entries cover ≥50% of its duration.
     // A small incidental overlap (e.g. a browser-extension PC-time snippet) won't suppress it.
     const tplDur = tsEnd - tsStart;
-    const covered = realEntries.reduce((acc, e) => {
+    const tplActivity = normalizeActivity(tpl.activity || '');
+    const coveringEntries = dayEntries.filter(e => {
+      if (!e.deleted) return true;
+      return normalizeActivity(e.activity || '') === tplActivity && e.energy === tpl.energy;
+    });
+    const covered = coveringEntries.reduce((acc, e) => {
       const eS = Math.max(tsStart, e.tsStart || (e.ts - (e.blockIntervalMin || settings.intervalMin) * 60000));
       const eE = Math.min(tsEnd, e.ts);
       return acc + Math.max(0, eE - eS);

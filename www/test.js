@@ -41,8 +41,8 @@ function testEntryTimeRange(entry, fallbackMin = 30) {
   return { start, end };
 }
 
-function clipEntryToDateForDisplay(entry, dateKey, intervalMin = 30) {
-  if (!entry || entry.deleted) return null;
+function clipEntryToDateForDisplay(entry, dateKey, intervalMin = 30, includeDeleted = false) {
+  if (!entry || (entry.deleted && !includeDeleted)) return null;
   const range = testEntryTimeRange(entry, intervalMin);
   if (!range) return entry.date === dateKey ? entry : null;
   const dayStart = Date.parse(dateKey + 'T00:00:00.000Z');
@@ -60,8 +60,8 @@ function clipEntryToDateForDisplay(entry, dateKey, intervalMin = 30) {
   };
 }
 
-function getEntriesForDateWindow(entriesArr, dateKey, intervalMin = 30) {
-  return entriesArr.map(e => clipEntryToDateForDisplay(e, dateKey, intervalMin)).filter(Boolean);
+function getEntriesForDateWindow(entriesArr, dateKey, intervalMin = 30, includeDeleted = false) {
+  return entriesArr.map(e => clipEntryToDateForDisplay(e, dateKey, intervalMin, includeDeleted)).filter(Boolean);
 }
 
 function todayRenderKey(dateKey, entriesArr) {
@@ -246,6 +246,15 @@ test('date window clips a crossing entry for each viewed day', () => {
   assert.equal(mon[0].ts, Date.UTC(2026, 0, 6, 0));
   assert.equal(tue[0].tsStart, Date.UTC(2026, 0, 6, 0));
   assert.equal(tue[0].ts, Date.UTC(2026, 0, 6, 4));
+});
+test('date window only includes deleted entries when explicitly requested', () => {
+  const arr = [
+    {id:1, activity:'Sleep', energy:'recovery', deleted:true, tsStart: Date.UTC(2026, 0, 5, 0), ts: Date.UTC(2026, 0, 5, 12)},
+  ];
+  assert.equal(getEntriesForDateWindow(arr, '2026-01-05').length, 0);
+  const withDeleted = getEntriesForDateWindow(arr, '2026-01-05', 30, true);
+  assert.equal(withDeleted.length, 1);
+  assert.equal(withDeleted[0].activity, 'Sleep');
 });
 test('today render key changes between clipped views of the same saved entry', () => {
   const arr = [
