@@ -3023,7 +3023,70 @@ function toggleDatePicker() {
   dd.style.display = 'block';
 }
 function computeDeepScore(arr){return arr.length?Math.round(arr.filter(e=>e.energy==='deep').length/arr.length*100):0;}
-function computeDeepHrs(arr){return +(arr.filter(e=>e.energy==='deep').length*(settings.intervalMin/60)).toFixed(1);}
+function _dateKeyPlusDays(dateKey, days) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0)).toISOString().slice(0, 10);
+}
+function entryDurationMinutes(entry, fallbackMin) {
+  const fallback = fallbackMin || settings.intervalMin || 30;
+  if (!entry) return fallback;
+  if (entry.tsStart && entry.ts && entry.ts > entry.tsStart) {
+    return Math.max(1, Math.round((entry.ts - entry.tsStart) / 60000));
+  }
+  if (Array.isArray(entry.segments) && entry.segments.length) {
+    const seconds = entry.segments.reduce((sum, seg) => sum + (Number(seg.duration) || 0), 0);
+    if (seconds > 0) return Math.max(1, Math.round(seconds / 60));
+  }
+  const stored = Number(entry.blockIntervalMin);
+  return Number.isFinite(stored) && stored > 0 ? Math.round(stored) : fallback;
+}
+function entryTimeRange(entry, fallbackMin) {
+  if (!entry || !entry.ts) return null;
+  const end = Number(entry.ts);
+  const start = entry.tsStart ? Number(entry.tsStart) : end - entryDurationMinutes(entry, fallbackMin) * 60000;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return { start, end };
+}
+function sumEntryMinutes(arr, predicate) {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const byDate = new Map();
+  (arr || []).forEach(entry => {
+    if (!entry || entry.deleted || entry.missed) return;
+    if (predicate && !predicate(entry)) return;
+    const range = entryTimeRange(entry);
+    if (!range) return;
+    const dateKey = getDateInTZ(range.start, tz);
+    const dayStart = tzParseTime(dateKey, '00:00');
+    const dayEnd = tzParseTime(_dateKeyPlusDays(dateKey, 1), '00:00');
+    const start = Math.max(range.start, dayStart);
+    const end = Math.min(range.end, dayEnd);
+    if (end <= start) return;
+    if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+    byDate.get(dateKey).push({ start, end });
+  });
+
+  let totalMs = 0;
+  byDate.forEach(intervals => {
+    intervals.sort((a, b) => a.start - b.start);
+    let cur = null;
+    intervals.forEach(interval => {
+      if (!cur) {
+        cur = { ...interval };
+      } else if (interval.start <= cur.end) {
+        cur.end = Math.max(cur.end, interval.end);
+      } else {
+        totalMs += cur.end - cur.start;
+        cur = { ...interval };
+      }
+    });
+    if (cur) totalMs += cur.end - cur.start;
+  });
+  return Math.round(totalMs / 60000);
+}
+function sumEnergyMinutes(arr, energy) {
+  return sumEntryMinutes(arr, e => e.energy === energy);
+}
+function computeDeepHrs(arr){return +(sumEnergyMinutes(arr, 'deep')/60).toFixed(1);}
 function _buildEntriesByDate(tz) {
   const map = new Map();
   for (const e of entries) {
@@ -3704,8 +3767,7 @@ function getContextualPrompt(todayE) {
 
   const realEntries = todayE.filter(e => !e.missed && !e.deleted);
   const deepEntries = realEntries.filter(e => e.energy === 'deep');
-  const deepMins = deepEntries.reduce((s, e) =>
-    s + (e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || settings.intervalMin || 30)), 0);
+  const deepMins = sumEnergyMinutes(realEntries, 'deep');
   const deepHrs = deepMins / 60;
   const dailyGoalHrs = getDailyGoalHrs();
   const hasGoal = (settings.deepGoal || 0) > 0;
@@ -3866,12 +3928,8 @@ function renderStatusBanner(todayE) {
     return;
   }
 
-  // Actual deep minutes from real entry durations
-  const deepMins = todayE
-    .filter(e => e.energy === 'deep' && !e.missed && !e.deleted && !e.break && !e.away)
-    .reduce((s, e) => s + (e.tsStart
-      ? Math.round((e.ts - e.tsStart) / 60000)
-      : (e.blockIntervalMin || settings.intervalMin || 30)), 0);
+  // Actual deep minutes from real entry durations, with overlaps counted once.
+  const deepMins = sumEnergyMinutes(todayE.filter(e => !e.break && !e.away), 'deep');
   const deepHrs = deepMins / 60;
 
   // Daily goal = weekly goal / 5
@@ -3997,7 +4055,7 @@ function renderSidePanel() {
   // ── Status card (goal progress + day bar) ──
   const spStatus = document.getElementById('sp-status-content');
   if (spStatus) {
-    const deepMins = todayE.filter(e=>e.energy==='deep').reduce((s,e)=>s+(e.blockIntervalMin||0),0);
+    const deepMins = sumEnergyMinutes(todayE, 'deep');
     const dailyGoalMins = getDailyGoalMins();
     const pct = dailyGoalMins>0 ? Math.min(100,Math.round(deepMins/dailyGoalMins*100)) : 0;
     const deepStr = deepMins>=60?`${(deepMins/60).toFixed(1)}h`:`${deepMins}m`;
@@ -4061,9 +4119,7 @@ function renderSidePanel() {
   for (let i = 6; i >= 0; i--) {
     const k = getDateInTZ(Date.now() - i * 86400000, tz);
     const dayE = byDate.get(k) || [];
-    const deepMins = dayE
-      .filter(e => e.energy === 'deep' || e.energy === 'learning')
-      .reduce((s, e) => s + (e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 0)), 0);
+    const deepMins = sumEntryMinutes(dayE, e => e.energy === 'deep' || e.energy === 'learning');
     const dow = new Date(k + 'T12:00:00').getDay();
     bars.push({deepMins, label: weekDays[dow], isToday: k === todayKey});
   }
@@ -4960,7 +5016,7 @@ function selectWeekDay(key) {
 
 function renderMonthOverview(monthE, monthDate) {
   const deepHrs = computeDeepHrs(monthE);
-  const totalMins = monthE.reduce((s,e)=>s+entryMins(e),0);
+  const totalMins = sumEntryMinutes(monthE);
   const onPlanE = monthE.filter(e=>e.onPlan!==null);
   const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
   const distractionCost = Math.round(monthE.filter(e=>e.energy==='distraction').reduce((s,e)=>s+entryMins(e),0)/60*settings.targetRate);
@@ -4974,7 +5030,7 @@ function renderMonthOverview(monthE, monthDate) {
   for (let i=1; i<=daysInMonth; i++) {
     const key = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
     const dayE = entries.filter(e=>!e.missed&&!e.away&&!e.deleted&&getDateInTZ(e.tsStart||e.ts)===key);
-    const totalH = dayE.reduce((s,e)=>s+entryMins(e),0)/60;
+    const totalH = sumEntryMinutes(dayE)/60;
     const deepH = computeDeepHrs(dayE);
     if (totalH > maxDayH) maxDayH = totalH;
     dayBars.push({i, key, totalH, deepH, isToday:key===today, isFuture:key>today, hasData:dayE.length>0});
@@ -5212,7 +5268,7 @@ function renderWeekOverview(days) {
   const weekE = getWeekEntries(weekRangeOffset).filter(e=>!e.missed);
   const goal = settings.deepGoal;
   const deepHrs = computeDeepHrs(weekE);
-  const totalMins = weekE.reduce((s,e)=>s+entryMins(e),0);
+  const totalMins = sumEntryMinutes(weekE);
   const pct = Math.min(100,Math.round(deepHrs/goal*100));
   const onPlanE = weekE.filter(e=>e.onPlan!==null);
   const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
@@ -5220,7 +5276,7 @@ function renderWeekOverview(days) {
   const bestDay = days.reduce((a,b)=>b.entries.length&&computeDeepHrs(b.entries)>computeDeepHrs(a.entries)?b:a, days[0]);
   const activeDays = days.filter(d=>d.entries.length);
   const avgDeep = activeDays.length?(Math.round(activeDays.reduce((s,d)=>s+computeDeepHrs(d.entries),0)/activeDays.length*10)/10).toFixed(1)+'h':'—';
-  const maxTotal = Math.max(...days.map(d=>d.entries.reduce((s,e)=>s+entryMins(e),0)/60),0.5);
+  const maxTotal = Math.max(...days.map(d=>sumEntryMinutes(d.entries)/60),0.5);
 
   const content = document.getElementById('week-content');
   content.innerHTML = `
@@ -5260,11 +5316,11 @@ function renderWeekOverview(days) {
           ];
           const focusKeys = new Set(FOCUS.map(f=>f.k));
           const maxFocusH = Math.max(...days.map(d=>
-            d.entries.filter(e=>!e.missed&&focusKeys.has(e.energy)).reduce((s,e)=>s+entryMins(e),0)/60
+            sumEntryMinutes(d.entries, e => !e.missed && focusKeys.has(e.energy))/60
           ), 0.5);
           return days.map(d=>{
             const focusEntries = d.entries.filter(e=>!e.missed&&focusKeys.has(e.energy));
-            const focusH = focusEntries.reduce((s,e)=>s+entryMins(e),0)/60;
+            const focusH = sumEntryMinutes(focusEntries)/60;
             const barH = Math.max(focusH>0?8:3, Math.round(focusH/maxFocusH*72));
             const energyMins = {};
             focusEntries.forEach(e=>{ energyMins[e.energy]=(energyMins[e.energy]||0)+entryMins(e); });
@@ -5357,10 +5413,10 @@ function renderWeekOverview(days) {
 function renderDayDetail(day) {
   const dayE = day.entries.filter(e=>!e.missed);
   const deepHrs = computeDeepHrs(dayE);
-  const totalMins = dayE.reduce((s,e)=>s+entryMins(e),0);
+  const totalMins = sumEntryMinutes(dayE);
   const onPlanE = dayE.filter(e=>e.onPlan!==null);
   const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
-  const distractionMins = dayE.filter(e=>e.energy==='distraction').reduce((s,e)=>s+entryMins(e),0);
+  const distractionMins = sumEntryMinutes(dayE, e => e.energy === 'waste' || e.energy === 'distraction');
 
   // Time-of-day pattern: morning (before 12), afternoon (12-17), evening (17+)
   function blockHour(e) { return tzHour(e.tsStart||e.ts); }
@@ -5441,7 +5497,7 @@ function renderWeekTable() {
     const dayDate = new Date(dateKey+'T12:00:00');
     const dayLabel = dayDate.toLocaleDateString([],{weekday:'long',month:'short',day:'numeric'});
     const dayDeep = computeDeepHrs(dayEntries);
-    const dayTotal = (Math.round(dayEntries.reduce((s,e)=>s+entryMins(e),0)/60*10)/10).toFixed(1);
+    const dayTotal = (Math.round(sumEntryMinutes(dayEntries)/60*10)/10).toFixed(1);
     return `<div style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:6px;cursor:pointer" onclick="selectWeekDay('${dateKey}')">
         <div style="font-size:12px;font-weight:700">${dayLabel} <span style="font-size:10px;color:var(--muted);font-weight:400">— tap for detail</span></div>
@@ -6016,10 +6072,10 @@ function computeDailySummary(dateKey) {
   const dayEntries = entries.filter(e => !e.missed && !e.deleted && getDateInTZ(e.tsStart || e.ts) === dateKey);
   if (!dayEntries.length) return null;
 
-  const totalMin = dayEntries.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const totalMin = sumEntryMinutes(dayEntries);
   if (totalMin === 0) return null;
 
-  const minFor = key => dayEntries.filter(e => e.energy === key).reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+  const minFor = key => sumEnergyMinutes(dayEntries, key);
   const nine5Min    = minFor('nine5');
   const deepMin     = minFor('deep');
   const shallowMin  = minFor('shallow');
@@ -6047,7 +6103,7 @@ function computeDailySummary(dateKey) {
   const hourBuckets = {};
   dayEntries.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
     const hr = tzHour(e.tsStart);
-    hourBuckets[hr] = (hourBuckets[hr] || 0) + (e.blockIntervalMin || 0);
+    hourBuckets[hr] = (hourBuckets[hr] || 0) + entryDurationMinutes(e);
   });
   let peakHour = null, peakHourMin = 0;
   Object.entries(hourBuckets).forEach(([h, m]) => {
@@ -6112,9 +6168,9 @@ function renderStreakCalendar() {
     const ts = Date.now() - i * 86400000;
     const key = getDateInTZ(ts, tz);
     const dayE = byDate.get(key) || [];
-    const deepMins = dayE.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-    const wasteMins = dayE.filter(e => e.energy === 'waste').reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
-    const totalMins = dayE.reduce((s, e) => s + (e.blockIntervalMin || 0), 0);
+    const deepMins = sumEnergyMinutes(dayE, 'deep');
+    const wasteMins = sumEnergyMinutes(dayE, 'waste');
+    const totalMins = sumEntryMinutes(dayE);
     const pct = dailyGoalMins > 0 ? deepMins / dailyGoalMins : 0;
     const wasteHeavy = totalMins > 0 && wasteMins / totalMins > 0.3;
     let bg;

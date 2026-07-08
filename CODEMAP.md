@@ -17,7 +17,7 @@
 - `storage.js` — line 1299 → **EXTRACTED** (see below)
 - `insights.js` — line 1300 → **EXTRACTED** (see below)
 - `focus-wallet.js` — line 1301 → **EXTRACTED** (see below)
-- `focus-mode.js` — line 7506 → **EXTRACTED** (see below)
+- `focus-mode.js` — line 7562 → **EXTRACTED** (see below)
 
 ---
 
@@ -28,14 +28,14 @@ Lines: external file
 Purpose: All localStorage/Firebase persistence, data loading, and cross-device sync helpers.
 Functions: `persist()`, `syncEntries()`, `syncFocusRedemptions()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
 Variables: (managed internally)
-Depends on: Firebase SDK globals, `focusRedemptions` global
+Depends on: Firebase SDK globals, `focusRedemptions` global, `sumEnergyMinutes()`
 
 ### insights.js
 Lines: external file
 Purpose: Weekly insight computation (deep hours, waste patterns, best day, peak hour).
 Functions: `computeInsights(weekKey)`
 Variables: (managed internally)
-Depends on: `entries` global, `storage.js` helpers
+Depends on: `entries` global, `storage.js` helpers, `sumEntryMinutes()`, `sumEnergyMinutes()`
 
 ### focus-wallet.js
 Lines: external file
@@ -204,9 +204,9 @@ Variables: `viewingDateKey`
 Depends on: `entries`, `getDateInTZ()`, `renderToday()`
 
 ## [Statistics & Scoring]
-Lines: 3614–3662
-Purpose: Per-array metrics: deep score %, deep hours, consecutive-day streaks, identity score + level label.
-Functions: `computeDeepScore()`, `computeDeepHrs()`, `computeStreak()`, `computeCleanStreak()`, `computeIdentityScore()`, `getIdentityLevelWithEmoji()`
+Lines: 3025–3124
+Purpose: Per-array metrics: deep score %, overlap-safe duration/deep-hour helpers, consecutive-day streaks, identity score + level label.
+Functions: `computeDeepScore()`, `_dateKeyPlusDays()`, `entryDurationMinutes()`, `entryTimeRange()`, `sumEntryMinutes()`, `sumEnergyMinutes()`, `computeDeepHrs()`, `computeStreak()`, `computeCleanStreak()`, `computeIdentityScore()`, `getIdentityLevelWithEmoji()`
 Variables: —
 Depends on: `entries`, `getDateInTZ()`, `toDateKey()`
 
@@ -225,11 +225,11 @@ Variables: —
 Depends on: `entries`, `settings` (timezone)
 
 ## [Today View — Rendering]
-Lines: 3854–4776
+Lines: 3923–4292
 Purpose: Main `renderToday()` and all its sub-renders: day bar, status banner, Focus Wallet card, timeline (blocks + gaps), stat cards, recent entries list, contextual-visibility rules, hero state machine, same-as-last CTA, awareness signal, side-panel refresh trigger.
 Functions: `renderToday()`, `renderDayBar()`, `renderStatusBanner()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderSidePanel()`, `renderLeftPanel()`
 Variables: `_todayRenderKey`, `_lastLoggedEntryId`
-Depends on: Timeline helpers, Statistics, Entry logging, Date picker, Focus Wallet, `persist()`, `renderStreakCalendar()`, `renderFocusHeatmap()`
+Depends on: Timeline helpers, Statistics (including `sumEntryMinutes()` / `sumEnergyMinutes()`), Entry logging, Date picker, Focus Wallet, `persist()`, `renderStreakCalendar()`, `renderFocusHeatmap()`
 
 ## [Hero Prompt & Task Suggestions]
 Lines: 4777–4895
@@ -404,11 +404,11 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Retro log modal (energy, time range, save, edit, delete) | Entry Logging & Editing | 3088–3521 |
 | Timeline gap detection / overlap clipping | Timeline Helpers | 3706–3853 |
 | Browse yesterday / past days | Date Picker & Navigation | 3547–3613 |
-| Streak count / deep hours % / identity score | Statistics & Scoring | 3614–3662 |
+| Streak count / deep hours % / identity score | Statistics & Scoring | 3025–3124 |
 | Custom activity colors | Activity Color Management | 3663–3705 |
-| Today view full re-render | Today View — Rendering | 3854–4776 |
-| Day bar (colored hour-by-hour bar) | Today View — Rendering | 3854–4776 |
-| Status banner (deep today / time left / to goal) | Today View — Rendering | 3854–4776 |
+| Today view full re-render | Today View — Rendering | 3923–4292 |
+| Day bar (colored hour-by-hour bar) | Today View — Rendering | 3923–4292 |
+| Status banner (deep today / time left / to goal) | Today View — Rendering | 3923–4292 |
 | Desktop right panel (goal, energy, week bars) | Today View — Rendering → `renderSidePanel()` | ~4468 |
 | Desktop left panel (streak calendar) | Today View — Rendering → `renderLeftPanel()` | ~4417 |
 | Hero task input / start-from-hero | Hero Prompt & Task Suggestions | 4777–4895 |

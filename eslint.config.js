@@ -42,6 +42,7 @@ export default [
         getDailyGoalHrs: 'readonly', getDailyGoalMins: 'readonly',
         getWeeklyGoalMins: 'readonly', getWorkDayStartTs: 'readonly',
         getTodayEntries: 'readonly', getEntriesForWeekKey: 'readonly',
+        sumEntryMinutes: 'readonly', sumEnergyMinutes: 'readonly',
         persist: 'readonly', syncEntries: 'readonly',
         fmtDur: 'readonly', getActivityColor: 'readonly', resetTimer: 'readonly',
         buildHeroSuggestions: 'readonly', buildSugItem: 'readonly',

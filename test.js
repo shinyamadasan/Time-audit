@@ -21,8 +21,59 @@ function computeDeepScore(arr) {
   return arr.length ? Math.round(arr.filter(e => e.energy === 'deep').length / arr.length * 100) : 0;
 }
 
+function testDateKeyPlusDays(dateKey, days) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0)).toISOString().slice(0, 10);
+}
+
+function testEntryDurationMinutes(entry, fallbackMin = 30) {
+  if (entry.tsStart && entry.ts && entry.ts > entry.tsStart) {
+    return Math.max(1, Math.round((entry.ts - entry.tsStart) / 60000));
+  }
+  return entry.blockIntervalMin || fallbackMin;
+}
+
+function sumEntryMinutes(entriesArr, predicate, intervalMin = 30) {
+  const byDate = new Map();
+  let fallbackTotal = 0;
+  entriesArr.forEach(entry => {
+    if (!entry || entry.deleted || entry.missed) return;
+    if (predicate && !predicate(entry)) return;
+    if (!entry.ts) {
+      fallbackTotal += testEntryDurationMinutes(entry, intervalMin);
+      return;
+    }
+    const end = entry.ts;
+    const start = entry.tsStart || end - testEntryDurationMinutes(entry, intervalMin) * 60000;
+    if (end <= start) return;
+    const dateKey = new Date(start).toISOString().slice(0, 10);
+    const dayStart = Date.parse(dateKey + 'T00:00:00.000Z');
+    const dayEnd = Date.parse(testDateKeyPlusDays(dateKey, 1) + 'T00:00:00.000Z');
+    const clipped = { start: Math.max(start, dayStart), end: Math.min(end, dayEnd) };
+    if (clipped.end <= clipped.start) return;
+    if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+    byDate.get(dateKey).push(clipped);
+  });
+
+  let totalMs = 0;
+  byDate.forEach(intervals => {
+    intervals.sort((a, b) => a.start - b.start);
+    let current = null;
+    intervals.forEach(interval => {
+      if (!current) current = { ...interval };
+      else if (interval.start <= current.end) current.end = Math.max(current.end, interval.end);
+      else {
+        totalMs += current.end - current.start;
+        current = { ...interval };
+      }
+    });
+    if (current) totalMs += current.end - current.start;
+  });
+  return fallbackTotal + Math.round(totalMs / 60000);
+}
+
 function computeDeepHrs(arr, intervalMin = 30) {
-  return +(arr.filter(e => e.energy === 'deep').length * (intervalMin / 60)).toFixed(1);
+  return +(sumEntryMinutes(arr, e => e.energy === 'deep', intervalMin) / 60).toFixed(1);
 }
 
 function computeIdentityScore(arr) {
@@ -111,6 +162,19 @@ test('2 deep blocks at 30min = 1.0h', () => {
 test('3 deep blocks at 20min = 1.0h', () => {
   const arr = [{energy:'deep'},{energy:'deep'},{energy:'deep'}];
   assert.equal(computeDeepHrs(arr, 20), 1.0);
+});
+test('overlapping deep entries count occupied time once', () => {
+  const arr = [
+    {energy:'deep', tsStart: Date.UTC(2026, 0, 5, 9), ts: Date.UTC(2026, 0, 5, 12)},
+    {energy:'deep', tsStart: Date.UTC(2026, 0, 5, 10), ts: Date.UTC(2026, 0, 5, 13)},
+  ];
+  assert.equal(computeDeepHrs(arr), 4.0);
+});
+test('single deep entry is clipped to its start calendar day', () => {
+  const arr = [
+    {energy:'deep', tsStart: Date.UTC(2026, 0, 5, 0), ts: Date.UTC(2026, 0, 6, 4)},
+  ];
+  assert.equal(computeDeepHrs(arr), 24.0);
 });
 
 console.log('\ncomputeIdentityScore(arr)');
