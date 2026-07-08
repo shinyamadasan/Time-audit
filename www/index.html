@@ -234,6 +234,26 @@
     <button class="btn sm ghost" style="flex-shrink:0;font-size:11px" onclick="setDailyCommitment()">Set</button>
   </div>
 
+  <!-- Focus wallet -->
+  <div id="focus-wallet-card" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:14px;padding:12px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px">
+      <div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700">Focus wallet</div>
+        <div style="display:flex;align-items:baseline;gap:6px;margin-top:2px">
+          <span id="fw-balance" style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--deep)">0</span>
+          <span style="font-size:12px;color:var(--muted)">pts this week</span>
+        </div>
+      </div>
+      <button class="btn sm primary" onclick="openFocusWallet()">Spend</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:11px">
+      <div><span style="color:var(--muted)">earned</span><br><span id="fw-earned" style="font-family:var(--mono);color:var(--text)">0</span></div>
+      <div><span style="color:var(--muted)">spent/costs</span><br><span id="fw-spent" style="font-family:var(--mono);color:var(--text)">0</span></div>
+      <div><span style="color:var(--muted)">sports</span><br><span id="fw-sports" style="font-family:var(--mono);color:var(--text)">0/3 free</span></div>
+    </div>
+    <div id="fw-note" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4"></div>
+  </div>
+
   <!-- Accountability partner card -->
   <div id="partner-card" style="display:none"></div>
 
@@ -379,6 +399,12 @@
   <div class="settings-section" id="reflect-daily-reviews-section">
     <div class="settings-title">Daily reflections</div>
     <div id="reflect-daily-reviews"></div>
+  </div>
+
+  <!-- By project -->
+  <div class="settings-section" id="reflect-projects-section" style="display:none">
+    <div class="settings-title">By project / client</div>
+    <div id="reflect-projects"></div>
   </div>
 
   <!-- This week's patterns -->
@@ -647,7 +673,23 @@
         <span style="color:var(--muted);font-size:13px;font-weight:600">→</span>
         <input type="time" id="tpl-end" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
       </div>
-      <button type="button" class="btn" style="width:100%;justify-content:center" onclick="addTemplate()">+ Add recurring block</button>
+      <button type="button" id="tpl-add-btn" class="btn" style="width:100%;justify-content:center" onclick="addTemplate()">+ Add recurring block</button>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-title">Daily Time Budgets</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Cap any category per day. You'll get a warning toast when you go over. Leave blank for no limit.</div>
+    <div id="budget-list"></div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-title">Ping Quiet Hours</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">No pings during these hours. Works overnight (e.g. 23:00 → 07:00). Leave blank to disable.</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="time" id="set-quiet-start" onchange="saveSettings()" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
+      <span style="color:var(--muted);font-size:13px;font-weight:600">→</span>
+      <input type="time" id="set-quiet-end" onchange="saveSettings()" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
     </div>
   </div>
 
@@ -889,6 +931,7 @@
       </div>
     </div>
     <div class="field"><label>Note</label><textarea id="f-note" placeholder="Optional context…"></textarea></div>
+    <div class="field"><label>Project / Client <span style="color:var(--muted);font-weight:400;font-size:11px">(optional)</span></label><input type="text" id="f-project" placeholder="e.g. Client A" autocomplete="off"></div>
   </div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
     <button class="btn ghost" id="log-cancel-btn" onclick="dismissLog()">Skip</button>
@@ -1020,6 +1063,10 @@
     <div class="field-label">Recent</div>
     <div class="presets-scroll" id="retro-chips"></div>
   </div>
+  <div class="field" style="margin-bottom:12px">
+    <label>Project / Client <span style="color:var(--muted);font-weight:400;font-size:11px">(optional)</span></label>
+    <input type="text" id="retro-project" placeholder="e.g. Client A, Website redesign" autocomplete="off">
+  </div>
   <div class="field-label">Category</div>
   <div class="energy-grid">
     <button class="energy-btn nine5" onclick="setRetroEnergy('nine5')"><span class="e-name">Job Work</span><span class="e-desc">Your shift, on the clock</span></button>
@@ -1078,9 +1125,35 @@
     <label>Custom number</label>
     <input type="number" id="commitment-custom" min="1" max="20" placeholder="e.g. 6">
   </div>
-  <div style="display:flex;gap:8px;margin-top:16px">
+<div style="display:flex;gap:8px;margin-top:16px">
     <button class="btn ghost flex-1" onclick="closeModal('commitment-overlay')">Cancel</button>
     <button class="btn primary flex-1" onclick="saveCommitment()">Commit</button>
+  </div>
+</div></div>
+
+<!-- ══ FOCUS WALLET MODAL ══ -->
+<div class="overlay" id="focus-wallet-overlay" onclick="overlayClose(event,'focus-wallet-overlay')">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-tag">FOCUS WALLET</div>
+  <div class="modal-title">Spend focus points</div>
+  <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:12px;margin-bottom:14px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Available this week</div>
+    <div id="fw-modal-balance" style="font-family:var(--mono);font-size:26px;font-weight:700;color:var(--deep)">0 pts</div>
+    <div id="fw-modal-summary" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+    <button class="btn" onclick="spendFocusPoints('Movie',25,'movie')">Movie<br><span style="font-size:11px;color:var(--muted)">25 pts</span></button>
+    <button class="btn" onclick="spendFocusPoints('Night out',60,'night-out')">Night out<br><span style="font-size:11px;color:var(--muted)">60 pts</span></button>
+    <button class="btn" onclick="spendFocusPoints('Extra sports',25,'sports')">Extra sports<br><span style="font-size:11px;color:var(--muted)">25 pts</span></button>
+    <button class="btn" onclick="spendFocusPoints('Small treat',15,'treat')">Small treat<br><span style="font-size:11px;color:var(--muted)">15 pts</span></button>
+  </div>
+  <div class="field"><label>Custom reward</label><input type="text" id="fw-custom-label" placeholder="e.g. dinner with friends"></div>
+  <div class="field"><label>Point cost</label><input type="number" id="fw-custom-points" min="1" step="1" placeholder="e.g. 40"></div>
+  <div id="fw-recent-breakdown" style="font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:14px"></div>
+  <div style="display:flex;gap:8px">
+    <button class="btn ghost flex-1" onclick="closeModal('focus-wallet-overlay')">Cancel</button>
+    <button class="btn primary flex-1" onclick="spendCustomFocusPoints()">Spend custom</button>
   </div>
 </div></div>
 
@@ -1213,6 +1286,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="storage.js"></script>
 <script src="insights.js"></script>
+<script src="focus-wallet.js"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -1224,6 +1298,7 @@ let entries = [];
 let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22, sleepTime:'23:00', wakeTime:'07:00', sleepReminderMin:30, sleepSetupDone:false, templates:[] };
 let reviews = {};
 let weeklyReviews = {};
+let focusRedemptions = [];
 let intention = '';
 let running = false;
 let ticker = null;
@@ -1761,6 +1836,7 @@ function doPing() {
   if (timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId) {
     timerStartedAt = Date.now(); remaining = totalSecs; updateRing(); return;
   }
+  if (isInQuietHours()) { timerStartedAt = Date.now(); remaining = totalSecs; updateRing(); return; }
 
   pingCount++;
   const now = Date.now();
@@ -2026,6 +2102,7 @@ function _doQuickSave(activity, energy) {
   showLogFeedback(energy);
   checkReviewPrompt();
   checkEscalation();
+  checkBudget(energy);
 }
 
 function dismissQuickLog() {
@@ -2079,6 +2156,110 @@ function saveCommitment() {
   persist(); renderToday();
   closeModal('commitment-overlay');
   showToast(`Committed to ${n} deep blocks today`);
+}
+
+function getCurrentFocusWallet() {
+  if (typeof computeFocusWallet !== 'function') return null;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const weekKey = getWeekKey(new Date(todayKey + 'T12:00:00Z'));
+  return computeFocusWallet(entries, focusRedemptions, settings, weekKey, {
+    weekKeyForTs(ts) {
+      const dateKey = getDateInTZ(ts, tz);
+      return getWeekKey(new Date(dateKey + 'T12:00:00Z'));
+    },
+    dateKeyForTs(ts) {
+      return getDateInTZ(ts, tz);
+    }
+  });
+}
+
+function formatFocusPoints(points) {
+  const n = Math.round(Number(points || 0) * 10) / 10;
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+function focusWalletEscape(value) {
+  return String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function renderFocusWallet() {
+  const card = document.getElementById('focus-wallet-card');
+  if (!card) return;
+  const wallet = getCurrentFocusWallet();
+  if (!wallet) { card.style.display = 'none'; return; }
+
+  card.style.display = 'block';
+  document.getElementById('fw-balance').textContent = formatFocusPoints(wallet.balance);
+  document.getElementById('fw-earned').textContent = formatFocusPoints(wallet.earned);
+  document.getElementById('fw-spent').textContent = formatFocusPoints(wallet.spent);
+  const sportsFree = Math.min(wallet.sportsSessions, 3);
+  const sportsExtra = Math.max(0, wallet.sportsSessions - 3);
+  document.getElementById('fw-sports').textContent = sportsExtra
+    ? `${wallet.sportsSessions} used, ${sportsExtra} paid`
+    : `${sportsFree}/3 free`;
+  document.getElementById('fw-note').textContent = wallet.balance > 0
+    ? 'Weekend fun comes from this balance. Deep work fills it; waste and extra sports drain it.'
+    : 'Earn points with focused work before spending on weekend rewards.';
+
+  const modalBalance = document.getElementById('fw-modal-balance');
+  if (modalBalance) modalBalance.textContent = `${formatFocusPoints(wallet.balance)} pts`;
+  const modalSummary = document.getElementById('fw-modal-summary');
+  if (modalSummary) {
+    modalSummary.textContent = `Earned ${formatFocusPoints(wallet.earned)} · spent/costs ${formatFocusPoints(wallet.spent)} · week ${wallet.weekKey}`;
+  }
+  const recent = document.getElementById('fw-recent-breakdown');
+  if (recent) {
+    const rows = wallet.breakdown.slice(-5).reverse();
+    recent.innerHTML = rows.length
+      ? rows.map(row => `<div style="display:flex;justify-content:space-between;gap:10px"><span>${focusWalletEscape(row.label)}</span><span style="font-family:var(--mono);color:${row.points >= 0 ? 'var(--deep)' : 'var(--distraction)'}">${row.points > 0 ? '+' : ''}${formatFocusPoints(row.points)}</span></div>`).join('')
+      : 'No wallet activity yet this week.';
+  }
+}
+
+function openFocusWallet() {
+  renderFocusWallet();
+  document.getElementById('focus-wallet-overlay').classList.add('open');
+}
+
+function spendFocusPoints(label, points, category) {
+  const cost = Number(points);
+  if (!Number.isFinite(cost) || cost <= 0) { showToast('Enter a valid point cost'); return false; }
+  const wallet = getCurrentFocusWallet();
+  if (!wallet) return false;
+  if (wallet.balance < cost) {
+    showToast(`Need ${formatFocusPoints(cost - wallet.balance)} more focus points`);
+    return false;
+  }
+  const now = Date.now();
+  focusRedemptions.push({
+    id: `${now}_${Math.random().toString(36).slice(2, 8)}`,
+    weekKey: wallet.weekKey,
+    label: label || 'Reward',
+    category: category || 'reward',
+    points: cost,
+    createdAt: now,
+    updatedAt: now
+  });
+  persist();
+  if (typeof syncFocusRedemptions === 'function') syncFocusRedemptions();
+  renderFocusWallet();
+  closeModal('focus-wallet-overlay');
+  showToast(`Spent ${formatFocusPoints(cost)} pts on ${label || 'reward'}`);
+  return true;
+}
+
+function spendCustomFocusPoints() {
+  const labelEl = document.getElementById('fw-custom-label');
+  const pointsEl = document.getElementById('fw-custom-points');
+  const label = labelEl.value.trim() || 'Custom reward';
+  const points = Number(pointsEl.value);
+  if (spendFocusPoints(label, points, 'custom')) {
+    if (labelEl) labelEl.value = '';
+    if (pointsEl) pointsEl.value = '';
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -2272,7 +2453,7 @@ function openLog(pingNum) {
   }
   logIsPing = !!pingNum;
   selectedEnergy=''; selectedOnPlan=null;
-  ['f-activity','f-note'].forEach(id=>document.getElementById(id).value='');
+  ['f-activity','f-note','f-project'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-deap').value='';
   document.getElementById('f-rate').value='';
   document.getElementById('detail-body').classList.remove('open');
@@ -2398,6 +2579,7 @@ function openRetroLog() {
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('retro-activity').value = '';
+  document.getElementById('retro-project').value = '';
   populateRetroChips();
   // Default: last block's end time as start, now as end
   const nowStr = tzHHMM(Date.now());
@@ -2443,12 +2625,14 @@ function saveRetroEntry() {
   const midnight = spansMidnight ? tzParseTime(endDateKey, '00:00') : null;
 
   const onPlan = retroEnergy !== 'distraction' && retroEnergy !== 'waste';
+  const project = document.getElementById('retro-project').value.trim();
 
   function makeEntry(id, ts, tsS, dateKey) {
     const blkDur = Math.round((ts - tsS) / 60000);
     const e = { id, ts, tsStart: tsS, blockIntervalMin: blkDur,
       date: dateKey, activity, energy: retroEnergy, onPlan, retro: true,
       updatedAt: Date.now() };
+    if (project) e.project = project;
     e.category = getBucket(e); e.originalLabel = e.energy || null;
     validateEntry(e);
     return e;
@@ -2520,17 +2704,19 @@ function saveRetroEntry() {
       entries.push(makeEntry(midnight - 1, midnight, tsStart, startDateKey));
       entries.push(makeEntry(tsEnd, tsEnd, midnight, endDateKey));
       entries.sort((a,b) => b.ts - a.ts);
-      persist(); renderToday(); syncEntries();
-      closeModal('retro-overlay');
+      persist(); closeModal('retro-overlay');
       const dur1 = Math.round((midnight - tsStart) / 60000);
       const dur2 = Math.round((tsEnd - midnight) / 60000);
       showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
+      setTimeout(() => { renderToday(); syncEntries(); }, 0);
+      checkBudget(retroEnergy);
       } else {
       entries.push(makeEntry(tsEnd, tsEnd, tsStart, startDateKey));
       entries.sort((a,b) => b.ts - a.ts);
-      persist(); renderToday(); syncEntries();
-      closeModal('retro-overlay');
+      persist(); closeModal('retro-overlay');
       showToast(`Logged retroactively · ${fmtDur(dur)}`, false, retroEnergy);
+      setTimeout(() => { renderToday(); syncEntries(); }, 0);
+      checkBudget(retroEnergy);
       }
   }
 }
@@ -2562,6 +2748,23 @@ function toggleDetail() {
   const body=document.getElementById('detail-body'); body.classList.toggle('open');
   document.getElementById('detail-arrow').textContent=body.classList.contains('open')?'▾':'▸';
 }
+// ── Time Budget check ─────────────────────────────────────────────────────
+// Called after any save. If today's total for `energy` exceeds the cap in
+// settings.budgets, fires a warning toast 1.8 s after the log toast clears.
+function checkBudget(energy) {
+  if (!settings.budgets) return;
+  const budget = settings.budgets[energy];
+  if (!budget || budget <= 0) return;
+  const todayMins = getEntriesForDate(getViewingDateKey())
+    .filter(e => !e.deleted && !e.missed && e.energy === energy)
+    .reduce((sum, e) => sum + (e.blockIntervalMin || 0), 0);
+  if (todayMins < budget) return;
+  const label  = eLabel[energy] || energy;
+  const logged = todayMins >= 60 ? `${(todayMins / 60).toFixed(1)}h` : `${todayMins}m`;
+  const cap    = budget    >= 60 ? `${(budget    / 60).toFixed(1)}h` : `${budget}m`;
+  setTimeout(() => showToast(`⚠ ${label} limit reached — ${logged} logged today (cap ${cap})`), 1800);
+}
+
 function saveEntry() {
   const activity = normalizeActivity(document.getElementById('f-activity').value.trim());
   if (!activity){showToast('Add an activity description');return;}
@@ -2578,6 +2781,7 @@ function saveEntry() {
     deap:document.getElementById('f-deap').value,
     rate:parseFloat(document.getElementById('f-rate').value)||null,
     note:document.getElementById('f-note').value.trim(),
+    project:document.getElementById('f-project').value.trim()||undefined,
   };
   entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
 
@@ -2590,11 +2794,12 @@ function saveEntry() {
   clearTimeout(snoozeTimer);
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
-  persist(); renderToday(); closeModal('log-overlay');
-  syncEntries();
+  persist(); closeModal('log-overlay');
+  setTimeout(() => { renderToday(); syncEntries(); }, 0);
   showLogFeedback(entry.energy);
   checkReviewPrompt();
   checkEscalation();
+  checkBudget(entry.energy);
 
   // If mid-block switch: reset block start and open pre-commit for next task
   if (switchingTask) {
@@ -2949,10 +3154,14 @@ function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
   retroEnergy = '';
   document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('retro-activity').value = activity || '';
+  document.getElementById('retro-project').value = '';
   if (energy) setRetroEnergy(energy);
   populateRetroChips();
   document.getElementById('retro-start').value = tzHHMM(tsStart);
-  document.getElementById('retro-end').value   = tzHHMM(Math.min(tsEnd, Date.now()));
+  // For template prefills (activity provided), use exact end time so the user sees the full block.
+  // For gap fills (no activity), cap at now — you can't log a block that hasn't happened yet.
+  const cappedEnd = activity ? tsEnd : Math.min(tsEnd, Date.now());
+  document.getElementById('retro-end').value   = tzHHMM(cappedEnd);
   document.getElementById('retro-overlay').classList.add('open');
   setTimeout(() => {
     const input = document.getElementById('retro-activity');
@@ -2961,9 +3170,10 @@ function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
 }
 
 function openEditEntry(id) {
-  const entry = entries.find(e => e.id === id);
+  const numId = Number(id);
+  const entry = entries.find(e => e.id === numId);
   if (!entry) return;
-  editingEntryId = id;
+  editingEntryId = numId;
 
   const tsS = entry.tsStart || (entry.ts - (entry.blockIntervalMin || settings.intervalMin) * 60000);
   const tsE = entry.ts;
@@ -2978,6 +3188,7 @@ function openEditEntry(id) {
     retroEnergy = '';
     document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
     document.getElementById('retro-activity').value = '';
+    document.getElementById('retro-project').value = '';
     document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
     document.getElementById('retro-modal-title').textContent = 'What were you doing?';
   } else {
@@ -2985,6 +3196,7 @@ function openEditEntry(id) {
     document.querySelectorAll('#retro-overlay .energy-btn').forEach(b => b.classList.remove('selected'));
     if (retroEnergy) document.querySelectorAll(`#retro-overlay .energy-btn.${retroEnergy}`).forEach(b => b.classList.add('selected'));
     document.getElementById('retro-activity').value = entry.activity || '';
+    document.getElementById('retro-project').value = entry.project || '';
     document.getElementById('retro-modal-tag').textContent = 'EDIT BLOCK';
     document.getElementById('retro-modal-title').textContent = 'Edit this block';
   }
@@ -3039,8 +3251,11 @@ function renderEntryRow(item) {
   if (item.template) {
     const dur = Math.round((item.ts - item.tsStart) / 60000);
     const label = eLabel[item.energy] || item.energy;
-    const safeActivity = item.activity.replace(/'/g, "\\'");
-    return `<div class="tl-row tl-template-row" onclick="openRetroLogPrefilled(${item.tsStart},${item.ts},'${safeActivity}','${item.energy}')">
+    const safeAct = item.activity.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    return `<div class="tl-row tl-template-row"
+      data-ts-start="${item.tsStart}" data-ts-end="${item.ts}"
+      data-activity="${safeAct}" data-energy="${item.energy}"
+      onclick="openRetroLogPrefilled(+this.dataset.tsStart,+this.dataset.tsEnd,this.dataset.activity,this.dataset.energy)">
       <div class="tl-time">${localTime(item.tsStart)}</div>
       <div class="tl-bar-col tl-bar-template"></div>
       <div class="tl-content">
@@ -3122,12 +3337,15 @@ function renderEntryRow(item) {
     return rows.join('');
   }
 
+  const projectPill = item.project
+    ? ` · <span style="font-size:10px;padding:1px 5px;border-radius:3px;background:var(--bg3);color:var(--muted)">${item.project}</span>`
+    : '';
   return `<div class="tl-row" data-entry-id="${item.id}" onclick="${editCall}" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
       <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span>${mergeTag}</div>
-      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}</div>
+      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}${projectPill}</div>
     </div>
     <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
   </div>`;
@@ -3850,6 +4068,7 @@ function renderToday() {
     document.getElementById('commit-label').textContent = 'Set your daily goal';
     document.getElementById('commit-bar').classList.add('no-goal');
   }
+  renderFocusWallet();
 
   // Cache key — only rebuild timeline/list DOM when today's entries actually change
   const newRenderKey = todayE.map(e => e.id + ':' + (e.updatedAt || e.ts)).join(',');
@@ -4305,6 +4524,7 @@ function quickRetroLog() {
     taskInput.value = '';
     resetRetroBar();
     showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
+    checkBudget(learnedEng);
   } else {
     const _qEntry = makeQEntry(tsEnd, tsEnd, tsStart, startDateKey);
     _lastLoggedEntryId = _qEntry.id;
@@ -4315,6 +4535,7 @@ function quickRetroLog() {
     resetRetroBar();
     const wasteFlag = (learnedEng === 'waste' || learnedEng === 'distraction') ? ' ⚠ auto-flagged' : '';
     showToast(`Logged: ${task} · ${fmtDur(dur)}${wasteFlag}`, false, learnedEng);
+    checkBudget(learnedEng);
   }
 }
 
@@ -5166,6 +5387,8 @@ function renderSettings() {
   document.getElementById('set-sleep-time').value=settings.sleepTime||'23:00';
   document.getElementById('set-wake-time').value=settings.wakeTime||'07:00';
   document.getElementById('set-sleep-reminder-min').value=String(settings.sleepReminderMin??30);
+  document.getElementById('set-quiet-start').value=settings.quietStart||'';
+  document.getElementById('set-quiet-end').value=settings.quietEnd||'';
   const rh = settings.reviewHour ?? 22;
   document.getElementById('set-review-hour').value = `${String(rh).padStart(2,'0')}:00`;
   const toneEl = document.getElementById('set-coach-tone');
@@ -5203,6 +5426,53 @@ function renderSettings() {
   renderAvatarPicker();
   renderPartnerSettings();
   renderTemplateList();
+  renderBudgets();
+}
+
+function isInQuietHours(ts) {
+  if (!settings.quietStart || !settings.quietEnd) return false;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const t = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false })
+    .format(ts ? new Date(ts) : new Date()).slice(0, 5);
+  const s = settings.quietStart, e = settings.quietEnd;
+  return s <= e ? (t >= s && t < e) : (t >= s || t < e);
+}
+
+function saveBudget(energy, val) {
+  if (!settings.budgets) settings.budgets = {};
+  const mins = parseInt(val, 10);
+  if (mins > 0) settings.budgets[energy] = mins;
+  else delete settings.budgets[energy];
+  persist();
+}
+
+function renderBudgets() {
+  const el = document.getElementById('budget-list');
+  if (!el) return;
+  const ROWS = [
+    ['deep',     'var(--deep)',        'Deep Work'],
+    ['nine5',    'var(--nine5)',       'Job Work'],
+    ['shallow',  'var(--shallow)',     'Shallow Work'],
+    ['learning', 'var(--learning)',    'Learning'],
+    ['exercise', 'var(--exercise)',    'Exercise'],
+    ['recovery', 'var(--break)',       'Maintenance'],
+    ['errands',  'var(--errands)',     'Errands'],
+    ['social',   'var(--social)',      'Social'],
+    ['waste',    'var(--distraction)', 'Waste'],
+  ];
+  const b = settings.budgets || {};
+  el.innerHTML = ROWS.map(([energy, color, label]) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="width:3px;height:18px;border-radius:2px;background:${color};flex-shrink:0"></div>
+      <div style="flex:1;font-size:13px;color:var(--text)">${label}</div>
+      <input type="number" min="0" step="5" placeholder="—"
+        value="${b[energy] || ''}"
+        onchange="saveBudget('${energy}', this.value)"
+        style="width:64px;background:var(--bg2);border:1px solid var(--border2);color:var(--text);
+               font-family:var(--mono);font-size:13px;padding:5px 8px;border-radius:7px;
+               outline:none;text-align:right">
+      <span style="font-size:11px;color:var(--muted);white-space:nowrap">min/day</span>
+    </div>`).join('');
 }
 
 const TONE_PREVIEWS = {
@@ -5225,6 +5495,8 @@ function saveSettings(){
   settings.sleepTime=document.getElementById('set-sleep-time').value||'23:00';
   settings.wakeTime=document.getElementById('set-wake-time').value||'07:00';
   settings.sleepReminderMin=parseInt(document.getElementById('set-sleep-reminder-min').value)||30;
+  settings.quietStart=document.getElementById('set-quiet-start').value||'';
+  settings.quietEnd=document.getElementById('set-quiet-end').value||'';
   // Dedicated key so Firebase can never silently overwrite the local timezone
   localStorage.setItem('ta3-tz', settings.timezone);
   settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
@@ -6008,6 +6280,37 @@ function renderWeekComparison() {
   </div>`;
 }
 
+function renderProjectBreakdown() {
+  const el = document.getElementById('reflect-projects');
+  const section = document.getElementById('reflect-projects-section');
+  if (!el || !section) return;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const weekStart = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const map = {};
+  for (const e of entries) {
+    if (e.deleted || e.missed || !e.project) continue;
+    if ((e.tsStart || e.ts) < weekStart) continue;
+    map[e.project] = (map[e.project] || 0) + (e.blockIntervalMin || 0);
+  }
+  const rows = Object.entries(map).sort((a, b) => b[1] - a[1]);
+  if (!rows.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  const fmtH = m => m >= 60 ? `${(m/60).toFixed(1)}h` : `${m}m`;
+  const maxMins = rows[0][1];
+  el.innerHTML = rows.map(([project, mins]) => {
+    const pct = Math.round(mins / maxMins * 100);
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+        <span style="font-size:13px;color:var(--text);font-weight:500">${project}</span>
+        <span style="font-family:var(--mono);font-size:13px;color:var(--muted)">${fmtH(mins)}</span>
+      </div>
+      <div style="height:4px;background:var(--bg3);border-radius:2px">
+        <div style="height:4px;width:${pct}%;background:var(--deep);border-radius:2px"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function renderReflectView() {
   const now = new Date();
   const weekKey = getWeekKey(now);
@@ -6015,6 +6318,7 @@ function renderReflectView() {
   // ── New sections ──
   renderHonestSummary();
   renderWeekComparison();
+  renderProjectBreakdown();
 
   // ── Daily summary ──
   renderDailySummary();
@@ -6242,6 +6546,10 @@ function renderReflectHistory() {
 // ══════════════════════════════════════════════════════
 function generateTemplateEntries(dateKey) {
   if (!settings.templates || !settings.templates.length) return [];
+  // Only show templates for today and the past 7 days (not older history)
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const cutoff = getDateInTZ(Date.now() - 7 * 24 * 60 * 60 * 1000, tz);
+  if (dateKey < cutoff) return [];
   const noon = tzParseTime(dateKey, '12:00');
   const dow = tzDow(noon);
   const realEntries = getEntriesForDate(dateKey).filter(e => !e.deleted && !e.missed);
@@ -6252,11 +6560,15 @@ function generateTemplateEntries(dateKey) {
     const tsStart = tzParseTime(dateKey, tpl.startTime);
     let tsEnd = tzParseTime(dateKey, tpl.endTime);
     if (tsEnd <= tsStart) tsEnd += 24 * 60 * 60 * 1000;
-    const hasOverlap = realEntries.some(e => {
-      const eS = e.tsStart || (e.ts - (e.blockIntervalMin || settings.intervalMin) * 60000);
-      return eS < tsEnd && e.ts > tsStart;
-    });
-    if (hasOverlap) continue;
+    // Only hide the template when logged entries cover ≥50% of its duration.
+    // A small incidental overlap (e.g. a browser-extension PC-time snippet) won't suppress it.
+    const tplDur = tsEnd - tsStart;
+    const covered = realEntries.reduce((acc, e) => {
+      const eS = Math.max(tsStart, e.tsStart || (e.ts - (e.blockIntervalMin || settings.intervalMin) * 60000));
+      const eE = Math.min(tsEnd, e.ts);
+      return acc + Math.max(0, eE - eS);
+    }, 0);
+    if (covered >= tplDur * 0.5) continue;
     result.push({
       id: `tpl_${tpl.id}_${dateKey}`,
       ts: tsEnd, tsStart, date: dateKey,
@@ -6303,6 +6615,7 @@ function renderTemplateList() {
           <span style="font-size:11px;color:var(--muted)">${dur}</span>
         </div>
       </div>
+      <button type="button" onclick="editTemplate(${i})" style="background:none;border:none;color:var(--muted);font-size:15px;padding:10px 8px;cursor:pointer;flex-shrink:0;transition:color 0.15s" onmouseover="this.style.color='var(--deep)'" onmouseout="this.style.color='var(--muted)'">✎</button>
       <button type="button" onclick="removeTemplate(${i})" style="background:none;border:none;color:var(--muted);font-size:16px;padding:10px 12px;cursor:pointer;flex-shrink:0;transition:color 0.15s" onmouseover="this.style.color='var(--distraction)'" onmouseout="this.style.color='var(--muted)'">×</button>
     </div>`;
   }).join('');
@@ -6322,22 +6635,56 @@ function addTemplate() {
   const days = [...document.querySelectorAll('.tpl-day-btn.on')].map(b => parseInt(b.dataset.day));
   if (!days.length) { showToast('Select at least one day'); return; }
   if (!settings.templates) settings.templates = [];
-  settings.templates.push({ id: Date.now().toString(36), activity, energy, days, startTime, endTime, enabled: true });
+  const wasEditing = _editingTplIdx !== null;
+  if (wasEditing) {
+    // Update existing — preserve id and enabled flag
+    settings.templates[_editingTplIdx] = { ...settings.templates[_editingTplIdx], activity, energy, days, startTime, endTime };
+    _editingTplIdx = null;
+  } else {
+    settings.templates.push({ id: Date.now().toString(36), activity, energy, days, startTime, endTime, enabled: true });
+  }
   settings._savedAt = Date.now();
-  persist();
-  if (fbRoomRef) fbRoomRef.update({ settings });
-  renderTemplateList();
-  renderToday();
+  settings._templatesSavedAt = Date.now();
+  // Clear form instantly so the UI feels responsive
   document.getElementById('tpl-activity').value = '';
   document.getElementById('tpl-start').value = '';
   document.getElementById('tpl-end').value = '';
   document.querySelectorAll('.tpl-day-btn').forEach(b => b.classList.remove('on'));
-  showToast('Recurring block added');
+  const addBtn = document.getElementById('tpl-add-btn');
+  if (addBtn) addBtn.textContent = '+ Add recurring block';
+  showToast(wasEditing ? 'Block updated' : 'Recurring block added');
+  // Defer save + re-render so the button response feels instant
+  setTimeout(() => {
+    persist();
+    if (fbRoomRef) fbRoomRef.update({ settings });
+    renderTemplateList();
+    renderToday();
+  }, 0);
+}
+
+let _editingTplIdx = null;
+
+function editTemplate(i) {
+  const tpl = settings.templates[i];
+  _editingTplIdx = i;
+  document.getElementById('tpl-activity').value = tpl.activity;
+  document.getElementById('tpl-energy').value = tpl.energy;
+  document.getElementById('tpl-start').value = tpl.startTime;
+  document.getElementById('tpl-end').value = tpl.endTime;
+  document.querySelectorAll('.tpl-day-btn').forEach(b =>
+    b.classList.toggle('on', tpl.days.includes(parseInt(b.dataset.day)))
+  );
+  const btn = document.getElementById('tpl-add-btn');
+  if (btn) btn.textContent = '✓ Save changes';
+  document.getElementById('tpl-activity').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('tpl-activity').focus();
 }
 
 function removeTemplate(i) {
+  if (_editingTplIdx === i) { _editingTplIdx = null; const btn = document.getElementById('tpl-add-btn'); if (btn) btn.textContent = '+ Add recurring block'; }
   settings.templates.splice(i, 1);
   settings._savedAt = Date.now();
+  settings._templatesSavedAt = Date.now();
   persist();
   if (fbRoomRef) fbRoomRef.update({ settings });
   renderTemplateList();
@@ -6791,6 +7138,7 @@ async function initNativeNotifications() {
 
 function scheduleNativePing(inSeconds) {
   if (!isNative || !LocalNotifications) return;
+  if (isInQuietHours(Date.now() + inSeconds * 1000)) { cancelNativePing(); return; }
   const at = new Date(Date.now() + inSeconds * 1000);
   const task = lastTaskForRepeat ? lastTaskForRepeat.replace(/ \(Output:.*\)/,'') : null;
   LocalNotifications.cancel({ notifications: [{ id: PING_NOTIF_ID }, { id: PING_FOLLOWUP_ID }] }).catch(()=>{});
@@ -7005,6 +7353,7 @@ if ('serviceWorker' in navigator) {
 // Schedule a SW backup ping (called when page becomes hidden or timer resets)
 function swSchedulePing() {
   if (!_swReg?.active || !running || breakActive) return;
+  if (isInQuietHours(Date.now() + remaining * 1000)) return;
   _swReg.active.postMessage({ action: 'schedule-ping', delayMs: remaining * 1000 });
 }
 

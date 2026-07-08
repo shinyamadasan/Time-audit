@@ -234,6 +234,26 @@
     <button class="btn sm ghost" style="flex-shrink:0;font-size:11px" onclick="setDailyCommitment()">Set</button>
   </div>
 
+  <!-- Focus wallet -->
+  <div id="focus-wallet-card" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:14px;padding:12px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px">
+      <div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700">Focus wallet</div>
+        <div style="display:flex;align-items:baseline;gap:6px;margin-top:2px">
+          <span id="fw-balance" style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--deep)">0</span>
+          <span style="font-size:12px;color:var(--muted)">pts this week</span>
+        </div>
+      </div>
+      <button class="btn sm primary" onclick="openFocusWallet()">Spend</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:11px">
+      <div><span style="color:var(--muted)">earned</span><br><span id="fw-earned" style="font-family:var(--mono);color:var(--text)">0</span></div>
+      <div><span style="color:var(--muted)">spent/costs</span><br><span id="fw-spent" style="font-family:var(--mono);color:var(--text)">0</span></div>
+      <div><span style="color:var(--muted)">sports</span><br><span id="fw-sports" style="font-family:var(--mono);color:var(--text)">0/3 free</span></div>
+    </div>
+    <div id="fw-note" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4"></div>
+  </div>
+
   <!-- Accountability partner card -->
   <div id="partner-card" style="display:none"></div>
 
@@ -1105,9 +1125,35 @@
     <label>Custom number</label>
     <input type="number" id="commitment-custom" min="1" max="20" placeholder="e.g. 6">
   </div>
-  <div style="display:flex;gap:8px;margin-top:16px">
+<div style="display:flex;gap:8px;margin-top:16px">
     <button class="btn ghost flex-1" onclick="closeModal('commitment-overlay')">Cancel</button>
     <button class="btn primary flex-1" onclick="saveCommitment()">Commit</button>
+  </div>
+</div></div>
+
+<!-- ══ FOCUS WALLET MODAL ══ -->
+<div class="overlay" id="focus-wallet-overlay" onclick="overlayClose(event,'focus-wallet-overlay')">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-tag">FOCUS WALLET</div>
+  <div class="modal-title">Spend focus points</div>
+  <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:12px;margin-bottom:14px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Available this week</div>
+    <div id="fw-modal-balance" style="font-family:var(--mono);font-size:26px;font-weight:700;color:var(--deep)">0 pts</div>
+    <div id="fw-modal-summary" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+    <button class="btn" onclick="spendFocusPoints('Movie',25,'movie')">Movie<br><span style="font-size:11px;color:var(--muted)">25 pts</span></button>
+    <button class="btn" onclick="spendFocusPoints('Night out',60,'night-out')">Night out<br><span style="font-size:11px;color:var(--muted)">60 pts</span></button>
+    <button class="btn" onclick="spendFocusPoints('Extra sports',25,'sports')">Extra sports<br><span style="font-size:11px;color:var(--muted)">25 pts</span></button>
+    <button class="btn" onclick="spendFocusPoints('Small treat',15,'treat')">Small treat<br><span style="font-size:11px;color:var(--muted)">15 pts</span></button>
+  </div>
+  <div class="field"><label>Custom reward</label><input type="text" id="fw-custom-label" placeholder="e.g. dinner with friends"></div>
+  <div class="field"><label>Point cost</label><input type="number" id="fw-custom-points" min="1" step="1" placeholder="e.g. 40"></div>
+  <div id="fw-recent-breakdown" style="font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:14px"></div>
+  <div style="display:flex;gap:8px">
+    <button class="btn ghost flex-1" onclick="closeModal('focus-wallet-overlay')">Cancel</button>
+    <button class="btn primary flex-1" onclick="spendCustomFocusPoints()">Spend custom</button>
   </div>
 </div></div>
 
@@ -1240,6 +1286,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="storage.js"></script>
 <script src="insights.js"></script>
+<script src="focus-wallet.js"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -1251,6 +1298,7 @@ let entries = [];
 let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22, sleepTime:'23:00', wakeTime:'07:00', sleepReminderMin:30, sleepSetupDone:false, templates:[] };
 let reviews = {};
 let weeklyReviews = {};
+let focusRedemptions = [];
 let intention = '';
 let running = false;
 let ticker = null;
@@ -2108,6 +2156,110 @@ function saveCommitment() {
   persist(); renderToday();
   closeModal('commitment-overlay');
   showToast(`Committed to ${n} deep blocks today`);
+}
+
+function getCurrentFocusWallet() {
+  if (typeof computeFocusWallet !== 'function') return null;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const weekKey = getWeekKey(new Date(todayKey + 'T12:00:00Z'));
+  return computeFocusWallet(entries, focusRedemptions, settings, weekKey, {
+    weekKeyForTs(ts) {
+      const dateKey = getDateInTZ(ts, tz);
+      return getWeekKey(new Date(dateKey + 'T12:00:00Z'));
+    },
+    dateKeyForTs(ts) {
+      return getDateInTZ(ts, tz);
+    }
+  });
+}
+
+function formatFocusPoints(points) {
+  const n = Math.round(Number(points || 0) * 10) / 10;
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+function focusWalletEscape(value) {
+  return String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function renderFocusWallet() {
+  const card = document.getElementById('focus-wallet-card');
+  if (!card) return;
+  const wallet = getCurrentFocusWallet();
+  if (!wallet) { card.style.display = 'none'; return; }
+
+  card.style.display = 'block';
+  document.getElementById('fw-balance').textContent = formatFocusPoints(wallet.balance);
+  document.getElementById('fw-earned').textContent = formatFocusPoints(wallet.earned);
+  document.getElementById('fw-spent').textContent = formatFocusPoints(wallet.spent);
+  const sportsFree = Math.min(wallet.sportsSessions, 3);
+  const sportsExtra = Math.max(0, wallet.sportsSessions - 3);
+  document.getElementById('fw-sports').textContent = sportsExtra
+    ? `${wallet.sportsSessions} used, ${sportsExtra} paid`
+    : `${sportsFree}/3 free`;
+  document.getElementById('fw-note').textContent = wallet.balance > 0
+    ? 'Weekend fun comes from this balance. Deep work fills it; waste and extra sports drain it.'
+    : 'Earn points with focused work before spending on weekend rewards.';
+
+  const modalBalance = document.getElementById('fw-modal-balance');
+  if (modalBalance) modalBalance.textContent = `${formatFocusPoints(wallet.balance)} pts`;
+  const modalSummary = document.getElementById('fw-modal-summary');
+  if (modalSummary) {
+    modalSummary.textContent = `Earned ${formatFocusPoints(wallet.earned)} · spent/costs ${formatFocusPoints(wallet.spent)} · week ${wallet.weekKey}`;
+  }
+  const recent = document.getElementById('fw-recent-breakdown');
+  if (recent) {
+    const rows = wallet.breakdown.slice(-5).reverse();
+    recent.innerHTML = rows.length
+      ? rows.map(row => `<div style="display:flex;justify-content:space-between;gap:10px"><span>${focusWalletEscape(row.label)}</span><span style="font-family:var(--mono);color:${row.points >= 0 ? 'var(--deep)' : 'var(--distraction)'}">${row.points > 0 ? '+' : ''}${formatFocusPoints(row.points)}</span></div>`).join('')
+      : 'No wallet activity yet this week.';
+  }
+}
+
+function openFocusWallet() {
+  renderFocusWallet();
+  document.getElementById('focus-wallet-overlay').classList.add('open');
+}
+
+function spendFocusPoints(label, points, category) {
+  const cost = Number(points);
+  if (!Number.isFinite(cost) || cost <= 0) { showToast('Enter a valid point cost'); return false; }
+  const wallet = getCurrentFocusWallet();
+  if (!wallet) return false;
+  if (wallet.balance < cost) {
+    showToast(`Need ${formatFocusPoints(cost - wallet.balance)} more focus points`);
+    return false;
+  }
+  const now = Date.now();
+  focusRedemptions.push({
+    id: `${now}_${Math.random().toString(36).slice(2, 8)}`,
+    weekKey: wallet.weekKey,
+    label: label || 'Reward',
+    category: category || 'reward',
+    points: cost,
+    createdAt: now,
+    updatedAt: now
+  });
+  persist();
+  if (typeof syncFocusRedemptions === 'function') syncFocusRedemptions();
+  renderFocusWallet();
+  closeModal('focus-wallet-overlay');
+  showToast(`Spent ${formatFocusPoints(cost)} pts on ${label || 'reward'}`);
+  return true;
+}
+
+function spendCustomFocusPoints() {
+  const labelEl = document.getElementById('fw-custom-label');
+  const pointsEl = document.getElementById('fw-custom-points');
+  const label = labelEl.value.trim() || 'Custom reward';
+  const points = Number(pointsEl.value);
+  if (spendFocusPoints(label, points, 'custom')) {
+    if (labelEl) labelEl.value = '';
+    if (pointsEl) pointsEl.value = '';
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -3916,6 +4068,7 @@ function renderToday() {
     document.getElementById('commit-label').textContent = 'Set your daily goal';
     document.getElementById('commit-bar').classList.add('no-goal');
   }
+  renderFocusWallet();
 
   // Cache key — only rebuild timeline/list DOM when today's entries actually change
   const newRenderKey = todayE.map(e => e.id + ':' + (e.updatedAt || e.ts)).join(',');

@@ -6,7 +6,7 @@
   "main": "index.js",
   "scripts": {
     "build": "echo \"No build step needed\"",
-    "lint": "npx eslint storage.js focus-mode.js insights.js",
+    "lint": "npx eslint storage.js focus-mode.js insights.js focus-wallet.js",
     "sync": "npx cap sync",
     "android": "npx cap run android",
     "open": "npx cap open android"

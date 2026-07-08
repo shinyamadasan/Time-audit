@@ -13,10 +13,11 @@
 | Second `<script>` | 7740–7895 | Onboarding init + phone-usage tracking |
 
 **External files loaded (in order):**
-- `firebase-app-compat.js` / `firebase-database-compat.js` / `firebase-auth-compat.js` — CDN, line 2123–2125
-- `storage.js` — line 2126 → **EXTRACTED** (see below)
-- `insights.js` — line 2127 → **EXTRACTED** (see below)
-- `focus-mode.js` — line 7614 → **EXTRACTED** (see below)
+- `firebase-app-compat.js` / `firebase-database-compat.js` / `firebase-auth-compat.js` — CDN, line 1284–1286
+- `storage.js` — line 1287 → **EXTRACTED** (see below)
+- `insights.js` — line 1288 → **EXTRACTED** (see below)
+- `focus-wallet.js` — line 1289 → **EXTRACTED** (see below)
+- `focus-mode.js` — line 7416 → **EXTRACTED** (see below)
 
 ---
 
@@ -25,9 +26,9 @@
 ### storage.js
 Lines: external file
 Purpose: All localStorage/Firebase persistence, data loading, and cross-device sync helpers.
-Functions: `persist()`, `syncEntries()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
+Functions: `persist()`, `syncEntries()`, `syncFocusRedemptions()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
 Variables: (managed internally)
-Depends on: Firebase SDK globals
+Depends on: Firebase SDK globals, `focusRedemptions` global
 
 ### insights.js
 Lines: external file
@@ -35,6 +36,13 @@ Purpose: Weekly insight computation (deep hours, waste patterns, best day, peak 
 Functions: `computeInsights(weekKey)`
 Variables: (managed internally)
 Depends on: `entries` global, `storage.js` helpers
+
+### focus-wallet.js
+Lines: external file
+Purpose: Pure Focus Wallet scoring rules: compute weekly earned points, waste/sports costs, reward redemption spend, and current balance.
+Functions: `getFocusWalletSettings()`, `getFocusWalletWeekKey()`, `getFocusWalletEntryDurationMin()`, `isFocusWalletSportsEntry()`, `computeFocusWallet()`
+Variables: `DEFAULT_FOCUS_WALLET_SETTINGS`
+Depends on: no app globals; attaches helpers to `globalThis`
 
 ### focus-mode.js
 Lines: external file
@@ -74,9 +82,9 @@ Depends on: —
 
 ## [HTML — Today View]
 Lines: 1020–1332
-Purpose: All markup for the Today tab: header with date picker, status banner, day bar, hero section (idle/active/away states), commit bar, same-as-last CTA, sleep pill, quick-retro bar, awareness signal, timeline, stat cards, recent entries list.
+Purpose: All markup for the Today tab: header with date picker, status banner, day bar, hero section (idle/active/away states), commit bar, Focus Wallet card, same-as-last CTA, sleep pill, quick-retro bar, awareness signal, timeline, stat cards, recent entries list.
 Functions: —
-Key IDs: `view-today`, `today-date`, `date-picker-dropdown`, `status-banner`, `day-bar`, `activity-hero`, `hero-idle`, `hero-active`, `hero-away`, `commit-bar`, `same-as-last-btn`, `sleep-pill-btn`, `quick-retro-bar`, `awareness-signal`, `timeline-section`, `timeline-blocks`, `timeline-date-label`, `timeline-summary`, `recent-list`
+Key IDs: `view-today`, `today-date`, `date-picker-dropdown`, `status-banner`, `day-bar`, `activity-hero`, `hero-idle`, `hero-active`, `hero-away`, `commit-bar`, `focus-wallet-card`, `same-as-last-btn`, `sleep-pill-btn`, `quick-retro-bar`, `awareness-signal`, `timeline-section`, `timeline-blocks`, `timeline-date-label`, `timeline-summary`, `recent-list`
 Depends on: —
 
 ## [HTML — Week / Reflect / Settings Views]
@@ -95,9 +103,9 @@ Depends on: —
 
 ## [HTML — Overlays & Modals]
 Lines: 1616–1812
-Purpose: Sign-in overlay, bottom nav, quick-log ping modal, pre-commit modal (task naming before starting timer).
+Purpose: Sign-in overlay, bottom nav, quick-log ping modal, pre-commit modal (task naming before starting timer), daily commitment modal, Focus Wallet spend modal.
 Functions: —
-Key IDs: `signin-overlay`, `nav`, `quicklog-overlay`, `precommit-overlay`
+Key IDs: `signin-overlay`, `nav`, `quicklog-overlay`, `precommit-overlay`, `commitment-overlay`, `focus-wallet-overlay`
 Depends on: —
 
 ## [HTML — Focus Mode Overlays]
@@ -122,7 +130,7 @@ Depends on: —
 Lines: 2129–2196
 Purpose: All top-level mutable state and one-time constants shared across the entire app.
 Functions: —
-Variables: `currentTask`, `viewingDateKey`, `entries`, `settings`, `reviews`, `weeklyReviews`, `intention`, `running`, `ticker`, `pcTimeLiveTicker`, `totalSecs`, `remaining`, `distractionDebt`, `pingCount`, `sortKey`, `sortDir`, `selectedEnergy`, `selectedOnPlan`, `QUICK_ACTIVITY_OPTIONS`, `blockStartTime`, `lastStateChange`, `currentState`, `blockSegments`, `focusExitTimer`, `fbApp`, `fbDb`, `fbRoomRef`, `roomCode`, `fbTimerReceived`, `currentUser`, `timerStartedAt`, `snoozesUsedToday`, `snoozeTimer`, `quickLogBusy`, `switchingTask`, `dailyCommitment`, `lastTaskForRepeat`, `breakActive`, `breakEndsAt`, `breakTicker`, `breakStartTs`, `timerOwnerDeviceId`, `awayActive`, `awayStartTime`, `awayLabel`, `continueBannerTimer`, `continueBannerCountdown`, `recentChipTasks`, `taskStartTime`, `awayElapsedTicker`, `CIRCUM`
+Variables: `currentTask`, `viewingDateKey`, `entries`, `settings`, `reviews`, `weeklyReviews`, `focusRedemptions`, `intention`, `running`, `ticker`, `pcTimeLiveTicker`, `totalSecs`, `remaining`, `distractionDebt`, `pingCount`, `sortKey`, `sortDir`, `selectedEnergy`, `selectedOnPlan`, `QUICK_ACTIVITY_OPTIONS`, `blockStartTime`, `lastStateChange`, `currentState`, `blockSegments`, `focusExitTimer`, `fbApp`, `fbDb`, `fbRoomRef`, `roomCode`, `fbTimerReceived`, `currentUser`, `timerStartedAt`, `snoozesUsedToday`, `snoozeTimer`, `quickLogBusy`, `switchingTask`, `dailyCommitment`, `lastTaskForRepeat`, `breakActive`, `breakEndsAt`, `breakTicker`, `breakStartTs`, `timerOwnerDeviceId`, `awayActive`, `awayStartTime`, `awayLabel`, `continueBannerTimer`, `continueBannerCountdown`, `recentChipTasks`, `taskStartTime`, `awayElapsedTicker`, `CIRCUM`
 Depends on: —
 
 ## [Timer — Core Interval Tracking]
@@ -147,11 +155,18 @@ Variables: `alertLoop`, `qlEnergy`, `quickLogBusy`, `snoozesUsedToday`, `snoozeT
 Depends on: Timer section, State globals, `persist()`, `syncEntries()`, `entries`, `renderToday()`, `showToast()`, Native notifications section
 
 ## [Daily Commitment / Goal]
-Lines: 2961–2984
+Lines: 2145–2158
 Purpose: Set and save the daily deep-work goal (number of blocks).
 Functions: `setDailyCommitment()`, `setCommitmentQuick()`, `saveCommitment()`
 Variables: `dailyCommitment`
 Depends on: `persist()`, `renderToday()`
+
+## [Focus Wallet]
+Lines: 2161–2268
+Purpose: Weekly Focus Wallet UI bridge: compute current balance from entries/redemptions, render the Today card and spend modal, and store reward purchases.
+Functions: `getCurrentFocusWallet()`, `formatFocusPoints()`, `focusWalletEscape()`, `renderFocusWallet()`, `openFocusWallet()`, `spendFocusPoints()`, `spendCustomFocusPoints()`
+Variables: `focusRedemptions`
+Depends on: `computeFocusWallet()`, `getDateInTZ()`, `getWeekKey()`, `persist()`, `syncFocusRedemptions()`, `showToast()`
 
 ## [Heartbeat / Session Persistence]
 Lines: 3000–3068
@@ -211,10 +226,10 @@ Depends on: `entries`, `settings` (timezone)
 
 ## [Today View — Rendering]
 Lines: 3854–4776
-Purpose: Main `renderToday()` and all its sub-renders: day bar, status banner, timeline (blocks + gaps), stat cards, recent entries list, contextual-visibility rules, hero state machine, same-as-last CTA, awareness signal, side-panel refresh trigger.
+Purpose: Main `renderToday()` and all its sub-renders: day bar, status banner, Focus Wallet card, timeline (blocks + gaps), stat cards, recent entries list, contextual-visibility rules, hero state machine, same-as-last CTA, awareness signal, side-panel refresh trigger.
 Functions: `renderToday()`, `renderDayBar()`, `renderStatusBanner()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderSidePanel()`, `renderLeftPanel()`
 Variables: `_todayRenderKey`, `_lastLoggedEntryId`
-Depends on: Timeline helpers, Statistics, Entry logging, Date picker, `persist()`, `renderStreakCalendar()`, `renderFocusHeatmap()`
+Depends on: Timeline helpers, Statistics, Entry logging, Date picker, Focus Wallet, `persist()`, `renderStreakCalendar()`, `renderFocusHeatmap()`
 
 ## [Hero Prompt & Task Suggestions]
 Lines: 4777–4895
@@ -382,6 +397,7 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Ping sound / ping modal (same-as-last, quick chips) | Ping & Quick-Log Modal | 2555–2960 |
 | Behavioral feedback flash after logging | Ping & Quick-Log Modal | 2555–2960 |
 | Daily deep-work goal / commitment | Daily Commitment / Goal | 2961–2984 |
+| Focus Wallet points / weekend rewards | Focus Wallet + focus-wallet.js | 2161–2268 + EXTRACTED |
 | Crash/heartbeat recovery on reopen | Heartbeat / Session Persistence | 2985–3065 |
 | Tab switching (Today / Week / Reflect / Settings) | View Management | 3066–3083 |
 | Quick-action preset buttons | Utility — Formatting & Quick Actions | 3084–3160 |
@@ -423,6 +439,7 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Onboarding flow | Onboarding | 7588–7726 |
 | Android app-usage auto-logging | Phone Usage Tracking (Android) | 7727–7895 |
 | Pomodoro timer / session control | focus-mode.js | EXTRACTED |
+| Focus Wallet scoring rules | focus-wallet.js | EXTRACTED |
 | Lo-fi music / playlist | focus-mode.js | EXTRACTED |
 | Focus mode blocker overlay | focus-mode.js | EXTRACTED |
 | Persistence / Firebase sync | storage.js | EXTRACTED |
