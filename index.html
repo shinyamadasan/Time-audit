@@ -3047,22 +3047,36 @@ function entryTimeRange(entry, fallbackMin) {
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
   return { start, end };
 }
-function sumEntryMinutes(arr, predicate) {
+function sumEntryMinutes(arr, predicate, dateKeyFilter=null) {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const byDate = new Map();
+  const fallbackMinsByDate = new Map();
   (arr || []).forEach(entry => {
     if (!entry || entry.deleted || entry.missed) return;
     if (predicate && !predicate(entry)) return;
     const range = entryTimeRange(entry);
-    if (!range) return;
-    const dateKey = getDateInTZ(range.start, tz);
-    const dayStart = tzParseTime(dateKey, '00:00');
-    const dayEnd = tzParseTime(_dateKeyPlusDays(dateKey, 1), '00:00');
-    const start = Math.max(range.start, dayStart);
-    const end = Math.min(range.end, dayEnd);
-    if (end <= start) return;
-    if (!byDate.has(dateKey)) byDate.set(dateKey, []);
-    byDate.get(dateKey).push({ start, end });
+    if (!range) {
+      const fallbackKey = entry.date || (entry.ts ? getDateInTZ(entry.ts, tz) : null);
+      if (!dateKeyFilter || fallbackKey === dateKeyFilter) {
+        const key = fallbackKey || dateKeyFilter || '__fallback__';
+        fallbackMinsByDate.set(key, (fallbackMinsByDate.get(key) || 0) + entryDurationMinutes(entry));
+      }
+      return;
+    }
+    let cursor = range.start;
+    let guard = 0;
+    while (cursor < range.end && guard++ < 370) {
+      const dateKey = getDateInTZ(cursor, tz);
+      const dayStart = tzParseTime(dateKey, '00:00');
+      const dayEnd = tzParseTime(_dateKeyPlusDays(dateKey, 1), '00:00');
+      const start = Math.max(range.start, dayStart);
+      const end = Math.min(range.end, dayEnd);
+      if (end > start && (!dateKeyFilter || dateKey === dateKeyFilter)) {
+        if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+        byDate.get(dateKey).push({ start, end });
+      }
+      cursor = Math.max(dayEnd, cursor + 60000);
+    }
   });
 
   let totalMs = 0;
@@ -3081,12 +3095,14 @@ function sumEntryMinutes(arr, predicate) {
     });
     if (cur) totalMs += cur.end - cur.start;
   });
-  return Math.round(totalMs / 60000);
+  let fallbackTotal = 0;
+  fallbackMinsByDate.forEach(mins => { fallbackTotal += mins; });
+  return fallbackTotal + Math.round(totalMs / 60000);
 }
-function sumEnergyMinutes(arr, energy) {
-  return sumEntryMinutes(arr, e => e.energy === energy);
+function sumEnergyMinutes(arr, energy, dateKey=null) {
+  return sumEntryMinutes(arr, e => e.energy === energy, dateKey);
 }
-function computeDeepHrs(arr){return +(sumEnergyMinutes(arr, 'deep')/60).toFixed(1);}
+function computeDeepHrs(arr, dateKey=null){return +(sumEnergyMinutes(arr, 'deep', dateKey)/60).toFixed(1);}
 function _buildEntriesByDate(tz) {
   const map = new Map();
   for (const e of entries) {
@@ -3767,7 +3783,7 @@ function getContextualPrompt(todayE) {
 
   const realEntries = todayE.filter(e => !e.missed && !e.deleted);
   const deepEntries = realEntries.filter(e => e.energy === 'deep');
-  const deepMins = sumEnergyMinutes(realEntries, 'deep');
+  const deepMins = sumEnergyMinutes(realEntries, 'deep', getDateInTZ(Date.now(), tz));
   const deepHrs = deepMins / 60;
   const dailyGoalHrs = getDailyGoalHrs();
   const hasGoal = (settings.deepGoal || 0) > 0;
@@ -3929,7 +3945,7 @@ function renderStatusBanner(todayE) {
   }
 
   // Actual deep minutes from real entry durations, with overlaps counted once.
-  const deepMins = sumEnergyMinutes(todayE.filter(e => !e.break && !e.away), 'deep');
+  const deepMins = sumEnergyMinutes(todayE.filter(e => !e.break && !e.away), 'deep', getViewingDateKey());
   const deepHrs = deepMins / 60;
 
   // Daily goal = weekly goal / 5
@@ -4055,7 +4071,7 @@ function renderSidePanel() {
   // ── Status card (goal progress + day bar) ──
   const spStatus = document.getElementById('sp-status-content');
   if (spStatus) {
-    const deepMins = sumEnergyMinutes(todayE, 'deep');
+    const deepMins = sumEnergyMinutes(todayE, 'deep', todayKey);
     const dailyGoalMins = getDailyGoalMins();
     const pct = dailyGoalMins>0 ? Math.min(100,Math.round(deepMins/dailyGoalMins*100)) : 0;
     const deepStr = deepMins>=60?`${(deepMins/60).toFixed(1)}h`:`${deepMins}m`;
@@ -4087,14 +4103,10 @@ function renderSidePanel() {
     {key:'distraction',label:'Distraction',color:'var(--distraction)'},
   ];
   const mins = {};
-  let totalMins = 0;
-  for (const e of todayE) {
-    if (e.break || e.away || e.browserUsage) continue;
-    const dur = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 0);
-    const cat = e.energy || 'shallow';
-    mins[cat] = (mins[cat] || 0) + dur;
-    totalMins += dur;
-  }
+  cats.forEach(c => {
+    mins[c.key] = sumEntryMinutes(todayE, e => !e.break && !e.away && !e.browserUsage && (e.energy || 'shallow') === c.key, todayKey);
+  });
+  const totalMins = Object.values(mins).reduce((s, m) => s + m, 0);
   const energyHTML = totalMins > 0
     ? cats.filter(c => mins[c.key]).map(c => {
         const m = mins[c.key];
@@ -4119,7 +4131,7 @@ function renderSidePanel() {
   for (let i = 6; i >= 0; i--) {
     const k = getDateInTZ(Date.now() - i * 86400000, tz);
     const dayE = byDate.get(k) || [];
-    const deepMins = sumEntryMinutes(dayE, e => e.energy === 'deep' || e.energy === 'learning');
+    const deepMins = sumEntryMinutes(dayE, e => e.energy === 'deep' || e.energy === 'learning', k);
     const dow = new Date(k + 'T12:00:00').getDay();
     bars.push({deepMins, label: weekDays[dow], isToday: k === todayKey});
   }
@@ -4259,7 +4271,7 @@ function renderToday() {
   // Timeline summary
   const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(todayE)) : todayE.length > 0;
   document.getElementById('timeline-summary').textContent =
-    workStarted ? `${computeDeepHrs(todayE)}h deep · ${todayE.length} blocks` : '';
+    workStarted ? `${computeDeepHrs(todayE, _vk)}h deep · ${todayE.length} blocks` : '';
 
   const listEl = document.getElementById('recent-list');
 
@@ -5019,7 +5031,7 @@ function renderMonthOverview(monthE, monthDate) {
   const totalMins = sumEntryMinutes(monthE);
   const onPlanE = monthE.filter(e=>e.onPlan!==null);
   const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
-  const distractionCost = Math.round(monthE.filter(e=>e.energy==='distraction').reduce((s,e)=>s+entryMins(e),0)/60*settings.targetRate);
+  const distractionCost = Math.round(sumEntryMinutes(monthE, e=>e.energy==='distraction')/60*settings.targetRate);
 
   // Build days of month
   const year = monthDate.getFullYear(), month = monthDate.getMonth();
@@ -5030,8 +5042,8 @@ function renderMonthOverview(monthE, monthDate) {
   for (let i=1; i<=daysInMonth; i++) {
     const key = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
     const dayE = entries.filter(e=>!e.missed&&!e.away&&!e.deleted&&getDateInTZ(e.tsStart||e.ts)===key);
-    const totalH = sumEntryMinutes(dayE)/60;
-    const deepH = computeDeepHrs(dayE);
+    const totalH = sumEntryMinutes(dayE, null, key)/60;
+    const deepH = computeDeepHrs(dayE, key);
     if (totalH > maxDayH) maxDayH = totalH;
     dayBars.push({i, key, totalH, deepH, isToday:key===today, isFuture:key>today, hasData:dayE.length>0});
   }
@@ -5087,9 +5099,9 @@ function entryMins(e) {
   return e.tsStart ? Math.round((e.ts-e.tsStart)/60000) : (e.blockIntervalMin||settings.intervalMin);
 }
 
-function renderEnergySplit(el, entriesArr) {
+function renderEnergySplit(el, entriesArr, dateKey=null) {
   const energyMins = {deep:0,shallow:0,nine5:0,errands:0,learning:0,exercise:0,social:0,recovery:0,waste:0};
-  entriesArr.forEach(e => { if(energyMins[e.energy]!==undefined) energyMins[e.energy]+=entryMins(e); });
+  Object.keys(energyMins).forEach(type => { energyMins[type] = sumEnergyMinutes(entriesArr, type, dateKey); });
   const total = Object.values(energyMins).reduce((a,b)=>a+b,0)||1;
   const energyColors = {
     deep:'var(--deep)',shallow:'var(--shallow)',nine5:'var(--nine5)',
@@ -5115,13 +5127,15 @@ function renderEnergySplit(el, entriesArr) {
   }).join('') || `<div style="color:var(--muted);font-size:12px">No data</div>`;
 }
 
-function renderTopActivities(el, entriesArr, limit=8, days=null) {
+function renderTopActivities(el, entriesArr, limit=8, days=null, dateKey=null) {
   const actMap = {};
-  expandPCTimeEntries(entriesArr.filter(e=>!e.missed)).forEach(e=>{
+  const expanded = expandPCTimeEntries(entriesArr.filter(e=>!e.missed));
+  expanded.forEach(e=>{
     const key = e.activity.split(' (Output')[0];
-    const m = entryMins(e);
     if(!actMap[key]) actMap[key]={mins:0,energy:e.energy};
-    actMap[key].mins+=m;
+  });
+  Object.keys(actMap).forEach(act => {
+    actMap[act].mins = sumEntryMinutes(expanded, e => e.activity.split(' (Output')[0] === act, dateKey);
   });
   const top = Object.entries(actMap).sort((a,b)=>b[1].mins-a[1].mins).slice(0,limit);
   const maxMins = top[0]?.[1].mins||1;
@@ -5140,7 +5154,7 @@ function renderTopActivities(el, entriesArr, limit=8, days=null) {
     if (days && days.length) {
       // Segmented bar — one segment per day, proportional to that day's minutes for this activity
       const dayMins = days.map(d => {
-        const m = d.entries.filter(e=>!e.missed && e.activity.split(' (Output')[0]===act).reduce((s,e)=>s+entryMins(e),0);
+        const m = sumEntryMinutes(expanded, e => e.activity.split(' (Output')[0] === act, d.key);
         return { key: d.key, label: d.label, mins: m };
       });
       const activeDays = dayMins.filter(d => d.mins > 0);
@@ -5199,7 +5213,7 @@ function renderUnloggedHours(el, days) {
     const availableMins = isToday
       ? Math.max(0, Math.round((now - dayStartTs) / 60000))
       : 24 * 60;
-    const loggedMins = d.entries.filter(e => !e.deleted).reduce((s, e) => s + entryMins(e), 0);
+    const loggedMins = sumEntryMinutes(d.entries, e => !e.deleted, d.key);
     const unloggedMins = Math.max(0, availableMins - loggedMins);
     return { key: d.key, label: d.label, unloggedMins, availableMins, idx };
   });
@@ -5273,10 +5287,10 @@ function renderWeekOverview(days) {
   const onPlanE = weekE.filter(e=>e.onPlan!==null);
   const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
   const distractionCost = Math.round(weekE.filter(e=>e.energy==='waste').length*(settings.intervalMin/60)*settings.targetRate);
-  const bestDay = days.reduce((a,b)=>b.entries.length&&computeDeepHrs(b.entries)>computeDeepHrs(a.entries)?b:a, days[0]);
+  const bestDay = days.reduce((a,b)=>b.entries.length&&computeDeepHrs(b.entries, b.key)>computeDeepHrs(a.entries, a.key)?b:a, days[0]);
   const activeDays = days.filter(d=>d.entries.length);
-  const avgDeep = activeDays.length?(Math.round(activeDays.reduce((s,d)=>s+computeDeepHrs(d.entries),0)/activeDays.length*10)/10).toFixed(1)+'h':'—';
-  const maxTotal = Math.max(...days.map(d=>sumEntryMinutes(d.entries)/60),0.5);
+  const avgDeep = activeDays.length?(Math.round(activeDays.reduce((s,d)=>s+computeDeepHrs(d.entries, d.key),0)/activeDays.length*10)/10).toFixed(1)+'h':'—';
+  const maxTotal = Math.max(...days.map(d=>sumEntryMinutes(d.entries, null, d.key)/60),0.5);
 
   const content = document.getElementById('week-content');
   content.innerHTML = `
@@ -5316,15 +5330,15 @@ function renderWeekOverview(days) {
           ];
           const focusKeys = new Set(FOCUS.map(f=>f.k));
           const maxFocusH = Math.max(...days.map(d=>
-            sumEntryMinutes(d.entries, e => !e.missed && focusKeys.has(e.energy))/60
+            sumEntryMinutes(d.entries, e => !e.missed && focusKeys.has(e.energy), d.key)/60
           ), 0.5);
           return days.map(d=>{
             const focusEntries = d.entries.filter(e=>!e.missed&&focusKeys.has(e.energy));
-            const focusH = sumEntryMinutes(focusEntries)/60;
+            const focusH = sumEntryMinutes(focusEntries, null, d.key)/60;
             const barH = Math.max(focusH>0?8:3, Math.round(focusH/maxFocusH*72));
             const energyMins = {};
-            focusEntries.forEach(e=>{ energyMins[e.energy]=(energyMins[e.energy]||0)+entryMins(e); });
-            const totalFocusMin = focusEntries.reduce((s,e)=>s+entryMins(e),0)||1;
+            FOCUS.forEach(f=>{ energyMins[f.k] = sumEntryMinutes(focusEntries, e=>e.energy===f.k, d.key); });
+            const totalFocusMin = Object.values(energyMins).reduce((s,m)=>s+m,0)||1;
             const segments = FOCUS.filter(f=>energyMins[f.k]).map(f=>
               `<div style="width:100%;height:${Math.round(energyMins[f.k]/totalFocusMin*100)}%;background:${f.c};flex-shrink:0"></div>`
             ).join('');
@@ -5358,7 +5372,7 @@ function renderWeekOverview(days) {
       <div class="w-card m0">
         <div class="w-card-title">Highlights</div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          <div><div class="stat-label">Best day</div><div style="font-size:13px;font-weight:600;font-family:var(--mono)">${bestDay.entries.length?computeDeepHrs(bestDay.entries)+'h — '+bestDay.label:'—'}</div></div>
+          <div><div class="stat-label">Best day</div><div style="font-size:13px;font-weight:600;font-family:var(--mono)">${bestDay.entries.length?computeDeepHrs(bestDay.entries, bestDay.key)+'h — '+bestDay.label:'—'}</div></div>
           <div><div class="stat-label">Avg deep/day</div><div style="font-size:13px;font-weight:600;font-family:var(--mono)">${avgDeep}</div></div>
           <div><div class="stat-label">Distraction cost</div><div style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--distraction)">$${distractionCost}</div></div>
         </div>
@@ -5402,7 +5416,8 @@ function renderWeekOverview(days) {
 
   // Populate activity dropdown
   const actMap2 = {};
-  weekE.filter(e=>!e.missed&&!e.break).forEach(e=>{ const k=e.activity.split(' (Output')[0]; actMap2[k]=(actMap2[k]||0)+entryMins(e); });
+  weekE.filter(e=>!e.missed&&!e.break).forEach(e=>{ const k=e.activity.split(' (Output')[0]; actMap2[k]=0; });
+  Object.keys(actMap2).forEach(k=>{ actMap2[k]=sumEntryMinutes(weekE, x=>!x.missed&&!x.break&&x.activity.split(' (Output')[0]===k); });
   const actSel = document.getElementById('filter-activity');
   actSel.innerHTML = '<option value="">All activities</option>' +
     Object.entries(actMap2).sort((a,b)=>b[1]-a[1]).map(([act])=>`<option value="${act}">${act}</option>`).join('');
@@ -5412,18 +5427,18 @@ function renderWeekOverview(days) {
 
 function renderDayDetail(day) {
   const dayE = day.entries.filter(e=>!e.missed);
-  const deepHrs = computeDeepHrs(dayE);
-  const totalMins = sumEntryMinutes(dayE);
+  const deepHrs = computeDeepHrs(dayE, day.key);
+  const totalMins = sumEntryMinutes(dayE, null, day.key);
   const onPlanE = dayE.filter(e=>e.onPlan!==null);
   const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
-  const distractionMins = sumEntryMinutes(dayE, e => e.energy === 'waste' || e.energy === 'distraction');
+  const distractionMins = sumEntryMinutes(dayE, e => e.energy === 'waste' || e.energy === 'distraction', day.key);
 
   // Time-of-day pattern: morning (before 12), afternoon (12-17), evening (17+)
   function blockHour(e) { return tzHour(e.tsStart||e.ts); }
   const morning = dayE.filter(e=>blockHour(e)<12);
   const afternoon = dayE.filter(e=>blockHour(e)>=12&&blockHour(e)<17);
   const evening = dayE.filter(e=>blockHour(e)>=17);
-  const morningDeep = computeDeepHrs(morning), aftDeep = computeDeepHrs(afternoon), eveDeep = computeDeepHrs(evening);
+  const morningDeep = computeDeepHrs(morning, day.key), aftDeep = computeDeepHrs(afternoon, day.key), eveDeep = computeDeepHrs(evening, day.key);
 
   const content = document.getElementById('week-content');
   content.innerHTML = `
@@ -5470,8 +5485,8 @@ function renderDayDetail(day) {
     <!-- Entry list -->
     <div class="w-card"><div class="w-card-title">Timeline</div><div id="w-day-entries"></div></div>`;
 
-  renderEnergySplit(document.getElementById('w-energy-split-day'), dayE);
-  renderTopActivities(document.getElementById('w-top-acts-day'), dayE, 10);
+  renderEnergySplit(document.getElementById('w-energy-split-day'), dayE, day.key);
+  renderTopActivities(document.getElementById('w-top-acts-day'), dayE, 10, null, day.key);
   renderEntryList(document.getElementById('w-day-entries'), dayE);
 }
 
@@ -5496,8 +5511,8 @@ function renderWeekTable() {
     const dayEntries = byDay[dateKey].sort((a,b)=>(b.tsStart||b.ts)-(a.tsStart||a.ts));
     const dayDate = new Date(dateKey+'T12:00:00');
     const dayLabel = dayDate.toLocaleDateString([],{weekday:'long',month:'short',day:'numeric'});
-    const dayDeep = computeDeepHrs(dayEntries);
-    const dayTotal = (Math.round(sumEntryMinutes(dayEntries)/60*10)/10).toFixed(1);
+    const dayDeep = computeDeepHrs(dayEntries, dateKey);
+    const dayTotal = (Math.round(sumEntryMinutes(dayEntries, null, dateKey)/60*10)/10).toFixed(1);
     return `<div style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:6px;cursor:pointer" onclick="selectWeekDay('${dateKey}')">
         <div style="font-size:12px;font-weight:700">${dayLabel} <span style="font-size:10px;color:var(--muted);font-weight:400">— tap for detail</span></div>
@@ -6072,10 +6087,10 @@ function computeDailySummary(dateKey) {
   const dayEntries = entries.filter(e => !e.missed && !e.deleted && getDateInTZ(e.tsStart || e.ts) === dateKey);
   if (!dayEntries.length) return null;
 
-  const totalMin = sumEntryMinutes(dayEntries);
+  const totalMin = sumEntryMinutes(dayEntries, null, dateKey);
   if (totalMin === 0) return null;
 
-  const minFor = key => sumEnergyMinutes(dayEntries, key);
+  const minFor = key => sumEnergyMinutes(dayEntries, key, dateKey);
   const nine5Min    = minFor('nine5');
   const deepMin     = minFor('deep');
   const shallowMin  = minFor('shallow');
@@ -6168,9 +6183,9 @@ function renderStreakCalendar() {
     const ts = Date.now() - i * 86400000;
     const key = getDateInTZ(ts, tz);
     const dayE = byDate.get(key) || [];
-    const deepMins = sumEnergyMinutes(dayE, 'deep');
-    const wasteMins = sumEnergyMinutes(dayE, 'waste');
-    const totalMins = sumEntryMinutes(dayE);
+    const deepMins = sumEnergyMinutes(dayE, 'deep', key);
+    const wasteMins = sumEnergyMinutes(dayE, 'waste', key);
+    const totalMins = sumEntryMinutes(dayE, null, key);
     const pct = dailyGoalMins > 0 ? deepMins / dailyGoalMins : 0;
     const wasteHeavy = totalMins > 0 && wasteMins / totalMins > 0.3;
     let bg;
