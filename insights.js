@@ -10,16 +10,16 @@
 
 // ── Per-entry feedback flash (called after each log) ──
 
-function _insightMinutes(arr, predicate) {
-  if (typeof sumEntryMinutes === 'function') return sumEntryMinutes(arr, predicate);
+function _insightMinutes(arr, predicate, dateKey=null) {
+  if (typeof sumEntryMinutes === 'function') return sumEntryMinutes(arr, predicate, dateKey);
   return (arr || [])
     .filter(e => !predicate || predicate(e))
     .reduce((s, e) => s + (e.blockIntervalMin || settings.intervalMin || 30), 0);
 }
 
-function _insightEnergyMinutes(arr, energy) {
-  if (typeof sumEnergyMinutes === 'function') return sumEnergyMinutes(arr, energy);
-  return _insightMinutes(arr, e => e.energy === energy);
+function _insightEnergyMinutes(arr, energy, dateKey=null) {
+  if (typeof sumEnergyMinutes === 'function') return sumEnergyMinutes(arr, energy, dateKey);
+  return _insightMinutes(arr, e => e.energy === energy, dateKey);
 }
 
 function analyzeBehavior(entry, todayE) {
@@ -653,7 +653,7 @@ function computeInsights(weekKey) {
   });
   let bestDay = '—', bestDayMin = 0;
   Object.entries(dayBuckets).forEach(([d, dayEntries]) => {
-    const m = _insightEnergyMinutes(dayEntries, 'deep');
+    const m = _insightEnergyMinutes(dayEntries, 'deep', d);
     if (m > bestDayMin) { bestDayMin = m; bestDay = dayNames[new Date(d+'T12:00:00').getDay()]; }
   });
 
