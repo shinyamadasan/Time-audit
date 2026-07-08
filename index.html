@@ -2845,9 +2845,8 @@ function checkBudget(energy) {
   if (!settings.budgets) return;
   const budget = settings.budgets[energy];
   if (!budget || budget <= 0) return;
-  const todayMins = getEntriesForDate(getViewingDateKey())
-    .filter(e => !e.deleted && !e.missed && e.energy === energy)
-    .reduce((sum, e) => sum + (e.blockIntervalMin || 0), 0);
+  const viewingKey = getViewingDateKey();
+  const todayMins = sumEnergyMinutes(getEntriesForDateWindow(viewingKey), energy, viewingKey);
   if (todayMins < budget) return;
   const label  = eLabel[energy] || energy;
   const logged = todayMins >= 60 ? `${(todayMins / 60).toFixed(1)}h` : `${todayMins}m`;
@@ -2967,7 +2966,32 @@ function getViewingDateKey() {
   return viewingDateKey || getDateInTZ(Date.now(), tz);
 }
 function getViewingEntries() {
-  return getEntriesForDate(getViewingDateKey());
+  return getEntriesForDateWindow(getViewingDateKey());
+}
+function clipEntryToDateForDisplay(entry, dateKey) {
+  if (!entry || entry.deleted) return null;
+  const range = entryTimeRange(entry);
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (!range) {
+    const fallbackKey = entry.date || (entry.ts ? getDateInTZ(entry.ts, tz) : null);
+    return fallbackKey === dateKey ? entry : null;
+  }
+  const dayStart = tzParseTime(dateKey, '00:00');
+  const dayEnd = tzParseTime(_dateKeyPlusDays(dateKey, 1), '00:00');
+  const start = Math.max(range.start, dayStart);
+  const end = Math.min(range.end, dayEnd);
+  if (end <= start) return null;
+  if (start === range.start && end === range.end) return entry;
+  return {
+    ...entry,
+    tsStart: start,
+    ts: end,
+    blockIntervalMin: Math.max(1, Math.round((end - start) / 60000)),
+    _clippedToDate: dateKey
+  };
+}
+function getEntriesForDateWindow(dateKey) {
+  return entries.map(e => clipEntryToDateForDisplay(e, dateKey)).filter(Boolean);
 }
 function isViewingToday() {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -2982,10 +3006,8 @@ function setViewDate(dateKey) {
 }
 function navigateDateBy(delta) {
   const cur = getViewingDateKey();
-  const [y, mo, d] = cur.split('-').map(Number);
-  const next = new Date(Date.UTC(y, mo - 1, d + delta));
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const nextKey = getDateInTZ(next.getTime(), tz);
+  const nextKey = _dateKeyPlusDays(cur, delta);
   // Don't navigate past today
   const todayKey = getDateInTZ(Date.now(), tz);
   if (nextKey > todayKey) return;
@@ -3002,7 +3024,7 @@ function toggleDatePicker() {
   for (let i = 0; i < 14; i++) {
     const ts = Date.now() - i * 86400000;
     const k = getDateInTZ(ts, tz);
-    const count = getEntriesForDate(k).length;
+    const count = getEntriesForDateWindow(k).length;
     const label = i === 0 ? 'Today' : i === 1 ? 'Yesterday'
       : new Intl.DateTimeFormat('en-US', {timeZone: tz, weekday:'long'}).format(new Date(ts));
     const dateStr = new Intl.DateTimeFormat('en-US', {timeZone: tz, month:'short', day:'numeric'}).format(new Date(ts));
@@ -3648,9 +3670,8 @@ let _todayRenderKey = '';
 function applyContextualVisibility(todayE) {
   const isToday = isViewingToday();
   const nowH = new Date().getHours();
-  const nonMissed = (isToday ? todayE : entries.filter(e =>
-    getDateInTZ(e.tsStart || e.ts) === getViewingDateKey()
-  )).filter(e => !e.missed && !e.deleted);
+  const viewKey = getViewingDateKey();
+  const nonMissed = todayE.filter(e => !e.missed && !e.deleted);
   const entryCount = nonMissed.length;
 
   const isMorning = nowH < 11;
@@ -3721,7 +3742,7 @@ function applyContextualVisibility(todayE) {
   // Morning: show when 5+ entries (day is young, summary not meaningful yet)
   const summaryThreshold = !isToday ? 1 : isEvening ? 3 : isMorning ? 5 : 4;
   if (entryCount >= summaryThreshold) {
-    renderDailySummary();
+    renderDailySummary(viewKey);
   } else {
     const card = document.getElementById('daily-summary');
     if (card) card.style.display = 'none';
@@ -4229,7 +4250,7 @@ function renderToday() {
   renderFocusWallet();
 
   // Cache key — only rebuild timeline/list DOM when today's entries actually change
-  const newRenderKey = todayE.map(e => e.id + ':' + (e.updatedAt || e.ts)).join(',');
+  const newRenderKey = _viewKey + '|' + todayE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
   const entriesChanged = newRenderKey !== _todayRenderKey;
   if (entriesChanged) _todayRenderKey = newRenderKey;
 
@@ -6084,7 +6105,7 @@ function formatSavedAt(ts) {
 // DAILY SUMMARY
 // ══════════════════════════════════════════════════════
 function computeDailySummary(dateKey) {
-  const dayEntries = entries.filter(e => !e.missed && !e.deleted && getDateInTZ(e.tsStart || e.ts) === dateKey);
+  const dayEntries = getEntriesForDateWindow(dateKey).filter(e => !e.missed && !e.deleted);
   if (!dayEntries.length) return null;
 
   const totalMin = sumEntryMinutes(dayEntries, null, dateKey);
@@ -6143,9 +6164,8 @@ function computeDailySummary(dateKey) {
 
 // getDailySummaryInsight, buildDailySummaryHTML — moved to insights.js
 
-function renderDailySummary() {
-  const todayKey = toDateKey(new Date());
-  const s = computeDailySummary(todayKey);
+function renderDailySummary(dateKey=getViewingDateKey(), updateReflect=false) {
+  const s = computeDailySummary(dateKey);
 
   // Today view card
   const card = document.getElementById('daily-summary');
@@ -6161,7 +6181,7 @@ function renderDailySummary() {
 
   // Reflect view panel
   const reflectPanel = document.getElementById('reflect-daily-summary');
-  if (reflectPanel) {
+  if (reflectPanel && updateReflect) {
     reflectPanel.innerHTML = buildDailySummaryHTML(s);
   }
 }
@@ -6482,7 +6502,7 @@ function renderReflectView() {
   renderProjectBreakdown();
 
   // ── Daily summary ──
-  renderDailySummary();
+  renderDailySummary(getDateInTZ(Date.now()), true);
 
   // ── Insights ──
   const insightsEl = document.getElementById('reflect-insights');
@@ -6713,7 +6733,7 @@ function generateTemplateEntries(dateKey) {
   if (dateKey < cutoff) return [];
   const noon = tzParseTime(dateKey, '12:00');
   const dow = tzDow(noon);
-  const realEntries = getEntriesForDate(dateKey).filter(e => !e.deleted && !e.missed);
+  const realEntries = getEntriesForDateWindow(dateKey).filter(e => !e.deleted && !e.missed);
   const result = [];
   for (const tpl of settings.templates) {
     if (!tpl.enabled) continue;
