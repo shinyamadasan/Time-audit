@@ -33,6 +33,41 @@ function testEntryDurationMinutes(entry, fallbackMin = 30) {
   return entry.blockIntervalMin || fallbackMin;
 }
 
+function testEntryTimeRange(entry, fallbackMin = 30) {
+  if (!entry || !entry.ts) return null;
+  const end = Number(entry.ts);
+  const start = entry.tsStart ? Number(entry.tsStart) : end - testEntryDurationMinutes(entry, fallbackMin) * 60000;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return { start, end };
+}
+
+function clipEntryToDateForDisplay(entry, dateKey, intervalMin = 30) {
+  if (!entry || entry.deleted) return null;
+  const range = testEntryTimeRange(entry, intervalMin);
+  if (!range) return entry.date === dateKey ? entry : null;
+  const dayStart = Date.parse(dateKey + 'T00:00:00.000Z');
+  const dayEnd = Date.parse(testDateKeyPlusDays(dateKey, 1) + 'T00:00:00.000Z');
+  const start = Math.max(range.start, dayStart);
+  const end = Math.min(range.end, dayEnd);
+  if (end <= start) return null;
+  if (start === range.start && end === range.end) return entry;
+  return {
+    ...entry,
+    tsStart: start,
+    ts: end,
+    blockIntervalMin: Math.max(1, Math.round((end - start) / 60000)),
+    _clippedToDate: dateKey
+  };
+}
+
+function getEntriesForDateWindow(entriesArr, dateKey, intervalMin = 30) {
+  return entriesArr.map(e => clipEntryToDateForDisplay(e, dateKey, intervalMin)).filter(Boolean);
+}
+
+function todayRenderKey(dateKey, entriesArr) {
+  return dateKey + '|' + entriesArr.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
+}
+
 function sumEntryMinutes(entriesArr, predicate, intervalMin = 30, dateKeyFilter = null) {
   const byDate = new Map();
   const fallbackMinsByDate = new Map();
@@ -196,6 +231,29 @@ test('day-specific activity sum caps a 28h entry to that calendar day', () => {
   ];
   assert.equal(sumEntryMinutes(arr, e => e.activity === 'PC Time', 30, '2026-01-05'), 24 * 60);
   assert.equal(sumEntryMinutes(arr, e => e.activity === 'PC Time', 30, '2026-01-06'), 4 * 60);
+});
+test('date window clips a crossing entry for each viewed day', () => {
+  const arr = [
+    {id:1, activity:'PC Time', energy:'deep', tsStart: Date.UTC(2026, 0, 5, 0), ts: Date.UTC(2026, 0, 6, 4)},
+  ];
+  const mon = getEntriesForDateWindow(arr, '2026-01-05');
+  const tue = getEntriesForDateWindow(arr, '2026-01-06');
+  assert.equal(mon.length, 1);
+  assert.equal(tue.length, 1);
+  assert.equal(mon[0].blockIntervalMin, 24 * 60);
+  assert.equal(tue[0].blockIntervalMin, 4 * 60);
+  assert.equal(mon[0].tsStart, Date.UTC(2026, 0, 5, 0));
+  assert.equal(mon[0].ts, Date.UTC(2026, 0, 6, 0));
+  assert.equal(tue[0].tsStart, Date.UTC(2026, 0, 6, 0));
+  assert.equal(tue[0].ts, Date.UTC(2026, 0, 6, 4));
+});
+test('today render key changes between clipped views of the same saved entry', () => {
+  const arr = [
+    {id:1, activity:'PC Time', energy:'deep', tsStart: Date.UTC(2026, 0, 5, 0), ts: Date.UTC(2026, 0, 6, 4)},
+  ];
+  const mon = getEntriesForDateWindow(arr, '2026-01-05');
+  const tue = getEntriesForDateWindow(arr, '2026-01-06');
+  assert.notEqual(todayRenderKey('2026-01-05', mon), todayRenderKey('2026-01-06', tue));
 });
 
 console.log('\ncomputeIdentityScore(arr)');

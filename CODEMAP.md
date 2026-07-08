@@ -199,9 +199,9 @@ Depends on: `entries`, `persist()`, `syncEntries()`, `showToast()`, `renderToday
 ## [Date Picker & Navigation]
 Lines: 3547–3613
 Purpose: Browse past days in the Today view — get/set viewing date, navigate by delta, build the 14-day dropdown list.
-Functions: `getViewingDateKey()`, `getViewingEntries()`, `isViewingToday()`, `dayEndTs()`, `setViewDate()`, `navigateDateBy()`, `toggleDatePicker()`
+Functions: `getViewingDateKey()`, `getViewingEntries()`, `clipEntryToDateForDisplay()`, `getEntriesForDateWindow()`, `isViewingToday()`, `dayEndTs()`, `setViewDate()`, `navigateDateBy()`, `toggleDatePicker()`
 Variables: `viewingDateKey`
-Depends on: `entries`, `getDateInTZ()`, `renderToday()`
+Depends on: `entries`, `getDateInTZ()`, `entryTimeRange()`, `tzParseTime()`, `_dateKeyPlusDays()`, `renderToday()`
 
 ## [Statistics & Scoring]
 Lines: 3025–3124
