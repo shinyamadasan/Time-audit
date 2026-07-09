@@ -180,7 +180,7 @@ Lines: 3070–3087
 Purpose: Tab switching — activate the correct view div, highlight the nav button, trigger view-specific renders.
 Functions: `showView()`
 Variables: —
-Depends on: `renderToday()`, `renderWeek()`, `renderSettings()`, `renderSidePanel()`, `renderStreakCalendar()`
+Depends on: `renderToday()`, `renderWeek()`, `renderSettings()`
 
 ## [Utility — Formatting & Quick Actions]
 Lines: 3084–3160
@@ -227,9 +227,9 @@ Depends on: `entries`, `settings` (timezone)
 ## [Today View — Rendering]
 Lines: 3923–4292
 Purpose: Main `renderToday()` and all its sub-renders: day bar, status banner, Focus Wallet card, timeline (blocks + gaps), stat cards, recent entries list, contextual-visibility rules, hero state machine, same-as-last CTA, awareness signal, side-panel refresh trigger.
-Functions: `renderToday()`, `renderDayBar()`, `renderStatusBanner()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderSidePanel()`, `renderLeftPanel()`
-Variables: `_todayRenderKey`, `_lastLoggedEntryId`
-Depends on: Timeline helpers, Statistics (including `sumEntryMinutes()` / `sumEnergyMinutes()`), Entry logging, Date picker, Focus Wallet, `persist()`, `renderStreakCalendar()`, `renderFocusHeatmap()`
+Functions: `renderToday()`, `shouldRenderOnDateTick()`, `renderTodayOnDateChange()`, `renderDayBar()`, `renderStatusBanner()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderSidePanel()`, `renderLeftPanel()`
+Variables: `_todayRenderKey`, `_lastTodayDateKey`, `_lastLoggedEntryId`
+Depends on: Timeline helpers, Statistics (including `sumEntryMinutes()` / `sumEnergyMinutes()`), Entry logging, Date picker, Focus Wallet, `persist()`
 
 ## [Hero Prompt & Task Suggestions]
 Lines: 4777–4895

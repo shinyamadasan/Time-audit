@@ -2451,7 +2451,6 @@ function showView(name) {
   if (name==='settings') renderSettings();
 
   document.body.classList.toggle('view-today', name === 'today');
-  if (name === 'today' && window.innerWidth >= 1100) { renderSidePanel(); renderStreakCalendar(); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -3672,6 +3671,20 @@ function toggleTlBucket(id) {
 // ⚠ DANGER: setViewDate() sets this to '__FORCE__' (a sentinel) to force re-render on empty days.
 // An empty day produces key '' which equals the initial value — without the sentinel, switching to an empty past day shows stale UI.
 let _todayRenderKey = '';
+let _lastTodayDateKey = '';
+
+function shouldRenderOnDateTick(lastDateKey, currentDateKey) {
+  return !!currentDateKey && currentDateKey !== lastDateKey;
+}
+
+function renderTodayOnDateChange() {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  if (!shouldRenderOnDateTick(_lastTodayDateKey, todayKey)) return;
+  _lastTodayDateKey = todayKey;
+  _todayRenderKey = '__FORCE__';
+  renderToday();
+}
 
 // ── Contextual visibility ─────────────────────────────────────────────────
 // Shows the highest-signal element for the current moment.
@@ -4216,6 +4229,8 @@ function renderToday() {
 
   const _tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const _viewKey = getViewingDateKey();
+  const _todayKey = getDateInTZ(Date.now(), _tz);
+  if (_viewKey === _todayKey) _lastTodayDateKey = _todayKey;
   // tzParseTime gives noon on that date in the user's own timezone — safe for Intl display
   document.getElementById('today-date').textContent = new Intl.DateTimeFormat('en-US', {
     timeZone: _tz, weekday: 'long', month: 'long', day: 'numeric'
@@ -4296,9 +4311,8 @@ function renderToday() {
   applyContextualVisibility(todayE);
 
   // Timeline label + nav
-  const _todayKey2 = getDateInTZ(Date.now(), _tz);
   const _vk = getViewingDateKey();
-  const _diffDays = Math.round((new Date(_todayKey2) - new Date(_vk)) / 86400000);
+  const _diffDays = Math.round((new Date(_todayKey) - new Date(_vk)) / 86400000);
   const _tlLabel = _diffDays === 0 ? "Today's timeline"
     : _diffDays === 1 ? "Yesterday's timeline"
     : new Intl.DateTimeFormat('en-US',{timeZone:_tz,weekday:'long',month:'short',day:'numeric'}).format(new Date(_vk + 'T12:00:00')) + "'s timeline";
@@ -4331,8 +4345,6 @@ function renderToday() {
   renderDayBar(todayE);
   renderStatusBanner(todayE);
   renderSidePanel();
-  renderStreakCalendar();
-  renderFocusHeatmap();
   renderPartnerCard();
 }
 
@@ -6518,6 +6530,8 @@ function renderReflectView() {
   renderHonestSummary();
   renderWeekComparison();
   renderProjectBreakdown();
+  renderStreakCalendar();
+  renderFocusHeatmap();
 
   // ── Daily summary ──
   renderDailySummary(getDateInTZ(Date.now()), true);
@@ -7531,8 +7545,8 @@ document.addEventListener('click', e => {
     dd.style.display = 'none';
   }
 });
-// Refresh timeline every 60s so "Since last log" gap stays current
-setInterval(() => { if (!running && !breakActive) renderToday(); }, 60000);
+// Full Today render is only needed on date rollover; lightweight status updates run above.
+setInterval(() => { if (!running && !breakActive) renderTodayOnDateChange(); }, 60000);
 
 // ══════════════════════════════════════════════════════
 // SERVICE WORKER — background ping notifications
