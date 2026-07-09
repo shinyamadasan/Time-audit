@@ -2912,19 +2912,36 @@ function saveEntry() {
 }
 
 
+function isSameDeletionTarget(entry, target) {
+  if (!entry || !target || entry.deleted) return false;
+  if (entry.id === target.id) return true;
+  if (String(entry.activity || '').trim().toLowerCase() !== String(target.activity || '').trim().toLowerCase()) return false;
+  if ((entry.energy || '') !== (target.energy || '')) return false;
+  const a = entryTimeRange(entry);
+  const b = entryTimeRange(target);
+  if (!a || !b) return false;
+  const toleranceMs = 60 * 1000;
+  return Math.abs(a.start - b.start) <= toleranceMs && Math.abs(a.end - b.end) <= toleranceMs;
+}
+
 function deleteEntry(id) {
   // Tombstone instead of filter — lets Firebase and other devices know this entry is gone.
   // Filtering it out would create a race: the sync listener sees it "missing" locally and re-adds it.
   const entryId = typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : id;
   const entry = entries.find(e => e.id === entryId);
   if (!entry) { showToast('Entry not found'); return; }
-  entry.deleted = true;
-  entry.updatedAt = Date.now();
+  const targets = entries.filter(e => isSameDeletionTarget(e, entry));
+  if (!targets.length) { _todayRenderKey = '__FORCE__'; renderToday(); showToast('Already deleted'); return; }
+  const now = Date.now();
+  targets.forEach(e => {
+    e.deleted = true;
+    e.updatedAt = now;
+  });
   persist();
   _todayRenderKey = '__FORCE__';
   syncEntries();
   renderToday(); renderWeek(); renderWeekTable();
-  showToast(`Deleted ${entry.activity || 'entry'}`);
+  showToast(targets.length > 1 ? `Deleted ${entry.activity || 'entry'} (${targets.length} copies)` : `Deleted ${entry.activity || 'entry'}`);
 }
 
 function startSprint() {
