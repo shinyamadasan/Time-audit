@@ -26,7 +26,7 @@
 ### storage.js
 Lines: external file
 Purpose: All localStorage/Firebase persistence, data loading, and cross-device sync helpers.
-Functions: `persist()`, `syncEntries()`, `syncFocusRedemptions()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
+Functions: `persist()`, `resolveEntrySync()`, `syncEntries()`, `syncFocusRedemptions()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
 Variables: (managed internally)
 Depends on: Firebase SDK globals, `focusRedemptions` global, `sumEnergyMinutes()`
 
@@ -91,7 +91,7 @@ Depends on: —
 Lines: 1335–1578
 Purpose: Markup for the Week tab (day tabs, energy split, top activities), Reflect tab (honest summary, week comparison, reflections, weekly review), and Settings tab (timezone, intervals, presets, data management).
 Functions: —
-Key IDs: `view-week`, `view-reflect`, `view-settings`, `reflect-streak-cal` (streak cal mount), `reflect-heatmap` (heatmap mount)
+Key IDs: `view-week`, `view-reflect`, `view-settings`, `reflect-streak-cal` (streak cal mount), `reflect-heatmap` (heatmap mount), `app-build-label`
 Depends on: —
 
 ## [HTML — Desktop Side Panels]
@@ -130,7 +130,7 @@ Depends on: —
 Lines: 2129–2196
 Purpose: All top-level mutable state and one-time constants shared across the entire app.
 Functions: —
-Variables: `currentTask`, `viewingDateKey`, `entries`, `settings`, `reviews`, `weeklyReviews`, `focusRedemptions`, `intention`, `running`, `ticker`, `pcTimeLiveTicker`, `totalSecs`, `remaining`, `distractionDebt`, `pingCount`, `sortKey`, `sortDir`, `selectedEnergy`, `selectedOnPlan`, `QUICK_ACTIVITY_OPTIONS`, `blockStartTime`, `lastStateChange`, `currentState`, `blockSegments`, `focusExitTimer`, `fbApp`, `fbDb`, `fbRoomRef`, `roomCode`, `fbTimerReceived`, `currentUser`, `timerStartedAt`, `snoozesUsedToday`, `snoozeTimer`, `quickLogBusy`, `switchingTask`, `dailyCommitment`, `lastTaskForRepeat`, `breakActive`, `breakEndsAt`, `breakTicker`, `breakStartTs`, `timerOwnerDeviceId`, `awayActive`, `awayStartTime`, `awayLabel`, `continueBannerTimer`, `continueBannerCountdown`, `recentChipTasks`, `taskStartTime`, `awayElapsedTicker`, `CIRCUM`
+Variables: `APP_BUILD`, `currentTask`, `viewingDateKey`, `entries`, `settings`, `reviews`, `weeklyReviews`, `focusRedemptions`, `intention`, `running`, `ticker`, `pcTimeLiveTicker`, `totalSecs`, `remaining`, `distractionDebt`, `pingCount`, `sortKey`, `sortDir`, `selectedEnergy`, `selectedOnPlan`, `QUICK_ACTIVITY_OPTIONS`, `blockStartTime`, `lastStateChange`, `currentState`, `blockSegments`, `focusExitTimer`, `fbApp`, `fbDb`, `fbRoomRef`, `roomCode`, `fbTimerReceived`, `currentUser`, `timerStartedAt`, `snoozesUsedToday`, `snoozeTimer`, `quickLogBusy`, `switchingTask`, `dailyCommitment`, `lastTaskForRepeat`, `breakActive`, `breakEndsAt`, `breakTicker`, `breakStartTs`, `timerOwnerDeviceId`, `awayActive`, `awayStartTime`, `awayLabel`, `continueBannerTimer`, `continueBannerCountdown`, `recentChipTasks`, `taskStartTime`, `awayElapsedTicker`, `CIRCUM`
 Depends on: —
 
 ## [Timer — Core Interval Tracking]
@@ -301,6 +301,13 @@ Functions: `renderReflectView()`, `renderHonestSummary()`, `renderWeekComparison
 Variables: —
 Depends on: `entries`, `reviews`, `weeklyReviews`, Statistics section, `computeInsights()`, `getDateInTZ()`, `tzDow()`, `tzHour()`
 
+## [Weekly Schedule Templates]
+Lines: 6729–6910
+Purpose: Recurring block templates, template suppression against real/deleted entries, and Settings template editor.
+Functions: `generateTemplateEntries()`, `entryCoversTemplateSlot()`, `renderTemplateList()`, `toggleTplDay()`, `addTemplate()`, `editTemplate()`, `removeTemplate()`
+Variables: `_editingTplIdx`
+Depends on: `settings`, Date Picker, `entries`, `persist()`, `renderToday()`, Firebase sync
+
 ## [Settings View]
 Lines: 6010–6092
 Purpose: Render settings form (timezone, ping interval, deep-work goal, presets, coach tone, exit delay, review hour, sleep times, sync, account); save handler; add/remove presets.
@@ -428,6 +435,7 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Focus heatmap (hour × day grid) | Reflect View → `renderFocusHeatmap()` | ~6750 |
 | Daily reflection cards | Reflect View → `renderDailyReflections()` | ~6928 |
 | Weekly review form (wins, waste, change) | Reflect View → `saveWeeklyReview()` | ~6982 |
+| Recurring schedule templates | Weekly Schedule Templates | ~6729 |
 | Settings form (timezone, interval, presets…) | Settings View | 6010–6092 |
 | Toast notifications | Overlay, Toast & Modal Utilities | 7106–7181 |
 | CSV export / clear data | Export & Data Management | 7131–7181 |

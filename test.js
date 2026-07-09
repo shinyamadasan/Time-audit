@@ -84,6 +84,31 @@ function shouldRenderOnDateTick(lastDateKey, currentDateKey) {
   return !!currentDateKey && currentDateKey !== lastDateKey;
 }
 
+function resolveEntrySync(local, remote, nowTs = Date.now()) {
+  if (!remote || !remote.id) return { action: 'skip' };
+  const remoteEntry = remote.updatedAt ? remote : { ...remote, updatedAt: remote.ts || nowTs };
+  if (!local) {
+    return remoteEntry.deleted ? { action: 'skip' } : { action: 'add', entry: remoteEntry };
+  }
+  if (local.deleted && !remoteEntry.deleted) return { action: 'keep-local' };
+  const remoteV = remoteEntry.updatedAt || remoteEntry.ts || 0;
+  const localV = local.updatedAt || local.ts || 0;
+  return remoteV > localV ? { action: 'replace', entry: remoteEntry } : { action: 'keep-local' };
+}
+
+function normalizeActivityForTemplate(s) {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function entryCoversTemplateSlot(entry, tpl) {
+  if (!entry || entry.missed) return false;
+  if (!entry.deleted) return true;
+  const entryActivity = String(normalizeActivityForTemplate(String(entry.activity || '').trim()) || '').toLowerCase();
+  const tplActivity = String(normalizeActivityForTemplate(String(tpl.activity || '').trim()) || '').toLowerCase();
+  return entryActivity === tplActivity && entry.energy === tpl.energy;
+}
+
 function sumEntryMinutes(entriesArr, predicate, intervalMin = 30, dateKeyFilter = null) {
   const byDate = new Map();
   const fallbackMinsByDate = new Map();
@@ -291,6 +316,43 @@ test('minute tick only requests full render when date changes', () => {
   assert.equal(shouldRenderOnDateTick('2026-07-09', '2026-07-09'), false);
   assert.equal(shouldRenderOnDateTick('2026-07-09', '2026-07-10'), true);
   assert.equal(shouldRenderOnDateTick('', '2026-07-09'), true);
+});
+
+console.log('\nresolveEntrySync(local, remote)');
+test('remote live entry is added when local is missing', () => {
+  const result = resolveEntrySync(null, { id: 1, ts: 1000, activity: 'Deep work' }, 2000);
+  assert.equal(result.action, 'add');
+  assert.equal(result.entry.updatedAt, 1000);
+});
+test('remote tombstone is skipped when local is missing', () => {
+  assert.equal(resolveEntrySync(null, { id: 1, deleted: true, updatedAt: 3000 }).action, 'skip');
+});
+test('local tombstone wins over newer remote live entry', () => {
+  const local = { id: 1, deleted: true, updatedAt: 1000 };
+  const remote = { id: 1, deleted: false, updatedAt: 5000, activity: 'Sleep' };
+  assert.equal(resolveEntrySync(local, remote).action, 'keep-local');
+});
+test('newer remote tombstone replaces local live entry', () => {
+  const local = { id: 1, deleted: false, updatedAt: 1000, activity: 'Sleep' };
+  const remote = { id: 1, deleted: true, updatedAt: 5000 };
+  assert.equal(resolveEntrySync(local, remote).action, 'replace');
+});
+
+console.log('\nentryCoversTemplateSlot(entry, tpl)');
+test('live entries suppress overlapping templates regardless of label', () => {
+  const entry = { id: 1, activity: 'PC Time', energy: 'deep' };
+  const tpl = { activity: 'Sleep', energy: 'recovery' };
+  assert.equal(entryCoversTemplateSlot(entry, tpl), true);
+});
+test('deleted matching entry suppresses matching template', () => {
+  const entry = { id: 1, activity: ' sleep ', energy: 'recovery', deleted: true };
+  const tpl = { activity: 'Sleep', energy: 'recovery' };
+  assert.equal(entryCoversTemplateSlot(entry, tpl), true);
+});
+test('deleted different entry does not suppress unrelated template', () => {
+  const entry = { id: 1, activity: 'Scribe shift', energy: 'nine5', deleted: true };
+  const tpl = { activity: 'Sleep', energy: 'recovery' };
+  assert.equal(entryCoversTemplateSlot(entry, tpl), false);
 });
 
 console.log('\ncomputeIdentityScore(arr)');

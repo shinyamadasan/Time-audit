@@ -704,6 +704,7 @@
       <button class="btn sm danger" onclick="clearSelectedDay()">Clear day</button>
     </div>
     <div style="margin-top:10px;font-size:12px;color:var(--muted)" id="settings-stats"></div>
+    <div style="margin-top:6px;font-size:11px;color:var(--muted2);font-family:var(--mono)">Build <span id="app-build-label"></span></div>
   </div>
 </div>
 
@@ -1304,6 +1305,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
+const APP_BUILD = '2026-07-09-integrity-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -5605,6 +5607,8 @@ function renderSettings() {
   toneEl.value = settings.coachTone || 'analyst';
   renderTonePreview();
   document.getElementById('settings-stats').textContent=`${entries.length} total entries · ${getWeekEntries().length} this week`;
+  const buildEl = document.getElementById('app-build-label');
+  if (buildEl) buildEl.textContent = APP_BUILD;
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const datesWithEntries = [...new Set(entries.filter(e=>!e.deleted).map(e=>getDateInTZ(e.tsStart||e.ts,tz)))].sort().reverse();
   const todayKey = toDateKey(new Date());
@@ -6776,11 +6780,7 @@ function generateTemplateEntries(dateKey) {
     // Only hide the template when logged entries cover ≥50% of its duration.
     // A small incidental overlap (e.g. a browser-extension PC-time snippet) won't suppress it.
     const tplDur = tsEnd - tsStart;
-    const tplActivity = normalizeActivity(tpl.activity || '');
-    const coveringEntries = dayEntries.filter(e => {
-      if (!e.deleted) return true;
-      return normalizeActivity(e.activity || '') === tplActivity && e.energy === tpl.energy;
-    });
+    const coveringEntries = dayEntries.filter(e => entryCoversTemplateSlot(e, tpl));
     const covered = coveringEntries.reduce((acc, e) => {
       const eS = Math.max(tsStart, e.tsStart || (e.ts - (e.blockIntervalMin || settings.intervalMin) * 60000));
       const eE = Math.min(tsEnd, e.ts);
@@ -6796,6 +6796,14 @@ function generateTemplateEntries(dateKey) {
     });
   }
   return result;
+}
+
+function entryCoversTemplateSlot(entry, tpl) {
+  if (!entry || entry.missed) return false;
+  if (!entry.deleted) return true;
+  const entryActivity = String(normalizeActivity(String(entry.activity || '').trim()) || '').toLowerCase();
+  const tplActivity = String(normalizeActivity(String(tpl.activity || '').trim()) || '').toLowerCase();
+  return entryActivity === tplActivity && entry.energy === tpl.energy;
 }
 
 function renderTemplateList() {
