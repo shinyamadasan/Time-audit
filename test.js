@@ -80,6 +80,10 @@ function todayRenderKey(dateKey, entriesArr) {
   return dateKey + '|' + entriesArr.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
 }
 
+function shouldRenderOnDateTick(lastDateKey, currentDateKey) {
+  return !!currentDateKey && currentDateKey !== lastDateKey;
+}
+
 function sumEntryMinutes(entriesArr, predicate, intervalMin = 30, dateKeyFilter = null) {
   const byDate = new Map();
   const fallbackMinsByDate = new Map();
@@ -282,6 +286,11 @@ test('today render key changes between clipped views of the same saved entry', (
   const mon = getEntriesForDateWindow(arr, '2026-01-05');
   const tue = getEntriesForDateWindow(arr, '2026-01-06');
   assert.notEqual(todayRenderKey('2026-01-05', mon), todayRenderKey('2026-01-06', tue));
+});
+test('minute tick only requests full render when date changes', () => {
+  assert.equal(shouldRenderOnDateTick('2026-07-09', '2026-07-09'), false);
+  assert.equal(shouldRenderOnDateTick('2026-07-09', '2026-07-10'), true);
+  assert.equal(shouldRenderOnDateTick('', '2026-07-09'), true);
 });
 
 console.log('\ncomputeIdentityScore(arr)');
