@@ -41,6 +41,18 @@ function testEntryTimeRange(entry, fallbackMin = 30) {
   return { start, end };
 }
 
+function isSameDeletionTarget(entry, target) {
+  if (!entry || !target || entry.deleted) return false;
+  if (entry.id === target.id) return true;
+  if (String(entry.activity || '').trim().toLowerCase() !== String(target.activity || '').trim().toLowerCase()) return false;
+  if ((entry.energy || '') !== (target.energy || '')) return false;
+  const a = testEntryTimeRange(entry);
+  const b = testEntryTimeRange(target);
+  if (!a || !b) return false;
+  const toleranceMs = 60 * 1000;
+  return Math.abs(a.start - b.start) <= toleranceMs && Math.abs(a.end - b.end) <= toleranceMs;
+}
+
 function clipEntryToDateForDisplay(entry, dateKey, intervalMin = 30, includeDeleted = false) {
   if (!entry || (entry.deleted && !includeDeleted)) return null;
   const range = testEntryTimeRange(entry, intervalMin);
@@ -255,6 +267,13 @@ test('date window only includes deleted entries when explicitly requested', () =
   const withDeleted = getEntriesForDateWindow(arr, '2026-01-05', 30, true);
   assert.equal(withDeleted.length, 1);
   assert.equal(withDeleted[0].activity, 'Sleep');
+});
+test('delete target matches duplicate visible block with a different id', () => {
+  const target = {id:1, activity:'Sleep', energy:'recovery', tsStart: Date.UTC(2026, 0, 5, 0), ts: Date.UTC(2026, 0, 5, 12)};
+  const dup = {id:2, activity:'sleep', energy:'recovery', tsStart: Date.UTC(2026, 0, 5, 0), ts: Date.UTC(2026, 0, 5, 12)};
+  const later = {id:3, activity:'Sleep', energy:'recovery', tsStart: Date.UTC(2026, 0, 5, 1), ts: Date.UTC(2026, 0, 5, 12)};
+  assert.equal(isSameDeletionTarget(dup, target), true);
+  assert.equal(isSameDeletionTarget(later, target), false);
 });
 test('today render key changes between clipped views of the same saved entry', () => {
   const arr = [
