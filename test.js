@@ -109,6 +109,125 @@ function entryCoversTemplateSlot(entry, tpl) {
   return entryActivity === tplActivity && entry.energy === tpl.energy;
 }
 
+function testDataDoctorDateKey(ts) {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+function testDataDoctorIssueEntry(entry, index, range) {
+  const anchor = range ? range.start : Number(entry?.tsStart || entry?.ts);
+  return {
+    index,
+    id: entry?.id ?? 'missing',
+    date: Number.isFinite(anchor) ? testDataDoctorDateKey(anchor) : (entry?.date || 'unknown'),
+    activity: entry?.activity || 'Untitled',
+    energy: entry?.energy || 'unknown',
+    deleted: !!entry?.deleted
+  };
+}
+
+function testDataDoctorDuplicateKey(entry, range) {
+  return [
+    String(entry.activity || '').trim().toLowerCase(),
+    entry.energy || '',
+    Math.round(range.start / 60000),
+    Math.round(range.end / 60000)
+  ].join('|');
+}
+
+function testDataDoctorAddDayMinutes(dayTotals, range) {
+  let cursor = range.start;
+  let guard = 0;
+  while (cursor < range.end && guard++ < 370) {
+    const dateKey = testDataDoctorDateKey(cursor);
+    const dayStart = Date.parse(dateKey + 'T00:00:00.000Z');
+    const dayEnd = Date.parse(testDateKeyPlusDays(dateKey, 1) + 'T00:00:00.000Z');
+    const start = Math.max(range.start, dayStart);
+    const end = Math.min(range.end, dayEnd);
+    if (end > start) dayTotals.set(dateKey, (dayTotals.get(dateKey) || 0) + Math.round((end - start) / 60000));
+    cursor = Math.max(dayEnd, cursor + 60000);
+  }
+}
+
+function scanDataDoctorEntries(entriesArr, opts = {}) {
+  const intervalMin = opts.intervalMin || 30;
+  const nowTs = opts.nowTs ?? Date.now();
+  const longEntryMin = opts.longEntryMin || 18 * 60;
+  const dayMaxMin = opts.dayMaxMin || 24 * 60;
+  const futureGraceMs = opts.futureGraceMs || 60 * 60 * 1000;
+  const issues = {
+    missingUpdatedAt: [],
+    dateMismatches: [],
+    invalidRanges: [],
+    futureEntries: [],
+    longEntries: [],
+    exactDuplicateGroups: [],
+    duplicateIds: [],
+    dayOverflows: []
+  };
+  const duplicateMap = new Map();
+  const idMap = new Map();
+  const dayTotals = new Map();
+
+  (entriesArr || []).forEach((entry, index) => {
+    if (!entry || entry.template) return;
+    if (entry.id != null) {
+      const key = String(entry.id);
+      if (!idMap.has(key)) idMap.set(key, []);
+      idMap.get(key).push(testDataDoctorIssueEntry(entry, index, null));
+    }
+    if (!entry.updatedAt) issues.missingUpdatedAt.push(testDataDoctorIssueEntry(entry, index, null));
+
+    const range = testEntryTimeRange(entry, intervalMin);
+    const anchor = range ? range.start : Number(entry.tsStart || entry.ts);
+    const expectedDate = Number.isFinite(anchor) ? testDataDoctorDateKey(anchor) : null;
+    if (expectedDate && entry.date !== expectedDate) {
+      issues.dateMismatches.push({ ...testDataDoctorIssueEntry(entry, index, range), expectedDate });
+    }
+
+    if (entry.deleted || entry.missed) return;
+    if (!range) {
+      issues.invalidRanges.push(testDataDoctorIssueEntry(entry, index, null));
+      return;
+    }
+
+    const minutes = Math.round((range.end - range.start) / 60000);
+    const issue = { ...testDataDoctorIssueEntry(entry, index, range), minutes };
+    if (range.end > nowTs + futureGraceMs) issues.futureEntries.push(issue);
+    if (minutes > longEntryMin) issues.longEntries.push(issue);
+    testDataDoctorAddDayMinutes(dayTotals, range);
+
+    const dupKey = testDataDoctorDuplicateKey(entry, range);
+    if (!duplicateMap.has(dupKey)) duplicateMap.set(dupKey, []);
+    duplicateMap.get(dupKey).push({ ...issue, index, range });
+  });
+
+  duplicateMap.forEach(group => {
+    if (group.length < 2) return;
+    group.sort((a, b) => (entriesArr[b.index]?.updatedAt || entriesArr[b.index]?.ts || 0) - (entriesArr[a.index]?.updatedAt || entriesArr[a.index]?.ts || 0));
+    issues.exactDuplicateGroups.push({
+      keepIndex: group[0].index,
+      duplicateIndexes: group.slice(1).map(item => item.index),
+      ids: group.map(item => item.id),
+      count: group.length,
+      activity: group[0].activity,
+      energy: group[0].energy,
+      date: group[0].date,
+      minutes: group[0].minutes
+    });
+  });
+
+  idMap.forEach((items, id) => {
+    if (items.length > 1) issues.duplicateIds.push({ id, count: items.length, items });
+  });
+
+  dayTotals.forEach((minutes, date) => {
+    if (minutes > dayMaxMin) issues.dayOverflows.push({ date, minutes });
+  });
+
+  const totalIssues = Object.values(issues).reduce((sum, list) => sum + list.length, 0);
+  return { issues, totalIssues, scanned: (entriesArr || []).length };
+}
+
 function sumEntryMinutes(entriesArr, predicate, intervalMin = 30, dateKeyFilter = null) {
   const byDate = new Map();
   const fallbackMinsByDate = new Map();
@@ -353,6 +472,45 @@ test('deleted different entry does not suppress unrelated template', () => {
   const entry = { id: 1, activity: 'Scribe shift', energy: 'nine5', deleted: true };
   const tpl = { activity: 'Sleep', energy: 'recovery' };
   assert.equal(entryCoversTemplateSlot(entry, tpl), false);
+});
+
+console.log('\nscanDataDoctorEntries(entries)');
+test('detects exact duplicate live entries', () => {
+  const start = Date.parse('2026-01-05T10:00:00.000Z');
+  const end = Date.parse('2026-01-05T11:00:00.000Z');
+  const scan = scanDataDoctorEntries([
+    { id: 1, tsStart: start, ts: end, date: '2026-01-05', activity: 'Deep work', energy: 'deep', updatedAt: 1000 },
+    { id: 2, tsStart: start, ts: end, date: '2026-01-05', activity: ' deep work ', energy: 'deep', updatedAt: 2000 }
+  ], { nowTs: Date.parse('2026-01-06T00:00:00.000Z') });
+  assert.equal(scan.issues.exactDuplicateGroups.length, 1);
+  assert.deepEqual(scan.issues.exactDuplicateGroups[0].duplicateIndexes, [0]);
+});
+test('detects long entries that should be manually reviewed', () => {
+  const start = Date.parse('2026-01-05T00:00:00.000Z');
+  const scan = scanDataDoctorEntries([
+    { id: 1, tsStart: start, ts: start + 28 * 60 * 60000, date: '2026-01-05', activity: 'PC Time', energy: 'deep', updatedAt: 1000 }
+  ], { nowTs: Date.parse('2026-01-07T00:00:00.000Z') });
+  assert.equal(scan.issues.longEntries.length, 1);
+  assert.equal(scan.issues.longEntries[0].minutes, 28 * 60);
+});
+test('detects raw day totals above 24 hours', () => {
+  const day = Date.parse('2026-01-05T00:00:00.000Z');
+  const scan = scanDataDoctorEntries([
+    { id: 1, tsStart: day, ts: day + 20 * 60 * 60000, date: '2026-01-05', activity: 'PC Time', energy: 'deep', updatedAt: 1000 },
+    { id: 2, tsStart: day + 2 * 60 * 60000, ts: day + 10 * 60 * 60000, date: '2026-01-05', activity: 'Sleep', energy: 'recovery', updatedAt: 1000 }
+  ], { nowTs: Date.parse('2026-01-06T00:00:00.000Z') });
+  assert.equal(scan.issues.dayOverflows.length, 1);
+  assert.equal(scan.issues.dayOverflows[0].minutes, 28 * 60);
+});
+test('detects metadata drift without counting deleted entries as visible duplicates', () => {
+  const start = Date.parse('2026-01-05T10:00:00.000Z');
+  const end = Date.parse('2026-01-05T11:00:00.000Z');
+  const scan = scanDataDoctorEntries([
+    { id: 1, tsStart: start, ts: end, date: '2026-01-04', activity: 'Sleep', energy: 'recovery', deleted: true }
+  ], { nowTs: Date.parse('2026-01-06T00:00:00.000Z') });
+  assert.equal(scan.issues.missingUpdatedAt.length, 1);
+  assert.equal(scan.issues.dateMismatches.length, 1);
+  assert.equal(scan.issues.exactDuplicateGroups.length, 0);
 });
 
 console.log('\ncomputeIdentityScore(arr)');

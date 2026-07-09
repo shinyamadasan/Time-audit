@@ -88,10 +88,10 @@ Key IDs: `view-today`, `today-date`, `date-picker-dropdown`, `status-banner`, `d
 Depends on: —
 
 ## [HTML — Week / Reflect / Settings Views]
-Lines: 1335–1578
+Lines: 1335–1587
 Purpose: Markup for the Week tab (day tabs, energy split, top activities), Reflect tab (honest summary, week comparison, reflections, weekly review), and Settings tab (timezone, intervals, presets, data management).
 Functions: —
-Key IDs: `view-week`, `view-reflect`, `view-settings`, `reflect-streak-cal` (streak cal mount), `reflect-heatmap` (heatmap mount), `app-build-label`
+Key IDs: `view-week`, `view-reflect`, `view-settings`, `reflect-streak-cal` (streak cal mount), `reflect-heatmap` (heatmap mount), `data-doctor-results`, `app-build-label`
 Depends on: —
 
 ## [HTML — Desktop Side Panels]
@@ -330,9 +330,9 @@ Variables: `_toastTimer`
 Depends on: —
 
 ## [Export & Data Management]
-Lines: 7131–7181
-Purpose: CSV export, clear-all entries (with confirm), clear a single selected day.
-Functions: `exportCSV()`, `clearAll()`, `clearSelectedDay()`, `clearTodayOnly()`
+Lines: 7123–7398
+Purpose: Data Doctor scan/repair for duplicate and suspicious records, CSV export, clear-all entries (with confirm), clear a single selected day.
+Functions: `dataDoctorEscape()`, `dataDoctorIssueEntry()`, `dataDoctorDuplicateKey()`, `dataDoctorAddDayMinutes()`, `scanDataDoctorEntries()`, `dataDoctorEntryLine()`, `dataDoctorList()`, `renderDataDoctorResults()`, `runDataDoctor()`, `repairDataDoctorMetadata()`, `repairDataDoctorDuplicates()`, `exportCSV()`, `clearAll()`, `clearSelectedDay()`, `clearTodayOnly()`
 Variables: —
 Depends on: `entries`, `persist()`, `syncEntries()`, `renderToday()`
 
@@ -438,7 +438,7 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Recurring schedule templates | Weekly Schedule Templates | ~6729 |
 | Settings form (timezone, interval, presets…) | Settings View | 6010–6092 |
 | Toast notifications | Overlay, Toast & Modal Utilities | 7106–7181 |
-| CSV export / clear data | Export & Data Management | 7131–7181 |
+| Data Doctor / CSV export / clear data | Export & Data Management | ~7123 |
 | PWA install banner / Service Worker setup | PWA Installation | 7202–7228 |
 | Voice logging | Voice Input | 7229–7270 |
 | Push notifications (Capacitor) | Native Notifications (Capacitor) | 7347–7495 |

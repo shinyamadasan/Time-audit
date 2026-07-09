@@ -703,6 +703,15 @@
       <select id="clear-day-select" style="font-family:var(--head);font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex:1;min-width:0"></select>
       <button class="btn sm danger" onclick="clearSelectedDay()">Clear day</button>
     </div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);font-weight:800;margin-bottom:8px">Data Doctor</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn sm ghost" onclick="runDataDoctor()">Run scan</button>
+        <button class="btn sm ghost" onclick="repairDataDoctorMetadata()">Fix metadata</button>
+        <button class="btn sm danger" onclick="repairDataDoctorDuplicates()">Delete exact duplicates</button>
+      </div>
+      <div id="data-doctor-results" style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.45">Scan for duplicate blocks, impossible durations, and stale sync metadata.</div>
+    </div>
     <div style="margin-top:10px;font-size:12px;color:var(--muted)" id="settings-stats"></div>
     <div style="margin-top:6px;font-size:11px;color:var(--muted2);font-family:var(--mono)">Build <span id="app-build-label"></span></div>
   </div>
@@ -1305,7 +1314,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-09-integrity-1';
+const APP_BUILD = '2026-07-09-data-doctor-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -7110,6 +7119,231 @@ function showToast(msg, withUndo, energy) {
   t.classList.add('show');
 }
 
+
+function dataDoctorEscape(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function dataDoctorIssueEntry(entry, index, range, tz) {
+  const anchor = range ? range.start : Number(entry?.tsStart || entry?.ts);
+  const date = Number.isFinite(anchor) ? getDateInTZ(anchor, tz) : (entry?.date || 'unknown');
+  return {
+    index,
+    id: entry?.id ?? 'missing',
+    date,
+    activity: entry?.activity || 'Untitled',
+    energy: entry?.energy || 'unknown',
+    deleted: !!entry?.deleted
+  };
+}
+
+function dataDoctorDuplicateKey(entry, range) {
+  return [
+    String(entry.activity || '').trim().toLowerCase(),
+    entry.energy || '',
+    Math.round(range.start / 60000),
+    Math.round(range.end / 60000)
+  ].join('|');
+}
+
+function dataDoctorAddDayMinutes(dayTotals, range, tz) {
+  let cursor = range.start;
+  let guard = 0;
+  while (cursor < range.end && guard++ < 370) {
+    const dateKey = getDateInTZ(cursor, tz);
+    const dayStart = tzParseTime(dateKey, '00:00');
+    const dayEnd = tzParseTime(_dateKeyPlusDays(dateKey, 1), '00:00');
+    const start = Math.max(range.start, dayStart);
+    const end = Math.min(range.end, dayEnd);
+    if (end > start) {
+      dayTotals.set(dateKey, (dayTotals.get(dateKey) || 0) + Math.round((end - start) / 60000));
+    }
+    cursor = Math.max(dayEnd, cursor + 60000);
+  }
+}
+
+function scanDataDoctorEntries(entriesArr, opts = {}) {
+  const tz = opts.timezone || settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const intervalMin = opts.intervalMin || settings.intervalMin || 30;
+  const nowTs = opts.nowTs ?? Date.now();
+  const longEntryMin = opts.longEntryMin || 18 * 60;
+  const dayMaxMin = opts.dayMaxMin || 24 * 60;
+  const futureGraceMs = opts.futureGraceMs || 60 * 60 * 1000;
+  const issues = {
+    missingUpdatedAt: [],
+    dateMismatches: [],
+    invalidRanges: [],
+    futureEntries: [],
+    longEntries: [],
+    exactDuplicateGroups: [],
+    duplicateIds: [],
+    dayOverflows: []
+  };
+  const duplicateMap = new Map();
+  const idMap = new Map();
+  const dayTotals = new Map();
+
+  (entriesArr || []).forEach((entry, index) => {
+    if (!entry || entry.template) return;
+    if (entry.id != null) {
+      const key = String(entry.id);
+      if (!idMap.has(key)) idMap.set(key, []);
+      idMap.get(key).push(dataDoctorIssueEntry(entry, index, null, tz));
+    }
+    if (!entry.updatedAt) issues.missingUpdatedAt.push(dataDoctorIssueEntry(entry, index, null, tz));
+
+    const range = entryTimeRange(entry, intervalMin);
+    const anchor = range ? range.start : Number(entry.tsStart || entry.ts);
+    const expectedDate = Number.isFinite(anchor) ? getDateInTZ(anchor, tz) : null;
+    if (expectedDate && entry.date !== expectedDate) {
+      issues.dateMismatches.push({ ...dataDoctorIssueEntry(entry, index, range, tz), expectedDate });
+    }
+
+    if (entry.deleted || entry.missed) return;
+    if (!range) {
+      issues.invalidRanges.push(dataDoctorIssueEntry(entry, index, null, tz));
+      return;
+    }
+
+    const minutes = Math.round((range.end - range.start) / 60000);
+    const issue = { ...dataDoctorIssueEntry(entry, index, range, tz), minutes };
+    if (range.end > nowTs + futureGraceMs) issues.futureEntries.push(issue);
+    if (minutes > longEntryMin) issues.longEntries.push(issue);
+    dataDoctorAddDayMinutes(dayTotals, range, tz);
+
+    const dupKey = dataDoctorDuplicateKey(entry, range);
+    if (!duplicateMap.has(dupKey)) duplicateMap.set(dupKey, []);
+    duplicateMap.get(dupKey).push({ ...issue, index, range });
+  });
+
+  duplicateMap.forEach(group => {
+    if (group.length < 2) return;
+    group.sort((a, b) => (entriesArr[b.index]?.updatedAt || entriesArr[b.index]?.ts || 0) - (entriesArr[a.index]?.updatedAt || entriesArr[a.index]?.ts || 0));
+    issues.exactDuplicateGroups.push({
+      keepIndex: group[0].index,
+      duplicateIndexes: group.slice(1).map(item => item.index),
+      ids: group.map(item => item.id),
+      count: group.length,
+      activity: group[0].activity,
+      energy: group[0].energy,
+      date: group[0].date,
+      minutes: group[0].minutes
+    });
+  });
+
+  idMap.forEach((items, id) => {
+    if (items.length > 1) issues.duplicateIds.push({ id, count: items.length, items });
+  });
+
+  dayTotals.forEach((minutes, date) => {
+    if (minutes > dayMaxMin) issues.dayOverflows.push({ date, minutes });
+  });
+
+  const totalIssues = Object.values(issues).reduce((sum, list) => sum + list.length, 0);
+  return { issues, totalIssues, scanned: (entriesArr || []).length };
+}
+
+function dataDoctorEntryLine(item) {
+  const mins = item.minutes ? ` - ${fmtDur(item.minutes)}` : '';
+  return `${dataDoctorEscape(item.date)} - #${dataDoctorEscape(item.id)} ${dataDoctorEscape(item.activity)} (${dataDoctorEscape(item.energy)})${mins}`;
+}
+
+function dataDoctorList(items, formatter, emptyText) {
+  if (!items.length) return `<div style="color:var(--muted2)">${emptyText}</div>`;
+  const shown = items.slice(0, 6).map(formatter).join('');
+  const extra = items.length > 6 ? `<div style="color:var(--muted2);margin-top:3px">+${items.length - 6} more</div>` : '';
+  return `<div style="display:grid;gap:4px">${shown}${extra}</div>`;
+}
+
+function renderDataDoctorResults(scan) {
+  const el = document.getElementById('data-doctor-results');
+  if (!el) return;
+  if (!scan.totalIssues) {
+    el.innerHTML = `<div style="color:var(--deep);font-weight:700">No obvious data issues found.</div><div style="color:var(--muted2)">Scanned ${scan.scanned} records.</div>`;
+    return;
+  }
+  const i = scan.issues;
+  const sections = [
+    ['Safe metadata fixes', [
+      `${i.missingUpdatedAt.length} missing sync stamp${i.missingUpdatedAt.length === 1 ? '' : 's'}`,
+      `${i.dateMismatches.length} date mismatch${i.dateMismatches.length === 1 ? '' : 'es'}`
+    ].join(' - '), [
+      dataDoctorList(i.missingUpdatedAt, item => `<div>Missing stamp: ${dataDoctorEntryLine(item)}</div>`, 'No missing sync stamps.'),
+      dataDoctorList(i.dateMismatches, item => `<div>Date mismatch: ${dataDoctorEntryLine(item)} should be ${dataDoctorEscape(item.expectedDate)}</div>`, 'No date mismatches.')
+    ].join('')],
+    ['Exact duplicates', `${i.exactDuplicateGroups.length} group${i.exactDuplicateGroups.length === 1 ? '' : 's'}`, dataDoctorList(i.exactDuplicateGroups, group => `<div>${dataDoctorEscape(group.date)} - ${group.count} copies of ${dataDoctorEscape(group.activity)} (${fmtDur(group.minutes)}) - ids ${dataDoctorEscape(group.ids.join(', '))}</div>`, 'No exact duplicate groups.')],
+    ['Needs manual review', `${i.longEntries.length} long, ${i.dayOverflows.length} day overflow, ${i.invalidRanges.length} invalid, ${i.futureEntries.length} future`, [
+      dataDoctorList(i.longEntries, item => `<div>Long: ${dataDoctorEntryLine(item)}</div>`, 'No long entries.'),
+      dataDoctorList(i.dayOverflows, day => `<div>Day total: ${dataDoctorEscape(day.date)} - ${fmtDur(day.minutes)}</div>`, 'No days above 24h raw logged time.'),
+      dataDoctorList(i.invalidRanges, item => `<div>Invalid range: ${dataDoctorEntryLine(item)}</div>`, 'No invalid time ranges.'),
+      dataDoctorList(i.futureEntries, item => `<div>Future: ${dataDoctorEntryLine(item)}</div>`, 'No future entries.'),
+      dataDoctorList(i.duplicateIds, group => `<div>Duplicate id #${dataDoctorEscape(group.id)} appears ${group.count} times</div>`, 'No duplicate ids.')
+    ].join('')]
+  ];
+
+  el.innerHTML = `<div style="font-weight:800;color:var(--head);margin-bottom:6px">${scan.totalIssues} issue${scan.totalIssues === 1 ? '' : 's'} found across ${scan.scanned} records</div>` +
+    sections.map(([title, count, body]) => `<div style="padding:8px 0;border-top:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:5px">
+        <b style="color:var(--text)">${title}</b><span style="font-family:var(--mono);color:var(--muted2)">${count}</span>
+      </div>
+      ${body}
+    </div>`).join('');
+}
+
+function runDataDoctor() {
+  const scan = scanDataDoctorEntries(entries);
+  renderDataDoctorResults(scan);
+  showToast(scan.totalIssues ? `Data Doctor found ${scan.totalIssues} issue${scan.totalIssues === 1 ? '' : 's'}` : 'Data Doctor found no obvious issues');
+}
+
+function repairDataDoctorMetadata() {
+  const scan = scanDataDoctorEntries(entries);
+  const count = scan.issues.missingUpdatedAt.length + scan.issues.dateMismatches.length;
+  if (!count) { showToast('No metadata fixes needed'); runDataDoctor(); return; }
+  if (!confirm(`Fix ${count} metadata issue${count === 1 ? '' : 's'}? This only updates sync stamps and stored date keys.`)) return;
+  const now = Date.now();
+  scan.issues.missingUpdatedAt.forEach(item => {
+    const entry = entries[item.index];
+    if (entry && !entry.updatedAt) entry.updatedAt = entry.ts || now;
+  });
+  scan.issues.dateMismatches.forEach(item => {
+    const entry = entries[item.index];
+    if (!entry || !item.expectedDate) return;
+    entry.date = item.expectedDate;
+    entry.updatedAt = now;
+  });
+  persist(); syncEntries(); renderToday(); renderWeek(); renderWeekTable(); renderSettings(); runDataDoctor();
+  showToast('Metadata fixed');
+}
+
+function repairDataDoctorDuplicates() {
+  const scan = scanDataDoctorEntries(entries);
+  const duplicateCount = scan.issues.exactDuplicateGroups.reduce((sum, group) => sum + group.duplicateIndexes.length, 0);
+  if (!duplicateCount) { showToast('No exact duplicates to delete'); runDataDoctor(); return; }
+  if (!confirm(`Delete ${duplicateCount} exact duplicate entr${duplicateCount === 1 ? 'y' : 'ies'}? The newest copy stays.`)) return;
+  const now = Date.now();
+  const removeIndexes = new Set();
+  let tombstoned = 0;
+  scan.issues.exactDuplicateGroups.forEach(group => {
+    const keeper = entries[group.keepIndex];
+    group.duplicateIndexes.forEach(index => {
+      const entry = entries[index];
+      if (!entry || entry.deleted) return;
+      if (keeper && entry.id === keeper.id) {
+        removeIndexes.add(index);
+      } else {
+        entry.deleted = true;
+        entry.updatedAt = now;
+        tombstoned++;
+      }
+    });
+  });
+  if (removeIndexes.size) entries = entries.filter((_, index) => !removeIndexes.has(index));
+  persist(); syncEntries(); _todayRenderKey = '__FORCE__'; renderToday(); renderWeek(); renderWeekTable(); renderSettings(); runDataDoctor();
+  showToast(`Deleted ${tombstoned + removeIndexes.size} duplicate${tombstoned + removeIndexes.size === 1 ? '' : 's'}`);
+}
 
 function exportCSV() {
   if (!entries.length){showToast('No entries to export');return;}
