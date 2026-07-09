@@ -575,22 +575,16 @@ function startSync() {
     remoteEntries.forEach(re => {
       if (!re || !re.id) return;
       const local = localMap.get(re.id);
-      if (!local) {
-        // New entry from remote — skip tombstones, add live entries
-        if (re.deleted) return;
-        if (!re.updatedAt) re.updatedAt = re.ts || Date.now();
-        if (!re.missed) validateEntry(re);
-        entries.push(re);
+      const resolution = resolveEntrySync(local, re);
+      if (resolution.action === 'add') {
+        const entry = resolution.entry;
+        if (!entry.missed && !entry.deleted) validateEntry(entry);
+        entries.push(entry);
         changed = true;
-      } else {
-        // Conflict: prefer whichever version is newer (deleted flag propagates too)
-        if (local.deleted && !re.deleted) return;
-        const remoteV = re.updatedAt || re.ts || 0;
-        const localV  = local.updatedAt || local.ts || 0;
-        if (remoteV > localV) {
-          Object.assign(local, re);
-          changed = true;
-        }
+      } else if (resolution.action === 'replace') {
+        if (!resolution.entry.missed && !resolution.entry.deleted) validateEntry(resolution.entry);
+        Object.assign(local, resolution.entry);
+        changed = true;
       }
     });
     if (changed) {
@@ -782,6 +776,18 @@ function syncTimerState() {
       ownerDeviceId: timerOwnerDeviceId || null
     }
   });
+}
+
+function resolveEntrySync(local, remote, nowTs = Date.now()) {
+  if (!remote || !remote.id) return { action: 'skip' };
+  const remoteEntry = remote.updatedAt ? remote : { ...remote, updatedAt: remote.ts || nowTs };
+  if (!local) {
+    return remoteEntry.deleted ? { action: 'skip' } : { action: 'add', entry: remoteEntry };
+  }
+  if (local.deleted && !remoteEntry.deleted) return { action: 'keep-local' };
+  const remoteV = remoteEntry.updatedAt || remoteEntry.ts || 0;
+  const localV  = local.updatedAt || local.ts || 0;
+  return remoteV > localV ? { action: 'replace', entry: remoteEntry } : { action: 'keep-local' };
 }
 
 function syncEntries() {
