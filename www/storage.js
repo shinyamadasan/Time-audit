@@ -759,10 +759,11 @@ function startSync() {
   });
 
   updateSyncPill('connected', 'synced');
-  syncEntries();
-  syncFocusRedemptions();
-  localStorage.setItem('ta3-last-sync', Date.now());
-  showToast('Synced ✓');
+  Promise.all([syncEntries(), syncFocusRedemptions()]).then(results => {
+    if (!results.some(Boolean)) return;
+    localStorage.setItem('ta3-last-sync', Date.now());
+    showToast('Synced ✓');
+  });
 }
 
 function syncTimerState() {
@@ -790,21 +791,34 @@ function resolveEntrySync(local, remote, nowTs = Date.now()) {
   return remoteV > localV ? { action: 'replace', entry: remoteEntry } : { action: 'keep-local' };
 }
 
+let _lastSyncErrorToastAt = 0;
+function notifySyncWriteFailed(err) {
+  console.warn('Sync write failed', err);
+  const now = Date.now();
+  if (now - _lastSyncErrorToastAt < 30000) return;
+  _lastSyncErrorToastAt = now;
+  if (typeof showToast === 'function') showToast('Sync failed — saved locally');
+}
+
 function syncEntries() {
-  if (!fbRoomRef) return;
+  if (!fbRoomRef) return Promise.resolve(false);
   const updates = {};
   entries.forEach(e => { updates[`entries/e_${e.id}`] = e; });
-  fbRoomRef.update(updates);
-  publishPublicStats();
+  return fbRoomRef.update(updates)
+    .then(() => { publishPublicStats(); return true; })
+    .catch(err => { notifySyncWriteFailed(err); return false; });
 }
 
 function syncFocusRedemptions() {
-  if (!fbRoomRef) return;
+  if (!fbRoomRef) return Promise.resolve(false);
   const updates = {};
   focusRedemptions.forEach(item => {
     if (item && item.id) updates[`focusRedemptions/r_${item.id}`] = item;
   });
-  if (Object.keys(updates).length) fbRoomRef.update(updates);
+  if (!Object.keys(updates).length) return Promise.resolve(false);
+  return fbRoomRef.update(updates)
+    .then(() => true)
+    .catch(err => { notifySyncWriteFailed(err); return false; });
 }
 
 function publishPublicStats() {
