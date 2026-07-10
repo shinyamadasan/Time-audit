@@ -714,6 +714,10 @@
       <div id="data-doctor-results" style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.45">Scan for duplicate blocks, impossible durations, and stale sync metadata.</div>
     </div>
     <div style="margin-top:10px;font-size:12px;color:var(--muted)" id="settings-stats"></div>
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--muted2)">
+      <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);font-weight:800;margin-bottom:5px">Performance</div>
+      <div id="perf-debug-results" style="font-family:var(--mono);line-height:1.45">No render samples yet.</div>
+    </div>
     <div style="margin-top:6px;font-size:11px;color:var(--muted2);font-family:var(--mono)">Build <span id="app-build-label"></span></div>
   </div>
 </div>
@@ -1315,7 +1319,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-09-data-doctor-4';
+const APP_BUILD = '2026-07-10-perf-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -5619,6 +5623,7 @@ function renderSettings() {
   document.getElementById('settings-stats').textContent=`${entries.length} total entries · ${getWeekEntries().length} this week`;
   const buildEl = document.getElementById('app-build-label');
   if (buildEl) buildEl.textContent = APP_BUILD;
+  renderPerfDebug();
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const datesWithEntries = [...new Set(entries.filter(e=>!e.deleted).map(e=>getDateInTZ(e.tsStart||e.ts,tz)))].sort().reverse();
   const todayKey = toDateKey(new Date());
@@ -7542,6 +7547,71 @@ function clearTodayOnly(){
   }
   showToast('Today cleared');
 }
+
+const PERF_SLOW_LIMITS = { renderToday: 120, renderWeek: 180, scanDataDoctorEntries: 120 };
+const PERF_LABELS = {
+  renderToday: 'Today',
+  renderWeek: 'Week',
+  scanDataDoctorEntries: 'Data Doctor'
+};
+const perfStats = {};
+const perfSlowEvents = [];
+
+function perfNow() {
+  return (window.performance && performance.now) ? performance.now() : Date.now();
+}
+
+function recordPerfSample(name, ms) {
+  const rounded = Math.round(ms);
+  const stat = perfStats[name] || { count: 0, maxMs: 0, lastMs: 0 };
+  stat.count += 1;
+  stat.lastMs = rounded;
+  stat.maxMs = Math.max(stat.maxMs || 0, rounded);
+  stat.lastAt = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+  perfStats[name] = stat;
+  const slowLimit = PERF_SLOW_LIMITS[name] || 100;
+  if (rounded >= slowLimit) {
+    perfSlowEvents.unshift({ name, ms: rounded, at: stat.lastAt });
+    if (perfSlowEvents.length > 6) perfSlowEvents.length = 6;
+  }
+  renderPerfDebug();
+}
+
+function renderPerfDebug() {
+  const el = document.getElementById('perf-debug-results');
+  if (!el) return;
+  const rows = Object.keys(PERF_LABELS).map(name => {
+    const stat = perfStats[name];
+    const label = PERF_LABELS[name];
+    return stat
+      ? `${label}: ${stat.lastMs}ms last, ${stat.maxMs}ms max (${stat.count})`
+      : `${label}: no samples`;
+  });
+  const slow = perfSlowEvents.length
+    ? `<div style="margin-top:4px;color:var(--muted)">Slow: ${perfSlowEvents.map(e => `${PERF_LABELS[e.name]} ${e.ms}ms ${e.at}`).join(' · ')}</div>`
+    : `<div style="margin-top:4px;color:var(--muted2)">No slow samples yet.</div>`;
+  el.innerHTML = rows.join('<br>') + slow;
+}
+
+function perfWrap(name, fn) {
+  return function(...args) {
+    const start = perfNow();
+    try {
+      return fn.apply(this, args);
+    } finally {
+      recordPerfSample(name, perfNow() - start);
+    }
+  };
+}
+
+function installPerfInstrumentation() {
+  if (installPerfInstrumentation.done) return;
+  installPerfInstrumentation.done = true;
+  renderToday = perfWrap('renderToday', renderToday);
+  renderWeek = perfWrap('renderWeek', renderWeek);
+  scanDataDoctorEntries = perfWrap('scanDataDoctorEntries', scanDataDoctorEntries);
+}
+installPerfInstrumentation();
 
 // ══════════════════════════════════════════════════════
 // INTENTION SYNC
