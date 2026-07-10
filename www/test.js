@@ -228,6 +228,29 @@ function scanDataDoctorEntries(entriesArr, opts = {}) {
   return { issues, totalIssues, scanned: (entriesArr || []).length };
 }
 
+function getDataDoctorDuplicateIdExtraIndexes(scan, entriesArr) {
+  const indexes = new Set();
+  scan.issues.duplicateIds.forEach(group => {
+    const sorted = group.items
+      .map(item => item.index)
+      .filter(index => Number.isInteger(index) && entriesArr[index])
+      .sort((a, b) => (entriesArr[b].updatedAt || entriesArr[b].ts || 0) - (entriesArr[a].updatedAt || entriesArr[a].ts || 0));
+    sorted.slice(1).forEach(index => indexes.add(index));
+  });
+  return indexes;
+}
+
+function getDataDoctorFlaggedIndexes(scan, entriesArr) {
+  const indexes = new Set();
+  ['longEntries', 'invalidRanges', 'futureEntries'].forEach(key => {
+    scan.issues[key].forEach(item => {
+      if (Number.isInteger(item.index) && entriesArr[item.index]) indexes.add(item.index);
+    });
+  });
+  getDataDoctorDuplicateIdExtraIndexes(scan, entriesArr).forEach(index => indexes.add(index));
+  return indexes;
+}
+
 function sumEntryMinutes(entriesArr, predicate, intervalMin = 30, dateKeyFilter = null) {
   const byDate = new Map();
   const fallbackMinsByDate = new Map();
@@ -511,6 +534,29 @@ test('detects metadata drift without counting deleted entries as visible duplica
   assert.equal(scan.issues.missingUpdatedAt.length, 1);
   assert.equal(scan.issues.dateMismatches.length, 1);
   assert.equal(scan.issues.exactDuplicateGroups.length, 0);
+});
+test('flags long, invalid, future, and duplicate-id extras for deletion', () => {
+  const day = Date.parse('2026-01-05T00:00:00.000Z');
+  const entriesArr = [
+    { id: 1, tsStart: day, ts: day + 19 * 60 * 60000, date: '2026-01-05', activity: 'PC Time', energy: 'deep', updatedAt: 1000 },
+    { id: 2, tsStart: day + 2 * 60 * 60000, ts: day + 60 * 60000, date: '2026-01-05', activity: 'Bad range', energy: 'deep', updatedAt: 1000 },
+    { id: 3, tsStart: day + 26 * 60 * 60000, ts: day + 27 * 60 * 60000, date: '2026-01-06', activity: 'Future', energy: 'deep', updatedAt: 1000 },
+    { id: 4, tsStart: day + 4 * 60 * 60000, ts: day + 5 * 60 * 60000, date: '2026-01-05', activity: 'Keep id', energy: 'deep', updatedAt: 3000 },
+    { id: 4, tsStart: day + 6 * 60 * 60000, ts: day + 7 * 60 * 60000, date: '2026-01-05', activity: 'Drop id', energy: 'deep', updatedAt: 1000 }
+  ];
+  const scan = scanDataDoctorEntries(entriesArr, { nowTs: day + 24 * 60 * 60000 });
+  assert.deepEqual([...getDataDoctorFlaggedIndexes(scan, entriesArr)].sort((a, b) => a - b), [0, 1, 2, 4]);
+  assert.deepEqual([...getDataDoctorDuplicateIdExtraIndexes(scan, entriesArr)], [4]);
+});
+test('does not flag day-overflow-only records for deletion', () => {
+  const day = Date.parse('2026-01-05T00:00:00.000Z');
+  const entriesArr = [
+    { id: 1, tsStart: day, ts: day + 13 * 60 * 60000, date: '2026-01-05', activity: 'PC Time', energy: 'deep', updatedAt: 1000 },
+    { id: 2, tsStart: day + 10 * 60 * 60000, ts: day + 23 * 60 * 60000, date: '2026-01-05', activity: 'Sleep', energy: 'recovery', updatedAt: 1000 }
+  ];
+  const scan = scanDataDoctorEntries(entriesArr, { nowTs: day + 24 * 60 * 60000 });
+  assert.equal(scan.issues.dayOverflows.length, 1);
+  assert.equal(getDataDoctorFlaggedIndexes(scan, entriesArr).size, 0);
 });
 
 console.log('\ncomputeIdentityScore(arr)');
