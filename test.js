@@ -170,7 +170,7 @@ function scanDataDoctorEntries(entriesArr, opts = {}) {
 
   (entriesArr || []).forEach((entry, index) => {
     if (!entry || entry.template) return;
-    if (entry.id != null) {
+    if (entry.id != null && !entry.deleted) {
       const key = String(entry.id);
       if (!idMap.has(key)) idMap.set(key, []);
       idMap.get(key).push(testDataDoctorIssueEntry(entry, index, null));
@@ -181,7 +181,7 @@ function scanDataDoctorEntries(entriesArr, opts = {}) {
     const anchor = range ? range.start : Number(entry.tsStart || entry.ts);
     const expectedDate = Number.isFinite(anchor) ? testDataDoctorDateKey(anchor) : null;
     if (expectedDate && entry.date !== expectedDate) {
-      issues.dateMismatches.push({ ...testDataDoctorIssueEntry(entry, index, range), expectedDate });
+      issues.dateMismatches.push({ ...testDataDoctorIssueEntry(entry, index, range), storedDate: entry.date || 'missing', expectedDate });
     }
 
     if (entry.deleted || entry.missed) return;
@@ -228,6 +228,16 @@ function scanDataDoctorEntries(entriesArr, opts = {}) {
   return { issues, totalIssues, scanned: (entriesArr || []).length };
 }
 
+function getDataDoctorExactDuplicateIndexes(scan, entriesArr) {
+  const indexes = new Set();
+  scan.issues.exactDuplicateGroups.forEach(group => {
+    group.duplicateIndexes.forEach(index => {
+      if (Number.isInteger(index) && entriesArr[index] && !entriesArr[index].deleted) indexes.add(index);
+    });
+  });
+  return indexes;
+}
+
 function getDataDoctorDuplicateIdExtraIndexes(scan, entriesArr) {
   const indexes = new Set();
   scan.issues.duplicateIds.forEach(group => {
@@ -247,6 +257,7 @@ function getDataDoctorFlaggedIndexes(scan, entriesArr) {
       if (Number.isInteger(item.index) && entriesArr[item.index]) indexes.add(item.index);
     });
   });
+  getDataDoctorExactDuplicateIndexes(scan, entriesArr).forEach(index => indexes.add(index));
   getDataDoctorDuplicateIdExtraIndexes(scan, entriesArr).forEach(index => indexes.add(index));
   return indexes;
 }
@@ -533,20 +544,34 @@ test('detects metadata drift without counting deleted entries as visible duplica
   ], { nowTs: Date.parse('2026-01-06T00:00:00.000Z') });
   assert.equal(scan.issues.missingUpdatedAt.length, 1);
   assert.equal(scan.issues.dateMismatches.length, 1);
+  assert.equal(scan.issues.dateMismatches[0].storedDate, '2026-01-04');
+  assert.equal(scan.issues.dateMismatches[0].expectedDate, '2026-01-05');
   assert.equal(scan.issues.exactDuplicateGroups.length, 0);
+  assert.equal(scan.issues.duplicateIds.length, 0);
 });
-test('flags long, invalid, future, and duplicate-id extras for deletion', () => {
+test('flags long, invalid, future, exact duplicate, and duplicate-id extras for deletion', () => {
   const day = Date.parse('2026-01-05T00:00:00.000Z');
   const entriesArr = [
     { id: 1, tsStart: day, ts: day + 19 * 60 * 60000, date: '2026-01-05', activity: 'PC Time', energy: 'deep', updatedAt: 1000 },
     { id: 2, tsStart: day + 2 * 60 * 60000, ts: day + 60 * 60000, date: '2026-01-05', activity: 'Bad range', energy: 'deep', updatedAt: 1000 },
     { id: 3, tsStart: day + 26 * 60 * 60000, ts: day + 27 * 60 * 60000, date: '2026-01-06', activity: 'Future', energy: 'deep', updatedAt: 1000 },
     { id: 4, tsStart: day + 4 * 60 * 60000, ts: day + 5 * 60 * 60000, date: '2026-01-05', activity: 'Keep id', energy: 'deep', updatedAt: 3000 },
-    { id: 4, tsStart: day + 6 * 60 * 60000, ts: day + 7 * 60 * 60000, date: '2026-01-05', activity: 'Drop id', energy: 'deep', updatedAt: 1000 }
+    { id: 4, tsStart: day + 6 * 60 * 60000, ts: day + 7 * 60 * 60000, date: '2026-01-05', activity: 'Drop id', energy: 'deep', updatedAt: 1000 },
+    { id: 5, tsStart: day + 8 * 60 * 60000, ts: day + 9 * 60 * 60000, date: '2026-01-05', activity: 'Duplicate', energy: 'deep', updatedAt: 1000 },
+    { id: 6, tsStart: day + 8 * 60 * 60000, ts: day + 9 * 60 * 60000, date: '2026-01-05', activity: ' Duplicate ', energy: 'deep', updatedAt: 2000 }
   ];
   const scan = scanDataDoctorEntries(entriesArr, { nowTs: day + 24 * 60 * 60000 });
-  assert.deepEqual([...getDataDoctorFlaggedIndexes(scan, entriesArr)].sort((a, b) => a - b), [0, 1, 2, 4]);
+  assert.deepEqual([...getDataDoctorFlaggedIndexes(scan, entriesArr)].sort((a, b) => a - b), [0, 1, 2, 4, 5]);
+  assert.deepEqual([...getDataDoctorExactDuplicateIndexes(scan, entriesArr)], [5]);
   assert.deepEqual([...getDataDoctorDuplicateIdExtraIndexes(scan, entriesArr)], [4]);
+});
+test('ignores deleted tombstones when detecting duplicate ids', () => {
+  const day = Date.parse('2026-01-05T00:00:00.000Z');
+  const scan = scanDataDoctorEntries([
+    { id: 1, tsStart: day, ts: day + 60 * 60000, date: '2026-01-05', activity: 'Old tombstone', energy: 'deep', deleted: true, updatedAt: 1000 },
+    { id: 1, tsStart: day + 2 * 60 * 60000, ts: day + 3 * 60 * 60000, date: '2026-01-05', activity: 'Live copy', energy: 'deep', updatedAt: 2000 }
+  ], { nowTs: day + 24 * 60 * 60000 });
+  assert.equal(scan.issues.duplicateIds.length, 0);
 });
 test('does not flag day-overflow-only records for deletion', () => {
   const day = Date.parse('2026-01-05T00:00:00.000Z');

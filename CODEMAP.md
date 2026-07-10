@@ -330,9 +330,9 @@ Variables: `_toastTimer`
 Depends on: —
 
 ## [Export & Data Management]
-Lines: 7124–7455
+Lines: 7124–7466
 Purpose: Data Doctor scan/repair for duplicate and suspicious records, CSV export, clear-all entries (with confirm), clear a single selected day.
-Functions: `dataDoctorEscape()`, `dataDoctorIssueEntry()`, `dataDoctorDuplicateKey()`, `dataDoctorAddDayMinutes()`, `scanDataDoctorEntries()`, `dataDoctorEntryLine()`, `dataDoctorList()`, `getDataDoctorDuplicateIdExtraIndexes()`, `getDataDoctorFlaggedIndexes()`, `renderDataDoctorResults()`, `runDataDoctor()`, `repairDataDoctorMetadata()`, `repairDataDoctorDuplicates()`, `repairDataDoctorFlaggedEntries()`, `exportCSV()`, `clearAll()`, `clearSelectedDay()`, `clearTodayOnly()`
+Functions: `dataDoctorEscape()`, `dataDoctorIssueEntry()`, `dataDoctorDuplicateKey()`, `dataDoctorAddDayMinutes()`, `scanDataDoctorEntries()`, `dataDoctorEntryLine()`, `dataDoctorList()`, `getDataDoctorExactDuplicateIndexes()`, `getDataDoctorDuplicateIdExtraIndexes()`, `getDataDoctorFlaggedIndexes()`, `renderDataDoctorResults()`, `runDataDoctor()`, `repairDataDoctorMetadata()`, `repairDataDoctorDuplicates()`, `repairDataDoctorFlaggedEntries()`, `exportCSV()`, `clearAll()`, `clearSelectedDay()`, `clearTodayOnly()`
 Variables: —
 Depends on: `entries`, `persist()`, `syncEntries()`, `renderToday()`
 
