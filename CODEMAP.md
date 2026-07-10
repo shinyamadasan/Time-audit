@@ -89,9 +89,9 @@ Depends on: —
 
 ## [HTML — Week / Reflect / Settings Views]
 Lines: 1335–1587
-Purpose: Markup for the Week tab (day tabs, energy split, top activities), Reflect tab (honest summary, week comparison, reflections, weekly review), and Settings tab (timezone, intervals, presets, data management).
+Purpose: Markup for the Week tab (day tabs, energy split, top activities), Reflect tab (honest summary, week comparison, reflections, weekly review), and Settings tab (timezone, intervals, presets, data management, performance readout).
 Functions: —
-Key IDs: `view-week`, `view-reflect`, `view-settings`, `reflect-streak-cal` (streak cal mount), `reflect-heatmap` (heatmap mount), `data-doctor-results`, `app-build-label`
+Key IDs: `view-week`, `view-reflect`, `view-settings`, `reflect-streak-cal` (streak cal mount), `reflect-heatmap` (heatmap mount), `data-doctor-results`, `perf-debug-results`, `app-build-label`
 Depends on: —
 
 ## [HTML — Desktop Side Panels]
@@ -330,11 +330,11 @@ Variables: `_toastTimer`
 Depends on: —
 
 ## [Export & Data Management]
-Lines: 7124–7548
-Purpose: Data Doctor scan/repair for duplicate and suspicious records, CSV export, clear-all entries (with confirm), clear a single selected day.
-Functions: `dataDoctorEscape()`, `dataDoctorIssueEntry()`, `dataDoctorDuplicateKey()`, `dataDoctorAddDayMinutes()`, `dataDoctorAddDayInterval()`, `dataDoctorKeepScore()`, `dataDoctorChooseOverlapLoser()`, `dataDoctorFindOverflowOverlaps()`, `scanDataDoctorEntries()`, `dataDoctorEntryLine()`, `dataDoctorList()`, `getDataDoctorExactDuplicateIndexes()`, `getDataDoctorDuplicateIdExtraIndexes()`, `getDataDoctorFlaggedIndexes()`, `renderDataDoctorResults()`, `runDataDoctor()`, `repairDataDoctorMetadata()`, `repairDataDoctorDuplicates()`, `repairDataDoctorFlaggedEntries()`, `exportCSV()`, `clearAll()`, `clearSelectedDay()`, `clearTodayOnly()`
-Variables: —
-Depends on: `entries`, `persist()`, `syncEntries()`, `renderToday()`
+Lines: 7129–7614
+Purpose: Data Doctor scan/repair for duplicate and suspicious records, CSV export, clear-all entries (with confirm), clear a single selected day, and in-memory performance timing for expensive renders.
+Functions: `dataDoctorEscape()`, `dataDoctorIssueEntry()`, `dataDoctorDuplicateKey()`, `dataDoctorAddDayMinutes()`, `dataDoctorAddDayInterval()`, `dataDoctorKeepScore()`, `dataDoctorChooseOverlapLoser()`, `dataDoctorFindOverflowOverlaps()`, `scanDataDoctorEntries()`, `dataDoctorEntryLine()`, `dataDoctorList()`, `getDataDoctorExactDuplicateIndexes()`, `getDataDoctorDuplicateIdExtraIndexes()`, `getDataDoctorFlaggedIndexes()`, `renderDataDoctorResults()`, `runDataDoctor()`, `repairDataDoctorMetadata()`, `repairDataDoctorDuplicates()`, `repairDataDoctorFlaggedEntries()`, `exportCSV()`, `clearAll()`, `clearSelectedDay()`, `clearTodayOnly()`, `perfNow()`, `recordPerfSample()`, `renderPerfDebug()`, `perfWrap()`, `installPerfInstrumentation()`
+Variables: `PERF_SLOW_LIMITS`, `PERF_LABELS`, `perfStats`, `perfSlowEvents`
+Depends on: `entries`, `persist()`, `syncEntries()`, `renderToday()`, `renderWeek()`, `scanDataDoctorEntries()`
 
 ## [PWA Installation]
 Lines: 7202–7228
