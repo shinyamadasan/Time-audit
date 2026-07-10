@@ -109,65 +109,92 @@
     const weekKeyForTs = options && options.weekKeyForTs;
     const dateKeyForTs = options && options.dateKeyForTs;
     const dailyGoalMin = getDailyGoalMin(appSettings, cfg);
+    const weeks = new Map();
 
-    function computeWeekOnly(scanWeekKey, includeBreakdown) {
-      let earned = 0;
-      let autoCosts = 0;
-      let redeemed = 0;
-      const breakdown = [];
-      const deepMinutesByDay = {};
-      const wasteCostByDay = {};
-      const sportsSessions = [];
+    function createWeekState(scanWeekKey) {
+      return {
+        weekKey: scanWeekKey,
+        earned: 0,
+        autoCosts: 0,
+        redeemed: 0,
+        breakdown: [],
+        deepMinutesByDay: {},
+        wasteCostByDay: {},
+        sportsSessions: [],
+        finalized: false
+      };
+    }
 
-      (entries || []).forEach(entry => {
-        if (!entry || entry.deleted || entry.missed) return;
-        if (getEntryWeekKey(entry, weekKeyForTs, fallbackMin) !== scanWeekKey) return;
+    function getWeekState(scanWeekKey) {
+      if (!weeks.has(scanWeekKey)) weeks.set(scanWeekKey, createWeekState(scanWeekKey));
+      return weeks.get(scanWeekKey);
+    }
 
-        const durationMin = getFocusWalletEntryDurationMin(entry, fallbackMin);
-        const dateKey = getEntryDateKey(entry, dateKeyForTs, fallbackMin);
+    (entries || []).forEach(entry => {
+      if (!entry || entry.deleted || entry.missed) return;
+      const entryWeekKey = getEntryWeekKey(entry, weekKeyForTs, fallbackMin);
+      if (!entryWeekKey || entryWeekKey > weekKey) return;
 
-        if (entry.energy === 'deep') {
-          const multiplier = entry.retro ? cfg.retroMultiplier : 1;
-          const base = Math.floor(durationMin / cfg.deepPointMinutes) * cfg.deepPointsPerUnit * multiplier;
-          earned += base;
-          if (includeBreakdown) addBreakdown(breakdown, 'earn', entry.retro ? 'Retro deep work' : 'Deep work', base, { entryId: entry.id });
+      const state = getWeekState(entryWeekKey);
+      const includeBreakdown = entryWeekKey === weekKey;
+      const durationMin = getFocusWalletEntryDurationMin(entry, fallbackMin);
+      const dateKey = getEntryDateKey(entry, dateKeyForTs, fallbackMin);
 
-          if (!entry.retro && durationMin >= cfg.liveFocusBonusMin) {
-            earned += cfg.liveFocusBonus;
-            if (includeBreakdown) addBreakdown(breakdown, 'bonus', 'Live focus bonus', cfg.liveFocusBonus, { entryId: entry.id });
-          }
-          deepMinutesByDay[dateKey] = (deepMinutesByDay[dateKey] || 0) + durationMin;
+      if (entry.energy === 'deep') {
+        const multiplier = entry.retro ? cfg.retroMultiplier : 1;
+        const base = Math.floor(durationMin / cfg.deepPointMinutes) * cfg.deepPointsPerUnit * multiplier;
+        state.earned += base;
+        if (includeBreakdown) addBreakdown(state.breakdown, 'earn', entry.retro ? 'Retro deep work' : 'Deep work', base, { entryId: entry.id });
+
+        if (!entry.retro && durationMin >= cfg.liveFocusBonusMin) {
+          state.earned += cfg.liveFocusBonus;
+          if (includeBreakdown) addBreakdown(state.breakdown, 'bonus', 'Live focus bonus', cfg.liveFocusBonus, { entryId: entry.id });
         }
+        state.deepMinutesByDay[dateKey] = (state.deepMinutesByDay[dateKey] || 0) + durationMin;
+      }
 
-        if (entry.energy === 'waste' || entry.energy === 'distraction') {
-          const rawCost = Math.floor(durationMin / cfg.wastePenaltyMinutes) * cfg.wastePenaltyPoints;
-          wasteCostByDay[dateKey] = (wasteCostByDay[dateKey] || 0) + rawCost;
-        }
+      if (entry.energy === 'waste' || entry.energy === 'distraction') {
+        const rawCost = Math.floor(durationMin / cfg.wastePenaltyMinutes) * cfg.wastePenaltyPoints;
+        state.wasteCostByDay[dateKey] = (state.wasteCostByDay[dateKey] || 0) + rawCost;
+      }
 
-        if (isFocusWalletSportsEntry(entry, cfg)) {
-          sportsSessions.push({
-            entry,
-            durationMin,
-            ts: entryStartTs(entry, fallbackMin) || entry.ts || 0
-          });
-        }
-      });
+      if (isFocusWalletSportsEntry(entry, cfg)) {
+        state.sportsSessions.push({
+          entry,
+          durationMin,
+          ts: entryStartTs(entry, fallbackMin) || entry.ts || 0
+        });
+      }
+    });
 
-      Object.entries(deepMinutesByDay).forEach(([dateKey, minutes]) => {
+    (redemptions || []).forEach(item => {
+      if (!item || item.deleted) return;
+      const itemWeekKey = item.weekKey || getFocusWalletWeekKey(item.createdAt || item.ts || Date.now());
+      if (!itemWeekKey || itemWeekKey > weekKey) return;
+      const state = getWeekState(itemWeekKey);
+      const points = Math.max(0, Number(item.points || item.cost || 0));
+      state.redeemed += points;
+      if (itemWeekKey === weekKey) addBreakdown(state.breakdown, 'spend', item.label || 'Reward', -points, { redemptionId: item.id, entryId: item.entryId });
+    });
+
+    function finalizeWeekState(state, includeBreakdown) {
+      if (state.finalized) return state;
+
+      Object.entries(state.deepMinutesByDay).forEach(([dateKey, minutes]) => {
         if (dailyGoalMin > 0 && minutes >= dailyGoalMin) {
-          earned += cfg.dailyGoalBonus;
-          if (includeBreakdown) addBreakdown(breakdown, 'bonus', 'Daily deep goal bonus', cfg.dailyGoalBonus, { dateKey });
+          state.earned += cfg.dailyGoalBonus;
+          if (includeBreakdown) addBreakdown(state.breakdown, 'bonus', 'Daily deep goal bonus', cfg.dailyGoalBonus, { dateKey });
         }
       });
 
-      Object.entries(wasteCostByDay).forEach(([dateKey, rawCost]) => {
+      Object.entries(state.wasteCostByDay).forEach(([dateKey, rawCost]) => {
         const cost = Math.min(rawCost, cfg.wastePenaltyDailyCap);
-        autoCosts += cost;
-        if (includeBreakdown) addBreakdown(breakdown, 'cost', 'Waste time cost', -cost, { dateKey });
+        state.autoCosts += cost;
+        if (includeBreakdown) addBreakdown(state.breakdown, 'cost', 'Waste time cost', -cost, { dateKey });
       });
 
-      sportsSessions.sort((a, b) => a.ts - b.ts);
-      sportsSessions.forEach((session, idx) => {
+      state.sportsSessions.sort((a, b) => a.ts - b.ts);
+      state.sportsSessions.forEach((session, idx) => {
         const sessionNum = idx + 1;
         let cost = 0;
         if (sessionNum > cfg.sportsFreeSessions) {
@@ -178,38 +205,19 @@
         if (session.durationMin > cfg.sportsLongSessionMin) {
           cost += Math.ceil((session.durationMin - cfg.sportsLongSessionMin) / 60) * cfg.sportsLongSessionExtraHourCost;
         }
-        autoCosts += cost;
-        if (includeBreakdown) addBreakdown(breakdown, 'cost', `Sports session ${sessionNum}`, -cost, { entryId: session.entry.id });
+        state.autoCosts += cost;
+        if (includeBreakdown) addBreakdown(state.breakdown, 'cost', `Sports session ${sessionNum}`, -cost, { entryId: session.entry.id });
       });
 
-      (redemptions || []).forEach(item => {
-        if (!item || item.deleted) return;
-        const itemWeekKey = item.weekKey || getFocusWalletWeekKey(item.createdAt || item.ts || Date.now());
-        if (itemWeekKey !== scanWeekKey) return;
-        const points = Math.max(0, Number(item.points || item.cost || 0));
-        redeemed += points;
-        if (includeBreakdown) addBreakdown(breakdown, 'spend', item.label || 'Reward', -points, { redemptionId: item.id, entryId: item.entryId });
-      });
-
-      return { earned, autoCosts, redeemed, sportsSessions, breakdown };
+      state.finalized = true;
+      return state;
     }
 
-    const current = computeWeekOnly(weekKey, true);
+    const current = finalizeWeekState(getWeekState(weekKey), true);
     let carriedDebt = 0;
     if (cfg.carryNegativeDebt) {
-      const priorWeeks = new Set();
-      (entries || []).forEach(entry => {
-        if (!entry || entry.deleted || entry.missed) return;
-        const entryWeekKey = getEntryWeekKey(entry, weekKeyForTs, fallbackMin);
-        if (entryWeekKey < weekKey) priorWeeks.add(entryWeekKey);
-      });
-      (redemptions || []).forEach(item => {
-        if (!item || item.deleted) return;
-        const itemWeekKey = item.weekKey || getFocusWalletWeekKey(item.createdAt || item.ts || Date.now());
-        if (itemWeekKey < weekKey) priorWeeks.add(itemWeekKey);
-      });
-      Array.from(priorWeeks).sort().forEach(priorWeekKey => {
-        const prior = computeWeekOnly(priorWeekKey, false);
+      Array.from(weeks.keys()).filter(priorWeekKey => priorWeekKey < weekKey).sort().forEach(priorWeekKey => {
+        const prior = finalizeWeekState(weeks.get(priorWeekKey), false);
         carriedDebt = Math.min(0, carriedDebt + prior.earned - prior.autoCosts - prior.redeemed);
       });
       if (carriedDebt) {
