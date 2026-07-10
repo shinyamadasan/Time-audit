@@ -1319,7 +1319,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-10-perf-1';
+const APP_BUILD = '2026-07-10-perf-2';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -4238,6 +4238,7 @@ function renderSidePanel() {
 
 /** Re-renders the Today view: stats, commitment bar, timeline, recent list, and all sub-components. */
 function renderToday() {
+  let perfStageStart = perfNow();
   resetRetroBar();
   const todayE = getViewingEntries();
   const realEntries = todayE.filter(e => !e.missed);
@@ -4295,6 +4296,7 @@ function renderToday() {
     document.getElementById('commit-bar').classList.add('no-goal');
   }
   renderFocusWallet();
+  perfStageStart = recordPerfStage('renderTodayData', perfStageStart);
 
   // Cache key — only rebuild timeline/list DOM when today's entries actually change
   const newRenderKey = _viewKey + '|' + todayE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
@@ -4321,6 +4323,7 @@ function renderToday() {
       }
     }
   }
+  perfStageStart = recordPerfStage('renderTodayTimeline', perfStageStart);
 
 
   // ── Contextual visibility: show the right element for this moment ──
@@ -4339,6 +4342,7 @@ function renderToday() {
   const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(todayE)) : todayE.length > 0;
   document.getElementById('timeline-summary').textContent =
     workStarted ? `${computeDeepHrs(todayE, _vk)}h deep · ${todayE.length} blocks` : '';
+  perfStageStart = recordPerfStage('renderTodayHeader', perfStageStart);
 
   const listEl = document.getElementById('recent-list');
 
@@ -4346,22 +4350,27 @@ function renderToday() {
   if (entriesChanged) {
     if (!todayE.length) {
       listEl.innerHTML = '<div class="empty"><span class="empty-icon">⏱</span>Start the timer and log your first block.</div>';
+      perfStageStart = recordPerfStage('renderTodayRecentList', perfStageStart);
       renderRecentChips();
       renderAwarenessSignal();
+      recordPerfStage('renderTodayBottomUi', perfStageStart);
       return;
     }
 
     const sortedRecent = expandPCTimeEntries([...todayE]).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
     listEl.innerHTML = sortedRecent.slice(0, 6).map(buildEntryRowHTML).join('');
   } // end if (entriesChanged)
+  perfStageStart = recordPerfStage('renderTodayRecentList', perfStageStart);
 
   renderRecentChips();
   renderAwarenessSignal();
   updateHeroPrompt(todayE);
   renderDayBar(todayE);
   renderStatusBanner(todayE);
+  perfStageStart = recordPerfStage('renderTodayBottomUi', perfStageStart);
   renderSidePanel();
   renderPartnerCard();
+  recordPerfStage('renderTodayPanels', perfStageStart);
 }
 
 
@@ -7548,17 +7557,42 @@ function clearTodayOnly(){
   showToast('Today cleared');
 }
 
-const PERF_SLOW_LIMITS = { renderToday: 120, renderWeek: 180, scanDataDoctorEntries: 120 };
+const PERF_SLOW_LIMITS = {
+  renderToday: 120,
+  renderWeek: 180,
+  scanDataDoctorEntries: 120,
+  renderTodayData: 50,
+  renderTodayTimeline: 80,
+  renderTodayHeader: 40,
+  renderTodayRecentList: 50,
+  renderTodayBottomUi: 80,
+  renderTodayPanels: 100
+};
 const PERF_LABELS = {
   renderToday: 'Today',
   renderWeek: 'Week',
-  scanDataDoctorEntries: 'Data Doctor'
+  scanDataDoctorEntries: 'Data Doctor',
+  renderTodayData: 'Data + stats',
+  renderTodayTimeline: 'Timeline',
+  renderTodayHeader: 'Header + summary',
+  renderTodayRecentList: 'Recent list',
+  renderTodayBottomUi: 'Bottom UI',
+  renderTodayPanels: 'Panels'
 };
+const PERF_GROUPS = [
+  { title: 'Main', names: ['renderToday', 'renderWeek', 'scanDataDoctorEntries'] },
+  { title: 'Today breakdown', names: ['renderTodayData', 'renderTodayTimeline', 'renderTodayHeader', 'renderTodayRecentList', 'renderTodayBottomUi', 'renderTodayPanels'] }
+];
 const perfStats = {};
 const perfSlowEvents = [];
 
 function perfNow() {
   return (window.performance && performance.now) ? performance.now() : Date.now();
+}
+
+function shouldRenderPerfDebug() {
+  const settingsView = document.getElementById('view-settings');
+  return settingsView && settingsView.classList.contains('active');
 }
 
 function recordPerfSample(name, ms) {
@@ -7574,23 +7608,32 @@ function recordPerfSample(name, ms) {
     perfSlowEvents.unshift({ name, ms: rounded, at: stat.lastAt });
     if (perfSlowEvents.length > 6) perfSlowEvents.length = 6;
   }
-  renderPerfDebug();
+  if (shouldRenderPerfDebug()) renderPerfDebug();
+}
+
+function recordPerfStage(name, sinceMs) {
+  const now = perfNow();
+  recordPerfSample(name, now - sinceMs);
+  return now;
 }
 
 function renderPerfDebug() {
   const el = document.getElementById('perf-debug-results');
   if (!el) return;
-  const rows = Object.keys(PERF_LABELS).map(name => {
-    const stat = perfStats[name];
-    const label = PERF_LABELS[name];
-    return stat
-      ? `${label}: ${stat.lastMs}ms last, ${stat.maxMs}ms max (${stat.count})`
-      : `${label}: no samples`;
+  const rows = PERF_GROUPS.map(group => {
+    const groupRows = group.names.map(name => {
+      const stat = perfStats[name];
+      const label = PERF_LABELS[name] || name;
+      return stat
+        ? `${label}: ${stat.lastMs}ms last, ${stat.maxMs}ms max (${stat.count})`
+        : `${label}: no samples`;
+    }).join('<br>');
+    return `<div style="margin-top:5px;color:var(--muted2);font-size:10px;text-transform:uppercase;letter-spacing:.06em">${group.title}</div>${groupRows}`;
   });
   const slow = perfSlowEvents.length
-    ? `<div style="margin-top:4px;color:var(--muted)">Slow: ${perfSlowEvents.map(e => `${PERF_LABELS[e.name]} ${e.ms}ms ${e.at}`).join(' · ')}</div>`
+    ? `<div style="margin-top:4px;color:var(--muted)">Slow: ${perfSlowEvents.map(e => `${PERF_LABELS[e.name] || e.name} ${e.ms}ms ${e.at}`).join(' · ')}</div>`
     : `<div style="margin-top:4px;color:var(--muted2)">No slow samples yet.</div>`;
-  el.innerHTML = rows.join('<br>') + slow;
+  el.innerHTML = rows.join('') + slow;
 }
 
 function perfWrap(name, fn) {

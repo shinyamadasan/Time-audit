@@ -225,8 +225,8 @@ Variables: —
 Depends on: `entries`, `settings` (timezone)
 
 ## [Today View — Rendering]
-Lines: 3923–4292
-Purpose: Main `renderToday()` and all its sub-renders: day bar, status banner, Focus Wallet card, timeline (blocks + gaps), stat cards, recent entries list, contextual-visibility rules, hero state machine, same-as-last CTA, awareness signal, side-panel refresh trigger.
+Lines: 3932–4377
+Purpose: Main `renderToday()` and all its sub-renders: day bar, status banner, Focus Wallet card, timeline (blocks + gaps), stat cards, recent entries list, contextual-visibility rules, hero state machine, same-as-last CTA, awareness signal, side-panel refresh trigger, render performance checkpoints.
 Functions: `renderToday()`, `shouldRenderOnDateTick()`, `renderTodayOnDateChange()`, `renderDayBar()`, `renderStatusBanner()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderSidePanel()`, `renderLeftPanel()`
 Variables: `_todayRenderKey`, `_lastTodayDateKey`, `_lastLoggedEntryId`
 Depends on: Timeline helpers, Statistics (including `sumEntryMinutes()` / `sumEnergyMinutes()`), Entry logging, Date picker, Focus Wallet, `persist()`
@@ -330,10 +330,10 @@ Variables: `_toastTimer`
 Depends on: —
 
 ## [Export & Data Management]
-Lines: 7129–7614
+Lines: 7138–7657
 Purpose: Data Doctor scan/repair for duplicate and suspicious records, CSV export, clear-all entries (with confirm), clear a single selected day, and in-memory performance timing for expensive renders.
-Functions: `dataDoctorEscape()`, `dataDoctorIssueEntry()`, `dataDoctorDuplicateKey()`, `dataDoctorAddDayMinutes()`, `dataDoctorAddDayInterval()`, `dataDoctorKeepScore()`, `dataDoctorChooseOverlapLoser()`, `dataDoctorFindOverflowOverlaps()`, `scanDataDoctorEntries()`, `dataDoctorEntryLine()`, `dataDoctorList()`, `getDataDoctorExactDuplicateIndexes()`, `getDataDoctorDuplicateIdExtraIndexes()`, `getDataDoctorFlaggedIndexes()`, `renderDataDoctorResults()`, `runDataDoctor()`, `repairDataDoctorMetadata()`, `repairDataDoctorDuplicates()`, `repairDataDoctorFlaggedEntries()`, `exportCSV()`, `clearAll()`, `clearSelectedDay()`, `clearTodayOnly()`, `perfNow()`, `recordPerfSample()`, `renderPerfDebug()`, `perfWrap()`, `installPerfInstrumentation()`
-Variables: `PERF_SLOW_LIMITS`, `PERF_LABELS`, `perfStats`, `perfSlowEvents`
+Functions: `dataDoctorEscape()`, `dataDoctorIssueEntry()`, `dataDoctorDuplicateKey()`, `dataDoctorAddDayMinutes()`, `dataDoctorAddDayInterval()`, `dataDoctorKeepScore()`, `dataDoctorChooseOverlapLoser()`, `dataDoctorFindOverflowOverlaps()`, `scanDataDoctorEntries()`, `dataDoctorEntryLine()`, `dataDoctorList()`, `getDataDoctorExactDuplicateIndexes()`, `getDataDoctorDuplicateIdExtraIndexes()`, `getDataDoctorFlaggedIndexes()`, `renderDataDoctorResults()`, `runDataDoctor()`, `repairDataDoctorMetadata()`, `repairDataDoctorDuplicates()`, `repairDataDoctorFlaggedEntries()`, `exportCSV()`, `clearAll()`, `clearSelectedDay()`, `clearTodayOnly()`, `perfNow()`, `shouldRenderPerfDebug()`, `recordPerfSample()`, `recordPerfStage()`, `renderPerfDebug()`, `perfWrap()`, `installPerfInstrumentation()`
+Variables: `PERF_SLOW_LIMITS`, `PERF_LABELS`, `PERF_GROUPS`, `perfStats`, `perfSlowEvents`
 Depends on: `entries`, `persist()`, `syncEntries()`, `renderToday()`, `renderWeek()`, `scanDataDoctorEntries()`
 
 ## [PWA Installation]
