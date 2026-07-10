@@ -998,22 +998,10 @@ button, a, [role="button"],
 .sp-card:last-child{margin-bottom:0}
 .sp-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-bottom:10px}
 @media(min-width:1100px){
-  .app{max-width:none}
-  body.view-today{padding-left:232px;padding-right:232px}
-  body.view-today #left-panel{
-    position:fixed;left:0;top:0;width:220px;height:100vh;
-    overflow-y:auto;padding:12px;box-sizing:border-box;
-    background:var(--bg);border-right:1px solid var(--border);
-    display:flex!important;flex-direction:column;gap:8px;z-index:40;
-  }
-  body.view-today #side-panel{
-    position:fixed;right:0;top:0;width:220px;height:100vh;
-    overflow-y:auto;padding:12px;box-sizing:border-box;
-    background:var(--bg);border-left:1px solid var(--border);
-    display:flex!important;flex-direction:column;gap:8px;z-index:40;
-  }
-  body.view-today #status-banner,
-  body.view-today #day-bar{display:none!important}
+  .app{max-width:760px}
+  body.view-today{padding-left:0;padding-right:0}
+  body.view-today #left-panel,
+  body.view-today #side-panel{display:none!important}
 }
 .lp-nav-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:none;border:none;border-radius:10px;color:var(--muted);font-family:var(--head);font-size:13px;font-weight:500;cursor:pointer;text-align:left;transition:color 0.15s,background 0.15s}
 .lp-nav-btn.active{color:var(--deep);background:var(--deep-dim)}
