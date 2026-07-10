@@ -1315,7 +1315,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-09-data-doctor-2';
+const APP_BUILD = '2026-07-09-data-doctor-3';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -7188,7 +7188,7 @@ function scanDataDoctorEntries(entriesArr, opts = {}) {
 
   (entriesArr || []).forEach((entry, index) => {
     if (!entry || entry.template) return;
-    if (entry.id != null) {
+    if (entry.id != null && !entry.deleted) {
       const key = String(entry.id);
       if (!idMap.has(key)) idMap.set(key, []);
       idMap.get(key).push(dataDoctorIssueEntry(entry, index, null, tz));
@@ -7199,7 +7199,7 @@ function scanDataDoctorEntries(entriesArr, opts = {}) {
     const anchor = range ? range.start : Number(entry.tsStart || entry.ts);
     const expectedDate = Number.isFinite(anchor) ? getDateInTZ(anchor, tz) : null;
     if (expectedDate && entry.date !== expectedDate) {
-      issues.dateMismatches.push({ ...dataDoctorIssueEntry(entry, index, range, tz), expectedDate });
+      issues.dateMismatches.push({ ...dataDoctorIssueEntry(entry, index, range, tz), storedDate: entry.date || 'missing', expectedDate });
     }
 
     if (entry.deleted || entry.missed) return;
@@ -7258,6 +7258,16 @@ function dataDoctorList(items, formatter, emptyText) {
   return `<div style="display:grid;gap:4px">${shown}${extra}</div>`;
 }
 
+function getDataDoctorExactDuplicateIndexes(scan, entriesArr = entries) {
+  const indexes = new Set();
+  scan.issues.exactDuplicateGroups.forEach(group => {
+    group.duplicateIndexes.forEach(index => {
+      if (Number.isInteger(index) && entriesArr[index] && !entriesArr[index].deleted) indexes.add(index);
+    });
+  });
+  return indexes;
+}
+
 function getDataDoctorDuplicateIdExtraIndexes(scan, entriesArr = entries) {
   const indexes = new Set();
   scan.issues.duplicateIds.forEach(group => {
@@ -7277,6 +7287,7 @@ function getDataDoctorFlaggedIndexes(scan, entriesArr = entries) {
       if (Number.isInteger(item.index) && entriesArr[item.index]) indexes.add(item.index);
     });
   });
+  getDataDoctorExactDuplicateIndexes(scan, entriesArr).forEach(index => indexes.add(index));
   getDataDoctorDuplicateIdExtraIndexes(scan, entriesArr).forEach(index => indexes.add(index));
   return indexes;
 }
@@ -7295,7 +7306,7 @@ function renderDataDoctorResults(scan) {
       `${i.dateMismatches.length} date mismatch${i.dateMismatches.length === 1 ? '' : 'es'}`
     ].join(' - '), [
       dataDoctorList(i.missingUpdatedAt, item => `<div>Missing stamp: ${dataDoctorEntryLine(item)}</div>`, 'No missing sync stamps.'),
-      dataDoctorList(i.dateMismatches, item => `<div>Date mismatch: ${dataDoctorEntryLine(item)} should be ${dataDoctorEscape(item.expectedDate)}</div>`, 'No date mismatches.')
+      dataDoctorList(i.dateMismatches, item => `<div>Date mismatch: stored ${dataDoctorEscape(item.storedDate)} -> ${dataDoctorEscape(item.expectedDate)} - #${dataDoctorEscape(item.id)} ${dataDoctorEscape(item.activity)} (${dataDoctorEscape(item.energy)})</div>`, 'No date mismatches.')
     ].join('')],
     ['Exact duplicates', `${i.exactDuplicateGroups.length} group${i.exactDuplicateGroups.length === 1 ? '' : 's'}`, dataDoctorList(i.exactDuplicateGroups, group => `<div>${dataDoctorEscape(group.date)} - ${group.count} copies of ${dataDoctorEscape(group.activity)} (${fmtDur(group.minutes)}) - ids ${dataDoctorEscape(group.ids.join(', '))}</div>`, 'No exact duplicate groups.')],
     ['Needs manual review', `${i.longEntries.length} long, ${i.dayOverflows.length} day overflow, ${i.invalidRanges.length} invalid, ${i.futureEntries.length} future`, [
@@ -7378,7 +7389,7 @@ function repairDataDoctorFlaggedEntries() {
   const overflowNote = scan.issues.dayOverflows.length
     ? ' Day-overflow-only warnings stay visible unless a specific bad entry caused them.'
     : '';
-  if (!confirm(`Delete ${liveCount} flagged entr${liveCount === 1 ? 'y' : 'ies'}? This deletes long, invalid, future, and duplicate-id records.${overflowNote}`)) return;
+  if (!confirm(`Delete ${liveCount} flagged entr${liveCount === 1 ? 'y' : 'ies'}? This deletes long, invalid, future, exact duplicate, and duplicate-id records.${overflowNote}`)) return;
   const now = Date.now();
   const removeIndexes = new Set();
   let tombstoned = 0;
