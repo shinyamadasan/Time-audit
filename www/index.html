@@ -246,11 +246,14 @@
       </div>
       <button class="btn sm primary" onclick="openFocusWallet()">Spend</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:11px">
-      <div><span style="color:var(--muted)">earned</span><br><span id="fw-earned" style="font-family:var(--mono);color:var(--text)">0</span></div>
-      <div><span style="color:var(--muted)">spent/costs</span><br><span id="fw-spent" style="font-family:var(--mono);color:var(--text)">0</span></div>
-      <div><span style="color:var(--muted)">sports</span><br><span id="fw-sports" style="font-family:var(--mono);color:var(--text)">0/3 free</span></div>
-    </div>
+    <details style="font-size:11px;color:var(--muted);margin-top:2px">
+      <summary style="cursor:pointer;color:var(--muted2);font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700">Details</summary>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:11px;margin-top:8px">
+        <div><span style="color:var(--muted)">earned</span><br><span id="fw-earned" style="font-family:var(--mono);color:var(--text)">0</span></div>
+        <div><span style="color:var(--muted)">spent/costs</span><br><span id="fw-spent" style="font-family:var(--mono);color:var(--text)">0</span></div>
+        <div><span style="color:var(--muted)">sports</span><br><span id="fw-sports" style="font-family:var(--mono);color:var(--text)">0/3 free</span></div>
+      </div>
+    </details>
     <div id="fw-note" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4"></div>
   </div>
 
@@ -342,7 +345,7 @@
       <div class="s-val" id="s-streak">0</div>
       <div class="s-sub" id="s-streak-sub">days</div>
     </div>
-    <div class="stat-card" style="flex:1;text-align:center">
+    <div class="stat-card" style="flex:1;text-align:center;display:none">
       <div class="s-label">Identity</div>
       <div class="s-val" id="s-identity" style="font-size:13px">—</div>
       <div class="s-sub" id="s-identity-sub" style="margin-top:3px;line-height:1.3"></div>
@@ -703,8 +706,9 @@
       <select id="clear-day-select" style="font-family:var(--head);font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex:1;min-width:0"></select>
       <button class="btn sm danger" onclick="clearSelectedDay()">Clear day</button>
     </div>
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-      <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);font-weight:800;margin-bottom:8px">Data Doctor</div>
+    <details style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <summary style="cursor:pointer;color:var(--muted2);font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;margin-bottom:8px">Advanced: Data Doctor</summary>
+      <div style="margin-top:10px">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn sm ghost" onclick="runDataDoctor()">Run scan</button>
         <button class="btn sm ghost" onclick="repairDataDoctorMetadata()">Fix metadata</button>
@@ -712,12 +716,13 @@
         <button class="btn sm danger" onclick="repairDataDoctorFlaggedEntries()">Delete flagged entries</button>
       </div>
       <div id="data-doctor-results" style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.45">Scan for duplicate blocks, impossible durations, and stale sync metadata.</div>
-    </div>
+      </div>
+    </details>
     <div style="margin-top:10px;font-size:12px;color:var(--muted)" id="settings-stats"></div>
-    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--muted2)">
-      <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);font-weight:800;margin-bottom:5px">Performance</div>
+    <details style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--muted2)">
+      <summary style="cursor:pointer;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);font-weight:800;margin-bottom:5px">Advanced: Performance</summary>
       <div id="perf-debug-results" style="font-family:var(--mono);line-height:1.45">No render samples yet.</div>
-    </div>
+    </details>
     <div style="margin-top:6px;font-size:11px;color:var(--muted2);font-family:var(--mono)">Build <span id="app-build-label"></span></div>
   </div>
 </div>
@@ -1319,7 +1324,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-10-stability-1';
+const APP_BUILD = '2026-07-10-daily-driver-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -4379,7 +4384,7 @@ function renderToday() {
   renderDayBar(todayE);
   renderStatusBanner(todayE);
   perfStageStart = recordPerfStage('renderTodayBottomUi', perfStageStart);
-  renderSidePanel();
+  if (document.body.classList.contains('show-dashboard-panels')) renderSidePanel();
   renderPartnerCard();
   recordPerfStage('renderTodayPanels', perfStageStart);
 }
