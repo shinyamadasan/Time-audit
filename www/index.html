@@ -1315,7 +1315,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-09-data-doctor-3';
+const APP_BUILD = '2026-07-09-data-doctor-4';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -7165,6 +7165,80 @@ function dataDoctorAddDayMinutes(dayTotals, range, tz) {
   }
 }
 
+function dataDoctorAddDayInterval(dayIntervals, entry, index, range, tz) {
+  let cursor = range.start;
+  let guard = 0;
+  while (cursor < range.end && guard++ < 370) {
+    const dateKey = getDateInTZ(cursor, tz);
+    const dayStart = tzParseTime(dateKey, '00:00');
+    const dayEnd = tzParseTime(_dateKeyPlusDays(dateKey, 1), '00:00');
+    const start = Math.max(range.start, dayStart);
+    const end = Math.min(range.end, dayEnd);
+    if (end > start) {
+      if (!dayIntervals.has(dateKey)) dayIntervals.set(dateKey, []);
+      dayIntervals.get(dateKey).push({ start, end, index, entry });
+    }
+    cursor = Math.max(dayEnd, cursor + 60000);
+  }
+}
+
+function dataDoctorKeepScore(entry) {
+  const activity = String(entry?.activity || '').trim().toLowerCase();
+  let score = 0;
+  if (activity === 'sleep') score += 8;
+  if (entry?.energy === 'recovery') score += 5;
+  if (entry?.energy === 'deep') score += 4;
+  if (entry?.energy === 'nine5') score += 3;
+  if (entry?.energy === 'learning') score += 2;
+  if (entry?.energy === 'exercise' || entry?.energy === 'social' || entry?.energy === 'errands') score += 1;
+  if (entry?.retro) score += 2;
+  if (entry?.onPlan === true) score += 1;
+  if (activity && !['pc time', 'screen time', 'phone usage'].includes(activity)) score += 1;
+  if (activity === 'pc time' || activity === 'screen time' || activity === 'phone usage') score -= 5;
+  if (entry?.autoLogged) score -= 2;
+  return score;
+}
+
+function dataDoctorChooseOverlapLoser(a, b) {
+  const aScore = dataDoctorKeepScore(a.entry);
+  const bScore = dataDoctorKeepScore(b.entry);
+  if (aScore !== bScore) return aScore < bScore ? a : b;
+  const aUpdated = a.entry?.updatedAt || a.entry?.ts || 0;
+  const bUpdated = b.entry?.updatedAt || b.entry?.ts || 0;
+  if (aUpdated !== bUpdated) return aUpdated < bUpdated ? a : b;
+  const aDur = a.end - a.start;
+  const bDur = b.end - b.start;
+  if (aDur !== bDur) return aDur < bDur ? a : b;
+  return a.index > b.index ? a : b;
+}
+
+function dataDoctorFindOverflowOverlaps(dayIntervals, dayTotals, dayMaxMin, tz) {
+  const byIndex = new Map();
+  dayTotals.forEach((minutes, date) => {
+    if (minutes <= dayMaxMin) return;
+    const intervals = (dayIntervals.get(date) || []).slice().sort((a, b) => a.start - b.start);
+    for (let i = 0; i < intervals.length; i++) {
+      for (let j = i + 1; j < intervals.length; j++) {
+        const a = intervals[i], b = intervals[j];
+        if (b.start >= a.end) break;
+        const overlapMs = Math.min(a.end, b.end) - Math.max(a.start, b.start);
+        if (overlapMs < 15 * 60000) continue;
+        const loser = dataDoctorChooseOverlapLoser(a, b);
+        const prev = byIndex.get(loser.index);
+        const overlapMinutes = Math.round(overlapMs / 60000);
+        if (!prev || overlapMinutes > prev.overlapMinutes) {
+          byIndex.set(loser.index, {
+            ...dataDoctorIssueEntry(loser.entry, loser.index, { start: loser.start, end: loser.end }, tz),
+            minutes: Math.round((loser.end - loser.start) / 60000),
+            overlapMinutes
+          });
+        }
+      }
+    }
+  });
+  return [...byIndex.values()];
+}
+
 function scanDataDoctorEntries(entriesArr, opts = {}) {
   const tz = opts.timezone || settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const intervalMin = opts.intervalMin || settings.intervalMin || 30;
@@ -7180,11 +7254,13 @@ function scanDataDoctorEntries(entriesArr, opts = {}) {
     longEntries: [],
     exactDuplicateGroups: [],
     duplicateIds: [],
-    dayOverflows: []
+    dayOverflows: [],
+    overflowOverlaps: []
   };
   const duplicateMap = new Map();
   const idMap = new Map();
   const dayTotals = new Map();
+  const dayIntervals = new Map();
 
   (entriesArr || []).forEach((entry, index) => {
     if (!entry || entry.template) return;
@@ -7213,6 +7289,7 @@ function scanDataDoctorEntries(entriesArr, opts = {}) {
     if (range.end > nowTs + futureGraceMs) issues.futureEntries.push(issue);
     if (minutes > longEntryMin) issues.longEntries.push(issue);
     dataDoctorAddDayMinutes(dayTotals, range, tz);
+    dataDoctorAddDayInterval(dayIntervals, entry, index, range, tz);
 
     const dupKey = dataDoctorDuplicateKey(entry, range);
     if (!duplicateMap.has(dupKey)) duplicateMap.set(dupKey, []);
@@ -7241,6 +7318,7 @@ function scanDataDoctorEntries(entriesArr, opts = {}) {
   dayTotals.forEach((minutes, date) => {
     if (minutes > dayMaxMin) issues.dayOverflows.push({ date, minutes });
   });
+  issues.overflowOverlaps = dataDoctorFindOverflowOverlaps(dayIntervals, dayTotals, dayMaxMin, tz);
 
   const totalIssues = Object.values(issues).reduce((sum, list) => sum + list.length, 0);
   return { issues, totalIssues, scanned: (entriesArr || []).length };
@@ -7287,6 +7365,9 @@ function getDataDoctorFlaggedIndexes(scan, entriesArr = entries) {
       if (Number.isInteger(item.index) && entriesArr[item.index]) indexes.add(item.index);
     });
   });
+  scan.issues.overflowOverlaps.forEach(item => {
+    if (Number.isInteger(item.index) && entriesArr[item.index]) indexes.add(item.index);
+  });
   getDataDoctorExactDuplicateIndexes(scan, entriesArr).forEach(index => indexes.add(index));
   getDataDoctorDuplicateIdExtraIndexes(scan, entriesArr).forEach(index => indexes.add(index));
   return indexes;
@@ -7309,9 +7390,10 @@ function renderDataDoctorResults(scan) {
       dataDoctorList(i.dateMismatches, item => `<div>Date mismatch: stored ${dataDoctorEscape(item.storedDate)} -> ${dataDoctorEscape(item.expectedDate)} - #${dataDoctorEscape(item.id)} ${dataDoctorEscape(item.activity)} (${dataDoctorEscape(item.energy)})</div>`, 'No date mismatches.')
     ].join('')],
     ['Exact duplicates', `${i.exactDuplicateGroups.length} group${i.exactDuplicateGroups.length === 1 ? '' : 's'}`, dataDoctorList(i.exactDuplicateGroups, group => `<div>${dataDoctorEscape(group.date)} - ${group.count} copies of ${dataDoctorEscape(group.activity)} (${fmtDur(group.minutes)}) - ids ${dataDoctorEscape(group.ids.join(', '))}</div>`, 'No exact duplicate groups.')],
-    ['Needs manual review', `${i.longEntries.length} long, ${i.dayOverflows.length} day overflow, ${i.invalidRanges.length} invalid, ${i.futureEntries.length} future`, [
+    ['Needs manual review', `${i.longEntries.length} long, ${i.dayOverflows.length} day overflow, ${i.overflowOverlaps.length} overlap, ${i.invalidRanges.length} invalid, ${i.futureEntries.length} future`, [
       dataDoctorList(i.longEntries, item => `<div>Long: ${dataDoctorEntryLine(item)}</div>`, 'No long entries.'),
       dataDoctorList(i.dayOverflows, day => `<div>Day total: ${dataDoctorEscape(day.date)} - ${fmtDur(day.minutes)}</div>`, 'No days above 24h raw logged time.'),
+      dataDoctorList(i.overflowOverlaps, item => `<div>Overlap cleanup: ${dataDoctorEntryLine(item)} overlaps ${fmtDur(item.overlapMinutes)}</div>`, 'No overflow overlap entries.'),
       dataDoctorList(i.invalidRanges, item => `<div>Invalid range: ${dataDoctorEntryLine(item)}</div>`, 'No invalid time ranges.'),
       dataDoctorList(i.futureEntries, item => `<div>Future: ${dataDoctorEntryLine(item)}</div>`, 'No future entries.'),
       dataDoctorList(i.duplicateIds, group => `<div>Duplicate id #${dataDoctorEscape(group.id)} appears ${group.count} times</div>`, 'No duplicate ids.')
@@ -7389,7 +7471,7 @@ function repairDataDoctorFlaggedEntries() {
   const overflowNote = scan.issues.dayOverflows.length
     ? ' Day-overflow-only warnings stay visible unless a specific bad entry caused them.'
     : '';
-  if (!confirm(`Delete ${liveCount} flagged entr${liveCount === 1 ? 'y' : 'ies'}? This deletes long, invalid, future, exact duplicate, and duplicate-id records.${overflowNote}`)) return;
+  if (!confirm(`Delete ${liveCount} flagged entr${liveCount === 1 ? 'y' : 'ies'}? This deletes long, invalid, future, exact duplicate, duplicate-id, and overflow-overlap records.${overflowNote}`)) return;
   const now = Date.now();
   const removeIndexes = new Set();
   let tombstoned = 0;
