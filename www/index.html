@@ -1319,7 +1319,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-10-perf-3';
+const APP_BUILD = '2026-07-10-stability-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1691,7 +1691,7 @@ function stopAndLog() {
     entries.push(entry);
     entries.sort((a, b) => b.ts - a.ts);
     lastTaskForRepeat = task;
-    persist(); renderToday(); syncEntries();
+    persist(); scheduleRenderToday(); syncEntries();
     showToast(`Logged · ${task} · ${fmtDur(dur)}`);
   }
   resetTimer();
@@ -1721,7 +1721,7 @@ function switchTaskMidBlock() {
     entries.push(entry);
     entries.sort((a, b) => b.ts - a.ts);
     lastTaskForRepeat = prevTask;
-    persist(); renderToday(); syncEntries();
+    persist(); scheduleRenderToday(); syncEntries();
     showToast(`Logged: ${prevTask} · ${fmtDur(dur)}`);
   }
 
@@ -1843,7 +1843,7 @@ function endBreak() {
 
   document.getElementById('timer-status').textContent = `Break done · pinging every ${settings.intervalMin} min`;
   updateRing();
-  persist(); renderToday(); syncEntries(); syncTimerState();
+  persist(); scheduleRenderToday(); syncEntries(); syncTimerState();
   if (fbRoomRef) fbRoomRef.update({ breakState: { active: false } });
   showToast('Break over — back to work! ✓');
   playAlert(1, 0);
@@ -1947,7 +1947,7 @@ function autoLogBlock(activity, energy, tsStart, tsEnd) {
     _lastLoggedEntryId = entry.id;
   }
 
-  persist(); renderToday(); syncEntries();
+  persist(); scheduleRenderToday(); syncEntries();
   showToast(`Auto-logged: ${activity} · ${fmtDur(dur)}`);
   checkReviewPrompt();
   checkEscalation();
@@ -2126,7 +2126,7 @@ function _doQuickSave(activity, energy) {
 
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
-  persist(); renderToday(); syncEntries();
+  persist(); scheduleRenderToday(); syncEntries();
   showLogFeedback(energy);
   checkReviewPrompt();
   checkEscalation();
@@ -2181,7 +2181,7 @@ function saveCommitment() {
   const n = parseInt(document.getElementById('commitment-custom').value);
   if (isNaN(n) || n < 1) { showToast('Enter a valid number'); return; }
   dailyCommitment = n;
-  persist(); renderToday();
+  persist(); scheduleRenderToday();
   closeModal('commitment-overlay');
   showToast(`Committed to ${n} deep blocks today`);
 }
@@ -2358,7 +2358,7 @@ function logFocusReward() {
   entries.sort((a, b) => b.ts - a.ts);
   _lastLoggedEntryId = entry.id;
   persist();
-  renderToday();
+  scheduleRenderToday();
   syncEntries();
   if (redemption && typeof syncFocusRedemptions === 'function') syncFocusRedemptions();
   closeModal('focus-wallet-overlay');
@@ -2777,7 +2777,7 @@ function saveRetroEntry() {
     editingEntryId = null;
     editingEntryBase = null;
     entries.sort((a,b) => b.ts - a.ts);
-    persist(); renderToday(); renderWeek(); syncEntries();
+    persist(); scheduleRenderToday(); renderWeek(); syncEntries();
     document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
     document.getElementById('retro-modal-title').textContent = 'What were you doing?';
     closeModal('retro-overlay');
@@ -2799,7 +2799,7 @@ function saveRetroEntry() {
             e.originalLabel = retroEnergy;
             e.updatedAt = Date.now();
           });
-          persist(); syncEntries(); renderToday(); renderWeek();
+          persist(); syncEntries(); scheduleRenderToday(); renderWeek();
           showToast(`${_others.length} other "${activity}" ${_others.length === 1 ? 'entry' : 'entries'} updated`);
         }
       }
@@ -2813,14 +2813,14 @@ function saveRetroEntry() {
       const dur1 = Math.round((midnight - tsStart) / 60000);
       const dur2 = Math.round((tsEnd - midnight) / 60000);
       showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
-      setTimeout(() => { renderToday(); syncEntries(); }, 0);
+      scheduleRenderToday(); syncEntries();
       checkBudget(retroEnergy);
       } else {
       entries.push(makeEntry(tsEnd, tsEnd, tsStart, startDateKey));
       entries.sort((a,b) => b.ts - a.ts);
       persist(); closeModal('retro-overlay');
       showToast(`Logged retroactively · ${fmtDur(dur)}`, false, retroEnergy);
-      setTimeout(() => { renderToday(); syncEntries(); }, 0);
+      scheduleRenderToday(); syncEntries();
       checkBudget(retroEnergy);
       }
   }
@@ -2899,7 +2899,7 @@ function saveEntry() {
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
   persist(); closeModal('log-overlay');
-  setTimeout(() => { renderToday(); syncEntries(); }, 0);
+  scheduleRenderToday(); syncEntries();
   showLogFeedback(entry.energy);
   checkReviewPrompt();
   checkEscalation();
@@ -2946,7 +2946,7 @@ function deleteEntry(id) {
   const entry = entries.find(e => e.id === entryId);
   if (!entry) { showToast('Entry not found'); return; }
   const targets = entries.filter(e => isSameDeletionTarget(e, entry));
-  if (!targets.length) { _todayRenderKey = '__FORCE__'; renderToday(); showToast('Already deleted'); return; }
+  if (!targets.length) { _todayRenderKey = '__FORCE__'; scheduleRenderToday(); showToast('Already deleted'); return; }
   const now = Date.now();
   targets.forEach(e => {
     e.deleted = true;
@@ -2955,7 +2955,7 @@ function deleteEntry(id) {
   persist();
   _todayRenderKey = '__FORCE__';
   syncEntries();
-  renderToday(); renderWeek(); renderWeekTable();
+  scheduleRenderToday(); renderWeek(); renderWeekTable();
   showToast(targets.length > 1 ? `Deleted ${entry.activity || 'entry'} (${targets.length} copies)` : `Deleted ${entry.activity || 'entry'}`);
 }
 
@@ -4704,7 +4704,7 @@ function switchToTask(task) {
     });
     getActivityColor(prevTask);
     lastTaskForRepeat = prevTask;
-    persist(); renderToday(); syncEntries();
+    persist(); scheduleRenderToday(); syncEntries();
     showToast(`Logged: ${prevTask} · ${fmtDur(dur)}`);
   }
   document.getElementById('switch-panel').style.display = 'none';
@@ -4763,7 +4763,7 @@ function quickRetroLog() {
     entries.push(makeQEntry(midnight - 1, midnight, tsStart, startDateKey));
     entries.push(makeQEntry(tsEnd, tsEnd, midnight, endDateKey));
     entries.sort((a, b) => b.ts - a.ts);
-    persist(); renderToday(); syncEntries();
+    persist(); scheduleRenderToday(); syncEntries();
     taskInput.value = '';
     resetRetroBar();
     showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
@@ -4773,7 +4773,7 @@ function quickRetroLog() {
     _lastLoggedEntryId = _qEntry.id;
     entries.push(_qEntry);
     entries.sort((a, b) => b.ts - a.ts);
-    persist(); renderToday(); syncEntries();
+    persist(); scheduleRenderToday(); syncEntries();
     taskInput.value = '';
     resetRetroBar();
     const wasteFlag = (learnedEng === 'waste' || learnedEng === 'distraction') ? ' ⚠ auto-flagged' : '';
@@ -4811,7 +4811,7 @@ function quickLogSameAsLast() {
   learnWastePattern(activity, energy);
   entries.push(entry);
   entries.sort((a, b) => b.ts - a.ts);
-  persist(); renderToday(); syncEntries();
+  persist(); scheduleRenderToday(); syncEntries();
   showToast(`Logged · ${activity} · ${fmtDur(dur)} · timer started`, false, energy);
   resetRetroBar();
   if (!running) _startTimer(activity);
@@ -4946,7 +4946,7 @@ function toggleAway() {
     btn.style.borderColor = 'var(--away)';
     btn.style.color = 'var(--away)';
     document.getElementById('timer-status').textContent = 'Ready';
-    persist(); renderToday(); syncEntries();
+    persist(); scheduleRenderToday(); syncEntries();
     if (fbRoomRef) fbRoomRef.update({ awayState: { active: false } });
     showToast(`${entry.activity} logged · ${fmtDur(dur)}`);
   } else {
@@ -5949,7 +5949,7 @@ function logSleepEntry(sleepTs, wakeTs) {
     away: true, autoLogged: true, quickLogged: true, onPlan: false, retro: false
   };
   entries.unshift(entry);
-  persist(); renderToday(); syncEntries();
+  persist(); scheduleRenderToday(); syncEntries();
   showToast(`Sleep logged · ${fmtSleepDur(sleepTs, wakeTs)}`);
   localStorage.setItem('ta3-sleep-reminded', toDateKey(new Date()));
 }
@@ -8398,7 +8398,7 @@ async function syncPhoneUsage(UsageStats) {
   }
 
   if (added > 0) {
-    persist(); renderToday(); syncEntries();
+    persist(); scheduleRenderToday(); syncEntries();
     showToast(`Auto-logged ${added} phone session${added > 1 ? 's' : ''}`);
   }
   localStorage.setItem(PHONE_USAGE_KEY, String(now));

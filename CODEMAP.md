@@ -25,9 +25,9 @@
 
 ### storage.js
 Lines: external file
-Purpose: All localStorage/Firebase persistence, data loading, and cross-device sync helpers.
-Functions: `persist()`, `resolveEntrySync()`, `syncEntries()`, `syncFocusRedemptions()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
-Variables: (managed internally)
+Purpose: All localStorage/Firebase persistence, data loading, debounced Today rendering, and cross-device sync helpers with throttled sync-failure feedback.
+Functions: `persist()`, `scheduleRenderToday()`, `notifySyncWriteFailed()`, `resolveEntrySync()`, `syncEntries()`, `syncFocusRedemptions()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
+Variables: `_renderTodayPending`, `_lastSyncErrorToastAt`
 Depends on: Firebase SDK globals, `focusRedemptions` global, `sumEnergyMinutes()`
 
 ### insights.js
