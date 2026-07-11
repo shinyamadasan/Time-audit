@@ -5,6 +5,21 @@ Check each item. If something is broken, do not push.
 
 ---
 
+## Automated Checks
+
+Run these before pushing code changes:
+
+```bash
+npm test
+npm run test:smoke
+```
+
+`npm test` runs the unit/regression suite. `npm run test:smoke` runs the Playwright browser smoke tests for the daily-driver flows: quick retro log + undo, delete + undo, Focus Wallet spend + undo, and crossing-day entries that should never display as one 28h block.
+
+GitHub Actions runs both commands automatically on pushes and pull requests to `main`.
+
+---
+
 ## 1. Page Load
 
 - [ ] Page loads with no console errors (open DevTools → Console)
