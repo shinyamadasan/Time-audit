@@ -5,5 +5,7 @@ resources/
 *.log
 *.tmp
 .DS_Store
+test-results/
+playwright-report/
 # Audio served from GitHub Pages — not bundled in APK
 www/Sounds/
