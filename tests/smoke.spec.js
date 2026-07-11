@@ -240,6 +240,9 @@ test('today health shows compact daily accounting', async ({ page }) => {
   await expect(page.locator('#th-waste')).toHaveText('20m waste');
   await expect(page.locator('#th-wallet')).toHaveText('15 pts');
   await expect(page.locator('#th-unlogged')).toContainText('unlogged');
+
+  await page.locator('#th-unlogged').click();
+  await expect(page.locator('#timeline-blocks')).toBeInViewport({ ratio: 0.1 });
 });
 
 test('crossing-day entries are clipped instead of displayed as one 28h block', async ({ page }) => {
