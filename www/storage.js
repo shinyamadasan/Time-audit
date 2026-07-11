@@ -785,7 +785,12 @@ function resolveEntrySync(local, remote, nowTs = Date.now()) {
   if (!local) {
     return remoteEntry.deleted ? { action: 'skip' } : { action: 'add', entry: remoteEntry };
   }
-  if (local.deleted && !remoteEntry.deleted) return { action: 'keep-local' };
+  if (local.deleted && !remoteEntry.deleted) {
+    const remoteV = remoteEntry.updatedAt || remoteEntry.ts || 0;
+    const localV = local.updatedAt || local.ts || 0;
+    if (remoteEntry.undoRestoredAt && remoteV > localV) return { action: 'replace', entry: remoteEntry };
+    return { action: 'keep-local' };
+  }
   const remoteV = remoteEntry.updatedAt || remoteEntry.ts || 0;
   const localV  = local.updatedAt || local.ts || 0;
   return remoteV > localV ? { action: 'replace', entry: remoteEntry } : { action: 'keep-local' };

@@ -90,10 +90,57 @@ function resolveEntrySync(local, remote, nowTs = Date.now()) {
   if (!local) {
     return remoteEntry.deleted ? { action: 'skip' } : { action: 'add', entry: remoteEntry };
   }
-  if (local.deleted && !remoteEntry.deleted) return { action: 'keep-local' };
+  if (local.deleted && !remoteEntry.deleted) {
+    const remoteV = remoteEntry.updatedAt || remoteEntry.ts || 0;
+    const localV = local.updatedAt || local.ts || 0;
+    if (remoteEntry.undoRestoredAt && remoteV > localV) return { action: 'replace', entry: remoteEntry };
+    return { action: 'keep-local' };
+  }
   const remoteV = remoteEntry.updatedAt || remoteEntry.ts || 0;
   const localV = local.updatedAt || local.ts || 0;
   return remoteV > localV ? { action: 'replace', entry: remoteEntry } : { action: 'keep-local' };
+}
+
+function testSameUndoId(a, b) {
+  return String(a) === String(b);
+}
+
+function testTombstoneUndoEntries(entriesArr, entryIds, nowTs) {
+  let changed = false;
+  (entryIds || []).forEach(id => {
+    const idx = entriesArr.findIndex(e => testSameUndoId(e.id, id));
+    if (idx >= 0) entriesArr[idx] = { ...entriesArr[idx], deleted: true, updatedAt: nowTs };
+    else entriesArr.push({ id, ts: nowTs, deleted: true, updatedAt: nowTs });
+    changed = true;
+  });
+  return changed;
+}
+
+function testRestoreUndoEntries(entriesArr, snapshots, nowTs) {
+  let changed = false;
+  (snapshots || []).forEach(snapshot => {
+    if (!snapshot || snapshot.id == null) return;
+    const restored = JSON.parse(JSON.stringify(snapshot));
+    restored.updatedAt = nowTs;
+    restored.undoRestoredAt = nowTs;
+    if (!snapshot.deleted) delete restored.deleted;
+    const idx = entriesArr.findIndex(e => testSameUndoId(e.id, restored.id));
+    if (idx >= 0) entriesArr[idx] = restored;
+    else entriesArr.push(restored);
+    changed = true;
+  });
+  return changed;
+}
+
+function testTombstoneUndoRedemptions(redemptionsArr, redemptionIds, nowTs) {
+  let changed = false;
+  (redemptionIds || []).forEach(id => {
+    const idx = redemptionsArr.findIndex(r => testSameUndoId(r.id, id));
+    if (idx >= 0) redemptionsArr[idx] = { ...redemptionsArr[idx], deleted: true, updatedAt: nowTs };
+    else redemptionsArr.push({ id, deleted: true, updatedAt: nowTs });
+    changed = true;
+  });
+  return changed;
 }
 
 function normalizeActivityForTemplate(s) {
@@ -570,6 +617,42 @@ test('newer remote tombstone replaces local live entry', () => {
   const local = { id: 1, deleted: false, updatedAt: 1000, activity: 'Sleep' };
   const remote = { id: 1, deleted: true, updatedAt: 5000 };
   assert.equal(resolveEntrySync(local, remote).action, 'replace');
+});
+test('undo-restored remote live entry can replace a local tombstone', () => {
+  const local = { id: 1, deleted: true, updatedAt: 1000 };
+  const remote = { id: 1, deleted: false, updatedAt: 5000, undoRestoredAt: 5000, activity: 'Sleep' };
+  const result = resolveEntrySync(local, remote);
+  assert.equal(result.action, 'replace');
+  assert.equal(result.entry.activity, 'Sleep');
+});
+
+console.log('\nundo helpers');
+test('created entry undo tombstones existing entries', () => {
+  const entriesArr = [{ id: 1, ts: 1000, activity: 'Movie', updatedAt: 1000 }];
+  assert.equal(testTombstoneUndoEntries(entriesArr, [1], 2000), true);
+  assert.equal(entriesArr.length, 1);
+  assert.equal(entriesArr[0].deleted, true);
+  assert.equal(entriesArr[0].updatedAt, 2000);
+});
+test('created entry undo writes a tombstone when local entry is missing', () => {
+  const entriesArr = [];
+  testTombstoneUndoEntries(entriesArr, ['abc'], 3000);
+  assert.deepEqual(entriesArr[0], { id: 'abc', ts: 3000, deleted: true, updatedAt: 3000 });
+});
+test('delete undo restores the saved live snapshot with a newer stamp', () => {
+  const entriesArr = [{ id: 2, ts: 2000, activity: 'Sleep', deleted: true, updatedAt: 2500 }];
+  const snapshot = { id: 2, ts: 2000, activity: 'Sleep', energy: 'recovery', updatedAt: 1000 };
+  testRestoreUndoEntries(entriesArr, [snapshot], 4000);
+  assert.equal(entriesArr[0].activity, 'Sleep');
+  assert.equal(entriesArr[0].deleted, undefined);
+  assert.equal(entriesArr[0].updatedAt, 4000);
+  assert.equal(entriesArr[0].undoRestoredAt, 4000);
+});
+test('reward spend undo tombstones wallet redemptions', () => {
+  const redemptionsArr = [{ id: 'r1', points: 30, updatedAt: 1000 }];
+  testTombstoneUndoRedemptions(redemptionsArr, ['r1'], 5000);
+  assert.equal(redemptionsArr[0].deleted, true);
+  assert.equal(redemptionsArr[0].updatedAt, 5000);
 });
 
 console.log('\nentryCoversTemplateSlot(entry, tpl)');
