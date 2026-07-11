@@ -197,6 +197,51 @@ test('focus wallet spend can be undone without leaving point debt', async ({ pag
   await expect(page.locator('#recent-list')).not.toContainText('Movie smoke');
 });
 
+test('today health shows compact daily accounting', async ({ page }) => {
+  const now = new Date();
+  const todayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const deepStart = todayStart + 9 * 60 * 60 * 1000;
+  const deepEnd = deepStart + 60 * 60 * 1000;
+  const wasteEnd = deepEnd + 20 * 60 * 1000;
+  const entries = [
+    {
+      id: deepEnd,
+      ts: deepEnd,
+      tsStart: deepStart,
+      updatedAt: deepEnd,
+      blockIntervalMin: 60,
+      date: utcDateKey(deepStart),
+      activity: 'Smoke deep work',
+      energy: 'deep',
+      category: 'deep_work',
+      originalLabel: 'deep',
+      onPlan: true,
+      retro: false
+    },
+    {
+      id: wasteEnd,
+      ts: wasteEnd,
+      tsStart: deepEnd,
+      updatedAt: wasteEnd,
+      blockIntervalMin: 20,
+      date: utcDateKey(deepEnd),
+      activity: 'Smoke scrolling',
+      energy: 'waste',
+      category: 'waste',
+      originalLabel: 'waste',
+      onPlan: false,
+      retro: true
+    }
+  ];
+  await openApp(page, { entries });
+
+  await expect(page.locator('#today-health')).toContainText('Today health');
+  await expect(page.locator('#th-deep')).toHaveText('1h deep');
+  await expect(page.locator('#th-waste')).toHaveText('20m waste');
+  await expect(page.locator('#th-wallet')).toHaveText('15 pts');
+  await expect(page.locator('#th-unlogged')).toContainText('unlogged');
+});
+
 test('crossing-day entries are clipped instead of displayed as one 28h block', async ({ page }) => {
   const now = new Date();
   const todayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
