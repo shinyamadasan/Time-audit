@@ -647,6 +647,13 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .commit-progress{flex:1;height:10px;background:var(--bg4);border-radius:5px;overflow:hidden}
 .commit-fill{height:100%;border-radius:5px;background:var(--deep);transition:width 0.4s}
 .commit-label{font-size:12px;font-family:var(--mono);color:var(--text);white-space:nowrap}
+.today-health{background:var(--bg2);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,0.35);border-radius:var(--r2);
+  padding:9px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.today-health-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;flex-shrink:0}
+.today-health-metric{font-family:var(--mono);font-size:12px;color:var(--muted2);white-space:nowrap}
+.today-health-metric.deep{color:var(--deep)}
+.today-health-metric.waste.has-waste,.today-health-metric.wallet.negative{color:var(--distraction)}
+.today-health-metric.unlogged.warn{color:#f9c74f}
 
 /* ── Log feedback flash ── */
 @keyframes ring-flash{0%,100%{opacity:1}50%{opacity:0.4}}
