@@ -1324,7 +1324,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-10-daily-driver-1';
+const APP_BUILD = '2026-07-10-undo-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1379,6 +1379,7 @@ let recentChipTasks = [];
 let taskStartTime = null;
 let awayElapsedTicker = null;
 let partnerData = null; // live data from accountability partner's public node
+let lastUndoAction = null;
 // firebaseConfig, syncedDeviceId, connectedDevices — moved to storage.js
 
 const CIRCUM = 314.2;
@@ -1441,6 +1442,111 @@ function fmtDur(min) {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+function cloneUndoValue(value) {
+  if (value == null) return value;
+  if (typeof structuredClone === 'function') {
+    try { return structuredClone(value); } catch(e) {}
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+
+function sameUndoId(a, b) {
+  return String(a) === String(b);
+}
+
+function rememberUndoAction(action) {
+  lastUndoAction = { ...action, createdAt: Date.now() };
+}
+
+function rememberCreatedUndo(label, createdEntries, createdRedemptions) {
+  const entryIds = (createdEntries || []).filter(e => e && e.id != null).map(e => e.id);
+  const redemptionIds = (createdRedemptions || []).filter(r => r && r.id != null).map(r => r.id);
+  if (!entryIds.length && !redemptionIds.length) return;
+  rememberUndoAction({ type: 'created', label, entryIds, redemptionIds });
+}
+
+function rememberRestoreEntriesUndo(label, snapshots) {
+  const entriesToRestore = (snapshots || []).filter(e => e && e.id != null).map(cloneUndoValue);
+  if (!entriesToRestore.length) return;
+  rememberUndoAction({ type: 'restore-entries', label, entries: entriesToRestore });
+}
+
+function tombstoneUndoEntries(entryIds, now) {
+  let changed = false;
+  (entryIds || []).forEach(id => {
+    const idx = entries.findIndex(e => sameUndoId(e.id, id));
+    if (idx >= 0) {
+      entries[idx] = { ...entries[idx], deleted: true, updatedAt: now };
+    } else {
+      entries.push({ id, ts: now, deleted: true, updatedAt: now });
+    }
+    changed = true;
+  });
+  return changed;
+}
+
+function restoreUndoEntries(snapshots, now) {
+  let changed = false;
+  (snapshots || []).forEach(snapshot => {
+    if (!snapshot || snapshot.id == null) return;
+    const restored = cloneUndoValue(snapshot);
+    restored.updatedAt = now;
+    restored.undoRestoredAt = now;
+    if (!snapshot.deleted) delete restored.deleted;
+    const idx = entries.findIndex(e => sameUndoId(e.id, restored.id));
+    if (idx >= 0) entries[idx] = restored;
+    else entries.push(restored);
+    changed = true;
+  });
+  return changed;
+}
+
+function tombstoneUndoRedemptions(redemptionIds, now) {
+  let changed = false;
+  (redemptionIds || []).forEach(id => {
+    const idx = focusRedemptions.findIndex(r => sameUndoId(r.id, id));
+    if (idx >= 0) {
+      focusRedemptions[idx] = { ...focusRedemptions[idx], deleted: true, updatedAt: now };
+    } else {
+      focusRedemptions.push({ id, deleted: true, updatedAt: now });
+    }
+    changed = true;
+  });
+  return changed;
+}
+
+function undoLastAction() {
+  const action = lastUndoAction;
+  if (!action) { showToast('Nothing to undo'); return; }
+  lastUndoAction = null;
+  const now = Date.now();
+  let entriesChanged = false;
+  let redemptionsChanged = false;
+
+  if (action.type === 'created') {
+    entriesChanged = tombstoneUndoEntries(action.entryIds, now) || entriesChanged;
+    redemptionsChanged = tombstoneUndoRedemptions(action.redemptionIds, now) || redemptionsChanged;
+  } else if (action.type === 'restore-entries') {
+    entriesChanged = restoreUndoEntries(action.entries, now) || entriesChanged;
+  }
+
+  if (entriesChanged) {
+    entries.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    _todayRenderKey = '__FORCE__';
+  }
+  persist();
+  scheduleRenderToday();
+  if (typeof renderWeek === 'function') renderWeek();
+  if (typeof renderWeekTable === 'function') renderWeekTable();
+  if (entriesChanged && typeof syncEntries === 'function') syncEntries();
+  if (redemptionsChanged && typeof syncFocusRedemptions === 'function') syncFocusRedemptions();
+  showToast(`Undid ${action.label || 'last action'}`);
+}
+
+function showUndoToast(msg, energy) {
+  showToast(msg, true, energy);
 }
 
 function updateRing() {
@@ -1697,7 +1803,8 @@ function stopAndLog() {
     entries.sort((a, b) => b.ts - a.ts);
     lastTaskForRepeat = task;
     persist(); scheduleRenderToday(); syncEntries();
-    showToast(`Logged · ${task} · ${fmtDur(dur)}`);
+    rememberCreatedUndo('log', [entry]);
+    showUndoToast(`Logged · ${task} · ${fmtDur(dur)}`, prevEnergy);
   }
   resetTimer();
 }
@@ -1727,7 +1834,8 @@ function switchTaskMidBlock() {
     entries.sort((a, b) => b.ts - a.ts);
     lastTaskForRepeat = prevTask;
     persist(); scheduleRenderToday(); syncEntries();
-    showToast(`Logged: ${prevTask} · ${fmtDur(dur)}`);
+    rememberCreatedUndo('log', [entry]);
+    showUndoToast(`Logged: ${prevTask} · ${fmtDur(dur)}`, prevEnergy);
   }
 
   // Reset block timer and open pre-commit for next task
@@ -1850,7 +1958,8 @@ function endBreak() {
   updateRing();
   persist(); scheduleRenderToday(); syncEntries(); syncTimerState();
   if (fbRoomRef) fbRoomRef.update({ breakState: { active: false } });
-  showToast('Break over — back to work! ✓');
+  rememberCreatedUndo('break log', [entry]);
+  showUndoToast('Break over — break logged', entry.energy);
   playAlert(1, 0);
 }
 
@@ -2094,6 +2203,7 @@ function _doQuickSave(activity, energy) {
   if (!activity) activity = energy;
   const _now = Date.now();
   const tsStart = blockStartTime || (_now - totalSecs * 1000);
+  const loggedDur = Math.round((_now - tsStart) / 60000) || settings.intervalMin;
 
   // If the previous entry is the same activity+energy and ended right where
   // this block starts (within 2 min tolerance), extend it instead of creating
@@ -2107,7 +2217,10 @@ function _doQuickSave(activity, energy) {
     tsStart >= prevStart2 - SEAM_TOLERANCE_MS &&
     tsStart <= prev.ts + SEAM_TOLERANCE_MS;
 
+  let undoSnapshot = null;
+  let createdEntry = null;
   if (canExtend) {
+    undoSnapshot = cloneUndoValue(prev);
     prev.ts = _now;
     prev.blockIntervalMin = Math.round((_now - (prev.tsStart || tsStart)) / 60000);
     prev.updatedAt = _now;
@@ -2126,12 +2239,16 @@ function _doQuickSave(activity, energy) {
     learnWastePattern(activity, energy);
     validateEntry(entry);
     entries.unshift(entry);
+    createdEntry = entry;
     _lastLoggedEntryId = entry.id;
   }
 
   document.getElementById('quicklog-overlay').classList.remove('open');
   document.title = 'ChronaSense';
   persist(); scheduleRenderToday(); syncEntries();
+  if (undoSnapshot) rememberRestoreEntriesUndo('log extension', [undoSnapshot]);
+  else rememberCreatedUndo('log', [createdEntry]);
+  showUndoToast(`Logged · ${activity} · ${fmtDur(loggedDur)}`, energy);
   showLogFeedback(energy);
   checkReviewPrompt();
   checkEscalation();
@@ -2369,7 +2486,8 @@ function logFocusReward() {
   closeModal('focus-wallet-overlay');
   const wallet = getCurrentFocusWallet();
   const debt = wallet && wallet.balance < 0 ? ` · ${formatFocusPoints(Math.abs(wallet.balance))} pts debt` : '';
-  showToast(`Logged ${label} · ${fmtDur(durationMin)}${points ? ` · ${formatFocusPoints(points)} pts` : ''}${debt}`);
+  rememberCreatedUndo('reward spend', [entry], redemption ? [redemption] : []);
+  showUndoToast(`Logged ${label} · ${fmtDur(durationMin)}${points ? ` · ${formatFocusPoints(points)} pts` : ''}${debt}`, energy);
   return true;
 }
 
@@ -2811,23 +2929,28 @@ function saveRetroEntry() {
     }
   } else {
     if (spansMidnight) {
-      entries.push(makeEntry(midnight - 1, midnight, tsStart, startDateKey));
-      entries.push(makeEntry(tsEnd, tsEnd, midnight, endDateKey));
+      const firstEntry = makeEntry(midnight - 1, midnight, tsStart, startDateKey);
+      const secondEntry = makeEntry(tsEnd, tsEnd, midnight, endDateKey);
+      entries.push(firstEntry);
+      entries.push(secondEntry);
       entries.sort((a,b) => b.ts - a.ts);
       persist(); closeModal('retro-overlay');
       const dur1 = Math.round((midnight - tsStart) / 60000);
       const dur2 = Math.round((tsEnd - midnight) / 60000);
-      showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
+      rememberCreatedUndo('retro log', [firstEntry, secondEntry]);
+      showUndoToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`, retroEnergy);
       scheduleRenderToday(); syncEntries();
       checkBudget(retroEnergy);
-      } else {
-      entries.push(makeEntry(tsEnd, tsEnd, tsStart, startDateKey));
+    } else {
+      const entry = makeEntry(tsEnd, tsEnd, tsStart, startDateKey);
+      entries.push(entry);
       entries.sort((a,b) => b.ts - a.ts);
       persist(); closeModal('retro-overlay');
-      showToast(`Logged retroactively · ${fmtDur(dur)}`, false, retroEnergy);
+      rememberCreatedUndo('retro log', [entry]);
+      showUndoToast(`Logged retroactively · ${fmtDur(dur)}`, retroEnergy);
       scheduleRenderToday(); syncEntries();
       checkBudget(retroEnergy);
-      }
+    }
   }
 }
 
@@ -2905,6 +3028,8 @@ function saveEntry() {
   document.title = 'ChronaSense';
   persist(); closeModal('log-overlay');
   scheduleRenderToday(); syncEntries();
+  rememberCreatedUndo('log', [entry]);
+  showUndoToast(`Logged · ${activity} · ${fmtDur(entry.blockIntervalMin)}`, selectedEnergy);
   showLogFeedback(entry.energy);
   checkReviewPrompt();
   checkEscalation();
@@ -2952,6 +3077,7 @@ function deleteEntry(id) {
   if (!entry) { showToast('Entry not found'); return; }
   const targets = entries.filter(e => isSameDeletionTarget(e, entry));
   if (!targets.length) { _todayRenderKey = '__FORCE__'; scheduleRenderToday(); showToast('Already deleted'); return; }
+  const undoSnapshots = targets.map(cloneUndoValue);
   const now = Date.now();
   targets.forEach(e => {
     e.deleted = true;
@@ -2961,7 +3087,8 @@ function deleteEntry(id) {
   _todayRenderKey = '__FORCE__';
   syncEntries();
   scheduleRenderToday(); renderWeek(); renderWeekTable();
-  showToast(targets.length > 1 ? `Deleted ${entry.activity || 'entry'} (${targets.length} copies)` : `Deleted ${entry.activity || 'entry'}`);
+  rememberRestoreEntriesUndo('delete', undoSnapshots);
+  showUndoToast(targets.length > 1 ? `Deleted ${entry.activity || 'entry'} (${targets.length} copies)` : `Deleted ${entry.activity || 'entry'}`);
 }
 
 function startSprint() {
@@ -4700,17 +4827,19 @@ function switchToTask(task) {
     const dur = Math.max(1, Math.round((tsEnd - blockStartTime) / 60000));
     const prevTask = currentTask || lastTaskForRepeat || 'Work';
     const lastEnergy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
-    entries.unshift({
+    const entry = {
       id: tsEnd, ts: tsEnd, tsStart: blockStartTime,
       blockIntervalMin: dur,
       date: toDateKey(new Date()),
       activity: prevTask, energy: lastEnergy,
       onPlan: lastEnergy !== 'distraction', retro: false
-    });
+    };
+    entries.unshift(entry);
     getActivityColor(prevTask);
     lastTaskForRepeat = prevTask;
     persist(); scheduleRenderToday(); syncEntries();
-    showToast(`Logged: ${prevTask} · ${fmtDur(dur)}`);
+    rememberCreatedUndo('log', [entry]);
+    showUndoToast(`Logged: ${prevTask} · ${fmtDur(dur)}`, lastEnergy);
   }
   document.getElementById('switch-panel').style.display = 'none';
   _startTimer(task);
@@ -4765,13 +4894,16 @@ function quickRetroLog() {
   if (spansMidnight) {
     const dur1 = Math.round((midnight - tsStart) / 60000);
     const dur2 = Math.round((tsEnd - midnight) / 60000);
-    entries.push(makeQEntry(midnight - 1, midnight, tsStart, startDateKey));
-    entries.push(makeQEntry(tsEnd, tsEnd, midnight, endDateKey));
+    const firstEntry = makeQEntry(midnight - 1, midnight, tsStart, startDateKey);
+    const secondEntry = makeQEntry(tsEnd, tsEnd, midnight, endDateKey);
+    entries.push(firstEntry);
+    entries.push(secondEntry);
     entries.sort((a, b) => b.ts - a.ts);
     persist(); scheduleRenderToday(); syncEntries();
     taskInput.value = '';
     resetRetroBar();
-    showToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`);
+    rememberCreatedUndo('retro log', [firstEntry, secondEntry]);
+    showUndoToast(`Split at midnight · ${fmtDur(dur1)} + ${fmtDur(dur2)}`, learnedEng);
     checkBudget(learnedEng);
   } else {
     const _qEntry = makeQEntry(tsEnd, tsEnd, tsStart, startDateKey);
@@ -4782,7 +4914,8 @@ function quickRetroLog() {
     taskInput.value = '';
     resetRetroBar();
     const wasteFlag = (learnedEng === 'waste' || learnedEng === 'distraction') ? ' ⚠ auto-flagged' : '';
-    showToast(`Logged: ${task} · ${fmtDur(dur)}${wasteFlag}`, false, learnedEng);
+    rememberCreatedUndo('retro log', [_qEntry]);
+    showUndoToast(`Logged: ${task} · ${fmtDur(dur)}${wasteFlag}`, learnedEng);
     checkBudget(learnedEng);
   }
 }
@@ -4817,7 +4950,8 @@ function quickLogSameAsLast() {
   entries.push(entry);
   entries.sort((a, b) => b.ts - a.ts);
   persist(); scheduleRenderToday(); syncEntries();
-  showToast(`Logged · ${activity} · ${fmtDur(dur)} · timer started`, false, energy);
+  rememberCreatedUndo('log', [entry]);
+  showUndoToast(`Logged · ${activity} · ${fmtDur(dur)} · timer started`, energy);
   resetRetroBar();
   if (!running) _startTimer(activity);
 }
@@ -4953,7 +5087,8 @@ function toggleAway() {
     document.getElementById('timer-status').textContent = 'Ready';
     persist(); scheduleRenderToday(); syncEntries();
     if (fbRoomRef) fbRoomRef.update({ awayState: { active: false } });
-    showToast(`${entry.activity} logged · ${fmtDur(dur)}`);
+    rememberCreatedUndo('away log', [entry]);
+    showUndoToast(`${entry.activity} logged · ${fmtDur(dur)}`, entry.energy);
   } else {
     // Toggle the away picker
     const picker = document.getElementById('away-picker');
@@ -5955,7 +6090,8 @@ function logSleepEntry(sleepTs, wakeTs) {
   };
   entries.unshift(entry);
   persist(); scheduleRenderToday(); syncEntries();
-  showToast(`Sleep logged · ${fmtSleepDur(sleepTs, wakeTs)}`);
+  rememberCreatedUndo('sleep log', [entry]);
+  showUndoToast(`Sleep logged · ${fmtSleepDur(sleepTs, wakeTs)}`, entry.energy);
   localStorage.setItem('ta3-sleep-reminded', toDateKey(new Date()));
 }
 
@@ -7144,9 +7280,22 @@ function showToast(msg, withUndo, energy) {
   t.style.borderLeft = energy && _toastColors[energy]
     ? `3px solid ${_toastColors[energy]}`
     : '3px solid transparent';
-  t.innerHTML = `<span>${msg}</span>`;
+  t.textContent = '';
+  const text = document.createElement('span');
+  text.textContent = msg;
+  t.appendChild(text);
   t.classList.remove('has-undo');
-  _toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  if (withUndo && lastUndoAction) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-undo-btn';
+    btn.textContent = 'Undo';
+    btn.onclick = undoLastAction;
+    t.appendChild(btn);
+    t.classList.add('has-undo');
+  }
+  const timeout = withUndo && lastUndoAction ? 5200 : 2200;
+  _toastTimer = setTimeout(() => t.classList.remove('show'), timeout);
   t.classList.add('show');
 }
 

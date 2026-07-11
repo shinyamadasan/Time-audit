@@ -130,8 +130,15 @@ Depends on: —
 Lines: 2129–2196
 Purpose: All top-level mutable state and one-time constants shared across the entire app.
 Functions: —
-Variables: `APP_BUILD`, `currentTask`, `viewingDateKey`, `entries`, `settings`, `reviews`, `weeklyReviews`, `focusRedemptions`, `intention`, `running`, `ticker`, `pcTimeLiveTicker`, `totalSecs`, `remaining`, `distractionDebt`, `pingCount`, `sortKey`, `sortDir`, `selectedEnergy`, `selectedOnPlan`, `QUICK_ACTIVITY_OPTIONS`, `blockStartTime`, `lastStateChange`, `currentState`, `blockSegments`, `focusExitTimer`, `fbApp`, `fbDb`, `fbRoomRef`, `roomCode`, `fbTimerReceived`, `currentUser`, `timerStartedAt`, `snoozesUsedToday`, `snoozeTimer`, `quickLogBusy`, `switchingTask`, `dailyCommitment`, `lastTaskForRepeat`, `breakActive`, `breakEndsAt`, `breakTicker`, `breakStartTs`, `timerOwnerDeviceId`, `awayActive`, `awayStartTime`, `awayLabel`, `continueBannerTimer`, `continueBannerCountdown`, `recentChipTasks`, `taskStartTime`, `awayElapsedTicker`, `CIRCUM`
+Variables: `APP_BUILD`, `currentTask`, `viewingDateKey`, `entries`, `settings`, `reviews`, `weeklyReviews`, `focusRedemptions`, `intention`, `running`, `ticker`, `pcTimeLiveTicker`, `totalSecs`, `remaining`, `distractionDebt`, `pingCount`, `sortKey`, `sortDir`, `selectedEnergy`, `selectedOnPlan`, `QUICK_ACTIVITY_OPTIONS`, `blockStartTime`, `lastStateChange`, `currentState`, `blockSegments`, `focusExitTimer`, `fbApp`, `fbDb`, `fbRoomRef`, `roomCode`, `fbTimerReceived`, `currentUser`, `timerStartedAt`, `snoozesUsedToday`, `snoozeTimer`, `quickLogBusy`, `switchingTask`, `dailyCommitment`, `lastTaskForRepeat`, `breakActive`, `breakEndsAt`, `breakTicker`, `breakStartTs`, `timerOwnerDeviceId`, `awayActive`, `awayStartTime`, `awayLabel`, `continueBannerTimer`, `continueBannerCountdown`, `recentChipTasks`, `taskStartTime`, `awayElapsedTicker`, `lastUndoAction`, `CIRCUM`
 Depends on: —
+
+## [Undo — Last Action]
+Lines: ~1447–1549
+Purpose: One-slot in-memory undo for deliberate daily actions. Created entries/redemptions are tombstoned; deleted/extended entries are restored from snapshots with newer sync stamps.
+Functions: `cloneUndoValue()`, `sameUndoId()`, `rememberUndoAction()`, `rememberCreatedUndo()`, `rememberRestoreEntriesUndo()`, `tombstoneUndoEntries()`, `restoreUndoEntries()`, `tombstoneUndoRedemptions()`, `undoLastAction()`, `showUndoToast()`
+Variables: `lastUndoAction`
+Depends on: `entries`, `focusRedemptions`, `persist()`, `scheduleRenderToday()`, `renderWeek()`, `renderWeekTable()`, `syncEntries()`, `syncFocusRedemptions()`, `showToast()`
 
 ## [Timer — Core Interval Tracking]
 Lines: 2197–2476
@@ -327,7 +334,7 @@ Lines: 7106–7181
 Purpose: Generic close-modal helper, background-click close, and toast notification (with optional undo action).
 Functions: `closeModal()`, `overlayClose()`, `showToast()`
 Variables: `_toastTimer`
-Depends on: —
+Depends on: Undo section (`lastUndoAction`, `undoLastAction()`)
 
 ## [Export & Data Management]
 Lines: 7138–7657
