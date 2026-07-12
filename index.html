@@ -240,6 +240,15 @@
     <button type="button" class="today-health-metric unlogged" id="th-unlogged" onclick="scrollToTimeline()">0m unlogged</button>
   </div>
 
+  <button type="button" class="closeout-card" id="closeout-card" onclick="openCloseoutReview()" style="display:none">
+    <span class="closeout-main">
+      <span class="closeout-title" id="closeout-title">Close day</span>
+      <span class="closeout-sub" id="closeout-sub">Review today, pick tomorrow.</span>
+      <span class="closeout-stats" id="closeout-stats"></span>
+    </span>
+    <span class="closeout-action" id="closeout-action">Close day</span>
+  </button>
+
   <!-- Focus wallet -->
   <div id="focus-wallet-card" class="today-detail" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:14px;padding:12px;margin-bottom:12px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px">
@@ -1203,6 +1212,8 @@
     <div id="reality-score-sub" style="font-size:12px;font-weight:500"></div>
   </div>
 
+  <div id="rv-closeout-summary" style="display:none"></div>
+
   <!-- Plan vs actual for the day being reviewed — closes yesterday's loop -->
   <div id="rv-plan-vs-actual" style="display:none"></div>
 
@@ -1324,7 +1335,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-12-plan-progress-1';
+const APP_BUILD = '2026-07-12-closeout-loop-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -3895,6 +3906,64 @@ function renderTodayOnDateChange() {
   renderToday();
 }
 
+function computeCloseoutSummary(dateKey) {
+  const realEntries = getEntriesForDateWindow(dateKey).filter(e => !e.missed && !e.deleted);
+  const isToday = dateKey === getDateInTZ(Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const planItems = getPlanItems(dateKey);
+  const gapEnd = isToday ? undefined : dayEndTs(dateKey);
+  const wallet = isToday ? getCurrentFocusWallet() : null;
+  return {
+    entryCount: realEntries.length,
+    planCount: planItems.length,
+    planDone: planItems.filter(i => i.done).length,
+    deepMin: sumEnergyMinutes(realEntries, 'deep', dateKey),
+    wasteMin: sumEnergyMinutes(realEntries, 'waste', dateKey) + sumEnergyMinutes(realEntries, 'distraction', dateKey),
+    unloggedMin: computeGaps(realEntries, gapEnd).reduce((sum, gap) => sum + (gap.gapMin || 0), 0),
+    walletBalance: wallet ? wallet.balance : null,
+    reviewed: !!reviews[dateKey]
+  };
+}
+
+function closeoutSummaryParts(summary) {
+  const parts = [];
+  if (summary.planCount) parts.push(`${summary.planDone}/${summary.planCount} plan`);
+  parts.push(`${fmtDur(summary.deepMin)} deep`);
+  if (summary.wasteMin > 0) parts.push(`${fmtDur(summary.wasteMin)} waste`);
+  if (summary.unloggedMin > 0) parts.push(`${fmtDur(summary.unloggedMin)} unlogged`);
+  if (summary.walletBalance !== null) parts.push(`${formatFocusPoints(summary.walletBalance)} pts`);
+  return parts;
+}
+
+function openCloseoutReview() {
+  openReview(getViewingDateKey());
+}
+
+function renderCloseoutCta() {
+  const card = document.getElementById('closeout-card');
+  if (!card) return;
+  const dateKey = getViewingDateKey();
+  if (!isViewingToday()) { card.style.display = 'none'; return; }
+
+  const summary = computeCloseoutSummary(dateKey);
+  const reviewHour = settings.reviewHour ?? 22;
+  const shouldShow = summary.reviewed || summary.entryCount > 0 || summary.planCount > 0 || tzHour(Date.now()) >= reviewHour;
+  if (!shouldShow) { card.style.display = 'none'; return; }
+
+  card.style.display = 'flex';
+  card.classList.toggle('closed', summary.reviewed);
+  const savedAt = summary.reviewed ? formatSavedAt(reviews[dateKey]._savedAt) : '';
+  document.getElementById('closeout-title').textContent = summary.reviewed ? 'Day closed' : 'Close day';
+  document.getElementById('closeout-sub').textContent = summary.reviewed
+    ? `${savedAt ? 'Review saved ' + savedAt + '. ' : 'Review saved. '}Edit it anytime.`
+    : summary.entryCount || summary.planCount
+      ? 'Review today, name the leak, pick tomorrow.'
+      : 'No logs yet. Set tomorrow when you are ready.';
+  document.getElementById('closeout-action').textContent = summary.reviewed ? 'Edit review' : 'Close day';
+  document.getElementById('closeout-stats').innerHTML = closeoutSummaryParts(summary)
+    .map(part => `<span>${part}</span>`)
+    .join('');
+}
+
 function computeTodayHealth(todayE, dateKey) {
   const realEntries = (todayE || []).filter(e => !e.deleted && !e.missed);
   const wasteMin = sumEnergyMinutes(realEntries, 'waste', dateKey) + sumEnergyMinutes(realEntries, 'distraction', dateKey);
@@ -3948,6 +4017,32 @@ function renderTodayHealth(todayE) {
   unloggedEl.classList.toggle('actionable', health.unloggedMin > 0);
   unloggedEl.disabled = health.unloggedMin <= 0;
   unloggedEl.title = health.unloggedMin > 0 ? 'Jump to timeline gaps' : '';
+}
+
+function renderReviewCloseoutSummary() {
+  const el = document.getElementById('rv-closeout-summary');
+  if (!el) return;
+  const dateKey = _reviewDateKey || getViewingDateKey();
+  const summary = computeCloseoutSummary(dateKey);
+  if (!summary.entryCount && !summary.planCount) { el.style.display = 'none'; el.innerHTML = ''; return; }
+
+  el.style.display = 'block';
+  const planLabel = summary.planCount ? `${summary.planDone}/${summary.planCount}` : 'none';
+  const walletCell = summary.walletBalance === null ? '' : `
+      <div class="rv-closeout-cell">
+        <span>Wallet</span>
+        <strong>${formatFocusPoints(summary.walletBalance)} pts</strong>
+      </div>`;
+  el.innerHTML = `<div class="rv-closeout">
+      <div class="rv-closeout-head">Closeout summary</div>
+      <div class="rv-closeout-grid">
+        <div class="rv-closeout-cell"><span>Plan</span><strong>${planLabel}</strong></div>
+        <div class="rv-closeout-cell"><span>Deep</span><strong>${fmtDur(summary.deepMin)}</strong></div>
+        <div class="rv-closeout-cell"><span>Waste</span><strong>${fmtDur(summary.wasteMin)}</strong></div>
+        <div class="rv-closeout-cell"><span>Unlogged</span><strong>${fmtDur(summary.unloggedMin)}</strong></div>
+        ${walletCell}
+      </div>
+    </div>`;
 }
 
 // ── Contextual visibility ─────────────────────────────────────────────────
@@ -4534,6 +4629,7 @@ function renderToday() {
   renderTodayPlan();
   renderFocusWallet();
   renderTodayHealth(todayE);
+  renderCloseoutCta();
   perfStageStart = recordPerfStage('renderTodayData', perfStageStart);
 
   // Cache key — only rebuild timeline/list DOM when today's entries actually change
@@ -6279,6 +6375,7 @@ function openReview(dateKey) {
 
   document.getElementById('rv-avoid').value = r.avoid || '';
   openReviewPlan();
+  renderReviewCloseoutSummary();
   renderReviewPlanVsActual();
 
   // Reality score — use entries for that date
@@ -6534,6 +6631,7 @@ function saveReview(){
   if (typeof syncPlans === 'function') syncPlans(targetKey);
   closeModal('review-overlay');
   renderTodayPlan();
+  renderCloseoutCta();
   if (document.getElementById('reflect-daily-reviews')) renderDailyReflections();
   showToast('Review saved ✓');
 }
