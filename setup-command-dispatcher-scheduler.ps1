@@ -1,11 +1,28 @@
 # Run this ONCE (as Administrator) to register the Telegram-command dispatcher with Windows Task
-# Scheduler. After running, it fires every 2 minutes while the PC is on.
-# To change the interval: edit -RepetitionInterval below and re-run this script.
+# Scheduler.
 #
-# Deliberately NOT -WakeToRun, unlike "ChronaSense Claude Overnight": this task should only ever act
-# when the PC is already awake. Waking the PC every 2 minutes overnight just to check for a Telegram
-# command would defeat the point of letting it sleep -- the twice-daily "ChronaSense Claude Overnight"
-# task (which DOES use -WakeToRun) remains the backup path for anything sent while the PC was asleep.
+# SLEEP-AND-WAKE MODEL (DECISIONS D-033, ported from the Meal Prep app):
+#   This task DOES use -WakeToRun, and fires every 30 minutes -- not every 2.
+#
+#   The original design polled every 2 minutes with WakeToRun OFF, on the assumption that the PC was
+#   always on. It isn't: the PC sleeps after 15 min idle. With WakeToRun off, a /go sent from the
+#   phone would just sit in the repo until someone physically woke the machine -- remote development
+#   was impossible. With WakeToRun ON, a 2-minute interval would wake the PC ~720x/day and defeat
+#   sleeping entirely. 30 minutes is the balance: the PC sleeps, wakes on the half-hour to drain any
+#   queued command (build -> review -> merge -> deploy), then idles back to sleep.
+#
+#   Nothing is lost while asleep: n8n writes commands into the repo via GitHub, and
+#   -StartWhenAvailable drains the whole backlog on the next wake.
+#
+#   Dispatch-Commands.ps1 asserts ES_SYSTEM_REQUIRED for the life of its process, so a 10-15 minute
+#   Codex build dispatched from a timer-wake cannot be suspended mid-flight by the unattended-sleep
+#   timer.
+#
+#   The interval is deliberately the SAME as the Meal Prep dispatcher's (30 min) rather than
+#   staggered: aligned triggers mean ONE wake serves both apps. Staggering them would wake the PC
+#   twice as often for no benefit. Each repo has its own automation.lock, so they cannot collide.
+#
+# To change the cadence: edit -RepetitionInterval below and re-run this script.
 
 $scriptPath = "C:\Users\Admin\Desktop\Vibe code\Time audit app\tools\Dispatch-Commands.ps1"
 $taskName   = "ChronaSense Command Dispatcher"
@@ -23,14 +40,16 @@ $action = New-ScheduledTaskAction `
 # duration (P99999999DT23H59M59S) that Task Scheduler's XML schema rejects as out of range --
 # confirmed live, and Register-ScheduledTask throws but doesn't stop the script, so a prior run of
 # this file printed a false "Task registered" success message while nothing was actually created.
-# 10 years is comfortably "indefinite" for a task meant to be re-registered if ever changed anyway.
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-    -RepetitionInterval (New-TimeSpan -Minutes 2) `
+    -RepetitionInterval (New-TimeSpan -Minutes 30) `
     -RepetitionDuration (New-TimeSpan -Days 3650)
 
+# -WakeToRun: wake the sleeping PC to drain queued Telegram commands (D-033).
+# -StartWhenAvailable: if a scheduled fire was missed (PC off), run as soon as it can.
 $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit (New-TimeSpan -Hours 2) `
     -StartWhenAvailable `
+    -WakeToRun `
     -MultipleInstances IgnoreNew
 
 try {
@@ -39,18 +58,22 @@ try {
         -Action $action `
         -Trigger $trigger `
         -Settings $settings `
-        -Description "Polls captures/commands/ for new Telegram control commands (/status /next /go /run /build /review /stop /enable /disable) every 2 minutes and dispatches them. See docs/09-automation.md." `
+        -Description "Wakes the PC every 30 min to drain captures/commands/ (Telegram control commands: /status /next /go /run /build /review /stop /enable /disable) and dispatch them. Sleep-and-wake model: DECISIONS D-033." `
         -Force -ErrorAction Stop | Out-Null
 } catch {
     Write-Host ""
     Write-Host "FAILED to register '$taskName': $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Are you running this as Administrator? Set-ScheduledTask/Register-ScheduledTask require it." -ForegroundColor Yellow
     exit 1
 }
 
 Write-Host ""
 Write-Host "Task registered: '$taskName'" -ForegroundColor Green
-Write-Host "Runs every 2 minutes while the PC is on (no WakeToRun -- see the file header comment)" -ForegroundColor Green
+Write-Host "Wakes the PC every 30 minutes to drain queued Telegram commands (WakeToRun, D-033)." -ForegroundColor Green
 Write-Host ""
-Write-Host "To verify: open Task Scheduler and look for '$taskName'"
-Write-Host "To test now: Right-click the task > Run"
+Write-Host "Verify with:" -ForegroundColor Cyan
+Write-Host "  Get-ScheduledTask -TaskName '$taskName' | Select-Object State, @{n='Wake';e={`$_.Settings.WakeToRun}}, @{n='Every';e={`$_.Triggers[0].Repetition.Interval}}"
+Write-Host "Expect: Ready | True | PT30M"
+Write-Host ""
+Write-Host "To test now: Right-click the task in Task Scheduler > Run"
 Write-Host "Output log: $((Split-Path (Split-Path $scriptPath)))\claude-session.log (shared with run-claude.ps1)"
