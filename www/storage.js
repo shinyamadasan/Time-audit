@@ -289,6 +289,7 @@ function persist() {
   localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
   localStorage.setItem('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
   localStorage.setItem('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
+  localStorage.setItem('ta3-plans', JSON.stringify(plans));
   localStorage.setItem('ta3-intention', intention);
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
   localStorage.setItem('ta3-lv', Date.now()); // local version — used to detect unsynced changes
@@ -336,6 +337,8 @@ function load() {
   try { weeklyReviews = JSON.parse(localStorage.getItem('ta3-weekly-reviews') || '{}'); } catch(e){ weeklyReviews={}; }
   try { focusRedemptions = JSON.parse(localStorage.getItem('ta3-focus-redemptions') || '[]'); } catch { focusRedemptions=[]; }
   if (!Array.isArray(focusRedemptions)) focusRedemptions = [];
+  try { plans = JSON.parse(localStorage.getItem('ta3-plans') || '{}'); } catch { plans={}; }
+  if (!plans || typeof plans !== 'object' || Array.isArray(plans)) plans = {};
   intention = localStorage.getItem('ta3-intention') || '';
   if (!settings.presets?.length) settings.presets = DEFAULT_PRESETS;
   // Pre-fill intention from yesterday's "tomorrow" field if today's is empty
@@ -637,6 +640,39 @@ function startSync() {
     if (changed) { localStorage.setItem('ta3-reviews', JSON.stringify(reviews)); renderToday(); }
   });
 
+  // Plans merge per date-key, then per item id by updatedAt. A whole-object last-writer-wins
+  // would drop a done-toggle made on one device while another device added an item the same day.
+  fbDb.ref(`rooms/${roomCode}/plans`).on('value', snap => {
+    const val = snap.val();
+    if (!val) return;
+    let changed = false;
+    Object.entries(val).forEach(([date, remote]) => {
+      if (!remote) return;
+      const remoteItems = normalizePlanItems(remote.items);
+      const local = plans[date];
+      if (!local) {
+        plans[date] = { items: remoteItems, updatedAt: remote.updatedAt || 0 };
+        changed = true;
+        return;
+      }
+      const byId = new Map(normalizePlanItems(local.items).map(i => [i.id, i]));
+      remoteItems.forEach(ri => {
+        if (!ri || !ri.id) return;
+        const li = byId.get(ri.id);
+        if (!li || (ri.updatedAt || 0) > (li.updatedAt || 0)) { byId.set(ri.id, ri); changed = true; }
+      });
+      plans[date] = {
+        items: Array.from(byId.values()),
+        updatedAt: Math.max(local.updatedAt || 0, remote.updatedAt || 0)
+      };
+    });
+    if (changed) {
+      localStorage.setItem('ta3-plans', JSON.stringify(plans));
+      if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
+      renderToday();
+    }
+  });
+
   fbDb.ref(`rooms/${roomCode}/weeklyReviews`).on('value', snap => {
     const val = snap.val();
     if (!val) return;
@@ -851,7 +887,7 @@ let _partnerUidRef  = null;
 /** Removes all active Firebase room listeners. Call before switching rooms or signing out. */
 function teardownRoomListeners() {
   if (!fbDb || !roomCode) return;
-  const paths = ['timer','entries','intention','devices','settings','breakState','reviews','weeklyReviews','focusRedemptions','awayState'];
+  const paths = ['timer','entries','intention','devices','settings','breakState','reviews','weeklyReviews','focusRedemptions','awayState','plans'];
   paths.forEach(p => fbDb.ref(`rooms/${roomCode}/${p}`).off());
   fbDb.ref('.info/connected').off();
   if (fbRoomRef) fbRoomRef.off();
@@ -873,6 +909,18 @@ function initPartnerListener(partnerUid) {
 function syncIntention(val) {
   if (!fbRoomRef) return;
   fbRoomRef.update({ intention: val });
+}
+
+/** Firebase stores sparse arrays as objects — always read plan items back as a real array. */
+function normalizePlanItems(items) {
+  if (Array.isArray(items)) return items.filter(Boolean);
+  if (items && typeof items === 'object') return Object.values(items).filter(Boolean);
+  return [];
+}
+
+function syncPlans(dateKey) {
+  if (!fbRoomRef || !dateKey || !plans[dateKey]) return;
+  fbRoomRef.update({ [`plans/${dateKey}`]: plans[dateKey] });
 }
 
 function disconnectSync() {
