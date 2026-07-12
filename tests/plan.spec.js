@@ -331,6 +331,46 @@ test('this week’s priorities are offered as chips (weekly steers daily)', asyn
   await expect(page.locator('.rv-plan-item')).toContainText('Ship the report');
 });
 
+test('waste and downtime are never offered as tomorrow’s priorities', async ({ page }) => {
+  // Regression: recent-activity suggestions are unfiltered by energy, so the picker was offering
+  // "Drinking with friends" as a candidate for tomorrow's top 3. Surfaced by real logged data.
+  const logged = (activity, energy, daysAgo) => {
+    const start = Date.now() - daysAgo * DAY_MS;
+    const end   = start + 60 * 60 * 1000;
+    return {
+      id: end + activity.length, ts: end, tsStart: start, updatedAt: end, blockIntervalMin: 60,
+      date: utcDateKey(start), activity, energy, category: energy,
+      originalLabel: energy, onPlan: true, retro: false
+    };
+  };
+
+  await openApp(page, {
+    entries: [
+      logged('App building', 'deep', 1),
+      logged('Drinking with friends', 'waste', 1),
+      logged('Coffee with friends', 'social', 2),
+      logged('Afternoon nap', 'recovery', 2),
+      logged('Gym', 'exercise', 3)
+    ]
+  });
+  await page.evaluate(() => openReview());
+
+  const chips = page.locator('.rv-plan-chip');
+  const labels = await chips.allInnerTexts();
+  const text = labels.join(' | ');
+
+  expect(text).toContain('App building');     // deep work — plannable
+  expect(text).toContain('Gym');              // exercise — plannable
+  expect(text).not.toContain('Drinking');     // waste
+  expect(text).not.toContain('Coffee');       // social
+  expect(text).not.toContain('nap');          // recovery
+
+  // The filter is on the CHIPS only — you can still hand-type anything at all.
+  await page.locator('#rv-plan-task').fill('Drinking with friends');
+  await page.locator('#rv-plan-add').getByRole('button', { name: 'Add' }).click();
+  await expect(page.locator('.rv-plan-item')).toContainText('Drinking with friends');
+});
+
 test('review shows plan vs actual for the day being reviewed', async ({ page }) => {
   await openApp(page, {
     entries: [deepEntry(90 * 60 * 1000, 45 * 60 * 1000, 'Write report')],   // 45m of real work
