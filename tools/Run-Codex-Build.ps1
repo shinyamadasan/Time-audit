@@ -162,7 +162,7 @@ if ($branchExists) {
 $CODEX_TIMEOUT_MINUTES = 20   # tune per how long a real build/chained group legitimately takes
 $startTime = Get-Date
 # Start-Process -ArgumentList, given an array, does not reliably quote elements containing spaces
-# (confirmed live: $root's "Meal prep app" path split into separate positional args, and codex
+# (confirmed live: $root's space-containing path split into separate positional args, and codex
 # rejected 'prep' as an unexpected argument). A single pre-quoted command-line string avoids this.
 $codexArgs = "exec -C `"$root`" --sandbox workspace-write `"Continue`""
 
