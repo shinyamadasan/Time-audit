@@ -240,6 +240,15 @@
     <button type="button" class="today-health-metric unlogged" id="th-unlogged" onclick="scrollToTimeline()">0m unlogged</button>
   </div>
 
+  <button type="button" class="closeout-card recovery" id="missed-closeout-card" onclick="openMissedCloseoutReview()" style="display:none">
+    <span class="closeout-main">
+      <span class="closeout-title" id="missed-closeout-title">Yesterday wasn't closed</span>
+      <span class="closeout-sub" id="missed-closeout-sub">Close yesterday first, then choose today's plan.</span>
+      <span class="closeout-stats" id="missed-closeout-stats"></span>
+    </span>
+    <span class="closeout-action">Close yesterday</span>
+  </button>
+
   <button type="button" class="closeout-card" id="closeout-card" onclick="openCloseoutReview()" style="display:none">
     <span class="closeout-main">
       <span class="closeout-title" id="closeout-title">Close day</span>
@@ -1335,7 +1344,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-12-closeout-loop-1';
+const APP_BUILD = '2026-07-12-missed-closeout-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -3938,6 +3947,44 @@ function openCloseoutReview() {
   openReview(getViewingDateKey());
 }
 
+function missedCloseoutDateKey() {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return _dateKeyPlusDays(getDateInTZ(Date.now(), tz), -1);
+}
+
+function getMissedCloseout() {
+  const dateKey = missedCloseoutDateKey();
+  const summary = computeCloseoutSummary(dateKey);
+  if (summary.reviewed || (!summary.entryCount && !summary.planCount)) return null;
+  return { dateKey, summary };
+}
+
+function openMissedCloseoutReview() {
+  const missed = getMissedCloseout();
+  openReview(missed ? missed.dateKey : missedCloseoutDateKey());
+}
+
+function renderMissedCloseoutCta() {
+  const card = document.getElementById('missed-closeout-card');
+  if (!card) return;
+  if (!isViewingToday()) { card.style.display = 'none'; return; }
+
+  const missed = getMissedCloseout();
+  if (!missed) { card.style.display = 'none'; return; }
+
+  card.style.display = 'flex';
+  const label = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+  }).format(tzParseTime(missed.dateKey, '12:00'));
+  document.getElementById('missed-closeout-title').textContent = `Yesterday wasn't closed`;
+  document.getElementById('missed-closeout-sub').textContent = `Recover ${label}; the plan picker will set up today.`;
+  document.getElementById('missed-closeout-stats').innerHTML = closeoutSummaryParts(missed.summary)
+    .map(part => `<span>${part}</span>`)
+    .join('');
+}
+
 function renderCloseoutCta() {
   const card = document.getElementById('closeout-card');
   if (!card) return;
@@ -4629,6 +4676,7 @@ function renderToday() {
   renderTodayPlan();
   renderFocusWallet();
   renderTodayHealth(todayE);
+  renderMissedCloseoutCta();
   renderCloseoutCta();
   perfStageStart = recordPerfStage('renderTodayData', perfStageStart);
 
@@ -6631,6 +6679,7 @@ function saveReview(){
   if (typeof syncPlans === 'function') syncPlans(targetKey);
   closeModal('review-overlay');
   renderTodayPlan();
+  renderMissedCloseoutCta();
   renderCloseoutCta();
   if (document.getElementById('reflect-daily-reviews')) renderDailyReflections();
   showToast('Review saved ✓');

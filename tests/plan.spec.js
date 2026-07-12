@@ -101,6 +101,18 @@ function planFor(items) {
   };
 }
 
+function planForDate(dateKey, items) {
+  return {
+    [dateKey]: {
+      items: items.map((it, i) => ({
+        id: 'seed' + i, task: it.task, when: it.when || '',
+        done: !!it.done, doneAt: null, updatedAt: Date.now()
+      })),
+      updatedAt: Date.now()
+    }
+  };
+}
+
 async function addItem(page, task, when = '') {
   if (when) await page.locator('#plan-when').fill(when);
   await page.locator('#plan-task').fill(task);
@@ -301,6 +313,17 @@ function wasteEntry(startMsAgo, endMsAgo, activity) {
   };
 }
 
+function datedEntry(dateKey, startHour, endHour, activity, energy = 'deep') {
+  const start = Date.parse(`${dateKey}T${String(startHour).padStart(2, '0')}:00:00Z`);
+  const end   = Date.parse(`${dateKey}T${String(endHour).padStart(2, '0')}:00:00Z`);
+  return {
+    id: end, ts: end, tsStart: start, updatedAt: end,
+    blockIntervalMin: Math.round((end - start) / 60000),
+    date: dateKey, activity, energy, category: energy,
+    originalLabel: energy, onPlan: energy === 'deep', retro: false
+  };
+}
+
 test('review picks tomorrow’s plan and writes it to the next day', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => openReview());
@@ -464,6 +487,41 @@ test('close day CTA opens the review loop and marks today closed after save', as
   await expect(page.locator('#review-overlay')).not.toHaveClass(/open/);
   await expect(page.locator('#closeout-title')).toHaveText('Day closed');
   await expect(page.locator('#closeout-action')).toHaveText('Edit review');
+});
+
+test('missed closeout recovery reviews yesterday and writes today plan', async ({ page }) => {
+  const yesterday = utcDateKey(Date.now() - DAY_MS);
+  await openApp(page, {
+    entries: [datedEntry(yesterday, 10, 11, 'Write report')],
+    plans: planForDate(yesterday, [{ task: 'Write report', done: true }, { task: 'Gym', done: false }])
+  });
+
+  await expect(page.locator('#missed-closeout-card')).toBeVisible();
+  await expect(page.locator('#missed-closeout-title')).toHaveText("Yesterday wasn't closed");
+  await expect(page.locator('#missed-closeout-stats')).toContainText('1/2 plan');
+  await expect(page.locator('#missed-closeout-stats')).toContainText('1h deep');
+
+  await page.locator('#missed-closeout-card').click();
+  await expect(page.locator('#review-overlay')).toHaveClass(/open/);
+  await expect(page.locator('#rv-date-label')).not.toHaveText('');
+  await expect(page.locator('#rv-plan-vs-actual')).toContainText('Write report');
+
+  await page.locator('#rv-win').fill('Closed yesterday late');
+  await page.locator('#rv-plan-task').fill('Today focus');
+  await page.locator('#rv-plan-add').getByRole('button', { name: 'Add' }).click();
+  await page.locator('#review-overlay').getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.locator('#missed-closeout-card')).toBeHidden();
+  const result = await page.evaluate(() => {
+    const today = toDateKey(new Date());
+    const yesterdayKey = _dateKeyPlusDays(today, -1);
+    return {
+      reviewedYesterday: !!reviews[yesterdayKey],
+      todayTasks: getPlanItems(today).map(i => i.task)
+    };
+  });
+  expect(result.reviewedYesterday).toBe(true);
+  expect(result.todayTasks).toContain('Today focus');
 });
 
 test('reference-class line reports what you actually do on that weekday', async ({ page }) => {

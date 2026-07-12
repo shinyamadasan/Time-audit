@@ -738,6 +738,9 @@ button.today-health-metric{background:none;border:none;padding:0;text-align:left
   padding:11px 13px;margin-bottom:12px;color:var(--text);font-family:var(--head);text-align:left;cursor:pointer}
 .closeout-card:hover{background:var(--bg3);border-color:rgba(76,199,240,0.45)}
 .closeout-card.closed{border-color:rgba(52,211,153,0.28)}
+.closeout-card.recovery{border-color:rgba(249,199,79,0.34);background:rgba(249,199,79,0.06)}
+.closeout-card.recovery .closeout-title,.closeout-card.recovery .closeout-action{color:#f9c74f}
+.closeout-card.recovery .closeout-action{border-color:rgba(249,199,79,0.28);background:rgba(249,199,79,0.1)}
 .closeout-main{display:block;flex:1;min-width:0}
 .closeout-title{display:block;font-size:12px;font-weight:800;color:var(--text);line-height:1.25}
 .closeout-card.closed .closeout-title{color:#34d399}
