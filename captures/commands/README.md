@@ -51,16 +51,16 @@ If Telegram says a command is queued but nothing happens, run this from PowerShe
 commands once:
 
 ```powershell
-cd "C:\Users\Admin\Desktop\Vibe code\Meal prep app"
+cd "C:\Users\Admin\Desktop\Vibe code\Time audit app"
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\tools\Dispatch-Commands.ps1"
 ```
 
 If the scheduled dispatcher is disabled, run PowerShell as Administrator and re-enable it:
 
 ```powershell
-cd "C:\Users\Admin\Desktop\Vibe code\Meal prep app"
-Enable-ScheduledTask -TaskName "Meal Prep Command Dispatcher"
-Start-ScheduledTask -TaskName "Meal Prep Command Dispatcher"
+cd "C:\Users\Admin\Desktop\Vibe code\Time audit app"
+Enable-ScheduledTask -TaskName "ChronaSense Command Dispatcher"
+Start-ScheduledTask -TaskName "ChronaSense Command Dispatcher"
 ```
 
 `status: new` → `applied` once processed (idempotent — an n8n retry can't double-dispatch). Every

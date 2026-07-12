@@ -42,7 +42,7 @@ Preflight check, result classification (review/blocked/failure/no-work), and an 
 `/review` when a task reaches `status: review` — superseding v1.5's "stage a branch and ask a human to
 open Codex" fallback, now that headless execution is verified working (D-025). v1.5 added Telegram
 remote control — `/status /next /go /run /build /review /stop /enable /disable`, dispatched via a new
-~2-min-polling "Meal Prep Command Dispatcher" Scheduled Task (no `-WakeToRun`) reading
+30-min WakeToRun Command Dispatcher Scheduled Task (D-033: sleeps, wakes to drain) reading
 `captures/commands/` and replying through `captures/replies/OUTBOX.md`; `/build`/`/review` run on
 isolated `task-<id>` branches with their own commit-scope guards and never touch/merge `main` (D-024).
 v1.4 added Sprint Execution Mode —

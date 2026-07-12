@@ -266,7 +266,7 @@ The rule: AI handles mechanical work. Humans make commitments.
 
 | Layer | Status |
 |---|---|
-| App (HTML/CSS/JS) | Working — live at shinyamadasan.github.io/Meal-Prep/ |
+| App (HTML/CSS/JS) | Working — live at shinyamadasan.github.io/Time-audit/ |
 | Documentation system | Complete (docs/ + planning/ + library/) |
 | Capture pipeline | Live (Telegram → n8n → inbox) |
 | Planning pipeline | Operational (D-015 gated pipeline; Claude→TASKS.md conversion added D-022) |
