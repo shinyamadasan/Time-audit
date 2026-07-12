@@ -807,6 +807,7 @@
     <span class="sl-sub">Tap to log and continue</span>
   </button>
   <button class="same-last-other" id="ql-other-btn" onclick="showQuickForm()">Something different ↓</button>
+  <div class="ql-plan" id="ql-plan" style="display:none"></div>
   <div class="quick-lane">
     <div class="quick-lane-label">Quick Log</div>
     <div class="quick-actions-grid" id="ql-quick-actions"></div>
@@ -1200,10 +1201,25 @@
     <div id="reality-score-sub" style="font-size:12px;font-weight:500"></div>
   </div>
 
+  <!-- Plan vs actual for the day being reviewed — closes yesterday's loop -->
+  <div id="rv-plan-vs-actual" style="display:none"></div>
+
   <div class="field"><label>One win today</label><input type="text" id="rv-win" placeholder="What went well?"></div>
   <div class="field"><label>One waste today</label><input type="text" id="rv-waste" placeholder="What cost you time?"></div>
   <div class="field"><label>How to avoid it next time</label><input type="text" id="rv-avoid" placeholder="e.g. Phone in another room..."></div>
-  <div class="field"><label>Tomorrow's focus</label><input type="text" id="rv-tomorrow" placeholder="What will you focus on?"></div>
+
+  <!-- Tomorrow's plan — the nightly ritual -->
+  <div class="field">
+    <label>Tomorrow — pick up to 3</label>
+    <div class="rv-plan-ref" id="rv-plan-ref"></div>
+    <div id="rv-plan-list"></div>
+    <div id="rv-plan-chips"></div>
+    <div class="rv-plan-add" id="rv-plan-add">
+      <input type="text" id="rv-plan-when" class="plan-input when" maxlength="40" placeholder="when">
+      <input type="text" id="rv-plan-task" class="plan-input task" maxlength="80" placeholder="what will you do?">
+      <button type="button" class="btn sm" onclick="addReviewPlanItem()">Add</button>
+    </div>
+  </div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
     <button class="btn ghost" onclick="closeModal('review-overlay')">Skip</button>
     <button class="btn primary" onclick="saveReview()">Save</button>
@@ -2092,6 +2108,8 @@ function openQuickLog() {
     if (qlQuickLane) qlQuickLane.style.display = '';
   }
 
+  renderQuickLogPlan();
+
   renderQuickActionGrid('ql-quick-actions', option => {
     if (quickLogBusy) return;
     quickLogBusy = true;
@@ -2155,6 +2173,38 @@ function quickSaveLast() {
   quickLogBusy = true;
   const btn = document.getElementById('ql-continue-btn');
   _doQuickSave(btn.dataset.lastActivity, btn.dataset.lastEnergy);
+}
+
+// The ping only fires mid-block, so this is not "go start your plan" — it's "was this block one
+// of the things you planned?". Logging through it writes the EXACT planned label, which is what
+// makes planTrackedMin() match reliably instead of missing a hand-typed variant.
+function renderQuickLogPlan() {
+  const el = document.getElementById('ql-plan');
+  if (!el) return;
+  const items = getPlanItems(planTodayKey()).filter(i => !i.done);
+  if (!items.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const esc = s => String(s).replace(/</g, '&lt;');
+  el.style.display = 'block';
+  el.innerHTML = `<div class="ql-plan-label">You planned today</div>
+    <div class="ql-plan-chips">${items.map(it =>
+      `<button type="button" class="ql-plan-chip" onclick="quickSaveFromPlan('${it.id}')">${esc(it.task)}</button>`
+    ).join('')}</div>`;
+}
+
+function quickSaveFromPlan(id) {
+  if (quickLogBusy) return;
+  const it = getPlanItems(planTodayKey()).find(x => x.id === id);
+  if (!it) return;
+  const energy = inferPlanEnergy(it.task);
+  if (energy) {
+    quickLogBusy = true;
+    _doQuickSave(it.task, energy);
+    return;
+  }
+  // Never logged this task before — ask for the category rather than guessing it wrong.
+  showQuickForm();
+  const actEl = document.getElementById('ql-activity');
+  if (actEl) actEl.value = it.task;
 }
 
 function saveQuickEntry() {
@@ -5036,6 +5086,28 @@ function syncCommitmentFromPlan() {
   dailyCommitment = getPlanItems(planTodayKey()).length;
 }
 
+/** `intention` is legacy single-string state that focus-mode still displays. Derive it from the
+ *  next unfinished plan item so the focus overlay names the thing you actually meant to do.
+ *  Never blanks an existing intention — an empty plan just leaves it alone. */
+function syncIntentionFromPlan() {
+  const next = getPlanItems(planTodayKey()).find(i => !i.done);
+  if (!next || next.task === intention) return;
+  intention = next.task;
+  const el = document.getElementById('intention');
+  if (el) el.value = intention;
+}
+
+/** Energy for a planned task, inferred from how it was logged before. Returns null when there's
+ *  no history — the caller then asks rather than guessing and mislabelling the entry. */
+function inferPlanEnergy(task) {
+  const n = normalizePlanTask(task);
+  const prev = entries.find(e => !e.missed && !e.deleted && e.activity
+                                 && normalizePlanTask(e.activity) === n && e.energy);
+  if (prev) return prev.energy;
+  const learned = (settings.learnedEnergy || {})[normalizeActivity(task)];
+  return learned || null;
+}
+
 function savePlanItems(dateKey, items) {
   plans[dateKey] = { items, updatedAt: Date.now() };
   syncCommitmentFromPlan();
@@ -5064,6 +5136,7 @@ function renderTodayPlan() {
   const el = document.getElementById('plan-strip');
   if (!el) return;
   syncCommitmentFromPlan();
+  syncIntentionFromPlan();
 
   const dateKey  = getViewingDateKey();
   const readOnly = !isViewingToday();
@@ -6087,6 +6160,8 @@ function removePreset(i){settings.presets.splice(i,1);persist();renderSettings()
 // REVIEW
 // ══════════════════════════════════════════════════════
 let _reviewDateKey = null; // which date is currently open in the review modal
+let _reviewPlanDraft = [];        // tomorrow's plan being picked (carries tombstones)
+let _reviewPlanTargetKey = null;  // the date that draft is FOR (= reviewed day + 1)
 
 function openReview(dateKey) {
   _reviewDateKey = dateKey || toDateKey(new Date());
@@ -6120,7 +6195,8 @@ function openReview(dateKey) {
   }
 
   document.getElementById('rv-avoid').value = r.avoid || '';
-  document.getElementById('rv-tomorrow').value = r.tomorrow || '';
+  openReviewPlan();
+  renderReviewPlanVsActual();
 
   // Reality score — use entries for that date
   const dayE = entries.filter(e => !e.missed && !e.deleted && getDateInTZ(e.tsStart || e.ts) === _reviewDateKey);
@@ -6200,15 +6276,174 @@ function openReflectionsHistory() {
   document.getElementById('reflections-history-overlay').classList.add('open');
 }
 
+// ══════════════════════════════════════════════════════
+// REVIEW PLAN PICKER — the nightly ritual that seeds tomorrow
+// ══════════════════════════════════════════════════════
+// The 22:00 review prompt already existed and already asked "tomorrow's focus" as one string.
+// This turns that single field into the 1-3 plan the next day actually runs on.
+
+function reviewPlanTargetKey() {
+  return _dateKeyPlusDays(_reviewDateKey || toDateKey(new Date()), 1);
+}
+
+function openReviewPlan() {
+  _reviewPlanTargetKey = reviewPlanTargetKey();
+  // Draft carries tombstones so a removal here still propagates through the sync merge.
+  _reviewPlanDraft = getPlanItemsRaw(_reviewPlanTargetKey).map(i => ({ ...i }));
+  renderReviewPlan();
+}
+
+function reviewPlanVisible() {
+  return _reviewPlanDraft.filter(i => !i.deleted);
+}
+
+/** Candidate tasks offered as one-tap chips. Unfinished items from the reviewed day appear here
+ *  as an OFFER — never auto-carried, which is what would deadlock a capped list. */
+function reviewPlanChips() {
+  const chosen = new Set(reviewPlanVisible().map(i => normalizePlanTask(i.task)));
+  const out = [];
+  const push = (task, tag) => {
+    const n = normalizePlanTask(task);
+    if (!n || chosen.has(n) || out.some(o => normalizePlanTask(o.task) === n)) return;
+    out.push({ task, tag });
+  };
+
+  getPlanItems(_reviewDateKey).filter(i => !i.done).forEach(i => push(i.task, 'undone'));
+
+  const wk = getWeekKey(new Date(tzParseTime(_reviewPlanTargetKey, '12:00')));
+  const wp = (weeklyReviews[wk] || {}).plan || {};
+  [wp.p1, wp.p2, wp.p3].forEach(p => { if (p && p.trim()) push(p.trim(), 'week'); });
+
+  (buildHeroSuggestions().recent || []).slice(0, 4).forEach(t => push(t, 'recent'));
+  return out.slice(0, 6);
+}
+
+/** Reference-class line: what you ACTUALLY do on this weekday, so tomorrow is planned against
+ *  reality rather than optimism. Recalling past actuals is the documented fix for the planning
+ *  fallacy — and this app is the only thing that has the data. */
+function reviewPlanReferenceLine() {
+  const targetTs = tzParseTime(_reviewPlanTargetKey, '12:00');
+  const dow = tzDow(targetTs);
+  const samples = [];
+  for (let i = 1; i <= 56 && samples.length < 6; i++) {
+    const k = _dateKeyPlusDays(_reviewPlanTargetKey, -i);
+    if (tzDow(tzParseTime(k, '12:00')) !== dow) continue;
+    const dayE = getEntriesForDateWindow(k).filter(e => !e.missed && !e.deleted);
+    if (!dayE.length) continue;
+    samples.push(sumEnergyMinutes(dayE, 'deep', k));
+  }
+  if (samples.length < 2) return '';
+  const avg = Math.round(samples.reduce((a, b) => a + b, 0) / samples.length);
+  const wd = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long', timeZone: settings.timezone || undefined
+  }).format(new Date(targetTs));
+  return `On a typical ${wd} you track ${fmtPlanMin(avg)} of deep work.`;
+}
+
+function renderReviewPlan() {
+  const listEl  = document.getElementById('rv-plan-list');
+  const chipsEl = document.getElementById('rv-plan-chips');
+  const addEl   = document.getElementById('rv-plan-add');
+  const refEl   = document.getElementById('rv-plan-ref');
+  if (!listEl) return;
+
+  const esc  = s => String(s).replace(/</g, '&lt;');
+  const attr = s => String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const items = reviewPlanVisible();
+
+  listEl.innerHTML = items.map(it => `
+    <div class="rv-plan-item">
+      <div class="rv-plan-task" title="${attr(it.task)}">
+        ${it.when ? `<span class="plan-when">${esc(it.when)} →</span> ` : ''}${esc(it.task)}
+      </div>
+      <button type="button" class="plan-remove" onclick="removeReviewPlanItem('${it.id}')" title="Remove">✕</button>
+    </div>`).join('');
+
+  const chips = items.length >= PLAN_MAX ? [] : reviewPlanChips();
+  chipsEl.innerHTML = chips.length
+    ? `<div class="rv-plan-chip-row">${chips.map(c =>
+        `<button type="button" class="rv-plan-chip ${c.tag}" onclick="addReviewPlanChip('${attr(c.task)}')">
+           ${esc(c.task)}<span class="rv-chip-tag">${c.tag === 'undone' ? 'undone' : c.tag === 'week' ? 'this week' : 'recent'}</span>
+         </button>`).join('')}</div>`
+    : '';
+
+  addEl.style.display = items.length >= PLAN_MAX ? 'none' : 'flex';
+  if (refEl) {
+    const line = reviewPlanReferenceLine();
+    refEl.textContent = line;
+    refEl.style.display = line ? 'block' : 'none';
+  }
+}
+
+function pushReviewPlanItem(task, when) {
+  if (reviewPlanVisible().length >= PLAN_MAX) { showToast(`${PLAN_MAX} is the cap`); return; }
+  _reviewPlanDraft.push({
+    id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    task, when: when || '', done: false, doneAt: null, updatedAt: Date.now()
+  });
+  renderReviewPlan();
+}
+
+function addReviewPlanItem() {
+  const taskEl = document.getElementById('rv-plan-task');
+  const whenEl = document.getElementById('rv-plan-when');
+  const task = (taskEl ? taskEl.value : '').trim();
+  if (!task) { showToast('What will you do?'); if (taskEl) taskEl.focus(); return; }
+  pushReviewPlanItem(task, (whenEl ? whenEl.value : '').trim());
+  if (taskEl) taskEl.value = '';
+  if (whenEl) whenEl.value = '';
+}
+
+function addReviewPlanChip(task) {
+  pushReviewPlanItem(task, '');
+}
+
+function removeReviewPlanItem(id) {
+  _reviewPlanDraft = _reviewPlanDraft.map(i =>
+    i.id === id ? { ...i, deleted: true, updatedAt: Date.now() } : i
+  );
+  renderReviewPlan();
+}
+
+/** Yesterday's promise, answered with data instead of memory. Neutral by design — an unfinished
+ *  item is information, not a verdict. */
+function renderReviewPlanVsActual() {
+  const el = document.getElementById('rv-plan-vs-actual');
+  if (!el) return;
+  const items = getPlanItems(_reviewDateKey);
+  if (!items.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+
+  const esc = s => String(s).replace(/</g, '&lt;');
+  const done = items.filter(i => i.done).length;
+  el.style.display = 'block';
+  el.innerHTML = `<div class="rv-pva">
+      <div class="rv-pva-head">You planned ${items.length} · finished ${done}</div>
+      ${items.map(it => {
+        const m = planTrackedMin(it.task, _reviewDateKey);
+        return `<div class="rv-pva-row">
+          <span class="rv-pva-mark${it.done ? ' on' : ''}">${it.done ? '✓' : '○'}</span>
+          <span class="rv-pva-task">${esc(it.task)}</span>
+          <span class="rv-pva-min${m > 0 ? ' on' : ''}">${fmtPlanMin(m)}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
 function saveReview(){
   const k = _reviewDateKey || toDateKey(new Date());
-  const isToday = k === toDateKey(new Date());
-  reviews[k]={win:document.getElementById('rv-win').value,waste:document.getElementById('rv-waste').value,avoid:document.getElementById('rv-avoid').value,tomorrow:document.getElementById('rv-tomorrow').value,_savedAt:Date.now()};
-  // Only update tomorrow's intention when saving today's review
-  if (isToday) { const tom=document.getElementById('rv-tomorrow').value; if(tom) intention=tom; }
+  const targetKey = _reviewPlanTargetKey || _dateKeyPlusDays(k, 1);
+  const visible = reviewPlanVisible();
+  // reviews[].tomorrow stays populated so Reflect history and existing records keep rendering.
+  const tomorrowText = visible.map(i => i.task).join(' · ');
+  reviews[k]={win:document.getElementById('rv-win').value,waste:document.getElementById('rv-waste').value,avoid:document.getElementById('rv-avoid').value,tomorrow:tomorrowText,_savedAt:Date.now()};
+
+  plans[targetKey] = { items: _reviewPlanDraft.map(i => ({ ...i })), updatedAt: Date.now() };
+
   persist();
   if (fbRoomRef) fbRoomRef.update({ [`reviews/${k}`]: reviews[k] });
+  if (typeof syncPlans === 'function') syncPlans(targetKey);
   closeModal('review-overlay');
+  renderTodayPlan();
   if (document.getElementById('reflect-daily-reviews')) renderDailyReflections();
   showToast('Review saved ✓');
 }
@@ -6389,7 +6624,6 @@ function renderYesterdayPromise() {
   const _tz2 = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const yesterdayKey = getDateInTZ(Date.now() - 86400000, _tz2);
   const r = reviews[yesterdayKey];
-  const promise = r?.tomorrow?.trim();
   const waste   = r?.waste?.trim();
   const avoid   = r?.avoid?.trim();
 
@@ -6406,19 +6640,10 @@ function renderYesterdayPromise() {
   });
   const wasteItems = Object.entries(wasteMap).sort((a, b) => b[1] - a[1]);
 
-  // Need at least one field to show the card
-  if (!promise && !waste && !avoid && !wasteItems.length) { el.style.display = 'none'; return; }
-
-  const alreadySet = promise && intention.trim().toLowerCase() === promise.toLowerCase();
-
-  const focusRow = promise ? `
-    <div class="promise-row focus">
-      <span class="promise-row-label">Today's focus you set yesterday</span>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
-        <span class="promise-row-value flex-1">"${promise}"</span>
-        ${!alreadySet ? `<button class="promise-set-btn" onclick="applyPromiseAsIntention()">Set focus</button>` : `<span style="font-size:10px;color:var(--deep);font-weight:600">✓ active</span>`}
-      </div>
-    </div>` : '';
+  // The focus row that used to live here was retired — the Today Plan strip now owns
+  // "what you said you'd do today", with one-tap start and tracked-minutes evidence.
+  // This banner keeps only the part the plan strip does NOT cover: yesterday's waste traps.
+  if (!waste && !avoid && !wasteItems.length) { el.style.display = 'none'; return; }
 
   // Auto-populated waste from actual entries (takes priority over manual field if richer)
   const autoWasteContent = wasteItems.length
@@ -6443,20 +6668,12 @@ function renderYesterdayPromise() {
       <span class="promise-header-title">Yesterday's accountability</span>
       <button class="btn sm ghost" onclick="openReview('${yesterdayKey}')" style="font-size:10px;padding:3px 9px">Edit</button>
     </div>
-    ${wasteRow}${avoidRow}${focusRow}
+    ${wasteRow}${avoidRow}
   </div>`;
 }
 
-function applyPromiseAsIntention() {
-  const yesterdayKey = toDateKey(new Date(Date.now() - 86400000));
-  const promise = reviews[yesterdayKey]?.tomorrow?.trim();
-  if (!promise) return;
-  intention = promise;
-  document.getElementById('intention').value = promise;
-  persist();
-  renderYesterdayPromise();
-  showToast('Focus set ✓');
-}
+// applyPromiseAsIntention() was retired — the Today Plan strip supersedes the "Set focus" button,
+// and `intention` is now derived from the plan by syncIntentionFromPlan().
 
 // ══════════════════════════════════════════════════════
 // REFLECT  — insights, weekly review, history

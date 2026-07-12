@@ -63,13 +63,13 @@ function baseSettings(overrides = {}) {
 const utcDateKey = ts => new Date(ts).toISOString().slice(0, 10);
 const todayKey = () => utcDateKey(Date.now());
 
-async function openApp(page, { entries = [], plans = {}, settings = {} } = {}) {
+async function openApp(page, { entries = [], plans = {}, reviews = {}, settings = {} } = {}) {
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({
     status: 200, contentType: 'application/javascript', body: firebaseStub
   }));
   // addInitScript re-runs on every navigation, so seed exactly once — otherwise a reload
   // would wipe localStorage before the app could load it, and persistence can't be tested.
-  await page.addInitScript(({ entries, plans, settings }) => {
+  await page.addInitScript(({ entries, plans, reviews, settings }) => {
     if (localStorage.getItem('ta3-test-seeded')) return;
     localStorage.clear();
     sessionStorage.clear();
@@ -80,8 +80,9 @@ async function openApp(page, { entries = [], plans = {}, settings = {} } = {}) {
     localStorage.setItem('ta3-entries', JSON.stringify(entries));
     localStorage.setItem('ta3-focus-redemptions', '[]');
     localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
     localStorage.setItem('ta3-test-seeded', '1');
-  }, { entries, plans, settings: baseSettings(settings) });
+  }, { entries, plans, reviews, settings: baseSettings(settings) });
   await page.goto(APP_URL);
   await page.waitForFunction(() => typeof window.renderTodayPlan === 'function' && !!document.getElementById('plan-strip'));
   await expect(page.locator('#signin-overlay')).toBeHidden();
@@ -237,4 +238,175 @@ test('a past day with a plan shows it read-only (no start/remove controls)', asy
   await expect(page.locator('.plan-start')).toHaveCount(0);   // read-only
   await expect(page.locator('.plan-remove')).toHaveCount(0);
   await expect(page.locator('.plan-add')).toHaveCount(0);
+});
+
+// ══════════════════════════════════════════════════════
+// The nightly ritual — the review modal becomes the plan picker
+// ══════════════════════════════════════════════════════
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function deepEntry(startMsAgo, endMsAgo, activity) {
+  const start = Date.now() - startMsAgo;
+  const end   = Date.now() - endMsAgo;
+  return {
+    id: end, ts: end, tsStart: start, updatedAt: end,
+    blockIntervalMin: Math.round((end - start) / 60000),
+    date: utcDateKey(start), activity, energy: 'deep', category: 'deep_work',
+    originalLabel: 'deep', onPlan: true, retro: false
+  };
+}
+
+test('review picks tomorrow’s plan and writes it to the next day', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => openReview());
+
+  await page.locator('#rv-plan-when').fill('after lunch');
+  await page.locator('#rv-plan-task').fill('Ship the report');
+  await page.locator('#rv-plan-add').getByRole('button', { name: 'Add' }).click();
+  await page.locator('#rv-plan-task').fill('Gym');
+  await page.locator('#rv-plan-add').getByRole('button', { name: 'Add' }).click();
+  await expect(page.locator('.rv-plan-item')).toHaveCount(2);
+
+  await page.locator('#review-overlay').getByRole('button', { name: 'Save' }).click();
+
+  const result = await page.evaluate(() => {
+    const tomorrow = _dateKeyPlusDays(toDateKey(new Date()), 1);
+    return {
+      tasks: getPlanItems(tomorrow).map(i => i.task),
+      when: getPlanItems(tomorrow)[0].when,
+      legacy: reviews[toDateKey(new Date())].tomorrow   // Reflect history still renders this
+    };
+  });
+  expect(result.tasks).toEqual(['Ship the report', 'Gym']);
+  expect(result.when).toBe('after lunch');
+  expect(result.legacy).toBe('Ship the report · Gym');
+});
+
+test('review caps tomorrow at 3 items', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => openReview());
+
+  for (const t of ['A', 'B', 'C']) {
+    await page.locator('#rv-plan-task').fill(t);
+    await page.locator('#rv-plan-add').getByRole('button', { name: 'Add' }).click();
+  }
+  await expect(page.locator('.rv-plan-item')).toHaveCount(3);
+  await expect(page.locator('#rv-plan-add')).toBeHidden();   // no way to enter a 4th
+});
+
+test('unfinished items are OFFERED as chips, never auto-carried', async ({ page }) => {
+  await openApp(page, {
+    plans: planFor([{ task: 'Write report', done: true }, { task: 'Gym', done: false }])
+  });
+  await page.evaluate(() => openReview());
+
+  // Not pre-added to tomorrow — auto-carry into a capped list is exactly what would deadlock it.
+  await expect(page.locator('.rv-plan-item')).toHaveCount(0);
+
+  const undoneChip = page.locator('.rv-plan-chip.undone');
+  await expect(undoneChip).toHaveCount(1);
+  await expect(undoneChip).toContainText('Gym');
+  await expect(page.locator('.rv-plan-chip')).not.toContainText('Write report');  // finished work isn't re-offered
+
+  await undoneChip.click();
+  await expect(page.locator('.rv-plan-item')).toHaveCount(1);
+  await expect(page.locator('.rv-plan-item')).toContainText('Gym');
+});
+
+test('this week’s priorities are offered as chips (weekly steers daily)', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const tomorrow = _dateKeyPlusDays(toDateKey(new Date()), 1);
+    const wk = getWeekKey(new Date(tzParseTime(tomorrow, '12:00')));
+    weeklyReviews[wk] = { plan: { p1: 'Ship the report', p2: 'Fix onboarding', p3: '' } };
+  });
+  await page.evaluate(() => openReview());
+
+  const weekChips = page.locator('.rv-plan-chip.week');
+  await expect(weekChips).toHaveCount(2);
+  await expect(weekChips.first()).toContainText('Ship the report');
+
+  await weekChips.first().click();
+  await expect(page.locator('.rv-plan-item')).toContainText('Ship the report');
+});
+
+test('review shows plan vs actual for the day being reviewed', async ({ page }) => {
+  await openApp(page, {
+    entries: [deepEntry(90 * 60 * 1000, 45 * 60 * 1000, 'Write report')],   // 45m of real work
+    plans: planFor([{ task: 'Write report', done: true }, { task: 'Gym', done: false }])
+  });
+  await page.evaluate(() => openReview());
+
+  const pva = page.locator('#rv-plan-vs-actual');
+  await expect(pva).toBeVisible();
+  await expect(pva.locator('.rv-pva-head')).toHaveText('You planned 2 · finished 1');
+
+  const rows = pva.locator('.rv-pva-row');
+  await expect(rows.nth(0)).toContainText('Write report');
+  await expect(rows.nth(0).locator('.rv-pva-min')).toHaveText('45m');
+  await expect(rows.nth(1)).toContainText('Gym');
+  await expect(rows.nth(1).locator('.rv-pva-min')).toHaveText('0m');   // honest, not scolding
+});
+
+test('reference-class line reports what you actually do on that weekday', async ({ page }) => {
+  // Tomorrow's weekday recurs at today-6 and today-13.
+  const sameWeekday = daysAgo => {
+    const start = Date.now() - daysAgo * DAY_MS;
+    const end   = start + 2 * 60 * 60 * 1000;   // 2h deep
+    return {
+      id: end, ts: end, tsStart: start, updatedAt: end, blockIntervalMin: 120,
+      date: utcDateKey(start), activity: 'Deep work', energy: 'deep',
+      category: 'deep_work', originalLabel: 'deep', onPlan: true, retro: false
+    };
+  };
+  await openApp(page, { entries: [sameWeekday(6), sameWeekday(13)] });
+  await page.evaluate(() => openReview());
+
+  const ref = page.locator('#rv-plan-ref');
+  await expect(ref).toBeVisible();
+  await expect(ref).toContainText('On a typical');
+  await expect(ref).toContainText('2.0h of deep work');
+});
+
+// ══════════════════════════════════════════════════════
+// The ping cue — quick-log surfaces the plan
+// ══════════════════════════════════════════════════════
+
+test('ping offers the unfinished plan, and logging through it feeds auto-verify', async ({ page }) => {
+  // A prior "Write report" entry gives inferPlanEnergy() history, so one tap logs it directly.
+  await openApp(page, {
+    entries: [deepEntry(5 * DAY_MS, 5 * DAY_MS - 30 * 60 * 1000, 'Write report')],
+    plans: planFor([{ task: 'Write report' }, { task: 'Gym', done: true }])
+  });
+
+  // The ping only fires mid-block, so start one first.
+  await page.locator('.plan-item').first().locator('.plan-start').click();
+  await expect(page.locator('#activity-hero')).toHaveClass(/tracking/);
+
+  await page.evaluate(() => openQuickLog());
+
+  const chips = page.locator('.ql-plan-chip');
+  await expect(chips).toHaveCount(1);                     // only the UNFINISHED item is offered
+  await expect(chips.first()).toHaveText('Write report');
+
+  await chips.first().click();
+  await expect(page.locator('#quicklog-overlay')).not.toHaveClass(/open/);
+
+  // The entry lands with the EXACT planned label, which is what makes planTrackedMin() match.
+  const tracked = await page.evaluate(() => planTrackedMin('Write report', planTodayKey()));
+  expect(tracked).toBeGreaterThan(0);
+  await expect(page.locator('.plan-item').first().locator('.plan-tracked')).toHaveClass(/on/);
+});
+
+test('ping asks for a category rather than guessing one for a never-logged task', async ({ page }) => {
+  await openApp(page, { plans: planFor([{ task: 'Brand new task' }]) });
+
+  await page.locator('.plan-item').first().locator('.plan-start').click();
+  await page.evaluate(() => openQuickLog());
+  await page.locator('.ql-plan-chip').first().click();
+
+  // No history for it -> the form opens pre-filled instead of mislabelling the entry.
+  await expect(page.locator('#quicklog-overlay')).toHaveClass(/open/);
+  await expect(page.locator('#ql-activity')).toHaveValue('Brand new task');
 });

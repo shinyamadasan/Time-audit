@@ -157,7 +157,13 @@ Depends on: Timer section (`resetTimer`, `running`), `renderToday()`
 ## [Ping & Quick-Log Modal]
 Lines: 2761–2957
 Purpose: Ping delivery (sound + modal), PC Time live tracking, quick-log UI (same-as-last, energy chips, full form), snooze, behavioral feedback flash.
-Functions: `stopAlertLoop()`, `showPingBanner()`, `hidePingBanner()`, `doPing()`, `startPCTimeLive()`, `stopPCTimeLive()`, `autoLogBlock()`, `openQuickLog()`, `setQlEnergy()`, `populateQlChips()`, `showQuickForm()`, `quickSaveLast()`, `saveQuickEntry()`, `learnWastePattern()`, `_doQuickSave()`, `dismissQuickLog()`, `snoozeLog()`, `showLogFeedback()`, `fireBehavioralFeedback()`
+Functions: `stopAlertLoop()`, `showPingBanner()`, `hidePingBanner()`, `doPing()`, `startPCTimeLive()`, `stopPCTimeLive()`, `autoLogBlock()`, `openQuickLog()`, `setQlEnergy()`, `populateQlChips()`, `showQuickForm()`, `quickSaveLast()`, `renderQuickLogPlan()`, `quickSaveFromPlan()`, `saveQuickEntry()`, `learnWastePattern()`, `_doQuickSave()`, `dismissQuickLog()`, `snoozeLog()`, `showLogFeedback()`, `fireBehavioralFeedback()`
+
+⚠ The ping only fires **mid-block** (`openQuickLog()` returns early unless `running || blockStartTime`),
+so the plan chips here mean "was this block one of your planned items?" — not "go start your plan".
+Logging through a chip writes the **exact** planned label, which is what makes `planTrackedMin()`
+match reliably instead of missing a hand-typed variant. `quickSaveFromPlan()` asks for a category
+rather than guessing when the task has no logging history (`inferPlanEnergy()` returns null).
 Variables: `alertLoop`, `qlEnergy`, `quickLogBusy`, `snoozesUsedToday`, `snoozeTimer`, `_feedbackTimer`
 Depends on: Timer section, State globals, `persist()`, `syncEntries()`, `entries`, `renderToday()`, `showToast()`, Native notifications section
 
@@ -167,8 +173,9 @@ Purpose: The 1–3 daily intentions that drive execution — the single daily ta
 plan strip (which replaced the old commit-bar), enforces the 3-item WIP cap, wires one-tap start,
 and derives evidence of "done" from actually-tracked entries rather than a self-reported checkbox.
 Functions: `planTodayKey()`, `normalizePlanTask()`, `getPlanItems()`, `getPlanItemsRaw()`,
-`syncCommitmentFromPlan()`, `savePlanItems()`, `planTrackedMin()`, `fmtPlanMin()`,
-`renderTodayPlan()`, `addPlanItem()`, `removePlanItem()`, `togglePlanDone()`, `startPlanItem()`
+`syncCommitmentFromPlan()`, `syncIntentionFromPlan()`, `inferPlanEnergy()`, `savePlanItems()`,
+`planTrackedMin()`, `fmtPlanMin()`, `renderTodayPlan()`, `addPlanItem()`, `removePlanItem()`,
+`togglePlanDone()`, `startPlanItem()`
 Variables: `PLAN_MAX` (3), `plans` (state global)
 Depends on: `getEntriesForDateWindow()`, `entryDurationMinutes()`, `getViewingDateKey()`,
 `isViewingToday()`, `getDateInTZ()`, `_startTimer()`, `switchToTask()`, `persist()`,
@@ -312,11 +319,38 @@ Variables: —
 Depends on: `entries`, `settings`, `persist()`, `renderToday()`
 
 ## [Day Review Modal]
-Lines: 6093–6464
-Purpose: Open and save the end-of-day reflection for any date; render yesterday's promise accountability banner; format week labels and save timestamps.
-Functions: `openReview()`, `saveReview()`, `renderYesterdayPromise()`, `applyPromiseAsIntention()`, `formatWeekLabel()`, `formatSavedAt()`, `computeDailySummary()`, `renderDailySummary()`
+Lines: ~6090–6480
+Purpose: Open and save the end-of-day reflection for any date; render yesterday's waste-trap
+accountability banner; format week labels and save timestamps. `checkReviewPrompt()` auto-opens
+this at `settings.reviewHour` (default 22:00) — **this is the daily habit hook the whole plan
+loop hangs on.**
+Functions: `openReview()`, `saveReview()`, `renderYesterdayPromise()`, `formatWeekLabel()`, `formatSavedAt()`, `computeDailySummary()`, `renderDailySummary()`, `checkReviewPrompt()`
 Variables: `_reviewDateKey`
-Depends on: `reviews`, `entries`, `persist()`, `renderToday()`, Statistics section
+Depends on: `reviews`, `plans`, `entries`, `persist()`, `renderToday()`, Review Plan Picker, Statistics section
+
+⚠ `applyPromiseAsIntention()` and the banner's "Set focus" row were **retired** — the Today Plan
+strip owns "what you said you'd do today". The banner now renders only yesterday's waste traps and
+avoid strategy. `saveReview()` writes `plans[reviewedDay + 1]` and keeps `reviews[k].tomorrow`
+populated (joined item labels) so Reflect history and older records still render.
+
+## [Review Plan Picker]
+Lines: ~6210–6360
+Purpose: Turns the review's single "Tomorrow's focus" string into the 1–3 item plan the next day
+runs on. Offers one-tap chips (unfinished items from the reviewed day, this week's p1/p2/p3, recent
+tasks), shows a reference-class line, and renders plan-vs-actual for the day being reviewed.
+Functions: `reviewPlanTargetKey()`, `openReviewPlan()`, `reviewPlanVisible()`, `reviewPlanChips()`,
+`reviewPlanReferenceLine()`, `renderReviewPlan()`, `pushReviewPlanItem()`, `addReviewPlanItem()`,
+`addReviewPlanChip()`, `removeReviewPlanItem()`, `renderReviewPlanVsActual()`
+Variables: `_reviewPlanDraft` (carries tombstones), `_reviewPlanTargetKey`
+Depends on: Today Plan section, `weeklyReviews`, `buildHeroSuggestions()`, `sumEnergyMinutes()`,
+`tzDow()`, `tzParseTime()`, `_dateKeyPlusDays()`, `getWeekKey()`
+
+⚠ Unfinished items from the reviewed day are **offered as chips, never auto-added**. Auto-carrying
+them into a 3-capped list would make it impossible to plan on a bad day — the same deadlock the
+original "circle of tasks" design had.
+
+⚠ `_reviewPlanDraft` holds tombstoned items so a removal made in the review still propagates
+through the per-item sync merge.
 
 ## [Reflect View]
 Lines: 6465–7085
@@ -454,7 +488,11 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Week view (energy split, top activities, table) | Week View | 5427–6009 |
 | Month overview | Week View → `renderMonthOverview()` | ~5490 |
 | Sleep reminder / sleep entry logging | Sleep Tracking | 6083–6211 |
-| Yesterday's promise / day review modal | Day Review Modal | 6093–6464 |
+| Yesterday's waste traps / day review modal | Day Review Modal | ~6090–6480 |
+| Nightly ritual: picking tomorrow's 1–3 | Review Plan Picker | ~6210–6360 |
+| "On a typical Tuesday you track…" line | Review Plan Picker → `reviewPlanReferenceLine()` | ~6260 |
+| Plan-vs-actual in the review | Review Plan Picker → `renderReviewPlanVsActual()` | ~6340 |
+| Plan chips inside the ping modal | Ping & Quick-Log → `renderQuickLogPlan()` | ~2160 |
 | Honest summary card (Reflect tab) | Reflect View | 6465–7085 |
 | Week comparison (this vs last week) | Reflect View → `renderWeekComparison()` | 6805 |
 | 60-day streak calendar | Reflect View → `renderStreakCalendar()` | ~6700 |
