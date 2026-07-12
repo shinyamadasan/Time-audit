@@ -23,7 +23,7 @@ export default [
         // App globals defined in index.html — consumed by storage.js, focus-mode.js, insights.js
         entries: 'writable', settings: 'writable', reviews: 'writable',
         weeklyReviews: 'writable', focusRedemptions: 'writable',
-        intention: 'writable', dailyCommitment: 'writable',
+        intention: 'writable', dailyCommitment: 'writable', plans: 'writable',
         snoozesUsedToday: 'writable', running: 'writable', timerStartedAt: 'writable',
         totalSecs: 'writable', remaining: 'writable', lastTaskForRepeat: 'writable',
         fbApp: 'writable', fbDb: 'writable', fbRoomRef: 'writable',
@@ -48,6 +48,7 @@ export default [
         buildHeroSuggestions: 'readonly', buildSugItem: 'readonly',
         triggerPenaltyMode: 'readonly', renderSettings: 'readonly',
         showHeroState: 'readonly', confirm: 'readonly',
+        syncCommitmentFromPlan: 'readonly',
         requestAnimationFrame: 'readonly',
         // App globals — timer / state vars defined in index.html
         blockStartTime: 'writable', awayActive: 'writable', awayStartTime: 'writable',
