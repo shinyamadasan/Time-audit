@@ -428,7 +428,8 @@ body:not(.today-details-open) .today-detail{display:none!important}
   justify-content:center;z-index:110;padding:20px;opacity:0;pointer-events:none;transition:opacity 0.2s}
 .review-overlay.open{opacity:1;pointer-events:all}
 .review-modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);
-  padding:24px;width:100%;max-width:420px;transform:translateY(8px);transition:transform 0.2s}
+  padding:24px;width:100%;max-width:420px;max-height:calc(100vh - 40px);overflow-y:auto;
+  transform:translateY(8px);transition:transform 0.2s;overscroll-behavior:contain}
 .review-overlay.open .review-modal{transform:translateY(0)}
 
 /* ── Week view ── */
@@ -705,6 +706,12 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .rv-pva-task{flex:1;min-width:0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rv-pva-min{font-family:var(--mono);font-size:10px;color:var(--muted);flex-shrink:0}
 .rv-pva-min.on{color:var(--deep)}
+.rv-closeout{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:10px 12px;margin-bottom:16px}
+.rv-closeout-head{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;margin-bottom:8px}
+.rv-closeout-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.rv-closeout-cell{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px}
+.rv-closeout-cell span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);font-weight:700;margin-bottom:3px}
+.rv-closeout-cell strong{font-family:var(--mono);font-size:13px;color:var(--text);font-weight:700}
 
 /* ── Quick-log: today's plan chips ── */
 .ql-plan{margin:10px 0}
@@ -725,6 +732,22 @@ button.today-health-metric{background:none;border:none;padding:0;text-align:left
 .today-health-metric.actionable{cursor:pointer}
 .today-health-metric.actionable:hover{text-decoration:underline;color:var(--text)}
 .today-health-metric:disabled{opacity:1}
+
+.closeout-card{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg2);
+  border:1px solid rgba(76,199,240,0.24);box-shadow:0 1px 3px rgba(0,0,0,0.35);border-radius:var(--r2);
+  padding:11px 13px;margin-bottom:12px;color:var(--text);font-family:var(--head);text-align:left;cursor:pointer}
+.closeout-card:hover{background:var(--bg3);border-color:rgba(76,199,240,0.45)}
+.closeout-card.closed{border-color:rgba(52,211,153,0.28)}
+.closeout-main{display:block;flex:1;min-width:0}
+.closeout-title{display:block;font-size:12px;font-weight:800;color:var(--text);line-height:1.25}
+.closeout-card.closed .closeout-title{color:#34d399}
+.closeout-sub{display:block;font-size:11px;color:var(--muted);line-height:1.35;margin-top:2px}
+.closeout-stats{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.closeout-stats span{font-family:var(--mono);font-size:10px;color:var(--muted);background:var(--bg3);border:1px solid var(--border);
+  border-radius:999px;padding:2px 7px}
+.closeout-action{flex-shrink:0;border-radius:999px;background:var(--deep-dim2);border:1px solid rgba(76,199,240,0.3);
+  color:var(--deep);font-size:11px;font-weight:800;padding:6px 10px}
+.closeout-card.closed .closeout-action{background:rgba(52,211,153,0.1);border-color:rgba(52,211,153,0.28);color:#34d399}
 
 /* ── Log feedback flash ── */
 @keyframes ring-flash{0%,100%{opacity:1}50%{opacity:0.4}}

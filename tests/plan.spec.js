@@ -290,6 +290,17 @@ function deepEntry(startMsAgo, endMsAgo, activity) {
   };
 }
 
+function wasteEntry(startMsAgo, endMsAgo, activity) {
+  const start = Date.now() - startMsAgo;
+  const end   = Date.now() - endMsAgo;
+  return {
+    id: end, ts: end, tsStart: start, updatedAt: end,
+    blockIntervalMin: Math.round((end - start) / 60000),
+    date: utcDateKey(start), activity, energy: 'waste', category: 'waste',
+    originalLabel: 'waste', onPlan: false, retro: false
+  };
+}
+
 test('review picks tomorrow’s plan and writes it to the next day', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => openReview());
@@ -420,6 +431,39 @@ test('review shows plan vs actual for the day being reviewed', async ({ page }) 
   await expect(rows.nth(0).locator('.rv-pva-min')).toHaveText('45m');
   await expect(rows.nth(1)).toContainText('Gym');
   await expect(rows.nth(1).locator('.rv-pva-min')).toHaveText('0m');   // honest, not scolding
+});
+
+test('close day CTA opens the review loop and marks today closed after save', async ({ page }) => {
+  await openApp(page, {
+    entries: [
+      deepEntry(120 * 60 * 1000, 75 * 60 * 1000, 'Write report'),
+      wasteEntry(70 * 60 * 1000, 50 * 60 * 1000, 'Scrolling')
+    ],
+    plans: planFor([{ task: 'Write report', done: true }, { task: 'Gym', done: false }])
+  });
+
+  await expect(page.locator('#closeout-card')).toBeVisible();
+  await expect(page.locator('#closeout-title')).toHaveText('Close day');
+  await expect(page.locator('#closeout-stats')).toContainText('1/2 plan');
+  await expect(page.locator('#closeout-stats')).toContainText('45m deep');
+  await expect(page.locator('#closeout-stats')).toContainText('20m waste');
+
+  await page.locator('#closeout-card').click();
+  await expect(page.locator('#review-overlay')).toHaveClass(/open/);
+  await expect(page.locator('#rv-closeout-summary')).toBeVisible();
+  await expect(page.locator('#rv-closeout-summary')).toContainText('Closeout summary');
+  await expect(page.locator('#rv-closeout-summary')).toContainText('45m');
+  await expect(page.locator('#rv-closeout-summary')).toContainText('20m');
+  await expect(page.locator('#rv-plan-vs-actual')).toBeVisible();
+
+  await page.locator('#rv-win').fill('Shipped the report');
+  await page.locator('#rv-waste').fill('Scrolling');
+  await page.locator('#rv-avoid').fill('Block the feed');
+  await page.locator('#review-overlay').getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.locator('#review-overlay')).not.toHaveClass(/open/);
+  await expect(page.locator('#closeout-title')).toHaveText('Day closed');
+  await expect(page.locator('#closeout-action')).toHaveText('Edit review');
 });
 
 test('reference-class line reports what you actually do on that weekday', async ({ page }) => {
