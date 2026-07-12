@@ -1322,7 +1322,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-11-health-waste-jump-1';
+const APP_BUILD = '2026-07-12-daily-plan-loop-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -5108,6 +5108,17 @@ function inferPlanEnergy(task) {
   return learned || null;
 }
 
+// Categories you don't set as one of tomorrow's three priorities. ('distraction' and 'break' are
+// the legacy names for waste/recovery — old entries still carry them.)
+const PLAN_CHIP_SKIP_ENERGY = new Set(['waste', 'distraction', 'recovery', 'break', 'social']);
+
+/** Is this a thing you'd deliberately commit to doing? Used to filter suggestion CHIPS only —
+ *  a hand-typed plan item is never restricted. */
+function isPlannableTask(task) {
+  const e = inferPlanEnergy(task);
+  return !e || !PLAN_CHIP_SKIP_ENERGY.has(e);
+}
+
 function savePlanItems(dateKey, items) {
   plans[dateKey] = { items, updatedAt: Date.now() };
   syncCommitmentFromPlan();
@@ -6314,7 +6325,14 @@ function reviewPlanChips() {
   const wp = (weeklyReviews[wk] || {}).plan || {};
   [wp.p1, wp.p2, wp.p3].forEach(p => { if (p && p.trim()) push(p.trim(), 'week'); });
 
-  (buildHeroSuggestions().recent || []).slice(0, 4).forEach(t => push(t, 'recent'));
+  // Recent-activity suggestions are unfiltered by energy, so without this guard the app offers
+  // "Drinking with friends" as one of tomorrow's three priorities. A plan is the things you
+  // deliberately commit to — you never plan to waste time, sleep, or socialise. Only the CHIPS
+  // are filtered; anything can still be typed in by hand.
+  (buildHeroSuggestions().recent || [])
+    .filter(isPlannableTask)
+    .slice(0, 4)
+    .forEach(t => push(t, 'recent'));
   return out.slice(0, 6);
 }
 
