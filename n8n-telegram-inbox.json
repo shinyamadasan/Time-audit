@@ -1,16 +1,21 @@
 {
-  "name": "Telegram -> captures (capture + decide)",
+  "name": "[ChronaSense] Telegram -> captures (capture + decide)",
   "nodes": [
     {
       "parameters": {
-        "updates": ["message"],
+        "updates": [
+          "message"
+        ],
         "additionalFields": {}
       },
       "id": "telegram-trigger",
       "name": "Telegram Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "credentials": {
         "telegramApi": {
           "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
@@ -21,13 +26,19 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
           "combinator": "and",
           "conditions": [
             {
               "leftValue": "={{ $json.message.from.id }}",
               "rightValue": "REPLACE_WITH_YOUR_TELEGRAM_USER_ID",
-              "operator": { "type": "number", "operation": "equals" }
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
             }
           ]
         }
@@ -36,7 +47,10 @@
       "name": "Authorized sender?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -46,7 +60,10 @@
       "name": "Build capture/decision file",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 220]
+      "position": [
+        680,
+        220
+      ]
     },
     {
       "parameters": {
@@ -55,9 +72,18 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT" },
-            { "name": "Accept", "value": "application/vnd.github+json" },
-            { "name": "User-Agent", "value": "n8n-chronasense-capture" }
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-chronasense-capture"
+            }
           ]
         },
         "sendBody": true,
@@ -69,19 +95,27 @@
       "name": "GitHub: create file",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 220]
+      "position": [
+        900,
+        220
+      ]
     },
     {
       "parameters": {
         "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
         "text": "={{ $('Build capture/decision file').item.json.isControl ? '\\u2699\\ufe0f Command `/' + $('Build capture/decision file').item.json.command + '` queued (`' + $('Build capture/decision file').item.json.id + '`). Processing shortly.' : ($('Build capture/decision file').item.json.isDecision ? '\\u2705 Decision noted (`' + $('Build capture/decision file').item.json.id + '`). I\\u2019ll apply it on the next run.' : '\\u2705 Captured `' + $('Build capture/decision file').item.json.id + '` as ' + $('Build capture/decision file').item.json.command + '. I\\u2019ll triage it on the next run.') }}",
-        "additionalFields": { "parse_mode": "Markdown" }
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
       },
       "id": "reply-ok",
       "name": "Reply: ok",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1120, 220],
+      "position": [
+        1120,
+        220
+      ],
       "credentials": {
         "telegramApi": {
           "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
@@ -99,7 +133,10 @@
       "name": "Reply: unauthorized",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [680, 420],
+      "position": [
+        680,
+        420
+      ],
       "credentials": {
         "telegramApi": {
           "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
@@ -109,17 +146,61 @@
     }
   ],
   "connections": {
-    "Telegram Trigger": { "main": [[{ "node": "Authorized sender?", "type": "main", "index": 0 }]] },
-    "Authorized sender?": {
+    "Telegram Trigger": {
       "main": [
-        [{ "node": "Build capture/decision file", "type": "main", "index": 0 }],
-        [{ "node": "Reply: unauthorized", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Authorized sender?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Build capture/decision file": { "main": [[{ "node": "GitHub: create file", "type": "main", "index": 0 }]] },
-    "GitHub: create file": { "main": [[{ "node": "Reply: ok", "type": "main", "index": 0 }]] }
+    "Authorized sender?": {
+      "main": [
+        [
+          {
+            "node": "Build capture/decision file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply: unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build capture/decision file": {
+      "main": [
+        [
+          {
+            "node": "GitHub: create file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub: create file": {
+      "main": [
+        [
+          {
+            "node": "Reply: ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "_setup_notes": [
     "UPDATED for the Telegram-control feature: one workflow now handles capture (/feature,/bug,...), approval replies, AND remote-control commands.",
     "A message that STARTS with status/next/go/run/build/review/stop/enable/disable -> captures/commands/<id>.md (Dispatch-Commands.ps1 on the PC does the routing -- see docs/09-automation.md).",

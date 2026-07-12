@@ -1,11 +1,14 @@
 {
-  "name": "Morning Digest -> Telegram",
+  "name": "[ChronaSense] Morning Digest -> Telegram",
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
-            { "field": "cronExpression", "expression": "0 7 * * *" }
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
           ]
         }
       },
@@ -13,7 +16,10 @@
       "name": "Every morning 07:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -22,32 +28,53 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT" },
-            { "name": "Accept", "value": "application/vnd.github.raw" },
-            { "name": "User-Agent", "value": "n8n-chronasense-digest" }
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.raw"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-chronasense-digest"
+            }
           ]
         },
         "options": {
-          "response": { "response": { "responseFormat": "text" } }
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
         }
       },
       "id": "github-get-digest",
       "name": "GitHub: get DIGEST.md (raw)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 300]
+      "position": [
+        480,
+        300
+      ]
     },
     {
       "parameters": {
         "chatId": "REPLACE_WITH_YOUR_TELEGRAM_USER_ID",
         "text": "={{ $json.data }}",
-        "additionalFields": { "parse_mode": "Markdown" }
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
       },
       "id": "send-digest",
       "name": "Telegram: send digest",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [720, 300],
+      "position": [
+        720,
+        300
+      ],
       "credentials": {
         "telegramApi": {
           "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
@@ -62,31 +89,53 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT" },
-            { "name": "Accept", "value": "application/vnd.github.raw" },
-            { "name": "User-Agent", "value": "n8n-chronasense-digest" }
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.raw"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-chronasense-digest"
+            }
           ]
         },
         "options": {
-          "response": { "response": { "responseFormat": "text" } }
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
         }
       },
       "id": "github-get-codex-ready",
       "name": "GitHub: get CODEX_READY.md (raw)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 500]
+      "position": [
+        480,
+        500
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
           "combinator": "and",
           "conditions": [
             {
               "leftValue": "={{ $json.data }}",
               "rightValue": "No Codex-ready tasks right now.",
-              "operator": { "type": "string", "operation": "notContains" }
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
             }
           ]
         }
@@ -95,19 +144,27 @@
       "name": "IF has Codex-ready tasks",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [720, 500]
+      "position": [
+        720,
+        500
+      ]
     },
     {
       "parameters": {
         "chatId": "REPLACE_WITH_YOUR_TELEGRAM_USER_ID",
         "text": "={{ $json.data }}",
-        "additionalFields": { "parse_mode": "Markdown" }
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
       },
       "id": "send-codex-ready",
       "name": "Telegram: send codex-ready notice",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [960, 460],
+      "position": [
+        960,
+        460
+      ],
       "credentials": {
         "telegramApi": {
           "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
@@ -120,21 +177,57 @@
     "Every morning 07:00": {
       "main": [
         [
-          { "node": "GitHub: get DIGEST.md (raw)", "type": "main", "index": 0 },
-          { "node": "GitHub: get CODEX_READY.md (raw)", "type": "main", "index": 0 }
+          {
+            "node": "GitHub: get DIGEST.md (raw)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub: get CODEX_READY.md (raw)",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
-    "GitHub: get DIGEST.md (raw)": { "main": [[{ "node": "Telegram: send digest", "type": "main", "index": 0 }]] },
-    "GitHub: get CODEX_READY.md (raw)": { "main": [[{ "node": "IF has Codex-ready tasks", "type": "main", "index": 0 }]] },
+    "GitHub: get DIGEST.md (raw)": {
+      "main": [
+        [
+          {
+            "node": "Telegram: send digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub: get CODEX_READY.md (raw)": {
+      "main": [
+        [
+          {
+            "node": "IF has Codex-ready tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "IF has Codex-ready tasks": {
       "main": [
-        [{ "node": "Telegram: send codex-ready notice", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Telegram: send codex-ready notice",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "_setup_notes": [
     "NEW workflow (separate from capture) - it has a Schedule trigger, so it does not conflict with the Telegram webhook.",
     "Sends planning/DIGEST.md to Telegram every morning at 07:00 (server time). Edit the cron '0 7 * * *' to taste.",
