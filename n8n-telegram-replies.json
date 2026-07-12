@@ -1,11 +1,14 @@
 {
-  "name": "Command Replies -> Telegram (fast relay)",
+  "name": "[ChronaSense] Command Replies -> Telegram (fast relay)",
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
-            { "field": "cronExpression", "expression": "*/2 * * * *" }
+            {
+              "field": "cronExpression",
+              "expression": "*/2 * * * *"
+            }
           ]
         }
       },
@@ -13,7 +16,10 @@
       "name": "Every 2 minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -22,9 +28,18 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT" },
-            { "name": "Accept", "value": "application/vnd.github+json" },
-            { "name": "User-Agent", "value": "n8n-chronasense-replies" }
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-chronasense-replies"
+            }
           ]
         },
         "options": {}
@@ -33,7 +48,10 @@
       "name": "GitHub: get OUTBOX.md (json + sha)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 300]
+      "position": [
+        480,
+        300
+      ]
     },
     {
       "parameters": {
@@ -43,18 +61,27 @@
       "name": "Decode OUTBOX.md",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [720, 300]
+      "position": [
+        720,
+        300
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
           "combinator": "and",
           "conditions": [
             {
               "leftValue": "={{ $json.text }}",
               "rightValue": "No pending replies.",
-              "operator": { "type": "string", "operation": "notEquals" }
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
             }
           ]
         }
@@ -63,19 +90,27 @@
       "name": "IF has pending replies",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [960, 300]
+      "position": [
+        960,
+        300
+      ]
     },
     {
       "parameters": {
         "chatId": "REPLACE_WITH_YOUR_TELEGRAM_USER_ID",
         "text": "={{ $json.text }}",
-        "additionalFields": { "parse_mode": "Markdown" }
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
       },
       "id": "send-replies",
       "name": "Telegram: send replies",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1200, 220],
+      "position": [
+        1200,
+        220
+      ],
       "credentials": {
         "telegramApi": {
           "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
@@ -90,9 +125,18 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT" },
-            { "name": "Accept", "value": "application/vnd.github+json" },
-            { "name": "User-Agent", "value": "n8n-chronasense-replies" }
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-chronasense-replies"
+            }
           ]
         },
         "sendBody": true,
@@ -104,22 +148,73 @@
       "name": "GitHub: clear OUTBOX.md",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 220]
+      "position": [
+        1440,
+        220
+      ]
     }
   ],
   "connections": {
-    "Every 2 minutes": { "main": [[{ "node": "GitHub: get OUTBOX.md (json + sha)", "type": "main", "index": 0 }]] },
-    "GitHub: get OUTBOX.md (json + sha)": { "main": [[{ "node": "Decode OUTBOX.md", "type": "main", "index": 0 }]] },
-    "Decode OUTBOX.md": { "main": [[{ "node": "IF has pending replies", "type": "main", "index": 0 }]] },
+    "Every 2 minutes": {
+      "main": [
+        [
+          {
+            "node": "GitHub: get OUTBOX.md (json + sha)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub: get OUTBOX.md (json + sha)": {
+      "main": [
+        [
+          {
+            "node": "Decode OUTBOX.md",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decode OUTBOX.md": {
+      "main": [
+        [
+          {
+            "node": "IF has pending replies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "IF has pending replies": {
       "main": [
-        [{ "node": "Telegram: send replies", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Telegram: send replies",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
-    "Telegram: send replies": { "main": [[{ "node": "GitHub: clear OUTBOX.md", "type": "main", "index": 0 }]] }
+    "Telegram: send replies": {
+      "main": [
+        [
+          {
+            "node": "GitHub: clear OUTBOX.md",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "_setup_notes": [
     "NEW workflow, part of the Telegram-control feature (docs/09-automation.md). Purely a fast relay:",
     "fetch captures/replies/OUTBOX.md every 2 minutes, send it to Telegram if it has real content,",
