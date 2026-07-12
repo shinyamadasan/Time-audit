@@ -46,6 +46,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--head);min-height:1
 /* ── Page header ── */
 .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
 .page-title{font-size:11px;font-weight:600;text-transform:none;letter-spacing:0.02em;color:var(--muted);font-family:var(--mono)}
+body:not(.today-details-open) .today-detail{display:none!important}
+#today-details-toggle[aria-pressed="true"]{border-color:rgba(76,199,240,0.45);color:var(--deep);background:var(--deep-dim2)}
 
 /* ── Sync status pill ── */
 .sync-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--mono);
@@ -708,6 +710,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 button.today-health-metric{background:none;border:none;padding:0;text-align:left;cursor:default}
 .today-health-metric.deep{color:var(--deep)}
 .today-health-metric.waste.has-waste,.today-health-metric.wallet.negative{color:var(--distraction)}
+.today-health-metric.wallet.actionable{color:var(--deep)}
 .today-health-metric.unlogged.warn{color:#f9c74f}
 .today-health-metric.actionable{cursor:pointer}
 .today-health-metric.actionable:hover{text-decoration:underline;color:var(--text)}
