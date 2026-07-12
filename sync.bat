@@ -42,18 +42,23 @@ if errorlevel 1 (
 
 echo.
 echo [3/3] Pushing to GitHub (web app)...
-git add index.html *.js *.css CHANGELOG.md Sounds
+:: "www" stages the whole mirrored bundle. The literal "index.html" pathspec only ever matched
+:: the root file, so www\index.html was copied in step 1 but never committed - which is why it
+:: kept needing a manual "mirror to web bundle" commit afterwards.
+git add index.html *.js *.css CHANGELOG.md Sounds www
 git status
 git commit -m "Update app"
 if errorlevel 1 (
-  echo Nothing new to commit - already up to date.
+  echo Nothing new to commit - deploying existing commits.
+)
+:: Push unconditionally. This used to sit in the "else" of the commit above, so whenever there
+:: was nothing new to stage, the script skipped the push entirely and still printed "Done!" -
+:: leaving already-committed work sitting unpushed while it looked like a successful deploy.
+git push origin main
+if errorlevel 1 (
+  echo ERROR: git push failed - check credentials or connection
 ) else (
-  git push origin main
-  if errorlevel 1 (
-    echo ERROR: git push failed - check credentials or connection
-  ) else (
-    echo Pushed to GitHub!
-  )
+  echo Pushed to GitHub!
 )
 
 echo.
