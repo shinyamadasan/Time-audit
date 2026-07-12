@@ -640,15 +640,67 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .quicklog-snooze{width:100%;margin-top:8px;font-size:12px;color:var(--muted2);
   background:none;border:none;cursor:pointer;font-family:var(--head);text-align:center;padding:4px}
 
-/* ── Daily commitment bar ── */
-.commit-bar{background:var(--bg2);border:1px solid var(--border2);box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);
-  padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px}
-.commit-bar.no-goal{border-color:rgba(76,199,240,0.35);cursor:pointer}
-.commit-bar.no-goal .commit-label{color:var(--deep);font-weight:600}
-.commit-bar.no-goal .btn{background:var(--deep-dim);border-color:rgba(76,199,240,0.5);color:var(--deep)}
-.commit-progress{flex:1;height:10px;background:var(--bg4);border-radius:5px;overflow:hidden}
-.commit-fill{height:100%;border-radius:5px;background:var(--deep);transition:width 0.4s}
-.commit-label{font-size:12px;font-family:var(--mono);color:var(--text);white-space:nowrap}
+/* ── Today plan strip ── */
+.plan-strip{background:var(--bg2);border:1px solid var(--border2);box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);
+  padding:11px 13px;margin-bottom:12px}
+.plan-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.plan-title{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700}
+.plan-count{font-size:11px;font-family:var(--mono);color:var(--muted2)}
+.plan-item{display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid var(--border)}
+.plan-item.done .plan-task{color:var(--muted2);text-decoration:line-through}
+.plan-check{width:19px;height:19px;flex-shrink:0;border-radius:5px;border:1px solid var(--border2);background:var(--bg3);
+  color:var(--deep);font-size:11px;line-height:1;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
+.plan-check.ro{cursor:default}
+.plan-item.done .plan-check{border-color:var(--deep);background:var(--deep-dim)}
+.plan-body{flex:1;min-width:0}
+.plan-task{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-when{color:var(--deep);font-weight:600}
+.plan-item.done .plan-when{color:var(--muted2)}
+.plan-meta{margin-top:1px}
+.plan-tracked{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.plan-tracked.on{color:var(--deep)}
+.plan-start,.plan-remove{flex-shrink:0;background:none;border:none;cursor:pointer;padding:3px 5px;font-size:13px;line-height:1}
+.plan-start{color:var(--deep)}
+.plan-remove{color:var(--muted);font-size:11px}
+.plan-add{display:flex;gap:6px;align-items:center;padding-top:8px;border-top:1px solid var(--border)}
+.plan-input{background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);
+  font-family:var(--head);font-size:12px;padding:7px 9px;min-width:0}
+.plan-input.when{flex:0 0 34%}
+.plan-input.task{flex:1}
+.plan-full{padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
+
+/* ── Review: tomorrow's plan picker ── */
+.rv-plan-ref{font-size:11px;color:var(--muted);margin-bottom:7px;font-style:italic}
+.rv-plan-add{display:flex;gap:6px;align-items:center;margin-top:8px}
+.rv-plan-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+.rv-plan-task{flex:1;min-width:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rv-plan-chip-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.rv-plan-chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:999px;color:var(--text);font-family:var(--head);font-size:11px;padding:5px 10px;cursor:pointer;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rv-plan-chip.undone{border-color:rgba(249,199,79,0.45)}
+.rv-plan-chip.week{border-color:rgba(76,199,240,0.45)}
+.rv-chip-tag{font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);flex-shrink:0}
+.rv-plan-chip.undone .rv-chip-tag{color:#f9c74f}
+.rv-plan-chip.week .rv-chip-tag{color:var(--deep)}
+
+/* ── Review: plan vs actual ── */
+.rv-pva{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:10px 12px;margin-bottom:16px}
+.rv-pva-head{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;margin-bottom:7px}
+.rv-pva-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+.rv-pva-mark{width:14px;flex-shrink:0;color:var(--muted);font-size:11px}
+.rv-pva-mark.on{color:var(--deep)}
+.rv-pva-task{flex:1;min-width:0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rv-pva-min{font-family:var(--mono);font-size:10px;color:var(--muted);flex-shrink:0}
+.rv-pva-min.on{color:var(--deep)}
+
+/* ── Quick-log: today's plan chips ── */
+.ql-plan{margin:10px 0}
+.ql-plan-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;margin-bottom:6px}
+.ql-plan-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ql-plan-chip{background:var(--deep-dim);border:1px solid rgba(76,199,240,0.5);border-radius:999px;color:var(--deep);
+  font-family:var(--head);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .today-health{background:var(--bg2);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,0.35);border-radius:var(--r2);
   padding:9px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .today-health-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;flex-shrink:0}
@@ -872,8 +924,8 @@ button, a, [role="button"],
 /* Ring fill */
 .ring-fg { transition: stroke-dashoffset 0.9s cubic-bezier(0.4,0,0.2,1), stroke 0.4s ease; }
 
-/* Commit bar / week progress fill */
-.commit-fill, .week-progress-fill, .reflect-goal-fill, .fbo-progress-fill {
+/* Week progress fill */
+.week-progress-fill, .reflect-goal-fill, .fbo-progress-fill {
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
