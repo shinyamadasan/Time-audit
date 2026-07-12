@@ -668,6 +668,39 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .plan-input.when{flex:0 0 34%}
 .plan-input.task{flex:1}
 .plan-full{padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
+
+/* ── Review: tomorrow's plan picker ── */
+.rv-plan-ref{font-size:11px;color:var(--muted);margin-bottom:7px;font-style:italic}
+.rv-plan-add{display:flex;gap:6px;align-items:center;margin-top:8px}
+.rv-plan-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+.rv-plan-task{flex:1;min-width:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rv-plan-chip-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.rv-plan-chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:999px;color:var(--text);font-family:var(--head);font-size:11px;padding:5px 10px;cursor:pointer;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rv-plan-chip.undone{border-color:rgba(249,199,79,0.45)}
+.rv-plan-chip.week{border-color:rgba(76,199,240,0.45)}
+.rv-chip-tag{font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);flex-shrink:0}
+.rv-plan-chip.undone .rv-chip-tag{color:#f9c74f}
+.rv-plan-chip.week .rv-chip-tag{color:var(--deep)}
+
+/* ── Review: plan vs actual ── */
+.rv-pva{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:10px 12px;margin-bottom:16px}
+.rv-pva-head{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;margin-bottom:7px}
+.rv-pva-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+.rv-pva-mark{width:14px;flex-shrink:0;color:var(--muted);font-size:11px}
+.rv-pva-mark.on{color:var(--deep)}
+.rv-pva-task{flex:1;min-width:0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rv-pva-min{font-family:var(--mono);font-size:10px;color:var(--muted);flex-shrink:0}
+.rv-pva-min.on{color:var(--deep)}
+
+/* ── Quick-log: today's plan chips ── */
+.ql-plan{margin:10px 0}
+.ql-plan-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;margin-bottom:6px}
+.ql-plan-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ql-plan-chip{background:var(--deep-dim);border:1px solid rgba(76,199,240,0.5);border-radius:999px;color:var(--deep);
+  font-family:var(--head);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .today-health{background:var(--bg2);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,0.35);border-radius:var(--r2);
   padding:9px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .today-health-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;flex-shrink:0}
