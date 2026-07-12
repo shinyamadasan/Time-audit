@@ -18,13 +18,13 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://api.github.com/repos/shinyamadasan/Meal-Prep/contents/planning/DIGEST.md",
+        "url": "https://api.github.com/repos/shinyamadasan/Time-audit/contents/planning/DIGEST.md",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             { "name": "Authorization", "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT" },
             { "name": "Accept", "value": "application/vnd.github.raw" },
-            { "name": "User-Agent", "value": "n8n-meal-prep-digest" }
+            { "name": "User-Agent", "value": "n8n-chronasense-digest" }
           ]
         },
         "options": {
@@ -58,13 +58,13 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://api.github.com/repos/shinyamadasan/Meal-Prep/contents/planning/CODEX_READY.md",
+        "url": "https://api.github.com/repos/shinyamadasan/Time-audit/contents/planning/CODEX_READY.md",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             { "name": "Authorization", "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT" },
             { "name": "Accept", "value": "application/vnd.github.raw" },
-            { "name": "User-Agent", "value": "n8n-meal-prep-digest" }
+            { "name": "User-Agent", "value": "n8n-chronasense-digest" }
           ]
         },
         "options": {
