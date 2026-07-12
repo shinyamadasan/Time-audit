@@ -154,14 +154,18 @@ test('tracked minutes are derived from real entries, not the checkbox', async ({
 
   const rows = page.locator('.plan-item');
   // Worked on it -> the app says so, with no manual input at all.
+  await expect(rows.nth(0).locator('.plan-status')).toHaveText('Logged');
+  await expect(rows.nth(0).locator('.plan-status')).toHaveClass(/logged/);
   await expect(rows.nth(0).locator('.plan-tracked')).toHaveText('30m tracked');
   await expect(rows.nth(0).locator('.plan-tracked')).toHaveClass(/on/);
   // Never touched -> honest zero.
+  await expect(rows.nth(1).locator('.plan-status')).toHaveText('Not started');
   await expect(rows.nth(1).locator('.plan-tracked')).toHaveText('0m tracked');
 
   // Ticking "done" on the untouched item does NOT invent tracked time.
   await rows.nth(1).locator('.plan-check').click();
   await expect(rows.nth(1)).toHaveClass(/done/);
+  await expect(rows.nth(1).locator('.plan-status')).toHaveText('Not started');
   await expect(rows.nth(1).locator('.plan-tracked')).toHaveText('0m tracked');
   await expect(page.locator('.plan-count')).toHaveText('1 of 2 done');
 });
@@ -176,6 +180,35 @@ test('one-tap start launches the timer with the planned task', async ({ page }) 
   // `let` globals live in the script's lexical scope, not on window — reference them bare.
   expect(await page.evaluate(() => running)).toBe(true);
   expect(await page.evaluate(() => currentTask)).toBe('Write report');
+  await expect(page.locator('.plan-item').first().locator('.plan-status')).toHaveText('In progress');
+  await expect(page.locator('.plan-item').first()).toHaveClass(/in-progress/);
+  await expect(page.locator('.plan-next')).toHaveText('Working now');
+  await expect(page.locator('.plan-next')).toBeDisabled();
+});
+
+test('start next launches the first unstarted plan item', async ({ page }) => {
+  const start = Date.now() - 60 * 60 * 1000;
+  const end   = Date.now() - 30 * 60 * 1000;
+  const entries = [{
+    id: end, ts: end, tsStart: start, updatedAt: end, blockIntervalMin: 30,
+    date: utcDateKey(start), activity: 'Write report', energy: 'deep',
+    category: 'deep_work', originalLabel: 'deep', onPlan: true, retro: false
+  }];
+
+  await openApp(page, {
+    entries,
+    plans: planFor([{ task: 'Write report' }, { task: 'Gym' }, { task: 'Read paper' }])
+  });
+
+  await expect(page.locator('.plan-item').nth(0).locator('.plan-status')).toHaveText('Logged');
+  await expect(page.locator('.plan-item').nth(1).locator('.plan-status')).toHaveText('Not started');
+  await expect(page.locator('.plan-next')).toHaveText('Start next');
+
+  await page.locator('.plan-next').click();
+
+  await expect(page.locator('#hero-task-name')).toHaveText('Gym');
+  await expect(page.locator('.plan-item').nth(1).locator('.plan-status')).toHaveText('In progress');
+  expect(await page.evaluate(() => currentTask)).toBe('Gym');
 });
 
 test('plan survives a reload and drives the daily target', async ({ page }) => {

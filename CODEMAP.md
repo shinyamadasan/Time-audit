@@ -174,8 +174,9 @@ plan strip (which replaced the old commit-bar), enforces the 3-item WIP cap, wir
 and derives evidence of "done" from actually-tracked entries rather than a self-reported checkbox.
 Functions: `planTodayKey()`, `normalizePlanTask()`, `getPlanItems()`, `getPlanItemsRaw()`,
 `syncCommitmentFromPlan()`, `syncIntentionFromPlan()`, `inferPlanEnergy()`, `savePlanItems()`,
-`planTrackedMin()`, `fmtPlanMin()`, `renderTodayPlan()`, `addPlanItem()`, `removePlanItem()`,
-`togglePlanDone()`, `startPlanItem()`
+`planTrackedMin()`, `fmtPlanMin()`, `isPlanTaskActive()`, `getPlanItemStatus()`,
+`getActivePlanItem()`, `getNextPlanItem()`, `renderTodayPlan()`, `addPlanItem()`,
+`removePlanItem()`, `togglePlanDone()`, `startPlanItem()`, `startNextPlanItem()`
 Variables: `PLAN_MAX` (3), `plans` (state global)
 Depends on: `getEntriesForDateWindow()`, `entryDurationMinutes()`, `getViewingDateKey()`,
 `isViewingToday()`, `getDateInTZ()`, `_startTimer()`, `switchToTask()`, `persist()`,
