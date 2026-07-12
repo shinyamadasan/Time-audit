@@ -26,7 +26,7 @@
 ### storage.js
 Lines: external file
 Purpose: All localStorage/Firebase persistence, data loading, debounced Today rendering, and cross-device sync helpers with throttled sync-failure feedback.
-Functions: `persist()`, `scheduleRenderToday()`, `notifySyncWriteFailed()`, `resolveEntrySync()`, `syncEntries()`, `syncFocusRedemptions()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
+Functions: `persist()`, `scheduleRenderToday()`, `notifySyncWriteFailed()`, `resolveEntrySync()`, `syncEntries()`, `syncFocusRedemptions()`, `syncPlans()`, `normalizePlanItems()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
 Variables: `_renderTodayPending`, `_lastSyncErrorToastAt`
 Depends on: Firebase SDK globals, `focusRedemptions` global, `sumEnergyMinutes()`
 
@@ -103,9 +103,9 @@ Depends on: —
 
 ## [HTML — Overlays & Modals]
 Lines: 1616–1812
-Purpose: Sign-in overlay, bottom nav, quick-log ping modal, pre-commit modal (task naming before starting timer), daily commitment modal, Focus Wallet reward-log modal.
+Purpose: Sign-in overlay, bottom nav, quick-log ping modal, pre-commit modal (task naming before starting timer), Focus Wallet reward-log modal.
 Functions: —
-Key IDs: `signin-overlay`, `nav`, `quicklog-overlay`, `precommit-overlay`, `commitment-overlay`, `focus-wallet-overlay`
+Key IDs: `signin-overlay`, `nav`, `quicklog-overlay`, `precommit-overlay`, `focus-wallet-overlay`
 Depends on: —
 
 ## [HTML — Focus Mode Overlays]
@@ -161,12 +161,29 @@ Functions: `stopAlertLoop()`, `showPingBanner()`, `hidePingBanner()`, `doPing()`
 Variables: `alertLoop`, `qlEnergy`, `quickLogBusy`, `snoozesUsedToday`, `snoozeTimer`, `_feedbackTimer`
 Depends on: Timer section, State globals, `persist()`, `syncEntries()`, `entries`, `renderToday()`, `showToast()`, Native notifications section
 
-## [Daily Commitment / Goal]
-Lines: 2145–2158
-Purpose: Set and save the daily deep-work goal (number of blocks).
-Functions: `setDailyCommitment()`, `setCommitmentQuick()`, `saveCommitment()`
-Variables: `dailyCommitment`
-Depends on: `persist()`, `renderToday()`
+## [Today Plan]
+Lines: ~5050–5190
+Purpose: The 1–3 daily intentions that drive execution — the single daily target. Renders the
+plan strip (which replaced the old commit-bar), enforces the 3-item WIP cap, wires one-tap start,
+and derives evidence of "done" from actually-tracked entries rather than a self-reported checkbox.
+Functions: `planTodayKey()`, `normalizePlanTask()`, `getPlanItems()`, `getPlanItemsRaw()`,
+`syncCommitmentFromPlan()`, `savePlanItems()`, `planTrackedMin()`, `fmtPlanMin()`,
+`renderTodayPlan()`, `addPlanItem()`, `removePlanItem()`, `togglePlanDone()`, `startPlanItem()`
+Variables: `PLAN_MAX` (3), `plans` (state global)
+Depends on: `getEntriesForDateWindow()`, `entryDurationMinutes()`, `getViewingDateKey()`,
+`isViewingToday()`, `getDateInTZ()`, `_startTimer()`, `switchToTask()`, `persist()`,
+`showToast()`, `syncPlans()` + `normalizePlanItems()` (storage.js)
+
+⚠ `renderTodayPlan()` is called **directly** by every mutation — never routed through
+`renderToday()`, whose `_todayRenderKey` cache only tracks entries and would silently swallow
+plan edits.
+
+⚠ Removed items are **tombstoned** (`deleted:true`), not spliced — a hard delete gets resurrected
+by the per-item sync merge on the next inbound snapshot.
+
+⚠ `dailyCommitment` is now **derived** (= today's plan item count), not user-set; the daily
+commitment modal was retired (the plan is the target). `focus-mode.js:110` still reads
+`dailyCommitment` for the focus deep bar, so the global must keep existing.
 
 ## [Focus Wallet]
 Lines: 2173–2353
@@ -227,7 +244,7 @@ Depends on: `settings`, `persist()`
 ## [Timeline Helpers]
 Lines: 3706–3853
 Purpose: Work-day start detection, timeline display preprocessing — overlap clipping, consecutive-entry merging, gap computation, scroll-to.
-Functions: `getWorkDayStartTs()`, `clipOverlapsForDisplay()`, `mergeConsecutiveForDisplay()`, `computeGaps()`, `scrollToTimeline()`, `localTime()`
+Functions: `getWorkDayStartTs()`, `clipOverlapsForDisplay()`, `mergeConsecutiveForDisplay()`, `computeGaps()`, `scrollToTimeline()`, `scrollToFirstEnergy()`, `localTime()`
 Variables: —
 Depends on: `entries`, `settings` (timezone)
 
@@ -410,7 +427,9 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Break timer (5/15/30 min breaks) | Break Tracking | 2477–2554 |
 | Ping sound / ping modal (same-as-last, quick chips) | Ping & Quick-Log Modal | 2555–2960 |
 | Behavioral feedback flash after logging | Ping & Quick-Log Modal | 2555–2960 |
-| Daily deep-work goal / commitment | Daily Commitment / Goal | 2961–2984 |
+| Today's 1–3 plan / plan strip / WIP cap | Today Plan | ~5050–5190 |
+| Daily target (now = plan item count) | Today Plan → `syncCommitmentFromPlan()` | ~5080 |
+| Plan-vs-actual tracked minutes | Today Plan → `planTrackedMin()` | ~5095 |
 | Focus Wallet points / weekend rewards | Focus Wallet + focus-wallet.js | 2173–2353 + EXTRACTED |
 | Crash/heartbeat recovery on reopen | Heartbeat / Session Persistence | 2985–3065 |
 | Tab switching (Today / Week / Reflect / Settings) | View Management | 3066–3083 |

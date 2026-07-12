@@ -226,19 +226,14 @@
 
   </div>
 
-  <!-- Daily commitment bar -->
-  <div class="commit-bar" id="commit-bar">
-    <div style="font-size:12px;color:var(--muted);flex-shrink:0">Goal</div>
-    <div class="commit-progress"><div class="commit-fill" id="commit-fill" style="width:0%"></div></div>
-    <div class="commit-label" id="commit-label">0 / 0</div>
-    <button class="btn sm ghost" style="flex-shrink:0;font-size:11px" onclick="setDailyCommitment()">Set</button>
-  </div>
+  <!-- Today's plan (1-3 intentions) -->
+  <div class="plan-strip" id="plan-strip"></div>
 
   <!-- Today health -->
   <div class="today-health" id="today-health" aria-live="polite">
     <span class="today-health-label" id="th-label">Today health</span>
     <span class="today-health-metric deep" id="th-deep">0m deep</span>
-    <span class="today-health-metric waste" id="th-waste">0m waste</span>
+    <button type="button" class="today-health-metric waste" id="th-waste" onclick="scrollToFirstEnergy('waste','distraction')">0m waste</button>
     <span class="today-health-metric wallet" id="th-wallet">0 pts</span>
     <button type="button" class="today-health-metric unlogged" id="th-unlogged" onclick="scrollToTimeline()">0m unlogged</button>
   </div>
@@ -1138,28 +1133,6 @@
   </div>
 </div></div>
 
-<!-- ══ DAILY COMMITMENT MODAL ══ -->
-<div class="overlay" id="commitment-overlay" onclick="overlayClose(event,'commitment-overlay')">
-<div class="modal">
-  <div class="modal-handle"></div>
-  <div class="modal-tag">DAILY GOAL</div>
-  <div class="modal-title">How many deep blocks today?</div>
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px">
-    <button class="btn" onclick="setCommitmentQuick(4)">4</button>
-    <button class="btn" onclick="setCommitmentQuick(6)">6</button>
-    <button class="btn" onclick="setCommitmentQuick(8)">8</button>
-    <button class="btn" onclick="setCommitmentQuick(10)">10</button>
-  </div>
-  <div class="field">
-    <label>Custom number</label>
-    <input type="number" id="commitment-custom" min="1" max="20" placeholder="e.g. 6">
-  </div>
-<div style="display:flex;gap:8px;margin-top:16px">
-    <button class="btn ghost flex-1" onclick="closeModal('commitment-overlay')">Cancel</button>
-    <button class="btn primary flex-1" onclick="saveCommitment()">Commit</button>
-  </div>
-</div></div>
-
 <!-- ══ FOCUS WALLET MODAL ══ -->
 <div class="overlay" id="focus-wallet-overlay" onclick="overlayClose(event,'focus-wallet-overlay')">
 <div class="modal">
@@ -1333,7 +1306,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-11-health-jump-1';
+const APP_BUILD = '2026-07-11-health-waste-jump-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1372,7 +1345,8 @@ let snoozesUsedToday = 0;
 let snoozeTimer = null;
 let quickLogBusy = false;
 let switchingTask = false;
-let dailyCommitment = 0;
+let dailyCommitment = 0;   // derived from today's plan item count — see syncCommitmentFromPlan()
+let plans = {};            // { '<dateKey>': { items: [{id,task,when,done,doneAt,deleted,updatedAt}], updatedAt } }
 let lastTaskForRepeat = '';
 let breakActive = false;
 let breakEndsAt = null;
@@ -2300,22 +2274,6 @@ function fireBehavioralFeedback(entry, todayE) {
 }
 
 // analyzeBehavior, renderFeedbackFlash, dismissFeedbackFlash, checkEscalation — moved to insights.js
-
-function setDailyCommitment() {
-  document.getElementById('commitment-custom').value = dailyCommitment || '';
-  document.getElementById('commitment-overlay').classList.add('open');
-}
-function setCommitmentQuick(n) {
-  document.getElementById('commitment-custom').value = n;
-}
-function saveCommitment() {
-  const n = parseInt(document.getElementById('commitment-custom').value);
-  if (isNaN(n) || n < 1) { showToast('Enter a valid number'); return; }
-  dailyCommitment = n;
-  persist(); scheduleRenderToday();
-  closeModal('commitment-overlay');
-  showToast(`Committed to ${n} deep blocks today`);
-}
 
 function getCurrentFocusWallet() {
   if (typeof computeFocusWallet !== 'function') return null;
@@ -3519,6 +3477,18 @@ function scrollToTimeline() {
   document.getElementById('timeline-blocks').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function scrollToFirstEnergy(...energies) {
+  const safeEnergies = energies.filter(e => /^[a-z0-9_-]+$/i.test(String(e)));
+  const selector = safeEnergies.map(e => `.tl-row[data-energy="${e}"]`).join(',');
+  const row = selector ? document.querySelector(`#timeline-blocks ${selector}`) : null;
+  if (!row) { scrollToTimeline(); return; }
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.classList.remove('tl-row-focus');
+  void row.offsetWidth;
+  row.classList.add('tl-row-focus');
+  setTimeout(() => row.classList.remove('tl-row-focus'), 1400);
+}
+
 
 function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
   editingEntryId = null;
@@ -3687,7 +3657,7 @@ function renderEntryRow(item) {
       const rClick    = subActivity
         ? `openEditEntry(${subs.find(s => s.activity === subActivity && (s.tsStart||s.ts) === tStart)?.id || item.id})`
         : editCall;
-      return `<div class="tl-row" data-entry-id="${item.id}" onclick="${rClick}" style="cursor:pointer">
+      return `<div class="tl-row" data-entry-id="${item.id}" data-energy="${energyClass}" onclick="${rClick}" style="cursor:pointer">
         <div class="tl-time">${localTime(tStart)}</div>
         <div class="tl-bar-col ${rClass}" ${rBarStyle}></div>
         <div class="tl-content">
@@ -3714,7 +3684,7 @@ function renderEntryRow(item) {
   const projectPill = item.project
     ? ` · <span style="font-size:10px;padding:1px 5px;border-radius:3px;background:var(--bg3);color:var(--muted)">${item.project}</span>`
     : '';
-  return `<div class="tl-row" data-entry-id="${item.id}" onclick="${editCall}" style="cursor:pointer">
+  return `<div class="tl-row" data-entry-id="${item.id}" data-energy="${energyClass}" onclick="${editCall}" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
@@ -3881,6 +3851,9 @@ function renderTodayHealth(todayE) {
   const wasteEl = document.getElementById('th-waste');
   wasteEl.textContent = `${fmtDur(health.wasteMin)} waste`;
   wasteEl.classList.toggle('has-waste', health.wasteMin > 0);
+  wasteEl.classList.toggle('actionable', health.wasteMin > 0);
+  wasteEl.disabled = health.wasteMin <= 0;
+  wasteEl.title = health.wasteMin > 0 ? 'Jump to waste entries' : '';
 
   const walletEl = document.getElementById('th-wallet');
   if (isToday && health.walletBalance !== null) {
@@ -4480,19 +4453,7 @@ function renderToday() {
     if (identSubEl) identSubEl.textContent = `${3 - identScore} deep block${3 - identScore === 1 ? '' : 's'} to Trying`;
   }
 
-  // Daily commitment bar
-  if (dailyCommitment > 0) {
-    const pct = Math.min(100, Math.round(deepCount / dailyCommitment * 100));
-    document.getElementById('commit-fill').style.width = pct + '%';
-    document.getElementById('commit-label').textContent = `${deepCount} / ${dailyCommitment} deep`;
-    document.getElementById('commit-bar').style.display = 'flex';
-    document.getElementById('commit-bar').classList.remove('no-goal');
-  } else {
-    document.getElementById('commit-bar').style.display = 'flex';
-    document.getElementById('commit-fill').style.width = '0%';
-    document.getElementById('commit-label').textContent = 'Set your daily goal';
-    document.getElementById('commit-bar').classList.add('no-goal');
-  }
+  renderTodayPlan();
   renderFocusWallet();
   renderTodayHealth(todayE);
   perfStageStart = recordPerfStage('renderTodayData', perfStageStart);
@@ -5043,6 +5004,168 @@ function quickLogSleep() {
 
 
 // generateInsights, renderAwarenessSignal — moved to insights.js
+
+// ══════════════════════════════════════════════════════
+// TODAY PLAN — the 1-3 intentions that drive the day
+// ══════════════════════════════════════════════════════
+const PLAN_MAX = 3;
+
+function planTodayKey() {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return getDateInTZ(Date.now(), tz);
+}
+
+/** Strip the "(Output: …)" suffix the pre-commit modal appends, so a planned task still
+ *  matches the entry it produced. Same idiom as buildHeroSuggestions(). */
+function normalizePlanTask(s) {
+  return String(s || '').split(' (Output:')[0].trim().toLowerCase();
+}
+
+function getPlanItems(dateKey) {
+  return normalizePlanItems(plans[dateKey] && plans[dateKey].items).filter(i => !i.deleted);
+}
+
+/** Removed items are tombstoned, not spliced — a hard delete would be resurrected by the
+ *  per-item sync merge on the next inbound snapshot. */
+function getPlanItemsRaw(dateKey) {
+  return normalizePlanItems(plans[dateKey] && plans[dateKey].items);
+}
+
+/** The plan IS the daily target — focus-mode's deep bar reads dailyCommitment. */
+function syncCommitmentFromPlan() {
+  dailyCommitment = getPlanItems(planTodayKey()).length;
+}
+
+function savePlanItems(dateKey, items) {
+  plans[dateKey] = { items, updatedAt: Date.now() };
+  syncCommitmentFromPlan();
+  persist();
+  if (typeof syncPlans === 'function') syncPlans(dateKey);
+  renderTodayPlan();
+}
+
+/** Minutes actually tracked against a planned task — the honest signal a checkbox can't fake. */
+function planTrackedMin(task, dateKey) {
+  const target = normalizePlanTask(task);
+  if (!target) return 0;
+  return getEntriesForDateWindow(dateKey)
+    .filter(e => !e.missed && !e.deleted && !e.away && !e.break && e.activity
+                 && normalizePlanTask(e.activity) === target)
+    .reduce((sum, e) => sum + entryDurationMinutes(e), 0);
+}
+
+function fmtPlanMin(m) {
+  return m >= 60 ? (m / 60).toFixed(1) + 'h' : m + 'm';
+}
+
+// Called directly by every plan mutation — never routed through renderToday(), whose
+// _todayRenderKey cache only tracks entries and would silently swallow plan edits.
+function renderTodayPlan() {
+  const el = document.getElementById('plan-strip');
+  if (!el) return;
+  syncCommitmentFromPlan();
+
+  const dateKey  = getViewingDateKey();
+  const readOnly = !isViewingToday();
+  const items    = getPlanItems(dateKey);
+
+  if (readOnly && !items.length) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+
+  const doneCount = items.filter(i => i.done).length;
+  const esc  = s => String(s).replace(/</g, '&lt;');
+  const attr = s => String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+  const head = `<div class="plan-head">
+      <span class="plan-title">${readOnly ? 'Planned that day' : 'Today'}</span>
+      <span class="plan-count">${items.length ? `${doneCount} of ${items.length} done` : `pick up to ${PLAN_MAX}`}</span>
+    </div>`;
+
+  const rows = items.map(it => {
+    const mins    = planTrackedMin(it.task, dateKey);
+    const tracked = `<span class="plan-tracked${mins > 0 ? ' on' : ''}">${fmtPlanMin(mins)} tracked</span>`;
+    const when    = it.when ? `<span class="plan-when">${esc(it.when)} →</span> ` : '';
+    const check   = readOnly
+      ? `<span class="plan-check ro">${it.done ? '✓' : ''}</span>`
+      : `<button class="plan-check" onclick="togglePlanDone('${it.id}')" title="Mark done">${it.done ? '✓' : ''}</button>`;
+    const actions = readOnly ? '' : `
+        <button class="plan-start" onclick="startPlanItem('${it.id}')" title="Start this">▸</button>
+        <button class="plan-remove" onclick="removePlanItem('${it.id}')" title="Remove">✕</button>`;
+    return `<div class="plan-item${it.done ? ' done' : ''}">
+        ${check}
+        <div class="plan-body">
+          <div class="plan-task" title="${attr(it.task)}">${when}${esc(it.task)}</div>
+          <div class="plan-meta">${tracked}</div>
+        </div>${actions}
+      </div>`;
+  }).join('');
+
+  let footer = '';
+  if (!readOnly) {
+    footer = items.length >= PLAN_MAX
+      ? `<div class="plan-full">${PLAN_MAX} of ${PLAN_MAX} — finish or remove one to add another.</div>`
+      : `<div class="plan-add">
+          <input id="plan-when" class="plan-input when" maxlength="40" placeholder="when (optional)">
+          <input id="plan-task" class="plan-input task" maxlength="80" placeholder="what will you do?"
+                 onkeydown="if(event.key==='Enter')addPlanItem()">
+          <button class="btn sm" onclick="addPlanItem()">Add</button>
+        </div>`;
+  }
+
+  el.innerHTML = head + rows + footer;
+}
+
+function addPlanItem() {
+  if (!isViewingToday()) return;
+  const dateKey = planTodayKey();
+  const raw     = getPlanItemsRaw(dateKey).slice();
+  if (getPlanItems(dateKey).length >= PLAN_MAX) {
+    showToast(`${PLAN_MAX} is the cap — remove one first`);
+    return;
+  }
+  const taskEl = document.getElementById('plan-task');
+  const whenEl = document.getElementById('plan-when');
+  const task   = (taskEl ? taskEl.value : '').trim();
+  if (!task) { showToast('What will you do?'); if (taskEl) taskEl.focus(); return; }
+
+  raw.push({
+    id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    task,
+    when: (whenEl ? whenEl.value : '').trim(),
+    done: false,
+    doneAt: null,
+    updatedAt: Date.now()
+  });
+  savePlanItems(dateKey, raw);
+}
+
+function removePlanItem(id) {
+  if (!isViewingToday()) return;
+  const dateKey = planTodayKey();
+  const raw = getPlanItemsRaw(dateKey).map(i =>
+    i.id === id ? { ...i, deleted: true, updatedAt: Date.now() } : i
+  );
+  savePlanItems(dateKey, raw);
+}
+
+function togglePlanDone(id) {
+  if (!isViewingToday()) return;
+  const dateKey = planTodayKey();
+  const raw = getPlanItemsRaw(dateKey).map(i => {
+    if (i.id !== id) return i;
+    const done = !i.done;
+    return { ...i, done, doneAt: done ? Date.now() : null, updatedAt: Date.now() };
+  });
+  savePlanItems(dateKey, raw);
+}
+
+// Mirrors useChip() — reuses the existing timer entry points rather than adding new ones.
+function startPlanItem(id) {
+  const it = getPlanItems(planTodayKey()).find(x => x.id === id);
+  if (!it) return;
+  if (running) switchToTask(it.task);
+  else _startTimer(it.task);
+}
 
 // ══════════════════════════════════════════════════════
 // RECENT TASK CHIPS
