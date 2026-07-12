@@ -1324,7 +1324,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-12-focus-today-1';
+const APP_BUILD = '2026-07-12-plan-progress-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -5169,6 +5169,29 @@ function fmtPlanMin(m) {
   return m >= 60 ? (m / 60).toFixed(1) + 'h' : m + 'm';
 }
 
+function isPlanTaskActive(task) {
+  return running && normalizePlanTask(currentTask) === normalizePlanTask(task);
+}
+
+function getPlanItemStatus(item, dateKey, trackedMin) {
+  if (isPlanTaskActive(item.task)) return { key: 'in-progress', label: 'In progress' };
+  if (trackedMin > 0) return { key: 'logged', label: 'Logged' };
+  return { key: 'not-started', label: 'Not started' };
+}
+
+function getActivePlanItem(dateKey) {
+  return getPlanItems(dateKey).find(item => isPlanTaskActive(item.task)) || null;
+}
+
+function getNextPlanItem(dateKey) {
+  const items = getPlanItems(dateKey);
+  const active = getActivePlanItem(dateKey);
+  if (active) return active;
+  return items.find(item => !item.done && planTrackedMin(item.task, dateKey) === 0)
+      || items.find(item => !item.done)
+      || null;
+}
+
 // Called directly by every plan mutation — never routed through renderToday(), whose
 // _todayRenderKey cache only tracks entries and would silently swallow plan edits.
 function renderTodayPlan() {
@@ -5187,27 +5210,39 @@ function renderTodayPlan() {
   const doneCount = items.filter(i => i.done).length;
   const esc  = s => String(s).replace(/</g, '&lt;');
   const attr = s => String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const nextItem = readOnly || !items.length ? null : getNextPlanItem(dateKey);
+  const nextIsActive = !!(nextItem && isPlanTaskActive(nextItem.task));
+  const nextLabel = !nextItem ? 'All clear' : nextIsActive ? 'Working now' : 'Start next';
+  const nextAction = !readOnly && items.length
+    ? `<button class="plan-next" onclick="startNextPlanItem()" ${!nextItem || nextIsActive ? 'disabled' : ''}>${nextLabel}</button>`
+    : '';
 
   const head = `<div class="plan-head">
-      <span class="plan-title">${readOnly ? 'Planned that day' : 'Today'}</span>
-      <span class="plan-count">${items.length ? `${doneCount} of ${items.length} done` : `pick up to ${PLAN_MAX}`}</span>
+      <div class="plan-head-text">
+        <span class="plan-title">${readOnly ? 'Planned that day' : 'Today'}</span>
+        <span class="plan-count">${items.length ? `${doneCount} of ${items.length} done` : `pick up to ${PLAN_MAX}`}</span>
+      </div>
+      ${nextAction}
     </div>`;
 
   const rows = items.map(it => {
     const mins    = planTrackedMin(it.task, dateKey);
+    const status  = getPlanItemStatus(it, dateKey, mins);
+    const active  = status.key === 'in-progress';
+    const statusPill = `<span class="plan-status ${status.key}">${status.label}</span>`;
     const tracked = `<span class="plan-tracked${mins > 0 ? ' on' : ''}">${fmtPlanMin(mins)} tracked</span>`;
     const when    = it.when ? `<span class="plan-when">${esc(it.when)} →</span> ` : '';
     const check   = readOnly
       ? `<span class="plan-check ro">${it.done ? '✓' : ''}</span>`
       : `<button class="plan-check" onclick="togglePlanDone('${it.id}')" title="Mark done">${it.done ? '✓' : ''}</button>`;
     const actions = readOnly ? '' : `
-        <button class="plan-start" onclick="startPlanItem('${it.id}')" title="Start this">▸</button>
+        <button class="plan-start" onclick="startPlanItem('${it.id}')" title="${active ? 'Already tracking' : 'Start this'}" ${active ? 'disabled' : ''}>${active ? '●' : '▸'}</button>
         <button class="plan-remove" onclick="removePlanItem('${it.id}')" title="Remove">✕</button>`;
-    return `<div class="plan-item${it.done ? ' done' : ''}">
+    return `<div class="plan-item ${status.key}${it.done ? ' done' : ''}">
         ${check}
         <div class="plan-body">
           <div class="plan-task" title="${attr(it.task)}">${when}${esc(it.task)}</div>
-          <div class="plan-meta">${tracked}</div>
+          <div class="plan-meta">${statusPill}${tracked}</div>
         </div>${actions}
       </div>`;
   }).join('');
@@ -5272,11 +5307,20 @@ function togglePlanDone(id) {
 }
 
 // Mirrors useChip() — reuses the existing timer entry points rather than adding new ones.
-function startPlanItem(id) {
+async function startPlanItem(id) {
   const it = getPlanItems(planTodayKey()).find(x => x.id === id);
   if (!it) return;
   if (running) switchToTask(it.task);
-  else _startTimer(it.task);
+  else await _startTimer(it.task);
+  renderTodayPlan();
+}
+
+async function startNextPlanItem() {
+  if (!isViewingToday()) return;
+  const next = getNextPlanItem(planTodayKey());
+  if (!next) { showToast('Plan is already clear'); return; }
+  if (isPlanTaskActive(next.task)) { showToast('Already working this plan item'); return; }
+  await startPlanItem(next.id);
 }
 
 // ══════════════════════════════════════════════════════
