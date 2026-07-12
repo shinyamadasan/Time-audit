@@ -93,13 +93,24 @@ function utcDateKey(ts) {
   return new Date(ts).toISOString().slice(0, 10);
 }
 
-async function openApp(page, { entries = [], focusRedemptions = [], settings = {} } = {}) {
+async function openApp(page, { entries = [], focusRedemptions = [], settings = {}, nowTs = null } = {}) {
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({
     status: 200,
     contentType: 'application/javascript',
     body: firebaseStub
   }));
-  await page.addInitScript(({ entries, focusRedemptions, settings }) => {
+  await page.addInitScript(({ entries, focusRedemptions, settings, nowTs }) => {
+    if (nowTs) {
+      const RealDate = Date;
+      window.Date = class MockDate extends RealDate {
+        constructor(...args) {
+          super(...(args.length ? args : [nowTs]));
+        }
+        static now() {
+          return nowTs;
+        }
+      };
+    }
     localStorage.clear();
     sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1');
@@ -111,7 +122,8 @@ async function openApp(page, { entries = [], focusRedemptions = [], settings = {
   }, {
     entries,
     focusRedemptions,
-    settings: baseSettings(settings)
+    settings: baseSettings(settings),
+    nowTs
   });
   await page.goto(APP_URL);
   await page.waitForFunction(() => typeof window.quickRetroLog === 'function' && !!document.getElementById('timeline-blocks'));
@@ -198,8 +210,8 @@ test('focus wallet spend can be undone without leaving point debt', async ({ pag
 });
 
 test('today health shows compact daily accounting', async ({ page }) => {
-  const now = new Date();
-  const todayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const nowTs = Date.UTC(2026, 6, 10, 12, 0, 0);
+  const todayStart = Date.UTC(2026, 6, 10);
   const deepStart = todayStart + 9 * 60 * 60 * 1000;
   const deepEnd = deepStart + 60 * 60 * 1000;
   const wasteEnd = deepEnd + 20 * 60 * 1000;
@@ -233,7 +245,7 @@ test('today health shows compact daily accounting', async ({ page }) => {
       retro: true
     }
   ];
-  await openApp(page, { entries });
+  await openApp(page, { entries, nowTs });
 
   await expect(page.locator('#today-health')).toContainText('Today health');
   await expect(page.locator('#th-deep')).toHaveText('1h deep');
@@ -243,6 +255,12 @@ test('today health shows compact daily accounting', async ({ page }) => {
 
   await page.locator('#th-unlogged').click();
   await expect(page.locator('#timeline-blocks')).toBeInViewport({ ratio: 0.1 });
+
+  await page.locator('#today-health').scrollIntoViewIfNeeded();
+  await page.locator('#th-waste').click();
+  const wasteRow = page.locator('#timeline-blocks .tl-row[data-energy="waste"]').first();
+  await expect(wasteRow).toBeInViewport({ ratio: 0.1 });
+  await expect(wasteRow).toHaveClass(/tl-row-focus/);
 });
 
 test('crossing-day entries are clipped instead of displayed as one 28h block', async ({ page }) => {
