@@ -51,13 +51,13 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "=https://api.github.com/repos/shinyamadasan/Meal-Prep/contents/{{ $json.path }}",
+        "url": "=https://api.github.com/repos/shinyamadasan/Time-audit/contents/{{ $json.path }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             { "name": "Authorization", "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT" },
             { "name": "Accept", "value": "application/vnd.github+json" },
-            { "name": "User-Agent", "value": "n8n-meal-prep-capture" }
+            { "name": "User-Agent", "value": "n8n-chronasense-capture" }
           ]
         },
         "sendBody": true,
