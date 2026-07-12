@@ -84,7 +84,7 @@ Depends on: —
 Lines: 1020–1332
 Purpose: All markup for the Today tab: header with date picker, status banner, day bar, hero section (idle/active/away states), commit bar, Today Health strip, Focus Wallet card, same-as-last CTA, sleep pill, quick-retro bar, awareness signal, timeline, stat cards, recent entries list.
 Functions: —
-Key IDs: `view-today`, `today-date`, `date-picker-dropdown`, `status-banner`, `day-bar`, `activity-hero`, `hero-idle`, `hero-active`, `hero-away`, `commit-bar`, `today-health`, `focus-wallet-card`, `same-as-last-btn`, `sleep-pill-btn`, `quick-retro-bar`, `awareness-signal`, `timeline-section`, `timeline-blocks`, `timeline-date-label`, `timeline-summary`, `recent-list`
+Key IDs: `view-today`, `today-date`, `date-picker-dropdown`, `today-details-toggle`, `status-banner`, `day-bar`, `activity-hero`, `hero-idle`, `hero-active`, `hero-away`, `commit-bar`, `today-health`, `focus-wallet-card`, `same-as-last-btn`, `sleep-pill-btn`, `quick-retro-bar`, `awareness-signal`, `timeline-section`, `timeline-blocks`, `timeline-date-label`, `timeline-summary`, `recent-list`
 Depends on: —
 
 ## [HTML — Week / Reflect / Settings Views]
@@ -258,7 +258,7 @@ Depends on: `entries`, `settings` (timezone)
 ## [Today View — Rendering]
 Lines: 3932–4377
 Purpose: Main `renderToday()` and all its sub-renders: day bar, status banner, Today Health strip, Focus Wallet card, timeline (blocks + gaps), stat cards, recent entries list, contextual-visibility rules, hero state machine, same-as-last CTA, awareness signal, side-panel refresh trigger, render performance checkpoints.
-Functions: `renderToday()`, `shouldRenderOnDateTick()`, `renderTodayOnDateChange()`, `computeTodayHealth()`, `renderTodayHealth()`, `renderDayBar()`, `renderStatusBanner()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderSidePanel()`, `renderLeftPanel()`
+Functions: `renderToday()`, `isTodayDetailsOpen()`, `applyTodayDetailsMode()`, `toggleTodayDetails()`, `shouldRenderOnDateTick()`, `renderTodayOnDateChange()`, `computeTodayHealth()`, `renderTodayHealth()`, `renderDayBar()`, `renderStatusBanner()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderSidePanel()`, `renderLeftPanel()`
 Variables: `_todayRenderKey`, `_lastTodayDateKey`, `_lastLoggedEntryId`
 Depends on: Timeline helpers, Statistics (including `sumEntryMinutes()` / `sumEnergyMinutes()`), Entry logging, Date picker, Focus Wallet, `persist()`
 

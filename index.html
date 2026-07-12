@@ -34,6 +34,8 @@
       </button>
     </div>
     <div style="display:flex;gap:6px;align-items:center;position:relative">
+      <button class="btn sm" id="today-details-toggle" onclick="toggleTodayDetails()" aria-pressed="false"
+        style="padding:7px 12px">Details</button>
       <button class="btn sm" onclick="enterFocusMode()" title="Focus mode"
         style="padding:7px 12px;border-color:rgba(76,199,240,0.3);color:var(--deep);background:var(--deep-dim2)">⊙ Focus</button>
       <button class="hdr-more-btn" id="hdr-more-btn" onclick="toggleHdrMenu()"
@@ -69,7 +71,7 @@
   <button id="break-btn" style="display:none"></button>
 
   <!-- ── Status banner ── -->
-  <div id="status-banner" style="display:none;align-items:center;justify-content:space-between;gap:12px;border-radius:14px;padding:13px 16px;margin-bottom:14px;flex-wrap:wrap">
+  <div id="status-banner" class="today-detail" style="display:none;align-items:center;justify-content:space-between;gap:12px;border-radius:14px;padding:13px 16px;margin-bottom:14px;flex-wrap:wrap">
     <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
       <div>
         <div class="sb-val" id="sb-deep-val">—</div>
@@ -90,10 +92,10 @@
   </div>
 
   <!-- ── Day bar ── -->
-  <div id="day-bar" style="display:none;margin-bottom:16px"></div>
+  <div id="day-bar" class="today-detail" style="display:none;margin-bottom:16px"></div>
 
   <!-- Daily Summary Card -->
-  <div class="daily-summary" id="daily-summary" style="display:none"></div>
+  <div class="daily-summary today-detail" id="daily-summary" style="display:none"></div>
 
   <!-- ── Activity Hero ── -->
   <div class="activity-hero" id="activity-hero">
@@ -234,12 +236,12 @@
     <span class="today-health-label" id="th-label">Today health</span>
     <span class="today-health-metric deep" id="th-deep">0m deep</span>
     <button type="button" class="today-health-metric waste" id="th-waste" onclick="scrollToFirstEnergy('waste','distraction')">0m waste</button>
-    <span class="today-health-metric wallet" id="th-wallet">0 pts</span>
+    <button type="button" class="today-health-metric wallet" id="th-wallet" onclick="openFocusWallet()">0 pts</button>
     <button type="button" class="today-health-metric unlogged" id="th-unlogged" onclick="scrollToTimeline()">0m unlogged</button>
   </div>
 
   <!-- Focus wallet -->
-  <div id="focus-wallet-card" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:14px;padding:12px;margin-bottom:12px">
+  <div id="focus-wallet-card" class="today-detail" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:14px;padding:12px;margin-bottom:12px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px">
       <div>
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700">Focus wallet</div>
@@ -262,7 +264,7 @@
   </div>
 
   <!-- Accountability partner card -->
-  <div id="partner-card" style="display:none"></div>
+  <div id="partner-card" class="today-detail" style="display:none"></div>
 
   <!-- Continue banner removed — auto-logging handles this now -->
   <div class="continue-banner" id="continue-banner" style="display:none">
@@ -319,7 +321,7 @@
   <div id="retro-waste-hint" style="display:none"></div>
 
   <!-- Awareness Signal -->
-  <div id="awareness-signal" style="display:none"></div>
+  <div id="awareness-signal" class="today-detail" style="display:none"></div>
 
 
 
@@ -338,7 +340,7 @@
   </div>
 
   <!-- Simplified stat row -->
-  <div style="display:flex;gap:8px;margin-bottom:12px">
+  <div class="today-detail" style="display:flex;gap:8px;margin-bottom:12px">
     <div class="stat-card highlight" style="flex:1;text-align:center">
       <div class="s-label">Deep blocks</div>
       <div class="s-val" id="s-deep">0</div>
@@ -1322,7 +1324,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-12-daily-plan-loop-1';
+const APP_BUILD = '2026-07-12-focus-today-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -3861,6 +3863,25 @@ function toggleTlBucket(id) {
 let _todayRenderKey = '';
 let _lastTodayDateKey = '';
 
+function isTodayDetailsOpen() {
+  return localStorage.getItem('ta3-today-details-open') === '1';
+}
+
+function applyTodayDetailsMode() {
+  const isOpen = isTodayDetailsOpen();
+  document.body.classList.toggle('today-details-open', isOpen);
+  const btn = document.getElementById('today-details-toggle');
+  if (!btn) return;
+  btn.textContent = isOpen ? 'Clean' : 'Details';
+  btn.setAttribute('aria-pressed', String(isOpen));
+  btn.title = isOpen ? 'Hide extra Today details' : 'Show extra Today details';
+}
+
+function toggleTodayDetails() {
+  localStorage.setItem('ta3-today-details-open', isTodayDetailsOpen() ? '0' : '1');
+  applyTodayDetailsMode();
+}
+
 function shouldRenderOnDateTick(lastDateKey, currentDateKey) {
   return !!currentDateKey && currentDateKey !== lastDateKey;
 }
@@ -3910,9 +3931,15 @@ function renderTodayHealth(todayE) {
     walletEl.style.display = '';
     walletEl.textContent = `${formatFocusPoints(health.walletBalance)} pts`;
     walletEl.classList.toggle('negative', health.walletBalance < 0);
+    walletEl.classList.add('actionable');
+    walletEl.disabled = false;
+    walletEl.title = 'Open focus wallet';
   } else {
     walletEl.style.display = 'none';
     walletEl.classList.remove('negative');
+    walletEl.classList.remove('actionable');
+    walletEl.disabled = true;
+    walletEl.title = '';
   }
 
   const unloggedEl = document.getElementById('th-unlogged');
@@ -4477,6 +4504,7 @@ function renderToday() {
   const backBtn = document.getElementById('back-to-today-btn');
   if (backBtn) backBtn.style.display = isViewingToday() ? 'none' : 'inline-flex';
   document.getElementById('intention').value = intention;
+  applyTodayDetailsMode();
 
   // Simplified stat row — animate value if it changed
   setStatVal('s-deep', deepCount);

@@ -196,17 +196,48 @@ test('focus wallet spend can be undone without leaving point debt', async ({ pag
   };
   await openApp(page, { entries: [deepEntry] });
 
-  await expect(page.locator('#fw-balance')).toHaveText('17');
-  await page.locator('#focus-wallet-card').getByRole('button', { name: 'Spend' }).click();
+  await expect(page.locator('#th-wallet')).toHaveText('17 pts');
+  await page.locator('#th-wallet').click();
   await page.locator('#fw-reward-label').fill('Movie smoke');
   await page.locator('#fw-reward-duration').fill('30');
   await page.locator('#fw-reward-points').fill('10');
   await page.getByRole('button', { name: 'Log reward' }).click();
 
-  await expect(page.locator('#fw-balance')).toHaveText('7');
+  await expect(page.locator('#th-wallet')).toHaveText('7 pts');
   await clickToastUndo(page);
-  await expect(page.locator('#fw-balance')).toHaveText('17');
+  await expect(page.locator('#th-wallet')).toHaveText('17 pts');
   await expect(page.locator('#recent-list')).not.toContainText('Movie smoke');
+});
+
+test('today defaults to clean mode and can reveal details', async ({ page }) => {
+  const ts = minutesAgo(5);
+  const deepEntry = {
+    id: ts,
+    ts,
+    tsStart: ts - 60 * 60 * 1000,
+    updatedAt: ts,
+    blockIntervalMin: 60,
+    date: utcDateKey(ts),
+    activity: 'Deep work',
+    energy: 'deep',
+    category: 'deep_work',
+    originalLabel: 'deep',
+    onPlan: true,
+    retro: false
+  };
+  await openApp(page, { entries: [deepEntry] });
+
+  await expect(page.locator('#today-details-toggle')).toHaveText('Details');
+  await expect(page.locator('#today-details-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#focus-wallet-card')).toBeHidden();
+
+  await page.locator('#today-details-toggle').click();
+  await expect(page.locator('#today-details-toggle')).toHaveText('Clean');
+  await expect(page.locator('#today-details-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#focus-wallet-card')).toBeVisible();
+
+  await page.locator('#today-details-toggle').click();
+  await expect(page.locator('#focus-wallet-card')).toBeHidden();
 });
 
 test('today health shows compact daily accounting', async ({ page }) => {
