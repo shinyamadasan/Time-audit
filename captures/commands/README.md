@@ -1,19 +1,19 @@
-# Commands â€” the remote-control inbox
+# Commands — the remote-control inbox
 
 The **control-panel** half of the Telegram pipeline, mirroring `captures/decisions/` exactly:
 **n8n only ever creates files here** (one immutable file per Telegram control command). It never runs
 anything itself. All logic happens later, in `tools/Dispatch-Commands.ps1` on the PC.
 
 ```
-Telegram command  â†’  n8n (dumb transport)  â†’  captures/commands/<id>.md
-                                                    â”‚  Dispatch-Commands.ps1 (PC, lock-protected)
-                                                    â”œâ”€ routes to the matching phase runner
-                                                    â”œâ”€ marks this file status: applied
-                                                    â””â”€ writes captures/replies/<id>-reply.md
+Telegram command  →  n8n (dumb transport)  →  captures/commands/<id>.md
+                                                    │  Dispatch-Commands.ps1 (PC, lock-protected)
+                                                    ├─ routes to the matching phase runner
+                                                    ├─ marks this file status: applied
+                                                    └─ writes captures/replies/<id>-reply.md
 ```
 
 n8n's job is messaging/transport only. Deciding what a command means and doing it is entirely
-PC-side, deterministic routing code â€” same separation of duties as captures/decisions.
+PC-side, deterministic routing code — same separation of duties as captures/decisions.
 
 ## Command file format (what n8n writes)
 Filename: `captures/commands/<UTC-timestamp>-<telegram_msg_id>-command.md`
@@ -37,7 +37,7 @@ status: new
 | command | what it does | mutates repo? |
 |---|---|---|
 | `/status` | Reports automation state, branch, last run, Codex-ready + review-ready counts | no |
-| `/run` | Runs Claude's planning pipeline now (Triage + BUILD_QUEUEâ†’TASKS.md), same as `run-claude.ps1` without `-Scheduled` | yes (`main`) |
+| `/run` | Runs Claude's planning pipeline now (Triage + BUILD_QUEUE→TASKS.md), same as `run-claude.ps1` without `-Scheduled` | yes (`main`) |
 | `/build` | Builds the first `status: codex` task in `TASKS.md` on its own `task-<id>` branch | yes (`task-<id>` only, never `main`) |
 | `/review` | Reviews the first `status: review` task's branch, writes `REVIEW.md`/`TASKS.md` | yes (`task-<id>` only, never `main`) |
 | `/next` | Reports whose turn it is (same table as the interactive `Next` command) | no |
@@ -63,8 +63,8 @@ Enable-ScheduledTask -TaskName "ChronaSense Command Dispatcher"
 Start-ScheduledTask -TaskName "ChronaSense Command Dispatcher"
 ```
 
-`status: new` â†’ `applied` once processed (idempotent â€” an n8n retry can't double-dispatch). Every
+`status: new` → `applied` once processed (idempotent — an n8n retry can't double-dispatch). Every
 command produces exactly one reply in `captures/replies/`, regardless of outcome (success, halt, or
 "nothing to do").
 
-No command ever merges a `task-<id>` branch into `main` â€” that stays a manual, human step.
+No command ever merges a `task-<id>` branch into `main` — that stays a manual, human step.

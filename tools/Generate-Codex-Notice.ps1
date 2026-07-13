@@ -6,10 +6,10 @@
   Parses TASKS.md for tasks with `status: codex` (ready for Codex to pick up, not yet started,
   not blocked, not in review) and writes a Telegram-ready notice to planning/CODEX_READY.md.
 
-  STRUCTURED OUTPUT ONLY. This script does NOT message anyone â€” delivery is n8n's job: n8n reads
+  STRUCTURED OUTPUT ONLY. This script does NOT message anyone — delivery is n8n's job: n8n reads
   planning/CODEX_READY.md from GitHub on the morning schedule (alongside DIGEST.md) and sends it to
   Telegram only when there is at least one Codex-ready task. (Separation of duties: Claude/PC produces
-  structured output; n8n owns all messaging â€” mirrors Generate-Digest.ps1.)
+  structured output; n8n owns all messaging — mirrors Generate-Digest.ps1.)
 
   Source is pure ASCII; all emoji/symbols are built from code points so it runs the same under
   Windows PowerShell 5.1 (Task Scheduler) regardless of file encoding.
@@ -24,7 +24,7 @@ $root  = Split-Path $PSScriptRoot -Parent
 $tasks = Join-Path $root 'TASKS.md'
 if (-not $OutFile) { $OutFile = Join-Path $root 'planning/CODEX_READY.md' }
 
-# This exact string is the contract n8n's IF node checks for â€” keep them in sync.
+# This exact string is the contract n8n's IF node checks for — keep them in sync.
 $NONE_PLACEHOLDER = 'No Codex-ready tasks right now.'
 
 $raw = Get-Content $tasks -Raw -Encoding UTF8
@@ -32,7 +32,7 @@ $raw = Get-Content $tasks -Raw -Encoding UTF8
 $body = ($raw -split '<!-- TASK TEMPLATE')[0]
 
 # One match per task block. \p{Pd} matches any dash (the em-dash/middle-dot after the id).
-$blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[Â·â€¢]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
+$blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[·•]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
 
 $items = foreach ($b in $blocks) {
     $rest = $b.Groups['rest'].Value

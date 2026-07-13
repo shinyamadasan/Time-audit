@@ -96,7 +96,7 @@ function Get-TaskStatusById {
 function Get-TrackedTasks {
     $text = Get-Content $tasksFile -Raw -Encoding UTF8
     $body = ($text -split '<!-- TASK TEMPLATE')[0]
-    $blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[Â·â€¢]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
+    $blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[·•]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
     $tracked = @()
     foreach ($b in $blocks) {
         $m = [regex]::Match($b.Groups['rest'].Value, '(?m)^status:\s*(?<s>[\w-]+)')
