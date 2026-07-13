@@ -8,7 +8,7 @@
 //   fbApp, fbDb, fbRoomRef, roomCode, timerOwnerDeviceId,
 //   ticker, taskStartTime, currentTask, breakActive, breakEndsAt,
 //   breakTicker, breakStartTs,
-//   renderToday(), renderWeek(), showToast(), updateRing(),
+//   renderToday(), renderWeek(), showToast(), showHeroState(), updateRing(),
 //   updateLiveCost(), doPing(), _updateBreakDisplay(), endBreak()
 // ══════════════════════════════════════════════════════
 
@@ -739,28 +739,7 @@ function startSync() {
   });
 
   fbDb.ref(`rooms/${roomCode}/awayState`).on('value', snap => {
-    const data = snap.val();
-    if (!data || data.startedBy === syncedDeviceId) return;
-    if (data.active && data.label && !awayActive) {
-      // Remote started away — mirror it
-      awayActive = true;
-      awayStartTime = data.startedAt || Date.now();
-      awayLabel = data.label;
-      showHeroState('away');
-      document.getElementById('hero-away-label').textContent = data.label;
-      clearInterval(awayElapsedTicker);
-      awayElapsedTicker = setInterval(() => {
-        const s = Math.floor((Date.now() - awayStartTime) / 1000);
-        const el = document.getElementById('hero-away-elapsed');
-        if (el) el.textContent = `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
-      }, 1000);
-      document.getElementById('timer-status').textContent = `Away · ${data.label} · synced`;
-    } else if (!data.active && awayActive) {
-      // Remote ended away — clear local away UI (entry already logged on originating device)
-      clearInterval(awayElapsedTicker);
-      awayActive = false; awayStartTime = null; awayLabel = 'Away';
-      showHeroState('idle');
-    }
+    applyRemoteAwayState(snap.val());
   });
 
   // Listen for incoming nudges (ignore any that are older than 30s to skip history on connect)
@@ -800,6 +779,44 @@ function startSync() {
     localStorage.setItem('ta3-last-sync', Date.now());
     showToast('Synced ✓');
   });
+}
+
+function applyRemoteAwayState(data) {
+  if (!data || data.startedBy === syncedDeviceId) return false;
+  if (data.active && data.label) {
+    const startedAt = data.startedAt || Date.now();
+    const changed = !awayActive || awayLabel !== data.label || awayStartTime !== startedAt;
+    if (!changed) return false;
+
+    awayActive = true;
+    awayStartTime = startedAt;
+    awayLabel = data.label;
+    showHeroState('away');
+    const labelEl = document.getElementById('hero-away-label');
+    if (labelEl) labelEl.textContent = data.label;
+    clearInterval(awayElapsedTicker);
+    const renderElapsed = () => {
+      const s = Math.floor((Date.now() - awayStartTime) / 1000);
+      const el = document.getElementById('hero-away-elapsed');
+      if (el) el.textContent = `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+    };
+    renderElapsed();
+    awayElapsedTicker = setInterval(renderElapsed, 1000);
+    const statusEl = document.getElementById('timer-status');
+    if (statusEl) statusEl.textContent = `Away · ${data.label} · synced`;
+    return true;
+  }
+  if (!data.active && awayActive) {
+    // Remote ended away — clear local away UI. The device ending away owns the entry log.
+    clearInterval(awayElapsedTicker);
+    awayElapsedTicker = null;
+    awayActive = false;
+    awayStartTime = null;
+    awayLabel = 'Away';
+    showHeroState('idle');
+    return true;
+  }
+  return false;
 }
 
 function syncTimerState() {
