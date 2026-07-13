@@ -23,6 +23,10 @@ param(
     [switch]$Scheduled
 )
 
+# OFF by default, and the installer PRESERVES whatever an existing install already had.
+# A fresh app must never start running unattended overnight builds on its install day: nobody has
+# validated the pipeline yet, and an autonomous agent shipping to a repo you have not verified is
+# not a feature. Flip to $true only after the doctor is green and you have watched one run.
 $AUTOMATION_ENABLED = $false   # flip to $true once validated
 
 $projectPath = "C:/Users/Admin/Desktop/Vibe code/Time audit app"
