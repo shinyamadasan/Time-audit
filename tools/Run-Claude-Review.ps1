@@ -145,7 +145,7 @@ function Invoke-AutoMerge {
 # --- Find the first status: review task ---
 $text = Get-Content $tasksFile -Raw -Encoding UTF8
 $body = ($text -split '<!-- TASK TEMPLATE')[0]
-$blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[·•]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
+$blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[Â·â€¢]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
 $target = $null
 foreach ($b in $blocks) {
     $m = [regex]::Match($b.Groups['rest'].Value, '(?m)^status:\s*(?<s>[\w-]+)')
@@ -186,20 +186,47 @@ as the interactive "Review" command already documents.
 Review task $taskId ($title) on the current branch ($branchName). Read the branch diff against main,
 CHANGELOG.md, TEST_REPORT.md, and $taskId's acceptance criteria in TASKS.md.
 
-You may ONLY write to REVIEW.md and TASKS.md (only $taskId's status field) -- do not touch app.js,
-index.html, style.css, tests, or any other file. Do not attempt git commit or git push (not
-available to you this run).
+You may ONLY write to REVIEW.md and TASKS.md (only $taskId's status field) -- do not touch any
+application source file, test, or config. Do not attempt git commit or git push (not available to
+you this run).
 
-Write a REVIEW.md entry: verdict (APPROVED or REWORK), must-fix items if any, nits if any. Then set
-$taskId's status in TASKS.md. Never rubber-stamp.
+GUARDIAN GAUNTLET -- run this BEFORE you decide anything. It is not optional.
+
+Using the Task tool, run these two specialists against the branch diff:
+
+  1. security-guardian -- audit the diff for vulnerabilities, secret leakage, and unsafe handling
+     of user data.
+  2. quality-guardian  -- verify the diff ACTUALLY satisfies $taskId's acceptance criteria in
+     TASKS.md. Not "looks plausible" -- traced, criterion by criterion.
+
+Both run as READ-ONLY ADVISORS. Tell each one explicitly, in the prompt you give it, that it must
+report findings back to you and must NOT edit, write, or fix any file. This run has a commit-scope
+guard that ABORTS the whole review if anything other than REVIEW.md or TASKS.md changes on disk, so
+a guardian that "helpfully" applies a fix will fail the review outright.
+
+Fold their findings into REVIEW.md under a "## Guardian Gauntlet" heading -- both the findings and
+the fact that each guardian ran.
+
+If a guardian CANNOT run (tool unavailable, agent not found, error), say so explicitly in REVIEW.md
+and treat the gauntlet as NOT PASSED. Never record a guardian as clean when it did not run. An
+unrun gate that reports "pass" is worse than no gate: it launders unaudited code as audited.
+
+Then write the REVIEW.md entry: verdict (APPROVED or REWORK), must-fix items if any, nits if any.
+Set $taskId's status in TASKS.md. Never rubber-stamp.
+
+VERDICT RULES -- the gauntlet outranks your own impression of the diff:
+  - Any CONFIRMED security finding                       => REWORK. Never approve over it.
+  - quality-guardian finds an unmet acceptance criterion => REWORK.
+  - A guardian did not run                               => do NOT choose 'done'. Use 'approved'
+                                                            at most, and say why in REVIEW.md.
 
 RISK-GATED MERGE (see DECISIONS D-032). Choose the status by what the task TOUCHES:
-  - codex    = REWORK needed (must-fix items exist).
-  - approved = APPROVED, but the task touches a RED-ZONE surface: Firestore / sync / storage, the
-               tombstone-merge-deletion machinery, saveData() or the cloudReady write-guard, auth,
-               security, or the AI Dev OS / automation itself. This HOLDS the branch: main is NOT
-               merged, and the human merges after a glance. Lost data cannot be reverted, so these
-               never auto-ship.
+  - codex    = REWORK needed (must-fix items exist, or the gauntlet failed).
+  - approved = APPROVED, but the task touches a RED-ZONE surface. The red zone is defined in
+               CLAUDE.md's "Risk-gated merge" section -- generally: the data / sync / storage
+               layer, auth, security, or the AI Dev OS / automation itself. This HOLDS the branch:
+               main is NOT merged, and the human merges after a glance. Lost user data cannot be
+               reverted, so these never auto-ship.
   - done     = APPROVED and the change is reversible (UI, CSS, copy, additive non-data features).
                This AUTO-MERGES into main and deploys.
 If you are torn between done and approved, choose approved.
@@ -216,9 +243,15 @@ Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
 
 $prevEAP = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
+# "Task" is what lets the reviewer spawn the Guardian Gauntlet (security-guardian, quality-guardian).
+# Without it the prompt can ASK for a guardian all it likes and nothing happens -- the reviewer has no
+# tool to spawn one with, and silently reviews alone. That was the original bug: the pipeline diagram
+# advertised a Guardian Gauntlet that could never have run.
+# The guardians are advisory only; the commit-scope guard below still fails the review closed if any
+# of them writes to disk.
 try {
     $prompt | claude -p `
-        --allowedTools "Read" "Glob" "Grep" "Edit" "Write" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)" `
+        --allowedTools "Read" "Glob" "Grep" "Edit" "Write" "Task" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)" `
         2>$null | Tee-Object -FilePath $logFile -Append
 } finally {
     $ErrorActionPreference = $prevEAP

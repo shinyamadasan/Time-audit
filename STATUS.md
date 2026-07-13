@@ -7,7 +7,7 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ## 2026-07-12 -- AI Dev OS installed in ChronaSense
 
-**Scaffolded the AI Dev OS** (copied + adapted from the Meal Prep app, per `AI-DEV-OS.md`'s
+**Scaffolded the AI Dev OS** (installed from the `ai-dev-os` repo, per `AI-DEV-OS.md`'s
 "Bootstrap a new app"). Zero app code touched -- `index.html`, `storage.js`, `insights.js`,
 `focus-mode.js`, `focus-wallet.js`, `style.css` are all untouched.
 

@@ -96,7 +96,7 @@ function Get-TaskStatusById {
 function Get-TrackedTasks {
     $text = Get-Content $tasksFile -Raw -Encoding UTF8
     $body = ($text -split '<!-- TASK TEMPLATE')[0]
-    $blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[·•]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
+    $blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[Â·â€¢]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
     $tracked = @()
     foreach ($b in $blocks) {
         $m = [regex]::Match($b.Groups['rest'].Value, '(?m)^status:\s*(?<s>[\w-]+)')
@@ -162,7 +162,7 @@ if ($branchExists) {
 $CODEX_TIMEOUT_MINUTES = 20   # tune per how long a real build/chained group legitimately takes
 $startTime = Get-Date
 # Start-Process -ArgumentList, given an array, does not reliably quote elements containing spaces
-# (confirmed live: $root's space-containing path split into separate positional args, and codex
+# (confirmed live: $root's "ChronaSense" path split into separate positional args, and codex
 # rejected 'prep' as an unexpected argument). A single pre-quoted command-line string avoids this.
 $codexArgs = "exec -C `"$root`" --sandbox workspace-write `"Continue`""
 

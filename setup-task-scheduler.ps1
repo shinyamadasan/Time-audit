@@ -2,7 +2,7 @@
 # After running, the task fires automatically at 2am every night
 # To change the time: edit the -At parameter below and re-run this script
 
-$scriptPath = "C:\Users\Admin\Desktop\Vibe code\Time audit app\run-claude.ps1"
+$scriptPath = "C:/Users/Admin/Desktop/Vibe code/Time audit app\run-claude.ps1"
 $taskName = "ChronaSense Claude Overnight"
 
 # Remove existing task if it exists (so re-running this script is safe)
@@ -12,7 +12,7 @@ $action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
     -Argument "-NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`" -Scheduled"
 
-# Two daily runs — 2pm and 6pm
+# Two daily runs â€” 2pm and 6pm
 # 2pm: Claude works through task queue, PC stays on
 # 6pm: Claude continues where it left off, PC shuts down after
 $trigger1 = New-ScheduledTaskTrigger -Daily -At "9:00PM"

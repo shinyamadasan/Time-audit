@@ -23,9 +23,9 @@ param(
     [switch]$Scheduled
 )
 
-$AUTOMATION_ENABLED = $false   # flip to $true to re-enable overnight automation
+$AUTOMATION_ENABLED = $false   # flip to $true once validated
 
-$projectPath = "C:\Users\Admin\Desktop\Vibe code\Time audit app"
+$projectPath = "C:/Users/Admin/Desktop/Vibe code/Time audit app"
 $logFile = "$projectPath\claude-session.log"
 
 Set-Location $projectPath
