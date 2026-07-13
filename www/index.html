@@ -612,9 +612,12 @@
       </div>
       <div class="sync-status-row" style="margin-top:10px">
         <div class="setting-sub" id="sync-detail-label">Connecting…</div>
-        <div class="sync-pill" id="sync-pill2">
-          <div class="sync-dot" id="sync-dot2"></div>
-          <span id="sync-label2">offline</span>
+        <div class="sync-controls">
+          <button class="btn sm ghost" id="sync-now-btn" onclick="forceSyncNow()">Sync now</button>
+          <div class="sync-pill" id="sync-pill2">
+            <div class="sync-dot" id="sync-dot2"></div>
+            <span id="sync-label2">offline</span>
+          </div>
         </div>
       </div>
       <div class="sync-devices" id="sync-devices" style="margin-top:6px"></div>
@@ -1349,7 +1352,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-13-action-strip-1';
+const APP_BUILD = '2026-07-13-sync-reliability-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];

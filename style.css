@@ -473,7 +473,9 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 
 /* sync setup */
 .sync-setup{padding:14px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border2)}
-.sync-status-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.sync-status-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.sync-status-row .setting-sub{min-width:0}
+.sync-controls{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .sync-config-area{width:100%;background:var(--bg4);border:1px solid var(--border2);color:var(--text);
   font-family:var(--mono);font-size:11px;padding:8px;border-radius:6px;min-height:80px;resize:vertical;outline:none}
 .sync-config-area:focus{border-color:var(--deep)}

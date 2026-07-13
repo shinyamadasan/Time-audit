@@ -25,9 +25,9 @@
 
 ### storage.js
 Lines: external file
-Purpose: All localStorage/Firebase persistence, data loading, debounced Today rendering, and cross-device sync helpers with throttled sync-failure feedback.
-Functions: `persist()`, `scheduleRenderToday()`, `syncDeviceLabel()`, `syncAgeLabel()`, `updateTimerSyncDetail()`, `applyRemoteTimerState()`, `applyRemoteAwayState()`, `notifySyncWriteFailed()`, `resolveEntrySync()`, `syncEntries()`, `syncFocusRedemptions()`, `syncPlans()`, `normalizePlanItems()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
-Variables: `_renderTodayPending`, `_lastSyncErrorToastAt`
+Purpose: All localStorage/Firebase persistence, data loading, debounced Today rendering, and cross-device sync helpers with throttled sync-failure feedback plus timer sync visibility.
+Functions: `persist()`, `scheduleRenderToday()`, `forceSyncNow()`, `syncDeviceLabel()`, `syncAgeLabel()`, `updateTimerSyncDetail()`, `renderTimerSyncDetail()`, `startSyncDetailAgeTicker()`, `stopSyncDetailAgeTicker()`, `applyRemoteTimerState()`, `applyRemoteAwayState()`, `notifySyncWriteFailed()`, `resolveEntrySync()`, `syncEntries()`, `syncFocusRedemptions()`, `syncPlans()`, `normalizePlanItems()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
+Variables: `_renderTodayPending`, `_lastSyncErrorToastAt`, `_lastTimerSyncDetail`, `_syncDetailAgeTicker`
 Depends on: Firebase SDK globals, `focusRedemptions` global, `sumEnergyMinutes()`
 
 ### insights.js
@@ -91,7 +91,7 @@ Depends on: —
 Lines: 1335–1587
 Purpose: Markup for the Week tab (day tabs, energy split, top activities), Reflect tab (honest summary, week comparison, reflections, weekly review), and Settings tab (timezone, intervals, presets, data management, performance readout).
 Functions: —
-Key IDs: `view-week`, `view-reflect`, `view-settings`, `reflect-streak-cal` (streak cal mount), `reflect-heatmap` (heatmap mount), `data-doctor-results`, `perf-debug-results`, `app-build-label`
+Key IDs: `view-week`, `view-reflect`, `view-settings`, `reflect-streak-cal` (streak cal mount), `reflect-heatmap` (heatmap mount), `sync-now-btn`, `data-doctor-results`, `perf-debug-results`, `app-build-label`
 Depends on: —
 
 ## [HTML — Desktop Side Panels]

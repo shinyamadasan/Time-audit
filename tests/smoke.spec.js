@@ -398,6 +398,8 @@ test('remote timer handoff updates task label and block anchors', async ({ page 
   expect(applied).toBe(true);
   await expect(page.locator('#hero-task-name')).toHaveText('Cooking');
   await expect(page.locator('#timer-status')).toHaveText('Synced · pinging every 30 min');
+  await expect(page.locator('#sync-detail-label')).toContainText('cloud heard phone');
+  await expect(page.locator('#sync-detail-label')).toContainText('owner: phone');
   await expect(page.locator('#sync-detail-label')).toContainText('active: Cooking');
 
   const state = await page.evaluate(() => ({
@@ -405,15 +407,57 @@ test('remote timer handoff updates task label and block anchors', async ({ page 
     lastTaskForRepeat,
     taskStartTime,
     blockStartTime,
-    timerOwnerDeviceId
+    timerOwnerDeviceId,
+    savedTimer: JSON.parse(localStorage.getItem('ta3-timer') || 'null')
   }));
-  expect(state).toEqual({
-    currentTask: 'Cooking',
-    lastTaskForRepeat: 'Cooking',
-    taskStartTime: remoteStart,
-    blockStartTime: remoteStart,
-    timerOwnerDeviceId: 'phone-device'
-  });
+  expect(state.currentTask).toBe('Cooking');
+  expect(state.lastTaskForRepeat).toBe('Cooking');
+  expect(state.taskStartTime).toBe(remoteStart);
+  expect(state.blockStartTime).toBe(remoteStart);
+  expect(state.timerOwnerDeviceId).toBe('phone-device');
+  expect(state.savedTimer.currentTask).toBe('Cooking');
+  expect(state.savedTimer.taskStartTime).toBe(remoteStart);
+});
+
+test('sync now pulls the latest remote timer snapshot', async ({ page }) => {
+  await openApp(page);
+  const remoteStart = Date.now() - 3 * 60 * 1000;
+
+  const ok = await page.evaluate(async (startTs) => {
+    const timer = {
+      running: true,
+      lastTask: 'Cooking',
+      intervalSecs: 1800,
+      startedAt: startTs,
+      taskStartTime: startTs,
+      blockStartTime: startTs,
+      ownerDeviceId: 'phone-device',
+      updatedAt: Date.now(),
+      updatedBy: 'phone-device',
+      deviceName: 'phone'
+    };
+    window.__syncUpdates = [];
+    fbRoomRef = {
+      child(path) {
+        return {
+          once() {
+            return Promise.resolve({ val: () => path === 'timer' ? timer : null });
+          }
+        };
+      },
+      update(payload) {
+        window.__syncUpdates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    return forceSyncNow();
+  }, remoteStart);
+
+  expect(ok).toBe(true);
+  await expect(page.locator('#hero-task-name')).toHaveText('Cooking');
+  await expect(page.locator('#sync-detail-label')).toContainText('cloud heard phone');
+  await expect(page.locator('#sync-detail-label')).toContainText('owner: phone');
+  await expect(page.locator('#sync-detail-label')).toContainText('active: Cooking');
 });
 
 test('remote timer stop resets local state and clears restored timer storage', async ({ page }) => {
