@@ -1344,7 +1344,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-13-away-sync-1';
+const APP_BUILD = '2026-07-13-sync-hardening-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1779,6 +1779,8 @@ function resetTimer() {
   cancelNativePing();
   if (breakActive) { clearInterval(breakTicker); breakTicker = null; breakActive = false; document.getElementById('break-active-row').classList.remove('show'); }
   taskStartTime = null;
+  blockStartTime = null;
+  timerStartedAt = null;
   document.getElementById('interval-input').disabled = false;
   document.getElementById('break-btn').style.display = 'none'; document.getElementById('switch-btn').style.display = 'none';
   document.getElementById('main-btn').disabled = false;
@@ -1795,7 +1797,8 @@ function resetTimer() {
   document.getElementById('activity-hero').classList.remove('tracking');
   updateRing();
   // Push stopped:true so other devices fully reset instead of just pausing
-  if (fbRoomRef) fbRoomRef.update({ timer: { running: false, stopped: true, ownerDeviceId: null, lastTask: null } });
+  persist();
+  if (fbRoomRef) syncTimerState({ stopped: true, lastTask: null });
 }
 
 // ══════════════════════════════════════════════════════
@@ -1928,6 +1931,7 @@ function startBreak(mins) {
   }, 1000);
 
   if (fbRoomRef) fbRoomRef.update({ breakState: { active: true, endsAt: breakEndsAt, durationMin: mins, startedBy: syncedDeviceId } });
+  syncTimerState();
   persist();
   showToast(`${mins}-min break started ☕ timer auto-resumes`);
 }
@@ -2024,6 +2028,8 @@ function doPing() {
   // Sound
   playAlert(2, 400);
   document.title = 'ChronaSense';
+  persist();
+  syncTimerState();
 
 }
 
@@ -8880,8 +8886,17 @@ function handleDeepLink(url) {
     if (action === 'start') {
       if (running) {
         currentTask = task; lastTaskForRepeat = task;
+        taskStartTime = Date.now();
+        blockStartTime = taskStartTime;
+        timerStartedAt = taskStartTime;
+        remaining = totalSecs;
+        timerOwnerDeviceId = syncedDeviceId;
         document.getElementById('hero-task-name').textContent = task;
-        persist(); showToast(`Switched to · ${task}`);
+        updateTimerTaskLabel();
+        updateRing();
+        persist();
+        syncTimerState();
+        showToast(`Switched to · ${task}`);
       } else {
         setTimeout(() => _startTimer(task), 300);
       }
