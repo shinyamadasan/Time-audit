@@ -18,8 +18,7 @@
       ],
       "credentials": {
         "telegramApi": {
-          "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
-          "name": "Telegram Bot"
+          "name": "Telegram Bot - ChronaSense"
         }
       }
     },
@@ -73,10 +72,6 @@
         "headerParameters": {
           "parameters": [
             {
-              "name": "Authorization",
-              "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT"
-            },
-            {
               "name": "Accept",
               "value": "application/vnd.github+json"
             },
@@ -89,7 +84,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"message\": \"{{ $json.isControl ? 'command' : ($json.isDecision ? 'decision' : 'capture') }}: {{ $json.command }} ({{ $json.id }})\",\n  \"content\": \"{{ $json.contentB64 }}\",\n  \"branch\": \"main\"\n}",
-        "options": {}
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "github-create-file",
       "name": "GitHub: create file",
@@ -98,7 +95,12 @@
       "position": [
         900,
         220
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "GitHub PAT"
+        }
+      }
     },
     {
       "parameters": {
@@ -118,8 +120,7 @@
       ],
       "credentials": {
         "telegramApi": {
-          "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
-          "name": "Telegram Bot"
+          "name": "Telegram Bot - ChronaSense"
         }
       }
     },
@@ -139,8 +140,7 @@
       ],
       "credentials": {
         "telegramApi": {
-          "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
-          "name": "Telegram Bot"
+          "name": "Telegram Bot - ChronaSense"
         }
       }
     }
