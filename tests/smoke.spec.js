@@ -307,6 +307,31 @@ test('today health shows compact daily accounting', async ({ page }) => {
   await expect(wasteRow).toHaveClass(/tl-row-focus/);
 });
 
+test('today health hides minor unlogged gaps', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 10, 10, 20, 0);
+  const todayStart = Date.UTC(2026, 6, 10);
+  const deepStart = todayStart + 10 * 60 * 60 * 1000;
+  const deepEnd = deepStart + 10 * 60 * 1000;
+  const entries = [{
+    id: deepEnd,
+    ts: deepEnd,
+    tsStart: deepStart,
+    updatedAt: deepEnd,
+    blockIntervalMin: 10,
+    date: utcDateKey(deepStart),
+    activity: 'Short focus',
+    energy: 'deep',
+    category: 'deep_work',
+    originalLabel: 'deep',
+    onPlan: true,
+    retro: false
+  }];
+  await openApp(page, { entries, nowTs });
+
+  await expect(page.locator('#th-deep')).toHaveText('10m deep');
+  await expect(page.locator('#th-unlogged')).toBeHidden();
+});
+
 test('remote away switch updates an already mirrored away state', async ({ page }) => {
   await openApp(page);
   const cookingStart = Date.now() - 2 * 60 * 1000;
