@@ -1344,7 +1344,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-12-missed-closeout-1';
+const APP_BUILD = '2026-07-13-morning-startup-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -5231,6 +5231,26 @@ function quickLogSleep() {
 // TODAY PLAN — the 1-3 intentions that drive the day
 // ══════════════════════════════════════════════════════
 const PLAN_MAX = 3;
+const MORNING_PLAN_PRESETS = {
+  deep: {
+    label: 'Deep work day',
+    detail: 'Protect one first block',
+    task: 'Main deep work block',
+    when: 'first block'
+  },
+  maintenance: {
+    label: 'Maintenance day',
+    detail: 'Admin, cleanup, errands',
+    task: 'Maintenance block',
+    when: 'next block'
+  },
+  light: {
+    label: 'Light day',
+    detail: 'One honest focus block',
+    task: 'Light focus block',
+    when: 'next block'
+  }
+};
 
 function planTodayKey() {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -5251,6 +5271,17 @@ function getPlanItems(dateKey) {
  *  per-item sync merge on the next inbound snapshot. */
 function getPlanItemsRaw(dateKey) {
   return normalizePlanItems(plans[dateKey] && plans[dateKey].items);
+}
+
+function createPlanItem(task, when = '') {
+  return {
+    id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    task,
+    when,
+    done: false,
+    doneAt: null,
+    updatedAt: Date.now()
+  };
 }
 
 /** The plan IS the daily target — focus-mode's deep bar reads dailyCommitment. */
@@ -5336,6 +5367,46 @@ function getNextPlanItem(dateKey) {
       || null;
 }
 
+function renderMorningStartup(esc, attr) {
+  const choices = Object.entries(MORNING_PLAN_PRESETS).map(([key, preset]) => `
+    <button type="button" class="morning-choice ${key}" onclick="setMorningPlan('${key}')">
+      <span>${esc(preset.label)}</span>
+      <small>${esc(preset.detail)}</small>
+    </button>`).join('');
+  return `<div class="morning-startup" id="morning-startup">
+      <div class="morning-kicker">Morning startup</div>
+      <div class="morning-title">What kind of day is this?</div>
+      <div class="morning-sub">Pick a mode, then name the first block. If you drift: log it, then restart.</div>
+      <div class="morning-choices">${choices}</div>
+      <div class="plan-add morning-add">
+        <input id="plan-when" class="plan-input when" maxlength="40" placeholder="when (optional)">
+        <input id="plan-task" class="plan-input task" maxlength="80" placeholder="first block or top task"
+               onkeydown="if(event.key==='Enter')addPlanItem()">
+        <button class="btn sm" onclick="addPlanItem()" title="${attr('Add a custom plan item')}">Add</button>
+      </div>
+    </div>`;
+}
+
+function setMorningPlan(type) {
+  if (!isViewingToday()) return;
+  const preset = MORNING_PLAN_PRESETS[type];
+  if (!preset) return;
+  const dateKey = planTodayKey();
+  if (getPlanItems(dateKey).length >= PLAN_MAX) {
+    showToast(`${PLAN_MAX} is the cap - remove one first`);
+    return;
+  }
+  const taskEl = document.getElementById('plan-task');
+  const whenEl = document.getElementById('plan-when');
+  const task = ((taskEl && taskEl.value) || preset.task).trim();
+  const when = ((whenEl && whenEl.value) || preset.when).trim();
+  if (!task) { showToast('Name the first block'); if (taskEl) taskEl.focus(); return; }
+  const raw = getPlanItemsRaw(dateKey).slice();
+  raw.push(createPlanItem(task, when));
+  savePlanItems(dateKey, raw);
+  showToast(`${preset.label} set`);
+}
+
 // Called directly by every plan mutation — never routed through renderToday(), whose
 // _todayRenderKey cache only tracks entries and would silently swallow plan edits.
 function renderTodayPlan() {
@@ -5349,11 +5420,19 @@ function renderTodayPlan() {
   const items    = getPlanItems(dateKey);
 
   if (readOnly && !items.length) { el.style.display = 'none'; return; }
+  if (!readOnly && !items.length && typeof getMissedCloseout === 'function' && getMissedCloseout()) {
+    el.style.display = 'none';
+    return;
+  }
   el.style.display = 'block';
 
   const doneCount = items.filter(i => i.done).length;
   const esc  = s => String(s).replace(/</g, '&lt;');
   const attr = s => String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  if (!readOnly && !items.length) {
+    el.innerHTML = renderMorningStartup(esc, attr);
+    return;
+  }
   const nextItem = readOnly || !items.length ? null : getNextPlanItem(dateKey);
   const nextIsActive = !!(nextItem && isPlanTaskActive(nextItem.task));
   const nextLabel = !nextItem ? 'All clear' : nextIsActive ? 'Working now' : 'Start next';
@@ -5419,14 +5498,7 @@ function addPlanItem() {
   const task   = (taskEl ? taskEl.value : '').trim();
   if (!task) { showToast('What will you do?'); if (taskEl) taskEl.focus(); return; }
 
-  raw.push({
-    id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    task,
-    when: (whenEl ? whenEl.value : '').trim(),
-    done: false,
-    doneAt: null,
-    updatedAt: Date.now()
-  });
+  raw.push(createPlanItem(task, (whenEl ? whenEl.value : '').trim()));
   savePlanItems(dateKey, raw);
 }
 
