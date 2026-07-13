@@ -294,6 +294,36 @@ test('today health shows compact daily accounting', async ({ page }) => {
   await expect(wasteRow).toHaveClass(/tl-row-focus/);
 });
 
+test('remote away switch updates an already mirrored away state', async ({ page }) => {
+  await openApp(page);
+  const cookingStart = Date.now() - 2 * 60 * 1000;
+
+  await page.evaluate((startTs) => {
+    awayActive = true;
+    awayStartTime = startTs - 5 * 60 * 1000;
+    awayLabel = 'Eat';
+    showHeroState('away');
+    document.getElementById('hero-away-label').textContent = 'Eat';
+    document.getElementById('timer-status').textContent = 'Away · Eat · synced';
+  }, cookingStart);
+
+  await expect(page.locator('#hero-away-label')).toHaveText('Eat');
+
+  const applied = await page.evaluate((startTs) => applyRemoteAwayState({
+    active: true,
+    label: 'Cooking',
+    startedAt: startTs,
+    startedBy: 'phone-device'
+  }), cookingStart);
+
+  expect(applied).toBe(true);
+  await expect(page.locator('#hero-away-label')).toHaveText('Cooking');
+  await expect(page.locator('#timer-status')).toHaveText('Away · Cooking · synced');
+
+  const state = await page.evaluate(() => ({ awayActive, awayLabel, awayStartTime }));
+  expect(state).toEqual({ awayActive: true, awayLabel: 'Cooking', awayStartTime: cookingStart });
+});
+
 test('crossing-day entries are clipped instead of displayed as one 28h block', async ({ page }) => {
   const now = new Date();
   const todayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
