@@ -137,6 +137,14 @@ test('morning startup turns a day mode into the first plan item', async ({ page 
   expect(stored).toEqual([{ task: 'Ship launch notes', when: 'first block' }]);
 });
 
+test('today action strip focuses the plan when no target exists', async ({ page }) => {
+  await openApp(page);
+
+  await expect(page.locator('#today-action-title')).toHaveText("Set today's target");
+  await page.locator('#today-action-primary').click();
+  await expect(page.locator('#plan-task')).toBeFocused();
+});
+
 test('WIP cap holds at 3 and removing one frees a slot (no deadlock)', async ({ page }) => {
   await openApp(page);
 
@@ -159,6 +167,17 @@ test('WIP cap holds at 3 and removing one frees a slot (no deadlock)', async ({ 
 
   await addItem(page, 'Read paper');
   await expect(page.locator('.plan-item')).toHaveCount(3);
+});
+
+test('today action strip starts the next planned item', async ({ page }) => {
+  await openApp(page, { plans: planFor([{ task: 'Write report' }]) });
+
+  await expect(page.locator('#today-action-title')).toHaveText('Next: Write report');
+  await page.locator('#today-action-primary').click();
+
+  await expect(page.locator('#hero-task-name')).toHaveText('Write report');
+  await expect(page.locator('#today-action-title')).toHaveText('Working now');
+  await expect(page.locator('#today-action-sub')).toHaveText('Write report');
 });
 
 test('when-then trigger renders with the task', async ({ page }) => {

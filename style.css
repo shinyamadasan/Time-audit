@@ -646,6 +646,23 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 /* ── Today plan strip ── */
 .plan-strip{background:var(--bg2);border:1px solid var(--border2);box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);
   padding:11px 13px;margin-bottom:12px}
+.today-action-strip{background:linear-gradient(135deg,var(--bg2),var(--bg3));border:1px solid rgba(76,199,240,0.24);
+  box-shadow:0 1px 3px rgba(0,0,0,0.35);border-radius:var(--r2);padding:10px 12px;margin-bottom:12px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--text)}
+.today-action-strip.warn{border-color:rgba(249,199,79,0.36);background:rgba(249,199,79,0.06)}
+.today-action-strip.live{border-color:rgba(52,211,153,0.34);background:rgba(52,211,153,0.06)}
+.today-action-main{min-width:0}
+.today-action-kicker{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;margin-bottom:2px}
+.today-action-title{font-size:13px;font-weight:800;color:var(--text);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.today-action-sub{font-size:11px;color:var(--muted);line-height:1.35;margin-top:2px}
+.today-action-btn{flex-shrink:0;background:var(--deep-dim2);border:1px solid rgba(76,199,240,0.34);border-radius:999px;
+  color:var(--deep);font-family:var(--head);font-size:11px;font-weight:800;padding:7px 11px;cursor:pointer}
+.today-action-strip.warn .today-action-btn{background:rgba(249,199,79,0.12);border-color:rgba(249,199,79,0.34);color:#f9c74f}
+.today-action-strip.live .today-action-btn{background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.34);color:#34d399}
+@media(max-width:520px){
+  .today-action-strip{align-items:stretch;flex-direction:column;gap:8px}
+  .today-action-btn{align-self:flex-start}
+}
 .morning-startup{display:grid;gap:10px}
 .morning-kicker{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700}
 .morning-title{font-size:18px;font-weight:800;color:var(--text);line-height:1.15}
