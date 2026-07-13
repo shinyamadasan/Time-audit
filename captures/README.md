@@ -1,18 +1,18 @@
-# Captures â€” mobile capture pipeline
+# Captures — mobile capture pipeline
 
-Telegram â†’ n8n â†’ here. **n8n only ever creates files in `inbox/`** (one immutable file per capture).
+Telegram → n8n → here. **n8n only ever creates files in `inbox/`** (one immutable file per capture).
 It never edits planning files. All judgment happens later, in the Claude run's **Triage** event.
 
 ```
-Telegram  â†’  n8n (dumb capture)  â†’  captures/inbox/<id>.md
-                                          â”‚  Claude run: Triage
-                                          â”œâ”€ route â†’ planning/ROADMAP.md (Queue / Known Issues / Ideas / Research)
-                                          â””â”€ archive â†’ captures/processed/YYYY/MM/<id>.md
+Telegram  →  n8n (dumb capture)  →  captures/inbox/<id>.md
+                                          │  Claude run: Triage
+                                          ├─ route → planning/ROADMAP.md (Queue / Known Issues / Ideas / Research)
+                                          └─ archive → captures/processed/YYYY/MM/<id>.md
 ```
 
 ## Flow
 1. **n8n** writes one file per Telegram message to `inbox/` (see format below). No AI, no parsing of
-   planning files â€” just create the file. The slash command *is* the category.
+   planning files — just create the file. The slash command *is* the category.
 2. **Claude**, at the start of each run (Triage event in `../WORKFLOW.md`), processes every
    `inbox/*.md`: categorize, **dedupe** against ROADMAP/DONE, **score against the North-star goals in
    `../docs/PROJECT.md`**, estimate priority + complexity, add tags, write acceptance criteria and

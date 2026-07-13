@@ -1,16 +1,16 @@
-# ðŸ“± AI Dev System
+# 📱 AI Dev System
 
-**CAPTURE** â€” text the bot
-- `/feature` â†’ build
-- `/bug` â†’ log
-- `/todo` â†’ build
-- `/idea` â†’ park
-- `/research` â†’ park
+**CAPTURE** — text the bot
+- `/feature` → build
+- `/bug` → log
+- `/todo` → build
+- `/idea` → park
+- `/research` → park
 
-**REVIEW** (morning) â€” `STATUS` Â· `TASK`
+**REVIEW** (morning) — `STATUS` · `TASK`
 
-**STEER** â€” `ROADMAP` top = next build Â· promote ideas when ready
+**STEER** — `ROADMAP` top = next build · promote ideas when ready
 
 > **Capture. Don't think.**
 
-_Full playbook â†’ `OPERATOR.md`._
+_Full playbook → `OPERATOR.md`._

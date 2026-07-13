@@ -12,7 +12,7 @@ $action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
     -Argument "-NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`" -Scheduled"
 
-# Two daily runs â€” 2pm and 6pm
+# Two daily runs — 2pm and 6pm
 # 2pm: Claude works through task queue, PC stays on
 # 6pm: Claude continues where it left off, PC shuts down after
 $trigger1 = New-ScheduledTaskTrigger -Daily -At "9:00PM"
