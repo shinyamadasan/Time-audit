@@ -510,62 +510,7 @@ function startSync() {
   deviceRef.onDisconnect().remove();
 
   fbDb.ref(`rooms/${roomCode}/timer`).on('value', snap => {
-    const data = snap.val();
-    if (!data) return;
-    if (data.ownerDeviceId) timerOwnerDeviceId = data.ownerDeviceId;
-    if (data.running && data.startedAt) {
-      const elapsed = Math.floor((Date.now() - data.startedAt) / 1000);
-      timerStartedAt = data.startedAt;
-      totalSecs = data.intervalSecs;
-      remaining = Math.max(0, totalSecs - elapsed);
-      // Sync task name from Firebase if remote has one
-      if (data.lastTask && data.lastTask !== currentTask) {
-        currentTask = data.lastTask;
-        lastTaskForRepeat = data.lastTask;
-        const nameEl = document.getElementById('hero-task-name');
-        if (nameEl) nameEl.textContent = data.lastTask;
-      }
-      if (!running) {
-        running = true;
-        settings.intervalMin = data.intervalSecs / 60;
-        document.getElementById('interval-input').value = settings.intervalMin;
-        document.getElementById('main-btn').textContent = 'Break';
-        document.getElementById('timer-status').textContent = `Synced · pinging every ${settings.intervalMin} min`;
-        const task = currentTask || lastTaskForRepeat || 'Work';
-        if (!taskStartTime) taskStartTime = timerStartedAt || Date.now();
-        document.getElementById('hero-idle').style.display = 'none';
-        document.getElementById('hero-active').style.display = 'block';
-        document.getElementById('hero-task-name').textContent = task;
-        if (!ticker) {
-          ticker = setInterval(() => {
-            remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
-            updateLiveCost();
-            remaining <= 0 ? doPing() : updateRing();
-          }, 1000);
-        }
-        fbTimerReceived = true;
-      } else {
-        // Already running — just re-sync remaining without restarting ticker
-        remaining = Math.max(0, totalSecs - elapsed);
-        updateRing();
-        fbTimerReceived = true;
-      }
-    } else if (!data.running) {
-      fbTimerReceived = true;
-      if (data.stopped) {
-        // Full stop from another device — reset completely
-        if (running || taskStartTime) resetTimer();
-      } else {
-        if (data.pausedRemaining != null) remaining = data.pausedRemaining;
-        if (running) {
-          running = false; clearInterval(ticker); ticker = null;
-          document.getElementById('main-btn').textContent = 'Resume';
-          document.getElementById('timer-status').textContent = 'Paused (synced)';
-        }
-      }
-    }
-    if (data.intervalSecs) { totalSecs = data.intervalSecs; settings.intervalMin = data.intervalSecs/60; }
-    updateRing();
+    applyRemoteTimerState(snap.val());
   });
 
   fbDb.ref(`rooms/${roomCode}/entries`).on('value', snap => {
@@ -781,6 +726,119 @@ function startSync() {
   });
 }
 
+function syncDeviceLabel(deviceId, fallback) {
+  if (fallback) return fallback;
+  if (!deviceId) return 'other device';
+  if (deviceId === syncedDeviceId) return 'this device';
+  const device = connectedDevices && connectedDevices[deviceId];
+  return (device && device.name) || 'other device';
+}
+
+function syncAgeLabel(ts) {
+  if (!ts) return 'now';
+  const sec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (sec < 5) return 'now';
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  return `${min}m ago`;
+}
+
+function updateTimerSyncDetail(data, stateLabel) {
+  const el = document.getElementById('sync-detail-label');
+  if (!el || !data) return;
+  const device = syncDeviceLabel(data.updatedBy || data.ownerDeviceId, data.deviceName);
+  const prefix = data.updatedBy === syncedDeviceId ? 'Synced' : `Synced from ${device}`;
+  el.textContent = `${prefix} ${syncAgeLabel(data.updatedAt)} · ${stateLabel}`;
+}
+
+function applyRemoteTimerState(data) {
+  if (!data) return false;
+  if ('ownerDeviceId' in data) timerOwnerDeviceId = data.ownerDeviceId || null;
+  if (data.intervalSecs) {
+    totalSecs = data.intervalSecs;
+    settings.intervalMin = data.intervalSecs / 60;
+  }
+
+  if (data.running && data.startedAt) {
+    const elapsed = Math.floor((Date.now() - data.startedAt) / 1000);
+    timerStartedAt = data.startedAt;
+    remaining = Math.max(0, totalSecs - elapsed);
+
+    const remoteTask = data.lastTask || currentTask || lastTaskForRepeat || 'Work';
+    const remoteTaskStart = data.taskStartTime || data.blockStartTime || data.startedAt;
+    currentTask = remoteTask;
+    lastTaskForRepeat = remoteTask;
+    taskStartTime = remoteTaskStart;
+    blockStartTime = data.blockStartTime || remoteTaskStart;
+    if (awayActive) {
+      clearInterval(awayElapsedTicker);
+      awayElapsedTicker = null;
+      awayActive = false;
+      awayStartTime = null;
+      awayLabel = 'Away';
+    }
+    if (breakActive) {
+      clearInterval(breakTicker);
+      breakTicker = null;
+      breakActive = false;
+      const breakRow = document.getElementById('break-active-row');
+      if (breakRow) breakRow.classList.remove('show');
+    }
+
+    const nameEl = document.getElementById('hero-task-name');
+    if (nameEl) nameEl.textContent = remoteTask;
+
+    if (!running) {
+      running = true;
+      const intervalEl = document.getElementById('interval-input');
+      if (intervalEl) intervalEl.value = settings.intervalMin;
+      document.getElementById('main-btn').textContent = 'Break';
+      showHeroState('active');
+      document.getElementById('activity-hero').classList.add('tracking');
+      if (!ticker) {
+        ticker = setInterval(() => {
+          remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
+          updateLiveCost();
+          remaining <= 0 ? doPing() : updateRing();
+        }, 1000);
+      }
+    }
+    document.getElementById('timer-status').textContent = `Synced · pinging every ${settings.intervalMin} min`;
+    updateTimerTaskLabel();
+    updateTimerSyncDetail(data, `active: ${remoteTask}`);
+    fbTimerReceived = true;
+    updateRing();
+    return true;
+  }
+
+  if (!data.running) {
+    fbTimerReceived = true;
+    if (data.stopped) {
+      const hadTimer = running || !!taskStartTime || !!timerStartedAt || !!currentTask;
+      if (hadTimer) resetTimer();
+      updateTimerSyncDetail(data, 'timer stopped');
+      return hadTimer;
+    }
+
+    if (data.pausedRemaining != null) remaining = data.pausedRemaining;
+    if (running) {
+      running = false;
+      clearInterval(ticker);
+      ticker = null;
+      persist();
+      document.getElementById('main-btn').textContent = 'Resume';
+      document.getElementById('timer-status').textContent = 'Paused (synced)';
+      updateTimerTaskLabel();
+      updateTimerSyncDetail(data, 'timer paused');
+      updateRing();
+      return true;
+    }
+    updateTimerSyncDetail(data, 'timer idle');
+  }
+  updateRing();
+  return false;
+}
+
 function applyRemoteAwayState(data) {
   if (!data || data.startedBy === syncedDeviceId) return false;
   if (data.active && data.label) {
@@ -804,6 +862,11 @@ function applyRemoteAwayState(data) {
     awayElapsedTicker = setInterval(renderElapsed, 1000);
     const statusEl = document.getElementById('timer-status');
     if (statusEl) statusEl.textContent = `Away · ${data.label} · synced`;
+    updateTimerSyncDetail({
+      updatedAt: data.updatedAt || Date.now(),
+      updatedBy: data.startedBy,
+      deviceName: data.deviceName
+    }, `away: ${data.label}`);
     return true;
   }
   if (!data.active && awayActive) {
@@ -814,22 +877,43 @@ function applyRemoteAwayState(data) {
     awayStartTime = null;
     awayLabel = 'Away';
     showHeroState('idle');
+    updateTimerSyncDetail({
+      updatedAt: data.updatedAt || Date.now(),
+      updatedBy: data.startedBy,
+      deviceName: data.deviceName
+    }, 'away ended');
     return true;
   }
   return false;
 }
 
-function syncTimerState() {
+function syncTimerState(extra = {}) {
   if (!fbRoomRef) return;
+  const now = Date.now();
+  const isStopped = !!extra.stopped;
+  const taskAnchor = taskStartTime || blockStartTime || timerStartedAt || now;
+  const blockAnchor = blockStartTime || taskStartTime || timerStartedAt || now;
+  const lastTask = Object.prototype.hasOwnProperty.call(extra, 'lastTask')
+    ? extra.lastTask
+    : (currentTask || lastTaskForRepeat || null);
+  const timer = {
+    lastTask,
+    running: isStopped ? false : running,
+    stopped: isStopped,
+    intervalSecs: totalSecs,
+    startedAt: running && !isStopped ? Date.now() - (totalSecs - remaining) * 1000 : null,
+    taskStartTime: running && !isStopped ? taskAnchor : null,
+    blockStartTime: running && !isStopped ? blockAnchor : null,
+    pausedRemaining: running || isStopped ? null : remaining,
+    ownerDeviceId: isStopped ? null : (timerOwnerDeviceId || null),
+    updatedAt: now,
+    updatedBy: syncedDeviceId,
+    deviceName: navigator.userAgent.includes('Mobile') ? 'phone' : 'PC'
+  };
   fbRoomRef.update({
-    timer: {
-      lastTask: currentTask || lastTaskForRepeat || null,      running,
-      intervalSecs: totalSecs,
-      startedAt: running ? Date.now() - (totalSecs - remaining) * 1000 : null,
-      pausedRemaining: running ? null : remaining,
-      ownerDeviceId: timerOwnerDeviceId || null
-    }
+    timer
   });
+  updateTimerSyncDetail(timer, timer.running ? `active: ${timer.lastTask || 'Work'}` : timer.stopped ? 'timer stopped' : 'timer paused');
 }
 
 function resolveEntrySync(local, remote, nowTs = Date.now()) {

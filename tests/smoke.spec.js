@@ -324,6 +324,159 @@ test('remote away switch updates an already mirrored away state', async ({ page 
   expect(state).toEqual({ awayActive: true, awayLabel: 'Cooking', awayStartTime: cookingStart });
 });
 
+test('remote timer handoff updates task label and block anchors', async ({ page }) => {
+  await openApp(page);
+  const oldStart = Date.now() - 10 * 60 * 1000;
+  const remoteStart = Date.now() - 2 * 60 * 1000;
+
+  await page.evaluate((startTs) => {
+    running = true;
+    totalSecs = 1800;
+    remaining = 1200;
+    currentTask = 'Eat';
+    lastTaskForRepeat = 'Eat';
+    timerStartedAt = startTs;
+    taskStartTime = startTs;
+    blockStartTime = startTs;
+    timerOwnerDeviceId = syncedDeviceId;
+    showHeroState('active');
+    document.getElementById('hero-task-name').textContent = 'Eat';
+    document.getElementById('timer-status').textContent = 'Pinging every 30 min';
+  }, oldStart);
+
+  const applied = await page.evaluate((startTs) => applyRemoteTimerState({
+    running: true,
+    lastTask: 'Cooking',
+    intervalSecs: 1800,
+    startedAt: startTs,
+    taskStartTime: startTs,
+    blockStartTime: startTs,
+    ownerDeviceId: 'phone-device',
+    updatedAt: Date.now(),
+    updatedBy: 'phone-device',
+    deviceName: 'phone'
+  }), remoteStart);
+
+  expect(applied).toBe(true);
+  await expect(page.locator('#hero-task-name')).toHaveText('Cooking');
+  await expect(page.locator('#timer-status')).toHaveText('Synced · pinging every 30 min');
+  await expect(page.locator('#sync-detail-label')).toContainText('active: Cooking');
+
+  const state = await page.evaluate(() => ({
+    currentTask,
+    lastTaskForRepeat,
+    taskStartTime,
+    blockStartTime,
+    timerOwnerDeviceId
+  }));
+  expect(state).toEqual({
+    currentTask: 'Cooking',
+    lastTaskForRepeat: 'Cooking',
+    taskStartTime: remoteStart,
+    blockStartTime: remoteStart,
+    timerOwnerDeviceId: 'phone-device'
+  });
+});
+
+test('remote timer stop resets local state and clears restored timer storage', async ({ page }) => {
+  await openApp(page);
+  const startTs = Date.now() - 5 * 60 * 1000;
+
+  await page.evaluate((ts) => {
+    running = true;
+    totalSecs = 1800;
+    remaining = 1200;
+    currentTask = 'Cooking';
+    lastTaskForRepeat = 'Cooking';
+    timerStartedAt = ts;
+    taskStartTime = ts;
+    blockStartTime = ts;
+    timerOwnerDeviceId = 'phone-device';
+    localStorage.setItem('ta3-timer', JSON.stringify({
+      running: true,
+      currentTask: 'Cooking',
+      lastTask: 'Cooking',
+      timerStartedAt: ts,
+      taskStartTime: ts,
+      totalSecs: 1800
+    }));
+    showHeroState('active');
+    document.getElementById('hero-task-name').textContent = 'Cooking';
+  }, startTs);
+
+  const applied = await page.evaluate(() => applyRemoteTimerState({
+    running: false,
+    stopped: true,
+    ownerDeviceId: null,
+    lastTask: null,
+    updatedAt: Date.now(),
+    updatedBy: 'phone-device',
+    deviceName: 'phone'
+  }));
+
+  expect(applied).toBe(true);
+  await expect(page.locator('#timer-status')).toHaveText('Ready');
+  await expect(page.locator('#sync-detail-label')).toContainText('timer stopped');
+
+  const state = await page.evaluate(() => ({
+    running,
+    currentTask,
+    taskStartTime,
+    blockStartTime,
+    timerStartedAt,
+    timerOwnerDeviceId,
+    savedTimer: localStorage.getItem('ta3-timer')
+  }));
+  expect(state).toEqual({
+    running: false,
+    currentTask: '',
+    taskStartTime: null,
+    blockStartTime: null,
+    timerStartedAt: null,
+    timerOwnerDeviceId: null,
+    savedTimer: null
+  });
+});
+
+test('local timer reset publishes stopped state for other devices', async ({ page }) => {
+  await openApp(page);
+  const startTs = Date.now() - 4 * 60 * 1000;
+
+  const timer = await page.evaluate((ts) => {
+    window.__timerUpdates = [];
+    fbRoomRef = {
+      update(payload) {
+        window.__timerUpdates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    running = true;
+    totalSecs = 1800;
+    remaining = 1000;
+    currentTask = 'Cooking';
+    lastTaskForRepeat = 'Cooking';
+    timerStartedAt = ts;
+    taskStartTime = ts;
+    blockStartTime = ts;
+    timerOwnerDeviceId = syncedDeviceId;
+    localStorage.setItem('ta3-timer', JSON.stringify({
+      running: true,
+      currentTask: 'Cooking',
+      timerStartedAt: ts,
+      taskStartTime: ts,
+      totalSecs: 1800
+    }));
+    resetTimer();
+    return window.__timerUpdates.at(-1).timer;
+  }, startTs);
+
+  expect(timer.running).toBe(false);
+  expect(timer.stopped).toBe(true);
+  expect(timer.lastTask).toBe(null);
+  expect(timer.ownerDeviceId).toBe(null);
+  expect(timer.startedAt).toBe(null);
+});
+
 test('crossing-day entries are clipped instead of displayed as one 28h block', async ({ page }) => {
   const now = new Date();
   const todayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
