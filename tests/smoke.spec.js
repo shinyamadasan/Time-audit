@@ -137,6 +137,13 @@ async function clickToastUndo(page) {
   await undo.click();
 }
 
+async function openTodayDetails(page) {
+  const toggle = page.locator('#today-details-toggle');
+  if ((await toggle.getAttribute('aria-pressed')) !== 'true') {
+    await toggle.click();
+  }
+}
+
 test('quick retro log can be undone', async ({ page }) => {
   await openApp(page);
 
@@ -146,6 +153,7 @@ test('quick retro log can be undone', async ({ page }) => {
   await page.locator('#retro-qend').fill('10:30');
   await page.locator('.quick-retro-bar').getByRole('button', { name: 'Log' }).click();
 
+  await openTodayDetails(page);
   await expect(page.locator('#recent-list')).toContainText('Smoke deep work');
   await clickToastUndo(page);
   await expect(page.locator('#recent-list')).not.toContainText('Smoke deep work');
@@ -169,6 +177,7 @@ test('deleted entries can be restored with undo', async ({ page }) => {
   };
   await openApp(page, { entries: [entry] });
 
+  await openTodayDetails(page);
   const row = page.locator('#recent-list .entry-row').filter({ hasText: 'Seeded focus block' });
   await expect(row).toHaveCount(1);
   await row.locator('button[onclick*="deleteEntry"]').click();
@@ -206,6 +215,7 @@ test('focus wallet spend can be undone without leaving point debt', async ({ pag
   await expect(page.locator('#th-wallet')).toHaveText('7 pts');
   await clickToastUndo(page);
   await expect(page.locator('#th-wallet')).toHaveText('17 pts');
+  await openTodayDetails(page);
   await expect(page.locator('#recent-list')).not.toContainText('Movie smoke');
 });
 
@@ -230,14 +240,17 @@ test('today defaults to clean mode and can reveal details', async ({ page }) => 
   await expect(page.locator('#today-details-toggle')).toHaveText('Details');
   await expect(page.locator('#today-details-toggle')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('#focus-wallet-card')).toBeHidden();
+  await expect(page.locator('#recent-entries-section')).toBeHidden();
 
   await page.locator('#today-details-toggle').click();
   await expect(page.locator('#today-details-toggle')).toHaveText('Clean');
   await expect(page.locator('#today-details-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#focus-wallet-card')).toBeVisible();
+  await expect(page.locator('#recent-entries-section')).toBeVisible();
 
   await page.locator('#today-details-toggle').click();
   await expect(page.locator('#focus-wallet-card')).toBeHidden();
+  await expect(page.locator('#recent-entries-section')).toBeHidden();
 });
 
 test('today health shows compact daily accounting', async ({ page }) => {
