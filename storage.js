@@ -24,6 +24,8 @@ const GOOGLE_CLIENT_ID = '548433155531-r93hucpo6pa8darnjm5tioj1rgg4vn6s.apps.goo
 let syncedDeviceId = localStorage.getItem('ta3-device-id') || ('device_' + Math.random().toString(36).slice(2,8));
 localStorage.setItem('ta3-device-id', syncedDeviceId);
 let connectedDevices = {};
+let _lastTimerSyncDetail = null;
+let _syncDetailAgeTicker = null;
 
 // ── Shared constants ──
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -510,7 +512,10 @@ function startSync() {
   deviceRef.onDisconnect().remove();
 
   fbDb.ref(`rooms/${roomCode}/timer`).on('value', snap => {
-    applyRemoteTimerState(snap.val());
+    const changed = applyRemoteTimerState(snap.val());
+    if (changed) {
+      scheduleRenderToday();
+    }
   });
 
   fbDb.ref(`rooms/${roomCode}/entries`).on('value', snap => {
@@ -718,6 +723,7 @@ function startSync() {
     }
   });
 
+  startSyncDetailAgeTicker();
   updateSyncPill('connected', 'synced');
   Promise.all([syncEntries(), syncFocusRedemptions()]).then(results => {
     if (!results.some(Boolean)) return;
@@ -726,10 +732,43 @@ function startSync() {
   });
 }
 
+async function forceSyncNow() {
+  if (!fbRoomRef) {
+    showToast('Sign in to sync first');
+    return false;
+  }
+  const btn = document.getElementById('sync-now-btn');
+  if (btn) btn.disabled = true;
+  updateSyncPill('syncing', 'syncing...');
+  try {
+    const [timerSnap, awaySnap] = await Promise.all([
+      fbRoomRef.child('timer').once('value'),
+      fbRoomRef.child('awayState').once('value')
+    ]);
+    const timerChanged = applyRemoteTimerState(timerSnap.val());
+    const awayChanged = applyRemoteAwayState(awaySnap.val());
+    await Promise.all([syncEntries(), syncFocusRedemptions()]);
+    localStorage.setItem('ta3-last-sync', Date.now());
+    if (timerChanged || awayChanged) {
+      persist();
+      scheduleRenderToday();
+    }
+    updateSyncPill('connected', 'synced');
+    showToast('Sync checked');
+    return true;
+  } catch (err) {
+    notifySyncWriteFailed(err);
+    updateSyncPill('syncing', 'sync retry needed');
+    return false;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function syncDeviceLabel(deviceId, fallback) {
-  if (fallback) return fallback;
   if (!deviceId) return 'other device';
   if (deviceId === syncedDeviceId) return 'this device';
+  if (fallback) return fallback;
   const device = connectedDevices && connectedDevices[deviceId];
   return (device && device.name) || 'other device';
 }
@@ -744,11 +783,32 @@ function syncAgeLabel(ts) {
 }
 
 function updateTimerSyncDetail(data, stateLabel) {
+  _lastTimerSyncDetail = { data: { ...data }, stateLabel };
+  renderTimerSyncDetail();
+}
+
+function renderTimerSyncDetail() {
   const el = document.getElementById('sync-detail-label');
-  if (!el || !data) return;
+  if (!el || !_lastTimerSyncDetail) return false;
+  const { data, stateLabel } = _lastTimerSyncDetail;
   const device = syncDeviceLabel(data.updatedBy || data.ownerDeviceId, data.deviceName);
-  const prefix = data.updatedBy === syncedDeviceId ? 'Synced' : `Synced from ${device}`;
-  el.textContent = `${prefix} ${syncAgeLabel(data.updatedAt)} · ${stateLabel}`;
+  const ownerName = data.ownerDeviceId
+    ? syncDeviceLabel(data.ownerDeviceId, data.ownerDeviceId === data.updatedBy ? data.deviceName : null)
+    : 'none';
+  const source = data.updatedBy === syncedDeviceId ? 'cloud heard this device' : `cloud heard ${device}`;
+  el.textContent = `${source} ${syncAgeLabel(data.updatedAt)} · owner: ${ownerName} · ${stateLabel}`;
+  return true;
+}
+
+function startSyncDetailAgeTicker() {
+  if (_syncDetailAgeTicker) return;
+  _syncDetailAgeTicker = setInterval(renderTimerSyncDetail, 15000);
+}
+
+function stopSyncDetailAgeTicker() {
+  if (!_syncDetailAgeTicker) return;
+  clearInterval(_syncDetailAgeTicker);
+  _syncDetailAgeTicker = null;
 }
 
 function applyRemoteTimerState(data) {
@@ -808,6 +868,8 @@ function applyRemoteTimerState(data) {
     updateTimerSyncDetail(data, `active: ${remoteTask}`);
     fbTimerReceived = true;
     updateRing();
+    persist();
+    scheduleRenderToday();
     return true;
   }
 
@@ -988,6 +1050,7 @@ let _partnerUidRef  = null;
 /** Removes all active Firebase room listeners. Call before switching rooms or signing out. */
 function teardownRoomListeners() {
   if (!fbDb || !roomCode) return;
+  stopSyncDetailAgeTicker();
   const paths = ['timer','entries','intention','devices','settings','breakState','reviews','weeklyReviews','focusRedemptions','awayState','plans'];
   paths.forEach(p => fbDb.ref(`rooms/${roomCode}/${p}`).off());
   fbDb.ref('.info/connected').off();
@@ -1054,10 +1117,15 @@ function updateSyncPill(state, label) {
     if(d) d.className='sync-dot'+(state==='syncing'?' pulse':'');
   });
   const dl=document.getElementById('sync-detail-label');
-  if(dl) dl.textContent =
-    state==='connected' ? `Synced across all your devices` :
-    state==='syncing'   ? 'Connecting…' :
-                          'Not connected';
+  if(dl) {
+    const renderedTimer = state === 'connected' && renderTimerSyncDetail();
+    if (!renderedTimer) {
+      dl.textContent =
+        state==='connected' ? `Synced across all your devices` :
+        state==='syncing'   ? 'Connecting...' :
+                              'Not connected';
+    }
+  }
 }
 
 function updateSyncUI() {
