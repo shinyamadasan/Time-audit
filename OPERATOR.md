@@ -109,56 +109,6 @@ means the dispatcher drains the whole backlog on the next wake.
 **Trade-off:** up to ~30 min latency on a remote command. Irrelevant for work you aren't watching.
 Want it snappier? Shorten the interval (more wakes). Want fewer wakes? Lengthen it.
 
-### What runs when â€” and what the master flag actually gates
-
-Every app installed by the AI Dev OS registers **two** scheduled tasks. Not one each â€” two, both.
-They do different jobs and are easy to confuse:
-
-| Task | Fires | Job |
-|---|---|---|
-| **ChronaSense Command Dispatcher** | every **30 min** | Drains Telegram commands (`/status`, `/go`, `/build`, `/review`â€¦) |
-| **ChronaSense Claude Overnight** | **9 PM & 2 AM** | Autonomous run: triage captures â†’ proposals â†’ morning digest |
-
-Both wake the PC. **Neither is "the automation" on its own** â€” they are just alarm clocks.
-
-The thing that decides whether anything actually *happens* is one line in `run-claude.ps1`:
-
-```powershell
-$AUTOMATION_ENABLED = $false   # flip to $true once validated
-```
-
-That is **the single master flag for everything that mutates the repo unattended** â€” the overnight
-run *and* the dispatcher's build/review/merge commands. It is deliberately not a schedule setting,
-because scheduling and permission are different questions:
-
-| | `$AUTOMATION_ENABLED = $false` | `= $true` |
-|---|---|---|
-| Tasks still fire on schedule | yes | yes |
-| `/status`, `/next`, `/log` (read-only) | **work** | work |
-| `/go`, `/build`, `/review` (mutating) | **blocked** | run |
-| Overnight run does real work | **no â€” no-ops** | yes |
-
-So a freshly installed app is **fully wired but deliberately inert**. Every alarm is set; nothing is
-allowed to touch the repo yet. Turn it on only after you have watched one run:
-
-- `/enable` from Telegram (flips the flag, commits, pushes), or edit `run-claude.ps1` by hand.
-- `/disable` is the kill switch â€” it stops mutation without unregistering anything.
-
-**Validate in this order.** `/status` first: it exercises the whole loop â€” n8n writes the command
-into the repo, the dispatcher wakes and drains it, writes a reply to `captures/replies/OUTBOX.md`,
-n8n relays it back to Telegram â€” while changing nothing. If `/status` replies, the machinery works.
-*Then* `/enable`, then `/go`.
-
-### Running more than one app
-
-Each app gets its own pair of tasks, its own repo, and its own `automation.lock`, so two apps can
-never collide. Their dispatchers deliberately share the **same 30-minute interval** rather than being
-staggered: aligned triggers mean **one wake of the PC serves every app**. Staggering would wake the
-machine once per app for no benefit.
-
-Each app's `$AUTOMATION_ENABLED` is independent â€” a validated app can be live while a new one stays
-inert.
-
 ### Dispatcher controls â€” these need an **elevated** PowerShell (Run as Administrator)
 ```powershell
 Get-ScheduledTask -TaskName "ChronaSense Command Dispatcher" |
