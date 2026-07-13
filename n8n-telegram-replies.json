@@ -29,10 +29,6 @@
         "headerParameters": {
           "parameters": [
             {
-              "name": "Authorization",
-              "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT"
-            },
-            {
               "name": "Accept",
               "value": "application/vnd.github+json"
             },
@@ -42,7 +38,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "github-get-outbox",
       "name": "GitHub: get OUTBOX.md (json + sha)",
@@ -51,7 +49,12 @@
       "position": [
         480,
         300
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "GitHub PAT"
+        }
+      }
     },
     {
       "parameters": {
@@ -113,8 +116,7 @@
       ],
       "credentials": {
         "telegramApi": {
-          "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
-          "name": "Telegram Bot"
+          "name": "Telegram Bot - ChronaSense"
         }
       }
     },
@@ -125,10 +127,6 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT"
-            },
             {
               "name": "Accept",
               "value": "application/vnd.github+json"
@@ -142,7 +140,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"message\": \"replies: cleared after send\",\n  \"content\": \"Tm8gcGVuZGluZyByZXBsaWVzLgo=\",\n  \"sha\": \"{{ $('Decode OUTBOX.md').item.json.sha }}\",\n  \"branch\": \"main\"\n}",
-        "options": {}
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "github-clear-outbox",
       "name": "GitHub: clear OUTBOX.md",
@@ -151,7 +151,12 @@
       "position": [
         1440,
         220
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "GitHub PAT"
+        }
+      }
     }
   ],
   "connections": {

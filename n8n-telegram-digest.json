@@ -29,10 +29,6 @@
         "headerParameters": {
           "parameters": [
             {
-              "name": "Authorization",
-              "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT"
-            },
-            {
               "name": "Accept",
               "value": "application/vnd.github.raw"
             },
@@ -48,7 +44,9 @@
               "responseFormat": "text"
             }
           }
-        }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "github-get-digest",
       "name": "GitHub: get DIGEST.md (raw)",
@@ -57,7 +55,12 @@
       "position": [
         480,
         300
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "GitHub PAT"
+        }
+      }
     },
     {
       "parameters": {
@@ -77,8 +80,7 @@
       ],
       "credentials": {
         "telegramApi": {
-          "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
-          "name": "Telegram Bot"
+          "name": "Telegram Bot - ChronaSense"
         }
       }
     },
@@ -89,10 +91,6 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer REPLACE_WITH_YOUR_GITHUB_PAT"
-            },
             {
               "name": "Accept",
               "value": "application/vnd.github.raw"
@@ -109,7 +107,9 @@
               "responseFormat": "text"
             }
           }
-        }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "github-get-codex-ready",
       "name": "GitHub: get CODEX_READY.md (raw)",
@@ -118,7 +118,12 @@
       "position": [
         480,
         500
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "GitHub PAT"
+        }
+      }
     },
     {
       "parameters": {
@@ -167,8 +172,7 @@
       ],
       "credentials": {
         "telegramApi": {
-          "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
-          "name": "Telegram Bot"
+          "name": "Telegram Bot - ChronaSense"
         }
       }
     }
