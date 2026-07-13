@@ -1,7 +1,7 @@
 # Run this ONCE (as Administrator) to register the Telegram-command dispatcher with Windows Task
 # Scheduler.
 #
-# SLEEP-AND-WAKE MODEL (DECISIONS D-033, ported from the Meal Prep app):
+# SLEEP-AND-WAKE MODEL (DECISIONS D-033):
 #   This task DOES use -WakeToRun, and fires every 30 minutes -- not every 2.
 #
 #   The original design polled every 2 minutes with WakeToRun OFF, on the assumption that the PC was
@@ -18,13 +18,14 @@
 #   Codex build dispatched from a timer-wake cannot be suspended mid-flight by the unattended-sleep
 #   timer.
 #
-#   The interval is deliberately the SAME as the Meal Prep dispatcher's (30 min) rather than
-#   staggered: aligned triggers mean ONE wake serves both apps. Staggering them would wake the PC
-#   twice as often for no benefit. Each repo has its own automation.lock, so they cannot collide.
+#   Every app installed by the AI Dev OS uses this SAME 30-minute interval, deliberately -- never
+#   staggered. Aligned triggers mean ONE wake of the PC serves EVERY app. Staggering them would wake
+#   the machine once per app for no benefit. The apps cannot collide: each repo has its own
+#   automation.lock.
 #
 # To change the cadence: edit -RepetitionInterval below and re-run this script.
 
-$scriptPath = "C:\Users\Admin\Desktop\Vibe code\Time audit app\tools\Dispatch-Commands.ps1"
+$scriptPath = "C:/Users/Admin/Desktop/Vibe code/Time audit app\tools\Dispatch-Commands.ps1"
 $taskName   = "ChronaSense Command Dispatcher"
 
 # Remove existing task if it exists (so re-running this script is safe)

@@ -7,7 +7,7 @@
   (Approve / Clarify / Park / Reject), preserves the in-file priority order within each group,
   and writes a Telegram-ready digest to planning/DIGEST.md (and stdout).
 
-  STRUCTURED OUTPUT ONLY. This script does NOT message anyone — delivery is n8n's job: n8n reads
+  STRUCTURED OUTPUT ONLY. This script does NOT message anyone â€” delivery is n8n's job: n8n reads
   planning/DIGEST.md from GitHub on a morning schedule and sends it to Telegram. (Separation of duties:
   Claude/PC produces structured output; n8n owns all messaging.)
 
@@ -42,7 +42,7 @@ $blocks = [regex]::Matches($pending, '(?ms)^###\s+(?<id>PROP-\d+)\s+\p{Pd}\s+(?<
 
 $items = foreach ($b in $blocks) {
     $body = $b.Groups['body'].Value
-    # Only undecided proposals belong in the digest — skip anything already approved/parked/rejected.
+    # Only undecided proposals belong in the digest â€” skip anything already approved/parked/rejected.
     $mStatus = [regex]::Match($body, '\*\*status:\*\*\s*(?<s>\w+)')
     if ($mStatus.Success -and $mStatus.Groups['s'].Value -ne 'pending') { continue }
     if (-not [regex]::IsMatch($body, 'Decision:')) {

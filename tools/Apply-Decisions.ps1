@@ -48,7 +48,7 @@ foreach ($f in $files) {
     # clause parser already understands. "accept" applies each pending proposal's own recommended
     # verdict; "<verb> all" applies that verb to every pending proposal.
     if ($body -match '(?i)\baccept\b' -or $body -match '(?i)\b(approve|park|reject|clarify)\s+all\b') {
-        $pend = @{}   # pending PROP number -> its recommended verdict (from the ▶ Decision line)
+        $pend = @{}   # pending PROP number -> its recommended verdict (from the â–¶ Decision line)
         foreach ($m in [regex]::Matches($propText, '(?ms)^###\s+PROP-0*(?<n>\d+)\s+\p{Pd}\s+.+?\r?\n(?<b>.*?)(?=^###\s|\z)')) {
             if ($m.Groups['b'].Value -notmatch '\*\*status:\*\*\s*pending') { continue }
             $rec = ([regex]::Match($m.Groups['b'].Value, 'Decision:\s*(?<v>\w+)')).Groups['v'].Value.ToLower()
@@ -89,7 +89,7 @@ foreach ($f in $files) {
         $title = $mBlock.Groups['title'].Value.Trim()
         $newStatus = $statusWord[$current]
         # Idempotency: if it's already in the target status (re-applied reply, or decided a prior run),
-        # skip — don't re-stamp or re-queue. Prevents rebuilding already-built work.
+        # skip â€” don't re-stamp or re-queue. Prevents rebuilding already-built work.
         $cur = [regex]::Match($mBlock.Groups['body'].Value, '\*\*status:\*\*\s*(?<s>\w+)')
         if ($cur.Success -and $cur.Groups['s'].Value -eq $newStatus) {
             $applied += "  = $propId already $newStatus - skipped"; continue
@@ -126,7 +126,7 @@ if ($applied.Count -eq 0) { Write-Host 'No new decisions found.'; return }
 # Splice BQ items in under "## Approved sprint", dropping the empty placeholder.
 if ($bqAdds.Count -gt 0) {
     $block = ($bqAdds -join "`n`n")
-    # Drop whatever "empty" placeholder is there (original `*(empty…)*` or the builder's `_…empty…Awaiting…_`).
+    # Drop whatever "empty" placeholder is there (original `*(emptyâ€¦)*` or the builder's `_â€¦emptyâ€¦Awaitingâ€¦_`).
     $placeholder = '(?im)^[_*].*(empty|awaiting next sprint).*$'
     if ($bqText -match $placeholder) {
         $bqText = $bqText -replace $placeholder, $block

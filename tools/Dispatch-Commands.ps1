@@ -120,7 +120,7 @@ function Get-NextAction {
     if (-not (Test-Path $tasksFile)) { return @{ Action = 'status'; Message = 'No TASKS.md found.' } }
     $text = Get-Content $tasksFile -Raw -Encoding UTF8
     $body = ($text -split '<!-- TASK TEMPLATE')[0]
-    $blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[·•]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
+    $blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[Â·â€¢]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
     $priority = @(
         @{ s = 'blocked';     owner = 'you (Claude)'; action = 'status'; note = 'blocked -- needs your decision, see the blocker note in TASKS.md' }
         @{ s = 'review';      owner = 'Claude';        action = 'review' }
@@ -214,7 +214,7 @@ function Get-TaskTable {
     if (-not (Test-Path $tasksFile)) { return @() }
     $text = Get-Content $tasksFile -Raw -Encoding UTF8
     $body = ($text -split '<!-- TASK TEMPLATE')[0]
-    $blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[·•]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
+    $blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[Â·â€¢]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
     $out = @()
     foreach ($b in $blocks) {
         $rest = $b.Groups['rest'].Value
