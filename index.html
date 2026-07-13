@@ -375,14 +375,16 @@
       <div class="s-sub" id="s-identity-sub" style="margin-top:3px;line-height:1.3"></div>
     </div>
   </div>
-  <div class="page-header" style="margin-bottom:8px">
-    <div class="page-title">Recent entries</div>
-    <div style="display:flex;gap:6px">
-      <button class="btn sm ghost" onclick="openRetroLog()">+ Past block</button>
-      <button class="btn sm ghost" onclick="showView('week')">All →</button>
+  <div id="recent-entries-section" class="today-detail">
+    <div class="page-header" style="margin-bottom:8px">
+      <div class="page-title">Recent entries</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn sm ghost" onclick="openRetroLog()">+ Past block</button>
+        <button class="btn sm ghost" onclick="showView('week')">All →</button>
+      </div>
     </div>
+    <div id="recent-list"></div>
   </div>
-  <div id="recent-list"></div>
 </div>
 
 <!-- ══ WEEK ══ -->
@@ -1344,7 +1346,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-13-sync-hardening-1';
+const APP_BUILD = '2026-07-13-noise-cleanup-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];

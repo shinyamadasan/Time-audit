@@ -84,7 +84,7 @@ Depends on: —
 Lines: 1020–1332
 Purpose: All markup for the Today tab: header with date picker, status banner, day bar, hero section (idle/active/away states), Today Plan strip with generated morning startup state, Today Health strip, Focus Wallet card, same-as-last CTA, sleep pill, quick-retro bar, awareness signal, timeline, stat cards, recent entries list.
 Functions: —
-Key IDs: `view-today`, `today-date`, `date-picker-dropdown`, `today-details-toggle`, `status-banner`, `day-bar`, `activity-hero`, `hero-idle`, `hero-active`, `hero-away`, `plan-strip`, `morning-startup`, `plan-task`, `today-health`, `missed-closeout-card`, `closeout-card`, `focus-wallet-card`, `same-as-last-btn`, `sleep-pill-btn`, `quick-retro-bar`, `awareness-signal`, `timeline-section`, `timeline-blocks`, `timeline-date-label`, `timeline-summary`, `recent-list`
+Key IDs: `view-today`, `today-date`, `date-picker-dropdown`, `today-details-toggle`, `status-banner`, `day-bar`, `activity-hero`, `hero-idle`, `hero-active`, `hero-away`, `plan-strip`, `morning-startup`, `plan-task`, `today-health`, `missed-closeout-card`, `closeout-card`, `focus-wallet-card`, `same-as-last-btn`, `sleep-pill-btn`, `quick-retro-bar`, `awareness-signal`, `timeline-section`, `timeline-blocks`, `timeline-date-label`, `timeline-summary`, `recent-entries-section`, `recent-list`
 Depends on: —
 
 ## [HTML — Week / Reflect / Settings Views]
