@@ -119,6 +119,24 @@ async function addItem(page, task, when = '') {
   await page.locator('#plan-strip').getByRole('button', { name: 'Add' }).click();
 }
 
+test('morning startup turns a day mode into the first plan item', async ({ page }) => {
+  await openApp(page);
+
+  await expect(page.locator('#morning-startup')).toBeVisible();
+  await expect(page.locator('#morning-startup')).toContainText('What kind of day is this?');
+
+  await page.locator('#plan-task').fill('Ship launch notes');
+  await page.locator('.morning-choice.deep').click();
+
+  await expect(page.locator('#morning-startup')).toBeHidden();
+  await expect(page.locator('.plan-item')).toHaveCount(1);
+  await expect(page.locator('.plan-item').first().locator('.plan-when')).toHaveText('first block →');
+  await expect(page.locator('.plan-item').first().locator('.plan-task')).toContainText('Ship launch notes');
+
+  const stored = await page.evaluate(() => getPlanItems(planTodayKey()).map(i => ({ task: i.task, when: i.when })));
+  expect(stored).toEqual([{ task: 'Ship launch notes', when: 'first block' }]);
+});
+
 test('WIP cap holds at 3 and removing one frees a slot (no deadlock)', async ({ page }) => {
   await openApp(page);
 

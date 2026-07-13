@@ -646,6 +646,20 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 /* ── Today plan strip ── */
 .plan-strip{background:var(--bg2);border:1px solid var(--border2);box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);
   padding:11px 13px;margin-bottom:12px}
+.morning-startup{display:grid;gap:10px}
+.morning-kicker{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700}
+.morning-title{font-size:18px;font-weight:800;color:var(--text);line-height:1.15}
+.morning-sub{font-size:12px;color:var(--muted);line-height:1.45}
+.morning-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.morning-choice{display:flex;flex-direction:column;gap:3px;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:8px;color:var(--text);font-family:var(--head);text-align:left;padding:9px;cursor:pointer;min-width:0}
+.morning-choice:hover{border-color:rgba(76,199,240,0.45);background:var(--bg4)}
+.morning-choice span{font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.morning-choice small{font-size:10px;color:var(--muted);line-height:1.3}
+.morning-choice.deep span{color:var(--deep)}
+.morning-choice.maintenance span{color:#c084fc}
+.morning-choice.light span{color:#34d399}
+.morning-add{padding-top:9px}
 .plan-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
 .plan-head-text{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
 .plan-title{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700}
@@ -681,6 +695,12 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .plan-input.when{flex:0 0 34%}
 .plan-input.task{flex:1}
 .plan-full{padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
+@media(max-width:520px){
+  .morning-choices{grid-template-columns:1fr}
+  .plan-add{flex-wrap:wrap}
+  .plan-input.when{flex:1 1 100%}
+  .plan-add .btn{margin-left:auto}
+}
 
 /* ── Review: tomorrow's plan picker ── */
 .rv-plan-ref{font-size:11px;color:var(--muted);margin-bottom:7px;font-style:italic}

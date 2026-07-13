@@ -82,9 +82,9 @@ Depends on: —
 
 ## [HTML — Today View]
 Lines: 1020–1332
-Purpose: All markup for the Today tab: header with date picker, status banner, day bar, hero section (idle/active/away states), commit bar, Today Health strip, Focus Wallet card, same-as-last CTA, sleep pill, quick-retro bar, awareness signal, timeline, stat cards, recent entries list.
+Purpose: All markup for the Today tab: header with date picker, status banner, day bar, hero section (idle/active/away states), Today Plan strip with generated morning startup state, Today Health strip, Focus Wallet card, same-as-last CTA, sleep pill, quick-retro bar, awareness signal, timeline, stat cards, recent entries list.
 Functions: —
-Key IDs: `view-today`, `today-date`, `date-picker-dropdown`, `today-details-toggle`, `status-banner`, `day-bar`, `activity-hero`, `hero-idle`, `hero-active`, `hero-away`, `commit-bar`, `today-health`, `missed-closeout-card`, `closeout-card`, `focus-wallet-card`, `same-as-last-btn`, `sleep-pill-btn`, `quick-retro-bar`, `awareness-signal`, `timeline-section`, `timeline-blocks`, `timeline-date-label`, `timeline-summary`, `recent-list`
+Key IDs: `view-today`, `today-date`, `date-picker-dropdown`, `today-details-toggle`, `status-banner`, `day-bar`, `activity-hero`, `hero-idle`, `hero-active`, `hero-away`, `plan-strip`, `morning-startup`, `plan-task`, `today-health`, `missed-closeout-card`, `closeout-card`, `focus-wallet-card`, `same-as-last-btn`, `sleep-pill-btn`, `quick-retro-bar`, `awareness-signal`, `timeline-section`, `timeline-blocks`, `timeline-date-label`, `timeline-summary`, `recent-list`
 Depends on: —
 
 ## [HTML — Week / Reflect / Settings Views]
@@ -173,11 +173,12 @@ Purpose: The 1–3 daily intentions that drive execution — the single daily ta
 plan strip (which replaced the old commit-bar), enforces the 3-item WIP cap, wires one-tap start,
 and derives evidence of "done" from actually-tracked entries rather than a self-reported checkbox.
 Functions: `planTodayKey()`, `normalizePlanTask()`, `getPlanItems()`, `getPlanItemsRaw()`,
-`syncCommitmentFromPlan()`, `syncIntentionFromPlan()`, `inferPlanEnergy()`, `savePlanItems()`,
+`createPlanItem()`, `syncCommitmentFromPlan()`, `syncIntentionFromPlan()`, `inferPlanEnergy()`, `savePlanItems()`,
 `planTrackedMin()`, `fmtPlanMin()`, `isPlanTaskActive()`, `getPlanItemStatus()`,
-`getActivePlanItem()`, `getNextPlanItem()`, `renderTodayPlan()`, `addPlanItem()`,
-`removePlanItem()`, `togglePlanDone()`, `startPlanItem()`, `startNextPlanItem()`
-Variables: `PLAN_MAX` (3), `plans` (state global)
+`getActivePlanItem()`, `getNextPlanItem()`, `renderMorningStartup()`, `setMorningPlan()`,
+`renderTodayPlan()`, `addPlanItem()`, `removePlanItem()`, `togglePlanDone()`,
+`startPlanItem()`, `startNextPlanItem()`
+Variables: `PLAN_MAX` (3), `MORNING_PLAN_PRESETS`, `plans` (state global)
 Depends on: `getEntriesForDateWindow()`, `entryDurationMinutes()`, `getViewingDateKey()`,
 `isViewingToday()`, `getDateInTZ()`, `_startTimer()`, `switchToTask()`, `persist()`,
 `showToast()`, `syncPlans()` + `normalizePlanItems()` (storage.js)
