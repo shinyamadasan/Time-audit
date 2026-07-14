@@ -362,6 +362,95 @@ test('remote away switch updates an already mirrored away state', async ({ page 
   expect(state).toEqual({ awayActive: true, awayLabel: 'Cooking', awayStartTime: cookingStart });
 });
 
+test('remote away start stops an older mirrored timer', async ({ page }) => {
+  await openApp(page);
+  const eatStart = Date.now() - 10 * 60 * 1000;
+  const cookingStart = Date.now() - 2 * 60 * 1000;
+
+  await page.evaluate((startTs) => {
+    running = true;
+    totalSecs = 1800;
+    remaining = 1200;
+    currentTask = 'Eat';
+    lastTaskForRepeat = 'Eat';
+    timerStartedAt = startTs;
+    taskStartTime = startTs;
+    blockStartTime = startTs;
+    timerOwnerDeviceId = 'phone-device';
+    showHeroState('active');
+    document.getElementById('hero-task-name').textContent = 'Eat';
+    document.getElementById('timer-status').textContent = 'Synced · pinging every 30 min';
+  }, eatStart);
+
+  const applied = await page.evaluate((startTs) => applyRemoteAwayState({
+    active: true,
+    label: 'Cooking',
+    startedAt: startTs,
+    startedBy: 'phone-device',
+    updatedAt: Date.now(),
+    deviceName: 'phone'
+  }), cookingStart);
+
+  expect(applied).toBe(true);
+  await expect(page.locator('#hero-away-label')).toHaveText('Cooking');
+  await expect(page.locator('#timer-status')).toHaveText('Away · Cooking · synced');
+
+  const state = await page.evaluate(() => ({
+    running,
+    currentTask,
+    taskStartTime,
+    blockStartTime,
+    timerStartedAt,
+    timerOwnerDeviceId,
+    awayActive,
+    awayLabel,
+    awayStartTime
+  }));
+  expect(state).toEqual({
+    running: false,
+    currentTask: '',
+    taskStartTime: null,
+    blockStartTime: null,
+    timerStartedAt: null,
+    timerOwnerDeviceId: null,
+    awayActive: true,
+    awayLabel: 'Cooking',
+    awayStartTime: cookingStart
+  });
+});
+
+test('stale remote away snapshot cannot overwrite newer local away state', async ({ page }) => {
+  await openApp(page);
+  const localStart = Date.now() - 60 * 1000;
+  const localStamp = Date.now();
+  const staleStart = Date.now() - 8 * 60 * 1000;
+
+  await page.evaluate(({ startTs, stamp }) => {
+    awayActive = true;
+    awayStartTime = startTs;
+    awayLabel = 'Cooking';
+    localStorage.setItem('ta3-away-updated-at', String(stamp));
+    showHeroState('away');
+    document.getElementById('hero-away-label').textContent = 'Cooking';
+    document.getElementById('timer-status').textContent = 'Away · Cooking · synced';
+  }, { startTs: localStart, stamp: localStamp });
+
+  const applied = await page.evaluate(({ startTs, stamp }) => applyRemoteAwayState({
+    active: true,
+    label: 'Eat',
+    startedAt: startTs,
+    startedBy: 'phone-device',
+    updatedAt: stamp
+  }), { startTs: staleStart, stamp: localStamp - 1000 });
+
+  expect(applied).toBe(false);
+  await expect(page.locator('#hero-away-label')).toHaveText('Cooking');
+  await expect(page.locator('#sync-detail-label')).toContainText('ignored stale away');
+
+  const state = await page.evaluate(() => ({ awayActive, awayLabel, awayStartTime }));
+  expect(state).toEqual({ awayActive: true, awayLabel: 'Cooking', awayStartTime: localStart });
+});
+
 test('remote timer handoff updates task label and block anchors', async ({ page }) => {
   await openApp(page);
   const oldStart = Date.now() - 10 * 60 * 1000;
@@ -417,6 +506,61 @@ test('remote timer handoff updates task label and block anchors', async ({ page 
   expect(state.timerOwnerDeviceId).toBe('phone-device');
   expect(state.savedTimer.currentTask).toBe('Cooking');
   expect(state.savedTimer.taskStartTime).toBe(remoteStart);
+});
+
+test('stale remote timer snapshot cannot overwrite newer local timer state', async ({ page }) => {
+  await openApp(page);
+  const localStart = Date.now() - 60 * 1000;
+  const localStamp = Date.now();
+  const staleStart = Date.now() - 12 * 60 * 1000;
+
+  await page.evaluate(({ startTs, stamp }) => {
+    running = true;
+    totalSecs = 1800;
+    remaining = 1740;
+    currentTask = 'Cooking';
+    lastTaskForRepeat = 'Cooking';
+    timerStartedAt = startTs;
+    taskStartTime = startTs;
+    blockStartTime = startTs;
+    timerOwnerDeviceId = syncedDeviceId;
+    localStorage.setItem('ta3-timer-updated-at', String(stamp));
+    showHeroState('active');
+    document.getElementById('hero-task-name').textContent = 'Cooking';
+    document.getElementById('timer-status').textContent = 'Pinging every 30 min';
+  }, { startTs: localStart, stamp: localStamp });
+
+  const applied = await page.evaluate(({ startTs, stamp }) => applyRemoteTimerState({
+    running: true,
+    lastTask: 'Eat',
+    intervalSecs: 1800,
+    startedAt: startTs,
+    taskStartTime: startTs,
+    blockStartTime: startTs,
+    ownerDeviceId: 'phone-device',
+    updatedAt: stamp,
+    updatedBy: 'phone-device',
+    deviceName: 'phone'
+  }), { startTs: staleStart, stamp: localStamp - 1000 });
+
+  expect(applied).toBe(false);
+  await expect(page.locator('#hero-task-name')).toHaveText('Cooking');
+  await expect(page.locator('#sync-detail-label')).toContainText('ignored stale timer');
+
+  const state = await page.evaluate(() => ({
+    currentTask,
+    taskStartTime,
+    blockStartTime,
+    timerOwnerDeviceId,
+    syncedDeviceId
+  }));
+  expect(state).toEqual({
+    currentTask: 'Cooking',
+    taskStartTime: localStart,
+    blockStartTime: localStart,
+    timerOwnerDeviceId: state.syncedDeviceId,
+    syncedDeviceId: state.syncedDeviceId
+  });
 });
 
 test('sync now pulls the latest remote timer snapshot', async ({ page }) => {

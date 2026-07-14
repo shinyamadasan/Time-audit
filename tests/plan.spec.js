@@ -607,7 +607,8 @@ test('missed closeout recovery reviews yesterday and writes today plan', async (
 test('reference-class line reports what you actually do on that weekday', async ({ page }) => {
   // Tomorrow's weekday recurs at today-6 and today-13.
   const sameWeekday = daysAgo => {
-    const start = Date.now() - daysAgo * DAY_MS;
+    const d = new Date(Date.now() - daysAgo * DAY_MS);
+    const start = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0);
     const end   = start + 2 * 60 * 60 * 1000;   // 2h deep
     return {
       id: end, ts: end, tsStart: start, updatedAt: end, blockIntervalMin: 120,
