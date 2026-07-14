@@ -15,33 +15,69 @@ Habits, not commands.
 6. **Never interrupt deep work** to "just fix one thing." Capture it, stay in flow.
 7. **Review, don't micromanage.** Judge the outcome against the task; don't re-engineer how it was done.
 
-## Daily
+## Daily — it runs from your phone
 
-**Morning (~2 min)**
-- [ ] Read `STATUS.md` (top entry) — what ran overnight, where it stands.
-- [ ] Read `planning/TASK.md` — what's active now.
-- [ ] Skim the overnight commits (GitHub, or `git log`). Sane? If not → revert (below).
+You do not open the repo to run this system. You open Telegram.
 
-**Throughout the day**
-- Idea / bug appears → text the bot → keep going. **Capture and continue.**
+**Morning · ~2 min · the only moment the system truly needs you**
 
-**Evening (~2 min)**
-- [ ] Look at what shipped today (`planning/DONE.md` + the live site).
-- [ ] Good → leave it. Wrong → revert the commit.
-- [ ] Make sure the **top of `planning/ROADMAP.md`** is what you want built tonight.
+The bot sends the **Morning Digest** (~3 AM, after the overnight run triaged whatever you captured
+yesterday). It lists proposals awaiting your judgment. Reply to it:
+
+```
+Approve all      Approve 3      Park 5      Reject 2
+```
+
+**Nothing is built without this.** Silence means nothing happens — that is the safety valve, not a
+bug. Approving is a product decision, and it is the one thing no agent is allowed to do for you.
+
+**Through the day · 0 min**
+
+Idea or bug appears → text the bot → keep going.
+
+```
+pantry search is slow on mobile
+dark mode toggle in settings
+```
+
+Do not triage it. Do not design it in the message. That is what the overnight run is for. **Capture
+and continue** — the whole point is that an idea never costs you your flow.
+
+**When you want something shipped · one press**
+
+```
+/go
+```
+
+One press = **one task, all the way through**: plan → Codex builds on a branch → Guardian Gauntlet
+audits it → Claude reviews → merges → deploys. A sleeping PC wakes itself to do it. Press `/go`
+again for the next task.
+
+**Evening · ~1 min**
+
+Look at the app. Good → leave it. Wrong → revert the commit. That is the whole review.
+
+**The one thing that is deliberately NOT automatic**
+
+Red-zone work is **HELD**. If a task touches the data / sync / storage layer, auth, security, or the
+AI Dev OS itself, the reviewer approves it but does **not** merge — it waits for your eyes
+(`status: approved`). This friction is not removable, and it is not an oversight: a broken UI change
+is reverted in a minute, but **lost user data cannot be reverted at all**. See DECISIONS D-032.
 
 ## Weekly (~10 min)
-- [ ] **Export your data** (app → Settings → Export Data). Keep the last few `.json` files.
-      This is the **only real undo for data loss** — `git revert` restores code, never deleted data.
-      It's what saved the pantry during the 2026-07 sync incidents. Do it before you dogfood
-      anything risky. (Set a recurring phone reminder; see D-032.)
-- [ ] Merge any **held** red-zone branches: an approved-but-`approved`-status task (data/sync/auth/OS)
-      waits for your glance. Check `TASKS.md` for `status: approved`, skim the diff, then
-      `git checkout main && git merge --ff-only task-<id> && git push origin main`.
-- [ ] Clean `planning/ROADMAP.md` — reorder the queue, prune stale items.
-- [ ] Promote any `/idea` / `/research` that's now worth building into the Task Queue.
+- [ ] **Export your data.** This is the **only real undo for data loss** — `git revert` restores
+      code, never deleted rows. Do it before you dogfood anything risky. Set a recurring phone
+      reminder; nothing in this system can do it for you.
+- [ ] **Merge the held red-zone branches.** Check `TASKS.md` for `status: approved`, skim the diff,
+      then: `git checkout main && git merge --ff-only task-<id> && git push origin main`
+- [ ] Clean `planning/ROADMAP.md` — reorder the queue, prune what you will never build.
 - [ ] Skim `docs/DECISIONS.md` — still agree? Supersede anything that changed.
-- [ ] Prune `planning/DONE.md` if it's long (git keeps the full history).
+
+## Running two or more apps
+
+Same rhythm, once per app: each has its own bot, its own digest, its own `/go`. They share a single
+PC wake (the dispatchers are deliberately aligned on the same interval), so the second app costs you
+no extra machine time — only the two minutes of judgment its digest asks for.
 
 ## At the keyboard (PC cheat sheet)
 
