@@ -60,7 +60,10 @@
         "httpHeaderAuth": {
           "name": "GitHub PAT"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -123,7 +126,10 @@
         "httpHeaderAuth": {
           "name": "GitHub PAT"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
