@@ -188,8 +188,16 @@ if ($branchDirty.Count -gt 0) {
 }
 
 # npm test on the BRANCH, not on main -- we are about to make the branch become main.
+# Platform. PowerShell 7 defines $IsWindows/$IsMacOS; Windows PowerShell 5.1 does NOT -- there the
+# variable is $null, which is FALSY. A naive "if ($IsWindows)" would therefore take the macOS branch
+# on 5.1 and break every existing Windows install. Hence the explicit null check.
+$OnWindows = if ($null -eq $IsWindows) { $true } else { $IsWindows }
+
 $psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = 'cmd.exe'; $psi.Arguments = '/c npm test'; $psi.WorkingDirectory = $root
+# cmd.exe does not exist on macOS; /bin/sh is the equivalent there.
+if ($OnWindows) { $psi.FileName = 'cmd.exe'; $psi.Arguments = '/c npm test' }
+else            { $psi.FileName = '/bin/sh'; $psi.Arguments = '-c "npm test"' }
+$psi.WorkingDirectory = $root
 $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
 $p = [System.Diagnostics.Process]::Start($psi)
 if (-not $p.WaitForExit(10 * 60 * 1000)) {

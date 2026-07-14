@@ -328,6 +328,26 @@ if (-not $Scheduled) {
     # power button. Sleep (S3) / hibernate (S4) are both wakeable, so the Command Dispatcher's
     # WakeToRun timer can wake the machine, drain the queue (build/review/merge), and let it idle
     # back to sleep. Same power saving, without cutting off remote work. See DECISIONS D-033.
-    Add-Content -Path $logFile -Value "=== Sleeping PC (wakeable by the Command Dispatcher wake timer) ==="
-    rundll32.exe powrprof.dll,SetSuspendState 0,1,0
+    # Platform. PowerShell 7 defines $IsWindows; Windows PowerShell 5.1 does NOT (it is $null, which
+    # is FALSY) -- so check for null explicitly, or 5.1 would take the macOS branch and never sleep.
+    $onWin = if ($null -eq $IsWindows) { $true } else { $IsWindows }
+
+    if ($onWin) {
+        Add-Content -Path $logFile -Value "=== Sleeping PC (wakeable by the Command Dispatcher wake timer) ==="
+        rundll32.exe powrprof.dll,SetSuspendState 0,1,0
+    } else {
+        # macOS DELIBERATELY DOES NOT SLEEP HERE, and this is a real design difference -- not an
+        # oversight, and not a straight translation of the Windows behaviour.
+        #
+        # Windows can be woken by a Task Scheduler timer every 30 minutes (WakeToRun), so it sleeps
+        # deeply and wakes to drain the queue. macOS has no equivalent: `pmset repeat wakeorpoweron`
+        # supports exactly ONE repeating wake per day. A Mac that sleeps would therefore sit on a
+        # queued /go until someone touched it -- the exact failure D-033 exists to prevent, and it
+        # would be silent.
+        #
+        # So on macOS the machine stays awake and launchd's 30-minute interval fires reliably. On a
+        # Mac mini -- a desktop that sits there anyway, idling around 7W -- that is the right trade:
+        # a few watts for a remote loop that actually works. The display still sleeps.
+        Add-Content -Path $logFile -Value "=== macOS: staying awake so the launchd dispatcher can fire (no WakeToRun equivalent -- see D-038) ==="
+    }
 }

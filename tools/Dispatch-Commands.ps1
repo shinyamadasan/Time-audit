@@ -47,16 +47,33 @@ $NO_REPLIES   = 'No pending replies.'
 # ES_SYSTEM_REQUIRED for the life of this process (ES_CONTINUOUS), which also covers the phase
 # runners it invokes and waits on. Windows releases it automatically when this process exits, so the
 # PC idles back to sleep on its own once the queue is drained.
-try {
-    Add-Type -Namespace Win32Power -Name Native -MemberDefinition @'
+# Platform. PowerShell 7 defines $IsWindows; Windows PowerShell 5.1 does NOT (it is $null, which is
+# FALSY) -- check for null explicitly, or 5.1 takes the macOS branch and loses its keep-awake.
+$OnWindows = if ($null -eq $IsWindows) { $true } else { $IsWindows }
+$caffeinate = $null
+
+if ($OnWindows) {
+    try {
+        Add-Type -Namespace Win32Power -Name Native -MemberDefinition @'
 [DllImport("kernel32.dll", SetLastError = true)]
 public static extern uint SetThreadExecutionState(uint esFlags);
 '@ -ErrorAction Stop
-    # ES_CONTINUOUS (0x80000000) | ES_SYSTEM_REQUIRED (0x00000001)
-    [void][Win32Power.Native]::SetThreadExecutionState(0x80000001)
-} catch {
-    # Non-fatal: worst case Windows may sleep mid-build; the lock + idempotent commands make a
-    # retry safe on the next wake.
+        # ES_CONTINUOUS (0x80000000) | ES_SYSTEM_REQUIRED (0x00000001)
+        [void][Win32Power.Native]::SetThreadExecutionState(0x80000001)
+    } catch {
+        # Non-fatal: worst case Windows may sleep mid-build; the lock + idempotent commands make a
+        # retry safe on the next wake.
+    }
+} else {
+    # macOS: `caffeinate -i -w <pid>` keeps the machine awake for exactly as long as the given PID
+    # lives, then releases. Same contract as ES_CONTINUOUS -- tied to THIS process, so the Mac idles
+    # back to sleep on its own once the queue is drained, with no cleanup to forget.
+    # Without it, a 10-15 minute build gets suspended halfway and leaves a half-finished branch.
+    try {
+        $caffeinate = Start-Process -FilePath 'caffeinate' -ArgumentList @('-i', '-w', $PID) -PassThru -ErrorAction Stop
+    } catch {
+        # Non-fatal, same as above.
+    }
 }
 
 # Under $ErrorActionPreference = 'Stop', ANY stderr text from a native command -- even a benign

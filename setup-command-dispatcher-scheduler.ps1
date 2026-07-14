@@ -25,8 +25,86 @@
 #
 # To change the cadence: edit -RepetitionInterval below and re-run this script.
 
-$scriptPath = "C:/Users/Admin/Desktop/Vibe code/Time audit app\tools\Dispatch-Commands.ps1"
+# Platform. PowerShell 7 defines $IsWindows; Windows PowerShell 5.1 does NOT (it is $null, which is
+# FALSY) -- so check for null explicitly, or 5.1 would take the macOS branch and register nothing.
+$OnWindows = if ($null -eq $IsWindows) { $true } else { $IsWindows }
+
 $taskName   = "ChronaSense Command Dispatcher"
+
+# =============================================================================================
+# macOS -- launchd. Not a translation of the Windows path: a genuinely different power model.
+#
+# Windows sleeps deeply and is woken every 30 minutes by a WakeToRun timer. macOS HAS NO
+# EQUIVALENT -- `pmset repeat wakeorpoweron` supports exactly ONE repeating wake per day. A
+# sleeping Mac would therefore sit on a queued /go until somebody touched it, silently, which is
+# the precise failure the sleep-and-wake model exists to prevent.
+#
+# So on macOS the machine STAYS AWAKE and launchd's 30-minute interval fires reliably. On a Mac
+# mini -- a desktop that sits there anyway, idling around 7W -- that is the right trade: a few
+# watts for a remote loop that actually works. The display still sleeps.
+# =============================================================================================
+if (-not $OnWindows) {
+    $dispatchScript = "C:/Users/Admin/Desktop/Vibe code/Time audit app/tools/Dispatch-Commands.ps1"
+    $label    = "com.aidevos.chronasense.dispatcher"
+    $plistDir = Join-Path $HOME 'Library/LaunchAgents'
+    $plist    = Join-Path $plistDir "$label.plist"
+    $pwshPath = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
+    if (-not $pwshPath) {
+        Write-Host "FAILED: 'pwsh' is not on PATH. Install PowerShell 7:  brew install powershell" -ForegroundColor Red
+        exit 1
+    }
+
+    New-Item -ItemType Directory -Path $plistDir -Force | Out-Null
+
+    # StartInterval is seconds. RunAtLoad drains anything queued while the job was unloaded.
+    @"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$label</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$pwshPath</string>
+    <string>-NoProfile</string>
+    <string>-File</string>
+    <string>$dispatchScript</string>
+  </array>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>C:/Users/Admin/Desktop/Vibe code/Time audit app/claude-session.log</string>
+  <key>StandardErrorPath</key><string>C:/Users/Admin/Desktop/Vibe code/Time audit app/claude-session.log</string>
+</dict>
+</plist>
+"@ | Set-Content -Path $plist -Encoding UTF8
+
+    # bootout first so re-running this script is safe (the launchd equivalent of Unregister).
+    & launchctl bootout "gui/$(id -u)/$label" 2>$null | Out-Null
+    & launchctl bootstrap "gui/$(id -u)" $plist 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { & launchctl load -w $plist 2>$null | Out-Null }   # older macOS fallback
+
+    Write-Host ""
+    Write-Host "launchd job loaded: $label" -ForegroundColor Green
+    Write-Host "Runs tools/Dispatch-Commands.ps1 every 30 minutes."
+    Write-Host ""
+    Write-Host "ONE MORE STEP -- keep the Mac awake, or none of this fires:" -ForegroundColor Yellow
+    Write-Host "  sudo pmset -a sleep 0 displaysleep 10"
+    Write-Host ""
+    Write-Host "  macOS cannot be woken on a 30-minute timer the way Windows can, so a sleeping Mac"
+    Write-Host "  would just sit on your queued /go until you touched it -- silently. Staying awake is"
+    Write-Host "  what makes remote work actually work. The display still sleeps; a Mac mini idles at"
+    Write-Host "  roughly 7W."
+    Write-Host ""
+    Write-Host "Verify with:" -ForegroundColor Cyan
+    Write-Host "  launchctl list | grep $label        # a PID or 0 in the first column = loaded"
+    Write-Host "  pmset -g | grep ' sleep'            # expect: sleep 0"
+    exit 0
+}
+
+# =============================================================================================
+# Windows -- Task Scheduler (below). Sleeps deeply, woken every 30 min by WakeToRun.
+# =============================================================================================
+$scriptPath = "C:/Users/Admin/Desktop/Vibe code/Time audit app\tools\Dispatch-Commands.ps1"
 
 # Remove existing task if it exists (so re-running this script is safe)
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue

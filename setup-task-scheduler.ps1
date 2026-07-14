@@ -2,8 +2,68 @@
 # After running, the task fires automatically at 2am every night
 # To change the time: edit the -At parameter below and re-run this script
 
-$scriptPath = "C:/Users/Admin/Desktop/Vibe code/Time audit app\run-claude.ps1"
+# Platform. PowerShell 7 defines $IsWindows; Windows PowerShell 5.1 does NOT (it is $null, which is
+# FALSY) -- check for null explicitly, or 5.1 takes the macOS branch and registers nothing.
+$OnWindows = if ($null -eq $IsWindows) { $true } else { $IsWindows }
+
 $taskName = "ChronaSense Claude Overnight"
+
+# ---------------------------------------------------------------- macOS: launchd
+if (-not $OnWindows) {
+    $runScript = "C:/Users/Admin/Desktop/Vibe code/Time audit app/run-claude.ps1"
+    $label     = "com.aidevos.chronasense.overnight"
+    $plistDir  = Join-Path $HOME 'Library/LaunchAgents'
+    $plist     = Join-Path $plistDir "$label.plist"
+    $pwshPath  = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
+    if (-not $pwshPath) {
+        Write-Host "FAILED: 'pwsh' is not on PATH. Install PowerShell 7:  brew install powershell" -ForegroundColor Red
+        exit 1
+    }
+
+    New-Item -ItemType Directory -Path $plistDir -Force | Out-Null
+
+    # Two daily runs, same as Windows: 9 PM and 2 AM. StartCalendarInterval takes an ARRAY of dicts
+    # for multiple times. Note: -Scheduled is NOT passed on macOS -- on Windows that flag tells the
+    # run to sleep the machine afterwards, and a Mac must stay awake for launchd's 30-minute
+    # dispatcher to keep firing (macOS has no WakeToRun equivalent).
+    @"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$label</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$pwshPath</string>
+    <string>-NoProfile</string>
+    <string>-File</string>
+    <string>$runScript</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>21</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>2</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>C:/Users/Admin/Desktop/Vibe code/Time audit app/claude-session.log</string>
+  <key>StandardErrorPath</key><string>C:/Users/Admin/Desktop/Vibe code/Time audit app/claude-session.log</string>
+</dict>
+</plist>
+"@ | Set-Content -Path $plist -Encoding UTF8
+
+    & launchctl bootout "gui/$(id -u)/$label" 2>$null | Out-Null
+    & launchctl bootstrap "gui/$(id -u)" $plist 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { & launchctl load -w $plist 2>$null | Out-Null }
+
+    Write-Host ""
+    Write-Host "launchd job loaded: $label" -ForegroundColor Green
+    Write-Host "Runs run-claude.ps1 at 9:00 PM and 2:00 AM daily."
+    Write-Host ""
+    Write-Host "Verify with:  launchctl list | grep $label" -ForegroundColor Cyan
+    exit 0
+}
+
+# ---------------------------------------------------------------- Windows: Task Scheduler
+$scriptPath = "C:/Users/Admin/Desktop/Vibe code/Time audit app\run-claude.ps1"
 
 # Remove existing task if it exists (so re-running this script is safe)
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
