@@ -37,6 +37,12 @@
 #>
 param([switch]$DryRun)
 
+# Platform. PowerShell 7 defines $IsWindows/$IsMacOS; Windows PowerShell 5.1 does NOT -- there the
+# variable is $null, which is FALSY. A naive "if ($IsWindows)" would therefore take the macOS branch
+# on 5.1 and break every existing Windows install. Hence the explicit null check.
+$OnWindows = if ($null -eq $IsWindows) { $true } else { $IsWindows }
+
+
 # WHICH IMPLEMENTER BUILDS THE CODE. Set by the installer from the app's config ("builder" key).
 #
 #   codex   -- `codex exec`. The default, and the stronger option: the model that WRITES the code is
@@ -217,8 +223,8 @@ if ($BUILDER -eq 'claude') {
     # /go. cmd.exe /c resolves the shim the same way a human typing `claude` in a terminal does.
     # (Run-Claude-Review.ps1 already uses this pattern for `npm test`, for the same reason.)
     $claudeArgs = '-p --allowedTools "Read" "Glob" "Grep" "Edit" "Write" "Bash(npm test)" "Bash(npm run *)" "Bash(node *)"'
-    $psi.FileName  = 'cmd.exe'
-    $psi.Arguments = "/c claude $claudeArgs"
+    if ($OnWindows) { $psi.FileName = 'cmd.exe'; $psi.Arguments = "/c claude $claudeArgs" }
+    else            { $psi.FileName = '/bin/sh'; $psi.Arguments = "-c ""claude $claudeArgs""" }
 
     # Codex reads AGENTS.md and knows this OS. Claude has to be told to -- so point it at the exact
     # same contract rather than inventing a second, drifting definition of the Implementer role.

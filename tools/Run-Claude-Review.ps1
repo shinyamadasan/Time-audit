@@ -20,6 +20,11 @@
 #>
 param([switch]$DryRun, [switch]$NoAutoMerge, [switch]$NoPush)
 
+
+# Platform. PowerShell 7 defines $IsWindows/$IsMacOS; Windows PowerShell 5.1 does NOT (the variable
+# is $null, which is FALSY -- so a naive "if ($IsWindows)" would silently take the macOS branch on
+# 5.1 and break every existing Windows install). Hence the explicit null check.
+$OnWindows = if ($null -eq $IsWindows) { $true } else { $IsWindows }
 $ErrorActionPreference = 'Stop'
 $root       = Split-Path $PSScriptRoot -Parent
 $logFile    = Join-Path $root 'claude-session.log'
@@ -62,8 +67,9 @@ function Invoke-NpmTest {
     Add-Content -Path $logFile -Value "[Run-Claude-Review] running npm test before auto-merge (timeout: $AUTO_MERGE_TEST_TIMEOUT_MINUTES minute(s))."
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = 'cmd.exe'
-    $psi.Arguments = '/c npm test'
+    # cmd.exe does not exist on macOS. /bin/sh is the equivalent shim resolver there.
+    if ($OnWindows) { $psi.FileName = 'cmd.exe';  $psi.Arguments = '/c npm test' }
+    else            { $psi.FileName = '/bin/sh';  $psi.Arguments = '-c "npm test"' }
     $psi.WorkingDirectory = $root
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
@@ -76,7 +82,11 @@ function Invoke-NpmTest {
     $stderrTask = $proc.StandardError.ReadToEndAsync()
     $exited = $proc.WaitForExit($AUTO_MERGE_TEST_TIMEOUT_MINUTES * 60 * 1000)
     if (-not $exited) {
-        & taskkill /PID $proc.Id /T /F 2>$null | Out-Null
+        # taskkill is Windows-only. Stop-Process works on both, but on Windows it does NOT kill the
+        # process TREE -- npm spawns node, and killing only the npm shim leaves the real test process
+        # alive, still holding the lock. taskkill /T is what actually reaps the tree there.
+        if ($OnWindows) { & taskkill /PID $proc.Id /T /F 2>$null | Out-Null }
+        else            { & pkill -TERM -P $proc.Id 2>$null | Out-Null }
         if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
         $proc.WaitForExit()
         Add-Content -Path $logFile -Value "[Run-Claude-Review] npm test TIMED OUT after $AUTO_MERGE_TEST_TIMEOUT_MINUTES minute(s)."
