@@ -37,6 +37,20 @@
 #>
 param([switch]$DryRun)
 
+# WHICH IMPLEMENTER BUILDS THE CODE. Set by the installer from the app's config ("builder" key).
+#
+#   codex   -- `codex exec`. The default, and the stronger option: the model that WRITES the code is
+#              not the model that REVIEWS it, so their blind spots do not line up.
+#   claude  -- headless `claude -p`. For anyone who has Claude Code but not Codex. Builder and
+#              reviewer are then the same model and DO share blind spots -- a real cost, honestly
+#              stated. What survives is what matters most: separate processes, separate prompts, zero
+#              shared context, and the builder gets NO GIT TOOLS, so it cannot commit, push, merge,
+#              or mark its own work approved.
+#
+# Everything else in this file is engine-agnostic. Only the process we start changes.
+$BUILDER = 'codex'
+if ($BUILDER -notin @('codex', 'claude')) { $BUILDER = 'codex' }
+
 $ErrorActionPreference = 'Stop'
 $root       = Split-Path $PSScriptRoot -Parent
 $logFile    = Join-Path $root 'claude-session.log'
@@ -118,8 +132,8 @@ if ($dirty.Count -gt 0) {
     Write-Result "ABORTED: main has $($dirty.Count) uncommitted change(s). Commit/stash/clean before building."
     exit 2
 }
-if (-not (Get-Command codex -ErrorAction SilentlyContinue)) {
-    Write-Result "ABORTED: the 'codex' CLI is not available on PATH for this session. Install/authenticate Codex CLI or check the account running this task has it on PATH."
+if (-not (Get-Command $BUILDER -ErrorAction SilentlyContinue)) {
+    Write-Result "ABORTED: the '$BUILDER' CLI is not on PATH for this session (builder = '$BUILDER'). Install/authenticate it, or check the account running this scheduled task has it on PATH."
     exit 2
 }
 
@@ -161,23 +175,98 @@ if ($branchExists) {
 # net against any other cause of a hang.
 $CODEX_TIMEOUT_MINUTES = 20   # tune per how long a real build/chained group legitimately takes
 $startTime = Get-Date
-# Start-Process -ArgumentList, given an array, does not reliably quote elements containing spaces
-# (confirmed live: $root's "ChronaSense" path split into separate positional args, and codex
-# rejected 'prep' as an unexpected argument). A single pre-quoted command-line string avoids this.
-$codexArgs = "exec -C `"$root`" --sandbox workspace-write `"Continue`""
 
+# ---------------------------------------------------------------------------------------------
+# THE IMPLEMENTER IS PLUGGABLE. Everything above and below this block -- branch isolation, the
+# clean-main preflight, the tracked-task snapshot, the commit-scope guard, the timeout kill, the
+# blocked-task classification -- is engine-agnostic and stays exactly as it is. Only the process we
+# start changes.
+#
+#   builder = codex   -> `codex exec`, the default. Two vendors means uncorrelated blind spots:
+#                        the model that writes the code is not the model that reviews it.
+#   builder = claude  -> headless `claude -p`, for anyone who has Claude Code but not Codex.
+#
+# The claude path is a REAL trade, and it is worth naming: the builder and the reviewer are then the
+# same model, so they share blind spots -- if the builder misreads a task, the reviewer is likelier
+# to misread it the same way. What survives is the part that matters most: they are separate
+# processes with separate prompts, zero shared context, and DIFFERENT TOOL GRANTS. The builder gets
+# no git at all -- it cannot commit, cannot push, cannot merge, and cannot mark its own work
+# approved. The runner commits; the reviewer (which has no Edit/Write on app code) judges the diff
+# it has never seen the reasoning behind. That is a far stronger gate than one session doing both.
+# ---------------------------------------------------------------------------------------------
 $psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = 'codex'
-$psi.Arguments = $codexArgs
 $psi.WorkingDirectory = $root
 $psi.UseShellExecute = $false
 $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $true
 
+$builderPrompt = $null
+
+if ($BUILDER -eq 'claude') {
+    # Prefer the logged-in Claude subscription over API-key billing, same as the other runners.
+    Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+
+    # NO GIT TOOLS. The runner commits; the builder must not. Without this the builder could commit
+    # straight to the branch, bypass the commit-scope guard, and (worse) set its own task to a status
+    # the reviewer never granted.
+    #
+    # LAUNCH VIA cmd.exe. `codex` is a real .exe, but `claude` is an npm shim (claude.ps1 / claude.cmd)
+    # -- and System.Diagnostics.Process with UseShellExecute=false CANNOT start a script by bare name.
+    # It throws Win32Exception, which is exactly what a Claude-only user would hit on their very first
+    # /go. cmd.exe /c resolves the shim the same way a human typing `claude` in a terminal does.
+    # (Run-Claude-Review.ps1 already uses this pattern for `npm test`, for the same reason.)
+    $claudeArgs = '-p --allowedTools "Read" "Glob" "Grep" "Edit" "Write" "Bash(npm test)" "Bash(npm run *)" "Bash(node *)"'
+    $psi.FileName  = 'cmd.exe'
+    $psi.Arguments = "/c claude $claudeArgs"
+
+    # Codex reads AGENTS.md and knows this OS. Claude has to be told to -- so point it at the exact
+    # same contract rather than inventing a second, drifting definition of the Implementer role.
+    $builderPrompt = @"
+You are running in autonomous mode as the IMPLEMENTER. No human is available.
+
+Follow AGENTS.md exactly -- it is the Implementer's manual and it is the contract you are held to.
+
+Implement the first task in TASKS.md with 'status: codex' ($($first.Id): $($first.Title)). ONLY that
+task. Read its acceptance criteria and the files it names. Read docs/ARCHITECTURE.md and
+docs/DECISIONS.md before you touch anything, and obey CLAUDE.md's Hard Rules without exception --
+they exist because each one has already caused a production bug.
+
+Then:
+  1. Run 'npm test'. If it fails, fix your own change until it passes. Do not weaken a test to make
+     it pass -- that converts a real failure into a silent one, which is worse than shipping nothing.
+  2. Append implementation evidence to CHANGELOG.md and test evidence to TEST_REPORT.md.
+  3. Set that task's 'status:' to 'review' in TASKS.md.
+
+If the task is ambiguous, or you would have to guess at a requirement, or a Hard Rule blocks the only
+approach you can see: set 'status: blocked', write the blocker under the task, and STOP. A blocked
+task with an honest reason is a good outcome. A guessed one is not -- you would be inventing a
+requirement the human never asked for, and the reviewer has no way to know you did.
+
+You CANNOT commit, push, or merge -- you have no git tools, by design. The runner commits what you
+changed and a separate reviewer judges it. Do not attempt to approve your own work.
+
+Touch only the files this task requires. Every changed line must trace to an acceptance criterion.
+"@
+}
+else {
+    # Start-Process -ArgumentList, given an array, does not reliably quote elements containing spaces
+    # (confirmed live: $root's "ChronaSense" path split into separate positional args, and codex
+    # rejected 'prep' as an unexpected argument). A single pre-quoted command-line string avoids this.
+    $psi.FileName  = 'codex'
+    $psi.Arguments = "exec -C `"$root`" --sandbox workspace-write `"Continue`""
+}
+
 $proc = New-Object System.Diagnostics.Process
 $proc.StartInfo = $psi
 $proc.Start() | Out-Null
+
+# Pipe the prompt via stdin rather than as an argument: under Windows PowerShell 5.1 a long
+# multi-line prompt passed as a native-command argument loses its tail (confirmed live in the
+# planner, where Claude received only the head of the prompt). Closing stdin immediately afterwards
+# is also what gives the child an instant EOF -- without it, `codex exec` once hung for 7+ hours
+# holding automation.lock and silently refusing every Telegram command.
+if ($builderPrompt) { $proc.StandardInput.Write($builderPrompt) }
 $proc.StandardInput.Close()
 $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
 $stderrTask = $proc.StandardError.ReadToEndAsync()
