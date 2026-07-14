@@ -61,15 +61,35 @@ Look at the app. Good → leave it. Wrong → revert the commit. That is the who
 
 Red-zone work is **HELD**. If a task touches the data / sync / storage layer, auth, security, or the
 AI Dev OS itself, the reviewer approves it but does **not** merge — it waits for your eyes
-(`status: approved`). This friction is not removable, and it is not an oversight: a broken UI change
-is reverted in a minute, but **lost user data cannot be reverted at all**. See DECISIONS D-032.
+(`status: approved`). A broken UI change is reverted in a minute, but **lost user data cannot be
+reverted at all**. See DECISIONS D-032.
+
+You can land it **from the phone**, in two steps (D-036):
+
+```
+/merge TASK-014        → shows what it TOUCHES and merges nothing
+/merge TASK-014 yes    → runs every gate, then fast-forwards main
+```
+
+The first step replies with the files, the diff stat, a GitHub compare link, and — most usefully —
+**the reviewer's own recorded reason for holding it**, quoted verbatim. Read that, open the link,
+*then* answer.
+
+The gate was never asking you to be at a desk. It was asking you to **look**. `/merge` removes the
+desk and keeps the looking: the summary step cannot merge anything, so seeing what a change touches
+is unavoidable, while ignoring it stays a deliberate act rather than a reflex.
+
+`/merge TASK-014 yes` is held to exactly the same standard as an auto-merge — clean tree, `npm test`
+green, true fast-forward (never a merge commit) — and refuses anything that is not `status:
+approved`.
 
 ## Weekly (~10 min)
 - [ ] **Export your data.** This is the **only real undo for data loss** — `git revert` restores
       code, never deleted rows. Do it before you dogfood anything risky. Set a recurring phone
       reminder; nothing in this system can do it for you.
-- [ ] **Merge the held red-zone branches.** Check `TASKS.md` for `status: approved`, skim the diff,
-      then: `git checkout main && git merge --ff-only task-<id> && git push origin main`
+- [ ] **Merge the held red-zone branches.** Check `TASKS.md` for `status: approved`. From the phone:
+      `/merge TASK-014` (read what it touches) then `/merge TASK-014 yes`. At the PC:
+      `git checkout main && git merge --ff-only task-<id> && git push origin main`
 - [ ] Clean `planning/ROADMAP.md` — reorder the queue, prune what you will never build.
 - [ ] Skim `docs/DECISIONS.md` — still agree? Supersede anything that changed.
 
@@ -152,7 +172,7 @@ They do different jobs and are easy to confuse:
 
 | Task | Fires | Job |
 |---|---|---|
-| **ChronaSense Command Dispatcher** | every **30 min** | Drains Telegram commands (`/status`, `/go`, `/build`, `/review`…) |
+| **ChronaSense Command Dispatcher** | every **30 min** | Drains Telegram commands (`/status`, `/go`, `/build`, `/review`, `/merge`…) |
 | **ChronaSense Claude Overnight** | **9 PM & 2 AM** | Autonomous run: triage captures → proposals → morning digest |
 
 Both wake the PC. **Neither is "the automation" on its own** — they are just alarm clocks.

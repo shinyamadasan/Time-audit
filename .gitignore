@@ -9,3 +9,8 @@ test-results/
 playwright-report/
 # Audio served from GitHub Pages — not bundled in APK
 www/Sounds/
+
+# AI Dev OS runtime artifacts -- these MUST be ignored, or the merge gates see a
+# permanently dirty tree and refuse to merge anything.
+automation.lock
+.last-phase-result.txt
