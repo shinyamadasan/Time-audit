@@ -751,6 +751,12 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .rv-closeout-cell{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px}
 .rv-closeout-cell span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);font-weight:700;margin-bottom:3px}
 .rv-closeout-cell strong{font-family:var(--mono);font-size:13px;color:var(--text);font-weight:700}
+.rv-gap-check{background:rgba(249,199,79,0.06);border:1px solid rgba(249,199,79,0.26);border-radius:var(--r);padding:10px 12px;margin:-6px 0 16px}
+.rv-gap-check.ok{background:rgba(52,211,153,0.06);border-color:rgba(52,211,153,0.24)}
+.rv-gap-head{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#f9c74f;font-weight:800;margin-bottom:5px}
+.rv-gap-check.ok .rv-gap-head{color:#34d399}
+.rv-gap-copy{font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:9px}
+.rv-gap-actions{display:flex;flex-wrap:wrap;gap:7px}
 
 /* ── Quick-log: today's plan chips ── */
 .ql-plan{margin:10px 0}

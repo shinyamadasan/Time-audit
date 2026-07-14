@@ -116,10 +116,10 @@ Key IDs: `focus-block-overlay`, `focus-overlay`, `focus-task-input`, `focus-sugg
 Depends on: focus-mode.js
 
 ## [HTML — Review, Sleep, Away, Break, Sync Modals]
-Lines: 1901–2119
-Purpose: Remaining overlay HTML — day review modal, sleep reminder modal, away picker, break modal, hdr-menu dropdown, reflections history modal, the `<audio>` element.
+Lines: 46–1346
+Purpose: Review/reflections/sleep overlay HTML plus related header/away controls and the install/recovery prompts.
 Functions: —
-Key IDs: `review-overlay`, `rv-closeout-summary`, `sleep-reminder-overlay`, `away-picker`, `break-modal`, `hdr-menu`, `reflections-history-overlay`
+Key IDs: `review-overlay`, `rv-closeout-summary`, `rv-unlogged-decision`, `sleep-reminder-overlay`, `away-picker`, `break-modal`, `hdr-menu`, `reflections-history-overlay`
 Depends on: —
 
 ---
@@ -127,7 +127,7 @@ Depends on: —
 ## JAVASCRIPT SECTIONS
 
 ## [State — Global Variables]
-Lines: 2129–2196
+Lines: 1353–1423
 Purpose: All top-level mutable state and one-time constants shared across the entire app.
 Functions: —
 Variables: `APP_BUILD`, `currentTask`, `viewingDateKey`, `entries`, `settings`, `reviews`, `weeklyReviews`, `focusRedemptions`, `intention`, `running`, `ticker`, `pcTimeLiveTicker`, `totalSecs`, `remaining`, `distractionDebt`, `pingCount`, `sortKey`, `sortDir`, `selectedEnergy`, `selectedOnPlan`, `QUICK_ACTIVITY_OPTIONS`, `blockStartTime`, `lastStateChange`, `currentState`, `blockSegments`, `focusExitTimer`, `fbApp`, `fbDb`, `fbRoomRef`, `roomCode`, `fbTimerReceived`, `currentUser`, `timerStartedAt`, `snoozesUsedToday`, `snoozeTimer`, `quickLogBusy`, `switchingTask`, `dailyCommitment`, `lastTaskForRepeat`, `breakActive`, `breakEndsAt`, `breakTicker`, `breakStartTs`, `timerOwnerDeviceId`, `awayActive`, `awayStartTime`, `awayLabel`, `continueBannerTimer`, `continueBannerCountdown`, `recentChipTasks`, `taskStartTime`, `awayElapsedTicker`, `lastUndoAction`, `CIRCUM`
@@ -258,14 +258,14 @@ Variables: —
 Depends on: `entries`, `settings` (timezone)
 
 ## [Today View — Rendering]
-Lines: 3932–4377
+Lines: 3901–4945
 Purpose: Main `renderToday()` and all its sub-renders: day bar, status banner, Today Health strip, Focus Wallet card, timeline (blocks + gaps), stat cards, recent entries list, contextual-visibility rules, hero state machine, same-as-last CTA, awareness signal, side-panel refresh trigger, render performance checkpoints.
-Functions: `renderToday()`, `isTodayDetailsOpen()`, `applyTodayDetailsMode()`, `toggleTodayDetails()`, `shouldRenderOnDateTick()`, `renderTodayOnDateChange()`, `computeCloseoutSummary()`, `closeoutSummaryParts()`, `openCloseoutReview()`, `missedCloseoutDateKey()`, `getMissedCloseout()`, `openMissedCloseoutReview()`, `renderMissedCloseoutCta()`, `renderCloseoutCta()`, `computeTodayHealth()`, `renderTodayHealth()`, `focusTodayPlanInput()`, `renderTodayActionStrip()`, `renderReviewCloseoutSummary()`, `renderDayBar()`, `renderStatusBanner()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderSidePanel()`, `renderLeftPanel()`
+Functions: `renderToday()`, `isTodayDetailsOpen()`, `applyTodayDetailsMode()`, `toggleTodayDetails()`, `shouldRenderOnDateTick()`, `renderTodayOnDateChange()`, `getCloseoutGaps()`, `computeCloseoutSummary()`, `closeoutSummaryParts()`, `openCloseoutReview()`, `missedCloseoutDateKey()`, `getMissedCloseout()`, `openMissedCloseoutReview()`, `renderMissedCloseoutCta()`, `renderCloseoutCta()`, `computeTodayHealth()`, `renderTodayHealth()`, `focusTodayPlanInput()`, `renderTodayActionStrip()`, `renderReviewCloseoutSummary()`, `renderReviewUnloggedDecision()`, `markReviewUnloggedIntentional()`, `openReviewFirstGap()`, `renderDayBar()`, `renderStatusBanner()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderSidePanel()`, `renderLeftPanel()`
 Variables: `_todayRenderKey`, `_lastTodayDateKey`, `_lastLoggedEntryId`
 Depends on: Timeline helpers, Statistics (including `sumEntryMinutes()` / `sumEnergyMinutes()`), Entry logging, Date picker, Focus Wallet, `persist()`
 
 ## [Hero Prompt & Task Suggestions]
-Lines: 4777–4895
+Lines: 4950–5046
 Purpose: "Name your task" hero input — start timer from hero, suggestion dropdown (recent + presets), keyboard navigation, dismiss individual suggestions.
 Functions: `startFromHero()`, `buildHeroSuggestions()`, `buildSugItem()`, `hideActivitySuggestion()`, `showHeroSuggestions()`, `hideHeroSuggestions()`, `selectHeroSuggestion()`, `handleHeroKey()`
 Variables: `_heroSugIndex`
@@ -321,13 +321,13 @@ Variables: —
 Depends on: `entries`, `settings`, `persist()`, `renderToday()`
 
 ## [Day Review Modal]
-Lines: ~6090–6480
+Lines: ~6665–7335
 Purpose: Open and save the end-of-day reflection for any date; render yesterday's waste-trap
 accountability banner; format week labels and save timestamps. `checkReviewPrompt()` auto-opens
 this at `settings.reviewHour` (default 22:00) — **this is the daily habit hook the whole plan
 loop hangs on.**
 Functions: `openReview()`, `saveReview()`, `renderYesterdayPromise()`, `formatWeekLabel()`, `formatSavedAt()`, `computeDailySummary()`, `renderDailySummary()`, `checkReviewPrompt()`
-Variables: `_reviewDateKey`
+Variables: `_reviewDateKey`, `_reviewUnloggedOk`
 Depends on: `reviews`, `plans`, `entries`, `persist()`, `renderToday()`, Review Plan Picker, Statistics section
 
 ⚠ `applyPromiseAsIntention()` and the banner's "Set focus" row were **retired** — the Today Plan
