@@ -149,6 +149,40 @@ into the repo, the dispatcher wakes and drains it, writes a reply to `captures/r
 n8n relays it back to Telegram — while changing nothing. If `/status` replies, the machinery works.
 *Then* `/enable`, then `/go`.
 
+### Importing the n8n workflows (read this before you touch n8n)
+
+**Import the JSON files. Never hand-edit the nodes.** Every n8n failure this system has had came from
+hand-editing: once it left one app's bot POSTing into another app's repo (both apps fed one repo,
+the other went silent, nothing errored), and once it set an HTTP node to `Basic Auth` with empty
+headers. The files in the repo are correct by construction — the right repo URL, the right auth
+type, the right headers. Editing is how they stop being correct.
+
+Use **Workflows -> ... -> Import from File**, not paste-into-canvas. If you see nodes named
+`GitHub: create file1` (note the trailing `1`), you pasted into an existing canvas and now have a
+half-old hybrid. Delete it and import properly.
+
+Three credentials, created once, named EXACTLY:
+
+| Name | Type | Value |
+|---|---|---|
+| `Telegram Bot - ChronaSense` | Telegram | that app's bot token |
+| `GitHub PAT` | **Header Auth** | Name: `Authorization` · Value: `Bearer github_pat_...` |
+
+**THE TRAP: n8n binds credentials by ID, not by name.** The per-app credential names make a
+mis-binding *visible*, but they do not *prevent* it — on import, n8n silently attaches the first
+Telegram credential of the right type, which is usually the wrong app's bot. **After every import,
+open the Telegram nodes and confirm the credential names the app you actually meant.**
+
+That mis-binding has a second, nastier effect: **a Telegram bot can only have ONE webhook.**
+Publishing a workflow bound to the wrong bot STEALS that bot's webhook. Fixing the credential later
+re-points the *new* bot's webhook but leaves the *robbed* bot orphaned — its messages then vanish
+silently. If a bot goes quiet after you fixed a credential elsewhere, **unpublish and re-publish its
+inbox workflow** to re-register the webhook.
+
+**Verify by routing, not by reading.** Send each bot a distinct plain message and confirm it lands
+in that app's `captures/inbox/` and nowhere else. A workflow can look perfect and still be writing
+into the wrong repo — GitHub answers `200 OK` either way.
+
 ### Running more than one app
 
 Each app gets its own pair of tasks, its own repo, and its own `automation.lock`, so two apps can
