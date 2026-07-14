@@ -520,7 +520,7 @@ test('review shows plan vs actual for the day being reviewed', async ({ page }) 
 
   const pva = page.locator('#rv-plan-vs-actual');
   await expect(pva).toBeVisible();
-  await expect(pva.locator('.rv-pva-head')).toHaveText('You planned 2 · finished 1');
+  await expect(pva.locator('.rv-pva-head')).toHaveText('You planned 2 · logged 1 · skipped 1');
 
   const rows = pva.locator('.rv-pva-row');
   await expect(rows.nth(0)).toContainText('Write report');
@@ -551,6 +551,11 @@ test('close day CTA opens the review loop and marks today closed after save', as
   await expect(page.locator('#rv-closeout-summary')).toContainText('45m');
   await expect(page.locator('#rv-closeout-summary')).toContainText('20m');
   await expect(page.locator('#rv-plan-vs-actual')).toBeVisible();
+  await expect(page.locator('#rv-unlogged-decision')).toBeVisible();
+  await expect(page.locator('#rv-unlogged-decision')).toContainText('Missing time check');
+  await expect(page.locator('#rv-unlogged-decision').getByRole('button', { name: 'Log first gap' })).toBeVisible();
+  await page.locator('#rv-unlogged-decision').getByRole('button', { name: 'Mark blank' }).click();
+  await expect(page.locator('#rv-unlogged-decision')).toContainText('Missing time acknowledged');
 
   await page.locator('#rv-win').fill('Shipped the report');
   await page.locator('#rv-waste').fill('Scrolling');
@@ -560,6 +565,8 @@ test('close day CTA opens the review loop and marks today closed after save', as
   await expect(page.locator('#review-overlay')).not.toHaveClass(/open/);
   await expect(page.locator('#closeout-title')).toHaveText('Day closed');
   await expect(page.locator('#closeout-action')).toHaveText('Edit review');
+  await expect(page.locator('#closeout-stats')).toContainText('blank ok');
+  expect(await page.evaluate(() => reviews[planTodayKey()].unloggedOk)).toBe(true);
 });
 
 test('missed closeout recovery reviews yesterday and writes today plan', async ({ page }) => {

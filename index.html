@@ -1230,6 +1230,7 @@
   </div>
 
   <div id="rv-closeout-summary" style="display:none"></div>
+  <div id="rv-unlogged-decision" style="display:none"></div>
 
   <!-- Plan vs actual for the day being reviewed — closes yesterday's loop -->
   <div id="rv-plan-vs-actual" style="display:none"></div>
@@ -1352,7 +1353,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-14-demote-daily-goal-1';
+const APP_BUILD = '2026-07-14-closeout-v2-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -3929,21 +3930,32 @@ function renderTodayOnDateChange() {
   renderToday();
 }
 
-function computeCloseoutSummary(dateKey) {
+function getCloseoutGaps(dateKey) {
   const realEntries = getEntriesForDateWindow(dateKey).filter(e => !e.missed && !e.deleted);
   const isToday = dateKey === getDateInTZ(Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
-  const planItems = getPlanItems(dateKey);
   const gapEnd = isToday ? undefined : dayEndTs(dateKey);
+  return computeGaps(realEntries, gapEnd);
+}
+
+function computeCloseoutSummary(dateKey) {
+  const realEntries = getEntriesForDateWindow(dateKey).filter(e => !e.missed && !e.deleted);
+  const planItems = getPlanItems(dateKey);
+  const isToday = dateKey === getDateInTZ(Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const gaps = getCloseoutGaps(dateKey);
   const wallet = isToday ? getCurrentFocusWallet() : null;
+  const review = reviews[dateKey] || null;
   return {
     entryCount: realEntries.length,
     planCount: planItems.length,
-    planDone: planItems.filter(i => i.done).length,
+    planDone: planItems.filter(i => i.done || planTrackedMin(i.task, dateKey) > 0).length,
     deepMin: sumEnergyMinutes(realEntries, 'deep', dateKey),
     wasteMin: sumEnergyMinutes(realEntries, 'waste', dateKey) + sumEnergyMinutes(realEntries, 'distraction', dateKey),
-    unloggedMin: computeGaps(realEntries, gapEnd).reduce((sum, gap) => sum + (gap.gapMin || 0), 0),
+    unloggedMin: gaps.reduce((sum, gap) => sum + (gap.gapMin || 0), 0),
+    unloggedGapCount: gaps.length,
+    firstUnloggedGap: gaps.find(gap => (gap.gapMin || 0) >= 30) || gaps[0] || null,
+    unloggedOk: !!(review && review.unloggedOk),
     walletBalance: wallet ? wallet.balance : null,
-    reviewed: !!reviews[dateKey]
+    reviewed: !!review
   };
 }
 
@@ -3952,7 +3964,9 @@ function closeoutSummaryParts(summary) {
   if (summary.planCount) parts.push(`${summary.planDone}/${summary.planCount} plan`);
   parts.push(`${fmtDur(summary.deepMin)} deep`);
   if (summary.wasteMin > 0) parts.push(`${fmtDur(summary.wasteMin)} waste`);
-  if (summary.unloggedMin > 0) parts.push(`${fmtDur(summary.unloggedMin)} unlogged`);
+  if (summary.unloggedMin > 0) {
+    parts.push(summary.unloggedOk ? `${fmtDur(summary.unloggedMin)} blank ok` : `${fmtDur(summary.unloggedMin)} unlogged`);
+  }
   if (summary.walletBalance !== null) parts.push(`${formatFocusPoints(summary.walletBalance)} pts`);
   return parts;
 }
@@ -4016,6 +4030,8 @@ function renderCloseoutCta() {
   document.getElementById('closeout-title').textContent = summary.reviewed ? 'Day closed' : 'Close day';
   document.getElementById('closeout-sub').textContent = summary.reviewed
     ? `${savedAt ? 'Review saved ' + savedAt + '. ' : 'Review saved. '}Edit it anytime.`
+    : summary.unloggedMin >= 30 && !summary.unloggedOk
+      ? 'Fill or mark missing time, then pick tomorrow.'
     : summary.entryCount || summary.planCount
       ? 'Review today, name the leak, pick tomorrow.'
       : 'No logs yet. Set tomorrow when you are ready.';
@@ -4197,6 +4213,7 @@ function renderReviewCloseoutSummary() {
 
   el.style.display = 'block';
   const planLabel = summary.planCount ? `${summary.planDone}/${summary.planCount}` : 'none';
+  const unloggedLabel = summary.unloggedOk || _reviewUnloggedOk ? 'Blank ok' : 'Unlogged';
   const walletCell = summary.walletBalance === null ? '' : `
       <div class="rv-closeout-cell">
         <span>Wallet</span>
@@ -4208,10 +4225,53 @@ function renderReviewCloseoutSummary() {
         <div class="rv-closeout-cell"><span>Plan</span><strong>${planLabel}</strong></div>
         <div class="rv-closeout-cell"><span>Deep</span><strong>${fmtDur(summary.deepMin)}</strong></div>
         <div class="rv-closeout-cell"><span>Waste</span><strong>${fmtDur(summary.wasteMin)}</strong></div>
-        <div class="rv-closeout-cell"><span>Unlogged</span><strong>${fmtDur(summary.unloggedMin)}</strong></div>
+        <div class="rv-closeout-cell"><span>${unloggedLabel}</span><strong>${fmtDur(summary.unloggedMin)}</strong></div>
         ${walletCell}
       </div>
     </div>`;
+}
+
+function renderReviewUnloggedDecision() {
+  const el = document.getElementById('rv-unlogged-decision');
+  if (!el) return;
+  const dateKey = _reviewDateKey || getViewingDateKey();
+  const summary = computeCloseoutSummary(dateKey);
+  if (summary.unloggedMin < 30) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+
+  const gap = summary.firstUnloggedGap;
+  const gapLabel = summary.unloggedGapCount === 1 ? '1 gap' : `${summary.unloggedGapCount} gaps`;
+  const timeLabel = gap ? `${localTime(gap.tsStart)} - ${localTime(gap.ts)}` : 'missing time';
+  const ok = _reviewUnloggedOk;
+  el.style.display = 'block';
+  el.innerHTML = `<div class="rv-gap-check${ok ? ' ok' : ''}">
+      <div class="rv-gap-head">${ok ? 'Missing time acknowledged' : 'Missing time check'}</div>
+      <div class="rv-gap-copy">
+        ${fmtDur(summary.unloggedMin)} is unlogged across ${gapLabel}. ${ok ? 'You marked it intentionally blank for this review.' : `First gap: ${timeLabel}. Fill it if you remember, or mark it blank if you do not.`}
+      </div>
+      <div class="rv-gap-actions">
+        <button type="button" class="btn sm ghost" onclick="openReviewFirstGap()">Log first gap</button>
+        <button type="button" class="btn sm ${ok ? 'primary' : 'ghost'}" onclick="markReviewUnloggedIntentional()">${ok ? 'Marked blank' : 'Mark blank'}</button>
+      </div>
+    </div>`;
+}
+
+function markReviewUnloggedIntentional() {
+  _reviewUnloggedOk = true;
+  renderReviewCloseoutSummary();
+  renderReviewUnloggedDecision();
+}
+
+function openReviewFirstGap() {
+  const dateKey = _reviewDateKey || getViewingDateKey();
+  const summary = computeCloseoutSummary(dateKey);
+  const gap = summary.firstUnloggedGap;
+  if (!gap) { showToast('No reviewable gap found'); return; }
+  closeModal('review-overlay');
+  openRetroLogPrefilled(gap.tsStart, Math.round(gap.ts));
 }
 
 // ── Contextual visibility ─────────────────────────────────────────────────
@@ -6608,11 +6668,13 @@ function removePreset(i){settings.presets.splice(i,1);persist();renderSettings()
 let _reviewDateKey = null; // which date is currently open in the review modal
 let _reviewPlanDraft = [];        // tomorrow's plan being picked (carries tombstones)
 let _reviewPlanTargetKey = null;  // the date that draft is FOR (= reviewed day + 1)
+let _reviewUnloggedOk = false;    // true when missing time was seen and intentionally left blank
 
 function openReview(dateKey) {
   _reviewDateKey = dateKey || toDateKey(new Date());
   const isToday = _reviewDateKey === toDateKey(new Date());
   const r = reviews[_reviewDateKey] || {};
+  _reviewUnloggedOk = !!r.unloggedOk;
 
   // Date label in modal header
   const dateLabel = document.getElementById('rv-date-label');
@@ -6643,6 +6705,7 @@ function openReview(dateKey) {
   document.getElementById('rv-avoid').value = r.avoid || '';
   openReviewPlan();
   renderReviewCloseoutSummary();
+  renderReviewUnloggedDecision();
   renderReviewPlanVsActual();
 
   // Reality score — use entries for that date
@@ -6868,14 +6931,16 @@ function renderReviewPlanVsActual() {
   if (!items.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
 
   const esc = s => String(s).replace(/</g, '&lt;');
-  const done = items.filter(i => i.done).length;
+  const logged = items.filter(i => i.done || planTrackedMin(i.task, _reviewDateKey) > 0).length;
+  const skipped = Math.max(0, items.length - logged);
   el.style.display = 'block';
   el.innerHTML = `<div class="rv-pva">
-      <div class="rv-pva-head">You planned ${items.length} · finished ${done}</div>
+      <div class="rv-pva-head">You planned ${items.length} · logged ${logged} · skipped ${skipped}</div>
       ${items.map(it => {
         const m = planTrackedMin(it.task, _reviewDateKey);
+        const loggedItem = it.done || m > 0;
         return `<div class="rv-pva-row">
-          <span class="rv-pva-mark${it.done ? ' on' : ''}">${it.done ? '✓' : '○'}</span>
+          <span class="rv-pva-mark${loggedItem ? ' on' : ''}">${loggedItem ? '✓' : '○'}</span>
           <span class="rv-pva-task">${esc(it.task)}</span>
           <span class="rv-pva-min${m > 0 ? ' on' : ''}">${fmtPlanMin(m)}</span>
         </div>`;
@@ -6887,9 +6952,17 @@ function saveReview(){
   const k = _reviewDateKey || toDateKey(new Date());
   const targetKey = _reviewPlanTargetKey || _dateKeyPlusDays(k, 1);
   const visible = reviewPlanVisible();
+  const summary = computeCloseoutSummary(k);
   // reviews[].tomorrow stays populated so Reflect history and existing records keep rendering.
   const tomorrowText = visible.map(i => i.task).join(' · ');
-  reviews[k]={win:document.getElementById('rv-win').value,waste:document.getElementById('rv-waste').value,avoid:document.getElementById('rv-avoid').value,tomorrow:tomorrowText,_savedAt:Date.now()};
+  reviews[k]={
+    win:document.getElementById('rv-win').value,
+    waste:document.getElementById('rv-waste').value,
+    avoid:document.getElementById('rv-avoid').value,
+    tomorrow:tomorrowText,
+    unloggedOk: summary.unloggedMin >= 30 ? _reviewUnloggedOk : false,
+    _savedAt:Date.now()
+  };
 
   plans[targetKey] = { items: _reviewPlanDraft.map(i => ({ ...i })), updatedAt: Date.now() };
 
