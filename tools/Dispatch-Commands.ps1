@@ -183,6 +183,46 @@ function Invoke-ReviewPhase {
     [pscustomobject]@{ Result = $res; ExitCode = $code }
 }
 
+# /merge -- land a HELD red-zone branch from the phone, in two steps.
+#
+# D-032 holds red-zone work (data/sync/storage, auth, security, the OS itself) because a human should
+# see what it touches before something irreversible lands. Note what that gate actually wants: it
+# wants you to have LOOKED. It never wanted you to be sitting at a desk -- that was incidental, and
+# it just meant a held branch could sit for days while you were away.
+#
+# So: two steps, and the FIRST one cannot merge anything.
+#   /merge TASK-014       -> replies with what the diff touches + the reviewer's own recorded reason
+#                            for holding it. main is untouched.
+#   /merge TASK-014 yes   -> runs the SAME gates as the auto-merge and fast-forwards main.
+#
+# The summary is the speed bump. It makes ignoring the diff a deliberate act instead of a reflex --
+# which is the only honest thing a one-word text message can be asked to protect against.
+function Invoke-MergePhase {
+    param([string]$CommandBody)
+
+    # The command file keeps the operator's full message in its body, so the args survive even though
+    # the `command:` frontmatter field holds only the bare verb.
+    $m = [regex]::Match($CommandBody, '(?im)^/merge\b\s*(?<rest>.*)$')
+    $rest = if ($m.Success) { $m.Groups['rest'].Value.Trim() } else { '' }
+
+    $idM = [regex]::Match($rest, '(?i)\b(?<id>TASK-\d+)\b')
+    if (-not $idM.Success) {
+        return "Usage: /merge TASK-014   (shows what it touches)`nThen:  /merge TASK-014 yes   (lands it)"
+    }
+    $taskId    = $idM.Groups['id'].Value.ToUpper()
+    $confirmed = $rest -match '(?i)\b(yes|confirm)\b'
+
+    $a = @('-TaskId', $taskId)
+    if ($confirmed) { $a += '-Confirm' }
+    if ($DryRun)    { $a += '-DryRun' }
+
+    & (Join-Path $root 'tools\Run-Merge.ps1') @a
+    $code = $LASTEXITCODE
+    $resultFile = Join-Path $root '.last-phase-result.txt'
+    if (Test-Path $resultFile) { $r = (Get-Content $resultFile -Raw).Trim(); Remove-Item $resultFile -Force; return $r }
+    return "Merge phase runner exited with code $code and left no result -- check claude-session.log."
+}
+
 # Shared by /run and /go's autopilot.
 function Invoke-RunPhase {
     if ($DryRun) { return [pscustomobject]@{ Result = "[DRY RUN] would run planning ($runClaude, no -Scheduled)"; ExitCode = 0 } }
@@ -510,6 +550,7 @@ try {
                 'build'  { (Invoke-BuildPhase).Result }
                 'review' { (Invoke-ReviewPhase).Result }
                 'go'     { Invoke-Autopilot }
+                'merge'  { Invoke-MergePhase -CommandBody $raw }
                 'log' {
                     $logTail = Get-Content "$root\claude-session.log" -Tail 40 -ErrorAction SilentlyContinue
                     if ($logTail) { "Last session log (40 lines):`n" + ($logTail -join "`n") } else { "No session log yet." }
