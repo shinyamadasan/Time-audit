@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chronasense Tracker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 300px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 16px;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .logo {
+    font-size: 15px;
+    font-weight: 700;
+    color: #a78bfa;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo img { width: 22px; height: 22px; border-radius: 5px; }
+  .btn-settings {
+    background: none;
+    border: none;
+    color: #6b7280;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 6px;
+    width: auto;
+    transition: color 0.15s;
+  }
+  .btn-settings:hover { color: #a78bfa; opacity: 1; }
+  .status {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+  .status .email { color: #a78bfa; font-weight: 600; }
+  .dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .dot.green { background: #4ade80; }
+  .dot.grey  { background: #6b7280; }
+  button {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  .btn-primary { background: #a78bfa; color: #1a1a2e; }
+  .btn-ghost   { background: transparent; color: #9ca3af; border: 1px solid #374151; margin-top: 8px; }
+  .tracking-info {
+    background: #16213e;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    font-size: 11px;
+    color: #9ca3af;
+  }
+  .tracking-info strong { color: #e0e0e0; display: block; margin-bottom: 4px; font-size: 12px; }
+  .error { color: #f87171; font-size: 11px; margin-top: 8px; text-align: center; }
+
+  /* ── Settings view ── */
+  #view-settings { display: none; }
+  .settings-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #e0e0e0;
+    margin-bottom: 10px;
+  }
+  .site-list {
+    max-height: 220px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+  }
+  .site-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    gap: 8px;
+  }
+  .site-row:hover { background: #16213e; }
+  .site-label { font-weight: 600; color: #e0e0e0; flex: 1; }
+  .site-domain { color: #6b7280; font-size: 11px; flex: 1; }
+  .btn-remove {
+    background: none;
+    border: none;
+    color: #6b7280;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 0 4px;
+    width: auto;
+    line-height: 1;
+    border-radius: 4px;
+  }
+  .btn-remove:hover { color: #f87171; opacity: 1; }
+  .add-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 10px;
+    border-top: 1px solid #1f2937;
+  }
+  .add-form input {
+    background: #16213e;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 12px;
+    color: #e0e0e0;
+    outline: none;
+    width: 100%;
+  }
+  .add-form input:focus { border-color: #a78bfa; }
+  .add-form input::placeholder { color: #4b5563; }
+  .add-row { display: flex; gap: 6px; }
+  .btn-add {
+    background: #a78bfa;
+    color: #1a1a2e;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    width: auto;
+    margin-top: 0;
+  }
+  .btn-add:hover { opacity: 0.85; }
+  .add-hint { font-size: 10px; color: #4b5563; }
+  .custom-badge {
+    font-size: 9px;
+    background: #312e81;
+    color: #a78bfa;
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 4px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Main view ── -->
+<div id="view-main">
+  <div class="header">
+    <div class="logo"><img src="icon48.png" alt="">Chronasense</div>
+    <button class="btn-settings" id="btn-open-settings" title="Manage tracked sites">⚙</button>
+  </div>
+
+  <div id="signed-out" style="display:none">
+    <div class="status">
+      <span class="dot grey"></span>Not tracking
+    </div>
+    <div class="tracking-info">
+      <strong>What gets tracked</strong>
+      YouTube, Instagram, Reddit, Netflix, LinkedIn, Notion, GitHub and more — logged automatically to your Chronasense.
+    </div>
+    <button class="btn-primary" id="btn-signin">Sign in with Google</button>
+    <div class="error" id="error-msg"></div>
+  </div>
+
+  <div id="signed-in" style="display:none">
+    <div class="status">
+      <span class="dot green"></span>Tracking active
+      <br><span class="email" id="user-email"></span>
+    </div>
+    <div class="tracking-info">
+      <strong>Running in background</strong>
+      Browser sessions are logged to your Chronasense automatically. Sessions under 1 minute are ignored.
+    </div>
+    <button class="btn-ghost" id="btn-signout">Sign out</button>
+  </div>
+</div>
+
+<!-- ── Settings view ── -->
+<div id="view-settings">
+  <div class="header">
+    <button class="btn-settings" id="btn-back" title="Back">←</button>
+    <div class="settings-title">Tracked sites</div>
+    <div style="width:30px"></div>
+  </div>
+
+  <div class="site-list" id="site-list"></div>
+
+  <div class="add-form">
+    <div class="add-hint">Add a site to track</div>
+    <div class="add-row">
+      <input id="input-domain" placeholder="Domain (e.g. twitch.tv)" />
+    </div>
+    <div class="add-row">
+      <input id="input-label" placeholder="Label (e.g. Twitch)" style="flex:1" />
+      <button class="btn-add" id="btn-add-site">Add</button>
+    </div>
+    <div class="error" id="add-error"></div>
+  </div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
