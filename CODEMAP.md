@@ -26,8 +26,8 @@
 ### storage.js
 Lines: external file
 Purpose: All localStorage/Firebase persistence, data loading, debounced Today rendering, and cross-device sync helpers with throttled sync-failure feedback plus timer sync visibility.
-Functions: `persist()`, `scheduleRenderToday()`, `forceSyncNow()`, `syncDeviceLabel()`, `syncAgeLabel()`, `updateTimerSyncDetail()`, `renderTimerSyncDetail()`, `startSyncDetailAgeTicker()`, `stopSyncDetailAgeTicker()`, `applyRemoteTimerState()`, `applyRemoteAwayState()`, `notifySyncWriteFailed()`, `resolveEntrySync()`, `syncEntries()`, `syncFocusRedemptions()`, `syncPlans()`, `normalizePlanItems()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
-Variables: `_renderTodayPending`, `_lastSyncErrorToastAt`, `_lastTimerSyncDetail`, `_syncDetailAgeTicker`
+Functions: `persist()`, `scheduleRenderToday()`, `numberFromStorage()`, `rememberTimerSyncStamp()`, `currentTimerSyncStamp()`, `remoteTimerSyncStamp()`, `isStaleRemoteTimerState()`, `rememberAwaySyncStamp()`, `currentAwaySyncStamp()`, `remoteAwaySyncStamp()`, `isStaleRemoteAwayState()`, `forceSyncNow()`, `syncDeviceLabel()`, `syncAgeLabel()`, `updateTimerSyncDetail()`, `renderTimerSyncDetail()`, `startSyncDetailAgeTicker()`, `stopSyncDetailAgeTicker()`, `applyRemoteTimerState()`, `applyRemoteAwayState()`, `notifySyncWriteFailed()`, `resolveEntrySync()`, `syncEntries()`, `syncFocusRedemptions()`, `syncPlans()`, `normalizePlanItems()`, `getEntriesForDate()`, `_buildEntriesByDate()`, `getDateInTZ()`, `toDateKey()`, `getWeekKey()`, `tzDow()`, `tzHour()`, `tzParseTime()`
+Variables: `_renderTodayPending`, `_lastSyncErrorToastAt`, `_lastTimerSyncDetail`, `_syncDetailAgeTicker`, `TIMER_SYNC_STAMP_KEY`, `AWAY_SYNC_STAMP_KEY`
 Depends on: Firebase SDK globals, `focusRedemptions` global, `sumEnergyMinutes()`
 
 ### insights.js

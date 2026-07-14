@@ -26,6 +26,8 @@ localStorage.setItem('ta3-device-id', syncedDeviceId);
 let connectedDevices = {};
 let _lastTimerSyncDetail = null;
 let _syncDetailAgeTicker = null;
+const TIMER_SYNC_STAMP_KEY = 'ta3-timer-updated-at';
+const AWAY_SYNC_STAMP_KEY = 'ta3-away-updated-at';
 
 // ── Shared constants ──
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -279,6 +281,55 @@ function scheduleRenderToday() {
   requestAnimationFrame(() => { _renderTodayPending = false; renderToday(); });
 }
 
+function numberFromStorage(key) {
+  const n = parseInt(localStorage.getItem(key) || '0', 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function rememberTimerSyncStamp(ts = Date.now()) {
+  const stamp = Number(ts) || Date.now();
+  localStorage.setItem(TIMER_SYNC_STAMP_KEY, String(stamp));
+  return stamp;
+}
+
+function currentTimerSyncStamp() {
+  const saved = numberFromStorage(TIMER_SYNC_STAMP_KEY);
+  const activeAnchor = running ? Math.max(timerStartedAt || 0, taskStartTime || 0, blockStartTime || 0) : 0;
+  return Math.max(saved, activeAnchor);
+}
+
+function remoteTimerSyncStamp(data) {
+  if (!data) return 0;
+  return Number(data.updatedAt || data.startedAt || data.taskStartTime || data.blockStartTime || 0) || 0;
+}
+
+function isStaleRemoteTimerState(data) {
+  const remoteStamp = remoteTimerSyncStamp(data);
+  const localStamp = currentTimerSyncStamp();
+  return !!(remoteStamp && localStamp && remoteStamp < localStamp);
+}
+
+function rememberAwaySyncStamp(ts = Date.now()) {
+  const stamp = Number(ts) || Date.now();
+  localStorage.setItem(AWAY_SYNC_STAMP_KEY, String(stamp));
+  return stamp;
+}
+
+function currentAwaySyncStamp() {
+  return Math.max(numberFromStorage(AWAY_SYNC_STAMP_KEY), awayActive ? (awayStartTime || 0) : 0);
+}
+
+function remoteAwaySyncStamp(data) {
+  if (!data) return 0;
+  return Number(data.updatedAt || data.startedAt || 0) || 0;
+}
+
+function isStaleRemoteAwayState(data) {
+  const remoteStamp = remoteAwaySyncStamp(data);
+  const localStamp = currentAwaySyncStamp();
+  return !!(remoteStamp && localStamp && remoteStamp < localStamp);
+}
+
 // ══════════════════════════════════════════════════════
 // PERSIST / LOAD
 // ══════════════════════════════════════════════════════
@@ -296,7 +347,16 @@ function persist() {
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
   localStorage.setItem('ta3-lv', Date.now()); // local version — used to detect unsynced changes
   if (running && timerStartedAt) {
-    localStorage.setItem('ta3-timer', JSON.stringify({timerStartedAt, totalSecs, running: true, lastTask: lastTaskForRepeat, currentTask, taskStartTime}));
+    localStorage.setItem('ta3-timer', JSON.stringify({
+      timerStartedAt,
+      totalSecs,
+      running: true,
+      lastTask: lastTaskForRepeat,
+      currentTask,
+      taskStartTime,
+      timerUpdatedAt: currentTimerSyncStamp(),
+      ownerDeviceId: timerOwnerDeviceId || null
+    }));
   } else {
     localStorage.removeItem('ta3-timer');
   }
@@ -369,6 +429,8 @@ function load() {
         lastTaskForRepeat = saved.lastTask || '';
         if (saved.currentTask) currentTask = saved.currentTask;
         if (saved.taskStartTime) taskStartTime = saved.taskStartTime;
+        if (saved.timerUpdatedAt) rememberTimerSyncStamp(saved.timerUpdatedAt);
+        if (saved.ownerDeviceId) timerOwnerDeviceId = saved.ownerDeviceId;
       }
     }
   } catch(e) {}
@@ -689,7 +751,8 @@ function startSync() {
   });
 
   fbDb.ref(`rooms/${roomCode}/awayState`).on('value', snap => {
-    applyRemoteAwayState(snap.val());
+    const changed = applyRemoteAwayState(snap.val());
+    if (changed) scheduleRenderToday();
   });
 
   // Listen for incoming nudges (ignore any that are older than 30s to skip history on connect)
@@ -813,6 +876,11 @@ function stopSyncDetailAgeTicker() {
 
 function applyRemoteTimerState(data) {
   if (!data) return false;
+  if (isStaleRemoteTimerState(data)) {
+    fbTimerReceived = true;
+    updateTimerSyncDetail(data, 'ignored stale timer');
+    return false;
+  }
   if ('ownerDeviceId' in data) timerOwnerDeviceId = data.ownerDeviceId || null;
   if (data.intervalSecs) {
     totalSecs = data.intervalSecs;
@@ -865,6 +933,7 @@ function applyRemoteTimerState(data) {
     }
     document.getElementById('timer-status').textContent = `Synced · pinging every ${settings.intervalMin} min`;
     updateTimerTaskLabel();
+    rememberTimerSyncStamp(remoteTimerSyncStamp(data) || Date.now());
     updateTimerSyncDetail(data, `active: ${remoteTask}`);
     fbTimerReceived = true;
     updateRing();
@@ -877,6 +946,7 @@ function applyRemoteTimerState(data) {
     fbTimerReceived = true;
     if (data.stopped) {
       const hadTimer = running || !!taskStartTime || !!timerStartedAt || !!currentTask;
+      rememberTimerSyncStamp(remoteTimerSyncStamp(data) || Date.now());
       if (hadTimer) resetTimer();
       updateTimerSyncDetail(data, 'timer stopped');
       return hadTimer;
@@ -891,10 +961,12 @@ function applyRemoteTimerState(data) {
       document.getElementById('main-btn').textContent = 'Resume';
       document.getElementById('timer-status').textContent = 'Paused (synced)';
       updateTimerTaskLabel();
+      rememberTimerSyncStamp(remoteTimerSyncStamp(data) || Date.now());
       updateTimerSyncDetail(data, 'timer paused');
       updateRing();
       return true;
     }
+    rememberTimerSyncStamp(remoteTimerSyncStamp(data) || Date.now());
     updateTimerSyncDetail(data, 'timer idle');
   }
   updateRing();
@@ -902,12 +974,47 @@ function applyRemoteTimerState(data) {
 }
 
 function applyRemoteAwayState(data) {
-  if (!data || data.startedBy === syncedDeviceId) return false;
+  if (!data) return false;
+  if (isStaleRemoteAwayState(data)) {
+    updateTimerSyncDetail({
+      updatedAt: data.updatedAt || data.startedAt || Date.now(),
+      updatedBy: data.startedBy,
+      deviceName: data.deviceName
+    }, 'ignored stale away');
+    return false;
+  }
+  if (data.startedBy === syncedDeviceId) {
+    if (data.updatedAt || data.startedAt) rememberAwaySyncStamp(remoteAwaySyncStamp(data));
+    return false;
+  }
   if (data.active && data.label) {
     const startedAt = data.startedAt || Date.now();
     const changed = !awayActive || awayLabel !== data.label || awayStartTime !== startedAt;
     if (!changed) return false;
 
+    rememberAwaySyncStamp(remoteAwaySyncStamp(data) || Date.now());
+    const mirroredTimer = running && (!timerOwnerDeviceId || timerOwnerDeviceId !== syncedDeviceId);
+    if (mirroredTimer) {
+      running = false;
+      clearInterval(ticker);
+      ticker = null;
+      if (typeof _stopHeartbeat === 'function') _stopHeartbeat();
+      if (typeof cancelNativePing === 'function') cancelNativePing();
+      timerStartedAt = null;
+      taskStartTime = null;
+      blockStartTime = null;
+      timerOwnerDeviceId = null;
+      currentTask = '';
+      totalSecs = settings.intervalMin * 60;
+      remaining = totalSecs;
+      const mainBtn = document.getElementById('main-btn');
+      if (mainBtn) { mainBtn.textContent = 'Start'; mainBtn.disabled = false; }
+      const switchBtn = document.getElementById('switch-btn');
+      if (switchBtn) switchBtn.style.display = 'none';
+      const breakBtn = document.getElementById('break-btn');
+      if (breakBtn) breakBtn.style.display = 'none';
+      updateTimerTaskLabel();
+    }
     awayActive = true;
     awayStartTime = startedAt;
     awayLabel = data.label;
@@ -933,6 +1040,7 @@ function applyRemoteAwayState(data) {
   }
   if (!data.active && awayActive) {
     // Remote ended away — clear local away UI. The device ending away owns the entry log.
+    rememberAwaySyncStamp(remoteAwaySyncStamp(data) || Date.now());
     clearInterval(awayElapsedTicker);
     awayElapsedTicker = null;
     awayActive = false;
@@ -952,6 +1060,7 @@ function applyRemoteAwayState(data) {
 function syncTimerState(extra = {}) {
   if (!fbRoomRef) return;
   const now = Date.now();
+  rememberTimerSyncStamp(now);
   const isStopped = !!extra.stopped;
   const taskAnchor = taskStartTime || blockStartTime || timerStartedAt || now;
   const blockAnchor = blockStartTime || taskStartTime || timerStartedAt || now;
