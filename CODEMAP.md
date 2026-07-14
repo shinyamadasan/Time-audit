@@ -96,7 +96,7 @@ Depends on: —
 
 ## [HTML — Desktop Side Panels]
 Lines: 1579–1613
-Purpose: Left panel (60-day streak calendar) and right panel (goal, energy breakdown, week bars, streaks, heatmap) shown only on ≥1100px screens.
+Purpose: Left panel (60-day streak calendar) and right panel (plan progress, energy breakdown, week bars, streaks, heatmap) shown only on ≥1100px screens.
 Functions: —
 Key IDs: `left-panel`, `side-panel`, `sp-status-content`, `sp-day-bar`, `sp-energy-bars`, `sp-week-bars`, `sp-streak-content`
 Depends on: —
@@ -477,8 +477,8 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Custom activity colors | Activity Color Management | 3663–3705 |
 | Today view full re-render | Today View — Rendering | 3923–4292 |
 | Day bar (colored hour-by-hour bar) | Today View — Rendering | 3923–4292 |
-| Status banner (deep today / time left / to goal) | Today View — Rendering | 3923–4292 |
-| Desktop right panel (goal, energy, week bars) | Today View — Rendering → `renderSidePanel()` | ~4468 |
+| Status banner (deep today / time left / plan progress) | Today View — Rendering | 3923–4292 |
+| Desktop right panel (plan progress, energy, week bars) | Today View — Rendering → `renderSidePanel()` | ~4468 |
 | Desktop left panel (streak calendar) | Today View — Rendering → `renderLeftPanel()` | ~4417 |
 | Hero task input / start-from-hero | Hero Prompt & Task Suggestions | 4777–4895 |
 | Task suggestion dropdown (hero) | Hero Prompt & Task Suggestions | 4777–4895 |

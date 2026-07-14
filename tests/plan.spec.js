@@ -119,6 +119,13 @@ async function addItem(page, task, when = '') {
   await page.locator('#plan-strip').getByRole('button', { name: 'Add' }).click();
 }
 
+async function openTodayDetails(page) {
+  const toggle = page.locator('#today-details-toggle');
+  if ((await toggle.getAttribute('aria-pressed')) !== 'true') {
+    await toggle.click();
+  }
+}
+
 test('morning startup turns a day mode into the first plan item', async ({ page }) => {
   await openApp(page);
 
@@ -178,6 +185,35 @@ test('today action strip starts the next planned item', async ({ page }) => {
   await expect(page.locator('#hero-task-name')).toHaveText('Write report');
   await expect(page.locator('#today-action-title')).toHaveText('Working now');
   await expect(page.locator('#today-action-sub')).toHaveText('Write report');
+});
+
+test('today details report plan progress instead of daily goal', async ({ page }) => {
+  const end = Date.now() - 5 * 60 * 1000;
+  const start = end - 45 * 60 * 1000;
+  const entry = {
+    id: end,
+    ts: end,
+    tsStart: start,
+    updatedAt: end,
+    blockIntervalMin: 45,
+    date: utcDateKey(start),
+    activity: 'Write report',
+    energy: 'deep',
+    category: 'deep_work',
+    originalLabel: 'deep',
+    onPlan: true,
+    retro: false
+  };
+
+  await openApp(page, {
+    entries: [entry],
+    plans: planFor([{ task: 'Write report' }, { task: 'Gym' }])
+  });
+  await openTodayDetails(page);
+
+  await expect(page.locator('#sb-needed-label')).toHaveText('plan');
+  await expect(page.locator('#sb-needed-val')).toHaveText('1/2');
+  await expect(page.locator('#status-banner')).not.toContainText(/goal/i);
 });
 
 test('when-then trigger renders with the task', async ({ page }) => {
