@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Chronasense Tracker",
+  "version": "1.0",
+  "description": "Auto-tracks browser activity and logs it to Chronasense",
+  "permissions": ["tabs", "storage", "identity", "alarms", "notifications"],
+  "host_permissions": [
+    "https://*.firebaseio.com/*",
+    "https://securetoken.googleapis.com/*",
+    "https://identitytoolkit.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["icon128.png", "icon48.png", "icon16.png"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "oauth2": {
+    "client_id": "548433155531-abvpt7urujs8rjccma2o4petf726fueo.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/userinfo.email"]
+  }
+}

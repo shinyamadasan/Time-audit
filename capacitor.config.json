@@ -1,0 +1,18 @@
+{
+  "appId": "com.timeaudit.app",
+  "appName": "ChronaSense",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    },
+    "GoogleAuth": {
+      "scopes": ["profile", "email"],
+      "serverClientId": "548433155531-r93hucpo6pa8darnjm5tioj1rgg4vn6s.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
+    }
+  }
+}

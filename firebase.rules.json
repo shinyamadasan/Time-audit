@@ -1,0 +1,36 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$roomId": {
+        ".read": "auth != null && $roomId === ('uid_' + auth.uid)",
+        ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+      }
+    },
+    "pairs": {
+      "$pairId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "$userNode": {
+      "public": {
+        ".read": "auth != null",
+        ".write": "auth != null && $userNode === ('uid_' + auth.uid)"
+      },
+      "partnerUid": {
+        ".read": "auth != null && $userNode === ('uid_' + auth.uid)",
+        ".write": "auth != null"
+      },
+      "pairCode": {
+        ".read": "auth != null && $userNode === ('uid_' + auth.uid)",
+        ".write": "auth != null && $userNode === ('uid_' + auth.uid)"
+      },
+      "nudges": {
+        ".read": "auth != null && $userNode === ('uid_' + auth.uid)",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
