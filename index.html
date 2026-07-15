@@ -621,6 +621,7 @@
         </div>
       </div>
       <div class="sync-devices" id="sync-devices" style="margin-top:6px"></div>
+      <div class="sync-event-log" id="sync-event-log" style="display:none"></div>
       <div style="margin-top:12px">
         <button class="btn sm danger" onclick="signOutUser()">Sign out</button>
       </div>
@@ -1353,7 +1354,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-14-sync-reliability-1';
+const APP_BUILD = '2026-07-14-sync-observability-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -5845,6 +5846,11 @@ function toggleAway() {
     document.getElementById('timer-status').textContent = 'Ready';
     persist(); scheduleRenderToday(); syncEntries();
     if (typeof rememberAwaySyncStamp === 'function') rememberAwaySyncStamp(now);
+    if (typeof updateTimerSyncDetail === 'function') updateTimerSyncDetail({
+      updatedAt: now,
+      updatedBy: syncedDeviceId,
+      deviceName: navigator.userAgent.includes('Mobile') ? 'phone' : 'PC'
+    }, 'away ended', 'away');
     if (fbRoomRef) fbRoomRef.update({
       awayState: {
         active: false,
@@ -5905,6 +5911,11 @@ function startAway(label) {
   awayStartTime = awayStartedAt;
   awayLabel = label;
   if (typeof rememberAwaySyncStamp === 'function') rememberAwaySyncStamp(awayStartedAt);
+  if (typeof updateTimerSyncDetail === 'function') updateTimerSyncDetail({
+    updatedAt: awayStartedAt,
+    updatedBy: syncedDeviceId,
+    deviceName: navigator.userAgent.includes('Mobile') ? 'phone' : 'PC'
+  }, `away: ${label}`, 'away');
   if (fbRoomRef) fbRoomRef.update({
     awayState: {
       active: true,
