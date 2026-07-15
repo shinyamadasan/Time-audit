@@ -232,6 +232,50 @@ function clearSyncedFocusOverlay() {
   return true;
 }
 
+function takeOverSyncedFocusTimer() {
+  if (!syncedFocusTimer || !syncedFocusTimer.running) return false;
+  const phase = syncedFocusTimer.focusPhase === 'break' ? 'break' : 'work';
+  const intervalSecs = Math.max(1, Number(syncedFocusTimer.intervalSecs || totalSecs || 1500));
+  const elapsed = Math.max(0, Math.floor((Date.now() - syncedFocusTimer.startedAt) / 1000));
+  const remainingSecs = Math.max(0, intervalSecs - elapsed);
+  const task = syncedFocusTimer.task || currentTask || 'Focus session';
+
+  timerOwnerDeviceId = syncedDeviceId;
+  currentTask = task;
+  lastTaskForRepeat = task;
+  totalSecs = intervalSecs;
+  remaining = remainingSecs;
+  timerStartedAt = syncedFocusTimer.startedAt;
+  taskStartTime = taskStartTime || syncedFocusTimer.startedAt;
+  blockStartTime = blockStartTime || taskStartTime || syncedFocusTimer.startedAt;
+  pomodoroPhase = phase;
+  pomodoroPhaseStartedAt = syncedFocusTimer.startedAt;
+  pomodoroRemaining = remainingSecs;
+  focusStartTime = phase === 'work' ? syncedFocusTimer.startedAt : null;
+  if (phase === 'break') pomodoroBreakMin = Math.max(1, Math.round(intervalSecs / 60));
+  else pomodoroWorkMin = Math.max(1, Math.round(intervalSecs / 60));
+
+  if (!document.getElementById('focus-overlay')?.classList.contains('open')) return true;
+  focusModeOn = true;
+  const taskInput = document.getElementById('focus-task-input');
+  if (taskInput) taskInput.style.display = 'none';
+  const intentionEl = document.getElementById('focus-intention-text');
+  if (intentionEl) {
+    intentionEl.textContent = task;
+    intentionEl.style.display = 'block';
+  }
+  document.getElementById('focus-phase-label').textContent = phase === 'break' ? 'BREAK' : 'FOCUS';
+  document.getElementById('focus-phase-sub').textContent = `owned here · ${phase} session`;
+  document.getElementById('focus-settings-row').style.display = 'none';
+  document.getElementById('focus-start-btn').style.display = 'none';
+  setPomodoroCountdown(remainingSecs);
+  renderPomoDots();
+  updateFocusDeepBar();
+  clearInterval(pomodoroTimer);
+  pomodoroTimer = setInterval(tickPomodoro, 1000);
+  return true;
+}
+
 function startPomodoro() {
   pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min').value) || 25;
   pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min').value) || 5;
@@ -555,7 +599,8 @@ function resumeFocusMusic() {
 
 function enterFocusMode() {
   const mirroredRemoteTimer = running && timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId;
-  if (running && blockStartTime && !mirroredRemoteTimer) {
+  const ownedSyncedFocus = running && syncedFocusTimer?.running && syncedFocusTimer.ownerDeviceId === syncedDeviceId;
+  if (running && blockStartTime && !mirroredRemoteTimer && !ownedSyncedFocus) {
     const tsEnd = Date.now();
     const dur = Math.round((tsEnd - blockStartTime) / 60000);
     if (dur >= 1) {
@@ -611,7 +656,8 @@ function enterFocusMode() {
   setPomodoroCountdown(pomodoroWorkMin * 60);
   renderPomoDots();
   updateFocusDeepBar();
-  syncFocusOverlayFromRemote();
+  if (ownedSyncedFocus) takeOverSyncedFocusTimer();
+  else syncFocusOverlayFromRemote();
 }
 
 function tryExitFocusMode() {

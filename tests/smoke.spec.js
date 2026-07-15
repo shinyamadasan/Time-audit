@@ -904,6 +904,118 @@ test('focus overlay mirrors a remote PC focus session without taking ownership',
   expect(result.countdown).toMatch(/^2[2-3]:\d{2}$/);
 });
 
+test('remote owner banner can intentionally take over a synced focus timer', async ({ page }) => {
+  await openApp(page);
+  const remoteStart = Date.now() - 2 * 60 * 1000;
+
+  await page.evaluate((startTs) => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.__timerUpdates = [];
+    fbRoomRef = {
+      update(payload) {
+        window.__timerUpdates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    applyRemoteTimerState({
+      running: true,
+      mode: 'focus',
+      focusPhase: 'work',
+      lastTask: 'Takeover focus',
+      intervalSecs: 25 * 60,
+      startedAt: startTs,
+      taskStartTime: startTs,
+      blockStartTime: startTs,
+      ownerDeviceId: 'pc-device',
+      updatedAt: Date.now(),
+      updatedBy: 'pc-device',
+      deviceName: 'PC'
+    });
+    renderToday();
+  }, remoteStart);
+
+  const banner = page.locator('#active-device-banner');
+  await expect(banner).toBeVisible();
+  await expect(page.locator('#active-device-title')).toHaveText('PC is active');
+  await expect(page.locator('#active-device-detail')).toContainText('Focus: Takeover focus');
+
+  await page.locator('#active-device-takeover-btn').click();
+  await expect(banner).toBeHidden();
+
+  const state = await page.evaluate(() => ({
+    timerOwnerDeviceId,
+    syncedDeviceId,
+    syncedFocusOwner: syncedFocusTimer?.ownerDeviceId,
+    update: window.__timerUpdates.at(-1)?.timer,
+    syncEvents: JSON.parse(localStorage.getItem('ta3-sync-event-log') || '[]')
+  }));
+  expect(state.timerOwnerDeviceId).toBe(state.syncedDeviceId);
+  expect(state.syncedFocusOwner).toBe(state.syncedDeviceId);
+  expect(state.update).toMatchObject({
+    running: true,
+    mode: 'focus',
+    focusPhase: 'work',
+    lastTask: 'Takeover focus',
+    ownerDeviceId: state.syncedDeviceId,
+    takeover: true
+  });
+  expect(state.syncEvents[0]).toMatchObject({
+    kind: 'timer',
+    stateLabel: 'takeover: Takeover focus'
+  });
+});
+
+test('local focus owner accepts explicit takeover from another device', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.__timerUpdates = [];
+    fbRoomRef = {
+      update(payload) {
+        window.__timerUpdates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Relinquish focus';
+    startPomodoro();
+    const startedAt = focusStartTime;
+    const applied = applyRemoteTimerState({
+      running: true,
+      mode: 'focus',
+      focusPhase: 'work',
+      lastTask: 'Relinquish focus',
+      intervalSecs: 25 * 60,
+      startedAt,
+      taskStartTime: startedAt,
+      blockStartTime: startedAt,
+      ownerDeviceId: 'phone-device',
+      updatedAt: Date.now() + 1000,
+      updatedBy: 'phone-device',
+      deviceName: 'phone',
+      takeover: true
+    });
+    return {
+      applied,
+      currentTask,
+      timerOwnerDeviceId,
+      syncedFocusOwner: syncedFocusTimer?.ownerDeviceId,
+      phaseSub: document.getElementById('focus-phase-sub').textContent,
+      republishedCount: window.__timerUpdates.filter(item => item.timer?.ownerDeviceId === syncedDeviceId).length
+    };
+  });
+
+  expect(result).toMatchObject({
+    applied: true,
+    currentTask: 'Relinquish focus',
+    timerOwnerDeviceId: 'phone-device',
+    syncedFocusOwner: 'phone-device',
+    phaseSub: 'phone synced · work session',
+    republishedCount: 1
+  });
+});
+
 test('stale remote timer snapshot cannot overwrite newer local timer state', async ({ page }) => {
   await openApp(page);
   const localStart = Date.now() - 60 * 1000;
