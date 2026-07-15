@@ -144,6 +144,63 @@ async function openTodayDetails(page) {
   }
 }
 
+test('focus overlay exit logs and renders the active session', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.confirm = () => true;
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Focus exit save';
+    startPomodoro();
+    focusStartTime = Date.now() - 7 * 60 * 1000;
+    exitFocusConfirm();
+
+    const saved = JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+      .filter(e => e.activity === 'Focus exit save');
+    return {
+      savedCount: saved.length,
+      minutes: saved[0]?.blockIntervalMin,
+      overlayOpen: document.getElementById('focus-overlay').classList.contains('open')
+    };
+  });
+
+  expect(result).toMatchObject({
+    savedCount: 1,
+    minutes: 7,
+    overlayOpen: false
+  });
+  await expect(page.locator('#recent-list')).toContainText('Focus exit save');
+});
+
+test('leaving during a focus break does not duplicate the completed work session', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.confirm = () => true;
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Focus break duplicate guard';
+    startPomodoro();
+    focusStartTime = Date.now() - 25 * 60 * 1000;
+    endWorkSession();
+    exitFocusConfirm();
+
+    const saved = entries.filter(e => e.activity === 'Focus break duplicate guard');
+    return {
+      savedCount: saved.length,
+      minutes: saved[0]?.blockIntervalMin,
+      phase: pomodoroPhase
+    };
+  });
+
+  expect(result).toMatchObject({
+    savedCount: 1,
+    minutes: 25,
+    phase: 'idle'
+  });
+});
+
 test('quick retro log can be undone', async ({ page }) => {
   await openApp(page);
 
