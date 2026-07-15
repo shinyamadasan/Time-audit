@@ -1,6 +1,7 @@
 node_modules/
 android/
 .claude/
+claude-obsidian/
 resources/
 *.log
 *.tmp
