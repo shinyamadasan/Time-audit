@@ -309,7 +309,7 @@ Depends on: `persist()`, `syncEntries()`, `renderToday()`, `entries`
 ## [Week View]
 Lines: 5427–6009
 Purpose: Week and month overview — day tab navigation, energy split chart, top-activities list, untracked-hours summary, sortable entries table, single-day detail drilldown.
-Functions: `renderWeek()`, `setWeekMode()`, `shiftRange()`, `selectWeekDay()`, `renderMonthOverview()`, `entryMins()`, `renderEnergySplit()`, `renderTopActivities()`, `renderUnloggedHours()`, `renderEntryList()`, `renderWeekOverview()`, `renderDayDetail()`, `renderWeekTable()`, `sortBy()`
+Functions: `renderWeek()`, `setWeekMode()`, `shiftRange()`, `selectWeekDay()`, `renderMonthOverview()`, `entryMins()`, `renderEnergySplit()`, `activityBaseName()`, `activityGroupKey()`, `activityDisplayLabel()`, `preferActivityLabel()`, `renderTopActivities()`, `renderUnloggedHours()`, `renderEntryList()`, `renderWeekOverview()`, `renderDayDetail()`, `renderWeekTable()`, `sortBy()`
 Variables: `weekSelectedDay`, `weekRangeOffset`, `sortKey`, `sortDir`
 Depends on: `entries`, Statistics section, `getDateInTZ()`, `toDateKey()`, `computeInsights()`
 

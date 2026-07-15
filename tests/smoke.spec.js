@@ -590,6 +590,68 @@ test('today health hides minor unlogged gaps', async ({ page }) => {
   await expect(page.locator('#th-unlogged')).toBeHidden();
 });
 
+test('week top activities merge activity labels that only differ by case', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 18, 0, 0);
+  const sleepAStart = Date.UTC(2026, 6, 13, 0, 0, 0);
+  const sleepAEnd = sleepAStart + 8 * 60 * 60 * 1000;
+  const sleepBStart = Date.UTC(2026, 6, 14, 0, 0, 0);
+  const sleepBEnd = sleepBStart + 2 * 60 * 60 * 1000;
+  const scribeStart = Date.UTC(2026, 6, 15, 9, 0, 0);
+  const scribeEnd = scribeStart + 3 * 60 * 60 * 1000;
+  const entries = [
+    {
+      id: sleepAEnd,
+      ts: sleepAEnd,
+      tsStart: sleepAStart,
+      updatedAt: sleepAEnd,
+      blockIntervalMin: 480,
+      date: utcDateKey(sleepAStart),
+      activity: 'Sleep',
+      energy: 'recovery',
+      category: 'recovery'
+    },
+    {
+      id: sleepBEnd,
+      ts: sleepBEnd,
+      tsStart: sleepBStart,
+      updatedAt: sleepBEnd,
+      blockIntervalMin: 120,
+      date: utcDateKey(sleepBStart),
+      activity: 'sleep',
+      energy: 'recovery',
+      category: 'recovery'
+    },
+    {
+      id: scribeEnd,
+      ts: scribeEnd,
+      tsStart: scribeStart,
+      updatedAt: scribeEnd,
+      blockIntervalMin: 180,
+      date: utcDateKey(scribeStart),
+      activity: 'Scribe shift',
+      energy: 'nine5',
+      category: 'nine5'
+    }
+  ];
+  await openApp(page, { entries, nowTs });
+
+  await page.evaluate(() => showView('week'));
+
+  const top = page.locator('#w-top-acts-week');
+  await expect(top.locator('[data-activity-key="sleep"]')).toHaveCount(1);
+  await expect(top.locator('[data-activity-key="sleep"]')).toContainText('Sleep');
+  await expect(top.locator('[data-activity-key="sleep"]')).toContainText('10.0h');
+
+  const options = await page.locator('#filter-activity option').allTextContents();
+  expect(options.filter(text => text.trim().toLowerCase() === 'sleep')).toHaveLength(1);
+
+  await page.locator('#filter-activity').selectOption('sleep');
+  const tableText = await page.locator('#week-table-body').innerText();
+  expect(tableText).toContain('Sleep');
+  expect(tableText).toContain('sleep');
+  expect(tableText).not.toContain('Scribe shift');
+});
+
 test('remote away switch updates an already mirrored away state', async ({ page }) => {
   await openApp(page);
   const cookingStart = Date.now() - 2 * 60 * 1000;
