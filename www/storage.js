@@ -1005,6 +1005,7 @@ function applyRemoteTimerState(data) {
   }
 
   if (data.running && data.startedAt) {
+    const isFocusTimer = data.mode === 'focus';
     const elapsed = Math.floor((Date.now() - data.startedAt) / 1000);
     timerStartedAt = data.startedAt;
     remaining = Math.max(0, totalSecs - elapsed);
@@ -1048,10 +1049,12 @@ function applyRemoteTimerState(data) {
         }, 1000);
       }
     }
-    document.getElementById('timer-status').textContent = `Synced · pinging every ${settings.intervalMin} min`;
+    document.getElementById('timer-status').textContent = isFocusTimer
+      ? `Focus synced · ${remoteTask}`
+      : `Synced · pinging every ${settings.intervalMin} min`;
     updateTimerTaskLabel();
     rememberTimerSyncStamp(remoteTimerSyncStamp(data) || Date.now());
-    updateTimerSyncDetail(data, `active: ${remoteTask}`);
+    updateTimerSyncDetail(data, `${isFocusTimer ? 'focus' : 'active'}: ${remoteTask}`);
     fbTimerReceived = true;
     updateRing();
     persist();
@@ -1179,21 +1182,29 @@ function syncTimerState(extra = {}) {
   const now = Date.now();
   rememberTimerSyncStamp(now);
   const isStopped = !!extra.stopped;
-  const taskAnchor = taskStartTime || blockStartTime || timerStartedAt || now;
-  const blockAnchor = blockStartTime || taskStartTime || timerStartedAt || now;
+  const hasExplicitRunning = Object.prototype.hasOwnProperty.call(extra, 'running');
+  const isRunning = isStopped ? false : (hasExplicitRunning ? !!extra.running : running);
+  const intervalSecs = extra.intervalSecs || totalSecs;
+  const startedAt = Object.prototype.hasOwnProperty.call(extra, 'startedAt')
+    ? extra.startedAt
+    : (isRunning ? Date.now() - (intervalSecs - remaining) * 1000 : null);
+  const taskAnchor = extra.taskStartTime || taskStartTime || blockStartTime || timerStartedAt || startedAt || now;
+  const blockAnchor = extra.blockStartTime || blockStartTime || taskStartTime || timerStartedAt || startedAt || now;
   const lastTask = Object.prototype.hasOwnProperty.call(extra, 'lastTask')
     ? extra.lastTask
     : (currentTask || lastTaskForRepeat || null);
   const timer = {
     lastTask,
-    running: isStopped ? false : running,
+    running: isRunning,
     stopped: isStopped,
-    intervalSecs: totalSecs,
-    startedAt: running && !isStopped ? Date.now() - (totalSecs - remaining) * 1000 : null,
-    taskStartTime: running && !isStopped ? taskAnchor : null,
-    blockStartTime: running && !isStopped ? blockAnchor : null,
-    pausedRemaining: running || isStopped ? null : remaining,
-    ownerDeviceId: isStopped ? null : (timerOwnerDeviceId || null),
+    intervalSecs,
+    startedAt: isRunning ? startedAt : null,
+    taskStartTime: isRunning ? taskAnchor : null,
+    blockStartTime: isRunning ? blockAnchor : null,
+    pausedRemaining: isRunning || isStopped ? null : remaining,
+    ownerDeviceId: isStopped ? null : (extra.ownerDeviceId || timerOwnerDeviceId || null),
+    mode: extra.mode || null,
+    focusPhase: extra.focusPhase || null,
     updatedAt: now,
     updatedBy: syncedDeviceId,
     deviceName: navigator.userAgent.includes('Mobile') ? 'phone' : 'PC'
@@ -1201,7 +1212,9 @@ function syncTimerState(extra = {}) {
   fbRoomRef.update({
     timer
   });
-  updateTimerSyncDetail(timer, timer.running ? `active: ${timer.lastTask || 'Work'}` : timer.stopped ? 'timer stopped' : 'timer paused');
+  updateTimerSyncDetail(timer, timer.running
+    ? `${timer.mode === 'focus' ? 'focus' : 'active'}: ${timer.lastTask || 'Work'}`
+    : timer.stopped ? 'timer stopped' : 'timer paused');
 }
 
 function resolveEntrySync(local, remote, nowTs = Date.now()) {

@@ -201,6 +201,47 @@ test('leaving during a focus break does not duplicate the completed work session
   });
 });
 
+test('focus work publishes active timer sync and exit publishes stopped state', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.confirm = () => true;
+    window.__timerUpdates = [];
+    fbRoomRef = {
+      update(payload) {
+        window.__timerUpdates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Synced focus block';
+    startPomodoro();
+    const activeTimer = window.__timerUpdates.filter(item => item.timer).at(-1).timer;
+    exitFocusConfirm();
+    const stoppedTimer = window.__timerUpdates.filter(item => item.timer).at(-1).timer;
+    return { activeTimer, stoppedTimer, syncedDeviceId };
+  });
+
+  expect(result.activeTimer).toMatchObject({
+    running: true,
+    stopped: false,
+    mode: 'focus',
+    focusPhase: 'work',
+    lastTask: 'Synced focus block',
+    intervalSecs: 25 * 60,
+    ownerDeviceId: result.syncedDeviceId
+  });
+  expect(result.activeTimer.startedAt).toBeGreaterThan(0);
+  expect(result.stoppedTimer).toMatchObject({
+    running: false,
+    stopped: true,
+    mode: 'focus',
+    lastTask: null,
+    ownerDeviceId: null
+  });
+});
+
 test('quick retro log can be undone', async ({ page }) => {
   await openApp(page);
 
@@ -667,6 +708,46 @@ test('remote timer handoff updates task label and block anchors', async ({ page 
   expect(state.timerOwnerDeviceId).toBe('phone-device');
   expect(state.savedTimer.currentTask).toBe('Cooking');
   expect(state.savedTimer.taskStartTime).toBe(remoteStart);
+});
+
+test('remote focus timer is adopted as active sync state', async ({ page }) => {
+  await openApp(page);
+  const remoteStart = Date.now() - 2 * 60 * 1000;
+
+  const applied = await page.evaluate((startTs) => applyRemoteTimerState({
+    running: true,
+    mode: 'focus',
+    focusPhase: 'work',
+    lastTask: 'PC focus block',
+    intervalSecs: 25 * 60,
+    startedAt: startTs,
+    taskStartTime: startTs,
+    blockStartTime: startTs,
+    ownerDeviceId: 'pc-device',
+    updatedAt: Date.now(),
+    updatedBy: 'pc-device',
+    deviceName: 'PC'
+  }), remoteStart);
+
+  expect(applied).toBe(true);
+  await expect(page.locator('#hero-task-name')).toHaveText('PC focus block');
+  await expect(page.locator('#timer-status')).toHaveText('Focus synced · PC focus block');
+  await expect(page.locator('#sync-detail-label')).toContainText('focus: PC focus block');
+
+  const state = await page.evaluate(() => ({
+    running,
+    currentTask,
+    taskStartTime,
+    blockStartTime,
+    timerOwnerDeviceId,
+    savedTimer: JSON.parse(localStorage.getItem('ta3-timer') || 'null')
+  }));
+  expect(state.currentTask).toBe('PC focus block');
+  expect(state.taskStartTime).toBe(remoteStart);
+  expect(state.blockStartTime).toBe(remoteStart);
+  expect(state.timerOwnerDeviceId).toBe('pc-device');
+  expect(state.savedTimer.currentTask).toBe('PC focus block');
+  expect(state.savedTimer.ownerDeviceId).toBe('pc-device');
 });
 
 test('stale remote timer snapshot cannot overwrite newer local timer state', async ({ page }) => {

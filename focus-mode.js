@@ -7,7 +7,8 @@
 //   persist(), syncEntries(), showToast(), resetTimer(),
 //   getTodayEntries(), getActivityColor(), toDateKey(), fmtDur(),
 //   getBucket(), renderToday(), updateRing(), doPing(),
-//   buildHeroSuggestions(), buildSugItem(), _startHeartbeat(), _stopHeartbeat()
+//   buildHeroSuggestions(), buildSugItem(), syncTimerState(),
+//   _startHeartbeat(), _stopHeartbeat()
 // ══════════════════════════════════════════════════════
 
 // ── State ──
@@ -130,6 +131,22 @@ function setPomodoroCountdown(secs) {
     `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
+function syncFocusTimerState(startedAt = focusStartTime || Date.now()) {
+  if (typeof syncTimerState !== 'function' || pomodoroPhase === 'idle') return;
+  const phaseSecs = (pomodoroPhase === 'break' ? pomodoroBreakMin : pomodoroWorkMin) * 60;
+  syncTimerState({
+    running: true,
+    mode: 'focus',
+    focusPhase: pomodoroPhase,
+    lastTask: getFocusTaskLabel(),
+    intervalSecs: phaseSecs,
+    startedAt,
+    taskStartTime: startedAt,
+    blockStartTime: startedAt,
+    ownerDeviceId: timerOwnerDeviceId || syncedDeviceId
+  });
+}
+
 function startPomodoro() {
   pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min').value) || 25;
   pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min').value) || 5;
@@ -151,6 +168,8 @@ function startPomodoro() {
   intentionEl.textContent = focusTask;
   intentionEl.style.display = 'block';
   currentTask = focusTask;
+  lastTaskForRepeat = focusTask;
+  timerOwnerDeviceId = syncedDeviceId;
 
   if (running) {
     pomodoroWasPaused = true;
@@ -165,6 +184,7 @@ function startPomodoro() {
   clearInterval(pomodoroTimer);
   pomodoroTimer = setInterval(tickPomodoro, 1000);
   updateFocusDeepBar();
+  syncFocusTimerState();
 }
 
 function getFocusTaskLabel() {
@@ -237,6 +257,7 @@ function endWorkSession() {
   btn.style.display = 'block';
 
   renderToday();
+  syncFocusTimerState(tsEnd);
   pomodoroTimer = setInterval(tickPomodoro, 1000);
 }
 
@@ -526,6 +547,9 @@ function confirmExitFocus() {
     if (typeof _startHeartbeat === 'function') _startHeartbeat();
   }
   pomodoroWasPaused = false;
+  syncTimerState({ stopped: true, lastTask: null, mode: 'focus' });
+  timerOwnerDeviceId = null;
+  currentTask = '';
   renderToday();
 }
 

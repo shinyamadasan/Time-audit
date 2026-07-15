@@ -1354,7 +1354,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-15-sync-reconcile-wrap-1';
+const APP_BUILD = '2026-07-15-focus-sync-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -9097,6 +9097,19 @@ if ((isNative || isMobileBrowser) && !running && !sessionStorage.getItem('ta3-se
   const _chipsEl = document.getElementById('recent-chips');
   setTimeout(() => { if (!running) _heroInput?.focus(); }, 400);
   if (_promptEl) _promptEl.textContent = 'Starting your session…';
+  let _autoTimer = null;
+  let _autoCheck = null;
+  const _cancelMobileAutoStart = () => {
+    clearTimeout(_autoTimer);
+    clearInterval(_autoCheck);
+  };
+  const _startMobileAutoTimer = () => {
+    if (!running) {
+      if (_continueChip) _continueChip.remove();
+      const _task = _heroInput?.value.trim() || 'Work';
+      _startTimer(_task);
+    }
+  };
 
   // If returning user, show a single "Continue" chip — don't pre-fill the input
   let _continueChip = null;
@@ -9105,17 +9118,17 @@ if ((isNative || isMobileBrowser) && !running && !sessionStorage.getItem('ta3-se
     _continueChip.className = 'chip';
     _continueChip.style.cssText = 'border-color:var(--deep);color:var(--deep)';
     _continueChip.textContent = `▶ Continue "${lastTaskForRepeat}"`;
-    _continueChip.onclick = () => { clearTimeout(_autoTimer); _continueChip.remove(); _startTimer(lastTaskForRepeat); };
+    _continueChip.onclick = () => { _cancelMobileAutoStart(); _continueChip.remove(); _startTimer(lastTaskForRepeat); };
     _chipsEl.prepend(_continueChip);
   }
 
-  const _autoTimer = setTimeout(() => {
-    if (!running) {
-      if (_continueChip) _continueChip.remove();
-      const _task = _heroInput?.value.trim() || 'Work';
-      _startTimer(_task);
+  _autoTimer = setTimeout(_startMobileAutoTimer, 5000);
+  _autoCheck = setInterval(() => {
+    if (fbTimerReceived) {
+      _cancelMobileAutoStart();
+      _startMobileAutoTimer();
     }
-  }, 2000);
+  }, 200);
 }
 initUrlSchemeHandler();
 
