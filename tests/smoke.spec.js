@@ -324,6 +324,7 @@ test('active local focus owner rejects remote timer takeover and republishes foc
 
 test('quick retro log can be undone', async ({ page }) => {
   await openApp(page);
+  await openTodayDetails(page);
 
   await page.locator('#retro-task').click();
   await page.locator('#retro-task').fill('Smoke deep work');
@@ -442,18 +443,49 @@ test('today defaults to clean mode and can reveal details', async ({ page }) => 
 
   await expect(page.locator('#today-details-toggle')).toHaveText('Details');
   await expect(page.locator('#today-details-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.quick-retro-bar')).toBeHidden();
+  await expect(page.locator('#timeline-section')).toBeHidden();
   await expect(page.locator('#focus-wallet-card')).toBeHidden();
   await expect(page.locator('#recent-entries-section')).toBeHidden();
 
   await page.locator('#today-details-toggle').click();
   await expect(page.locator('#today-details-toggle')).toHaveText('Clean');
   await expect(page.locator('#today-details-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.quick-retro-bar')).toBeVisible();
+  await expect(page.locator('#timeline-section')).toBeVisible();
   await expect(page.locator('#focus-wallet-card')).toBeVisible();
   await expect(page.locator('#recent-entries-section')).toBeVisible();
 
   await page.locator('#today-details-toggle').click();
+  await expect(page.locator('.quick-retro-bar')).toBeHidden();
+  await expect(page.locator('#timeline-section')).toBeHidden();
   await expect(page.locator('#focus-wallet-card')).toBeHidden();
   await expect(page.locator('#recent-entries-section')).toBeHidden();
+});
+
+test('today long labels wrap on phone width without horizontal overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+
+  await page.evaluate(async () => {
+    const longTask = 'Very long focus task name that should wrap calmly instead of stretching the Today tab sideways';
+    savePlanItems(planTodayKey(), [createPlanItem(longTask, 'this morning after the first coffee')]);
+    renderToday();
+    await _startTimer(longTask);
+  });
+
+  await expect(page.locator('#hero-task-name')).toContainText('Very long focus task name');
+  await expect(page.locator('.plan-task')).toContainText('Very long focus task name');
+  await expect(page.locator('#today-action-title')).toBeVisible();
+
+  const layout = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    heroWhiteSpace: getComputedStyle(document.getElementById('hero-task-name')).whiteSpace,
+    actionWhiteSpace: getComputedStyle(document.getElementById('today-action-title')).whiteSpace
+  }));
+  expect(layout.overflow).toBeLessThanOrEqual(1);
+  expect(layout.heroWhiteSpace).toBe('normal');
+  expect(layout.actionWhiteSpace).toBe('normal');
 });
 
 test('today health shows compact daily accounting', async ({ page }) => {
@@ -501,6 +533,8 @@ test('today health shows compact daily accounting', async ({ page }) => {
   await expect(page.locator('#th-unlogged')).toContainText('unlogged');
 
   await page.locator('#th-unlogged').click();
+  await expect(page.locator('#today-details-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#timeline-section')).toBeVisible();
   await expect(page.locator('#timeline-blocks')).toBeInViewport({ ratio: 0.1 });
 
   await page.locator('#today-health').scrollIntoViewIfNeeded();

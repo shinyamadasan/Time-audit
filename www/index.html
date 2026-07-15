@@ -328,7 +328,7 @@
   </button>
 
   <!-- Quick retro log -->
-  <div class="quick-retro-bar" style="flex-wrap:wrap;gap:6px">
+  <div class="quick-retro-bar today-detail" style="flex-wrap:wrap;gap:6px">
     <div style="position:relative;flex:1;min-width:120px">
       <input class="quick-retro-input" id="retro-task" placeholder="What did you do?"
         autocomplete="new-password" name="retro-task-field"
@@ -354,7 +354,7 @@
 
 
 
-  <div class="timeline-section">
+  <div class="timeline-section today-detail" id="timeline-section">
     <div class="section-label">
       <div style="display:flex;align-items:center;gap:8px">
         <button onclick="navigateDateBy(-1)" title="Previous day"
@@ -1362,7 +1362,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-15-focus-sync-4';
+const APP_BUILD = '2026-07-15-today-clean-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -3571,10 +3571,19 @@ function computeGaps(todayEntries, dayNow) {
 
 
 function scrollToTimeline() {
-  document.getElementById('timeline-blocks').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!isTodayDetailsOpen()) {
+    localStorage.setItem('ta3-today-details-open', '1');
+    applyTodayDetailsMode();
+  }
+  const timeline = document.getElementById('timeline-blocks');
+  if (timeline) timeline.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function scrollToFirstEnergy(...energies) {
+  if (!isTodayDetailsOpen()) {
+    localStorage.setItem('ta3-today-details-open', '1');
+    applyTodayDetailsMode();
+  }
   const safeEnergies = energies.filter(e => /^[a-z0-9_-]+$/i.test(String(e)));
   const selector = safeEnergies.map(e => `.tl-row[data-energy="${e}"]`).join(',');
   const row = selector ? document.querySelector(`#timeline-blocks ${selector}`) : null;
