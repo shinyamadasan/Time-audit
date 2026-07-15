@@ -28,6 +28,9 @@ let _lastTimerSyncDetail = null;
 let _syncDetailAgeTicker = null;
 const TIMER_SYNC_STAMP_KEY = 'ta3-timer-updated-at';
 const AWAY_SYNC_STAMP_KEY = 'ta3-away-updated-at';
+const SYNC_EVENT_LOG_KEY = 'ta3-sync-event-log';
+const SYNC_EVENT_LOG_LIMIT = 6;
+let _syncEventLog = loadSyncEventLog();
 
 // ── Shared constants ──
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -328,6 +331,74 @@ function isStaleRemoteAwayState(data) {
   const remoteStamp = remoteAwaySyncStamp(data);
   const localStamp = currentAwaySyncStamp();
   return !!(remoteStamp && localStamp && remoteStamp < localStamp);
+}
+
+function loadSyncEventLog() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SYNC_EVENT_LOG_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter(Boolean).slice(0, SYNC_EVENT_LOG_LIMIT) : [];
+  } catch {
+    return [];
+  }
+}
+
+function syncEventWriterId(data) {
+  return data && (data.updatedBy || data.startedBy || data.ownerDeviceId || '');
+}
+
+function syncEventCloudAt(data) {
+  return data && (data.updatedAt || data.startedAt || data.taskStartTime || data.blockStartTime || 0);
+}
+
+function recordSyncEvent(kind, data, stateLabel) {
+  const event = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    kind,
+    stateLabel,
+    writerId: syncEventWriterId(data),
+    ownerDeviceId: data && data.ownerDeviceId || '',
+    deviceName: data && data.deviceName || '',
+    cloudAt: syncEventCloudAt(data),
+    seenAt: Date.now()
+  };
+  _syncEventLog = [event, ..._syncEventLog]
+    .filter((item, idx, arr) => idx === arr.findIndex(other =>
+      other.kind === item.kind &&
+      other.stateLabel === item.stateLabel &&
+      other.writerId === item.writerId &&
+      other.cloudAt === item.cloudAt
+    ))
+    .slice(0, SYNC_EVENT_LOG_LIMIT);
+  localStorage.setItem(SYNC_EVENT_LOG_KEY, JSON.stringify(_syncEventLog));
+  renderSyncEventLog();
+}
+
+function syncEventEscape(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+function renderSyncEventLog() {
+  const el = document.getElementById('sync-event-log');
+  if (!el) return false;
+  if (!_syncEventLog.length) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return false;
+  }
+
+  el.style.display = 'block';
+  el.innerHTML = `<div class="sync-event-head">Recent timer / away sync</div>` +
+    _syncEventLog.map(event => {
+      const device = syncDeviceLabel(event.writerId, event.deviceName);
+      const cloudAge = event.cloudAt ? syncAgeLabel(event.cloudAt) : 'no cloud time';
+      const seenAge = syncAgeLabel(event.seenAt);
+      return `<div class="sync-event-row">
+        <span class="sync-event-kind">${syncEventEscape(event.kind)}</span>
+        <span class="sync-event-main">${syncEventEscape(event.stateLabel)}</span>
+        <span class="sync-event-meta">${syncEventEscape(device)} / cloud ${syncEventEscape(cloudAge)} / seen ${syncEventEscape(seenAge)}</span>
+      </div>`;
+    }).join('');
+  return true;
 }
 
 // ══════════════════════════════════════════════════════
@@ -845,8 +916,9 @@ function syncAgeLabel(ts) {
   return `${min}m ago`;
 }
 
-function updateTimerSyncDetail(data, stateLabel) {
+function updateTimerSyncDetail(data, stateLabel, kind = 'timer') {
   _lastTimerSyncDetail = { data: { ...data }, stateLabel };
+  recordSyncEvent(kind, data || {}, stateLabel);
   renderTimerSyncDetail();
 }
 
@@ -865,7 +937,10 @@ function renderTimerSyncDetail() {
 
 function startSyncDetailAgeTicker() {
   if (_syncDetailAgeTicker) return;
-  _syncDetailAgeTicker = setInterval(renderTimerSyncDetail, 15000);
+  _syncDetailAgeTicker = setInterval(() => {
+    renderTimerSyncDetail();
+    renderSyncEventLog();
+  }, 15000);
 }
 
 function stopSyncDetailAgeTicker() {
@@ -980,7 +1055,7 @@ function applyRemoteAwayState(data) {
       updatedAt: data.updatedAt || data.startedAt || Date.now(),
       updatedBy: data.startedBy,
       deviceName: data.deviceName
-    }, 'ignored stale away');
+    }, 'ignored stale away', 'away');
     return false;
   }
   if (data.startedBy === syncedDeviceId) {
@@ -1035,7 +1110,7 @@ function applyRemoteAwayState(data) {
       updatedAt: data.updatedAt || Date.now(),
       updatedBy: data.startedBy,
       deviceName: data.deviceName
-    }, `away: ${data.label}`);
+    }, `away: ${data.label}`, 'away');
     return true;
   }
   if (!data.active && awayActive) {
@@ -1051,7 +1126,7 @@ function applyRemoteAwayState(data) {
       updatedAt: data.updatedAt || Date.now(),
       updatedBy: data.startedBy,
       deviceName: data.deviceName
-    }, 'away ended');
+    }, 'away ended', 'away');
     return true;
   }
   return false;
@@ -1235,6 +1310,7 @@ function updateSyncPill(state, label) {
                               'Not connected';
     }
   }
+  renderSyncEventLog();
 }
 
 function updateSyncUI() {
@@ -1245,6 +1321,7 @@ function updateSyncUI() {
       `<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px;margin-top:8px">Connected devices</div>` +
       deviceEntries.map(([id,d])=>`<div class="sync-device-row"><div class="sync-device-dot"></div>${d.name||'Device'} ${id===syncedDeviceId?'<span style="color:var(--deep)">(this device)</span>':''}</div>`).join('');
   } else { devicesEl.innerHTML = ''; }
+  renderSyncEventLog();
 }
 
 function copyRoomCode() {

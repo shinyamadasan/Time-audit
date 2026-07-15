@@ -351,12 +351,17 @@ test('remote away switch updates an already mirrored away state', async ({ page 
     active: true,
     label: 'Cooking',
     startedAt: startTs,
-    startedBy: 'phone-device'
+    startedBy: 'phone-device',
+    updatedAt: Date.now(),
+    deviceName: 'phone'
   }), cookingStart);
 
   expect(applied).toBe(true);
   await expect(page.locator('#hero-away-label')).toHaveText('Cooking');
   await expect(page.locator('#timer-status')).toHaveText('Away · Cooking · synced');
+  await expect(page.locator('#sync-event-log')).toContainText('away');
+  await expect(page.locator('#sync-event-log')).toContainText('away: Cooking');
+  await expect(page.locator('#sync-event-log')).toContainText('phone');
 
   const state = await page.evaluate(() => ({ awayActive, awayLabel, awayStartTime }));
   expect(state).toEqual({ awayActive: true, awayLabel: 'Cooking', awayStartTime: cookingStart });
@@ -446,6 +451,7 @@ test('stale remote away snapshot cannot overwrite newer local away state', async
   expect(applied).toBe(false);
   await expect(page.locator('#hero-away-label')).toHaveText('Cooking');
   await expect(page.locator('#sync-detail-label')).toContainText('ignored stale away');
+  await expect(page.locator('#sync-event-log')).toContainText('ignored stale away');
 
   const state = await page.evaluate(() => ({ awayActive, awayLabel, awayStartTime }));
   expect(state).toEqual({ awayActive: true, awayLabel: 'Cooking', awayStartTime: localStart });
@@ -490,6 +496,9 @@ test('remote timer handoff updates task label and block anchors', async ({ page 
   await expect(page.locator('#sync-detail-label')).toContainText('cloud heard phone');
   await expect(page.locator('#sync-detail-label')).toContainText('owner: phone');
   await expect(page.locator('#sync-detail-label')).toContainText('active: Cooking');
+  await expect(page.locator('#sync-event-log')).toContainText('timer');
+  await expect(page.locator('#sync-event-log')).toContainText('active: Cooking');
+  await expect(page.locator('#sync-event-log')).toContainText('phone');
 
   const state = await page.evaluate(() => ({
     currentTask,
@@ -546,6 +555,7 @@ test('stale remote timer snapshot cannot overwrite newer local timer state', asy
   expect(applied).toBe(false);
   await expect(page.locator('#hero-task-name')).toHaveText('Cooking');
   await expect(page.locator('#sync-detail-label')).toContainText('ignored stale timer');
+  await expect(page.locator('#sync-event-log')).toContainText('ignored stale timer');
 
   const state = await page.evaluate(() => ({
     currentTask,

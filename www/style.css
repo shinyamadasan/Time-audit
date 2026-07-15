@@ -486,6 +486,13 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .sync-devices{margin-top:10px;display:flex;flex-direction:column;gap:4px}
 .sync-device-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-family:var(--mono)}
 .sync-device-dot{width:6px;height:6px;border-radius:50%;background:var(--deep);flex-shrink:0}
+.sync-event-log{margin-top:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);padding:8px 10px}
+.sync-event-head{font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700;margin-bottom:6px}
+.sync-event-row{display:grid;grid-template-columns:58px 1fr auto;gap:8px;align-items:baseline;font-family:var(--mono);font-size:10px;color:var(--muted);padding:3px 0;border-top:1px solid var(--border)}
+.sync-event-row:first-of-type{border-top:none}
+.sync-event-kind{color:var(--deep);font-weight:700;text-transform:uppercase}
+.sync-event-main{color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sync-event-meta{white-space:nowrap;color:var(--muted2)}
 .instructions-box{background:var(--bg4);border-radius:var(--r);padding:12px;margin-top:10px;font-size:12px;color:var(--muted);line-height:1.7}
 .instructions-box a{color:var(--shallow);text-decoration:none}
 .instructions-box strong{color:var(--text);font-weight:600}
