@@ -370,8 +370,8 @@ Depends on: `settings`, Date Picker, `entries`, `persist()`, `renderToday()`, Fi
 
 ## [Settings View]
 Lines: 6010–6092
-Purpose: Render settings form (timezone, ping interval, deep-work goal, presets, coach tone, exit delay, review hour, sleep times, sync, account); save handler; add/remove presets.
-Functions: `renderSettings()`, `saveSettings()`, `addPreset()`, `removePreset()`, `renderTonePreview()`
+Purpose: Render settings form (timezone, ping interval, deep-work goal, presets, coach tone, exit delay, review hour, sleep times, sync, account, activity cleanup); save handler; add/remove presets.
+Functions: `activityOutputSuffix()`, `activityWithCanonicalLabel()`, `chooseActivityCleanupCanonical()`, `getActivityCleanupGroups()`, `renderActivityCleanup()`, `setActivityCleanupCanonical()`, `applyActivityCleanup()`, `renderSettings()`, `saveSettings()`, `addPreset()`, `removePreset()`, `renderTonePreview()`
 Variables: `TONE_PREVIEWS`
 Depends on: `settings`, `persist()`, `syncEntries()`, Firebase auth section
 
