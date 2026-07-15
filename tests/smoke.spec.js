@@ -276,6 +276,31 @@ test('focus wallet spend can be undone without leaving point debt', async ({ pag
   await expect(page.locator('#recent-list')).not.toContainText('Movie smoke');
 });
 
+test('sync event text wraps on narrow screens without horizontal overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+
+  await page.evaluate(() => {
+    document.getElementById('auth-signed-in').style.display = 'block';
+    showView('settings');
+    recordSyncEvent('timer', {
+      updatedAt: Date.now() - 65000,
+      updatedBy: 'phone-device',
+      ownerDeviceId: 'phone-device',
+      deviceName: 'very-long-phone-device-name-that-should-wrap'
+    }, 'active: Cooking with a deliberately long synced task label');
+  });
+
+  await expect(page.locator('#sync-event-log')).toBeVisible();
+  await expect(page.locator('.sync-event-main').first()).toContainText('Cooking');
+  const layout = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    metaWhiteSpace: getComputedStyle(document.querySelector('.sync-event-meta')).whiteSpace
+  }));
+  expect(layout.overflow).toBeLessThanOrEqual(1);
+  expect(layout.metaWhiteSpace).toBe('normal');
+});
+
 test('today defaults to clean mode and can reveal details', async ({ page }) => {
   const ts = minutesAgo(5);
   const deepEntry = {
