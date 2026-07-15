@@ -158,6 +158,80 @@ function refreshFocusTimerSync(force = false) {
   return true;
 }
 
+function isSyncedFocusMirrorActive() {
+  return !!(syncedFocusTimer
+    && syncedFocusTimer.running
+    && syncedFocusTimer.ownerDeviceId
+    && syncedFocusTimer.ownerDeviceId !== syncedDeviceId);
+}
+
+function renderSyncedFocusOverlay() {
+  if (!isSyncedFocusMirrorActive()) return false;
+  const phase = syncedFocusTimer.focusPhase === 'break' ? 'break' : 'work';
+  const intervalSecs = Math.max(1, Number(syncedFocusTimer.intervalSecs || totalSecs || 1500));
+  const elapsed = Math.max(0, Math.floor((Date.now() - syncedFocusTimer.startedAt) / 1000));
+  const remainingSecs = Math.max(0, intervalSecs - elapsed);
+
+  pomodoroPhase = phase;
+  pomodoroPhaseStartedAt = syncedFocusTimer.startedAt;
+  pomodoroRemaining = remainingSecs;
+  if (phase === 'break') pomodoroBreakMin = Math.max(1, Math.round(intervalSecs / 60));
+  else pomodoroWorkMin = Math.max(1, Math.round(intervalSecs / 60));
+
+  const taskInput = document.getElementById('focus-task-input');
+  if (taskInput) taskInput.style.display = 'none';
+  const intentionEl = document.getElementById('focus-intention-text');
+  if (intentionEl) {
+    intentionEl.textContent = syncedFocusTimer.task || currentTask || 'Focus session';
+    intentionEl.style.display = 'block';
+  }
+  const labelEl = document.getElementById('focus-phase-label');
+  if (labelEl) labelEl.textContent = phase === 'break' ? 'BREAK' : 'FOCUS';
+  const subEl = document.getElementById('focus-phase-sub');
+  if (subEl) subEl.textContent = `${syncedFocusTimer.deviceName || 'other device'} synced · ${phase} session`;
+  const settingsRow = document.getElementById('focus-settings-row');
+  if (settingsRow) settingsRow.style.display = 'none';
+  const startBtn = document.getElementById('focus-start-btn');
+  if (startBtn) startBtn.style.display = 'none';
+  setPomodoroCountdown(remainingSecs);
+  renderPomoDots();
+  updateFocusDeepBar();
+  return true;
+}
+
+function syncFocusOverlayFromRemote() {
+  if (!renderSyncedFocusOverlay()) return false;
+  if (document.getElementById('focus-overlay')?.classList.contains('open')) {
+    clearInterval(pomodoroTimer);
+    pomodoroTimer = setInterval(renderSyncedFocusOverlay, 1000);
+  }
+  return true;
+}
+
+function clearSyncedFocusOverlay() {
+  if (!document.getElementById('focus-overlay')?.classList.contains('open')) return false;
+  if (isSyncedFocusMirrorActive()) return false;
+  clearInterval(pomodoroTimer);
+  pomodoroTimer = null;
+  pomodoroPhase = 'idle';
+  pomodoroPhaseStartedAt = null;
+  const taskInput = document.getElementById('focus-task-input');
+  if (taskInput) {
+    taskInput.value = '';
+    taskInput.style.display = 'block';
+  }
+  document.getElementById('focus-intention-text').style.display = 'none';
+  document.getElementById('focus-phase-label').textContent = 'POMODORO';
+  document.getElementById('focus-phase-sub').textContent = 'set your timer and go';
+  document.getElementById('focus-settings-row').style.display = 'flex';
+  const startBtn = document.getElementById('focus-start-btn');
+  startBtn.textContent = 'Start';
+  startBtn.onclick = startPomodoro;
+  startBtn.style.display = 'block';
+  setPomodoroCountdown(pomodoroWorkMin * 60);
+  return true;
+}
+
 function startPomodoro() {
   pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min').value) || 25;
   pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min').value) || 5;
@@ -480,7 +554,8 @@ function resumeFocusMusic() {
 // ══════════════════════════════════════════════════════
 
 function enterFocusMode() {
-  if (running && blockStartTime) {
+  const mirroredRemoteTimer = running && timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId;
+  if (running && blockStartTime && !mirroredRemoteTimer) {
     const tsEnd = Date.now();
     const dur = Math.round((tsEnd - blockStartTime) / 60000);
     if (dur >= 1) {
@@ -512,6 +587,8 @@ function enterFocusMode() {
   _lofiTrackIdx = Math.floor(Math.random() * _LOFI_TRACKS.length);
   startFocusMusic();
   focusModeOn = true;
+  clearInterval(pomodoroTimer);
+  pomodoroTimer = null;
   pomodoroCount = 0;
   pomodoroPhase = 'idle';
   pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min')?.value) || 25;
@@ -534,6 +611,7 @@ function enterFocusMode() {
   setPomodoroCountdown(pomodoroWorkMin * 60);
   renderPomoDots();
   updateFocusDeepBar();
+  syncFocusOverlayFromRemote();
 }
 
 function tryExitFocusMode() {
@@ -546,6 +624,18 @@ function exitFocusConfirm() {
 }
 
 function confirmExitFocus() {
+  const mirroredRemoteFocus = isSyncedFocusMirrorActive();
+  if (mirroredRemoteFocus) {
+    clearInterval(pomodoroTimer);
+    pomodoroTimer = null;
+    pomodoroPhase = 'idle';
+    pomodoroPhaseStartedAt = null;
+    stopFocusMusic();
+    focusModeOn = false;
+    document.getElementById('focus-overlay').classList.remove('open');
+    renderToday();
+    return;
+  }
   const shouldResumePausedTimer = pomodoroWasPaused && running && !ticker;
   saveActiveFocusSession();
   clearInterval(pomodoroTimer);

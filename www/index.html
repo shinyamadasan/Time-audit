@@ -1354,7 +1354,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-15-focus-sync-2';
+const APP_BUILD = '2026-07-15-focus-sync-3';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1401,6 +1401,7 @@ let breakEndsAt = null;
 let breakTicker = null;
 let breakStartTs = null;
 let timerOwnerDeviceId = null;
+let syncedFocusTimer = null;
 let awayActive = false;
 let awayStartTime = null;
 let awayLabel = 'Away';

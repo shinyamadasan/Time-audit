@@ -830,6 +830,80 @@ test('remote focus timer is adopted as active sync state', async ({ page }) => {
   expect(state.savedTimer.ownerDeviceId).toBe('pc-device');
 });
 
+test('focus overlay mirrors a remote PC focus session without taking ownership', async ({ page }) => {
+  await openApp(page);
+  const remoteStart = Date.now() - 2 * 60 * 1000;
+
+  const result = await page.evaluate((startTs) => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.__timerUpdates = [];
+    fbRoomRef = {
+      update(payload) {
+        window.__timerUpdates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    applyRemoteTimerState({
+      running: true,
+      mode: 'focus',
+      focusPhase: 'work',
+      lastTask: 'PC focus mirror',
+      intervalSecs: 25 * 60,
+      startedAt: startTs,
+      taskStartTime: startTs,
+      blockStartTime: startTs,
+      ownerDeviceId: 'pc-device',
+      updatedAt: Date.now(),
+      updatedBy: 'pc-device',
+      deviceName: 'PC'
+    });
+    const entryCountBefore = entries.length;
+
+    enterFocusMode();
+    const openState = {
+      overlayOpen: document.getElementById('focus-overlay').classList.contains('open'),
+      phaseLabel: document.getElementById('focus-phase-label').textContent,
+      task: document.getElementById('focus-intention-text').textContent,
+      sub: document.getElementById('focus-phase-sub').textContent,
+      countdown: document.getElementById('focus-countdown').textContent,
+      startDisplay: document.getElementById('focus-start-btn').style.display,
+      entryCountAfterEnter: entries.length,
+      runningAfterEnter: running,
+      ownerAfterEnter: timerOwnerDeviceId
+    };
+
+    confirmExitFocus();
+    return {
+      ...openState,
+      overlayStillOpen: document.getElementById('focus-overlay').classList.contains('open'),
+      entryCountAfterExit: entries.length,
+      runningAfterExit: running,
+      taskAfterExit: currentTask,
+      ownerAfterExit: timerOwnerDeviceId,
+      stoppedWrites: window.__timerUpdates.filter(item => item.timer?.stopped).length,
+      entryCountBefore
+    };
+  }, remoteStart);
+
+  expect(result).toMatchObject({
+    overlayOpen: true,
+    phaseLabel: 'FOCUS',
+    task: 'PC focus mirror',
+    sub: 'PC synced · work session',
+    startDisplay: 'none',
+    entryCountAfterEnter: result.entryCountBefore,
+    runningAfterEnter: true,
+    ownerAfterEnter: 'pc-device',
+    overlayStillOpen: false,
+    entryCountAfterExit: result.entryCountBefore,
+    runningAfterExit: true,
+    taskAfterExit: 'PC focus mirror',
+    ownerAfterExit: 'pc-device',
+    stoppedWrites: 0
+  });
+  expect(result.countdown).toMatch(/^2[2-3]:\d{2}$/);
+});
+
 test('stale remote timer snapshot cannot overwrite newer local timer state', async ({ page }) => {
   await openApp(page);
   const localStart = Date.now() - 60 * 1000;
