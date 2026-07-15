@@ -481,6 +481,76 @@ test('remote away start stops an older mirrored timer', async ({ page }) => {
   });
 });
 
+test('background sync reconciliation pulls a missed remote away snapshot', async ({ page }) => {
+  await openApp(page);
+  const eatStart = Date.now() - 10 * 60 * 1000;
+  const cookingStart = Date.now() - 2 * 60 * 1000;
+
+  const applied = await page.evaluate(({ eatStartTs, cookingStartTs }) => {
+    running = true;
+    totalSecs = 1800;
+    remaining = 1200;
+    currentTask = 'Eat';
+    lastTaskForRepeat = 'Eat';
+    timerStartedAt = eatStartTs;
+    taskStartTime = eatStartTs;
+    blockStartTime = eatStartTs;
+    timerOwnerDeviceId = 'phone-device';
+    showHeroState('active');
+    document.getElementById('hero-task-name').textContent = 'Eat';
+    document.getElementById('timer-status').textContent = 'Synced · pinging every 30 min';
+
+    const awayState = {
+      active: true,
+      label: 'Cooking',
+      startedAt: cookingStartTs,
+      startedBy: 'phone-device',
+      updatedAt: Date.now(),
+      deviceName: 'phone'
+    };
+    fbRoomRef = {
+      child(path) {
+        return {
+          once() {
+            return Promise.resolve({ val: () => path === 'awayState' ? awayState : null });
+          }
+        };
+      }
+    };
+    return reconcileRemoteActiveState();
+  }, { eatStartTs: eatStart, cookingStartTs: cookingStart });
+
+  expect(applied).toBe(true);
+  await expect(page.locator('#hero-away-label')).toHaveText('Cooking');
+  await expect(page.locator('#timer-status')).toHaveText('Away · Cooking · synced');
+  await expect(page.locator('#sync-event-log')).toContainText('away: Cooking');
+
+  const state = await page.evaluate(() => ({
+    running,
+    currentTask,
+    taskStartTime,
+    blockStartTime,
+    timerStartedAt,
+    timerOwnerDeviceId,
+    awayActive,
+    awayLabel,
+    awayStartTime,
+    lastSync: Number(localStorage.getItem('ta3-last-sync') || 0)
+  }));
+  expect(state).toMatchObject({
+    running: false,
+    currentTask: '',
+    taskStartTime: null,
+    blockStartTime: null,
+    timerStartedAt: null,
+    timerOwnerDeviceId: null,
+    awayActive: true,
+    awayLabel: 'Cooking',
+    awayStartTime: cookingStart
+  });
+  expect(state.lastSync).toBeGreaterThan(0);
+});
+
 test('stale remote away snapshot cannot overwrite newer local away state', async ({ page }) => {
   await openApp(page);
   const localStart = Date.now() - 60 * 1000;
