@@ -488,6 +488,27 @@ test('today long labels wrap on phone width without horizontal overflow', async 
   expect(layout.actionWhiteSpace).toBe('normal');
 });
 
+test('today compact cards use readable UI text instead of the display font', async ({ page }) => {
+  await openApp(page);
+
+  await page.evaluate(() => {
+    document.getElementById('today-action-strip').style.display = 'flex';
+    document.getElementById('missed-closeout-card').style.display = 'flex';
+  });
+
+  const fonts = await page.evaluate(() => ({
+    action: getComputedStyle(document.getElementById('today-action-strip')).fontFamily,
+    actionButton: getComputedStyle(document.getElementById('today-action-primary')).fontFamily,
+    health: getComputedStyle(document.getElementById('today-health')).fontFamily,
+    closeout: getComputedStyle(document.getElementById('missed-closeout-card')).fontFamily,
+    closeoutAction: getComputedStyle(document.querySelector('#missed-closeout-card .closeout-action')).fontFamily
+  }));
+  Object.values(fonts).forEach(fontFamily => {
+    expect(fontFamily).toContain('Segoe UI');
+    expect(fontFamily).not.toContain('Syne');
+  });
+});
+
 test('today health shows compact daily accounting', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 10, 12, 0, 0);
   const todayStart = Date.UTC(2026, 6, 10);
