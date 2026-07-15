@@ -748,6 +748,11 @@
       <button class="btn sm danger" onclick="clearSelectedDay()">Clear day</button>
     </div>
     <details style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <summary style="cursor:pointer;color:var(--muted2);font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;margin-bottom:8px">Advanced: Activity Cleanup</summary>
+      <div style="font-size:12px;color:var(--muted);line-height:1.45;margin:8px 0 10px">Merge task-name variants without deleting entries. This updates live entries only; deleted tombstones stay untouched.</div>
+      <div id="activity-cleanup-results" style="font-size:12px;color:var(--muted);line-height:1.45">Scanning activity names...</div>
+    </details>
+    <details style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
       <summary style="cursor:pointer;color:var(--muted2);font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;margin-bottom:8px">Advanced: Data Doctor</summary>
       <div style="margin-top:10px">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -1362,7 +1367,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-15-activity-display-1';
+const APP_BUILD = '2026-07-15-activity-cleanup-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -6713,6 +6718,127 @@ function renderWeekTable() {
 
 function sortBy(key){sortKey===key?sortDir*=-1:(sortKey=key,sortDir=-1);renderWeekTable();}
 
+let activityCleanupGroupsCache = [];
+
+function activityOutputSuffix(activity) {
+  const raw = String(activity || '');
+  const idx = raw.indexOf(' (Output');
+  return idx >= 0 ? raw.slice(idx) : '';
+}
+
+function activityWithCanonicalLabel(activity, canonical) {
+  return `${canonical}${activityOutputSuffix(activity)}`;
+}
+
+function chooseActivityCleanupCanonical(variants) {
+  const sorted = [...variants].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  const alreadyClean = sorted.find(v => activityDisplayLabel(v.label) === v.label);
+  return alreadyClean ? alreadyClean.label : activityDisplayLabel(sorted[0]?.label || '');
+}
+
+function getActivityCleanupGroups() {
+  const groups = {};
+  entries.forEach(e => {
+    if (e.deleted || e.missed || !e.activity) return;
+    const key = activityGroupKey(e.activity);
+    const label = activityBaseName(e.activity);
+    if (!key || !label) return;
+    if (!groups[key]) groups[key] = { key, totalCount: 0, variants: {} };
+    groups[key].totalCount += 1;
+    if (!groups[key].variants[label]) groups[key].variants[label] = { label, count: 0 };
+    groups[key].variants[label].count += 1;
+  });
+
+  return Object.values(groups)
+    .map(group => {
+      const variants = Object.values(group.variants)
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+      return {
+        key: group.key,
+        totalCount: group.totalCount,
+        variants,
+        canonical: chooseActivityCleanupCanonical(variants)
+      };
+    })
+    .filter(group => group.variants.length > 1)
+    .sort((a, b) => b.totalCount - a.totalCount || a.canonical.localeCompare(b.canonical));
+}
+
+function renderActivityCleanup() {
+  const el = document.getElementById('activity-cleanup-results');
+  if (!el) return;
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const attr = s => esc(s).replace(/"/g, '&quot;');
+  activityCleanupGroupsCache = getActivityCleanupGroups();
+  if (!activityCleanupGroupsCache.length) {
+    el.innerHTML = '<div style="color:var(--muted)">No activity-name variants found.</div>';
+    return;
+  }
+  el.innerHTML = activityCleanupGroupsCache.map((group, i) => `
+    <div class="activity-cleanup-group" data-activity-key="${attr(group.key)}" style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px;background:var(--bg3)">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px">
+        <div>
+          <div style="font-weight:700;color:var(--text);font-size:13px">${esc(group.canonical)}</div>
+          <div style="font-size:11px;color:var(--muted2);font-family:var(--mono)">${group.totalCount} entries · ${group.variants.length} variants</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <input id="activity-cleanup-input-${i}" value="${attr(group.canonical)}"
+          style="flex:1;min-width:160px;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:12px;padding:7px 9px;border-radius:8px;outline:none">
+        <button class="btn sm" onclick="applyActivityCleanup(${i})">Apply</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        ${group.variants.map((variant, j) => `
+          <div style="display:flex;align-items:center;gap:8px;min-width:0">
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${esc(variant.label)}</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--muted2);white-space:nowrap">${variant.count}</span>
+            <button class="btn sm ghost" style="padding:3px 7px;font-size:10px" onclick="setActivityCleanupCanonical(${i},${j})">Use</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function setActivityCleanupCanonical(groupIndex, variantIndex) {
+  const group = activityCleanupGroupsCache[groupIndex];
+  const variant = group?.variants?.[variantIndex];
+  const input = document.getElementById(`activity-cleanup-input-${groupIndex}`);
+  if (variant && input) input.value = variant.label;
+}
+
+function applyActivityCleanup(groupIndex) {
+  const group = activityCleanupGroupsCache[groupIndex];
+  const input = document.getElementById(`activity-cleanup-input-${groupIndex}`);
+  const canonical = String(input?.value || '').trim().replace(/\s+/g, ' ');
+  if (!group || !canonical) { showToast('Choose a canonical activity name'); return; }
+
+  const snapshots = [];
+  const now = Date.now();
+  let changed = 0;
+  entries.forEach(e => {
+    if (e.deleted || e.missed || !e.activity || activityGroupKey(e.activity) !== group.key) return;
+    const nextActivity = activityWithCanonicalLabel(e.activity, canonical);
+    if (nextActivity === e.activity) return;
+    snapshots.push(cloneUndoValue(e));
+    e.activity = nextActivity;
+    e.updatedAt = now;
+    changed += 1;
+  });
+
+  if (!changed) { showToast('Already clean'); return; }
+  getActivityColor(canonical);
+  persist();
+  syncEntries();
+  _todayRenderKey = '__FORCE__';
+  scheduleRenderToday();
+  renderWeek();
+  renderWeekTable();
+  renderSettings();
+  rememberRestoreEntriesUndo('activity cleanup', snapshots);
+  showUndoToast(`Renamed ${changed} entries · ${canonical}`);
+}
+
 function renderSettings() {
   document.getElementById('set-interval').value=settings.intervalMin;
   document.getElementById('set-rate').value=settings.targetRate;
@@ -6733,6 +6859,7 @@ function renderSettings() {
   const buildEl = document.getElementById('app-build-label');
   if (buildEl) buildEl.textContent = APP_BUILD;
   renderPerfDebug();
+  renderActivityCleanup();
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const datesWithEntries = [...new Set(entries.filter(e=>!e.deleted).map(e=>getDateInTZ(e.tsStart||e.ts,tz)))].sort().reverse();
   const todayKey = toDateKey(new Date());

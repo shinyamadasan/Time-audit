@@ -713,6 +713,80 @@ test('today timeline and recent entries display activity casing consistently', a
   expect(recentText).not.toContain('app building');
 });
 
+test('activity cleanup merges stored name variants with undo', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 18, 0, 0);
+  const start = Date.UTC(2026, 6, 15, 9, 0, 0);
+  const entries = [
+    {
+      id: 1,
+      ts: start + 10 * 60 * 1000,
+      tsStart: start,
+      updatedAt: start,
+      blockIntervalMin: 10,
+      date: utcDateKey(start),
+      activity: 'APP BUILDING',
+      energy: 'deep'
+    },
+    {
+      id: 2,
+      ts: start + 25 * 60 * 1000,
+      tsStart: start + 15 * 60 * 1000,
+      updatedAt: start,
+      blockIntervalMin: 10,
+      date: utcDateKey(start),
+      activity: 'app building (Output: deploy)',
+      energy: 'deep'
+    },
+    {
+      id: 3,
+      ts: start + 40 * 60 * 1000,
+      tsStart: start + 30 * 60 * 1000,
+      updatedAt: start,
+      blockIntervalMin: 10,
+      date: utcDateKey(start),
+      activity: 'App Building',
+      energy: 'deep'
+    },
+    {
+      id: 4,
+      ts: start + 55 * 60 * 1000,
+      tsStart: start + 45 * 60 * 1000,
+      updatedAt: start,
+      blockIntervalMin: 10,
+      date: utcDateKey(start),
+      activity: 'app building',
+      energy: 'deep',
+      deleted: true
+    }
+  ];
+  await openApp(page, { entries, nowTs });
+  await page.evaluate(() => showView('settings'));
+  await page.locator('summary').filter({ hasText: 'Advanced: Activity Cleanup' }).click();
+
+  const group = page.locator('.activity-cleanup-group[data-activity-key="app building"]');
+  await expect(group).toBeVisible();
+  await expect(group).toContainText('APP BUILDING');
+  await expect(group).toContainText('app building');
+  await group.locator('input').fill('App Building');
+  await group.getByRole('button', { name: 'Apply' }).click();
+
+  const cleaned = await page.evaluate(() => entries
+    .sort((a, b) => a.id - b.id)
+    .map(e => ({ id: e.id, activity: e.activity, deleted: !!e.deleted })));
+  expect(cleaned).toEqual([
+    { id: 1, activity: 'App Building', deleted: false },
+    { id: 2, activity: 'App Building (Output: deploy)', deleted: false },
+    { id: 3, activity: 'App Building', deleted: false },
+    { id: 4, activity: 'app building', deleted: true }
+  ]);
+
+  await clickToastUndo(page);
+  const restored = await page.evaluate(() => entries
+    .sort((a, b) => a.id - b.id)
+    .map(e => ({ id: e.id, activity: e.activity, deleted: !!e.deleted })));
+  expect(restored).toEqual(entries.map(e => ({ id: e.id, activity: e.activity, deleted: !!e.deleted })));
+});
+
 test('remote away switch updates an already mirrored away state', async ({ page }) => {
   await openApp(page);
   const cookingStart = Date.now() - 2 * 60 * 1000;
