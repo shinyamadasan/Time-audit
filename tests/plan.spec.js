@@ -62,14 +62,39 @@ function baseSettings(overrides = {}) {
 
 const utcDateKey = ts => new Date(ts).toISOString().slice(0, 10);
 const todayKey = () => utcDateKey(Date.now());
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-async function openApp(page, { entries = [], plans = {}, reviews = {}, settings = {} } = {}) {
+function stableNowTs() {
+  const d = new Date();
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 18, 0, 0);
+}
+
+function stableEntryWindow(startMsAgo, endMsAgo, nowTs = Date.now()) {
+  const duration = startMsAgo - endMsAgo;
+  const rawStart = nowTs - startMsAgo;
+  const base = new Date(startMsAgo < DAY_MS ? nowTs : rawStart);
+  const start = Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 12, 0, 0);
+  return { start, end: start + duration };
+}
+
+async function openApp(page, { entries = [], plans = {}, reviews = {}, settings = {}, nowTs = null } = {}) {
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({
     status: 200, contentType: 'application/javascript', body: firebaseStub
   }));
   // addInitScript re-runs on every navigation, so seed exactly once — otherwise a reload
   // would wipe localStorage before the app could load it, and persistence can't be tested.
-  await page.addInitScript(({ entries, plans, reviews, settings }) => {
+  await page.addInitScript(({ entries, plans, reviews, settings, nowTs }) => {
+    if (nowTs) {
+      const RealDate = Date;
+      window.Date = class MockDate extends RealDate {
+        constructor(...args) {
+          super(...(args.length ? args : [nowTs]));
+        }
+        static now() {
+          return nowTs;
+        }
+      };
+    }
     if (localStorage.getItem('ta3-test-seeded')) return;
     localStorage.clear();
     sessionStorage.clear();
@@ -82,7 +107,7 @@ async function openApp(page, { entries = [], plans = {}, reviews = {}, settings 
     localStorage.setItem('ta3-plans', JSON.stringify(plans));
     localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
     localStorage.setItem('ta3-test-seeded', '1');
-  }, { entries, plans, reviews, settings: baseSettings(settings) });
+  }, { entries, plans, reviews, settings: baseSettings(settings), nowTs });
   await page.goto(APP_URL);
   await page.waitForFunction(() => typeof window.renderTodayPlan === 'function' && !!document.getElementById('plan-strip'));
   await expect(page.locator('#signin-overlay')).toBeHidden();
@@ -224,8 +249,8 @@ test('when-then trigger renders with the task', async ({ page }) => {
 });
 
 test('tracked minutes are derived from real entries, not the checkbox', async ({ page }) => {
-  const start = Date.now() - 60 * 60 * 1000;
-  const end   = Date.now() - 30 * 60 * 1000;   // 30 minutes of real tracked time
+  const nowTs = stableNowTs();
+  const { start, end } = stableEntryWindow(60 * 60 * 1000, 30 * 60 * 1000, nowTs);   // 30 minutes of real tracked time
   const entries = [{
     id: end, ts: end, tsStart: start, updatedAt: end, blockIntervalMin: 30,
     date: utcDateKey(start), activity: 'Write report', energy: 'deep',
@@ -234,7 +259,8 @@ test('tracked minutes are derived from real entries, not the checkbox', async ({
 
   await openApp(page, {
     entries,
-    plans: planFor([{ task: 'Write report' }, { task: 'Gym' }])
+    plans: planFor([{ task: 'Write report' }, { task: 'Gym' }]),
+    nowTs
   });
 
   const rows = page.locator('.plan-item');
@@ -272,8 +298,8 @@ test('one-tap start launches the timer with the planned task', async ({ page }) 
 });
 
 test('start next launches the first unstarted plan item', async ({ page }) => {
-  const start = Date.now() - 60 * 60 * 1000;
-  const end   = Date.now() - 30 * 60 * 1000;
+  const nowTs = stableNowTs();
+  const { start, end } = stableEntryWindow(60 * 60 * 1000, 30 * 60 * 1000, nowTs);
   const entries = [{
     id: end, ts: end, tsStart: start, updatedAt: end, blockIntervalMin: 30,
     date: utcDateKey(start), activity: 'Write report', energy: 'deep',
@@ -282,7 +308,8 @@ test('start next launches the first unstarted plan item', async ({ page }) => {
 
   await openApp(page, {
     entries,
-    plans: planFor([{ task: 'Write report' }, { task: 'Gym' }, { task: 'Read paper' }])
+    plans: planFor([{ task: 'Write report' }, { task: 'Gym' }, { task: 'Read paper' }]),
+    nowTs
   });
 
   await expect(page.locator('.plan-item').nth(0).locator('.plan-status')).toHaveText('Logged');
@@ -362,11 +389,8 @@ test('a past day with a plan shows it read-only (no start/remove controls)', asy
 // The nightly ritual — the review modal becomes the plan picker
 // ══════════════════════════════════════════════════════
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function deepEntry(startMsAgo, endMsAgo, activity) {
-  const start = Date.now() - startMsAgo;
-  const end   = Date.now() - endMsAgo;
+function deepEntry(startMsAgo, endMsAgo, activity, nowTs = Date.now()) {
+  const { start, end } = stableEntryWindow(startMsAgo, endMsAgo, nowTs);
   return {
     id: end, ts: end, tsStart: start, updatedAt: end,
     blockIntervalMin: Math.round((end - start) / 60000),
@@ -375,9 +399,8 @@ function deepEntry(startMsAgo, endMsAgo, activity) {
   };
 }
 
-function wasteEntry(startMsAgo, endMsAgo, activity) {
-  const start = Date.now() - startMsAgo;
-  const end   = Date.now() - endMsAgo;
+function wasteEntry(startMsAgo, endMsAgo, activity, nowTs = Date.now()) {
+  const { start, end } = stableEntryWindow(startMsAgo, endMsAgo, nowTs);
   return {
     id: end, ts: end, tsStart: start, updatedAt: end,
     blockIntervalMin: Math.round((end - start) / 60000),
@@ -512,9 +535,11 @@ test('waste and downtime are never offered as tomorrow’s priorities', async ({
 });
 
 test('review shows plan vs actual for the day being reviewed', async ({ page }) => {
+  const nowTs = stableNowTs();
   await openApp(page, {
-    entries: [deepEntry(90 * 60 * 1000, 45 * 60 * 1000, 'Write report')],   // 45m of real work
-    plans: planFor([{ task: 'Write report', done: true }, { task: 'Gym', done: false }])
+    entries: [deepEntry(90 * 60 * 1000, 45 * 60 * 1000, 'Write report', nowTs)],   // 45m of real work
+    plans: planFor([{ task: 'Write report', done: true }, { task: 'Gym', done: false }]),
+    nowTs
   });
   await page.evaluate(() => openReview());
 
@@ -530,12 +555,14 @@ test('review shows plan vs actual for the day being reviewed', async ({ page }) 
 });
 
 test('close day CTA opens the review loop and marks today closed after save', async ({ page }) => {
+  const nowTs = stableNowTs();
   await openApp(page, {
     entries: [
-      deepEntry(120 * 60 * 1000, 75 * 60 * 1000, 'Write report'),
-      wasteEntry(70 * 60 * 1000, 50 * 60 * 1000, 'Scrolling')
+      deepEntry(120 * 60 * 1000, 75 * 60 * 1000, 'Write report', nowTs),
+      wasteEntry(70 * 60 * 1000, 50 * 60 * 1000, 'Scrolling', nowTs)
     ],
-    plans: planFor([{ task: 'Write report', done: true }, { task: 'Gym', done: false }])
+    plans: planFor([{ task: 'Write report', done: true }, { task: 'Gym', done: false }]),
+    nowTs
   });
 
   await expect(page.locator('#closeout-card')).toBeVisible();
