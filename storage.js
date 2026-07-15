@@ -1059,6 +1059,21 @@ function applyRemoteTimerState(data) {
 
     const nameEl = document.getElementById('hero-task-name');
     if (nameEl) nameEl.textContent = remoteTask;
+    if (isFocusTimer) {
+      syncedFocusTimer = {
+        running: true,
+        task: remoteTask,
+        focusPhase: data.focusPhase || 'work',
+        startedAt: data.startedAt,
+        intervalSecs: totalSecs,
+        ownerDeviceId: data.ownerDeviceId || data.updatedBy || null,
+        updatedAt: data.updatedAt || Date.now(),
+        deviceName: data.deviceName || null
+      };
+      if (typeof syncFocusOverlayFromRemote === 'function') syncFocusOverlayFromRemote();
+    } else {
+      syncedFocusTimer = null;
+    }
 
     if (!running) {
       running = true;
@@ -1093,6 +1108,10 @@ function applyRemoteTimerState(data) {
     if (data.stopped) {
       const hadTimer = running || !!taskStartTime || !!timerStartedAt || !!currentTask;
       rememberTimerSyncStamp(remoteTimerSyncStamp(data) || Date.now());
+      if (data.mode === 'focus') {
+        syncedFocusTimer = null;
+        if (typeof clearSyncedFocusOverlay === 'function') clearSyncedFocusOverlay();
+      }
       if (hadTimer) resetTimer();
       updateTimerSyncDetail(data, 'timer stopped');
       return hadTimer;
