@@ -7,7 +7,7 @@
 //   persist(), syncEntries(), showToast(), resetTimer(),
 //   getTodayEntries(), getActivityColor(), toDateKey(), fmtDur(),
 //   getBucket(), renderToday(), updateRing(), doPing(),
-//   buildHeroSuggestions(), buildSugItem()
+//   buildHeroSuggestions(), buildSugItem(), _startHeartbeat(), _stopHeartbeat()
 // ══════════════════════════════════════════════════════
 
 // ── State ──
@@ -133,9 +133,6 @@ function setPomodoroCountdown(secs) {
 function startPomodoro() {
   pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min').value) || 25;
   pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min').value) || 5;
-  pomodoroPhase = 'work';
-  pomodoroRemaining = pomodoroWorkMin * 60;
-  focusStartTime = Date.now();
 
   const taskInput = document.getElementById('focus-task-input');
   const focusTask = taskInput.value.trim();
@@ -146,6 +143,9 @@ function startPomodoro() {
     setTimeout(() => { taskInput.classList.remove('focus-task-error'); taskInput.placeholder = 'What are you focusing on?'; }, 2000);
     return;
   }
+  pomodoroPhase = 'work';
+  pomodoroRemaining = pomodoroWorkMin * 60;
+  focusStartTime = Date.now();
   taskInput.style.display = 'none';
   const intentionEl = document.getElementById('focus-intention-text');
   intentionEl.textContent = focusTask;
@@ -167,6 +167,42 @@ function startPomodoro() {
   updateFocusDeepBar();
 }
 
+function getFocusTaskLabel() {
+  const label = document.getElementById('focus-intention-text')?.textContent?.trim();
+  return (label && label !== '—') ? label : (currentTask || intention || 'Deep work');
+}
+
+function logFocusSession(tsStart, tsEnd = Date.now()) {
+  const dur = Math.round((tsEnd - tsStart) / 60000);
+  if (dur < 1) return null;
+  const task = getFocusTaskLabel();
+  const entry = {
+    id: tsEnd, ts: tsEnd, tsStart,
+    blockIntervalMin: dur,
+    date: toDateKey(new Date(tsEnd)),
+    activity: task, energy: 'deep',
+    onPlan: true, retro: false
+  };
+  entry.category = getBucket(entry);
+  entry.originalLabel = entry.energy;
+  getActivityColor(task);
+  entries.push(entry);
+  entries.sort((a, b) => b.ts - a.ts);
+  lastTaskForRepeat = task;
+  persist(); syncEntries();
+  showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+  updateFocusDeepBar();
+  return entry;
+}
+
+function saveActiveFocusSession() {
+  if (!focusStartTime) return null;
+  const tsStart = focusStartTime;
+  focusStartTime = null;
+  if (pomodoroPhase !== 'work') return null;
+  return logFocusSession(tsStart);
+}
+
 function tickPomodoro() {
   pomodoroRemaining = Math.max(0, pomodoroRemaining - 1);
   setPomodoroCountdown(pomodoroRemaining);
@@ -182,26 +218,12 @@ function endWorkSession() {
   clearInterval(pomodoroTimer);
   pomodoroCount++;
   renderPomoDots();
-  updateFocusDeepBar();
   playAlertSound();
 
-  const task = currentTask || intention || 'Deep work';
   const tsEnd = Date.now();
-  const tsStart = blockStartTime || (tsEnd - pomodoroWorkMin * 60000);
-  const dur = Math.round((tsEnd - tsStart) / 60000);
-  const entry = {
-    id: tsEnd, ts: tsEnd, tsStart,
-    blockIntervalMin: dur,
-    date: toDateKey(new Date()),
-    activity: task, energy: 'deep',
-    onPlan: true, retro: false
-  };
-  getActivityColor(task);
-  entries.push(entry);
-  entries.sort((a,b) => b.ts - a.ts);
-  blockStartTime = Date.now();
-  persist(); syncEntries();
-  showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+  const tsStart = focusStartTime || (tsEnd - pomodoroWorkMin * 60000);
+  focusStartTime = null;
+  logFocusSession(tsStart, tsEnd);
 
   pomodoroPhase = 'break';
   pomodoroRemaining = pomodoroBreakMin * 60;
@@ -214,6 +236,7 @@ function endWorkSession() {
   btn.onclick = skipBreak;
   btn.style.display = 'block';
 
+  renderToday();
   pomodoroTimer = setInterval(tickPomodoro, 1000);
 }
 
@@ -482,43 +505,28 @@ function tryExitFocusMode() {
 
 function exitFocusConfirm() {
   if (!confirm('Are you sure you want to be distracted?')) return;
-  if (focusStartTime) {
-    const task = document.getElementById('focus-intention-text').textContent || currentTask || intention || 'Deep work';
-    const tsEnd = Date.now();
-    const dur = Math.round((tsEnd - focusStartTime) / 60000);
-    if (dur >= 1) {
-      const entry = {
-        id: tsEnd, ts: tsEnd, tsStart: focusStartTime,
-        blockIntervalMin: dur,
-        date: toDateKey(new Date()),
-        activity: task, energy: 'deep',
-        onPlan: true, retro: false
-      };
-      getActivityColor(task);
-      entries.push(entry);
-      entries.sort((a, b) => b.ts - a.ts);
-      persist(); syncEntries();
-      showToast(`Logged: ${task} · ${fmtDur(dur)}`);
-    }
-    focusStartTime = null;
-  }
   confirmExitFocus();
 }
 
 function confirmExitFocus() {
+  const shouldResumePausedTimer = pomodoroWasPaused && running && !ticker;
+  saveActiveFocusSession();
   clearInterval(pomodoroTimer);
   pomodoroPhase = 'idle';
   stopFocusMusic();
   focusModeOn = false;
   document.getElementById('focus-overlay').classList.remove('open');
-  if (pomodoroWasPaused && running && !ticker) {
+  if (typeof _stopHeartbeat === 'function') _stopHeartbeat();
+  if (shouldResumePausedTimer) {
     ticker = setInterval(() => {
       remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
       updateRing();
       if (remaining <= 0) doPing();
     }, 1000);
+    if (typeof _startHeartbeat === 'function') _startHeartbeat();
   }
   pomodoroWasPaused = false;
+  renderToday();
 }
 
 // ══════════════════════════════════════════════════════
@@ -557,6 +565,7 @@ function requestExitFocus() {
     if (cd <= 0) {
       clearInterval(focusBlockCountdown);
       document.getElementById('focus-block-overlay').classList.remove('show');
+      confirmExitFocus();
     }
   }, 1000);
 }

@@ -45,6 +45,7 @@ export default [
         sumEntryMinutes: 'readonly', sumEnergyMinutes: 'readonly',
         persist: 'readonly', syncEntries: 'readonly',
         fmtDur: 'readonly', getActivityColor: 'readonly', resetTimer: 'readonly',
+        _startHeartbeat: 'readonly', _stopHeartbeat: 'readonly',
         buildHeroSuggestions: 'readonly', buildSugItem: 'readonly',
         triggerPenaltyMode: 'readonly', renderSettings: 'readonly',
         showHeroState: 'readonly', confirm: 'readonly',
