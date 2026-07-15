@@ -26,10 +26,13 @@ localStorage.setItem('ta3-device-id', syncedDeviceId);
 let connectedDevices = {};
 let _lastTimerSyncDetail = null;
 let _syncDetailAgeTicker = null;
+let _syncReconcileTicker = null;
+let _syncReconcileInFlight = false;
 const TIMER_SYNC_STAMP_KEY = 'ta3-timer-updated-at';
 const AWAY_SYNC_STAMP_KEY = 'ta3-away-updated-at';
 const SYNC_EVENT_LOG_KEY = 'ta3-sync-event-log';
 const SYNC_EVENT_LOG_LIMIT = 6;
+const SYNC_RECONCILE_MS = 2 * 60 * 1000;
 let _syncEventLog = loadSyncEventLog();
 
 // ── Shared constants ──
@@ -611,6 +614,7 @@ function startSync() {
     const online = snap.val();
     if (online) {
       updateSyncPill('connected', 'synced');
+      startSyncReconcileTicker();
       deviceRef.set({
         lastSeen: Date.now(),
         name: navigator.userAgent.includes('Mobile') ? '📱 Mobile' : '💻 Desktop'
@@ -620,6 +624,7 @@ function startSync() {
       const ls = parseInt(localStorage.getItem('ta3-last-sync') || '0', 10);
       if (lv > ls) syncEntries();
     } else {
+      stopSyncReconcileTicker();
       const pill = document.getElementById('sync-pill');
       if (pill && pill.classList.contains('connected')) {
         updateSyncPill('syncing', 'offline · data saved locally');
@@ -899,6 +904,30 @@ async function forceSyncNow() {
   }
 }
 
+async function reconcileRemoteActiveState() {
+  if (!fbRoomRef || _syncReconcileInFlight) return false;
+  _syncReconcileInFlight = true;
+  try {
+    const [timerSnap, awaySnap] = await Promise.all([
+      fbRoomRef.child('timer').once('value'),
+      fbRoomRef.child('awayState').once('value')
+    ]);
+    const timerChanged = applyRemoteTimerState(timerSnap.val());
+    const awayChanged = applyRemoteAwayState(awaySnap.val());
+    localStorage.setItem('ta3-last-sync', Date.now());
+    if (timerChanged || awayChanged) {
+      persist();
+      scheduleRenderToday();
+    }
+    return timerChanged || awayChanged;
+  } catch (err) {
+    notifySyncWriteFailed(err);
+    return false;
+  } finally {
+    _syncReconcileInFlight = false;
+  }
+}
+
 function syncDeviceLabel(deviceId, fallback) {
   if (!deviceId) return 'other device';
   if (deviceId === syncedDeviceId) return 'this device';
@@ -947,6 +976,19 @@ function stopSyncDetailAgeTicker() {
   if (!_syncDetailAgeTicker) return;
   clearInterval(_syncDetailAgeTicker);
   _syncDetailAgeTicker = null;
+}
+
+function startSyncReconcileTicker() {
+  if (_syncReconcileTicker) return;
+  _syncReconcileTicker = setInterval(() => {
+    reconcileRemoteActiveState();
+  }, SYNC_RECONCILE_MS);
+}
+
+function stopSyncReconcileTicker() {
+  if (!_syncReconcileTicker) return;
+  clearInterval(_syncReconcileTicker);
+  _syncReconcileTicker = null;
 }
 
 function applyRemoteTimerState(data) {
@@ -1235,6 +1277,7 @@ let _partnerUidRef  = null;
 function teardownRoomListeners() {
   if (!fbDb || !roomCode) return;
   stopSyncDetailAgeTicker();
+  stopSyncReconcileTicker();
   const paths = ['timer','entries','intention','devices','settings','breakState','reviews','weeklyReviews','focusRedemptions','awayState','plans'];
   paths.forEach(p => fbDb.ref(`rooms/${roomCode}/${p}`).off());
   fbDb.ref('.info/connected').off();
