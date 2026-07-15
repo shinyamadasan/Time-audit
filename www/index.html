@@ -1362,7 +1362,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-15-readable-cards-1';
+const APP_BUILD = '2026-07-15-activity-merge-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -6239,15 +6239,40 @@ function renderEnergySplit(el, entriesArr, dateKey=null) {
   }).join('') || `<div style="color:var(--muted);font-size:12px">No data</div>`;
 }
 
+function activityBaseName(activity) {
+  return String(activity || '').split(' (Output')[0].trim().replace(/\s+/g, ' ');
+}
+
+function activityGroupKey(activity) {
+  return activityBaseName(activity).toLowerCase();
+}
+
+function activityDisplayLabel(activity) {
+  const label = activityBaseName(activity);
+  return label && label === label.toLowerCase() ? normalizeActivity(label) : label;
+}
+
+function preferActivityLabel(current, candidate) {
+  if (!current) return candidate || '';
+  if (!candidate) return current;
+  if (current === current.toLowerCase() && /[A-Z]/.test(candidate)) return candidate;
+  return current;
+}
+
 function renderTopActivities(el, entriesArr, limit=8, days=null, dateKey=null) {
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const attr = s => esc(s).replace(/"/g, '&quot;');
   const actMap = {};
   const expanded = expandPCTimeEntries(entriesArr.filter(e=>!e.missed));
   expanded.forEach(e=>{
-    const key = e.activity.split(' (Output')[0];
-    if(!actMap[key]) actMap[key]={mins:0,energy:e.energy};
+    const key = activityGroupKey(e.activity);
+    if (!key) return;
+    const label = activityDisplayLabel(e.activity);
+    if(!actMap[key]) actMap[key]={mins:0,energy:e.energy,label};
+    else actMap[key].label = preferActivityLabel(actMap[key].label, label);
   });
   Object.keys(actMap).forEach(act => {
-    actMap[act].mins = sumEntryMinutes(expanded, e => e.activity.split(' (Output')[0] === act, dateKey);
+    actMap[act].mins = sumEntryMinutes(expanded, e => activityGroupKey(e.activity) === act, dateKey);
   });
   const top = Object.entries(actMap).sort((a,b)=>b[1].mins-a[1].mins).slice(0,limit);
   const maxMins = top[0]?.[1].mins||1;
@@ -6258,15 +6283,16 @@ function renderTopActivities(el, entriesArr, limit=8, days=null, dateKey=null) {
   };
 
   el.innerHTML = top.length ? top.map(([act,data])=>{
+    const labelText = data.label || act;
     const totalW = Math.round(data.mins/maxMins*100);
-    const color = getActivityColor(act)||energyColors[data.energy]||'var(--deep)';
+    const color = getActivityColor(labelText)||energyColors[data.energy]||'var(--deep)';
     const label = data.mins>=60?(Math.round(data.mins/6)/10).toFixed(1)+'h':data.mins+'m';
 
     let barHTML, dayLineHTML = '';
     if (days && days.length) {
       // Segmented bar — one segment per day, proportional to that day's minutes for this activity
       const dayMins = days.map(d => {
-        const m = sumEntryMinutes(expanded, e => e.activity.split(' (Output')[0] === act, d.key);
+        const m = sumEntryMinutes(expanded, e => activityGroupKey(e.activity) === act, d.key);
         return { key: d.key, label: d.label, mins: m };
       });
       const activeDays = dayMins.filter(d => d.mins > 0);
@@ -6299,9 +6325,9 @@ function renderTopActivities(el, entriesArr, limit=8, days=null, dateKey=null) {
       </div>`;
     }
 
-    return `<div style="margin-bottom:12px">
+    return `<div data-activity-key="${attr(act)}" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-        <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%">${act}</span>
+        <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%">${esc(labelText)}</span>
         <span style="color:var(--muted);font-family:var(--mono);flex-shrink:0">${label}</span>
       </div>
       ${barHTML}${dayLineHTML}
@@ -6527,12 +6553,22 @@ function renderWeekOverview(days) {
   renderUnloggedHours(document.getElementById('w-unlogged-week'), days);
 
   // Populate activity dropdown
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const attr = s => esc(s).replace(/"/g, '&quot;');
   const actMap2 = {};
-  weekE.filter(e=>!e.missed&&!e.break).forEach(e=>{ const k=e.activity.split(' (Output')[0]; actMap2[k]=0; });
-  Object.keys(actMap2).forEach(k=>{ actMap2[k]=sumEntryMinutes(weekE, x=>!x.missed&&!x.break&&x.activity.split(' (Output')[0]===k); });
+  weekE.filter(e=>!e.missed&&!e.break).forEach(e=>{
+    const k = activityGroupKey(e.activity);
+    if (!k) return;
+    if (!actMap2[k]) actMap2[k] = { mins: 0, label: activityDisplayLabel(e.activity) };
+    else actMap2[k].label = preferActivityLabel(actMap2[k].label, activityDisplayLabel(e.activity));
+  });
+  Object.keys(actMap2).forEach(k=>{
+    actMap2[k].mins = sumEntryMinutes(weekE, x=>!x.missed&&!x.break&&activityGroupKey(x.activity)===k);
+  });
   const actSel = document.getElementById('filter-activity');
   actSel.innerHTML = '<option value="">All activities</option>' +
-    Object.entries(actMap2).sort((a,b)=>b[1]-a[1]).map(([act])=>`<option value="${act}">${act}</option>`).join('');
+    Object.entries(actMap2).sort((a,b)=>b[1].mins-a[1].mins)
+      .map(([key,data])=>`<option value="${attr(key)}">${esc(data.label || key)}</option>`).join('');
 
   renderWeekTable();
 }
@@ -6607,7 +6643,7 @@ function renderWeekTable() {
   const actFilter = document.getElementById('filter-activity')?.value || '';
   let filtered = expandPCTimeEntries(getWeekEntries(weekRangeOffset).filter(e=>!e.missed));
   if (energyFilter) filtered = filtered.filter(e=>e.energy===energyFilter);
-  if (actFilter) filtered = filtered.filter(e=>e.activity.startsWith(actFilter));
+  if (actFilter) filtered = filtered.filter(e=>activityGroupKey(e.activity)===actFilter);
 
   const tbody = document.getElementById('week-table-body');
   if (!tbody) return;
