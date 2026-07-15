@@ -648,8 +648,69 @@ test('week top activities merge activity labels that only differ by case', async
   await page.locator('#filter-activity').selectOption('sleep');
   const tableText = await page.locator('#week-table-body').innerText();
   expect(tableText).toContain('Sleep');
-  expect(tableText).toContain('sleep');
+  expect(tableText).not.toContain('sleep');
   expect(tableText).not.toContain('Scribe shift');
+});
+
+test('today timeline and recent entries display activity casing consistently', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 18, 0, 0);
+  const firstStart = Date.UTC(2026, 6, 15, 9, 0, 0);
+  const firstEnd = firstStart + 10 * 60 * 1000;
+  const secondStart = firstEnd;
+  const secondEnd = secondStart + 10 * 60 * 1000;
+  const laterStart = Date.UTC(2026, 6, 15, 11, 0, 0);
+  const laterEnd = laterStart + 10 * 60 * 1000;
+  const entries = [
+    {
+      id: firstEnd,
+      ts: firstEnd,
+      tsStart: firstStart,
+      updatedAt: firstEnd,
+      blockIntervalMin: 10,
+      date: utcDateKey(firstStart),
+      activity: 'APP BUILDING',
+      energy: 'deep',
+      category: 'deep_work'
+    },
+    {
+      id: secondEnd,
+      ts: secondEnd,
+      tsStart: secondStart,
+      updatedAt: secondEnd,
+      blockIntervalMin: 10,
+      date: utcDateKey(secondStart),
+      activity: 'app building',
+      energy: 'deep',
+      category: 'deep_work'
+    },
+    {
+      id: laterEnd,
+      ts: laterEnd,
+      tsStart: laterStart,
+      updatedAt: laterEnd,
+      blockIntervalMin: 10,
+      date: utcDateKey(laterStart),
+      activity: 'app building',
+      energy: 'deep',
+      category: 'deep_work'
+    }
+  ];
+  await openApp(page, { entries, nowTs });
+  await openTodayDetails(page);
+
+  const timelineRows = page.locator('#timeline-blocks .tl-row[data-activity-key="app building"]');
+  await expect(timelineRows).toHaveCount(2);
+  const mergedRow = timelineRows.filter({ hasText: '20m' });
+  await expect(mergedRow).toHaveCount(1);
+  await expect(mergedRow).toContainText('App building');
+  await expect(mergedRow).toContainText('×2');
+
+  const recentRows = page.locator('#recent-list .entry-row[data-activity-key="app building"]');
+  await expect(recentRows).toHaveCount(3);
+  const recentText = await page.locator('#recent-list').innerText();
+  expect(recentText).toContain('App building');
+  expect(recentText).not.toContain('APP BUILDING');
+  expect(recentText).not.toContain('app building');
 });
 
 test('remote away switch updates an already mirrored away state', async ({ page }) => {

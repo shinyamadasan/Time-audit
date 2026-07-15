@@ -1362,7 +1362,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-15-activity-merge-1';
+const APP_BUILD = '2026-07-15-activity-display-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1440,6 +1440,30 @@ function fmt(s) { return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s
 function normalizeActivity(s) {
   if (!s) return s;
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function activityBaseName(activity) {
+  return String(activity || '').split(' (Output')[0].trim().replace(/\s+/g, ' ');
+}
+
+function activityGroupKey(activity) {
+  return activityBaseName(activity).toLowerCase();
+}
+
+function activityDisplayLabel(activity) {
+  const label = activityBaseName(activity);
+  if (!label) return '';
+  const letters = label.replace(/[^A-Za-z]/g, '');
+  const allLower = letters && letters === letters.toLowerCase();
+  const shouty = letters.length > 3 && letters === letters.toUpperCase();
+  return (allLower || shouty) ? normalizeActivity(label.toLowerCase()) : label;
+}
+
+function preferActivityLabel(current, candidate) {
+  if (!current) return candidate || '';
+  if (!candidate) return current;
+  if (activityDisplayLabel(current) !== current && activityDisplayLabel(candidate) === candidate) return candidate;
+  return activityDisplayLabel(current);
 }
 
 // Expand PC Time entries into "PC time · X" sub-rows, removing nested browser entries
@@ -2141,7 +2165,7 @@ function openQuickLog() {
   const formBody = document.getElementById('ql-form-body');
   const qlQuickLane = document.getElementById('ql-quick-actions').closest('.quick-lane');
   if (last) {
-    document.getElementById('ql-last-label').textContent = last.activity.split(' (Output:')[0].substring(0, 32);
+    document.getElementById('ql-last-label').textContent = activityDisplayLabel(last.activity).substring(0, 32);
     continueBtn.dataset.lastActivity = last.activity;
     continueBtn.dataset.lastEnergy = last.energy;
     continueBtn.style.display = 'block';
@@ -2664,9 +2688,10 @@ function getRecentLogOptions(limit = 6) {
   const recent = [];
   for (const e of entries) {
     if (e.missed || e.break || e.away || !e.activity) continue;
-    const activity = e.activity.split(' (Output:')[0].trim();
-    if (!activity) continue;
-    const key = `${activity.toLowerCase()}|${e.energy || ''}`;
+    const activity = activityDisplayLabel(e.activity);
+    const activityKey = activityGroupKey(e.activity);
+    if (!activityKey) continue;
+    const key = `${activityKey}|${e.energy || ''}`;
     if (seen.has(key)) continue;
     seen.add(key);
     recent.push({ activity, energy: e.energy || 'shallow' });
@@ -2784,7 +2809,7 @@ function openLog(pingNum) {
     logFormBody.style.display = 'block';
     if (currentTask) document.getElementById('f-activity').value = currentTask;
   } else if (last && logIsPing) {
-    slLabel.textContent = last.activity.substring(0, 32);
+    slLabel.textContent = activityDisplayLabel(last.activity).substring(0, 32);
     slBtn.style.display = 'block';
     slOther.style.display = 'block';
     logFormBody.style.display = 'none';
@@ -2839,8 +2864,10 @@ function populateRetroChips() {
   const recent = [];
   for (const e of entries) {
     if (e.missed || e.break || e.away || !e.activity) continue;
-    const key = e.activity.split(' (Output:')[0];
-    if (!seen.has(key)) { seen.add(key); recent.push({ activity: key, energy: e.energy }); }
+    const key = activityGroupKey(e.activity);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    recent.push({ activity: activityDisplayLabel(e.activity), energy: e.energy });
     if (recent.length >= 8) break;
   }
   const wrap = document.getElementById('retro-chips-wrap');
@@ -3480,15 +3507,15 @@ function mergeConsecutiveForDisplay(sorted) {
   if (!sorted.length) return sorted;
   // MAX_GAP_MS defined in storage.js
   const out = [];
-  let g = { ...sorted[0], _mergeCount: 1, _mergedIds: [sorted[0].id] };
+  let g = { ...sorted[0], activity: activityDisplayLabel(sorted[0].activity), _mergeCount: 1, _mergedIds: [sorted[0].id] };
   for (let i = 1; i < sorted.length; i++) {
     const e = sorted[i];
     const gap = (e.tsStart || e.ts) - g.ts;
-    if (e.activity === g.activity && e.energy === g.energy && gap >= 0 && gap <= MAX_GAP_MS) {
-      g = { ...g, ts: e.ts, blockIntervalMin: Math.round((e.ts - (g.tsStart || g.ts)) / 60000), _mergeCount: g._mergeCount + 1, _mergedIds: [...g._mergedIds, e.id] };
+    if (activityGroupKey(e.activity) === activityGroupKey(g.activity) && e.energy === g.energy && gap >= 0 && gap <= MAX_GAP_MS) {
+      g = { ...g, activity: preferActivityLabel(g.activity, activityDisplayLabel(e.activity)), ts: e.ts, blockIntervalMin: Math.round((e.ts - (g.tsStart || g.ts)) / 60000), _mergeCount: g._mergeCount + 1, _mergedIds: [...g._mergedIds, e.id] };
     } else {
       out.push(g);
-      g = { ...e, _mergeCount: 1, _mergedIds: [e.id] };
+      g = { ...e, activity: activityDisplayLabel(e.activity), _mergeCount: 1, _mergedIds: [e.id] };
     }
   }
   out.push(g);
@@ -3698,9 +3725,12 @@ function cancelRetroEdit() {
 }
 
 function renderEntryRow(item) {
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const attr = s => esc(s).replace(/"/g, '&quot;');
   if (item.template) {
     const dur = Math.round((item.ts - item.tsStart) / 60000);
     const label = eLabel[item.energy] || item.energy;
+    const templateActivity = activityDisplayLabel(item.activity);
     const safeAct = item.activity.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
     return `<div class="tl-row tl-template-row"
       data-ts-start="${item.tsStart}" data-ts-end="${item.ts}"
@@ -3709,7 +3739,7 @@ function renderEntryRow(item) {
       <div class="tl-time">${localTime(item.tsStart)}</div>
       <div class="tl-bar-col tl-bar-template"></div>
       <div class="tl-content">
-        <div class="tl-activity">${item.activity}<span class="tl-badge" style="background:var(--bg3);color:var(--muted);border-radius:4px">${label}</span></div>
+        <div class="tl-activity">${esc(templateActivity)}<span class="tl-badge" style="background:var(--bg3);color:var(--muted);border-radius:4px">${label}</span></div>
         <div class="tl-meta">${localTime(item.tsStart)} – ${localTime(item.ts)} · ${fmtDur(dur)} · <span style="color:var(--deep);font-weight:600">tap to log</span></div>
       </div>
     </div>`;
@@ -3722,7 +3752,9 @@ function renderEntryRow(item) {
     ? `${localTime(item.tsStart)} – ${localTime(item.ts)}`
     : localTime(item.ts);
   const label = item.missed ? 'Untracked' : (eLabel[item.energy] || item.energy);
-  const actColor = item.missed ? null : getActivityColor(item.activity);
+  const displayActivity = item.missed ? 'Untracked' : activityDisplayLabel(item.activity);
+  const activityKey = activityGroupKey(item.activity);
+  const actColor = item.missed ? null : getActivityColor(displayActivity);
   const barStyle = actColor ? `style="background:${actColor}"` : '';
   const badgeStyle = actColor ? `style="background:${actColor}22;color:${actColor};border-radius:4px"` : '';
 
@@ -3754,16 +3786,17 @@ function renderEntryRow(item) {
 
     const pcRow = (tStart, tEnd, subActivity) => {
       const rDur      = Math.round((tEnd - tStart) / 60000);
-      const rColor    = subActivity ? getActivityColor(subActivity) : null;
+      const subLabel  = subActivity ? activityDisplayLabel(subActivity) : '';
+      const rColor    = subActivity ? getActivityColor(subLabel) : null;
       const rBarStyle = rColor ? `style="background:${rColor}"` : barStyle;
       const rClass    = rColor ? '' : energyClass;
       const rLabel    = subActivity
-        ? `PC time <span style="color:var(--muted);font-weight:400">· ${subActivity}</span>`
+        ? `PC time <span style="color:var(--muted);font-weight:400">· ${esc(subLabel)}</span>`
         : `PC time`;
       const rClick    = subActivity
         ? `openEditEntry(${subs.find(s => s.activity === subActivity && (s.tsStart||s.ts) === tStart)?.id || item.id})`
         : editCall;
-      return `<div class="tl-row" data-entry-id="${item.id}" data-energy="${energyClass}" onclick="${rClick}" style="cursor:pointer">
+      return `<div class="tl-row" data-entry-id="${item.id}" data-activity-key="${attr(subActivity ? activityGroupKey(subActivity) : activityKey)}" data-energy="${energyClass}" onclick="${rClick}" style="cursor:pointer">
         <div class="tl-time">${localTime(tStart)}</div>
         <div class="tl-bar-col ${rClass}" ${rBarStyle}></div>
         <div class="tl-content">
@@ -3790,11 +3823,11 @@ function renderEntryRow(item) {
   const projectPill = item.project
     ? ` · <span style="font-size:10px;padding:1px 5px;border-radius:3px;background:var(--bg3);color:var(--muted)">${item.project}</span>`
     : '';
-  return `<div class="tl-row" data-entry-id="${item.id}" data-energy="${energyClass}" onclick="${editCall}" style="cursor:pointer">
+  return `<div class="tl-row" data-entry-id="${item.id}" data-activity-key="${attr(activityKey)}" data-energy="${energyClass}" onclick="${editCall}" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
-      <div class="tl-activity">${item.activity}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span>${mergeTag}</div>
+      <div class="tl-activity">${esc(displayActivity)}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span>${mergeTag}</div>
       <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}${projectPill}</div>
     </div>
     <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
@@ -3822,6 +3855,9 @@ function renderTimelineCombined(combined) {
 
 /** @param {Object} e entry @returns {string} HTML for a recent-list row */
 function buildEntryRowHTML(e) {
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const attr = s => esc(s).replace(/"/g, '&quot;');
+  const displayActivity = activityDisplayLabel(e.activity);
   const duration = e.segments
     ? Math.round(e.segments.reduce((sum, s) => sum + s.duration, 0) / 60)
     : e.tsStart
@@ -3831,10 +3867,10 @@ function buildEntryRowHTML(e) {
     ? `${localTime(e.tsStart)} – ${localTime(e.ts)}`
     : localTime(e.ts);
   return `
-    <div class="entry-row">
+    <div class="entry-row" data-activity-key="${attr(activityGroupKey(e.activity))}">
       <div class="entry-bar ${e.energy}"></div>
       <div class="entry-main">
-        <div class="entry-activity">${e.activity}</div>
+        <div class="entry-activity">${esc(displayActivity)}</div>
         <div class="entry-meta">
   ${timeRange} · ${fmtDur(duration)}
   ${e.deap ? ' · ' + e.deap : ''}
@@ -4347,7 +4383,7 @@ function applyContextualVisibility(todayE) {
     .filter(e => !e.missed && !e.deleted && e.activity)
     .sort((a, b) => b.ts - a.ts)[0];
   if (salBtn && lastRealEntry && isToday) {
-    salLabel.textContent = lastRealEntry.activity;
+    salLabel.textContent = activityDisplayLabel(lastRealEntry.activity);
     const salTimeEl = document.getElementById('same-as-last-time');
     if (salTimeEl) {
       const endTs = lastRealEntry.ts || lastRealEntry.tsStart;
@@ -5058,15 +5094,20 @@ function startFromHero() {
 
 let _heroSugIndex = -1;
 function buildHeroSuggestions(filter) {
-  const hidden = new Set(settings.hiddenSuggestions || []);
+  const hidden = new Set((settings.hiddenSuggestions || []).map(activityGroupKey));
   const seen = new Set();
   const recent = [];
   for (const e of entries) {
     if (e.missed || e.away || !e.activity || e.deleted) continue;
-    const key = e.activity.split(' (Output:')[0].trim();
-    if (!seen.has(key) && !hidden.has(key)) { seen.add(key); recent.push(key); }
+    const key = activityGroupKey(e.activity);
+    if (!key || seen.has(key) || hidden.has(key)) continue;
+    seen.add(key);
+    recent.push(activityDisplayLabel(e.activity));
   }
-  const presets = (settings.presets || []).map(p => p.label).filter(l => !seen.has(l) && !hidden.has(l));
+  const presets = (settings.presets || []).map(p => p.label).filter(l => {
+    const key = activityGroupKey(l);
+    return key && !seen.has(key) && !hidden.has(key);
+  });
   const all = [...recent, ...presets];
   if (!filter) return { recent, presets };
   const q = filter.toLowerCase();
@@ -5320,8 +5361,10 @@ function openSwitchPanel() {
     const seen = new Set();
     for (const e of entries) {
       if (e.missed || e.break || e.away || !e.activity) continue;
-      const key = e.activity.split(' (Output:')[0];
-      if (!seen.has(key) && key !== currentTask) { seen.add(key); _switchTasks.push(key); }
+      const key = activityGroupKey(e.activity);
+      if (!key || seen.has(key) || key === activityGroupKey(currentTask)) continue;
+      seen.add(key);
+      _switchTasks.push(activityDisplayLabel(e.activity));
       if (_switchTasks.length >= 20) break;
     }
     renderSwitchList(_switchTasks);
@@ -5332,7 +5375,8 @@ function openSwitchPanel() {
 function renderSwitchList(tasks) {
   const el = document.getElementById('switch-list');
   if (!tasks.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px">No recent tasks</div>'; return; }
-  el.innerHTML = tasks.map(t => `<div class="switch-list-item">${t}</div>`).join('');
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  el.innerHTML = tasks.map(t => `<div class="switch-list-item">${esc(t)}</div>`).join('');
   el.querySelectorAll('.switch-list-item').forEach((item, i) => {
     item.addEventListener('click', () => fillSwitch(tasks[i]));
   });
@@ -5477,7 +5521,7 @@ function quickLogSameAsLast() {
     tsStart = tsEnd - (settings.intervalMin || 30) * 60000;
   }
   const dur = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
-  const activity = normalizeActivity(last.activity);
+  const activity = activityDisplayLabel(last.activity);
   const energy = last.energy || 'shallow';
   const dateKey = toDateKey(new Date(tsStart));
   const entry = { id: Date.now(), ts: tsEnd, tsStart, blockIntervalMin: dur,
@@ -5858,10 +5902,10 @@ function renderRecentChips() {
   for (const e of entries) {
     if (e.ts < cutoff) break;
     if (e.break || e.away || e.missed || !e.activity) continue;
-    if (!seen.has(e.activity)) {
-      seen.add(e.activity);
-      recentChipTasks.push(e.activity);
-    }
+    const key = activityGroupKey(e.activity);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    recentChipTasks.push(activityDisplayLabel(e.activity));
     if (recentChipTasks.length >= 5) break;
   }
   if (!recentChipTasks.length) { el.innerHTML = ''; return; }
@@ -6239,26 +6283,6 @@ function renderEnergySplit(el, entriesArr, dateKey=null) {
   }).join('') || `<div style="color:var(--muted);font-size:12px">No data</div>`;
 }
 
-function activityBaseName(activity) {
-  return String(activity || '').split(' (Output')[0].trim().replace(/\s+/g, ' ');
-}
-
-function activityGroupKey(activity) {
-  return activityBaseName(activity).toLowerCase();
-}
-
-function activityDisplayLabel(activity) {
-  const label = activityBaseName(activity);
-  return label && label === label.toLowerCase() ? normalizeActivity(label) : label;
-}
-
-function preferActivityLabel(current, candidate) {
-  if (!current) return candidate || '';
-  if (!candidate) return current;
-  if (current === current.toLowerCase() && /[A-Z]/.test(candidate)) return candidate;
-  return current;
-}
-
 function renderTopActivities(el, entriesArr, limit=8, days=null, dateKey=null) {
   const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const attr = s => esc(s).replace(/"/g, '&quot;');
@@ -6402,11 +6426,12 @@ function renderEntryList(el, entriesArr) {
   el.innerHTML = expanded.sort((a,b)=>(b.tsStart||b.ts)-(a.tsStart||a.ts)).map(e=>{
     const dur = entryMins(e);
     const time = e.tsStart?`${localTime(e.tsStart)} – ${localTime(e.ts)}`:localTime(e.ts);
-    const color = getActivityColor(e.activity)||energyColors[e.energy]||'var(--muted)';
+    const displayActivity = activityDisplayLabel(e.activity);
+    const color = getActivityColor(displayActivity)||energyColors[e.energy]||'var(--muted)';
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
       <div style="width:3px;height:34px;border-radius:2px;background:${color};flex-shrink:0"></div>
       <div class="flex-min">
-        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.activity}</div>
+        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${displayActivity}</div>
         <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
       </div>
       <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
@@ -6669,11 +6694,12 @@ function renderWeekTable() {
       ${dayEntries.map(e=>{
         const dur = entryMins(e);
         const time = e.tsStart?`${localTime(e.tsStart)} – ${localTime(e.ts)}`:localTime(e.ts);
-        const color = getActivityColor(e.activity)||energyColors[e.energy]||'var(--muted)';
+        const displayActivity = activityDisplayLabel(e.activity);
+        const color = getActivityColor(displayActivity)||energyColors[e.energy]||'var(--muted)';
         return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
           <div style="width:3px;height:32px;border-radius:2px;background:${color};flex-shrink:0"></div>
           <div class="flex-min">
-            <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.activity}</div>
+            <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${displayActivity}</div>
             <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
           </div>
           <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
@@ -6858,11 +6884,14 @@ function openReview(dateKey) {
   if (!r.waste && isToday) {
     const wasteMap = {};
     getTodayEntries().filter(e => e.energy === 'waste' && e.activity).forEach(e => {
-      const key = e.activity.split(' (Output:')[0];
-      wasteMap[key] = (wasteMap[key] || 0) + (e.blockIntervalMin || 0);
+      const key = activityGroupKey(e.activity);
+      if (!key) return;
+      if (!wasteMap[key]) wasteMap[key] = { label: activityDisplayLabel(e.activity), min: 0 };
+      else wasteMap[key].label = preferActivityLabel(wasteMap[key].label, activityDisplayLabel(e.activity));
+      wasteMap[key].min += e.blockIntervalMin || 0;
     });
-    const worst = Object.entries(wasteMap).sort((a, b) => b[1] - a[1])[0];
-    document.getElementById('rv-waste').value = worst ? `${worst[0]} · ${worst[1] >= 60 ? (worst[1]/60).toFixed(1)+'h' : worst[1]+'m'}` : '';
+    const worst = Object.values(wasteMap).sort((a, b) => b.min - a.min)[0];
+    document.getElementById('rv-waste').value = worst ? `${worst.label} · ${worst.min >= 60 ? (worst.min/60).toFixed(1)+'h' : worst.min+'m'}` : '';
   } else {
     document.getElementById('rv-waste').value = r.waste || '';
   }
@@ -7329,10 +7358,13 @@ function renderYesterdayPromise() {
   );
   const wasteMap = {};
   yesterdayEntries.forEach(e => {
-    const k = e.activity;
-    wasteMap[k] = (wasteMap[k] || 0) + (e.blockIntervalMin || settings.intervalMin || 30);
+    const k = activityGroupKey(e.activity);
+    if (!k) return;
+    if (!wasteMap[k]) wasteMap[k] = { label: activityDisplayLabel(e.activity), min: 0 };
+    else wasteMap[k].label = preferActivityLabel(wasteMap[k].label, activityDisplayLabel(e.activity));
+    wasteMap[k].min += e.blockIntervalMin || settings.intervalMin || 30;
   });
-  const wasteItems = Object.entries(wasteMap).sort((a, b) => b[1] - a[1]);
+  const wasteItems = Object.values(wasteMap).sort((a, b) => b.min - a.min);
 
   // The focus row that used to live here was retired — the Today Plan strip now owns
   // "what you said you'd do today", with one-tap start and tracked-minutes evidence.
@@ -7341,7 +7373,7 @@ function renderYesterdayPromise() {
 
   // Auto-populated waste from actual entries (takes priority over manual field if richer)
   const autoWasteContent = wasteItems.length
-    ? wasteItems.map(([act, min]) => `${act} (${min >= 60 ? (min/60).toFixed(1)+'h' : min+'m'})`).join(' · ')
+    ? wasteItems.map(item => `${item.label} (${item.min >= 60 ? (item.min/60).toFixed(1)+'h' : item.min+'m'})`).join(' · ')
     : null;
   const wasteContent = autoWasteContent || waste;
   const wasteRow = wasteContent ? `

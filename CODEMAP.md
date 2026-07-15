@@ -143,7 +143,7 @@ Depends on: `entries`, `focusRedemptions`, `persist()`, `scheduleRenderToday()`,
 ## [Timer — Core Interval Tracking]
 Lines: 2197–2476
 Purpose: Start/stop/reset the 30-min countdown ring, pre-commit modal for naming tasks, state switching, heartbeat, and the `beforeunload` guard.
-Functions: `fmt()`, `normalizeActivity()`, `expandPCTimeEntries()`, `fmtDur()`, `updateRing()`, `toggleTimer()`, `continueLastTask()`, `switchToNewTask()`, `confirmPreCommit()`, `updateTimerTaskLabel()`, `_startTimer()`, `switchState()`, `playAlert()`, `resetTimer()`, `stopAndLog()`, `switchTaskMidBlock()`
+Functions: `fmt()`, `normalizeActivity()`, `activityBaseName()`, `activityGroupKey()`, `activityDisplayLabel()`, `preferActivityLabel()`, `expandPCTimeEntries()`, `fmtDur()`, `updateRing()`, `toggleTimer()`, `continueLastTask()`, `switchToNewTask()`, `confirmPreCommit()`, `updateTimerTaskLabel()`, `_startTimer()`, `switchState()`, `playAlert()`, `resetTimer()`, `stopAndLog()`, `switchTaskMidBlock()`
 Variables: `CIRCUM` (314.2 SVG circumference)
 Depends on: State globals, `persist()`, `syncEntries()`, `showToast()`, `renderToday()`, Firebase sync section
 
@@ -309,7 +309,7 @@ Depends on: `persist()`, `syncEntries()`, `renderToday()`, `entries`
 ## [Week View]
 Lines: 5427–6009
 Purpose: Week and month overview — day tab navigation, energy split chart, top-activities list, untracked-hours summary, sortable entries table, single-day detail drilldown.
-Functions: `renderWeek()`, `setWeekMode()`, `shiftRange()`, `selectWeekDay()`, `renderMonthOverview()`, `entryMins()`, `renderEnergySplit()`, `activityBaseName()`, `activityGroupKey()`, `activityDisplayLabel()`, `preferActivityLabel()`, `renderTopActivities()`, `renderUnloggedHours()`, `renderEntryList()`, `renderWeekOverview()`, `renderDayDetail()`, `renderWeekTable()`, `sortBy()`
+Functions: `renderWeek()`, `setWeekMode()`, `shiftRange()`, `selectWeekDay()`, `renderMonthOverview()`, `entryMins()`, `renderEnergySplit()`, `renderTopActivities()`, `renderUnloggedHours()`, `renderEntryList()`, `renderWeekOverview()`, `renderDayDetail()`, `renderWeekTable()`, `sortBy()`
 Variables: `weekSelectedDay`, `weekRangeOffset`, `sortKey`, `sortDir`
 Depends on: `entries`, Statistics section, `getDateInTZ()`, `toDateKey()`, `computeInsights()`
 
