@@ -91,6 +91,14 @@
     <div id="sb-status-pill"></div>
   </div>
 
+  <div id="active-device-banner" class="active-device-banner" style="display:none">
+    <div class="active-device-copy">
+      <div class="active-device-title" id="active-device-title">Another device is active</div>
+      <div class="active-device-detail" id="active-device-detail">View only until you take over.</div>
+    </div>
+    <button class="btn sm primary active-device-action" id="active-device-takeover-btn" onclick="takeOverActiveTimer()">Take over here</button>
+  </div>
+
   <!-- ── Day bar ── -->
   <div id="day-bar" class="today-detail" style="display:none;margin-bottom:16px"></div>
 
@@ -1354,7 +1362,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-15-focus-sync-3';
+const APP_BUILD = '2026-07-15-focus-sync-4';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -4643,6 +4651,86 @@ function renderStatusBanner(todayE) {
   pill.style.cssText = `font-size:11px;font-weight:700;letter-spacing:.05em;padding:6px 14px;border-radius:999px;white-space:nowrap;background:${pillBg};color:${pillColor}`;
 }
 
+function getActiveTimerOwnerSnapshot() {
+  if (!running || !timerOwnerDeviceId || timerOwnerDeviceId === syncedDeviceId) return null;
+  const focus = syncedFocusTimer && syncedFocusTimer.running
+    && syncedFocusTimer.ownerDeviceId === timerOwnerDeviceId
+    ? syncedFocusTimer
+    : null;
+  const ownerName = syncDeviceLabel(timerOwnerDeviceId, focus?.deviceName);
+  const task = focus?.task || currentTask || lastTaskForRepeat || 'current timer';
+  const mode = focus ? 'Focus' : 'Timer';
+  return { ownerName, task, mode, focus };
+}
+
+function renderActiveDeviceBanner() {
+  const banner = document.getElementById('active-device-banner');
+  if (!banner) return false;
+  const snap = isViewingToday() ? getActiveTimerOwnerSnapshot() : null;
+  if (!snap) {
+    banner.style.display = 'none';
+    return false;
+  }
+  document.getElementById('active-device-title').textContent = `${snap.ownerName} is active`;
+  document.getElementById('active-device-detail').textContent =
+    `${snap.mode}: ${snap.task} · owned by ${snap.ownerName}. View only until you take over.`;
+  banner.style.display = 'flex';
+  return true;
+}
+
+function takeOverActiveTimer() {
+  const snap = getActiveTimerOwnerSnapshot();
+  if (!snap) {
+    showToast('This device already owns the timer');
+    renderActiveDeviceBanner();
+    return false;
+  }
+
+  timerOwnerDeviceId = syncedDeviceId;
+  const now = Date.now();
+  const startedAt = timerStartedAt || (now - Math.max(0, totalSecs - remaining) * 1000);
+  const task = snap.task || currentTask || lastTaskForRepeat || 'Work';
+  currentTask = task;
+  lastTaskForRepeat = task;
+  timerStartedAt = startedAt;
+  taskStartTime = taskStartTime || blockStartTime || startedAt;
+  blockStartTime = blockStartTime || taskStartTime || startedAt;
+
+  let mode = null;
+  let focusPhase = null;
+  if (snap.focus) {
+    syncedFocusTimer = {
+      ...snap.focus,
+      task,
+      ownerDeviceId: syncedDeviceId,
+      updatedAt: now,
+      deviceName: 'this device'
+    };
+    mode = 'focus';
+    focusPhase = snap.focus.focusPhase || 'work';
+    if (typeof takeOverSyncedFocusTimer === 'function') takeOverSyncedFocusTimer();
+  }
+
+  syncTimerState({
+    running: true,
+    lastTask: task,
+    intervalSecs: totalSecs,
+    startedAt,
+    taskStartTime,
+    blockStartTime,
+    ownerDeviceId: syncedDeviceId,
+    mode,
+    focusPhase,
+    takeover: true,
+    stateLabel: `takeover: ${task}`
+  });
+  persist();
+  showToast(`Now owned by this device: ${task}`);
+  renderActiveDeviceBanner();
+  renderToday();
+  return true;
+}
+
 function renderLeftPanel() {
   if (window.innerWidth < 1100) return;
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -4939,6 +5027,7 @@ function renderToday() {
   updateHeroPrompt(todayE);
   renderDayBar(todayE);
   renderStatusBanner(todayE);
+  renderActiveDeviceBanner();
   perfStageStart = recordPerfStage('renderTodayBottomUi', perfStageStart);
   if (document.body.classList.contains('show-dashboard-panels')) renderSidePanel();
   renderPartnerCard();
@@ -9072,7 +9161,7 @@ initAutoSync();
 initNativeNotifications();
 setTimeout(() => { checkSleepSetup(); checkSleepReminder(); }, 2000);
 setInterval(checkSleepReminder, 5 * 60 * 1000); // re-check every 5 min until sleep is logged
-setInterval(() => { if (isViewingToday()) { const e = getViewingEntries(); updateHeroPrompt(e); renderDayBar(e); renderStatusBanner(e); renderTodayHealth(e); renderTodayActionStrip(e); } }, 60000);
+setInterval(() => { if (isViewingToday()) { const e = getViewingEntries(); updateHeroPrompt(e); renderDayBar(e); renderStatusBanner(e); renderActiveDeviceBanner(); renderTodayHealth(e); renderTodayActionStrip(e); } }, 60000);
 // Auto-start "PC Time" on fresh browser open (desktop only, not mobile browsers)
 // Wait up to 5s for Firebase to tell us if a timer is already running elsewhere.
 // If Firebase says a timer is running, adopt that — don't overwrite it.

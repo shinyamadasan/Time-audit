@@ -1013,7 +1013,7 @@ function syncLocalActiveTimerState() {
 
 function applyRemoteTimerState(data) {
   if (!data) return false;
-  if (isLocalFocusTimerActive() && data.updatedBy && data.updatedBy !== syncedDeviceId) {
+  if (isLocalFocusTimerActive() && data.updatedBy && data.updatedBy !== syncedDeviceId && !data.takeover) {
     fbTimerReceived = true;
     updateTimerSyncDetail(data, 'ignored remote timer; focus owned here');
     syncLocalActiveTimerState();
@@ -1250,6 +1250,7 @@ function syncTimerState(extra = {}) {
     ownerDeviceId: isStopped ? null : (extra.ownerDeviceId || timerOwnerDeviceId || null),
     mode: extra.mode || null,
     focusPhase: extra.focusPhase || null,
+    takeover: !!extra.takeover,
     updatedAt: now,
     updatedBy: syncedDeviceId,
     deviceName: navigator.userAgent.includes('Mobile') ? 'phone' : 'PC'
@@ -1257,9 +1258,9 @@ function syncTimerState(extra = {}) {
   fbRoomRef.update({
     timer
   });
-  updateTimerSyncDetail(timer, timer.running
+  updateTimerSyncDetail(timer, extra.stateLabel || (timer.running
     ? `${timer.mode === 'focus' ? 'focus' : 'active'}: ${timer.lastTask || 'Work'}`
-    : timer.stopped ? 'timer stopped' : 'timer paused');
+    : timer.stopped ? 'timer stopped' : 'timer paused'));
 }
 
 function resolveEntrySync(local, remote, nowTs = Date.now()) {
