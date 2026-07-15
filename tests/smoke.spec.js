@@ -787,6 +787,103 @@ test('activity cleanup merges stored name variants with undo', async ({ page }) 
   expect(restored).toEqual(entries.map(e => ({ id: e.id, activity: e.activity, deleted: !!e.deleted })));
 });
 
+test('activity guardrail canonicalizes new timer and retro logs', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 18, 0, 0);
+  const seedStart = Date.UTC(2026, 6, 15, 8, 0, 0);
+  const seed = {
+    id: seedStart + 30 * 60 * 1000,
+    ts: seedStart + 30 * 60 * 1000,
+    tsStart: seedStart,
+    updatedAt: seedStart,
+    blockIntervalMin: 30,
+    date: utcDateKey(seedStart),
+    activity: 'App Building',
+    energy: 'deep'
+  };
+  await openApp(page, { entries: [seed], nowTs });
+
+  const timerEntry = await page.evaluate(async () => {
+    await _startTimer('app building');
+    taskStartTime = Date.now() - 6 * 60 * 1000;
+    blockStartTime = taskStartTime;
+    stopAndLog();
+    return entries.find(e => e.id !== 1 && e.activity === 'App Building' && e.blockIntervalMin === 6)?.activity;
+  });
+  expect(timerEntry).toBe('App Building');
+
+  await openTodayDetails(page);
+  await page.locator('#retro-task').click();
+  await page.locator('#retro-task').fill('app building (Output: deploy)');
+  await page.locator('#retro-qstart').fill('10:00');
+  await page.locator('#retro-qend').fill('10:15');
+  await page.locator('.quick-retro-bar').getByRole('button', { name: 'Log' }).click();
+
+  const retroEntry = await page.evaluate(() => entries.find(e =>
+    e.activity === 'App Building (Output: deploy)' && e.blockIntervalMin === 15
+  )?.activity);
+  expect(retroEntry).toBe('App Building (Output: deploy)');
+});
+
+test('activity guardrail canonicalizes quick saves', async ({ page }) => {
+  const seedStart = Date.now() - 60 * 60 * 1000;
+  const seed = {
+    id: seedStart + 30 * 60 * 1000,
+    ts: seedStart + 30 * 60 * 1000,
+    tsStart: seedStart,
+    updatedAt: seedStart,
+    blockIntervalMin: 30,
+    date: utcDateKey(seedStart),
+    activity: 'App Building',
+    energy: 'deep'
+  };
+  await openApp(page, { entries: [seed] });
+
+  const saved = await page.evaluate(() => {
+    blockStartTime = Date.now() - 5 * 60 * 1000;
+    totalSecs = 30 * 60;
+    _doQuickSave('app building', 'deep');
+    return entries.find(e => e.quickLogged && e.activity === 'App Building')?.activity;
+  });
+
+  expect(saved).toBe('App Building');
+});
+
+test('activity guardrail canonicalizes focus sessions', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 18, 0, 0);
+  const seedStart = Date.UTC(2026, 6, 15, 8, 0, 0);
+  const seed = {
+    id: seedStart + 30 * 60 * 1000,
+    ts: seedStart + 30 * 60 * 1000,
+    tsStart: seedStart,
+    updatedAt: seedStart,
+    blockIntervalMin: 30,
+    date: utcDateKey(seedStart),
+    activity: 'App Building',
+    energy: 'deep'
+  };
+  await openApp(page, { entries: [seed], nowTs });
+
+  const result = await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.confirm = () => true;
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'app building';
+    startPomodoro();
+    focusStartTime = Date.now() - 7 * 60 * 1000;
+    exitFocusConfirm();
+    const saved = entries.find(e => e.activity === 'App Building' && e.blockIntervalMin === 7);
+    return {
+      savedActivity: saved?.activity,
+      lastTaskForRepeat
+    };
+  });
+
+  expect(result).toMatchObject({
+    savedActivity: 'App Building',
+    lastTaskForRepeat: 'App Building'
+  });
+});
+
 test('remote away switch updates an already mirrored away state', async ({ page }) => {
   await openApp(page);
   const cookingStart = Date.now() - 2 * 60 * 1000;

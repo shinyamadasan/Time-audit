@@ -8,7 +8,7 @@
 //   getTodayEntries(), getActivityColor(), toDateKey(), fmtDur(),
 //   getBucket(), renderToday(), updateRing(), doPing(),
 //   buildHeroSuggestions(), buildSugItem(), syncTimerState(),
-//   _startHeartbeat(), _stopHeartbeat()
+//   canonicalizeActivityInput(), _startHeartbeat(), _stopHeartbeat()
 // ══════════════════════════════════════════════════════
 
 // ── State ──
@@ -36,6 +36,11 @@ let _shuffleMode = localStorage.getItem('ta3-focus-shuffle') === '1';
 let _shuffleQueue = [];
 let _inBreakMode = false;
 let _outroActive = false;
+
+function canonicalFocusActivity(task) {
+  const fn = globalThis.canonicalizeActivityInput;
+  return typeof fn === 'function' ? fn(task) : String(task || '').trim();
+}
 
 // Audio served from GitHub Pages — not bundled in APK (keeps APK ~12MB)
 const _AUDIO_BASE = 'https://shinyamadasan.github.io/Time-audit/Sounds/';
@@ -281,7 +286,7 @@ function startPomodoro() {
   pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min').value) || 5;
 
   const taskInput = document.getElementById('focus-task-input');
-  const focusTask = taskInput.value.trim();
+  const focusTask = canonicalFocusActivity(taskInput.value.trim());
   if (!focusTask) {
     taskInput.classList.add('focus-task-error');
     taskInput.placeholder = 'Name your focus session first';
@@ -325,7 +330,7 @@ function getFocusTaskLabel() {
 function logFocusSession(tsStart, tsEnd = Date.now()) {
   const dur = Math.round((tsEnd - tsStart) / 60000);
   if (dur < 1) return null;
-  const task = getFocusTaskLabel();
+  const task = canonicalFocusActivity(getFocusTaskLabel());
   const entry = {
     id: tsEnd, ts: tsEnd, tsStart,
     blockIntervalMin: dur,
@@ -604,7 +609,7 @@ function enterFocusMode() {
     const tsEnd = Date.now();
     const dur = Math.round((tsEnd - blockStartTime) / 60000);
     if (dur >= 1) {
-      const task = currentTask || intention || 'Work block';
+      const task = canonicalFocusActivity(currentTask || intention || 'Work block');
       const energy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
       const entry = {
         id: tsEnd, ts: tsEnd, tsStart: blockStartTime,

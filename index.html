@@ -1367,7 +1367,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-15-activity-cleanup-1';
+const APP_BUILD = '2026-07-15-activity-guard-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1469,6 +1469,35 @@ function preferActivityLabel(current, candidate) {
   if (!candidate) return current;
   if (activityDisplayLabel(current) !== current && activityDisplayLabel(candidate) === candidate) return candidate;
   return activityDisplayLabel(current);
+}
+
+function canonicalActivityBase(activity) {
+  const key = activityGroupKey(activity);
+  if (!key) return '';
+  const variants = {};
+  entries.forEach(e => {
+    if (e.deleted || e.missed || !e.activity || activityGroupKey(e.activity) !== key) return;
+    const label = activityBaseName(e.activity);
+    if (!label) return;
+    if (!variants[label]) variants[label] = { label, count: 0 };
+    variants[label].count += 1;
+  });
+  (settings.presets || []).forEach(p => {
+    if (!p?.label || activityGroupKey(p.label) !== key) return;
+    const label = activityBaseName(p.label);
+    if (!variants[label]) variants[label] = { label, count: 0 };
+    variants[label].count += 0.5;
+  });
+  const existing = Object.values(variants);
+  return existing.length ? chooseActivityCleanupCanonical(existing) : activityDisplayLabel(activity);
+}
+
+function canonicalizeActivityInput(activity) {
+  const raw = String(activity || '').trim().replace(/\s+/g, ' ');
+  if (!raw) return '';
+  const base = activityBaseName(raw);
+  if (!base) return raw;
+  return `${canonicalActivityBase(base)}${activityOutputSuffix(raw)}`;
 }
 
 // Expand PC Time entries into "PC time · X" sub-rows, removing nested browser entries
@@ -1746,6 +1775,7 @@ function updateTimerTaskLabel() {
 }
 
 async function _startTimer(task) {
+  task = canonicalizeActivityInput(task);
   currentTask = task;
   lastTaskForRepeat = task;
   taskStartTime = Date.now();
@@ -1857,7 +1887,7 @@ function stopAndLog() {
   const tsEnd = Date.now();
   const tsStart = taskStartTime || blockStartTime || (tsEnd - (settings.intervalMin || 30) * 60000);
   const dur = Math.round((tsEnd - tsStart) / 60000);
-  const task = currentTask || lastTaskForRepeat || 'Work block';
+  const task = canonicalizeActivityInput(currentTask || lastTaskForRepeat || 'Work block');
   const prevEnergy = entries.find(e => !e.missed && !e.deleted && !e.break && e.energy)?.energy || 'deep';
   if (dur >= 1) {
     const entry = {
@@ -1891,7 +1921,7 @@ function switchTaskMidBlock() {
   const tsEnd = Date.now();
   const tsStart = blockStartTime || (tsEnd - totalSecs * 1000);
   const dur = Math.round((tsEnd - tsStart) / 60000);
-  const prevTask = currentTask || intention || 'Work block';
+  const prevTask = canonicalizeActivityInput(currentTask || intention || 'Work block');
   const prevEnergy = entries.find(e => !e.missed && !e.break)?.energy || 'deep';
   if (dur >= 1) {
     const entry = {
@@ -2104,6 +2134,7 @@ function stopPCTimeLive() {
 
 function autoLogBlock(activity, energy, tsStart, tsEnd) {
   if (!activity) activity = 'Work';
+  activity = canonicalizeActivityInput(activity);
   const dur = Math.round((tsEnd - tsStart) / 60000);
   if (dur < 1) return;
 
@@ -2310,6 +2341,7 @@ function _doQuickSave(activity, energy) {
   if (LocalNotifications) LocalNotifications.cancel({ notifications: [{ id: PING_FOLLOWUP_ID }] }).catch(()=>{});
   stopAlertLoop();
   if (!activity) activity = energy;
+  activity = canonicalizeActivityInput(activity);
   const _now = Date.now();
   const tsStart = blockStartTime || (_now - totalSecs * 1000);
   const loggedDur = Math.round((_now - tsStart) / 60000) || settings.intervalMin;
@@ -2518,7 +2550,7 @@ function renderFocusRewardPreview() {
 }
 
 function logFocusReward() {
-  const label = normalizeActivity(document.getElementById('fw-reward-label').value.trim());
+  const label = canonicalizeActivityInput(document.getElementById('fw-reward-label').value.trim());
   if (!label) { showToast('Name the reward'); return false; }
   const durationMin = Math.round(Number(document.getElementById('fw-reward-duration').value));
   if (!Number.isFinite(durationMin) || durationMin < 1) { showToast('Enter a valid duration'); return false; }
@@ -2921,7 +2953,7 @@ function setRetroEnergy(type, fromAI) {
 }
 
 function saveRetroEntry() {
-  const activity = document.getElementById('retro-activity').value.trim();
+  const activity = canonicalizeActivityInput(document.getElementById('retro-activity').value.trim());
   if (!activity) { showToast('Add an activity description'); return; }
   if (!retroEnergy) { showToast('Pick an energy type'); return; }
   const _bulkOrigEnergy = editingEntryId !== null ? (entries.find(e => e.id === editingEntryId)?.energy || '') : '';
@@ -3094,7 +3126,7 @@ function checkBudget(energy) {
 }
 
 function saveEntry() {
-  const activity = normalizeActivity(document.getElementById('f-activity').value.trim());
+  const activity = canonicalizeActivityInput(document.getElementById('f-activity').value.trim());
   if (!activity){showToast('Add an activity description');return;}
   if (!selectedEnergy){showToast('Pick an energy type');return;}
 
@@ -5411,7 +5443,7 @@ function switchToTask(task) {
   if (running && blockStartTime) {
     const tsEnd = Date.now();
     const dur = Math.max(1, Math.round((tsEnd - blockStartTime) / 60000));
-    const prevTask = currentTask || lastTaskForRepeat || 'Work';
+    const prevTask = canonicalizeActivityInput(currentTask || lastTaskForRepeat || 'Work');
     const lastEnergy = entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep';
     const entry = {
       id: tsEnd, ts: tsEnd, tsStart: blockStartTime,
@@ -5433,7 +5465,7 @@ function switchToTask(task) {
 
 function quickRetroLog() {
   const taskInput = document.getElementById('retro-task');
-  const task = normalizeActivity((taskInput.value || taskInput.dataset.lastValue || '').trim());
+  const task = canonicalizeActivityInput((taskInput.value || taskInput.dataset.lastValue || '').trim());
   if (!task) { showToast('What did you do?'); taskInput.focus(); return; }
 
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -9797,7 +9829,7 @@ async function syncPhoneUsage(UsageStats) {
   let added = 0;
 
   for (const s of sessions) {
-    const appName = TRACKED_APPS[s.pkg];
+    const appName = canonicalizeActivityInput(TRACKED_APPS[s.pkg]);
     if (!appName) continue;
     if (s.durationMs < MIN_SESSION_MS) continue;
 
