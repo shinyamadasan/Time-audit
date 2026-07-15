@@ -812,6 +812,30 @@ const SEAM_TOLERANCE_MS = 2 * 60 * 1000;
 const MAX_GAP_MS        = 5 * 60 * 1000;
 const MIN_GAP_MIN       = 5;
 
+function activityBaseName(activity) {
+  return String(activity || '').split(' (Output')[0].trim().replace(/\s+/g, ' ');
+}
+
+function activityGroupKey(activity) {
+  return activityBaseName(activity).toLowerCase();
+}
+
+function activityDisplayLabel(activity) {
+  const label = activityBaseName(activity);
+  if (!label) return '';
+  const letters = label.replace(/[^A-Za-z]/g, '');
+  const allLower = letters && letters === letters.toLowerCase();
+  const shouty = letters.length > 3 && letters === letters.toUpperCase();
+  return (allLower || shouty) ? normalizeActivityForTemplate(label.toLowerCase()) : label;
+}
+
+function preferActivityLabel(current, candidate) {
+  if (!current) return candidate || '';
+  if (!candidate) return current;
+  if (activityDisplayLabel(current) !== current && activityDisplayLabel(candidate) === candidate) return candidate;
+  return activityDisplayLabel(current);
+}
+
 function clipOverlapsForDisplay(ascSorted) {
   if (ascSorted.length < 2) return ascSorted;
   const result = ascSorted.map(e => ({ ...e }));
@@ -831,20 +855,21 @@ function clipOverlapsForDisplay(ascSorted) {
 function mergeConsecutiveForDisplay(clipped) {
   if (!clipped.length) return [];
   const out = [];
-  let group = { ...clipped[0], _mergedIds: null };
+  let group = { ...clipped[0], activity: activityDisplayLabel(clipped[0].activity), _mergedIds: null };
   for (let i = 1; i < clipped.length; i++) {
     const e = clipped[i];
     const gap = (group.tsStart || group.ts) - e.ts;
-    const sameKind = e.activity === group.activity && e.energy === group.energy;
+    const sameKind = activityGroupKey(e.activity) === activityGroupKey(group.activity) && e.energy === group.energy;
     if (sameKind && gap >= 0 && gap <= MAX_GAP_MS) {
       if (!group._mergedIds) group._mergedIds = [group.id];
       group._mergedIds.push(e.id);
+      group.activity = preferActivityLabel(group.activity, activityDisplayLabel(e.activity));
       group.tsStart = e.tsStart || e.ts;
       group.blockIntervalMin = Math.round(((group.tsStart || group.ts) - (e.tsStart || e.ts)) / 60000) ||
         (group.blockIntervalMin || 1);
     } else {
       out.push(group);
-      group = { ...e, _mergedIds: null };
+      group = { ...e, activity: activityDisplayLabel(e.activity), _mergedIds: null };
     }
   }
   out.push(group);
@@ -906,6 +931,15 @@ test('merges same-activity entries within MAX_GAP_MS', () => {
   const b = makeEntry(1, 9 - 4/60, 9 - 1/60);   // 8:56–8:59, gap ~1min — within 5min
   const result = mergeConsecutiveForDisplay([a, b]);
   assert.equal(result.length, 1);
+  assert.ok(Array.isArray(result[0]._mergedIds), '_mergedIds should be an array');
+  assert.equal(result[0]._mergedIds.length, 2);
+});
+test('merges same-activity entries when casing differs', () => {
+  const a = makeEntry(2, 9, 10, 'APP BUILDING', 'deep');
+  const b = makeEntry(1, 9 - 4/60, 9 - 1/60, 'app building', 'deep');
+  const result = mergeConsecutiveForDisplay([a, b]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].activity, 'App building');
   assert.ok(Array.isArray(result[0]._mergedIds), '_mergedIds should be an array');
   assert.equal(result[0]._mergedIds.length, 2);
 });
