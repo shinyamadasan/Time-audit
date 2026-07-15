@@ -242,6 +242,86 @@ test('focus work publishes active timer sync and exit publishes stopped state', 
   });
 });
 
+test('focus started before sync connects publishes when sync becomes available', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    fbRoomRef = null;
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Late sync focus';
+    startPomodoro();
+
+    window.__timerUpdates = [];
+    fbRoomRef = {
+      update(payload) {
+        window.__timerUpdates.push(payload);
+        return Promise.resolve();
+      }
+    };
+
+    const pushed = syncLocalActiveTimerState();
+    const timer = window.__timerUpdates.at(-1)?.timer;
+    return { pushed, timer, syncedDeviceId };
+  });
+
+  expect(result.pushed).toBe(true);
+  expect(result.timer).toMatchObject({
+    running: true,
+    stopped: false,
+    mode: 'focus',
+    focusPhase: 'work',
+    lastTask: 'Late sync focus',
+    intervalSecs: 25 * 60,
+    ownerDeviceId: result.syncedDeviceId
+  });
+  expect(result.timer.startedAt).toBeGreaterThan(0);
+});
+
+test('active local focus owner rejects remote timer takeover and republishes focus', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.__timerUpdates = [];
+    fbRoomRef = {
+      update(payload) {
+        window.__timerUpdates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Owner focus block';
+    startPomodoro();
+
+    const applied = applyRemoteTimerState({
+      running: true,
+      lastTask: 'Phone auto timer',
+      intervalSecs: 1800,
+      startedAt: Date.now(),
+      taskStartTime: Date.now(),
+      blockStartTime: Date.now(),
+      ownerDeviceId: 'phone-device',
+      updatedAt: Date.now() + 1000,
+      updatedBy: 'phone-device',
+      deviceName: 'phone'
+    });
+    const republished = window.__timerUpdates.at(-1)?.timer;
+    return { applied, currentTask, republished, syncedDeviceId };
+  });
+
+  expect(result.applied).toBe(false);
+  expect(result.currentTask).toBe('Owner focus block');
+  expect(result.republished).toMatchObject({
+    running: true,
+    mode: 'focus',
+    lastTask: 'Owner focus block',
+    ownerDeviceId: result.syncedDeviceId
+  });
+  await expect(page.locator('#sync-event-log')).toContainText('ignored remote timer; focus owned here');
+  await expect(page.locator('#sync-detail-label')).toContainText('focus: Owner focus block');
+});
+
 test('quick retro log can be undone', async ({ page }) => {
   await openApp(page);
 

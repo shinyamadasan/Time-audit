@@ -619,6 +619,7 @@ function startSync() {
         lastSeen: Date.now(),
         name: navigator.userAgent.includes('Mobile') ? '📱 Mobile' : '💻 Desktop'
       });
+      syncLocalActiveTimerState();
       // Push any local changes that happened while offline
       const lv = parseInt(localStorage.getItem('ta3-lv') || '0', 10);
       const ls = parseInt(localStorage.getItem('ta3-last-sync') || '0', 10);
@@ -991,8 +992,33 @@ function stopSyncReconcileTicker() {
   _syncReconcileTicker = null;
 }
 
+function isLocalFocusTimerActive() {
+  return typeof pomodoroPhase !== 'undefined'
+    && pomodoroPhase !== 'idle'
+    && timerOwnerDeviceId === syncedDeviceId;
+}
+
+function syncLocalActiveTimerState() {
+  if (!fbRoomRef) return false;
+  if (isLocalFocusTimerActive() && typeof syncFocusTimerState === 'function') {
+    syncFocusTimerState();
+    return true;
+  }
+  if (running && timerOwnerDeviceId === syncedDeviceId) {
+    syncTimerState();
+    return true;
+  }
+  return false;
+}
+
 function applyRemoteTimerState(data) {
   if (!data) return false;
+  if (isLocalFocusTimerActive() && data.updatedBy && data.updatedBy !== syncedDeviceId) {
+    fbTimerReceived = true;
+    updateTimerSyncDetail(data, 'ignored remote timer; focus owned here');
+    syncLocalActiveTimerState();
+    return false;
+  }
   if (isStaleRemoteTimerState(data)) {
     fbTimerReceived = true;
     updateTimerSyncDetail(data, 'ignored stale timer');

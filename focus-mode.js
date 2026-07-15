@@ -23,8 +23,11 @@ let pomodoroWorkMin = 25;
 let pomodoroBreakMin = 5;
 let pomodoroCount = 0;
 let focusStartTime = null;
+let pomodoroPhaseStartedAt = null;
 let pomodoroWasPaused = false;
 let _pomodoroAutoStart = localStorage.getItem('ta3-pomo-auto') === '1';
+let _lastFocusSyncAt = 0;
+const FOCUS_SYNC_REFRESH_MS = 15000;
 
 // ── Music state ──
 let _focusMusicVolume = parseFloat(localStorage.getItem('ta3-focus-vol') || '0.3');
@@ -131,9 +134,10 @@ function setPomodoroCountdown(secs) {
     `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-function syncFocusTimerState(startedAt = focusStartTime || Date.now()) {
+function syncFocusTimerState(startedAt = pomodoroPhaseStartedAt || focusStartTime || Date.now()) {
   if (typeof syncTimerState !== 'function' || pomodoroPhase === 'idle') return;
   const phaseSecs = (pomodoroPhase === 'break' ? pomodoroBreakMin : pomodoroWorkMin) * 60;
+  _lastFocusSyncAt = Date.now();
   syncTimerState({
     running: true,
     mode: 'focus',
@@ -145,6 +149,13 @@ function syncFocusTimerState(startedAt = focusStartTime || Date.now()) {
     blockStartTime: startedAt,
     ownerDeviceId: timerOwnerDeviceId || syncedDeviceId
   });
+}
+
+function refreshFocusTimerSync(force = false) {
+  if (pomodoroPhase === 'idle') return false;
+  if (!force && Date.now() - _lastFocusSyncAt < FOCUS_SYNC_REFRESH_MS) return false;
+  syncFocusTimerState();
+  return true;
 }
 
 function startPomodoro() {
@@ -163,6 +174,7 @@ function startPomodoro() {
   pomodoroPhase = 'work';
   pomodoroRemaining = pomodoroWorkMin * 60;
   focusStartTime = Date.now();
+  pomodoroPhaseStartedAt = focusStartTime;
   taskInput.style.display = 'none';
   const intentionEl = document.getElementById('focus-intention-text');
   intentionEl.textContent = focusTask;
@@ -226,6 +238,7 @@ function saveActiveFocusSession() {
 function tickPomodoro() {
   pomodoroRemaining = Math.max(0, pomodoroRemaining - 1);
   setPomodoroCountdown(pomodoroRemaining);
+  refreshFocusTimerSync();
   if (pomodoroPhase === 'work' && pomodoroRemaining === _OUTRO_LEAD_SEC) {
     _startWorkOutro();
   }
@@ -246,6 +259,7 @@ function endWorkSession() {
   logFocusSession(tsStart, tsEnd);
 
   pomodoroPhase = 'break';
+  pomodoroPhaseStartedAt = tsEnd;
   pomodoroRemaining = pomodoroBreakMin * 60;
   _enterBreakMusic();
   document.getElementById('focus-phase-label').textContent = 'BREAK ☕';
@@ -264,6 +278,7 @@ function endWorkSession() {
 function endPomodoroBreak() {
   clearInterval(pomodoroTimer);
   pomodoroPhase = 'idle';
+  pomodoroPhaseStartedAt = null;
   _exitBreakMusic();
   playAlertSound();
 
@@ -288,6 +303,7 @@ function endPomodoroBreak() {
 function skipBreak() {
   clearInterval(pomodoroTimer);
   _skipBreakMusic();
+  pomodoroPhaseStartedAt = null;
   startPomodoro();
 }
 
@@ -534,6 +550,7 @@ function confirmExitFocus() {
   saveActiveFocusSession();
   clearInterval(pomodoroTimer);
   pomodoroPhase = 'idle';
+  pomodoroPhaseStartedAt = null;
   stopFocusMusic();
   focusModeOn = false;
   document.getElementById('focus-overlay').classList.remove('open');
