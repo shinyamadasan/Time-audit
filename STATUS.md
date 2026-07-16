@@ -5,6 +5,12 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-07-16 — Triage + Plan
+
+STEP A: 5 new captures processed (msg_ids 52, 55, 61, 63, 67). Capture 52: real bug report (timer state not restored on app reopen) → PROP-004 (Approve, P1, Goal #3). Captures 55/61/63/67: bot noise → PROP-005 (Reject). STEP B: BUILD_QUEUE.md empty; no tasks added. No blockers. **Action needed:** set Current Objective in ROADMAP.md, then approve PROP-004 to unlock build pipeline for the timer-restore bug fix.
+
+---
+
 ## 2026-07-15 — Triage + Plan
 
 STEP A: 0 new captures (all 5 inbox files already `status: triaged` from 2026-07-14 run); nothing to process. STEP B: BUILD_QUEUE.md empty; no tasks added to TASKS.md. No blockers. Awaiting: human sets Current Objective in ROADMAP.md and approves a PROPOSALS.md item to unlock the build pipeline.
