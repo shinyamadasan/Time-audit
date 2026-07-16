@@ -1396,7 +1396,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-schedule-split-3';
+const APP_BUILD = '2026-07-16-coverage-context-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1729,55 +1729,31 @@ function isLegacyJobCoverageBlock(entry) {
   return !!entry && (entry.energy === 'nine5' || entry.category === 'nine5');
 }
 
-function splitRecurringCoverageForDisplay(entriesArr, dateKey = null) {
+function isCoverageContextBlock(entry, dateKey = null, range = null) {
+  const durationMin = range ? Math.round((range.end - range.start) / 60000) : 0;
+  return isRecurringCoverageBlock(entry, dateKey) ||
+    (durationMin >= 60 && isLegacyJobCoverageBlock(entry));
+}
+
+function annotateCoverageContextForDisplay(entriesArr, dateKey = null) {
   const arr = Array.isArray(entriesArr) ? entriesArr : [];
   const ranged = arr
     .map(entry => ({ entry, range: entryTimeRange(entry) }))
     .filter(item => item.range && !item.entry.deleted && !item.entry.missed);
+  const coverage = ranged
+    .filter(item => isCoverageContextBlock(item.entry, dateKey, item.range))
+    .sort((a, b) => (b.range.end - b.range.start) - (a.range.end - a.range.start));
 
-  const makePiece = (entry, start, end) => {
-    const piece = {
-      ...entry,
-      id: `${entry.id}_seg_${Math.round(start)}`,
-      tsStart: start,
-      ts: end,
-      blockIntervalMin: Math.max(1, Math.round((end - start) / 60000)),
-      _displaySegmentOf: entry.id
-    };
-    delete piece._mergedIds;
-    delete piece._mergeCount;
-    return piece;
-  };
-
-  return arr.flatMap(entry => {
+  return arr.map(entry => {
     const range = entryTimeRange(entry);
-    if (!range) return [entry];
-    const rangeDurationMin = Math.round((range.end - range.start) / 60000);
-    const blockers = ranged
-      .filter(item =>
+    if (!range || isCoverageContextBlock(entry, dateKey, range)) return entry;
+    const context = coverage.find(item =>
         item.entry !== entry &&
-        !isRecurringCoverageBlock(item.entry, dateKey) &&
-        (item.range.end - item.range.start) < (range.end - range.start) &&
-        item.range.end > range.start &&
-        item.range.start < range.end
-      )
-      .sort((a, b) => a.range.start - b.range.start);
-    const isCoverageBlock = isRecurringCoverageBlock(entry, dateKey) ||
-      (rangeDurationMin >= 60 && blockers.length > 0 && isLegacyJobCoverageBlock(entry));
-    if (!isCoverageBlock) return [entry];
-    if (!blockers.length) return [entry];
-
-    const pieces = [];
-    let cursor = range.start;
-    blockers.forEach(item => {
-      const start = Math.max(range.start, item.range.start);
-      const end = Math.min(range.end, item.range.end);
-      if (end <= cursor) return;
-      if (start > cursor) pieces.push(makePiece(entry, cursor, start));
-      cursor = Math.max(cursor, end);
-    });
-    if (range.end > cursor) pieces.push(makePiece(entry, cursor, range.end));
-    return pieces;
+        item.range.start <= range.start &&
+        item.range.end >= range.end
+    );
+    if (!context) return entry;
+    return { ...entry, _coverageContext: activityDisplayLabel(context.entry.activity) };
   });
 }
 
@@ -4213,12 +4189,15 @@ function renderEntryRow(item) {
   const projectPill = item.project
     ? ` · <span style="font-size:10px;padding:1px 5px;border-radius:3px;background:var(--bg3);color:var(--muted)">${item.project}</span>`
     : '';
+  const contextPill = item._coverageContext
+    ? ` · <span style="font-size:10px;color:var(--muted2)">during ${esc(item._coverageContext)}</span>`
+    : '';
   return `<div class="tl-row" data-entry-id="${item.id}" data-activity-key="${attr(activityKey)}" data-energy="${energyClass}" onclick="${editCall}" style="cursor:pointer">
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
       <div class="tl-activity">${esc(displayActivity)}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span>${mergeTag}</div>
-      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}${projectPill}</div>
+      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}${projectPill}${contextPill}</div>
     </div>
     <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
   </div>`;
@@ -4306,7 +4285,7 @@ function assembleTodayTimeline(todayE) {
       subs.forEach(s => { pcSubMap.get(container.id).push(s); nestedBrowserIds.add(s.id); });
     }
   });
-  const sortedForDisplay = splitRecurringCoverageForDisplay(sorted.filter(e => !nestedBrowserIds.has(e.id)), getViewingDateKey())
+  const sortedForDisplay = annotateCoverageContextForDisplay(sorted.filter(e => !nestedBrowserIds.has(e.id)), getViewingDateKey())
     .sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
   const clipped = clipOverlapsForDisplay(sortedForDisplay).filter(e => {
     const dur = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 1);
