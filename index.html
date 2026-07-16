@@ -700,6 +700,13 @@
   <div class="settings-section">
     <div class="settings-title">Weekly Schedule</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Fixed commitments shown greyed-out in your timeline. Turn on auto-log for reliable shifts; delete that day's entry if reality changed.</div>
+    <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+      <div class="flex-min">
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">Default day skeleton</div>
+        <div style="font-size:10px;color:var(--muted);line-height:1.35">Adds sleep, meals, and hygiene as editable placeholders. No auto-log.</div>
+      </div>
+      <button type="button" class="btn sm ghost" onclick="addDefaultDaySkeleton()" style="flex-shrink:0">Add skeleton</button>
+    </div>
     <div id="template-list"></div>
     <!-- Add form -->
     <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-top:4px">
@@ -1389,7 +1396,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-pc-fragment-merge-1';
+const APP_BUILD = '2026-07-16-day-skeleton-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -8799,6 +8806,65 @@ function templateSlotRange(tpl, dateKey) {
   let tsEnd = tzParseTime(dateKey, tpl.endTime);
   if (tsEnd <= tsStart) tsEnd += 24 * 60 * 60 * 1000;
   return { tsStart, tsEnd };
+}
+
+function hhmmToMinutes(value) {
+  const [h, m] = String(value || '00:00').split(':').map(Number);
+  return ((h || 0) * 60 + (m || 0) + 1440) % 1440;
+}
+
+function minutesToHHMM(totalMin) {
+  const mins = ((Math.round(totalMin) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+function addMinutesHHMM(value, deltaMin) {
+  return minutesToHHMM(hhmmToMinutes(value) + deltaMin);
+}
+
+function defaultDaySkeletonTemplates() {
+  const sleepTime = settings.sleepTime || '23:00';
+  const wakeTime = settings.wakeTime || '07:00';
+  const days = [0, 1, 2, 3, 4, 5, 6];
+  const block = (id, activity, energy, startTime, endTime) => ({
+    id: `skeleton_${id}`,
+    activity,
+    energy,
+    days: [...days],
+    startTime,
+    endTime,
+    autoLog: false,
+    enabled: true,
+    skeleton: true
+  });
+  return [
+    block('sleep', 'Sleep', 'recovery', sleepTime, wakeTime),
+    block('breakfast', 'Breakfast', 'recovery', addMinutesHHMM(wakeTime, 60), addMinutesHHMM(wakeTime, 90)),
+    block('lunch', 'Lunch', 'recovery', addMinutesHHMM(wakeTime, 360), addMinutesHHMM(wakeTime, 390)),
+    block('dinner', 'Dinner', 'recovery', addMinutesHHMM(wakeTime, 660), addMinutesHHMM(wakeTime, 690)),
+    block('hygiene', 'Hygiene', 'recovery', addMinutesHHMM(sleepTime, -30), addMinutesHHMM(sleepTime, -10))
+  ];
+}
+
+function templateSkeletonExists(candidate) {
+  return (settings.templates || []).some(tpl =>
+    String(tpl.id) === String(candidate.id) ||
+    (activityGroupKey(tpl.activity) === activityGroupKey(candidate.activity) && (tpl.days || []).length >= 5)
+  );
+}
+
+function addDefaultDaySkeleton() {
+  if (!settings.templates) settings.templates = [];
+  const toAdd = defaultDaySkeletonTemplates().filter(tpl => !templateSkeletonExists(tpl));
+  if (!toAdd.length) { showToast('Default day skeleton already exists'); return; }
+  settings.templates.push(...toAdd);
+  settings._savedAt = Date.now();
+  settings._templatesSavedAt = Date.now();
+  persist();
+  if (fbRoomRef) fbRoomRef.update({ settings });
+  renderTemplateList();
+  renderToday();
+  showToast(`Added ${toAdd.length} skeleton blocks`);
 }
 
 function templateSkippedOnDate(tpl, dateKey) {

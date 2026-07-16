@@ -911,6 +911,48 @@ test('scheduled blocks can be marked off today before auto-log', async ({ page }
   });
 });
 
+test('default day skeleton adds editable non-auto schedule anchors once', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
+  await openApp(page, {
+    nowTs,
+    settings: {
+      sleepTime: '02:00',
+      wakeTime: '10:00'
+    }
+  });
+
+  await page.evaluate(() => showView('settings'));
+  await page.getByRole('button', { name: 'Add skeleton' }).click();
+  await page.getByRole('button', { name: 'Add skeleton' }).click();
+
+  const templates = await page.evaluate(() => settings.templates.map(t => ({
+    id: t.id,
+    activity: t.activity,
+    energy: t.energy,
+    days: t.days,
+    startTime: t.startTime,
+    endTime: t.endTime,
+    autoLog: t.autoLog,
+    skeleton: t.skeleton
+  })));
+
+  expect(templates).toHaveLength(5);
+  expect(templates.map(t => t.activity)).toEqual(['Sleep', 'Breakfast', 'Lunch', 'Dinner', 'Hygiene']);
+  expect(templates).not.toEqual(expect.arrayContaining([
+    expect.objectContaining({ activity: 'Chores' })
+  ]));
+  expect(templates.every(t => t.energy === 'recovery' && t.autoLog === false && t.skeleton === true && t.days.length === 7)).toBe(true);
+  expect(templates).toEqual(expect.arrayContaining([
+    expect.objectContaining({ activity: 'Sleep', startTime: '02:00', endTime: '10:00' }),
+    expect.objectContaining({ activity: 'Breakfast', startTime: '11:00', endTime: '11:30' }),
+    expect.objectContaining({ activity: 'Lunch', startTime: '16:00', endTime: '16:30' }),
+    expect.objectContaining({ activity: 'Dinner', startTime: '21:00', endTime: '21:30' }),
+    expect.objectContaining({ activity: 'Hygiene', startTime: '01:30', endTime: '01:50' })
+  ]));
+  await expect(page.locator('#template-list')).toContainText('Breakfast');
+  await expect(page.locator('#template-list')).toContainText('Hygiene');
+});
+
 test('weekly schedule auto-log respects a deleted day skip', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
   await openApp(page, {
