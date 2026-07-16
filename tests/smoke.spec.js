@@ -1109,10 +1109,12 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
   const panel = page.locator('#day-template-panel');
   await expect(panel).toContainText('No blocks yet for Saturday');
   await expect(page.locator('#template-form-card')).toBeHidden();
+  await expect(page.locator('#template-form-overlay')).not.toHaveClass(/open/);
   await expect(page.locator('#template-list')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Add missing basics' })).toHaveCount(0);
   await page.getByRole('button', { name: '+ Block' }).click();
   await expect(page.locator('#template-form-card')).toBeVisible();
+  await expect(page.locator('#template-form-overlay')).toHaveClass(/open/);
   await page.selectOption('#tpl-task-choice', 'sleep');
   await expect(page.locator('#tpl-activity')).toHaveValue('Sleep');
   await expect(page.locator('#tpl-energy')).toHaveValue('recovery');
@@ -1146,6 +1148,7 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
   await expect(panel.getByRole('button', { name: 'Edit Sleep' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Delete Sleep' })).toBeVisible();
   await expect(page.locator('#template-form-card')).toBeHidden();
+  await expect(page.locator('#template-form-overlay')).not.toHaveClass(/open/);
   await page.selectOption('#day-template-select', '1');
   await expect(panel).toContainText('No blocks yet for Monday');
   await page.evaluate(() => {
@@ -1164,32 +1167,31 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
     renderTemplateList();
   });
   await page.locator('.template-advanced summary').click();
-  const calendar = page.locator('.template-cal');
-  await expect(calendar).toBeVisible();
-  await expect(calendar.locator('.template-cal-head div')).toHaveText(['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
-  const satSleep = calendar.locator('.template-cal-day[data-day="6"] .template-cal-event').filter({ hasText: 'Sleep' });
-  const satHygiene = calendar.locator('.template-cal-day[data-day="6"] .template-cal-event').filter({ hasText: 'Hygiene' });
+  const week = page.locator('.template-week');
+  await expect(week).toBeVisible();
+  await expect(week.locator('.template-week-head div')).toHaveText(['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+  const satMorning = week.locator('.template-week-section[data-section="morning"] .template-week-cell[data-day="6"]');
+  const satSleep = satMorning.locator('.template-week-event').filter({ hasText: 'Sleep' });
+  const satHygiene = satMorning.locator('.template-week-event').filter({ hasText: 'Hygiene' });
   await expect(satSleep).toContainText('09:00-17:00');
-  await expect(satHygiene).toHaveClass(/short/);
-  await expect(satSleep).toHaveClass(/long/);
-  const [sleepZ, hygieneZ] = await Promise.all([
-    satSleep.evaluate(el => Number(getComputedStyle(el).zIndex)),
-    satHygiene.evaluate(el => Number(getComputedStyle(el).zIndex))
-  ]);
-  expect(sleepZ).toBeGreaterThan(hygieneZ);
-  await expect(calendar.locator('button[aria-label="Edit Sleep"]')).toHaveCount(0);
-  const deleteSleep = satSleep.locator('.template-cal-delete');
+  await expect(satHygiene).toContainText('08:30-08:50');
+  const morningHeight = await satMorning.evaluate(el => el.getBoundingClientRect().height);
+  expect(morningHeight).toBeGreaterThan(100);
+  await expect(week.locator('button[aria-label="Edit Sleep"]')).toHaveCount(0);
+  const deleteSleep = satSleep.locator('.template-week-delete');
   await expect(deleteSleep).toHaveCSS('opacity', '0');
   await satSleep.hover();
   await expect(deleteSleep).toHaveCSS('opacity', '1');
   await satSleep.click({ position: { x: 12, y: 12 } });
   await expect(page.locator('#template-form-card')).toBeVisible();
+  await expect(page.locator('#template-form-overlay')).toHaveClass(/open/);
   await expect(page.locator('#tpl-form-title')).toHaveText('Edit recurring block');
   await page.locator('#template-form-card').getByRole('button', { name: 'Cancel' }).click();
   await expect(page.locator('#template-form-card')).toBeHidden();
-  await expect(calendar.locator('.template-cal-day[data-day="1"] .template-cal-event').filter({ hasText: 'Sleep' })).toHaveCount(0);
+  await expect(page.locator('#template-form-overlay')).not.toHaveClass(/open/);
+  await expect(week.locator('.template-week-cell[data-day="1"] .template-week-event').filter({ hasText: 'Sleep' })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 900 });
-  const mobileScroll = await page.locator('.template-cal-wrap').evaluate(el => ({
+  const mobileScroll = await page.locator('.template-week-wrap').evaluate(el => ({
     internalScroll: el.scrollWidth > el.clientWidth,
     pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
   }));
@@ -1209,6 +1211,7 @@ test('day dropdown preselects one day and lets a block repeat on checked days', 
   await expect(page.locator('#template-form-card')).toBeHidden();
   await page.getByRole('button', { name: '+ Block' }).click();
   await expect(page.locator('#template-form-card')).toBeVisible();
+  await expect(page.locator('#template-form-overlay')).toHaveClass(/open/);
   const initiallySelectedDays = await page.evaluate(() =>
     [...document.querySelectorAll('#tpl-day-picker .tpl-day-btn.on')].map(btn => parseInt(btn.dataset.day))
   );
@@ -1270,15 +1273,17 @@ test('day dropdown shows existing recurring blocks for the selected weekday', as
   await expect(panel).toContainText('auto-log');
   await panel.getByRole('button', { name: 'Edit Scribe shift' }).click();
   await expect(page.locator('#template-form-card')).toBeVisible();
+  await expect(page.locator('#template-form-overlay')).toHaveClass(/open/);
   await expect(page.locator('#tpl-form-title')).toHaveText('Edit recurring block');
   await expect(page.locator('#tpl-task-choice')).toHaveValue('custom');
   await expect(page.locator('#tpl-activity')).toHaveValue('Scribe shift');
   await page.locator('#template-form-card').getByRole('button', { name: 'Cancel' }).click();
   await expect(page.locator('#template-form-card')).toBeHidden();
+  await expect(page.locator('#template-form-overlay')).not.toHaveClass(/open/);
   await page.locator('.template-advanced summary').click();
-  const calendar = page.locator('.template-cal');
-  await expect(calendar.locator('.template-cal-day[data-day="6"] .template-cal-event').filter({ hasText: 'Scribe shift' })).toContainText('22:00-08:00');
-  await expect(calendar.locator('.template-cal-day[data-day="0"] .template-cal-event.continuation').filter({ hasText: 'Scribe shift cont.' })).toContainText('22:00-08:00');
+  const week = page.locator('.template-week');
+  await expect(week.locator('.template-week-section[data-section="evening"] .template-week-cell[data-day="6"] .template-week-event').filter({ hasText: 'Scribe shift' })).toContainText('22:00-08:00');
+  await expect(week.locator('.template-week-section[data-section="night"] .template-week-cell[data-day="0"] .template-week-event.continuation').filter({ hasText: 'Scribe shift cont.' })).toContainText('22:00-08:00');
   await panel.getByRole('button', { name: 'Delete Scribe shift' }).click();
   await expect(panel).toContainText('No blocks yet for Saturday');
   expect(await page.evaluate(() => settings.templates.length)).toBe(0);
