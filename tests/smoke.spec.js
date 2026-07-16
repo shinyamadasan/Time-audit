@@ -783,6 +783,87 @@ test('today health hides minor unlogged gaps', async ({ page }) => {
   await expect(page.locator('#th-unlogged')).toBeHidden();
 });
 
+test('weekly schedule auto-logs fixed blocks after they end', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
+  await openApp(page, {
+    nowTs,
+    settings: {
+      templates: [{
+        id: 'scribe',
+        activity: 'Scribe shift',
+        energy: 'nine5',
+        days: [3],
+        startTime: '00:00',
+        endTime: '08:00',
+        autoLog: true,
+        enabled: true
+      }]
+    }
+  });
+
+  const saved = await page.evaluate(() => {
+    const entry = entries.find(e => e.id === 'tpllog_scribe_2026-07-15');
+    return entry && {
+      activity: entry.activity,
+      energy: entry.energy,
+      minutes: entry.blockIntervalMin,
+      category: entry.category,
+      autoLogged: entry.autoLogged,
+      scheduledAutoLog: entry.scheduledAutoLog,
+      start: new Date(entry.tsStart).toISOString(),
+      end: new Date(entry.ts).toISOString()
+    };
+  });
+  expect(saved).toEqual({
+    activity: 'Scribe shift',
+    energy: 'nine5',
+    minutes: 480,
+    category: 'nine5',
+    autoLogged: true,
+    scheduledAutoLog: true,
+    start: '2026-07-15T00:00:00.000Z',
+    end: '2026-07-15T08:00:00.000Z'
+  });
+  await expect(page.locator('#recent-list')).toContainText('Scribe shift');
+});
+
+test('weekly schedule auto-log respects a deleted day skip', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
+  await openApp(page, {
+    nowTs,
+    entries: [{
+      id: 'tpllog_scribe_2026-07-15',
+      ts: Date.UTC(2026, 6, 15, 8, 0, 0),
+      tsStart: Date.UTC(2026, 6, 15, 0, 0, 0),
+      updatedAt: Date.UTC(2026, 6, 15, 8, 30, 0),
+      blockIntervalMin: 480,
+      date: '2026-07-15',
+      activity: 'Scribe shift',
+      energy: 'nine5',
+      category: 'nine5',
+      deleted: true
+    }],
+    settings: {
+      templates: [{
+        id: 'scribe',
+        activity: 'Scribe shift',
+        energy: 'nine5',
+        days: [3],
+        startTime: '00:00',
+        endTime: '08:00',
+        autoLog: true,
+        enabled: true
+      }]
+    }
+  });
+
+  const liveCount = await page.evaluate(() =>
+    entries.filter(e => e.id === 'tpllog_scribe_2026-07-15' && !e.deleted).length
+  );
+  expect(liveCount).toBe(0);
+  await expect(page.locator('#recent-list')).not.toContainText('Scribe shift');
+});
+
 test('week top activities merge activity labels that only differ by case', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 18, 0, 0);
   const sleepAStart = Date.UTC(2026, 6, 13, 0, 0, 0);
