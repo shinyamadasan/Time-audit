@@ -521,6 +521,62 @@ test('today sleep basic logs overnight sleep as recovery', async ({ page }) => {
   });
 });
 
+test('today routine prompt logs the current meal window', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 10, 12, 15, 0);
+  await openApp(page, { nowTs });
+
+  await expect(page.locator('#routine-prompt')).toBeVisible();
+  await expect(page.locator('#routine-prompt')).toContainText('Lunch check');
+  await page.locator('#routine-prompt').getByRole('button', { name: /Eat/ }).click();
+
+  const saved = await page.evaluate(() => {
+    const entry = entries.find(e => e.routinePrompt === 'lunch' && e.activity === 'Eat');
+    const dismissed = JSON.parse(localStorage.getItem('ta3-routine-dismissed-2026-07-10') || '[]');
+    return entry && {
+      activity: entry.activity,
+      energy: entry.energy,
+      minutes: entry.blockIntervalMin,
+      category: entry.category,
+      commonLogged: entry.commonLogged,
+      routinePrompt: entry.routinePrompt,
+      dismissed
+    };
+  });
+  expect(saved).toEqual({
+    activity: 'Eat',
+    energy: 'recovery',
+    minutes: 30,
+    category: 'recovery',
+    commonLogged: true,
+    routinePrompt: 'lunch',
+    dismissed: ['lunch']
+  });
+  await expect(page.locator('#routine-prompt')).toBeHidden();
+});
+
+test('today routine prompt stays quiet when the routine was already logged', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 10, 12, 45, 0);
+  const eatStart = Date.UTC(2026, 6, 10, 12, 0, 0);
+  const eatEnd = Date.UTC(2026, 6, 10, 12, 30, 0);
+  const entries = [{
+    id: eatEnd,
+    ts: eatEnd,
+    tsStart: eatStart,
+    updatedAt: eatEnd,
+    blockIntervalMin: 30,
+    date: utcDateKey(eatStart),
+    activity: 'Eat',
+    energy: 'recovery',
+    category: 'recovery',
+    originalLabel: 'recovery',
+    onPlan: false,
+    retro: true
+  }];
+  await openApp(page, { entries, nowTs });
+
+  await expect(page.locator('#routine-prompt')).toBeHidden();
+});
+
 test('today gap recovery fills a missing block from clean mode', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 10, 10, 45, 0);
   const deepStart = Date.UTC(2026, 6, 10, 9, 0, 0);

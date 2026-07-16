@@ -811,6 +811,23 @@ button.today-health-metric{background:none;border:none;padding:0;text-align:left
   .gap-other-btn{align-self:flex-start}
 }
 
+.routine-prompt{background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.24);box-shadow:0 1px 3px rgba(0,0,0,0.35);
+  border-radius:var(--r2);padding:11px 12px;margin-bottom:12px;font-family:var(--ui)}
+.routine-main{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:9px}
+.routine-label{font-size:10px;text-transform:uppercase;color:var(--learning);font-weight:800;letter-spacing:0}
+.routine-title{font-size:13px;font-weight:800;color:var(--text);line-height:1.25;margin-top:2px}
+.routine-detail{font-size:11px;color:var(--muted);line-height:1.35;margin-top:2px}
+.routine-actions{display:flex;flex-wrap:wrap;gap:6px}
+.routine-chip,.routine-dismiss{border-radius:999px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);
+  font-family:var(--ui);font-size:11px;font-weight:800;padding:6px 10px;cursor:pointer}
+.routine-chip:hover,.routine-dismiss:hover{background:var(--bg4);border-color:var(--border3)}
+.routine-chip.recovery{color:var(--break);border-color:rgba(167,139,250,0.26)}
+.routine-dismiss{flex-shrink:0;color:var(--muted2)}
+@media(max-width:520px){
+  .routine-main{flex-direction:column;gap:6px}
+  .routine-dismiss{align-self:flex-start}
+}
+
 .daily-basics{background:var(--bg2);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,0.35);
   border-radius:var(--r2);padding:11px 12px;margin-bottom:12px;font-family:var(--ui)}
 .daily-basics-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:9px}
@@ -854,6 +871,7 @@ button.today-health-metric{background:none;border:none;padding:0;text-align:left
 .today-action-strip,.today-action-strip *,
 .today-health,.today-health *,
 .gap-recovery,.gap-recovery *,
+.routine-prompt,.routine-prompt *,
 .daily-basics,.daily-basics *,
 .closeout-card,.closeout-card *,
 .sal-card,.sal-card *,

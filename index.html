@@ -254,6 +254,9 @@
   <!-- Gap recovery inbox -->
   <div class="gap-recovery" id="gap-recovery" style="display:none" aria-live="polite"></div>
 
+  <!-- Routine prompt -->
+  <div class="routine-prompt" id="routine-prompt" style="display:none" aria-live="polite"></div>
+
   <!-- Daily basics quick logs -->
   <div class="daily-basics" id="daily-basics" aria-label="Daily basics quick logs">
     <div class="daily-basics-head">
@@ -1379,7 +1382,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-gap-recovery-1';
+const APP_BUILD = '2026-07-16-routine-prompts-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1421,6 +1424,57 @@ const GAP_RECOVERY_OPTIONS = [
   { label: 'Commute', activity: 'Commute', energy: 'errands' },
   { label: 'Phone', activity: 'Phone', energy: 'waste' },
   { label: 'Rest', activity: 'Rest', energy: 'recovery' },
+];
+const ROUTINE_PROMPTS = [
+  {
+    id: 'breakfast',
+    label: 'Breakfast check',
+    detail: 'If breakfast or cooking already happened, log it in one tap.',
+    start: '07:30',
+    end: '10:30',
+    match: ['Eat', 'Cooking'],
+    actions: [
+      { label: 'Eat', activity: 'Eat', energy: 'recovery', minutes: 20 },
+      { label: 'Cooking', activity: 'Cooking', energy: 'recovery', minutes: 30 }
+    ]
+  },
+  {
+    id: 'lunch',
+    label: 'Lunch check',
+    detail: 'Keep the middle of the day from becoming mystery time.',
+    start: '11:30',
+    end: '14:00',
+    match: ['Eat', 'Cooking'],
+    actions: [
+      { label: 'Eat', activity: 'Eat', energy: 'recovery', minutes: 30 },
+      { label: 'Cooking', activity: 'Cooking', energy: 'recovery', minutes: 30 }
+    ]
+  },
+  {
+    id: 'dinner',
+    label: 'Dinner check',
+    detail: 'Log the specific routine, not a generic chore bucket.',
+    start: '17:30',
+    end: '20:30',
+    match: ['Eat', 'Cooking', 'Dishes'],
+    actions: [
+      { label: 'Eat', activity: 'Eat', energy: 'recovery', minutes: 30 },
+      { label: 'Cooking', activity: 'Cooking', energy: 'recovery', minutes: 45 },
+      { label: 'Dishes', activity: 'Dishes', energy: 'recovery', minutes: 15 }
+    ]
+  },
+  {
+    id: 'evening',
+    label: 'Evening check',
+    detail: 'Tiny maintenance logs make tomorrow easier to read.',
+    start: '20:30',
+    end: '23:30',
+    match: ['Hygiene', 'Dishes'],
+    actions: [
+      { label: 'Hygiene', activity: 'Hygiene', energy: 'recovery', minutes: 15 },
+      { label: 'Dishes', activity: 'Dishes', energy: 'recovery', minutes: 15 }
+    ]
+  }
 ];
 let blockStartTime = null;
 let lastStateChange = null;
@@ -4269,6 +4323,89 @@ function renderGapRecoveryInbox(todayE) {
   `;
 }
 
+function routinePromptStorageKey(dateKey) {
+  return `ta3-routine-dismissed-${dateKey}`;
+}
+
+function getDismissedRoutinePrompts(dateKey) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(routinePromptStorageKey(dateKey)) || '[]');
+    return Array.isArray(saved) ? saved : [];
+  } catch(e) {
+    return [];
+  }
+}
+
+function markRoutinePromptDismissed(promptId, dateKey = getViewingDateKey()) {
+  const dismissed = new Set(getDismissedRoutinePrompts(dateKey));
+  dismissed.add(promptId);
+  localStorage.setItem(routinePromptStorageKey(dateKey), JSON.stringify([...dismissed]));
+}
+
+function routinePromptWindow(prompt, dateKey) {
+  const tsStart = tzParseTime(dateKey, prompt.start);
+  let tsEnd = tzParseTime(dateKey, prompt.end);
+  if (tsEnd <= tsStart) tsEnd += 24 * 60 * 60 * 1000;
+  return { tsStart, tsEnd };
+}
+
+function routinePromptAlreadyLogged(prompt, todayE, range) {
+  const wanted = new Set((prompt.match || []).map(activityGroupKey));
+  const matchStart = range.tsStart - 60 * 60000;
+  return (todayE || []).some(e => {
+    if (!e || e.deleted || e.missed || !wanted.has(activityGroupKey(e.activity))) return false;
+    const start = Number(e.tsStart || e.ts || 0);
+    const end = Number(e.ts || start);
+    return end > matchStart && start < range.tsEnd;
+  });
+}
+
+function getRoutinePromptCandidate(todayE) {
+  if (!isViewingToday() || isInQuietHours(Date.now())) return null;
+  const dateKey = getViewingDateKey();
+  const dismissed = new Set(getDismissedRoutinePrompts(dateKey));
+  const now = Date.now();
+  for (let idx = 0; idx < ROUTINE_PROMPTS.length; idx++) {
+    const prompt = ROUTINE_PROMPTS[idx];
+    if (dismissed.has(prompt.id)) continue;
+    const range = routinePromptWindow(prompt, dateKey);
+    if (now < range.tsStart || now > range.tsEnd) continue;
+    if (routinePromptAlreadyLogged(prompt, todayE, range)) continue;
+    return { ...prompt, idx, ...range };
+  }
+  return null;
+}
+
+function renderRoutinePrompt(todayE) {
+  const card = document.getElementById('routine-prompt');
+  if (!card) return;
+  const prompt = getRoutinePromptCandidate(todayE);
+  if (!prompt) {
+    card.style.display = 'none';
+    card.innerHTML = '';
+    return;
+  }
+
+  const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+  const actions = prompt.actions.map((action, actionIdx) => `
+    <button type="button" class="routine-chip ${action.energy}" onclick="quickLogRoutinePrompt(${prompt.idx}, ${actionIdx})">${esc(action.label)} · ${fmtDur(action.minutes)}</button>
+  `).join('');
+  card.style.display = 'block';
+  card.innerHTML = `
+    <div class="routine-main">
+      <div>
+        <div class="routine-label">Routine prompt</div>
+        <div class="routine-title">${esc(prompt.label)}</div>
+        <div class="routine-detail">${esc(prompt.detail)}</div>
+      </div>
+      <button type="button" class="routine-dismiss" onclick="dismissRoutinePrompt(${prompt.idx})">Skip</button>
+    </div>
+    <div class="routine-actions">${actions}</div>
+  `;
+}
+
 function focusTodayPlanInput() {
   const input = document.getElementById('plan-task');
   if (!input) { showToast('No plan input open right now'); return; }
@@ -5133,6 +5270,7 @@ function renderToday() {
   renderTodayHealth(todayE);
   renderTodayActionStrip(todayE);
   renderGapRecoveryInbox(todayE);
+  renderRoutinePrompt(todayE);
   renderDailyBasics();
   renderMissedCloseoutCta();
   renderCloseoutCta();
@@ -6090,7 +6228,7 @@ function quickLogCommon(idx) {
   logCommonActivity(option.activity, option.energy, option.minutes);
 }
 
-function logCommonActivity(activity, energy, minutes) {
+function logCommonActivity(activity, energy, minutes, extra = null) {
   if (!isViewingToday()) { showToast('Common logs are for today'); return null; }
   const label = canonicalizeActivityInput(activity);
   const durMin = Math.max(1, Math.round(Number(minutes) || settings.intervalMin || 30));
@@ -6108,7 +6246,8 @@ function logCommonActivity(activity, energy, minutes) {
     onPlan: energy !== 'waste' && energy !== 'distraction',
     retro: true,
     quickLogged: true,
-    commonLogged: true
+    commonLogged: true,
+    ...(extra || {})
   };
   entry.category = getBucket(entry);
   entry.originalLabel = entry.energy || null;
@@ -6125,6 +6264,26 @@ function logCommonActivity(activity, energy, minutes) {
   showUndoToast(`Logged · ${label} · ${fmtDur(durMin)}`, energy);
   checkBudget(energy);
   return entry;
+}
+
+function quickLogRoutinePrompt(promptIdx, actionIdx) {
+  const prompt = ROUTINE_PROMPTS[promptIdx];
+  const action = prompt?.actions?.[actionIdx];
+  if (!prompt || !action) return null;
+  const entry = logCommonActivity(action.activity, action.energy, action.minutes, { routinePrompt: prompt.id });
+  if (entry) {
+    markRoutinePromptDismissed(prompt.id);
+    scheduleRenderToday();
+  }
+  return entry;
+}
+
+function dismissRoutinePrompt(promptIdx) {
+  const prompt = ROUTINE_PROMPTS[promptIdx];
+  if (!prompt) return;
+  markRoutinePromptDismissed(prompt.id);
+  renderRoutinePrompt(getViewingEntries());
+  showToast('Routine prompt skipped');
 }
 
 function currentGapRecoveryRange() {
@@ -9621,7 +9780,7 @@ initAutoSync();
 initNativeNotifications();
 setTimeout(() => { checkSleepSetup(); checkSleepReminder(); }, 2000);
 setInterval(checkSleepReminder, 5 * 60 * 1000); // re-check every 5 min until sleep is logged
-setInterval(() => { if (isViewingToday()) { const e = getViewingEntries(); updateHeroPrompt(e); renderDayBar(e); renderStatusBanner(e); renderActiveDeviceBanner(); renderTodayHealth(e); renderTodayActionStrip(e); renderGapRecoveryInbox(e); } }, 60000);
+setInterval(() => { if (isViewingToday()) { const e = getViewingEntries(); updateHeroPrompt(e); renderDayBar(e); renderStatusBanner(e); renderActiveDeviceBanner(); renderTodayHealth(e); renderTodayActionStrip(e); renderGapRecoveryInbox(e); renderRoutinePrompt(e); } }, 60000);
 // Auto-start "PC Time" on fresh browser open (desktop only, not mobile browsers)
 // Wait up to 5s for Firebase to tell us if a timer is already running elsewhere.
 // If Firebase says a timer is running, adopt that — don't overwrite it.
