@@ -1148,12 +1148,35 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
   await expect(page.locator('#template-form-card')).toBeHidden();
   await page.selectOption('#day-template-select', '1');
   await expect(panel).toContainText('No blocks yet for Monday');
+  await page.evaluate(() => {
+    settings.templates[0].startTime = '09:00';
+    settings.templates[0].endTime = '17:00';
+    settings.templates.push({
+      id: 'hygiene',
+      activity: 'Hygiene',
+      energy: 'recovery',
+      days: [6],
+      startTime: '08:30',
+      endTime: '08:50',
+      autoLog: false,
+      enabled: true
+    });
+    renderTemplateList();
+  });
   await page.locator('.template-advanced summary').click();
   const calendar = page.locator('.template-cal');
   await expect(calendar).toBeVisible();
   await expect(calendar.locator('.template-cal-head div')).toHaveText(['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
   const satSleep = calendar.locator('.template-cal-day[data-day="6"] .template-cal-event').filter({ hasText: 'Sleep' });
-  await expect(satSleep).toContainText('02:00-10:00');
+  const satHygiene = calendar.locator('.template-cal-day[data-day="6"] .template-cal-event').filter({ hasText: 'Hygiene' });
+  await expect(satSleep).toContainText('09:00-17:00');
+  await expect(satHygiene).toHaveClass(/short/);
+  await expect(satSleep).toHaveClass(/long/);
+  const [sleepZ, hygieneZ] = await Promise.all([
+    satSleep.evaluate(el => Number(getComputedStyle(el).zIndex)),
+    satHygiene.evaluate(el => Number(getComputedStyle(el).zIndex))
+  ]);
+  expect(sleepZ).toBeGreaterThan(hygieneZ);
   await expect(calendar.locator('button[aria-label="Edit Sleep"]')).toHaveCount(0);
   const deleteSleep = satSleep.locator('.template-cal-delete');
   await expect(deleteSleep).toHaveCSS('opacity', '0');
