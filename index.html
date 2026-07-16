@@ -714,16 +714,19 @@
             <option value="6">Saturday</option>
             <option value="0">Sunday</option>
           </select>
-          <button type="button" class="btn sm ghost" onclick="addBasicsToSelectedDay()">Add basics</button>
+          <button type="button" id="day-template-basics-btn" class="btn sm ghost" onclick="addBasicsToSelectedDay()">Add missing basics</button>
           <button type="button" class="btn sm ghost" onclick="startTemplateBlockForSelectedDay()">+ Block</button>
         </div>
         <div id="day-template-panel" class="day-template-panel"></div>
       </div>
     </div>
-    <div id="template-list"></div>
+    <details class="template-advanced">
+      <summary>Advanced: All recurring blocks</summary>
+      <div id="template-list"></div>
+    </details>
     <!-- Add form -->
-    <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-top:4px">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:12px">New recurring block</div>
+    <div id="template-form-card" class="template-form-card" hidden>
+      <div id="tpl-form-title" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:12px">New recurring block</div>
       <input id="tpl-activity" type="text" placeholder="Activity name (e.g. Job shift, Class, Gym)"
         style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:9px 11px;border-radius:8px;outline:none;margin-bottom:10px">
       <select id="tpl-energy" style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:9px 11px;border-radius:8px;outline:none;margin-bottom:12px;appearance:none">
@@ -759,7 +762,10 @@
           <span style="display:block;font-size:10px;color:var(--muted);line-height:1.35;margin-top:2px">Best for fixed job shifts. If you did not work, delete that day's auto entry.</span>
         </span>
       </label>
-      <button type="button" id="tpl-add-btn" class="btn" style="width:100%;justify-content:center" onclick="addTemplate()">+ Add recurring block</button>
+      <div class="template-form-actions">
+        <button type="button" id="tpl-add-btn" class="btn" onclick="addTemplate()">+ Add recurring block</button>
+        <button type="button" class="btn ghost" onclick="cancelTemplateEdit()">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -1409,7 +1415,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-day-dropdown-1';
+const APP_BUILD = '2026-07-16-day-template-cleanup-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -9045,6 +9051,17 @@ function templatesForDay(day) {
     .sort((a, b) => hhmmToMinutes(a.startTime) - hhmmToMinutes(b.startTime));
 }
 
+function templateItemsForDay(day) {
+  return (settings.templates || [])
+    .map((tpl, i) => ({ tpl, i }))
+    .filter(item => item.tpl.enabled !== false && normalizeTemplateDays(item.tpl.days).includes(day))
+    .sort((a, b) => hhmmToMinutes(a.tpl.startTime) - hhmmToMinutes(b.tpl.startTime));
+}
+
+function missingBasicsForDay(day) {
+  return templatePresetTemplates('basics', [day]).filter(tpl => !templateSkeletonExists(tpl));
+}
+
 function renderDayTemplatePanel() {
   const el = document.getElementById('day-template-panel');
   if (!el) return;
@@ -9058,29 +9075,73 @@ function renderDayTemplatePanel() {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[ch]));
   const day = selectedDayTemplateDay();
-  const blocks = templatesForDay(day);
+  const missingBasics = missingBasicsForDay(day);
+  const basicsBtn = document.getElementById('day-template-basics-btn');
+  if (basicsBtn) {
+    basicsBtn.disabled = missingBasics.length === 0;
+    basicsBtn.textContent = missingBasics.length ? 'Add missing basics' : 'Basics added';
+  }
+  const blocks = templateItemsForDay(day);
   el.innerHTML = blocks.length
-    ? blocks.map(tpl => `
+    ? blocks.map(({ tpl, i }) => {
+      const title = esc(activityDisplayLabel(tpl.activity));
+      return `
         <div class="day-template-bar" style="border-left-color:${templateEnergyColor(tpl.energy)}">
-          <div class="day-template-bar-title">
-            <span>${esc(activityDisplayLabel(tpl.activity))}</span>
-            <small>${esc(eLabel[tpl.energy] || tpl.energy || '')}</small>
+          <div class="day-template-bar-main">
+            <div class="day-template-bar-title">
+              <span>${title}</span>
+              <small>${esc(eLabel[tpl.energy] || tpl.energy || '')}</small>
+            </div>
+            <div class="day-template-bar-meta">${esc(tpl.startTime)}-${esc(tpl.endTime)} · ${tpl.autoLog ? 'auto-log' : 'manual'}</div>
           </div>
-          <div class="day-template-bar-meta">${esc(tpl.startTime)}-${esc(tpl.endTime)} · ${tpl.autoLog ? 'auto-log' : 'manual'}</div>
+          <div class="day-template-bar-actions">
+            <button type="button" class="day-template-action" aria-label="Edit ${title}" onclick="editTemplate(${i})">Edit</button>
+            <button type="button" class="day-template-action danger" aria-label="Delete ${title}" onclick="removeTemplate(${i})">x</button>
+          </div>
         </div>
-      `).join('')
+      `;
+    }).join('')
     : `<div class="day-template-empty">No blocks yet for ${dayTemplateFullLabel(day)}.</div>`;
+}
+
+function resetTemplateForm() {
+  const activityEl = document.getElementById('tpl-activity');
+  const startEl = document.getElementById('tpl-start');
+  const endEl = document.getElementById('tpl-end');
+  if (activityEl) activityEl.value = '';
+  if (startEl) startEl.value = '';
+  if (endEl) endEl.value = '';
+  const autoEl = document.getElementById('tpl-auto-log');
+  if (autoEl) autoEl.checked = false;
+  document.querySelectorAll('#tpl-day-picker .tpl-day-btn').forEach(b => b.classList.remove('on'));
+  const addBtn = document.getElementById('tpl-add-btn');
+  if (addBtn) addBtn.textContent = '+ Add recurring block';
+  const titleEl = document.getElementById('tpl-form-title');
+  if (titleEl) titleEl.textContent = 'New recurring block';
+}
+
+function showTemplateForm(title = 'New recurring block') {
+  const form = document.getElementById('template-form-card');
+  if (form) form.hidden = false;
+  const titleEl = document.getElementById('tpl-form-title');
+  if (titleEl) titleEl.textContent = title;
+}
+
+function hideTemplateForm() {
+  const form = document.getElementById('template-form-card');
+  if (form) form.hidden = true;
+}
+
+function cancelTemplateEdit() {
+  _editingTplIdx = null;
+  resetTemplateForm();
+  hideTemplateForm();
 }
 
 function startTemplateBlockForDay(day) {
   _editingTplIdx = null;
-  const btn = document.getElementById('tpl-add-btn');
-  if (btn) btn.textContent = '+ Add recurring block';
-  document.getElementById('tpl-activity').value = '';
-  document.getElementById('tpl-start').value = '';
-  document.getElementById('tpl-end').value = '';
-  const autoEl = document.getElementById('tpl-auto-log');
-  if (autoEl) autoEl.checked = false;
+  resetTemplateForm();
+  showTemplateForm('New recurring block');
   document.querySelectorAll('#tpl-day-picker .tpl-day-btn').forEach(b =>
     b.classList.toggle('on', parseInt(b.dataset.day) === day)
   );
@@ -9383,15 +9444,9 @@ function addTemplate() {
   }
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
-  // Clear form instantly so the UI feels responsive
-  document.getElementById('tpl-activity').value = '';
-  document.getElementById('tpl-start').value = '';
-  document.getElementById('tpl-end').value = '';
-  const autoEl = document.getElementById('tpl-auto-log');
-  if (autoEl) autoEl.checked = false;
-  document.querySelectorAll('#tpl-day-picker .tpl-day-btn').forEach(b => b.classList.remove('on'));
-  const addBtn = document.getElementById('tpl-add-btn');
-  if (addBtn) addBtn.textContent = '+ Add recurring block';
+  // Clear and collapse the form instantly so settings stays focused on the selected day.
+  resetTemplateForm();
+  hideTemplateForm();
   renderDayTemplatePanel();
   renderTemplateList();
   showToast(wasEditing ? 'Block updated' : 'Recurring block added');
@@ -9401,8 +9456,10 @@ function addTemplate() {
 let _editingTplIdx = null;
 
 function editTemplate(i) {
-  const tpl = settings.templates[i];
+  const tpl = settings.templates?.[i];
+  if (!tpl) return;
   _editingTplIdx = i;
+  showTemplateForm('Edit recurring block');
   document.getElementById('tpl-activity').value = tpl.activity;
   document.getElementById('tpl-energy').value = tpl.energy;
   document.getElementById('tpl-start').value = tpl.startTime;
@@ -9413,13 +9470,18 @@ function editTemplate(i) {
     b.classList.toggle('on', tpl.days.includes(parseInt(b.dataset.day)))
   );
   const btn = document.getElementById('tpl-add-btn');
-  if (btn) btn.textContent = '✓ Save changes';
+  if (btn) btn.textContent = 'Save changes';
   document.getElementById('tpl-activity').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   document.getElementById('tpl-activity').focus();
 }
 
 function removeTemplate(i) {
-  if (_editingTplIdx === i) { _editingTplIdx = null; const btn = document.getElementById('tpl-add-btn'); if (btn) btn.textContent = '+ Add recurring block'; }
+  if (!settings.templates || !settings.templates[i]) return;
+  if (_editingTplIdx === i) {
+    cancelTemplateEdit();
+  } else if (_editingTplIdx !== null && _editingTplIdx > i) {
+    _editingTplIdx--;
+  }
   settings.templates.splice(i, 1);
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
