@@ -1406,7 +1406,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-preset-cards-1';
+const APP_BUILD = '2026-07-16-template-off-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -4113,7 +4113,6 @@ function renderEntryRow(item) {
       <div class="tl-template-actions">
         <button class="log-gap-btn" onclick="event.stopPropagation(); openTemplateLog(${templateIdArg},${templateDateArg})">Log it</button>
         <button class="log-gap-btn template-off-btn" onclick="event.stopPropagation(); skipTemplateOnDate(${templateIdArg},${templateDateArg})">Off today</button>
-        <button class="log-gap-btn" onclick="event.stopPropagation(); editTemplateFromToday(${templateIdArg})">Edit</button>
       </div>
     </div>`;
   }
@@ -8957,13 +8956,6 @@ function openTemplateLog(templateId, dateKey) {
   openRetroLogPrefilled(range.tsStart, range.tsEnd, tpl.activity, tpl.energy);
 }
 
-function editTemplateFromToday(templateId) {
-  const idx = (settings.templates || []).findIndex(tpl => String(tpl.id) === String(templateId));
-  if (idx < 0) { showToast('Template not found'); return; }
-  showView('settings');
-  editTemplate(idx);
-}
-
 function templateSlotRange(tpl, dateKey) {
   const tsStart = tzParseTime(dateKey, tpl.startTime);
   let tsEnd = tzParseTime(dateKey, tpl.endTime);
@@ -9163,6 +9155,7 @@ function skipTemplateOnDate(templateId, dateKey) {
   persist();
   if (fbRoomRef) fbRoomRef.update({ settings });
   renderTemplateList();
+  _todayRenderKey = '__FORCE__';
   renderToday();
   showToast(`Skipped ${activityDisplayLabel(tpl.activity)} today`);
 }
