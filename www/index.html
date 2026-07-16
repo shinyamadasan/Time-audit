@@ -1423,7 +1423,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-week-calendar-click-2';
+const APP_BUILD = '2026-07-16-week-calendar-visibility-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -9366,11 +9366,13 @@ function renderTemplateList() {
     const days = normalizeTemplateDays(tpl.days);
     const title = esc(activityDisplayLabel(tpl.activity));
     const event = (dayIndex, segStart, segEnd, isContinuation = false) => {
-      const height = Math.max(((segEnd - segStart) / 1440) * 100, 2.4);
+      const segDuration = segEnd - segStart;
+      const height = Math.max((segDuration / 1440) * 100, 2.4);
       const top = (segStart / 1440) * 100;
       const itemTitle = `${title}${isContinuation ? ' cont.' : ''}`;
+      const sizeClass = segDuration >= 90 ? ' long' : segDuration <= 45 ? ' short' : '';
       segmentsByDay[dayIndex].push(`
-        <div class="template-cal-event${isContinuation ? ' continuation' : ''}"
+        <div class="template-cal-event${sizeClass}${isContinuation ? ' continuation' : ''}"
           data-template-index="${i}"
           role="button"
           tabindex="0"
