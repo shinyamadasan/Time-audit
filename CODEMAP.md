@@ -365,7 +365,7 @@ Depends on: `entries`, `reviews`, `weeklyReviews`, Statistics section, `computeI
 ## [Weekly Schedule Templates]
 Lines: 6729–6910
 Purpose: Recurring block templates, optional auto-log after scheduled end, template suppression against real/deleted entries, and Settings template editor.
-Functions: `generateTemplateEntries()`, `templateSlotRange()`, `autoTemplateEntryId()`, `templateSlotCovered()`, `autoLogDueTemplates()`, `entryCoversTemplateSlot()`, `scheduleTemplateDiffersFromEntry()`, `updateTemplateFromEntry()`, `maybeOfferTemplateUpdate()`, `renderTemplateList()`, `toggleTplDay()`, `addTemplate()`, `editTemplate()`, `removeTemplate()`
+Functions: `generateTemplateEntries()`, `templateSlotRange()`, `templateSkippedOnDate()`, `skipTemplateOnDate()`, `autoTemplateEntryId()`, `templateSlotCovered()`, `autoLogDueTemplates()`, `entryCoversTemplateSlot()`, `scheduleTemplateDiffersFromEntry()`, `updateTemplateFromEntry()`, `maybeOfferTemplateUpdate()`, `renderTemplateList()`, `toggleTplDay()`, `addTemplate()`, `editTemplate()`, `removeTemplate()`
 Variables: `_editingTplIdx`
 Depends on: `settings`, Date Picker, `entries`, `persist()`, `renderToday()`, Firebase sync
 

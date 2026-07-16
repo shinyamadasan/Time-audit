@@ -870,6 +870,45 @@ test('editing an auto-logged schedule can update the recurring template', async 
   });
 });
 
+test('scheduled blocks can be marked off today before auto-log', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 7, 0, 0);
+  await openApp(page, {
+    nowTs,
+    settings: {
+      templates: [{
+        id: 'scribe',
+        activity: 'Scribe shift',
+        energy: 'nine5',
+        days: [3],
+        startTime: '00:00',
+        endTime: '08:00',
+        autoLog: true,
+        enabled: true
+      }]
+    }
+  });
+
+  await openTodayDetails(page);
+  await expect(page.locator('#timeline-blocks')).toContainText('Scribe shift');
+  await page.locator('#timeline-blocks .template-off-btn').click();
+  await expect(page.locator('#timeline-blocks')).not.toContainText('Scribe shift');
+
+  const result = await page.evaluate(() => {
+    Date.now = () => Date.UTC(2026, 6, 15, 9, 0, 0);
+    return {
+      created: autoLogDueTemplates({ notify: false }),
+      liveCount: entries.filter(e => !e.deleted && e.activity === 'Scribe shift').length,
+      skipDates: settings.templates[0].skipDates
+    };
+  });
+
+  expect(result).toEqual({
+    created: false,
+    liveCount: 0,
+    skipDates: ['2026-07-15']
+  });
+});
+
 test('weekly schedule auto-log respects a deleted day skip', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
   await openApp(page, {
