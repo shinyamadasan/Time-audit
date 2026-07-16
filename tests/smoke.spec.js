@@ -469,6 +469,11 @@ test('today daily basics logs common mandatory activity from clean mode', async 
   await openApp(page, { nowTs });
 
   await expect(page.locator('#daily-basics')).toBeVisible();
+  await expect(page.locator('#daily-basics')).not.toContainText('Chores');
+  await expect(page.locator('#daily-basics')).not.toContainText('Errand');
+  await expect(page.locator('#daily-basics')).toContainText('Cooking');
+  await expect(page.locator('#daily-basics')).toContainText('Dishes');
+  await expect(page.locator('#daily-basics')).toContainText('Hygiene');
   await expect(page.locator('.quick-retro-bar')).toBeHidden();
   await page.locator('#daily-basics').getByRole('button', { name: /Eat/ }).click();
 
