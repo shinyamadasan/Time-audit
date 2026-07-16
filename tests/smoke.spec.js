@@ -1212,7 +1212,7 @@ test('template preset can add a selected night work block', async ({ page }) => 
   }]);
 });
 
-test('today template rows expose log off and edit actions', async ({ page }) => {
+test('today template rows expose log and off actions without settings clutter', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
   await openApp(page, {
     nowTs,
@@ -1235,7 +1235,7 @@ test('today template rows expose log off and edit actions', async ({ page }) => 
   const row = page.locator('#timeline-blocks .tl-template-row').filter({ hasText: 'Lunch' });
   await expect(row.getByRole('button', { name: 'Log it' })).toBeVisible();
   await expect(row.getByRole('button', { name: 'Off today' })).toBeVisible();
-  await expect(row.getByRole('button', { name: 'Edit' })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Edit' })).toHaveCount(0);
 
   await row.getByRole('button', { name: 'Log it' }).click();
   await expect(page.locator('#retro-overlay')).toBeVisible();
@@ -1244,11 +1244,9 @@ test('today template rows expose log off and edit actions', async ({ page }) => 
   await expect(page.locator('#retro-end')).toHaveValue('11:30');
   await page.locator('#retro-overlay').getByRole('button', { name: 'Cancel' }).click();
 
-  await row.getByRole('button', { name: 'Edit' }).click();
-  await expect(page.locator('#view-settings')).toHaveClass(/active/);
-  await expect(page.locator('#tpl-activity')).toHaveValue('Lunch');
-  await expect(page.locator('#tpl-start')).toHaveValue('11:00');
-  await expect(page.locator('#tpl-end')).toHaveValue('11:30');
+  await row.getByRole('button', { name: 'Off today' }).click();
+  await expect(row).toHaveCount(0);
+  await expect(page.locator('#timeline-blocks')).not.toContainText('Lunch');
 });
 
 test('day template form rejects duplicate recurring blocks on add and edit', async ({ page }) => {
