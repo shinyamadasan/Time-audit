@@ -1396,7 +1396,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-delete-fast-1';
+const APP_BUILD = '2026-07-16-schedule-split-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1715,6 +1715,59 @@ function isScheduleOrPlanBlock(entry, dateKey) {
     !!entry.templateId ||
     entryMatchesScheduleTemplate(entry, dateKey) ||
     entryMatchesPlanItem(entry, dateKey);
+}
+
+function isRecurringCoverageBlock(entry) {
+  return !!entry && !entry.deleted && !entry.missed && !entry.browserUsage &&
+    (!!entry.scheduledAutoLog || !!entry.templateId || !!entry.template);
+}
+
+function splitRecurringCoverageForDisplay(entriesArr) {
+  const arr = Array.isArray(entriesArr) ? entriesArr : [];
+  const ranged = arr
+    .map(entry => ({ entry, range: entryTimeRange(entry) }))
+    .filter(item => item.range && !item.entry.deleted && !item.entry.missed);
+
+  const makePiece = (entry, start, end) => {
+    const piece = {
+      ...entry,
+      id: `${entry.id}_seg_${Math.round(start)}`,
+      tsStart: start,
+      ts: end,
+      blockIntervalMin: Math.max(1, Math.round((end - start) / 60000)),
+      _displaySegmentOf: entry.id
+    };
+    delete piece._mergedIds;
+    delete piece._mergeCount;
+    return piece;
+  };
+
+  return arr.flatMap(entry => {
+    if (!isRecurringCoverageBlock(entry)) return [entry];
+    const range = entryTimeRange(entry);
+    if (!range) return [entry];
+    const blockers = ranged
+      .filter(item =>
+        item.entry !== entry &&
+        !isRecurringCoverageBlock(item.entry) &&
+        item.range.end > range.start &&
+        item.range.start < range.end
+      )
+      .sort((a, b) => a.range.start - b.range.start);
+    if (!blockers.length) return [entry];
+
+    const pieces = [];
+    let cursor = range.start;
+    blockers.forEach(item => {
+      const start = Math.max(range.start, item.range.start);
+      const end = Math.min(range.end, item.range.end);
+      if (end <= cursor) return;
+      if (start > cursor) pieces.push(makePiece(entry, cursor, start));
+      cursor = Math.max(cursor, end);
+    });
+    if (range.end > cursor) pieces.push(makePiece(entry, cursor, range.end));
+    return pieces;
+  });
 }
 
 function squashTinyPCTimeFragments(entriesArr, dateKey = null) {
@@ -4096,7 +4149,10 @@ function renderEntryRow(item) {
     ? `<span style="font-size:10px;color:var(--muted);font-weight:600;margin-left:4px;opacity:0.7">×${item._mergeCount}</span>`
     : '';
   const mergedIdsArg = entryIdJsArg((item._mergedIds || []).map(String).join(','));
-  const editCall = item._mergeCount > 1
+  const segmentSourceArg = entryIdJsArg(item._displaySegmentOf || item.id);
+  const editCall = item._displaySegmentOf
+    ? `openEditEntry(${segmentSourceArg})`
+    : item._mergeCount > 1
     ? `openEditMergedEntry(${mergedIdsArg},${item.tsStart || item.ts},${item.ts})`
     : `openEditEntry(${entryIdJsArg(item.id)})`;
 
@@ -4239,7 +4295,8 @@ function assembleTodayTimeline(todayE) {
       subs.forEach(s => { pcSubMap.get(container.id).push(s); nestedBrowserIds.add(s.id); });
     }
   });
-  const sortedForDisplay = sorted.filter(e => !nestedBrowserIds.has(e.id));
+  const sortedForDisplay = splitRecurringCoverageForDisplay(sorted.filter(e => !nestedBrowserIds.has(e.id)))
+    .sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
   const clipped = clipOverlapsForDisplay(sortedForDisplay).filter(e => {
     const dur = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 1);
     return dur > 0;
