@@ -94,13 +94,13 @@ function utcDateKey(ts) {
   return new Date(ts).toISOString().slice(0, 10);
 }
 
-async function openApp(page, { entries = [], focusRedemptions = [], settings = {}, nowTs = null } = {}) {
+async function openApp(page, { entries = [], focusRedemptions = [], plans = {}, settings = {}, nowTs = null } = {}) {
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({
     status: 200,
     contentType: 'application/javascript',
     body: firebaseStub
   }));
-  await page.addInitScript(({ entries, focusRedemptions, settings, nowTs }) => {
+  await page.addInitScript(({ entries, focusRedemptions, plans, settings, nowTs }) => {
     if (nowTs) {
       const RealDate = Date;
       window.Date = class MockDate extends RealDate {
@@ -120,9 +120,11 @@ async function openApp(page, { entries = [], focusRedemptions = [], settings = {
     localStorage.setItem('ta3-settings', JSON.stringify(settings));
     localStorage.setItem('ta3-entries', JSON.stringify(entries));
     localStorage.setItem('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
+    localStorage.setItem('ta3-plans', JSON.stringify(plans));
   }, {
     entries,
     focusRedemptions,
+    plans,
     settings: baseSettings(settings),
     nowTs
   });
@@ -1915,6 +1917,64 @@ test('local timer reset publishes stopped state for other devices', async ({ pag
   expect(timer.lastTask).toBe(null);
   expect(timer.ownerDeviceId).toBe(null);
   expect(timer.startedAt).toBe(null);
+});
+
+test('tiny PC Time fragments inside planned blocks are absorbed in displays', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
+  const todayKey = '2026-07-15';
+  const appStart = Date.UTC(2026, 6, 15, 9, 0, 0);
+  const appEnd = Date.UTC(2026, 6, 15, 10, 0, 0);
+  const pcStart = Date.UTC(2026, 6, 15, 9, 5, 0);
+  const pcEnd = Date.UTC(2026, 6, 15, 9, 9, 0);
+  const entries = [
+    {
+      id: appEnd,
+      ts: appEnd,
+      tsStart: appStart,
+      updatedAt: appEnd,
+      blockIntervalMin: 60,
+      date: todayKey,
+      activity: 'App building',
+      energy: 'deep',
+      category: 'deep_work',
+      originalLabel: 'deep',
+      onPlan: true,
+      retro: true
+    },
+    {
+      id: pcEnd,
+      ts: pcEnd,
+      tsStart: pcStart,
+      updatedAt: pcEnd,
+      blockIntervalMin: 4,
+      date: todayKey,
+      activity: 'PC Time',
+      energy: 'shallow',
+      category: 'shallow_work',
+      originalLabel: 'shallow',
+      onPlan: true,
+      autoLogged: true
+    }
+  ];
+  const plans = {
+    [todayKey]: {
+      items: [{ id: 'p1', task: 'App building', when: '', done: false, updatedAt: nowTs }],
+      updatedAt: nowTs
+    }
+  };
+
+  await openApp(page, { entries, plans, nowTs });
+  await openTodayDetails(page);
+
+  await expect(page.locator('#timeline-blocks')).toContainText('App building');
+  await expect(page.locator('#timeline-blocks')).not.toContainText('PC Time');
+  await expect(page.locator('#recent-list')).toContainText('App building');
+  await expect(page.locator('#recent-list')).not.toContainText('PC Time');
+  await expect.poll(() => page.evaluate(() => entries.length)).toBe(2);
+
+  await page.evaluate(() => showView('week'));
+  await expect(page.locator('#week-content')).toContainText('App building');
+  await expect(page.locator('#week-content')).not.toContainText('PC Time');
 });
 
 test('crossing-day entries are clipped instead of displayed as one 28h block', async ({ page }) => {
