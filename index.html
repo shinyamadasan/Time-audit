@@ -541,7 +541,7 @@
       <div class="setting-control"><input type="number" id="set-exitdelay" value="10" min="3" max="60" onchange="saveSettings()"></div>
     </div>
     <div class="setting-row">
-      <div><div class="setting-label">EOD review time</div><div class="setting-sub">When to prompt your daily reflection</div></div>
+      <div><div class="setting-label">Close day time</div><div class="setting-sub">Morning times close the previous calendar day, useful for graveyard shifts</div></div>
       <div class="setting-control">
         <input type="time" id="set-review-hour" value="22:00" onchange="saveSettings()"
           style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 7px;border-radius:6px;outline:none;width:auto">
@@ -1382,11 +1382,11 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-routine-prompts-1';
+const APP_BUILD = '2026-07-16-closeout-time-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
-let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22, sleepTime:'23:00', wakeTime:'07:00', sleepReminderMin:30, sleepSetupDone:false, templates:[] };
+let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22, reviewTime:'22:00', sleepTime:'23:00', wakeTime:'07:00', sleepReminderMin:30, sleepSetupDone:false, templates:[] };
 let reviews = {};
 let weeklyReviews = {};
 let focusRedemptions = [];
@@ -4150,6 +4150,39 @@ function closeoutSummaryParts(summary) {
   return parts;
 }
 
+function closeoutTimeValue() {
+  if (/^\d{2}:\d{2}$/.test(settings.reviewTime || '')) return settings.reviewTime;
+  const hour = Number.isFinite(Number(settings.reviewHour)) ? Number(settings.reviewHour) : 22;
+  return `${String(Math.max(0, Math.min(23, hour))).padStart(2, '0')}:00`;
+}
+
+function closeoutTimeMinutes() {
+  const [h, m] = closeoutTimeValue().split(':').map(Number);
+  return h * 60 + m;
+}
+
+function closeoutCutoffTs(dateKey) {
+  const closeTime = closeoutTimeValue();
+  const closeDateKey = closeoutTimeMinutes() < 12 * 60 ? _dateKeyPlusDays(dateKey, 1) : dateKey;
+  return tzParseTime(closeDateKey, closeTime);
+}
+
+function isCloseoutDue(dateKey, ts = Date.now()) {
+  return ts >= closeoutCutoffTs(dateKey);
+}
+
+function nextUnreviewedCloseoutDateKey(ts = Date.now()) {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(ts, tz);
+  const yesterdayKey = _dateKeyPlusDays(todayKey, -1);
+  for (const dateKey of [yesterdayKey, todayKey]) {
+    if (!isCloseoutDue(dateKey, ts) || reviews[dateKey]) continue;
+    const summary = computeCloseoutSummary(dateKey);
+    if (summary.entryCount || summary.planCount || dateKey === todayKey) return dateKey;
+  }
+  return null;
+}
+
 function openCloseoutReview() {
   openReview(getViewingDateKey());
 }
@@ -4161,6 +4194,7 @@ function missedCloseoutDateKey() {
 
 function getMissedCloseout() {
   const dateKey = missedCloseoutDateKey();
+  if (!isCloseoutDue(dateKey)) return null;
   const summary = computeCloseoutSummary(dateKey);
   if (summary.reviewed || (!summary.entryCount && !summary.planCount)) return null;
   return { dateKey, summary };
@@ -4199,8 +4233,7 @@ function renderCloseoutCta() {
   if (!isViewingToday()) { card.style.display = 'none'; return; }
 
   const summary = computeCloseoutSummary(dateKey);
-  const reviewHour = settings.reviewHour ?? 22;
-  const shouldShow = summary.reviewed || summary.entryCount > 0 || summary.planCount > 0 || tzHour(Date.now()) >= reviewHour;
+  const shouldShow = summary.reviewed || (!getMissedCloseout() && isCloseoutDue(dateKey));
   if (!shouldShow) { card.style.display = 'none'; return; }
 
   card.style.display = 'flex';
@@ -4422,7 +4455,6 @@ function renderTodayActionStrip(todayE) {
   const dateKey = getViewingDateKey();
   const planItems = getPlanItems(dateKey);
   const health = computeTodayHealth(todayE, dateKey);
-  const reviewHour = settings.reviewHour ?? 22;
   const missed = typeof getMissedCloseout === 'function' ? getMissedCloseout() : null;
   const next = planItems.length ? getNextPlanItem(dateKey) : null;
   const remoteActive = typeof getActiveTimerOwnerSnapshot === 'function' ? getActiveTimerOwnerSnapshot() : null;
@@ -4500,7 +4532,7 @@ function renderTodayActionStrip(todayE) {
       button: 'Start next',
       action: 'startNextPlanItem()'
     };
-  } else if (tzHour(Date.now()) >= reviewHour) {
+  } else if (isCloseoutDue(dateKey)) {
     state = {
       tone: '',
       title: 'Close the loop',
@@ -7265,8 +7297,7 @@ function renderSettings() {
   document.getElementById('set-sleep-reminder-min').value=String(settings.sleepReminderMin??30);
   document.getElementById('set-quiet-start').value=settings.quietStart||'';
   document.getElementById('set-quiet-end').value=settings.quietEnd||'';
-  const rh = settings.reviewHour ?? 22;
-  document.getElementById('set-review-hour').value = `${String(rh).padStart(2,'0')}:00`;
+  document.getElementById('set-review-hour').value = closeoutTimeValue();
   const toneEl = document.getElementById('set-coach-tone');
   toneEl.value = settings.coachTone || 'analyst';
   renderTonePreview();
@@ -7381,6 +7412,7 @@ function saveSettings(){
   localStorage.setItem('ta3-tz', settings.timezone);
   settings.coachTone=document.getElementById('set-coach-tone').value||'analyst';
   const reviewTimeVal = document.getElementById('set-review-hour').value || '22:00';
+  settings.reviewTime = reviewTimeVal;
   settings.reviewHour = parseInt(reviewTimeVal.split(':')[0], 10);
   settings._savedAt = Date.now();
   renderTonePreview();
@@ -7878,7 +7910,10 @@ function snoozeSleepReminder() {
   document.getElementById('sleep-reminder-overlay').style.display = 'none';
 }
 
-function checkReviewPrompt(){const rh=settings.reviewHour??22;if(tzHour(Date.now())>=rh&&!reviews[toDateKey(new Date())])setTimeout(()=>openReview(),800);}
+function checkReviewPrompt(){
+  const dueDateKey = nextUnreviewedCloseoutDateKey();
+  if (dueDateKey) setTimeout(()=>openReview(dueDateKey),800);
+}
 
 function renderYesterdayPromise() {
   const el = document.getElementById('yesterday-promise');
