@@ -1092,7 +1092,7 @@ test('long non-job coverage blocks are not split by the legacy fallback', async 
   await expect(timeline).not.toContainText('12:00 AM – 1:00 AM');
 });
 
-test('day cards add editable basics to one weekday', async ({ page }) => {
+test('day dropdown adds editable basics to the selected weekday', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
   await openApp(page, {
     nowTs,
@@ -1103,12 +1103,11 @@ test('day cards add editable basics to one weekday', async ({ page }) => {
   });
 
   await page.evaluate(() => showView('settings'));
-  await expect(page.locator('.day-template-card')).toHaveCount(7);
-  const satCard = page.locator('.day-template-card').filter({ hasText: 'Sat' });
-  const monCard = page.locator('.day-template-card').filter({ hasText: 'Mon' });
-  await expect(satCard).toContainText('No blocks yet');
-  await satCard.getByRole('button', { name: 'Add basics' }).click();
-  await satCard.getByRole('button', { name: 'Add basics' }).click();
+  await page.selectOption('#day-template-select', '6');
+  const panel = page.locator('#day-template-panel');
+  await expect(panel).toContainText('No blocks yet for Saturday');
+  await page.getByRole('button', { name: 'Add basics' }).click();
+  await page.getByRole('button', { name: 'Add basics' }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1135,14 +1134,15 @@ test('day cards add editable basics to one weekday', async ({ page }) => {
     expect.objectContaining({ activity: 'Dinner', startTime: '21:00', endTime: '21:30' }),
     expect.objectContaining({ activity: 'Hygiene', startTime: '01:30', endTime: '01:50' })
   ]));
-  await expect(satCard).toContainText('Sleep');
-  await expect(satCard).toContainText('02:00-10:00');
-  await expect(monCard).toContainText('No blocks yet');
+  await expect(panel).toContainText('Sleep');
+  await expect(panel).toContainText('02:00-10:00');
+  await page.selectOption('#day-template-select', '1');
+  await expect(panel).toContainText('No blocks yet for Monday');
   await expect(page.locator('#template-list')).toContainText('Breakfast');
   await expect(page.locator('#template-list')).toContainText('Hygiene');
 });
 
-test('day cards keep separate weekday skeletons and preselect custom block days', async ({ page }) => {
+test('day dropdown keeps separate weekday skeletons and preselects custom block days', async ({ page }) => {
   await openApp(page, {
     settings: {
       sleepTime: '23:00',
@@ -1151,10 +1151,10 @@ test('day cards keep separate weekday skeletons and preselect custom block days'
   });
 
   await page.evaluate(() => showView('settings'));
-  const monCard = page.locator('.day-template-card').filter({ hasText: 'Mon' });
-  const satCard = page.locator('.day-template-card').filter({ hasText: 'Sat' });
-  await monCard.getByRole('button', { name: 'Add basics' }).click();
-  await satCard.getByRole('button', { name: 'Add basics' }).click();
+  await page.selectOption('#day-template-select', '1');
+  await page.getByRole('button', { name: 'Add basics' }).click();
+  await page.selectOption('#day-template-select', '6');
+  await page.getByRole('button', { name: 'Add basics' }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1166,14 +1166,14 @@ test('day cards keep separate weekday skeletons and preselect custom block days'
   expect(templates.filter(t => t.activity === 'Sleep').map(t => t.days)).toEqual([[1], [6]]);
   expect(new Set(templates.map(t => t.id)).size).toBe(10);
 
-  await satCard.getByRole('button', { name: '+ Block' }).click();
+  await page.getByRole('button', { name: '+ Block' }).click();
   const selectedDays = await page.evaluate(() =>
     [...document.querySelectorAll('#tpl-day-picker .tpl-day-btn.on')].map(btn => parseInt(btn.dataset.day))
   );
   expect(selectedDays).toEqual([6]);
 });
 
-test('day cards show existing recurring blocks for that weekday', async ({ page }) => {
+test('day dropdown shows existing recurring blocks for the selected weekday', async ({ page }) => {
   await openApp(page, {
     settings: {
       templates: [{
@@ -1190,12 +1190,13 @@ test('day cards show existing recurring blocks for that weekday', async ({ page 
   });
 
   await page.evaluate(() => showView('settings'));
-  const satCard = page.locator('.day-template-card').filter({ hasText: 'Sat' });
-  const monCard = page.locator('.day-template-card').filter({ hasText: 'Mon' });
-  await expect(satCard).toContainText('Scribe shift');
-  await expect(satCard).toContainText('22:00-08:00');
-  await expect(satCard).toContainText('auto-log');
-  await expect(monCard).toContainText('No blocks yet');
+  const panel = page.locator('#day-template-panel');
+  await page.selectOption('#day-template-select', '6');
+  await expect(panel).toContainText('Scribe shift');
+  await expect(panel).toContainText('22:00-08:00');
+  await expect(panel).toContainText('auto-log');
+  await page.selectOption('#day-template-select', '1');
+  await expect(panel).toContainText('No blocks yet for Monday');
 });
 
 test('today template rows expose log and off actions without settings clutter', async ({ page }) => {
