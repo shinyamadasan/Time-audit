@@ -76,6 +76,7 @@ function baseSettings(overrides = {}) {
     activityColors: {},
     coachTone: 'analyst',
     reviewHour: 22,
+    reviewTime: '22:00',
     sleepTime: '23:00',
     wakeTime: '07:00',
     sleepReminderMin: 30,

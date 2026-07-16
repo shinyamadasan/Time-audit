@@ -55,7 +55,7 @@ function baseSettings(overrides = {}) {
   return {
     hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10,
     presets: [], timezone: 'UTC', activityColors: {}, coachTone: 'analyst',
-    reviewHour: 22, sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30,
+    reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30,
     sleepSetupDone: true, templates: [], ...overrides
   };
 }
@@ -562,6 +562,7 @@ test('close day CTA opens the review loop and marks today closed after save', as
       wasteEntry(70 * 60 * 1000, 50 * 60 * 1000, 'Scrolling', nowTs)
     ],
     plans: planFor([{ task: 'Write report', done: true }, { task: 'Gym', done: false }]),
+    settings: { reviewTime: '17:00', reviewHour: 17 },
     nowTs
   });
 
@@ -596,11 +597,59 @@ test('close day CTA opens the review loop and marks today closed after save', as
   expect(await page.evaluate(() => reviews[planTodayKey()].unloggedOk)).toBe(true);
 });
 
+test('close day CTA waits until the configured closeout time', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 16, 18, 0, 0);
+  await openApp(page, {
+    entries: [datedEntry('2026-07-16', 15, 16, 'Write report')],
+    plans: planForDate('2026-07-16', [{ task: 'Write report', done: true }]),
+    settings: { reviewTime: '22:00', reviewHour: 22 },
+    nowTs
+  });
+
+  await expect(page.locator('#closeout-card')).toBeHidden();
+  await expect(page.locator('#today-action-title')).not.toHaveText('Close the loop');
+});
+
+test('morning closeout time treats yesterday as due after the graveyard cutoff', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 16, 8, 5, 0);
+  await openApp(page, {
+    entries: [datedEntry('2026-07-15', 22, 23, 'Scribe shift')],
+    plans: planForDate('2026-07-15', [{ task: 'Scribe shift', done: true }]),
+    settings: { reviewTime: '08:00', reviewHour: 8 },
+    nowTs
+  });
+
+  await expect(page.locator('#missed-closeout-card')).toBeVisible();
+  await expect(page.locator('#missed-closeout-title')).toHaveText("Yesterday wasn't closed");
+  await expect(page.locator('#closeout-card')).toBeHidden();
+
+  await page.locator('#missed-closeout-card').click();
+  await expect(page.locator('#review-overlay')).toHaveClass(/open/);
+  await expect(page.locator('#rv-plan-vs-actual')).toContainText('Scribe shift');
+  expect(await page.evaluate(() => _reviewDateKey)).toBe('2026-07-15');
+});
+
+test('morning closeout time does not nag before the graveyard cutoff', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 16, 7, 30, 0);
+  await openApp(page, {
+    entries: [datedEntry('2026-07-15', 22, 23, 'Scribe shift')],
+    plans: planForDate('2026-07-15', [{ task: 'Scribe shift', done: true }]),
+    settings: { reviewTime: '08:00', reviewHour: 8 },
+    nowTs
+  });
+
+  await expect(page.locator('#missed-closeout-card')).toBeHidden();
+  await expect(page.locator('#closeout-card')).toBeHidden();
+  await expect(page.locator('#today-action-title')).not.toHaveText('Close yesterday first');
+});
+
 test('missed closeout recovery reviews yesterday and writes today plan', async ({ page }) => {
-  const yesterday = utcDateKey(Date.now() - DAY_MS);
+  const nowTs = Date.UTC(2026, 6, 16, 10, 0, 0);
+  const yesterday = utcDateKey(nowTs - DAY_MS);
   await openApp(page, {
     entries: [datedEntry(yesterday, 10, 11, 'Write report')],
-    plans: planForDate(yesterday, [{ task: 'Write report', done: true }, { task: 'Gym', done: false }])
+    plans: planForDate(yesterday, [{ task: 'Write report', done: true }, { task: 'Gym', done: false }]),
+    nowTs
   });
 
   await expect(page.locator('#missed-closeout-card')).toBeVisible();
