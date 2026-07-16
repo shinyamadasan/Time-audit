@@ -953,6 +953,54 @@ test('default day skeleton adds editable non-auto schedule anchors once', async 
   await expect(page.locator('#template-list')).toContainText('Hygiene');
 });
 
+test('weekly schedule add and delete update the list before deferred refresh', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    showView('settings');
+    window.__templatePersistCalls = 0;
+    window.__templateRenderTodayCalls = 0;
+    const originalPersist = persist;
+    const originalRenderToday = renderToday;
+    window.__restoreTemplateFns = () => {
+      persist = originalPersist;
+      renderToday = originalRenderToday;
+    };
+    persist = () => { window.__templatePersistCalls++; };
+    renderToday = () => { window.__templateRenderTodayCalls++; };
+
+    document.getElementById('tpl-activity').value = 'Fast block';
+    document.getElementById('tpl-energy').value = 'deep';
+    document.getElementById('tpl-start').value = '09:00';
+    document.getElementById('tpl-end').value = '10:00';
+    document.querySelector('.tpl-day-btn[data-day="1"]').classList.add('on');
+    addTemplate();
+    const afterAdd = {
+      listText: document.getElementById('template-list').textContent,
+      persistCalls: window.__templatePersistCalls,
+      renderTodayCalls: window.__templateRenderTodayCalls
+    };
+
+    removeTemplate(0);
+    const afterDelete = {
+      listText: document.getElementById('template-list').textContent,
+      persistCalls: window.__templatePersistCalls,
+      renderTodayCalls: window.__templateRenderTodayCalls
+    };
+
+    return { afterAdd, afterDelete };
+  });
+
+  expect(result.afterAdd.listText).toContain('Fast block');
+  expect(result.afterAdd.persistCalls).toBe(0);
+  expect(result.afterAdd.renderTodayCalls).toBe(0);
+  expect(result.afterDelete.listText).not.toContain('Fast block');
+  expect(result.afterDelete.persistCalls).toBe(0);
+  expect(result.afterDelete.renderTodayCalls).toBe(0);
+  await expect.poll(() => page.evaluate(() => window.__templatePersistCalls)).toBe(2);
+  await page.evaluate(() => window.__restoreTemplateFns());
+});
+
 test('weekly schedule auto-log respects a deleted day skip', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
   await openApp(page, {

@@ -1396,7 +1396,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-day-skeleton-1';
+const APP_BUILD = '2026-07-16-schedule-fast-edit-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -9061,6 +9061,15 @@ function toggleTplDay(btn) {
   btn.classList.toggle('on');
 }
 
+function persistTemplatesAfterPaint() {
+  const save = () => {
+    persist();
+    if (fbRoomRef) fbRoomRef.update({ settings });
+    scheduleRenderToday();
+  };
+  requestAnimationFrame(() => setTimeout(save, 0));
+}
+
 function addTemplate() {
   const activity = document.getElementById('tpl-activity').value.trim();
   if (!activity) { showToast('Add an activity name'); return; }
@@ -9091,14 +9100,9 @@ function addTemplate() {
   document.querySelectorAll('.tpl-day-btn').forEach(b => b.classList.remove('on'));
   const addBtn = document.getElementById('tpl-add-btn');
   if (addBtn) addBtn.textContent = '+ Add recurring block';
+  renderTemplateList();
   showToast(wasEditing ? 'Block updated' : 'Recurring block added');
-  // Defer save + re-render so the button response feels instant
-  setTimeout(() => {
-    persist();
-    if (fbRoomRef) fbRoomRef.update({ settings });
-    renderTemplateList();
-    renderToday();
-  }, 0);
+  persistTemplatesAfterPaint();
 }
 
 let _editingTplIdx = null;
@@ -9126,10 +9130,9 @@ function removeTemplate(i) {
   settings.templates.splice(i, 1);
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
-  persist();
-  if (fbRoomRef) fbRoomRef.update({ settings });
   renderTemplateList();
-  renderToday();
+  showToast('Recurring block deleted');
+  persistTemplatesAfterPaint();
 }
 
 // ══════════════════════════════════════════════════════
