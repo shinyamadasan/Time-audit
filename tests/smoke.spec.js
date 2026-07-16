@@ -912,8 +912,9 @@ test('editing an auto-logged schedule can update the recurring template', async 
 
   await openTodayDetails(page);
   const row = page.locator('#recent-list .entry-row').filter({ hasText: 'Scribe shift' }).first();
-  await row.locator('button').first().click();
+  await row.locator('button[onclick*="openEditEntry"]').click();
   await expect(page.locator('#retro-overlay')).toBeVisible();
+  await expect(page.locator('#retro-activity')).toHaveValue('Scribe shift');
   await page.locator('#retro-start').fill('01:00');
   await page.locator('#retro-end').fill('09:00');
   await page.locator('#retro-overlay').getByRole('button', { name: 'Save' }).click();
@@ -974,7 +975,7 @@ test('scheduled blocks can be marked off today before auto-log', async ({ page }
   });
 });
 
-test('schedule-matched display shows covered time between detailed logs even without metadata', async ({ page }) => {
+test('schedule-matched pocket logs show the shift as context without splitting it', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
   const shiftStart = Date.UTC(2026, 6, 15, 0, 0, 0);
   const firstDetailStart = Date.UTC(2026, 6, 15, 0, 45, 0);
@@ -1040,8 +1041,10 @@ test('schedule-matched display shows covered time between detailed logs even wit
   await openTodayDetails(page);
 
   const timeline = page.locator('#timeline-blocks');
-  await expect(timeline).toContainText('12:47 AM – 1:25 AM · 38m');
-  await expect(timeline.locator('.tl-row').filter({ hasText: 'Scribe shift' })).toHaveCount(3);
+  const activityLabels = await timeline.locator('.tl-row .tl-activity').allTextContents();
+  expect(activityLabels.filter(text => text.includes('Scribe shift'))).toHaveLength(1);
+  await expect(timeline.locator('.tl-row').filter({ hasText: 'App building' }).first()).toContainText('during Scribe shift');
+  await expect(timeline).not.toContainText('12:47 AM – 1:25 AM · 38m');
   await expect(timeline.locator('.tl-untracked-row').filter({ hasText: '12:47 AM' })).toHaveCount(0);
 });
 
@@ -1085,6 +1088,7 @@ test('long non-job coverage blocks are not split by the legacy fallback', async 
 
   const timeline = page.locator('#timeline-blocks');
   await expect(timeline.locator('.tl-row').filter({ hasText: 'Sleep' })).toHaveCount(1);
+  await expect(timeline.locator('.tl-row').filter({ hasText: 'Phone' })).not.toContainText('during Sleep');
   await expect(timeline).not.toContainText('12:00 AM – 1:00 AM');
 });
 
