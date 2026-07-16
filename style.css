@@ -1227,6 +1227,25 @@ button, a, [role="button"],
 .template-advanced{margin:8px 0 10px;padding-top:10px;border-top:1px solid var(--border)}
 .template-advanced summary{cursor:pointer;color:var(--muted2);font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;margin-bottom:8px}
 .template-advanced[open]{margin-bottom:12px}
+.template-week-wrap{overflow-x:auto;padding-bottom:2px}
+.template-week-table{width:100%;min-width:720px;border-collapse:separate;border-spacing:0 6px;font-size:11px}
+.template-week-table th,.template-week-table td{padding:8px 8px;text-align:center;vertical-align:middle}
+.template-week-table thead th{color:var(--muted2);font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border)}
+.template-week-table tbody tr{background:var(--bg2)}
+.template-week-table tbody th,.template-week-table tbody td{border-top:1px solid var(--border2);border-bottom:1px solid var(--border2)}
+.template-week-table tbody th:first-child{border-left:4px solid var(--muted);border-radius:8px 0 0 8px}
+.template-week-table tbody td:last-child{border-right:1px solid var(--border2);border-radius:0 8px 8px 0}
+.template-week-task{text-align:left!important;min-width:160px;max-width:220px}
+.template-week-name{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.template-week-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:3px;font-size:9px;font-weight:700}
+.template-week-auto{color:var(--deep)!important;background:var(--deep-dim2);border:1px solid rgba(76,199,240,0.25);border-radius:5px;padding:1px 5px}
+.template-week-on{color:var(--deep);font-weight:800;background:var(--deep-dim2)}
+.template-week-off{color:var(--muted2);opacity:.45}
+.template-week-time{font-family:var(--mono);color:var(--muted);white-space:nowrap}
+.template-week-time span{display:block;color:var(--muted2);font-size:9px;margin-top:2px}
+.template-week-actions{white-space:nowrap}
+.template-week-actions button{background:none;border:1px solid var(--border2);border-radius:6px;color:var(--muted);font-family:var(--head);font-size:10px;font-weight:700;padding:4px 7px;margin-left:4px;cursor:pointer}
+.template-week-actions button:hover{color:var(--deep);border-color:rgba(76,199,240,0.35)}
 .template-form-card{background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-top:8px}
 .template-form-actions{display:flex;gap:8px;align-items:center}
 .template-form-actions #tpl-add-btn{flex:1;justify-content:center}

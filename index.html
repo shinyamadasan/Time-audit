@@ -1423,7 +1423,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-template-task-picker-1';
+const APP_BUILD = '2026-07-16-week-template-table-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -9336,40 +9336,64 @@ function renderTemplateList() {
     el.innerHTML = '<div style="font-size:12px;color:var(--muted);font-style:italic;padding:4px 0 12px">No recurring blocks yet.</div>';
     return;
   }
-  const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+  const dayCols = [
+    { day: 1, label: 'Mon' },
+    { day: 2, label: 'Tue' },
+    { day: 3, label: 'Wed' },
+    { day: 4, label: 'Thu' },
+    { day: 5, label: 'Fri' },
+    { day: 6, label: 'Sat' },
+    { day: 0, label: 'Sun' }
+  ];
   const ENERGY_COLOR = { nine5:'var(--nine5)', deep:'var(--deep)', shallow:'var(--shallow)', learning:'var(--learning)', exercise:'var(--exercise)', recovery:'var(--break)', errands:'var(--errands)', social:'var(--social)', waste:'var(--distraction)' };
   const ENERGY_LABEL = { nine5:'Job Work', deep:'Deep Work', shallow:'Shallow Work', learning:'Learning', exercise:'Exercise', recovery:'Maintenance', errands:'Errands', social:'Social', waste:'Waste' };
-  el.innerHTML = settings.templates.map((tpl, i) => {
+  const rows = settings.templates.map((tpl, i) => {
     const color = ENERGY_COLOR[tpl.energy] || 'var(--muted)';
     const energyLabel = ENERGY_LABEL[tpl.energy] || tpl.energy;
-    const sortedDays = [...tpl.days].sort((a,b)=>a-b);
-    const dayChips = sortedDays.map(d => `<span style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:1px 6px;font-size:10px;font-family:var(--mono);color:var(--muted)">${DAY_LABELS[d]}</span>`).join('');
-    const autoChip = tpl.autoLog ? `<span style="background:var(--deep-dim2);border:1px solid rgba(76,199,240,0.25);border-radius:5px;padding:1px 6px;font-size:10px;color:var(--deep);font-weight:700">auto-log</span>` : '';
     const [sh, sm] = tpl.startTime.split(':').map(Number);
     const [eh, em] = tpl.endTime.split(':').map(Number);
     let mins = (eh * 60 + em) - (sh * 60 + sm);
     if (mins <= 0) mins += 24 * 60;
     const dur = mins >= 60 ? `${(mins/60).toFixed(mins%60===0?0:1)}h` : `${mins}m`;
+    const days = normalizeTemplateDays(tpl.days);
+    const title = esc(activityDisplayLabel(tpl.activity));
+    const dayCells = dayCols.map(({ day, label }) => {
+      const active = days.includes(day);
+      return `<td class="${active ? 'template-week-on' : 'template-week-off'}" aria-label="${label} ${active ? 'active' : 'off'}">${active ? 'on' : '-'}</td>`;
+    }).join('');
     return `
-    <div style="display:flex;border-radius:10px;border:1px solid var(--border2);overflow:hidden;margin-bottom:8px;background:var(--bg2)">
-      <div style="width:4px;background:${color};flex-shrink:0"></div>
-      <div style="flex:1;padding:10px 12px;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:5px">${tpl.activity}
-          <span style="font-size:10px;font-weight:500;color:${color};background:${color}22;border-radius:4px;padding:1px 6px;margin-left:4px">${energyLabel}</span>
-        </div>
-        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
-          ${dayChips}
-          <span style="color:var(--muted);font-size:10px">·</span>
-          <span style="font-size:11px;color:var(--muted);font-family:var(--mono)">${tpl.startTime} → ${tpl.endTime}</span>
-          <span style="color:var(--muted);font-size:10px">·</span>
-          <span style="font-size:11px;color:var(--muted)">${dur}</span>
-          ${autoChip}
-        </div>
-      </div>
-      <button type="button" onclick="editTemplate(${i})" style="background:none;border:none;color:var(--muted);font-size:15px;padding:10px 8px;cursor:pointer;flex-shrink:0;transition:color 0.15s" onmouseover="this.style.color='var(--deep)'" onmouseout="this.style.color='var(--muted)'">✎</button>
-      <button type="button" onclick="removeTemplate(${i})" style="background:none;border:none;color:var(--muted);font-size:16px;padding:10px 12px;cursor:pointer;flex-shrink:0;transition:color 0.15s" onmouseover="this.style.color='var(--distraction)'" onmouseout="this.style.color='var(--muted)'">×</button>
-    </div>`;
+      <tr>
+        <th scope="row" class="template-week-task" style="border-left-color:${color}">
+          <div class="template-week-name">${title}</div>
+          <div class="template-week-meta">
+            <span style="color:${color}">${esc(energyLabel)}</span>${tpl.autoLog ? '<span class="template-week-auto">auto-log</span>' : ''}
+          </div>
+        </th>
+        ${dayCells}
+        <td class="template-week-time">${esc(tpl.startTime)}-${esc(tpl.endTime)}<span>${dur}</span></td>
+        <td class="template-week-actions">
+          <button type="button" aria-label="Edit ${title}" onclick="editTemplate(${i})">Edit</button>
+          <button type="button" aria-label="Delete ${title}" onclick="removeTemplate(${i})">x</button>
+        </td>
+      </tr>`;
   }).join('');
+  el.innerHTML = `
+    <div class="template-week-wrap">
+      <table class="template-week-table">
+        <thead>
+          <tr>
+            <th scope="col">Block</th>
+            ${dayCols.map(({ label }) => `<th scope="col">${label}</th>`).join('')}
+            <th scope="col">Time</th>
+            <th scope="col">Edit</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
 }
 
 function toggleTplDay(btn) {
