@@ -1389,7 +1389,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-template-offtoday-1';
+const APP_BUILD = '2026-07-16-pc-fragment-merge-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1623,6 +1623,69 @@ function expandPCTimeEntries(entriesArr) {
     if (!nestedIds.has(e.id)) result.push(e);
   }
   return result.filter(e => !nestedIds.has(e.id));
+}
+
+const PC_TIME_FRAGMENT_MAX_MIN = 10;
+const PC_TIME_FRAGMENT_MIN_COVERAGE = 0.8;
+
+function isPcTimeEntry(entry) {
+  return activityGroupKey(entry?.activity) === 'pc time' && !entry?.browserUsage;
+}
+
+function overlapMs(a, b) {
+  return Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
+}
+
+function entryMatchesScheduleTemplate(entry, dateKey) {
+  if (!entry || !dateKey || isPcTimeEntry(entry)) return false;
+  const entryRange = entryTimeRange(entry);
+  if (!entryRange) return false;
+  const dow = tzDow(tzParseTime(dateKey, '12:00'));
+  return (settings.templates || []).some(tpl => {
+    if (!tpl.enabled || templateSkippedOnDate(tpl, dateKey)) return false;
+    if (!(tpl.days || []).includes(dow)) return false;
+    if (activityGroupKey(tpl.activity) !== activityGroupKey(entry.activity)) return false;
+    return overlapMs(entryRange, templateSlotRange(tpl, dateKey)) > 0;
+  });
+}
+
+function entryMatchesPlanItem(entry, dateKey) {
+  if (!entry || !dateKey || isPcTimeEntry(entry)) return false;
+  const activity = normalizePlanTask(entry.activity);
+  if (!activity) return false;
+  return getPlanItems(dateKey).some(item => normalizePlanTask(item.task) === activity);
+}
+
+function isScheduleOrPlanBlock(entry, dateKey) {
+  if (!entry || entry.deleted || entry.missed || entry.away || entry.break || entry.browserUsage || isPcTimeEntry(entry)) return false;
+  return !!entry.scheduledAutoLog ||
+    !!entry.templateId ||
+    entryMatchesScheduleTemplate(entry, dateKey) ||
+    entryMatchesPlanItem(entry, dateKey);
+}
+
+function squashTinyPCTimeFragments(entriesArr, dateKey = null) {
+  const arr = Array.isArray(entriesArr) ? entriesArr : [];
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const dateFor = entry => dateKey || getDateInTZ(entry?.tsStart || entry?.ts || Date.now(), tz);
+  const blocks = arr
+    .map(entry => ({ entry, dateKey: dateFor(entry), range: entryTimeRange(entry) }))
+    .filter(item => item.range && isScheduleOrPlanBlock(item.entry, item.dateKey));
+  if (!blocks.length) return arr;
+
+  return arr.filter(entry => {
+    if (entry.deleted || entry.missed || !isPcTimeEntry(entry)) return true;
+    const range = entryTimeRange(entry);
+    if (!range) return true;
+    const durationMin = Math.round((range.end - range.start) / 60000);
+    if (durationMin > PC_TIME_FRAGMENT_MAX_MIN) return true;
+    const entryDateKey = dateFor(entry);
+    const coveredMs = blocks
+      .filter(block => block.dateKey === entryDateKey)
+      .reduce((sum, block) => sum + overlapMs(range, block.range), 0);
+    const durationMs = range.end - range.start;
+    return coveredMs / durationMs < PC_TIME_FRAGMENT_MIN_COVERAGE;
+  });
 }
 
 function fmtDur(min) {
@@ -5310,6 +5373,7 @@ function renderToday() {
 
   const _tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const _viewKey = getViewingDateKey();
+  const displayTodayE = squashTinyPCTimeFragments(todayE, _viewKey);
   const _todayKey = getDateInTZ(Date.now(), _tz);
   if (_viewKey === _todayKey) _lastTodayDateKey = _todayKey;
   // tzParseTime gives noon on that date in the user's own timezone — safe for Intl display
@@ -5362,14 +5426,15 @@ function renderToday() {
   const timelineTemplateKey = (settings.templates || [])
     .map(t => [t.id, t.enabled !== false, (t.days || []).join('-'), t.startTime, t.endTime, t.activity, t.energy, !!t.autoLog, (t.skipDates || []).join('/')].join(':'))
     .join(',');
-  const newRenderKey = _viewKey + '|' + timelineTemplateKey + '|' + todayE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
+  const timelinePlanKey = getPlanItems(_viewKey).map(item => [item.id, item.task, item.done, item.updatedAt || ''].join(':')).join(',');
+  const newRenderKey = _viewKey + '|' + timelineTemplateKey + '|' + timelinePlanKey + '|' + todayE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
   const entriesChanged = newRenderKey !== _todayRenderKey;
   if (entriesChanged) _todayRenderKey = newRenderKey;
 
   const tlEl = document.getElementById('timeline-blocks');
 
   if (entriesChanged) {
-    const combined = assembleTodayTimeline(todayE);
+    const combined = assembleTodayTimeline(displayTodayE);
     if (!combined.length) {
       tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
     } else {
@@ -5402,16 +5467,16 @@ function renderToday() {
   document.getElementById('timeline-nav-next').style.display = isViewingToday() ? 'none' : '';
 
   // Timeline summary
-  const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(todayE)) : todayE.length > 0;
+  const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(displayTodayE)) : displayTodayE.length > 0;
   document.getElementById('timeline-summary').textContent =
-    workStarted ? `${computeDeepHrs(todayE, _vk)}h deep · ${todayE.length} blocks` : '';
+    workStarted ? `${computeDeepHrs(displayTodayE, _vk)}h deep · ${displayTodayE.length} blocks` : '';
   perfStageStart = recordPerfStage('renderTodayHeader', perfStageStart);
 
   const listEl = document.getElementById('recent-list');
 
 
   if (entriesChanged) {
-    if (!todayE.length) {
+    if (!displayTodayE.length) {
       listEl.innerHTML = '<div class="empty"><span class="empty-icon">⏱</span>Start the timer and log your first block.</div>';
       perfStageStart = recordPerfStage('renderTodayRecentList', perfStageStart);
       renderRecentChips();
@@ -5420,7 +5485,7 @@ function renderToday() {
       return;
     }
 
-    const sortedRecent = expandPCTimeEntries([...todayE]).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
+    const sortedRecent = expandPCTimeEntries([...displayTodayE]).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
     listEl.innerHTML = sortedRecent.slice(0, 6).map(buildEntryRowHTML).join('');
   } // end if (entriesChanged)
   perfStageStart = recordPerfStage('renderTodayRecentList', perfStageStart);
@@ -6792,7 +6857,8 @@ function renderTopActivities(el, entriesArr, limit=8, days=null, dateKey=null) {
   const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const attr = s => esc(s).replace(/"/g, '&quot;');
   const actMap = {};
-  const expanded = expandPCTimeEntries(entriesArr.filter(e=>!e.missed));
+  const displayEntries = squashTinyPCTimeFragments(entriesArr.filter(e=>!e.missed), dateKey);
+  const expanded = expandPCTimeEntries(displayEntries);
   expanded.forEach(e=>{
     const key = activityGroupKey(e.activity);
     if (!key) return;
@@ -6927,7 +6993,9 @@ function renderUnloggedHours(el, days) {
 function renderEntryList(el, entriesArr) {
   if (!entriesArr.length) { el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries.</div>'; return; }
   const energyColors = {deep:'var(--deep)',shallow:'var(--shallow)',admin:'var(--admin)',distraction:'var(--distraction)',break:'var(--break)'};
-  const expanded = expandPCTimeEntries(entriesArr);
+  const displayEntries = squashTinyPCTimeFragments(entriesArr);
+  if (!displayEntries.length) { el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries.</div>'; return; }
+  const expanded = expandPCTimeEntries(displayEntries);
   el.innerHTML = expanded.sort((a,b)=>(b.tsStart||b.ts)-(a.tsStart||a.ts)).map(e=>{
     const dur = entryMins(e);
     const time = e.tsStart?`${localTime(e.tsStart)} – ${localTime(e.ts)}`:localTime(e.ts);
@@ -6947,7 +7015,8 @@ function renderEntryList(el, entriesArr) {
 }
 
 function renderWeekOverview(days) {
-  const weekE = getWeekEntries(weekRangeOffset).filter(e=>!e.missed);
+  const displayDays = days.map(d => ({ ...d, entries: squashTinyPCTimeFragments(d.entries, d.key) }));
+  const weekE = displayDays.flatMap(d => d.entries).filter(e=>!e.missed);
   const goal = settings.deepGoal;
   const deepHrs = computeDeepHrs(weekE);
   const totalMins = sumEntryMinutes(weekE);
@@ -6955,10 +7024,10 @@ function renderWeekOverview(days) {
   const onPlanE = weekE.filter(e=>e.onPlan!==null);
   const onPlanPct = onPlanE.length?Math.round(onPlanE.filter(e=>e.onPlan).length/onPlanE.length*100)+'%':'—';
   const distractionCost = Math.round(weekE.filter(e=>e.energy==='waste').length*(settings.intervalMin/60)*settings.targetRate);
-  const bestDay = days.reduce((a,b)=>b.entries.length&&computeDeepHrs(b.entries, b.key)>computeDeepHrs(a.entries, a.key)?b:a, days[0]);
-  const activeDays = days.filter(d=>d.entries.length);
+  const bestDay = displayDays.reduce((a,b)=>b.entries.length&&computeDeepHrs(b.entries, b.key)>computeDeepHrs(a.entries, a.key)?b:a, displayDays[0]);
+  const activeDays = displayDays.filter(d=>d.entries.length);
   const avgDeep = activeDays.length?(Math.round(activeDays.reduce((s,d)=>s+computeDeepHrs(d.entries, d.key),0)/activeDays.length*10)/10).toFixed(1)+'h':'—';
-  const maxTotal = Math.max(...days.map(d=>sumEntryMinutes(d.entries, null, d.key)/60),0.5);
+  const maxTotal = Math.max(...displayDays.map(d=>sumEntryMinutes(d.entries, null, d.key)/60),0.5);
 
   const content = document.getElementById('week-content');
   content.innerHTML = `
@@ -6979,7 +7048,7 @@ function renderWeekOverview(days) {
         <div style="height:100%;background:var(--deep);border-radius:4px;width:${pct}%;transition:width 0.4s"></div>
       </div>
       <div style="display:flex;gap:6px;margin-top:10px;align-items:center">
-        ${days.map(d=>`<div class="streak-dot ${d.entries.length>=4?'on':'off'} ${d.isToday?'today-dot':''}" title="${d.label}: ${d.entries.length} entries" onclick="selectWeekDay('${d.key}')" style="cursor:pointer"></div>`).join('')}
+        ${displayDays.map(d=>`<div class="streak-dot ${d.entries.length>=4?'on':'off'} ${d.isToday?'today-dot':''}" title="${d.label}: ${d.entries.length} entries" onclick="selectWeekDay('${d.key}')" style="cursor:pointer"></div>`).join('')}
         <span style="font-size:11px;color:var(--muted);margin-left:4px">${computeStreak()} day streak</span>
       </div>
     </div>
@@ -6997,10 +7066,10 @@ function renderWeekOverview(days) {
             {k:'waste',   c:'var(--distraction)'},
           ];
           const focusKeys = new Set(FOCUS.map(f=>f.k));
-          const maxFocusH = Math.max(...days.map(d=>
+          const maxFocusH = Math.max(...displayDays.map(d=>
             sumEntryMinutes(d.entries, e => !e.missed && focusKeys.has(e.energy), d.key)/60
           ), 0.5);
-          return days.map(d=>{
+          return displayDays.map(d=>{
             const focusEntries = d.entries.filter(e=>!e.missed&&focusKeys.has(e.energy));
             const focusH = sumEntryMinutes(focusEntries, null, d.key)/60;
             const barH = Math.max(focusH>0?8:3, Math.round(focusH/maxFocusH*72));
@@ -7021,7 +7090,7 @@ function renderWeekOverview(days) {
         })()}
       </div>
       <div style="display:flex;gap:6px;margin-top:6px">
-        ${days.map(d=>`<div style="flex:1;text-align:center;font-size:9px;color:${d.isToday?'var(--deep)':'var(--muted)'};font-family:var(--mono);font-weight:${d.isToday?'700':'400'};cursor:pointer" onclick="selectWeekDay('${d.key}')">${d.label}</div>`).join('')}
+        ${displayDays.map(d=>`<div style="flex:1;text-align:center;font-size:9px;color:${d.isToday?'var(--deep)':'var(--muted)'};font-family:var(--mono);font-weight:${d.isToday?'700':'400'};cursor:pointer" onclick="selectWeekDay('${d.key}')">${d.label}</div>`).join('')}
       </div>
       <div style="display:flex;gap:12px;margin-top:10px;font-size:10px;color:var(--muted)">
         <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--deep);margin-right:4px"></span>Deep</span>
@@ -7079,8 +7148,8 @@ function renderWeekOverview(days) {
     </div>`;
 
   renderEnergySplit(document.getElementById('w-energy-split-week'), weekE);
-  renderTopActivities(document.getElementById('w-top-acts-week'), weekE, 8, days);
-  renderUnloggedHours(document.getElementById('w-unlogged-week'), days);
+  renderTopActivities(document.getElementById('w-top-acts-week'), weekE, 8, displayDays);
+  renderUnloggedHours(document.getElementById('w-unlogged-week'), displayDays);
 
   // Populate activity dropdown
   const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -7104,7 +7173,7 @@ function renderWeekOverview(days) {
 }
 
 function renderDayDetail(day) {
-  const dayE = day.entries.filter(e=>!e.missed);
+  const dayE = squashTinyPCTimeFragments(day.entries.filter(e=>!e.missed), day.key);
   const deepHrs = computeDeepHrs(dayE, day.key);
   const totalMins = sumEntryMinutes(dayE, null, day.key);
   const onPlanE = dayE.filter(e=>e.onPlan!==null);
@@ -7171,7 +7240,7 @@ function renderDayDetail(day) {
 function renderWeekTable() {
   const energyFilter = document.getElementById('filter-energy')?.value || '';
   const actFilter = document.getElementById('filter-activity')?.value || '';
-  let filtered = expandPCTimeEntries(getWeekEntries(weekRangeOffset).filter(e=>!e.missed));
+  let filtered = expandPCTimeEntries(squashTinyPCTimeFragments(getWeekEntries(weekRangeOffset).filter(e=>!e.missed)));
   if (energyFilter) filtered = filtered.filter(e=>e.energy===energyFilter);
   if (actFilter) filtered = filtered.filter(e=>activityGroupKey(e.activity)===actFilter);
 
