@@ -254,6 +254,9 @@
   <!-- Gap recovery inbox -->
   <div class="gap-recovery" id="gap-recovery" style="display:none" aria-live="polite"></div>
 
+  <!-- Rebuild day recovery -->
+  <div class="gap-recovery" id="rebuild-day-card" style="display:none" aria-live="polite"></div>
+
   <!-- Routine prompt -->
   <div class="routine-prompt" id="routine-prompt" style="display:none" aria-live="polite"></div>
 
@@ -1396,7 +1399,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-coverage-context-1';
+const APP_BUILD = '2026-07-16-rebuild-day-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -4189,6 +4192,9 @@ function renderEntryRow(item) {
   const projectPill = item.project
     ? ` · <span style="font-size:10px;padding:1px 5px;border-radius:3px;background:var(--bg3);color:var(--muted)">${item.project}</span>`
     : '';
+  const estimatedPill = item.estimated
+    ? ` · <span style="font-size:10px;color:var(--muted2)">estimated</span>`
+    : '';
   const contextPill = item._coverageContext
     ? ` · <span style="font-size:10px;color:var(--muted2)">during ${esc(item._coverageContext)}</span>`
     : '';
@@ -4197,7 +4203,7 @@ function renderEntryRow(item) {
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
       <div class="tl-activity">${esc(displayActivity)}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span>${mergeTag}</div>
-      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}${projectPill}${contextPill}</div>
+      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}${projectPill}${estimatedPill}${contextPill}</div>
     </div>
     <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
   </div>`;
@@ -4235,13 +4241,14 @@ function buildEntryRowHTML(e) {
   const timeRange = e.tsStart
     ? `${localTime(e.tsStart)} – ${localTime(e.ts)}`
     : localTime(e.ts);
+  const estimateText = e.estimated ? ' · estimated' : '';
   return `
     <div class="entry-row" data-activity-key="${attr(activityGroupKey(e.activity))}">
       <div class="entry-bar ${e.energy}"></div>
       <div class="entry-main">
         <div class="entry-activity">${esc(displayActivity)}</div>
         <div class="entry-meta">
-  ${timeRange} · ${fmtDur(duration)}
+  ${timeRange} · ${fmtDur(duration)}${estimateText}
   ${e.deap ? ' · ' + e.deap : ''}
   ${e.rate ? ' · $' + e.rate + '/hr' : ''}
 </div>
@@ -4604,6 +4611,137 @@ function renderGapRecoveryInbox(todayE) {
     <div class="gap-recovery-sub">What was this block?</div>
     <div class="gap-chip-row">${buttonHtml}</div>
   `;
+}
+
+function rebuildDayTemplateSuggestions(dateKey, dayEntries) {
+  if (!dateKey || !settings.templates?.length) return [];
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  if (dateKey > todayKey) return [];
+  const dow = tzDow(tzParseTime(dateKey, '12:00'));
+  const liveEntries = (dayEntries || []).filter(e => !e.deleted && !e.missed);
+  return settings.templates
+    .filter(tpl => tpl.enabled !== false && (tpl.days || []).includes(dow) && !templateSkippedOnDate(tpl, dateKey))
+    .map(tpl => {
+      const range = templateSlotRange(tpl, dateKey);
+      if (dateKey === todayKey && Date.now() < range.tsEnd) return null;
+      const durationMs = range.tsEnd - range.tsStart;
+      const coveredMs = liveEntries.reduce((sum, e) => {
+        const eRange = entryTimeRange(e);
+        return eRange ? sum + overlapMs({ start: range.tsStart, end: range.tsEnd }, eRange) : sum;
+      }, 0);
+      if (coveredMs >= durationMs * 0.5) return null;
+      return {
+        type: 'template',
+        templateId: tpl.id,
+        activity: tpl.activity,
+        energy: tpl.energy,
+        tsStart: range.tsStart,
+        tsEnd: range.tsEnd,
+        durationMin: Math.max(1, Math.round(durationMs / 60000))
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.tsStart - b.tsStart)
+    .slice(0, 4);
+}
+
+function rebuildDayGapSuggestion(dateKey, dayEntries) {
+  const realEntries = (dayEntries || []).filter(e => !e.deleted && !e.missed);
+  if (!realEntries.length) return null;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const gapEnd = dateKey === todayKey ? Date.now() : dayEndTs(dateKey);
+  const gap = computeGaps(realEntries, gapEnd)
+    .filter(g => (g.gapMin || 0) >= 60)
+    .sort((a, b) => (b.gapMin || 0) - (a.gapMin || 0))[0];
+  return gap ? { type: 'gap', tsStart: gap.tsStart, tsEnd: Math.round(gap.ts), durationMin: gap.gapMin } : null;
+}
+
+function getRebuildDaySuggestions(dateKey = getViewingDateKey(), dayEntries = getViewingEntries()) {
+  const templates = rebuildDayTemplateSuggestions(dateKey, dayEntries);
+  const gap = rebuildDayGapSuggestion(dateKey, dayEntries);
+  return gap ? [...templates, gap] : templates;
+}
+
+function renderRebuildDayCard(dayEntries) {
+  const card = document.getElementById('rebuild-day-card');
+  if (!card) return;
+  const dateKey = getViewingDateKey();
+  const suggestions = getRebuildDaySuggestions(dateKey, dayEntries);
+  const liveEntries = (dayEntries || []).filter(e => !e.deleted && !e.missed);
+  const loggedMin = sumEntryMinutes(liveEntries, null, dateKey);
+  const hasLargeGap = suggestions.some(s => s.type === 'gap');
+  const needsRecovery = hasLargeGap || !liveEntries.length || loggedMin < 120;
+  if (!suggestions.length || !needsRecovery) {
+    card.style.display = 'none';
+    card.innerHTML = '';
+    return;
+  }
+
+  const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+  const buttons = suggestions.map((s, idx) => {
+    if (s.type === 'gap') {
+      return `<button type="button" class="gap-chip shallow" onclick="openRebuildGap(${idx})">Fill biggest gap · ${fmtDur(s.durationMin)}</button>`;
+    }
+    const label = activityDisplayLabel(s.activity);
+    return `<button type="button" class="gap-chip ${s.energy}" onclick="logRebuildTemplate(${idx})">Estimate ${esc(label)} · ${fmtDur(s.durationMin)}</button>`;
+  }).join('');
+
+  card.style.display = 'block';
+  card.innerHTML = `
+    <div class="gap-recovery-head">
+      <div>
+        <div class="gap-recovery-label">Rebuild day</div>
+        <div class="gap-recovery-title">Forgot to log? Start from your skeleton.</div>
+      </div>
+    </div>
+    <div class="gap-recovery-sub">Use only what you believe happened. These logs are marked estimated.</div>
+    <div class="gap-chip-row">${buttons}</div>
+  `;
+}
+
+function logRebuildTemplate(idx) {
+  const suggestion = getRebuildDaySuggestions()[idx];
+  if (!suggestion || suggestion.type !== 'template') { showToast('Rebuild suggestion not found'); return null; }
+  const label = canonicalizeActivityInput(suggestion.activity);
+  const entry = {
+    id: Date.now(),
+    ts: suggestion.tsEnd,
+    tsStart: suggestion.tsStart,
+    updatedAt: Date.now(),
+    blockIntervalMin: suggestion.durationMin,
+    date: toDateKey(new Date(suggestion.tsStart)),
+    activity: label,
+    energy: suggestion.energy,
+    onPlan: suggestion.energy !== 'waste' && suggestion.energy !== 'distraction',
+    retro: true,
+    estimated: true,
+    rebuildDay: true,
+    note: 'Estimated from Rebuild day'
+  };
+  entry.category = getBucket(entry);
+  entry.originalLabel = entry.energy || null;
+  getActivityColor(label);
+  validateEntry(entry);
+  entries.unshift(entry);
+  entries.sort((a, b) => b.ts - a.ts);
+  _lastLoggedEntryId = entry.id;
+  persist();
+  syncEntries();
+  rememberCreatedUndo('rebuild day', [entry]);
+  _todayRenderKey = '__FORCE__';
+  renderToday();
+  showUndoToast(`Estimated · ${label} · ${fmtDur(suggestion.durationMin)}`, suggestion.energy);
+  return entry;
+}
+
+function openRebuildGap(idx) {
+  const suggestion = getRebuildDaySuggestions()[idx];
+  if (!suggestion || suggestion.type !== 'gap') { showToast('Rebuild gap not found'); return; }
+  openRetroLogPrefilled(suggestion.tsStart, suggestion.tsEnd);
 }
 
 function routinePromptStorageKey(dateKey) {
@@ -5553,6 +5691,7 @@ function renderToday() {
   renderTodayHealth(displayTodayE);
   renderTodayActionStrip(displayTodayE);
   renderGapRecoveryInbox(displayTodayE);
+  renderRebuildDayCard(displayTodayE);
   renderRoutinePrompt(displayTodayE);
   renderDailyBasics();
   renderMissedCloseoutCta();
