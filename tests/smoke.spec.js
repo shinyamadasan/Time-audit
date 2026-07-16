@@ -1103,8 +1103,12 @@ test('template preset adds editable non-auto basics once', async ({ page }) => {
   });
 
   await page.evaluate(() => showView('settings'));
-  await page.getByRole('button', { name: /^Add preset$/ }).click();
-  await page.getByRole('button', { name: /^Add preset$/ }).click();
+  const basicsCard = page.locator('.template-preset-card').filter({ hasText: 'Daily basics' });
+  await expect(basicsCard).toContainText('Sleep');
+  await expect(basicsCard).toContainText('Breakfast');
+  await expect(basicsCard).toContainText('02:00-10:00');
+  await basicsCard.getByRole('button', { name: 'Add editable blocks' }).click();
+  await basicsCard.getByRole('button', { name: 'Add editable blocks' }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1143,12 +1147,13 @@ test('template preset supports different selected day sets', async ({ page }) =>
   });
 
   await page.evaluate(() => showView('settings'));
+  const basicsCard = page.locator('.template-preset-card').filter({ hasText: 'Daily basics' });
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="1"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="2"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="3"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="4"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="5"]').click();
-  await page.getByRole('button', { name: /^Add preset$/ }).click();
+  await basicsCard.getByRole('button', { name: 'Add editable blocks' }).click();
 
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="1"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="2"]').click();
@@ -1157,7 +1162,7 @@ test('template preset supports different selected day sets', async ({ page }) =>
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="5"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="0"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="6"]').click();
-  await page.getByRole('button', { name: /^Add preset$/ }).click();
+  await basicsCard.getByRole('button', { name: 'Add editable blocks' }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1175,15 +1180,16 @@ test('template preset can add a selected night work block', async ({ page }) => 
 
   await page.evaluate(() => {
     showView('settings');
-    document.getElementById('template-preset-select').value = 'night-work';
-    renderTemplatePresetHelp();
     document.querySelectorAll('#skeleton-day-picker .tpl-day-btn').forEach(btn =>
       btn.classList.toggle('on', btn.dataset.day === '1')
     );
   });
 
-  await expect(page.locator('#template-preset-help')).toContainText('22:00 to 08:00');
-  await page.getByRole('button', { name: /^Add preset$/ }).click();
+  const nightCard = page.locator('.template-preset-card').filter({ hasText: 'Night work' });
+  await expect(nightCard).toContainText('Work shift');
+  await expect(nightCard).toContainText('22:00-08:00');
+  await expect(nightCard).toContainText('auto-log');
+  await nightCard.getByRole('button', { name: 'Add editable blocks' }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     activity: t.activity,
