@@ -225,7 +225,7 @@ Depends on: `entries`, `persist()`
 ## [Entry Logging & Editing]
 Lines: 3088–3521
 Purpose: Full retro log modal — open, energy selection, time-range inputs, save new entry, edit existing entry, delete entry, merge-edit multiple entries.
-Functions: `openLog()`, `saveLastEntry()`, `showLogForm()`, `populateRetroChips()`, `openRetroLog()`, `setRetroEnergy()`, `saveRetroEntry()`, `dismissLog()`, `setEnergy()`, `setOnPlan()`, `toggleDetail()`, `saveEntry()`, `isSameDeletionTarget()`, `deleteEntry()`, `openRetroLogPrefilled()`, `openEditEntry()`, `openEditMergedEntry()`, `cancelRetroEdit()`, `renderEntryRow()`, `renderGapRow()`, `renderTimelineCombined()`, `toggleTlBucket()`
+Functions: `openLog()`, `saveLastEntry()`, `showLogForm()`, `entryIdJsArg()`, `sameEntryId()`, `populateRetroChips()`, `openRetroLog()`, `setRetroEnergy()`, `saveRetroEntry()`, `dismissLog()`, `setEnergy()`, `setOnPlan()`, `toggleDetail()`, `saveEntry()`, `isSameDeletionTarget()`, `deleteEntry()`, `openRetroLogPrefilled()`, `openEditEntry()`, `openEditMergedEntry()`, `cancelRetroEdit()`, `renderEntryRow()`, `renderGapRow()`, `renderTimelineCombined()`, `toggleTlBucket()`
 Variables: `retroEnergy`, `editingEntryId`, `editingMergedIds`, `editingEntryBase`, `logIsPing`, `tlExpandedBuckets`
 Depends on: `entries`, `persist()`, `syncEntries()`, `showToast()`, `renderToday()`, `getActivityColor()`, `toDateKey()`, `getBucket()`
 
@@ -365,7 +365,7 @@ Depends on: `entries`, `reviews`, `weeklyReviews`, Statistics section, `computeI
 ## [Weekly Schedule Templates]
 Lines: 6729–6910
 Purpose: Recurring block templates, optional auto-log after scheduled end, template suppression against real/deleted entries, and Settings template editor.
-Functions: `generateTemplateEntries()`, `templateSlotRange()`, `autoTemplateEntryId()`, `templateSlotCovered()`, `autoLogDueTemplates()`, `entryCoversTemplateSlot()`, `renderTemplateList()`, `toggleTplDay()`, `addTemplate()`, `editTemplate()`, `removeTemplate()`
+Functions: `generateTemplateEntries()`, `templateSlotRange()`, `autoTemplateEntryId()`, `templateSlotCovered()`, `autoLogDueTemplates()`, `entryCoversTemplateSlot()`, `scheduleTemplateDiffersFromEntry()`, `updateTemplateFromEntry()`, `maybeOfferTemplateUpdate()`, `renderTemplateList()`, `toggleTplDay()`, `addTemplate()`, `editTemplate()`, `removeTemplate()`
 Variables: `_editingTplIdx`
 Depends on: `settings`, Date Picker, `entries`, `persist()`, `renderToday()`, Firebase sync
 
@@ -386,7 +386,7 @@ Depends on: `fbDb`, `fbRoomRef`, storage.js sync helpers
 ## [Overlay, Toast & Modal Utilities]
 Lines: 7106–7181
 Purpose: Generic close-modal helper, background-click close, and toast notification (with optional undo action).
-Functions: `closeModal()`, `overlayClose()`, `showToast()`
+Functions: `closeModal()`, `overlayClose()`, `toastBorderColor()`, `showToast()`, `showActionToast()`
 Variables: `_toastTimer`
 Depends on: Undo section (`lastUndoAction`, `undoLastAction()`)
 

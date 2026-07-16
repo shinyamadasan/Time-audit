@@ -1389,7 +1389,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-template-autolog-1';
+const APP_BUILD = '2026-07-16-schedule-edit-offer-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -2985,6 +2985,14 @@ let retroEnergy = '';
 let editingEntryId = null;     // id of entry being edited (null = new entry)
 let editingMergedIds = null;  // [id, ...] when editing a merged (×N) display block
 let editingEntryBase = null;  // { startDate, crossesMidnight } for timestamp reconstruction
+function entryIdJsArg(id) {
+  return `'${String(id).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/</g, '\\x3C')}'`;
+}
+
+function sameEntryId(a, b) {
+  return String(a) === String(b);
+}
+
 function populateRetroChips() {
   // Build unique recent activities (last 10 distinct, preserving energy type)
   const seen = new Set();
@@ -3046,7 +3054,14 @@ function saveRetroEntry() {
   const activity = canonicalizeActivityInput(document.getElementById('retro-activity').value.trim());
   if (!activity) { showToast('Add an activity description'); return; }
   if (!retroEnergy) { showToast('Pick an energy type'); return; }
-  const _bulkOrigEnergy = editingEntryId !== null ? (entries.find(e => e.id === editingEntryId)?.energy || '') : '';
+  const _editingOriginal = editingEntryId !== null && !editingMergedIds
+    ? entries.find(e => sameEntryId(e.id, editingEntryId))
+    : null;
+  const _scheduleEditOriginal = _editingOriginal?.scheduledAutoLog && _editingOriginal?.templateId
+    ? cloneUndoValue(_editingOriginal)
+    : null;
+  let _scheduleEditUpdated = null;
+  const _bulkOrigEnergy = editingEntryId !== null ? (_editingOriginal?.energy || '') : '';
   const startVal = document.getElementById('retro-start').value;
   const endVal = document.getElementById('retro-end').value;
   if (!startVal || !endVal) { showToast('Set start and end time'); return; }
@@ -3087,12 +3102,12 @@ function saveRetroEntry() {
   if (editingEntryId !== null) {
     if (editingMergedIds && editingMergedIds.length > 1) {
       // Merged block edit: remove all sub-entries, insert one combined entry
-      const mergedIdSet = new Set(editingMergedIds);
+      const mergedIdSet = new Set(editingMergedIds.map(String));
       const firstId = editingMergedIds[0];
       // Remove all sub-entries except first (we'll reuse first slot or just filter)
       // Remove all, then push new entry/entries
       for (let i = entries.length - 1; i >= 0; i--) {
-        if (mergedIdSet.has(entries[i].id)) entries.splice(i, 1);
+        if (mergedIdSet.has(String(entries[i].id))) entries.splice(i, 1);
       }
       if (spansMidnight) {
         entries.push(makeEntry(midnight - 1, midnight, tsStart, startDateKey));
@@ -3103,15 +3118,37 @@ function saveRetroEntry() {
       editingMergedIds = null;
     } else {
       // Update single existing entry — if it now spans midnight, split it
-      const idx = entries.findIndex(e => e.id === editingEntryId);
+      const idx = entries.findIndex(e => sameEntryId(e.id, editingEntryId));
       if (idx !== -1) {
         if (spansMidnight) {
           // Replace the original with the pre-midnight part; push a new next-day entry
-          entries[idx] = makeEntry(midnight - 1, midnight, tsStart, startDateKey);
-          entries.push(makeEntry(tsEnd, tsEnd, midnight, endDateKey));
+          const source = entries[idx];
+          const firstPart = makeEntry(midnight - 1, midnight, tsStart, startDateKey);
+          const secondPart = makeEntry(tsEnd, tsEnd, midnight, endDateKey);
+          if (source.scheduledAutoLog) {
+            firstPart.autoLogged = source.autoLogged;
+            firstPart.scheduledAutoLog = source.scheduledAutoLog;
+            firstPart.templateId = source.templateId;
+            _scheduleEditUpdated = {
+              ...firstPart,
+              tsStart,
+              ts: tsEnd,
+              blockIntervalMin: dur
+            };
+          }
+          entries[idx] = firstPart;
+          entries.push(secondPart);
         } else {
-          entries[idx] = makeEntry(entries[idx].id, tsEnd, tsStart, startDateKey);
+          const source = entries[idx];
+          const replacement = makeEntry(source.id, tsEnd, tsStart, startDateKey);
+          if (source.scheduledAutoLog) {
+            replacement.autoLogged = source.autoLogged;
+            replacement.scheduledAutoLog = source.scheduledAutoLog;
+            replacement.templateId = source.templateId;
+          }
+          entries[idx] = replacement;
           entries[idx].updatedAt = Date.now();
+          _scheduleEditUpdated = entries[idx];
         }
       }
     }
@@ -3122,8 +3159,9 @@ function saveRetroEntry() {
     document.getElementById('retro-modal-tag').textContent = 'LOG PAST BLOCK';
     document.getElementById('retro-modal-title').textContent = 'What were you doing?';
     closeModal('retro-overlay');
-    showToast(spansMidnight ? 'Split at midnight · block updated' : 'Block updated');
-    if (_bulkOrigEnergy && retroEnergy !== _bulkOrigEnergy) {
+    const scheduleOfferShown = maybeOfferTemplateUpdate(_scheduleEditOriginal, _scheduleEditUpdated);
+    if (!scheduleOfferShown) showToast(spansMidnight ? 'Split at midnight · block updated' : 'Block updated');
+    if (!scheduleOfferShown && _bulkOrigEnergy && retroEnergy !== _bulkOrigEnergy) {
       const _norm = activity.toLowerCase();
       const _others = entries.filter(e =>
         !e.deleted &&
@@ -3290,8 +3328,7 @@ function isSameDeletionTarget(entry, target) {
 function deleteEntry(id) {
   // Tombstone instead of filter — lets Firebase and other devices know this entry is gone.
   // Filtering it out would create a race: the sync listener sees it "missing" locally and re-adds it.
-  const entryId = typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : id;
-  const entry = entries.find(e => e.id === entryId);
+  const entry = entries.find(e => sameEntryId(e.id, id));
   if (!entry) { showToast('Entry not found'); return; }
   const targets = entries.filter(e => isSameDeletionTarget(e, entry));
   if (!targets.length) { _todayRenderKey = '__FORCE__'; scheduleRenderToday(); showToast('Already deleted'); return; }
@@ -3774,10 +3811,10 @@ function openRetroLogPrefilled(tsStart, tsEnd, activity, energy) {
 }
 
 function openEditEntry(id) {
-  const numId = Number(id);
-  const entry = entries.find(e => e.id === numId);
+  const entry = entries.find(e => sameEntryId(e.id, id));
   if (!entry) return;
-  editingEntryId = numId;
+  editingEntryId = entry.id;
+  editingMergedIds = null;
 
   const tsS = entry.tsStart || (entry.ts - (entry.blockIntervalMin || settings.intervalMin) * 60000);
   const tsE = entry.ts;
@@ -3815,12 +3852,13 @@ function openEditEntry(id) {
 // Opens the edit modal for a merged (×N) display block.
 // idsStr = comma-separated string of all sub-entry IDs; tsS/tsE = full merged range timestamps.
 function openEditMergedEntry(idsStr, tsS, tsE) {
-  const ids = idsStr.split(',').map(Number);
-  const firstEntry = entries.find(e => e.id === ids[0]);
+  const ids = idsStr.split(',').map(id => id.trim()).filter(Boolean);
+  const mergedEntries = ids.map(id => entries.find(e => sameEntryId(e.id, id))).filter(Boolean);
+  const firstEntry = mergedEntries[0];
   if (!firstEntry) return;
 
-  editingEntryId = ids[0];
-  editingMergedIds = ids;
+  editingEntryId = firstEntry.id;
+  editingMergedIds = mergedEntries.map(e => e.id);
 
   const [sh, sm] = tzHHMM(tsS).split(':').map(Number);
   const [eh, em] = tzHHMM(tsE).split(':').map(Number);
@@ -3832,7 +3870,7 @@ function openEditMergedEntry(idsStr, tsS, tsE) {
   if (retroEnergy) document.querySelectorAll(`#retro-overlay .energy-btn.${retroEnergy}`).forEach(b => b.classList.add('selected'));
   document.getElementById('retro-activity').value = firstEntry.activity || '';
   document.getElementById('retro-modal-tag').textContent = 'EDIT BLOCK';
-  document.getElementById('retro-modal-title').textContent = `Edit block (×${ids.length})`;
+  document.getElementById('retro-modal-title').textContent = `Edit block (×${mergedEntries.length})`;
   populateRetroChips();
 
   document.getElementById('retro-start').value = tzHHMM(tsS);
@@ -3893,16 +3931,17 @@ function renderEntryRow(item) {
         <div class="tl-activity">Untracked<span class="tl-badge tl-badge-untracked">${fmtDur(dur)}</span></div>
         <div class="tl-meta">${timeLabel}</div>
       </div>
-      <button class="log-gap-btn" onclick="openEditEntry(${item.id})">Fill in</button>
+      <button class="log-gap-btn" onclick="openEditEntry(${entryIdJsArg(item.id)})">Fill in</button>
     </div>`;
   }
 
   const mergeTag = item._mergeCount > 1
     ? `<span style="font-size:10px;color:var(--muted);font-weight:600;margin-left:4px;opacity:0.7">×${item._mergeCount}</span>`
     : '';
+  const mergedIdsArg = entryIdJsArg((item._mergedIds || []).map(String).join(','));
   const editCall = item._mergeCount > 1
-    ? `openEditMergedEntry('${item._mergedIds.join(',')}',${item.tsStart || item.ts},${item.ts})`
-    : `openEditEntry(${item.id})`;
+    ? `openEditMergedEntry(${mergedIdsArg},${item.tsStart || item.ts},${item.ts})`
+    : `openEditEntry(${entryIdJsArg(item.id)})`;
 
   // PC Time with browser sub-activities — render as individual rows
   if (item._subActivities?.length) {
@@ -3921,7 +3960,7 @@ function renderEntryRow(item) {
         ? `PC time <span style="color:var(--muted);font-weight:400">· ${esc(subLabel)}</span>`
         : `PC time`;
       const rClick    = subActivity
-        ? `openEditEntry(${subs.find(s => s.activity === subActivity && (s.tsStart||s.ts) === tStart)?.id || item.id})`
+        ? `openEditEntry(${entryIdJsArg(subs.find(s => s.activity === subActivity && (s.tsStart||s.ts) === tStart)?.id || item.id)})`
         : editCall;
       return `<div class="tl-row" data-entry-id="${item.id}" data-activity-key="${attr(subActivity ? activityGroupKey(subActivity) : activityKey)}" data-energy="${energyClass}" onclick="${rClick}" style="cursor:pointer">
         <div class="tl-time">${localTime(tStart)}</div>
@@ -4009,8 +4048,8 @@ function buildEntryRowHTML(e) {
         ${e.onPlan === true ? '<span class="badge onplan">✓</span>' :
           e.onPlan === false ? '<span class="badge offplan">✗</span>' : ''}
       </div>
-      <button class="btn sm ghost" style="padding:3px 7px;font-size:13px;flex-shrink:0;opacity:0.6" onclick="event.stopPropagation(); openEditEntry(${e.id})">✎</button>
-      <button class="btn sm ghost" style="padding:3px 7px;font-size:11px;flex-shrink:0" onclick="event.stopPropagation(); deleteEntry(${e.id})">✕</button>
+      <button class="btn sm ghost" style="padding:3px 7px;font-size:13px;flex-shrink:0;opacity:0.6" onclick="event.stopPropagation(); openEditEntry(${entryIdJsArg(e.id)})">✎</button>
+      <button class="btn sm ghost" style="padding:3px 7px;font-size:11px;flex-shrink:0" onclick="event.stopPropagation(); deleteEntry(${entryIdJsArg(e.id)})">✕</button>
     </div>
    `;
 }
@@ -6895,8 +6934,8 @@ function renderEntryList(el, entriesArr) {
         <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
       </div>
       <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
-      <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0;font-size:13px;opacity:0.6" onclick="event.stopPropagation(); openEditEntry(${e._synthetic ? '' : e.id})" ${e._synthetic ? 'disabled style="opacity:0.2;cursor:default;padding:2px 6px;flex-shrink:0;font-size:13px"' : ''}>✎</button>
-      ${e._synthetic ? '' : `<button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="event.stopPropagation(); deleteEntry(${e._pcSub ? String(e.id).replace('_pc','') : e.id})">✕</button>`}
+      <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0;font-size:13px;opacity:0.6" onclick="event.stopPropagation(); openEditEntry(${e._synthetic ? "''" : entryIdJsArg(e.id)})" ${e._synthetic ? 'disabled style="opacity:0.2;cursor:default;padding:2px 6px;flex-shrink:0;font-size:13px"' : ''}>✎</button>
+      ${e._synthetic ? '' : `<button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="event.stopPropagation(); deleteEntry(${entryIdJsArg(e._pcSub ? String(e.id).replace('_pc','') : e.id)})">✕</button>`}
     </div>`;
   }).join('');
 }
@@ -7163,8 +7202,8 @@ function renderWeekTable() {
             <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px">${time} · ${fmtDur(dur)}</div>
           </div>
           <span style="font-size:9px;padding:2px 7px;border-radius:999px;font-weight:600;background:${color}22;color:${color};flex-shrink:0">${eLabel[e.energy]||e.energy}</span>
-          <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0;font-size:13px;opacity:0.6" onclick="event.stopPropagation(); openEditEntry(${e.id})">✎</button>
-          <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="event.stopPropagation(); deleteEntry(${e.id})">✕</button>
+          <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0;font-size:13px;opacity:0.6" onclick="event.stopPropagation(); openEditEntry(${entryIdJsArg(e.id)})">✎</button>
+          <button class="btn sm ghost" style="padding:2px 6px;flex-shrink:0" onclick="event.stopPropagation(); deleteEntry(${entryIdJsArg(e.id)})">✕</button>
         </div>`;
       }).join('')}
     </div>`;
@@ -8774,6 +8813,45 @@ function entryCoversTemplateSlot(entry, tpl) {
   return entryActivity === tplActivity && entry.energy === tpl.energy;
 }
 
+function scheduleTemplateDiffersFromEntry(tpl, entry) {
+  if (!tpl || !entry || !entry.tsStart || !entry.ts) return false;
+  const tplActivity = activityDisplayLabel(tpl.activity);
+  const entryActivity = activityDisplayLabel(entry.activity);
+  return tplActivity !== entryActivity ||
+    (tpl.energy || '') !== (entry.energy || '') ||
+    (tpl.startTime || '') !== tzHHMM(entry.tsStart) ||
+    (tpl.endTime || '') !== tzHHMM(entry.ts);
+}
+
+function updateTemplateFromEntry(templateId, entry) {
+  const tpl = (settings.templates || []).find(t => String(t.id) === String(templateId));
+  if (!tpl || !entry) { showToast('Schedule template not found'); return; }
+  tpl.activity = activityDisplayLabel(entry.activity || tpl.activity);
+  tpl.energy = entry.energy || tpl.energy;
+  tpl.startTime = tzHHMM(entry.tsStart || entry.ts);
+  tpl.endTime = tzHHMM(entry.ts);
+  tpl.autoLog = true;
+  tpl.enabled = tpl.enabled !== false;
+  settings._savedAt = Date.now();
+  settings._templatesSavedAt = Date.now();
+  persist();
+  if (fbRoomRef) fbRoomRef.update({ settings });
+  renderTemplateList();
+  renderToday();
+  showToast('Recurring schedule updated');
+}
+
+function maybeOfferTemplateUpdate(originalEntry, updatedEntry) {
+  if (!originalEntry || !updatedEntry || !updatedEntry.scheduledAutoLog || !updatedEntry.templateId) return false;
+  const tpl = (settings.templates || []).find(t => String(t.id) === String(updatedEntry.templateId));
+  if (!tpl || !scheduleTemplateDiffersFromEntry(tpl, updatedEntry)) return false;
+  showActionToast('Update recurring schedule too?', [
+    { label: 'Update schedule', onClick: () => updateTemplateFromEntry(updatedEntry.templateId, updatedEntry) },
+    { label: 'One-off', onClick: () => showToast('Kept as one-time edit') }
+  ], updatedEntry.energy, 10000);
+  return true;
+}
+
 function renderTemplateList() {
   const el = document.getElementById('template-list');
   if (!el) return;
@@ -9067,17 +9145,21 @@ function updateLiveCost() {
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 function overlayClose(e,id){if(e.target.id===id)closeModal(id);}
 let _toastTimer = null;
-function showToast(msg, withUndo, energy) {
-  const t = document.getElementById('toast');
-  if (_toastTimer) clearTimeout(_toastTimer);
-  // Energy-colored left border
-  const _toastColors = {
+function toastBorderColor(energy) {
+  const colors = {
     deep:'#4cc7f0', shallow:'#6fb3f2', admin:'#f9c74f', nine5:'#f9c74f',
     errands:'#94a3b8', learning:'#34d399', exercise:'#fb923c', social:'#f472b6',
     recovery:'#a78bfa', distraction:'#ff6b6b', waste:'#ff6b6b'
   };
-  t.style.borderLeft = energy && _toastColors[energy]
-    ? `3px solid ${_toastColors[energy]}`
+  return colors[energy] || null;
+}
+
+function showToast(msg, withUndo, energy) {
+  const t = document.getElementById('toast');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  const borderColor = toastBorderColor(energy);
+  t.style.borderLeft = borderColor
+    ? `3px solid ${borderColor}`
     : '3px solid transparent';
   t.textContent = '';
   const text = document.createElement('span');
@@ -9094,6 +9176,34 @@ function showToast(msg, withUndo, energy) {
     t.classList.add('has-undo');
   }
   const timeout = withUndo && lastUndoAction ? 5200 : 2200;
+  _toastTimer = setTimeout(() => t.classList.remove('show'), timeout);
+  t.classList.add('show');
+}
+
+function showActionToast(msg, actions = [], energy, timeout = 9000) {
+  const t = document.getElementById('toast');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  const borderColor = toastBorderColor(energy);
+  t.style.borderLeft = borderColor
+    ? `3px solid ${borderColor}`
+    : '3px solid transparent';
+  t.textContent = '';
+  const text = document.createElement('span');
+  text.textContent = msg;
+  t.appendChild(text);
+  t.classList.toggle('has-undo', actions.length > 0);
+  actions.forEach(action => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-undo-btn';
+    btn.textContent = action.label;
+    btn.onclick = () => {
+      if (_toastTimer) clearTimeout(_toastTimer);
+      t.classList.remove('show');
+      action.onClick?.();
+    };
+    t.appendChild(btn);
+  });
   _toastTimer = setTimeout(() => t.classList.remove('show'), timeout);
   t.classList.add('show');
 }

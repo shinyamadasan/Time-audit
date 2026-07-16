@@ -827,6 +827,49 @@ test('weekly schedule auto-logs fixed blocks after they end', async ({ page }) =
   await expect(page.locator('#recent-list')).toContainText('Scribe shift');
 });
 
+test('editing an auto-logged schedule can update the recurring template', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
+  await openApp(page, {
+    nowTs,
+    settings: {
+      templates: [{
+        id: 'scribe',
+        activity: 'Scribe shift',
+        energy: 'nine5',
+        days: [3],
+        startTime: '00:00',
+        endTime: '08:00',
+        autoLog: true,
+        enabled: true
+      }]
+    }
+  });
+
+  await openTodayDetails(page);
+  const row = page.locator('#recent-list .entry-row').filter({ hasText: 'Scribe shift' }).first();
+  await row.locator('button').first().click();
+  await expect(page.locator('#retro-overlay')).toBeVisible();
+  await page.locator('#retro-start').fill('01:00');
+  await page.locator('#retro-end').fill('09:00');
+  await page.locator('#retro-overlay').getByRole('button', { name: 'Save' }).click();
+
+  const toast = page.locator('#toast');
+  await expect(toast).toContainText('Update recurring schedule too?');
+  await toast.getByRole('button', { name: 'Update schedule' }).click();
+
+  const template = await page.evaluate(() => settings.templates[0]);
+  expect(template).toMatchObject({
+    id: 'scribe',
+    activity: 'Scribe shift',
+    energy: 'nine5',
+    days: [3],
+    startTime: '01:00',
+    endTime: '09:00',
+    autoLog: true,
+    enabled: true
+  });
+});
+
 test('weekly schedule auto-log respects a deleted day skip', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
   await openApp(page, {
