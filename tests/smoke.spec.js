@@ -974,7 +974,7 @@ test('scheduled blocks can be marked off today before auto-log', async ({ page }
   });
 });
 
-test('scheduled auto-log display shows covered time between detailed logs', async ({ page }) => {
+test('schedule-matched display shows covered time between detailed logs even without metadata', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
   const shiftStart = Date.UTC(2026, 6, 15, 0, 0, 0);
   const firstDetailStart = Date.UTC(2026, 6, 15, 0, 45, 0);
@@ -994,10 +994,7 @@ test('scheduled auto-log display shows covered time between detailed logs', asyn
       energy: 'nine5',
       category: 'nine5',
       onPlan: true,
-      retro: false,
-      autoLogged: true,
-      scheduledAutoLog: true,
-      templateId: 'scribe'
+      retro: false
     },
     {
       id: 'detail-a',
@@ -1024,7 +1021,22 @@ test('scheduled auto-log display shows covered time between detailed logs', asyn
       retro: true
     }
   ];
-  await openApp(page, { entries, nowTs });
+  await openApp(page, {
+    entries,
+    nowTs,
+    settings: {
+      templates: [{
+        id: 'scribe',
+        activity: 'Scribe shift',
+        energy: 'nine5',
+        days: [3],
+        startTime: '00:00',
+        endTime: '08:00',
+        autoLog: true,
+        enabled: true
+      }]
+    }
+  });
   await openTodayDetails(page);
 
   const timeline = page.locator('#timeline-blocks');
