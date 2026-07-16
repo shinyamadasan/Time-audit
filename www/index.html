@@ -1389,7 +1389,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-schedule-edit-offer-1';
+const APP_BUILD = '2026-07-16-template-offtoday-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -3897,6 +3897,8 @@ function renderEntryRow(item) {
     const label = eLabel[item.energy] || item.energy;
     const templateActivity = activityDisplayLabel(item.activity);
     const safeAct = item.activity.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    const templateIdArg = entryIdJsArg(item.templateId);
+    const templateDateArg = entryIdJsArg(item.date);
     return `<div class="tl-row tl-template-row"
       data-ts-start="${item.tsStart}" data-ts-end="${item.ts}"
       data-activity="${safeAct}" data-energy="${item.energy}"
@@ -3907,6 +3909,7 @@ function renderEntryRow(item) {
         <div class="tl-activity">${esc(templateActivity)}<span class="tl-badge" style="background:var(--bg3);color:var(--muted);border-radius:4px">${label}</span></div>
         <div class="tl-meta">${localTime(item.tsStart)} – ${localTime(item.ts)} · ${fmtDur(dur)} · <span style="color:var(--deep);font-weight:600">${item.autoLog ? 'auto-logs after end' : 'tap to log'}</span></div>
       </div>
+      <button class="log-gap-btn template-off-btn" onclick="event.stopPropagation(); skipTemplateOnDate(${templateIdArg},${templateDateArg})">Off today</button>
     </div>`;
   }
   const energyClass = item.missed ? 'missed' : item.energy;
@@ -5356,17 +5359,20 @@ function renderToday() {
   perfStageStart = recordPerfStage('renderTodayData', perfStageStart);
 
   // Cache key — only rebuild timeline/list DOM when today's entries actually change
-  const newRenderKey = _viewKey + '|' + todayE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
+  const timelineTemplateKey = (settings.templates || [])
+    .map(t => [t.id, t.enabled !== false, (t.days || []).join('-'), t.startTime, t.endTime, t.activity, t.energy, !!t.autoLog, (t.skipDates || []).join('/')].join(':'))
+    .join(',');
+  const newRenderKey = _viewKey + '|' + timelineTemplateKey + '|' + todayE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
   const entriesChanged = newRenderKey !== _todayRenderKey;
   if (entriesChanged) _todayRenderKey = newRenderKey;
 
   const tlEl = document.getElementById('timeline-blocks');
 
   if (entriesChanged) {
-    if (!todayE.length) {
+    const combined = assembleTodayTimeline(todayE);
+    if (!combined.length) {
       tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
     } else {
-      const combined = assembleTodayTimeline(todayE);
       tlEl.innerHTML = renderTimelineCombined(combined);
       // Animate the most recently logged entry
       if (_lastLoggedEntryId) {
@@ -8696,6 +8702,7 @@ function generateTemplateEntries(dateKey) {
   for (const tpl of settings.templates) {
     if (!tpl.enabled) continue;
     if (!tpl.days.includes(dow)) continue;
+    if (templateSkippedOnDate(tpl, dateKey)) continue;
     const { tsStart, tsEnd } = templateSlotRange(tpl, dateKey);
     // Only hide the template when logged entries cover ≥50% of its duration.
     // A small incidental overlap (e.g. a browser-extension PC-time snippet) won't suppress it.
@@ -8712,7 +8719,7 @@ function generateTemplateEntries(dateKey) {
       ts: tsEnd, tsStart, date: dateKey,
       blockIntervalMin: Math.round((tsEnd - tsStart) / 60000),
       activity: tpl.activity, energy: tpl.energy,
-      template: true, onPlan: true, autoLog: !!tpl.autoLog
+      template: true, templateId: tpl.id, onPlan: true, autoLog: !!tpl.autoLog
     });
   }
   return result;
@@ -8725,12 +8732,31 @@ function templateSlotRange(tpl, dateKey) {
   return { tsStart, tsEnd };
 }
 
+function templateSkippedOnDate(tpl, dateKey) {
+  return Array.isArray(tpl?.skipDates) && tpl.skipDates.includes(dateKey);
+}
+
+function skipTemplateOnDate(templateId, dateKey) {
+  const tpl = (settings.templates || []).find(t => String(t.id) === String(templateId));
+  if (!tpl || !dateKey) { showToast('Schedule block not found'); return; }
+  if (!Array.isArray(tpl.skipDates)) tpl.skipDates = [];
+  if (!tpl.skipDates.includes(dateKey)) tpl.skipDates.push(dateKey);
+  settings._savedAt = Date.now();
+  settings._templatesSavedAt = Date.now();
+  persist();
+  if (fbRoomRef) fbRoomRef.update({ settings });
+  renderTemplateList();
+  renderToday();
+  showToast(`Skipped ${activityDisplayLabel(tpl.activity)} today`);
+}
+
 function autoTemplateEntryId(tpl, dateKey) {
   const safeId = String(tpl.id || activityGroupKey(tpl.activity) || 'template').replace(/[^\w-]/g, '_');
   return `tpllog_${safeId}_${dateKey}`;
 }
 
 function templateSlotCovered(tpl, dateKey, range) {
+  if (templateSkippedOnDate(tpl, dateKey)) return true;
   const autoId = autoTemplateEntryId(tpl, dateKey);
   const dayEntries = getEntriesForDateWindow(dateKey, true).filter(e => !e.missed);
   if (dayEntries.some(e => String(e.id) === autoId)) return true;
@@ -8760,6 +8786,7 @@ function autoLogDueTemplates({ notify = true } = {}) {
     for (const dateKey of candidateKeys) {
       const dow = tzDow(tzParseTime(dateKey, '12:00'));
       if (!tpl.days.includes(dow)) continue;
+      if (templateSkippedOnDate(tpl, dateKey)) continue;
       const range = templateSlotRange(tpl, dateKey);
       if (now < range.tsEnd) continue;
       if (running && (taskStartTime || timerStartedAt || now) < range.tsEnd && now > range.tsStart) continue;
