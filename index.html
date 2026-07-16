@@ -714,59 +714,67 @@
             <option value="6">Saturday</option>
             <option value="0">Sunday</option>
           </select>
-          <button type="button" id="day-template-basics-btn" class="btn sm ghost" onclick="addBasicsToSelectedDay()">Add missing basics</button>
           <button type="button" class="btn sm ghost" onclick="startTemplateBlockForSelectedDay()">+ Block</button>
         </div>
         <div id="day-template-panel" class="day-template-panel"></div>
+        <div id="template-form-card" class="template-form-card" hidden>
+          <div id="tpl-form-title" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:12px">New recurring block</div>
+          <select id="tpl-task-choice" onchange="applyTemplateTaskChoice()" style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:9px 11px;border-radius:8px;outline:none;margin-bottom:10px;appearance:none">
+            <option value="custom">Custom task</option>
+            <option value="sleep">Sleep</option>
+            <option value="breakfast">Breakfast</option>
+            <option value="lunch">Lunch</option>
+            <option value="dinner">Dinner</option>
+            <option value="hygiene">Hygiene</option>
+            <option value="job">Job shift</option>
+            <option value="exercise">Exercise</option>
+          </select>
+          <input id="tpl-activity" type="text" placeholder="Activity name (e.g. Job shift, Class, Gym)"
+            style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:9px 11px;border-radius:8px;outline:none;margin-bottom:10px">
+          <select id="tpl-energy" style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:9px 11px;border-radius:8px;outline:none;margin-bottom:12px;appearance:none">
+            <option value="nine5">🟡 Job Work</option>
+            <option value="deep">🔵 Deep Work</option>
+            <option value="shallow">💠 Shallow Work</option>
+            <option value="learning">🟢 Learning</option>
+            <option value="exercise">🟠 Exercise</option>
+            <option value="recovery">🟣 Maintenance</option>
+            <option value="errands">⬜ Errands</option>
+            <option value="social">🩷 Social</option>
+          </select>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px">Days</div>
+          <div id="tpl-day-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+            <button type="button" class="tpl-day-btn" data-day="1" onclick="toggleTplDay(this)">Mon</button>
+            <button type="button" class="tpl-day-btn" data-day="2" onclick="toggleTplDay(this)">Tue</button>
+            <button type="button" class="tpl-day-btn" data-day="3" onclick="toggleTplDay(this)">Wed</button>
+            <button type="button" class="tpl-day-btn" data-day="4" onclick="toggleTplDay(this)">Thu</button>
+            <button type="button" class="tpl-day-btn" data-day="5" onclick="toggleTplDay(this)">Fri</button>
+            <button type="button" class="tpl-day-btn" data-day="6" onclick="toggleTplDay(this)">Sat</button>
+            <button type="button" class="tpl-day-btn" data-day="0" onclick="toggleTplDay(this)">Sun</button>
+          </div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px">Time range</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+            <input type="time" id="tpl-start" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
+            <span style="color:var(--muted);font-size:13px;font-weight:600">→</span>
+            <input type="time" id="tpl-end" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
+          </div>
+          <label style="display:flex;gap:8px;align-items:flex-start;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:9px 10px;margin-bottom:14px;cursor:pointer">
+            <input type="checkbox" id="tpl-auto-log" style="margin-top:2px;accent-color:var(--deep)">
+            <span>
+              <span style="display:block;font-size:12px;color:var(--text);font-weight:700">Auto-log after this block ends</span>
+              <span style="display:block;font-size:10px;color:var(--muted);line-height:1.35;margin-top:2px">Best for fixed job shifts. If you did not work, delete that day's auto entry.</span>
+            </span>
+          </label>
+          <div class="template-form-actions">
+            <button type="button" id="tpl-add-btn" class="btn" onclick="addTemplate()">+ Add recurring block</button>
+            <button type="button" class="btn ghost" onclick="cancelTemplateEdit()">Cancel</button>
+          </div>
+        </div>
       </div>
     </div>
     <details class="template-advanced">
       <summary>Advanced: All recurring blocks</summary>
       <div id="template-list"></div>
     </details>
-    <!-- Add form -->
-    <div id="template-form-card" class="template-form-card" hidden>
-      <div id="tpl-form-title" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:12px">New recurring block</div>
-      <input id="tpl-activity" type="text" placeholder="Activity name (e.g. Job shift, Class, Gym)"
-        style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:9px 11px;border-radius:8px;outline:none;margin-bottom:10px">
-      <select id="tpl-energy" style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:9px 11px;border-radius:8px;outline:none;margin-bottom:12px;appearance:none">
-        <option value="nine5">🟡 Job Work</option>
-        <option value="deep">🔵 Deep Work</option>
-        <option value="shallow">💠 Shallow Work</option>
-        <option value="learning">🟢 Learning</option>
-        <option value="exercise">🟠 Exercise</option>
-        <option value="recovery">🟣 Maintenance</option>
-        <option value="errands">⬜ Errands</option>
-        <option value="social">🩷 Social</option>
-      </select>
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px">Days</div>
-      <div id="tpl-day-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-        <button type="button" class="tpl-day-btn" data-day="1" onclick="toggleTplDay(this)">Mon</button>
-        <button type="button" class="tpl-day-btn" data-day="2" onclick="toggleTplDay(this)">Tue</button>
-        <button type="button" class="tpl-day-btn" data-day="3" onclick="toggleTplDay(this)">Wed</button>
-        <button type="button" class="tpl-day-btn" data-day="4" onclick="toggleTplDay(this)">Thu</button>
-        <button type="button" class="tpl-day-btn" data-day="5" onclick="toggleTplDay(this)">Fri</button>
-        <button type="button" class="tpl-day-btn" data-day="6" onclick="toggleTplDay(this)">Sat</button>
-        <button type="button" class="tpl-day-btn" data-day="0" onclick="toggleTplDay(this)">Sun</button>
-      </div>
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px">Time range</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
-        <input type="time" id="tpl-start" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
-        <span style="color:var(--muted);font-size:13px;font-weight:600">→</span>
-        <input type="time" id="tpl-end" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
-      </div>
-      <label style="display:flex;gap:8px;align-items:flex-start;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:9px 10px;margin-bottom:14px;cursor:pointer">
-        <input type="checkbox" id="tpl-auto-log" style="margin-top:2px;accent-color:var(--deep)">
-        <span>
-          <span style="display:block;font-size:12px;color:var(--text);font-weight:700">Auto-log after this block ends</span>
-          <span style="display:block;font-size:10px;color:var(--muted);line-height:1.35;margin-top:2px">Best for fixed job shifts. If you did not work, delete that day's auto entry.</span>
-        </span>
-      </label>
-      <div class="template-form-actions">
-        <button type="button" id="tpl-add-btn" class="btn" onclick="addTemplate()">+ Add recurring block</button>
-        <button type="button" class="btn ghost" onclick="cancelTemplateEdit()">Cancel</button>
-      </div>
-    </div>
   </div>
 
   <div class="settings-section">
@@ -1415,7 +1423,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-day-template-cleanup-1';
+const APP_BUILD = '2026-07-16-template-task-picker-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -9018,31 +9026,19 @@ function templateEnergyColor(energy) {
   return colors[energy] || 'var(--muted)';
 }
 
-function templatePresetTemplates(presetKey, daySelection) {
+function templateTaskChoice(choice) {
   const sleepTime = settings.sleepTime || '23:00';
   const wakeTime = settings.wakeTime || '07:00';
-  const days = normalizeTemplateDays(daySelection?.length ? daySelection : [0, 1, 2, 3, 4, 5, 6]);
-  const safePreset = String(presetKey || 'basics').replace(/[^\w-]/g, '_');
-  const dayKey = days.join('');
-  const block = (id, activity, energy, startTime, endTime, autoLog = false) => ({
-    id: `preset_${safePreset}_${dayKey}_${id}`,
-    activity,
-    energy,
-    days: [...days],
-    startTime,
-    endTime,
-    autoLog,
-    enabled: true,
-    skeleton: true,
-    preset: presetKey || 'basics'
-  });
-  return [
-    block('sleep', 'Sleep', 'recovery', sleepTime, wakeTime),
-    block('breakfast', 'Breakfast', 'recovery', addMinutesHHMM(wakeTime, 60), addMinutesHHMM(wakeTime, 90)),
-    block('lunch', 'Lunch', 'recovery', addMinutesHHMM(wakeTime, 360), addMinutesHHMM(wakeTime, 390)),
-    block('dinner', 'Dinner', 'recovery', addMinutesHHMM(wakeTime, 660), addMinutesHHMM(wakeTime, 690)),
-    block('hygiene', 'Hygiene', 'recovery', addMinutesHHMM(sleepTime, -30), addMinutesHHMM(sleepTime, -10))
-  ];
+  const choices = {
+    sleep: { activity: 'Sleep', energy: 'recovery', startTime: sleepTime, endTime: wakeTime },
+    breakfast: { activity: 'Breakfast', energy: 'recovery', startTime: addMinutesHHMM(wakeTime, 60), endTime: addMinutesHHMM(wakeTime, 90) },
+    lunch: { activity: 'Lunch', energy: 'recovery', startTime: addMinutesHHMM(wakeTime, 360), endTime: addMinutesHHMM(wakeTime, 390) },
+    dinner: { activity: 'Dinner', energy: 'recovery', startTime: addMinutesHHMM(wakeTime, 660), endTime: addMinutesHHMM(wakeTime, 690) },
+    hygiene: { activity: 'Hygiene', energy: 'recovery', startTime: addMinutesHHMM(sleepTime, -30), endTime: addMinutesHHMM(sleepTime, -10) },
+    job: { activity: 'Job shift', energy: 'nine5' },
+    exercise: { activity: 'Exercise', energy: 'exercise' }
+  };
+  return choices[choice] || null;
 }
 
 function templatesForDay(day) {
@@ -9058,10 +9054,6 @@ function templateItemsForDay(day) {
     .sort((a, b) => hhmmToMinutes(a.tpl.startTime) - hhmmToMinutes(b.tpl.startTime));
 }
 
-function missingBasicsForDay(day) {
-  return templatePresetTemplates('basics', [day]).filter(tpl => !templateSkeletonExists(tpl));
-}
-
 function renderDayTemplatePanel() {
   const el = document.getElementById('day-template-panel');
   if (!el) return;
@@ -9075,12 +9067,6 @@ function renderDayTemplatePanel() {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[ch]));
   const day = selectedDayTemplateDay();
-  const missingBasics = missingBasicsForDay(day);
-  const basicsBtn = document.getElementById('day-template-basics-btn');
-  if (basicsBtn) {
-    basicsBtn.disabled = missingBasics.length === 0;
-    basicsBtn.textContent = missingBasics.length ? 'Add missing basics' : 'Basics added';
-  }
   const blocks = templateItemsForDay(day);
   el.innerHTML = blocks.length
     ? blocks.map(({ tpl, i }) => {
@@ -9105,6 +9091,8 @@ function renderDayTemplatePanel() {
 }
 
 function resetTemplateForm() {
+  const choiceEl = document.getElementById('tpl-task-choice');
+  if (choiceEl) choiceEl.value = 'custom';
   const activityEl = document.getElementById('tpl-activity');
   const startEl = document.getElementById('tpl-start');
   const endEl = document.getElementById('tpl-end');
@@ -9118,6 +9106,26 @@ function resetTemplateForm() {
   if (addBtn) addBtn.textContent = '+ Add recurring block';
   const titleEl = document.getElementById('tpl-form-title');
   if (titleEl) titleEl.textContent = 'New recurring block';
+}
+
+function selectTemplateTaskChoice(activity) {
+  const choiceEl = document.getElementById('tpl-task-choice');
+  if (!choiceEl) return;
+  const activityKey = activityGroupKey(activity);
+  const match = [...choiceEl.options].find(opt => {
+    const choice = templateTaskChoice(opt.value);
+    return choice && activityGroupKey(choice.activity) === activityKey;
+  });
+  choiceEl.value = match ? match.value : 'custom';
+}
+
+function applyTemplateTaskChoice() {
+  const choice = templateTaskChoice(document.getElementById('tpl-task-choice')?.value);
+  if (!choice) return;
+  document.getElementById('tpl-activity').value = choice.activity;
+  document.getElementById('tpl-energy').value = choice.energy;
+  if (choice.startTime) document.getElementById('tpl-start').value = choice.startTime;
+  if (choice.endTime) document.getElementById('tpl-end').value = choice.endTime;
 }
 
 function showTemplateForm(title = 'New recurring block') {
@@ -9145,32 +9153,14 @@ function startTemplateBlockForDay(day) {
   document.querySelectorAll('#tpl-day-picker .tpl-day-btn').forEach(b =>
     b.classList.toggle('on', parseInt(b.dataset.day) === day)
   );
-  document.getElementById('tpl-activity').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  document.getElementById('tpl-activity').focus();
+  const focusEl = document.getElementById('tpl-task-choice') || document.getElementById('tpl-activity');
+  focusEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  focusEl.focus();
   showToast(`New block will repeat on ${dayTemplateLabel(day)}`);
-}
-
-function addBasicsToDay(day) {
-  addDayTemplateSkeleton([day]);
-}
-
-function addBasicsToSelectedDay() {
-  addBasicsToDay(selectedDayTemplateDay());
 }
 
 function startTemplateBlockForSelectedDay() {
   startTemplateBlockForDay(selectedDayTemplateDay());
-}
-
-function defaultDaySkeletonTemplates(daySelection) {
-  return templatePresetTemplates('basics', daySelection);
-}
-
-function templateSkeletonExists(candidate) {
-  return (settings.templates || []).some(tpl =>
-    String(tpl.id) === String(candidate.id) ||
-    (tpl.skeleton && templateDuplicateKey(tpl) === templateDuplicateKey(candidate))
-  );
 }
 
 function templateDuplicateKey(tpl) {
@@ -9187,29 +9177,6 @@ function findDuplicateTemplate(candidate, ignoreIndex = -1) {
   return (settings.templates || []).find((tpl, i) =>
     i !== ignoreIndex && templateDuplicateKey(tpl) === candidateKey
   );
-}
-
-function addDayTemplateSkeleton(daySelection = [0, 1, 2, 3, 4, 5, 6]) {
-  if (!settings.templates) settings.templates = [];
-  const days = normalizeTemplateDays(daySelection);
-  if (!days.length) { showToast('Select at least one day'); return; }
-  const toAdd = templatePresetTemplates('basics', days).filter(tpl => !templateSkeletonExists(tpl));
-  if (!toAdd.length) { showToast('Basics already exist for that day'); return; }
-  settings.templates.push(...toAdd);
-  settings._savedAt = Date.now();
-  settings._templatesSavedAt = Date.now();
-  persist();
-  if (fbRoomRef) fbRoomRef.update({ settings });
-  renderDayTemplatePanel();
-  renderTemplateList();
-  _todayRenderKey = '__FORCE__';
-  renderToday();
-  const label = days.length === 1 ? dayTemplateLabel(days[0]) : `${days.length} days`;
-  showToast(`Added basics to ${label}`);
-}
-
-function addDefaultDaySkeleton() {
-  addDayTemplateSkeleton();
 }
 
 function templateSkippedOnDate(tpl, dateKey) {
@@ -9460,6 +9427,7 @@ function editTemplate(i) {
   if (!tpl) return;
   _editingTplIdx = i;
   showTemplateForm('Edit recurring block');
+  selectTemplateTaskChoice(tpl.activity);
   document.getElementById('tpl-activity').value = tpl.activity;
   document.getElementById('tpl-energy').value = tpl.energy;
   document.getElementById('tpl-start').value = tpl.startTime;
@@ -9471,8 +9439,9 @@ function editTemplate(i) {
   );
   const btn = document.getElementById('tpl-add-btn');
   if (btn) btn.textContent = 'Save changes';
-  document.getElementById('tpl-activity').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  document.getElementById('tpl-activity').focus();
+  const focusEl = document.getElementById('tpl-task-choice') || document.getElementById('tpl-activity');
+  focusEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  focusEl.focus();
 }
 
 function removeTemplate(i) {

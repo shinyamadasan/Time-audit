@@ -1210,9 +1210,8 @@ button, a, [role="button"],
 .tl-template-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0}
 .tl-template-actions .log-gap-btn{padding:4px 9px}
 .tl-bar-template{background:repeating-linear-gradient(45deg,var(--border2),var(--border2) 3px,transparent 3px,transparent 7px);border-radius:2px}
-.day-template-controls{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;margin-bottom:10px}
+.day-template-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin-bottom:10px}
 .day-template-controls select{width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:13px;padding:8px 10px;border-radius:8px;outline:none}
-.day-template-controls .btn:disabled{opacity:0.45;cursor:not-allowed}
 .day-template-panel{display:flex;flex-direction:column;gap:6px}
 .day-template-bar{display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--border2);border-left:4px solid var(--muted);border-radius:8px;padding:8px 10px;min-width:0}
 .day-template-bar-main{flex:1;min-width:0}
