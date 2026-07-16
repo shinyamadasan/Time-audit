@@ -60,3 +60,44 @@ status: pending
 **Incidental note:** The Telegram → n8n → repo capture pipeline is confirmed working end-to-end (5 messages landed cleanly across 2026-07-12 to 2026-07-14).
 
 ---
+
+### PROP-004 — Timer state not restored on app reopen (capture 52)
+
+id: PROP-004
+captures: 20260715T1346Z-52
+status: pending
+dup-count: 1
+
+> **Decision: Approve** — First user-reported bug; maps directly to Hard Rule #8 (timer restore order in INIT). When the app is closed mid-session and reopened, the hero resets to starting "work" instead of resuming the active entry. Data correctness issue: the gap between close and reopen is untracked, and the resumed state is wrong.
+
+**Goal alignment:** supports — directly serves Goal #3 ("Never lose logged time") and Goal #1 ("Make logging frictionless"). A wrong state on reopen means the user either logs a wrong entry or loses time. Mixed with Goal #5 (stay maintainable) — the fix touches red-zone INIT code.
+
+**User value:** High. User noticed this during real usage, not testing. The symptom (app wakes to "work" start rather than continuing an active timer) causes a silent gap or a wrong entry — both undermine the audit's truthfulness.
+
+**Evidence:** 1 occurrence, first direct bug report from real usage. Maps to a documented fragile section (Hard Rule #8, CODEMAP INIT section). No prior PROPOSALS.md dupe. ROADMAP Known Issues is empty.
+
+**Effort:** Medium. Requires reading CODEMAP INIT section to locate the restoration block, then verifying the timer-state localStorage keys and their load order. Red-zone (risk gate: `approved`, not `done`). | **Dependencies:** CODEMAP.md (INIT section), DECISIONS.md (D-008 or equivalent timer-restore decision). | **Confidence:** High that the bug exists; Medium on root cause until CODEMAP INIT section is read. | **Ambiguity:** Low on what the expected behaviour is; Medium on precise file location.
+
+**Why now vs later:** Now — this is a data-correctness bug affecting every session closure, not a cosmetic issue. A wrong entry created on reopen cannot be reconstructed retroactively.
+
+**Goal-adjusted priority:** P1 — Current Objective not yet set, but Goal #3 is the highest-ranked applicable goal and this directly violates it. Would remain P1 under any stability-focused objective.
+
+---
+
+### PROP-005 — Bot noise batch (captures 55, 61, 63, 67)
+
+id: PROP-005
+captures: 20260715T1407Z-55, 20260716T0025Z-61, 20260716T0025Z-63, 20260716T0025Z-67
+status: pending
+dup-count: 4
+
+> **Decision: Reject** — Four noise messages: "test" (bot-setup test), "/reject" (mistyped bot command sent as plain text), and two single-character "s" keysmashes. No actionable content.
+
+**Goal alignment:** none — does not serve any North-star goal.
+**User value:** none.
+**Evidence:** 4 noise messages in quick succession (2026-07-15 to 2026-07-16); pattern matches previous noise batches (PROP-001, PROP-002, PROP-003). The "/reject" message was likely an accidental plain-text send of a bot command.
+**Effort:** n/a | **Dependencies:** n/a | **Confidence:** high (noise) | **Ambiguity:** low.
+**Why now vs later:** never — discard.
+**Goal-adjusted priority:** P3 (reject-class).
+
+---
