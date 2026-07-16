@@ -719,96 +719,6 @@ test('today gap recovery other opens prefilled retro log', async ({ page }) => {
   await expect(page.locator('#retro-end')).toHaveValue('10:45');
 });
 
-test('rebuild day estimates a skeleton block without pretending it is exact', async ({ page }) => {
-  const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
-  await openApp(page, {
-    nowTs,
-    settings: {
-      templates: [{
-        id: 'sleep',
-        activity: 'Sleep',
-        energy: 'recovery',
-        days: [3],
-        startTime: '00:00',
-        endTime: '08:00',
-        autoLog: false,
-        enabled: true,
-        skeleton: true
-      }]
-    }
-  });
-  await openTodayDetails(page);
-
-  const card = page.locator('#rebuild-day-card');
-  await expect(card).toBeVisible();
-  await card.getByRole('button', { name: /Estimate Sleep/ }).click();
-
-  const saved = await page.evaluate(() => {
-    const entry = entries.find(e => e.activity === 'Sleep');
-    return entry && {
-      activity: entry.activity,
-      energy: entry.energy,
-      estimated: entry.estimated,
-      rebuildDay: entry.rebuildDay,
-      note: entry.note,
-      minutes: entry.blockIntervalMin
-    };
-  });
-  expect(saved).toEqual({
-    activity: 'Sleep',
-    energy: 'recovery',
-    estimated: true,
-    rebuildDay: true,
-    note: 'Estimated from Rebuild day',
-    minutes: 480
-  });
-  await expect(page.locator('#timeline-blocks')).toContainText('estimated');
-});
-
-test('rebuild day opens the biggest gap in the retro form', async ({ page }) => {
-  const nowTs = Date.UTC(2026, 6, 15, 16, 0, 0);
-  const firstStart = Date.UTC(2026, 6, 15, 10, 0, 0);
-  const firstEnd = Date.UTC(2026, 6, 15, 11, 0, 0);
-  const secondStart = Date.UTC(2026, 6, 15, 14, 0, 0);
-  const secondEnd = Date.UTC(2026, 6, 15, 15, 0, 0);
-  await openApp(page, {
-    nowTs,
-    entries: [
-      {
-        id: firstEnd,
-        ts: firstEnd,
-        tsStart: firstStart,
-        updatedAt: firstEnd,
-        blockIntervalMin: 60,
-        date: utcDateKey(firstStart),
-        activity: 'Deep work',
-        energy: 'deep',
-        onPlan: true,
-        retro: true
-      },
-      {
-        id: secondEnd,
-        ts: secondEnd,
-        tsStart: secondStart,
-        updatedAt: secondEnd,
-        blockIntervalMin: 60,
-        date: utcDateKey(secondStart),
-        activity: 'Eat',
-        energy: 'recovery',
-        onPlan: true,
-        retro: true
-      }
-    ]
-  });
-  await openTodayDetails(page);
-
-  await page.locator('#rebuild-day-card').getByRole('button', { name: /Fill biggest gap/ }).click();
-  await expect(page.locator('#retro-overlay')).toBeVisible();
-  await expect(page.locator('#retro-start')).toHaveValue('11:00');
-  await expect(page.locator('#retro-end')).toHaveValue('14:00');
-  await expect(page.locator('#retro-activity')).toHaveValue('');
-});
-
 test('today long labels wrap on phone width without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
@@ -1182,7 +1092,7 @@ test('long non-job coverage blocks are not split by the legacy fallback', async 
   await expect(timeline).not.toContainText('12:00 AM – 1:00 AM');
 });
 
-test('default day skeleton adds editable non-auto schedule anchors once', async ({ page }) => {
+test('day template starter adds editable non-auto schedule anchors once', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
   await openApp(page, {
     nowTs,
@@ -1193,8 +1103,8 @@ test('default day skeleton adds editable non-auto schedule anchors once', async 
   });
 
   await page.evaluate(() => showView('settings'));
-  await page.getByRole('button', { name: 'Add skeleton' }).click();
-  await page.getByRole('button', { name: 'Add skeleton' }).click();
+  await page.getByRole('button', { name: 'Add day template' }).click();
+  await page.getByRole('button', { name: 'Add day template' }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1224,6 +1134,42 @@ test('default day skeleton adds editable non-auto schedule anchors once', async 
   await expect(page.locator('#template-list')).toContainText('Hygiene');
 });
 
+test('day template starter supports different selected day sets', async ({ page }) => {
+  await openApp(page, {
+    settings: {
+      sleepTime: '23:00',
+      wakeTime: '07:00'
+    }
+  });
+
+  await page.evaluate(() => showView('settings'));
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="1"]').click();
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="2"]').click();
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="3"]').click();
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="4"]').click();
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="5"]').click();
+  await page.getByRole('button', { name: 'Add day template' }).click();
+
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="1"]').click();
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="2"]').click();
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="3"]').click();
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="4"]').click();
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="5"]').click();
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="0"]').click();
+  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="6"]').click();
+  await page.getByRole('button', { name: 'Add day template' }).click();
+
+  const templates = await page.evaluate(() => settings.templates.map(t => ({
+    id: t.id,
+    activity: t.activity,
+    days: t.days
+  })));
+
+  expect(templates).toHaveLength(10);
+  expect(templates.filter(t => t.activity === 'Sleep').map(t => t.days)).toEqual([[0, 6], [1, 2, 3, 4, 5]]);
+  expect(new Set(templates.map(t => t.id)).size).toBe(10);
+});
+
 test('weekly schedule add and delete update the list before deferred refresh', async ({ page }) => {
   await openApp(page);
 
@@ -1244,7 +1190,7 @@ test('weekly schedule add and delete update the list before deferred refresh', a
     document.getElementById('tpl-energy').value = 'deep';
     document.getElementById('tpl-start').value = '09:00';
     document.getElementById('tpl-end').value = '10:00';
-    document.querySelector('.tpl-day-btn[data-day="1"]').classList.add('on');
+    document.querySelector('#tpl-day-picker .tpl-day-btn[data-day="1"]').classList.add('on');
     addTemplate();
     const afterAdd = {
       listText: document.getElementById('template-list').textContent,

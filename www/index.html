@@ -254,9 +254,6 @@
   <!-- Gap recovery inbox -->
   <div class="gap-recovery" id="gap-recovery" style="display:none" aria-live="polite"></div>
 
-  <!-- Rebuild day recovery -->
-  <div class="gap-recovery" id="rebuild-day-card" style="display:none" aria-live="polite"></div>
-
   <!-- Routine prompt -->
   <div class="routine-prompt" id="routine-prompt" style="display:none" aria-live="polite"></div>
 
@@ -701,14 +698,23 @@
   </div>
 
   <div class="settings-section">
-    <div class="settings-title">Weekly Schedule</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Fixed commitments shown greyed-out in your timeline. Turn on auto-log for reliable shifts; delete that day's entry if reality changed.</div>
-    <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+    <div class="settings-title">Day Templates</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Fixed commitments and daily anchors shown greyed-out in your timeline. Turn on auto-log only for reliable shifts; delete that day's entry if reality changed.</div>
+    <div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:12px">
       <div class="flex-min">
-        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">Default day skeleton</div>
-        <div style="font-size:10px;color:var(--muted);line-height:1.35">Adds sleep, meals, and hygiene as editable placeholders. No auto-log.</div>
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">Day template starter</div>
+        <div style="font-size:10px;color:var(--muted);line-height:1.35;margin-bottom:8px">Adds sleep, meals, and hygiene as editable placeholders for the days you choose. No auto-log.</div>
+        <div id="skeleton-day-picker" style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="tpl-day-btn on" data-day="1" onclick="toggleSkeletonDay(this)">Mon</button>
+          <button type="button" class="tpl-day-btn on" data-day="2" onclick="toggleSkeletonDay(this)">Tue</button>
+          <button type="button" class="tpl-day-btn on" data-day="3" onclick="toggleSkeletonDay(this)">Wed</button>
+          <button type="button" class="tpl-day-btn on" data-day="4" onclick="toggleSkeletonDay(this)">Thu</button>
+          <button type="button" class="tpl-day-btn on" data-day="5" onclick="toggleSkeletonDay(this)">Fri</button>
+          <button type="button" class="tpl-day-btn on" data-day="6" onclick="toggleSkeletonDay(this)">Sat</button>
+          <button type="button" class="tpl-day-btn on" data-day="0" onclick="toggleSkeletonDay(this)">Sun</button>
+        </div>
       </div>
-      <button type="button" class="btn sm ghost" onclick="addDefaultDaySkeleton()" style="flex-shrink:0">Add skeleton</button>
+      <button type="button" class="btn sm ghost" onclick="addDayTemplateSkeleton()" style="flex-shrink:0">Add day template</button>
     </div>
     <div id="template-list"></div>
     <!-- Add form -->
@@ -727,7 +733,7 @@
         <option value="social">🩷 Social</option>
       </select>
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px">Days</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      <div id="tpl-day-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
         <button type="button" class="tpl-day-btn" data-day="1" onclick="toggleTplDay(this)">Mon</button>
         <button type="button" class="tpl-day-btn" data-day="2" onclick="toggleTplDay(this)">Tue</button>
         <button type="button" class="tpl-day-btn" data-day="3" onclick="toggleTplDay(this)">Wed</button>
@@ -1399,7 +1405,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-rebuild-day-1';
+const APP_BUILD = '2026-07-16-day-template-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -4192,9 +4198,6 @@ function renderEntryRow(item) {
   const projectPill = item.project
     ? ` · <span style="font-size:10px;padding:1px 5px;border-radius:3px;background:var(--bg3);color:var(--muted)">${item.project}</span>`
     : '';
-  const estimatedPill = item.estimated
-    ? ` · <span style="font-size:10px;color:var(--muted2)">estimated</span>`
-    : '';
   const contextPill = item._coverageContext
     ? ` · <span style="font-size:10px;color:var(--muted2)">during ${esc(item._coverageContext)}</span>`
     : '';
@@ -4203,7 +4206,7 @@ function renderEntryRow(item) {
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
       <div class="tl-activity">${esc(displayActivity)}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span>${mergeTag}</div>
-      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}${projectPill}${estimatedPill}${contextPill}</div>
+      <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}${projectPill}${contextPill}</div>
     </div>
     <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
   </div>`;
@@ -4241,14 +4244,13 @@ function buildEntryRowHTML(e) {
   const timeRange = e.tsStart
     ? `${localTime(e.tsStart)} – ${localTime(e.ts)}`
     : localTime(e.ts);
-  const estimateText = e.estimated ? ' · estimated' : '';
   return `
     <div class="entry-row" data-activity-key="${attr(activityGroupKey(e.activity))}">
       <div class="entry-bar ${e.energy}"></div>
       <div class="entry-main">
         <div class="entry-activity">${esc(displayActivity)}</div>
         <div class="entry-meta">
-  ${timeRange} · ${fmtDur(duration)}${estimateText}
+  ${timeRange} · ${fmtDur(duration)}
   ${e.deap ? ' · ' + e.deap : ''}
   ${e.rate ? ' · $' + e.rate + '/hr' : ''}
 </div>
@@ -4611,137 +4613,6 @@ function renderGapRecoveryInbox(todayE) {
     <div class="gap-recovery-sub">What was this block?</div>
     <div class="gap-chip-row">${buttonHtml}</div>
   `;
-}
-
-function rebuildDayTemplateSuggestions(dateKey, dayEntries) {
-  if (!dateKey || !settings.templates?.length) return [];
-  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const todayKey = getDateInTZ(Date.now(), tz);
-  if (dateKey > todayKey) return [];
-  const dow = tzDow(tzParseTime(dateKey, '12:00'));
-  const liveEntries = (dayEntries || []).filter(e => !e.deleted && !e.missed);
-  return settings.templates
-    .filter(tpl => tpl.enabled !== false && (tpl.days || []).includes(dow) && !templateSkippedOnDate(tpl, dateKey))
-    .map(tpl => {
-      const range = templateSlotRange(tpl, dateKey);
-      if (dateKey === todayKey && Date.now() < range.tsEnd) return null;
-      const durationMs = range.tsEnd - range.tsStart;
-      const coveredMs = liveEntries.reduce((sum, e) => {
-        const eRange = entryTimeRange(e);
-        return eRange ? sum + overlapMs({ start: range.tsStart, end: range.tsEnd }, eRange) : sum;
-      }, 0);
-      if (coveredMs >= durationMs * 0.5) return null;
-      return {
-        type: 'template',
-        templateId: tpl.id,
-        activity: tpl.activity,
-        energy: tpl.energy,
-        tsStart: range.tsStart,
-        tsEnd: range.tsEnd,
-        durationMin: Math.max(1, Math.round(durationMs / 60000))
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.tsStart - b.tsStart)
-    .slice(0, 4);
-}
-
-function rebuildDayGapSuggestion(dateKey, dayEntries) {
-  const realEntries = (dayEntries || []).filter(e => !e.deleted && !e.missed);
-  if (!realEntries.length) return null;
-  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const todayKey = getDateInTZ(Date.now(), tz);
-  const gapEnd = dateKey === todayKey ? Date.now() : dayEndTs(dateKey);
-  const gap = computeGaps(realEntries, gapEnd)
-    .filter(g => (g.gapMin || 0) >= 60)
-    .sort((a, b) => (b.gapMin || 0) - (a.gapMin || 0))[0];
-  return gap ? { type: 'gap', tsStart: gap.tsStart, tsEnd: Math.round(gap.ts), durationMin: gap.gapMin } : null;
-}
-
-function getRebuildDaySuggestions(dateKey = getViewingDateKey(), dayEntries = getViewingEntries()) {
-  const templates = rebuildDayTemplateSuggestions(dateKey, dayEntries);
-  const gap = rebuildDayGapSuggestion(dateKey, dayEntries);
-  return gap ? [...templates, gap] : templates;
-}
-
-function renderRebuildDayCard(dayEntries) {
-  const card = document.getElementById('rebuild-day-card');
-  if (!card) return;
-  const dateKey = getViewingDateKey();
-  const suggestions = getRebuildDaySuggestions(dateKey, dayEntries);
-  const liveEntries = (dayEntries || []).filter(e => !e.deleted && !e.missed);
-  const loggedMin = sumEntryMinutes(liveEntries, null, dateKey);
-  const hasLargeGap = suggestions.some(s => s.type === 'gap');
-  const needsRecovery = hasLargeGap || !liveEntries.length || loggedMin < 120;
-  if (!suggestions.length || !needsRecovery) {
-    card.style.display = 'none';
-    card.innerHTML = '';
-    return;
-  }
-
-  const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[ch]));
-  const buttons = suggestions.map((s, idx) => {
-    if (s.type === 'gap') {
-      return `<button type="button" class="gap-chip shallow" onclick="openRebuildGap(${idx})">Fill biggest gap · ${fmtDur(s.durationMin)}</button>`;
-    }
-    const label = activityDisplayLabel(s.activity);
-    return `<button type="button" class="gap-chip ${s.energy}" onclick="logRebuildTemplate(${idx})">Estimate ${esc(label)} · ${fmtDur(s.durationMin)}</button>`;
-  }).join('');
-
-  card.style.display = 'block';
-  card.innerHTML = `
-    <div class="gap-recovery-head">
-      <div>
-        <div class="gap-recovery-label">Rebuild day</div>
-        <div class="gap-recovery-title">Forgot to log? Start from your skeleton.</div>
-      </div>
-    </div>
-    <div class="gap-recovery-sub">Use only what you believe happened. These logs are marked estimated.</div>
-    <div class="gap-chip-row">${buttons}</div>
-  `;
-}
-
-function logRebuildTemplate(idx) {
-  const suggestion = getRebuildDaySuggestions()[idx];
-  if (!suggestion || suggestion.type !== 'template') { showToast('Rebuild suggestion not found'); return null; }
-  const label = canonicalizeActivityInput(suggestion.activity);
-  const entry = {
-    id: Date.now(),
-    ts: suggestion.tsEnd,
-    tsStart: suggestion.tsStart,
-    updatedAt: Date.now(),
-    blockIntervalMin: suggestion.durationMin,
-    date: toDateKey(new Date(suggestion.tsStart)),
-    activity: label,
-    energy: suggestion.energy,
-    onPlan: suggestion.energy !== 'waste' && suggestion.energy !== 'distraction',
-    retro: true,
-    estimated: true,
-    rebuildDay: true,
-    note: 'Estimated from Rebuild day'
-  };
-  entry.category = getBucket(entry);
-  entry.originalLabel = entry.energy || null;
-  getActivityColor(label);
-  validateEntry(entry);
-  entries.unshift(entry);
-  entries.sort((a, b) => b.ts - a.ts);
-  _lastLoggedEntryId = entry.id;
-  persist();
-  syncEntries();
-  rememberCreatedUndo('rebuild day', [entry]);
-  _todayRenderKey = '__FORCE__';
-  renderToday();
-  showUndoToast(`Estimated · ${label} · ${fmtDur(suggestion.durationMin)}`, suggestion.energy);
-  return entry;
-}
-
-function openRebuildGap(idx) {
-  const suggestion = getRebuildDaySuggestions()[idx];
-  if (!suggestion || suggestion.type !== 'gap') { showToast('Rebuild gap not found'); return; }
-  openRetroLogPrefilled(suggestion.tsStart, suggestion.tsEnd);
 }
 
 function routinePromptStorageKey(dateKey) {
@@ -5691,7 +5562,6 @@ function renderToday() {
   renderTodayHealth(displayTodayE);
   renderTodayActionStrip(displayTodayE);
   renderGapRecoveryInbox(displayTodayE);
-  renderRebuildDayCard(displayTodayE);
   renderRoutinePrompt(displayTodayE);
   renderDailyBasics();
   renderMissedCloseoutCta();
@@ -9094,12 +8964,36 @@ function addMinutesHHMM(value, deltaMin) {
   return minutesToHHMM(hhmmToMinutes(value) + deltaMin);
 }
 
-function defaultDaySkeletonTemplates() {
+function normalizeTemplateDays(days) {
+  return [...new Set((days || [])
+    .map(d => parseInt(d, 10))
+    .filter(d => Number.isInteger(d) && d >= 0 && d <= 6)
+  )].sort((a, b) => a - b);
+}
+
+function sameTemplateDays(a, b) {
+  const left = normalizeTemplateDays(a);
+  const right = normalizeTemplateDays(b);
+  return left.length === right.length && left.every((day, i) => day === right[i]);
+}
+
+function selectedSkeletonDays() {
+  const selected = [...document.querySelectorAll('#skeleton-day-picker .tpl-day-btn.on')]
+    .map(btn => btn.dataset.day);
+  return normalizeTemplateDays(selected);
+}
+
+function toggleSkeletonDay(btn) {
+  btn.classList.toggle('on');
+}
+
+function defaultDaySkeletonTemplates(daySelection) {
   const sleepTime = settings.sleepTime || '23:00';
   const wakeTime = settings.wakeTime || '07:00';
-  const days = [0, 1, 2, 3, 4, 5, 6];
+  const days = normalizeTemplateDays(daySelection?.length ? daySelection : [0, 1, 2, 3, 4, 5, 6]);
+  const dayKey = days.join('');
   const block = (id, activity, energy, startTime, endTime) => ({
-    id: `skeleton_${id}`,
+    id: `skeleton_${dayKey}_${id}`,
     activity,
     energy,
     days: [...days],
@@ -9121,14 +9015,18 @@ function defaultDaySkeletonTemplates() {
 function templateSkeletonExists(candidate) {
   return (settings.templates || []).some(tpl =>
     String(tpl.id) === String(candidate.id) ||
-    (activityGroupKey(tpl.activity) === activityGroupKey(candidate.activity) && (tpl.days || []).length >= 5)
+    (tpl.skeleton &&
+      activityGroupKey(tpl.activity) === activityGroupKey(candidate.activity) &&
+      sameTemplateDays(tpl.days, candidate.days))
   );
 }
 
-function addDefaultDaySkeleton() {
+function addDayTemplateSkeleton() {
   if (!settings.templates) settings.templates = [];
-  const toAdd = defaultDaySkeletonTemplates().filter(tpl => !templateSkeletonExists(tpl));
-  if (!toAdd.length) { showToast('Default day skeleton already exists'); return; }
+  const days = selectedSkeletonDays();
+  if (!days.length) { showToast('Select at least one day'); return; }
+  const toAdd = defaultDaySkeletonTemplates(days).filter(tpl => !templateSkeletonExists(tpl));
+  if (!toAdd.length) { showToast('Day template already exists for those days'); return; }
   settings.templates.push(...toAdd);
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
@@ -9136,7 +9034,11 @@ function addDefaultDaySkeleton() {
   if (fbRoomRef) fbRoomRef.update({ settings });
   renderTemplateList();
   renderToday();
-  showToast(`Added ${toAdd.length} skeleton blocks`);
+  showToast(`Added ${toAdd.length} template blocks`);
+}
+
+function addDefaultDaySkeleton() {
+  addDayTemplateSkeleton();
 }
 
 function templateSkippedOnDate(tpl, dateKey) {
@@ -9350,7 +9252,7 @@ function addTemplate() {
   const endTime = document.getElementById('tpl-end').value;
   const autoLog = !!document.getElementById('tpl-auto-log')?.checked;
   if (!startTime || !endTime) { showToast('Set start and end time'); return; }
-  const days = [...document.querySelectorAll('.tpl-day-btn.on')].map(b => parseInt(b.dataset.day));
+  const days = [...document.querySelectorAll('#tpl-day-picker .tpl-day-btn.on')].map(b => parseInt(b.dataset.day));
   if (!days.length) { showToast('Select at least one day'); return; }
   if (!settings.templates) settings.templates = [];
   const wasEditing = _editingTplIdx !== null;
@@ -9369,7 +9271,7 @@ function addTemplate() {
   document.getElementById('tpl-end').value = '';
   const autoEl = document.getElementById('tpl-auto-log');
   if (autoEl) autoEl.checked = false;
-  document.querySelectorAll('.tpl-day-btn').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('#tpl-day-picker .tpl-day-btn').forEach(b => b.classList.remove('on'));
   const addBtn = document.getElementById('tpl-add-btn');
   if (addBtn) addBtn.textContent = '+ Add recurring block';
   renderTemplateList();
@@ -9388,7 +9290,7 @@ function editTemplate(i) {
   document.getElementById('tpl-end').value = tpl.endTime;
   const autoEl = document.getElementById('tpl-auto-log');
   if (autoEl) autoEl.checked = !!tpl.autoLog;
-  document.querySelectorAll('.tpl-day-btn').forEach(b =>
+  document.querySelectorAll('#tpl-day-picker .tpl-day-btn').forEach(b =>
     b.classList.toggle('on', tpl.days.includes(parseInt(b.dataset.day)))
   );
   const btn = document.getElementById('tpl-add-btn');
