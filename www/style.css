@@ -1236,17 +1236,18 @@ button, a, [role="button"],
 .template-cal-times{display:grid;grid-template-rows:repeat(24,var(--template-hour-height));border-left:1px solid var(--border2);background:var(--bg3)}
 .template-cal-time{font-family:var(--mono);font-size:9px;color:var(--muted2);line-height:1;padding:5px 7px 0 0;text-align:right;border-bottom:1px solid var(--border2)}
 .template-cal-day{position:relative;border-left:1px solid var(--border2);background:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--template-hour-height) - 1px),var(--border2) calc(var(--template-hour-height) - 1px),var(--border2) var(--template-hour-height))}
-.template-cal-event{position:absolute;left:7px;right:7px;min-height:22px;overflow:visible;border-left:4px solid var(--muted);border-radius:8px;background:rgba(255,255,255,.025)}
+.template-cal-event{position:absolute;left:7px;right:7px;min-height:22px;overflow:visible;border-left:4px solid var(--muted);border-radius:8px;background:rgba(255,255,255,.025);cursor:pointer;outline:none}
 .template-cal-event::after{content:"";position:absolute;inset:0;border:1px solid var(--border2);border-left:0;border-radius:0 8px 8px 0;pointer-events:none;opacity:.7}
+.template-cal-event:hover::after,.template-cal-event:focus-visible::after,.template-cal-event:focus-within::after{border-color:rgba(76,199,240,.35);opacity:1}
 .template-cal-event.continuation{opacity:.7}
-.template-cal-event-card{position:relative;z-index:1;max-height:68px;overflow:hidden;background:var(--bg2);border:1px solid var(--border2);border-left:0;border-radius:0 8px 8px 0;padding:5px 7px;box-shadow:0 1px 2px rgba(0,0,0,.25)}
-.template-cal-event-title{font-size:11px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
+.template-cal-event-card{position:relative;z-index:1;max-height:68px;overflow:hidden;background:var(--bg2);border:1px solid var(--border2);border-left:0;border-radius:0 8px 8px 0;padding:5px 24px 5px 7px;box-shadow:0 1px 2px rgba(0,0,0,.25);font-family:var(--ui);letter-spacing:0}
+.template-cal-event-title{font-family:var(--ui);font-size:11px;font-weight:700;letter-spacing:0;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
 .template-cal-event-meta{font-family:var(--mono);font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
-.template-cal-event-sub{display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:8px;font-weight:800;margin-top:2px}
+.template-cal-event-sub{display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-family:var(--ui);letter-spacing:0;font-size:8px;font-weight:700;margin-top:2px}
 .template-cal-auto{color:var(--deep)!important;background:var(--deep-dim2);border:1px solid rgba(76,199,240,.25);border-radius:5px;padding:1px 4px}
-.template-cal-event-actions{display:flex;gap:4px;margin-top:3px}
-.template-cal-event-actions button{background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:5px;color:var(--muted);font-family:var(--head);font-size:9px;font-weight:700;padding:2px 5px;cursor:pointer}
-.template-cal-event-actions button:hover{color:var(--deep);border-color:rgba(76,199,240,.35)}
+.template-cal-delete{position:absolute;z-index:2;top:4px;right:4px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0;background:rgba(15,15,18,.9);border:1px solid var(--border2);border-radius:6px;color:var(--muted);font-family:var(--ui);font-size:12px;font-weight:700;line-height:1;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .12s,border-color .12s,color .12s}
+.template-cal-event:hover .template-cal-delete,.template-cal-event:focus-within .template-cal-delete{opacity:1;pointer-events:auto}
+.template-cal-delete:hover,.template-cal-delete:focus-visible{color:var(--distraction);border-color:rgba(255,90,112,.45);outline:none}
 .template-form-card{background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-top:8px}
 .template-form-actions{display:flex;gap:8px;align-items:center}
 .template-form-actions #tpl-add-btn{flex:1;justify-content:center}

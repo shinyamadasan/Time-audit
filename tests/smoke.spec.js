@@ -915,9 +915,10 @@ test('editing an auto-logged schedule can update the recurring template', async 
   await row.locator('button[onclick*="openEditEntry"]').click();
   await expect(page.locator('#retro-overlay')).toBeVisible();
   await expect(page.locator('#retro-activity')).toHaveValue('Scribe shift');
-  await page.locator('#retro-activity').fill('Scribe shift');
   await page.locator('#retro-start').fill('01:00');
   await page.locator('#retro-end').fill('09:00');
+  await page.locator('#retro-activity').fill('Scribe shift');
+  await expect(page.locator('#retro-activity')).toHaveValue('Scribe shift');
   await page.locator('#retro-overlay').getByRole('button', { name: 'Save' }).click();
 
   const toast = page.locator('#toast');
@@ -1153,6 +1154,16 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
   await expect(calendar.locator('.template-cal-head div')).toHaveText(['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
   const satSleep = calendar.locator('.template-cal-day[data-day="6"] .template-cal-event').filter({ hasText: 'Sleep' });
   await expect(satSleep).toContainText('02:00-10:00');
+  await expect(calendar.locator('button[aria-label="Edit Sleep"]')).toHaveCount(0);
+  const deleteSleep = satSleep.locator('.template-cal-delete');
+  await expect(deleteSleep).toHaveCSS('opacity', '0');
+  await satSleep.hover();
+  await expect(deleteSleep).toHaveCSS('opacity', '1');
+  await satSleep.click({ position: { x: 12, y: 12 } });
+  await expect(page.locator('#template-form-card')).toBeVisible();
+  await expect(page.locator('#tpl-form-title')).toHaveText('Edit recurring block');
+  await page.locator('#template-form-card').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('#template-form-card')).toBeHidden();
   await expect(calendar.locator('.template-cal-day[data-day="1"] .template-cal-event').filter({ hasText: 'Sleep' })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 900 });
   const mobileScroll = await page.locator('.template-cal-wrap').evaluate(el => ({
