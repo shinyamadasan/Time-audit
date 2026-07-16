@@ -1154,11 +1154,69 @@ test('today timeline and recent entries display activity casing consistently', a
   await expect(mergedRow).toContainText('×2');
 
   const recentRows = page.locator('#recent-list .entry-row[data-activity-key="app building"]');
-  await expect(recentRows).toHaveCount(3);
+  await expect(recentRows).toHaveCount(2);
   const recentText = await page.locator('#recent-list').innerText();
   expect(recentText).toContain('App building');
+  expect(recentText).toContain('20m');
   expect(recentText).not.toContain('APP BUILDING');
   expect(recentText).not.toContain('app building');
+});
+
+test('today display collapses exact duplicates and merges continuous same task', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 10, 0, 0);
+  const start = Date.UTC(2026, 6, 15, 9, 0, 0);
+  const mid = Date.UTC(2026, 6, 15, 9, 8, 0);
+  const end = Date.UTC(2026, 6, 15, 9, 16, 0);
+  const entries = [
+    {
+      id: 'dup-a',
+      ts: mid,
+      tsStart: start,
+      updatedAt: mid,
+      blockIntervalMin: 8,
+      date: '2026-07-15',
+      activity: 'App building',
+      energy: 'deep',
+      onPlan: true,
+      retro: true
+    },
+    {
+      id: 'dup-b',
+      ts: mid,
+      tsStart: start,
+      updatedAt: mid + 1,
+      blockIntervalMin: 8,
+      date: '2026-07-15',
+      activity: 'APP BUILDING',
+      energy: 'deep',
+      onPlan: true,
+      retro: true
+    },
+    {
+      id: 'cont',
+      ts: end,
+      tsStart: mid,
+      updatedAt: end,
+      blockIntervalMin: 8,
+      date: '2026-07-15',
+      activity: 'app building',
+      energy: 'deep',
+      onPlan: true,
+      retro: true
+    }
+  ];
+
+  await openApp(page, { entries, nowTs });
+  await openTodayDetails(page);
+
+  const timelineRows = page.locator('#timeline-blocks .tl-row').filter({ hasText: 'App building' });
+  await expect(timelineRows).toHaveCount(1);
+  await expect(timelineRows.first()).toContainText('9:00 AM – 9:16 AM');
+  await expect(timelineRows.first()).toContainText('16m');
+  await expect(timelineRows.first()).toContainText('×3');
+  await expect(page.locator('#timeline-summary')).toContainText('1 blocks');
+  await expect(page.locator('#recent-list .entry-row').filter({ hasText: 'App building' })).toHaveCount(1);
+  expect(await page.evaluate(() => entries.length)).toBe(3);
 });
 
 test('activity cleanup merges stored name variants with undo', async ({ page }) => {

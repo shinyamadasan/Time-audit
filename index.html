@@ -1396,7 +1396,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-schedule-fast-edit-1';
+const APP_BUILD = '2026-07-16-display-dedupe-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1643,6 +1643,52 @@ function overlapMs(a, b) {
   return Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
 }
 
+function displayEntryIds(entry) {
+  return Array.isArray(entry?._mergedIds) && entry._mergedIds.length ? [...entry._mergedIds] : [entry?.id];
+}
+
+function exactDisplayDuplicateKey(entry) {
+  if (!entry || entry.deleted || entry.missed || entry.template || entry.isGap) return null;
+  const range = entryTimeRange(entry);
+  if (!range) return null;
+  return [
+    activityGroupKey(entry.activity),
+    entry.energy || '',
+    entry.project || '',
+    entry.away ? 'away' : '',
+    entry.break ? 'break' : '',
+    entry.browserUsage ? 'browser' : '',
+    Math.round(range.start / 60000),
+    Math.round(range.end / 60000)
+  ].join('|');
+}
+
+function collapseExactDuplicatesForDisplay(entriesArr) {
+  const out = [];
+  const byKey = new Map();
+  for (const entry of entriesArr || []) {
+    const key = exactDisplayDuplicateKey(entry);
+    if (!key) {
+      out.push(entry);
+      continue;
+    }
+    const existing = byKey.get(key);
+    if (!existing) {
+      const copy = { ...entry };
+      byKey.set(key, copy);
+      out.push(copy);
+      continue;
+    }
+    const existingIds = displayEntryIds(existing);
+    const entryIds = displayEntryIds(entry);
+    existing._mergedIds = [...existingIds, ...entryIds];
+    existing._mergeCount = (existing._mergeCount || existingIds.length) + entryIds.length;
+    existing.activity = preferActivityLabel(existing.activity, activityDisplayLabel(entry.activity));
+    existing.updatedAt = Math.max(existing.updatedAt || 0, entry.updatedAt || 0) || existing.updatedAt;
+  }
+  return out;
+}
+
 function entryMatchesScheduleTemplate(entry, dateKey) {
   if (!entry || !dateKey || isPcTimeEntry(entry)) return false;
   const entryRange = entryTimeRange(entry);
@@ -1672,7 +1718,7 @@ function isScheduleOrPlanBlock(entry, dateKey) {
 }
 
 function squashTinyPCTimeFragments(entriesArr, dateKey = null) {
-  const arr = Array.isArray(entriesArr) ? entriesArr : [];
+  const arr = collapseExactDuplicatesForDisplay(Array.isArray(entriesArr) ? entriesArr : []);
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const dateFor = entry => dateKey || getDateInTZ(entry?.tsStart || entry?.ts || Date.now(), tz);
   const blocks = arr
@@ -3741,19 +3787,34 @@ function mergeConsecutiveForDisplay(sorted) {
   if (!sorted.length) return sorted;
   // MAX_GAP_MS defined in storage.js
   const out = [];
-  let g = { ...sorted[0], activity: activityDisplayLabel(sorted[0].activity), _mergeCount: 1, _mergedIds: [sorted[0].id] };
+  const firstIds = displayEntryIds(sorted[0]);
+  let g = { ...sorted[0], activity: activityDisplayLabel(sorted[0].activity), _mergeCount: sorted[0]._mergeCount || firstIds.length, _mergedIds: firstIds };
   for (let i = 1; i < sorted.length; i++) {
     const e = sorted[i];
+    const eIds = displayEntryIds(e);
     const gap = (e.tsStart || e.ts) - g.ts;
-    if (activityGroupKey(e.activity) === activityGroupKey(g.activity) && e.energy === g.energy && gap >= 0 && gap <= MAX_GAP_MS) {
-      g = { ...g, activity: preferActivityLabel(g.activity, activityDisplayLabel(e.activity)), ts: e.ts, blockIntervalMin: Math.round((e.ts - (g.tsStart || g.ts)) / 60000), _mergeCount: g._mergeCount + 1, _mergedIds: [...g._mergedIds, e.id] };
+    const sameKind = activityGroupKey(e.activity) === activityGroupKey(g.activity) && e.energy === g.energy;
+    const sameRange = sameKind &&
+      Math.round(((e.tsStart || e.ts) || 0) / 60000) === Math.round(((g.tsStart || g.ts) || 0) / 60000) &&
+      Math.round((e.ts || 0) / 60000) === Math.round((g.ts || 0) / 60000);
+    if (sameRange) {
+      g = { ...g, activity: preferActivityLabel(g.activity, activityDisplayLabel(e.activity)), _mergeCount: (g._mergeCount || 1) + eIds.length, _mergedIds: [...g._mergedIds, ...eIds] };
+    } else if (sameKind && gap >= 0 && gap <= MAX_GAP_MS) {
+      g = { ...g, activity: preferActivityLabel(g.activity, activityDisplayLabel(e.activity)), ts: e.ts, blockIntervalMin: Math.round((e.ts - (g.tsStart || g.ts)) / 60000), _mergeCount: (g._mergeCount || 1) + eIds.length, _mergedIds: [...g._mergedIds, ...eIds] };
     } else {
       out.push(g);
-      g = { ...e, activity: activityDisplayLabel(e.activity), _mergeCount: 1, _mergedIds: [e.id] };
+      g = { ...e, activity: activityDisplayLabel(e.activity), _mergeCount: e._mergeCount || eIds.length, _mergedIds: eIds };
     }
   }
   out.push(g);
   return out;
+}
+
+function displayLoggedBlockCount(entriesArr) {
+  const asc = [...(entriesArr || [])]
+    .filter(e => !e.deleted && !e.missed && !e.template && !e.isGap)
+    .sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+  return mergeConsecutiveForDisplay(clipOverlapsForDisplay(asc)).length;
 }
 
 // ── Gap detection: anchored to work day start, not first entry ──
@@ -5375,12 +5436,11 @@ function renderToday() {
   resetRetroBar();
   autoLogDueTemplates({ notify: isViewingToday() });
   const todayE = getViewingEntries();
-  const realEntries = todayE.filter(e => !e.missed);
-  const deepCount = realEntries.filter(e => e.energy === 'deep').length;
-
   const _tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const _viewKey = getViewingDateKey();
   const displayTodayE = squashTinyPCTimeFragments(todayE, _viewKey);
+  const realEntries = displayTodayE.filter(e => !e.missed);
+  const deepCount = realEntries.filter(e => e.energy === 'deep').length;
   const _todayKey = getDateInTZ(Date.now(), _tz);
   if (_viewKey === _todayKey) _lastTodayDateKey = _todayKey;
   // tzParseTime gives noon on that date in the user's own timezone — safe for Intl display
@@ -5400,7 +5460,7 @@ function renderToday() {
   const cleanStreak = computeCleanStreak();
   const streakSubEl = document.getElementById('s-streak-sub');
   if (streakSubEl) streakSubEl.textContent = cleanStreak > 0 ? `days · ${cleanStreak}d clean` : 'days deep';
-  const identScore = computeIdentityScore(todayE);
+  const identScore = computeIdentityScore(displayTodayE);
   const identEl = document.getElementById('s-identity');
   const identSubEl = document.getElementById('s-identity-sub');
   identEl.textContent = getIdentityLevelWithEmoji(identScore);
@@ -5420,10 +5480,10 @@ function renderToday() {
 
   renderTodayPlan();
   renderFocusWallet();
-  renderTodayHealth(todayE);
-  renderTodayActionStrip(todayE);
-  renderGapRecoveryInbox(todayE);
-  renderRoutinePrompt(todayE);
+  renderTodayHealth(displayTodayE);
+  renderTodayActionStrip(displayTodayE);
+  renderGapRecoveryInbox(displayTodayE);
+  renderRoutinePrompt(displayTodayE);
   renderDailyBasics();
   renderMissedCloseoutCta();
   renderCloseoutCta();
@@ -5462,7 +5522,7 @@ function renderToday() {
 
 
   // ── Contextual visibility: show the right element for this moment ──
-  applyContextualVisibility(todayE);
+  applyContextualVisibility(displayTodayE);
 
   // Timeline label + nav
   const _vk = getViewingDateKey();
@@ -5475,8 +5535,9 @@ function renderToday() {
 
   // Timeline summary
   const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(displayTodayE)) : displayTodayE.length > 0;
+  const visibleBlockCount = displayLoggedBlockCount(displayTodayE);
   document.getElementById('timeline-summary').textContent =
-    workStarted ? `${computeDeepHrs(displayTodayE, _vk)}h deep · ${displayTodayE.length} blocks` : '';
+    workStarted ? `${computeDeepHrs(displayTodayE, _vk)}h deep · ${visibleBlockCount} blocks` : '';
   perfStageStart = recordPerfStage('renderTodayHeader', perfStageStart);
 
   const listEl = document.getElementById('recent-list');
@@ -5492,16 +5553,18 @@ function renderToday() {
       return;
     }
 
-    const sortedRecent = expandPCTimeEntries([...displayTodayE]).sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
+    const recentAsc = expandPCTimeEntries([...displayTodayE]).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+    const sortedRecent = mergeConsecutiveForDisplay(clipOverlapsForDisplay(recentAsc))
+      .sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
     listEl.innerHTML = sortedRecent.slice(0, 6).map(buildEntryRowHTML).join('');
   } // end if (entriesChanged)
   perfStageStart = recordPerfStage('renderTodayRecentList', perfStageStart);
 
   renderRecentChips();
   renderAwarenessSignal();
-  updateHeroPrompt(todayE);
-  renderDayBar(todayE);
-  renderStatusBanner(todayE);
+  updateHeroPrompt(displayTodayE);
+  renderDayBar(displayTodayE);
+  renderStatusBanner(displayTodayE);
   renderActiveDeviceBanner();
   perfStageStart = recordPerfStage('renderTodayBottomUi', perfStageStart);
   if (document.body.classList.contains('show-dashboard-panels')) renderSidePanel();

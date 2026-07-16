@@ -143,7 +143,7 @@ Depends on: `entries`, `focusRedemptions`, `persist()`, `scheduleRenderToday()`,
 ## [Timer — Core Interval Tracking]
 Lines: 2197–2476
 Purpose: Start/stop/reset the 30-min countdown ring, pre-commit modal for naming tasks, state switching, heartbeat, and the `beforeunload` guard.
-Functions: `fmt()`, `normalizeActivity()`, `activityBaseName()`, `activityGroupKey()`, `activityDisplayLabel()`, `preferActivityLabel()`, `canonicalActivityBase()`, `canonicalizeActivityInput()`, `expandPCTimeEntries()`, `isPcTimeEntry()`, `overlapMs()`, `entryMatchesScheduleTemplate()`, `entryMatchesPlanItem()`, `isScheduleOrPlanBlock()`, `squashTinyPCTimeFragments()`, `fmtDur()`, `updateRing()`, `toggleTimer()`, `continueLastTask()`, `switchToNewTask()`, `confirmPreCommit()`, `updateTimerTaskLabel()`, `_startTimer()`, `switchState()`, `playAlert()`, `resetTimer()`, `stopAndLog()`, `switchTaskMidBlock()`
+Functions: `fmt()`, `normalizeActivity()`, `activityBaseName()`, `activityGroupKey()`, `activityDisplayLabel()`, `preferActivityLabel()`, `canonicalActivityBase()`, `canonicalizeActivityInput()`, `expandPCTimeEntries()`, `isPcTimeEntry()`, `overlapMs()`, `displayEntryIds()`, `exactDisplayDuplicateKey()`, `collapseExactDuplicatesForDisplay()`, `entryMatchesScheduleTemplate()`, `entryMatchesPlanItem()`, `isScheduleOrPlanBlock()`, `squashTinyPCTimeFragments()`, `fmtDur()`, `updateRing()`, `toggleTimer()`, `continueLastTask()`, `switchToNewTask()`, `confirmPreCommit()`, `updateTimerTaskLabel()`, `_startTimer()`, `switchState()`, `playAlert()`, `resetTimer()`, `stopAndLog()`, `switchTaskMidBlock()`
 Variables: `CIRCUM` (314.2 SVG circumference)
 Depends on: State globals, `persist()`, `syncEntries()`, `showToast()`, `renderToday()`, Firebase sync section
 
@@ -253,7 +253,7 @@ Depends on: `settings`, `persist()`
 ## [Timeline Helpers]
 Lines: 3706–3853
 Purpose: Work-day start detection, timeline display preprocessing — overlap clipping, consecutive-entry merging, gap computation, scroll-to.
-Functions: `getWorkDayStartTs()`, `clipOverlapsForDisplay()`, `mergeConsecutiveForDisplay()`, `computeGaps()`, `scrollToTimeline()`, `scrollToFirstEnergy()`, `localTime()`
+Functions: `getWorkDayStartTs()`, `clipOverlapsForDisplay()`, `displayEntryIds()`, `exactDisplayDuplicateKey()`, `collapseExactDuplicatesForDisplay()`, `mergeConsecutiveForDisplay()`, `displayLoggedBlockCount()`, `computeGaps()`, `scrollToTimeline()`, `scrollToFirstEnergy()`, `localTime()`
 Variables: —
 Depends on: `entries`, `settings` (timezone)
 
