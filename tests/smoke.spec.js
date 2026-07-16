@@ -1170,6 +1170,57 @@ test('day template starter supports different selected day sets', async ({ page 
   expect(new Set(templates.map(t => t.id)).size).toBe(10);
 });
 
+test('day template form rejects duplicate recurring blocks on add and edit', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    showView('settings');
+    settings.templates = [];
+    renderTemplateList();
+
+    const fillTemplateForm = (activity, energy, startTime, endTime, days) => {
+      document.getElementById('tpl-activity').value = activity;
+      document.getElementById('tpl-energy').value = energy;
+      document.getElementById('tpl-start').value = startTime;
+      document.getElementById('tpl-end').value = endTime;
+      document.querySelectorAll('#tpl-day-picker .tpl-day-btn').forEach(btn =>
+        btn.classList.toggle('on', days.includes(parseInt(btn.dataset.day)))
+      );
+    };
+
+    fillTemplateForm('Scribe shift', 'nine5', '00:00', '08:00', [1]);
+    addTemplate();
+    fillTemplateForm('scribe shift', 'nine5', '00:00', '08:00', [1]);
+    addTemplate();
+    const afterDuplicateAdd = settings.templates.map(t => ({ activity: t.activity, days: t.days }));
+
+    fillTemplateForm('Lunch', 'recovery', '12:00', '12:30', [1]);
+    addTemplate();
+    editTemplate(1);
+    fillTemplateForm('SCRIBE SHIFT', 'deep', '00:00', '08:00', [1]);
+    addTemplate();
+
+    return {
+      afterDuplicateAdd,
+      templates: settings.templates.map(t => ({
+        activity: t.activity,
+        energy: t.energy,
+        startTime: t.startTime,
+        endTime: t.endTime,
+        days: t.days
+      })),
+      editingIndex: _editingTplIdx
+    };
+  });
+
+  expect(result.afterDuplicateAdd).toEqual([{ activity: 'Scribe shift', days: [1] }]);
+  expect(result.templates).toEqual([
+    { activity: 'Scribe shift', energy: 'nine5', startTime: '00:00', endTime: '08:00', days: [1] },
+    { activity: 'Lunch', energy: 'recovery', startTime: '12:00', endTime: '12:30', days: [1] }
+  ]);
+  expect(result.editingIndex).toBe(1);
+});
+
 test('weekly schedule add and delete update the list before deferred refresh', async ({ page }) => {
   await openApp(page);
 
