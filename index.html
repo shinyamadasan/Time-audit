@@ -702,9 +702,22 @@
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Fixed commitments and daily anchors shown greyed-out in your timeline. Turn on auto-log only for reliable shifts; delete that day's entry if reality changed.</div>
     <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:12px">
       <div class="flex-min">
-        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">Day cards</div>
-        <div style="font-size:10px;color:var(--muted);line-height:1.35;margin-bottom:10px">Each card is that day’s repeating skeleton. What appears on Saturday will be suggested every Saturday until you change or delete it.</div>
-        <div id="day-template-cards" class="day-template-grid"></div>
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">Day skeleton</div>
+        <div style="font-size:10px;color:var(--muted);line-height:1.35;margin-bottom:10px">Choose a day to see what will be suggested every time that day comes around.</div>
+        <div class="day-template-controls">
+          <select id="day-template-select" onchange="renderDayTemplatePanel()">
+            <option value="1">Monday</option>
+            <option value="2">Tuesday</option>
+            <option value="3">Wednesday</option>
+            <option value="4">Thursday</option>
+            <option value="5">Friday</option>
+            <option value="6">Saturday</option>
+            <option value="0">Sunday</option>
+          </select>
+          <button type="button" class="btn sm ghost" onclick="addBasicsToSelectedDay()">Add basics</button>
+          <button type="button" class="btn sm ghost" onclick="startTemplateBlockForSelectedDay()">+ Block</button>
+        </div>
+        <div id="day-template-panel" class="day-template-panel"></div>
       </div>
     </div>
     <div id="template-list"></div>
@@ -1396,7 +1409,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-day-cards-1';
+const APP_BUILD = '2026-07-16-day-dropdown-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -7598,7 +7611,7 @@ function renderSettings() {
   updateSyncUI();
   renderAvatarPicker();
   renderPartnerSettings();
-  renderDayTemplateCards();
+  renderDayTemplatePanel();
   renderTemplateList();
   renderBudgets();
 }
@@ -8984,6 +8997,21 @@ function dayTemplateLabel(day) {
   return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day] || '';
 }
 
+function dayTemplateFullLabel(day) {
+  return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day] || '';
+}
+
+function selectedDayTemplateDay() {
+  const select = document.getElementById('day-template-select');
+  const value = parseInt(select?.value, 10);
+  return Number.isInteger(value) && value >= 0 && value <= 6 ? value : 1;
+}
+
+function templateEnergyColor(energy) {
+  const colors = { nine5:'var(--nine5)', deep:'var(--deep)', shallow:'var(--shallow)', learning:'var(--learning)', exercise:'var(--exercise)', recovery:'var(--break)', errands:'var(--errands)', social:'var(--social)', waste:'var(--distraction)' };
+  return colors[energy] || 'var(--muted)';
+}
+
 function templatePresetTemplates(presetKey, daySelection) {
   const sleepTime = settings.sleepTime || '23:00';
   const wakeTime = settings.wakeTime || '07:00';
@@ -9017,33 +9045,31 @@ function templatesForDay(day) {
     .sort((a, b) => hhmmToMinutes(a.startTime) - hhmmToMinutes(b.startTime));
 }
 
-function renderDayTemplateCards() {
-  const el = document.getElementById('day-template-cards');
+function renderDayTemplatePanel() {
+  const el = document.getElementById('day-template-panel');
   if (!el) return;
+  const select = document.getElementById('day-template-select');
+  if (select && !select.dataset.ready) {
+    const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    select.value = String(tzDow(Date.now()));
+    select.dataset.ready = '1';
+  }
   const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[ch]));
-  el.innerHTML = [1, 2, 3, 4, 5, 6, 0].map(day => {
-    const blocks = templatesForDay(day);
-    const preview = blocks.length
-      ? blocks.map(tpl => `
-        <div class="day-template-line">
-          <span>${esc(activityDisplayLabel(tpl.activity))}</span>
-          <span>${esc(tpl.startTime)}-${esc(tpl.endTime)}${tpl.autoLog ? ' · auto-log' : ''}</span>
+  const day = selectedDayTemplateDay();
+  const blocks = templatesForDay(day);
+  el.innerHTML = blocks.length
+    ? blocks.map(tpl => `
+        <div class="day-template-bar" style="border-left-color:${templateEnergyColor(tpl.energy)}">
+          <div class="day-template-bar-title">
+            <span>${esc(activityDisplayLabel(tpl.activity))}</span>
+            <small>${esc(eLabel[tpl.energy] || tpl.energy || '')}</small>
+          </div>
+          <div class="day-template-bar-meta">${esc(tpl.startTime)}-${esc(tpl.endTime)} · ${tpl.autoLog ? 'auto-log' : 'manual'}</div>
         </div>
       `).join('')
-      : '<div class="day-template-empty">No blocks yet.</div>';
-    return `
-      <div class="day-template-card">
-        <div class="day-template-title">${dayTemplateLabel(day)}</div>
-        <div class="day-template-preview">${preview}</div>
-        <div class="day-template-actions">
-          <button type="button" class="btn sm ghost" onclick="addBasicsToDay(${day})">Add basics</button>
-          <button type="button" class="btn sm ghost" onclick="startTemplateBlockForDay(${day})">+ Block</button>
-        </div>
-      </div>
-    `
-  }).join('');
+    : `<div class="day-template-empty">No blocks yet for ${dayTemplateFullLabel(day)}.</div>`;
 }
 
 function startTemplateBlockForDay(day) {
@@ -9065,6 +9091,14 @@ function startTemplateBlockForDay(day) {
 
 function addBasicsToDay(day) {
   addDayTemplateSkeleton([day]);
+}
+
+function addBasicsToSelectedDay() {
+  addBasicsToDay(selectedDayTemplateDay());
+}
+
+function startTemplateBlockForSelectedDay() {
+  startTemplateBlockForDay(selectedDayTemplateDay());
 }
 
 function defaultDaySkeletonTemplates(daySelection) {
@@ -9105,7 +9139,7 @@ function addDayTemplateSkeleton(daySelection = [0, 1, 2, 3, 4, 5, 6]) {
   settings._templatesSavedAt = Date.now();
   persist();
   if (fbRoomRef) fbRoomRef.update({ settings });
-  renderDayTemplateCards();
+  renderDayTemplatePanel();
   renderTemplateList();
   _todayRenderKey = '__FORCE__';
   renderToday();
@@ -9130,7 +9164,7 @@ function skipTemplateOnDate(templateId, dateKey) {
   settings._templatesSavedAt = Date.now();
   persist();
   if (fbRoomRef) fbRoomRef.update({ settings });
-  renderDayTemplateCards();
+  renderDayTemplatePanel();
   renderTemplateList();
   _todayRenderKey = '__FORCE__';
   renderToday();
@@ -9250,7 +9284,7 @@ function updateTemplateFromEntry(templateId, entry) {
   settings._templatesSavedAt = Date.now();
   persist();
   if (fbRoomRef) fbRoomRef.update({ settings });
-  renderDayTemplateCards();
+  renderDayTemplatePanel();
   renderTemplateList();
   renderToday();
   showToast('Recurring schedule updated');
@@ -9358,7 +9392,7 @@ function addTemplate() {
   document.querySelectorAll('#tpl-day-picker .tpl-day-btn').forEach(b => b.classList.remove('on'));
   const addBtn = document.getElementById('tpl-add-btn');
   if (addBtn) addBtn.textContent = '+ Add recurring block';
-  renderDayTemplateCards();
+  renderDayTemplatePanel();
   renderTemplateList();
   showToast(wasEditing ? 'Block updated' : 'Recurring block added');
   persistTemplatesAfterPaint();
@@ -9389,7 +9423,7 @@ function removeTemplate(i) {
   settings.templates.splice(i, 1);
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
-  renderDayTemplateCards();
+  renderDayTemplatePanel();
   renderTemplateList();
   showToast('Recurring block deleted');
   persistTemplatesAfterPaint();
