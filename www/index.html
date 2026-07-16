@@ -1423,7 +1423,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-week-calendar-clean-1';
+const APP_BUILD = '2026-07-16-week-calendar-click-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -9372,6 +9372,11 @@ function renderTemplateList() {
       segmentsByDay[dayIndex].push(`
         <div class="template-cal-event${isContinuation ? ' continuation' : ''}"
           data-template-index="${i}"
+          role="button"
+          tabindex="0"
+          aria-label="Edit ${itemTitle}"
+          onclick="editTemplate(${i})"
+          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();editTemplate(${i})}"
           style="top:${top.toFixed(4)}%;height:${height.toFixed(4)}%;border-left-color:${color};--template-event-color:${color}">
           <div class="template-cal-event-card">
             <div class="template-cal-event-title">${itemTitle}</div>
@@ -9379,11 +9384,8 @@ function renderTemplateList() {
             <div class="template-cal-event-sub">
               <span style="color:${color}">${esc(energyLabel)}</span>${tpl.autoLog ? '<span class="template-cal-auto">auto-log</span>' : ''}
             </div>
-            ${!isContinuation ? `<div class="template-cal-event-actions">
-              <button type="button" aria-label="Edit ${title}" onclick="editTemplate(${i})">Edit</button>
-              <button type="button" aria-label="Delete ${title}" onclick="removeTemplate(${i})">x</button>
-            </div>` : ''}
           </div>
+          <button class="template-cal-delete" type="button" aria-label="Delete ${title}" onclick="event.stopPropagation();removeTemplate(${i})">x</button>
         </div>`);
     };
     days.forEach(day => {
