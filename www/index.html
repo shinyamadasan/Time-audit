@@ -1405,7 +1405,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-day-template-1';
+const APP_BUILD = '2026-07-16-template-dupes-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -9021,6 +9021,22 @@ function templateSkeletonExists(candidate) {
   );
 }
 
+function templateDuplicateKey(tpl) {
+  return [
+    activityGroupKey(tpl.activity),
+    tpl.startTime || '',
+    tpl.endTime || '',
+    normalizeTemplateDays(tpl.days).join(',')
+  ].join('|');
+}
+
+function findDuplicateTemplate(candidate, ignoreIndex = -1) {
+  const candidateKey = templateDuplicateKey(candidate);
+  return (settings.templates || []).find((tpl, i) =>
+    i !== ignoreIndex && templateDuplicateKey(tpl) === candidateKey
+  );
+}
+
 function addDayTemplateSkeleton() {
   if (!settings.templates) settings.templates = [];
   const days = selectedSkeletonDays();
@@ -9252,16 +9268,21 @@ function addTemplate() {
   const endTime = document.getElementById('tpl-end').value;
   const autoLog = !!document.getElementById('tpl-auto-log')?.checked;
   if (!startTime || !endTime) { showToast('Set start and end time'); return; }
-  const days = [...document.querySelectorAll('#tpl-day-picker .tpl-day-btn.on')].map(b => parseInt(b.dataset.day));
+  const days = normalizeTemplateDays([...document.querySelectorAll('#tpl-day-picker .tpl-day-btn.on')].map(b => b.dataset.day));
   if (!days.length) { showToast('Select at least one day'); return; }
   if (!settings.templates) settings.templates = [];
   const wasEditing = _editingTplIdx !== null;
+  const candidate = { activity, energy, days, startTime, endTime, autoLog };
+  if (findDuplicateTemplate(candidate, wasEditing ? _editingTplIdx : -1)) {
+    showToast('Recurring block already exists');
+    return;
+  }
   if (wasEditing) {
     // Update existing — preserve id and enabled flag
-    settings.templates[_editingTplIdx] = { ...settings.templates[_editingTplIdx], activity, energy, days, startTime, endTime, autoLog };
+    settings.templates[_editingTplIdx] = { ...settings.templates[_editingTplIdx], ...candidate };
     _editingTplIdx = null;
   } else {
-    settings.templates.push({ id: Date.now().toString(36), activity, energy, days, startTime, endTime, autoLog, enabled: true });
+    settings.templates.push({ id: Date.now().toString(36), ...candidate, enabled: true });
   }
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
