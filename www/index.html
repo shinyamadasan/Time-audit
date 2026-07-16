@@ -1431,7 +1431,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-week-template-sections-1';
+const APP_BUILD = '2026-07-16-week-calendar-click-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -9169,6 +9169,23 @@ function startTemplateBlockForDay(day) {
   showToast(`New block will repeat on ${dayTemplateLabel(day)}`);
 }
 
+function startTemplateBlockAt(day, event) {
+  if (event?.target?.closest?.('.template-cal-event')) return;
+  const target = event?.currentTarget;
+  let startMin = 8 * 60;
+  if (target && event && typeof event.clientY === 'number') {
+    const rect = target.getBoundingClientRect();
+    const rawMin = ((event.clientY - rect.top) / Math.max(1, rect.height)) * 1440;
+    startMin = Math.floor(rawMin / 30) * 30;
+    startMin = Math.max(0, Math.min(1410, startMin));
+  }
+  startTemplateBlockForDay(day);
+  const startEl = document.getElementById('tpl-start');
+  const endEl = document.getElementById('tpl-end');
+  if (startEl) startEl.value = minutesToHHMM(startMin);
+  if (endEl) endEl.value = minutesToHHMM(startMin + 30);
+}
+
 function startTemplateBlockForSelectedDay() {
   startTemplateBlockForDay(selectedDayTemplateDay());
 }
@@ -9360,17 +9377,11 @@ function renderTemplateList() {
   ];
   const ENERGY_COLOR = { nine5:'var(--nine5)', deep:'var(--deep)', shallow:'var(--shallow)', learning:'var(--learning)', exercise:'var(--exercise)', recovery:'var(--break)', errands:'var(--errands)', social:'var(--social)', waste:'var(--distraction)' };
   const ENERGY_LABEL = { nine5:'Job Work', deep:'Deep Work', shallow:'Shallow Work', learning:'Learning', exercise:'Exercise', recovery:'Maintenance', errands:'Errands', social:'Social', waste:'Waste' };
-  const sections = [
-    { key: 'night', label: 'Night', range: '12 AM-6 AM', start: 0, end: 360 },
-    { key: 'morning', label: 'Morning', range: '6 AM-12 PM', start: 360, end: 720 },
-    { key: 'afternoon', label: 'Afternoon', range: '12 PM-6 PM', start: 720, end: 1080 },
-    { key: 'evening', label: 'Evening', range: '6 PM-12 AM', start: 1080, end: 1440 }
-  ];
-  const sectionForMinute = minute => {
-    const index = sections.findIndex(section => minute >= section.start && minute < section.end);
-    return index >= 0 ? index : sections.length - 1;
-  };
-  const itemsBySection = sections.map(() => dayCols.map(() => []));
+  const hourRows = Array.from({ length: 24 }, (_, hour) => {
+    const label = hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`;
+    return `<div class="template-cal-time">${label}</div>`;
+  }).join('');
+  const itemsByDay = dayCols.map(() => []);
   settings.templates.forEach((tpl, i) => {
     const color = ENERGY_COLOR[tpl.energy] || 'var(--muted)';
     const energyLabel = ENERGY_LABEL[tpl.energy] || tpl.energy;
@@ -9381,62 +9392,61 @@ function renderTemplateList() {
     const dur = duration >= 60 ? `${(duration/60).toFixed(duration%60===0?0:1)}h` : `${duration}m`;
     const days = normalizeTemplateDays(tpl.days);
     const title = esc(activityDisplayLabel(tpl.activity));
-    const event = (dayIndex, sortMin, isContinuation = false) => {
-      const sectionIndex = sectionForMinute(sortMin);
+    const event = (dayIndex, topMin, segmentMin, isContinuation = false) => {
       const itemTitle = `${title}${isContinuation ? ' cont.' : ''}`;
-      itemsBySection[sectionIndex][dayIndex].push({
-        sortMin,
+      const topPct = (topMin / 1440) * 100;
+      const heightPct = (segmentMin / 1440) * 100;
+      itemsByDay[dayIndex].push({
+        sortMin: topMin,
         html: `
-        <div class="template-week-event${isContinuation ? ' continuation' : ''}"
+        <div class="template-cal-event${isContinuation ? ' continuation' : ''}"
           data-template-index="${i}"
           role="button"
           tabindex="0"
           aria-label="Edit ${itemTitle}"
-          onclick="editTemplate(${i})"
-          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();editTemplate(${i})}"
-          style="border-left-color:${color};--template-event-color:${color}">
-          <div class="template-week-event-title">${itemTitle}</div>
-          <div class="template-week-event-meta">${esc(tpl.startTime)}-${esc(tpl.endTime)} · ${dur}</div>
-          <div class="template-week-event-sub">
-            <span style="color:${color}">${esc(energyLabel)}</span>${tpl.autoLog ? '<span class="template-week-auto">auto-log</span>' : ''}
+          onclick="event.stopPropagation();editTemplate(${i})"
+          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();editTemplate(${i})}"
+          style="top:${topPct}%;height:${heightPct}%;border-left-color:${color};--template-event-color:${color}">
+          <div class="template-cal-event-card">
+            <div class="template-cal-event-title">${itemTitle}</div>
+            <div class="template-cal-event-meta">${esc(tpl.startTime)}-${esc(tpl.endTime)} · ${dur}</div>
+            <div class="template-cal-event-sub">
+              <span style="color:${color}">${esc(energyLabel)}</span>${tpl.autoLog ? '<span class="template-cal-auto">auto-log</span>' : ''}
+            </div>
           </div>
-          <button class="template-week-delete" type="button" aria-label="Delete ${title}" onclick="event.stopPropagation();removeTemplate(${i})">x</button>
+          <button class="template-cal-delete" type="button" aria-label="Delete ${title}" onclick="event.stopPropagation();removeTemplate(${i})">x</button>
         </div>`
       });
     };
     days.forEach(day => {
       const dayIndex = dayCols.findIndex(col => col.day === day);
       if (dayIndex < 0) return;
-      event(dayIndex, startMin);
-      if (duration < 1440 && endMin <= startMin) {
+      if (endMin > startMin) {
+        event(dayIndex, startMin, duration);
+      } else {
+        event(dayIndex, startMin, 1440 - startMin);
         const nextIndex = (dayIndex + 1) % dayCols.length;
-        if (endMin > 0) event(nextIndex, 0, true);
+        if (endMin > 0) event(nextIndex, 0, endMin, true);
       }
     });
   });
-  const sectionRows = sections.map((section, sectionIndex) => `
-    <div class="template-week-section" data-section="${section.key}">
-      <div class="template-week-time">
-        <strong>${section.label}</strong>
-        <span>${section.range}</span>
-      </div>
-      ${dayCols.map(({ day, label }, dayIndex) => {
-        const items = itemsBySection[sectionIndex][dayIndex].sort((a, b) => a.sortMin - b.sortMin);
-        return `
-          <div class="template-week-cell" data-day="${day}" data-day-label="${label}">
-            ${items.map(item => item.html).join('')}
-          </div>`;
-      }).join('')}
-    </div>
-  `).join('');
   el.innerHTML = `
-    <div class="template-week-wrap">
-      <div class="template-week">
-        <div class="template-week-head">
-          <div></div>
+    <div class="template-cal-wrap">
+      <div class="template-cal">
+        <div class="template-cal-head">
+          <div class="template-cal-corner"></div>
           ${dayCols.map(({ label }) => `<div>${label}</div>`).join('')}
         </div>
-        ${sectionRows}
+        <div class="template-cal-body">
+          <div class="template-cal-times">${hourRows}</div>
+          ${dayCols.map(({ day, label }, dayIndex) => {
+            const items = itemsByDay[dayIndex].sort((a, b) => a.sortMin - b.sortMin);
+            return `
+              <div class="template-cal-day" data-day="${day}" data-day-label="${label}" onclick="startTemplateBlockAt(${day}, event)">
+                ${items.map(item => item.html).join('')}
+              </div>`;
+          }).join('')}
+        </div>
       </div>
     </div>`;
 }
