@@ -1092,7 +1092,7 @@ test('long non-job coverage blocks are not split by the legacy fallback', async 
   await expect(timeline).not.toContainText('12:00 AM – 1:00 AM');
 });
 
-test('day template starter adds editable non-auto schedule anchors once', async ({ page }) => {
+test('template preset adds editable non-auto basics once', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
   await openApp(page, {
     nowTs,
@@ -1103,8 +1103,8 @@ test('day template starter adds editable non-auto schedule anchors once', async 
   });
 
   await page.evaluate(() => showView('settings'));
-  await page.getByRole('button', { name: 'Add day template' }).click();
-  await page.getByRole('button', { name: 'Add day template' }).click();
+  await page.getByRole('button', { name: /^Add preset$/ }).click();
+  await page.getByRole('button', { name: /^Add preset$/ }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1134,7 +1134,7 @@ test('day template starter adds editable non-auto schedule anchors once', async 
   await expect(page.locator('#template-list')).toContainText('Hygiene');
 });
 
-test('day template starter supports different selected day sets', async ({ page }) => {
+test('template preset supports different selected day sets', async ({ page }) => {
   await openApp(page, {
     settings: {
       sleepTime: '23:00',
@@ -1148,7 +1148,7 @@ test('day template starter supports different selected day sets', async ({ page 
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="3"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="4"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="5"]').click();
-  await page.getByRole('button', { name: 'Add day template' }).click();
+  await page.getByRole('button', { name: /^Add preset$/ }).click();
 
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="1"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="2"]').click();
@@ -1157,7 +1157,7 @@ test('day template starter supports different selected day sets', async ({ page 
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="5"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="0"]').click();
   await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="6"]').click();
-  await page.getByRole('button', { name: 'Add day template' }).click();
+  await page.getByRole('button', { name: /^Add preset$/ }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1168,6 +1168,81 @@ test('day template starter supports different selected day sets', async ({ page 
   expect(templates).toHaveLength(10);
   expect(templates.filter(t => t.activity === 'Sleep').map(t => t.days)).toEqual([[0, 6], [1, 2, 3, 4, 5]]);
   expect(new Set(templates.map(t => t.id)).size).toBe(10);
+});
+
+test('template preset can add a selected night work block', async ({ page }) => {
+  await openApp(page);
+
+  await page.evaluate(() => {
+    showView('settings');
+    document.getElementById('template-preset-select').value = 'night-work';
+    renderTemplatePresetHelp();
+    document.querySelectorAll('#skeleton-day-picker .tpl-day-btn').forEach(btn =>
+      btn.classList.toggle('on', btn.dataset.day === '1')
+    );
+  });
+
+  await expect(page.locator('#template-preset-help')).toContainText('22:00 to 08:00');
+  await page.getByRole('button', { name: /^Add preset$/ }).click();
+
+  const templates = await page.evaluate(() => settings.templates.map(t => ({
+    activity: t.activity,
+    energy: t.energy,
+    days: t.days,
+    startTime: t.startTime,
+    endTime: t.endTime,
+    autoLog: t.autoLog,
+    skeleton: t.skeleton
+  })));
+
+  expect(templates).toEqual([{
+    activity: 'Work shift',
+    energy: 'nine5',
+    days: [1],
+    startTime: '22:00',
+    endTime: '08:00',
+    autoLog: true,
+    skeleton: true
+  }]);
+});
+
+test('today template rows expose log off and edit actions', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
+  await openApp(page, {
+    nowTs,
+    settings: {
+      templates: [{
+        id: 'lunch',
+        activity: 'Lunch',
+        energy: 'recovery',
+        days: [3],
+        startTime: '11:00',
+        endTime: '11:30',
+        autoLog: false,
+        enabled: true,
+        skeleton: true
+      }]
+    }
+  });
+
+  await openTodayDetails(page);
+  const row = page.locator('#timeline-blocks .tl-template-row').filter({ hasText: 'Lunch' });
+  await expect(row.getByRole('button', { name: 'Log it' })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Off today' })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Edit' })).toBeVisible();
+
+  await row.getByRole('button', { name: 'Log it' }).click();
+  await expect(page.locator('#retro-overlay')).toBeVisible();
+  await expect(page.locator('#retro-activity')).toHaveValue('Lunch');
+  await expect(page.locator('#retro-start')).toHaveValue('11:00');
+  await expect(page.locator('#retro-end')).toHaveValue('11:30');
+  await page.locator('#retro-overlay').getByRole('button', { name: 'Cancel' }).click();
+
+  await row.getByRole('button', { name: 'Edit' }).click();
+  await expect(page.locator('#view-settings')).toHaveClass(/active/);
+  await expect(page.locator('#tpl-activity')).toHaveValue('Lunch');
+  await expect(page.locator('#tpl-start')).toHaveValue('11:00');
+  await expect(page.locator('#tpl-end')).toHaveValue('11:30');
 });
 
 test('day template form rejects duplicate recurring blocks on add and edit', async ({ page }) => {

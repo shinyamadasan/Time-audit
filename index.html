@@ -702,8 +702,17 @@
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Fixed commitments and daily anchors shown greyed-out in your timeline. Turn on auto-log only for reliable shifts; delete that day's entry if reality changed.</div>
     <div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:12px">
       <div class="flex-min">
-        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">Day template starter</div>
-        <div style="font-size:10px;color:var(--muted);line-height:1.35;margin-bottom:8px">Adds sleep, meals, and hygiene as editable placeholders for the days you choose. No auto-log.</div>
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">Template preset</div>
+        <div style="font-size:10px;color:var(--muted);line-height:1.35;margin-bottom:8px">Apply a small group of editable blocks to the days you choose.</div>
+        <select id="template-preset-select" onchange="renderTemplatePresetHelp()"
+          style="width:100%;max-width:260px;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:12px;padding:8px 10px;border-radius:8px;outline:none;margin-bottom:7px">
+          <option value="basics">Daily basics</option>
+          <option value="night-work">Night work</option>
+          <option value="day-work">Day work</option>
+          <option value="active-day">Active day</option>
+          <option value="errand-day">Errand day</option>
+        </select>
+        <div id="template-preset-help" style="font-size:10px;color:var(--muted2);line-height:1.35;margin-bottom:8px">Sleep, meals, and hygiene. No auto-log.</div>
         <div id="skeleton-day-picker" style="display:flex;gap:6px;flex-wrap:wrap">
           <button type="button" class="tpl-day-btn on" data-day="1" onclick="toggleSkeletonDay(this)">Mon</button>
           <button type="button" class="tpl-day-btn on" data-day="2" onclick="toggleSkeletonDay(this)">Tue</button>
@@ -714,7 +723,7 @@
           <button type="button" class="tpl-day-btn on" data-day="0" onclick="toggleSkeletonDay(this)">Sun</button>
         </div>
       </div>
-      <button type="button" class="btn sm ghost" onclick="addDayTemplateSkeleton()" style="flex-shrink:0">Add day template</button>
+      <button type="button" class="btn sm ghost" onclick="addDayTemplateSkeleton()" style="flex-shrink:0">Add preset</button>
     </div>
     <div id="template-list"></div>
     <!-- Add form -->
@@ -1405,7 +1414,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-template-dupes-1';
+const APP_BUILD = '2026-07-16-template-presets-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -4099,20 +4108,21 @@ function renderEntryRow(item) {
     const dur = Math.round((item.ts - item.tsStart) / 60000);
     const label = eLabel[item.energy] || item.energy;
     const templateActivity = activityDisplayLabel(item.activity);
-    const safeAct = item.activity.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
     const templateIdArg = entryIdJsArg(item.templateId);
     const templateDateArg = entryIdJsArg(item.date);
     return `<div class="tl-row tl-template-row"
-      data-ts-start="${item.tsStart}" data-ts-end="${item.ts}"
-      data-activity="${safeAct}" data-energy="${item.energy}"
-      onclick="openRetroLogPrefilled(+this.dataset.tsStart,+this.dataset.tsEnd,this.dataset.activity,this.dataset.energy)">
+      onclick="openTemplateLog(${templateIdArg},${templateDateArg})">
       <div class="tl-time">${localTime(item.tsStart)}</div>
       <div class="tl-bar-col tl-bar-template"></div>
       <div class="tl-content">
         <div class="tl-activity">${esc(templateActivity)}<span class="tl-badge" style="background:var(--bg3);color:var(--muted);border-radius:4px">${label}</span></div>
-        <div class="tl-meta">${localTime(item.tsStart)} – ${localTime(item.ts)} · ${fmtDur(dur)} · <span style="color:var(--deep);font-weight:600">${item.autoLog ? 'auto-logs after end' : 'tap to log'}</span></div>
+        <div class="tl-meta">${localTime(item.tsStart)} – ${localTime(item.ts)} · ${fmtDur(dur)} · <span style="color:var(--deep);font-weight:600">${item.autoLog ? 'will auto-log after end' : 'template hint'}</span></div>
       </div>
-      <button class="log-gap-btn template-off-btn" onclick="event.stopPropagation(); skipTemplateOnDate(${templateIdArg},${templateDateArg})">Off today</button>
+      <div class="tl-template-actions">
+        <button class="log-gap-btn" onclick="event.stopPropagation(); openTemplateLog(${templateIdArg},${templateDateArg})">Log it</button>
+        <button class="log-gap-btn template-off-btn" onclick="event.stopPropagation(); skipTemplateOnDate(${templateIdArg},${templateDateArg})">Off today</button>
+        <button class="log-gap-btn" onclick="event.stopPropagation(); editTemplateFromToday(${templateIdArg})">Edit</button>
+      </div>
     </div>`;
   }
   const energyClass = item.missed ? 'missed' : item.energy;
@@ -7607,6 +7617,7 @@ function renderSettings() {
   updateSyncUI();
   renderAvatarPicker();
   renderPartnerSettings();
+  renderTemplatePresetHelp();
   renderTemplateList();
   renderBudgets();
 }
@@ -8943,6 +8954,24 @@ function generateTemplateEntries(dateKey) {
   return result;
 }
 
+function findTemplateById(templateId) {
+  return (settings.templates || []).find(tpl => String(tpl.id) === String(templateId));
+}
+
+function openTemplateLog(templateId, dateKey) {
+  const tpl = findTemplateById(templateId);
+  if (!tpl || !dateKey) { showToast('Template not found'); return; }
+  const range = templateSlotRange(tpl, dateKey);
+  openRetroLogPrefilled(range.tsStart, range.tsEnd, tpl.activity, tpl.energy);
+}
+
+function editTemplateFromToday(templateId) {
+  const idx = (settings.templates || []).findIndex(tpl => String(tpl.id) === String(templateId));
+  if (idx < 0) { showToast('Template not found'); return; }
+  showView('settings');
+  editTemplate(idx);
+}
+
 function templateSlotRange(tpl, dateKey) {
   const tsStart = tzParseTime(dateKey, tpl.startTime);
   let tsEnd = tzParseTime(dateKey, tpl.endTime);
@@ -8987,37 +9016,93 @@ function toggleSkeletonDay(btn) {
   btn.classList.toggle('on');
 }
 
-function defaultDaySkeletonTemplates(daySelection) {
+function templatePresetDefinitions() {
+  return {
+    basics: {
+      label: 'Daily basics',
+      help: 'Sleep, meals, and hygiene. No auto-log.'
+    },
+    'night-work': {
+      label: 'Night work',
+      help: 'One auto-logging job block from 22:00 to 08:00.'
+    },
+    'day-work': {
+      label: 'Day work',
+      help: 'One auto-logging job block from 09:00 to 17:00.'
+    },
+    'active-day': {
+      label: 'Active day',
+      help: 'One editable workout block. No auto-log.'
+    },
+    'errand-day': {
+      label: 'Errand day',
+      help: 'Groceries and appointment anchors. No auto-log.'
+    }
+  };
+}
+
+function selectedTemplatePreset() {
+  return document.getElementById('template-preset-select')?.value || 'basics';
+}
+
+function renderTemplatePresetHelp() {
+  const helpEl = document.getElementById('template-preset-help');
+  if (!helpEl) return;
+  const defs = templatePresetDefinitions();
+  helpEl.textContent = (defs[selectedTemplatePreset()] || defs.basics).help;
+}
+
+function templatePresetTemplates(presetKey, daySelection) {
   const sleepTime = settings.sleepTime || '23:00';
   const wakeTime = settings.wakeTime || '07:00';
   const days = normalizeTemplateDays(daySelection?.length ? daySelection : [0, 1, 2, 3, 4, 5, 6]);
+  const safePreset = String(presetKey || 'basics').replace(/[^\w-]/g, '_');
   const dayKey = days.join('');
-  const block = (id, activity, energy, startTime, endTime) => ({
-    id: `skeleton_${dayKey}_${id}`,
+  const block = (id, activity, energy, startTime, endTime, autoLog = false) => ({
+    id: `preset_${safePreset}_${dayKey}_${id}`,
     activity,
     energy,
     days: [...days],
     startTime,
     endTime,
-    autoLog: false,
+    autoLog,
     enabled: true,
-    skeleton: true
+    skeleton: true,
+    preset: presetKey || 'basics'
   });
-  return [
-    block('sleep', 'Sleep', 'recovery', sleepTime, wakeTime),
-    block('breakfast', 'Breakfast', 'recovery', addMinutesHHMM(wakeTime, 60), addMinutesHHMM(wakeTime, 90)),
-    block('lunch', 'Lunch', 'recovery', addMinutesHHMM(wakeTime, 360), addMinutesHHMM(wakeTime, 390)),
-    block('dinner', 'Dinner', 'recovery', addMinutesHHMM(wakeTime, 660), addMinutesHHMM(wakeTime, 690)),
-    block('hygiene', 'Hygiene', 'recovery', addMinutesHHMM(sleepTime, -30), addMinutesHHMM(sleepTime, -10))
-  ];
+  const presets = {
+    basics: [
+      block('sleep', 'Sleep', 'recovery', sleepTime, wakeTime),
+      block('breakfast', 'Breakfast', 'recovery', addMinutesHHMM(wakeTime, 60), addMinutesHHMM(wakeTime, 90)),
+      block('lunch', 'Lunch', 'recovery', addMinutesHHMM(wakeTime, 360), addMinutesHHMM(wakeTime, 390)),
+      block('dinner', 'Dinner', 'recovery', addMinutesHHMM(wakeTime, 660), addMinutesHHMM(wakeTime, 690)),
+      block('hygiene', 'Hygiene', 'recovery', addMinutesHHMM(sleepTime, -30), addMinutesHHMM(sleepTime, -10))
+    ],
+    'night-work': [
+      block('work-shift', 'Work shift', 'nine5', '22:00', '08:00', true)
+    ],
+    'day-work': [
+      block('work-shift', 'Work shift', 'nine5', '09:00', '17:00', true)
+    ],
+    'active-day': [
+      block('workout', 'Workout', 'exercise', addMinutesHHMM(wakeTime, 660), addMinutesHHMM(wakeTime, 720))
+    ],
+    'errand-day': [
+      block('groceries', 'Groceries', 'errands', addMinutesHHMM(wakeTime, 360), addMinutesHHMM(wakeTime, 420)),
+      block('appointment', 'Appointment', 'errands', addMinutesHHMM(wakeTime, 480), addMinutesHHMM(wakeTime, 540))
+    ]
+  };
+  return presets[presetKey] || presets.basics;
+}
+
+function defaultDaySkeletonTemplates(daySelection) {
+  return templatePresetTemplates('basics', daySelection);
 }
 
 function templateSkeletonExists(candidate) {
   return (settings.templates || []).some(tpl =>
     String(tpl.id) === String(candidate.id) ||
-    (tpl.skeleton &&
-      activityGroupKey(tpl.activity) === activityGroupKey(candidate.activity) &&
-      sameTemplateDays(tpl.days, candidate.days))
+    (tpl.skeleton && templateDuplicateKey(tpl) === templateDuplicateKey(candidate))
   );
 }
 
@@ -9041,8 +9126,10 @@ function addDayTemplateSkeleton() {
   if (!settings.templates) settings.templates = [];
   const days = selectedSkeletonDays();
   if (!days.length) { showToast('Select at least one day'); return; }
-  const toAdd = defaultDaySkeletonTemplates(days).filter(tpl => !templateSkeletonExists(tpl));
-  if (!toAdd.length) { showToast('Day template already exists for those days'); return; }
+  const presetKey = selectedTemplatePreset();
+  const preset = templatePresetDefinitions()[presetKey] || templatePresetDefinitions().basics;
+  const toAdd = templatePresetTemplates(presetKey, days).filter(tpl => !templateSkeletonExists(tpl));
+  if (!toAdd.length) { showToast('Preset already exists for those days'); return; }
   settings.templates.push(...toAdd);
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
@@ -9050,7 +9137,7 @@ function addDayTemplateSkeleton() {
   if (fbRoomRef) fbRoomRef.update({ settings });
   renderTemplateList();
   renderToday();
-  showToast(`Added ${toAdd.length} template blocks`);
+  showToast(`Added ${toAdd.length} ${preset.label} block${toAdd.length === 1 ? '' : 's'}`);
 }
 
 function addDefaultDaySkeleton() {
