@@ -1092,7 +1092,7 @@ test('long non-job coverage blocks are not split by the legacy fallback', async 
   await expect(timeline).not.toContainText('12:00 AM – 1:00 AM');
 });
 
-test('day dropdown adds editable basics to the selected weekday', async ({ page }) => {
+test('day dropdown adds a chosen task to the selected weekday', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
   await openApp(page, {
     nowTs,
@@ -1108,9 +1108,15 @@ test('day dropdown adds editable basics to the selected weekday', async ({ page 
   await expect(panel).toContainText('No blocks yet for Saturday');
   await expect(page.locator('#template-form-card')).toBeHidden();
   await expect(page.locator('#template-list')).toBeHidden();
-  await page.getByRole('button', { name: 'Add missing basics' }).click();
-  await expect(page.getByRole('button', { name: 'Basics added' })).toBeDisabled();
-  await page.evaluate(() => addBasicsToSelectedDay());
+  await expect(page.getByRole('button', { name: 'Add missing basics' })).toHaveCount(0);
+  await page.getByRole('button', { name: '+ Block' }).click();
+  await expect(page.locator('#template-form-card')).toBeVisible();
+  await page.selectOption('#tpl-task-choice', 'sleep');
+  await expect(page.locator('#tpl-activity')).toHaveValue('Sleep');
+  await expect(page.locator('#tpl-energy')).toHaveValue('recovery');
+  await expect(page.locator('#tpl-start')).toHaveValue('02:00');
+  await expect(page.locator('#tpl-end')).toHaveValue('10:00');
+  await page.locator('#template-form-card').getByRole('button', { name: '+ Add recurring block' }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1123,32 +1129,28 @@ test('day dropdown adds editable basics to the selected weekday', async ({ page 
     skeleton: t.skeleton
   })));
 
-  expect(templates).toHaveLength(5);
-  expect(templates.map(t => t.activity)).toEqual(['Sleep', 'Breakfast', 'Lunch', 'Dinner', 'Hygiene']);
+  expect(templates).toHaveLength(1);
+  expect(templates.map(t => t.activity)).toEqual(['Sleep']);
   expect(templates.every(t => t.days.length === 1 && t.days[0] === 6)).toBe(true);
-  expect(templates).not.toEqual(expect.arrayContaining([
-    expect.objectContaining({ activity: 'Chores' })
-  ]));
-  expect(templates.every(t => t.energy === 'recovery' && t.autoLog === false && t.skeleton === true)).toBe(true);
-  expect(templates).toEqual(expect.arrayContaining([
-    expect.objectContaining({ activity: 'Sleep', startTime: '02:00', endTime: '10:00' }),
-    expect.objectContaining({ activity: 'Breakfast', startTime: '11:00', endTime: '11:30' }),
-    expect.objectContaining({ activity: 'Lunch', startTime: '16:00', endTime: '16:30' }),
-    expect.objectContaining({ activity: 'Dinner', startTime: '21:00', endTime: '21:30' }),
-    expect.objectContaining({ activity: 'Hygiene', startTime: '01:30', endTime: '01:50' })
-  ]));
+  expect(templates[0]).toEqual(expect.objectContaining({
+    activity: 'Sleep',
+    energy: 'recovery',
+    startTime: '02:00',
+    endTime: '10:00',
+    autoLog: false
+  }));
   await expect(panel).toContainText('Sleep');
   await expect(panel).toContainText('02:00-10:00');
   await expect(panel.getByRole('button', { name: 'Edit Sleep' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Delete Sleep' })).toBeVisible();
+  await expect(page.locator('#template-form-card')).toBeHidden();
   await page.selectOption('#day-template-select', '1');
   await expect(panel).toContainText('No blocks yet for Monday');
   await page.locator('.template-advanced summary').click();
-  await expect(page.locator('#template-list')).toContainText('Breakfast');
-  await expect(page.locator('#template-list')).toContainText('Hygiene');
+  await expect(page.locator('#template-list')).toContainText('Sleep');
 });
 
-test('day dropdown keeps separate weekday skeletons and preselects custom block days', async ({ page }) => {
+test('day dropdown preselects one day and lets a block repeat on checked days', async ({ page }) => {
   await openApp(page, {
     settings: {
       sleepTime: '23:00',
@@ -1157,28 +1159,45 @@ test('day dropdown keeps separate weekday skeletons and preselects custom block 
   });
 
   await page.evaluate(() => showView('settings'));
-  await page.selectOption('#day-template-select', '1');
-  await page.getByRole('button', { name: 'Add missing basics' }).click();
   await page.selectOption('#day-template-select', '6');
-  await page.getByRole('button', { name: 'Add missing basics' }).click();
+  await expect(page.locator('#template-form-card')).toBeHidden();
+  await page.getByRole('button', { name: '+ Block' }).click();
+  await expect(page.locator('#template-form-card')).toBeVisible();
+  const initiallySelectedDays = await page.evaluate(() =>
+    [...document.querySelectorAll('#tpl-day-picker .tpl-day-btn.on')].map(btn => parseInt(btn.dataset.day))
+  );
+  expect(initiallySelectedDays).toEqual([6]);
+
+  await page.selectOption('#tpl-task-choice', 'breakfast');
+  await expect(page.locator('#tpl-activity')).toHaveValue('Breakfast');
+  await expect(page.locator('#tpl-start')).toHaveValue('08:00');
+  await expect(page.locator('#tpl-end')).toHaveValue('08:30');
+  await page.locator('#tpl-day-picker .tpl-day-btn[data-day="1"]').click();
+  await page.locator('#template-form-card').getByRole('button', { name: '+ Add recurring block' }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
     activity: t.activity,
-    days: t.days
+    days: t.days,
+    startTime: t.startTime,
+    endTime: t.endTime
   })));
 
-  expect(templates).toHaveLength(10);
-  expect(templates.filter(t => t.activity === 'Sleep').map(t => t.days)).toEqual([[1], [6]]);
-  expect(new Set(templates.map(t => t.id)).size).toBe(10);
+  expect(templates).toHaveLength(1);
+  expect(templates[0]).toEqual(expect.objectContaining({
+    activity: 'Breakfast',
+    days: [1, 6],
+    startTime: '08:00',
+    endTime: '08:30'
+  }));
+  expect(new Set(templates.map(t => t.id)).size).toBe(1);
 
-  await expect(page.locator('#template-form-card')).toBeHidden();
-  await page.getByRole('button', { name: '+ Block' }).click();
-  await expect(page.locator('#template-form-card')).toBeVisible();
-  const selectedDays = await page.evaluate(() =>
-    [...document.querySelectorAll('#tpl-day-picker .tpl-day-btn.on')].map(btn => parseInt(btn.dataset.day))
-  );
-  expect(selectedDays).toEqual([6]);
+  const panel = page.locator('#day-template-panel');
+  await expect(panel).toContainText('Breakfast');
+  await page.selectOption('#day-template-select', '1');
+  await expect(panel).toContainText('Breakfast');
+  await page.selectOption('#day-template-select', '2');
+  await expect(panel).toContainText('No blocks yet for Tuesday');
 });
 
 test('day dropdown shows existing recurring blocks for the selected weekday', async ({ page }) => {
@@ -1206,6 +1225,7 @@ test('day dropdown shows existing recurring blocks for the selected weekday', as
   await panel.getByRole('button', { name: 'Edit Scribe shift' }).click();
   await expect(page.locator('#template-form-card')).toBeVisible();
   await expect(page.locator('#tpl-form-title')).toHaveText('Edit recurring block');
+  await expect(page.locator('#tpl-task-choice')).toHaveValue('custom');
   await expect(page.locator('#tpl-activity')).toHaveValue('Scribe shift');
   await page.locator('#template-form-card').getByRole('button', { name: 'Cancel' }).click();
   await expect(page.locator('#template-form-card')).toBeHidden();
