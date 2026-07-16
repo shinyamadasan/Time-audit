@@ -700,20 +700,12 @@
   <div class="settings-section">
     <div class="settings-title">Day Templates</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Fixed commitments and daily anchors shown greyed-out in your timeline. Turn on auto-log only for reliable shifts; delete that day's entry if reality changed.</div>
-    <div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+    <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:12px">
       <div class="flex-min">
         <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">Template preset</div>
-        <div style="font-size:10px;color:var(--muted);line-height:1.35;margin-bottom:8px">Apply a small group of editable blocks to the days you choose.</div>
-        <select id="template-preset-select" onchange="renderTemplatePresetHelp()"
-          style="width:100%;max-width:260px;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--head);font-size:12px;padding:8px 10px;border-radius:8px;outline:none;margin-bottom:7px">
-          <option value="basics">Daily basics</option>
-          <option value="night-work">Night work</option>
-          <option value="day-work">Day work</option>
-          <option value="active-day">Active day</option>
-          <option value="errand-day">Errand day</option>
-        </select>
-        <div id="template-preset-help" style="font-size:10px;color:var(--muted2);line-height:1.35;margin-bottom:8px">Sleep, meals, and hygiene. No auto-log.</div>
-        <div id="skeleton-day-picker" style="display:flex;gap:6px;flex-wrap:wrap">
+        <div style="font-size:10px;color:var(--muted);line-height:1.35;margin-bottom:8px">Pick days, then add visible editable blocks. You can change or delete every block below after adding.</div>
+        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:7px">Apply to days</div>
+        <div id="skeleton-day-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
           <button type="button" class="tpl-day-btn on" data-day="1" onclick="toggleSkeletonDay(this)">Mon</button>
           <button type="button" class="tpl-day-btn on" data-day="2" onclick="toggleSkeletonDay(this)">Tue</button>
           <button type="button" class="tpl-day-btn on" data-day="3" onclick="toggleSkeletonDay(this)">Wed</button>
@@ -722,8 +714,8 @@
           <button type="button" class="tpl-day-btn on" data-day="6" onclick="toggleSkeletonDay(this)">Sat</button>
           <button type="button" class="tpl-day-btn on" data-day="0" onclick="toggleSkeletonDay(this)">Sun</button>
         </div>
+        <div id="template-preset-cards" class="template-preset-grid"></div>
       </div>
-      <button type="button" class="btn sm ghost" onclick="addDayTemplateSkeleton()" style="flex-shrink:0">Add preset</button>
     </div>
     <div id="template-list"></div>
     <!-- Add form -->
@@ -1414,7 +1406,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-template-presets-1';
+const APP_BUILD = '2026-07-16-preset-cards-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -7617,7 +7609,7 @@ function renderSettings() {
   updateSyncUI();
   renderAvatarPicker();
   renderPartnerSettings();
-  renderTemplatePresetHelp();
+  renderTemplatePresetCards();
   renderTemplateList();
   renderBudgets();
 }
@@ -9041,17 +9033,6 @@ function templatePresetDefinitions() {
   };
 }
 
-function selectedTemplatePreset() {
-  return document.getElementById('template-preset-select')?.value || 'basics';
-}
-
-function renderTemplatePresetHelp() {
-  const helpEl = document.getElementById('template-preset-help');
-  if (!helpEl) return;
-  const defs = templatePresetDefinitions();
-  helpEl.textContent = (defs[selectedTemplatePreset()] || defs.basics).help;
-}
-
 function templatePresetTemplates(presetKey, daySelection) {
   const sleepTime = settings.sleepTime || '23:00';
   const wakeTime = settings.wakeTime || '07:00';
@@ -9095,6 +9076,31 @@ function templatePresetTemplates(presetKey, daySelection) {
   return presets[presetKey] || presets.basics;
 }
 
+function renderTemplatePresetCards() {
+  const el = document.getElementById('template-preset-cards');
+  if (!el) return;
+  const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+  const defs = templatePresetDefinitions();
+  el.innerHTML = Object.entries(defs).map(([key, def]) => {
+    const preview = templatePresetTemplates(key, [1]).map(tpl => `
+      <div class="template-preset-line">
+        <span>${esc(tpl.activity)}</span>
+        <span>${esc(tpl.startTime)}-${esc(tpl.endTime)}${tpl.autoLog ? ' · auto-log' : ''}</span>
+      </div>
+    `).join('');
+    return `
+      <div class="template-preset-card">
+        <div class="template-preset-title">${esc(def.label)}</div>
+        <div class="template-preset-help">${esc(def.help)}</div>
+        <div class="template-preset-preview">${preview}</div>
+        <button type="button" class="btn sm ghost template-preset-add" onclick="addDayTemplateSkeleton(${entryIdJsArg(key)})">Add editable blocks</button>
+      </div>
+    `;
+  }).join('');
+}
+
 function defaultDaySkeletonTemplates(daySelection) {
   return templatePresetTemplates('basics', daySelection);
 }
@@ -9122,11 +9128,10 @@ function findDuplicateTemplate(candidate, ignoreIndex = -1) {
   );
 }
 
-function addDayTemplateSkeleton() {
+function addDayTemplateSkeleton(presetKey = 'basics') {
   if (!settings.templates) settings.templates = [];
   const days = selectedSkeletonDays();
   if (!days.length) { showToast('Select at least one day'); return; }
-  const presetKey = selectedTemplatePreset();
   const preset = templatePresetDefinitions()[presetKey] || templatePresetDefinitions().basics;
   const toAdd = templatePresetTemplates(presetKey, days).filter(tpl => !templateSkeletonExists(tpl));
   if (!toAdd.length) { showToast('Preset already exists for those days'); return; }

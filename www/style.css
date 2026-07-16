@@ -1210,6 +1210,15 @@ button, a, [role="button"],
 .tl-template-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0}
 .tl-template-actions .log-gap-btn{padding:4px 9px}
 .tl-bar-template{background:repeating-linear-gradient(45deg,var(--border2),var(--border2) 3px,transparent 3px,transparent 7px);border-radius:2px}
+.template-preset-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.template-preset-card{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px;min-width:0}
+.template-preset-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:3px}
+.template-preset-help{font-size:10px;color:var(--muted);line-height:1.35;margin-bottom:8px}
+.template-preset-preview{display:flex;flex-direction:column;gap:4px;margin-bottom:9px}
+.template-preset-line{display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:10px;color:var(--muted2);line-height:1.25}
+.template-preset-line span:first-child{color:var(--text);font-family:var(--head);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.template-preset-line span:last-child{white-space:nowrap;text-align:right}
+.template-preset-add{width:100%;justify-content:center}
 .tpl-day-btn{padding:5px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--bg2);color:var(--muted);font-size:12px;font-family:var(--mono);cursor:pointer;transition:all 0.15s;user-select:none}
 .tpl-day-btn.on{background:var(--deep-dim);color:var(--deep);border-color:var(--deep);font-weight:600}
 
