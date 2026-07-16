@@ -251,6 +251,9 @@
     <button type="button" class="today-health-metric unlogged" id="th-unlogged" onclick="scrollToTimeline()">0m unlogged</button>
   </div>
 
+  <!-- Gap recovery inbox -->
+  <div class="gap-recovery" id="gap-recovery" style="display:none" aria-live="polite"></div>
+
   <!-- Daily basics quick logs -->
   <div class="daily-basics" id="daily-basics" aria-label="Daily basics quick logs">
     <div class="daily-basics-head">
@@ -1376,7 +1379,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-daily-basics-specific-1';
+const APP_BUILD = '2026-07-16-gap-recovery-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1411,6 +1414,13 @@ const COMMON_LOG_OPTIONS = [
   { label: 'Walk', activity: 'Walk', energy: 'exercise', minutes: 20, hint: 'last 20m' },
   { label: 'Commute', activity: 'Commute', energy: 'errands', minutes: 30, hint: 'last 30m' },
   { label: 'Exercise', activity: 'Exercise', energy: 'exercise', minutes: 60, hint: 'last 1h' },
+];
+const GAP_RECOVERY_OPTIONS = [
+  { label: 'Cooking', activity: 'Cooking', energy: 'recovery' },
+  { label: 'Eat', activity: 'Eat', energy: 'recovery' },
+  { label: 'Commute', activity: 'Commute', energy: 'errands' },
+  { label: 'Phone', activity: 'Phone', energy: 'waste' },
+  { label: 'Rest', activity: 'Rest', energy: 'recovery' },
 ];
 let blockStartTime = null;
 let lastStateChange = null;
@@ -4213,6 +4223,52 @@ function renderTodayHealth(todayE) {
   unloggedEl.title = hasReviewableGap ? 'Jump to timeline gaps' : '';
 }
 
+function getGapRecoveryCandidate(todayE) {
+  if (!isViewingToday()) return null;
+  const realEntries = (todayE || []).filter(e => !e.deleted && !e.missed);
+  const gap = computeGaps(realEntries).find(g => (g.gapMin || 0) >= 30);
+  if (!gap) return null;
+  const tsEnd = Math.min(Math.round(gap.ts), Date.now());
+  if (tsEnd <= gap.tsStart) return null;
+  const gapMin = Math.round((tsEnd - gap.tsStart) / 60000);
+  if (gapMin < 30) return null;
+  return { ...gap, ts: tsEnd, gapMin };
+}
+
+function renderGapRecoveryInbox(todayE) {
+  const card = document.getElementById('gap-recovery');
+  if (!card) return;
+  const gap = getGapRecoveryCandidate(todayE);
+  if (!gap) {
+    card.style.display = 'none';
+    card.innerHTML = '';
+    delete card.dataset.tsStart;
+    delete card.dataset.tsEnd;
+    return;
+  }
+
+  const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+  card.dataset.tsStart = String(gap.tsStart);
+  card.dataset.tsEnd = String(gap.ts);
+  card.style.display = 'block';
+  const buttonHtml = GAP_RECOVERY_OPTIONS.map((option, idx) => `
+    <button type="button" class="gap-chip ${option.energy}" onclick="fillGapRecovery(${idx})">${esc(option.label)}</button>
+  `).join('');
+  card.innerHTML = `
+    <div class="gap-recovery-head">
+      <div>
+        <div class="gap-recovery-label">Recover missing time</div>
+        <div class="gap-recovery-title">${localTime(gap.tsStart)} - ${localTime(gap.ts)} · ${fmtDur(gap.gapMin)}</div>
+      </div>
+      <button type="button" class="gap-other-btn" onclick="openGapRecoveryOther()">Other</button>
+    </div>
+    <div class="gap-recovery-sub">What was this block?</div>
+    <div class="gap-chip-row">${buttonHtml}</div>
+  `;
+}
+
 function focusTodayPlanInput() {
   const input = document.getElementById('plan-task');
   if (!input) { showToast('No plan input open right now'); return; }
@@ -5076,6 +5132,7 @@ function renderToday() {
   renderFocusWallet();
   renderTodayHealth(todayE);
   renderTodayActionStrip(todayE);
+  renderGapRecoveryInbox(todayE);
   renderDailyBasics();
   renderMissedCloseoutCta();
   renderCloseoutCta();
@@ -6066,6 +6123,64 @@ function logCommonActivity(activity, energy, minutes) {
   syncEntries();
   rememberCreatedUndo('common log', [entry]);
   showUndoToast(`Logged · ${label} · ${fmtDur(durMin)}`, energy);
+  checkBudget(energy);
+  return entry;
+}
+
+function currentGapRecoveryRange() {
+  const card = document.getElementById('gap-recovery');
+  const tsStart = Number(card?.dataset.tsStart || 0);
+  const tsEnd = Number(card?.dataset.tsEnd || 0);
+  if (!tsStart || !tsEnd || tsEnd <= tsStart) return null;
+  return { tsStart, tsEnd };
+}
+
+function fillGapRecovery(idx) {
+  const option = GAP_RECOVERY_OPTIONS[idx];
+  const range = currentGapRecoveryRange();
+  if (!option || !range) { showToast('No recoverable gap found'); return null; }
+  return logGapRecoveryActivity(option.activity, option.energy, range.tsStart, range.tsEnd);
+}
+
+function openGapRecoveryOther() {
+  const range = currentGapRecoveryRange();
+  if (!range) { showToast('No recoverable gap found'); return; }
+  openRetroLogPrefilled(range.tsStart, range.tsEnd);
+}
+
+function logGapRecoveryActivity(activity, energy, tsStart, tsEnd) {
+  if (!isViewingToday()) { showToast('Gap recovery is for today'); return null; }
+  const label = canonicalizeActivityInput(activity);
+  const durMin = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
+  if (durMin < 1) { showToast('Gap is too short to log'); return null; }
+  if (durMin >= 240 && !confirm(`Log ${fmtDur(durMin)} as ${label}?`)) return null;
+  const entry = {
+    id: tsEnd,
+    ts: tsEnd,
+    tsStart,
+    updatedAt: Date.now(),
+    blockIntervalMin: durMin,
+    date: toDateKey(new Date(tsStart)),
+    activity: label,
+    energy,
+    onPlan: energy !== 'waste' && energy !== 'distraction',
+    retro: true,
+    quickLogged: true,
+    gapRecovered: true
+  };
+  entry.category = getBucket(entry);
+  entry.originalLabel = entry.energy || null;
+  getActivityColor(label);
+  learnWastePattern(label, energy);
+  validateEntry(entry);
+  entries.unshift(entry);
+  entries.sort((a, b) => b.ts - a.ts);
+  _lastLoggedEntryId = entry.id;
+  persist();
+  scheduleRenderToday();
+  syncEntries();
+  rememberCreatedUndo('gap recovery', [entry]);
+  showUndoToast(`Recovered · ${label} · ${fmtDur(durMin)}`, energy);
   checkBudget(energy);
   return entry;
 }
@@ -9506,7 +9621,7 @@ initAutoSync();
 initNativeNotifications();
 setTimeout(() => { checkSleepSetup(); checkSleepReminder(); }, 2000);
 setInterval(checkSleepReminder, 5 * 60 * 1000); // re-check every 5 min until sleep is logged
-setInterval(() => { if (isViewingToday()) { const e = getViewingEntries(); updateHeroPrompt(e); renderDayBar(e); renderStatusBanner(e); renderActiveDeviceBanner(); renderTodayHealth(e); renderTodayActionStrip(e); } }, 60000);
+setInterval(() => { if (isViewingToday()) { const e = getViewingEntries(); updateHeroPrompt(e); renderDayBar(e); renderStatusBanner(e); renderActiveDeviceBanner(); renderTodayHealth(e); renderTodayActionStrip(e); renderGapRecoveryInbox(e); } }, 60000);
 // Auto-start "PC Time" on fresh browser open (desktop only, not mobile browsers)
 // Wait up to 5s for Firebase to tell us if a timer is already running elsewhere.
 // If Firebase says a timer is running, adopt that — don't overwrite it.
