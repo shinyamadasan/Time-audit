@@ -521,6 +521,82 @@ test('today sleep basic logs overnight sleep as recovery', async ({ page }) => {
   });
 });
 
+test('today gap recovery fills a missing block from clean mode', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 10, 10, 45, 0);
+  const deepStart = Date.UTC(2026, 6, 10, 9, 0, 0);
+  const deepEnd = Date.UTC(2026, 6, 10, 10, 0, 0);
+  const entries = [{
+    id: deepEnd,
+    ts: deepEnd,
+    tsStart: deepStart,
+    updatedAt: deepEnd,
+    blockIntervalMin: 60,
+    date: utcDateKey(deepStart),
+    activity: 'Deep block',
+    energy: 'deep',
+    category: 'deep_work',
+    originalLabel: 'deep',
+    onPlan: true,
+    retro: false
+  }];
+  await openApp(page, { entries, nowTs, settings: { wakeTime: '09:00' } });
+
+  await expect(page.locator('#gap-recovery')).toBeVisible();
+  await expect(page.locator('#gap-recovery')).toContainText('10:00 AM - 10:45 AM');
+  await expect(page.locator('#gap-recovery')).toContainText('45m');
+  await expect(page.locator('.quick-retro-bar')).toBeHidden();
+
+  await page.locator('#gap-recovery').getByRole('button', { name: 'Cooking' }).click();
+
+  const saved = await page.evaluate(() => {
+    const entry = entries.find(e => e.gapRecovered && e.activity === 'Cooking');
+    return entry && {
+      activity: entry.activity,
+      energy: entry.energy,
+      minutes: entry.blockIntervalMin,
+      category: entry.category,
+      start: new Date(entry.tsStart).toISOString(),
+      end: new Date(entry.ts).toISOString()
+    };
+  });
+  expect(saved).toEqual({
+    activity: 'Cooking',
+    energy: 'recovery',
+    minutes: 45,
+    category: 'recovery',
+    start: '2026-07-10T10:00:00.000Z',
+    end: '2026-07-10T10:45:00.000Z'
+  });
+  await expect(page.locator('#gap-recovery')).toBeHidden();
+});
+
+test('today gap recovery other opens prefilled retro log', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 10, 10, 45, 0);
+  const deepStart = Date.UTC(2026, 6, 10, 9, 0, 0);
+  const deepEnd = Date.UTC(2026, 6, 10, 10, 0, 0);
+  const entries = [{
+    id: deepEnd,
+    ts: deepEnd,
+    tsStart: deepStart,
+    updatedAt: deepEnd,
+    blockIntervalMin: 60,
+    date: utcDateKey(deepStart),
+    activity: 'Deep block',
+    energy: 'deep',
+    category: 'deep_work',
+    originalLabel: 'deep',
+    onPlan: true,
+    retro: false
+  }];
+  await openApp(page, { entries, nowTs, settings: { wakeTime: '09:00' } });
+
+  await page.locator('#gap-recovery').getByRole('button', { name: 'Other' }).click();
+
+  await expect(page.locator('#retro-overlay')).toBeVisible();
+  await expect(page.locator('#retro-start')).toHaveValue('10:00');
+  await expect(page.locator('#retro-end')).toHaveValue('10:45');
+});
+
 test('today long labels wrap on phone width without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);

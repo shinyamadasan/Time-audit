@@ -792,6 +792,25 @@ button.today-health-metric{background:none;border:none;padding:0;text-align:left
 .today-health-metric.actionable:hover{text-decoration:underline;color:var(--text)}
 .today-health-metric:disabled{opacity:1}
 
+.gap-recovery{background:rgba(249,199,79,0.06);border:1px solid rgba(249,199,79,0.28);box-shadow:0 1px 3px rgba(0,0,0,0.35);
+  border-radius:var(--r2);padding:11px 12px;margin-bottom:12px;font-family:var(--ui)}
+.gap-recovery-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}
+.gap-recovery-label{font-size:10px;text-transform:uppercase;color:#f9c74f;font-weight:800;letter-spacing:0}
+.gap-recovery-title{font-size:13px;font-weight:800;color:var(--text);line-height:1.25;margin-top:2px}
+.gap-recovery-sub{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.35}
+.gap-chip-row{display:flex;flex-wrap:wrap;gap:6px}
+.gap-chip,.gap-other-btn{border-radius:999px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);
+  font-family:var(--ui);font-size:11px;font-weight:800;padding:6px 10px;cursor:pointer}
+.gap-chip:hover,.gap-other-btn:hover{background:var(--bg4);border-color:var(--border3)}
+.gap-chip.recovery{color:var(--break);border-color:rgba(167,139,250,0.26)}
+.gap-chip.errands{color:var(--errands);border-color:rgba(148,163,184,0.26)}
+.gap-chip.waste{color:var(--distraction);border-color:rgba(255,107,107,0.26)}
+.gap-other-btn{flex-shrink:0;color:var(--deep);border-color:rgba(76,199,240,0.28);background:var(--deep-dim2)}
+@media(max-width:520px){
+  .gap-recovery-head{flex-direction:column;gap:6px}
+  .gap-other-btn{align-self:flex-start}
+}
+
 .daily-basics{background:var(--bg2);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,0.35);
   border-radius:var(--r2);padding:11px 12px;margin-bottom:12px;font-family:var(--ui)}
 .daily-basics-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:9px}
@@ -834,6 +853,7 @@ button.today-health-metric{background:none;border:none;padding:0;text-align:left
 
 .today-action-strip,.today-action-strip *,
 .today-health,.today-health *,
+.gap-recovery,.gap-recovery *,
 .daily-basics,.daily-basics *,
 .closeout-card,.closeout-card *,
 .sal-card,.sal-card *,
