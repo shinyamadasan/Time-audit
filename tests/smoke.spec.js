@@ -1092,7 +1092,7 @@ test('long non-job coverage blocks are not split by the legacy fallback', async 
   await expect(timeline).not.toContainText('12:00 AM – 1:00 AM');
 });
 
-test('template preset adds editable non-auto basics once', async ({ page }) => {
+test('day cards add editable basics to one weekday', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
   await openApp(page, {
     nowTs,
@@ -1103,12 +1103,12 @@ test('template preset adds editable non-auto basics once', async ({ page }) => {
   });
 
   await page.evaluate(() => showView('settings'));
-  const basicsCard = page.locator('.template-preset-card').filter({ hasText: 'Daily basics' });
-  await expect(basicsCard).toContainText('Sleep');
-  await expect(basicsCard).toContainText('Breakfast');
-  await expect(basicsCard).toContainText('02:00-10:00');
-  await basicsCard.getByRole('button', { name: 'Add editable blocks' }).click();
-  await basicsCard.getByRole('button', { name: 'Add editable blocks' }).click();
+  await expect(page.locator('.day-template-card')).toHaveCount(7);
+  const satCard = page.locator('.day-template-card').filter({ hasText: 'Sat' });
+  const monCard = page.locator('.day-template-card').filter({ hasText: 'Mon' });
+  await expect(satCard).toContainText('No blocks yet');
+  await satCard.getByRole('button', { name: 'Add basics' }).click();
+  await satCard.getByRole('button', { name: 'Add basics' }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1123,10 +1123,11 @@ test('template preset adds editable non-auto basics once', async ({ page }) => {
 
   expect(templates).toHaveLength(5);
   expect(templates.map(t => t.activity)).toEqual(['Sleep', 'Breakfast', 'Lunch', 'Dinner', 'Hygiene']);
+  expect(templates.every(t => t.days.length === 1 && t.days[0] === 6)).toBe(true);
   expect(templates).not.toEqual(expect.arrayContaining([
     expect.objectContaining({ activity: 'Chores' })
   ]));
-  expect(templates.every(t => t.energy === 'recovery' && t.autoLog === false && t.skeleton === true && t.days.length === 7)).toBe(true);
+  expect(templates.every(t => t.energy === 'recovery' && t.autoLog === false && t.skeleton === true)).toBe(true);
   expect(templates).toEqual(expect.arrayContaining([
     expect.objectContaining({ activity: 'Sleep', startTime: '02:00', endTime: '10:00' }),
     expect.objectContaining({ activity: 'Breakfast', startTime: '11:00', endTime: '11:30' }),
@@ -1134,11 +1135,14 @@ test('template preset adds editable non-auto basics once', async ({ page }) => {
     expect.objectContaining({ activity: 'Dinner', startTime: '21:00', endTime: '21:30' }),
     expect.objectContaining({ activity: 'Hygiene', startTime: '01:30', endTime: '01:50' })
   ]));
+  await expect(satCard).toContainText('Sleep');
+  await expect(satCard).toContainText('02:00-10:00');
+  await expect(monCard).toContainText('No blocks yet');
   await expect(page.locator('#template-list')).toContainText('Breakfast');
   await expect(page.locator('#template-list')).toContainText('Hygiene');
 });
 
-test('template preset supports different selected day sets', async ({ page }) => {
+test('day cards keep separate weekday skeletons and preselect custom block days', async ({ page }) => {
   await openApp(page, {
     settings: {
       sleepTime: '23:00',
@@ -1147,22 +1151,10 @@ test('template preset supports different selected day sets', async ({ page }) =>
   });
 
   await page.evaluate(() => showView('settings'));
-  const basicsCard = page.locator('.template-preset-card').filter({ hasText: 'Daily basics' });
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="1"]').click();
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="2"]').click();
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="3"]').click();
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="4"]').click();
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="5"]').click();
-  await basicsCard.getByRole('button', { name: 'Add editable blocks' }).click();
-
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="1"]').click();
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="2"]').click();
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="3"]').click();
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="4"]').click();
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="5"]').click();
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="0"]').click();
-  await page.locator('#skeleton-day-picker .tpl-day-btn[data-day="6"]').click();
-  await basicsCard.getByRole('button', { name: 'Add editable blocks' }).click();
+  const monCard = page.locator('.day-template-card').filter({ hasText: 'Mon' });
+  const satCard = page.locator('.day-template-card').filter({ hasText: 'Sat' });
+  await monCard.getByRole('button', { name: 'Add basics' }).click();
+  await satCard.getByRole('button', { name: 'Add basics' }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1171,45 +1163,39 @@ test('template preset supports different selected day sets', async ({ page }) =>
   })));
 
   expect(templates).toHaveLength(10);
-  expect(templates.filter(t => t.activity === 'Sleep').map(t => t.days)).toEqual([[0, 6], [1, 2, 3, 4, 5]]);
+  expect(templates.filter(t => t.activity === 'Sleep').map(t => t.days)).toEqual([[1], [6]]);
   expect(new Set(templates.map(t => t.id)).size).toBe(10);
+
+  await satCard.getByRole('button', { name: '+ Block' }).click();
+  const selectedDays = await page.evaluate(() =>
+    [...document.querySelectorAll('#tpl-day-picker .tpl-day-btn.on')].map(btn => parseInt(btn.dataset.day))
+  );
+  expect(selectedDays).toEqual([6]);
 });
 
-test('template preset can add a selected night work block', async ({ page }) => {
-  await openApp(page);
-
-  await page.evaluate(() => {
-    showView('settings');
-    document.querySelectorAll('#skeleton-day-picker .tpl-day-btn').forEach(btn =>
-      btn.classList.toggle('on', btn.dataset.day === '1')
-    );
+test('day cards show existing recurring blocks for that weekday', async ({ page }) => {
+  await openApp(page, {
+    settings: {
+      templates: [{
+        id: 'scribe',
+        activity: 'Scribe shift',
+        energy: 'nine5',
+        days: [6],
+        startTime: '22:00',
+        endTime: '08:00',
+        autoLog: true,
+        enabled: true
+      }]
+    }
   });
 
-  const nightCard = page.locator('.template-preset-card').filter({ hasText: 'Night work' });
-  await expect(nightCard).toContainText('Work shift');
-  await expect(nightCard).toContainText('22:00-08:00');
-  await expect(nightCard).toContainText('auto-log');
-  await nightCard.getByRole('button', { name: 'Add editable blocks' }).click();
-
-  const templates = await page.evaluate(() => settings.templates.map(t => ({
-    activity: t.activity,
-    energy: t.energy,
-    days: t.days,
-    startTime: t.startTime,
-    endTime: t.endTime,
-    autoLog: t.autoLog,
-    skeleton: t.skeleton
-  })));
-
-  expect(templates).toEqual([{
-    activity: 'Work shift',
-    energy: 'nine5',
-    days: [1],
-    startTime: '22:00',
-    endTime: '08:00',
-    autoLog: true,
-    skeleton: true
-  }]);
+  await page.evaluate(() => showView('settings'));
+  const satCard = page.locator('.day-template-card').filter({ hasText: 'Sat' });
+  const monCard = page.locator('.day-template-card').filter({ hasText: 'Mon' });
+  await expect(satCard).toContainText('Scribe shift');
+  await expect(satCard).toContainText('22:00-08:00');
+  await expect(satCard).toContainText('auto-log');
+  await expect(monCard).toContainText('No blocks yet');
 });
 
 test('today template rows expose log and off actions without settings clutter', async ({ page }) => {

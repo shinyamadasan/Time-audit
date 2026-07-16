@@ -702,19 +702,9 @@
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Fixed commitments and daily anchors shown greyed-out in your timeline. Turn on auto-log only for reliable shifts; delete that day's entry if reality changed.</div>
     <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:12px">
       <div class="flex-min">
-        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">Template preset</div>
-        <div style="font-size:10px;color:var(--muted);line-height:1.35;margin-bottom:8px">Pick days, then add visible editable blocks. You can change or delete every block below after adding.</div>
-        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:7px">Apply to days</div>
-        <div id="skeleton-day-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-          <button type="button" class="tpl-day-btn on" data-day="1" onclick="toggleSkeletonDay(this)">Mon</button>
-          <button type="button" class="tpl-day-btn on" data-day="2" onclick="toggleSkeletonDay(this)">Tue</button>
-          <button type="button" class="tpl-day-btn on" data-day="3" onclick="toggleSkeletonDay(this)">Wed</button>
-          <button type="button" class="tpl-day-btn on" data-day="4" onclick="toggleSkeletonDay(this)">Thu</button>
-          <button type="button" class="tpl-day-btn on" data-day="5" onclick="toggleSkeletonDay(this)">Fri</button>
-          <button type="button" class="tpl-day-btn on" data-day="6" onclick="toggleSkeletonDay(this)">Sat</button>
-          <button type="button" class="tpl-day-btn on" data-day="0" onclick="toggleSkeletonDay(this)">Sun</button>
-        </div>
-        <div id="template-preset-cards" class="template-preset-grid"></div>
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">Day cards</div>
+        <div style="font-size:10px;color:var(--muted);line-height:1.35;margin-bottom:10px">Each card is that day’s repeating skeleton. What appears on Saturday will be suggested every Saturday until you change or delete it.</div>
+        <div id="day-template-cards" class="day-template-grid"></div>
       </div>
     </div>
     <div id="template-list"></div>
@@ -1406,7 +1396,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-template-off-1';
+const APP_BUILD = '2026-07-16-day-cards-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -7608,7 +7598,7 @@ function renderSettings() {
   updateSyncUI();
   renderAvatarPicker();
   renderPartnerSettings();
-  renderTemplatePresetCards();
+  renderDayTemplateCards();
   renderTemplateList();
   renderBudgets();
 }
@@ -8990,39 +8980,8 @@ function sameTemplateDays(a, b) {
   return left.length === right.length && left.every((day, i) => day === right[i]);
 }
 
-function selectedSkeletonDays() {
-  const selected = [...document.querySelectorAll('#skeleton-day-picker .tpl-day-btn.on')]
-    .map(btn => btn.dataset.day);
-  return normalizeTemplateDays(selected);
-}
-
-function toggleSkeletonDay(btn) {
-  btn.classList.toggle('on');
-}
-
-function templatePresetDefinitions() {
-  return {
-    basics: {
-      label: 'Daily basics',
-      help: 'Sleep, meals, and hygiene. No auto-log.'
-    },
-    'night-work': {
-      label: 'Night work',
-      help: 'One auto-logging job block from 22:00 to 08:00.'
-    },
-    'day-work': {
-      label: 'Day work',
-      help: 'One auto-logging job block from 09:00 to 17:00.'
-    },
-    'active-day': {
-      label: 'Active day',
-      help: 'One editable workout block. No auto-log.'
-    },
-    'errand-day': {
-      label: 'Errand day',
-      help: 'Groceries and appointment anchors. No auto-log.'
-    }
-  };
+function dayTemplateLabel(day) {
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day] || '';
 }
 
 function templatePresetTemplates(presetKey, daySelection) {
@@ -9043,54 +9002,69 @@ function templatePresetTemplates(presetKey, daySelection) {
     skeleton: true,
     preset: presetKey || 'basics'
   });
-  const presets = {
-    basics: [
-      block('sleep', 'Sleep', 'recovery', sleepTime, wakeTime),
-      block('breakfast', 'Breakfast', 'recovery', addMinutesHHMM(wakeTime, 60), addMinutesHHMM(wakeTime, 90)),
-      block('lunch', 'Lunch', 'recovery', addMinutesHHMM(wakeTime, 360), addMinutesHHMM(wakeTime, 390)),
-      block('dinner', 'Dinner', 'recovery', addMinutesHHMM(wakeTime, 660), addMinutesHHMM(wakeTime, 690)),
-      block('hygiene', 'Hygiene', 'recovery', addMinutesHHMM(sleepTime, -30), addMinutesHHMM(sleepTime, -10))
-    ],
-    'night-work': [
-      block('work-shift', 'Work shift', 'nine5', '22:00', '08:00', true)
-    ],
-    'day-work': [
-      block('work-shift', 'Work shift', 'nine5', '09:00', '17:00', true)
-    ],
-    'active-day': [
-      block('workout', 'Workout', 'exercise', addMinutesHHMM(wakeTime, 660), addMinutesHHMM(wakeTime, 720))
-    ],
-    'errand-day': [
-      block('groceries', 'Groceries', 'errands', addMinutesHHMM(wakeTime, 360), addMinutesHHMM(wakeTime, 420)),
-      block('appointment', 'Appointment', 'errands', addMinutesHHMM(wakeTime, 480), addMinutesHHMM(wakeTime, 540))
-    ]
-  };
-  return presets[presetKey] || presets.basics;
+  return [
+    block('sleep', 'Sleep', 'recovery', sleepTime, wakeTime),
+    block('breakfast', 'Breakfast', 'recovery', addMinutesHHMM(wakeTime, 60), addMinutesHHMM(wakeTime, 90)),
+    block('lunch', 'Lunch', 'recovery', addMinutesHHMM(wakeTime, 360), addMinutesHHMM(wakeTime, 390)),
+    block('dinner', 'Dinner', 'recovery', addMinutesHHMM(wakeTime, 660), addMinutesHHMM(wakeTime, 690)),
+    block('hygiene', 'Hygiene', 'recovery', addMinutesHHMM(sleepTime, -30), addMinutesHHMM(sleepTime, -10))
+  ];
 }
 
-function renderTemplatePresetCards() {
-  const el = document.getElementById('template-preset-cards');
+function templatesForDay(day) {
+  return (settings.templates || [])
+    .filter(tpl => tpl.enabled !== false && normalizeTemplateDays(tpl.days).includes(day))
+    .sort((a, b) => hhmmToMinutes(a.startTime) - hhmmToMinutes(b.startTime));
+}
+
+function renderDayTemplateCards() {
+  const el = document.getElementById('day-template-cards');
   if (!el) return;
   const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[ch]));
-  const defs = templatePresetDefinitions();
-  el.innerHTML = Object.entries(defs).map(([key, def]) => {
-    const preview = templatePresetTemplates(key, [1]).map(tpl => `
-      <div class="template-preset-line">
-        <span>${esc(tpl.activity)}</span>
-        <span>${esc(tpl.startTime)}-${esc(tpl.endTime)}${tpl.autoLog ? ' · auto-log' : ''}</span>
-      </div>
-    `).join('');
+  el.innerHTML = [1, 2, 3, 4, 5, 6, 0].map(day => {
+    const blocks = templatesForDay(day);
+    const preview = blocks.length
+      ? blocks.map(tpl => `
+        <div class="day-template-line">
+          <span>${esc(activityDisplayLabel(tpl.activity))}</span>
+          <span>${esc(tpl.startTime)}-${esc(tpl.endTime)}${tpl.autoLog ? ' · auto-log' : ''}</span>
+        </div>
+      `).join('')
+      : '<div class="day-template-empty">No blocks yet.</div>';
     return `
-      <div class="template-preset-card">
-        <div class="template-preset-title">${esc(def.label)}</div>
-        <div class="template-preset-help">${esc(def.help)}</div>
-        <div class="template-preset-preview">${preview}</div>
-        <button type="button" class="btn sm ghost template-preset-add" onclick="addDayTemplateSkeleton(${entryIdJsArg(key)})">Add editable blocks</button>
+      <div class="day-template-card">
+        <div class="day-template-title">${dayTemplateLabel(day)}</div>
+        <div class="day-template-preview">${preview}</div>
+        <div class="day-template-actions">
+          <button type="button" class="btn sm ghost" onclick="addBasicsToDay(${day})">Add basics</button>
+          <button type="button" class="btn sm ghost" onclick="startTemplateBlockForDay(${day})">+ Block</button>
+        </div>
       </div>
-    `;
+    `
   }).join('');
+}
+
+function startTemplateBlockForDay(day) {
+  _editingTplIdx = null;
+  const btn = document.getElementById('tpl-add-btn');
+  if (btn) btn.textContent = '+ Add recurring block';
+  document.getElementById('tpl-activity').value = '';
+  document.getElementById('tpl-start').value = '';
+  document.getElementById('tpl-end').value = '';
+  const autoEl = document.getElementById('tpl-auto-log');
+  if (autoEl) autoEl.checked = false;
+  document.querySelectorAll('#tpl-day-picker .tpl-day-btn').forEach(b =>
+    b.classList.toggle('on', parseInt(b.dataset.day) === day)
+  );
+  document.getElementById('tpl-activity').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('tpl-activity').focus();
+  showToast(`New block will repeat on ${dayTemplateLabel(day)}`);
+}
+
+function addBasicsToDay(day) {
+  addDayTemplateSkeleton([day]);
 }
 
 function defaultDaySkeletonTemplates(daySelection) {
@@ -9120,21 +9094,23 @@ function findDuplicateTemplate(candidate, ignoreIndex = -1) {
   );
 }
 
-function addDayTemplateSkeleton(presetKey = 'basics') {
+function addDayTemplateSkeleton(daySelection = [0, 1, 2, 3, 4, 5, 6]) {
   if (!settings.templates) settings.templates = [];
-  const days = selectedSkeletonDays();
+  const days = normalizeTemplateDays(daySelection);
   if (!days.length) { showToast('Select at least one day'); return; }
-  const preset = templatePresetDefinitions()[presetKey] || templatePresetDefinitions().basics;
-  const toAdd = templatePresetTemplates(presetKey, days).filter(tpl => !templateSkeletonExists(tpl));
-  if (!toAdd.length) { showToast('Preset already exists for those days'); return; }
+  const toAdd = templatePresetTemplates('basics', days).filter(tpl => !templateSkeletonExists(tpl));
+  if (!toAdd.length) { showToast('Basics already exist for that day'); return; }
   settings.templates.push(...toAdd);
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
   persist();
   if (fbRoomRef) fbRoomRef.update({ settings });
+  renderDayTemplateCards();
   renderTemplateList();
+  _todayRenderKey = '__FORCE__';
   renderToday();
-  showToast(`Added ${toAdd.length} ${preset.label} block${toAdd.length === 1 ? '' : 's'}`);
+  const label = days.length === 1 ? dayTemplateLabel(days[0]) : `${days.length} days`;
+  showToast(`Added basics to ${label}`);
 }
 
 function addDefaultDaySkeleton() {
@@ -9154,6 +9130,7 @@ function skipTemplateOnDate(templateId, dateKey) {
   settings._templatesSavedAt = Date.now();
   persist();
   if (fbRoomRef) fbRoomRef.update({ settings });
+  renderDayTemplateCards();
   renderTemplateList();
   _todayRenderKey = '__FORCE__';
   renderToday();
@@ -9273,6 +9250,7 @@ function updateTemplateFromEntry(templateId, entry) {
   settings._templatesSavedAt = Date.now();
   persist();
   if (fbRoomRef) fbRoomRef.update({ settings });
+  renderDayTemplateCards();
   renderTemplateList();
   renderToday();
   showToast('Recurring schedule updated');
@@ -9380,6 +9358,7 @@ function addTemplate() {
   document.querySelectorAll('#tpl-day-picker .tpl-day-btn').forEach(b => b.classList.remove('on'));
   const addBtn = document.getElementById('tpl-add-btn');
   if (addBtn) addBtn.textContent = '+ Add recurring block';
+  renderDayTemplateCards();
   renderTemplateList();
   showToast(wasEditing ? 'Block updated' : 'Recurring block added');
   persistTemplatesAfterPaint();
@@ -9410,6 +9389,7 @@ function removeTemplate(i) {
   settings.templates.splice(i, 1);
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
+  renderDayTemplateCards();
   renderTemplateList();
   showToast('Recurring block deleted');
   persistTemplatesAfterPaint();
