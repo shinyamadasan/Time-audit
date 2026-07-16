@@ -1167,18 +1167,27 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
     renderTemplateList();
   });
   await page.locator('.template-advanced summary').click();
-  const week = page.locator('.template-week');
-  await expect(week).toBeVisible();
-  await expect(week.locator('.template-week-head div')).toHaveText(['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
-  const satMorning = week.locator('.template-week-section[data-section="morning"] .template-week-cell[data-day="6"]');
-  const satSleep = satMorning.locator('.template-week-event').filter({ hasText: 'Sleep' });
-  const satHygiene = satMorning.locator('.template-week-event').filter({ hasText: 'Hygiene' });
+  const calendar = page.locator('.template-cal');
+  await expect(calendar).toBeVisible();
+  await expect(calendar.locator('.template-cal-head div')).toHaveText(['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+  await expect(calendar.locator('.template-cal-time')).toHaveText([
+    '12 AM', '1 AM', '2 AM', '3 AM', '4 AM', '5 AM', '6 AM', '7 AM',
+    '8 AM', '9 AM', '10 AM', '11 AM', '12 PM', '1 PM', '2 PM', '3 PM',
+    '4 PM', '5 PM', '6 PM', '7 PM', '8 PM', '9 PM', '10 PM', '11 PM'
+  ]);
+  const satDay = calendar.locator('.template-cal-day[data-day="6"]');
+  const satSleep = satDay.locator('.template-cal-event').filter({ hasText: 'Sleep' });
+  const satHygiene = satDay.locator('.template-cal-event').filter({ hasText: 'Hygiene' });
   await expect(satSleep).toContainText('09:00-17:00');
   await expect(satHygiene).toContainText('08:30-08:50');
-  const morningHeight = await satMorning.evaluate(el => el.getBoundingClientRect().height);
-  expect(morningHeight).toBeGreaterThan(100);
-  await expect(week.locator('button[aria-label="Edit Sleep"]')).toHaveCount(0);
-  const deleteSleep = satSleep.locator('.template-week-delete');
+  const [dayHeight, sleepHeight] = await Promise.all([
+    satDay.evaluate(el => el.getBoundingClientRect().height),
+    satSleep.evaluate(el => el.getBoundingClientRect().height)
+  ]);
+  expect(dayHeight).toBeGreaterThan(1400);
+  expect(sleepHeight).toBeGreaterThan(450);
+  await expect(calendar.locator('button[aria-label="Edit Sleep"]')).toHaveCount(0);
+  const deleteSleep = satSleep.locator('.template-cal-delete');
   await expect(deleteSleep).toHaveCSS('opacity', '0');
   await satSleep.hover();
   await expect(deleteSleep).toHaveCSS('opacity', '1');
@@ -1189,9 +1198,23 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
   await page.locator('#template-form-card').getByRole('button', { name: 'Cancel' }).click();
   await expect(page.locator('#template-form-card')).toBeHidden();
   await expect(page.locator('#template-form-overlay')).not.toHaveClass(/open/);
-  await expect(week.locator('.template-week-cell[data-day="1"] .template-week-event').filter({ hasText: 'Sleep' })).toHaveCount(0);
+  await expect(calendar.locator('.template-cal-day[data-day="1"] .template-cal-event').filter({ hasText: 'Sleep' })).toHaveCount(0);
+
+  await page.locator('.template-cal-wrap').evaluate(el => { el.scrollTop = 0; });
+  await calendar.locator('.template-cal-day[data-day="1"]').click({ position: { x: 20, y: 150 } });
+  await expect(page.locator('#template-form-card')).toBeVisible();
+  await expect(page.locator('#template-form-overlay')).toHaveClass(/open/);
+  await expect(page.locator('#tpl-start')).toHaveValue('02:00');
+  await expect(page.locator('#tpl-end')).toHaveValue('02:30');
+  const clickedDays = await page.evaluate(() =>
+    [...document.querySelectorAll('#tpl-day-picker .tpl-day-btn.on')].map(btn => parseInt(btn.dataset.day))
+  );
+  expect(clickedDays).toEqual([1]);
+  await page.locator('#template-form-card').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('#template-form-card')).toBeHidden();
+
   await page.setViewportSize({ width: 390, height: 900 });
-  const mobileScroll = await page.locator('.template-week-wrap').evaluate(el => ({
+  const mobileScroll = await page.locator('.template-cal-wrap').evaluate(el => ({
     internalScroll: el.scrollWidth > el.clientWidth,
     pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
   }));
@@ -1281,9 +1304,9 @@ test('day dropdown shows existing recurring blocks for the selected weekday', as
   await expect(page.locator('#template-form-card')).toBeHidden();
   await expect(page.locator('#template-form-overlay')).not.toHaveClass(/open/);
   await page.locator('.template-advanced summary').click();
-  const week = page.locator('.template-week');
-  await expect(week.locator('.template-week-section[data-section="evening"] .template-week-cell[data-day="6"] .template-week-event').filter({ hasText: 'Scribe shift' })).toContainText('22:00-08:00');
-  await expect(week.locator('.template-week-section[data-section="night"] .template-week-cell[data-day="0"] .template-week-event.continuation').filter({ hasText: 'Scribe shift cont.' })).toContainText('22:00-08:00');
+  const calendar = page.locator('.template-cal');
+  await expect(calendar.locator('.template-cal-day[data-day="6"] .template-cal-event').filter({ hasText: 'Scribe shift' })).toContainText('22:00-08:00');
+  await expect(calendar.locator('.template-cal-day[data-day="0"] .template-cal-event.continuation').filter({ hasText: 'Scribe shift cont.' })).toContainText('22:00-08:00');
   await panel.getByRole('button', { name: 'Delete Scribe shift' }).click();
   await expect(panel).toContainText('No blocks yet for Saturday');
   expect(await page.evaluate(() => settings.templates.length)).toBe(0);
