@@ -224,8 +224,8 @@ Depends on: `entries`, `persist()`
 
 ## [Entry Logging & Editing]
 Lines: 3088–3521
-Purpose: Full retro log modal — open, energy selection, time-range inputs, save new entry, edit existing entry, delete entry, merge-edit multiple entries.
-Functions: `openLog()`, `saveLastEntry()`, `showLogForm()`, `entryIdJsArg()`, `sameEntryId()`, `populateRetroChips()`, `openRetroLog()`, `setRetroEnergy()`, `saveRetroEntry()`, `dismissLog()`, `setEnergy()`, `setOnPlan()`, `toggleDetail()`, `saveEntry()`, `isSameDeletionTarget()`, `deleteEntry()`, `openRetroLogPrefilled()`, `openEditEntry()`, `openEditMergedEntry()`, `cancelRetroEdit()`, `renderEntryRow()`, `renderGapRow()`, `renderTimelineCombined()`, `toggleTlBucket()`
+Purpose: Full retro log modal — open, energy selection, time-range inputs, save new entry, edit existing entry, delete entry with immediate active-view refresh, merge-edit multiple entries.
+Functions: `openLog()`, `saveLastEntry()`, `showLogForm()`, `entryIdJsArg()`, `sameEntryId()`, `populateRetroChips()`, `openRetroLog()`, `setRetroEnergy()`, `saveRetroEntry()`, `dismissLog()`, `setEnergy()`, `setOnPlan()`, `toggleDetail()`, `saveEntry()`, `isSameDeletionTarget()`, `isViewActive()`, `refreshAfterEntryDelete()`, `persistEntryDeleteAfterPaint()`, `deleteEntry()`, `openRetroLogPrefilled()`, `openEditEntry()`, `openEditMergedEntry()`, `cancelRetroEdit()`, `renderEntryRow()`, `renderGapRow()`, `renderTimelineCombined()`, `toggleTlBucket()`
 Variables: `retroEnergy`, `editingEntryId`, `editingMergedIds`, `editingEntryBase`, `logIsPing`, `tlExpandedBuckets`
 Depends on: `entries`, `persist()`, `syncEntries()`, `showToast()`, `renderToday()`, `getActivityColor()`, `toDateKey()`, `getBucket()`
 
