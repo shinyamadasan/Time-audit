@@ -1106,8 +1106,11 @@ test('day dropdown adds editable basics to the selected weekday', async ({ page 
   await page.selectOption('#day-template-select', '6');
   const panel = page.locator('#day-template-panel');
   await expect(panel).toContainText('No blocks yet for Saturday');
-  await page.getByRole('button', { name: 'Add basics' }).click();
-  await page.getByRole('button', { name: 'Add basics' }).click();
+  await expect(page.locator('#template-form-card')).toBeHidden();
+  await expect(page.locator('#template-list')).toBeHidden();
+  await page.getByRole('button', { name: 'Add missing basics' }).click();
+  await expect(page.getByRole('button', { name: 'Basics added' })).toBeDisabled();
+  await page.evaluate(() => addBasicsToSelectedDay());
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1136,8 +1139,11 @@ test('day dropdown adds editable basics to the selected weekday', async ({ page 
   ]));
   await expect(panel).toContainText('Sleep');
   await expect(panel).toContainText('02:00-10:00');
+  await expect(panel.getByRole('button', { name: 'Edit Sleep' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Delete Sleep' })).toBeVisible();
   await page.selectOption('#day-template-select', '1');
   await expect(panel).toContainText('No blocks yet for Monday');
+  await page.locator('.template-advanced summary').click();
   await expect(page.locator('#template-list')).toContainText('Breakfast');
   await expect(page.locator('#template-list')).toContainText('Hygiene');
 });
@@ -1152,9 +1158,9 @@ test('day dropdown keeps separate weekday skeletons and preselects custom block 
 
   await page.evaluate(() => showView('settings'));
   await page.selectOption('#day-template-select', '1');
-  await page.getByRole('button', { name: 'Add basics' }).click();
+  await page.getByRole('button', { name: 'Add missing basics' }).click();
   await page.selectOption('#day-template-select', '6');
-  await page.getByRole('button', { name: 'Add basics' }).click();
+  await page.getByRole('button', { name: 'Add missing basics' }).click();
 
   const templates = await page.evaluate(() => settings.templates.map(t => ({
     id: t.id,
@@ -1166,7 +1172,9 @@ test('day dropdown keeps separate weekday skeletons and preselects custom block 
   expect(templates.filter(t => t.activity === 'Sleep').map(t => t.days)).toEqual([[1], [6]]);
   expect(new Set(templates.map(t => t.id)).size).toBe(10);
 
+  await expect(page.locator('#template-form-card')).toBeHidden();
   await page.getByRole('button', { name: '+ Block' }).click();
+  await expect(page.locator('#template-form-card')).toBeVisible();
   const selectedDays = await page.evaluate(() =>
     [...document.querySelectorAll('#tpl-day-picker .tpl-day-btn.on')].map(btn => parseInt(btn.dataset.day))
   );
@@ -1195,6 +1203,15 @@ test('day dropdown shows existing recurring blocks for the selected weekday', as
   await expect(panel).toContainText('Scribe shift');
   await expect(panel).toContainText('22:00-08:00');
   await expect(panel).toContainText('auto-log');
+  await panel.getByRole('button', { name: 'Edit Scribe shift' }).click();
+  await expect(page.locator('#template-form-card')).toBeVisible();
+  await expect(page.locator('#tpl-form-title')).toHaveText('Edit recurring block');
+  await expect(page.locator('#tpl-activity')).toHaveValue('Scribe shift');
+  await page.locator('#template-form-card').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('#template-form-card')).toBeHidden();
+  await panel.getByRole('button', { name: 'Delete Scribe shift' }).click();
+  await expect(panel).toContainText('No blocks yet for Saturday');
+  expect(await page.evaluate(() => settings.templates.length)).toBe(0);
   await page.selectOption('#day-template-select', '1');
   await expect(panel).toContainText('No blocks yet for Monday');
 });
