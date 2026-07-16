@@ -1148,14 +1148,19 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
   await page.selectOption('#day-template-select', '1');
   await expect(panel).toContainText('No blocks yet for Monday');
   await page.locator('.template-advanced summary').click();
-  const weekTable = page.locator('.template-week-table');
-  await expect(weekTable).toBeVisible();
-  await expect(weekTable.locator('thead')).toContainText('Mon');
-  await expect(weekTable.locator('thead')).toContainText('Sun');
-  const sleepRow = weekTable.locator('tbody tr').filter({ hasText: 'Sleep' });
-  await expect(sleepRow).toContainText('02:00-10:00');
-  await expect(sleepRow.locator('td[aria-label="Sat active"]')).toHaveText('on');
-  await expect(sleepRow.locator('td[aria-label="Mon off"]')).toHaveText('-');
+  const calendar = page.locator('.template-cal');
+  await expect(calendar).toBeVisible();
+  await expect(calendar.locator('.template-cal-head')).toContainText('Mon');
+  await expect(calendar.locator('.template-cal-head')).toContainText('Sun');
+  const satSleep = calendar.locator('.template-cal-day[data-day="6"] .template-cal-event').filter({ hasText: 'Sleep' });
+  await expect(satSleep).toContainText('02:00-10:00');
+  await expect(calendar.locator('.template-cal-day[data-day="1"] .template-cal-event').filter({ hasText: 'Sleep' })).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 900 });
+  const mobileScroll = await page.locator('.template-cal-wrap').evaluate(el => ({
+    internalScroll: el.scrollWidth > el.clientWidth,
+    pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+  }));
+  expect(mobileScroll).toEqual({ internalScroll: true, pageFits: true });
 });
 
 test('day dropdown preselects one day and lets a block repeat on checked days', async ({ page }) => {
@@ -1237,6 +1242,10 @@ test('day dropdown shows existing recurring blocks for the selected weekday', as
   await expect(page.locator('#tpl-activity')).toHaveValue('Scribe shift');
   await page.locator('#template-form-card').getByRole('button', { name: 'Cancel' }).click();
   await expect(page.locator('#template-form-card')).toBeHidden();
+  await page.locator('.template-advanced summary').click();
+  const calendar = page.locator('.template-cal');
+  await expect(calendar.locator('.template-cal-day[data-day="6"] .template-cal-event').filter({ hasText: 'Scribe shift' })).toContainText('22:00-08:00');
+  await expect(calendar.locator('.template-cal-day[data-day="0"] .template-cal-event.continuation').filter({ hasText: 'Scribe shift cont.' })).toContainText('22:00-08:00');
   await panel.getByRole('button', { name: 'Delete Scribe shift' }).click();
   await expect(panel).toContainText('No blocks yet for Saturday');
   expect(await page.evaluate(() => settings.templates.length)).toBe(0);
