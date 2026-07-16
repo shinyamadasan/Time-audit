@@ -251,6 +251,15 @@
     <button type="button" class="today-health-metric unlogged" id="th-unlogged" onclick="scrollToTimeline()">0m unlogged</button>
   </div>
 
+  <!-- Daily basics quick logs -->
+  <div class="daily-basics" id="daily-basics" aria-label="Daily basics quick logs">
+    <div class="daily-basics-head">
+      <span>Daily basics</span>
+      <small>low-friction logs for things life requires</small>
+    </div>
+    <div class="daily-basics-grid" id="daily-basics-grid"></div>
+  </div>
+
   <button type="button" class="closeout-card recovery" id="missed-closeout-card" onclick="openMissedCloseoutReview()" style="display:none">
     <span class="closeout-main">
       <span class="closeout-title" id="missed-closeout-title">Yesterday wasn't closed</span>
@@ -324,7 +333,7 @@
   <!-- Sleep quick log pill -->
   <button id="sleep-pill-btn" class="sleep-pill" onclick="quickLogSleep()">
     💤 <span id="sleep-pill-label">Log last night's sleep</span>
-    <span style="float:right;font-size:10px;opacity:0.6;font-weight:400">tap to prefill →</span>
+    <span style="float:right;font-size:10px;opacity:0.6;font-weight:400">tap to log →</span>
   </button>
 
   <!-- Quick retro log -->
@@ -1367,7 +1376,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-15-activity-guard-1';
+const APP_BUILD = '2026-07-15-today-basics-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -1392,6 +1401,16 @@ const QUICK_ACTIVITY_OPTIONS = [
   { label: 'Workout', activity: 'Workout', energy: 'exercise', hint: 'Movement or training' },
   { label: 'Commute', activity: 'Commute', energy: 'errands', hint: 'Driving, travel, transit' },
   { label: 'Scroll', activity: 'Scroll', energy: 'waste', hint: 'Phone or feed drift' },
+];
+const COMMON_LOG_OPTIONS = [
+  { label: 'Sleep', activity: 'Sleep', energy: 'recovery', minutes: null, hint: 'last night', action: 'sleep' },
+  { label: 'Eat', activity: 'Eat', energy: 'recovery', minutes: 30, hint: 'last 30m' },
+  { label: 'Walk', activity: 'Walk', energy: 'exercise', minutes: 20, hint: 'last 20m' },
+  { label: 'Commute', activity: 'Commute', energy: 'errands', minutes: 30, hint: 'last 30m' },
+  { label: 'Errand', activity: 'Errand', energy: 'errands', minutes: 30, hint: 'last 30m' },
+  { label: 'Chores', activity: 'Chores', energy: 'errands', minutes: 30, hint: 'last 30m' },
+  { label: 'Rest', activity: 'Rest', energy: 'recovery', minutes: 20, hint: 'last 20m' },
+  { label: 'Exercise', activity: 'Exercise', energy: 'exercise', minutes: 60, hint: 'last 1h' },
 ];
 let blockStartTime = null;
 let lastStateChange = null;
@@ -3994,6 +4013,11 @@ function isTodayDetailsOpen() {
   return localStorage.getItem('ta3-today-details-open') === '1';
 }
 
+function setTodayDetailsOpen(isOpen) {
+  localStorage.setItem('ta3-today-details-open', isOpen ? '1' : '0');
+  applyTodayDetailsMode();
+}
+
 function applyTodayDetailsMode() {
   const isOpen = isTodayDetailsOpen();
   document.body.classList.toggle('today-details-open', isOpen);
@@ -4005,8 +4029,7 @@ function applyTodayDetailsMode() {
 }
 
 function toggleTodayDetails() {
-  localStorage.setItem('ta3-today-details-open', isTodayDetailsOpen() ? '0' : '1');
-  applyTodayDetailsMode();
+  setTodayDetailsOpen(!isTodayDetailsOpen());
 }
 
 function shouldRenderOnDateTick(lastDateKey, currentDateKey) {
@@ -4209,9 +4232,26 @@ function renderTodayActionStrip(todayE) {
   const reviewHour = settings.reviewHour ?? 22;
   const missed = typeof getMissedCloseout === 'function' ? getMissedCloseout() : null;
   const next = planItems.length ? getNextPlanItem(dateKey) : null;
+  const remoteActive = typeof getActiveTimerOwnerSnapshot === 'function' ? getActiveTimerOwnerSnapshot() : null;
   let state = null;
 
-  if (missed) {
+  if (remoteActive) {
+    state = {
+      tone: 'live',
+      title: `${remoteActive.ownerName}: ${remoteActive.task}`,
+      sub: `${remoteActive.mode} is running on another device.`,
+      button: 'Take over',
+      action: 'takeOverActiveTimer()'
+    };
+  } else if (typeof focusModeOn !== 'undefined' && focusModeOn && pomodoroPhase === 'work') {
+    state = {
+      tone: 'live',
+      title: 'Focus session running',
+      sub: typeof getFocusTaskLabel === 'function' ? getFocusTaskLabel() : 'Deep work is live.',
+      button: 'Open focus',
+      action: 'enterFocusMode()'
+    };
+  } else if (missed) {
     state = {
       tone: 'warn',
       title: 'Close yesterday first',
@@ -5036,6 +5076,7 @@ function renderToday() {
   renderFocusWallet();
   renderTodayHealth(todayE);
   renderTodayActionStrip(todayE);
+  renderDailyBasics();
   renderMissedCloseoutCta();
   renderCloseoutCta();
   perfStageStart = recordPerfStage('renderTodayData', perfStageStart);
@@ -5494,9 +5535,10 @@ function quickRetroLog() {
   const midnight = spansMidnight ? tzParseTime(endDateKey, '00:00') : null;
 
   // Energy resolution: 1) learned waste/distraction pattern, 2) most recent entry for same activity, 3) shallow
+  const commonOption = COMMON_LOG_OPTIONS.find(option => activityGroupKey(option.activity) === activityGroupKey(task));
   const _learnedWaste = (settings.learnedEnergy || {})[task];
   const _prevEntry = !_learnedWaste ? entries.find(e => !e.missed && !e.deleted && e.activity === task && e.energy) : null;
-  const learnedEng = _learnedWaste || (_prevEntry ? _prevEntry.energy : null) || 'shallow';
+  const learnedEng = _learnedWaste || (_prevEntry ? _prevEntry.energy : null) || commonOption?.energy || 'shallow';
 
   function makeQEntry(id, ts, tsS, dateKey) {
     const blkDur = Math.round((ts - tsS) / 60000);
@@ -5576,33 +5618,32 @@ function quickLogSameAsLast() {
   if (!running) _startTimer(activity);
 }
 
-function quickLogSleep() {
-  const taskInput = document.getElementById('retro-task');
-  taskInput.value = 'Sleep';
+function getQuickSleepWindow() {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const viewKey = getViewingDateKey();
   const nowMs = Date.now();
-  const yesterday = getDateInTZ(nowMs - 86400000, tz);
+  const todayKey = getDateInTZ(nowMs, tz);
 
-  // Priority 1: copy previous sleep entry's clock times
   const prevSleep = entries
     .filter(e => !e.missed && !e.deleted && e.activity?.toLowerCase().includes('sleep') && e.tsStart)
     .sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts))[0];
+  const sleepHHMM = prevSleep ? tzHHMM(prevSleep.tsStart) : (settings.sleepTime || '23:00');
+  const wakeHHMM = prevSleep ? tzHHMM(prevSleep.ts) : (settings.wakeTime || '07:00');
+  const [sH] = sleepHHMM.split(':').map(Number);
+  const [wH] = wakeHHMM.split(':').map(Number);
+  const sleepDateKey = sH > wH ? _dateKeyPlusDays(todayKey, -1) : todayKey;
+  let sleepTs = tzParseTime(sleepDateKey, sleepHHMM);
+  let wakeTs = tzParseTime(todayKey, wakeHHMM);
+  if (wakeTs <= sleepTs) wakeTs += 86400000;
+  if (wakeTs > nowMs) wakeTs = nowMs;
+  return { sleepTs, wakeTs };
+}
 
-  if (prevSleep) {
-    // Re-use the same HH:MM times — user likely slept at a similar time
-    document.getElementById('retro-qstart').value = tzHHMM(prevSleep.tsStart);
-    document.getElementById('retro-qend').value   = tzHHMM(Math.min(prevSleep.ts, nowMs - 60000));
-  } else {
-    // Fallback: 11pm last night → 7am today
-    const sleepStart = tzParseTime(yesterday, '23:00');
-    const sleepEnd   = Math.min(tzParseTime(viewKey, '07:00'), nowMs - 60000);
-    document.getElementById('retro-qstart').value = tzHHMM(sleepStart);
-    document.getElementById('retro-qend').value   = tzHHMM(sleepEnd > sleepStart ? sleepEnd : nowMs - 60000);
-  }
-
-  document.getElementById('retro-task').focus();
-  document.getElementById('retro-task').scrollIntoView({ behavior: 'smooth', block: 'center' });
+function quickLogSleep() {
+  const { sleepTs, wakeTs } = getQuickSleepWindow();
+  const dur = Math.round((wakeTs - sleepTs) / 60000);
+  if (dur < 30) { showToast('Sleep window is too short to log'); return; }
+  if (dur >= 11 * 60 && !confirm(`This will log ${fmtSleepDur(sleepTs, wakeTs)} of sleep. Confirm?`)) return;
+  logSleepEntry(sleepTs, wakeTs);
 }
 
 
@@ -5959,6 +6000,74 @@ function useChip(idx) {
   } else {
     _startTimer(task);
   }
+}
+
+function renderDailyBasics() {
+  const wrap = document.getElementById('daily-basics');
+  const grid = document.getElementById('daily-basics-grid');
+  if (!wrap || !grid) return;
+  if (!isViewingToday()) {
+    wrap.style.display = 'none';
+    grid.innerHTML = '';
+    return;
+  }
+  const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+  wrap.style.display = 'block';
+  grid.innerHTML = COMMON_LOG_OPTIONS.map((option, idx) => `
+    <button type="button" class="daily-basic-btn ${option.energy}" onclick="quickLogCommon(${idx})">
+      <span class="db-title">${esc(option.label)}</span>
+      <span class="db-hint">${esc(option.hint)}</span>
+    </button>
+  `).join('');
+}
+
+function quickLogCommon(idx) {
+  const option = COMMON_LOG_OPTIONS[idx];
+  if (!option) return;
+  if (option.action === 'sleep') {
+    quickLogSleep();
+    return;
+  }
+  logCommonActivity(option.activity, option.energy, option.minutes);
+}
+
+function logCommonActivity(activity, energy, minutes) {
+  if (!isViewingToday()) { showToast('Common logs are for today'); return null; }
+  const label = canonicalizeActivityInput(activity);
+  const durMin = Math.max(1, Math.round(Number(minutes) || settings.intervalMin || 30));
+  const tsEnd = Date.now();
+  const tsStart = tsEnd - durMin * 60000;
+  const entry = {
+    id: tsEnd,
+    ts: tsEnd,
+    tsStart,
+    updatedAt: tsEnd,
+    blockIntervalMin: durMin,
+    date: toDateKey(new Date(tsStart)),
+    activity: label,
+    energy,
+    onPlan: energy !== 'waste' && energy !== 'distraction',
+    retro: true,
+    quickLogged: true,
+    commonLogged: true
+  };
+  entry.category = getBucket(entry);
+  entry.originalLabel = entry.energy || null;
+  getActivityColor(label);
+  learnWastePattern(label, energy);
+  validateEntry(entry);
+  entries.unshift(entry);
+  entries.sort((a, b) => b.ts - a.ts);
+  _lastLoggedEntryId = entry.id;
+  persist();
+  scheduleRenderToday();
+  syncEntries();
+  rememberCreatedUndo('common log', [entry]);
+  showUndoToast(`Logged · ${label} · ${fmtDur(durMin)}`, energy);
+  checkBudget(energy);
+  return entry;
 }
 
 function showContinueBanner() {}

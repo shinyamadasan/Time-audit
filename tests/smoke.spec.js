@@ -443,6 +443,7 @@ test('today defaults to clean mode and can reveal details', async ({ page }) => 
 
   await expect(page.locator('#today-details-toggle')).toHaveText('Details');
   await expect(page.locator('#today-details-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#daily-basics')).toBeVisible();
   await expect(page.locator('.quick-retro-bar')).toBeHidden();
   await expect(page.locator('#timeline-section')).toBeHidden();
   await expect(page.locator('#focus-wallet-card')).toBeHidden();
@@ -461,6 +462,58 @@ test('today defaults to clean mode and can reveal details', async ({ page }) => 
   await expect(page.locator('#timeline-section')).toBeHidden();
   await expect(page.locator('#focus-wallet-card')).toBeHidden();
   await expect(page.locator('#recent-entries-section')).toBeHidden();
+});
+
+test('today daily basics logs common mandatory activity from clean mode', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 10, 12, 0, 0);
+  await openApp(page, { nowTs });
+
+  await expect(page.locator('#daily-basics')).toBeVisible();
+  await expect(page.locator('.quick-retro-bar')).toBeHidden();
+  await page.locator('#daily-basics').getByRole('button', { name: /Eat/ }).click();
+
+  const saved = await page.evaluate(() => {
+    const entry = entries.find(e => e.commonLogged && e.activity === 'Eat');
+    return entry && {
+      activity: entry.activity,
+      energy: entry.energy,
+      minutes: entry.blockIntervalMin,
+      category: entry.category,
+      retro: entry.retro
+    };
+  });
+  expect(saved).toEqual({
+    activity: 'Eat',
+    energy: 'recovery',
+    minutes: 30,
+    category: 'recovery',
+    retro: true
+  });
+});
+
+test('today sleep basic logs overnight sleep as recovery', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 10, 12, 0, 0);
+  await openApp(page, { nowTs });
+
+  await page.locator('#daily-basics').getByRole('button', { name: /Sleep/ }).click();
+
+  const saved = await page.evaluate(() => {
+    const entry = entries.find(e => e.activity === 'Sleep');
+    return entry && {
+      activity: entry.activity,
+      energy: entry.energy,
+      minutes: entry.blockIntervalMin,
+      start: new Date(entry.tsStart).toISOString(),
+      end: new Date(entry.ts).toISOString()
+    };
+  });
+  expect(saved).toEqual({
+    activity: 'Sleep',
+    energy: 'recovery',
+    minutes: 480,
+    start: '2026-07-09T23:00:00.000Z',
+    end: '2026-07-10T07:00:00.000Z'
+  });
 });
 
 test('today long labels wrap on phone width without horizontal overflow', async ({ page }) => {
@@ -500,6 +553,8 @@ test('today compact cards use readable UI text instead of the display font', asy
     action: getComputedStyle(document.getElementById('today-action-strip')).fontFamily,
     actionButton: getComputedStyle(document.getElementById('today-action-primary')).fontFamily,
     health: getComputedStyle(document.getElementById('today-health')).fontFamily,
+    dailyBasics: getComputedStyle(document.getElementById('daily-basics')).fontFamily,
+    dailyBasicsButton: getComputedStyle(document.querySelector('#daily-basics .daily-basic-btn')).fontFamily,
     closeout: getComputedStyle(document.getElementById('missed-closeout-card')).fontFamily,
     closeoutAction: getComputedStyle(document.querySelector('#missed-closeout-card .closeout-action')).fontFamily
   }));
