@@ -915,6 +915,7 @@ test('editing an auto-logged schedule can update the recurring template', async 
   await row.locator('button[onclick*="openEditEntry"]').click();
   await expect(page.locator('#retro-overlay')).toBeVisible();
   await expect(page.locator('#retro-activity')).toHaveValue('Scribe shift');
+  await page.locator('#retro-activity').fill('Scribe shift');
   await page.locator('#retro-start').fill('01:00');
   await page.locator('#retro-end').fill('09:00');
   await page.locator('#retro-overlay').getByRole('button', { name: 'Save' }).click();
@@ -1147,7 +1148,14 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
   await page.selectOption('#day-template-select', '1');
   await expect(panel).toContainText('No blocks yet for Monday');
   await page.locator('.template-advanced summary').click();
-  await expect(page.locator('#template-list')).toContainText('Sleep');
+  const weekTable = page.locator('.template-week-table');
+  await expect(weekTable).toBeVisible();
+  await expect(weekTable.locator('thead')).toContainText('Mon');
+  await expect(weekTable.locator('thead')).toContainText('Sun');
+  const sleepRow = weekTable.locator('tbody tr').filter({ hasText: 'Sleep' });
+  await expect(sleepRow).toContainText('02:00-10:00');
+  await expect(sleepRow.locator('td[aria-label="Sat active"]')).toHaveText('on');
+  await expect(sleepRow.locator('td[aria-label="Mon off"]')).toHaveText('-');
 });
 
 test('day dropdown preselects one day and lets a block repeat on checked days', async ({ page }) => {
