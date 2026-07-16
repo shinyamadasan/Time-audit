@@ -699,7 +699,7 @@
 
   <div class="settings-section">
     <div class="settings-title">Weekly Schedule</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Fixed commitments shown greyed-out in your timeline. Tap one to log reality.</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Fixed commitments shown greyed-out in your timeline. Turn on auto-log for reliable shifts; delete that day's entry if reality changed.</div>
     <div id="template-list"></div>
     <!-- Add form -->
     <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-top:4px">
@@ -732,6 +732,13 @@
         <span style="color:var(--muted);font-size:13px;font-weight:600">→</span>
         <input type="time" id="tpl-end" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 10px;border-radius:8px;outline:none">
       </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:9px 10px;margin-bottom:14px;cursor:pointer">
+        <input type="checkbox" id="tpl-auto-log" style="margin-top:2px;accent-color:var(--deep)">
+        <span>
+          <span style="display:block;font-size:12px;color:var(--text);font-weight:700">Auto-log after this block ends</span>
+          <span style="display:block;font-size:10px;color:var(--muted);line-height:1.35;margin-top:2px">Best for fixed job shifts. If you did not work, delete that day's auto entry.</span>
+        </span>
+      </label>
       <button type="button" id="tpl-add-btn" class="btn" style="width:100%;justify-content:center" onclick="addTemplate()">+ Add recurring block</button>
     </div>
   </div>
@@ -1382,7 +1389,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-closeout-time-1';
+const APP_BUILD = '2026-07-16-template-autolog-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -3860,7 +3867,7 @@ function renderEntryRow(item) {
       <div class="tl-bar-col tl-bar-template"></div>
       <div class="tl-content">
         <div class="tl-activity">${esc(templateActivity)}<span class="tl-badge" style="background:var(--bg3);color:var(--muted);border-radius:4px">${label}</span></div>
-        <div class="tl-meta">${localTime(item.tsStart)} – ${localTime(item.ts)} · ${fmtDur(dur)} · <span style="color:var(--deep);font-weight:600">tap to log</span></div>
+        <div class="tl-meta">${localTime(item.tsStart)} – ${localTime(item.ts)} · ${fmtDur(dur)} · <span style="color:var(--deep);font-weight:600">${item.autoLog ? 'auto-logs after end' : 'tap to log'}</span></div>
       </div>
     </div>`;
   }
@@ -5254,6 +5261,7 @@ function renderSidePanel() {
 function renderToday() {
   let perfStageStart = perfNow();
   resetRetroBar();
+  autoLogDueTemplates({ notify: isViewingToday() });
   const todayE = getViewingEntries();
   const realEntries = todayE.filter(e => !e.missed);
   const deepCount = realEntries.filter(e => e.energy === 'deep').length;
@@ -8649,9 +8657,7 @@ function generateTemplateEntries(dateKey) {
   for (const tpl of settings.templates) {
     if (!tpl.enabled) continue;
     if (!tpl.days.includes(dow)) continue;
-    const tsStart = tzParseTime(dateKey, tpl.startTime);
-    let tsEnd = tzParseTime(dateKey, tpl.endTime);
-    if (tsEnd <= tsStart) tsEnd += 24 * 60 * 60 * 1000;
+    const { tsStart, tsEnd } = templateSlotRange(tpl, dateKey);
     // Only hide the template when logged entries cover ≥50% of its duration.
     // A small incidental overlap (e.g. a browser-extension PC-time snippet) won't suppress it.
     const tplDur = tsEnd - tsStart;
@@ -8667,10 +8673,97 @@ function generateTemplateEntries(dateKey) {
       ts: tsEnd, tsStart, date: dateKey,
       blockIntervalMin: Math.round((tsEnd - tsStart) / 60000),
       activity: tpl.activity, energy: tpl.energy,
-      template: true, onPlan: true
+      template: true, onPlan: true, autoLog: !!tpl.autoLog
     });
   }
   return result;
+}
+
+function templateSlotRange(tpl, dateKey) {
+  const tsStart = tzParseTime(dateKey, tpl.startTime);
+  let tsEnd = tzParseTime(dateKey, tpl.endTime);
+  if (tsEnd <= tsStart) tsEnd += 24 * 60 * 60 * 1000;
+  return { tsStart, tsEnd };
+}
+
+function autoTemplateEntryId(tpl, dateKey) {
+  const safeId = String(tpl.id || activityGroupKey(tpl.activity) || 'template').replace(/[^\w-]/g, '_');
+  return `tpllog_${safeId}_${dateKey}`;
+}
+
+function templateSlotCovered(tpl, dateKey, range) {
+  const autoId = autoTemplateEntryId(tpl, dateKey);
+  const dayEntries = getEntriesForDateWindow(dateKey, true).filter(e => !e.missed);
+  if (dayEntries.some(e => String(e.id) === autoId)) return true;
+  const tplDur = range.tsEnd - range.tsStart;
+  const covered = dayEntries
+    .filter(e => entryCoversTemplateSlot(e, tpl))
+    .reduce((acc, e) => {
+      const eStart = e.tsStart || (e.ts - (e.blockIntervalMin || settings.intervalMin) * 60000);
+      const eEnd = e.ts || eStart;
+      const clippedStart = Math.max(range.tsStart, eStart);
+      const clippedEnd = Math.min(range.tsEnd, eEnd);
+      return acc + Math.max(0, clippedEnd - clippedStart);
+    }, 0);
+  return covered >= tplDur * 0.5;
+}
+
+function autoLogDueTemplates({ notify = true } = {}) {
+  if (!settings.templates || !settings.templates.length) return false;
+  const now = Date.now();
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(now, tz);
+  const candidateKeys = [todayKey, _dateKeyPlusDays(todayKey, -1)];
+  const created = [];
+
+  for (const tpl of settings.templates) {
+    if (!tpl.enabled || !tpl.autoLog) continue;
+    for (const dateKey of candidateKeys) {
+      const dow = tzDow(tzParseTime(dateKey, '12:00'));
+      if (!tpl.days.includes(dow)) continue;
+      const range = templateSlotRange(tpl, dateKey);
+      if (now < range.tsEnd) continue;
+      if (running && (taskStartTime || timerStartedAt || now) < range.tsEnd && now > range.tsStart) continue;
+      if (templateSlotCovered(tpl, dateKey, range)) continue;
+
+      const label = canonicalizeActivityInput(tpl.activity);
+      const entry = {
+        id: autoTemplateEntryId(tpl, dateKey),
+        ts: range.tsEnd,
+        tsStart: range.tsStart,
+        updatedAt: now,
+        blockIntervalMin: Math.round((range.tsEnd - range.tsStart) / 60000),
+        date: toDateKey(new Date(range.tsStart)),
+        activity: label,
+        energy: tpl.energy,
+        onPlan: true,
+        retro: false,
+        autoLogged: true,
+        scheduledAutoLog: true,
+        templateId: tpl.id
+      };
+      entry.category = getBucket(entry);
+      entry.originalLabel = entry.energy || null;
+      getActivityColor(label);
+      validateEntry(entry);
+      created.push(entry);
+    }
+  }
+
+  if (!created.length) return false;
+  entries.unshift(...created);
+  entries.sort((a, b) => b.ts - a.ts);
+  _lastLoggedEntryId = created[0].id;
+  persist();
+  syncEntries();
+  rememberCreatedUndo('scheduled block', created);
+  if (notify) {
+    const msg = created.length === 1
+      ? `Auto-logged · ${created[0].activity} · ${fmtDur(created[0].blockIntervalMin)}`
+      : `Auto-logged ${created.length} scheduled blocks`;
+    showUndoToast(msg, created[0].energy);
+  }
+  return true;
 }
 
 function entryCoversTemplateSlot(entry, tpl) {
@@ -8696,6 +8789,7 @@ function renderTemplateList() {
     const energyLabel = ENERGY_LABEL[tpl.energy] || tpl.energy;
     const sortedDays = [...tpl.days].sort((a,b)=>a-b);
     const dayChips = sortedDays.map(d => `<span style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:1px 6px;font-size:10px;font-family:var(--mono);color:var(--muted)">${DAY_LABELS[d]}</span>`).join('');
+    const autoChip = tpl.autoLog ? `<span style="background:var(--deep-dim2);border:1px solid rgba(76,199,240,0.25);border-radius:5px;padding:1px 6px;font-size:10px;color:var(--deep);font-weight:700">auto-log</span>` : '';
     const [sh, sm] = tpl.startTime.split(':').map(Number);
     const [eh, em] = tpl.endTime.split(':').map(Number);
     let mins = (eh * 60 + em) - (sh * 60 + sm);
@@ -8714,6 +8808,7 @@ function renderTemplateList() {
           <span style="font-size:11px;color:var(--muted);font-family:var(--mono)">${tpl.startTime} → ${tpl.endTime}</span>
           <span style="color:var(--muted);font-size:10px">·</span>
           <span style="font-size:11px;color:var(--muted)">${dur}</span>
+          ${autoChip}
         </div>
       </div>
       <button type="button" onclick="editTemplate(${i})" style="background:none;border:none;color:var(--muted);font-size:15px;padding:10px 8px;cursor:pointer;flex-shrink:0;transition:color 0.15s" onmouseover="this.style.color='var(--deep)'" onmouseout="this.style.color='var(--muted)'">✎</button>
@@ -8732,6 +8827,7 @@ function addTemplate() {
   const energy = document.getElementById('tpl-energy').value;
   const startTime = document.getElementById('tpl-start').value;
   const endTime = document.getElementById('tpl-end').value;
+  const autoLog = !!document.getElementById('tpl-auto-log')?.checked;
   if (!startTime || !endTime) { showToast('Set start and end time'); return; }
   const days = [...document.querySelectorAll('.tpl-day-btn.on')].map(b => parseInt(b.dataset.day));
   if (!days.length) { showToast('Select at least one day'); return; }
@@ -8739,10 +8835,10 @@ function addTemplate() {
   const wasEditing = _editingTplIdx !== null;
   if (wasEditing) {
     // Update existing — preserve id and enabled flag
-    settings.templates[_editingTplIdx] = { ...settings.templates[_editingTplIdx], activity, energy, days, startTime, endTime };
+    settings.templates[_editingTplIdx] = { ...settings.templates[_editingTplIdx], activity, energy, days, startTime, endTime, autoLog };
     _editingTplIdx = null;
   } else {
-    settings.templates.push({ id: Date.now().toString(36), activity, energy, days, startTime, endTime, enabled: true });
+    settings.templates.push({ id: Date.now().toString(36), activity, energy, days, startTime, endTime, autoLog, enabled: true });
   }
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
@@ -8750,6 +8846,8 @@ function addTemplate() {
   document.getElementById('tpl-activity').value = '';
   document.getElementById('tpl-start').value = '';
   document.getElementById('tpl-end').value = '';
+  const autoEl = document.getElementById('tpl-auto-log');
+  if (autoEl) autoEl.checked = false;
   document.querySelectorAll('.tpl-day-btn').forEach(b => b.classList.remove('on'));
   const addBtn = document.getElementById('tpl-add-btn');
   if (addBtn) addBtn.textContent = '+ Add recurring block';
@@ -8772,6 +8870,8 @@ function editTemplate(i) {
   document.getElementById('tpl-energy').value = tpl.energy;
   document.getElementById('tpl-start').value = tpl.startTime;
   document.getElementById('tpl-end').value = tpl.endTime;
+  const autoEl = document.getElementById('tpl-auto-log');
+  if (autoEl) autoEl.checked = !!tpl.autoLog;
   document.querySelectorAll('.tpl-day-btn').forEach(b =>
     b.classList.toggle('on', tpl.days.includes(parseInt(b.dataset.day)))
   );
