@@ -974,6 +974,65 @@ test('scheduled blocks can be marked off today before auto-log', async ({ page }
   });
 });
 
+test('scheduled auto-log display shows covered time between detailed logs', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
+  const shiftStart = Date.UTC(2026, 6, 15, 0, 0, 0);
+  const firstDetailStart = Date.UTC(2026, 6, 15, 0, 45, 0);
+  const firstDetailEnd = Date.UTC(2026, 6, 15, 0, 47, 0);
+  const secondDetailStart = Date.UTC(2026, 6, 15, 1, 25, 0);
+  const secondDetailEnd = Date.UTC(2026, 6, 15, 1, 33, 0);
+  const shiftEnd = Date.UTC(2026, 6, 15, 8, 0, 0);
+  const entries = [
+    {
+      id: 'tpllog_scribe_2026-07-15',
+      ts: shiftEnd,
+      tsStart: shiftStart,
+      updatedAt: shiftEnd,
+      blockIntervalMin: 480,
+      date: utcDateKey(shiftStart),
+      activity: 'Scribe shift',
+      energy: 'nine5',
+      category: 'nine5',
+      onPlan: true,
+      retro: false,
+      autoLogged: true,
+      scheduledAutoLog: true,
+      templateId: 'scribe'
+    },
+    {
+      id: 'detail-a',
+      ts: firstDetailEnd,
+      tsStart: firstDetailStart,
+      updatedAt: firstDetailEnd,
+      blockIntervalMin: 2,
+      date: utcDateKey(firstDetailStart),
+      activity: 'App building',
+      energy: 'deep',
+      onPlan: true,
+      retro: true
+    },
+    {
+      id: 'detail-b',
+      ts: secondDetailEnd,
+      tsStart: secondDetailStart,
+      updatedAt: secondDetailEnd,
+      blockIntervalMin: 8,
+      date: utcDateKey(secondDetailStart),
+      activity: 'App building',
+      energy: 'deep',
+      onPlan: true,
+      retro: true
+    }
+  ];
+  await openApp(page, { entries, nowTs });
+  await openTodayDetails(page);
+
+  const timeline = page.locator('#timeline-blocks');
+  await expect(timeline).toContainText('12:47 AM – 1:25 AM · 38m');
+  await expect(timeline.locator('.tl-row').filter({ hasText: 'Scribe shift' })).toHaveCount(3);
+  await expect(timeline.locator('.tl-untracked-row').filter({ hasText: '12:47 AM' })).toHaveCount(0);
+});
+
 test('default day skeleton adds editable non-auto schedule anchors once', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
   await openApp(page, {
