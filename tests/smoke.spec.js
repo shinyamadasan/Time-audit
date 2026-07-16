@@ -1045,6 +1045,49 @@ test('schedule-matched display shows covered time between detailed logs even wit
   await expect(timeline.locator('.tl-untracked-row').filter({ hasText: '12:47 AM' })).toHaveCount(0);
 });
 
+test('long non-job coverage blocks are not split by the legacy fallback', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 10, 0, 0);
+  const sleepStart = Date.UTC(2026, 6, 15, 0, 0, 0);
+  const detailStart = Date.UTC(2026, 6, 15, 1, 0, 0);
+  const detailEnd = Date.UTC(2026, 6, 15, 1, 10, 0);
+  const sleepEnd = Date.UTC(2026, 6, 15, 8, 0, 0);
+  await openApp(page, {
+    entries: [
+      {
+        id: 'sleep-coverage',
+        ts: sleepEnd,
+        tsStart: sleepStart,
+        updatedAt: sleepEnd,
+        blockIntervalMin: 480,
+        date: utcDateKey(sleepStart),
+        activity: 'Sleep',
+        energy: 'recovery',
+        category: 'recovery',
+        onPlan: true,
+        retro: true
+      },
+      {
+        id: 'sleep-detail',
+        ts: detailEnd,
+        tsStart: detailStart,
+        updatedAt: detailEnd,
+        blockIntervalMin: 10,
+        date: utcDateKey(detailStart),
+        activity: 'Phone',
+        energy: 'waste',
+        onPlan: false,
+        retro: true
+      }
+    ],
+    nowTs
+  });
+  await openTodayDetails(page);
+
+  const timeline = page.locator('#timeline-blocks');
+  await expect(timeline.locator('.tl-row').filter({ hasText: 'Sleep' })).toHaveCount(1);
+  await expect(timeline).not.toContainText('12:00 AM – 1:00 AM');
+});
+
 test('default day skeleton adds editable non-auto schedule anchors once', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
   await openApp(page, {
