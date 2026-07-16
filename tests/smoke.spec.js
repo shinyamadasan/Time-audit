@@ -719,6 +719,96 @@ test('today gap recovery other opens prefilled retro log', async ({ page }) => {
   await expect(page.locator('#retro-end')).toHaveValue('10:45');
 });
 
+test('rebuild day estimates a skeleton block without pretending it is exact', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
+  await openApp(page, {
+    nowTs,
+    settings: {
+      templates: [{
+        id: 'sleep',
+        activity: 'Sleep',
+        energy: 'recovery',
+        days: [3],
+        startTime: '00:00',
+        endTime: '08:00',
+        autoLog: false,
+        enabled: true,
+        skeleton: true
+      }]
+    }
+  });
+  await openTodayDetails(page);
+
+  const card = page.locator('#rebuild-day-card');
+  await expect(card).toBeVisible();
+  await card.getByRole('button', { name: /Estimate Sleep/ }).click();
+
+  const saved = await page.evaluate(() => {
+    const entry = entries.find(e => e.activity === 'Sleep');
+    return entry && {
+      activity: entry.activity,
+      energy: entry.energy,
+      estimated: entry.estimated,
+      rebuildDay: entry.rebuildDay,
+      note: entry.note,
+      minutes: entry.blockIntervalMin
+    };
+  });
+  expect(saved).toEqual({
+    activity: 'Sleep',
+    energy: 'recovery',
+    estimated: true,
+    rebuildDay: true,
+    note: 'Estimated from Rebuild day',
+    minutes: 480
+  });
+  await expect(page.locator('#timeline-blocks')).toContainText('estimated');
+});
+
+test('rebuild day opens the biggest gap in the retro form', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 16, 0, 0);
+  const firstStart = Date.UTC(2026, 6, 15, 10, 0, 0);
+  const firstEnd = Date.UTC(2026, 6, 15, 11, 0, 0);
+  const secondStart = Date.UTC(2026, 6, 15, 14, 0, 0);
+  const secondEnd = Date.UTC(2026, 6, 15, 15, 0, 0);
+  await openApp(page, {
+    nowTs,
+    entries: [
+      {
+        id: firstEnd,
+        ts: firstEnd,
+        tsStart: firstStart,
+        updatedAt: firstEnd,
+        blockIntervalMin: 60,
+        date: utcDateKey(firstStart),
+        activity: 'Deep work',
+        energy: 'deep',
+        onPlan: true,
+        retro: true
+      },
+      {
+        id: secondEnd,
+        ts: secondEnd,
+        tsStart: secondStart,
+        updatedAt: secondEnd,
+        blockIntervalMin: 60,
+        date: utcDateKey(secondStart),
+        activity: 'Eat',
+        energy: 'recovery',
+        onPlan: true,
+        retro: true
+      }
+    ]
+  });
+  await openTodayDetails(page);
+
+  await page.locator('#rebuild-day-card').getByRole('button', { name: /Fill biggest gap/ }).click();
+  await expect(page.locator('#retro-overlay')).toBeVisible();
+  await expect(page.locator('#retro-start')).toHaveValue('11:00');
+  await expect(page.locator('#retro-end')).toHaveValue('14:00');
+  await expect(page.locator('#retro-activity')).toHaveValue('');
+});
+
 test('today long labels wrap on phone width without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
