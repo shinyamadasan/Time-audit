@@ -369,6 +369,69 @@ test('deleted entries can be restored with undo', async ({ page }) => {
   await expect(page.locator('#recent-list')).toContainText('Seeded focus block');
 });
 
+test('delete hides the entry before storage and sync work runs', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
+  const start = Date.UTC(2026, 6, 15, 9, 0, 0);
+  const entry = {
+    id: 'fast-delete',
+    ts: start + 30 * 60 * 1000,
+    tsStart: start,
+    updatedAt: start,
+    blockIntervalMin: 30,
+    date: utcDateKey(start),
+    activity: 'Delete responsiveness check',
+    energy: 'deep',
+    category: 'deep_work',
+    originalLabel: 'deep',
+    onPlan: true,
+    retro: true
+  };
+  await openApp(page, { entries: [entry], nowTs });
+  await openTodayDetails(page);
+  await expect(page.locator('#recent-list')).toContainText('Delete responsiveness check');
+
+  const result = await page.evaluate(() => {
+    window.__deletePersistCalls = 0;
+    window.__deleteSyncCalls = 0;
+    window.__deleteWeekCalls = 0;
+    const originalPersist = persist;
+    const originalSyncEntries = syncEntries;
+    const originalRenderWeek = renderWeek;
+    window.__restoreDeleteFns = () => {
+      persist = originalPersist;
+      syncEntries = originalSyncEntries;
+      renderWeek = originalRenderWeek;
+    };
+    persist = () => { window.__deletePersistCalls += 1; };
+    syncEntries = () => {
+      window.__deleteSyncCalls += 1;
+      return Promise.resolve(true);
+    };
+    renderWeek = () => { window.__deleteWeekCalls += 1; };
+
+    deleteEntry('fast-delete');
+
+    return {
+      listText: document.getElementById('recent-list').textContent,
+      timelineText: document.getElementById('timeline-blocks').textContent,
+      deleted: entries.find(e => e.id === 'fast-delete')?.deleted,
+      persistCalls: window.__deletePersistCalls,
+      syncCalls: window.__deleteSyncCalls,
+      weekCalls: window.__deleteWeekCalls
+    };
+  });
+
+  expect(result.deleted).toBe(true);
+  expect(result.listText).not.toContain('Delete responsiveness check');
+  expect(result.timelineText).not.toContain('Delete responsiveness check');
+  expect(result.persistCalls).toBe(0);
+  expect(result.syncCalls).toBe(0);
+  expect(result.weekCalls).toBe(0);
+  await expect.poll(() => page.evaluate(() => window.__deletePersistCalls)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__deleteSyncCalls)).toBe(1);
+  await page.evaluate(() => window.__restoreDeleteFns());
+});
+
 test('focus wallet spend can be undone without leaving point debt', async ({ page }) => {
   const ts = minutesAgo(5);
   const deepEntry = {
