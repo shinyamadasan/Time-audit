@@ -11,7 +11,7 @@ Each proposal is scored against the north-star goals in `docs/PROJECT.md`.
 
 id: PROP-001
 captures: 20260712T2058Z-12, 20260712T2108Z-16, 20260714T1411Z-36
-status: pending
+- **status:** pending
 dup-count: 3
 
 > **Decision: Reject** — Three keysmash/filler test messages ("tesss", "test capture,", "sda") sent during Telegram bot setup. No actionable content.
@@ -29,7 +29,7 @@ dup-count: 3
 
 id: PROP-002
 captures: 20260713T0942Z-20
-status: pending
+- **status:** pending
 
 > **Decision: Reject** — `/approve` arrived on 2026-07-13 with no pending proposal in context and nothing in BUILD_QUEUE. Likely a bot-command routing test, not intent to approve a specific proposal.
 
@@ -46,7 +46,7 @@ status: pending
 
 id: PROP-003
 captures: 20260714T1414Z-40
-status: pending
+- **status:** pending
 
 > **Decision: Reject** — Explicit end-to-end pipeline test ("routing test chronasense"). No feature request. Confirms the Telegram → n8n → captures/inbox pipeline is fully functional.
 
@@ -65,7 +65,7 @@ status: pending
 
 id: PROP-004
 captures: 20260715T1346Z-52
-status: pending
+- **status:** pending
 dup-count: 1
 
 > **Decision: Approve** — First user-reported bug; maps directly to Hard Rule #8 (timer restore order in INIT). When the app is closed mid-session and reopened, the hero resets to starting "work" instead of resuming the active entry. Data correctness issue: the gap between close and reopen is untracked, and the resumed state is wrong.
@@ -88,7 +88,7 @@ dup-count: 1
 
 id: PROP-005
 captures: 20260715T1407Z-55, 20260716T0025Z-61, 20260716T0025Z-63, 20260716T0025Z-67
-status: pending
+- **status:** pending
 dup-count: 4
 
 > **Decision: Reject** — Four noise messages: "test" (bot-setup test), "/reject" (mistyped bot command sent as plain text), and two single-character "s" keysmashes. No actionable content.
