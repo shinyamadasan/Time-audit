@@ -1391,6 +1391,83 @@ test('mobile normalizes synced recurring templates for settings and today hints'
   await expect(row).toContainText('template hint');
 });
 
+test('settings sync preserves and pushes newer local recurring templates', async ({ page }) => {
+  await openApp(page, {
+    settings: {
+      _savedAt: 100,
+      _templatesSavedAt: 500,
+      templates: [{
+        id: 'local-lunch',
+        activity: 'Lunch',
+        energy: 'recovery',
+        days: [3],
+        startTime: '13:00',
+        endTime: '13:30',
+        autoLog: false,
+        enabled: true
+      }]
+    }
+  });
+
+  const result = await page.evaluate(async () => {
+    const remoteSettings = {
+      _savedAt: 800,
+      _templatesSavedAt: 100,
+      intervalMin: 45,
+      templates: {}
+    };
+    const updates = [];
+    roomCode = 'sync-test';
+    fbRoomRef = {
+      update(payload) {
+        updates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    fbDb = {
+      ref(path) {
+        return {
+          once() {
+            return Promise.resolve({ val: () => path.endsWith('/settings') ? remoteSettings : null });
+          }
+        };
+      }
+    };
+
+    const changed = applyRemoteSettings(remoteSettings);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    syncSettings();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    return {
+      changed,
+      intervalMin: settings.intervalMin,
+      templates: settings.templates.map(t => ({
+        id: t.id,
+        activity: t.activity,
+        days: t.days,
+        startTime: t.startTime,
+        endTime: t.endTime
+      })),
+      updates
+    };
+  });
+
+  expect(result.changed).toBe(true);
+  expect(result.intervalMin).toBe(45);
+  expect(result.templates).toEqual([{
+    id: 'local-lunch',
+    activity: 'Lunch',
+    days: [3],
+    startTime: '13:00',
+    endTime: '13:30'
+  }]);
+  expect(result.updates).toContainEqual(expect.objectContaining({
+    'settings/templates': expect.arrayContaining([expect.objectContaining({ id: 'local-lunch' })]),
+    'settings/_templatesSavedAt': 500
+  }));
+});
+
 test('today template rows expose log and off actions without settings clutter', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
   await openApp(page, {
