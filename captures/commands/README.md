@@ -53,14 +53,22 @@ commands once:
 ```powershell
 cd "C:/Users/Admin/Desktop/Vibe code/Time audit app"
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\tools\Dispatch-Commands.ps1"
+# macOS: pwsh ./tools/Dispatch-Commands.ps1
 ```
 
-If the scheduled dispatcher is disabled, run PowerShell as Administrator and re-enable it:
+If the Windows scheduled dispatcher is disabled, run PowerShell as Administrator and re-enable it:
 
 ```powershell
 cd "C:/Users/Admin/Desktop/Vibe code/Time audit app"
 Enable-ScheduledTask -TaskName "ChronaSense Command Dispatcher"
 Start-ScheduledTask -TaskName "ChronaSense Command Dispatcher"
+```
+
+On macOS, check and kick the `launchd` job:
+
+```bash
+launchctl list | grep "com.aidevos.chronasense.dispatcher"
+launchctl kickstart -k "gui/$(id -u)/com.aidevos.chronasense.dispatcher"
 ```
 
 `status: new` → `applied` once processed (idempotent — an n8n retry can't double-dispatch). Every

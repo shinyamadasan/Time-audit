@@ -101,6 +101,7 @@ the /command, infer if none); dedupe against planning/PROPOSALS.md + planning/RO
 planning/DONE.md. Then write ONE proposal per capture into planning/PROPOSALS.md using the **Proposal
 contract** there (status: pending), filling EVERY field:
 - ▶ Decision — the recommended next action (Approve / Park / Reject / Clarify) + a one-line why, stated FIRST so it's actionable straight from a phone digest
+- ▶ Risk — Low or High + a one-line why, using the SAME criteria DECISIONS.md D-032 already uses at merge time (data/sync/storage, auth, security, or the AI Dev OS itself = High; everything else = Low). Decision: Approve + Risk: Low auto-promotes with no human reply needed (D-042) — when genuinely unsure, say High.
 - goal alignment — supports / conflicts / mixed vs the **Current Objective** in ROADMAP.md (+ which North-star goal in docs/PROJECT.md)
 - expected user value — who benefits, how much, in the current phase
 - evidence — recurring friction · dup count · demand signal · similar past work

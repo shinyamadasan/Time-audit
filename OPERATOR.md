@@ -50,8 +50,9 @@ and continue** — the whole point is that an idea never costs you your flow.
 ```
 
 One press = **one task, all the way through**: plan → Codex builds on a branch → Guardian Gauntlet
-audits it → Claude reviews → merges → deploys. A sleeping PC wakes itself to do it. Press `/go`
-again for the next task.
+audits it → Claude reviews → merges → deploys. On Windows, a sleeping PC wakes itself to do it; on
+macOS, the Mac must stay awake because `launchd` cannot wake it every 30 minutes. Press `/go` again
+for the next task.
 
 **Evening · ~1 min**
 
@@ -99,30 +100,33 @@ Same rhythm, once per app: each has its own bot, its own digest, its own `/go`. 
 PC wake (the dispatchers are deliberately aligned on the same interval), so the second app costs you
 no extra machine time — only the two minutes of judgment its digest asks for.
 
-## At the keyboard (PC cheat sheet)
+## At the keyboard (desktop cheat sheet)
 
 Telegram works from the PC too (it just polls every ~2 min). These run the **same phase runners**
 instantly. All are lock-protected (`automation.lock`) so they can never overlap each other or the
 scheduled run, and **every one takes `-DryRun`** — show what it would do, change nothing.
 
-Open PowerShell and copy-paste a block:
+Open PowerShell and copy-paste a block. On macOS, use `pwsh` and forward slashes.
 
 **Plan / triage** — captures → proposals, approved queue → tasks *(Telegram: `/run`)*
 ```powershell
 cd "C:/Users/Admin/Desktop/Vibe code/Time audit app"
 .\run-claude.ps1
+# macOS: pwsh ./run-claude.ps1
 ```
 
 **Build the next `status: codex` task** — auto-chains into review *(Telegram: `/build`; closest thing to `/go` at the PC)*
 ```powershell
 cd "C:/Users/Admin/Desktop/Vibe code/Time audit app"
 .\tools\Run-Codex-Build.ps1
+# macOS: pwsh ./tools/Run-Codex-Build.ps1
 ```
 
 **Review the pending `status: review` task** — applies the D-032 risk gate *(Telegram: `/review`)*
 ```powershell
 cd "C:/Users/Admin/Desktop/Vibe code/Time audit app"
 .\tools\Run-Claude-Review.ps1
+# macOS: pwsh ./tools/Run-Claude-Review.ps1
 ```
 
 **Merge a held red-zone branch** — a task the reviewer left at `status: approved` (D-032). Replace `<id>`:
@@ -137,17 +141,19 @@ git push origin main
 ```powershell
 cd "C:/Users/Admin/Desktop/Vibe code/Time audit app"
 .\tools\Dispatch-Commands.ps1
+# macOS: pwsh ./tools/Dispatch-Commands.ps1
 ```
 
 **Options:** all runners take `-DryRun`. The review runner also takes `-NoAutoMerge` (review but never
 touch `main` — inspect first) and `-NoPush` (merge locally, don't push).
 
-> ⚠ **Never run `.\run-claude.ps1 -Scheduled` by hand.** `-Scheduled` is the Task Scheduler's signal to
-> **shut the PC down** when the run ends. Plain `.\run-claude.ps1` is safe and will not power off.
+> **Never run `.\run-claude.ps1 -Scheduled` by hand.** `-Scheduled` is the Windows Task Scheduler
+> signal for the scheduled power-management path. Plain `.\run-claude.ps1` or
+> `pwsh ./run-claude.ps1` is safe and will not power off or sleep the machine.
 
-## Sleep the PC and still dev remotely (D-033)
+## Power model for remote work (D-033)
 
-The machine is set up to **sleep and still work for you**:
+Windows is set up to **sleep and still work for you**:
 
 | Piece | Setting | Why |
 |---|---|---|
@@ -165,17 +171,28 @@ means the dispatcher drains the whole backlog on the next wake.
 **Trade-off:** up to ~30 min latency on a remote command. Irrelevant for work you aren't watching.
 Want it snappier? Shorten the interval (more wakes). Want fewer wakes? Lengthen it.
 
+On macOS, the scheduler is `launchd`, not Task Scheduler. macOS has no equivalent to a 30-minute
+WakeToRun timer, so the Mac must stay awake for `/go` to run unattended:
+
+```bash
+sudo pmset -a sleep 0 displaysleep 10
+```
+
+The display can still sleep. The dispatcher also uses `caffeinate` while it is actively building, so
+a run is not suspended mid-flight.
+
 ### What runs when — and what the master flag actually gates
 
-Every app installed by the AI Dev OS registers **two** scheduled tasks. Not one each — two, both.
-They do different jobs and are easy to confuse:
+Every app installed by the AI Dev OS registers **two** schedules. On Windows they are Scheduled
+Tasks; on macOS they are `launchd` agents. They do different jobs and are easy to confuse:
 
 | Task | Fires | Job |
 |---|---|---|
 | **ChronaSense Command Dispatcher** | every **30 min** | Drains Telegram commands (`/status`, `/go`, `/build`, `/review`, `/merge`…) |
 | **ChronaSense Claude Overnight** | **9 PM & 2 AM** | Autonomous run: triage captures → proposals → morning digest |
 
-Both wake the PC. **Neither is "the automation" on its own** — they are just alarm clocks.
+On Windows, both can wake the PC. On macOS, they only fire while the Mac is awake. **Neither is "the
+automation" on its own** — they are just alarm clocks.
 
 The thing that decides whether anything actually *happens* is one line in `run-claude.ps1`:
 
@@ -249,7 +266,7 @@ machine once per app for no benefit.
 Each app's `$AUTOMATION_ENABLED` is independent — a validated app can be live while a new one stays
 inert.
 
-### Dispatcher controls — these need an **elevated** PowerShell (Run as Administrator)
+### Dispatcher controls — Windows, elevated PowerShell
 ```powershell
 Get-ScheduledTask -TaskName "ChronaSense Command Dispatcher" |
   Select-Object State, @{n='Wake';e={$_.Settings.WakeToRun}}, @{n='Every';e={$_.Triggers[0].Repetition.Interval}}
@@ -270,6 +287,13 @@ Set-ScheduledTask -InputObject $t
 ```powershell
 powercfg /change standby-timeout-ac 15    # minutes idle before sleeping on AC (0 = never)
 powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE | Select-String "Current AC"
+```
+
+### Dispatcher controls — macOS
+```bash
+launchctl list | grep "com.aidevos.chronasense.dispatcher"
+launchctl kickstart -k "gui/$(id -u)/com.aidevos.chronasense.dispatcher"
+pmset -g | grep ' sleep'
 ```
 
 ## The mindset
