@@ -1346,6 +1346,51 @@ test('day dropdown shows existing recurring blocks for the selected weekday', as
   await expect(panel).toContainText('No blocks yet for Monday');
 });
 
+test('mobile normalizes synced recurring templates for settings and today hints', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
+  await openApp(page, {
+    nowTs,
+    settings: {
+      _savedAt: 10,
+      _templatesSavedAt: 10,
+      templates: {
+        0: {
+          id: 'lunch',
+          activity: 'Lunch',
+          energy: 'recovery',
+          days: { 0: 3 },
+          startTime: '13:00',
+          endTime: '13:30',
+          autoLog: false,
+          enabled: true,
+          skipDates: {}
+        }
+      }
+    }
+  });
+
+  const normalized = await page.evaluate(() => ({
+    isArray: Array.isArray(settings.templates),
+    days: settings.templates[0]?.days
+  }));
+  expect(normalized).toEqual({ isArray: true, days: [3] });
+
+  await page.evaluate(() => showView('settings'));
+  await expect(page.locator('#view-settings')).toContainText('Day Templates');
+  await expect(page.locator('#day-template-select')).toBeVisible();
+  await page.selectOption('#day-template-select', '3');
+  await expect(page.locator('#day-template-panel')).toContainText('Lunch');
+  await page.locator('.template-advanced summary').click();
+  await expect(page.locator('.template-cal-day[data-day="3"] .template-cal-event').filter({ hasText: 'Lunch' })).toContainText('13:00-13:30');
+
+  await page.evaluate(() => showView('today'));
+  await openTodayDetails(page);
+  const row = page.locator('#timeline-blocks .tl-template-row').filter({ hasText: 'Lunch' });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('template hint');
+});
+
 test('today template rows expose log and off actions without settings clutter', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
   await openApp(page, {
