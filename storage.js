@@ -407,8 +407,31 @@ function renderSyncEventLog() {
 // ══════════════════════════════════════════════════════
 // PERSIST / LOAD
 // ══════════════════════════════════════════════════════
+function normalizeTemplates(templates) {
+  const list = Array.isArray(templates)
+    ? templates
+    : (templates && typeof templates === 'object' ? Object.values(templates) : []);
+  return list
+    .filter(tpl => tpl && typeof tpl === 'object')
+    .map(tpl => {
+      const days = Array.isArray(tpl.days)
+        ? tpl.days
+        : (tpl.days && typeof tpl.days === 'object' ? Object.values(tpl.days) : []);
+      const skipDates = Array.isArray(tpl.skipDates)
+        ? tpl.skipDates
+        : (tpl.skipDates && typeof tpl.skipDates === 'object' ? Object.values(tpl.skipDates) : []);
+      return {
+        ...tpl,
+        days: [...new Set(days.map(day => parseInt(day, 10)).filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort((a, b) => a - b),
+        skipDates: skipDates.filter(Boolean),
+        enabled: tpl.enabled !== false
+      };
+    });
+}
+
 /** Saves entries, settings, and commitment to localStorage then schedules a render. */
 function persist() {
+  settings.templates = normalizeTemplates(settings.templates);
   // Always store entries in strict chronological order (newest first)
   entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
   localStorage.setItem('ta3-entries', JSON.stringify(entries));
@@ -459,6 +482,7 @@ function load() {
   // Validate schema — warns to console for any malformed entries without crashing
   entries.forEach(e => { if (!e.missed && !e.deleted) validateEntry(e); });
   try { const s = JSON.parse(localStorage.getItem('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
+  settings.templates = normalizeTemplates(settings.templates);
   // Dedicated timezone key wins over everything (Firebase can't overwrite it)
   const savedTz = localStorage.getItem('ta3-tz');
   if (savedTz) {
@@ -696,19 +720,21 @@ function startSync() {
   });
 
   fbDb.ref(`rooms/${roomCode}/settings`).on('value', snap => {
-    const val = snap.val();
-    if (!val) return;
+    const remoteSettings = snap.val();
+    if (!remoteSettings) return;
+    const val = { ...remoteSettings, templates: normalizeTemplates(remoteSettings.templates) };
     const remoteTs = val._savedAt || 0;
     const localTs  = settings._savedAt || 0;
     if (remoteTs > localTs) {
       settings = { ...settings, ...val };
+      settings.templates = normalizeTemplates(settings.templates);
       localStorage.setItem('ta3-settings', JSON.stringify(settings));
       if (val.timezone) localStorage.setItem('ta3-tz', val.timezone);
       renderToday();
       renderSettings();
     } else if ((val._templatesSavedAt || 0) > (settings._templatesSavedAt || 0)) {
       // Remote has newer templates even if overall settings are older — accept just templates
-      settings.templates = val.templates || [];
+      settings.templates = normalizeTemplates(val.templates);
       settings._templatesSavedAt = val._templatesSavedAt;
       localStorage.setItem('ta3-settings', JSON.stringify(settings));
       renderToday();
