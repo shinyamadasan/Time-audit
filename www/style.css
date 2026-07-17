@@ -632,6 +632,18 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .w-stat-label{font-size:10px;color:var(--muted);text-transform:none;letter-spacing:0.02em;margin-top:4px}
 .w-card{background:var(--bg2);border:none;box-shadow:0 1px 3px rgba(0,0,0,0.4);border-radius:var(--r2);padding:14px;margin-bottom:10px}
 .w-card-title{font-size:11px;font-weight:600;text-transform:none;letter-spacing:0.02em;color:var(--muted);margin-bottom:10px}
+.week-header-actions{display:flex;align-items:center;gap:8px}
+.week-share-modal{max-width:620px}
+.week-share-preview{margin:0 0 14px;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:12px;padding:13px;color:var(--text);font-family:var(--mono);font-size:12px;
+  line-height:1.55;white-space:pre-wrap;max-height:48vh;overflow:auto}
+.week-share-actions{display:flex;justify-content:flex-end;gap:8px}
+@media(max-width:430px){
+  .week-header-actions{gap:6px}
+  .week-header-actions .btn{padding:8px 10px;font-size:11px}
+  .week-share-actions{flex-direction:column-reverse}
+  .week-share-actions .btn{width:100%}
+}
 
 /* ── Timeline bucket (grouped) rows ── */
 .tl-bucket{border-radius:var(--r);overflow:hidden;margin-bottom:3px}

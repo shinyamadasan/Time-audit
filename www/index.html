@@ -417,7 +417,10 @@
 <div class="view" id="view-week">
   <div class="page-header">
     <div class="page-title" id="week-view-title">This Week</div>
-    <button class="btn sm ghost" onclick="exportCSV()">Export CSV</button>
+    <div class="week-header-actions">
+      <button class="btn sm primary" id="week-share-btn" onclick="openWeekShare()">Share week</button>
+      <button class="btn sm ghost" onclick="exportCSV()">Export CSV</button>
+    </div>
   </div>
 
   <!-- Day tabs -->
@@ -427,6 +430,20 @@
   <div id="week-content"></div>
 </div>
 </div>
+
+<!-- Weekly share modal -->
+<div class="overlay" id="week-share-overlay" onclick="overlayClose(event,'week-share-overlay')">
+<div class="modal week-share-modal">
+  <div class="modal-handle"></div>
+  <div class="modal-tag">WEEKLY SHARE</div>
+  <div class="modal-title">Where did your week go?</div>
+  <pre class="week-share-preview" id="week-share-preview"></pre>
+  <div class="week-share-actions">
+    <button class="btn ghost" onclick="closeModal('week-share-overlay')">Close</button>
+    <button class="btn" onclick="copyWeekShare()">Copy text</button>
+    <button class="btn primary" onclick="nativeShareWeek()">Share</button>
+  </div>
+</div></div>
 
 <!-- ══ REFLECT ══ -->
 <div class="view" id="view-reflect">
@@ -1431,7 +1448,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-week-calendar-slots-1';
+const APP_BUILD = '2026-07-17-week-share-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -6858,6 +6875,8 @@ function renderWeek() {
   const isMonth = weekSelectedDay === 'month';
   const days = isMonth ? [] : getWeekDays(weekRangeOffset);
   const tabs = document.getElementById('day-tabs');
+  const shareBtn = document.getElementById('week-share-btn');
+  if (shareBtn) shareBtn.style.display = isMonth ? 'none' : '';
 
   // Build day buttons row (past + today days)
   const dayBtns = !isMonth ? days.filter(d=>!d.isFuture).map(d=>{
@@ -7163,6 +7182,185 @@ function renderUnloggedHours(el, days) {
     <div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;display:flex;margin-bottom:5px">${segments}</div>
     <div style="display:flex;flex-wrap:wrap;gap:4px 8px">${dayChips}</div>
   </div>`;
+}
+
+let _weekShareText = '';
+
+function weekShareDuration(mins) {
+  const safeMins = Math.max(0, Math.round(Number(mins) || 0));
+  if (safeMins < 60) return `${safeMins}m`;
+  return `${(Math.round(safeMins / 6) / 10).toFixed(1)}h`;
+}
+
+function weekShareRangeLabel(days) {
+  if (!days || !days.length) return getRangeLabel();
+  const first = days[0].date;
+  const last = days[days.length - 1].date;
+  const sameMonth = first.getMonth() === last.getMonth();
+  return first.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' - ' +
+    last.toLocaleDateString([], { month: sameMonth ? undefined : 'short', day: 'numeric', year: 'numeric' });
+}
+
+function weekShareAppUrl() {
+  if (location.protocol === 'http:' || location.protocol === 'https:') {
+    return location.origin + location.pathname;
+  }
+  return 'https://shinyamadasan.github.io/Time-audit/';
+}
+
+function weekShareUnloggedMinutes(days) {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const now = Date.now();
+  return (days || []).reduce((sum, d) => {
+    const isToday = d.key === todayKey;
+    let dayStartTs = 0;
+    try { dayStartTs = tzParseTime(d.key, '00:00'); }
+    catch(e) { dayStartTs = new Date(d.key + 'T00:00:00').getTime(); }
+    const availableMins = isToday ? Math.max(0, Math.round((now - dayStartTs) / 60000)) : 24 * 60;
+    const loggedMins = sumEntryMinutes(d.entries, e => !e.deleted, d.key);
+    return sum + Math.max(0, availableMins - loggedMins);
+  }, 0);
+}
+
+function weekShareTopActivities(entriesArr, limit=5) {
+  const actMap = {};
+  const displayEntries = squashTinyPCTimeFragments((entriesArr || []).filter(e => !e.missed));
+  const expanded = expandPCTimeEntries(displayEntries);
+  expanded.forEach(e => {
+    const key = activityGroupKey(e.activity);
+    if (!key) return;
+    const label = activityDisplayLabel(e.activity);
+    if (!actMap[key]) actMap[key] = { label, mins: 0 };
+    else actMap[key].label = preferActivityLabel(actMap[key].label, label);
+  });
+  Object.keys(actMap).forEach(key => {
+    actMap[key].mins = sumEntryMinutes(expanded, e => activityGroupKey(e.activity) === key);
+  });
+  return Object.entries(actMap)
+    .sort((a, b) => b[1].mins - a[1].mins)
+    .slice(0, limit)
+    .map(([, data]) => data);
+}
+
+function weekShareSignal(deepMins, wasteMins, goalMins, totalMins) {
+  if (!totalMins) return 'No clear signal yet - I need to log more honestly first.';
+  if (goalMins && deepMins >= goalMins) return 'Weekly deep work goal hit. The system worked this week.';
+  if (wasteMins > deepMins) {
+    return `Waste beat deep work by ${weekShareDuration(wasteMins - deepMins)}. Next week needs tighter defaults.`;
+  }
+  if (goalMins) {
+    return `Need ${weekShareDuration(goalMins - deepMins)} more deep work to hit my weekly target.`;
+  }
+  return `Deep work beat waste by ${weekShareDuration(deepMins - wasteMins)}.`;
+}
+
+function buildWeekShareSummary(days) {
+  const displayDays = (days || []).map(d => ({ ...d, entries: squashTinyPCTimeFragments(d.entries, d.key) }));
+  const weekE = displayDays.flatMap(d => d.entries).filter(e => !e.missed);
+  const totalMins = sumEntryMinutes(weekE);
+  const deepMins = sumEnergyMinutes(weekE, 'deep');
+  const wasteMins = sumEntryMinutes(weekE, e => e.energy === 'waste' || e.energy === 'distraction');
+  const goalMins = Math.max(0, Math.round((Number(settings.deepGoal) || 0) * 60));
+  const deepPct = totalMins ? Math.round(deepMins / totalMins * 100) : 0;
+  const activeDays = displayDays.filter(d => d.entries.length);
+  const bestDay = activeDays.length
+    ? activeDays.reduce((a, b) => computeDeepHrs(b.entries, b.key) > computeDeepHrs(a.entries, a.key) ? b : a, activeDays[0])
+    : null;
+  const energyOrder = ['deep', 'nine5', 'shallow', 'learning', 'exercise', 'social', 'errands', 'recovery', 'waste'];
+  const categoryLines = energyOrder.map(type => ({
+    label: type === 'deep' ? 'Deep work' : (eLabel[type] || type),
+    mins: type === 'waste'
+      ? sumEntryMinutes(weekE, e => e.energy === 'waste' || e.energy === 'distraction')
+      : sumEnergyMinutes(weekE, type)
+  })).filter(item => item.mins > 0);
+  const topActivities = weekShareTopActivities(weekE, 5);
+  const unloggedMins = weekShareUnloggedMinutes(displayDays);
+  const range = weekShareRangeLabel(displayDays);
+  const lines = [
+    `My ChronaSense week: ${range}`,
+    '',
+    `Logged: ${weekShareDuration(totalMins)}`,
+    `Deep work: ${weekShareDuration(deepMins)} / ${weekShareDuration(goalMins)} (${deepPct}% of logged time)`,
+    `Waste: ${weekShareDuration(wasteMins)}`,
+    `Unlogged: ${weekShareDuration(unloggedMins)}`,
+    `Best day: ${bestDay ? `${bestDay.label} - ${computeDeepHrs(bestDay.entries, bestDay.key)}h deep` : 'No deep work yet'}`,
+    '',
+    'Where my time went:'
+  ];
+
+  if (topActivities.length) {
+    topActivities.forEach((item, idx) => lines.push(`${idx + 1}. ${item.label} - ${weekShareDuration(item.mins)}`));
+  } else {
+    lines.push('No activities logged yet.');
+  }
+
+  lines.push('', 'By category:');
+  lines.push(categoryLines.length
+    ? categoryLines.map(item => `${item.label} ${weekShareDuration(item.mins)}`).join(' | ')
+    : 'No categories logged yet.');
+
+  lines.push('', 'Accountability:');
+  lines.push(weekShareSignal(deepMins, wasteMins, goalMins, totalMins));
+  lines.push('', `Shared from ChronaSense: ${weekShareAppUrl()}`);
+
+  return { text: lines.join('\n'), totalMins, deepMins, wasteMins };
+}
+
+function getCurrentWeekShareSummary() {
+  const days = getWeekDays(weekRangeOffset).filter(d => !d.isFuture);
+  return buildWeekShareSummary(days);
+}
+
+function openWeekShare() {
+  const summary = getCurrentWeekShareSummary();
+  _weekShareText = summary.text;
+  const preview = document.getElementById('week-share-preview');
+  if (preview) preview.textContent = _weekShareText;
+  document.getElementById('week-share-overlay').classList.add('open');
+}
+
+function copyWeekShareText(text) {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+  return new Promise((resolve, reject) => {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.left = '-9999px';
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand('copy') ? resolve() : reject(new Error('copy failed'));
+    } catch (err) {
+      reject(err);
+    } finally {
+      document.body.removeChild(area);
+    }
+  });
+}
+
+async function copyWeekShare() {
+  const text = _weekShareText || getCurrentWeekShareSummary().text;
+  try {
+    await copyWeekShareText(text);
+    showToast('Weekly share copied');
+  } catch (err) {
+    showToast('Copy failed - select the preview text');
+  }
+}
+
+async function nativeShareWeek() {
+  const text = _weekShareText || getCurrentWeekShareSummary().text;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'My ChronaSense week', text });
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    }
+  }
+  await copyWeekShare();
 }
 
 function renderEntryList(el, entriesArr) {
