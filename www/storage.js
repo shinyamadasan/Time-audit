@@ -429,9 +429,86 @@ function normalizeTemplates(templates) {
     });
 }
 
+function templateSyncStamp(source = settings) {
+  const stamp = Number(source?._templatesSavedAt || 0);
+  if (Number.isFinite(stamp) && stamp > 0) return stamp;
+  const templates = normalizeTemplates(source?.templates);
+  return templates.length ? Number(source?._savedAt || 0) || 0 : 0;
+}
+
+function ensureTemplateSyncStamp() {
+  settings.templates = normalizeTemplates(settings.templates);
+  if (settings.templates.length && !settings._templatesSavedAt) {
+    settings._templatesSavedAt = Number(settings._savedAt || 0) || Date.now();
+  }
+}
+
+function syncSettings() {
+  if (!fbRoomRef || !fbDb || !roomCode) return;
+  ensureTemplateSyncStamp();
+  fbDb.ref(`rooms/${roomCode}/settings`).once('value').then(snap => {
+    const remoteRaw = snap.val();
+    if (!remoteRaw) {
+      fbRoomRef.update({ settings });
+      return;
+    }
+    const remote = { ...remoteRaw, templates: normalizeTemplates(remoteRaw.templates) };
+    const localSavedAt = Number(settings._savedAt || 0);
+    const remoteSavedAt = Number(remote._savedAt || 0);
+    const localTemplateStamp = templateSyncStamp(settings);
+    const remoteTemplateStamp = templateSyncStamp(remote);
+
+    if (localSavedAt > remoteSavedAt) {
+      fbRoomRef.update({ settings });
+    } else if (localTemplateStamp > remoteTemplateStamp) {
+      fbRoomRef.update({
+        'settings/templates': settings.templates,
+        'settings/_templatesSavedAt': localTemplateStamp
+      });
+    }
+  }).catch(() => {});
+}
+
+function applyRemoteSettings(remoteSettings) {
+  if (!remoteSettings) return false;
+  const val = { ...remoteSettings, templates: normalizeTemplates(remoteSettings.templates) };
+  const remoteTs = Number(val._savedAt || 0);
+  const localTs  = Number(settings._savedAt || 0);
+  const localTemplates = normalizeTemplates(settings.templates);
+  const localTemplateStamp = templateSyncStamp({ ...settings, templates: localTemplates });
+  const remoteTemplateStamp = templateSyncStamp(val);
+  let changed = false;
+  let pushLocalTemplates = false;
+
+  if (remoteTs > localTs) {
+    settings = { ...settings, ...val };
+    if (localTemplateStamp > remoteTemplateStamp) {
+      settings.templates = localTemplates;
+      settings._templatesSavedAt = localTemplateStamp;
+      pushLocalTemplates = true;
+    } else {
+      settings.templates = val.templates;
+    }
+    changed = true;
+  } else if (remoteTemplateStamp > localTemplateStamp) {
+    settings.templates = val.templates;
+    settings._templatesSavedAt = remoteTemplateStamp;
+    changed = true;
+  } else if (localTemplateStamp > remoteTemplateStamp) {
+    pushLocalTemplates = true;
+  }
+
+  if (changed) {
+    localStorage.setItem('ta3-settings', JSON.stringify(settings));
+    if (val.timezone) localStorage.setItem('ta3-tz', val.timezone);
+  }
+  if (pushLocalTemplates) syncSettings();
+  return changed;
+}
+
 /** Saves entries, settings, and commitment to localStorage then schedules a render. */
 function persist() {
-  settings.templates = normalizeTemplates(settings.templates);
+  ensureTemplateSyncStamp();
   // Always store entries in strict chronological order (newest first)
   entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
   localStorage.setItem('ta3-entries', JSON.stringify(entries));
@@ -482,7 +559,7 @@ function load() {
   // Validate schema — warns to console for any malformed entries without crashing
   entries.forEach(e => { if (!e.missed && !e.deleted) validateEntry(e); });
   try { const s = JSON.parse(localStorage.getItem('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
-  settings.templates = normalizeTemplates(settings.templates);
+  ensureTemplateSyncStamp();
   // Dedicated timezone key wins over everything (Firebase can't overwrite it)
   const savedTz = localStorage.getItem('ta3-tz');
   if (savedTz) {
@@ -648,6 +725,7 @@ function startSync() {
       const lv = parseInt(localStorage.getItem('ta3-lv') || '0', 10);
       const ls = parseInt(localStorage.getItem('ta3-last-sync') || '0', 10);
       if (lv > ls) syncEntries();
+      syncSettings();
     } else {
       stopSyncReconcileTicker();
       const pill = document.getElementById('sync-pill');
@@ -720,25 +798,9 @@ function startSync() {
   });
 
   fbDb.ref(`rooms/${roomCode}/settings`).on('value', snap => {
-    const remoteSettings = snap.val();
-    if (!remoteSettings) return;
-    const val = { ...remoteSettings, templates: normalizeTemplates(remoteSettings.templates) };
-    const remoteTs = val._savedAt || 0;
-    const localTs  = settings._savedAt || 0;
-    if (remoteTs > localTs) {
-      settings = { ...settings, ...val };
-      settings.templates = normalizeTemplates(settings.templates);
-      localStorage.setItem('ta3-settings', JSON.stringify(settings));
-      if (val.timezone) localStorage.setItem('ta3-tz', val.timezone);
+    if (applyRemoteSettings(snap.val())) {
       renderToday();
       renderSettings();
-    } else if ((val._templatesSavedAt || 0) > (settings._templatesSavedAt || 0)) {
-      // Remote has newer templates even if overall settings are older — accept just templates
-      settings.templates = normalizeTemplates(val.templates);
-      settings._templatesSavedAt = val._templatesSavedAt;
-      localStorage.setItem('ta3-settings', JSON.stringify(settings));
-      renderToday();
-      if (document.getElementById('view-settings').classList.contains('active')) renderSettings();
     }
   });
 
