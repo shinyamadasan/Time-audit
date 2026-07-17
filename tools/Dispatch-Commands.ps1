@@ -4,11 +4,12 @@
   runner, writes exactly one reply per command to captures/replies/.
 
 .DESCRIPTION
-  Recognizes: /status /next /go /run /build /review /stop /enable /disable
-  /go is the everyday command: it does whatever /next recommends (run planning, build, or review).
-  /run /build /review still work directly as manual overrides, to force a specific phase out of order.
-  See captures/commands/README.md for the command-file contract and docs/09-automation.md for the
-  full design.
+  Recognizes: /status /next /go /run /build /review /merge /audit /stop /enable /disable /log
+  /go is the everyday command: it does whatever /next recommends (run planning, build, or review),
+  and falls back to /audit when there's genuinely nothing else to do (D-043).
+  /run /build /review /audit still work directly as manual overrides, to force a specific phase out
+  of order. /merge lands a held red-zone task in two steps. See captures/commands/README.md for the
+  command-file contract and docs/09-automation.md for the full design.
 
   Lock-protected (automation.lock, gitignored) so this can never overlap itself, an interactively
   triggered phase runner, or the twice-daily run-claude.ps1 -- all three share the same lock file.
@@ -208,7 +209,10 @@ function Get-NextReply {
 # code -- the autopilot loop classifies on the exit code, standalone /build just uses .Result.
 # ($a, not $args: $args is a PowerShell automatic variable and must not be shadowed.)
 function Invoke-BuildPhase {
-    $a = @(); if ($DryRun) { $a += '-DryRun' }
+    # Hashtable splat, NOT array (D-041): PowerShell array splatting binds POSITIONALLY, not by
+    # name, so an array holding just '-DryRun' happens to not crash here (no competing mandatory
+    # positional parameter) but silently never actually activates -DryRun on the target script.
+    $a = @{}; if ($DryRun) { $a['DryRun'] = $true }
     & (Join-Path $root 'tools\Run-Codex-Build.ps1') @a
     $code = $LASTEXITCODE
     $resultFile = Join-Path $root '.last-phase-result.txt'
@@ -219,7 +223,8 @@ function Invoke-BuildPhase {
 
 # Shared by /review and /go's autopilot.
 function Invoke-ReviewPhase {
-    $a = @(); if ($DryRun) { $a += '-DryRun' }
+    # Hashtable splat, NOT array (D-041): see Invoke-BuildPhase's comment above.
+    $a = @{}; if ($DryRun) { $a['DryRun'] = $true }
     & (Join-Path $root 'tools\Run-Claude-Review.ps1') @a
     $code = $LASTEXITCODE
     $resultFile = Join-Path $root '.last-phase-result.txt'
@@ -257,15 +262,28 @@ function Invoke-MergePhase {
     $taskId    = $idM.Groups['id'].Value.ToUpper()
     $confirmed = $rest -match '(?i)\b(yes|confirm)\b'
 
-    $a = @('-TaskId', $taskId)
-    if ($confirmed) { $a += '-Confirm' }
-    if ($DryRun)    { $a += '-DryRun' }
+    # Hashtable splat, NOT array (D-041): PowerShell array splatting binds POSITIONALLY, so
+    # '-TaskId' itself would bind to Run-Merge.ps1's mandatory $TaskId parameter, leaving the real
+    # task id nowhere to go -- crashes the whole dispatcher on every /merge. Confirmed live.
+    $a = @{ TaskId = $taskId }
+    if ($confirmed) { $a['Confirm'] = $true }
+    if ($DryRun)    { $a['DryRun'] = $true }
 
     & (Join-Path $root 'tools\Run-Merge.ps1') @a
     $code = $LASTEXITCODE
     $resultFile = Join-Path $root '.last-phase-result.txt'
     if (Test-Path $resultFile) { $r = (Get-Content $resultFile -Raw).Trim(); Remove-Item $resultFile -Force; return $r }
     return "Merge phase runner exited with code $code and left no result -- check claude-session.log."
+}
+
+function Invoke-AuditPhase {
+    $a = @{}; if ($DryRun) { $a['DryRun'] = $true }
+    & (Join-Path $root 'tools\Run-Audit.ps1') @a
+    $code = $LASTEXITCODE
+    $resultFile = Join-Path $root '.last-phase-result.txt'
+    $res = if (Test-Path $resultFile) { $r = (Get-Content $resultFile -Raw).Trim(); Remove-Item $resultFile -Force; $r }
+           else { "Audit phase runner exited with code $code and left no result -- check claude-session.log." }
+    [pscustomobject]@{ Result = $res; ExitCode = $code }
 }
 
 # Shared by /run and /go's autopilot.
@@ -385,6 +403,17 @@ function Get-UnconvertedBQCount {
     $n
 }
 
+function Get-UntriagedCaptureCount {
+    $inbox = Join-Path $root 'captures/inbox'
+    if (-not (Test-Path $inbox)) { return 0 }
+    $n = 0
+    foreach ($f in (Get-ChildItem -Path $inbox -Filter '*.md' -File)) {
+        $raw = Get-Content $f.FullName -Raw -Encoding UTF8
+        if ($raw -match '(?m)^status:\s*new\s*$') { $n++ }
+    }
+    $n
+}
+
 # Commit + push a TASKS.md status change autopilot just made (no-op in DryRun / when nothing staged).
 function Publish-TasksChange {
     param([string]$Message)
@@ -419,14 +448,39 @@ function Invoke-Autopilot {
     }
     if ($released) { Publish-TasksChange 'autopilot: release auto-blocked task(s) for retry' }
 
-    # --- Plan once if there is approved work but nothing build-ready yet. ---
+    # --- Plan once if there is approved work or untriaged captures but nothing build-ready yet. ---
     $planned = 0
-    if (-not (Get-TaskTable | Where-Object { $_.Status -eq 'codex' }) -and (Get-UnconvertedBQCount) -gt 0) {
+    $unconvertedBefore = Get-UnconvertedBQCount
+    $untriagedBefore = Get-UntriagedCaptureCount
+    $triageOnlyPlan = ($unconvertedBefore -eq 0 -and $untriagedBefore -gt 0)
+    if (-not (Get-TaskTable | Where-Object { $_.Status -eq 'codex' }) -and ($unconvertedBefore -gt 0 -or $untriagedBefore -gt 0)) {
         if (-not (Test-AutomationEnabled)) { return "Autopilot: automation disabled -- nothing done." }
         $before = @(Get-TaskTable | Where-Object { $_.Status -eq 'codex' }).Count
         $rp = Invoke-RunPhase; $actions++
         if ($rp.ExitCode -ne 0) { return "Autopilot stopped in planning: $($rp.Result)" }
         $planned = @(Get-TaskTable | Where-Object { $_.Status -eq 'codex' }).Count - $before
+    }
+
+    # --- Idle fallback (D-043): genuinely nothing queued anywhere -- no codex-status task, nothing
+    #     unconverted in BUILD_QUEUE. This is the ONLY point /audit ever runs automatically (never on
+    #     a schedule); it's naturally rate-limited by there being nothing else to do, and Run-Audit.ps1
+    #     itself is naturally rate-limited further by its own git-diff gate (D-043) -- an idle /go
+    #     pressed many times with no app changes costs one cheap "nothing changed" check per press,
+    #     not a real scan. If the audit auto-promotes something (Decision Approve + Risk Low), plan it
+    #     into a real task immediately so the SAME /go press can still build it below -- "find AND
+    #     build," not "find, then wait for another press." ---
+    $audited = $false
+    if (-not (Get-TaskTable | Where-Object { $_.Status -eq 'codex' }) -and (Get-UnconvertedBQCount) -eq 0) {
+        if (Test-AutomationEnabled) {
+            $ap = Invoke-AuditPhase; $actions++; $audited = $true
+            if ($ap.ExitCode -eq 2) { return "Autopilot stopped -- audit: $($ap.Result)" }   # preflight/dirty
+            if ($ap.ExitCode -eq 0 -and (Get-UnconvertedBQCount) -gt 0) {
+                $before2 = @(Get-TaskTable | Where-Object { $_.Status -eq 'codex' }).Count
+                $rp2 = Invoke-RunPhase; $actions++
+                if ($rp2.ExitCode -ne 0) { return "Autopilot stopped in planning (post-audit): $($rp2.Result)" }
+                $planned += @(Get-TaskTable | Where-Object { $_.Status -eq 'codex' }).Count - $before2
+            }
+        }
     }
 
     # --- Build exactly ONE dependency-satisfied task. Codex self-selects the first status:codex task
@@ -483,6 +537,10 @@ function Invoke-Autopilot {
         }
     } elseif ($waiting.Count -gt 0) {
         $out += "Nothing built -- top task(s) waiting on a merge."
+    } elseif ($triageOnlyPlan) {
+        $out += "TRIAGED $untriagedBefore new idea(s) into proposals. Reply Approve <n>, then /go."
+    } elseif ($audited) {
+        $out += $ap.Result   # the audit's own reply already says what it found (or "nothing changed")
     } else {
         $out += "Nothing to do -- no approved work is build-ready."
     }
@@ -572,7 +630,7 @@ try {
             if (-not $ok) { Write-Host "WARNING: could not push 'received' marker for $id after retries -- left as local uncommitted change." }
         }
 
-        $reply = if ($cmd -in @('run', 'build', 'review', 'go') -and -not (Test-AutomationEnabled)) {
+        $reply = if ($cmd -in @('run', 'build', 'review', 'go', 'audit') -and -not (Test-AutomationEnabled)) {
             "Automation is disabled (`$AUTOMATION_ENABLED = `$false) -- /$cmd refused to act. Send /enable first if you want this to run."
         } else {
             switch ($cmd) {
@@ -596,6 +654,7 @@ try {
                 'review' { (Invoke-ReviewPhase).Result }
                 'go'     { Invoke-Autopilot }
                 'merge'  { Invoke-MergePhase -CommandBody $raw }
+                'audit'  { (Invoke-AuditPhase).Result }
                 'log' {
                     $logTail = Get-Content "$root\claude-session.log" -Tail 40 -ErrorAction SilentlyContinue
                     if ($logTail) { "Last session log (40 lines):`n" + ($logTail -join "`n") } else { "No session log yet." }

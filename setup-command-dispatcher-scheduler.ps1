@@ -1,5 +1,7 @@
-# Run this ONCE (as Administrator) to register the Telegram-command dispatcher with Windows Task
-# Scheduler.
+# Run this ONCE to register the Telegram-command dispatcher.
+#
+# Windows: run from an Administrator PowerShell; registers a Task Scheduler task.
+# macOS  : run with `pwsh ./setup-command-dispatcher-scheduler.ps1`; registers a launchd agent.
 #
 # SLEEP-AND-WAKE MODEL (DECISIONS D-033):
 #   This task DOES use -WakeToRun, and fires every 30 minutes -- not every 2.

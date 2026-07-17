@@ -1,5 +1,8 @@
-# Run this ONCE to register the overnight Claude session with Windows Task Scheduler
-# After running, the task fires automatically at 2am every night
+# Run this ONCE to register the overnight Claude session.
+#
+# Windows: run from an Administrator PowerShell; registers a Task Scheduler task.
+# macOS  : run with `pwsh ./setup-task-scheduler.ps1`; registers a launchd agent.
+# After running, the task fires automatically at 9PM and 2AM every night.
 # To change the time: edit the -At parameter below and re-run this script
 
 # Platform. PowerShell 7 defines $IsWindows; Windows PowerShell 5.1 does NOT (it is $null, which is

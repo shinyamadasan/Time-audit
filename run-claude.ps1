@@ -1,10 +1,10 @@
 # Overnight automation launcher.
-# Triggered by Windows Task Scheduler ("ChronaSense Claude Overnight", 9PM / 2AM).
+# Triggered by Windows Task Scheduler or macOS launchd ("ChronaSense Claude Overnight", 9PM / 2AM).
 # Gated behind $AUTOMATION_ENABLED below -- disabled by default.
 #
 # Claude's job here is PLANNING ONLY: Triage (captures/inbox -> PROPOSALS.md) and converting approved
-# planning/BUILD_QUEUE.md items into PLAN.md + TASKS.md (status: codex). It NEVER touches
-# app.js / index.html / style.css and NEVER invokes Codex -- that split is enforced two ways:
+# planning/BUILD_QUEUE.md items into PLAN.md + TASKS.md (status: codex). It NEVER touches the app's
+# own source files ('index.html', 'style.css', 'storage.js', 'focus-mode.js', 'insights.js', 'focus-wallet.js') and NEVER invokes Codex -- that split is enforced two ways:
 #   1. The Claude session's --allowedTools has no git commit/push -- it literally cannot ship anything.
 #   2. This script commits Claude's output itself, but only after checking every changed path against
 #      an explicit allow-list (Phase 2b below). Anything outside that list halts uncommitted.
@@ -16,8 +16,8 @@
 # (environment/state problem -- nothing was attempted). See docs/09-automation.md.
 #
 # -Scheduled: pass this switch ONLY from the Windows Scheduled Task action (see
-# setup-task-scheduler.ps1). It is the sole signal used to decide whether to shut the PC down at the
-# end of a run -- deliberately not inferred from the current time, so a manual/interactive test run
+# setup-task-scheduler.ps1). It is the sole signal used to enter the scheduled power-management path
+# at the end of a run -- deliberately not inferred from the current time, so a manual/interactive test run
 # (e.g. you running ".\run-claude.ps1" by hand to check something) can never power off your machine.
 param(
     [switch]$Scheduled
@@ -199,8 +199,8 @@ stop mid-step, write the precise resume point to STATUS.md first.
 Read CLAUDE.md, STATUS.md, PLAN.md, and TASKS.md first.
 
 YOUR ROLE THIS RUN IS PLANNING ONLY -- you are acting as Claude (PM / Tech Lead / Architect), never as
-Codex (the Implementer). You must NEVER edit app.js, index.html, or style.css in this session, and you
-must NEVER invoke Codex or any other build agent. Committing and pushing is handled by the calling
+Codex (the Implementer). You must NEVER edit the app's own source files ('index.html', 'style.css', 'storage.js', 'focus-mode.js', 'insights.js', 'focus-wallet.js') in this
+session, and you must NEVER invoke Codex or any other build agent. Committing and pushing is handled by the calling
 script, not by you -- do not attempt `git commit` or `git push` (that tool is not available to you this
 run). Do not touch the ROADMAP "Do Not Work On" section. Do not delete files (archiving captures is a
 git mv).
@@ -209,7 +209,10 @@ STEP A -- TRIAGE (route + enrich only; never build, schedule, or prioritize-for-
 captures/inbox/*.md with `status: new` (SKIP any already `status: triaged`), process per WORKFLOW.md
 "Triage": categorize, dedupe vs PROPOSALS/ROADMAP/DONE, then ENRICH into the proposal contract in
 planning/PROPOSALS.md (status: pending) -- fill EVERY field. LEAD with **> Decision** (the recommended
-next action: Approve | Park | Reject | Clarify + a one-line why) so it's actionable from a phone digest.
+next action: Approve | Park | Reject | Clarify + a one-line why) so it's actionable from a phone digest,
+THEN **> Risk** (Low | High + a one-line why -- High means it touches data/sync/storage, auth,
+security, or the AI Dev OS itself, the exact DECISIONS.md D-032 red-zone list applied here at idea
+time instead of merge time; everything else is Low; say High whenever genuinely unsure).
 Then: goal alignment vs the **Current Objective** in ROADMAP.md (supports/conflicts/mixed + which
 North-star goal), expected user value, evidence (recurring friction, dup count, demand signal), effort
 + dependencies + confidence + ambiguity, why now vs later, and a **goal-adjusted** AI-recommended
@@ -269,6 +272,15 @@ try {
     $ErrorActionPreference = $prevEAP
 }
 if ($LASTEXITCODE -ne 0) { Halt-Automation "claude -p exited with code $LASTEXITCODE" }
+
+# --- Phase 2a-bis (deterministic, D-042): auto-promote Decision:Approve + Risk:Low proposals
+#     straight into BUILD_QUEUE.md, no human reply needed. Runs on EVERY pending proposal currently
+#     in PROPOSALS.md, not just ones this session just triaged -- so an old proposal sitting from
+#     before this existed also gets picked up once it has both fields. Anything else (any other
+#     Decision, Risk: High, or no Risk field at all) is untouched and still needs a human reply via
+#     Apply-Decisions.ps1, exactly as before. No LLM call -- see tools/Invoke-AutoPromote.ps1. ---
+try { & "$projectPath\tools\Invoke-AutoPromote.ps1" | Tee-Object -FilePath $logFile -Append }
+catch { Halt-Automation "Invoke-AutoPromote.ps1 threw an error: $_" }
 
 # --- Phase 2b (deterministic): commit-scope guard. The Claude session above cannot commit or push
 #     itself; this script is the only thing that ever commits its output, and only after checking
