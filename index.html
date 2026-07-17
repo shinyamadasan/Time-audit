@@ -1431,7 +1431,7 @@
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
-const APP_BUILD = '2026-07-16-week-calendar-auto-width-1';
+const APP_BUILD = '2026-07-16-week-calendar-slots-1';
 let currentTask = '';
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
@@ -9169,16 +9169,17 @@ function startTemplateBlockForDay(day) {
   showToast(`New block will repeat on ${dayTemplateLabel(day)}`);
 }
 
-function startTemplateBlockAt(day, event) {
+function startTemplateBlockAt(day, event, presetStartMin = null) {
   if (event?.target?.closest?.('.template-cal-event')) return;
   const target = event?.currentTarget;
-  let startMin = 8 * 60;
-  if (target && event && typeof event.clientY === 'number') {
-    const rect = target.getBoundingClientRect();
+  let startMin = Number.isFinite(presetStartMin) ? presetStartMin : 8 * 60;
+  if (!Number.isFinite(presetStartMin) && target && event && typeof event.clientY === 'number') {
+    const dayEl = target.closest?.('.template-cal-day') || target;
+    const rect = dayEl.getBoundingClientRect();
     const rawMin = ((event.clientY - rect.top) / Math.max(1, rect.height)) * 1440;
     startMin = Math.floor(rawMin / 30) * 30;
-    startMin = Math.max(0, Math.min(1410, startMin));
   }
+  startMin = Math.max(0, Math.min(1410, startMin));
   startTemplateBlockForDay(day);
   const startEl = document.getElementById('tpl-start');
   const endEl = document.getElementById('tpl-end');
@@ -9381,6 +9382,11 @@ function renderTemplateList() {
     const label = hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`;
     return `<div class="template-cal-time">${label}</div>`;
   }).join('');
+  const slotRows = day => Array.from({ length: 48 }, (_, slot) => {
+    const startMin = slot * 30;
+    const topPct = (startMin / 1440) * 100;
+    return `<button type="button" class="template-cal-slot" aria-label="Add ${dayTemplateLabel(day)} ${minutesToHHMM(startMin)}" onclick="startTemplateBlockAt(${day}, event, ${startMin})" style="top:${topPct}%"></button>`;
+  }).join('');
   const itemsByDay = dayCols.map(() => []);
   const dayWidths = dayCols.map(() => 190);
   settings.templates.forEach((tpl, i) => {
@@ -9446,7 +9452,8 @@ function renderTemplateList() {
           ${dayCols.map(({ day, label }, dayIndex) => {
             const items = itemsByDay[dayIndex].sort((a, b) => a.sortMin - b.sortMin);
             return `
-              <div class="template-cal-day" data-day="${day}" data-day-label="${label}" onclick="startTemplateBlockAt(${day}, event)">
+              <div class="template-cal-day" data-day="${day}" data-day-label="${label}">
+                ${slotRows(day)}
                 ${items.map(item => item.html).join('')}
               </div>`;
           }).join('')}
