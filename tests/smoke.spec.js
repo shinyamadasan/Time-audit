@@ -342,7 +342,8 @@ test('quick retro log can be undone', async ({ page }) => {
 });
 
 test('deleted entries can be restored with undo', async ({ page }) => {
-  const ts = minutesAgo(10);
+  const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
+  const ts = nowTs - 10 * 60 * 1000;
   const entry = {
     id: ts,
     ts,
@@ -357,7 +358,7 @@ test('deleted entries can be restored with undo', async ({ page }) => {
     onPlan: true,
     retro: true
   };
-  await openApp(page, { entries: [entry] });
+  await openApp(page, { entries: [entry], nowTs });
 
   await openTodayDetails(page);
   const row = page.locator('#recent-list .entry-row').filter({ hasText: 'Seeded focus block' });

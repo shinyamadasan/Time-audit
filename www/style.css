@@ -1229,7 +1229,7 @@ button, a, [role="button"],
 .template-advanced[open]{margin-bottom:12px}
 .template-cal-wrap{overflow:auto;max-height:min(72vh,980px);scroll-padding-top:42px;border:1px solid var(--border2);border-radius:10px;background:var(--bg3)}
 .template-cal{--template-hour-height:64px;min-width:1180px}
-.template-cal-head{position:sticky;top:0;z-index:20;display:grid;grid-template-columns:64px repeat(7,minmax(152px,1fr));align-items:end;background:var(--bg3);border-bottom:1px solid var(--border2)}
+.template-cal-head{position:relative;z-index:2;display:grid;grid-template-columns:64px repeat(7,minmax(152px,1fr));align-items:end;background:var(--bg3);border-bottom:1px solid var(--border2)}
 .template-cal-head div{padding:9px 8px;color:var(--muted2);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;text-align:center}
 .template-cal-corner{text-align:left!important}
 .template-cal-body{display:grid;grid-template-columns:64px repeat(7,minmax(152px,1fr));height:calc(var(--template-hour-height) * 24);position:relative}
