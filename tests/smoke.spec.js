@@ -1165,6 +1165,16 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
       autoLog: false,
       enabled: true
     });
+    settings.templates.push({
+      id: 'long-label',
+      activity: 'Check smmncourse and follow the system',
+      energy: 'deep',
+      days: [5],
+      startTime: '22:00',
+      endTime: '23:00',
+      autoLog: false,
+      enabled: true
+    });
     renderTemplateList();
   });
   await page.locator('.template-advanced summary').click();
@@ -1177,16 +1187,26 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
     '4 PM', '5 PM', '6 PM', '7 PM', '8 PM', '9 PM', '10 PM', '11 PM'
   ]);
   const satDay = calendar.locator('.template-cal-day[data-day="6"]');
+  const friDay = calendar.locator('.template-cal-day[data-day="5"]');
+  const tueDay = calendar.locator('.template-cal-day[data-day="2"]');
   const satSleep = satDay.locator('.template-cal-event').filter({ hasText: 'Sleep' });
   const satHygiene = satDay.locator('.template-cal-event').filter({ hasText: 'Hygiene' });
+  const friLongEvent = friDay.locator('.template-cal-event').filter({ hasText: 'Check smmncourse and follow the system' });
   await expect(satSleep).toContainText('09:00-17:00');
   await expect(satHygiene).toContainText('08:30-08:50');
+  await expect(friLongEvent).toContainText('22:00-23:00');
   const [dayHeight, sleepHeight] = await Promise.all([
     satDay.evaluate(el => el.getBoundingClientRect().height),
     satSleep.evaluate(el => el.getBoundingClientRect().height)
   ]);
   expect(dayHeight).toBeGreaterThan(1400);
   expect(sleepHeight).toBeGreaterThan(450);
+  const [friWidth, tueWidth] = await Promise.all([
+    friDay.evaluate(el => el.getBoundingClientRect().width),
+    tueDay.evaluate(el => el.getBoundingClientRect().width)
+  ]);
+  expect(friWidth).toBeGreaterThan(tueWidth);
+  await expect(friLongEvent.locator('.template-cal-event-title')).toHaveCSS('white-space', 'normal');
   await expect(calendar.locator('button[aria-label="Edit Sleep"]')).toHaveCount(0);
   const deleteSleep = satSleep.locator('.template-cal-delete');
   await expect(deleteSleep).toHaveCSS('opacity', '0');
