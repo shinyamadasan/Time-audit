@@ -1195,18 +1195,29 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
   await expect(satSleep).toContainText('09:00-17:00');
   await expect(satHygiene).toContainText('08:30-08:50');
   await expect(friLongEvent).toContainText('22:00-23:00');
-  const [dayHeight, sleepHeight] = await Promise.all([
+  const [dayHeight, sleepHeight, hygieneEventHeight, hygieneCardHeight] = await Promise.all([
     satDay.evaluate(el => el.getBoundingClientRect().height),
-    satSleep.evaluate(el => el.getBoundingClientRect().height)
+    satSleep.evaluate(el => el.getBoundingClientRect().height),
+    satHygiene.evaluate(el => el.getBoundingClientRect().height),
+    satHygiene.locator('.template-cal-event-card').evaluate(el => el.getBoundingClientRect().height)
   ]);
   expect(dayHeight).toBeGreaterThan(1400);
   expect(sleepHeight).toBeGreaterThan(450);
+  expect(hygieneCardHeight).toBeGreaterThan(hygieneEventHeight);
+  await expect(satHygiene.locator('.template-cal-event-card')).toHaveCSS('overflow', 'visible');
   const [friWidth, tueWidth] = await Promise.all([
     friDay.evaluate(el => el.getBoundingClientRect().width),
     tueDay.evaluate(el => el.getBoundingClientRect().width)
   ]);
   expect(friWidth).toBeGreaterThan(tueWidth);
   await expect(friLongEvent.locator('.template-cal-event-title')).toHaveCSS('white-space', 'normal');
+  await expect(calendar.locator('.template-cal-day[data-day="1"] .template-cal-slot')).toHaveCount(48);
+  const monTwoSlot = page.getByRole('button', { name: 'Add Mon 02:00' });
+  const monTwoThirtySlot = page.getByRole('button', { name: 'Add Mon 02:30' });
+  await expect(monTwoSlot).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await monTwoSlot.hover();
+  await expect(monTwoSlot).toHaveCSS('background-color', 'rgba(76, 199, 240, 0.1)');
+  await expect(monTwoThirtySlot).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(calendar.locator('button[aria-label="Edit Sleep"]')).toHaveCount(0);
   const deleteSleep = satSleep.locator('.template-cal-delete');
   await expect(deleteSleep).toHaveCSS('opacity', '0');
@@ -1222,7 +1233,7 @@ test('day dropdown adds a chosen task to the selected weekday', async ({ page })
   await expect(calendar.locator('.template-cal-day[data-day="1"] .template-cal-event').filter({ hasText: 'Sleep' })).toHaveCount(0);
 
   await page.locator('.template-cal-wrap').evaluate(el => { el.scrollTop = 0; });
-  await calendar.locator('.template-cal-day[data-day="1"]').click({ position: { x: 20, y: 150 } });
+  await monTwoSlot.click();
   await expect(page.locator('#template-form-card')).toBeVisible();
   await expect(page.locator('#template-form-overlay')).toHaveClass(/open/);
   await expect(page.locator('#tpl-start')).toHaveValue('02:00');
