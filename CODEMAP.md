@@ -308,9 +308,9 @@ Depends on: `persist()`, `syncEntries()`, `renderToday()`, `entries`
 
 ## [Week View]
 Lines: 5427–6009
-Purpose: Week and month overview — day tab navigation, energy split chart, top-activities list, untracked-hours summary, sortable entries table, single-day detail drilldown.
-Functions: `renderWeek()`, `setWeekMode()`, `shiftRange()`, `selectWeekDay()`, `renderMonthOverview()`, `entryMins()`, `renderEnergySplit()`, `renderTopActivities()`, `renderUnloggedHours()`, `renderEntryList()`, `renderWeekOverview()`, `renderDayDetail()`, `renderWeekTable()`, `sortBy()`
-Variables: `weekSelectedDay`, `weekRangeOffset`, `sortKey`, `sortDir`
+Purpose: Week and month overview — day tab navigation, energy split chart, top-activities list, untracked-hours summary, sortable entries table, single-day detail drilldown, and shareable weekly accountability summary.
+Functions: `renderWeek()`, `setWeekMode()`, `shiftRange()`, `selectWeekDay()`, `renderMonthOverview()`, `entryMins()`, `renderEnergySplit()`, `renderTopActivities()`, `renderUnloggedHours()`, `weekShareDuration()`, `weekShareRangeLabel()`, `weekShareAppUrl()`, `weekShareUnloggedMinutes()`, `weekShareTopActivities()`, `weekShareSignal()`, `buildWeekShareSummary()`, `getCurrentWeekShareSummary()`, `openWeekShare()`, `copyWeekShareText()`, `copyWeekShare()`, `nativeShareWeek()`, `renderEntryList()`, `renderWeekOverview()`, `renderDayDetail()`, `renderWeekTable()`, `sortBy()`
+Variables: `weekSelectedDay`, `weekRangeOffset`, `_weekShareText`, `sortKey`, `sortDir`
 Depends on: `entries`, Statistics section, `getDateInTZ()`, `toDateKey()`, `computeInsights()`
 
 ## [Sleep Tracking]

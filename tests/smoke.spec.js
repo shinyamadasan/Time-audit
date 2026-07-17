@@ -1581,6 +1581,89 @@ test('week top activities merge activity labels that only differ by case', async
   expect(tableText).not.toContain('Scribe shift');
 });
 
+test('week share builds an accountability summary and copies it', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 18, 0, 0);
+  const sleepStart = Date.UTC(2026, 6, 13, 0, 0, 0);
+  const sleepEnd = sleepStart + 8 * 60 * 60 * 1000;
+  const appStart = Date.UTC(2026, 6, 14, 9, 0, 0);
+  const appEnd = appStart + 2 * 60 * 60 * 1000;
+  const scribeStart = Date.UTC(2026, 6, 15, 9, 0, 0);
+  const scribeEnd = scribeStart + 3 * 60 * 60 * 1000;
+  const wasteStart = Date.UTC(2026, 6, 15, 14, 0, 0);
+  const wasteEnd = wasteStart + 60 * 60 * 1000;
+  const entries = [
+    {
+      id: sleepEnd,
+      ts: sleepEnd,
+      tsStart: sleepStart,
+      updatedAt: sleepEnd,
+      blockIntervalMin: 480,
+      date: utcDateKey(sleepStart),
+      activity: 'Sleep',
+      energy: 'recovery',
+      category: 'recovery'
+    },
+    {
+      id: appEnd,
+      ts: appEnd,
+      tsStart: appStart,
+      updatedAt: appEnd,
+      blockIntervalMin: 120,
+      date: utcDateKey(appStart),
+      activity: 'App building',
+      energy: 'deep',
+      category: 'deep'
+    },
+    {
+      id: scribeEnd,
+      ts: scribeEnd,
+      tsStart: scribeStart,
+      updatedAt: scribeEnd,
+      blockIntervalMin: 180,
+      date: utcDateKey(scribeStart),
+      activity: 'Scribe shift',
+      energy: 'nine5',
+      category: 'nine5'
+    },
+    {
+      id: wasteEnd,
+      ts: wasteEnd,
+      tsStart: wasteStart,
+      updatedAt: wasteEnd,
+      blockIntervalMin: 60,
+      date: utcDateKey(wasteStart),
+      activity: 'Doom scrolling',
+      energy: 'waste',
+      category: 'waste'
+    }
+  ];
+  await openApp(page, { entries, nowTs, settings: { deepGoal: 5 } });
+
+  await page.evaluate(() => showView('week'));
+  await page.evaluate(() => {
+    window.__copiedWeekShare = '';
+    window.copyWeekShareText = text => {
+      window.__copiedWeekShare = text;
+      return Promise.resolve();
+    };
+  });
+
+  await page.locator('#week-share-btn').click();
+  await expect(page.locator('#week-share-overlay')).toBeVisible();
+  const preview = page.locator('#week-share-preview');
+  await expect(preview).toContainText('My ChronaSense week:');
+  await expect(preview).toContainText('Logged: 14.0h');
+  await expect(preview).toContainText('Deep work: 2.0h / 5.0h');
+  await expect(preview).toContainText('Waste: 1.0h');
+  await expect(preview).toContainText('Sleep - 8.0h');
+  await expect(preview).toContainText('Shared from ChronaSense:');
+
+  await page.getByRole('button', { name: 'Copy text' }).click();
+  const copied = await page.evaluate(() => window.__copiedWeekShare);
+  expect(copied).toContain('Where my time went:');
+  expect(copied).toContain('App building - 2.0h');
+});
+
 test('today timeline and recent entries display activity casing consistently', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 18, 0, 0);
   const firstStart = Date.UTC(2026, 6, 15, 9, 0, 0);
