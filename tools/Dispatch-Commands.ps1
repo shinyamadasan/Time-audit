@@ -99,6 +99,34 @@ function Write-Reply {
     [System.IO.File]::WriteAllText($outboxFile, $newContent + "`n", $utf8)
 }
 
+# n8n's independent reply-clearing step (n8n-telegram-replies.json) polls OUTBOX.md and pushes its
+# own commit to main on its own schedule -- uncoordinated with this script. A plain commit-then-push
+# with no retry silently loses the race whenever the two land close together: our push gets rejected
+# (non-fast-forward), and since the result was never checked, the commit just sits unpushed locally,
+# later surfacing as a spurious rebase conflict on some unrelated branch (hit five times in one
+# session before this fix -- see docs/AI_OS_NOTES.md). Both commit sites below only ever touch a file
+# THIS SCRIPT owns (captures/commands/*.md's own status field, or OUTBOX.md's own content) and the
+# commit was never seen by anyone else, so it is always safe to discard on rejection and reapply the
+# same change on top of the fresh tip -- $Reapply re-derives the change from current values in scope
+# (never from the stale pre-reset file), so a retry is never stale by construction.
+function Invoke-CommitPushWithRetry {
+    param([string]$Message, [scriptblock]$Reapply, [int]$MaxAttempts = 5)
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        Invoke-Git -C $root diff --cached --quiet
+        if ($LASTEXITCODE -eq 0) { return $true }   # nothing staged -- already matches origin
+        Invoke-Git -C $root commit -m $Message | Out-Null
+        Invoke-Git -C $root push origin main | Out-Null
+        if ($LASTEXITCODE -eq 0) { return $true }
+        if ($attempt -lt $MaxAttempts) {
+            Invoke-Git -C $root fetch origin | Out-Null
+            Invoke-Git -C $root reset --hard origin/main | Out-Null
+            & $Reapply
+            Start-Sleep -Milliseconds (300 * $attempt)
+        }
+    }
+    $false
+}
+
 function Get-Branch { (Invoke-Git -C $root branch --show-current) }
 function Get-DirtyCount { @(Invoke-Git -C $root status --porcelain).Count }
 
@@ -534,14 +562,14 @@ try {
         # every real /run or /build would abort at Preflight seeing its own not-yet-committed command
         # file as "dirty tree." Committing it first means Preflight sees a clean main, as intended.
         if (-not $DryRun) {
-            $newRaw = $raw -replace '(?m)^status:\s*new\s*$', "status: applied`napplied: $(Get-Date -Format o)"
-            [System.IO.File]::WriteAllText($f.FullName, $newRaw, $utf8)
-            Invoke-Git -C $root add "captures/commands/$($f.Name)"
-            Invoke-Git -C $root diff --cached --quiet
-            if ($LASTEXITCODE -ne 0) {
-                Invoke-Git -C $root commit -m "command: /$cmd ($id) received" | Out-Null
-                Invoke-Git -C $root push origin main | Out-Null
+            $markApplied = {
+                $newRaw = $raw -replace '(?m)^status:\s*new\s*$', "status: applied`napplied: $(Get-Date -Format o)"
+                [System.IO.File]::WriteAllText($f.FullName, $newRaw, $utf8)
+                Invoke-Git -C $root add "captures/commands/$($f.Name)"
             }
+            & $markApplied
+            $ok = Invoke-CommitPushWithRetry -Message "command: /$cmd ($id) received" -Reapply $markApplied
+            if (-not $ok) { Write-Host "WARNING: could not push 'received' marker for $id after retries -- left as local uncommitted change." }
         }
 
         $reply = if ($cmd -in @('run', 'build', 'review', 'go') -and -not (Test-AutomationEnabled)) {
@@ -587,12 +615,12 @@ try {
             # OUTBOX.md entry pushed) on the next tick once a human has resolved that branch by hand.
             $curBranch = Invoke-Git -C $root branch --show-current
             if ($curBranch -eq 'main') {
+                # Write-Reply already wrote OUTBOX.md once, above -- the reapply block re-runs it only
+                # on a retry (after a reset discards this attempt), never before the first attempt.
+                $reapplyReply = { Write-Reply -Id $id -Text $reply; Invoke-Git -C $root add $outboxFile }
                 Invoke-Git -C $root add $outboxFile
-                Invoke-Git -C $root diff --cached --quiet
-                if ($LASTEXITCODE -ne 0) {
-                    Invoke-Git -C $root commit -m "reply: /$cmd ($id)" | Out-Null
-                    Invoke-Git -C $root push origin main | Out-Null
-                }
+                $ok = Invoke-CommitPushWithRetry -Message "reply: /$cmd ($id)" -Reapply $reapplyReply
+                if (-not $ok) { Write-Host "WARNING: could not push reply for /$cmd ($id) after retries -- left as local uncommitted change." }
             } else {
                 Write-Host "Not on main (on '$curBranch') after /$cmd -- likely a halted build/review left for inspection. Reply written locally to OUTBOX.md but not committed/pushed this tick."
             }

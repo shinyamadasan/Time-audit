@@ -25,7 +25,9 @@
     3. branch exists and is clean
     4. npm test passes on the branch
     5. npm test left the tree clean
-    6. main is an ancestor of the branch (a true fast-forward -- never a merge commit)
+    6. main is an ancestor of the branch (a true fast-forward -- never a merge commit) -- if not,
+       the branch is auto-rebased onto main and force-pushed (D-044); a real conflict still blocks
+       and asks a human, this only closes the gap the dispatcher's own bookkeeping commit opens
 
   Writes its result to .last-phase-result.txt for Dispatch-Commands.ps1 to relay to Telegram.
 #>
@@ -47,7 +49,19 @@ function Write-Result([string]$Text) {
     [System.IO.File]::WriteAllText($resultFile, $Text, $utf8)
     Write-Host $Text
 }
-function Invoke-Git { git @args }
+# $ErrorActionPreference = 'Stop' (below) promotes ANY stderr text from a native command -- even
+# routine progress output like git rebase's "Rebasing (1/1)" -- into a terminating exception, even
+# when the command's own exit code is 0. Confirmed live: this crashed the whole script the first
+# time the new auto-rebase step (below) ran `git rebase`, mid-merge, on a real branch. Lowering EAP
+# for the duration of the call (matching Dispatch-Commands.ps1's own Invoke-Git) fixes it without
+# swallowing stderr at the source, so callers that actually want it (e.g. the auto-rebase conflict
+# message) can still capture it via their own `2>&1`.
+function Invoke-Git {
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & git @args }
+    finally { $ErrorActionPreference = $prevEAP }
+}
 
 $TaskId = $TaskId.ToUpper()
 if ($TaskId -notmatch '^TASK-\d+$') {
@@ -185,6 +199,32 @@ if ($branchDirty.Count -gt 0) {
     Invoke-Git -C $root checkout main | Out-Null
     Write-Result "MERGE BLOCKED: $branchName has $($branchDirty.Count) uncommitted change(s). main was not changed."
     exit 1
+}
+
+# Auto-rebase (D-044). Dispatch-Commands.ps1 commits an administrative "received" marker to
+# main immediately before invoking this script -- its own Preflight requires that, since the
+# freshly-arrived command file would otherwise be an uncommitted change. That means main has
+# ALREADY moved on by exactly that commit every single time a /merge command reaches here, even
+# when the branch was rebased moments earlier: the ancestor check further down would never pass
+# through the normal dispatch path, and every merge would dead-end on "main is not an ancestor"
+# regardless of how current the branch actually is (confirmed live -- this blocked two real tasks
+# repeatedly). Auto-rebase closes that self-inflicted gap for the ordinary, conflict-free
+# case; a genuine conflict still stops here and asks a human, same as before.
+Invoke-Git -C $root merge-base --is-ancestor main $branchName | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    $rebaseOutput = Invoke-Git -C $root rebase main 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Invoke-Git -C $root rebase --abort | Out-Null
+        Invoke-Git -C $root checkout main | Out-Null
+        Write-Result "MERGE BLOCKED: $branchName conflicts with main and could not be auto-rebased. Rebase it by hand, then /merge again. main was not changed.`n`n$rebaseOutput"
+        exit 1
+    }
+    Invoke-Git -C $root push --force-with-lease origin $branchName | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Invoke-Git -C $root checkout main | Out-Null
+        Write-Result "MERGE BLOCKED: $branchName auto-rebased cleanly, but the force-push failed (someone else pushed to it concurrently). Try /merge again. main was not changed."
+        exit 1
+    }
 }
 
 # npm test on the BRANCH, not on main -- we are about to make the branch become main.
