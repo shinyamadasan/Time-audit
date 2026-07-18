@@ -1401,6 +1401,32 @@ test('mobile normalizes synced recurring templates for settings and today hints'
   await expect(row).toContainText('template hint');
 });
 
+test('mobile shows empty day skeleton and advanced grid before templates exist', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page, {
+    settings: {
+      templates: []
+    }
+  });
+
+  await page.evaluate(() => showView('settings'));
+  await page.selectOption('#day-template-select', '3');
+
+  const panel = page.locator('#day-template-panel');
+  await expect(panel).toContainText('No blocks yet for Wednesday');
+  const mobileSkeleton = panel.locator('.day-template-mobile-skeleton');
+  await expect(mobileSkeleton).toBeVisible();
+  await expect(mobileSkeleton.locator('.day-template-mobile-time')).toHaveCount(24);
+  await expect(mobileSkeleton.locator('.day-template-mobile-event')).toHaveCount(0);
+
+  await page.locator('.template-advanced summary').click();
+  const calendar = page.locator('.template-cal');
+  await expect(calendar).toBeVisible();
+  await expect(calendar.locator('.template-cal-day')).toHaveCount(7);
+  await expect(calendar.locator('.template-cal-day[data-day="3"] .template-cal-slot')).toHaveCount(48);
+  await expect(page.getByRole('button', { name: 'Add Wed 09:00' })).toBeVisible();
+});
+
 test('settings sync preserves and pushes newer local recurring templates', async ({ page }) => {
   await openApp(page, {
     settings: {
