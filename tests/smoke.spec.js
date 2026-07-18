@@ -1381,6 +1381,16 @@ test('mobile normalizes synced recurring templates for settings and today hints'
   await expect(page.locator('#day-template-select')).toBeVisible();
   await page.selectOption('#day-template-select', '3');
   await expect(page.locator('#day-template-panel')).toContainText('Lunch');
+  const mobileSkeleton = page.locator('.day-template-mobile-skeleton');
+  await expect(mobileSkeleton).toBeVisible();
+  await expect(mobileSkeleton.locator('.day-template-mobile-event')).toContainText('Lunch');
+  await expect(mobileSkeleton).toContainText('13:00-13:30');
+  const mobileSkeletonFits = await mobileSkeleton.evaluate(el => ({
+    width: el.getBoundingClientRect().width,
+    pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+  }));
+  expect(mobileSkeletonFits.width).toBeLessThanOrEqual(358);
+  expect(mobileSkeletonFits.pageFits).toBe(true);
   await page.locator('.template-advanced summary').click();
   await expect(page.locator('.template-cal-day[data-day="3"] .template-cal-event').filter({ hasText: 'Lunch' })).toContainText('13:00-13:30');
 
