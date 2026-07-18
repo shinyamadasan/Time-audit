@@ -58,6 +58,10 @@ already merged, auto-merges it after Claude approval, branch tests, and fast-for
 auto-parks rework (with a strike, retried until 3) and dependency-blocked tasks with a clear reason.
 The other commands force a specific phase for power-user/debug use.
 
+At clean boundaries, the dispatcher also handles AI-thread hygiene. After a successful `/go`
+auto-merge, a confirmed red-zone `/merge`, or a clean idle `/go`, it regenerates `HANDOFF.md`,
+commits it, and includes a "Thread reset checkpoint" in the Telegram reply.
+
 n8n can't reach into your PC directly, so commands are dispatched by a new Scheduled Task polling
 every ~2 minutes (not tied to the twice-daily automation) rather than an instant push — that
 trade-off was deliberate: true instant push would mean opening an inbound path to your PC for the

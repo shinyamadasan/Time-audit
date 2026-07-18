@@ -54,6 +54,10 @@ audits it → Claude reviews → merges → deploys. On Windows, a sleeping PC w
 macOS, the Mac must stay awake because `launchd` cannot wake it every 30 minutes. Press `/go` again
 for the next task.
 
+When `/go` finishes a task cleanly, or when it finds nothing approved/build-ready, the dispatcher
+updates `HANDOFF.md` and adds a **Thread reset checkpoint** to the Telegram reply. That is the safe
+moment to start a fresh AI thread without manually summarizing the old conversation.
+
 **Evening · ~1 min**
 
 Look at the app. Good → leave it. Wrong → revert the commit. That is the whole review.
