@@ -283,9 +283,32 @@ $updated = $tasksText.Replace($blk.Value, $newBody)
 Invoke-Git -C $root add TASKS.md | Out-Null
 Invoke-Git -C $root commit -m "$TaskId : merged (red-zone, confirmed by operator via /merge)" | Out-Null
 
-Invoke-Git -C $root push origin main | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Write-Result "MERGED into local main, but PUSH FAILED. Run 'git push origin main' at the PC."
+# Retry the push (D-048 addendum). Found live: a plain unretried push here left the merge sitting on
+# local main, unpushed, whenever something else (n8n's reply-clearing step, or the dispatcher's OWN
+# later OUTBOX-reply commit) advanced origin/main in the brief window first -- and Dispatch-
+# Commands.ps1's Invoke-CommitPushWithRetry (D-047), invoked right after this script returns to write
+# that reply, does a `git reset --hard origin/main` on ITS OWN push rejection, which silently
+# discarded this unpushed merge along with it, since D-047 assumed nothing else unpushed could be
+# sitting underneath. Retrying HERE, before this script ever returns, closes that window: rebase (not
+# reset -- these two commits are the actual merge/status-flip, not a regenerable message the way
+# D-047's callers' commits are) onto the fresh tip and retry, same MaxAttempts=5 convention as D-047.
+$pushed = $false
+for ($attempt = 1; $attempt -le 5; $attempt++) {
+    Invoke-Git -C $root push origin main | Out-Null
+    if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
+    if ($attempt -eq 5) { break }
+    Invoke-Git -C $root fetch origin | Out-Null
+    $rebaseOutput = Invoke-Git -C $root rebase origin/main 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Invoke-Git -C $root rebase --abort | Out-Null
+        Write-Result "MERGED into local main, but the push kept losing a race with something else advancing origin/main, and rebasing onto the new tip conflicted. Resolve by hand at the PC: git rebase origin/main (on main), then git push origin main.`n`n$rebaseOutput"
+        exit 1
+    }
+    Start-Sleep -Milliseconds (300 * $attempt)
+}
+
+if (-not $pushed) {
+    Write-Result "MERGED into local main, but PUSH FAILED after 5 attempt(s) -- kept losing the race with something else advancing origin/main. Run 'git push origin main' at the PC as soon as possible."
     exit 1
 }
 

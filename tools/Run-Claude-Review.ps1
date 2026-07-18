@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  /review phase runner: runs Claude's review against the first `status: review` task's branch.
+  /review phase runner: runs Claude's review against the first `status: review` task's branch,
+  falling back to Codex if Claude appears to be out of tokens/quota or unavailable (D-048).
 
 .DESCRIPTION
   Checks out task-<id>, invokes Claude non-interactively to do exactly what the interactive "Review"
@@ -9,6 +10,19 @@
   never touching app code. A commit-scope guard (same fail-fast mechanism as run-claude.ps1's)
   allows only REVIEW.md and TASKS.md; anything else halts with no commit/push. If Claude approves,
   this runner verifies the reviewed branch with npm test, fast-forwards main, and pushes main.
+
+  D-048: if Claude is missing from PATH, or the review call fails in a way that looks like a
+  quota/rate-limit/capacity problem (not a real review outcome -- "reviewed and found problems" is
+  never a failure, only "could not run" is), this runner retries the SAME branch with Codex as
+  reviewer instead, using tools/CODEX_REVIEW_INSTRUCTIONS.md (Codex has no Task tool, so it cannot
+  run the Guardian Gauntlet -- that file tells it to say so explicitly and never choose `done`,
+  reusing the exact "guardian didn't run -> approved at most" degradation clause the Claude prompt
+  already has, rather than inventing new verdict logic). Whichever engine actually produces the
+  verdict, this runner checks -- via `git log` on the branch for the builder-identity convention
+  Run-Codex-Build.ps1 commits ("built via codex" / "built via claude (fallback...)") -- whether the
+  SAME engine both built and reviewed the task, and if so appends a plain self-review disclosure to
+  the result. This is never a block: self-review is an already-accepted trade-off (Claude-only
+  installs have always done both roles in one session) -- it must be disclosed, not prevented.
 
   Writes its final human-readable result to .last-phase-result.txt (gitignored) for
   Dispatch-Commands.ps1 to relay.
@@ -25,6 +39,15 @@ param([switch]$DryRun, [switch]$NoAutoMerge, [switch]$NoPush)
 # is $null, which is FALSY -- so a naive "if ($IsWindows)" would silently take the macOS branch on
 # 5.1 and break every existing Windows install). Hence the explicit null check.
 $OnWindows = if ($null -eq $IsWindows) { $true } else { $IsWindows }
+
+# WHICH ENGINE REVIEWS, BY DEFAULT. D-048 makes this a preference, not a hard requirement -- see the
+# fallback logic below. Claude is the stronger default here for the opposite reason codex is the
+# default builder: Claude's review gets the Guardian Gauntlet (two read-only subagent specialists via
+# the Task tool); Codex has no equivalent, so a Codex review is always a strictly weaker fallback,
+# never a peer option to pick from freely.
+$PREFERRED_REVIEWER = 'claude'
+if ($PREFERRED_REVIEWER -notin @('claude', 'codex')) { $PREFERRED_REVIEWER = 'claude' }
+
 $ErrorActionPreference = 'Stop'
 $root       = Split-Path $PSScriptRoot -Parent
 $logFile    = Join-Path $root 'claude-session.log'
@@ -47,6 +70,30 @@ function Invoke-Git {
     $ErrorActionPreference = 'Continue'
     try { & git @args 2>$null }
     finally { $ErrorActionPreference = $prevEAP }
+}
+
+# D-048: same heuristic as Run-Codex-Build.ps1 -- distinguishes "the engine couldn't even run" (safe
+# to retry with the other engine) from "the engine ran and produced a real verdict" (REWORK is a
+# normal, expected outcome of a real review -- never treated as a failure here). Duplicated rather
+# than shared, matching this repo's convention of self-contained phase-runner scripts with no common
+# lib file.
+function Test-QuotaExhaustionSignal {
+    param([string]$Text)
+    if ([string]::IsNullOrEmpty($Text)) { return $false }
+    $Text -match '(?i)(rate.?limit(?:ed)?|quota|usage limit|\b429\b|insufficient.?(?:quota|credits?|balance)|too many requests|resource.?exhausted)'
+}
+
+# D-048 self-review disclosure: which engine's commit message built this branch, per the convention
+# Run-Codex-Build.ps1 writes ("<id>: built via codex" / "built via claude (fallback after ...)").
+# Returns $null if no such commit is found (e.g. a task built before D-048 shipped, or by a human) --
+# absence is not an error, just means no disclosure is possible.
+function Get-BuilderEngineForBranch {
+    param([string]$BranchName)
+    $subjects = @(Invoke-Git -C $root log $BranchName --format=%s)
+    foreach ($s in $subjects) {
+        if ($s -match '(?i)built via (codex|claude)') { return $Matches[1].ToLower() }
+    }
+    $null
 }
 
 function Write-Result {
@@ -169,14 +216,23 @@ $taskId = $target.Groups['id'].Value
 $title  = $target.Groups['title'].Value.Trim()
 $branchName = ($taskId -replace 'TASK-', 'task-').ToLower()
 
+$codexAvailable  = [bool](Get-Command codex  -ErrorAction SilentlyContinue)
+$claudeAvailable = [bool](Get-Command claude -ErrorAction SilentlyContinue)
+
 if ($DryRun) {
     $mergeMode = if ($AUTO_MERGE_AFTER_REVIEW) { 'enabled' } else { 'disabled' }
     $pushMode = if ($AUTO_PUSH_AFTER_MERGE) { 'enabled' } else { 'disabled' }
-    Write-Result "[DRY RUN] would checkout $branchName and review $taskId ($title). Auto-merge after approval: $mergeMode. Push after merge: $pushMode."
+    $firstChoice = if ($PREFERRED_REVIEWER -eq 'claude' -and $claudeAvailable) { 'claude' } elseif ($PREFERRED_REVIEWER -eq 'codex' -and $codexAvailable) { 'codex' } elseif ($claudeAvailable) { 'claude' } elseif ($codexAvailable) { 'codex' } else { 'neither available' }
+    Write-Result "[DRY RUN] would checkout $branchName and review $taskId ($title) via $firstChoice, falling back to the other engine on a detected quota/capacity signal. Auto-merge after approval: $mergeMode. Push after merge: $pushMode."
     exit 0
 }
 
-# --- Preflight: the task branch must exist and be clean before Claude reviews it. ---
+if (-not $codexAvailable -and -not $claudeAvailable) {
+    Write-Result "ABORTED: neither 'claude' nor 'codex' is on PATH for this session. Install/authenticate at least one, or check the account running this scheduled task has it on PATH."
+    exit 2
+}
+
+# --- Preflight: the task branch must exist and be clean before it's reviewed. ---
 Invoke-Git -C $root rev-parse --verify $branchName | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Result "ABORTED: branch '$branchName' for $taskId does not exist. Nothing to review."
@@ -189,14 +245,54 @@ if ($dirty.Count -gt 0) {
     exit 2
 }
 
-$prompt = @"
+# ---------------------------------------------------------------------------------------------
+# THE REVIEWER IS PLUGGABLE (D-048), mirroring Run-Codex-Build.ps1's $BUILDER pattern. Everything
+# outside this function -- preflight, the commit-scope guard, the verdict-status dispatch, the
+# auto-merge gates -- is engine-agnostic and unchanged. Only the process invoked here differs.
+# ---------------------------------------------------------------------------------------------
+function Invoke-ReviewerEngine {
+    param([string]$Engine, [string]$TaskId, [string]$Title, [string]$BranchName)
+
+    # Prefer the logged-in subscription over API-key billing for either engine, same as elsewhere.
+    Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+
+    if ($Engine -eq 'codex') {
+        # Short, single-line argument -- deliberately not a large inline prompt. `codex exec`'s only
+        # verified invocation contract in this repo (D-025) is a short literal instruction that tells
+        # Codex which committed file to go read and follow; passing a multi-paragraph prompt as a raw
+        # CLI argument would repeat the exact tail-truncation risk that forced claude's prompt through
+        # stdin instead. tools/CODEX_REVIEW_INSTRUCTIONS.md carries the actual reviewer contract.
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = 'codex'
+        $psi.Arguments = "exec -C `"$root`" --sandbox workspace-write `"Review $TaskId`""
+        $psi.WorkingDirectory = $root
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+
+        $proc = New-Object System.Diagnostics.Process
+        $proc.StartInfo = $psi
+        $proc.Start() | Out-Null
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+        $proc.WaitForExit()
+        $stdout = $stdoutTask.Result
+        $stderr = $stderrTask.Result
+        Add-Content -Path $logFile -Value "[Run-Claude-Review] codex review for $TaskId -- exit $($proc.ExitCode)"
+        Add-Content -Path $logFile -Value "[Run-Claude-Review] --- stdout ---`n$stdout"
+        if ($stderr) { Add-Content -Path $logFile -Value "[Run-Claude-Review] --- stderr ---`n$stderr" }
+        return [pscustomobject]@{ Engine = 'codex'; ExitCode = $proc.ExitCode; Stdout = $stdout; Stderr = $stderr }
+    }
+
+    # --- claude path: unchanged from the pre-D-048 behavior ---
+    $prompt = @"
 You are running in autonomous mode. No human is available. Follow CLAUDE.md's Reviewer role exactly
 as the interactive "Review" command already documents.
 
-Review task $taskId ($title) on the current branch ($branchName). Read the branch diff against main,
-CHANGELOG.md, TEST_REPORT.md, and $taskId's acceptance criteria in TASKS.md.
+Review task $TaskId ($Title) on the current branch ($BranchName). Read the branch diff against main,
+CHANGELOG.md, TEST_REPORT.md, and $TaskId's acceptance criteria in TASKS.md.
 
-You may ONLY write to REVIEW.md and TASKS.md (only $taskId's status field) -- do not touch any
+You may ONLY write to REVIEW.md and TASKS.md (only $TaskId's status field) -- do not touch any
 application source file, test, or config. Do not attempt git commit or git push (not available to
 you this run).
 
@@ -206,7 +302,7 @@ Using the Task tool, run these two specialists against the branch diff:
 
   1. security-guardian -- audit the diff for vulnerabilities, secret leakage, and unsafe handling
      of user data.
-  2. quality-guardian  -- verify the diff ACTUALLY satisfies $taskId's acceptance criteria in
+  2. quality-guardian  -- verify the diff ACTUALLY satisfies $TaskId's acceptance criteria in
      TASKS.md. Not "looks plausible" -- traced, criterion by criterion.
 
 Both run as READ-ONLY ADVISORS. Tell each one explicitly, in the prompt you give it, that it must
@@ -222,7 +318,7 @@ and treat the gauntlet as NOT PASSED. Never record a guardian as clean when it d
 unrun gate that reports "pass" is worse than no gate: it launders unaudited code as audited.
 
 Then write the REVIEW.md entry: verdict (APPROVED or REWORK), must-fix items if any, nits if any.
-Set $taskId's status in TASKS.md. Never rubber-stamp.
+Set $TaskId's status in TASKS.md. Never rubber-stamp.
 
 VERDICT RULES -- the gauntlet outranks your own impression of the diff:
   - Any CONFIRMED security finding                       => REWORK. Never approve over it.
@@ -243,37 +339,79 @@ If you are torn between done and approved, choose approved.
 State which gate you picked, and why, at the end of the REVIEW.md entry.
 "@
 
-# Pipe the PROMPT itself via stdin (not `claude -p $prompt`): under Windows PowerShell 5.1 a long
-# multi-line prompt passed as a native-command argument loses its tail -- confirmed live in the
-# planner, where Claude only received the head of the prompt. Piping via stdin delivers it intact
-# AND gives claude an immediate EOF (no ~3s stall). Lowering EAP to 'Continue' for the call prevents
-# claude's benign stderr from being promoted to a terminating exception under EAP = 'Stop'.
-# Match run-claude.ps1: prefer the logged-in Claude subscription over API-key billing for reviews.
-Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+    # Pipe the PROMPT itself via stdin (not `claude -p $prompt`): under Windows PowerShell 5.1 a long
+    # multi-line prompt passed as a native-command argument loses its tail -- confirmed live in the
+    # planner, where Claude only received the head of the prompt. Piping via stdin delivers it intact
+    # AND gives claude an immediate EOF (no ~3s stall).
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    if ($OnWindows) { $psi.FileName = 'cmd.exe'; $psi.Arguments = '/c claude -p --allowedTools "Read" "Glob" "Grep" "Edit" "Write" "Task" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)"' }
+    else            { $psi.FileName = '/bin/sh'; $psi.Arguments = '-c ''claude -p --allowedTools "Read" "Glob" "Grep" "Edit" "Write" "Task" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)"''' }
+    $psi.WorkingDirectory = $root
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
 
-$prevEAP = $ErrorActionPreference
-$ErrorActionPreference = 'Continue'
-# "Task" is what lets the reviewer spawn the Guardian Gauntlet (security-guardian, quality-guardian).
-# Without it the prompt can ASK for a guardian all it likes and nothing happens -- the reviewer has no
-# tool to spawn one with, and silently reviews alone. That was the original bug: the pipeline diagram
-# advertised a Guardian Gauntlet that could never have run.
-# The guardians are advisory only; the commit-scope guard below still fails the review closed if any
-# of them writes to disk.
-try {
-    $prompt | claude -p `
-        --allowedTools "Read" "Glob" "Grep" "Edit" "Write" "Task" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)" `
-        2>$null | Tee-Object -FilePath $logFile -Append
-} finally {
-    $ErrorActionPreference = $prevEAP
+    $proc = New-Object System.Diagnostics.Process
+    $proc.StartInfo = $psi
+    $proc.Start() | Out-Null
+    $proc.StandardInput.Write($prompt)
+    $proc.StandardInput.Close()
+    $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+    $stderrTask = $proc.StandardError.ReadToEndAsync()
+    $proc.WaitForExit()
+    $stdout = $stdoutTask.Result
+    $stderr = $stderrTask.Result
+    Add-Content -Path $logFile -Value "[Run-Claude-Review] claude review for $TaskId -- exit $($proc.ExitCode)"
+    Add-Content -Path $logFile -Value $stdout
+    if ($stderr) { Add-Content -Path $logFile -Value "[Run-Claude-Review] --- stderr ---`n$stderr" }
+    [pscustomobject]@{ Engine = 'claude'; ExitCode = $proc.ExitCode; Stdout = $stdout; Stderr = $stderr }
 }
-if ($LASTEXITCODE -ne 0) {
-    # Deliberately do NOT checkout main -- Claude's session may have left partial, uncommitted edits;
-    # leave $branchName exactly as it is for inspection rather than risk carrying stray changes onto main.
-    Write-Result "$taskId review FAILED: claude -p exited with code $LASTEXITCODE. See claude-session.log."
+
+$firstEngine = if ($PREFERRED_REVIEWER -eq 'claude' -and $claudeAvailable) { 'claude' }
+               elseif ($PREFERRED_REVIEWER -eq 'codex' -and $codexAvailable) { 'codex' }
+               elseif ($claudeAvailable) { 'claude' }
+               else { 'codex' }
+
+$attempt = Invoke-ReviewerEngine -Engine $firstEngine -TaskId $taskId -Title $title -BranchName $branchName
+$fallbackAttempted = $false
+$fallbackReason = $null
+
+# --- D-048: on a quota/capacity signal (never on "reviewed and found problems" -- that's exit 0 with
+#     a REWORK verdict, a normal outcome, not a failure), retry with the other engine. Discard
+#     whatever the failed engine left behind first so the retry starts from a clean branch tip rather
+#     than a possibly-partial REVIEW.md draft. ---
+if ($attempt.ExitCode -ne 0) {
+    $otherEngine = if ($attempt.Engine -eq 'claude') { 'codex' } else { 'claude' }
+    $otherAvailable = if ($otherEngine -eq 'codex') { $codexAvailable } else { $claudeAvailable }
+    $looksLikeQuota = (Test-QuotaExhaustionSignal $attempt.Stdout) -or (Test-QuotaExhaustionSignal $attempt.Stderr)
+    $missingEntirely = if ($attempt.Engine -eq 'codex') { -not $codexAvailable } else { -not $claudeAvailable }
+
+    if ($otherAvailable -and ($looksLikeQuota -or $missingEntirely)) {
+        $fallbackReason = if ($looksLikeQuota) { "a quota/capacity signal in $($attempt.Engine)'s output" } else { "$($attempt.Engine) was unexpectedly unavailable" }
+        Add-Content -Path $logFile -Value "[Run-Claude-Review] ${taskId}: falling back from $($attempt.Engine) to $otherEngine -- detected $fallbackReason."
+        Invoke-Git -C $root reset --hard HEAD | Out-Null
+        Invoke-Git -C $root clean -fd | Out-Null
+        $fallbackAttempted = $true
+        $attempt = Invoke-ReviewerEngine -Engine $otherEngine -TaskId $taskId -Title $title -BranchName $branchName
+    }
+}
+
+$engineUsed = $attempt.Engine
+
+if ($attempt.ExitCode -ne 0) {
+    # Deliberately do NOT checkout main -- the session may have left partial, uncommitted edits;
+    # leave $branchName exactly as it is for inspection rather than risk carrying stray changes onto
+    # main. Unlike Run-Codex-Build.ps1, a bare review-process failure does NOT mark the task blocked:
+    # it stays `status: review`, which is already a valid "try me again" state -- the next /review or
+    # /go invocation picks the same task up automatically once whichever engine(s) failed recover, with
+    # no separate auto:/strike-count machinery needed on this side.
+    $failNote = if ($fallbackAttempted) { "$engineUsed review (fallback after $fallbackReason) ALSO exited $($attempt.ExitCode)" } else { "$engineUsed review exited $($attempt.ExitCode)" }
+    Write-Result "$taskId review FAILED: $failNote. Left at status: review for automatic retry on the next /review or /go. See claude-session.log."
     exit 1
 }
 
-# --- Commit-scope guard: ONLY REVIEW.md and TASKS.md allowed ---
+# --- Commit-scope guard: ONLY REVIEW.md and TASKS.md allowed, regardless of which engine reviewed ---
 $allowedPatterns = @('^REVIEW\.md$', '^TASKS\.md$')
 $changed = @(Invoke-Git -C $root status --porcelain | ForEach-Object { $_.Substring(3).Trim() } | Where-Object { $_ })
 $violations = @($changed | Where-Object { $path = $_; -not ($allowedPatterns | Where-Object { $path -match $_ }) })
@@ -291,26 +429,36 @@ if ($changed.Count -eq 0) {
 }
 
 Invoke-Git -C $root add -- $changed
-Invoke-Git -C $root commit -m "${taskId}: Claude review" | Out-Null
+Invoke-Git -C $root commit -m "${taskId}: $engineUsed review" | Out-Null
 Invoke-Git -C $root push origin $branchName | Out-Null
+
+# D-048 self-review disclosure: check who built this branch BEFORE switching away from it -- git log
+# still needs the branch checked out (or at least resolvable) to read its history either way, but
+# doing this alongside the other pre-switch reads keeps everything in one place.
+$builderEngine = Get-BuilderEngineForBranch -BranchName $branchName
+$selfReviewNote = if ($builderEngine -and $builderEngine -eq $engineUsed) {
+    " Note: builder and reviewer were both $engineUsed for this task -- self-review, reduced blind-spot protection. Same trade-off already accepted for Claude-only installs; disclosed here per D-048, not blocked."
+} else { "" }
+$fallbackNote = if ($fallbackAttempted) { " (reviewed via $engineUsed -- fallback after $fallbackReason)" } else { "" }
+
 # Read the final status BEFORE switching back to main -- checking out main first would make this
-# read main's untouched TASKS.md (task-006 was never merged there), always reporting the task's
-# pre-review status regardless of what Claude actually decided. Confirmed live: a real APPROVED
+# read main's untouched TASKS.md (the task was never merged there), always reporting the task's
+# pre-review status regardless of what the reviewer actually decided. Confirmed live: a real APPROVED
 # review with status correctly set to `done` on $branchName was misreported as "needs REWORK"
 # because $tasksFile was read after the branch switch.
 $newStatus = Get-TaskStatus -TaskId $taskId
 if ($newStatus -eq 'done') {
-    Write-Result (Invoke-AutoMerge -TaskId $taskId -BranchName $branchName)
+    Write-Result ((Invoke-AutoMerge -TaskId $taskId -BranchName $branchName) + $fallbackNote + $selfReviewNote)
 } elseif ($newStatus -eq 'codex') {
     Invoke-Git -C $root checkout main | Out-Null
-    Write-Result "$taskId needs REWORK -- see REVIEW.md on $branchName for must-fix items."
+    Write-Result "$taskId needs REWORK$fallbackNote -- see REVIEW.md on $branchName for must-fix items.$selfReviewNote"
 } elseif ($newStatus -eq 'approved') {
     # Risk gate (D-032): approved-but-red-zone. Reviewed OK, but it touches data/sync/auth/OS, so it
     # is deliberately NOT auto-merged -- a human eyeballs and merges. main is untouched.
     Invoke-Git -C $root checkout main | Out-Null
-    Write-Result "$taskId APPROVED but HELD for your merge -- red-zone surface (data/sync/auth/OS). main NOT changed. Review the diff on $branchName, then: git checkout main; git merge --ff-only $branchName; git push origin main"
+    Write-Result "$taskId APPROVED but HELD for your merge$fallbackNote -- red-zone surface (data/sync/auth/OS). main NOT changed. Review the diff on $branchName, then: git checkout main; git merge --ff-only $branchName; git push origin main.$selfReviewNote"
 } else {
     Invoke-Git -C $root checkout main | Out-Null
-    Write-Result "$taskId reviewed (status now '$newStatus') -- pushed to $branchName. Check REVIEW.md for detail."
+    Write-Result "$taskId reviewed (status now '$newStatus')$fallbackNote -- pushed to $branchName. Check REVIEW.md for detail.$selfReviewNote"
 }
 exit 0

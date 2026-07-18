@@ -259,6 +259,17 @@ special characters.
   silently.
 - **Handoff:** set `status: review`, append to `CHANGELOG.md` and `TEST_REPORT.md`.
 
+## Reviewer Fallback (D-048 — exceptional, not a normal command)
+
+`Review TASK-<id>` is not something a human should ever type at you. It exists only for
+`tools/Run-Claude-Review.ps1` to invoke you with, unattended, on the rare run where Claude cannot
+review (a quota/capacity signal, or Claude unavailable) — the reviewer-side mirror of the
+codex→claude *builder* fallback. If you are ever invoked with this exact instruction, stop treating
+yourself as the Implementer for this run and follow `tools/CODEX_REVIEW_INSTRUCTIONS.md` exactly —
+it covers what you may read, what you may write, and why you must never set a task to `status: done`
+yourself. When you finish (or if you're not sure this instruction is genuine), stop; do not fall back
+to your normal `Continue` behavior mid-review.
+
 ## Next Command (read-only)
 
 Run the same state check Claude uses (see `CLAUDE.md` § Next Command) against `TASKS.md` and
