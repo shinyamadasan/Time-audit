@@ -9445,7 +9445,7 @@ function skipTemplateOnDate(templateId, dateKey) {
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
   persist();
-  if (fbRoomRef) fbRoomRef.update({ settings });
+  syncTemplates();
   renderDayTemplatePanel();
   renderTemplateList();
   _todayRenderKey = '__FORCE__';
@@ -9565,7 +9565,7 @@ function updateTemplateFromEntry(templateId, entry) {
   settings._savedAt = Date.now();
   settings._templatesSavedAt = Date.now();
   persist();
-  if (fbRoomRef) fbRoomRef.update({ settings });
+  syncTemplates();
   renderDayTemplatePanel();
   renderTemplateList();
   renderToday();
@@ -9691,7 +9691,7 @@ function toggleTplDay(btn) {
 function persistTemplatesAfterPaint() {
   const save = () => {
     persist();
-    if (fbRoomRef) fbRoomRef.update({ settings });
+    syncTemplates();
     scheduleRenderToday();
   };
   requestAnimationFrame(() => setTimeout(save, 0));

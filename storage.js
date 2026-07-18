@@ -469,6 +469,20 @@ function syncSettings() {
   }).catch(() => {});
 }
 
+function syncTemplates() {
+  if (!fbRoomRef) return Promise.resolve(false);
+  ensureTemplateSyncStamp();
+  const stamp = templateSyncStamp(settings) || Date.now();
+  settings._templatesSavedAt = stamp;
+  return fbRoomRef.update({
+    'settings/templates': settings.templates,
+    'settings/_templatesSavedAt': stamp,
+    'settings/_savedAt': settings._savedAt || stamp
+  })
+    .then(() => true)
+    .catch(err => { notifySyncWriteFailed(err); return false; });
+}
+
 function applyRemoteSettings(remoteSettings) {
   if (!remoteSettings) return false;
   const val = { ...remoteSettings, templates: normalizeTemplates(remoteSettings.templates) };
@@ -1472,6 +1486,7 @@ function disconnectSync() {
   // Generate a fresh private room so this device is isolated
   const newRoom = 'USER-' + Math.random().toString(36).slice(2,8).toUpperCase();
   localStorage.setItem('ta3-room', newRoom);
+  localStorage.setItem('ta3-room-code', newRoom);
   updateSyncPill('offline', 'offline');
   const crEl = document.getElementById('connected-room');
   if (crEl) crEl.textContent = '—';
@@ -1555,6 +1570,7 @@ function joinRoom() {
   }
   roomCode = code;
   localStorage.setItem('ta3-room', code);
+  localStorage.setItem('ta3-room-code', code);
   input.value = '';
   updateSyncPill('syncing', 'connecting…');
   startSync();
@@ -1562,7 +1578,7 @@ function joinRoom() {
 
 function tryAutoConnect() {
   const savedConfig = localStorage.getItem('ta3-firebase-config');
-  const savedRoom = localStorage.getItem('ta3-room-code');
+  const savedRoom = localStorage.getItem('ta3-room-code') || localStorage.getItem('ta3-room');
   if (!savedConfig || !savedRoom) return;
   try {
     const config = JSON.parse(savedConfig);

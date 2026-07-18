@@ -1504,6 +1504,40 @@ test('settings sync preserves and pushes newer local recurring templates', async
   }));
 });
 
+test('recurring template mutations publish template sync paths', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(async () => {
+    showView('settings');
+    const updates = [];
+    fbRoomRef = {
+      update(payload) {
+        updates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    document.getElementById('tpl-activity').value = 'Scribe shift';
+    document.getElementById('tpl-energy').value = 'nine5';
+    document.getElementById('tpl-start').value = '22:00';
+    document.getElementById('tpl-end').value = '08:00';
+    document.querySelectorAll('#tpl-day-picker .tpl-day-btn').forEach(btn =>
+      btn.classList.toggle('on', parseInt(btn.dataset.day) === 1)
+    );
+    addTemplate();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return {
+      templates: settings.templates.map(t => ({ activity: t.activity, days: t.days })),
+      updates
+    };
+  });
+
+  expect(result.templates).toEqual([{ activity: 'Scribe shift', days: [1] }]);
+  expect(result.updates).toContainEqual(expect.objectContaining({
+    'settings/templates': expect.arrayContaining([expect.objectContaining({ activity: 'Scribe shift' })]),
+    'settings/_templatesSavedAt': expect.any(Number)
+  }));
+});
+
 test('today template rows expose log and off actions without settings clutter', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
   await openApp(page, {
