@@ -20,13 +20,16 @@ or the lifecycle model; read CLAUDE.md for those if you need the wider picture.
 
 ## Startup Procedure
 
-1. Open `TASKS.md`.
-2. Find the first task with `status: codex`.
-3. If this task previously returned from review, read `REVIEW.md` before continuing — see Rework
+1. Read `CODEMAP.md`.
+2. Read `HANDOFF.md` if present for the latest thread-reset checkpoint. Treat it as context only;
+   `TASKS.md` remains the execution contract.
+3. Open `TASKS.md`.
+4. Find the first task with `status: codex`.
+5. If this task previously returned from review, read `REVIEW.md` before continuing — see Rework
    Path.
-4. Read the task's `acceptance:` checklist, `files:`, and `constraints:`.
-5. Read `docs/ARCHITECTURE.md` and `docs/DECISIONS.md` for the areas the task touches.
-6. Proceed to Definition of Ready before writing code.
+6. Read the task's `acceptance:` checklist, `files:`, and `constraints:`.
+7. Read `docs/ARCHITECTURE.md` and `docs/DECISIONS.md` for the areas the task touches.
+8. Proceed to Definition of Ready before writing code.
 
 Do not read `planning/BUILD_QUEUE.md` — it is Claude's planning input, not an execution source.
 
@@ -44,7 +47,8 @@ and stop.
 
 If context is lost mid-task:
 
-1. Open `TASKS.md` and find the task whose `status` is `codex` or `blocked` (yours in progress).
+1. Read `CODEMAP.md` and `HANDOFF.md` if present, then open `TASKS.md` and find the task whose
+   `status` is `codex` or `blocked` (yours in progress).
 2. Check for an existing branch `task-<id>` — resume from its last commit rather than restarting.
 3. Re-read that task's acceptance checklist before continuing.
 4. Never restart a task from scratch if prior work exists on its branch.
