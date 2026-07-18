@@ -2724,6 +2724,78 @@ test('sync now pulls the latest remote timer snapshot', async ({ page }) => {
   await expect(page.locator('#sync-detail-label')).toContainText('active: Cooking');
 });
 
+test('sync now pulls newer remote recurring templates', async ({ page }) => {
+  await openApp(page, {
+    settings: {
+      _savedAt: 100,
+      _templatesSavedAt: 100,
+      templates: []
+    }
+  });
+
+  const ok = await page.evaluate(async () => {
+    const remoteSettings = {
+      _savedAt: 200,
+      _templatesSavedAt: 500,
+      templates: [{
+        id: 'pc-scribe',
+        activity: 'Scribe shift',
+        energy: 'nine5',
+        days: [1],
+        startTime: '22:00',
+        endTime: '08:00',
+        autoLog: false,
+        enabled: true
+      }]
+    };
+    window.__syncUpdates = [];
+    fbDb = {
+      ref() {
+        return {
+          once() { return Promise.resolve({ val: () => remoteSettings }); }
+        };
+      }
+    };
+    fbRoomRef = {
+      child(path) {
+        return {
+          once() {
+            return Promise.resolve({ val: () => path === 'settings' ? remoteSettings : null });
+          }
+        };
+      },
+      update(payload) {
+        window.__syncUpdates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    const result = await forceSyncNow();
+    showView('settings');
+    document.getElementById('day-template-select').value = '1';
+    renderDayTemplatePanel();
+    return {
+      result,
+      templates: settings.templates.map(t => ({
+        id: t.id,
+        activity: t.activity,
+        days: t.days,
+        startTime: t.startTime,
+        endTime: t.endTime
+      }))
+    };
+  });
+
+  expect(ok.result).toBe(true);
+  expect(ok.templates).toEqual([{
+    id: 'pc-scribe',
+    activity: 'Scribe shift',
+    days: [1],
+    startTime: '22:00',
+    endTime: '08:00'
+  }]);
+  await expect(page.locator('#day-template-panel')).toContainText('Scribe shift');
+});
+
 test('remote timer stop resets local state and clears restored timer storage', async ({ page }) => {
   await openApp(page);
   const startTs = Date.now() - 5 * 60 * 1000;

@@ -983,18 +983,21 @@ async function forceSyncNow() {
   if (btn) btn.disabled = true;
   updateSyncPill('syncing', 'syncing...');
   try {
-    const [timerSnap, awaySnap] = await Promise.all([
+    const [timerSnap, awaySnap, settingsSnap] = await Promise.all([
       fbRoomRef.child('timer').once('value'),
-      fbRoomRef.child('awayState').once('value')
+      fbRoomRef.child('awayState').once('value'),
+      fbRoomRef.child('settings').once('value')
     ]);
     const timerChanged = applyRemoteTimerState(timerSnap.val());
     const awayChanged = applyRemoteAwayState(awaySnap.val());
-    await Promise.all([syncEntries(), syncFocusRedemptions()]);
+    const settingsChanged = applyRemoteSettings(settingsSnap.val());
+    await Promise.all([syncEntries(), syncFocusRedemptions(), syncSettings()]);
     localStorage.setItem('ta3-last-sync', Date.now());
-    if (timerChanged || awayChanged) {
+    if (timerChanged || awayChanged || settingsChanged) {
       persist();
       scheduleRenderToday();
     }
+    if (settingsChanged) renderSettings();
     updateSyncPill('connected', 'synced');
     showToast('Sync checked');
     return true;
