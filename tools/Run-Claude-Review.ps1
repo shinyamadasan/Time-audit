@@ -189,9 +189,26 @@ function Invoke-AutoMerge {
     }
 
     if ($AUTO_PUSH_AFTER_MERGE) {
-        Invoke-Git -C $root push origin main | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            return "$TaskId APPROVED and auto-merged $BranchName into local main, but push to origin/main FAILED. Inspect main and push manually."
+        # Retry with rebase, not reset (D-047/D-048 addendum, TASK-031). This is the highest-traffic
+        # push-to-main site in the whole system -- every reversible task lands through here. Found by
+        # auditing every push-to-main call site after Run-Merge.ps1's own unretried push silently lost
+        # a completed merge to a race with Dispatch-Commands.ps1's OUTBOX-reply retry logic (D-047):
+        # this site had the exact same shape and was equally exposed, just not yet caught live.
+        $pushed = $false
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+            Invoke-Git -C $root push origin main | Out-Null
+            if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
+            if ($attempt -eq 5) { break }
+            Invoke-Git -C $root fetch origin | Out-Null
+            $rebaseOutput = Invoke-Git -C $root rebase origin/main 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Invoke-Git -C $root rebase --abort | Out-Null
+                return "$TaskId APPROVED and auto-merged $BranchName into local main, but the push kept losing a race with something else advancing origin/main, and rebasing onto the new tip conflicted. Resolve by hand at the PC: git rebase origin/main (on main), then git push origin main.`n`n$rebaseOutput"
+            }
+            Start-Sleep -Milliseconds (300 * $attempt)
+        }
+        if (-not $pushed) {
+            return "$TaskId APPROVED and auto-merged $BranchName into local main, but PUSH FAILED after 5 attempt(s) -- kept losing the race with something else advancing origin/main. Run 'git push origin main' at the PC as soon as possible."
         }
         return "$TaskId APPROVED and auto-merged $BranchName into main, then pushed origin/main."
     }

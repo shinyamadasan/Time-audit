@@ -208,8 +208,27 @@ $autoPromotedCount = @([regex]::Matches((Get-Content $proposals -Raw -Encoding U
 Invoke-Git -C $root add planning/PROPOSALS.md planning/AUDIT_SUMMARY.md planning/BUILD_QUEUE.md | Out-Null
 Invoke-Git -C $root commit -m "audit: $newPropCount new proposal(s) from /audit" | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Result "HALTED: git commit failed after a clean audit."; exit 1 }
-Invoke-Git -C $root push origin main | Out-Null
-if ($LASTEXITCODE -ne 0) { Write-Result "Audit committed locally, but PUSH FAILED. Run 'git push origin main' at the PC."; exit 1 }
+# Retry with rebase, not reset (D-047/D-048 addendum, TASK-031) -- found by auditing every
+# push-to-main call site after Run-Merge.ps1's own unretried push silently lost a completed merge to
+# a race with Dispatch-Commands.ps1's OUTBOX-reply retry logic (D-047). This site had the same shape.
+$pushed = $false
+for ($attempt = 1; $attempt -le 5; $attempt++) {
+    Invoke-Git -C $root push origin main | Out-Null
+    if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
+    if ($attempt -eq 5) { break }
+    Invoke-Git -C $root fetch origin | Out-Null
+    $rebaseOutput = Invoke-Git -C $root rebase origin/main 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Invoke-Git -C $root rebase --abort | Out-Null
+        Write-Result "Audit committed locally, but the push kept losing a race with something else advancing origin/main, and rebasing onto the new tip conflicted. Resolve by hand at the PC: git rebase origin/main (on main), then git push origin main.`n`n$rebaseOutput"
+        exit 1
+    }
+    Start-Sleep -Milliseconds (300 * $attempt)
+}
+if (-not $pushed) {
+    Write-Result "Audit committed locally, but PUSH FAILED after 5 attempt(s) -- kept losing the race with something else advancing origin/main. Run 'git push origin main' at the PC as soon as possible."
+    exit 1
+}
 
 $mode = if ($needsFullRefresh) { "full re-scan" } else { "incremental" }
 $needsReply = $newPropCount - $autoPromotedCount
