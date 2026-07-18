@@ -47,6 +47,28 @@ Investigate before the next scheduled run. Nothing further was committed, pushed
     exit 1
 }
 
+# Retry with rebase, not reset (D-047/D-048 addendum, TASK-031) -- found by auditing every
+# push-to-main call site after Run-Merge.ps1's own unretried push silently lost a completed merge to
+# a race with Dispatch-Commands.ps1's OUTBOX-reply retry logic (D-047). This file's three push sites
+# share one helper (unlike the other sites this audit fixed, each in a different file, where this
+# repo's convention is to duplicate rather than share a lib) since all three live in one script.
+function Push-MainWithRetry {
+    param([string]$FailureContext)
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        git push origin main | Out-Null
+        if ($LASTEXITCODE -eq 0) { return }
+        if ($attempt -eq 5) { break }
+        git fetch origin | Out-Null
+        $rebaseOutput = git rebase origin/main 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            git rebase --abort | Out-Null
+            Halt-Automation "$FailureContext -- push kept losing a race with something else advancing origin/main, and rebasing onto the new tip conflicted.`n$rebaseOutput"
+        }
+        Start-Sleep -Milliseconds (300 * $attempt)
+    }
+    Halt-Automation "$FailureContext -- push failed after 5 attempt(s), kept losing the race with something else advancing origin/main."
+}
+
 function Get-RepoStateSummary {
     # Best-effort, defensive: this runs even when the failing check is "Repository exists" or "Git
     # available", so every step here has to tolerate git/the repo itself being unusable.
@@ -251,8 +273,7 @@ git diff --cached --quiet
 if ($LASTEXITCODE -ne 0) {
     git commit -m "decisions: apply approval replies -> BUILD_QUEUE" | Out-Null
     if ($LASTEXITCODE -ne 0) { Halt-Automation "git commit failed after Apply-Decisions.ps1" }
-    git push origin main | Out-Null
-    if ($LASTEXITCODE -ne 0) { Halt-Automation "git push failed after Apply-Decisions.ps1 commit" }
+    Push-MainWithRetry "git push failed after Apply-Decisions.ps1 commit"
 }
 
 # --- Phase 2: Claude session -- TRIAGE + PLAN CONVERSION ONLY. No commit/push tool available to it. ---
@@ -300,8 +321,7 @@ if ($violations.Count -gt 0) {
     git add -- $changed
     git commit -m "plan: triage + BUILD_QUEUE -> PLAN/TASKS (automated)" | Out-Null
     if ($LASTEXITCODE -ne 0) { Halt-Automation "git commit failed for plan-conversion changes" }
-    git push origin main | Out-Null
-    if ($LASTEXITCODE -ne 0) { Halt-Automation "git push failed for plan-conversion changes" }
+    Push-MainWithRetry "git push failed for plan-conversion changes"
 } else {
     Add-Content -Path $logFile -Value "No planning changes this run."
 }
@@ -315,8 +335,7 @@ git diff --cached --quiet
 if ($LASTEXITCODE -ne 0) {
     git commit -m "digest: refresh proposals digest + codex-ready notice" | Out-Null
     if ($LASTEXITCODE -ne 0) { Halt-Automation "git commit failed for digest/codex-ready refresh" }
-    git push origin main | Out-Null
-    if ($LASTEXITCODE -ne 0) { Halt-Automation "git push failed for digest/codex-ready refresh" }
+    Push-MainWithRetry "git push failed for digest/codex-ready refresh"
 }
 
 $endTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

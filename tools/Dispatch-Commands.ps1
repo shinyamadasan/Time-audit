@@ -39,6 +39,7 @@ $outboxFile   = Join-Path $replyDir 'OUTBOX.md'
 $lockFile     = Join-Path $root 'automation.lock'
 $tasksFile    = Join-Path $root 'TASKS.md'
 $runClaude    = Join-Path $root 'run-claude.ps1'
+$logFile      = Join-Path $root 'claude-session.log'
 $utf8         = New-Object System.Text.UTF8Encoding($false)
 $NO_REPLIES   = 'No pending replies.'
 
@@ -422,7 +423,32 @@ function Publish-TasksChange {
     Invoke-Git -C $root diff --cached --quiet
     if ($LASTEXITCODE -ne 0) {
         Invoke-Git -C $root commit -m $Message | Out-Null
-        Invoke-Git -C $root push origin main | Out-Null
+        # Retry with rebase, not reset (D-047/D-048 addendum, TASK-031) -- found by auditing every
+        # push-to-main call site after Run-Merge.ps1's own unretried push silently lost a completed
+        # merge to a race with this SAME script's own OUTBOX-reply retry logic (D-047). This site is
+        # the most exposed of all of them: it runs earlier in the very same Dispatch-Commands.ps1
+        # invocation that later calls Invoke-CommitPushWithRetry for the reply, so an unretried
+        # failure here sat one push-race away from being reset away by that later call, same as
+        # Run-Merge.ps1's merge was. No result string to bubble up (this function has always been
+        # fire-and-forget for its 5 callers in Invoke-Autopilot) -- log a warning instead of staying
+        # silent, rather than widen this function's contract for every caller just for this.
+        $pushed = $false
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+            Invoke-Git -C $root push origin main | Out-Null
+            if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
+            if ($attempt -eq 5) { break }
+            Invoke-Git -C $root fetch origin | Out-Null
+            $rebaseOutput = Invoke-Git -C $root rebase origin/main 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Invoke-Git -C $root rebase --abort | Out-Null
+                Add-Content -Path $logFile -Value "[Dispatch-Commands] Publish-TasksChange: push kept losing a race and rebasing conflicted -- '$Message' is stuck on local main, unpushed. Resolve by hand.`n$rebaseOutput"
+                return
+            }
+            Start-Sleep -Milliseconds (300 * $attempt)
+        }
+        if (-not $pushed) {
+            Add-Content -Path $logFile -Value "[Dispatch-Commands] Publish-TasksChange: push failed after 5 attempt(s) -- '$Message' is stuck on local main, unpushed. Resolve by hand."
+        }
     }
 }
 
@@ -562,7 +588,26 @@ function Set-AutomationFlag {
     Invoke-Git -C $root diff --cached --quiet
     if ($LASTEXITCODE -ne 0) {
         Invoke-Git -C $root commit -m "automation: $(if ($Enable) {'enable'} else {'disable'}) via Telegram" | Out-Null
-        Invoke-Git -C $root push origin main | Out-Null
+        # Retry with rebase, not reset (D-047/D-048 addendum, TASK-031) -- same audit and same
+        # reasoning as Publish-TasksChange above. Unlike that one, this function's return value IS
+        # surfaced to the operator, so a push failure is reported honestly instead of the previous
+        # behavior of always claiming success regardless of whether the push actually landed.
+        $pushed = $false
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+            Invoke-Git -C $root push origin main | Out-Null
+            if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
+            if ($attempt -eq 5) { break }
+            Invoke-Git -C $root fetch origin | Out-Null
+            $rebaseOutput = Invoke-Git -C $root rebase origin/main 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Invoke-Git -C $root rebase --abort | Out-Null
+                return "Automation $(if ($Enable) {'enabled'} else {'disabled'}) locally, but the push kept losing a race with something else advancing origin/main, and rebasing onto the new tip conflicted. Resolve by hand at the PC: git rebase origin/main (on main), then git push origin main.`n`n$rebaseOutput"
+            }
+            Start-Sleep -Milliseconds (300 * $attempt)
+        }
+        if (-not $pushed) {
+            return "Automation $(if ($Enable) {'enabled'} else {'disabled'}) locally, but PUSH FAILED after 5 attempt(s) -- kept losing the race with something else advancing origin/main. Run 'git push origin main' at the PC as soon as possible."
+        }
     }
     return "Automation $(if ($Enable) {'enabled'} else {'disabled'})."
 }
