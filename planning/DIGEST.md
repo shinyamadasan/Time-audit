@@ -1,9 +1,13 @@
 🌅 *ChronaSense — Morning Digest*
-Sun 19 Jul · 5 proposals waiting · 🎯 Objective: *unset*
+Sun 19 Jul · 6 proposals waiting · 🎯 Objective: *unset*
 
 ✅ *RECOMMEND APPROVE (1)*
 *4* · Timer state not restored on app reopen (capture 52)
    → — First user-reported bug; maps directly to Hard Rule #8 (timer restore order in INIT). When the app is closed mid-session and reopened, the hero resets to starting "work" instead of resuming the active entry. Data correctness issue: the gap between close and reopen is untracked, and the resumed state is wrong.
+
+💤 *RECOMMEND PARK (1)*
+*6* · Category clarity: where do cooking and church work go? (capture 75)
+   → — Real usage friction: user couldn't tell which category bucket to use for "cooking" or "church work." Worth addressing, but needs clarification (relabeling? new presets? descriptions?) before it can be specced. Park behind PROP-004 bug fix and pending Current Objective.
 
 🗑 *RECOMMEND REJECT (4)*
 *1* · Keysmash test noise (captures 12, 16, 36)
