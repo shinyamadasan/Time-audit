@@ -102,6 +102,78 @@ dup-count: 4
 
 ---
 
+### PROP-007 — `triggerPenaltyMode()` undefined — escalation dead-letters on 5-waste streaks
+
+id: PROP-007
+source: /audit (this run)
+- **status:** pending
+
+> **Decision: Approve** — Confirmed runtime bug. `checkEscalation()` in `insights.js:248` calls `triggerPenaltyMode()` which is not defined in `index.html`. A `ReferenceError` is thrown silently whenever five or more consecutive waste/missed entries are logged in a day. The function exists only in old prototype files and the `eslint.config.js` legacy globals list — it was never ported. The escalation path (the most forceful behavioral nudge in the app) silently never fires.
+
+> **Risk:** Low — Entry data is safe; `persist()` runs before the crash. The only consequence is that the penalty-mode activation and the `checkBudget()` warning both fail to run when the system should be at its most assertive. No data is lost and no sync is corrupted.
+
+**Goal alignment:** Directly violates Goal #4 (Insight must change behaviour). The escalation fires exactly when the user's behaviour is worst (5+ consecutive waste blocks in a row). Silently dead-lettering there is the worst possible moment for the feedback system to fail.
+
+**User value:** High. This is the strongest behavioural nudge in the app. Users who reach 5-waste streaks are exactly the users who most need it — and they're getting nothing.
+
+**Evidence:** `grep triggerPenaltyMode index.html` returns zero matches. The function appears only in prototype files (`ai_studio_code (1) - Copy.html:1360`) and the ESLint readonly-globals list (`eslint.config.js:53`), confirming it was never ported. The call sequence is: `_doQuickSave()` / `autoLogBlock()` / `saveEntry()` → `checkEscalation()` → `triggerPenaltyMode()` → ReferenceError. `checkBudget()` is never reached on the same path.
+
+**Effort:** Low — Two options: (a) add `typeof triggerPenaltyMode === 'function'` guard and document the missing function; or (b) port/implement `triggerPenaltyMode()` from the prototype file. The prototype version (at line 1360 in `ai_studio_code (1) - Copy.html`) is the right reference. | **Dependencies:** `insights.js:checkEscalation()`, `index.html` (location to add the function). | **Confidence:** High — reproduces deterministically on any 5th consecutive waste log. | **Ambiguity:** Low — the function is simply missing from the current production file.
+
+**Why now vs later:** Now — this bug fires in real usage whenever a user has a bad focus day (not a rare edge case). Every 5-waste streak since this code was split into modules has produced a silent ReferenceError. The fix is low-effort and the risk is low.
+
+**Goal-adjusted priority:** P1 — Goal #4 is the highest applicable goal and the bug silently nullifies its most impactful mechanism.
+
+---
+
+### PROP-008 — `enterFocusMode()` auto-log has no undo — wrong energy silently sticks
+
+id: PROP-008
+source: /audit (this run)
+- **status:** pending
+
+> **Decision: Approve** — UX gap confirmed in `focus-mode.js:608–626`. When the user opens Focus Mode with an active interval timer, `enterFocusMode()` auto-logs the running block. It calls `showToast()` (not `showUndoToast()`), so no undo action is registered. If the wrong energy is assigned (heuristic: most recent logged entry's energy, defaulting to `'deep'`), the user must manually find and edit or delete the entry from the timeline — there is no 1-tap correction.
+
+> **Risk:** Low — UI change only. Touches `enterFocusMode()` in `focus-mode.js` and the undo helper (`rememberCreatedUndo()` from `index.html`). Does not touch entry schema, Firebase sync, or timer state.
+
+**Goal alignment:** Goal #1 (Make logging frictionless) — a log that can't be undone with a single tap is friction. Goal #2 (Capture the truth) — a miscategorised block silently survives, distorting the audit record.
+
+**User value:** Medium. The auto-log is useful (it closes the running block before entering Pomodoro mode), but users who enter Focus Mode and immediately see "Deep work — 12m" toasted when they were actually doing email have no fast recovery path.
+
+**Evidence:** `focus-mode.js:625` — `showToast(\`Logged: ${task} · ${fmtDur(dur)}\`)`. Compare with `_doQuickSave()` in `index.html:2689-2690` which uses `showUndoToast()` and `rememberCreatedUndo()`. The energy heuristic is `entries.find(e => !e.missed && !e.break && !e.away)?.energy || 'deep'` (focus-mode.js:615) — it reads the most recently logged entry's energy, which may be from a previous day or a different energy category than the current block.
+
+**Effort:** Low — replace `showToast()` with `showUndoToast()` and add `rememberCreatedUndo('focus-mode auto-log', [entry])` before `resetTimer()`. | **Dependencies:** `focus-mode.js`, `rememberCreatedUndo()` / `showUndoToast()` (defined in `index.html`). | **Confidence:** High — reproducible on every Focus Mode open with an active timer. | **Ambiguity:** Low on the fix; medium on whether to also fix the energy heuristic at the same time or track it as a separate proposal.
+
+**Why now vs later:** Later than PROP-004 and PROP-007 (both are higher priority) but before any UX polish work. This is a small, targeted fix once PROP-007 is resolved.
+
+**Goal-adjusted priority:** P2 — Goal #1 alignment, but a workaround exists (timeline edit). Outranked by PROP-004 (data loss) and PROP-007 (broken escalation).
+
+---
+
+### PROP-009 — Focus Wallet "sport" substring match false-positives on "transport" entries
+
+id: PROP-009
+source: /audit (this run)
+- **status:** pending
+
+> **Decision: Approve** — Confirmed precision bug in `focus-wallet.js:isFocusWalletSportsEntry()`. The function uses `label.includes("sport")` where `label` is the lowercased activity name. The word "transport" contains "sport" as a substring (positions 4–8 of "transport"). Any activity logged as "Public transport", "Transport to office", "Air transport", etc. is silently classified as a weekly sports session, consuming a free-session slot and potentially incurring wallet costs (10 pts for session 4, 25 pts for each beyond that).
+
+> **Risk:** Low — Focus Wallet is a UI scoring layer; no entry data or Firebase schema is touched. The fix is a word-boundary check on the sports-activity keyword list.
+
+**Goal alignment:** Goal #3 (Never lose logged time) — the wallet score is computed incorrectly for affected users, misrepresenting the cost/reward balance. Goal #5 (stay maintainable) — the substring match violates the principle of precision for a feature that deducts points from a user's account.
+
+**User value:** Medium. Users who log commuting as any phrase containing "transport" will see unexpected sports-session costs accumulate over weeks. The confusion ("why am I being penalised for commuting?") undermines trust in the wallet feature.
+
+**Evidence:** `focus-wallet.js:89-91` — `cfg.sportsActivities.some(term => label.includes(String(term).toLowerCase()))`. The default `sportsActivities` array contains `'sport'` (line 27). `"transport".includes("sport")` evaluates to `true`. Other affected substrings: any phrase with "transport" in the activity name. The fix is to use word-boundary matching: `label.split(/\W+/).includes(term)` or `new RegExp('\\b' + term + '\\b').test(label)`.
+
+**Effort:** Low — one-line change per keyword check strategy, plus a test case. Could also remove the bare `'sport'` term from the defaults and rely on the more specific sport names (pickleball, basketball, tennis, soccer, etc.) already in the list. | **Dependencies:** `focus-wallet.js:isFocusWalletSportsEntry()`. | **Confidence:** High — `"transport".includes("sport")` is verifiable in any JS console. | **Ambiguity:** Low on the bug; low-medium on the best fix (remove 'sport' term vs. word-boundary regex).
+
+**Why now vs later:** After PROP-007 and PROP-004. The wallet feature is in use, so every week that passes with this bug adds miscounted sessions for affected users. But it's not a data-loss issue and can be batched with other wallet fixes.
+
+**Goal-adjusted priority:** P2 — Goal #3 alignment (incorrect score), but only affects users who log "transport" activities. Low blast radius, medium evidence of actual user impact.
+
+---
+
 ### PROP-006 — Category clarity: where do cooking and church work go? (capture 75)
 
 id: PROP-006
