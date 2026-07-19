@@ -101,3 +101,28 @@ dup-count: 4
 **Goal-adjusted priority:** P3 (reject-class).
 
 ---
+
+### PROP-006 — Category clarity: where do cooking and church work go? (capture 75)
+
+id: PROP-006
+captures: 20260719T1656Z-75
+- **status:** pending
+dup-count: 1
+
+> **Decision: Park** — Real usage friction: user couldn't tell which category bucket to use for "cooking" or "church work." Worth addressing, but needs clarification (relabeling? new presets? descriptions?) before it can be specced. Park behind PROP-004 bug fix and pending Current Objective.
+
+> **Risk:** Low — Most natural fixes (clearer category labels, new preset items, or in-picker examples) are UI-only changes that don't touch entry schema or Firebase sync. Escalates to High if a solution requires renaming or restructuring stored category keys — flag before building.
+
+**Goal alignment:** Supports Goal #1 (Make logging frictionless) — category confusion slows the ping→log loop and risks mislabeled entries. Weakly supports Goal #4 (Insight must change behaviour) — insights built on miscategorised entries are less meaningful.
+
+**User value:** Medium. First idea-type capture from real usage (not a bot test). If users can't confidently pick a category, they log wrong, skip, or quietly undermine the audit's truthfulness.
+
+**Evidence:** 1 occurrence, genuine usage. No dups in PROPOSALS.md or ROADMAP.md. Category confusion is a known friction point for any time-tracker — the user names two concrete examples (cooking, church work) that don't obviously fit existing buckets.
+
+**Effort:** Low–Medium depending on solution: adding/relabeling presets is very small; a guided category picker or inline descriptions is Medium. | **Dependencies:** CODEMAP.md (Category/Preset section — need to locate where category definitions live before scoping). | **Confidence:** High that friction exists; Low on exact fix until scope is clarified. | **Ambiguity:** High — "making the category clearer" could mean: (a) add cooking/church work as default presets, (b) rename or regroup existing category buckets, (c) add descriptions/examples to the picker UI, or (d) build a category hierarchy. Needs one clarifying follow-up before speccing.
+
+**Why now vs later:** Later — no data is lost from category confusion (entries are still logged, just possibly mislabeled). PROP-004 (timer restore bug, P1, data-correctness) takes priority. Re-evaluate once Current Objective is set and PROP-004 is in the build queue.
+
+**Goal-adjusted priority:** P2 — genuine UX friction tied to Goal #1, but outranked by a P1 data-correctness bug (PROP-004) and an unset Current Objective.
+
+---

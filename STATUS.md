@@ -5,6 +5,12 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-07-19 — Triage + Plan (run 2)
+
+STEP A: 1 new capture processed (msg_id 75, /idea). Category clarity idea ("where do cooking/church work go?") → PROP-006 (Park, P2, Goal #1). Archived to captures/processed/2026/07/. STEP B: BUILD_QUEUE.md empty; no tasks added. No blockers. **Action needed:** human approves PROP-004 (timer-restore bug, P1) and moves it to BUILD_QUEUE.md to unlock the build pipeline. PROP-006 parked pending PROP-004 resolution and Current Objective being set.
+
+---
+
 ## 2026-07-19 — Triage + Plan
 
 STEP A: 0 new captures (all 10 inbox files already `status: triaged`); nothing to process. STEP B: BUILD_QUEUE.md empty; no tasks added. No blockers. **Action needed:** human approves PROP-004 (timer-restore bug, P1) and moves it to BUILD_QUEUE.md to unlock the build pipeline.
