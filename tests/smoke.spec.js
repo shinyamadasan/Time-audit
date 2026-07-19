@@ -2852,6 +2852,66 @@ test('sync now pulls newer remote recurring templates', async ({ page }) => {
   await expect(page.locator('#day-template-panel')).toContainText('Scribe shift');
 });
 
+test('template sync doctor reports local and remote recurring blocks', async ({ page }) => {
+  await openApp(page, {
+    settings: {
+      _templatesSavedAt: 100,
+      templates: [{
+        id: 'local-lunch',
+        activity: 'Lunch',
+        energy: 'recovery',
+        days: [3],
+        startTime: '13:00',
+        endTime: '13:30',
+        autoLog: false,
+        enabled: true
+      }]
+    }
+  });
+
+  await page.evaluate(async () => {
+    const remoteSettings = {
+      _templatesSavedAt: 200,
+      templates: [{
+        id: 'remote-scribe',
+        activity: 'Scribe shift',
+        energy: 'nine5',
+        days: [1],
+        startTime: '22:00',
+        endTime: '08:00',
+        autoLog: false,
+        enabled: true
+      }]
+    };
+    fbRoomRef = {
+      child(path) {
+        return {
+          once() {
+            return Promise.resolve({ val: () =>
+              path === 'settings' ? remoteSettings :
+              path === 'templates' ? remoteSettings.templates :
+              path === 'templatesSavedAt' ? 200 :
+              null
+            });
+          }
+        };
+      }
+    };
+    roomCode = 'doctor-room';
+    currentUser = { uid: 'doctor-user' };
+    await runTemplateSyncDoctor();
+  });
+
+  const output = page.locator('#template-sync-doctor-results');
+  await expect(output).toContainText('build:');
+  await expect(output).toContainText('room: doctor-room');
+  await expect(output).toContainText('local.count: 1');
+  await expect(output).toContainText('local.items: Lunch');
+  await expect(output).toContainText('remote.settings.count: 1');
+  await expect(output).toContainText('remote.settings.items: Scribe shift');
+  await expect(output).toContainText('remote.top.count: 1');
+});
+
 test('remote timer stop resets local state and clears restored timer storage', async ({ page }) => {
   await openApp(page);
   const startTs = Date.now() - 5 * 60 * 1000;
