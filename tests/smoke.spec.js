@@ -1588,6 +1588,68 @@ test('recurring template mutations publish template sync paths', async ({ page }
   }));
 });
 
+test('sync now uploads local recurring templates when remote is empty', async ({ page }) => {
+  await openApp(page, {
+    settings: {
+      _savedAt: 900,
+      _templatesSavedAt: 900,
+      templates: [{
+        id: 'local-scribe',
+        activity: 'Scribe shift',
+        energy: 'nine5',
+        days: [1, 2, 3, 4, 5],
+        startTime: '22:00',
+        endTime: '08:00',
+        autoLog: false,
+        enabled: true
+      }]
+    }
+  });
+
+  const result = await page.evaluate(async () => {
+    const updates = [];
+    fbDb = {
+      ref() {
+        return {
+          once() {
+            return Promise.resolve({ val: () => ({ _savedAt: 100, _templatesSavedAt: 0, templates: [] }) });
+          }
+        };
+      }
+    };
+    fbRoomRef = {
+      child(path) {
+        return {
+          once() {
+            return Promise.resolve({ val: () =>
+              path === 'settings' ? { _savedAt: 100, _templatesSavedAt: 0, templates: [] } :
+              path === 'templates' ? [] :
+              path === 'templatesSavedAt' ? 0 :
+              null
+            });
+          }
+        };
+      },
+      update(payload) {
+        updates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    const ok = await forceSyncNow();
+    return { ok, updates };
+  });
+
+  expect(result.ok).toBe(true);
+  expect(result.updates).toContainEqual(expect.objectContaining({
+    templates: expect.arrayContaining([expect.objectContaining({ activity: 'Scribe shift' })]),
+    templatesSavedAt: 900
+  }));
+  expect(result.updates).toContainEqual(expect.objectContaining({
+    'settings/templates': expect.arrayContaining([expect.objectContaining({ activity: 'Scribe shift' })]),
+    'settings/_templatesSavedAt': 900
+  }));
+});
+
 test('today template rows expose log and off actions without settings clutter', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 9, 0, 0);
   await openApp(page, {
