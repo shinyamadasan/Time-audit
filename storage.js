@@ -463,7 +463,9 @@ function syncSettings() {
     } else if (localTemplateStamp > remoteTemplateStamp) {
       fbRoomRef.update({
         'settings/templates': settings.templates,
-        'settings/_templatesSavedAt': localTemplateStamp
+        'settings/_templatesSavedAt': localTemplateStamp,
+        'templates': settings.templates,
+        'templatesSavedAt': localTemplateStamp
       });
     }
   }).catch(() => {});
@@ -477,10 +479,25 @@ function syncTemplates() {
   return fbRoomRef.update({
     'settings/templates': settings.templates,
     'settings/_templatesSavedAt': stamp,
-    'settings/_savedAt': settings._savedAt || stamp
+    'settings/_savedAt': settings._savedAt || stamp,
+    'templates': settings.templates,
+    'templatesSavedAt': stamp
   })
     .then(() => true)
     .catch(err => { notifySyncWriteFailed(err); return false; });
+}
+
+function applyRemoteTemplates(remoteTemplates, remoteStamp = 0) {
+  const incoming = normalizeTemplates(remoteTemplates);
+  if (!incoming.length) return false;
+  const localTemplates = normalizeTemplates(settings.templates);
+  const localStamp = templateSyncStamp({ ...settings, templates: localTemplates });
+  const incomingStamp = Number(remoteStamp || 0);
+  if (localTemplates.length && localStamp > incomingStamp) return false;
+  settings.templates = incoming;
+  settings._templatesSavedAt = incomingStamp || Number(settings._templatesSavedAt || 0) || Date.now();
+  localStorage.setItem('ta3-settings', JSON.stringify(settings));
+  return true;
 }
 
 function applyRemoteSettings(remoteSettings) {
@@ -824,6 +841,17 @@ function startSync() {
     }
   });
 
+  fbDb.ref(`rooms/${roomCode}/templates`).on('value', snap => {
+    fbDb.ref(`rooms/${roomCode}/templatesSavedAt`).once('value').then(stampSnap => {
+      const changed = applyRemoteTemplates(snap.val(), stampSnap.val());
+      if (changed) {
+        _todayRenderKey = '__FORCE__';
+        renderToday();
+        renderSettings();
+      }
+    });
+  });
+
   fbDb.ref(`rooms/${roomCode}/reviews`).on('value', snap => {
     const val = snap.val();
     if (!val) return;
@@ -989,21 +1017,24 @@ async function forceSyncNow() {
   if (btn) btn.disabled = true;
   updateSyncPill('syncing', 'syncing...');
   try {
-    const [timerSnap, awaySnap, settingsSnap] = await Promise.all([
+    const [timerSnap, awaySnap, settingsSnap, templatesSnap, templateStampSnap] = await Promise.all([
       fbRoomRef.child('timer').once('value'),
       fbRoomRef.child('awayState').once('value'),
-      fbRoomRef.child('settings').once('value')
+      fbRoomRef.child('settings').once('value'),
+      fbRoomRef.child('templates').once('value'),
+      fbRoomRef.child('templatesSavedAt').once('value')
     ]);
     const timerChanged = applyRemoteTimerState(timerSnap.val());
     const awayChanged = applyRemoteAwayState(awaySnap.val());
     const settingsChanged = applyRemoteSettings(settingsSnap.val());
+    const templatesChanged = applyRemoteTemplates(templatesSnap.val(), templateStampSnap.val());
     await Promise.all([syncEntries(), syncFocusRedemptions(), syncSettings()]);
     localStorage.setItem('ta3-last-sync', Date.now());
-    if (timerChanged || awayChanged || settingsChanged) {
+    if (timerChanged || awayChanged || settingsChanged || templatesChanged) {
       persist();
       scheduleRenderToday();
     }
-    if (settingsChanged) renderSettings();
+    if (settingsChanged || templatesChanged) renderSettings();
     updateSyncPill('connected', 'synced');
     showToast('Sync checked');
     return true;
@@ -1448,7 +1479,7 @@ function teardownRoomListeners() {
   if (!fbDb || !roomCode) return;
   stopSyncDetailAgeTicker();
   stopSyncReconcileTicker();
-  const paths = ['timer','entries','intention','devices','settings','breakState','reviews','weeklyReviews','focusRedemptions','awayState','plans'];
+  const paths = ['timer','entries','intention','devices','settings','templates','templatesSavedAt','breakState','reviews','weeklyReviews','focusRedemptions','awayState','plans'];
   paths.forEach(p => fbDb.ref(`rooms/${roomCode}/${p}`).off());
   fbDb.ref('.info/connected').off();
   if (fbRoomRef) fbRoomRef.off();
