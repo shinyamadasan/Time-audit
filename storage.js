@@ -491,12 +491,14 @@ function applyRemoteSettings(remoteSettings) {
   const localTemplates = normalizeTemplates(settings.templates);
   const localTemplateStamp = templateSyncStamp({ ...settings, templates: localTemplates });
   const remoteTemplateStamp = templateSyncStamp(val);
+  const remoteHasTemplates = val.templates.length > 0;
+  const localHasTemplates = localTemplates.length > 0;
   let changed = false;
   let pushLocalTemplates = false;
 
   if (remoteTs > localTs) {
     settings = { ...settings, ...val };
-    if (localTemplateStamp > remoteTemplateStamp) {
+    if (localTemplateStamp > remoteTemplateStamp && localHasTemplates) {
       settings.templates = localTemplates;
       settings._templatesSavedAt = localTemplateStamp;
       pushLocalTemplates = true;
@@ -507,6 +509,10 @@ function applyRemoteSettings(remoteSettings) {
   } else if (remoteTemplateStamp > localTemplateStamp) {
     settings.templates = val.templates;
     settings._templatesSavedAt = remoteTemplateStamp;
+    changed = true;
+  } else if (remoteHasTemplates && !localHasTemplates) {
+    settings.templates = val.templates;
+    settings._templatesSavedAt = remoteTemplateStamp || Number(val._savedAt || 0) || Date.now();
     changed = true;
   } else if (localTemplateStamp > remoteTemplateStamp) {
     pushLocalTemplates = true;
