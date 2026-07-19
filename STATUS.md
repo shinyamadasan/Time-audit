@@ -5,6 +5,12 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-07-18 — Triage + Plan
+
+STEP A: 0 new captures (all 10 inbox files already `status: triaged`); nothing to process. STEP B: BUILD_QUEUE.md empty; no tasks added. No blockers. **Action needed:** human approves PROP-004 (timer-restore bug, P1) and moves it to BUILD_QUEUE.md to unlock the build pipeline.
+
+---
+
 ## 2026-07-17 — Triage + Plan
 
 STEP A: 0 new captures (all 10 inbox files already `status: triaged`); nothing to process. STEP B: BUILD_QUEUE.md empty; no tasks added. No blockers. **Action needed:** human approves PROP-004 (timer-restore bug, P1) and moves it to BUILD_QUEUE.md to unlock the build pipeline.
