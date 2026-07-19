@@ -511,7 +511,11 @@ function syncSettings() {
     const remoteTemplateStamp = templateSyncStamp(remote);
 
     if (localSavedAt > remoteSavedAt) {
-      fbRoomRef.update({ settings });
+      fbRoomRef.update({
+        settings,
+        templates: settings.templates,
+        templatesSavedAt: localTemplateStamp
+      });
     } else if (localTemplateStamp > remoteTemplateStamp) {
       fbRoomRef.update({
         'settings/templates': settings.templates,
@@ -1080,7 +1084,7 @@ async function forceSyncNow() {
     const awayChanged = applyRemoteAwayState(awaySnap.val());
     const settingsChanged = applyRemoteSettings(settingsSnap.val());
     const templatesChanged = applyRemoteTemplates(templatesSnap.val(), templateStampSnap.val());
-    await Promise.all([syncEntries(), syncFocusRedemptions(), syncSettings()]);
+    await Promise.all([syncEntries(), syncFocusRedemptions(), syncSettings(), syncTemplates()]);
     localStorage.setItem('ta3-last-sync', Date.now());
     if (timerChanged || awayChanged || settingsChanged || templatesChanged) {
       persist();
