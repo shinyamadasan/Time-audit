@@ -1582,7 +1582,9 @@ test('recurring template mutations publish template sync paths', async ({ page }
   expect(result.templates).toEqual([{ activity: 'Scribe shift', days: [1] }]);
   expect(result.updates).toContainEqual(expect.objectContaining({
     'settings/templates': expect.arrayContaining([expect.objectContaining({ activity: 'Scribe shift' })]),
-    'settings/_templatesSavedAt': expect.any(Number)
+    'settings/_templatesSavedAt': expect.any(Number),
+    templates: expect.arrayContaining([expect.objectContaining({ activity: 'Scribe shift' })]),
+    templatesSavedAt: expect.any(Number)
   }));
 });
 
@@ -2782,19 +2784,20 @@ test('sync now pulls newer remote recurring templates', async ({ page }) => {
   });
 
   const ok = await page.evaluate(async () => {
+    const remoteTemplates = [{
+      id: 'pc-scribe',
+      activity: 'Scribe shift',
+      energy: 'nine5',
+      days: [1],
+      startTime: '22:00',
+      endTime: '08:00',
+      autoLog: false,
+      enabled: true
+    }];
     const remoteSettings = {
       _savedAt: 200,
       _templatesSavedAt: 500,
-      templates: [{
-        id: 'pc-scribe',
-        activity: 'Scribe shift',
-        energy: 'nine5',
-        days: [1],
-        startTime: '22:00',
-        endTime: '08:00',
-        autoLog: false,
-        enabled: true
-      }]
+      templates: []
     };
     window.__syncUpdates = [];
     fbDb = {
@@ -2808,7 +2811,12 @@ test('sync now pulls newer remote recurring templates', async ({ page }) => {
       child(path) {
         return {
           once() {
-            return Promise.resolve({ val: () => path === 'settings' ? remoteSettings : null });
+            return Promise.resolve({ val: () =>
+              path === 'settings' ? remoteSettings :
+              path === 'templates' ? remoteTemplates :
+              path === 'templatesSavedAt' ? 500 :
+              null
+            });
           }
         };
       },
