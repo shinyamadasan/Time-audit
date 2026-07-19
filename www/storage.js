@@ -404,6 +404,58 @@ function renderSyncEventLog() {
   return true;
 }
 
+function templateSyncDoctorSummary(label, templates, stamp) {
+  const list = normalizeTemplates(templates);
+  const names = list.map(tpl =>
+    `${tpl.activity || '(blank)'} [${normalizeTemplateDays(tpl.days).map(dayTemplateLabel).join(',') || 'no days'} ${tpl.startTime || '?'}-${tpl.endTime || '?'}]`
+  );
+  return [
+    `${label}.count: ${list.length}`,
+    `${label}.stamp: ${stamp || 0}`,
+    `${label}.items: ${names.length ? names.join(' | ') : '(none)'}`
+  ];
+}
+
+async function runTemplateSyncDoctor() {
+  const el = document.getElementById('template-sync-doctor-results');
+  const btn = document.getElementById('template-sync-doctor-btn');
+  if (!el) return false;
+  el.style.display = 'block';
+  el.textContent = 'Checking template sync...';
+  if (btn) btn.disabled = true;
+  try {
+    const localLines = templateSyncDoctorSummary('local', settings.templates, settings._templatesSavedAt);
+    const base = [
+      `build: ${typeof APP_BUILD !== 'undefined' ? APP_BUILD : '(unknown)'}`,
+      `room: ${roomCode || '(none)'}`,
+      `user: ${currentUser?.uid || '(signed out)'}`,
+      `device: ${syncedDeviceId || '(unknown)'}`,
+      ...localLines
+    ];
+    if (!fbRoomRef) {
+      el.textContent = [...base, 'remote: not connected'].join('\n');
+      return false;
+    }
+    const [settingsSnap, templatesSnap, templatesStampSnap] = await Promise.all([
+      fbRoomRef.child('settings').once('value'),
+      fbRoomRef.child('templates').once('value'),
+      fbRoomRef.child('templatesSavedAt').once('value')
+    ]);
+    const remoteSettings = settingsSnap.val() || {};
+    const remoteLines = [
+      ...templateSyncDoctorSummary('remote.settings', remoteSettings.templates, remoteSettings._templatesSavedAt),
+      ...templateSyncDoctorSummary('remote.top', templatesSnap.val(), templatesStampSnap.val())
+    ];
+    el.textContent = [...base, ...remoteLines].join('\n');
+    return true;
+  } catch (err) {
+    el.textContent = `Template sync doctor failed: ${err?.message || err}`;
+    return false;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // ══════════════════════════════════════════════════════
 // PERSIST / LOAD
 // ══════════════════════════════════════════════════════
