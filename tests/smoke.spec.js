@@ -1504,6 +1504,54 @@ test('settings sync preserves and pushes newer local recurring templates', async
   }));
 });
 
+test('settings sync pulls non-empty remote templates over empty newer local stamp', async ({ page }) => {
+  await openApp(page, {
+    settings: {
+      _savedAt: 900,
+      _templatesSavedAt: 900,
+      templates: []
+    }
+  });
+
+  const result = await page.evaluate(() => {
+    const changed = applyRemoteSettings({
+      _savedAt: 500,
+      _templatesSavedAt: 500,
+      templates: [{
+        id: 'pc-scribe',
+        activity: 'Scribe shift',
+        energy: 'nine5',
+        days: [1],
+        startTime: '22:00',
+        endTime: '08:00',
+        autoLog: false,
+        enabled: true
+      }]
+    });
+    return {
+      changed,
+      templates: settings.templates.map(t => ({
+        id: t.id,
+        activity: t.activity,
+        days: t.days,
+        startTime: t.startTime,
+        endTime: t.endTime
+      })),
+      templateStamp: settings._templatesSavedAt
+    };
+  });
+
+  expect(result.changed).toBe(true);
+  expect(result.templates).toEqual([{
+    id: 'pc-scribe',
+    activity: 'Scribe shift',
+    days: [1],
+    startTime: '22:00',
+    endTime: '08:00'
+  }]);
+  expect(result.templateStamp).toBe(500);
+});
+
 test('recurring template mutations publish template sync paths', async ({ page }) => {
   await openApp(page);
 
