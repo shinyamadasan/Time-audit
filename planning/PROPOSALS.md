@@ -198,3 +198,75 @@ dup-count: 1
 **Goal-adjusted priority:** P2 — genuine UX friction tied to Goal #1, but outranked by a P1 data-correctness bug (PROP-004) and an unset Current Objective.
 
 ---
+
+### PROP-010 — `/approve all` approval command (capture 82)
+
+id: PROP-010
+captures: 20260720T0849Z-82
+- **status:** pending
+dup-count: 1
+
+> **Decision: Reject** (as a product proposal) — `/approve all` is a human approval-gate command, not a feature request or bug report. The user intends to approve all currently pending "Approve"-recommended proposals (PROP-004, PROP-007, PROP-008, PROP-009). Triage cannot execute approvals; ROADMAP.md and BUILD_QUEUE.md are write-protected in this step. The signal is noted and flagged in STATUS.md for the next human review.
+
+> **Risk:** Low — no code or data touched by the capture itself. The downstream approval action (moving proposals to ROADMAP.md) carries the risk profile of the individual approved proposals.
+
+**Goal alignment:** none as a proposal — this is an administrative command, not a product change.
+**User value:** none intrinsic; the value is in the downstream approvals it signals.
+**Evidence:** 1 occurrence; clear intent given 4 pending proposals with "Approve" decisions in PROPOSALS.md at time of capture. Distinct from PROP-002 (lone `/approve` when PROPOSALS.md was empty — noise); this one has clear referents.
+**Effort:** n/a | **Dependencies:** human manually moves PROP-004/007/008/009 to ROADMAP.md + BUILD_QUEUE.md | **Confidence:** high (intent is unambiguous) | **Ambiguity:** low.
+**Why now vs later:** never (as a proposal) — the approval action itself is what matters, not logging it as a feature.
+**Goal-adjusted priority:** P3 (reject-class as proposal; the approved items have their own priorities).
+
+**⚠ Action required:** Human should move PROP-004 (P1), PROP-007 (P1), PROP-008 (P2), PROP-009 (P2) to `planning/ROADMAP.md` (Approved Backlog) and add them to `planning/BUILD_QUEUE.md` to unblock the build pipeline.
+
+---
+
+### PROP-011 — Auto-timer toggle: enable / disable auto-start (capture 84)
+
+id: PROP-011
+captures: 20260720T0850Z-84
+- **status:** pending
+dup-count: 1
+
+> **Decision: Approve** — Real usage frustration: the timer auto-starts when the app opens even when the user is not working. A user-controlled toggle (on/off for auto-start) would eliminate unwanted entries and reduce noise in the audit log. First direct UX complaint about timer behavior from real use (not testing).
+
+> **Risk:** High — The timer system is the most fragile part of the codebase. Hard Rules #4 (stop heartbeat on every exit), #7 (device guard in `doPing()`), and #8 (timer-restore block order in INIT) all touch the same code path as any auto-start toggle. A poorly placed guard could break crash detection, multi-device safety, or timer restore — silently. Must be implemented with CODEMAP INIT + Timer sections read first. Risk gate: `approved`, not `done`.
+
+**Goal alignment:** Supports Goal #1 (Make logging frictionless) — forced auto-start creates friction and can produce wrong or unwanted log entries. Weakly supports Goal #2 (Capture the truth) — auto-entries the user didn't intend distort the audit record. Mixed with Goal #5 (stay maintainable) — the timer is the red-zone core of the app.
+
+**User value:** Medium-High. The user explicitly called this "annoying" in real daily use. If auto-start fires on non-work opens (e.g., checking a past entry, opening for a break-log), it silently starts a new entry the user must then delete or correct — classic log-pollution. A toggle is the minimum corrective.
+
+**Evidence:** 1 occurrence, genuine usage frustration (not a bot test). No PROPOSALS.md or ROADMAP.md dup. Likely recurring — timer auto-start on any app open is a behavioral trigger every time the app is used.
+
+**Effort:** Medium. Requires reading CODEMAP INIT + Timer sections to locate where auto-start fires, adding a `localStorage`-persisted preference key, and threading a guard through the start sequence without breaking Hard Rules. | **Dependencies:** CODEMAP.md (INIT section, Timer section), DECISIONS.md (any timer-start decisions), Hard Rules #4/#7/#8. | **Confidence:** High that the frustration is real and the feature is buildable; Medium on root cause (need to confirm which specific auto-start path fires on open). | **Ambiguity:** Medium — "auto timer" is not defined; could mean (a) timer auto-resumes an idle session on app open, (b) interval ping auto-fires on first load, or (c) the hero auto-transitions to "working" without user confirmation. Needs one clarifying read of CODEMAP INIT before speccing.
+
+**Why now vs later:** After PROP-004 and PROP-007 (both P1 data-correctness bugs). The auto-timer annoyance is a daily frustration but produces recoverable log entries (user can delete/correct), whereas PROP-004 (timer restore) and PROP-007 (broken escalation) produce silent data loss and dead behavioral feedback. Once P1 bugs land, this should be next.
+
+**Goal-adjusted priority:** P2 — Goal #1 alignment, real daily friction, but outranked by two confirmed P1 bugs (PROP-004, PROP-007).
+
+---
+
+### PROP-012 — In-app calendar / appointment planning (capture 86)
+
+id: PROP-012
+captures: 20260720T0856Z-86
+- **status:** pending
+dup-count: 1
+
+> **Decision: Park** — The user wants to plan appointments during the day inside the app (like Google Calendar), with an optional Google Calendar sync. Valid product direction for closing the "planned vs actual" gap, but this is a large-scope feature addition — effectively a second major subsystem alongside the timer/audit core. Park behind current P1/P2 bug fixes and pending Current Objective. Revisit once the app is stable and the Current Objective is set.
+
+> **Risk:** High — A calendar feature requires new data structures (appointment/event schema), new Firebase RTDB nodes, and potentially Google Calendar OAuth (external API, credential management). Any new schema touching RTDB sync is red-zone per DECISIONS.md D-032. If planned events need to appear on the timeline alongside logged entries, that also risks touching the fragile Timeline Helpers (Hard Rules #1/#2/#3). Risk gate will be `approved` for any implementation touching those paths.
+
+**Goal alignment:** Supports Goal #2 (Capture the truth of your day) — knowing what was planned vs what actually happened is a meaningful audit dimension. Partially supports Goal #1 (Make logging frictionless) — pre-scheduled blocks could auto-suggest category/task at log time. Conflicts with current priority (stability / P1 bugs). No direct conflict with any North-star goal, but the Current Objective is unset, so full alignment cannot be scored.
+
+**User value:** Medium. The feature closes a genuine gap — ChronaSense currently captures what you *did*, not what you *planned*. The planned-vs-actual comparison is high value for a personal time audit. However, the user also mentions Google Calendar integration, which many users already have running — the in-app planning option may serve users who don't use Google Calendar (e.g., the "recurring things" use case the user mentions).
+
+**Evidence:** 1 occurrence, genuine product vision from real usage. No PROPOSALS.md or ROADMAP.md dup. The "recurring things" mention suggests the user is already thinking in terms of schedule patterns, not one-off events. No demand signal beyond this one capture.
+
+**Effort:** High. This is a new major feature, not a bug fix or small UX change. Minimum scope: (a) appointment data model + Firebase schema, (b) calendar day-view UI, (c) integration with the timeline display. Optional scope: Google Calendar OAuth + two-way sync. Likely 3–5 tasks minimum. | **Dependencies:** CODEMAP.md (Timeline, INIT, Firebase Sync sections), DECISIONS.md (RTDB schema decisions), docs/DATA_MODEL.md (existing entry schema). | **Confidence:** Low on scope until further scoped (the user's request spans a wide range from "simple appointment list" to "full Google Calendar sync"). | **Ambiguity:** High — "planning" could mean: (a) add appointment/reminder entries to the timeline, (b) a separate calendar view with time blocks, (c) recurring schedule templates, or (d) bi-directional Google Calendar sync. Needs significant scoping before speccing.
+
+**Why now vs later:** Later — two P1 bugs (PROP-004, PROP-007) and two P2 UX fixes (PROP-008, PROP-009, PROP-011) should land first. This is a product expansion, not a stability fix. Revisit when Current Objective is set and the bug backlog is clear.
+
+**Goal-adjusted priority:** P3 — Valid product direction but large scope, high ambiguity, and not aligned with current stability/bug-fix priority. Down-weighted further by unset Current Objective.
+
+---
