@@ -65,6 +65,15 @@ $items = foreach ($b in $blocks) {
 $today = Get-Date -Format 'ddd dd MMM'
 $total = @($items).Count
 
+# Telegram hard-caps a single message at 4096 characters (confirmed live: a 12-proposal digest at
+# ~5000 chars failed outright with "Bad Request: message is too long" -- the send doesn't degrade
+# gracefully, it just fails completely, so the human gets NOTHING instead of even a partial digest).
+# This script has no way to know Markdown-entity overhead exactly, so it stops adding items well
+# before the real limit rather than truncating the final string (which would risk cutting a
+# Markdown entity in half and trading one delivery failure for a different one -- "can't parse
+# entities"). Stopping at an item boundary keeps every emitted line well-formed.
+$MAX_CONTENT_LEN = 3700   # leaves ~300 chars of headroom for the fixed footer below
+
 $lines = New-Object System.Collections.Generic.List[string]
 $lines.Add("$($g.sun) *ChronaSense $($g.dash) Morning Digest*")
 $lines.Add("$today $($g.dot) $total proposals waiting $($g.dot) $($g.target) Objective: *$objective*")
@@ -77,15 +86,35 @@ $groups = [ordered]@{
     'Reject'  = @{ icon = $g.bin;   label = 'RECOMMEND REJECT' }
 }
 
+function Get-JoinedLength([System.Collections.Generic.List[string]]$L) { ($L -join "`n").Length }
+
+$shownCount = 0
+$truncated = $false
+
 foreach ($v in $groups.Keys) {
+    if ($truncated) { break }
     $grp = @($items | Where-Object { $_.Verdict -eq $v })
     if ($grp.Count -eq 0) { continue }
-    $lines.Add("$($groups[$v].icon) *$($groups[$v].label) ($($grp.Count))*")
+
+    $groupHeaderLine = "$($groups[$v].icon) *$($groups[$v].label) ($($grp.Count))*"
+    if ((Get-JoinedLength $lines) + $groupHeaderLine.Length -gt $MAX_CONTENT_LEN) { $truncated = $true; break }
+    $lines.Add($groupHeaderLine)
+
     foreach ($it in $grp) {
         $tail = if ($it.Full -ne $it.Verdict) { " _($($it.Full))_" } else { "" }
-        $lines.Add("*$($it.Num)* $($g.dot) $($it.Title)")
-        $lines.Add("   $($g.arrow) $($it.Reason)$tail")
+        $itemLine1 = "*$($it.Num)* $($g.dot) $($it.Title)"
+        $itemLine2 = "   $($g.arrow) $($it.Reason)$tail"
+        if ((Get-JoinedLength $lines) + $itemLine1.Length + $itemLine2.Length + 2 -gt $MAX_CONTENT_LEN) { $truncated = $true; break }
+        $lines.Add($itemLine1)
+        $lines.Add($itemLine2)
+        $shownCount++
     }
+    $lines.Add("")
+}
+
+if ($truncated) {
+    $omitted = $total - $shownCount
+    $lines.Add("_...+$omitted more waiting, too many to fit in one message $($g.dash) see planning/PROPOSALS.md, or reply to approve/park/reject by number anyway._")
     $lines.Add("")
 }
 
