@@ -1,5 +1,24 @@
 # ChronaSense — Changelog
 
+## TASK-001 — approved, held for /merge (branch: task-001) — 2026-07-20
+changed:
+  - tools/Run-Codex-Build.ps1 (before auto-chaining a status:-review build into review, requires the
+    build touched CHANGELOG.md or TEST_REPORT.md; blocks as a no-op with a clear note otherwise)
+  - tools/Dispatch-Commands.ps1 (factored build/review classification into a shared
+    Resolve-ReviewOutcome; added crashed-review-retry and no-op-retry cases; fixed a HELD-vs-APPROVED
+    false-positive; added a pending-review-resume step to Invoke-Autopilot so plain /go resumes a
+    stuck review; RETRYING vs NEEDS YOU summary wording)
+tests: `[System.Management.Automation.Language.Parser]::ParseFile` on both files (pass); isolated
+  fixture harness against Resolve-ReviewOutcome, extracted from this repo's own copy of the code (5
+  cases / 9 assertions, all pass)
+blockers: none
+deviations: ported directly from the Meal Prep app (sibling project, sharing this exact
+  tools/Dispatch-Commands.ps1 / tools/Run-Codex-Build.ps1 template) after that app found and fixed
+  this bug live as its own TASK-032/D-051; full live end-to-end verification (a real crashed review,
+  a real no-op retry) not attempted here either -- not safely reproducible without spawning real
+  codex/claude CLI processes against a live branch
+→ status set to `approved` in TASKS.md (red-zone automation surface, held for human /merge)
+
 ## [0.4.0] — 2026-04-19
 ### Added
 - **Phone usage auto-tracking (Android)** — detects Instagram, YouTube, TikTok, Facebook, Twitter/X, Reddit, Snapchat, Pinterest, Netflix, Google Meet, Telegram, WhatsApp, Chrome and more via Android UsageStats API. Sessions logged automatically every 15 minutes.

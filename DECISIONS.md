@@ -198,4 +198,14 @@ Non-obvious choices baked into the code. Read before refactoring.
 
 **Why:** Capacitor requires a `webDir` folder (`www/`) as the source for the Android WebView. Rather than maintaining two copies, `sync.bat`/`sync.sh` copies root → `www/` before each Android build. All editing happens at the root.
 
+---
+
+## 19. `tools/Dispatch-Commands.ps1` / `tools/Run-Codex-Build.ps1` fixed to match the Meal Prep app's D-051 (ported, not independently discovered)
+
+**Decision:** Two automation bugs, found and fixed in the sibling Meal Prep app first, ported here directly: (1) `Run-Codex-Build.ps1` now refuses to auto-chain a build into review unless it actually touched `CHANGELOG.md` or `TEST_REPORT.md` — a rework retry that only flips a status field, changing nothing else, is now caught as a "no-op" before it ever reaches review. (2) `Dispatch-Commands.ps1`'s `Invoke-Autopilot` classification was factored into a shared `Resolve-ReviewOutcome` function, gaining a case for a crashed review engine (mirrors `status: review` onto `main` with no strike cap — transient infra flakiness, not a task defect) and a case for the new "build NO-OP" signal (bounded `strike N/3`, same idiom REWORK already uses). A third bug was caught while consolidating: the old inline classifier matched the bare word "APPROVED" against a red-zone "APPROVED but HELD" message and would have marked that task `done` on `main` even though it was never merged — now checked and excluded first. `Invoke-Autopilot` also gained a pending-review-resume step so a plain `/go` (not just an explicit `/review`) resumes a task stuck at `status: review`.
+
+**Why:** This project and the Meal Prep app share the exact same `tools/Dispatch-Commands.ps1` / `tools/Run-Codex-Build.ps1` template (confirmed byte-for-byte identical before this change) — a bug found in one is latent in the other, whether or not it has actually fired here yet. Since the developer runs both projects the same way and wants their AI Dev OS setups kept in parity, porting the fix immediately (rather than waiting for this project to independently hit the same incident) closes the gap before it causes a real stuck task here.
+
+**What NOT to do:** Do not assume this port is fully verified the same way a live incident would be — it's confirmed via parse-checks and an isolated fixture harness against this repo's own copy of the code (9/9 assertions pass), not a real crashed `claude -p`/`codex exec` run. Held at `status: approved` (not auto-merged) for the same reason the Meal Prep app holds this class of change — it touches the AI Dev OS itself.
+
 **What NOT to do:** Do not edit files inside `www/` directly — they will be overwritten on the next sync. Do not commit `www/` changes manually; always run `sync.sh` (or `sync.bat` on Windows) to regenerate it, then commit the result.
