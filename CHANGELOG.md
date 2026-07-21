@@ -1,5 +1,24 @@
 # ChronaSense — Changelog
 
+## TASK-002 — approved, held for /merge (branch: task-002) — 2026-07-21
+changed:
+  - tools/Generate-Digest.ps1 (builds the digest incrementally, stops before a safe char threshold,
+    appends a "+N more" note instead of truncating the raw string)
+  - tools/Dispatch-Commands.ps1 (stale-lock check now verifies the recorded PID is actually still
+    running; lowered the still-running staleness wait from 2 hours to 45 min; sends a Telegram
+    notice via the existing OUTBOX relay when it clears a stale lock instead of clearing silently)
+tests: `[System.Management.Automation.Language.Parser]::ParseFile` on both files (pass); digest fix
+  run against the real, live-failing planning/PROPOSALS.md (12 proposals) -- output 3911 chars,
+  under Telegram's 4096 limit, all Approve/Park items kept; isolated 4-case fixture test of the
+  stale-lock decision logic (dead PID, live+fresh, live+46min, live+44min-boundary), all pass
+blockers: none
+deviations: found live in the same session as TASK-001 -- a real Telegram digest-delivery failure
+  ("message is too long") led to investigating why the queued TASK-001 /merge commands sat
+  unprocessed, which led to discovering the hung-process/2-hour-stale-lock gap. The emergency
+  DIGEST.md content regeneration already landed on main directly, ahead of this branch, since it's
+  a data refresh rather than automation-surface code
+→ status set to `approved` in TASKS.md (red-zone automation surface, held for human /merge)
+
 ## TASK-001 — approved, held for /merge (branch: task-001) — 2026-07-20
 changed:
   - tools/Run-Codex-Build.ps1 (before auto-chaining a status:-review build into review, requires the

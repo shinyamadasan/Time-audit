@@ -5,6 +5,24 @@
 
 ---
 
+## TASK-002 · 2026-07-21
+suite: [System.Management.Automation.Language.Parser]::ParseFile on tools/Generate-Digest.ps1 and
+  tools/Dispatch-Commands.ps1; tools/Generate-Digest.ps1 executed against the real, live-failing
+  planning/PROPOSALS.md (12 pending proposals) with -OutFile pointed at a scratch file; isolated
+  fixture harness against the stale-lock decision logic (same branching as the real fix, run against
+  constructed lock files with real Get-Process checks, not mocked)
+result: both files parse clean, no syntax errors. Digest run against real data: output 3911 chars
+  (Telegram's limit is 4096) -- all 5 RECOMMEND APPROVE items and both RECOMMEND PARK items kept in
+  full, only 1 of 5 RECOMMEND REJECT items shown before the safe-length threshold was reached,
+  followed by a "+4 more waiting ... see planning/PROPOSALS.md" note. Stale-lock logic: 4/4 cases
+  pass -- a lock file whose recorded PID is not currently running clears immediately regardless of
+  timestamp age; a lock with a live PID and a fresh timestamp stays busy; a lock with a live PID and
+  a 46-minute-old timestamp clears; a lock with a live PID and a 44-minute-old timestamp (2 minutes
+  under the new 45-min threshold) stays busy, confirming no false-positive right at the boundary.
+untested: full live end-to-end verification -- a real Telegram send of the truncated digest, and a
+  real hung process actually getting auto-cleared with its Telegram notice actually arriving -- was
+  not attempted beyond the isolated checks above.
+
 ## TASK-001 · 2026-07-20
 suite: [System.Management.Automation.Language.Parser]::ParseFile on tools/Run-Codex-Build.ps1 and
   tools/Dispatch-Commands.ps1; isolated fixture harness against Resolve-ReviewOutcome (extracted from
