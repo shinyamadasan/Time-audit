@@ -804,11 +804,44 @@ function Set-AutomationFlag {
 }
 
 # --- Lock: shared with run-claude.ps1 and the phase runners, so nothing here ever overlaps a
-#     twice-daily scheduled run or another dispatcher invocation. ---
+#     twice-daily scheduled run or another dispatcher invocation.
+#
+#     STALE_LOCK_MINUTES was 2 HOURS until a live incident: a genuinely hung child process (0% CPU,
+#     no log output, no working child process of its own -- confirmed by hand, not assumed) sat
+#     holding this lock for 48+ minutes, completely invisible, until a human happened to go looking
+#     and killed it manually. Two problems, fixed together: (1) the wait before this self-heals was
+#     far longer than any legitimate run needs -- Run-Codex-Build.ps1's own build step caps at 20 min
+#     (CODEX_TIMEOUT_MINUTES) and Run-Merge.ps1's npm test caps at 10 min, so ~35-40 min covers the
+#     worst realistic legitimate case with room to spare; 45 min leaves a safety margin above that
+#     without still being "come back in two hours." (2) clearing the lock was silent -- nothing ever
+#     told the human it happened, so a stuck run and a legitimately-quiet run looked identical from
+#     Telegram. Deliberately does NOT also kill the lingering process automatically -- that is a
+#     bigger, more irreversible action than clearing a lock file, and this repo already has a
+#     human-triggered way to do it explicitly (/stop, below) rather than baking an unattended kill
+#     into ordinary dispatcher startup on a time guess alone. ---
+$STALE_LOCK_MINUTES = 45
 if (Test-Path $lockFile) {
-    $age = (Get-Date) - (Get-Item $lockFile).LastWriteTime
-    if ($age.TotalHours -ge 2) {
+    $lockLines   = @(Get-Content $lockFile -ErrorAction SilentlyContinue)
+    $lockPid     = $lockLines | Select-Object -First 1
+    $age         = (Get-Date) - (Get-Item $lockFile).LastWriteTime
+    $ownerAlive  = if ($lockPid) { [bool](Get-Process -Id $lockPid -ErrorAction SilentlyContinue) } else { $false }
+
+    if (-not $ownerAlive -or $age.TotalMinutes -ge $STALE_LOCK_MINUTES) {
+        $reason = if (-not $ownerAlive) {
+            "its owning process (PID $lockPid) had already exited without cleaning up"
+        } else {
+            "it was $([int]$age.TotalMinutes) min old with its owning process (PID $lockPid) still technically running but showing every sign of being hung"
+        }
         Remove-Item $lockFile -Force
+        if (-not $DryRun) {
+            $noteId   = "auto-recovery-$(Get-Date -Format 'yyyyMMddTHHmmss')Z"
+            $noteText = "note: cleared a stale automation lock because $reason. If a /go, /build, /review, or /merge from around then seemed to vanish, resend it.$(if ($ownerAlive) { " PID $lockPid may still be lingering in the background -- send /stop if this keeps happening (it stops automation AND kills the lock-holding process; /enable to resume after)." } else { '' })"
+            Write-Reply -Id $noteId -Text $noteText
+            $applyNote = { Write-Reply -Id $noteId -Text $noteText; Invoke-Git -C $root add $outboxFile }
+            Invoke-Git -C $root add $outboxFile | Out-Null
+            $ok = Invoke-CommitPushWithRetry -Message 'auto-recovery: cleared stale lock' -Reapply $applyNote
+            if (-not $ok) { Write-Host "WARNING: could not push stale-lock notice after retries -- left as local uncommitted change." }
+        }
     } else {
         Write-Host "Busy: another automation run is in progress (lock is $([int]$age.TotalMinutes) min old). Exiting without processing commands."
         exit 0
