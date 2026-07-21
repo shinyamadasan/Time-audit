@@ -19,3 +19,16 @@ Read the diff before you answer:
 
 To land it:  /merge TASK-002 yes
 Nothing has been merged. main is untouched.
+
+---
+
+## 20260721T1711Z-96-command
+2026-07-21T10:35:19.9325210-07:00
+
+MERGED: TASK-002 (Fix unbounded digest length + silent 2-hour stale-lock wait) -> main, pushed. Deploy follows. TASKS.md updated to 'done'.
+
+Thread reset checkpoint: updated HANDOFF.md.
+New thread prompt:
+Continue this app from this repo.
+Read HANDOFF.md, AGENTS.md, CLAUDE.md, TASKS.md, and CODEMAP.md if present.
+Use Next or /next to resume from the repo state; do not rely on previous chat context.
