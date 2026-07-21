@@ -87,7 +87,7 @@ test steps:
 ---
 
 ### TASK-002 - Fix unbounded digest length + silent 2-hour stale-lock wait
-status: approved
+status: done
 review: Claude implemented directly (tools/Generate-Digest.ps1, tools/Dispatch-Commands.ps1 -- same
   reasoning as TASK-001, Codex cannot commit under tools/). Held at `approved` for human `/merge`.
   Digest fix verified against the real, live-failing planning/PROPOSALS.md data (12 pending
