@@ -415,6 +415,29 @@ if ($anyBlocked.Count -gt 0) {
 }
 
 if ($anyReview.Count -gt 0) {
+    # Guard against a no-op status flip. AGENTS.md requires the builder to append evidence to
+    # CHANGELOG.md AND TEST_REPORT.md before setting status: review -- so a real build reaching
+    # review should always have touched at least one of them. Ported from the Meal Prep app's D-051
+    # fix: an engine can advance a task's status to review while changing nothing else at all
+    # ($changed containing only TASKS.md). Auto-chaining that straight into review either wastes a
+    # review cycle re-confirming the same must-fix items, or -- if that re-review then also crashes --
+    # hides the no-op behind a message that looks like real progress. Catch it here, before review,
+    # every time, rather than relying on the reviewer to notice.
+    $hasEvidence = @($changed | Where-Object { $_ -match '^(CHANGELOG\.md|TEST_REPORT\.md)$' }).Count -gt 0
+    if (-not $hasEvidence) {
+        $changedDesc = if ($changed.Count -gt 0) { $changed -join ', ' } else { 'nothing' }
+        foreach ($t in $anyReview) {
+            Set-TaskStatus -TaskId $t.Id -NewStatus 'blocked' -BlockerNote "$engineUsed exec set status: review but changed only $changedDesc -- no CHANGELOG.md/TEST_REPORT.md evidence, looks like a no-op status flip rather than a real fix." -AutoBlock
+        }
+        Invoke-Git -C $root add TASKS.md
+        Invoke-Git -C $root diff --cached --quiet
+        if ($LASTEXITCODE -ne 0) { Invoke-Git -C $root commit -m "$($first.Id): no-op advance to review caught, marked blocked" | Out-Null }
+        Invoke-Git -C $root push origin $branchName | Out-Null
+        Invoke-Git -C $root checkout main | Out-Null
+        Write-Result "$($first.Id) build NO-OP: reached status: review after $([int]$duration.TotalSeconds)s$fallbackNote but changed only $changedDesc -- no build/test evidence. Marked blocked on $branchName."
+        exit 1
+    }
+
     $buildMsg = "$($first.Id) build reached REVIEW ($($anyReview.Count) of $($tracked.Count) tracked task(s)) after $([int]$duration.TotalSeconds)s$fallbackNote, pushed to $branchName."
     Add-Content -Path $logFile -Value "[Run-Codex-Build] $buildMsg"
     # Auto-chain: no separate manual /review step needed after a clean build. Stay on $branchName for

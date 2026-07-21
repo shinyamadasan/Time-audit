@@ -573,10 +573,72 @@ function Publish-TasksChange {
     }
 }
 
-# ONE mission per /go: release retryable auto-blocks -> plan once if nothing is build-ready ->
-# build exactly one dependency-satisfied task (auto-blocking any dep-blocked higher-priority ones
-# ahead of it) -> auto-review -> auto-merge if approved -> report. The build runner auto-chains its
-# own review internally; every preflight/guard inside it is untouched. See docs/DECISIONS.md D-026/D-027.
+# ONE mission per /go: release retryable auto-blocks -> resume a pending review left by a crashed
+# review engine -> plan once if nothing is build-ready -> build exactly one dependency-satisfied task
+# (auto-blocking any dep-blocked higher-priority ones ahead of it) -> auto-review -> auto-merge if
+# approved -> report. The build runner auto-chains its own review internally; every preflight/guard
+# inside it is untouched. See DECISIONS.md D-026/D-027 (ported from the Meal Prep app's own D-051 fix
+# for this exact class of bug -- the two apps share the same Dispatch-Commands.ps1/Run-Codex-Build.ps1
+# template, so a bug found in one is latent in the other).
+
+# Classifies a build-or-review phase's raw result text and applies the right TASKS.md status
+# transition (+ strike bookkeeping where relevant) on main. Shared by the build loop's auto-chained-
+# review outcome and the pending-review-resume step below, so a fix to the classification (e.g.
+# telling a red-zone HELD approval apart from a real auto-merge) can't drift between the two call
+# sites. Returns an object with .NeedsHuman so the summary can tell a self-healing retry
+# ("RETRYING", no action needed) apart from a genuine stop ("NEEDS YOU").
+function Resolve-ReviewOutcome {
+    param($Task, [string]$ResultText)
+    # HELD must be checked before the generic APPROVED match: a red-zone review message
+    # ("$taskId APPROVED but HELD for your merge...") contains the literal word APPROVED, so a naive
+    # \bAPPROVED\b check alone would mark a NOT-merged red-zone task 'done' on main -- silently
+    # claiming code shipped when it never left the branch.
+    if ($ResultText -match '(?i)\bHELD\b') {
+        Set-TaskStatus -TaskId $Task.Id -NewStatus 'approved'
+        Publish-TasksChange "autopilot: $($Task.Id) approved, held for human /merge (red-zone)"
+        return [pscustomobject]@{ Id = $Task.Id; P = $Task.Priority; Outcome = 'approved, held for /merge (red-zone) -- see REVIEW.md, then /merge ' + $Task.Id; NeedsHuman = $true }
+    }
+    if ($ResultText -match '(?im)\bAPPROVED\b') {
+        Set-TaskStatus -TaskId $Task.Id -NewStatus 'done'
+        Publish-TasksChange "autopilot: $($Task.Id) approved and merged"
+        return [pscustomobject]@{ Id = $Task.Id; P = $Task.Priority; Outcome = 'approved'; NeedsHuman = $false }
+    }
+    if ($ResultText -match '(?im)REWORK') {
+        $prev = if ($Task.Note -match 'strike (?<n>\d)/3') { [int]$Matches['n'] } else { 0 }
+        $strike = $prev + 1
+        $why = if ($ResultText -match '(?ms)REWORK[^\r\n]*?[-:]\s*(?<w>[^\r\n]+)') { ($Matches['w'] -replace '^[-\s]+', '').Trim() } else { 'see REVIEW.md on the branch' }
+        Set-TaskBlockedAuto -TaskId $Task.Id -Note "review rework, strike $strike/3 -- $why"
+        Publish-TasksChange "autopilot: $($Task.Id) rework strike $strike/3"
+        return [pscustomobject]@{ Id = $Task.Id; P = $Task.Priority; Outcome = "rework (strike $strike/3): $why"; NeedsHuman = $true }
+    }
+    if ($ResultText -match '(?i)Left at status: review for automatic retry') {
+        # The review ENGINE failed to run (infra flakiness), not a real verdict -- Run-Claude-
+        # Review.ps1 deliberately leaves the branch at status: review so the next attempt is a plain
+        # retry, never a rebuild. Mirror that same status onto main (previously this fell through to
+        # the generic "build stopped" blocked-with-unmatched-note case below, which is what stranded
+        # a task on the Meal Prep app: the note text promised "automatic retry on the next /review or
+        # /go" but nothing was wired to make that true). No strike cap here on purpose -- capping
+        # would treat transient engine flakiness as if it were a repeated task-level failure.
+        Set-TaskStatus -TaskId $Task.Id -NewStatus 'review'
+        Publish-TasksChange "autopilot: $($Task.Id) review pending retry (engine crash, not a verdict)"
+        return [pscustomobject]@{ Id = $Task.Id; P = $Task.Priority; Outcome = 'review engine crashed before a verdict, will retry automatically'; NeedsHuman = $false }
+    }
+    if ($ResultText -match '(?i)build NO-OP') {
+        # Run-Codex-Build.ps1's own no-op guard: status advanced without any CHANGELOG.md/
+        # TEST_REPORT.md evidence -- the same "strike N/3" idiom REWORK already has, applied to a
+        # second failure class that needs the identical bounded-retry treatment (a genuinely broken
+        # task must not retry forever, unlike the pure-infra crash case above).
+        $prev = if ($Task.Note -match 'strike (?<n>\d)/3') { [int]$Matches['n'] } else { 0 }
+        $strike = $prev + 1
+        Set-TaskBlockedAuto -TaskId $Task.Id -Note "no-op build (status advanced with no CHANGELOG.md/TEST_REPORT.md evidence), strike $strike/3 -- $(($ResultText -replace '\s+',' ').Trim())"
+        Publish-TasksChange "autopilot: $($Task.Id) no-op build strike $strike/3"
+        return [pscustomobject]@{ Id = $Task.Id; P = $Task.Priority; Outcome = "no-op build detected (strike $strike/3)"; NeedsHuman = $true }
+    }
+    Set-TaskBlockedAuto -TaskId $Task.Id -Note "build stopped -- $(($ResultText -replace '\s+',' ').Trim())"
+    Publish-TasksChange "autopilot: $($Task.Id) build stopped"
+    [pscustomobject]@{ Id = $Task.Id; P = $Task.Priority; Outcome = "build stopped: $(($ResultText -replace '\s+',' ').Trim())"; NeedsHuman = $true }
+}
+
 function Invoke-Autopilot {
     $start = Get-Date
     $actions = 0
@@ -595,12 +657,31 @@ function Invoke-Autopilot {
     }
     if ($released) { Publish-TasksChange 'autopilot: release auto-blocked task(s) for retry' }
 
-    # --- Plan once if there is approved work or untriaged captures but nothing build-ready yet. ---
+    # --- Resume a review left pending by a crashed review engine, BEFORE building anything new. This
+    #     is the "/go" half of the retry promise Run-Claude-Review.ps1's own crash message makes
+    #     ("automatic retry on the next /review or /go") -- without this, that promise was only true
+    #     for an explicit /review, and a plain /go would never look at a status: review task at all
+    #     (its build loop below only ever searches for status: codex). Counts as this mission's one
+    #     action: a task already built and pushed is further along than anything not yet started, so
+    #     finishing its review takes priority over starting something new. ---
+    $waiting = @()
+    $built = $null
+    $pendingReview = Get-TaskTable | Where-Object { $_.Status -eq 'review' } | Select-Object -First 1
+    if ($pendingReview) {
+        if (-not (Test-AutomationEnabled)) { return "Autopilot: automation disabled -- nothing done." }
+        if ($DryRun) { return "[DRY RUN] would resume review of $($pendingReview.Id) ($($pendingReview.Title)) [P$($pendingReview.Priority)] -- left pending by a prior crashed review attempt." }
+        $rp0 = Invoke-ReviewPhase; $actions++
+        if ($rp0.ExitCode -eq 2) { return "Autopilot stopped -- systemic: $($rp0.Result)" }   # preflight/dirty/branch missing
+        $built = Resolve-ReviewOutcome -Task $pendingReview -ResultText $rp0.Result
+    }
+
+    # --- Plan once if there is approved work or untriaged captures but nothing build-ready yet.
+    #     Skipped if the pending-review resume above already used this mission's one action. ---
     $planned = 0
     $unconvertedBefore = Get-UnconvertedBQCount
     $untriagedBefore = Get-UntriagedCaptureCount
     $triageOnlyPlan = ($unconvertedBefore -eq 0 -and $untriagedBefore -gt 0)
-    if (-not (Get-TaskTable | Where-Object { $_.Status -eq 'codex' }) -and ($unconvertedBefore -gt 0 -or $untriagedBefore -gt 0)) {
+    if (-not $built -and -not (Get-TaskTable | Where-Object { $_.Status -eq 'codex' }) -and ($unconvertedBefore -gt 0 -or $untriagedBefore -gt 0)) {
         if (-not (Test-AutomationEnabled)) { return "Autopilot: automation disabled -- nothing done." }
         $before = @(Get-TaskTable | Where-Object { $_.Status -eq 'codex' }).Count
         $rp = Invoke-RunPhase; $actions++
@@ -615,9 +696,9 @@ function Invoke-Autopilot {
     #     pressed many times with no app changes costs one cheap "nothing changed" check per press,
     #     not a real scan. If the audit auto-promotes something (Decision Approve + Risk Low), plan it
     #     into a real task immediately so the SAME /go press can still build it below -- "find AND
-    #     build," not "find, then wait for another press." ---
+    #     build," not "find, then wait for another press." Skipped if a mission already ran above. ---
     $audited = $false
-    if (-not (Get-TaskTable | Where-Object { $_.Status -eq 'codex' }) -and (Get-UnconvertedBQCount) -eq 0) {
+    if (-not $built -and -not (Get-TaskTable | Where-Object { $_.Status -eq 'codex' }) -and (Get-UnconvertedBQCount) -eq 0) {
         if (Test-AutomationEnabled) {
             $ap = Invoke-AuditPhase; $actions++; $audited = $true
             if ($ap.ExitCode -eq 2) { return "Autopilot stopped -- audit: $($ap.Result)" }   # preflight/dirty
@@ -633,10 +714,9 @@ function Invoke-Autopilot {
     # --- Build exactly ONE dependency-satisfied task. Codex self-selects the first status:codex task
     #     (AGENTS.md), and planning keeps file order == priority order, so the first codex task is the
     #     highest-priority one. If its dependencies are not yet merged, auto-block it (so Codex skips
-    #     to the next satisfied one) and try again -- but still build only ONE task total. ---
-    $waiting = @()
-    $built = $null
-    while ($actions -lt $AUTOPILOT_MAX_ACTIONS -and ((Get-Date) - $start).TotalMinutes -lt $AUTOPILOT_MAX_MINUTES) {
+    #     to the next satisfied one) and try again -- but still build only ONE task total. Skipped if
+    #     the pending-review resume above already used this mission's one action. ---
+    while (-not $built -and $actions -lt $AUTOPILOT_MAX_ACTIONS -and ((Get-Date) - $start).TotalMinutes -lt $AUTOPILOT_MAX_MINUTES) {
         $next = Get-TaskTable | Where-Object { $_.Status -eq 'codex' } | Select-Object -First 1
         if (-not $next) { break }
         $mergedNow = @(Invoke-Git -C $root branch --merged main | ForEach-Object { $_.TrimStart('*').Trim() } | Where-Object { $_ })
@@ -653,22 +733,7 @@ function Invoke-Autopilot {
         if ($r.Result -match '-> auto-review:') { $actions++ }
         if ($r.ExitCode -eq 2) { return "Autopilot stopped -- systemic: $($r.Result)" }   # preflight/dirty/wrong-branch
 
-        if ($r.Result -match '(?im)\bAPPROVED\b') {
-            Set-TaskStatus -TaskId $next.Id -NewStatus 'done'
-            Publish-TasksChange "autopilot: $($next.Id) approved and merged"
-            $built = [pscustomobject]@{ Id = $next.Id; P = $next.Priority; Outcome = 'approved' }
-        } elseif ($r.Result -match '(?im)REWORK') {
-            $prev = if ($next.Note -match 'strike (?<n>\d)/3') { [int]$Matches['n'] } else { 0 }
-            $strike = $prev + 1
-            $why = if ($r.Result -match '(?ms)REWORK[^\r\n]*?[-:]\s*(?<w>[^\r\n]+)') { ($Matches['w'] -replace '^[-\s]+', '').Trim() } else { 'see REVIEW.md on the branch' }
-            Set-TaskBlockedAuto -TaskId $next.Id -Note "review rework, strike $strike/3 -- $why"
-            Publish-TasksChange "autopilot: $($next.Id) rework strike $strike/3"
-            $built = [pscustomobject]@{ Id = $next.Id; P = $next.Priority; Outcome = "rework (strike $strike/3): $why" }
-        } else {   # exit 1: blocked / test-fail / no-progress on this task
-            Set-TaskBlockedAuto -TaskId $next.Id -Note "build stopped -- $(($r.Result -replace '\s+',' ').Trim())"
-            Publish-TasksChange "autopilot: $($next.Id) build stopped"
-            $built = [pscustomobject]@{ Id = $next.Id; P = $next.Priority; Outcome = "build stopped: $(($r.Result -replace '\s+',' ').Trim())" }
-        }
+        $built = Resolve-ReviewOutcome -Task $next -ResultText $r.Result
         break   # ONE mission per /go
     }
 
@@ -678,6 +743,11 @@ function Invoke-Autopilot {
     if ($built) {
         if ($built.Outcome -eq 'approved') {
             $out += "APPROVED: $($built.Id) [P$($built.P)] built + reviewed + merged to main."
+        } elseif (-not $built.NeedsHuman) {
+            # Self-healing: an engine crash mid-review, not a real verdict and not anything the human
+            # needs to act on -- say so plainly rather than the same "NEEDS YOU" wording a genuine stop
+            # gets.
+            $out += "RETRYING: $($built.Id) [P$($built.P)] -- $($built.Outcome)"
         } else {
             $out += "NEEDS YOU: $($built.Id) [P$($built.P)] -- $($built.Outcome)"
             $out += "Branch $(($built.Id -replace 'TASK-','task-').ToLower()) left for inspection."
@@ -694,7 +764,7 @@ function Invoke-Autopilot {
     if ($planned -gt 0) { $out += "(planned $planned new task(s) this run.)" }
     if ($waiting.Count) { $out += "Waiting on merge: " + ($waiting -join '; ') }
     $out += "Remaining approved work: $remaining."
-    $out += if ($built -and $built.Outcome -eq 'approved') { "Next: /go." } else { "Next: /go (after resolving the above)." }
+    $out += if ($built -and ($built.Outcome -eq 'approved' -or -not $built.NeedsHuman)) { "Next: /go." } else { "Next: /go (after resolving the above)." }
     ($out -join "`n")
 }
 
