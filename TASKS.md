@@ -15,7 +15,7 @@
 ---
 
 ### TASK-001 - Fix silent no-op rework retry + stuck crashed-review state
-status: approved
+status: done
 review: Claude implemented directly (tools/Dispatch-Commands.ps1, tools/Run-Codex-Build.ps1 -- Codex
   cannot commit under tools/, same reasoning as this file's own Hard Rules). Held at `approved` for
   human `/merge`, not auto-merged -- this touches the AI Dev OS itself, which this project's own
