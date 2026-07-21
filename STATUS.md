@@ -5,6 +5,12 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-07-21 — Triage + Plan
+
+STEP A: 0 new captures (all 14 inbox files already `status: triaged`); nothing to process. STEP B: BUILD_QUEUE.md still empty; no tasks added. **Action needed:** human moves PROP-004 (P1), PROP-007 (P1), PROP-008 (P2), PROP-009 (P2), PROP-011 (P2) to ROADMAP.md + BUILD_QUEUE.md per the `/approve all` signal from msg_id 82 (see 2026-07-20 entry).
+
+---
+
 ## 2026-07-20 — Triage + Plan
 
 STEP A: 3 new captures processed (msg_ids 82, 84, 86). Capture 82: `/approve all` bot command — user signaling approval of all pending Approve-recommended proposals; cannot execute approval gate in triage mode → PROP-010 (Reject as proposal, P3). **⚠ Human action needed: move PROP-004/007/008/009 to ROADMAP.md + BUILD_QUEUE.md.** Capture 84: auto-timer annoys user when not working → PROP-011 (Approve, P2, Goal #1, Risk: High — timer red-zone). Capture 86: in-app calendar/appointment planning with optional Google Calendar sync → PROP-012 (Park, P3, Goal #2, Risk: High — new RTDB schema + possible OAuth). STEP B: BUILD_QUEUE.md still empty; no tasks added. **Action needed:** human moves PROP-004 (P1), PROP-007 (P1), PROP-008 (P2), PROP-009 (P2), PROP-011 (P2) to ROADMAP.md + BUILD_QUEUE.md per the `/approve all` signal from msg_id 82.
