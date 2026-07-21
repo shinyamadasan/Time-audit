@@ -152,7 +152,14 @@ function Get-StatusReply {
     $lastLine = Get-Content "$root\claude-session.log" -Tail 1 -ErrorAction SilentlyContinue
     $codexReady  = if (Test-Path $tasksFile) { @(Select-String -Path $tasksFile -Pattern '^status:\s*codex\s*$').Count } else { 0 }
     $reviewReady = if (Test-Path $tasksFile) { @(Select-String -Path $tasksFile -Pattern '^status:\s*review\s*$').Count } else { 0 }
-    $lockState = if (Test-Path $lockFile) { 'BUSY (a run is in progress)' } else { 'idle' }
+    # Surface the lock's age, not just its existence -- "BUSY" alone doesn't tell you whether that's
+    # normal (a build/test step genuinely still running) or the same shape as the 48-minute hang this
+    # was added after. Anyone checking /status mid-hang deserves to see the number that would have
+    # told them something was wrong.
+    $lockState = if (Test-Path $lockFile) {
+        $lockAgeMin = [int]((Get-Date) - (Get-Item $lockFile).LastWriteTime).TotalMinutes
+        "BUSY (a run has been in progress for $lockAgeMin min)"
+    } else { 'idle' }
     @"
 Automation: $enabled - Branch: $branch ($tree) - $lockState
 Last log line: $lastLine
