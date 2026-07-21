@@ -86,6 +86,78 @@ test steps:
 
 ---
 
+### TASK-002 - Fix unbounded digest length + silent 2-hour stale-lock wait
+status: approved
+review: Claude implemented directly (tools/Generate-Digest.ps1, tools/Dispatch-Commands.ps1 -- same
+  reasoning as TASK-001, Codex cannot commit under tools/). Held at `approved` for human `/merge`.
+  Digest fix verified against the real, live-failing planning/PROPOSALS.md data (12 pending
+  proposals): output is 3911 chars, under Telegram's 4096 limit, keeping every Approve/Park item.
+  Lock fix verified via an isolated 4-case fixture test of the exact decision branching (dead PID,
+  live PID + fresh timestamp, live PID + stale timestamp, live PID + just-under-threshold
+  timestamp). Both files parse clean. Land with `/merge TASK-002` then `/merge TASK-002 yes`.
+source: found live in the same session as TASK-001, while investigating a real Telegram delivery
+  failure ("Bad Request: message is too long") and the automation.lock incident that led to TASK-001
+priority: P1
+depends-on: none
+files: tools/Generate-Digest.ps1, tools/Dispatch-Commands.ps1, DECISIONS.md
+
+context:
+  Two separate reliability bugs. (1) `Generate-Digest.ps1` had no cap on the digest's length --
+  with enough pending proposals (12, each carrying full reasoning text), the generated message hit
+  ~5000 characters and Telegram rejected the send outright with "Bad Request: message is too long."
+  The human got NOTHING that morning, not a partial digest, just silence. (2) Separately,
+  `Dispatch-Commands.ps1`'s stale-lock check waited a full 2 hours before self-healing, and even
+  then cleared silently. Confirmed live: a genuinely hung process (0% CPU, no log output since
+  before it started, no working child process) sat holding `automation.lock` for 48+ minutes,
+  completely invisible, until a human happened to check Task Manager and killed it by hand -- the
+  queued `/merge` commands for TASK-001 sat stuck behind it the whole time.
+
+acceptance:
+  - [x] `Generate-Digest.ps1` builds the digest message incrementally and stops adding
+        proposal groups/items before a safe character threshold (3700, leaving headroom for the
+        fixed footer), appending a "+N more waiting ... see planning/PROPOSALS.md" note when
+        truncated, rather than truncating the final joined string (which could cut a Markdown
+        entity in half and trade one delivery failure for a different one).
+  - [x] `Dispatch-Commands.ps1`'s lock check reads the lock file's recorded PID and checks whether
+        that process is still actually running -- if it has already exited, the lock is stale
+        regardless of age, no waiting required.
+  - [x] If the recorded PID is still running, the staleness wait is lowered from 2 hours to 45
+        minutes (comfortably above the ~35-40 min worst-case legitimate run: Run-Codex-Build.ps1
+        caps its build step at 20 min, Run-Merge.ps1 caps npm test at 10 min).
+  - [x] Clearing a stale lock now sends a Telegram notice through the existing OUTBOX/reply relay
+        (`Write-Reply` + `Invoke-CommitPushWithRetry`, same mechanism every other command reply
+        uses) instead of clearing silently, so a stuck run and a quiet one no longer look identical
+        from Telegram.
+  - [x] Does NOT auto-kill the lingering process -- only clears the lock file. The notice mentions
+        `/stop` (which already kills the lock-holding process by PID) as the explicit,
+        human-triggered way to do that if it keeps happening.
+  - [x] `DECISIONS.md` gains a numbered entry.
+
+constraints:
+  - Automation/OS-surface change: solo, never chained.
+  - Red-zone surface -- held at `approved`, never auto-merged.
+  - Digest truncation must stop at item boundaries, never mid-string, to avoid breaking Markdown
+    parsing on the Telegram side.
+  - The stale-lock fix must not auto-kill any process -- clearing the lock file only; killing stays
+    a human's explicit call via `/stop`.
+
+test steps:
+  - [x] `[System.Management.Automation.Language.Parser]::ParseFile` on both changed `.ps1` files: no
+        syntax errors.
+  - [x] `Generate-Digest.ps1` run against the real (live-failing) `planning/PROPOSALS.md`: output
+        3911 chars, all 5 Approve items and both Park items kept, only the lowest-priority Reject
+        items truncated with a count note.
+  - [x] Isolated fixture harness against the lock decision logic (extracted from this repo's own
+        copy): 4 cases / 4 assertions, all pass -- dead PID clears regardless of age; live PID with
+        a fresh timestamp stays busy; live PID with a 46-minute-old timestamp clears; live PID with
+        a 44-minute-old timestamp (just under the new 45-min threshold) stays busy, confirming no
+        false positive right at the boundary.
+  - [ ] Live (human-verified): the next real oversized digest sends successfully with a truncation
+        note, and the next real hung process self-clears within 45 minutes with a visible Telegram
+        notice, instead of requiring manual intervention.
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

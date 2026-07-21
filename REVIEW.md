@@ -57,6 +57,61 @@ independent fixture verification rather than a second read of the same code.
 → TASK-001 status set to `approved` in TASKS.md. Land with `/merge TASK-001` then
 `/merge TASK-001 yes`.
 
+## Review TASK-002 - APPROVED, HELD (digest length cap + stale-lock visibility fix)
+branch: task-002
+verdict: approved (red-zone, held for human `/merge`)
+
+### Context
+Found live in the same session as TASK-001. While waiting for TASK-001's `/merge` commands to
+process, a real Telegram delivery failure surfaced ("Bad Request: message is too long") on this
+project's morning digest. Investigating why the queued `/merge` commands themselves hadn't been
+picked up led to a second discovery: `automation.lock` had been held by a genuinely hung process for
+48+ minutes with zero CPU activity, zero log output, and no working child process -- a human had to
+notice this by hand (Task Manager, `Get-Process` CPU/child-process checks) and kill it before the
+queue could move again.
+
+### Findings
+**1. Digest length cap — correct, verified against real failing data, not a synthetic case.**
+`Generate-Digest.ps1` now tracks cumulative length while adding proposal groups/items and stops
+before a 3700-char content threshold (leaving room for the fixed footer), appending a "+N more...see
+planning/PROPOSALS.md" note rather than truncating the final joined string. Run against the actual
+`planning/PROPOSALS.md` that produced the live failure (12 proposals): output is 3911 chars, safely
+under Telegram's 4096 cap, and every higher-priority item (5 Approve, 2 Park) survives intact -- only
+the lowest-priority Reject items get trimmed.
+
+**2. Stale-lock fix — correct, and appropriately conservative.** The new check verifies the lock
+file's recorded PID is actually still running before treating a fresh-looking lock as busy -- a
+crashed process that never cleaned up now clears immediately regardless of age, no arbitrary wait.
+For a PID that's still running, the wait is lowered from 2 hours to 45 minutes, a figure explicitly
+derived from this project's own documented ceilings (Run-Codex-Build.ps1's 20-min build cap,
+Run-Merge.ps1's 10-min npm-test cap), not picked arbitrarily. Verified via 4 fixture cases including
+the boundary (44 min stays busy, 46 min clears) -- no off-by-one false positive.
+
+**3. Deliberately does not auto-kill.** The fix clears only the lock file, never the lingering
+process itself, and surfaces `/stop` (this project's own pre-existing, human-triggered kill path) in
+the notice text as the explicit way to actually terminate a repeat offender. This is the right
+conservative line: auto-clearing a lock file is reversible and low-stakes; auto-killing an unknown
+process based on a time heuristic alone is not, and this project already has a deliberate,
+human-invoked mechanism for that specific action.
+
+**4. Visibility fix genuinely closes the gap that motivated this task.** The notice routes through
+the exact same `Write-Reply` + `Invoke-CommitPushWithRetry` mechanism every other command reply
+already uses, so a cleared stale lock now produces a real Telegram message instead of vanishing into
+`Write-Host` output nobody watching a scheduled task ever sees.
+
+**5. Verification is real, not assumed.** Both files parse clean. The digest fix was tested against
+the actual data that caused the live failure, not a contrived example. The lock fix was tested via
+constructed lock files exercising real `Get-Process` calls, not mocked assertions.
+
+### Verdict
+Gate picked: `approved` (red-zone: touches `tools/Generate-Digest.ps1` and
+`tools/Dispatch-Commands.ps1` directly — the AI Dev OS itself). Same disclosed same-session caveat as
+TASK-001 (Claude both built and reviewed this diff) — mitigated by testing against real failing data
+and an independent fixture harness rather than a second read of the same code.
+
+→ TASK-002 status set to `approved` in TASKS.md. Land with `/merge TASK-002` then
+`/merge TASK-002 yes`.
+
 <!-- REVIEW TEMPLATE -- copy and fill:
 
 ## Review TASK-<id> - <APPROVED | REWORK>
