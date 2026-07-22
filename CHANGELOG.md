@@ -1,5 +1,26 @@
 # ChronaSense — Changelog
 
+## TASK-003 — approved, held for /merge (branch: task-003) — 2026-07-21
+changed:
+  - tools/Run-Codex-Build.ps1 (new `Get-TaskBlockText`/`Get-TaskDeclaredFiles` helpers; after the
+    existing deny-list guard, computes changed files not declared by any tracked task and not a
+    standard evidence file; writes a task-ID-tagged note to gitignored `.scope-note.txt` on
+    mismatch, soft -- never blocks the build)
+  - tools/Run-Claude-Review.ps1 (reads `.scope-note.txt`, uses it only if it names the task
+    currently under review, always deletes it after reading; folds it into the Claude reviewer
+    prompt as an explicit item to address in REVIEW.md)
+  - .gitignore (added `.scope-note.txt`, same transient-handoff-file convention as
+    `.last-phase-result.txt`)
+tests: `[System.Management.Automation.Language.Parser]::ParseFile` on both changed files (pass);
+  direct diff against Meal Prep's pre-port versions confirmed both files were functionally
+  identical beforehand; fixture harness against the ported file/scope-parsing helpers, re-run
+  against this app's own copy (8/8 assertions pass)
+blockers: none
+deviations: ported from the sibling Meal Prep app (its TASK-034/D-053), which built this first
+  after comparing the shared AI Dev OS template against github.com/cathrynlavery/codex-build; no
+  live end-to-end run in either app -- disclosed as unverified-live in TEST_REPORT.md
+→ status set to `approved` in TASKS.md (red-zone automation surface, held for human /merge)
+
 ## TASK-002 — approved, held for /merge (branch: task-002) — 2026-07-21
 changed:
   - tools/Generate-Digest.ps1 (builds the digest incrementally, stops before a safe char threshold,

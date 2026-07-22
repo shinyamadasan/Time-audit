@@ -6,6 +6,56 @@
 
 ---
 
+## Review TASK-003 - APPROVED, HELD (per-task scope note, soft gate, ported from the Meal Prep app)
+branch: task-003
+verdict: approved (red-zone, held for human `/merge`)
+
+### Context
+Prompted by comparing the shared AI Dev OS template against `github.com/cathrynlavery/codex-build`,
+a similar Claude-orchestrates/Codex-builds skill. Its `check_scope.py` mechanically fails a run if a
+task touches a file outside its own declared allowlist -- something neither this app nor Meal Prep
+had. Both apps already have `Run-Codex-Build.ps1`'s `$deniedPatterns` deny-list, but that's a
+repo-wide "never touch the OS itself" guard, not a per-task check -- a task declaring
+`files: app.js` that also edits `style.css` passes the deny-list untouched (CSS is legitimate
+app-code surface) with nothing flagging the extra touch was never requested. Built in Meal Prep
+first (its TASK-034/D-053), then ported here since both apps share the identical template file.
+
+### Findings
+**1. Confirmed identical before porting, not assumed.** Direct diff against Meal Prep's pre-fix
+versions: `Run-Claude-Review.ps1` byte-identical; `Run-Codex-Build.ps1` differed only in two
+comment lines referencing the other app's name/path, no logic differences. Same standard this
+app's own TASK-001/TASK-002 ports already held themselves to.
+
+**2. Soft-gate design carried over correctly.** A mismatch never blocks the build, never marks a
+task blocked, never touches the build's own exit code -- only writes an advisory note, consumed
+once by the review step. This was an explicit, deliberate choice in the source app (the user
+specifically flagged that a hard-block version would trade silent scope creep for false-positive
+blocks needing manual intervention) and the port preserves that shape exactly, not a
+stricter/looser reinterpretation.
+
+**3. Cross-task-ID leak prevention ported correctly.** The handoff file is prefixed with the task
+ID(s) it applies to; `Run-Claude-Review.ps1` only uses it if the task currently under review is
+named there, and unconditionally deletes the file after reading either way. This logic is
+character-for-character identical to Meal Prep's already-tested version (6/6 fixture assertions
+there covering exactly this) -- not re-derived, verified via the same direct-diff standard as
+finding 1.
+
+**4. Verification.** Both files parse clean. Fixture harness against the file/scope-parsing
+helpers, re-run against this app's own copy: 8/8 assertions pass. No live end-to-end run in
+either app -- a real build that genuinely touches an undeclared file, verified to surface in a
+real REVIEW.md entry, remains outstanding; honestly disclosed in TEST_REPORT.md rather than
+claimed.
+
+### Risk-gate
+Automation/OS-surface: solo, never chained. Touches `tools/Run-Codex-Build.ps1` and
+`tools/Run-Claude-Review.ps1` directly -- the AI Dev OS's own automation. Held at `approved`,
+`main` NOT changed. Same disclosed same-session caveat as TASK-001/TASK-002 (Claude both built and
+reviewed this diff) -- mitigated by the fixture harness plus the direct-diff-against-tested-source
+standard, not just a second read of the same code.
+
+→ TASK-003 status set to `approved` in TASKS.md. Land with `/merge TASK-003` then
+`/merge TASK-003 yes`.
+
 ## Review TASK-001 - APPROVED, HELD (ported automation fix from the Meal Prep app)
 branch: task-001
 verdict: approved (red-zone, held for human `/merge`)

@@ -156,6 +156,75 @@ test steps:
         note, and the next real hung process self-clears within 45 minutes with a visible Telegram
         notice, instead of requiring manual intervention.
 
+### TASK-003 - Per-task scope note: flag builds that touch files their own task never declared
+status: approved
+review: Claude implemented directly (tools/Run-Codex-Build.ps1, tools/Run-Claude-Review.ps1 -- same
+  reasoning as TASK-001/002, Codex cannot commit under tools/). Held at `approved` for human
+  `/merge` -- touches the AI Dev OS itself. Deliberately a SOFT gate, not a hard block: an adjacent
+  file can be a legitimate dependency, so this only surfaces the mismatch to the reviewer instead
+  of silently trusting them to notice it in a raw diff. Ported from the Meal Prep app's TASK-034/
+  D-053 -- confirmed via direct diff that both changed files were functionally identical to Meal
+  Prep's pre-fix versions before porting (Run-Claude-Review.ps1 byte-identical; Run-Codex-Build.ps1
+  differed only in two comment lines). Verified via the same fixture harness re-run against this
+  app's own copy of the ported functions (8/8 assertions pass). Both files parse clean. Land with
+  `/merge TASK-003` then `/merge TASK-003 yes`.
+source: comparison against github.com/cathrynlavery/codex-build (a similar Claude-orchestrates/
+  Codex-builds skill) surfaced its `check_scope.py` per-task allowlist enforcer as something
+  neither app had -- Run-Codex-Build.ps1's existing `$deniedPatterns` is a repo-wide deny-list
+  (blocks the OS/automation surface outright) but never checked whether a build stayed inside the
+  specific files ITS OWN task declared. Built in Meal Prep first as TASK-034/D-053, then ported
+  here since both apps share the identical template file.
+priority: P2
+depends-on: none
+files: tools/Run-Codex-Build.ps1, tools/Run-Claude-Review.ps1, .gitignore
+
+context:
+  The existing commit-scope guard in Run-Codex-Build.ps1 is a repo-wide deny-list: it blocks
+  Codex/Claude from ever touching tools/, docs/, CLAUDE.md, etc., regardless of which task is
+  running. That's the right tool for "never touch the OS itself," but it says nothing about
+  whether a build stayed within the app-code surface its OWN task actually declared in TASKS.md's
+  `files:` field -- e.g. a task that says `files: app.js` but also edits `style.css` sails through
+  the deny-list untouched (CSS is legitimate app-code surface) with nothing flagging that the
+  touch was never requested. The reviewer sees the raw diff, but nothing prompts them to
+  cross-check it against the task's own declared scope.
+
+acceptance:
+  - [x] New `Get-TaskBlockText`/`Get-TaskDeclaredFiles` helpers parse a task's `files:` field
+        (single-line and multi-line-continuation forms), stripping `(new)` annotations, returning
+        `@()` (never a false "everything is out of scope") when the field is missing/unparseable.
+  - [x] After the existing deny-list guard passes, Run-Codex-Build.ps1 computes the union of
+        declared files across every tracked task in this invocation, and flags any changed file
+        that is neither declared nor a standard evidence file
+        (CHANGELOG.md/TEST_REPORT.md/TASKS.md).
+  - [x] This is a SOFT gate: a mismatch never blocks the build or marks it blocked. It only writes
+        a task-ID-tagged note to a new gitignored `.scope-note.txt` handoff file when reaching
+        `status: review`.
+  - [x] Run-Claude-Review.ps1 reads `.scope-note.txt`, uses it ONLY if the task currently under
+        review is one of the ID(s) the note names, and always deletes the file after reading
+        regardless of match so nothing can leak into a later run.
+  - [x] When present, the note is folded into the Claude reviewer's prompt as an explicit item.
+        The Codex-as-reviewer fallback path does not receive this signal, consistent with its
+        existing documented degraded-capability status.
+  - [x] `.scope-note.txt` added to `.gitignore`, matching `.last-phase-result.txt`'s existing
+        transient-handoff-file convention.
+
+constraints:
+  - Automation/OS-surface change: solo, never chained.
+  - Red-zone surface -- held at `approved`, never auto-merged.
+  - Must never become a hard block -- false positives (a legitimate adjacent-file touch) are
+    expected and must not stall a real fix.
+
+test steps:
+  - [x] `[System.Management.Automation.Language.Parser]::ParseFile` on both changed `.ps1` files:
+        no syntax errors.
+  - [x] Direct diff against Meal Prep's pre-port versions confirmed both files were functionally
+        identical before this change (Run-Claude-Review.ps1 byte-identical; Run-Codex-Build.ps1
+        differed only in two comment lines referencing the other app's name).
+  - [x] Fixture harness against `Get-TaskBlockText`/`Get-TaskDeclaredFiles`, re-run against this
+        app's own copy of the ported functions: 8/8 assertions pass.
+  - [ ] Live (human-verified): a real build that touches an undeclared file produces a visible
+        scope note in a real REVIEW.md entry, in production.
+
 ---
 
 <!-- Paste new tasks above this line. -->
