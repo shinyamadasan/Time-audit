@@ -20,3 +20,16 @@ Read the diff before you answer:
 
 To land it:  /merge TASK-003 yes
 Nothing has been merged. main is untouched.
+
+---
+
+## 20260722T0113Z-113-command
+2026-07-21T18:35:19.1869811-07:00
+
+MERGED: TASK-003 (Per-task scope note: flag builds that touch files their own task never declared) -> main, pushed. Deploy follows. TASKS.md updated to 'done'.
+
+Thread reset checkpoint: updated HANDOFF.md.
+New thread prompt:
+Continue this app from this repo.
+Read HANDOFF.md, AGENTS.md, CLAUDE.md, TASKS.md, and CODEMAP.md if present.
+Use Next or /next to resume from the repo state; do not rely on previous chat context.
