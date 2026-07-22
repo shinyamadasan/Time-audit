@@ -15,3 +15,4 @@ www/Sounds/
 # permanently dirty tree and refuse to merge anything.
 automation.lock
 .last-phase-result.txt
+.scope-note.txt

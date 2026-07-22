@@ -233,6 +233,22 @@ $taskId = $target.Groups['id'].Value
 $title  = $target.Groups['title'].Value.Trim()
 $branchName = ($taskId -replace 'TASK-', 'task-').ToLower()
 
+# Ported from Meal Prep's D-053: pick up the build runner's scope note, if it left one. Its first
+# line lists which task ID(s) it applies to -- only trust it if $taskId (the task actually under
+# review right now) is one of them, so a leftover note from an unrelated earlier run never attaches
+# to the wrong task. Always consumed (deleted) here regardless of match, so a stale/mismatched note
+# can't linger and confuse a later run either.
+$scopeNoteFile = Join-Path $root '.scope-note.txt'
+$scopeNoteForPrompt = ''
+if (Test-Path $scopeNoteFile) {
+    $noteLines = @(Get-Content $scopeNoteFile -Encoding UTF8)
+    if ($noteLines.Count -ge 2) {
+        $coveredIds = @($noteLines[0] -split ',\s*')
+        if ($taskId -in $coveredIds) { $scopeNoteForPrompt = ($noteLines | Select-Object -Skip 1) -join "`n" }
+    }
+    Remove-Item $scopeNoteFile -Force
+}
+
 $codexAvailable  = [bool](Get-Command codex  -ErrorAction SilentlyContinue)
 $claudeAvailable = [bool](Get-Command claude -ErrorAction SilentlyContinue)
 
@@ -268,7 +284,7 @@ if ($dirty.Count -gt 0) {
 # auto-merge gates -- is engine-agnostic and unchanged. Only the process invoked here differs.
 # ---------------------------------------------------------------------------------------------
 function Invoke-ReviewerEngine {
-    param([string]$Engine, [string]$TaskId, [string]$Title, [string]$BranchName)
+    param([string]$Engine, [string]$TaskId, [string]$Title, [string]$BranchName, [string]$ScopeNote)
 
     # Prefer the logged-in subscription over API-key billing for either engine, same as elsewhere.
     Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
@@ -356,6 +372,19 @@ If you are torn between done and approved, choose approved.
 State which gate you picked, and why, at the end of the REVIEW.md entry.
 "@
 
+    # Ported from Meal Prep's D-053: a mechanically-detected scope mismatch (build touched files the
+    # task never declared) is not a verdict by itself -- fold it in as one more thing the reviewer
+    # must explicitly address, same as the Guardian Gauntlet findings above.
+    if ($ScopeNote) {
+        $prompt += @"
+
+
+SCOPE NOTE (mechanically detected by the build script, not a verdict -- D-053): $ScopeNote
+Explicitly address this in REVIEW.md: state whether the extra file(s) are a legitimate, necessary
+part of this task or unrequested scope creep that should have been a separate task.
+"@
+    }
+
     # Pipe the PROMPT itself via stdin (not `claude -p $prompt`): under Windows PowerShell 5.1 a long
     # multi-line prompt passed as a native-command argument loses its tail -- confirmed live in the
     # planner, where Claude only received the head of the prompt. Piping via stdin delivers it intact
@@ -390,7 +419,7 @@ $firstEngine = if ($PREFERRED_REVIEWER -eq 'claude' -and $claudeAvailable) { 'cl
                elseif ($claudeAvailable) { 'claude' }
                else { 'codex' }
 
-$attempt = Invoke-ReviewerEngine -Engine $firstEngine -TaskId $taskId -Title $title -BranchName $branchName
+$attempt = Invoke-ReviewerEngine -Engine $firstEngine -TaskId $taskId -Title $title -BranchName $branchName -ScopeNote $scopeNoteForPrompt
 $fallbackAttempted = $false
 $fallbackReason = $null
 
@@ -410,7 +439,7 @@ if ($attempt.ExitCode -ne 0) {
         Invoke-Git -C $root reset --hard HEAD | Out-Null
         Invoke-Git -C $root clean -fd | Out-Null
         $fallbackAttempted = $true
-        $attempt = Invoke-ReviewerEngine -Engine $otherEngine -TaskId $taskId -Title $title -BranchName $branchName
+        $attempt = Invoke-ReviewerEngine -Engine $otherEngine -TaskId $taskId -Title $title -BranchName $branchName -ScopeNote $scopeNoteForPrompt
     }
 }
 
