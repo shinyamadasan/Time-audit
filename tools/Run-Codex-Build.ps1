@@ -154,6 +154,33 @@ function Get-TrackedTasks {
     $tracked
 }
 
+function Get-TaskBlockText {
+    param([string]$TaskId, [string]$FullText)
+    $m = [regex]::Match($FullText, "(?ms)^###\s+$TaskId\b.*?(?=^###\s|\z)")
+    if ($m.Success) { $m.Value } else { $null }
+}
+
+# Ported from the Meal Prep app's D-053 fix: parses a task's own declared `files:` line (plus any
+# indented continuation lines) into a flat list of repo-relative paths, stripping "(new)"
+# annotations. Returns @() if the field is missing or unparseable -- the caller treats an empty
+# list as "nothing to check against", never as "everything is out of scope".
+function Get-TaskDeclaredFiles {
+    param([string]$BlockText)
+    if (-not $BlockText) { return @() }
+    $collecting = $false
+    $parts = @()
+    foreach ($line in ($BlockText -split "\r?\n")) {
+        if (-not $collecting) {
+            if ($line -match '^files:\s*(.*)$') { $parts += $Matches[1]; $collecting = $true }
+        } elseif ($line -match '^[ \t]+(.*)$') {
+            $parts += $Matches[1]
+        } else {
+            break
+        }
+    }
+    @(($parts -join ' ') -split ',' | ForEach-Object { ($_ -replace '\s*\(new\)\s*$', '').Trim() } | Where-Object { $_ })
+}
+
 # --- Preflight: main must be clean before branching off it. Codex/Claude availability is checked
 #     per-attempt below, not here -- D-048 means "the preferred engine is missing" is no longer an
 #     automatic abort, only "NEITHER engine is available" is. ---
@@ -364,6 +391,25 @@ if ($violations.Count -gt 0) {
     exit 1
 }
 
+# --- Soft scope check (ported from Meal Prep's D-053): did the build touch files outside what its
+#     OWN task(s) declared? The deny-list above blocks the OS/automation surface outright, repo-wide,
+#     regardless of task -- this is a narrower question: within the allowed app-code surface, did the
+#     build stay inside what TASK-<id> itself said it would touch? Deliberately NOT a hard gate -- an
+#     adjacent file is sometimes a legitimate dependency (a shared import, a companion test) -- this
+#     only makes the mismatch visible to the reviewer instead of relying on them to notice it
+#     unprompted in a raw diff: code detects the mismatch, the reviewer judges whether it's legitimate.
+$tasksRawText = Get-Content $tasksFile -Raw -Encoding UTF8
+$declaredFiles = @($tracked | ForEach-Object { Get-TaskDeclaredFiles -BlockText (Get-TaskBlockText -TaskId $_.Id -FullText $tasksRawText) } | Select-Object -Unique)
+$evidenceFiles = @('CHANGELOG.md', 'TEST_REPORT.md', 'TASKS.md')
+$scopeNote = $null
+if ($declaredFiles.Count -gt 0) {
+    $outOfScope = @($changed | Where-Object { $_ -notin $declaredFiles -and $_ -notin $evidenceFiles })
+    if ($outOfScope.Count -gt 0) {
+        $scopeNote = "Declared files across $($tracked.Id -join ', '): $($declaredFiles -join ', '). Build also touched: $($outOfScope -join ', ') -- not declared by any tracked task. Judge whether this is a legitimate dependency of the task or unrequested scope creep that should have been its own task."
+        Add-Content -Path $logFile -Value "[Run-Codex-Build] SCOPE NOTE for $($tracked.Id -join ', '): $scopeNote"
+    }
+}
+
 # --- Failure: BOTH the preferred engine and (if attempted) its fallback exited non-zero. Commit
 #     whatever safe partial progress exists, mark every tracked task blocked so the next /build
 #     doesn't silently retry the same broken task. If this was a quota-signal failure on both engines
@@ -438,7 +484,18 @@ if ($anyReview.Count -gt 0) {
         exit 1
     }
 
-    $buildMsg = "$($first.Id) build reached REVIEW ($($anyReview.Count) of $($tracked.Count) tracked task(s)) after $([int]$duration.TotalSeconds)s$fallbackNote, pushed to $branchName."
+    # Ported from Meal Prep's D-053: hand the scope note (if any) to the review runner via a small
+    # gitignored file, prefixed with the task ID(s) it applies to -- Run-Claude-Review.ps1 only trusts
+    # it if the task it is CURRENTLY reviewing is one of those IDs, so a stale note from an unrelated
+    # earlier run can never attach itself to the wrong task.
+    $scopeNoteFile = Join-Path $root '.scope-note.txt'
+    if ($scopeNote) {
+        [System.IO.File]::WriteAllText($scopeNoteFile, "$($tracked.Id -join ', ')`n$scopeNote", $utf8)
+    } elseif (Test-Path $scopeNoteFile) {
+        Remove-Item $scopeNoteFile -Force
+    }
+
+    $buildMsg = "$($first.Id) build reached REVIEW ($($anyReview.Count) of $($tracked.Count) tracked task(s)) after $([int]$duration.TotalSeconds)s$fallbackNote, pushed to $branchName.$(if ($scopeNote) { ' (scope note flagged for reviewer -- see REVIEW.md.)' })"
     Add-Content -Path $logFile -Value "[Run-Codex-Build] $buildMsg"
     # Auto-chain: no separate manual /review step needed after a clean build. Stay on $branchName for
     # this call (Run-Claude-Review.ps1 checks it out itself, harmless no-op since we're already there)
