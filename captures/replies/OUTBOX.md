@@ -1,1 +1,4 @@
-No pending replies.
+## session-summary-20260721T171905Z
+2026-07-21T17:19:05.1053314-07:00
+
+Session summary: ported the same new safety check from the Meal Prep app over here (TASK-003), keeping both apps in sync as usual. It's a soft flag that catches when a build touches files a task never said it would touch -- not a hard block, just makes it visible to the reviewer instead of trusting them to notice a stray file in a raw diff. Confirmed both scripts were identical before porting, then verified with 8 passing checks. Touches the automation system itself, so it's held for your OK -- /merge TASK-003 then /merge TASK-003 yes when ready.
