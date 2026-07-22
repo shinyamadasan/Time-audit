@@ -5,6 +5,27 @@
 
 ---
 
+## TASK-003 · 2026-07-21
+suite: [System.Management.Automation.Language.Parser]::ParseFile on tools/Run-Codex-Build.ps1 and
+  tools/Run-Claude-Review.ps1; direct diff against Meal Prep's pre-port versions of both files;
+  fixture harness against `Get-TaskBlockText`/`Get-TaskDeclaredFiles` re-run against this app's own
+  copy of the ported functions (extracted via brace-matching)
+result: both files parse clean. Direct diff confirmed both files were functionally identical to
+  Meal Prep's pre-fix versions before porting (Run-Claude-Review.ps1 byte-identical;
+  Run-Codex-Build.ps1 differed only in two comment lines referencing the other app's name/path,
+  no logic differences). Fixture harness: 8/8 assertions pass -- single-line files field,
+  multi-line continuation with `(new)` annotations stripped, missing field returns `@()`, correct
+  isolation of one task among several with no bleed into neighbors, unknown task ID handled
+  without crash, out-of-scope diff logic correct for both an in-scope build and one with an extra
+  undeclared file. The note read/match/consume logic (task-ID matching, stale-note rejection,
+  always-delete-after-read) was not re-derived separately here -- it's character-for-character
+  identical to Meal Prep's already-tested version (6/6 assertions there), confirmed via the same
+  direct diff rather than re-running a duplicate fixture for no new signal.
+untested: no live end-to-end run in either app -- reproducing a real build that touches a file its
+  task never declared, and confirming the note actually reaches a real REVIEW.md entry, isn't
+  safely reproducible without running the real headless build/review pipeline against a live
+  branch. Honestly disclosed as unverified-live here rather than claimed.
+
 ## TASK-002 · 2026-07-21
 suite: [System.Management.Automation.Language.Parser]::ParseFile on tools/Generate-Digest.ps1 and
   tools/Dispatch-Commands.ps1; tools/Generate-Digest.ps1 executed against the real, live-failing
