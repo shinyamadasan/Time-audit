@@ -5,6 +5,12 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-07-22 — Triage + Plan (run 2)
+
+STEP A: 0 new captures (all 14 inbox files already `status: triaged`; 20 command captures + README checked, all `status: applied`; no new ideas or bug reports). STEP B: BUILD_QUEUE.md still empty; no tasks added. **Action needed:** human moves PROP-004 (P1), PROP-007 (P1), PROP-008 (P2), PROP-009 (P2), PROP-011 (P2) to ROADMAP.md + BUILD_QUEUE.md per the `/approve all` signal from msg_id 82 (see 2026-07-20 entry). TASKS 001/002/003 are all `status: done`.
+
+---
+
 ## 2026-07-22 — Triage + Plan
 
 STEP A: 0 new captures (all 14 inbox files already `status: triaged`; 21 command captures checked, all `/merge` commands with `status: applied`; no new ideas or bug reports). STEP B: BUILD_QUEUE.md still empty; no tasks added. **Action needed:** human moves PROP-004 (P1), PROP-007 (P1), PROP-008 (P2), PROP-009 (P2), PROP-011 (P2) to ROADMAP.md + BUILD_QUEUE.md per the `/approve all` signal from msg_id 82 (see 2026-07-20 entry). TASKS 001/002/003 are all `status: done`.
