@@ -270,3 +270,28 @@ dup-count: 1
 **Goal-adjusted priority:** P3 — Valid product direction but large scope, high ambiguity, and not aligned with current stability/bug-fix priority. Down-weighted further by unset Current Objective.
 
 ---
+
+### PROP-013 — Unlogged-day navigation opens the wrong day's timeline (capture 120)
+
+id: PROP-013
+captures: 20260724T1519Z-120
+- **status:** pending
+dup-count: 1
+
+> **Decision: Approve** — Real usage bug report: from an unlogged-time day list, clicking a specific day (user's example: Wednesday, while today is Friday) opens the *next* day's timeline (Thursday) instead. The header date label stays correct, so this isn't a global date-state bug — it's isolated to whatever click handler resolves the clicked day into a date key for the timeline view. The "off by one, toward the future" pattern is the classic symptom of a `YYYY-MM-DD` string being parsed as UTC midnight and re-rendered in a negative-UTC-offset local timezone, but that's a hypothesis, not a confirmed root cause.
+
+> **Risk:** Low — This reads as a display/navigation bug (which date key gets loaded into the timeline view), not a write path. It does not obviously touch entry schema or Firebase RTDB sync. Flagging Medium-lean-Low instead of flat Low because the fix location is unconfirmed: if root cause turns out to be inside `computeGaps()`'s work-day-start anchor or `getWorkDayStartTs()` (Timeline Helpers, Hard Rule #3) rather than the day-selection click handler, that section is explicitly red-zone and the gate should move to `approved`. Confirm the exact function before scoping as build-ready.
+
+**Goal alignment:** Supports Goal #2 (capture the truth of your day) — a user reviewing "did I log Wednesday?" and landing on Thursday's data instead is being shown the wrong truth, which is the core failure mode this app exists to prevent. Weakly supports Goal #1 (frictionless) — the user now has to double back and re-navigate, and may lose trust in day navigation generally.
+
+**User value:** High. This is a trust bug, not a cosmetic one — a time-audit app whose day navigation can't be trusted to show the day you clicked undermines the entire premise of the tool. First direct report of this specific symptom.
+
+**Evidence:** 1 occurrence, genuine usage report with a precise repro (unlogged-day list → click Wednesday while viewing Friday → Thursday's timeline renders; header date stays correct). No PROPOSALS.md or ROADMAP.md dup — distinct from PROP-004 (timer-restore-on-reopen) and PROP-006 (category-label clarity), the only other date/timer-adjacent open proposals. No dup in DONE.md (empty).
+
+**Effort:** Low–Medium. Needs CODEMAP.md read of the Timeline / date-navigation sections (`setViewDate()`, `navigateDateBy()`, `getViewingDateKey()` per CODEMAP, plus wherever the unlogged-day list's click handler lives — likely `renderUnloggedHours()` / `selectWeekDay()` in the Week view section per CODEMAP) before the exact fix location is known. | **Dependencies:** CODEMAP.md (Timeline Helpers + date-navigation sections), Hard Rule #3 (`computeGaps()` anchor — must confirm the fix doesn't touch it, or escalate risk if it does), Hard Rule #5 (`_todayRenderKey` sentinel — check for interaction). | **Confidence:** High that the bug is real and reproducible; Low-Medium on root cause until the click handler is traced. | **Ambiguity:** Low on expected behavior (clicking Wednesday must show Wednesday); Medium on root cause location.
+
+**Why now vs later:** Now-ish — this is a correctness/trust bug in the app's core "review your day" loop, same category of concern as PROP-004, though it doesn't destroy data (the underlying entries are presumably intact; only the wrong day's data is displayed). Should be scoped once PROP-004 (data loss, higher severity) is handled.
+
+**Goal-adjusted priority:** P2 — Real correctness bug affecting trust in day navigation, but ranked below PROP-004 (actual data loss) and PROP-007 (silently dead escalation feedback) since no data is lost or miscomputed here, only mis-displayed.
+
+---
