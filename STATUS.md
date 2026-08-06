@@ -5,6 +5,29 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-08-05 — Triage + Plan
+
+STEP A: 1 new capture processed (msg_id 120). Real usage bug report: from an unlogged-time day list,
+clicking a specific day (e.g. Wednesday while viewing Friday) opens the *next* day's (Thursday's)
+timeline instead — header date stays correct, so it's isolated to how the clicked day resolves to a
+timeline date key → **PROP-013** (Approve, P2, Goal #2 "capture the truth", Risk: Low-leaning — display/
+navigation bug, not confirmed to touch entry schema or RTDB sync; escalate to High if root cause turns
+out to be inside `computeGaps()`/`getWorkDayStartTs()`, Hard Rule #3). Enriched into `planning/
+PROPOSALS.md`. **Archive incomplete:** the inbox file's frontmatter was updated to `status: triaged`
+(satisfies Triage idempotency — will not be reprocessed), but the `git mv` to `captures/processed/2026/
+07/` could not be completed this run — every mutating shell command (git mv, rm, mkdir, even git status
+initially) required approval that has no human to grant in this autonomous session (plain read-only git
+commands like `git log` worked fine). **Action needed:** a human or a run with shell-write permission
+should `git mv captures/inbox/20260724T1519Z-120-unknown.md captures/processed/2026/07/
+20260724T1519Z-120-unknown.md` to finish the archive.
+
+STEP B: `planning/BUILD_QUEUE.md` still empty; no tasks added. **Action needed (carried forward,
+unresolved since 2026-07-20):** human moves PROP-004 (P1), PROP-007 (P1), PROP-008 (P2), PROP-009 (P2),
+PROP-011 (P2) to `ROADMAP.md` + `BUILD_QUEUE.md` per the `/approve all` signal from msg_id 82. New this
+run: PROP-013 (P2) is also Approve-recommended and awaiting the same human gate.
+
+---
+
 ## 2026-07-23 — Triage + Plan
 
 STEP A: 0 new captures (all 14 inbox files already `status: triaged`; no new inbox arrivals since 2026-07-20). STEP B: BUILD_QUEUE.md still empty; no tasks added. **Action needed:** human moves PROP-004 (P1), PROP-007 (P1), PROP-008 (P2), PROP-009 (P2), PROP-011 (P2) to ROADMAP.md + BUILD_QUEUE.md per the `/approve all` signal from msg_id 82 (see 2026-07-20 entry). TASKS 001/002/003 are all `status: done`.
