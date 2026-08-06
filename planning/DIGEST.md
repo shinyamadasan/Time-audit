@@ -1,7 +1,7 @@
 🌅 *ChronaSense — Morning Digest*
-Thu 23 Jul · 12 proposals waiting · 🎯 Objective: *unset*
+Wed 05 Aug · 13 proposals waiting · 🎯 Objective: *unset*
 
-✅ *RECOMMEND APPROVE (5)*
+✅ *RECOMMEND APPROVE (6)*
 *4* · Timer state not restored on app reopen (capture 52)
    → — First user-reported bug; maps directly to Hard Rule #8 (timer restore order in INIT). When the app is closed mid-session and reopened, the hero resets to starting "work" instead of resuming the active entry. Data correctness issue: the gap between close and reopen is untracked, and the resumed state is wrong.
 *7* · `triggerPenaltyMode()` undefined — escalation dead-letters on 5-waste streaks
@@ -12,18 +12,14 @@ Thu 23 Jul · 12 proposals waiting · 🎯 Objective: *unset*
    → — Confirmed precision bug in `focus-wallet.js:isFocusWalletSportsEntry()`. The function uses `label.includes("sport")` where `label` is the lowercased activity name. The word "transport" contains "sport" as a substring (positions 4–8 of "transport"). Any activity logged as "Public transport", "Transport to office", "Air transport", etc. is silently classified as a weekly sports session, consuming a free-session slot and potentially incurring wallet costs (10 pts for session 4, 25 pts for each beyond that).
 *11* · Auto-timer toggle: enable / disable auto-start (capture 84)
    → — Real usage frustration: the timer auto-starts when the app opens even when the user is not working. A user-controlled toggle (on/off for auto-start) would eliminate unwanted entries and reduce noise in the audit log. First direct UX complaint about timer behavior from real use (not testing).
+*13* · Unlogged-day navigation opens the wrong day's timeline (capture 120)
+   → — Real usage bug report: from an unlogged-time day list, clicking a specific day (user's example: Wednesday, while today is Friday) opens the *next* day's timeline (Thursday) instead. The header date label stays correct, so this isn't a global date-state bug — it's isolated to whatever click handler resolves the clicked day into a date key for the timeline view. The "off by one, toward the future" pattern is the classic symptom of a `YYYY-MM-DD` string being parsed as UTC midnight and re-rendered in a negative-UTC-offset local timezone, but that's a hypothesis, not a confirmed root cause.
 
 💤 *RECOMMEND PARK (2)*
 *6* · Category clarity: where do cooking and church work go? (capture 75)
    → — Real usage friction: user couldn't tell which category bucket to use for "cooking" or "church work." Worth addressing, but needs clarification (relabeling? new presets? descriptions?) before it can be specced. Park behind PROP-004 bug fix and pending Current Objective.
-*12* · In-app calendar / appointment planning (capture 86)
-   → — The user wants to plan appointments during the day inside the app (like Google Calendar), with an optional Google Calendar sync. Valid product direction for closing the "planned vs actual" gap, but this is a large-scope feature addition — effectively a second major subsystem alongside the timer/audit core. Park behind current P1/P2 bug fixes and pending Current Objective. Revisit once the app is stable and the Current Objective is set.
 
-🗑 *RECOMMEND REJECT (5)*
-*1* · Keysmash test noise (captures 12, 16, 36)
-   → — Three keysmash/filler test messages ("tesss", "test capture,", "sda") sent during Telegram bot setup. No actionable content.
-
-_...+4 more waiting, too many to fit in one message — see planning/PROPOSALS.md, or reply to approve/park/reject by number anyway._
+_...+6 more waiting, too many to fit in one message — see planning/PROPOSALS.md, or reply to approve/park/reject by number anyway._
 
 —
 *Reply:* `Accept` (take all my recs) · `Approve all` · `Approve 14-19` · `Park 7` · `Reject 12`
