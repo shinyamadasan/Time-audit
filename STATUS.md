@@ -5,6 +5,26 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-08-06 — Triage + Plan
+
+STEP A: 0 new captures (all 15 inbox files already `status: triaged`; msg_id 120/PROP-013 confirmed
+already enriched in `planning/PROPOSALS.md` from the prior run). Nothing to route or enrich.
+**Carried forward, unresolved since 2026-08-05:** msg 120's `git mv` to `captures/processed/2026/07/`
+is still incomplete — this autonomous run has no human available to approve the mutating shell
+command (`git mv` requires approval same as last run; plain reads still work fine). The file's
+frontmatter already reads `status: triaged` so it will not be reprocessed, but it remains physically
+in `captures/inbox/` instead of `captures/processed/2026/07/`. **Action needed:** a human, or a run
+with shell-write permission, completes `git mv captures/inbox/20260724T1519Z-120-unknown.md
+captures/processed/2026/07/20260724T1519Z-120-unknown.md`.
+
+STEP B: `planning/BUILD_QUEUE.md` still empty (confirmed); no tasks added. `planning/ROADMAP.md`
+Approved Backlog and Current Objective remain unset. **Action needed (carried forward, unresolved
+since 2026-07-20):** human moves PROP-004 (P1), PROP-007 (P1), PROP-008 (P2), PROP-009 (P2), PROP-011
+(P2), PROP-013 (P2) to `ROADMAP.md` + `BUILD_QUEUE.md` per the `/approve all` signal from msg_id 82,
+to unblock the build pipeline. All TASKS.md entries (001–003) remain `status: done`.
+
+---
+
 ## 2026-08-05 — Triage + Plan
 
 STEP A: 1 new capture processed (msg_id 120). Real usage bug report: from an unlogged-time day list,
