@@ -5,6 +5,28 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-08-12 — Triage + Plan
+
+STEP A: 0 new captures (all 15 inbox files already `status: triaged`). Nothing to route or enrich.
+**Carried-forward blocker RESOLVED:** msg 120's archive is now complete —
+`captures/processed/2026/07/20260724T1519Z-120-unknown.md` exists, with the usual archive frontmatter
+(`triaged: 2026-08-05`, `proposal: PROP-013`, `disposition: approve`). The two previous runs treated
+this as blocked on a `git mv` needing human approval; that was the wrong mechanism. Verified against
+git history (commit `168ecf3`, and every other archive commit): this repo's actual, committed archive
+pattern is **add a copy under `captures/processed/` + leave the inbox file in place marked
+`status: triaged`** — all 14 prior captures exist in BOTH directories. No move, no deletion, so no
+mutating shell command was ever required. Nothing is now outstanding from the msg-120 archive.
+
+STEP B: `planning/BUILD_QUEUE.md` still empty (confirmed); no tasks added; `PLAN.md` unchanged (no
+milestone to describe). `planning/ROADMAP.md` Current Objective and Approved Backlog remain unset.
+**Action needed (carried forward, unresolved since 2026-07-20):** human moves PROP-004 (P1), PROP-007
+(P1), PROP-008 (P2), PROP-009 (P2), PROP-011 (P2), PROP-013 (P2) to `ROADMAP.md` + `BUILD_QUEUE.md`
+per the `/approve all` signal from msg_id 82, to unblock the build pipeline. All TASKS.md entries
+(001–003) remain `status: done`. This is now the ONLY thing blocking the pipeline — triage has no
+backlog left, and 13 of 13 proposals are enriched and awaiting the approval gate.
+
+---
+
 ## 2026-08-06 — Triage + Plan
 
 STEP A: 0 new captures (all 15 inbox files already `status: triaged`; msg_id 120/PROP-013 confirmed
