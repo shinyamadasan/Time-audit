@@ -5,6 +5,24 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-08-12 — Triage + Plan (run 2)
+
+STEP A: 0 new captures — all 15 `captures/inbox/*.md` are `status: triaged`, and all 15 are present in
+`captures/processed/2026/07/`, so the archive is complete with nothing outstanding. (The only
+`status: new` string anywhere in `captures/` is the frontmatter example inside
+`captures/commands/README.md`, which is documentation, not a capture; the 20 real command captures are
+all `applied`/`cancelled`.) Nothing to route or enrich. All 13 proposals in `planning/PROPOSALS.md`
+remain enriched and `status: pending`.
+
+STEP B: `planning/BUILD_QUEUE.md` still empty (confirmed); no tasks added; `PLAN.md` unchanged (no
+milestone to describe). **Action needed (carried forward, unresolved since 2026-07-20 — unchanged this
+run):** human sets the Current Objective in `planning/ROADMAP.md` (still unset) and moves PROP-004 (P1),
+PROP-007 (P1), PROP-008 (P2), PROP-009 (P2), PROP-011 (P2), PROP-013 (P2) to `ROADMAP.md` +
+`BUILD_QUEUE.md` per the `/approve all` signal from msg_id 82. This remains the ONLY thing blocking the
+build pipeline: triage has zero backlog, and TASKS.md entries 001–003 are all `status: done`.
+
+---
+
 ## 2026-08-12 — Triage + Plan
 
 STEP A: 0 new captures (all 15 inbox files already `status: triaged`). Nothing to route or enrich.
