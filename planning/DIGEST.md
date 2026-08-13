@@ -1,5 +1,5 @@
 🌅 *ChronaSense — Morning Digest*
-Wed 12 Aug · 13 proposals waiting · 🎯 Objective: *unset*
+Thu 13 Aug · 13 proposals waiting · 🎯 Objective: *unset*
 
 ✅ *RECOMMEND APPROVE (6)*
 *4* · Timer state not restored on app reopen (capture 52)
