@@ -5,6 +5,27 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-08-14 — Triage + Plan
+
+STEP A: 0 new captures. All 15 `captures/inbox/*.md` are `status: triaged`, and all 15 have a matching
+archive under `captures/processed/2026/07/` — archive complete, nothing outstanding. A repo-wide scan
+for `status: new` under `captures/` returns only the frontmatter examples in `captures/README.md` and
+`captures/commands/README.md` (documentation, not captures); the 20 real command captures are all
+terminal (`applied`/`cancelled`). Nothing to categorize, dedupe, enrich, or archive. All 13 proposals
+in `planning/PROPOSALS.md` (PROP-001 … PROP-013) remain enriched and `status: pending`.
+
+STEP B: `planning/BUILD_QUEUE.md` still empty (confirmed); no `source: BQ-*` tasks to create; no
+existing TASKS.md entries reordered or restatused; `PLAN.md` unchanged (no milestone to describe).
+`planning/ROADMAP.md` Current Objective and Approved Backlog both still unset.
+**Action needed (carried forward, unresolved since 2026-07-20 — 25 days, unchanged this run):** human
+sets the Current Objective in `planning/ROADMAP.md` and moves PROP-004 (P1), PROP-007 (P1), PROP-008
+(P2), PROP-009 (P2), PROP-011 (P2), PROP-013 (P2) to `ROADMAP.md` + `BUILD_QUEUE.md` per the
+`/approve all` signal from msg_id 82. This remains the ONLY thing blocking the build pipeline: triage
+has zero backlog and TASKS.md entries 001–003 are all `status: done`. Autonomous runs cannot cross the
+approval gate, so every further triage-only run will report this same line until a human acts.
+
+---
+
 ## 2026-08-13 — Triage + Plan (run 2)
 
 STEP A: 0 new captures. All 15 `captures/inbox/*.md` are `status: triaged`, and all 15 have a matching
