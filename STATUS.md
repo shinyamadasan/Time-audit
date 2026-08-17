@@ -5,6 +5,32 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-08-17 — Triage + Plan
+
+STEP A: 0 new captures. All 15 `captures/inbox/*.md` carry `status: triaged` — verified by reading the
+`status:` line of every file, not a spot-check. A repo-wide scan of `captures/` for `status: new`
+matches only three documentation lines (`captures/README.md:37`, `captures/commands/README.md:29`
+and `:74`), which are frontmatter examples and prose, not captures. Archive is complete 1:1:
+`captures/processed/2026/07/` holds exactly the same 15 filenames as `captures/inbox/`. Nothing to
+categorize, dedupe, enrich, or archive. All 13 proposals in `planning/PROPOSALS.md`
+(PROP-001 … PROP-013) remain `status: pending` — 13 of 13 `**status:**` lines matched, zero
+approved/rejected.
+
+STEP B: `planning/BUILD_QUEUE.md` still empty (file body is literally `*(empty)*`); no `source: BQ-*`
+tasks to create — the only `source: BQ-<id>` string in `TASKS.md` is inside the commented-out task
+template. No existing TASKS.md entries added, reordered, or restatused; there are no `status: codex`
+tasks to order (001–003 are all `status: done`). `PLAN.md` unchanged (no milestone to describe).
+`planning/ROADMAP.md` Current Objective (line 19) and Approved Backlog (line 25) both still unset.
+**Action needed (carried forward, unresolved since 2026-07-20 — 28 days, unchanged this run):** human
+sets the Current Objective in `planning/ROADMAP.md` and moves PROP-004 (P1), PROP-007 (P1), PROP-008
+(P2), PROP-009 (P2), PROP-011 (P2), PROP-013 (P2) to `ROADMAP.md` + `BUILD_QUEUE.md` per the
+`/approve all` signal from msg_id 82. This remains the ONLY thing blocking the build pipeline: triage
+has zero backlog and TASKS.md entries 001–003 are all `status: done`. Autonomous runs cannot cross the
+approval gate, so every further triage-only run will report this same line until a human acts — this is
+now the 15th consecutive run to do so.
+
+---
+
 ## 2026-08-16 — Triage + Plan (run 2)
 
 STEP A: 0 new captures. Every one of the 15 `captures/inbox/*.md` files carries `status: triaged`
