@@ -1,6 +1,16 @@
 // node test.js
 import assert from 'node:assert/strict';
 import './focus-wallet.js';
+import {
+  createLifeLedgerMemoryStore,
+  deriveLifeLedgerKey,
+  fingerprintLifeLedgerEvent,
+  serializeLifeLedgerFacts,
+  upsertLifeLedgerEvent,
+  upsertManyLifeLedgerEvents,
+  validateLifeLedgerEvent,
+  validateLifeLedgerEventDraft
+} from './life-ledger-core.js';
 
 const { computeFocusWallet, getFocusWalletWeekKey } = globalThis;
 
@@ -1060,6 +1070,619 @@ test('negative debt carries forward, but prior surplus does not', () => {
   ], [], { intervalMin: 30 }, nextWeek);
   assert.equal(surplusWallet.carriedDebt, 0);
   assert.equal(surplusWallet.balance, 0);
+});
+
+// -- Life Ledger core ---------------------------------------------------------
+
+const LL_TIME = {
+  start: '2026-08-27T16:00:00.000Z',
+  end: '2026-08-27T16:45:00.000Z',
+  recorded: '2026-08-27T16:46:03.000Z',
+  revised: '2026-08-27T17:00:00.000Z'
+};
+
+function sampleActivityDraft(overrides = {}) {
+  const base = {
+    schemaVersion: 1,
+    sourceApp: 'chronasense',
+    sourceEntityId: '1700000000000',
+    type: 'activity_logged',
+    occurredAt: LL_TIME.end,
+    sourceTimezone: 'America/Phoenix',
+    payload: {
+      activity: 'Deep work',
+      category: 'deep_work',
+      startedAt: LL_TIME.start,
+      endedAt: LL_TIME.end,
+      durationMinutes: 45,
+      energy: 'deep',
+      onPlan: true
+    },
+    provenance: {
+      source: 'chronasense',
+      sourceRecordKind: 'chronasense.entry',
+      adapterVersion: 'chronasense-v1',
+      observedAt: LL_TIME.recorded,
+      captureMethod: 'timer',
+      evidence: ['chronasense.entries/1700000000000']
+    },
+    confidence: {
+      score: 1,
+      basis: 'source-recorded'
+    },
+    tombstone: {
+      active: false,
+      deletedAt: null,
+      reason: null,
+      provenance: null
+    }
+  };
+  return {
+    ...base,
+    ...overrides,
+    payload: { ...base.payload, ...(overrides.payload || {}) },
+    provenance: { ...base.provenance, ...(overrides.provenance || {}) },
+    confidence: { ...base.confidence, ...(overrides.confidence || {}) },
+    tombstone: { ...base.tombstone, ...(overrides.tombstone || {}) }
+  };
+}
+
+function sampleStoredEvent(overrides = {}) {
+  return {
+    ...sampleActivityDraft(overrides),
+    eventId: '3f1d7f69-8b5a-4f10-b7ec-d1c45e6fba55',
+    recordedAt: LL_TIME.recorded,
+    revisedAt: null,
+    revision: 1,
+    ...overrides
+  };
+}
+
+function tombstoneDraft() {
+  return sampleActivityDraft({
+    provenance: {
+      sourceOperation: 'delete',
+      observedAt: '2026-08-27T17:05:00.000Z'
+    },
+    tombstone: {
+      active: true,
+      deletedAt: '2026-08-27T17:05:00.000Z',
+      reason: 'user_delete',
+      provenance: {
+        sourceOperation: 'delete',
+        sourceRecordKind: 'chronasense.entry',
+        evidence: ['chronasense.entries/1700000000000/deleted']
+      }
+    }
+  });
+}
+
+function sequencedClock(...values) {
+  let index = 0;
+  return () => values[Math.min(index++, values.length - 1)];
+}
+
+console.log('\nLife Ledger validation');
+test('valid V1 persisted event passes', () => {
+  assert.equal(validateLifeLedgerEvent(sampleStoredEvent()).ok, true);
+});
+test('unsupported sourceApp fails', () => {
+  const result = validateLifeLedgerEventDraft(sampleActivityDraft({ sourceApp: 'calendar' }));
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some(error => error.includes('sourceApp')));
+});
+test('unsupported type fails', () => {
+  const result = validateLifeLedgerEventDraft(sampleActivityDraft({ type: 'journal_entry_added' }));
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some(error => error.includes('type')));
+});
+test('malformed timestamp fails', () => {
+  const result = validateLifeLedgerEventDraft(sampleActivityDraft({ occurredAt: '2026-08-27 16:45' }));
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some(error => error.includes('occurredAt')));
+});
+test('malformed revision fails', () => {
+  const result = validateLifeLedgerEvent(sampleStoredEvent({ revision: 0 }));
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some(error => error.includes('revision')));
+});
+test('malformed provenance fails', () => {
+  const event = sampleActivityDraft();
+  event.provenance = { source: 'chronasense' };
+  const result = validateLifeLedgerEventDraft(event);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some(error => error.includes('provenance')));
+});
+test('sourceTimezone is required for V1 local-window semantics', () => {
+  const result = validateLifeLedgerEventDraft(sampleActivityDraft({ sourceTimezone: 'Phoenix' }));
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some(error => error.includes('sourceTimezone')));
+});
+test('nested payload factual values must be JSON-safe', () => {
+  [
+    NaN,
+    Infinity,
+    -Infinity,
+    undefined,
+    new Date(LL_TIME.end),
+    () => {},
+    Symbol('x'),
+    new Map([['x', 1]])
+  ].forEach(bad => {
+    const event = sampleActivityDraft({ payload: { source: { bad } } });
+    const result = validateLifeLedgerEventDraft(event);
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some(error => error.includes('payload.source.bad')), `expected payload.source.bad error for ${String(bad)}`);
+  });
+});
+test('class instances and circular factual payloads are rejected safely', () => {
+  class FactualBox {
+    constructor() {
+      this.value = 1;
+    }
+  }
+  const classEvent = sampleActivityDraft({ payload: { source: { bad: new FactualBox() } } });
+  const classResult = validateLifeLedgerEventDraft(classEvent);
+  assert.equal(classResult.ok, false);
+  assert.ok(classResult.errors.some(error => error.includes('payload.source.bad')));
+
+  const circular = {};
+  circular.self = circular;
+  const circularEvent = sampleActivityDraft({ payload: { source: circular } });
+  const circularResult = validateLifeLedgerEventDraft(circularEvent);
+  assert.equal(circularResult.ok, false);
+  assert.ok(circularResult.errors.some(error => error.includes('circular')));
+});
+test('sparse factual arrays are rejected instead of becoming implicit null', () => {
+  const items = [];
+  items.length = 2;
+  items[1] = 'present';
+  const result = validateLifeLedgerEventDraft(sampleActivityDraft({ payload: { source: { items } } }));
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some(error => error.includes('payload.source.items[0]')));
+});
+test('sparse nested factual arrays are rejected', () => {
+  const items = [];
+  items.length = 2;
+  items[1] = { label: 'present' };
+  const result = validateLifeLedgerEventDraft(sampleActivityDraft({ payload: { source: { deep: { items } } } }));
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some(error => error.includes('payload.source.deep.items[0]')));
+});
+test('explicit null in factual arrays remains valid', () => {
+  const result = validateLifeLedgerEventDraft(sampleActivityDraft({ payload: { source: { items: [null, 'present'] } } }));
+  assert.equal(result.ok, true);
+});
+test('dense factual arrays with nested JSON data remain valid', () => {
+  const result = validateLifeLedgerEventDraft(sampleActivityDraft({
+    payload: {
+      source: {
+        items: [
+          { label: 'first', flags: [true, false], count: 1 },
+          { label: 'second', meta: { note: 'present' } }
+        ]
+      }
+    }
+  }));
+  assert.equal(result.ok, true);
+});
+test('unsupported factual provenance, confidence, and tombstone values are rejected', () => {
+  const provenanceEvent = sampleActivityDraft();
+  provenanceEvent.provenance.evidence = ['chronasense.entries/1700000000000'];
+  provenanceEvent.provenance.extra = { bad: new Set(['x']) };
+  assert.equal(validateLifeLedgerEventDraft(provenanceEvent).ok, false);
+
+  const confidenceEvent = sampleActivityDraft({ confidence: { source: { bad: NaN } } });
+  assert.equal(validateLifeLedgerEventDraft(confidenceEvent).ok, false);
+
+  const tombstoneEvent = tombstoneDraft();
+  tombstoneEvent.tombstone.provenance.sourceMetadata = { bad: new Date(LL_TIME.end) };
+  assert.equal(validateLifeLedgerEventDraft(tombstoneEvent).ok, false);
+});
+test('non-activity payload validation covers valid and invalid meal_prepared events', () => {
+  const valid = {
+    schemaVersion: 1,
+    sourceApp: 'meal',
+    sourceEntityId: 'cooked-meal-1',
+    type: 'meal_prepared',
+    occurredAt: '2026-08-27T18:00:00.000Z',
+    sourceTimezone: 'America/Phoenix',
+    payload: {
+      mealName: 'Chicken bowls',
+      preparedAt: '2026-08-27T18:00:00.000Z',
+      servingsPrepared: 4
+    },
+    provenance: {
+      source: 'meal',
+      sourceRecordKind: 'meal.cooked_meal',
+      adapterVersion: 'meal-v1',
+      observedAt: '2026-08-27T18:01:00.000Z',
+      evidence: ['meal.cookedMeals/cooked-meal-1']
+    },
+    confidence: { score: 1, basis: 'source-recorded' },
+    tombstone: { active: false, deletedAt: null, reason: null, provenance: null }
+  };
+  assert.equal(validateLifeLedgerEventDraft(valid).ok, true);
+  const invalid = { ...valid, payload: { mealName: 'Chicken bowls' } };
+  assert.equal(validateLifeLedgerEventDraft(invalid).ok, false);
+});
+
+console.log('\nLife Ledger identity');
+test('same logical source fact derives same idempotency key', () => {
+  assert.equal(
+    deriveLifeLedgerKey(sampleActivityDraft()),
+    'chronasense:1700000000000:activity_logged'
+  );
+});
+test('mutable payload change does not change logical key', () => {
+  const a = sampleActivityDraft();
+  const b = sampleActivityDraft({ payload: { activity: 'Renamed work' } });
+  assert.equal(deriveLifeLedgerKey(a), deriveLifeLedgerKey(b));
+});
+test('same raw source ID is scoped by sourceApp and type', () => {
+  const workout = {
+    ...sampleActivityDraft({
+      sourceApp: 'workout',
+      type: 'workout_completed',
+      sourceEntityId: '1700000000000',
+      occurredAt: LL_TIME.end,
+      payload: {
+        workoutName: 'Leg day',
+        startedAt: LL_TIME.start,
+        endedAt: LL_TIME.end,
+        durationMinutes: 45
+      },
+      provenance: {
+        source: 'workout',
+        sourceRecordKind: 'workout.workout',
+        adapterVersion: 'workout-v1',
+        observedAt: LL_TIME.recorded,
+        evidence: ['workout.completed/1700000000000']
+      }
+    })
+  };
+  assert.notEqual(deriveLifeLedgerKey(sampleActivityDraft()), deriveLifeLedgerKey(workout));
+});
+
+console.log('\nLife Ledger fingerprint');
+test('object key-order differences do not change fingerprint', () => {
+  const a = sampleActivityDraft({
+    payload: { source: { z: 1, a: 2 } }
+  });
+  const b = sampleActivityDraft({
+    payload: { source: { a: 2, z: 1 } }
+  });
+  assert.equal(fingerprintLifeLedgerEvent(a), fingerprintLifeLedgerEvent(b));
+  assert.equal(serializeLifeLedgerFacts(a), serializeLifeLedgerFacts(b));
+});
+test('observedAt-only change does not change factual fingerprint', () => {
+  const a = sampleActivityDraft();
+  const b = sampleActivityDraft({ provenance: { observedAt: '2026-08-28T00:00:00.000Z' } });
+  assert.equal(fingerprintLifeLedgerEvent(a), fingerprintLifeLedgerEvent(b));
+});
+test('adapterVersion-only change does not change factual fingerprint', () => {
+  const a = sampleActivityDraft();
+  const b = sampleActivityDraft({ provenance: { adapterVersion: 'chronasense-v2' } });
+  assert.equal(fingerprintLifeLedgerEvent(a), fingerprintLifeLedgerEvent(b));
+});
+test('recordedAt, revisedAt, revision, and eventId do not affect fingerprint', () => {
+  const a = sampleStoredEvent();
+  const b = sampleStoredEvent({
+    eventId: '4f1d7f69-8b5a-4f10-b7ec-d1c45e6fba55',
+    recordedAt: '2026-08-30T00:00:00.000Z',
+    revisedAt: '2026-08-30T01:00:00.000Z',
+    revision: 9
+  });
+  assert.equal(fingerprintLifeLedgerEvent(a), fingerprintLifeLedgerEvent(b));
+});
+test('sourceTimezone and occurredAt changes affect factual fingerprint', () => {
+  const base = sampleActivityDraft();
+  assert.notEqual(fingerprintLifeLedgerEvent(base), fingerprintLifeLedgerEvent(sampleActivityDraft({ sourceTimezone: 'Asia/Manila' })));
+  assert.notEqual(fingerprintLifeLedgerEvent(base), fingerprintLifeLedgerEvent(sampleActivityDraft({
+    occurredAt: '2026-08-27T17:00:00.000Z',
+    payload: { endedAt: '2026-08-27T17:00:00.000Z' }
+  })));
+});
+test('tombstone-state change affects factual fingerprint', () => {
+  assert.notEqual(fingerprintLifeLedgerEvent(sampleActivityDraft()), fingerprintLifeLedgerEvent(tombstoneDraft()));
+});
+
+console.log('\nLife Ledger upsert');
+test('new event gets one UUID, revision 1, and immutable recordedAt', () => {
+  const store = createLifeLedgerMemoryStore();
+  const result = upsertLifeLedgerEvent(store, sampleActivityDraft(), {
+    createId: () => '11111111-1111-4111-8111-111111111111',
+    clock: () => LL_TIME.recorded
+  });
+  assert.equal(result.action, 'created');
+  assert.equal(result.event.eventId, '11111111-1111-4111-8111-111111111111');
+  assert.equal(result.event.sourceEntityId, '1700000000000');
+  assert.equal(result.event.revision, 1);
+  assert.equal(result.event.recordedAt, LL_TIME.recorded);
+  assert.equal(result.event.revisedAt, null);
+});
+test('same normalized event twice creates one logical event and keeps revision 1', () => {
+  let ids = 0;
+  const store = createLifeLedgerMemoryStore();
+  const opts = {
+    createId: () => {
+      ids++;
+      return '22222222-2222-4222-8222-222222222222';
+    },
+    clock: sequencedClock(LL_TIME.recorded, '2026-08-28T00:00:00.000Z')
+  };
+  const first = upsertLifeLedgerEvent(store, sampleActivityDraft(), opts);
+  const second = upsertLifeLedgerEvent(store, sampleActivityDraft({ provenance: { observedAt: '2026-08-28T00:00:00.000Z' } }), opts);
+  assert.equal(first.action, 'created');
+  assert.equal(second.action, 'unchanged');
+  assert.equal(second.event.eventId, first.event.eventId);
+  assert.equal(second.event.revision, 1);
+  assert.equal(second.event.recordedAt, LL_TIME.recorded);
+  assert.equal(second.event.revisedAt, null);
+  assert.equal(store.listEvents().length, 1);
+  assert.equal(ids, 1);
+});
+test('factual payload change increments revision and keeps identity fields', () => {
+  const store = createLifeLedgerMemoryStore();
+  const opts = {
+    createId: () => '33333333-3333-4333-8333-333333333333',
+    clock: sequencedClock(LL_TIME.recorded, LL_TIME.revised)
+  };
+  const first = upsertLifeLedgerEvent(store, sampleActivityDraft(), opts);
+  const second = upsertLifeLedgerEvent(store, sampleActivityDraft({ payload: { activity: 'Deep work corrected' } }), opts);
+  assert.equal(second.action, 'revised');
+  assert.equal(second.event.eventId, first.event.eventId);
+  assert.equal(second.event.recordedAt, first.event.recordedAt);
+  assert.equal(second.event.revision, 2);
+  assert.equal(second.event.revisedAt, LL_TIME.revised);
+});
+test('explicit tombstone transition increments revision and keeps eventId', () => {
+  const store = createLifeLedgerMemoryStore();
+  const opts = {
+    createId: () => '44444444-4444-4444-8444-444444444444',
+    clock: sequencedClock(LL_TIME.recorded, '2026-08-27T17:05:00.000Z')
+  };
+  const first = upsertLifeLedgerEvent(store, sampleActivityDraft(), opts);
+  const deleted = upsertLifeLedgerEvent(store, tombstoneDraft(), opts);
+  assert.equal(deleted.action, 'tombstoned');
+  assert.equal(deleted.event.eventId, first.event.eventId);
+  assert.equal(deleted.event.revision, 2);
+  assert.equal(deleted.event.tombstone.active, true);
+});
+test('empty batch does not infer a tombstone from source absence', () => {
+  const store = createLifeLedgerMemoryStore();
+  upsertLifeLedgerEvent(store, sampleActivityDraft(), {
+    createId: () => '55555555-5555-4555-8555-555555555555',
+    clock: () => LL_TIME.recorded
+  });
+  const batch = upsertManyLifeLedgerEvents(store, []);
+  const [event] = store.listEvents();
+  assert.equal(batch.action, 'ok');
+  assert.equal(event.tombstone.active, false);
+});
+test('explicit restore clears tombstone, increments revision, and keeps eventId', () => {
+  const store = createLifeLedgerMemoryStore();
+  const opts = {
+    createId: () => '66666666-6666-4666-8666-666666666666',
+    clock: sequencedClock(LL_TIME.recorded, '2026-08-27T17:05:00.000Z', '2026-08-27T17:30:00.000Z')
+  };
+  const first = upsertLifeLedgerEvent(store, sampleActivityDraft(), opts);
+  upsertLifeLedgerEvent(store, tombstoneDraft(), opts);
+  const restored = upsertLifeLedgerEvent(store, sampleActivityDraft({
+    provenance: {
+      sourceOperation: 'restore',
+      observedAt: '2026-08-27T17:30:00.000Z'
+    }
+  }), opts);
+  assert.equal(restored.action, 'restored');
+  assert.equal(restored.event.eventId, first.event.eventId);
+  assert.equal(restored.event.revision, 3);
+  assert.equal(restored.event.tombstone.active, false);
+});
+test('create with restore provenance is rejected', () => {
+  const store = createLifeLedgerMemoryStore();
+  let ids = 0;
+  const result = upsertLifeLedgerEvent(store, sampleActivityDraft({
+    provenance: { sourceOperation: 'restore' }
+  }), {
+    createId: () => {
+      ids++;
+      return 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    },
+    clock: () => LL_TIME.recorded
+  });
+  assert.equal(result.action, 'rejected');
+  assert.equal(result.reason, 'restore_requires_existing_tombstone');
+  assert.equal(store.listEvents().length, 0);
+  assert.equal(ids, 0);
+});
+test('active never-deleted event rejects restore provenance without changing stored state', () => {
+  const store = createLifeLedgerMemoryStore();
+  const opts = {
+    createId: () => 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    clock: sequencedClock(LL_TIME.recorded, LL_TIME.revised)
+  };
+  const first = upsertLifeLedgerEvent(store, sampleActivityDraft(), opts);
+  const rejected = upsertLifeLedgerEvent(store, sampleActivityDraft({
+    provenance: {
+      sourceOperation: 'restore',
+      observedAt: LL_TIME.revised
+    }
+  }), opts);
+  const [stored] = store.listEvents();
+  assert.equal(rejected.action, 'rejected');
+  assert.equal(rejected.reason, 'restore_requires_existing_tombstone');
+  assert.equal(stored.eventId, first.event.eventId);
+  assert.equal(stored.revision, 1);
+  assert.equal(stored.recordedAt, LL_TIME.recorded);
+  assert.equal(stored.revisedAt, null);
+  assert.equal(stored.tombstone.active, false);
+});
+test('simple reappearance after tombstone is rejected without restore evidence', () => {
+  const store = createLifeLedgerMemoryStore();
+  const opts = {
+    createId: () => '77777777-7777-4777-8777-777777777777',
+    clock: sequencedClock(LL_TIME.recorded, '2026-08-27T17:05:00.000Z', '2026-08-27T17:30:00.000Z')
+  };
+  upsertLifeLedgerEvent(store, sampleActivityDraft(), opts);
+  upsertLifeLedgerEvent(store, tombstoneDraft(), opts);
+  const reappeared = upsertLifeLedgerEvent(store, sampleActivityDraft({
+    provenance: { observedAt: '2026-08-27T17:30:00.000Z' }
+  }), opts);
+  assert.equal(reappeared.action, 'rejected');
+  assert.equal(reappeared.reason, 'restore_requires_explicit_evidence');
+  assert.equal(store.listEvents()[0].tombstone.active, true);
+});
+test('repeated identical restored retry does not increment revision again', () => {
+  const store = createLifeLedgerMemoryStore();
+  const opts = {
+    createId: () => 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    clock: sequencedClock(LL_TIME.recorded, '2026-08-27T17:05:00.000Z', '2026-08-27T17:30:00.000Z', '2026-08-27T18:00:00.000Z')
+  };
+  const created = upsertLifeLedgerEvent(store, sampleActivityDraft(), opts);
+  upsertLifeLedgerEvent(store, tombstoneDraft(), opts);
+  const restoreDraft = sampleActivityDraft({
+    provenance: {
+      sourceOperation: 'restore',
+      observedAt: '2026-08-27T17:30:00.000Z'
+    }
+  });
+  const restored = upsertLifeLedgerEvent(store, restoreDraft, opts);
+  const retried = upsertLifeLedgerEvent(store, restoreDraft, opts);
+  assert.equal(retried.action, 'unchanged');
+  assert.equal(retried.event.eventId, created.event.eventId);
+  assert.equal(restored.event.revision, 3);
+  assert.equal(retried.event.revision, 3);
+});
+test('repeated retry after create does not create duplicate UUIDs or events', () => {
+  let ids = 0;
+  const store = createLifeLedgerMemoryStore();
+  const opts = {
+    createId: () => {
+      ids++;
+      return '88888888-8888-4888-8888-888888888888';
+    },
+    clock: () => LL_TIME.recorded
+  };
+  upsertLifeLedgerEvent(store, sampleActivityDraft(), opts);
+  upsertLifeLedgerEvent(store, sampleActivityDraft(), opts);
+  upsertLifeLedgerEvent(store, sampleActivityDraft(), opts);
+  assert.equal(store.listEvents().length, 1);
+  assert.equal(store.listEvents()[0].eventId, '88888888-8888-4888-8888-888888888888');
+  assert.equal(ids, 1);
+});
+test('sparse arrays are rejected by upsert before successful fingerprint persistence', () => {
+  let ids = 0;
+  const store = createLifeLedgerMemoryStore();
+  const items = [];
+  items.length = 2;
+  items[1] = 'present';
+  const result = upsertLifeLedgerEvent(store, sampleActivityDraft({ payload: { source: { items } } }), {
+    createId: () => {
+      ids++;
+      return '99999999-9999-4999-8999-999999999999';
+    },
+    clock: () => LL_TIME.recorded
+  });
+  assert.equal(result.action, 'rejected');
+  assert.equal(result.reason, 'invalid_event');
+  assert.equal(store.listEvents().length, 0);
+  assert.equal(ids, 0);
+});
+test('repeated identical retry after factual revision does not increment revision again', () => {
+  const store = createLifeLedgerMemoryStore();
+  const opts = {
+    createId: () => 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    clock: sequencedClock(LL_TIME.recorded, LL_TIME.revised, '2026-08-27T18:00:00.000Z')
+  };
+  upsertLifeLedgerEvent(store, sampleActivityDraft(), opts);
+  const corrected = sampleActivityDraft({ payload: { activity: 'Deep work corrected' } });
+  const revision = upsertLifeLedgerEvent(store, corrected, opts);
+  const retry = upsertLifeLedgerEvent(store, corrected, opts);
+  assert.equal(revision.action, 'revised');
+  assert.equal(revision.event.revision, 2);
+  assert.equal(retry.action, 'unchanged');
+  assert.equal(retry.event.revision, 2);
+});
+test('conflicting duplicate physical input rejects batch without minting multiple logical events', () => {
+  let ids = 0;
+  const store = createLifeLedgerMemoryStore();
+  const result = upsertManyLifeLedgerEvents(store, [
+    sampleActivityDraft(),
+    sampleActivityDraft({ payload: { activity: 'Conflicting physical duplicate' } })
+  ], {
+    createId: () => {
+      ids++;
+      return '99999999-9999-4999-8999-999999999999';
+    },
+    clock: () => LL_TIME.recorded
+  });
+  assert.equal(result.action, 'partial');
+  assert.equal(result.results[0].reason, 'conflicting_duplicate_physical_input');
+  assert.equal(store.listEvents().length, 0);
+  assert.equal(ids, 0);
+});
+test('identical duplicate physical rows in one batch create only one logical event', () => {
+  let ids = 0;
+  const store = createLifeLedgerMemoryStore();
+  const result = upsertManyLifeLedgerEvents(store, [
+    sampleActivityDraft(),
+    sampleActivityDraft()
+  ], {
+    createId: () => {
+      ids++;
+      return 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    },
+    clock: () => LL_TIME.recorded
+  });
+  assert.equal(result.action, 'ok');
+  assert.equal(store.listEvents().length, 1);
+  assert.equal(ids, 1);
+});
+test('conflicting duplicate rows reversed in input order produce same rejection outcome', () => {
+  const a = sampleActivityDraft();
+  const b = sampleActivityDraft({ payload: { activity: 'Conflicting physical duplicate' } });
+  const first = upsertManyLifeLedgerEvents(createLifeLedgerMemoryStore(), [a, b], {
+    createId: () => '12345678-1234-4234-8234-123456789abc',
+    clock: () => LL_TIME.recorded
+  });
+  const second = upsertManyLifeLedgerEvents(createLifeLedgerMemoryStore(), [b, a], {
+    createId: () => '12345678-1234-4234-8234-123456789abc',
+    clock: () => LL_TIME.recorded
+  });
+  assert.equal(first.action, second.action);
+  assert.equal(first.results[0].reason, 'conflicting_duplicate_physical_input');
+  assert.equal(second.results[0].reason, 'conflicting_duplicate_physical_input');
+  assert.equal(first.results[0].key, second.results[0].key);
+});
+test('returned store object mutation cannot mutate stored state', () => {
+  const store = createLifeLedgerMemoryStore();
+  const created = upsertLifeLedgerEvent(store, sampleActivityDraft(), {
+    createId: () => 'abcdefab-abcd-4abc-8abc-abcdefabcdef',
+    clock: () => LL_TIME.recorded
+  });
+  created.event.payload.activity = 'Mutated outside';
+  assert.equal(store.listEvents()[0].payload.activity, 'Deep work');
+});
+test('listed store object mutation cannot mutate stored state', () => {
+  const store = createLifeLedgerMemoryStore();
+  upsertLifeLedgerEvent(store, sampleActivityDraft(), {
+    createId: () => 'fedcbafe-dcba-4dcb-8dcb-fedcbafedcba',
+    clock: () => LL_TIME.recorded
+  });
+  const listed = store.listEvents();
+  listed[0].payload.activity = 'Mutated outside';
+  assert.equal(store.listEvents()[0].payload.activity, 'Deep work');
+});
+test('source-owned timestamp-style ChronaSense IDs remain stable strings', () => {
+  const store = createLifeLedgerMemoryStore();
+  const result = upsertLifeLedgerEvent(store, sampleActivityDraft({ sourceEntityId: '1700000000000' }), {
+    createId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    clock: () => LL_TIME.recorded
+  });
+  assert.equal(result.event.sourceEntityId, '1700000000000');
+  assert.notEqual(result.event.eventId, result.event.sourceEntityId);
+  assert.equal(deriveLifeLedgerKey({ sourceApp: 'chronasense', sourceEntityId: 1700000000000, type: 'activity_logged' }), deriveLifeLedgerKey(result.event));
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────────

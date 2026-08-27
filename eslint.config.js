@@ -2,8 +2,22 @@
 // Targets the extracted .js files only (not index.html which requires an HTML plugin).
 export default [
   {
+    files: ['life-ledger-core.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+    },
+    rules: {
+      'no-unused-vars': ['warn', { vars: 'local', args: 'none' }],
+      'no-undef': 'warn',
+      'no-duplicate-case': 'error',
+      'no-unreachable': 'warn',
+      'eqeqeq': ['warn', 'smart'],
+    }
+  },
+  {
     files: ['*.js'],
-    ignores: ['www/**', 'node_modules/**'],
+    ignores: ['www/**', 'node_modules/**', 'life-ledger-core.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script', // classic <script> tags — not ES modules
