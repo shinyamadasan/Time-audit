@@ -532,6 +532,36 @@
   </div>
 </div>
 
+<!-- ══ LEARNING PLANS ══ -->
+<div class="view" id="view-learning">
+  <div class="page-header">
+    <div class="page-title">Learning Plans</div>
+  </div>
+
+  <div class="learning-plan-error" id="learning-plan-error" role="alert" hidden></div>
+
+  <section class="settings-section learning-plan-create" aria-labelledby="learning-plan-create-title">
+    <div class="settings-title" id="learning-plan-create-title">Create plan</div>
+    <form id="learning-plan-create-form" class="learning-plan-form">
+      <div class="field learning-plan-field">
+        <label for="learning-plan-title-input">Plan title</label>
+        <input type="text" id="learning-plan-title-input" maxlength="120" autocomplete="off" placeholder="e.g. JavaScript fundamentals">
+      </div>
+      <button class="btn primary" type="submit">Create plan</button>
+    </form>
+  </section>
+
+  <section class="settings-section learning-plan-shell" aria-labelledby="learning-plan-list-title">
+    <div class="learning-plan-grid">
+      <aside class="learning-plan-sidebar" aria-labelledby="learning-plan-list-title">
+        <div class="settings-title" id="learning-plan-list-title">Plans</div>
+        <div id="learning-plan-list" class="learning-plan-list"></div>
+      </aside>
+      <div class="learning-plan-main" id="learning-plan-main"></div>
+    </div>
+  </section>
+</div>
+
 <!-- ══ SETTINGS ══ -->
 <div class="view" id="view-settings">
   <div class="page-header">
@@ -856,6 +886,9 @@
   </button>
 <button class="nav-btn" id="nav-reflect" onclick="showView('reflect');renderReflectView()">
     <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>Reflect
+  </button>
+  <button class="nav-btn" id="nav-learning" onclick="showView('learning')">
+    <svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2"/><path d="M8 7h7"/><path d="M8 11h5"/></svg>Learn
   </button>
   <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>Settings
@@ -1447,6 +1480,7 @@
 <script src="storage.js?v=20260719-template-sync-doctor-2"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
+<script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -3014,6 +3048,7 @@ function showView(name) {
   if (lpnb) lpnb.classList.add('active');
   if (name==='today') renderToday();
   if (name==='week') renderWeek();
+  if (name==='learning' && window.renderLearningPlans) window.renderLearningPlans();
   if (name==='settings') renderSettings();
   window.scrollTo({ top: 0, behavior: 'auto' });
 

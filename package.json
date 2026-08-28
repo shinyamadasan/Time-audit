@@ -8,7 +8,7 @@
     "build": "echo \"No build step needed\"",
     "test": "node test.js",
     "test:smoke": "npx playwright test",
-    "lint": "npx eslint storage.js focus-mode.js insights.js focus-wallet.js life-ledger-core.js chronasense-life-ledger-adapter.js learning-plan-model.js learning-plan-repository.js",
+    "lint": "npx eslint storage.js focus-mode.js insights.js focus-wallet.js life-ledger-core.js chronasense-life-ledger-adapter.js learning-plan-model.js learning-plan-repository.js learning-plan-ui.js",
     "sync": "npx cap sync",
     "android": "npx cap run android",
     "open": "npx cap open android"
