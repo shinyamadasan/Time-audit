@@ -160,6 +160,52 @@ function secondLearningPlan() {
   });
 }
 
+function multiSectionPlan({ sameTitles = false, completeFirstLesson = false } = {}) {
+  let plan = createLearningPlan({ title: 'Structured course' }, {
+    idGenerator: sequencedIds('plan-structured'),
+    clock: fixedClock()
+  });
+  for (let phaseIndex = 1; phaseIndex <= 2; phaseIndex++) {
+    const phaseId = `phase-${phaseIndex}`;
+    plan = addPhase(plan, { title: sameTitles ? 'Repeated phase' : `Phase ${phaseIndex}` }, {
+      idGenerator: sequencedIds(phaseId),
+      clock: fixedClock()
+    });
+    for (let lessonIndex = 1; lessonIndex <= 2; lessonIndex++) {
+      const lessonId = `lesson-${phaseIndex}-${lessonIndex}`;
+      plan = addLesson(plan, phaseId, { title: sameTitles ? 'Repeated lesson' : `Lesson ${phaseIndex}.${lessonIndex}` }, {
+        idGenerator: sequencedIds(lessonId),
+        clock: fixedClock()
+      });
+      for (let stepIndex = 1; stepIndex <= 2; stepIndex++) {
+        plan = addStep(plan, lessonId, { title: `Step ${phaseIndex}.${lessonIndex}.${stepIndex}` }, {
+          idGenerator: sequencedIds(`step-${phaseIndex}-${lessonIndex}-${stepIndex}`),
+          clock: fixedClock()
+        });
+      }
+    }
+  }
+  if (completeFirstLesson) {
+    plan = completeStep(plan, 'step-1-1-1', { clock: fixedClock('2026-08-28T12:10:00.000Z') });
+    plan = completeStep(plan, 'step-1-1-2', { clock: fixedClock('2026-08-28T12:11:00.000Z') });
+  }
+  return plan;
+}
+
+function largeOutline() {
+  const lines = [];
+  for (let phaseIndex = 1; phaseIndex <= 3; phaseIndex++) {
+    lines.push(`# Phase ${phaseIndex}`);
+    for (let lessonIndex = 1; lessonIndex <= 4; lessonIndex++) {
+      lines.push(`## Lesson ${phaseIndex}.${lessonIndex}`);
+      for (let stepIndex = 1; stepIndex <= 5; stepIndex++) {
+        lines.push(`- Step ${phaseIndex}.${lessonIndex}.${stepIndex}`);
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
 function envelope(plans) {
   return JSON.stringify({
     schemaVersion: LEARNING_PLAN_REPOSITORY_SCHEMA_VERSION,
@@ -199,6 +245,8 @@ async function openLearningPlans(page) {
 }
 
 async function createPlanThroughUi(page, title = 'JavaScript fundamentals') {
+  await page.locator('[data-lp-action="show-create"]').click();
+  await expect(page.locator('#learning-plan-create-panel')).toBeVisible();
   await page.locator('#learning-plan-title-input').fill(title);
   await page.getByRole('button', { name: 'Create plan' }).click();
   await expect(page.locator('.learning-plan-list-item')).toContainText(title);
@@ -208,35 +256,54 @@ async function fillImportForm(page, {
   title = 'JavaScript fundamentals',
   outline = '# Fundamentals\n## Variables\n- Read lesson\n- Complete exercises'
 } = {}) {
+  if (await page.locator('#learning-plan-import-panel').isHidden()) {
+    await page.locator('[data-lp-action="show-import"]').click();
+  }
   await page.locator('#learning-plan-import-title-input').fill(title);
   await page.locator('#learning-plan-import-outline').fill(outline);
 }
 
 async function previewImport(page) {
-  await page.getByRole('button', { name: 'Preview' }).click();
+  await page.locator('#learning-plan-import-form').getByRole('button', { name: 'Preview' }).click();
   await expect(page.getByRole('region', { name: 'Learning Plan import preview' })).toBeVisible();
 }
 
 async function importPlan(page) {
-  await page.getByRole('button', { name: 'Import plan' }).click();
+  await page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' }).click();
 }
 
 async function addPhaseThroughUi(page, title = 'Phase 1') {
+  await page.locator('[data-lp-action="open-add"][data-add-kind="phase"]').click();
   await page.locator('form[data-lp-action="add-phase"] input[name="title"]').fill(title);
   await page.locator('form[data-lp-action="add-phase"]').getByRole('button', { name: 'Add phase' }).click();
-  await expect(page.locator('[data-lp-action="rename-phase"]').first()).toHaveValue(title);
+  await expect(page.locator('[data-lp-action="toggle-phase"]').first()).toContainText(title);
 }
 
 async function addLessonThroughUi(page, title = 'Lesson 1') {
+  await page.locator('[data-lp-action="open-add"][data-add-kind="lesson"]').first().click();
   await page.locator('form[data-lp-action="add-lesson"] input[name="title"]').fill(title);
   await page.locator('form[data-lp-action="add-lesson"]').getByRole('button', { name: 'Add lesson' }).click();
-  await expect(page.locator('[data-lp-action="rename-lesson"]').first()).toHaveValue(title);
+  await expect(page.locator('[data-lp-action="toggle-lesson"]').first()).toContainText(title);
 }
 
 async function addStepThroughUi(page, title = 'Read docs') {
+  await page.locator('[data-lp-action="open-add"][data-add-kind="step"]').first().click();
   await page.locator('form[data-lp-action="add-step"] input[name="title"]').fill(title);
   await page.locator('form[data-lp-action="add-step"]').getByRole('button', { name: 'Add step' }).click();
-  await expect(page.locator('[data-lp-action="rename-step"]').first()).toHaveValue(title);
+  await expect(page.locator('.learning-plan-step')).toContainText(title);
+}
+
+async function renameThroughUi(page, kind, currentTitle, nextTitle) {
+  const block = kind === 'step'
+    ? page.locator('.learning-plan-step').filter({ hasText: currentTitle }).first()
+    : kind === 'plan'
+      ? page.locator('.learning-plan-title-display').filter({ hasText: currentTitle }).first()
+      : page.locator('.learning-plan-section-summary').filter({ hasText: currentTitle }).first();
+  await block.getByRole('button', { name: 'Edit' }).click();
+  const form = page.locator(`form[data-lp-action="rename-${kind}"]`).first();
+  await form.locator('input[name="title"]').fill(nextTitle);
+  await form.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#learning-plan-main').getByText(nextTitle, { exact: true }).first()).toBeVisible();
 }
 
 async function storedEnvelope(page) {
@@ -262,20 +329,31 @@ test('Learning Plans opens an empty repository without error', async ({ page }) 
 
   await expect(page.locator('#learning-plan-error')).toBeHidden();
   await expect(page.locator('#learning-plan-list')).toContainText('No Learning Plans yet.');
-  await expect(page.locator('#learning-plan-main')).toContainText('Create a Learning Plan');
+  await expect(page.locator('#learning-plan-main')).toContainText('Import a plan or create one manually');
+  await expect(page.locator('#learning-plan-import-panel')).toBeHidden();
+  await expect(page.locator('#learning-plan-create-panel')).toBeHidden();
 });
 
-test('Quick Import is the primary path while manual creation remains available', async ({ page }) => {
+test('creation controls are collapsed by default and open one flow at a time', async ({ page }) => {
   await openApp(page);
   await openLearningPlans(page);
 
-  const sections = await page.locator('#view-learning section.settings-section').evaluateAll(items => items.map(item => item.className));
-  expect(sections[0]).toContain('learning-plan-import');
-  expect(sections[1]).toContain('learning-plan-create');
+  await expect(page.locator('[data-lp-action="show-import"]')).toBeVisible();
+  await expect(page.locator('[data-lp-action="show-create"]')).toBeVisible();
+  await expect(page.locator('#learning-plan-import-panel')).toBeHidden();
+  await expect(page.locator('#learning-plan-create-panel')).toBeHidden();
+
+  await page.locator('[data-lp-action="show-import"]').click();
+  await expect(page.locator('#learning-plan-import-panel')).toBeVisible();
+  await expect(page.locator('#learning-plan-create-panel')).toBeHidden();
   await expect(page.locator('#learning-plan-import-title')).toHaveText('Import / Paste Plan');
   await expect(page.getByLabel('Plan title').first()).toHaveAttribute('id', 'learning-plan-import-title-input');
-  await expect(page.getByRole('button', { name: 'Preview' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+  await expect(page.locator('#learning-plan-import-form').getByRole('button', { name: 'Preview' })).toBeVisible();
+  await expect(page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' })).toBeDisabled();
+
+  await page.locator('[data-lp-action="show-create"]').click();
+  await expect(page.locator('#learning-plan-import-panel')).toBeHidden();
+  await expect(page.locator('#learning-plan-create-panel')).toBeVisible();
   await expect(page.locator('#learning-plan-create-title')).toHaveText('Create manually');
   await expect(page.getByRole('button', { name: 'Create plan' })).toBeVisible();
 });
@@ -296,7 +374,7 @@ test('valid paste previews hierarchy and counts without writing repository stora
   await expect(preview).toContainText('Fundamentals');
   await expect(preview).toContainText('Variables');
   await expect(preview).toContainText('Complete exercises');
-  await expect(page.getByRole('button', { name: 'Import plan' })).toBeEnabled();
+  await expect(page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' })).toBeEnabled();
   expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBeNull();
 });
 
@@ -330,15 +408,20 @@ test('Import creates one durable Learning Plan and reload restores the hierarchy
   expect(ids.every(id => /^[0-9a-f-]{36}$/i.test(id))).toBe(true);
   expect(ids).not.toContain('JavaScript Fundamentals');
   expect(ids).not.toContain('Fundamentals');
+  await expect(page.locator('#learning-plan-import-panel')).toBeHidden();
+  await expect(page.locator('#learning-plan-import-title-input')).toHaveValue('');
+  await expect(page.locator('#learning-plan-import-outline')).toHaveValue('');
+  await expect(page.locator('[data-lp-action="toggle-phase"]').first()).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('[data-lp-action="toggle-lesson"]').first()).toHaveAttribute('aria-expanded', 'true');
 
   await page.reload();
   await page.waitForFunction(() => typeof window.renderLearningPlans === 'function');
   await openLearningPlans(page);
 
   await expect(page.locator('.learning-plan-list-item')).toContainText('JavaScript Fundamentals');
-  await expect(page.locator('[data-lp-action="rename-phase"]').first()).toHaveValue('Fundamentals');
-  await expect(page.locator('[data-lp-action="rename-lesson"]').first()).toHaveValue('Variables');
-  await expect(page.locator('[data-lp-action="rename-step"]').first()).toHaveValue('Read lesson');
+  await expect(page.locator('[data-lp-action="toggle-phase"]').first()).toContainText('Fundamentals');
+  await expect(page.locator('[data-lp-action="toggle-lesson"]').first()).toContainText('Variables');
+  await expect(page.locator('.learning-plan-step').first()).toContainText('Read lesson');
 });
 
 test('rapid double Import creates at most one Learning Plan', async ({ page }) => {
@@ -347,7 +430,7 @@ test('rapid double Import creates at most one Learning Plan', async ({ page }) =
   await fillImportForm(page);
   await previewImport(page);
 
-  await page.getByRole('button', { name: 'Import plan' }).dblclick();
+  await page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' }).dblclick();
 
   const stored = await storedEnvelope(page);
   expect(stored.plans).toHaveLength(1);
@@ -362,12 +445,13 @@ test('malformed import shows a line-level error and persists nothing', async ({ 
     outline: '# Phase\n- Step without lesson'
   });
 
-  await page.getByRole('button', { name: 'Preview' }).click();
+  await page.locator('#learning-plan-import-form').getByRole('button', { name: 'Preview' }).click();
 
   await expect(page.locator('#learning-plan-error')).toContainText('Line 2');
   await expect(page.locator('#learning-plan-error')).toContainText('Step must come after a lesson');
   await expect(page.locator('#learning-plan-import-preview')).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+  await expect(page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' })).toBeDisabled();
+  await expect(page.locator('#learning-plan-import-panel')).toBeVisible();
   expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBeNull();
 });
 
@@ -390,6 +474,7 @@ test('import save failure keeps input contents and does not claim success', asyn
   await importPlan(page);
 
   await expect(page.locator('#learning-plan-error')).toContainText('Could not import Learning Plan');
+  await expect(page.locator('#learning-plan-import-panel')).toBeVisible();
   await expect(page.locator('#learning-plan-import-title-input')).toHaveValue('Blocked import');
   await expect(page.locator('#learning-plan-import-outline')).toHaveValue('# Phase\n## Lesson\n- Step');
   await expect(page.locator('.learning-plan-list-item')).toHaveCount(0);
@@ -404,12 +489,12 @@ test('editing outline or title after Preview invalidates stale import state', as
 
   await page.locator('#learning-plan-import-outline').fill('# Fundamentals\n## Variables\n- Changed task');
   await expect(page.locator('#learning-plan-import-preview')).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+  await expect(page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' })).toBeDisabled();
 
   await previewImport(page);
   await page.locator('#learning-plan-import-title-input').fill('Changed title');
   await expect(page.locator('#learning-plan-import-preview')).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+  await expect(page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' })).toBeDisabled();
 });
 
 test('Import remains unavailable until the current input has a valid preview', async ({ page }) => {
@@ -417,11 +502,11 @@ test('Import remains unavailable until the current input has a valid preview', a
   await openLearningPlans(page);
   await fillImportForm(page);
 
-  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+  await expect(page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' })).toBeDisabled();
   await previewImport(page);
-  await expect(page.getByRole('button', { name: 'Import plan' })).toBeEnabled();
+  await expect(page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' })).toBeEnabled();
   await page.locator('#learning-plan-import-outline').fill('## Lesson before phase');
-  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+  await expect(page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' })).toBeDisabled();
 });
 
 test('XSS-like import titles render as text in preview and saved UI', async ({ page }) => {
@@ -440,7 +525,7 @@ test('XSS-like import titles render as text in preview and saved UI', async ({ p
 
   await expect(page.locator('.learning-plan-list-item')).toContainText('<script>Plan</script>');
   await expect(page.locator('#learning-plan-list script')).toHaveCount(0);
-  await expect(page.locator('[data-lp-action="rename-phase"]').first()).toHaveValue('<svg onload=alert(1)>');
+  await expect(page.locator('[data-lp-action="toggle-phase"]').first()).toContainText('<svg onload=alert(1)>');
 });
 
 test('mobile Quick Import preview wraps long outlines without horizontal overflow', async ({ page }) => {
@@ -466,6 +551,8 @@ test('manual plan creation persists and reload restores it', async ({ page }) =>
   const stored = await storedEnvelope(page);
   expect(stored.plans).toHaveLength(1);
   expect(stored.plans[0].title).toBe('JavaScript fundamentals');
+  await expect(page.locator('#learning-plan-create-panel')).toBeHidden();
+  await expect(page.locator('#learning-plan-title-input')).toHaveValue('');
 
   await page.reload();
   await page.waitForFunction(() => typeof window.renderLearningPlans === 'function');
@@ -495,9 +582,9 @@ test('phase, lesson, step, complete, and reopen persist through reload', async (
   await page.waitForFunction(() => typeof window.renderLearningPlans === 'function');
   await openLearningPlans(page);
 
-  await expect(page.locator('[data-lp-action="rename-phase"]').first()).toHaveValue('Phase 1');
-  await expect(page.locator('[data-lp-action="rename-lesson"]').first()).toHaveValue('Lesson 1');
-  await expect(page.locator('[data-lp-action="rename-step"]').first()).toHaveValue('Read docs');
+  await expect(page.locator('[data-lp-action="toggle-phase"]').first()).toContainText('Phase 1');
+  await expect(page.locator('[data-lp-action="toggle-lesson"]').first()).toContainText('Lesson 1');
+  await expect(page.locator('.learning-plan-step').first()).toContainText('Read docs');
   await expect(page.locator('.learning-plan-step input[type="checkbox"]')).not.toBeChecked();
 });
 
@@ -511,20 +598,77 @@ test('progress display follows model semantics for seeded completed steps', asyn
   await expect(page.locator('.learning-plan-list-progress')).toHaveText('1 / 2 steps - 50%');
 });
 
+test('default expansion opens first unfinished phase and lesson only', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([multiSectionPlan({ completeFirstLesson: true })]) });
+  await openLearningPlans(page);
+
+  const phases = page.locator('[data-lp-action="toggle-phase"]');
+  const lessons = page.locator('[data-lp-action="toggle-lesson"]');
+  await expect(phases.nth(0)).toHaveAttribute('aria-expanded', 'true');
+  await expect(phases.nth(1)).toHaveAttribute('aria-expanded', 'false');
+  await expect(lessons.nth(0)).toHaveAttribute('aria-expanded', 'false');
+  await expect(lessons.nth(1)).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.learning-plan-step')).toHaveCount(2);
+
+  await page.reload();
+  await page.waitForFunction(() => typeof window.renderLearningPlans === 'function');
+  await openLearningPlans(page);
+
+  await expect(page.locator('[data-lp-action="toggle-phase"]').nth(0)).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('[data-lp-action="toggle-phase"]').nth(1)).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('[data-lp-action="toggle-lesson"]').nth(0)).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('[data-lp-action="toggle-lesson"]').nth(1)).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('phase and lesson collapse state follows immutable IDs even with same titles', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([multiSectionPlan({ sameTitles: true })]) });
+  await openLearningPlans(page);
+
+  const phases = page.locator('[data-lp-action="toggle-phase"]');
+  const firstPhaseId = await phases.nth(0).getAttribute('data-phase-id');
+  const secondPhaseId = await phases.nth(1).getAttribute('data-phase-id');
+  expect(firstPhaseId).not.toBe(secondPhaseId);
+  await phases.nth(1).click();
+  await expect(page.locator(`[data-lp-action="toggle-phase"][data-phase-id="${firstPhaseId}"]`)).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator(`[data-lp-action="toggle-phase"][data-phase-id="${secondPhaseId}"]`)).toHaveAttribute('aria-expanded', 'true');
+
+  const secondPhase = page.locator(`.learning-plan-phase:has([data-phase-id="${secondPhaseId}"])`);
+  const secondPhaseLessons = secondPhase.locator('[data-lp-action="toggle-lesson"]');
+  const firstLessonId = await secondPhaseLessons.nth(0).getAttribute('data-lesson-id');
+  const secondLessonId = await secondPhaseLessons.nth(1).getAttribute('data-lesson-id');
+  await secondPhaseLessons.nth(1).click();
+  await expect(page.locator(`[data-lp-action="toggle-lesson"][data-lesson-id="${firstLessonId}"]`)).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator(`[data-lp-action="toggle-lesson"][data-lesson-id="${secondLessonId}"]`)).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('60-step imported plan shows only the active working lesson after import', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  await fillImportForm(page, {
+    title: 'Large course',
+    outline: largeOutline()
+  });
+  await previewImport(page);
+  await importPlan(page);
+
+  const stored = await storedEnvelope(page);
+  expect(stored.plans[0].phases.flatMap(phase => phase.lessons.flatMap(lesson => lesson.steps))).toHaveLength(60);
+  await expect(page.locator('#learning-plan-import-panel')).toBeHidden();
+  await expect(page.locator('[data-lp-action="toggle-phase"]')).toHaveCount(3);
+  await expect(page.locator('[data-lp-action="toggle-lesson"]')).toHaveCount(4);
+  await expect(page.locator('.learning-plan-step')).toHaveCount(5);
+});
+
 test('plan and step IDs survive UI rename, complete, and reopen', async ({ page }) => {
   await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
   await openLearningPlans(page);
   const before = await storedEnvelope(page);
   const beforeIds = entityIds(before.plans[0]);
 
-  await page.locator('[data-lp-action="rename-plan"]').fill('Frontend mastery');
-  await page.locator('[data-lp-action="rename-plan"]').blur();
-  await page.locator('[data-lp-action="rename-phase"]').fill('Basics');
-  await page.locator('[data-lp-action="rename-phase"]').blur();
-  await page.locator('[data-lp-action="rename-lesson"]').fill('Syntax');
-  await page.locator('[data-lp-action="rename-lesson"]').blur();
-  await page.locator('[data-lp-action="rename-step"]').first().fill('Read docs');
-  await page.locator('[data-lp-action="rename-step"]').first().blur();
+  await renameThroughUi(page, 'plan', 'Frontend fundamentals', 'Frontend mastery');
+  await renameThroughUi(page, 'phase', 'Phase A', 'Basics');
+  await renameThroughUi(page, 'lesson', 'Lesson A', 'Syntax');
+  await renameThroughUi(page, 'step', 'Step A', 'Read docs');
   await page.locator('.learning-plan-step input[type="checkbox"]').first().check();
   await page.locator('.learning-plan-step input[type="checkbox"]').first().uncheck();
 
@@ -538,11 +682,11 @@ test('switching plans renders the selected persisted plan', async ({ page }) => 
   await openApp(page, { learningPlanRaw: envelope([seededLearningPlan(), secondLearningPlan()]) });
   await openLearningPlans(page);
 
-  await expect(page.locator('[data-lp-action="rename-plan"]')).toHaveValue('Frontend fundamentals');
+  await expect(page.locator('.learning-plan-plan-title-display')).toContainText('Frontend fundamentals');
   await page.locator('.learning-plan-list-item').filter({ hasText: 'Backend fundamentals' }).click();
 
-  await expect(page.locator('[data-lp-action="rename-plan"]')).toHaveValue('Backend fundamentals');
-  await expect(page.locator('[data-lp-action="rename-phase"]')).toHaveCount(0);
+  await expect(page.locator('.learning-plan-plan-title-display')).toContainText('Backend fundamentals');
+  await expect(page.locator('[data-lp-action="toggle-phase"]')).toHaveCount(0);
 });
 
 test('corrupt repository shows an error and does not reset storage', async ({ page }) => {
@@ -589,20 +733,95 @@ test('failed create and duplicate click do not create duplicate plans', async ({
     };
   }, LEARNING_PLAN_REPOSITORY_KEY);
 
+  await page.locator('[data-lp-action="show-create"]').click();
   await page.locator('#learning-plan-title-input').fill('Blocked plan');
   await page.getByRole('button', { name: 'Create plan' }).click();
   await expect(page.locator('#learning-plan-error')).toContainText('Could not create Learning Plan');
+  await expect(page.locator('#learning-plan-create-panel')).toBeVisible();
+  await expect(page.locator('#learning-plan-title-input')).toHaveValue('Blocked plan');
   await expect(page.locator('.learning-plan-list-item')).toHaveCount(0);
 
   await page.reload();
   await page.waitForFunction(() => typeof window.renderLearningPlans === 'function');
   await openLearningPlans(page);
+  await page.locator('[data-lp-action="show-create"]').click();
   await page.locator('#learning-plan-title-input').fill('Single plan');
   await page.getByRole('button', { name: 'Create plan' }).dblclick();
 
   const stored = await storedEnvelope(page);
   expect(stored.plans).toHaveLength(1);
   expect(stored.plans[0].title).toBe('Single plan');
+});
+
+test('failed add and failed rename keep editors open with input intact', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  await createPlanThroughUi(page);
+  await addPhaseThroughUi(page);
+  await addLessonThroughUi(page);
+  const before = await storedEnvelope(page);
+  const beforeIds = entityIds(before.plans[0]);
+  await expect(page.locator('form[data-lp-action="add-step"]')).toHaveCount(0);
+
+  await page.evaluate(key => {
+    const realSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) throw new Error('blocked write');
+      return realSetItem.call(this, keyName, value);
+    };
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+
+  await expect(page.locator('[data-lp-action="open-add"][data-add-kind="step"]').first()).toBeVisible();
+  await page.locator('[data-lp-action="open-add"][data-add-kind="step"]').first().click();
+  await page.locator('form[data-lp-action="add-step"] input[name="title"]').fill('Blocked step');
+  await page.locator('form[data-lp-action="add-step"]').getByRole('button', { name: 'Add step' }).click();
+  await expect(page.locator('#learning-plan-error')).toContainText('Could not save Learning Plan changes');
+  await expect(page.locator('form[data-lp-action="add-step"]')).toBeVisible();
+  await expect(page.locator('form[data-lp-action="add-step"] input[name="title"]')).toHaveValue('Blocked step');
+
+  await page.locator('form[data-lp-action="add-step"]').getByRole('button', { name: 'Cancel' }).click();
+  await page.locator('.learning-plan-lesson-summary').getByRole('button', { name: 'Edit' }).click();
+  await page.locator('form[data-lp-action="rename-lesson"] input[name="title"]').fill('Blocked lesson rename');
+  await page.locator('form[data-lp-action="rename-lesson"]').getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#learning-plan-error')).toContainText('Could not save Learning Plan changes');
+  await expect(page.locator('form[data-lp-action="rename-lesson"] input[name="title"]')).toHaveValue('Blocked lesson rename');
+  expect(entityIds((await storedEnvelope(page)).plans[0])).toEqual(beforeIds);
+});
+
+test('repeated renders do not duplicate add, checkbox, or rename actions', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  await createPlanThroughUi(page);
+  await addPhaseThroughUi(page);
+  await addLessonThroughUi(page);
+
+  await page.evaluate(() => {
+    window.renderLearningPlans();
+    window.renderLearningPlans();
+    window.renderLearningPlans();
+  });
+  await addStepThroughUi(page, 'Only step');
+  expect((await storedEnvelope(page)).plans[0].phases[0].lessons[0].steps).toHaveLength(1);
+
+  await page.evaluate(key => {
+    window.__learningPlanSetCalls = 0;
+    window.__learningPlanRealSetItem = window.__learningPlanRealSetItem || Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) window.__learningPlanSetCalls++;
+      return window.__learningPlanRealSetItem.call(this, keyName, value);
+    };
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+  await page.locator('.learning-plan-step input[type="checkbox"]').check();
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(1);
+
+  await page.evaluate(() => {
+    window.__learningPlanSetCalls = 0;
+    window.renderLearningPlans();
+    window.renderLearningPlans();
+  });
+  await renameThroughUi(page, 'step', 'Only step', 'Renamed once');
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(1);
+  expect((await storedEnvelope(page)).plans[0].phases[0].lessons[0].steps[0].title).toBe('Renamed once');
 });
 
 test('existing daily plan storage is unaffected by Learning Plan edits', async ({ page }) => {
@@ -633,7 +852,7 @@ test('long Learning Plan titles remain usable without mobile horizontal overflow
   await addLessonThroughUi(page, 'Lesson with a deliberately long title that keeps the hierarchy readable');
   await addStepThroughUi(page, 'Step with a deliberately long checklist label that wraps cleanly on a narrow screen');
 
-  await expect(page.locator('[data-lp-action="rename-plan"]')).toHaveValue(longTitle);
+  await expect(page.locator('.learning-plan-plan-title-display')).toContainText(longTitle);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });
@@ -652,9 +871,13 @@ test('visible Learning Plans smoke flow survives reload with completion present'
   await openLearningPlans(page);
 
   await expect(page.locator('.learning-plan-list-item')).toContainText('Low friction learning');
-  await expect(page.locator('[data-lp-action="rename-phase"]').first()).toHaveValue('Phase alpha');
-  await expect(page.locator('[data-lp-action="rename-lesson"]').first()).toHaveValue('Lesson alpha');
-  await expect(page.locator('[data-lp-action="rename-step"]').first()).toHaveValue('Finish alpha step');
+  await expect(page.locator('[data-lp-action="toggle-phase"]').first()).toContainText('Phase alpha');
+  await expect(page.locator('[data-lp-action="toggle-phase"]').first()).toHaveAttribute('aria-expanded', 'false');
+  await page.locator('[data-lp-action="toggle-phase"]').first().click();
+  await expect(page.locator('[data-lp-action="toggle-lesson"]').first()).toContainText('Lesson alpha');
+  await expect(page.locator('[data-lp-action="toggle-lesson"]').first()).toHaveAttribute('aria-expanded', 'false');
+  await page.locator('[data-lp-action="toggle-lesson"]').first().click();
+  await expect(page.locator('.learning-plan-step').first()).toContainText('Finish alpha step');
   await expect(page.locator('.learning-plan-step input[type="checkbox"]')).toBeChecked();
   await expect(page.locator('.learning-plan-progress')).toContainText('1 / 1 steps');
 });

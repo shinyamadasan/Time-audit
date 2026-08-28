@@ -22,6 +22,12 @@ let busy = false;
 let learningPlansAvailable = true;
 let importPreview = null;
 let importPreviewFingerprint = '';
+let openCreationPanel = null;
+let expansionPlanId = null;
+let activeAddEditor = null;
+let activeRenameEditor = null;
+const expandedPhaseIds = new Set();
+const expandedLessonIds = new Set();
 
 function ensureRepository() {
   if (!repository) repository = createLearningPlanRepository();
@@ -74,11 +80,22 @@ function loadLearningPlans() {
   }
 }
 
-function setLearningPlanControlsAvailable(available) {
+function applyCreationPanelVisibility() {
+  const actions = document.querySelector('.learning-plan-entry-actions');
   const create = document.querySelector('.learning-plan-create');
   const importSection = document.querySelector('.learning-plan-import');
-  if (create) create.hidden = !available;
-  if (importSection) importSection.hidden = !available;
+  const showControls = learningPlansAvailable;
+  if (actions) actions.hidden = !showControls;
+  if (create) create.hidden = !showControls || openCreationPanel !== 'manual';
+  if (importSection) importSection.hidden = !showControls || openCreationPanel !== 'import';
+  document.querySelector('[data-lp-action="show-import"]')?.setAttribute('aria-expanded', openCreationPanel === 'import' ? 'true' : 'false');
+  document.querySelector('[data-lp-action="show-create"]')?.setAttribute('aria-expanded', openCreationPanel === 'manual' ? 'true' : 'false');
+}
+
+function setLearningPlanControlsAvailable(available) {
+  learningPlansAvailable = available;
+  if (!available) openCreationPanel = null;
+  applyCreationPanelVisibility();
 }
 
 function renderLearningPlansUnavailable(message) {
@@ -122,6 +139,11 @@ function clearImportPreview() {
   importPreview = null;
   importPreviewFingerprint = '';
   renderImportPreview();
+}
+
+function resetImportTransient() {
+  document.getElementById('learning-plan-import-form')?.reset();
+  clearImportPreview();
 }
 
 function setImportBusy(nextBusy) {
@@ -218,17 +240,19 @@ function showImportParseErrors(errors) {
   }).join(' '));
 }
 
-function saveLearningPlan(plan, failureMessage = 'Could not save Learning Plan changes. Nothing was changed.') {
+function saveLearningPlan(plan, failureMessage = 'Could not save Learning Plan changes. Nothing was changed.', options = {}) {
+  const renderOnSuccess = options.renderOnSuccess !== false;
+  const renderOnFailure = options.renderOnFailure !== false;
   try {
     const saved = ensureRepository().savePlan(plan);
     replaceLocalPlan(saved);
     showLearningPlanError('');
-    renderLearningPlanState();
-    return true;
+    if (renderOnSuccess) renderLearningPlanState();
+    return saved;
   } catch (err) {
     showLearningPlanError(`${failureMessage} ${err.message}`);
-    renderLearningPlanState();
-    return false;
+    if (renderOnFailure) renderLearningPlanState();
+    return null;
   }
 }
 
@@ -238,6 +262,9 @@ function removeLearningPlan(planId) {
     if (result.removed) {
       learningPlans = learningPlans.filter(plan => plan.id !== planId);
       setSelectedPlan(selectedPlanId === planId ? null : selectedPlanId);
+      expansionPlanId = null;
+      activeAddEditor = null;
+      activeRenameEditor = null;
     }
     showLearningPlanError('');
     renderLearningPlanState();
@@ -250,6 +277,74 @@ function removeLearningPlan(planId) {
 function progressLabel(plan) {
   const progress = getLearningPlanProgress(plan);
   return `${progress.completedSteps} / ${progress.totalSteps} steps - ${progress.completionPercent}%`;
+}
+
+function sectionKey(kind, id) {
+  return `${kind}:${id}`;
+}
+
+function lessonProgress(lesson) {
+  const total = lesson.steps.length;
+  const completed = lesson.steps.filter(step => step.completed).length;
+  return { completed, total };
+}
+
+function phaseProgress(phase) {
+  return phase.lessons.reduce((sum, lesson) => {
+    const next = lessonProgress(lesson);
+    return {
+      completed: sum.completed + next.completed,
+      total: sum.total + next.total
+    };
+  }, { completed: 0, total: 0 });
+}
+
+function shortProgressLabel(progress) {
+  return `${progress.completed} / ${progress.total}`;
+}
+
+function sectionIsComplete(progress) {
+  return progress.total > 0 && progress.completed === progress.total;
+}
+
+function firstUnfinishedPhase(plan) {
+  return plan.phases.find(phase => !sectionIsComplete(phaseProgress(phase))) || null;
+}
+
+function firstUnfinishedLesson(phase) {
+  return phase.lessons.find(lesson => !sectionIsComplete(lessonProgress(lesson))) || null;
+}
+
+function resetExpansionForPlan(plan) {
+  expandedPhaseIds.clear();
+  expandedLessonIds.clear();
+  activeAddEditor = null;
+  activeRenameEditor = null;
+  expansionPlanId = plan?.id || null;
+  if (!plan) return;
+  const phase = firstUnfinishedPhase(plan);
+  if (!phase) return;
+  expandedPhaseIds.add(phase.id);
+  const lesson = firstUnfinishedLesson(phase);
+  if (lesson) expandedLessonIds.add(lesson.id);
+}
+
+function ensureExpansionForPlan(plan) {
+  if (!plan) {
+    resetExpansionForPlan(null);
+    return;
+  }
+  if (expansionPlanId !== plan.id) resetExpansionForPlan(plan);
+}
+
+function findPhaseForLesson(plan, lessonId) {
+  return plan.phases.find(phase => phase.lessons.some(lesson => lesson.id === lessonId)) || null;
+}
+
+function expandAroundLesson(plan, lessonId) {
+  const phase = findPhaseForLesson(plan, lessonId);
+  if (phase) expandedPhaseIds.add(phase.id);
+  expandedLessonIds.add(lessonId);
 }
 
 function renderPlanList() {
@@ -269,22 +364,22 @@ function renderPlanList() {
 }
 
 function renderLearningPlanState() {
+  applyCreationPanelVisibility();
   renderPlanList();
   const main = document.getElementById('learning-plan-main');
   if (!main) return;
   const plan = selectedPlan();
+  ensureExpansionForPlan(plan);
   if (!plan) {
-    main.innerHTML = '<div class="empty learning-plan-empty">Create a Learning Plan to start a checklist.</div>';
+    main.innerHTML = '<div class="empty learning-plan-empty">Import a plan or create one manually to start a checklist.</div>';
     return;
   }
   const progress = getLearningPlanProgress(plan);
   main.innerHTML = `
     <div class="learning-plan-detail">
       <div class="learning-plan-detail-head">
-        <div class="field learning-plan-title-field">
-          <label for="learning-plan-title-${escapeHtml(plan.id)}">Plan title</label>
-          <textarea id="learning-plan-title-${escapeHtml(plan.id)}" rows="2"
-            data-lp-action="rename-plan" data-plan-id="${escapeHtml(plan.id)}" maxlength="120">${escapeHtml(plan.title)}</textarea>
+        <div class="learning-plan-title-block">
+          ${renderTitleDisplay('plan', plan, plan.title)}
         </div>
         <button type="button" class="btn sm danger" data-lp-action="remove-plan" data-plan-id="${escapeHtml(plan.id)}">Delete</button>
       </div>
@@ -292,73 +387,142 @@ function renderLearningPlanState() {
         <span>${progress.completedSteps} / ${progress.totalSteps} steps</span>
         <strong>${progress.completionPercent}%</strong>
       </div>
-      <form class="learning-plan-add-row" data-lp-action="add-phase" data-plan-id="${escapeHtml(plan.id)}">
-        <label class="sr-only" for="learning-plan-new-phase-${escapeHtml(plan.id)}">Phase title</label>
-        <input id="learning-plan-new-phase-${escapeHtml(plan.id)}" type="text" name="title" maxlength="120" placeholder="New phase">
-        <button type="submit" class="btn sm">Add phase</button>
-      </form>
       <div class="learning-plan-phases">
         ${plan.phases.length ? plan.phases.map(phase => renderPhase(plan, phase)).join('') : '<div class="learning-plan-muted">No phases yet.</div>'}
       </div>
+      ${renderAddControl('phase', plan.id, { planId: plan.id })}
+    </div>
+  `;
+}
+
+function renderTitleDisplay(kind, plan, title, ids = {}) {
+  const id = ids.stepId || ids.lessonId || ids.phaseId || plan.id;
+  const key = sectionKey(kind, id);
+  const dataset = [
+    `data-plan-id="${escapeHtml(plan.id)}"`,
+    ids.phaseId ? `data-phase-id="${escapeHtml(ids.phaseId)}"` : '',
+    ids.lessonId ? `data-lesson-id="${escapeHtml(ids.lessonId)}"` : '',
+    ids.stepId ? `data-step-id="${escapeHtml(ids.stepId)}"` : ''
+  ].filter(Boolean).join(' ');
+  if (activeRenameEditor === key) {
+    return `
+      <form class="learning-plan-rename-row" data-lp-action="rename-${kind}" ${dataset}>
+        <label class="sr-only" for="learning-plan-rename-${escapeHtml(id)}">${kind} title</label>
+        <input id="learning-plan-rename-${escapeHtml(id)}" type="text" name="title" maxlength="${kind === 'step' ? '140' : '120'}" value="${escapeHtml(title)}">
+        <button type="submit" class="btn sm">Save</button>
+        <button type="button" class="btn sm" data-lp-action="cancel-rename">Cancel</button>
+      </form>
+    `;
+  }
+  return `
+    <div class="learning-plan-title-display learning-plan-${escapeHtml(kind)}-title-display">
+      <span class="learning-plan-title-text">${escapeHtml(title)}</span>
+      <button type="button" class="btn sm subtle" data-lp-action="open-rename" data-rename-key="${escapeHtml(key)}" ${dataset}>Edit</button>
     </div>
   `;
 }
 
 function renderPhase(plan, phase) {
+  const expanded = expandedPhaseIds.has(phase.id);
+  const progress = phaseProgress(phase);
+  const contentId = `learning-plan-phase-content-${escapeHtml(phase.id)}`;
   return `
     <section class="learning-plan-phase" aria-labelledby="learning-plan-phase-title-${escapeHtml(phase.id)}">
-      <div class="learning-plan-row learning-plan-phase-row">
-        <label class="sr-only" for="learning-plan-phase-title-${escapeHtml(phase.id)}">Phase title</label>
-        <textarea id="learning-plan-phase-title-${escapeHtml(phase.id)}" class="learning-plan-inline-title" rows="1"
-          data-lp-action="rename-phase" data-plan-id="${escapeHtml(plan.id)}"
-          data-phase-id="${escapeHtml(phase.id)}" maxlength="120">${escapeHtml(phase.title)}</textarea>
+      <div class="learning-plan-section-summary learning-plan-phase-summary">
+        <button type="button" class="learning-plan-toggle" data-lp-action="toggle-phase"
+          data-plan-id="${escapeHtml(plan.id)}" data-phase-id="${escapeHtml(phase.id)}"
+          aria-expanded="${expanded ? 'true' : 'false'}" aria-controls="${contentId}"
+          aria-label="${expanded ? 'Collapse' : 'Expand'} phase ${escapeHtml(phase.title)}">
+          <span class="learning-plan-toggle-mark" aria-hidden="true">${expanded ? 'v' : '>'}</span>
+          <span class="learning-plan-section-title" id="learning-plan-phase-title-${escapeHtml(phase.id)}">${escapeHtml(phase.title)}</span>
+          <span class="learning-plan-section-progress">${shortProgressLabel(progress)}</span>
+        </button>
+        <button type="button" class="btn sm subtle" data-lp-action="open-rename"
+          data-rename-key="${escapeHtml(sectionKey('phase', phase.id))}" data-plan-id="${escapeHtml(plan.id)}"
+          data-phase-id="${escapeHtml(phase.id)}">Edit</button>
       </div>
-      <div class="learning-plan-lessons">
-        ${phase.lessons.length ? phase.lessons.map(lesson => renderLesson(plan, phase, lesson)).join('') : '<div class="learning-plan-muted">No lessons yet.</div>'}
+      ${activeRenameEditor === sectionKey('phase', phase.id) ? renderTitleDisplay('phase', plan, phase.title, { phaseId: phase.id }) : ''}
+      <div id="${contentId}" class="learning-plan-section-content learning-plan-phase-content" ${expanded ? '' : 'hidden'}>
+        ${expanded ? `
+          <div class="learning-plan-lessons">
+            ${phase.lessons.length ? phase.lessons.map(lesson => renderLesson(plan, phase, lesson)).join('') : '<div class="learning-plan-muted">No lessons yet.</div>'}
+          </div>
+          ${renderAddControl('lesson', phase.id, { planId: plan.id, phaseId: phase.id })}
+        ` : ''}
       </div>
-      <form class="learning-plan-add-row learning-plan-add-nested" data-lp-action="add-lesson" data-plan-id="${escapeHtml(plan.id)}" data-phase-id="${escapeHtml(phase.id)}">
-        <label class="sr-only" for="learning-plan-new-lesson-${escapeHtml(phase.id)}">Lesson title</label>
-        <input id="learning-plan-new-lesson-${escapeHtml(phase.id)}" type="text" name="title" maxlength="120" placeholder="New lesson">
-        <button type="submit" class="btn sm">Add lesson</button>
-      </form>
     </section>
   `;
 }
 
 function renderLesson(plan, phase, lesson) {
+  const expanded = expandedLessonIds.has(lesson.id);
+  const progress = lessonProgress(lesson);
+  const contentId = `learning-plan-lesson-content-${escapeHtml(lesson.id)}`;
   return `
     <section class="learning-plan-lesson" aria-labelledby="learning-plan-lesson-title-${escapeHtml(lesson.id)}">
-      <div class="learning-plan-row learning-plan-lesson-row">
-        <label class="sr-only" for="learning-plan-lesson-title-${escapeHtml(lesson.id)}">Lesson title</label>
-        <textarea id="learning-plan-lesson-title-${escapeHtml(lesson.id)}" class="learning-plan-inline-title" rows="1"
-          data-lp-action="rename-lesson" data-plan-id="${escapeHtml(plan.id)}"
-          data-phase-id="${escapeHtml(phase.id)}" data-lesson-id="${escapeHtml(lesson.id)}" maxlength="120">${escapeHtml(lesson.title)}</textarea>
+      <div class="learning-plan-section-summary learning-plan-lesson-summary">
+        <button type="button" class="learning-plan-toggle" data-lp-action="toggle-lesson"
+          data-plan-id="${escapeHtml(plan.id)}" data-phase-id="${escapeHtml(phase.id)}"
+          data-lesson-id="${escapeHtml(lesson.id)}" aria-expanded="${expanded ? 'true' : 'false'}"
+          aria-controls="${contentId}" aria-label="${expanded ? 'Collapse' : 'Expand'} lesson ${escapeHtml(lesson.title)}">
+          <span class="learning-plan-toggle-mark" aria-hidden="true">${expanded ? 'v' : '>'}</span>
+          <span class="learning-plan-section-title" id="learning-plan-lesson-title-${escapeHtml(lesson.id)}">${escapeHtml(lesson.title)}</span>
+          <span class="learning-plan-section-progress">${shortProgressLabel(progress)}</span>
+        </button>
+        <button type="button" class="btn sm subtle" data-lp-action="open-rename"
+          data-rename-key="${escapeHtml(sectionKey('lesson', lesson.id))}" data-plan-id="${escapeHtml(plan.id)}"
+          data-phase-id="${escapeHtml(phase.id)}" data-lesson-id="${escapeHtml(lesson.id)}">Edit</button>
       </div>
-      <div class="learning-plan-steps">
-        ${lesson.steps.length ? lesson.steps.map(step => renderStep(plan, lesson, step)).join('') : '<div class="learning-plan-muted">No steps yet.</div>'}
+      ${activeRenameEditor === sectionKey('lesson', lesson.id) ? renderTitleDisplay('lesson', plan, lesson.title, { phaseId: phase.id, lessonId: lesson.id }) : ''}
+      <div id="${contentId}" class="learning-plan-section-content learning-plan-lesson-content" ${expanded ? '' : 'hidden'}>
+        ${expanded ? `
+          <div class="learning-plan-steps">
+            ${lesson.steps.length ? lesson.steps.map(step => renderStep(plan, lesson, step)).join('') : '<div class="learning-plan-muted">No steps yet.</div>'}
+          </div>
+          ${renderAddControl('step', lesson.id, { planId: plan.id, phaseId: phase.id, lessonId: lesson.id })}
+        ` : ''}
       </div>
-      <form class="learning-plan-add-row learning-plan-add-nested" data-lp-action="add-step" data-plan-id="${escapeHtml(plan.id)}" data-lesson-id="${escapeHtml(lesson.id)}">
-        <label class="sr-only" for="learning-plan-new-step-${escapeHtml(lesson.id)}">Step title</label>
-        <input id="learning-plan-new-step-${escapeHtml(lesson.id)}" type="text" name="title" maxlength="140" placeholder="New step">
-        <button type="submit" class="btn sm">Add step</button>
-      </form>
     </section>
   `;
 }
 
 function renderStep(plan, lesson, step) {
   return `
-    <div class="learning-plan-step${step.completed ? ' done' : ''}">
+    <div class="learning-plan-step${step.completed ? ' done' : ''}" data-step-id="${escapeHtml(step.id)}">
       <input type="checkbox" ${step.completed ? 'checked' : ''}
         data-lp-action="toggle-step" data-plan-id="${escapeHtml(plan.id)}"
         data-lesson-id="${escapeHtml(lesson.id)}" data-step-id="${escapeHtml(step.id)}"
         aria-label="${escapeHtml(step.completed ? 'Reopen step' : 'Complete step')}: ${escapeHtml(step.title)}">
-      <textarea class="learning-plan-step-title" rows="1"
-        data-lp-action="rename-step" data-plan-id="${escapeHtml(plan.id)}"
-        data-lesson-id="${escapeHtml(lesson.id)}" data-step-id="${escapeHtml(step.id)}" maxlength="140"
-        aria-label="Step title">${escapeHtml(step.title)}</textarea>
+      <div class="learning-plan-step-body">
+        ${renderTitleDisplay('step', plan, step.title, { lessonId: lesson.id, stepId: step.id })}
+      </div>
       <span class="learning-plan-step-state">${step.completed ? 'Complete' : 'Open'}</span>
     </div>
+  `;
+}
+
+function renderAddControl(kind, ownerId, ids) {
+  const key = sectionKey(kind, ownerId);
+  const label = kind === 'phase' ? 'phase' : kind === 'lesson' ? 'lesson' : 'step';
+  const maxLength = kind === 'step' ? '140' : '120';
+  const dataset = [
+    `data-plan-id="${escapeHtml(ids.planId)}"`,
+    ids.phaseId ? `data-phase-id="${escapeHtml(ids.phaseId)}"` : '',
+    ids.lessonId ? `data-lesson-id="${escapeHtml(ids.lessonId)}"` : ''
+  ].filter(Boolean).join(' ');
+  if (activeAddEditor !== key) {
+    return `
+      <button type="button" class="btn sm learning-plan-add-trigger" data-lp-action="open-add"
+        data-add-key="${escapeHtml(key)}" data-add-kind="${escapeHtml(kind)}" ${dataset}>+ Add ${label}</button>
+    `;
+  }
+  return `
+    <form class="learning-plan-add-row${kind === 'phase' ? '' : ' learning-plan-add-nested'}" data-lp-action="add-${kind}" ${dataset}>
+      <label class="sr-only" for="learning-plan-new-${escapeHtml(label)}-${escapeHtml(ownerId)}">${label} title</label>
+      <input id="learning-plan-new-${escapeHtml(label)}-${escapeHtml(ownerId)}" type="text" name="title" maxlength="${maxLength}" placeholder="New ${escapeHtml(label)}">
+      <button type="submit" class="btn sm">Add ${label}</button>
+      <button type="button" class="btn sm" data-lp-action="cancel-add">Cancel</button>
+    </form>
   `;
 }
 
@@ -380,6 +544,81 @@ function runExclusive(fn) {
     fn();
   } finally {
     busy = false;
+  }
+}
+
+function updateExpansionAfterAdd(plan, form, nextPlan) {
+  if (form.dataset.lpAction === 'add-phase') {
+    const phase = nextPlan.phases[nextPlan.phases.length - 1];
+    if (phase) expandedPhaseIds.add(phase.id);
+    return;
+  }
+  if (form.dataset.lpAction === 'add-lesson') {
+    expandedPhaseIds.add(form.dataset.phaseId);
+    const phase = nextPlan.phases.find(item => item.id === form.dataset.phaseId);
+    const lesson = phase?.lessons[phase.lessons.length - 1];
+    if (lesson) expandedLessonIds.add(lesson.id);
+    return;
+  }
+  if (form.dataset.lpAction === 'add-step') {
+    expandAroundLesson(plan, form.dataset.lessonId);
+  }
+}
+
+function handleAddSubmit(form) {
+  try {
+    const title = trimmedTitleFromForm(form);
+    if (!title) {
+      showLearningPlanError('Enter a title before adding it.');
+      return;
+    }
+    const plan = currentPlanFromDataset(form);
+    let nextPlan = plan;
+    if (form.dataset.lpAction === 'add-phase') {
+      nextPlan = addPhase(plan, { title });
+    } else if (form.dataset.lpAction === 'add-lesson') {
+      nextPlan = addLesson(plan, form.dataset.phaseId, { title });
+    } else if (form.dataset.lpAction === 'add-step') {
+      nextPlan = addStep(plan, form.dataset.lessonId, { title });
+    }
+    const saved = saveLearningPlan(nextPlan, undefined, {
+      renderOnSuccess: false,
+      renderOnFailure: false
+    });
+    if (saved) {
+      updateExpansionAfterAdd(plan, form, nextPlan);
+      activeAddEditor = null;
+      renderLearningPlanState();
+    }
+  } catch (err) {
+    showLearningPlanError(`Could not update Learning Plan. Nothing was changed. ${err.message}`);
+  }
+}
+
+function handleRenameSubmit(form) {
+  try {
+    const title = trimmedTitleFromForm(form);
+    if (!title) {
+      showLearningPlanError('Titles cannot be blank.');
+      return;
+    }
+    const plan = currentPlanFromDataset(form);
+    const action = form.dataset.lpAction;
+    let nextPlan = plan;
+    if (action === 'rename-plan') nextPlan = renamePlan(plan, title);
+    if (action === 'rename-phase') nextPlan = renamePhase(plan, form.dataset.phaseId, title);
+    if (action === 'rename-lesson') nextPlan = renameLesson(plan, form.dataset.lessonId, title);
+    if (action === 'rename-step') nextPlan = renameStep(plan, form.dataset.stepId, title);
+    const saved = saveLearningPlan(nextPlan, undefined, {
+      renderOnSuccess: false,
+      renderOnFailure: false
+    });
+    if (saved) {
+      activeRenameEditor = null;
+      renderLearningPlanState();
+    }
+  } catch (err) {
+    showLearningPlanError(`Could not update Learning Plan. Nothing was changed. ${err.message}`);
   }
 }
 
@@ -435,15 +674,21 @@ function handleImportSubmit(event) {
         return;
       }
       const plan = buildImportedLearningPlan(values.title, parsed);
-      if (saveLearningPlan(plan, 'Could not import Learning Plan. Nothing was saved.')) {
-        document.getElementById('learning-plan-import-form')?.reset();
-        clearImportPreview();
+      const saved = saveLearningPlan(plan, 'Could not import Learning Plan. Nothing was saved.', {
+        renderOnSuccess: false,
+        renderOnFailure: false
+      });
+      if (saved) {
+        resetImportTransient();
+        openCreationPanel = null;
+        resetExpansionForPlan(saved);
+        renderLearningPlanState();
       }
     } catch (err) {
       showLearningPlanError(`Could not import Learning Plan. Nothing was saved. ${err.message}`);
-      renderLearningPlanState();
     } finally {
       setImportBusy(false);
+      applyCreationPanelVisibility();
     }
   });
 }
@@ -466,8 +711,15 @@ function handleCreatePlan(event) {
       return;
     }
     const plan = createLearningPlan({ title });
-    if (saveLearningPlan(plan, 'Could not create Learning Plan. Nothing was saved.')) {
+    const saved = saveLearningPlan(plan, 'Could not create Learning Plan. Nothing was saved.', {
+      renderOnSuccess: false,
+      renderOnFailure: false
+    });
+    if (saved) {
       input.value = '';
+      openCreationPanel = null;
+      resetExpansionForPlan(saved);
+      renderLearningPlanState();
     }
   });
 }
@@ -477,40 +729,77 @@ function handleSubmit(event) {
   if (!form) return;
   event.preventDefault();
   runExclusive(() => {
-    try {
-      const title = trimmedTitleFromForm(form);
-      if (!title) {
-        showLearningPlanError('Enter a title before adding it.');
-        return;
-      }
-      const plan = currentPlanFromDataset(form);
-      let nextPlan = plan;
-      if (form.dataset.lpAction === 'add-phase') {
-        nextPlan = addPhase(plan, { title });
-      } else if (form.dataset.lpAction === 'add-lesson') {
-        nextPlan = addLesson(plan, form.dataset.phaseId, { title });
-      } else if (form.dataset.lpAction === 'add-step') {
-        nextPlan = addStep(plan, form.dataset.lessonId, { title });
-      }
-      if (saveLearningPlan(nextPlan)) form.reset();
-    } catch (err) {
-      showLearningPlanError(`Could not update Learning Plan. Nothing was changed. ${err.message}`);
-      renderLearningPlanState();
-    }
+    if (form.dataset.lpAction.startsWith('rename-')) handleRenameSubmit(form);
+    else handleAddSubmit(form);
   });
+}
+
+function toggleSet(set, id) {
+  if (set.has(id)) set.delete(id);
+  else set.add(id);
 }
 
 function handleClick(event) {
   const target = event.target.closest('[data-lp-action]');
   if (!target) return;
-  if (target.dataset.lpAction === 'select-plan') {
+  const action = target.dataset.lpAction;
+  if (action === 'show-import' || action === 'show-create') {
+    openCreationPanel = action === 'show-import' ? 'import' : 'manual';
+    applyCreationPanelVisibility();
+    return;
+  }
+  if (action === 'cancel-creation') {
+    openCreationPanel = null;
+    applyCreationPanelVisibility();
+    return;
+  }
+  if (action === 'select-plan') {
     setSelectedPlan(target.dataset.planId);
+    resetExpansionForPlan(selectedPlan());
     renderLearningPlanState();
     return;
   }
-  if (target.dataset.lpAction === 'remove-plan') {
+  if (action === 'remove-plan') {
     const plan = currentPlanFromDataset(target);
     if (window.confirm(`Delete Learning Plan "${plan.title}"?`)) removeLearningPlan(plan.id);
+    return;
+  }
+  if (action === 'toggle-phase') {
+    toggleSet(expandedPhaseIds, target.dataset.phaseId);
+    activeAddEditor = null;
+    activeRenameEditor = null;
+    renderLearningPlanState();
+    return;
+  }
+  if (action === 'toggle-lesson') {
+    toggleSet(expandedLessonIds, target.dataset.lessonId);
+    activeAddEditor = null;
+    activeRenameEditor = null;
+    renderLearningPlanState();
+    return;
+  }
+  if (action === 'open-add') {
+    activeAddEditor = target.dataset.addKey;
+    activeRenameEditor = null;
+    if (target.dataset.phaseId) expandedPhaseIds.add(target.dataset.phaseId);
+    if (target.dataset.lessonId) expandAroundLesson(currentPlanFromDataset(target), target.dataset.lessonId);
+    renderLearningPlanState();
+    return;
+  }
+  if (action === 'cancel-add') {
+    activeAddEditor = null;
+    renderLearningPlanState();
+    return;
+  }
+  if (action === 'open-rename') {
+    activeRenameEditor = target.dataset.renameKey;
+    activeAddEditor = null;
+    renderLearningPlanState();
+    return;
+  }
+  if (action === 'cancel-rename') {
+    activeRenameEditor = null;
+    renderLearningPlanState();
   }
 }
 
@@ -518,27 +807,13 @@ function handleChange(event) {
   const target = event.target.closest('[data-lp-action]');
   if (!target) return;
   const action = target.dataset.lpAction;
-  if (!action.startsWith('rename-') && action !== 'toggle-step') return;
+  if (action !== 'toggle-step') return;
   runExclusive(() => {
     try {
       const plan = currentPlanFromDataset(target);
-      let nextPlan = plan;
-      if (action === 'toggle-step') {
-        nextPlan = target.checked
-          ? completeStep(plan, target.dataset.stepId)
-          : reopenStep(plan, target.dataset.stepId);
-      } else {
-        const title = String(target.value || '').trim();
-        if (!title) {
-          showLearningPlanError('Titles cannot be blank.');
-          renderLearningPlanState();
-          return;
-        }
-        if (action === 'rename-plan') nextPlan = renamePlan(plan, title);
-        if (action === 'rename-phase') nextPlan = renamePhase(plan, target.dataset.phaseId, title);
-        if (action === 'rename-lesson') nextPlan = renameLesson(plan, target.dataset.lessonId, title);
-        if (action === 'rename-step') nextPlan = renameStep(plan, target.dataset.stepId, title);
-      }
+      const nextPlan = target.checked
+        ? completeStep(plan, target.dataset.stepId)
+        : reopenStep(plan, target.dataset.stepId);
       saveLearningPlan(nextPlan);
     } catch (err) {
       showLearningPlanError(`Could not update Learning Plan. Nothing was changed. ${err.message}`);
@@ -550,10 +825,10 @@ function handleChange(event) {
 function initLearningPlans() {
   if (initialized) return;
   initialized = true;
+  const view = document.getElementById('view-learning');
   const createForm = document.getElementById('learning-plan-create-form');
   const importForm = document.getElementById('learning-plan-import-form');
   const main = document.getElementById('learning-plan-main');
-  const list = document.getElementById('learning-plan-list');
   if (createForm) createForm.addEventListener('submit', handleCreatePlan);
   if (importForm) {
     importForm.addEventListener('submit', handleImportSubmit);
@@ -562,10 +837,9 @@ function initLearningPlans() {
   }
   if (main) {
     main.addEventListener('submit', handleSubmit);
-    main.addEventListener('click', handleClick);
     main.addEventListener('change', handleChange);
   }
-  if (list) list.addEventListener('click', handleClick);
+  if (view) view.addEventListener('click', handleClick);
 }
 
 export function renderLearningPlans() {
