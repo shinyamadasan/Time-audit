@@ -11,6 +11,7 @@ import {
   renameStep,
   reopenStep
 } from './learning-plan-model.js';
+import { parseLearningPlanOutline } from './learning-plan-import.js';
 import { createLearningPlanRepository } from './learning-plan-repository.js';
 
 let repository = null;
@@ -19,6 +20,8 @@ let selectedPlanId = null;
 let initialized = false;
 let busy = false;
 let learningPlansAvailable = true;
+let importPreview = null;
+let importPreviewFingerprint = '';
 
 function ensureRepository() {
   if (!repository) repository = createLearningPlanRepository();
@@ -73,7 +76,9 @@ function loadLearningPlans() {
 
 function setLearningPlanControlsAvailable(available) {
   const create = document.querySelector('.learning-plan-create');
+  const importSection = document.querySelector('.learning-plan-import');
   if (create) create.hidden = !available;
+  if (importSection) importSection.hidden = !available;
 }
 
 function renderLearningPlansUnavailable(message) {
@@ -97,6 +102,120 @@ function replaceLocalPlan(plan) {
     ? [...learningPlans, plan]
     : learningPlans.map(existing => existing.id === plan.id ? plan : existing);
   setSelectedPlan(plan.id);
+}
+
+function importInputValues() {
+  const title = String(document.getElementById('learning-plan-import-title-input')?.value || '').trim();
+  const outline = String(document.getElementById('learning-plan-import-outline')?.value || '');
+  return { title, outline };
+}
+
+function importInputFingerprint(values = importInputValues()) {
+  return JSON.stringify([values.title, values.outline]);
+}
+
+function formatImportCounts(counts) {
+  return `${counts.phases} ${counts.phases === 1 ? 'phase' : 'phases'} - ${counts.lessons} ${counts.lessons === 1 ? 'lesson' : 'lessons'} - ${counts.steps} ${counts.steps === 1 ? 'step' : 'steps'}`;
+}
+
+function clearImportPreview() {
+  importPreview = null;
+  importPreviewFingerprint = '';
+  renderImportPreview();
+}
+
+function setImportBusy(nextBusy) {
+  const form = document.getElementById('learning-plan-import-form');
+  if (!form) return;
+  form.querySelectorAll('button').forEach(button => {
+    if (button.dataset.lpImportAction === 'import') button.disabled = nextBusy || !importPreview || importInputFingerprint() !== importPreviewFingerprint;
+    else button.disabled = nextBusy;
+  });
+}
+
+function renderImportPreview() {
+  const preview = document.getElementById('learning-plan-import-preview');
+  const importButton = document.querySelector('[data-lp-import-action="import"]');
+  if (importButton) importButton.disabled = !importPreview || importInputFingerprint() !== importPreviewFingerprint;
+  if (!preview) return;
+  preview.replaceChildren();
+  if (!importPreview) {
+    preview.hidden = true;
+    return;
+  }
+
+  preview.hidden = false;
+  const title = document.createElement('div');
+  title.className = 'learning-plan-import-preview-title';
+  title.textContent = importPreview.title;
+  preview.append(title);
+
+  const counts = document.createElement('div');
+  counts.className = 'learning-plan-import-counts';
+  counts.textContent = formatImportCounts(importPreview.parsed.counts);
+  preview.append(counts);
+
+  const list = document.createElement('ol');
+  list.className = 'learning-plan-import-phases';
+  importPreview.parsed.phases.forEach(phaseDraft => {
+    const phase = document.createElement('li');
+    const phaseTitle = document.createElement('span');
+    phaseTitle.className = 'learning-plan-import-phase-title';
+    phaseTitle.textContent = phaseDraft.title;
+    phase.append(phaseTitle);
+
+    const lessons = document.createElement('ol');
+    lessons.className = 'learning-plan-import-lessons';
+    phaseDraft.lessons.forEach(lessonDraft => {
+      const lesson = document.createElement('li');
+      const lessonTitle = document.createElement('span');
+      lessonTitle.className = 'learning-plan-import-lesson-title';
+      lessonTitle.textContent = lessonDraft.title;
+      lesson.append(lessonTitle);
+
+      const steps = document.createElement('ul');
+      steps.className = 'learning-plan-import-steps';
+      lessonDraft.steps.forEach(stepDraft => {
+        const step = document.createElement('li');
+        step.textContent = stepDraft.title;
+        steps.append(step);
+      });
+      lesson.append(steps);
+      lessons.append(lesson);
+    });
+    phase.append(lessons);
+    list.append(phase);
+  });
+  preview.append(list);
+}
+
+function buildImportedLearningPlan(title, parsed) {
+  let plan = createLearningPlan({ title });
+  parsed.phases.forEach(phaseDraft => {
+    const phaseIndex = plan.phases.length;
+    plan = addPhase(plan, { title: phaseDraft.title });
+    const phaseId = plan.phases[phaseIndex].id;
+    phaseDraft.lessons.forEach(lessonDraft => {
+      const lessonIndex = plan.phases[phaseIndex].lessons.length;
+      plan = addLesson(plan, phaseId, { title: lessonDraft.title });
+      const lessonId = plan.phases[phaseIndex].lessons[lessonIndex].id;
+      lessonDraft.steps.forEach(stepDraft => {
+        plan = addStep(plan, lessonId, { title: stepDraft.title });
+      });
+    });
+  });
+  return plan;
+}
+
+function showImportParseErrors(errors) {
+  showLearningPlanError(errors.map(item => {
+    const found = String(item.content || '').trim();
+    const suffix = [
+      found ? `Found: ${found}.` : '',
+      item.expected ? `Expected: ${item.expected}.` : ''
+    ].filter(Boolean).join(' ');
+    return suffix ? `${item.message} ${suffix}` : item.message;
+  }).join(' '));
 }
 
 function saveLearningPlan(plan, failureMessage = 'Could not save Learning Plan changes. Nothing was changed.') {
@@ -264,6 +383,75 @@ function runExclusive(fn) {
   }
 }
 
+function handleImportPreview() {
+  runExclusive(() => {
+    if (!learningPlansAvailable) {
+      showLearningPlanError("Learning Plans are unavailable. Your stored data was left unchanged.");
+      return;
+    }
+    const values = importInputValues();
+    if (!values.title) {
+      showLearningPlanError('Enter a Learning Plan title before previewing it.');
+      clearImportPreview();
+      return;
+    }
+    const parsed = parseLearningPlanOutline(values.outline);
+    if (!parsed.ok) {
+      showImportParseErrors(parsed.errors);
+      clearImportPreview();
+      return;
+    }
+    importPreview = { title: values.title, parsed };
+    importPreviewFingerprint = importInputFingerprint(values);
+    showLearningPlanError('');
+    renderImportPreview();
+  });
+}
+
+function handleImportSubmit(event) {
+  event.preventDefault();
+  runExclusive(() => {
+    if (!learningPlansAvailable) {
+      showLearningPlanError("Learning Plans are unavailable. Your stored data was left unchanged.");
+      return;
+    }
+    const values = importInputValues();
+    if (!values.title) {
+      showLearningPlanError('Enter a Learning Plan title before importing it.');
+      clearImportPreview();
+      return;
+    }
+    if (!importPreview || importInputFingerprint(values) !== importPreviewFingerprint) {
+      showLearningPlanError('Preview the current title and outline before importing.');
+      clearImportPreview();
+      return;
+    }
+    setImportBusy(true);
+    try {
+      const parsed = parseLearningPlanOutline(values.outline);
+      if (!parsed.ok) {
+        showImportParseErrors(parsed.errors);
+        clearImportPreview();
+        return;
+      }
+      const plan = buildImportedLearningPlan(values.title, parsed);
+      if (saveLearningPlan(plan, 'Could not import Learning Plan. Nothing was saved.')) {
+        document.getElementById('learning-plan-import-form')?.reset();
+        clearImportPreview();
+      }
+    } catch (err) {
+      showLearningPlanError(`Could not import Learning Plan. Nothing was saved. ${err.message}`);
+      renderLearningPlanState();
+    } finally {
+      setImportBusy(false);
+    }
+  });
+}
+
+function handleImportInput() {
+  if (importPreview && importInputFingerprint() !== importPreviewFingerprint) clearImportPreview();
+}
+
 function handleCreatePlan(event) {
   event.preventDefault();
   runExclusive(() => {
@@ -363,9 +551,15 @@ function initLearningPlans() {
   if (initialized) return;
   initialized = true;
   const createForm = document.getElementById('learning-plan-create-form');
+  const importForm = document.getElementById('learning-plan-import-form');
   const main = document.getElementById('learning-plan-main');
   const list = document.getElementById('learning-plan-list');
   if (createForm) createForm.addEventListener('submit', handleCreatePlan);
+  if (importForm) {
+    importForm.addEventListener('submit', handleImportSubmit);
+    importForm.addEventListener('input', handleImportInput);
+    importForm.querySelector('[data-lp-import-action="preview"]')?.addEventListener('click', handleImportPreview);
+  }
   if (main) {
     main.addEventListener('submit', handleSubmit);
     main.addEventListener('click', handleClick);

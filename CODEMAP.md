@@ -17,6 +17,7 @@
 - `storage.js` — line 1299 → **EXTRACTED** (see below)
 - `insights.js` — line 1300 → **EXTRACTED** (see below)
 - `focus-wallet.js` — line 1301 → **EXTRACTED** (see below)
+- `learning-plan-ui.js` — line 1507 → **EXTRACTED** (see below; imports `learning-plan-import.js`)
 - `focus-mode.js` — line 7562 → **EXTRACTED** (see below)
 
 ---
@@ -50,6 +51,20 @@ Purpose: All Pomodoro timer, lo-fi music, focus blocker overlay, and focus task 
 Functions: `canonicalFocusActivity()`, `enterFocusMode()`, `tryExitFocusMode()`, `exitFocusConfirm()`, `confirmExitFocus()`, `syncFocusTimerState()`, `refreshFocusTimerSync()`, `isSyncedFocusMirrorActive()`, `renderSyncedFocusOverlay()`, `syncFocusOverlayFromRemote()`, `clearSyncedFocusOverlay()`, `takeOverSyncedFocusTimer()`, `startPomodoro()`, `getFocusTaskLabel()`, `logFocusSession()`, `saveActiveFocusSession()`, `tickPomodoro()`, `endWorkSession()`, `endPomodoroBreak()`, `skipBreak()`, `playAlertSound()`, `setPomodoroCountdown()`, `renderPomoDots()`, `updateFocusDeepBar()`, `togglePomodoroAutoStart()`, `startFocusMusic()`, `stopFocusMusic()`, `setFocusMusicVolume()`, `toggleFocusPlaylist()`, `selectFocusMusicOff()`, `resumeFocusMusic()`, `_nextTrackIdx()`, `_updateTrackLabel()`, `_startWorkOutro()`, `_enterBreakMusic()`, `_exitBreakMusic()`, `_skipBreakMusic()`, `_effectiveVolume()`, `showFocusBlocker()`, `requestExitFocus()`, `returnToFocus()`, `showFocusSuggestions()`, `hideFocusSuggestions()`, `selectFocusSuggestion()`, `handleFocusKey()`
 Variables: `focusModeOn`, `focusBlockCountdown`, `pomodoroPhase`, `pomodoroTimer`, `pomodoroRemaining`, `pomodoroWorkMin`, `pomodoroBreakMin`, `pomodoroCount`, `focusStartTime`, `pomodoroPhaseStartedAt`, `pomodoroWasPaused`, `_lastFocusSyncAt`, `_pomodoroAutoStart`, `_focusMusicVolume`, `_lofiTrackIdx`, `_shuffleMode`, `_shuffleQueue`, `_inBreakMode`, `_outroActive`, `_focusSugIndex`, `_LOFI_TRACKS`, `_BREAK_TRANSITION`, `_BREAK_LOOP`, `_OUTRO_LEAD_SEC`, `FOCUS_SYNC_REFRESH_MS`
 Depends on: `entries`, `settings`, `running`, `ticker`, `blockStartTime`, `currentTask`, `intention`, `lastTaskForRepeat`, `timerStartedAt`, `totalSecs`, `remaining`, `dailyCommitment`, `persist()`, `syncEntries()`, `syncTimerState()`, `showToast()`, `resetTimer()`, `getTodayEntries()`, `getActivityColor()`, `toDateKey()`, `fmtDur()`, `getBucket()`, `renderToday()`, `updateRing()`, `doPing()`, `buildHeroSuggestions()`, `buildSugItem()`, `canonicalizeActivityInput()`, `_startHeartbeat()`, `_stopHeartbeat()`
+
+### learning-plan-import.js
+Lines: external file
+Purpose: Pure deterministic Markdown-style outline parser for Learning Plan Quick Import. Supports `# Phase`, `## Lesson`, and `-` / `*` steps; returns a preview draft plus counts or line-level parse errors without generating durable IDs.
+Functions: `parseLearningPlanOutline()`
+Variables: —
+Depends on: no app globals
+
+### learning-plan-ui.js
+Lines: external file
+Purpose: Learning Plans browser UI, including repository load/error handling, manual plan creation/editing, progress rendering, and Quick Import preview/import flow.
+Functions: `renderLearningPlans()` plus internal handlers for create, rename, add phase/lesson/step, complete/reopen step, delete, preview import, and import plan.
+Variables: `repository`, `learningPlans`, `selectedPlanId`, `initialized`, `busy`, `learningPlansAvailable`, `importPreview`, `importPreviewFingerprint`
+Depends on: `learning-plan-model.js`, `learning-plan-repository.js`, `learning-plan-import.js`, DOM globals
 
 ---
 
@@ -93,6 +108,13 @@ Purpose: Markup for the Week tab (day tabs, energy split, top activities), Refle
 Functions: —
 Key IDs: `view-week`, `view-reflect`, `view-settings`, `reflect-streak-cal` (streak cal mount), `reflect-heatmap` (heatmap mount), `sync-now-btn`, `sync-event-log`, `data-doctor-results`, `perf-debug-results`, `app-build-label`
 Depends on: —
+
+## [HTML — Learning Plans View]
+Lines: ~532–574
+Purpose: Learning Plans tab markup: primary Quick Import form (plan title, outline textarea, preview/import actions, preview mount), secondary manual plan creation form, and list/detail shell.
+Functions: —
+Key IDs: `view-learning`, `learning-plan-error`, `learning-plan-import-form`, `learning-plan-import-title-input`, `learning-plan-import-outline`, `learning-plan-import-preview`, `learning-plan-create-form`, `learning-plan-title-input`, `learning-plan-list`, `learning-plan-main`
+Depends on: `learning-plan-ui.js`
 
 ## [HTML — Desktop Side Panels]
 Lines: 1579–1613
@@ -488,6 +510,7 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Task switch panel (mid-block) | Task Switching Panel | 5023–5092 |
 | "Log same as last" CTA / sleep pill shortcut | Quick-Log Special Shortcuts | 5162–5266 |
 | Away mode (Sleep, Eat, Walk…) | Away & Status Management | 5267–5415 |
+| Learning Plans manual/create/edit/import | HTML — Learning Plans View + learning-plan-ui.js + learning-plan-import.js | ~532–574 + EXTRACTED |
 | Week view (energy split, top activities, table) | Week View | 5427–6009 |
 | Month overview | Week View → `renderMonthOverview()` | ~5490 |
 | Sleep reminder / sleep entry logging | Sleep Tracking | 6083–6211 |

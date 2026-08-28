@@ -42,6 +42,7 @@ import {
   LearningPlanRepositoryError,
   createLearningPlanRepository
 } from './learning-plan-repository.js';
+import { parseLearningPlanOutline } from './learning-plan-import.js';
 
 const { computeFocusWallet, getFocusWalletWeekKey } = globalThis;
 
@@ -1259,6 +1260,118 @@ function withGlobalLocalStorage(storage, fn) {
     else delete globalThis.localStorage;
   }
 }
+
+// -- Learning Plan import parser ---------------------------------------------
+
+function parsedOutline(text) {
+  const result = parseLearningPlanOutline(text);
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  return result;
+}
+
+function rejectedOutline(text, code) {
+  const result = parseLearningPlanOutline(text);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some(error => error.code === code), `Expected ${code} in ${JSON.stringify(result.errors)}`);
+  return result;
+}
+
+console.log('\nLearning Plan import parser');
+test('valid one-phase one-lesson one-step outline parses', () => {
+  const result = parsedOutline('# Phase 1\n## Lesson 1\n- Read chapter');
+  assert.deepEqual(result.phases, [
+    { title: 'Phase 1', lessons: [{ title: 'Lesson 1', steps: [{ title: 'Read chapter' }] }] }
+  ]);
+});
+test('multiple phases parse in order', () => {
+  const result = parsedOutline('# Phase 1\n## Lesson 1\n- Step 1\n# Phase 2\n## Lesson 2\n- Step 2');
+  assert.deepEqual(result.phases.map(phase => phase.title), ['Phase 1', 'Phase 2']);
+});
+test('multiple lessons parse under one phase', () => {
+  const result = parsedOutline('# Phase\n## Lesson 1\n- Step 1\n## Lesson 2\n- Step 2');
+  assert.deepEqual(result.phases[0].lessons.map(lesson => lesson.title), ['Lesson 1', 'Lesson 2']);
+});
+test('multiple steps parse under one lesson', () => {
+  const result = parsedOutline('# Phase\n## Lesson\n- Step 1\n- Step 2');
+  assert.deepEqual(result.phases[0].lessons[0].steps.map(step => step.title), ['Step 1', 'Step 2']);
+});
+test('blank lines are ignored', () => {
+  const result = parsedOutline('\n# Phase\n\n## Lesson\n\n- Step\n');
+  assert.deepEqual(result.counts, { phases: 1, lessons: 1, steps: 1 });
+});
+test('asterisk step syntax is supported', () => {
+  const result = parsedOutline('# Phase\n## Lesson\n* Read docs');
+  assert.equal(result.phases[0].lessons[0].steps[0].title, 'Read docs');
+});
+test('surrounding whitespace is trimmed from labels', () => {
+  const result = parsedOutline('  #   Phase A  \n  ##   Lesson A  \n  -   Step A  ');
+  assert.deepEqual(result.phases, [
+    { title: 'Phase A', lessons: [{ title: 'Lesson A', steps: [{ title: 'Step A' }] }] }
+  ]);
+});
+test('multiple spaces after import markers remain valid', () => {
+  const result = parsedOutline('#    Phase\n##   Lesson\n-    Step');
+  assert.deepEqual(result.phases, [
+    { title: 'Phase', lessons: [{ title: 'Lesson', steps: [{ title: 'Step' }] }] }
+  ]);
+});
+test('phase marker without whitespace is rejected', () => {
+  rejectedOutline('#Phase\n## Lesson\n- Step', 'unsupported_line');
+});
+test('lesson marker without whitespace is rejected', () => {
+  rejectedOutline('# Phase\n##Lesson\n- Step', 'unsupported_line');
+});
+test('dash step marker without whitespace is rejected', () => {
+  rejectedOutline('# Phase\n## Lesson\n-Step', 'unsupported_line');
+});
+test('asterisk step marker without whitespace is rejected', () => {
+  rejectedOutline('# Phase\n## Lesson\n*Step', 'unsupported_line');
+});
+test('lesson before phase is rejected', () => {
+  const result = rejectedOutline('## Lesson\n- Step', 'lesson_before_phase');
+  assert.equal(result.errors[0].line, 1);
+});
+test('step before lesson is rejected', () => {
+  rejectedOutline('- Step', 'step_before_phase');
+});
+test('step directly under phase is rejected', () => {
+  rejectedOutline('# Phase\n- Step', 'step_before_lesson');
+});
+test('unsupported non-empty line is rejected with line number', () => {
+  const result = rejectedOutline('# Phase\n## Lesson\nDo work\n- Step', 'unsupported_line');
+  assert.equal(result.errors.find(error => error.code === 'unsupported_line').line, 3);
+});
+test('empty phase title is rejected', () => {
+  rejectedOutline('#   \n## Lesson\n- Step', 'empty_phase_title');
+});
+test('empty lesson title is rejected', () => {
+  rejectedOutline('# Phase\n##   \n- Step', 'empty_lesson_title');
+});
+test('empty step title is rejected', () => {
+  rejectedOutline('# Phase\n## Lesson\n-   ', 'empty_step_title');
+});
+test('phase with no lessons is rejected', () => {
+  rejectedOutline('# Phase 1\n# Phase 2\n## Lesson\n- Step', 'empty_phase');
+});
+test('lesson with no steps is rejected', () => {
+  rejectedOutline('# Phase\n## Lesson 1\n## Lesson 2\n- Step', 'empty_lesson');
+});
+test('zero phases are rejected', () => {
+  rejectedOutline('   \n\n', 'no_phases');
+});
+test('counts are correct', () => {
+  const result = parsedOutline('# P1\n## L1\n- S1\n- S2\n## L2\n- S3\n# P2\n## L3\n- S4');
+  assert.deepEqual(result.counts, { phases: 2, lessons: 3, steps: 4 });
+});
+test('parser result has no generated durable IDs', () => {
+  const result = parsedOutline('# Phase\n## Lesson\n- Step');
+  assert.equal(JSON.stringify(result).includes('"id"'), false);
+  assert.equal(JSON.stringify(result).includes('createdAt'), false);
+});
+test('same input produces deterministic parse output', () => {
+  const input = '# Phase\n## Lesson\n- Step';
+  assert.deepEqual(parseLearningPlanOutline(input), parseLearningPlanOutline(input));
+});
 
 console.log('\nLearning Plan model');
 test('create plan gets an immutable UUID-like injected ID and timestamps', () => {
