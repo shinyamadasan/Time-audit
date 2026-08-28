@@ -15,6 +15,28 @@ import {
   validateLifeLedgerEvent,
   validateLifeLedgerEventDraft
 } from './life-ledger-core.js';
+import {
+  addLesson,
+  addPhase,
+  addStep,
+  completeStep,
+  createLearningPlan,
+  createLesson,
+  createPhase,
+  createStep,
+  getLearningPlanProgress,
+  hydrateLearningPlan,
+  renameLesson,
+  renamePhase,
+  renamePlan,
+  renameStep,
+  reopenStep,
+  reorderLessons,
+  reorderPhases,
+  reorderSteps,
+  serializeLearningPlan,
+  validateLearningPlan
+} from './learning-plan-model.js';
 
 const { computeFocusWallet, getFocusWalletWeekKey } = globalThis;
 
@@ -1074,6 +1096,428 @@ test('negative debt carries forward, but prior surplus does not', () => {
   ], [], { intervalMin: 30 }, nextWeek);
   assert.equal(surplusWallet.carriedDebt, 0);
   assert.equal(surplusWallet.balance, 0);
+});
+
+// -- Learning Plan model ------------------------------------------------------
+
+const LP_TIME = {
+  created: '2026-08-27T12:00:00.000Z',
+  updated: '2026-08-27T12:05:00.000Z',
+  later: '2026-08-27T12:10:00.000Z',
+  completed: '2026-08-27T12:15:00.000Z',
+  reopened: '2026-08-27T12:20:00.000Z'
+};
+
+function sequencedIds(...values) {
+  let index = 0;
+  return () => values[Math.min(index++, values.length - 1)];
+}
+
+function fixedClock(value = LP_TIME.updated) {
+  return () => value;
+}
+
+function seededLearningPlan() {
+  let plan = createLearningPlan({ title: 'Frontend fundamentals' }, {
+    idGenerator: sequencedIds('plan-1'),
+    clock: fixedClock(LP_TIME.created)
+  });
+  plan = addPhase(plan, { title: 'Phase A' }, {
+    idGenerator: sequencedIds('phase-a'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  plan = addPhase(plan, { title: 'Phase B' }, {
+    idGenerator: sequencedIds('phase-b'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  plan = addLesson(plan, 'phase-a', { title: 'Lesson A' }, {
+    idGenerator: sequencedIds('lesson-a'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  plan = addLesson(plan, 'phase-a', { title: 'Lesson B' }, {
+    idGenerator: sequencedIds('lesson-b'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  plan = addStep(plan, 'lesson-a', { title: 'Step A' }, {
+    idGenerator: sequencedIds('step-a'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  plan = addStep(plan, 'lesson-a', { title: 'Step B' }, {
+    idGenerator: sequencedIds('step-b'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  return plan;
+}
+
+function firstPhase(plan) {
+  return plan.phases[0];
+}
+
+function firstLesson(plan) {
+  return firstPhase(plan).lessons[0];
+}
+
+function firstStep(plan) {
+  return firstLesson(plan).steps[0];
+}
+
+function withStructuredCloneDisabled(fn) {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'structuredClone');
+  try {
+    globalThis.structuredClone = undefined;
+    fn();
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'structuredClone', descriptor);
+    else delete globalThis.structuredClone;
+  }
+}
+
+function assertRejectedWithAndWithoutStructuredClone(value, pattern) {
+  assert.throws(() => hydrateLearningPlan(value), pattern);
+  withStructuredCloneDisabled(() => {
+    assert.throws(() => hydrateLearningPlan(value), pattern);
+  });
+}
+
+console.log('\nLearning Plan model');
+test('create plan gets an immutable UUID-like injected ID and timestamps', () => {
+  const plan = createLearningPlan({ title: 'JavaScript', description: 'Core work' }, {
+    idGenerator: sequencedIds('uuid-plan'),
+    clock: fixedClock(LP_TIME.created)
+  });
+  assert.equal(plan.id, 'uuid-plan');
+  assert.equal(plan.title, 'JavaScript');
+  assert.equal(plan.description, 'Core work');
+  assert.deepEqual(plan.phases, []);
+  assert.equal(plan.createdAt, LP_TIME.created);
+  assert.equal(plan.updatedAt, LP_TIME.created);
+});
+test('phase, lesson, and step each get immutable injected IDs', () => {
+  assert.equal(createPhase({ title: 'Phase' }, { idGenerator: sequencedIds('phase-id') }).id, 'phase-id');
+  assert.equal(createLesson({ title: 'Lesson' }, { idGenerator: sequencedIds('lesson-id') }).id, 'lesson-id');
+  assert.equal(createStep({ title: 'Step' }, { idGenerator: sequencedIds('step-id') }).id, 'step-id');
+});
+test('rename plan keeps plan ID and does not mutate the caller-owned plan', () => {
+  const plan = seededLearningPlan();
+  const renamed = renamePlan(plan, 'Frontend mastery', { clock: fixedClock(LP_TIME.later) });
+  assert.equal(renamed.id, plan.id);
+  assert.equal(renamed.title, 'Frontend mastery');
+  assert.equal(plan.title, 'Frontend fundamentals');
+  assert.equal(renamed.updatedAt, LP_TIME.later);
+});
+test('rename phase keeps phase ID', () => {
+  const plan = seededLearningPlan();
+  const renamed = renamePhase(plan, 'phase-a', 'Basics', { clock: fixedClock(LP_TIME.later) });
+  assert.equal(renamed.phases[0].id, 'phase-a');
+  assert.equal(renamed.phases[0].title, 'Basics');
+});
+test('rename lesson keeps lesson ID', () => {
+  const plan = seededLearningPlan();
+  const renamed = renameLesson(plan, 'lesson-a', 'Syntax', { clock: fixedClock(LP_TIME.later) });
+  assert.equal(firstLesson(renamed).id, 'lesson-a');
+  assert.equal(firstLesson(renamed).title, 'Syntax');
+});
+test('rename step keeps step ID', () => {
+  const plan = seededLearningPlan();
+  const renamed = renameStep(plan, 'step-a', 'Read docs', { clock: fixedClock(LP_TIME.later) });
+  assert.equal(firstStep(renamed).id, 'step-a');
+  assert.equal(firstStep(renamed).title, 'Read docs');
+});
+test('reordering phases keeps IDs and uses array order only', () => {
+  const plan = seededLearningPlan();
+  const reordered = reorderPhases(plan, ['phase-b', 'phase-a'], { clock: fixedClock(LP_TIME.later) });
+  assert.deepEqual(reordered.phases.map(phase => phase.id), ['phase-b', 'phase-a']);
+  assert.equal(reordered.phases[1].lessons[0].id, 'lesson-a');
+});
+test('reordering lessons keeps IDs', () => {
+  const plan = seededLearningPlan();
+  const reordered = reorderLessons(plan, 'phase-a', ['lesson-b', 'lesson-a'], { clock: fixedClock(LP_TIME.later) });
+  assert.deepEqual(firstPhase(reordered).lessons.map(lesson => lesson.id), ['lesson-b', 'lesson-a']);
+});
+test('reordering steps keeps IDs', () => {
+  const plan = seededLearningPlan();
+  const reordered = reorderSteps(plan, 'lesson-a', ['step-b', 'step-a'], { clock: fixedClock(LP_TIME.later) });
+  assert.deepEqual(firstLesson(reordered).steps.map(step => step.id), ['step-b', 'step-a']);
+});
+test('complete step keeps step ID, sets completedAt, and touches plan updatedAt', () => {
+  const plan = seededLearningPlan();
+  const completed = completeStep(plan, 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  assert.equal(firstStep(completed).id, 'step-a');
+  assert.equal(firstStep(completed).completed, true);
+  assert.equal(firstStep(completed).completedAt, LP_TIME.completed);
+  assert.equal(completed.updatedAt, LP_TIME.completed);
+});
+test('repeated complete is idempotent', () => {
+  const completed = completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  const retried = completeStep(completed, 'step-a', { clock: fixedClock(LP_TIME.later) });
+  assert.deepEqual(retried, completed);
+});
+test('reopen keeps step ID, clears completedAt, and touches plan updatedAt', () => {
+  const completed = completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  const reopened = reopenStep(completed, 'step-a', { clock: fixedClock(LP_TIME.reopened) });
+  assert.equal(firstStep(reopened).id, 'step-a');
+  assert.equal(firstStep(reopened).completed, false);
+  assert.equal(firstStep(reopened).completedAt, null);
+  assert.equal(reopened.updatedAt, LP_TIME.reopened);
+});
+test('complete, reopen, complete again preserves identity with a new completedAt', () => {
+  const completed = completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  const reopened = reopenStep(completed, 'step-a', { clock: fixedClock(LP_TIME.reopened) });
+  const completedAgain = completeStep(reopened, 'step-a', { clock: fixedClock(LP_TIME.later) });
+  assert.equal(firstStep(completedAgain).id, 'step-a');
+  assert.equal(firstStep(completedAgain).completedAt, LP_TIME.later);
+});
+test('adding an entity creates exactly one new ID', () => {
+  const plan = seededLearningPlan();
+  let idCalls = 0;
+  const withPhase = addPhase(plan, { title: 'Phase C' }, {
+    idGenerator: () => {
+      idCalls++;
+      return 'phase-c';
+    },
+    clock: fixedClock(LP_TIME.later)
+  });
+  assert.equal(idCalls, 1);
+  assert.deepEqual(withPhase.phases.map(phase => phase.id), ['phase-a', 'phase-b', 'phase-c']);
+});
+test('invalid empty titles are rejected on create and rename', () => {
+  assert.throws(() => createLearningPlan({ title: ' ' }, { idGenerator: sequencedIds('x'), clock: fixedClock() }), /title/);
+  assert.throws(() => renameStep(seededLearningPlan(), 'step-a', ' ', { clock: fixedClock() }), /title/);
+});
+test('duplicate IDs are rejected across the entire hierarchy', () => {
+  const plan = seededLearningPlan();
+  const duplicated = {
+    ...plan,
+    phases: [{ ...plan.phases[0], id: plan.id }, plan.phases[1]]
+  };
+  const validation = validateLearningPlan(duplicated);
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.some(error => error.includes('duplicates')));
+});
+test('ID generator collisions are rejected during add operations', () => {
+  const plan = seededLearningPlan();
+  assert.throws(() => addStep(plan, 'lesson-a', { title: 'Duplicate' }, {
+    idGenerator: sequencedIds('step-a'),
+    clock: fixedClock(LP_TIME.later)
+  }), /duplicates/);
+});
+test('malformed timestamps are rejected', () => {
+  const plan = { ...seededLearningPlan(), updatedAt: '2026-08-27T12:00:00' };
+  const validation = validateLearningPlan(plan);
+  assert.equal(validation.ok, false);
+  assert.ok(validation.errors.some(error => error.includes('updatedAt')));
+});
+test('completed/completedAt contradictions are rejected', () => {
+  const incompleteWithDate = seededLearningPlan();
+  incompleteWithDate.phases[0].lessons[0].steps[0].completedAt = LP_TIME.completed;
+  assert.equal(validateLearningPlan(incompleteWithDate).ok, false);
+
+  const completeWithoutDate = seededLearningPlan();
+  completeWithoutDate.phases[0].lessons[0].steps[0].completed = true;
+  completeWithoutDate.phases[0].lessons[0].steps[0].completedAt = null;
+  assert.equal(validateLearningPlan(completeWithoutDate).ok, false);
+});
+test('missing arrays and sparse arrays are rejected during hydrate', () => {
+  const missing = { ...seededLearningPlan() };
+  delete missing.phases[0].lessons;
+  assert.throws(() => hydrateLearningPlan(missing), /lessons/);
+
+  const sparse = seededLearningPlan();
+  sparse.phases.length = 3;
+  assert.throws(() => hydrateLearningPlan(sparse), /sparse array hole/);
+});
+test('JSON round trip preserves immutable IDs exactly', () => {
+  const plan = seededLearningPlan();
+  const roundTrip = hydrateLearningPlan(JSON.parse(serializeLearningPlan(plan)));
+  assert.deepEqual(roundTrip.phases.map(phase => phase.id), plan.phases.map(phase => phase.id));
+  assert.deepEqual(firstLesson(roundTrip).steps.map(step => step.id), firstLesson(plan).steps.map(step => step.id));
+});
+test('progress reports zero-step plans deterministically', () => {
+  const plan = createLearningPlan({ title: 'Empty' }, {
+    idGenerator: sequencedIds('plan-empty'),
+    clock: fixedClock(LP_TIME.created)
+  });
+  assert.deepEqual(getLearningPlanProgress(plan), {
+    totalSteps: 0,
+    completedSteps: 0,
+    completionRatio: 0,
+    completionPercent: 0
+  });
+});
+test('progress reports partial completion', () => {
+  const plan = completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  assert.deepEqual(getLearningPlanProgress(plan), {
+    totalSteps: 2,
+    completedSteps: 1,
+    completionRatio: 0.5,
+    completionPercent: 50
+  });
+});
+test('progress reports complete plans', () => {
+  let plan = completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  plan = completeStep(plan, 'step-b', { clock: fixedClock(LP_TIME.completed) });
+  assert.deepEqual(getLearningPlanProgress(plan), {
+    totalSteps: 2,
+    completedSteps: 2,
+    completionRatio: 1,
+    completionPercent: 100
+  });
+});
+test('operations do not mutate caller-owned input or share returned mutable state backward', () => {
+  const plan = seededLearningPlan();
+  const updated = addStep(plan, 'lesson-a', { title: 'Step C' }, {
+    idGenerator: sequencedIds('step-c'),
+    clock: fixedClock(LP_TIME.later)
+  });
+  updated.phases[0].lessons[0].steps[0].title = 'Mutated returned object';
+  assert.equal(firstLesson(plan).steps.length, 2);
+  assert.equal(firstStep(plan).title, 'Step A');
+});
+test('nonexistent target IDs fail deterministically', () => {
+  const plan = seededLearningPlan();
+  assert.throws(() => renamePhase(plan, 'missing-phase', 'Nope', { clock: fixedClock() }), /phase missing-phase not found/);
+  assert.throws(() => addLesson(plan, 'missing-phase', { title: 'Nope' }, { idGenerator: sequencedIds('x'), clock: fixedClock() }), /phase missing-phase not found/);
+  assert.throws(() => completeStep(plan, 'missing-step', { clock: fixedClock() }), /step missing-step not found/);
+});
+test('reorder rejects missing, duplicate, and extra IDs deterministically', () => {
+  const plan = seededLearningPlan();
+  assert.throws(() => reorderSteps(plan, 'lesson-a', ['step-a'], { clock: fixedClock() }), /include every existing id/);
+  assert.throws(() => reorderSteps(plan, 'lesson-a', ['step-a', 'step-a'], { clock: fixedClock() }), /duplicate id/);
+  assert.throws(() => reorderSteps(plan, 'lesson-a', ['step-a', 'missing-step'], { clock: fixedClock() }), /unknown id/);
+});
+test('same title on two different entities is allowed because title is not identity', () => {
+  let plan = createLearningPlan({ title: 'Same' }, {
+    idGenerator: sequencedIds('plan-same'),
+    clock: fixedClock(LP_TIME.created)
+  });
+  plan = addPhase(plan, { title: 'Same' }, { idGenerator: sequencedIds('phase-same'), clock: fixedClock() });
+  plan = addLesson(plan, 'phase-same', { title: 'Same' }, { idGenerator: sequencedIds('lesson-same'), clock: fixedClock() });
+  plan = addStep(plan, 'lesson-same', { title: 'Same' }, { idGenerator: sequencedIds('step-same'), clock: fixedClock() });
+  assert.equal(validateLearningPlan(plan).ok, true);
+  assert.deepEqual([plan.id, plan.phases[0].id, plan.phases[0].lessons[0].id, plan.phases[0].lessons[0].steps[0].id], [
+    'plan-same',
+    'phase-same',
+    'lesson-same',
+    'step-same'
+  ]);
+});
+test('changing title, order, and completion never changes future source identity IDs', () => {
+  const plan = seededLearningPlan();
+  const idsBefore = {
+    plan: plan.id,
+    phase: 'phase-a',
+    lesson: 'lesson-a',
+    step: 'step-a'
+  };
+  let changed = renamePlan(plan, 'Renamed', { clock: fixedClock(LP_TIME.later) });
+  changed = renamePhase(changed, 'phase-a', 'Renamed phase', { clock: fixedClock(LP_TIME.later) });
+  changed = reorderSteps(changed, 'lesson-a', ['step-b', 'step-a'], { clock: fixedClock(LP_TIME.later) });
+  changed = completeStep(changed, 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  assert.equal(changed.id, idsBefore.plan);
+  assert.equal(changed.phases.find(phase => phase.id === idsBefore.phase).id, idsBefore.phase);
+  assert.equal(changed.phases.find(phase => phase.id === 'phase-b').id, 'phase-b');
+  assert.equal(changed.phases[0].lessons.find(lesson => lesson.id === idsBefore.lesson).id, idsBefore.lesson);
+  assert.equal(changed.phases[0].lessons[0].steps.find(step => step.id === idsBefore.step).id, idsBefore.step);
+});
+test('empty child arrays are valid durable model state', () => {
+  const plan = createLearningPlan({ title: 'Empty' }, {
+    idGenerator: sequencedIds('empty-plan'),
+    clock: fixedClock(LP_TIME.created)
+  });
+  assert.equal(validateLearningPlan(plan).ok, true);
+});
+test('hydrate succeeds with structuredClone unavailable for valid plain data', () => {
+  const plan = seededLearningPlan();
+  withStructuredCloneDisabled(() => {
+    const hydrated = hydrateLearningPlan(plan);
+    assert.deepEqual(hydrated, plan);
+    assert.notEqual(hydrated, plan);
+  });
+});
+test('unsupported function-valued properties are rejected before fallback clone', () => {
+  const plan = seededLearningPlan();
+  plan.extra = () => 1;
+  assertRejectedWithAndWithoutStructuredClone(plan, /unsupported function/);
+});
+test('unsupported symbol values and symbol keys are rejected before fallback clone', () => {
+  const symbolValue = seededLearningPlan();
+  symbolValue.extra = Symbol('bad');
+  assertRejectedWithAndWithoutStructuredClone(symbolValue, /unsupported symbol/);
+
+  const symbolKey = seededLearningPlan();
+  symbolKey[Symbol('bad')] = 'hidden';
+  assertRejectedWithAndWithoutStructuredClone(symbolKey, /symbol key/);
+});
+test('unsupported BigInt values are rejected before fallback clone', () => {
+  const plan = seededLearningPlan();
+  plan.extra = 1n;
+  assertRejectedWithAndWithoutStructuredClone(plan, /unsupported bigint/);
+});
+test('Date values are rejected before fallback clone', () => {
+  const plan = seededLearningPlan();
+  plan.extra = new Date(LP_TIME.created);
+  assertRejectedWithAndWithoutStructuredClone(plan, /JSON-safe plain data/);
+});
+test('Map and Set values are rejected before fallback clone', () => {
+  const withMap = seededLearningPlan();
+  withMap.extra = new Map([['x', 1]]);
+  assertRejectedWithAndWithoutStructuredClone(withMap, /JSON-safe plain data/);
+
+  const withSet = seededLearningPlan();
+  withSet.extra = new Set(['x']);
+  assertRejectedWithAndWithoutStructuredClone(withSet, /JSON-safe plain data/);
+});
+test('class instances are rejected before fallback clone', () => {
+  class CustomPhase {
+    constructor() {
+      this.id = 'custom-phase';
+      this.title = 'Custom';
+      this.lessons = [];
+    }
+  }
+  const plan = seededLearningPlan();
+  plan.phases[0] = new CustomPhase();
+  assertRejectedWithAndWithoutStructuredClone(plan, /JSON-safe plain data/);
+});
+test('circular structures are rejected safely before fallback clone', () => {
+  const plan = seededLearningPlan();
+  plan.extra = plan;
+  assertRejectedWithAndWithoutStructuredClone(plan, /circular reference/);
+});
+test('undefined durable values are rejected before fallback clone', () => {
+  const plan = seededLearningPlan();
+  plan.phases[0].title = undefined;
+  assertRejectedWithAndWithoutStructuredClone(plan, /unsupported undefined/);
+});
+test('valid JSON-safe round trip preserves IDs, timestamps, completion, and order without structuredClone', () => {
+  let plan = seededLearningPlan();
+  plan = completeStep(plan, 'step-b', { clock: fixedClock(LP_TIME.completed) });
+  plan = reorderPhases(plan, ['phase-b', 'phase-a'], { clock: fixedClock(LP_TIME.later) });
+  plan = reorderSteps(plan, 'lesson-a', ['step-b', 'step-a'], { clock: fixedClock(LP_TIME.reopened) });
+
+  withStructuredCloneDisabled(() => {
+    const roundTrip = hydrateLearningPlan(JSON.parse(serializeLearningPlan(plan)));
+    assert.deepEqual(roundTrip, plan);
+    assert.deepEqual(roundTrip.phases.map(phase => phase.id), ['phase-b', 'phase-a']);
+    assert.deepEqual(roundTrip.phases[1].lessons[0].steps.map(step => step.id), ['step-b', 'step-a']);
+    assert.equal(roundTrip.createdAt, LP_TIME.created);
+    assert.equal(roundTrip.updatedAt, LP_TIME.reopened);
+    assert.equal(roundTrip.phases[1].lessons[0].steps[0].completed, true);
+    assert.equal(roundTrip.phases[1].lessons[0].steps[0].completedAt, LP_TIME.completed);
+  });
+});
+test('invalid injected idGenerator and clock outputs are rejected', () => {
+  assert.throws(() => createLearningPlan({ title: 'Bad ID' }, {
+    idGenerator: () => '',
+    clock: fixedClock(LP_TIME.created)
+  }), /idGenerator/);
+  assert.throws(() => createLearningPlan({ title: 'Bad clock' }, {
+    idGenerator: sequencedIds('bad-clock-plan'),
+    clock: () => '2026-08-27T12:00:00'
+  }), /clock/);
+  assert.throws(() => completeStep(seededLearningPlan(), 'step-a', {
+    clock: () => 'not a timestamp'
+  }), /clock/);
 });
 
 // -- Life Ledger core ---------------------------------------------------------

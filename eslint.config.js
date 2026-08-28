@@ -1,8 +1,8 @@
-// Minimal ESLint config — no build step, runs via: npx eslint storage.js focus-mode.js insights.js focus-wallet.js
+// Minimal ESLint config — no build step, runs via: npm run lint.
 // Targets the extracted .js files only (not index.html which requires an HTML plugin).
 export default [
   {
-    files: ['life-ledger-core.js', 'chronasense-life-ledger-adapter.js'],
+    files: ['life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'learning-plan-model.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -17,7 +17,7 @@ export default [
   },
   {
     files: ['*.js'],
-    ignores: ['www/**', 'node_modules/**', 'life-ledger-core.js', 'chronasense-life-ledger-adapter.js'],
+    ignores: ['www/**', 'node_modules/**', 'life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'learning-plan-model.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script', // classic <script> tags — not ES modules
