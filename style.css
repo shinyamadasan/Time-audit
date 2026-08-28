@@ -750,6 +750,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 /* ── Learning Plans ── */
 .learning-plan-error{background:var(--distraction-dim);border:1px solid rgba(255,107,107,0.35);border-radius:var(--r);
   color:var(--distraction);font-size:12px;line-height:1.45;padding:10px 12px;margin-bottom:10px;overflow-wrap:anywhere}
+.learning-plan-entry-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .learning-plan-import-form{display:flex;flex-direction:column;gap:10px}
 .learning-plan-import-form textarea{width:100%;min-width:0;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;
   color:var(--text);font-family:var(--mono);font-size:12px;line-height:1.45;padding:9px;outline:none;resize:vertical}
@@ -780,30 +781,42 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .learning-plan-main{min-width:0}
 .learning-plan-detail{display:flex;flex-direction:column;gap:10px}
 .learning-plan-detail-head{display:flex;align-items:flex-start;gap:8px}
-.learning-plan-title-field{flex:1;margin-bottom:0;min-width:0}
+.learning-plan-title-block{flex:1;margin-bottom:0;min-width:0}
 .learning-plan-progress{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg3);
   border:1px solid var(--border2);border-radius:8px;padding:9px 11px;font-family:var(--mono);font-size:12px;color:var(--muted)}
 .learning-plan-progress strong{color:var(--deep);font-weight:700}
+.learning-plan-title-display,.learning-plan-section-summary{display:flex;align-items:center;gap:8px;min-width:0}
+.learning-plan-title-text,.learning-plan-section-title{min-width:0;overflow-wrap:anywhere;line-height:1.3}
+.learning-plan-plan-title-display .learning-plan-title-text{font-size:18px;font-weight:800;color:var(--text)}
+.learning-plan-phase-title-display .learning-plan-title-text{font-size:14px;font-weight:800;color:var(--text)}
+.learning-plan-lesson-title-display .learning-plan-title-text{font-size:13px;font-weight:700;color:var(--deep)}
+.learning-plan-step-title-display .learning-plan-title-text{font-size:13px;color:var(--text)}
+.btn.subtle{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.subtle:hover{background:var(--bg3);border-color:var(--border)}
 .learning-plan-add-row{display:flex;gap:7px;align-items:center;min-width:0}
-.learning-plan-add-row input{flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);
+.learning-plan-add-row input,.learning-plan-rename-row input{flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);
   font-family:var(--head);font-size:12px;padding:7px 9px;outline:none}
-.learning-plan-add-row input:focus,.learning-plan-inline-title:focus,.learning-plan-step-title:focus{border-color:var(--deep)}
+.learning-plan-add-row input:focus,.learning-plan-rename-row input:focus{border-color:var(--deep)}
 .learning-plan-add-row .btn{flex-shrink:0}
 .learning-plan-add-nested{margin-top:8px}
-.learning-plan-phases,.learning-plan-lessons,.learning-plan-steps{display:flex;flex-direction:column;gap:8px}
-.learning-plan-phase{border-top:1px solid var(--border);padding-top:10px}
+.learning-plan-add-trigger{align-self:flex-start}
+.learning-plan-rename-row{display:flex;align-items:center;gap:7px;min-width:0;margin:5px 0}
+.learning-plan-phases,.learning-plan-lessons,.learning-plan-steps{display:flex;flex-direction:column;gap:7px}
+.learning-plan-phase{border-top:1px solid var(--border);padding-top:9px}
 .learning-plan-lesson{border-left:2px solid var(--border2);padding-left:10px}
-.learning-plan-row{display:flex;align-items:center;gap:8px;min-width:0}
-.learning-plan-inline-title,.learning-plan-step-title{width:100%;min-width:0;background:transparent;border:1px solid transparent;
-  border-radius:7px;color:var(--text);font-family:var(--head);outline:none;padding:5px 7px;overflow-wrap:anywhere;white-space:pre-wrap;
-  resize:none;line-height:1.3;min-height:32px}
-.learning-plan-title-field textarea{line-height:1.35;resize:vertical}
-.learning-plan-phase-row .learning-plan-inline-title{font-size:14px;font-weight:800}
-.learning-plan-lesson-row .learning-plan-inline-title{font-size:13px;font-weight:700;color:var(--deep)}
-.learning-plan-step{min-height:44px;display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:8px;
+.learning-plan-section-content{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.learning-plan-section-content[hidden]{display:none}
+.learning-plan-toggle{flex:1;min-width:0;min-height:36px;display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:7px;
+  background:transparent;border:0;color:var(--text);font-family:var(--head);padding:4px 0;text-align:left;cursor:pointer}
+.learning-plan-toggle-mark{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center}
+.learning-plan-section-title{font-weight:800}
+.learning-plan-lesson-summary .learning-plan-section-title{font-size:13px;font-weight:700;color:var(--deep)}
+.learning-plan-section-progress{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.learning-plan-step{min-height:40px;display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:8px;
   background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 9px}
 .learning-plan-step input[type="checkbox"]{width:20px;height:20px;accent-color:var(--deep);cursor:pointer}
-.learning-plan-step.done .learning-plan-step-title{color:var(--muted2);text-decoration:line-through}
+.learning-plan-step-body{min-width:0}
+.learning-plan-step.done .learning-plan-title-text{color:var(--muted2);text-decoration:line-through}
 .learning-plan-step-state{font-family:var(--mono);font-size:10px;color:var(--muted);border:1px solid var(--border2);border-radius:999px;padding:2px 7px}
 .learning-plan-step.done .learning-plan-step-state{color:var(--deep);background:var(--deep-dim)}
 .learning-plan-muted{font-size:12px;color:var(--muted);line-height:1.4;padding:3px 0}
@@ -812,12 +825,15 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .learning-plan-unavailable-title{font-size:15px;font-weight:800;color:var(--text);overflow-wrap:anywhere}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:620px){
-  .learning-plan-form,.learning-plan-detail-head,.learning-plan-add-row{align-items:stretch;flex-direction:column}
+  .learning-plan-form,.learning-plan-detail-head,.learning-plan-add-row,.learning-plan-rename-row{align-items:stretch;flex-direction:column}
+  .learning-plan-entry-actions .btn{flex:1 1 150px}
   .learning-plan-grid{grid-template-columns:1fr}
   .learning-plan-list{display:grid;grid-template-columns:1fr 1fr}
   .learning-plan-import-actions{justify-content:stretch}
   .learning-plan-import-actions .btn{flex:1 1 140px}
   .learning-plan-import-phases,.learning-plan-import-lessons,.learning-plan-import-steps{padding-left:14px}
+  .learning-plan-lesson{padding-left:7px}
+  .learning-plan-toggle{grid-template-columns:16px minmax(0,1fr) auto;gap:5px}
   .learning-plan-step{grid-template-columns:22px minmax(0,1fr);align-items:start}
   .learning-plan-step-state{grid-column:2;justify-self:start}
 }

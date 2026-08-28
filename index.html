@@ -540,7 +540,12 @@
 
   <div class="learning-plan-error" id="learning-plan-error" role="alert" hidden></div>
 
-  <section class="settings-section learning-plan-import" aria-labelledby="learning-plan-import-title">
+  <div class="learning-plan-entry-actions">
+    <button class="btn primary" type="button" data-lp-action="show-import" aria-expanded="false" aria-controls="learning-plan-import-panel">+ Import plan</button>
+    <button class="btn" type="button" data-lp-action="show-create" aria-expanded="false" aria-controls="learning-plan-create-panel">Create manually</button>
+  </div>
+
+  <section class="settings-section learning-plan-import" id="learning-plan-import-panel" aria-labelledby="learning-plan-import-title" hidden>
     <div class="settings-title" id="learning-plan-import-title">Import / Paste Plan</div>
     <form id="learning-plan-import-form" class="learning-plan-import-form">
       <div class="field learning-plan-field">
@@ -554,6 +559,7 @@
       <div class="learning-plan-import-actions">
         <button class="btn" type="button" data-lp-import-action="preview">Preview</button>
         <button class="btn primary" type="submit" data-lp-import-action="import" disabled>Import plan</button>
+        <button class="btn" type="button" data-lp-action="cancel-creation">Cancel</button>
       </div>
       <div class="learning-plan-import-help" aria-label="Supported import format">
         # Phase title<br>
@@ -564,7 +570,7 @@
     </form>
   </section>
 
-  <section class="settings-section learning-plan-create" aria-labelledby="learning-plan-create-title">
+  <section class="settings-section learning-plan-create" id="learning-plan-create-panel" aria-labelledby="learning-plan-create-title" hidden>
     <div class="settings-title" id="learning-plan-create-title">Create manually</div>
     <form id="learning-plan-create-form" class="learning-plan-form">
       <div class="field learning-plan-field">
@@ -572,6 +578,7 @@
         <input type="text" id="learning-plan-title-input" maxlength="120" autocomplete="off" placeholder="e.g. JavaScript fundamentals">
       </div>
       <button class="btn" type="submit">Create plan</button>
+      <button class="btn" type="button" data-lp-action="cancel-creation">Cancel</button>
     </form>
   </section>
 
