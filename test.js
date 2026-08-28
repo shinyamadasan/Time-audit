@@ -37,6 +37,11 @@ import {
   serializeLearningPlan,
   validateLearningPlan
 } from './learning-plan-model.js';
+import {
+  LEARNING_PLAN_REPOSITORY_KEY,
+  LearningPlanRepositoryError,
+  createLearningPlanRepository
+} from './learning-plan-repository.js';
 
 const { computeFocusWallet, getFocusWalletWeekKey } = globalThis;
 
@@ -1179,6 +1184,82 @@ function assertRejectedWithAndWithoutStructuredClone(value, pattern) {
   });
 }
 
+function makeMemoryStorage(initial = {}) {
+  const data = new Map(Object.entries(initial));
+  let setCalls = 0;
+  return {
+    getItem(key) {
+      return data.has(key) ? data.get(key) : null;
+    },
+    setItem(key, value) {
+      setCalls++;
+      data.set(key, String(value));
+    },
+    raw(key = LEARNING_PLAN_REPOSITORY_KEY) {
+      return data.get(key);
+    },
+    setCalls() {
+      return setCalls;
+    }
+  };
+}
+
+function learningPlanRepository(storage = makeMemoryStorage()) {
+  return createLearningPlanRepository({ storage });
+}
+
+function repositoryEnvelope(storage, key = LEARNING_PLAN_REPOSITORY_KEY) {
+  return JSON.parse(storage.raw(key));
+}
+
+function secondSeededLearningPlan() {
+  let plan = createLearningPlan({ title: 'Backend fundamentals' }, {
+    idGenerator: sequencedIds('plan-2'),
+    clock: fixedClock(LP_TIME.created)
+  });
+  plan = addPhase(plan, { title: 'Phase C' }, {
+    idGenerator: sequencedIds('phase-c'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  plan = addLesson(plan, 'phase-c', { title: 'Lesson C' }, {
+    idGenerator: sequencedIds('lesson-c'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  plan = addStep(plan, 'lesson-c', { title: 'Step C' }, {
+    idGenerator: sequencedIds('step-c'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  return plan;
+}
+
+function learningPlanIds(plan) {
+  return [
+    plan.id,
+    ...plan.phases.flatMap(phase => [
+      phase.id,
+      ...phase.lessons.flatMap(lesson => [
+        lesson.id,
+        ...lesson.steps.map(step => step.id)
+      ])
+    ])
+  ];
+}
+
+function withGlobalLocalStorage(storage, fn) {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  try {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      writable: true,
+      value: storage
+    });
+    fn();
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'localStorage', descriptor);
+    else delete globalThis.localStorage;
+  }
+}
+
 console.log('\nLearning Plan model');
 test('create plan gets an immutable UUID-like injected ID and timestamps', () => {
   const plan = createLearningPlan({ title: 'JavaScript', description: 'Core work' }, {
@@ -1518,6 +1599,350 @@ test('invalid injected idGenerator and clock outputs are rejected', () => {
   assert.throws(() => completeStep(seededLearningPlan(), 'step-a', {
     clock: () => 'not a timestamp'
   }), /clock/);
+});
+
+console.log('\nLearning Plan repository');
+test('empty repository lists no plans without writing storage', () => {
+  const storage = makeMemoryStorage();
+  assert.deepEqual(learningPlanRepository(storage).listPlans(), []);
+  assert.equal(storage.raw(), undefined);
+  assert.equal(storage.setCalls(), 0);
+});
+test('default key happy path uses ta3-learning-plans-v1', () => {
+  const storage = makeMemoryStorage();
+  createLearningPlanRepository({ storage }).savePlan(seededLearningPlan());
+  assert.ok(storage.raw(LEARNING_PLAN_REPOSITORY_KEY));
+});
+test('valid custom key happy path stores under the custom key only', () => {
+  const storage = makeMemoryStorage();
+  const customKey = 'ta3-learning-plans-custom';
+  createLearningPlanRepository({ storage, key: customKey }).savePlan(seededLearningPlan());
+  assert.equal(storage.raw(LEARNING_PLAN_REPOSITORY_KEY), undefined);
+  assert.deepEqual(repositoryEnvelope(storage, customKey).plans.map(plan => plan.id), ['plan-1']);
+});
+test('save one valid plan writes the versioned envelope', () => {
+  const storage = makeMemoryStorage();
+  const plan = seededLearningPlan();
+  const saved = learningPlanRepository(storage).savePlan(plan);
+  assert.deepEqual(saved, plan);
+  assert.notEqual(saved, plan);
+  assert.equal(storage.setCalls(), 1);
+  assert.deepEqual(repositoryEnvelope(storage), {
+    schemaVersion: 1,
+    plans: [plan]
+  });
+});
+test('reload from a new repository instance returns the same plan', () => {
+  const storage = makeMemoryStorage();
+  const plan = seededLearningPlan();
+  learningPlanRepository(storage).savePlan(plan);
+  assert.deepEqual(learningPlanRepository(storage).getPlan('plan-1'), plan);
+});
+test('every plan, phase, lesson, and step ID survives reload unchanged', () => {
+  const storage = makeMemoryStorage();
+  const plan = completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  const beforeIds = learningPlanIds(plan);
+  learningPlanRepository(storage).savePlan(plan);
+  const loaded = learningPlanRepository(storage).getPlan('plan-1');
+  assert.deepEqual(learningPlanIds(loaded), beforeIds);
+});
+test('completion state and completedAt survive reload', () => {
+  const storage = makeMemoryStorage();
+  const plan = completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  learningPlanRepository(storage).savePlan(plan);
+  const loaded = learningPlanRepository(storage).getPlan('plan-1');
+  assert.equal(firstStep(loaded).completed, true);
+  assert.equal(firstStep(loaded).completedAt, LP_TIME.completed);
+});
+test('hierarchy ordering survives reload', () => {
+  const storage = makeMemoryStorage();
+  let plan = reorderPhases(seededLearningPlan(), ['phase-b', 'phase-a'], { clock: fixedClock(LP_TIME.later) });
+  plan = reorderSteps(plan, 'lesson-a', ['step-b', 'step-a'], { clock: fixedClock(LP_TIME.reopened) });
+  learningPlanRepository(storage).savePlan(plan);
+  const loaded = learningPlanRepository(storage).getPlan('plan-1');
+  assert.deepEqual(loaded.phases.map(phase => phase.id), ['phase-b', 'phase-a']);
+  assert.deepEqual(loaded.phases[1].lessons[0].steps.map(step => step.id), ['step-b', 'step-a']);
+});
+test('saving an existing ID replaces rather than duplicates and preserves order', () => {
+  const storage = makeMemoryStorage();
+  const repo = learningPlanRepository(storage);
+  const first = seededLearningPlan();
+  const second = secondSeededLearningPlan();
+  repo.savePlan(first);
+  repo.savePlan(second);
+  repo.savePlan(renamePlan(first, 'Frontend mastery', { clock: fixedClock(LP_TIME.later) }));
+  const plans = repo.listPlans();
+  assert.deepEqual(plans.map(plan => plan.id), ['plan-1', 'plan-2']);
+  assert.equal(plans[0].title, 'Frontend mastery');
+});
+test('repeated identical save remains one plan with stable IDs', () => {
+  const storage = makeMemoryStorage();
+  const repo = learningPlanRepository(storage);
+  const plan = seededLearningPlan();
+  repo.savePlan(plan);
+  repo.savePlan(plan);
+  repo.savePlan(plan);
+  assert.equal(repo.listPlans().length, 1);
+  assert.deepEqual(learningPlanIds(repo.getPlan('plan-1')), learningPlanIds(plan));
+});
+test('save does not mutate caller input', () => {
+  const storage = makeMemoryStorage();
+  const plan = seededLearningPlan();
+  const before = JSON.stringify(plan);
+  learningPlanRepository(storage).savePlan(plan);
+  assert.equal(JSON.stringify(plan), before);
+});
+test('caller mutation after save does not alter persisted state', () => {
+  const storage = makeMemoryStorage();
+  const repo = learningPlanRepository(storage);
+  const plan = seededLearningPlan();
+  repo.savePlan(plan);
+  plan.phases[0].lessons[0].steps[0].title = 'Mutated source';
+  assert.equal(firstStep(repo.getPlan('plan-1')).title, 'Step A');
+});
+test('mutation of getPlan result does not alter later reads', () => {
+  const storage = makeMemoryStorage();
+  const repo = learningPlanRepository(storage);
+  repo.savePlan(seededLearningPlan());
+  const loaded = repo.getPlan('plan-1');
+  loaded.phases[0].lessons[0].steps[0].title = 'Mutated get';
+  assert.equal(firstStep(repo.getPlan('plan-1')).title, 'Step A');
+});
+test('mutation of listPlans output does not alter later reads', () => {
+  const storage = makeMemoryStorage();
+  const repo = learningPlanRepository(storage);
+  repo.savePlan(seededLearningPlan());
+  const listed = repo.listPlans();
+  listed[0].title = 'Mutated list';
+  listed.push(secondSeededLearningPlan());
+  assert.deepEqual(repo.listPlans().map(plan => plan.title), ['Frontend fundamentals']);
+});
+test('two repository instances see shared persisted state', () => {
+  const storage = makeMemoryStorage();
+  const firstRepo = learningPlanRepository(storage);
+  const secondRepo = learningPlanRepository(storage);
+  firstRepo.savePlan(seededLearningPlan());
+  assert.equal(secondRepo.getPlan('plan-1').title, 'Frontend fundamentals');
+  secondRepo.savePlan(secondSeededLearningPlan());
+  assert.deepEqual(firstRepo.listPlans().map(plan => plan.id), ['plan-1', 'plan-2']);
+});
+test('remove deletes only the exact matching plan ID', () => {
+  const storage = makeMemoryStorage();
+  const repo = learningPlanRepository(storage);
+  repo.savePlan(seededLearningPlan());
+  repo.savePlan(secondSeededLearningPlan());
+  const beforeRemoveSetCalls = storage.setCalls();
+  assert.deepEqual(repo.removePlan('plan-1'), { removed: true, planId: 'plan-1' });
+  assert.equal(storage.setCalls(), beforeRemoveSetCalls + 1);
+  assert.equal(repo.getPlan('plan-1'), null);
+  assert.equal(repo.getPlan('plan-2').title, 'Backend fundamentals');
+});
+test('remove preserves relative order of remaining plans', () => {
+  const storage = makeMemoryStorage();
+  const repo = learningPlanRepository(storage);
+  repo.savePlan(seededLearningPlan());
+  repo.savePlan(secondSeededLearningPlan());
+  repo.savePlan(createLearningPlan({ title: 'Third' }, {
+    idGenerator: sequencedIds('plan-3'),
+    clock: fixedClock(LP_TIME.created)
+  }));
+  repo.removePlan('plan-2');
+  assert.deepEqual(repo.listPlans().map(plan => plan.id), ['plan-1', 'plan-3']);
+});
+test('remove of a nonexistent ID is a deterministic no-op', () => {
+  const storage = makeMemoryStorage();
+  const repo = learningPlanRepository(storage);
+  repo.savePlan(seededLearningPlan());
+  const before = storage.raw();
+  const beforeSetCalls = storage.setCalls();
+  assert.deepEqual(repo.removePlan('missing-plan'), { removed: false, planId: 'missing-plan' });
+  assert.equal(storage.raw(), before);
+  assert.equal(storage.setCalls(), beforeSetCalls);
+});
+test('empty and whitespace IDs are rejected for get and remove', () => {
+  const repo = learningPlanRepository(makeMemoryStorage());
+  assert.throws(() => repo.getPlan('  '), error => error.code === 'invalid_plan_id');
+  assert.throws(() => repo.removePlan(''), error => error.code === 'invalid_plan_id');
+});
+test('empty, whitespace, and non-string repository keys are rejected when supplied', () => {
+  const storage = makeMemoryStorage();
+  assert.throws(() => createLearningPlanRepository({ storage, key: '' }), error => error.code === 'invalid_plan_id');
+  assert.throws(() => createLearningPlanRepository({ storage, key: '   ' }), error => error.code === 'invalid_plan_id');
+  assert.throws(() => createLearningPlanRepository({ storage, key: 12 }), error => error.code === 'invalid_plan_id');
+});
+test('explicit null and undefined keys are rejected instead of defaulted', () => {
+  const storage = makeMemoryStorage();
+  assert.throws(() => createLearningPlanRepository({ storage, key: null }), error => error.code === 'invalid_plan_id');
+  assert.throws(() => createLearningPlanRepository({ storage, key: undefined }), error => error.code === 'invalid_plan_id');
+});
+test('explicit invalid storage values are rejected instead of defaulted', () => {
+  assert.throws(() => createLearningPlanRepository({ storage: null }), error => error.code === 'storage_unavailable');
+  assert.throws(() => createLearningPlanRepository({ storage: undefined }), error => error.code === 'storage_unavailable');
+  assert.throws(() => createLearningPlanRepository({ storage: 'local' }), error => error.code === 'storage_unavailable');
+  assert.throws(() => createLearningPlanRepository({ storage: { getItem() {} } }), error => error.code === 'storage_unavailable');
+});
+test('explicit null storage is rejected even when global localStorage exists', () => {
+  withGlobalLocalStorage(makeMemoryStorage(), () => {
+    assert.throws(() => createLearningPlanRepository({ storage: null }), error => error.code === 'storage_unavailable');
+  });
+});
+test('omitted storage may use global localStorage', () => {
+  const storage = makeMemoryStorage();
+  withGlobalLocalStorage(storage, () => {
+    createLearningPlanRepository().savePlan(seededLearningPlan());
+    assert.deepEqual(repositoryEnvelope(storage).plans.map(plan => plan.id), ['plan-1']);
+  });
+});
+test('malformed plan is rejected before write', () => {
+  const storage = makeMemoryStorage();
+  assert.throws(() => learningPlanRepository(storage).savePlan({ id: 'bad' }), error => error.code === 'invalid_plan');
+  assert.equal(storage.raw(), undefined);
+  assert.equal(storage.setCalls(), 0);
+});
+test('duplicate nested IDs are rejected before write', () => {
+  const storage = makeMemoryStorage();
+  const plan = seededLearningPlan();
+  plan.phases[0].lessons[0].steps[1].id = 'step-a';
+  assert.throws(() => learningPlanRepository(storage).savePlan(plan), error => error.code === 'invalid_plan');
+  assert.equal(storage.raw(), undefined);
+});
+test('malformed completedAt state is rejected before write', () => {
+  const storage = makeMemoryStorage();
+  const plan = seededLearningPlan();
+  plan.phases[0].lessons[0].steps[0].completedAt = LP_TIME.completed;
+  assert.throws(() => learningPlanRepository(storage).savePlan(plan), error => error.code === 'invalid_plan');
+  assert.equal(storage.raw(), undefined);
+});
+test('malformed JSON in storage is rejected and left untouched', () => {
+  const storage = makeMemoryStorage({ [LEARNING_PLAN_REPOSITORY_KEY]: '{bad json' });
+  assert.throws(() => learningPlanRepository(storage).listPlans(), error => error.code === 'invalid_json');
+  assert.equal(storage.raw(), '{bad json');
+});
+test('undefined storage value is rejected and cannot be overwritten by save', () => {
+  const storage = makeMemoryStorage({ [LEARNING_PLAN_REPOSITORY_KEY]: undefined });
+  assert.throws(() => learningPlanRepository(storage).listPlans(), error => error.code === 'invalid_storage_value');
+  assert.throws(() => learningPlanRepository(storage).savePlan(seededLearningPlan()), error => error.code === 'invalid_storage_value');
+  assert.equal(storage.raw(), undefined);
+  assert.equal(storage.setCalls(), 0);
+});
+test('non-string storage values are rejected before parsing', () => {
+  [7, false, {}, []].forEach(value => {
+    const storage = makeMemoryStorage({ [LEARNING_PLAN_REPOSITORY_KEY]: value });
+    assert.throws(() => learningPlanRepository(storage).listPlans(), error => error.code === 'invalid_storage_value');
+    assert.equal(storage.raw(), value);
+  });
+});
+test('malformed envelope is rejected and left untouched', () => {
+  const raw = JSON.stringify({ schemaVersion: 1, plans: {} });
+  const storage = makeMemoryStorage({ [LEARNING_PLAN_REPOSITORY_KEY]: raw });
+  assert.throws(() => learningPlanRepository(storage).listPlans(), error => error.code === 'invalid_envelope');
+  assert.equal(storage.raw(), raw);
+});
+test('extra envelope fields are rejected', () => {
+  const raw = JSON.stringify({ schemaVersion: 1, plans: [], progress: [] });
+  const storage = makeMemoryStorage({ [LEARNING_PLAN_REPOSITORY_KEY]: raw });
+  assert.throws(() => learningPlanRepository(storage).listPlans(), error => error.code === 'invalid_envelope');
+  assert.equal(storage.raw(), raw);
+});
+test('unsupported schemaVersion is rejected and left untouched', () => {
+  const raw = JSON.stringify({ schemaVersion: 2, plans: [] });
+  const storage = makeMemoryStorage({ [LEARNING_PLAN_REPOSITORY_KEY]: raw });
+  assert.throws(() => learningPlanRepository(storage).listPlans(), error => error.code === 'unsupported_schema_version');
+  assert.equal(storage.raw(), raw);
+});
+test('malformed persisted plan is rejected and left untouched', () => {
+  const raw = JSON.stringify({ schemaVersion: 1, plans: [seededLearningPlan(), { id: 'bad' }] });
+  const storage = makeMemoryStorage({ [LEARNING_PLAN_REPOSITORY_KEY]: raw });
+  assert.throws(() => learningPlanRepository(storage).listPlans(), error => error.code === 'invalid_plan');
+  assert.equal(storage.raw(), raw);
+});
+test('duplicate plan IDs in persisted envelope are rejected', () => {
+  const raw = JSON.stringify({ schemaVersion: 1, plans: [seededLearningPlan(), seededLearningPlan()] });
+  const storage = makeMemoryStorage({ [LEARNING_PLAN_REPOSITORY_KEY]: raw });
+  assert.throws(() => learningPlanRepository(storage).listPlans(), error => error.code === 'duplicate_plan_id');
+  assert.equal(storage.raw(), raw);
+});
+test('read errors are surfaced without writing or clearing storage', () => {
+  let setCalls = 0;
+  const storage = {
+    getItem() {
+      throw new Error('read failed');
+    },
+    setItem() {
+      setCalls++;
+    }
+  };
+  assert.throws(() => createLearningPlanRepository({ storage }).listPlans(), error => error.code === 'storage_read_failed');
+  assert.equal(setCalls, 0);
+});
+test('write failures are surfaced and failed save does not report success', () => {
+  const plan = seededLearningPlan();
+  const storage = {
+    getItem() {
+      return null;
+    },
+    setItem() {
+      throw new Error('write failed');
+    }
+  };
+  assert.throws(() => createLearningPlanRepository({ storage }).savePlan(plan), error => error.code === 'storage_write_failed');
+});
+test('failed save leaves prior persisted state unchanged', () => {
+  const storage = makeMemoryStorage();
+  const repo = learningPlanRepository(storage);
+  repo.savePlan(seededLearningPlan());
+  const before = storage.raw();
+  const failingStorage = {
+    getItem: storage.getItem,
+    setItem() {
+      throw new Error('write failed');
+    }
+  };
+  assert.throws(() => createLearningPlanRepository({ storage: failingStorage }).savePlan(secondSeededLearningPlan()), error => error.code === 'storage_write_failed');
+  assert.equal(storage.raw(), before);
+});
+test('save after corrupt persisted state does not replace corruption', () => {
+  const storage = makeMemoryStorage({ [LEARNING_PLAN_REPOSITORY_KEY]: '{bad json' });
+  assert.throws(() => learningPlanRepository(storage).savePlan(seededLearningPlan()), error => error.code === 'invalid_json');
+  assert.equal(storage.raw(), '{bad json');
+});
+test('removePlan against corrupt storage throws without touching bytes', () => {
+  const storage = makeMemoryStorage({ [LEARNING_PLAN_REPOSITORY_KEY]: '{bad json' });
+  assert.throws(() => learningPlanRepository(storage).removePlan('plan-1'), error => error.code === 'invalid_json');
+  assert.equal(storage.raw(), '{bad json');
+  assert.equal(storage.setCalls(), 0);
+});
+test('nested mutation of listPlans output does not alter future reads', () => {
+  const storage = makeMemoryStorage();
+  const repo = learningPlanRepository(storage);
+  repo.savePlan(seededLearningPlan());
+  const listed = repo.listPlans();
+  listed[0].phases[0].lessons[0].steps[0].title = 'Mutated nested list';
+  assert.equal(firstStep(repo.listPlans()[0]).title, 'Step A');
+});
+test('repository persistence is plain JSON-safe state without derived progress', () => {
+  const storage = makeMemoryStorage();
+  let plan = completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  plan = reorderLessons(plan, 'phase-a', ['lesson-b', 'lesson-a'], { clock: fixedClock(LP_TIME.reopened) });
+  learningPlanRepository(storage).savePlan(plan);
+  const envelope = repositoryEnvelope(storage);
+  assert.equal(Object.prototype.hasOwnProperty.call(envelope.plans[0], 'progress'), false);
+  assert.deepEqual(hydrateLearningPlan(JSON.parse(JSON.stringify(envelope.plans[0]))), plan);
+});
+test('no IDs are regenerated during hydrate or load', () => {
+  const storage = makeMemoryStorage();
+  const plan = seededLearningPlan();
+  learningPlanRepository(storage).savePlan(plan);
+  const rawBefore = storage.raw();
+  assert.deepEqual(learningPlanRepository(storage).listPlans()[0], plan);
+  assert.equal(storage.raw(), rawBefore);
+});
+test('repository errors carry stable codes', () => {
+  assert.throws(() => createLearningPlanRepository({ storage: null }), error => {
+    assert.ok(error instanceof LearningPlanRepositoryError);
+    assert.equal(error.code, 'storage_unavailable');
+    return true;
+  });
 });
 
 // -- Life Ledger core ---------------------------------------------------------
