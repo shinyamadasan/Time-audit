@@ -2,6 +2,10 @@
 import assert from 'node:assert/strict';
 import './focus-wallet.js';
 import {
+  normalizeChronaSenseEntries,
+  normalizeChronaSenseEntry
+} from './chronasense-life-ledger-adapter.js';
+import {
   createLifeLedgerMemoryStore,
   deriveLifeLedgerKey,
   fingerprintLifeLedgerEvent,
@@ -1161,6 +1165,330 @@ function sequencedClock(...values) {
   let index = 0;
   return () => values[Math.min(index++, values.length - 1)];
 }
+
+const CS_CONTEXT = {
+  sourceTimezone: 'America/Phoenix',
+  observedAt: LL_TIME.recorded
+};
+
+function chronaEntry(overrides = {}) {
+  return {
+    id: 1700000000000,
+    tsStart: Date.parse(LL_TIME.start),
+    ts: Date.parse(LL_TIME.end),
+    blockIntervalMin: 45,
+    date: '2026-08-27',
+    activity: 'Deep work',
+    energy: 'deep',
+    category: 'deep_work',
+    onPlan: true,
+    retro: false,
+    updatedAt: Date.parse(LL_TIME.recorded),
+    originalLabel: 'deep',
+    syncStamp: 999,
+    ...overrides
+  };
+}
+
+function adapterDraft(entryOverrides = {}, contextOverrides = {}) {
+  const result = normalizeChronaSenseEntry(
+    chronaEntry(entryOverrides),
+    { ...CS_CONTEXT, ...contextOverrides }
+  );
+  assert.equal(result.ok, true, result.errors ? result.errors.join('; ') : result.reason);
+  return result.draft;
+}
+
+console.log('\nChronaSense Life Ledger adapter');
+test('normal ChronaSense entry normalizes to valid activity_logged draft', () => {
+  const draft = adapterDraft();
+  assert.equal(draft.sourceApp, 'chronasense');
+  assert.equal(draft.type, 'activity_logged');
+  assert.equal(draft.sourceEntityId, '1700000000000');
+  assert.equal(draft.payload.activity, 'Deep work');
+  assert.equal(validateLifeLedgerEventDraft(draft).ok, true);
+});
+test('source ID is preserved deterministically and is separate from Life Ledger UUID', () => {
+  const draft = adapterDraft();
+  const store = createLifeLedgerMemoryStore();
+  const created = upsertLifeLedgerEvent(store, draft, {
+    createId: () => '12121212-1212-4212-8212-121212121212',
+    clock: () => LL_TIME.recorded
+  });
+  assert.equal(created.event.sourceEntityId, '1700000000000');
+  assert.notEqual(created.event.eventId, created.event.sourceEntityId);
+});
+test('numeric timestamp-style source ID is supported', () => {
+  assert.equal(adapterDraft({ id: 1700000123456 }).sourceEntityId, '1700000123456');
+});
+test('stable string source ID is supported', () => {
+  const draft = adapterDraft({ id: 'tpllog_deep_work_2026-08-27' });
+  assert.equal(draft.sourceEntityId, 'tpllog_deep_work_2026-08-27');
+});
+test('same source entry normalizes to same logical identity', () => {
+  const a = adapterDraft();
+  const b = adapterDraft({}, { observedAt: '2026-08-28T00:00:00.000Z' });
+  assert.equal(deriveLifeLedgerKey(a), deriveLifeLedgerKey(b));
+});
+test('mutable activity text change keeps logical identity', () => {
+  const a = adapterDraft();
+  const b = adapterDraft({ activity: 'Deep work renamed' });
+  assert.equal(deriveLifeLedgerKey(a), deriveLifeLedgerKey(b));
+  assert.notEqual(a.payload.activity, b.payload.activity);
+});
+test('startedAt, endedAt, and occurredAt map from the source interval', () => {
+  const draft = adapterDraft();
+  assert.equal(draft.payload.startedAt, LL_TIME.start);
+  assert.equal(draft.payload.endedAt, LL_TIME.end);
+  assert.equal(draft.occurredAt, LL_TIME.end);
+});
+test('sourceTimezone is injected from the ChronaSense timezone context', () => {
+  const phoenix = adapterDraft();
+  const manila = adapterDraft({}, { sourceTimezone: 'Asia/Manila' });
+  assert.equal(phoenix.sourceTimezone, 'America/Phoenix');
+  assert.equal(manila.sourceTimezone, 'Asia/Manila');
+});
+test('duration is computed from factual interval timestamps', () => {
+  const draft = adapterDraft({ blockIntervalMin: 99 });
+  assert.equal(draft.payload.durationMinutes, 45);
+});
+test('operational sync metadata does not become factual payload', () => {
+  const draft = adapterDraft({
+    updatedAt: Date.parse(LL_TIME.revised),
+    originalLabel: 'deep',
+    syncStamp: 123,
+    source: 'browser-extension'
+  });
+  assert.equal(Object.hasOwn(draft.payload, 'updatedAt'), false);
+  assert.equal(Object.hasOwn(draft.payload, 'originalLabel'), false);
+  assert.equal(Object.hasOwn(draft.payload, 'syncStamp'), false);
+  assert.equal(Object.hasOwn(draft.payload, 'source'), false);
+  assert.equal(draft.payload.captureMethod, 'browser_usage');
+});
+test('deleted:true plus updatedAt without explicit reason is rejected', () => {
+  const result = normalizeChronaSenseEntry(
+    chronaEntry({ deleted: true, updatedAt: Date.parse('2026-08-27T17:05:00.000Z') }),
+    CS_CONTEXT
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'ambiguous_deletion_evidence');
+});
+test('explicit user_delete can produce a valid tombstone draft', () => {
+  const draft = adapterDraft({
+    deleted: true,
+    deletionReason: 'user_delete',
+    updatedAt: Date.parse('2026-08-27T17:05:00.000Z')
+  });
+  assert.equal(draft.tombstone.active, true);
+  assert.equal(draft.tombstone.deletedAt, '2026-08-27T17:05:00.000Z');
+  assert.equal(draft.tombstone.reason, 'user_delete');
+  assert.equal(validateLifeLedgerEventDraft(draft).ok, true);
+});
+test('explicit bulk_clear can produce a valid tombstone draft', () => {
+  const draft = adapterDraft({
+    deleted: true,
+    deleteReason: 'bulk_clear',
+    updatedAt: Date.parse('2026-08-27T17:05:00.000Z')
+  });
+  assert.equal(draft.tombstone.active, true);
+  assert.equal(draft.tombstone.reason, 'bulk_clear');
+  assert.equal(draft.provenance.sourceOperation, 'delete');
+});
+test('explicit data_doctor_repair can produce a valid tombstone draft', () => {
+  const draft = adapterDraft({
+    deleted: true,
+    deletionReason: 'data_doctor_repair',
+    updatedAt: Date.parse('2026-08-27T17:05:00.000Z')
+  });
+  assert.equal(draft.tombstone.active, true);
+  assert.equal(draft.tombstone.reason, 'data_doctor_repair');
+  assert.equal(draft.provenance.sourceOperation, 'repair');
+});
+test('ambiguous deleted record never becomes user_delete automatically', () => {
+  const result = normalizeChronaSenseEntry(
+    chronaEntry({ deleted: true, updatedAt: Date.parse('2026-08-27T17:05:00.000Z') }),
+    CS_CONTEXT
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'ambiguous_deletion_evidence');
+  assert.equal(Object.hasOwn(result, 'draft'), false);
+});
+test('trusted context deletion reason can produce a valid tombstone draft', () => {
+  const draft = adapterDraft(
+    { deleted: true, updatedAt: Date.parse('2026-08-27T17:05:00.000Z') },
+    { deletionReason: 'user_delete' }
+  );
+  assert.equal(draft.tombstone.active, true);
+  assert.equal(draft.tombstone.deletedAt, '2026-08-27T17:05:00.000Z');
+  assert.equal(draft.tombstone.reason, 'user_delete');
+  assert.equal(validateLifeLedgerEventDraft(draft).ok, true);
+});
+test('explicit deletion reason controls tombstone source operation', () => {
+  const draft = adapterDraft(
+    { deleted: true, deletionReason: 'data_doctor_repair', updatedAt: Date.parse('2026-08-27T17:05:00.000Z') }
+  );
+  assert.equal(draft.tombstone.reason, 'data_doctor_repair');
+  assert.equal(draft.tombstone.provenance.sourceOperation, 'repair');
+  assert.equal(draft.provenance.sourceOperation, 'repair');
+});
+test('ordinary live entry is not tombstoned', () => {
+  assert.equal(adapterDraft().tombstone.active, false);
+});
+test('selected-day or Data Doctor-like ambiguous deletion is rejected without explicit reason', () => {
+  const result = normalizeChronaSenseEntry(
+    chronaEntry({ deleted: true, updatedAt: Date.parse('2026-08-27T17:05:00.000Z'), dataDoctorCandidate: true }),
+    CS_CONTEXT
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'ambiguous_deletion_evidence');
+});
+test('missing source record and empty adapter input create no tombstone', () => {
+  const empty = normalizeChronaSenseEntries([], CS_CONTEXT);
+  assert.deepEqual(empty.drafts, []);
+  assert.deepEqual(empty.rejected, []);
+  assert.equal(normalizeChronaSenseEntry(null, CS_CONTEXT).ok, false);
+});
+test('ordinary entry without physical-path context does not fabricate e_<id> evidence', () => {
+  const draft = adapterDraft();
+  assert.deepEqual(draft.provenance.evidence, ['chronasense.entry:1700000000000']);
+  assert.equal(Object.hasOwn(draft.provenance, 'sourcePath'), false);
+  assert.equal(Object.hasOwn(draft.provenance, 'sourceEvidence'), false);
+});
+test('caller-provided source evidence is preserved as operational provenance', () => {
+  const draft = adapterDraft({}, { sourceEvidence: ['rooms/demo/entries/e_1700000000000'] });
+  assert.deepEqual(draft.provenance.evidence, ['chronasense.entry:1700000000000']);
+  assert.deepEqual(draft.provenance.sourceEvidence, ['rooms/demo/entries/e_1700000000000']);
+});
+test('browser-extension origin derives truthful entries/<id> source path', () => {
+  const draft = adapterDraft({ source: 'browser-extension' });
+  assert.equal(draft.provenance.sourceOrigin, 'browser-extension');
+  assert.equal(draft.provenance.sourcePath, 'entries/1700000000000');
+  assert.deepEqual(draft.provenance.sourceEvidence, ['entries/1700000000000']);
+});
+test('source evidence metadata does not change logical identity', () => {
+  const a = adapterDraft({}, { sourceEvidence: ['rooms/a/entries/e_1700000000000'] });
+  const b = adapterDraft({}, { sourceEvidence: ['rooms/b/entries/e_1700000000000'] });
+  assert.equal(deriveLifeLedgerKey(a), deriveLifeLedgerKey(b));
+});
+test('source evidence-only operational change does not create a factual revision', () => {
+  const store = createLifeLedgerMemoryStore();
+  const opts = {
+    createId: () => '89898989-8989-4898-8989-898989898989',
+    clock: sequencedClock(LL_TIME.recorded, LL_TIME.revised)
+  };
+  const first = upsertLifeLedgerEvent(store, adapterDraft({}, { sourceEvidence: ['rooms/a/entries/e_1700000000000'] }), opts);
+  const second = upsertLifeLedgerEvent(store, adapterDraft({}, { sourceEvidence: ['rooms/b/entries/e_1700000000000'] }), opts);
+  assert.equal(first.action, 'created');
+  assert.equal(second.action, 'unchanged');
+  assert.equal(second.event.revision, 1);
+});
+test('multiple capture flags produce deterministic captureMethod priority', () => {
+  assert.equal(adapterDraft({ browserUsage: true, phoneUsage: true, scheduledAutoLog: true }).payload.captureMethod, 'browser_usage');
+  assert.equal(adapterDraft({ phoneUsage: true, scheduledAutoLog: true, retro: true }).payload.captureMethod, 'phone_usage');
+  assert.equal(adapterDraft({ scheduledAutoLog: true, walletReward: true, retro: true }).payload.captureMethod, 'scheduled_template');
+  assert.equal(adapterDraft({ walletReward: true, retro: true, quickLogged: true }).payload.captureMethod, 'reward_log');
+  assert.equal(adapterDraft({ retro: true, quickLogged: true }).payload.captureMethod, 'retro_log');
+});
+test('duplicate identical physical rows collapse to one adapter draft', () => {
+  let ids = 0;
+  const batch = normalizeChronaSenseEntries([chronaEntry(), chronaEntry()], CS_CONTEXT);
+  assert.equal(batch.drafts.length, 1);
+  assert.deepEqual(batch.rejected, []);
+  const store = createLifeLedgerMemoryStore();
+  const result = upsertManyLifeLedgerEvents(store, batch.drafts, {
+    createId: () => {
+      ids++;
+      return '34343434-3434-4434-8434-343434343434';
+    },
+    clock: () => LL_TIME.recorded
+  });
+  assert.equal(result.action, 'ok');
+  assert.equal(store.listEvents().length, 1);
+  assert.equal(ids, 1);
+});
+test('equivalent browser-extension duplicate rows collapse deterministically', () => {
+  const a = normalizeChronaSenseEntries([
+    chronaEntry({ source: 'browser-extension' }),
+    chronaEntry({ source: 'browser-extension' })
+  ], CS_CONTEXT);
+  const b = normalizeChronaSenseEntries([
+    chronaEntry({ source: 'browser-extension' }),
+    chronaEntry({ source: 'browser-extension' })
+  ], CS_CONTEXT);
+  assert.equal(a.drafts.length, 1);
+  assert.equal(b.drafts.length, 1);
+  assert.deepEqual(a.drafts[0], b.drafts[0]);
+  assert.deepEqual(a.drafts[0].provenance.sourceEvidence, ['entries/1700000000000']);
+});
+test('conflicting same-ID physical rows are rejected at the adapter level', () => {
+  const first = normalizeChronaSenseEntries([
+    chronaEntry(),
+    chronaEntry({ activity: 'Different activity' })
+  ], CS_CONTEXT);
+  const second = normalizeChronaSenseEntries([
+    chronaEntry({ activity: 'Different activity' }),
+    chronaEntry()
+  ], CS_CONTEXT);
+  assert.equal(first.drafts.length, 0);
+  assert.equal(second.drafts.length, 0);
+  assert.equal(first.rejected.length, 1);
+  assert.equal(second.rejected.length, 1);
+  assert.equal(first.rejected[0].reason, 'conflicting_duplicate_physical_input');
+  assert.equal(second.rejected[0].reason, 'conflicting_duplicate_physical_input');
+  assert.equal(first.rejected[0].key, second.rejected[0].key);
+  assert.deepEqual(first.rejected[0].indexes, [0, 1]);
+  assert.deepEqual(second.rejected[0].indexes, [0, 1]);
+});
+test('focus-originated ordinary entry emits only activity_logged', () => {
+  const draft = adapterDraft({ focusSession: true, pomodoroCount: 1 });
+  assert.equal(draft.type, 'activity_logged');
+  assert.notEqual(draft.type, 'focus_session_completed');
+});
+test('malformed or insufficient source records are rejected deterministically', () => {
+  assert.equal(normalizeChronaSenseEntry(chronaEntry({ tsStart: Date.parse(LL_TIME.end) }), CS_CONTEXT).reason, 'invalid_interval');
+  assert.equal(normalizeChronaSenseEntry(chronaEntry({ activity: '' }), CS_CONTEXT).reason, 'missing_activity');
+  assert.equal(normalizeChronaSenseEntry(chronaEntry(), { observedAt: LL_TIME.recorded }).reason, 'missing_source_timezone');
+  assert.equal(normalizeChronaSenseEntry(chronaEntry({ deleted: true, updatedAt: null }), CS_CONTEXT).reason, 'invalid_deletion_evidence');
+});
+test('adapter does not mutate the source object', () => {
+  const source = chronaEntry({ note: 'Keep this note' });
+  const before = JSON.parse(JSON.stringify(source));
+  normalizeChronaSenseEntry(source, CS_CONTEXT);
+  assert.deepEqual(source, before);
+});
+test('normalized output passes Life Ledger validation and upsert', () => {
+  const store = createLifeLedgerMemoryStore();
+  const result = upsertLifeLedgerEvent(store, adapterDraft(), {
+    createId: () => '56565656-5656-4565-8565-565656565656',
+    clock: () => LL_TIME.recorded
+  });
+  assert.equal(result.action, 'created');
+  assert.equal(validateLifeLedgerEvent(result.event).ok, true);
+});
+test('repeated adapter plus upsert retry remains idempotent', () => {
+  let ids = 0;
+  const store = createLifeLedgerMemoryStore();
+  const opts = {
+    createId: () => {
+      ids++;
+      return '67676767-6767-4676-8676-676767676767';
+    },
+    clock: sequencedClock(LL_TIME.recorded, '2026-08-28T00:00:00.000Z')
+  };
+  const first = upsertLifeLedgerEvent(store, adapterDraft(), opts);
+  const retry = upsertLifeLedgerEvent(store, adapterDraft({}, { observedAt: '2026-08-28T00:00:00.000Z' }), opts);
+  assert.equal(first.action, 'created');
+  assert.equal(retry.action, 'unchanged');
+  assert.equal(retry.event.eventId, first.event.eventId);
+  assert.equal(retry.event.revision, 1);
+  assert.equal(ids, 1);
+});
+test('legacy entries without tsStart use stored duration without machine-time reinterpretation', () => {
+  const draft = adapterDraft({ tsStart: undefined, blockIntervalMin: 30 });
+  assert.equal(draft.payload.startedAt, '2026-08-27T16:15:00.000Z');
+  assert.equal(draft.payload.endedAt, LL_TIME.end);
+  assert.equal(draft.sourceTimezone, 'America/Phoenix');
+});
 
 console.log('\nLife Ledger validation');
 test('valid V1 persisted event passes', () => {
