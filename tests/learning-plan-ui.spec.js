@@ -204,6 +204,23 @@ async function createPlanThroughUi(page, title = 'JavaScript fundamentals') {
   await expect(page.locator('.learning-plan-list-item')).toContainText(title);
 }
 
+async function fillImportForm(page, {
+  title = 'JavaScript fundamentals',
+  outline = '# Fundamentals\n## Variables\n- Read lesson\n- Complete exercises'
+} = {}) {
+  await page.locator('#learning-plan-import-title-input').fill(title);
+  await page.locator('#learning-plan-import-outline').fill(outline);
+}
+
+async function previewImport(page) {
+  await page.getByRole('button', { name: 'Preview' }).click();
+  await expect(page.getByRole('region', { name: 'Learning Plan import preview' })).toBeVisible();
+}
+
+async function importPlan(page) {
+  await page.getByRole('button', { name: 'Import plan' }).click();
+}
+
 async function addPhaseThroughUi(page, title = 'Phase 1') {
   await page.locator('form[data-lp-action="add-phase"] input[name="title"]').fill(title);
   await page.locator('form[data-lp-action="add-phase"]').getByRole('button', { name: 'Add phase' }).click();
@@ -246,6 +263,199 @@ test('Learning Plans opens an empty repository without error', async ({ page }) 
   await expect(page.locator('#learning-plan-error')).toBeHidden();
   await expect(page.locator('#learning-plan-list')).toContainText('No Learning Plans yet.');
   await expect(page.locator('#learning-plan-main')).toContainText('Create a Learning Plan');
+});
+
+test('Quick Import is the primary path while manual creation remains available', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+
+  const sections = await page.locator('#view-learning section.settings-section').evaluateAll(items => items.map(item => item.className));
+  expect(sections[0]).toContain('learning-plan-import');
+  expect(sections[1]).toContain('learning-plan-create');
+  await expect(page.locator('#learning-plan-import-title')).toHaveText('Import / Paste Plan');
+  await expect(page.getByLabel('Plan title').first()).toHaveAttribute('id', 'learning-plan-import-title-input');
+  await expect(page.getByRole('button', { name: 'Preview' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+  await expect(page.locator('#learning-plan-create-title')).toHaveText('Create manually');
+  await expect(page.getByRole('button', { name: 'Create plan' })).toBeVisible();
+});
+
+test('valid paste previews hierarchy and counts without writing repository storage', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  await fillImportForm(page, {
+    title: 'JavaScript Fundamentals',
+    outline: '# Fundamentals\n## Variables\n- Read lesson\n- Complete exercises\n\n## Functions\n- Watch tutorial\n- Build project\n# Intermediate\n## Arrays\n- Solve exercises'
+  });
+
+  await previewImport(page);
+
+  const preview = page.getByRole('region', { name: 'Learning Plan import preview' });
+  await expect(preview).toContainText('JavaScript Fundamentals');
+  await expect(preview).toContainText('2 phases - 3 lessons - 5 steps');
+  await expect(preview).toContainText('Fundamentals');
+  await expect(preview).toContainText('Variables');
+  await expect(preview).toContainText('Complete exercises');
+  await expect(page.getByRole('button', { name: 'Import plan' })).toBeEnabled();
+  expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBeNull();
+});
+
+test('Import creates one durable Learning Plan and reload restores the hierarchy with model IDs', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  await page.evaluate(key => {
+    window.__learningPlanSetCalls = 0;
+    const realSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) window.__learningPlanSetCalls++;
+      return realSetItem.call(this, keyName, value);
+    };
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+  await fillImportForm(page, {
+    title: 'JavaScript Fundamentals',
+    outline: '# Fundamentals\n## Variables\n- Read lesson\n- Complete exercises\n## Functions\n- Build project'
+  });
+  await previewImport(page);
+
+  await importPlan(page);
+
+  const stored = await storedEnvelope(page);
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(1);
+  expect(stored.plans).toHaveLength(1);
+  expect(stored.plans[0].title).toBe('JavaScript Fundamentals');
+  expect(stored.plans[0].phases[0].title).toBe('Fundamentals');
+  expect(stored.plans[0].phases[0].lessons.map(lesson => lesson.title)).toEqual(['Variables', 'Functions']);
+  expect(stored.plans[0].phases[0].lessons[0].steps.map(step => step.title)).toEqual(['Read lesson', 'Complete exercises']);
+  const ids = entityIds(stored.plans[0]);
+  expect(ids.every(id => /^[0-9a-f-]{36}$/i.test(id))).toBe(true);
+  expect(ids).not.toContain('JavaScript Fundamentals');
+  expect(ids).not.toContain('Fundamentals');
+
+  await page.reload();
+  await page.waitForFunction(() => typeof window.renderLearningPlans === 'function');
+  await openLearningPlans(page);
+
+  await expect(page.locator('.learning-plan-list-item')).toContainText('JavaScript Fundamentals');
+  await expect(page.locator('[data-lp-action="rename-phase"]').first()).toHaveValue('Fundamentals');
+  await expect(page.locator('[data-lp-action="rename-lesson"]').first()).toHaveValue('Variables');
+  await expect(page.locator('[data-lp-action="rename-step"]').first()).toHaveValue('Read lesson');
+});
+
+test('rapid double Import creates at most one Learning Plan', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  await fillImportForm(page);
+  await previewImport(page);
+
+  await page.getByRole('button', { name: 'Import plan' }).dblclick();
+
+  const stored = await storedEnvelope(page);
+  expect(stored.plans).toHaveLength(1);
+  expect(stored.plans[0].title).toBe('JavaScript fundamentals');
+});
+
+test('malformed import shows a line-level error and persists nothing', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  await fillImportForm(page, {
+    title: 'Broken outline',
+    outline: '# Phase\n- Step without lesson'
+  });
+
+  await page.getByRole('button', { name: 'Preview' }).click();
+
+  await expect(page.locator('#learning-plan-error')).toContainText('Line 2');
+  await expect(page.locator('#learning-plan-error')).toContainText('Step must come after a lesson');
+  await expect(page.locator('#learning-plan-import-preview')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+  expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBeNull();
+});
+
+test('import save failure keeps input contents and does not claim success', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  await fillImportForm(page, {
+    title: 'Blocked import',
+    outline: '# Phase\n## Lesson\n- Step'
+  });
+  await previewImport(page);
+  await page.evaluate(key => {
+    const realSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) throw new Error('blocked write');
+      return realSetItem.call(this, keyName, value);
+    };
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+
+  await importPlan(page);
+
+  await expect(page.locator('#learning-plan-error')).toContainText('Could not import Learning Plan');
+  await expect(page.locator('#learning-plan-import-title-input')).toHaveValue('Blocked import');
+  await expect(page.locator('#learning-plan-import-outline')).toHaveValue('# Phase\n## Lesson\n- Step');
+  await expect(page.locator('.learning-plan-list-item')).toHaveCount(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBeNull();
+});
+
+test('editing outline or title after Preview invalidates stale import state', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  await fillImportForm(page);
+  await previewImport(page);
+
+  await page.locator('#learning-plan-import-outline').fill('# Fundamentals\n## Variables\n- Changed task');
+  await expect(page.locator('#learning-plan-import-preview')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+
+  await previewImport(page);
+  await page.locator('#learning-plan-import-title-input').fill('Changed title');
+  await expect(page.locator('#learning-plan-import-preview')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+});
+
+test('Import remains unavailable until the current input has a valid preview', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  await fillImportForm(page);
+
+  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+  await previewImport(page);
+  await expect(page.getByRole('button', { name: 'Import plan' })).toBeEnabled();
+  await page.locator('#learning-plan-import-outline').fill('## Lesson before phase');
+  await expect(page.getByRole('button', { name: 'Import plan' })).toBeDisabled();
+});
+
+test('XSS-like import titles render as text in preview and saved UI', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  await fillImportForm(page, {
+    title: '<script>Plan</script>',
+    outline: '# <svg onload=alert(1)>\n## Lesson & "quotes"\n- <img src=x onerror=alert(1)>'
+  });
+  await previewImport(page);
+
+  await expect(page.locator('#learning-plan-import-preview')).toContainText('<script>Plan</script>');
+  await expect(page.locator('#learning-plan-import-preview')).toContainText('<svg onload=alert(1)>');
+  await expect(page.locator('#learning-plan-import-preview script')).toHaveCount(0);
+  await importPlan(page);
+
+  await expect(page.locator('.learning-plan-list-item')).toContainText('<script>Plan</script>');
+  await expect(page.locator('#learning-plan-list script')).toHaveCount(0);
+  await expect(page.locator('[data-lp-action="rename-phase"]').first()).toHaveValue('<svg onload=alert(1)>');
+});
+
+test('mobile Quick Import preview wraps long outlines without horizontal overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await openApp(page);
+  await openLearningPlans(page);
+  await fillImportForm(page, {
+    title: 'A very long imported plan title that needs to wrap cleanly on phone width',
+    outline: '# Phase with a deliberately long title that must wrap cleanly instead of widening the viewport\n## Lesson with a deliberately long title that remains readable in preview\n- Step with a deliberately long title and punctuation / slashes / parentheses that should wrap safely'
+  });
+
+  await previewImport(page);
+
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
 });
 
 test('manual plan creation persists and reload restores it', async ({ page }) => {

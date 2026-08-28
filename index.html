@@ -540,14 +540,38 @@
 
   <div class="learning-plan-error" id="learning-plan-error" role="alert" hidden></div>
 
+  <section class="settings-section learning-plan-import" aria-labelledby="learning-plan-import-title">
+    <div class="settings-title" id="learning-plan-import-title">Import / Paste Plan</div>
+    <form id="learning-plan-import-form" class="learning-plan-import-form">
+      <div class="field learning-plan-field">
+        <label for="learning-plan-import-title-input">Plan title</label>
+        <input type="text" id="learning-plan-import-title-input" maxlength="120" autocomplete="off" placeholder="e.g. JavaScript fundamentals">
+      </div>
+      <div class="field learning-plan-field">
+        <label for="learning-plan-import-outline">Paste outline</label>
+        <textarea id="learning-plan-import-outline" rows="9" spellcheck="true" placeholder="# Phase 1&#10;## Lesson 1&#10;- First task&#10;- Second task"></textarea>
+      </div>
+      <div class="learning-plan-import-actions">
+        <button class="btn" type="button" data-lp-import-action="preview">Preview</button>
+        <button class="btn primary" type="submit" data-lp-import-action="import" disabled>Import plan</button>
+      </div>
+      <div class="learning-plan-import-help" aria-label="Supported import format">
+        # Phase title<br>
+        ## Lesson title<br>
+        - Step title
+      </div>
+      <div id="learning-plan-import-preview" class="learning-plan-import-preview" role="region" aria-label="Learning Plan import preview" aria-live="polite" hidden></div>
+    </form>
+  </section>
+
   <section class="settings-section learning-plan-create" aria-labelledby="learning-plan-create-title">
-    <div class="settings-title" id="learning-plan-create-title">Create plan</div>
+    <div class="settings-title" id="learning-plan-create-title">Create manually</div>
     <form id="learning-plan-create-form" class="learning-plan-form">
       <div class="field learning-plan-field">
         <label for="learning-plan-title-input">Plan title</label>
         <input type="text" id="learning-plan-title-input" maxlength="120" autocomplete="off" placeholder="e.g. JavaScript fundamentals">
       </div>
-      <button class="btn primary" type="submit">Create plan</button>
+      <button class="btn" type="submit">Create plan</button>
     </form>
   </section>
 
