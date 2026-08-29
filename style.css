@@ -750,6 +750,12 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 /* ── Learning Plans ── */
 .learning-plan-error{background:var(--distraction-dim);border:1px solid rgba(255,107,107,0.35);border-radius:var(--r);
   color:var(--distraction);font-size:12px;line-height:1.45;padding:10px 12px;margin-bottom:10px;overflow-wrap:anywhere}
+.learning-plan-guide{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:11px 12px;margin-bottom:10px;display:grid;gap:10px;min-width:0}
+.learning-plan-guide[hidden]{display:none}
+.learning-plan-guide-rule{font-size:13px;font-weight:800;line-height:1.35;color:var(--text);overflow-wrap:anywhere}
+.learning-plan-guide-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.learning-plan-guide-label{font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--deep);margin-bottom:3px}
+.learning-plan-guide-line{font-size:12px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}
 .learning-plan-entry-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .learning-plan-import-form{display:flex;flex-direction:column;gap:10px}
 .learning-plan-import-form textarea{width:100%;min-width:0;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;
@@ -785,6 +791,16 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .learning-plan-progress{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg3);
   border:1px solid var(--border2);border-radius:8px;padding:9px 11px;font-family:var(--mono);font-size:12px;color:var(--muted)}
 .learning-plan-progress strong{color:var(--deep);font-weight:700}
+.learning-plan-next-card{background:linear-gradient(135deg,var(--bg3),rgba(52,211,153,0.08));border:1px solid rgba(52,211,153,0.25);
+  border-radius:8px;padding:12px;display:grid;gap:7px;min-width:0}
+.learning-plan-next-card.complete{background:var(--deep-dim2);border-color:rgba(76,199,240,0.25)}
+.learning-plan-next-card.empty{background:var(--bg3);border-color:var(--border2)}
+.learning-plan-next-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--learning)}
+.learning-plan-next-card.complete .learning-plan-next-label{color:var(--deep)}
+.learning-plan-next-card.empty .learning-plan-next-label{color:var(--muted)}
+.learning-plan-next-title{font-size:17px;font-weight:800;line-height:1.25;color:var(--text);overflow-wrap:anywhere}
+.learning-plan-next-context{font-size:12px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}
+.learning-plan-next-open{justify-self:start}
 .learning-plan-title-display,.learning-plan-section-summary{display:flex;align-items:center;gap:8px;min-width:0}
 .learning-plan-title-text,.learning-plan-section-title{min-width:0;overflow-wrap:anywhere;line-height:1.3}
 .learning-plan-plan-title-display .learning-plan-title-text{font-size:18px;font-weight:800;color:var(--text)}
@@ -814,6 +830,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .learning-plan-section-progress{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
 .learning-plan-step{min-height:40px;display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:8px;
   background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 9px}
+.learning-plan-step:focus{outline:2px solid rgba(52,211,153,0.45);outline-offset:2px}
 .learning-plan-step input[type="checkbox"]{width:20px;height:20px;accent-color:var(--deep);cursor:pointer}
 .learning-plan-step-body{min-width:0}
 .learning-plan-step.done .learning-plan-title-text{color:var(--muted2);text-decoration:line-through}
@@ -825,6 +842,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .learning-plan-unavailable-title{font-size:15px;font-weight:800;color:var(--text);overflow-wrap:anywhere}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:620px){
+  .learning-plan-guide-grid{grid-template-columns:1fr}
   .learning-plan-form,.learning-plan-detail-head,.learning-plan-add-row,.learning-plan-rename-row{align-items:stretch;flex-direction:column}
   .learning-plan-entry-actions .btn{flex:1 1 150px}
   .learning-plan-grid{grid-template-columns:1fr}

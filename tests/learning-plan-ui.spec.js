@@ -8,7 +8,8 @@ import {
   addPhase,
   addStep,
   completeStep,
-  createLearningPlan
+  createLearningPlan,
+  reopenStep
 } from '../learning-plan-model.js';
 import {
   LEARNING_PLAN_REPOSITORY_KEY,
@@ -192,6 +193,29 @@ function multiSectionPlan({ sameTitles = false, completeFirstLesson = false } = 
   return plan;
 }
 
+function fullyCompletedPlan() {
+  let plan = seededLearningPlan();
+  plan = completeStep(plan, 'step-a', { clock: fixedClock('2026-08-28T12:10:00.000Z') });
+  plan = completeStep(plan, 'step-b', { clock: fixedClock('2026-08-28T12:11:00.000Z') });
+  return plan;
+}
+
+function zeroStepPlan() {
+  let plan = createLearningPlan({ title: 'Shell course' }, {
+    idGenerator: sequencedIds('plan-zero'),
+    clock: fixedClock()
+  });
+  plan = addPhase(plan, { title: 'Empty phase' }, {
+    idGenerator: sequencedIds('phase-zero'),
+    clock: fixedClock()
+  });
+  plan = addLesson(plan, 'phase-zero', { title: 'Empty lesson' }, {
+    idGenerator: sequencedIds('lesson-zero'),
+    clock: fixedClock()
+  });
+  return plan;
+}
+
 function largeOutline() {
   const lines = [];
   for (let phaseIndex = 1; phaseIndex <= 3; phaseIndex++) {
@@ -332,6 +356,38 @@ test('Learning Plans opens an empty repository without error', async ({ page }) 
   await expect(page.locator('#learning-plan-main')).toContainText('Import a plan or create one manually');
   await expect(page.locator('#learning-plan-import-panel')).toBeHidden();
   await expect(page.locator('#learning-plan-create-panel')).toBeHidden();
+});
+
+test('How this works guide is available, closed by default, toggleable, and storage-neutral', async ({ page }) => {
+  await openApp(page);
+  await openLearningPlans(page);
+  const before = await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY);
+  const guideButton = page.getByRole('button', { name: 'How this works' });
+  const guide = page.getByRole('region', { name: 'How this works' });
+
+  await expect(guideButton).toBeVisible();
+  await expect(guideButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(guide).toBeHidden();
+
+  await guideButton.click();
+  await expect(guideButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(guide).toBeVisible();
+  await expect(guide).toContainText("Don't decide what to study. Do the next unfinished step.");
+  await expect(guide).toContainText('Setup once');
+  await expect(guide).toContainText('Research');
+  await expect(guide).toContainText('Customize');
+  await expect(guide).toContainText('Import');
+  await expect(guide).toContainText('Every session');
+  await expect(guide).toContainText('Next Step');
+  await expect(guide).toContainText('Focus');
+  await expect(guide).toContainText('Complete');
+  await expect(guide).toContainText('Repeat');
+  await expect(guide).toContainText('Review');
+
+  await guideButton.click();
+  await expect(guideButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(guide).toBeHidden();
+  expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBe(before);
 });
 
 test('creation controls are collapsed by default and open one flow at a time', async ({ page }) => {
@@ -526,6 +582,9 @@ test('XSS-like import titles render as text in preview and saved UI', async ({ p
   await expect(page.locator('.learning-plan-list-item')).toContainText('<script>Plan</script>');
   await expect(page.locator('#learning-plan-list script')).toHaveCount(0);
   await expect(page.locator('[data-lp-action="toggle-phase"]').first()).toContainText('<svg onload=alert(1)>');
+  await expect(page.locator('.learning-plan-next-card')).toContainText('<img src=x onerror=alert(1)>');
+  await expect(page.locator('.learning-plan-next-card img')).toHaveCount(0);
+  await expect(page.locator('.learning-plan-next-card script')).toHaveCount(0);
 });
 
 test('mobile Quick Import preview wraps long outlines without horizontal overflow', async ({ page }) => {
@@ -598,6 +657,102 @@ test('progress display follows model semantics for seeded completed steps', asyn
   await expect(page.locator('.learning-plan-list-progress')).toHaveText('1 / 2 steps - 50%');
 });
 
+test('incomplete plan shows the selected plan Next Action with context', async ({ page }) => {
+  const plan = completeStep(multiSectionPlan(), 'step-1-1-1', { clock: fixedClock('2026-08-28T12:10:00.000Z') });
+  await openApp(page, { learningPlanRaw: envelope([plan]) });
+  await page.evaluate(key => {
+    window.__learningPlanSetCalls = 0;
+    const realSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) window.__learningPlanSetCalls++;
+      return realSetItem.call(this, keyName, value);
+    };
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+  await openLearningPlans(page);
+
+  const card = page.locator('.learning-plan-next-card');
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('NEXT ACTION');
+  await expect(card.locator('.learning-plan-next-title')).toHaveText('Step 1.1.2');
+  await expect(card.locator('.learning-plan-next-context')).toHaveText('Phase 1 - Lesson 1.1');
+  await expect(card.getByRole('button', { name: 'Open next step: Step 1.1.2' })).toBeVisible();
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(0);
+});
+
+test('Open step expands the exact phase and lesson, reveals the target step, and writes nothing', async ({ page }) => {
+  const plan = multiSectionPlan({ sameTitles: true, completeFirstLesson: true });
+  await openApp(page, { learningPlanRaw: envelope([plan]) });
+  await openLearningPlans(page);
+  await page.evaluate(key => {
+    window.__learningPlanSetCalls = 0;
+    const realSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) window.__learningPlanSetCalls++;
+      return realSetItem.call(this, keyName, value);
+    };
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+
+  await page.locator('[data-lp-action="toggle-phase"][data-phase-id="phase-1"]').click();
+  await expect(page.locator('[data-lp-action="toggle-phase"][data-phase-id="phase-1"]')).toHaveAttribute('aria-expanded', 'false');
+  await page.getByRole('button', { name: 'Open next step: Step 1.2.1' }).click();
+
+  await expect(page.locator('[data-lp-action="toggle-phase"][data-phase-id="phase-1"]')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('[data-lp-action="toggle-lesson"][data-lesson-id="lesson-1-2"]')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('[data-lp-step-target="step-1-2-1"]')).toBeVisible();
+  await expect(page.locator('[data-lp-step-target="step-1-2-1"]')).toBeFocused();
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(0);
+});
+
+test('completing and reopening steps updates Next Action from durable hierarchy', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').check();
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step B');
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').uncheck();
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+});
+
+test('fully complete and zero-step plans show distinct Next Action states', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([fullyCompletedPlan(), zeroStepPlan()]) });
+  await openLearningPlans(page);
+
+  await expect(page.locator('.learning-plan-next-card')).toContainText('Plan complete');
+  await expect(page.locator('.learning-plan-next-card')).toContainText('All 2 steps finished.');
+  await expect(page.getByRole('button', { name: /Open next step/ })).toHaveCount(0);
+
+  await page.locator('[data-lp-action="toggle-phase"][data-phase-id="phase-a"]').click();
+  await page.locator('[data-lp-action="toggle-lesson"][data-lesson-id="lesson-a"]').click();
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').uncheck();
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+
+  await page.locator('.learning-plan-list-item').filter({ hasText: 'Shell course' }).click();
+  await expect(page.locator('.learning-plan-next-card')).toContainText('No steps yet');
+  await expect(page.locator('.learning-plan-next-card')).toContainText('Add a step to begin.');
+  await expect(page.locator('.learning-plan-next-card')).not.toContainText('Plan complete');
+});
+
+test('switching plans and reload derive the same selected-plan Next Action', async ({ page }) => {
+  let first = seededLearningPlan();
+  first = completeStep(first, 'step-a', { clock: fixedClock('2026-08-28T12:10:00.000Z') });
+  let second = secondLearningPlan();
+  second = addPhase(second, { title: 'API phase' }, { idGenerator: sequencedIds('phase-b'), clock: fixedClock() });
+  second = addLesson(second, 'phase-b', { title: 'API lesson' }, { idGenerator: sequencedIds('lesson-b'), clock: fixedClock() });
+  second = addStep(second, 'lesson-b', { title: 'Build endpoint' }, { idGenerator: sequencedIds('step-build-endpoint'), clock: fixedClock() });
+  await openApp(page, { learningPlanRaw: envelope([first, second]) });
+  await openLearningPlans(page);
+
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step B');
+  await page.locator('.learning-plan-list-item').filter({ hasText: 'Backend fundamentals' }).click();
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Build endpoint');
+
+  await page.reload();
+  await page.waitForFunction(() => typeof window.renderLearningPlans === 'function');
+  await openLearningPlans(page);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step B');
+});
+
 test('default expansion opens first unfinished phase and lesson only', async ({ page }) => {
   await openApp(page, { learningPlanRaw: envelope([multiSectionPlan({ completeFirstLesson: true })]) });
   await openLearningPlans(page);
@@ -657,6 +812,7 @@ test('60-step imported plan shows only the active working lesson after import', 
   await expect(page.locator('[data-lp-action="toggle-phase"]')).toHaveCount(3);
   await expect(page.locator('[data-lp-action="toggle-lesson"]')).toHaveCount(4);
   await expect(page.locator('.learning-plan-step')).toHaveCount(5);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step 1.1.1');
 });
 
 test('plan and step IDs survive UI rename, complete, and reopen', async ({ page }) => {
@@ -701,6 +857,9 @@ test('corrupt repository shows an error and does not reset storage', async ({ pa
   await expect(page.getByText('Create a Learning Plan to start a checklist.')).toHaveCount(0);
   await expect(page.locator('.learning-plan-create')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Create plan' })).toBeHidden();
+  await expect(page.locator('.learning-plan-next-card')).toHaveCount(0);
+  await page.getByRole('button', { name: 'How this works' }).click();
+  await expect(page.getByRole('region', { name: 'How this works' })).toBeVisible();
   expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBe('{bad json');
 });
 
@@ -720,6 +879,7 @@ test('save failure shows an error and does not claim completion persisted', asyn
   await expect(page.locator('#learning-plan-error')).toContainText('Could not save Learning Plan changes');
   await expect(page.locator('.learning-plan-step input[type="checkbox"]').first()).not.toBeChecked();
   await expect(page.locator('.learning-plan-progress')).toContainText('0 / 2 steps');
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
 });
 
 test('failed create and duplicate click do not create duplicate plans', async ({ page }) => {
@@ -853,6 +1013,9 @@ test('long Learning Plan titles remain usable without mobile horizontal overflow
   await addStepThroughUi(page, 'Step with a deliberately long checklist label that wraps cleanly on a narrow screen');
 
   await expect(page.locator('.learning-plan-plan-title-display')).toContainText(longTitle);
+  await expect(page.locator('.learning-plan-next-title')).toContainText('Step with a deliberately long checklist label');
+  await page.getByRole('button', { name: 'How this works' }).click();
+  await expect(page.getByRole('region', { name: 'How this works' })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });

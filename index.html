@@ -536,9 +536,28 @@
 <div class="view" id="view-learning">
   <div class="page-header">
     <div class="page-title">Learning Plans</div>
+    <button class="btn sm" type="button" data-lp-action="toggle-guide" aria-expanded="false" aria-controls="learning-plan-guide">How this works</button>
   </div>
 
   <div class="learning-plan-error" id="learning-plan-error" role="alert" hidden></div>
+
+  <section class="learning-plan-guide" id="learning-plan-guide" role="region" aria-label="How this works" hidden>
+    <div class="learning-plan-guide-rule">Don't decide what to study. Do the next unfinished step.</div>
+    <div class="learning-plan-guide-grid">
+      <div>
+        <div class="learning-plan-guide-label">Setup once</div>
+        <div class="learning-plan-guide-line">Research -> Customize -> Import</div>
+      </div>
+      <div>
+        <div class="learning-plan-guide-label">Every session</div>
+        <div class="learning-plan-guide-line">Next Step -> Focus -> Complete -> Repeat</div>
+      </div>
+      <div>
+        <div class="learning-plan-guide-label">Review</div>
+        <div class="learning-plan-guide-line">Review and adjust the plan periodically.</div>
+      </div>
+    </div>
+  </section>
 
   <div class="learning-plan-entry-actions">
     <button class="btn primary" type="button" data-lp-action="show-import" aria-expanded="false" aria-controls="learning-plan-import-panel">+ Import plan</button>
