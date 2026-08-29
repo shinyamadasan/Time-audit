@@ -800,7 +800,8 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .learning-plan-next-card.empty .learning-plan-next-label{color:var(--muted)}
 .learning-plan-next-title{font-size:17px;font-weight:800;line-height:1.25;color:var(--text);overflow-wrap:anywhere}
 .learning-plan-next-context{font-size:12px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}
-.learning-plan-next-open{justify-self:start}
+.learning-plan-next-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.learning-plan-next-actions .btn{flex-shrink:0}
 .learning-plan-title-display,.learning-plan-section-summary{display:flex;align-items:center;gap:8px;min-width:0}
 .learning-plan-title-text,.learning-plan-section-title{min-width:0;overflow-wrap:anywhere;line-height:1.3}
 .learning-plan-plan-title-display .learning-plan-title-text{font-size:18px;font-weight:800;color:var(--text)}
@@ -847,6 +848,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   .learning-plan-entry-actions .btn{flex:1 1 150px}
   .learning-plan-grid{grid-template-columns:1fr}
   .learning-plan-list{display:grid;grid-template-columns:1fr 1fr}
+  .learning-plan-next-actions .btn{flex:1 1 120px}
   .learning-plan-import-actions{justify-content:stretch}
   .learning-plan-import-actions .btn{flex:1 1 140px}
   .learning-plan-import-phases,.learning-plan-import-lessons,.learning-plan-import-steps{padding-left:14px}
