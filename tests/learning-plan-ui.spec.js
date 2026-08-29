@@ -268,6 +268,42 @@ async function openLearningPlans(page) {
   await expect(page.locator('#view-learning')).toHaveClass(/active/);
 }
 
+async function stubFocusAudio(page) {
+  await page.evaluate(() => { HTMLMediaElement.prototype.play = () => Promise.resolve(); });
+}
+
+async function captureSyncWrites(page) {
+  await page.evaluate(() => {
+    window.__syncPayloads = [];
+    const ref = {
+      update(payload) {
+        window.__syncPayloads.push(JSON.parse(JSON.stringify(payload)));
+        return Promise.resolve();
+      },
+      set(payload) {
+        window.__syncPayloads.push(JSON.parse(JSON.stringify({ set: payload })));
+        return Promise.resolve();
+      },
+      child() { return ref; },
+      once() { return Promise.resolve({ val: () => null }); },
+      on() {},
+      off() {},
+      remove() { return Promise.resolve(); }
+    };
+    fbRoomRef = ref;
+    fbDb = { ref: () => ref };
+    roomCode = 'SYNC-TEST';
+    currentUser = null;
+  });
+}
+
+function expectNoLearningPlanProvenance(value) {
+  const text = JSON.stringify(value);
+  expect(text).not.toContain('"learningPlan"');
+  ['plan-a', 'phase-a', 'lesson-a', 'step-a', 'plan-b', 'phase-b', 'lesson-b', 'step-build-endpoint']
+    .forEach(id => { expect(text).not.toContain(id); });
+}
+
 async function createPlanThroughUi(page, title = 'JavaScript fundamentals') {
   await page.locator('[data-lp-action="show-create"]').click();
   await expect(page.locator('#learning-plan-create-panel')).toBeVisible();
@@ -675,8 +711,360 @@ test('incomplete plan shows the selected plan Next Action with context', async (
   await expect(card).toContainText('NEXT ACTION');
   await expect(card.locator('.learning-plan-next-title')).toHaveText('Step 1.1.2');
   await expect(card.locator('.learning-plan-next-context')).toHaveText('Phase 1 - Lesson 1.1');
+  await expect(card.getByRole('button', { name: 'Start Focus: Step 1.1.2' })).toBeVisible();
   await expect(card.getByRole('button', { name: 'Open next step: Step 1.1.2' })).toBeVisible();
   expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(0);
+});
+
+test('Start Focus starts existing Focus with exact Next Action IDs and readable context without completing the step', async ({ page }) => {
+  const plan = completeStep(multiSectionPlan(), 'step-1-1-1', { clock: fixedClock('2026-08-28T12:10:00.000Z') });
+  await openApp(page, { learningPlanRaw: envelope([plan]) });
+  await openLearningPlans(page);
+  const before = await storedEnvelope(page);
+
+  await page.evaluate(() => { HTMLMediaElement.prototype.play = () => Promise.resolve(); });
+  await page.getByRole('button', { name: 'Start Focus: Step 1.1.2' }).click();
+
+  await expect(page.locator('#focus-overlay')).toHaveClass(/open/);
+  await expect(page.locator('#focus-phase-label')).toHaveText('FOCUS');
+  await expect(page.locator('#focus-intention-text')).toHaveText('Step 1.1.2');
+  await expect(page.locator('#focus-phase-sub')).toHaveText('Structured course · Phase 1 · Lesson 1.1 · 25 min');
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step 1.1.2');
+
+  const state = await page.evaluate(() => ({
+    metadata: getFocusLearningPlanMetadata(),
+    entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]'),
+    timer: JSON.parse(localStorage.getItem('ta3-timer') || 'null')
+  }));
+  expect(state.metadata).toEqual({
+    planId: 'plan-structured',
+    phaseId: 'phase-1',
+    lessonId: 'lesson-1-1',
+    stepId: 'step-1-1-2',
+    planTitle: 'Structured course',
+    phaseTitle: 'Phase 1',
+    lessonTitle: 'Lesson 1.1',
+    stepTitle: 'Step 1.1.2'
+  });
+  expect(state.entries).toHaveLength(0);
+  expect(state.timer).toBeNull();
+  expect(await storedEnvelope(page)).toEqual(before);
+});
+
+test('Learning Plan provenance clears before skipped break starts the next Pomodoro', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await stubFocusAudio(page);
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+
+  const state = await page.evaluate(() => {
+    focusStartTime = Date.now() - 25 * 60 * 1000;
+    endWorkSession();
+    const afterWorkMetadata = getFocusLearningPlanMetadata();
+    document.getElementById('focus-task-input').value = 'Generic after skip';
+    skipBreak();
+    return {
+      afterWorkMetadata,
+      afterSkipMetadata: getFocusLearningPlanMetadata(),
+      task: getFocusTaskLabel(),
+      sub: document.getElementById('focus-phase-sub').textContent,
+      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+    };
+  });
+
+  expect(state.afterWorkMetadata).toBeNull();
+  expect(state.afterSkipMetadata).toBeNull();
+  expect(state.task).toBe('Generic after skip');
+  expect(state.sub).toBe('work session · 25 min');
+  expect(state.entries).toHaveLength(1);
+  expectNoLearningPlanProvenance(state.entries);
+});
+
+test('Learning Plan provenance clears before completed break auto-starts the next Pomodoro', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await stubFocusAudio(page);
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+
+  const state = await page.evaluate(() => {
+    _pomodoroAutoStart = true;
+    focusStartTime = Date.now() - 25 * 60 * 1000;
+    endWorkSession();
+    document.getElementById('focus-task-input').value = 'Generic after auto break';
+    endPomodoroBreak();
+    _pomodoroAutoStart = false;
+    return {
+      metadata: getFocusLearningPlanMetadata(),
+      task: getFocusTaskLabel(),
+      sub: document.getElementById('focus-phase-sub').textContent,
+      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+    };
+  });
+
+  expect(state.metadata).toBeNull();
+  expect(state.task).toBe('Generic after auto break');
+  expect(state.sub).toBe('work session · 25 min');
+  expect(state.entries).toHaveLength(1);
+  expectNoLearningPlanProvenance(state.entries);
+});
+
+test('later generic Focus cannot inherit Learning Plan provenance', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await stubFocusAudio(page);
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+
+  const state = await page.evaluate(() => {
+    focusStartTime = Date.now() - 7 * 60 * 1000;
+    confirmExitFocus();
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Generic focus';
+    const started = startPomodoro();
+    return {
+      started,
+      metadata: getFocusLearningPlanMetadata(),
+      task: getFocusTaskLabel(),
+      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+    };
+  });
+
+  expect(state.started).toBe(true);
+  expect(state.metadata).toBeNull();
+  expect(state.task).toBe('Generic focus');
+  expect(state.entries).toHaveLength(1);
+  expectNoLearningPlanProvenance(state.entries);
+});
+
+test('Learning Plan Focus A followed by Learning Plan Focus B carries only B provenance', async ({ page }) => {
+  let second = secondLearningPlan();
+  second = addPhase(second, { title: 'API phase' }, { idGenerator: sequencedIds('phase-b'), clock: fixedClock() });
+  second = addLesson(second, 'phase-b', { title: 'API lesson' }, { idGenerator: sequencedIds('lesson-b'), clock: fixedClock() });
+  second = addStep(second, 'lesson-b', { title: 'Build endpoint' }, { idGenerator: sequencedIds('step-build-endpoint'), clock: fixedClock() });
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan(), second]) });
+  await openLearningPlans(page);
+  await stubFocusAudio(page);
+
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+  await page.evaluate(() => { confirmExitFocus(); });
+  await page.locator('.learning-plan-list-item').filter({ hasText: 'Backend fundamentals' }).click();
+  await page.getByRole('button', { name: 'Start Focus: Build endpoint' }).click();
+  const metadata = await page.evaluate(() => getFocusLearningPlanMetadata());
+
+  expect(metadata).toEqual({
+    planId: 'plan-b',
+    phaseId: 'phase-b',
+    lessonId: 'lesson-b',
+    stepId: 'step-build-endpoint',
+    planTitle: 'Backend fundamentals',
+    phaseTitle: 'API phase',
+    lessonTitle: 'API lesson',
+    stepTitle: 'Build endpoint'
+  });
+});
+
+test('Learning Plan Focus does not persist provenance in synced timer or entry payloads', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await stubFocusAudio(page);
+  await captureSyncWrites(page);
+
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+  const during = await page.evaluate(() => ({
+    metadata: getFocusLearningPlanMetadata(),
+    payloads: window.__syncPayloads
+  }));
+  expect(during.metadata?.planId).toBe('plan-a');
+  expectNoLearningPlanProvenance(during.payloads);
+
+  const after = await page.evaluate(() => {
+    focusStartTime = Date.now() - 7 * 60 * 1000;
+    confirmExitFocus();
+    return {
+      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]'),
+      payloads: window.__syncPayloads
+    };
+  });
+  expect(after.entries).toHaveLength(1);
+  expectNoLearningPlanProvenance(after.entries);
+  expectNoLearningPlanProvenance(after.payloads);
+});
+
+test('rapid Start Focus activation creates one Focus session and no duplicate Learning Plan writes', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await page.evaluate(key => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.__learningPlanSetCalls = 0;
+    const realSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) window.__learningPlanSetCalls++;
+      return realSetItem.call(this, keyName, value);
+    };
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+
+  const start = page.getByRole('button', { name: 'Start Focus: Step A' });
+  await start.dblclick();
+  const state = await page.evaluate(() => {
+    const firstStart = focusStartTime;
+    document.querySelector('[data-lp-action="start-next-focus"]')?.click();
+    return {
+      firstStart,
+      afterClickStart: focusStartTime,
+      running: isFocusSessionRunning(),
+      task: getFocusTaskLabel(),
+      setCalls: window.__learningPlanSetCalls
+    };
+  });
+
+  expect(state.firstStart).toBeGreaterThan(0);
+  expect(state.afterClickStart).toBe(state.firstStart);
+  expect(state.running).toBe(true);
+  expect(state.task).toBe('Step A');
+  expect(state.setCalls).toBe(0);
+});
+
+test('Start Focus control remains usable after exiting an uncompleted Learning Plan session', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await stubFocusAudio(page);
+
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+  const firstStart = await page.evaluate(() => focusStartTime);
+  await page.evaluate(() => { confirmExitFocus(); });
+  await openLearningPlans(page);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+  await expect(page.getByRole('button', { name: 'Start Focus: Step A' })).toBeEnabled();
+  await page.waitForTimeout(20);
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+
+  const state = await page.evaluate(() => ({
+    focusStartTime,
+    metadata: getFocusLearningPlanMetadata(),
+    running: isFocusSessionRunning(),
+    entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+  }));
+  expect(state.focusStartTime).toBeGreaterThan(firstStart);
+  expect(state.metadata?.stepId).toBe('step-a');
+  expect(state.running).toBe(true);
+  expect(state.entries).toHaveLength(0);
+});
+
+test('stale Start Focus controls cannot start a previous, completed, or deleted Next Action', async ({ page }) => {
+  let second = secondLearningPlan();
+  second = addPhase(second, { title: 'API phase' }, { idGenerator: sequencedIds('phase-b'), clock: fixedClock() });
+  second = addLesson(second, 'phase-b', { title: 'API lesson' }, { idGenerator: sequencedIds('lesson-b'), clock: fixedClock() });
+  second = addStep(second, 'lesson-b', { title: 'Build endpoint' }, { idGenerator: sequencedIds('step-build-endpoint'), clock: fixedClock() });
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan(), second]) });
+  await openLearningPlans(page);
+  await page.evaluate(() => { HTMLMediaElement.prototype.play = () => Promise.resolve(); });
+
+  const staleDataset = await page.locator('[data-lp-action="start-next-focus"]').evaluate(button => ({ ...button.dataset }));
+  await page.locator('.learning-plan-list-item').filter({ hasText: 'Backend fundamentals' }).click();
+  await page.evaluate(dataset => {
+    const stale = document.createElement('button');
+    Object.entries(dataset).forEach(([key, value]) => { stale.dataset[key] = value; });
+    stale.textContent = 'stale';
+    document.getElementById('view-learning').append(stale);
+    stale.click();
+    stale.remove();
+  }, staleDataset);
+  await expect(page.locator('#learning-plan-error')).toContainText('selected Learning Plan changed');
+  expect(await page.evaluate(() => isFocusSessionRunning())).toBe(false);
+
+  await page.locator('.learning-plan-list-item').filter({ hasText: 'Frontend fundamentals' }).click();
+  const completedDataset = await page.locator('[data-lp-action="start-next-focus"]').evaluate(button => ({ ...button.dataset }));
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').check();
+  await page.evaluate(dataset => {
+    const stale = document.createElement('button');
+    Object.entries(dataset).forEach(([key, value]) => { stale.dataset[key] = value; });
+    document.getElementById('view-learning').append(stale);
+    stale.click();
+    stale.remove();
+  }, completedDataset);
+  await expect(page.locator('#learning-plan-error')).toContainText('Next Action changed');
+  expect(await page.evaluate(() => isFocusSessionRunning())).toBe(false);
+
+  const deletedDataset = await page.locator('[data-lp-action="start-next-focus"]').evaluate(button => ({ ...button.dataset }));
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Delete' }).click();
+  await page.evaluate(dataset => {
+    const stale = document.createElement('button');
+    Object.entries(dataset).forEach(([key, value]) => { stale.dataset[key] = value; });
+    document.getElementById('view-learning').append(stale);
+    stale.click();
+    stale.remove();
+  }, deletedDataset);
+  await expect(page.locator('#learning-plan-error')).toContainText('selected Learning Plan changed');
+  expect(await page.evaluate(() => isFocusSessionRunning())).toBe(false);
+});
+
+test('Start Focus failure leaves Learning Plan state unchanged', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  const before = await storedEnvelope(page);
+  await page.evaluate(() => {
+    window.enterFocusMode = () => { throw new Error('blocked focus start'); };
+  });
+
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+
+  await expect(page.locator('#learning-plan-error')).toContainText('blocked focus start');
+  await expect(page.locator('#focus-overlay')).not.toHaveClass(/open/);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+  expect(await storedEnvelope(page)).toEqual(before);
+});
+
+test('existing generic Focus start still uses default duration and no Learning Plan metadata', async ({ page }) => {
+  await openApp(page);
+  const state = await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Generic focus';
+    const started = startPomodoro();
+    return {
+      started,
+      task: getFocusTaskLabel(),
+      countdown: document.getElementById('focus-countdown').textContent,
+      sub: document.getElementById('focus-phase-sub').textContent,
+      metadata: getFocusLearningPlanMetadata()
+    };
+  });
+
+  expect(state).toEqual({
+    started: true,
+    task: 'Generic focus',
+    countdown: '25:00',
+    sub: 'work session · 25 min',
+    metadata: null
+  });
+});
+
+test('active Focus prevents a second Learning Plan Start Focus while preserving the running session', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await page.evaluate(() => { HTMLMediaElement.prototype.play = () => Promise.resolve(); });
+  const startDataset = await page.locator('[data-lp-action="start-next-focus"]').evaluate(button => ({ ...button.dataset }));
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+  const firstStart = await page.evaluate(() => focusStartTime);
+
+  await page.evaluate(dataset => {
+    const duplicate = document.createElement('button');
+    Object.entries(dataset).forEach(([key, value]) => { duplicate.dataset[key] = value; });
+    document.getElementById('view-learning').append(duplicate);
+    duplicate.click();
+  }, startDataset);
+
+  await expect(page.locator('#learning-plan-error')).toContainText('Focus is already running');
+  const state = await page.evaluate(() => ({
+    focusStartTime,
+    task: getFocusTaskLabel(),
+    running: isFocusSessionRunning()
+  }));
+  expect(state).toEqual({
+    focusStartTime: firstStart,
+    task: 'Step A',
+    running: true
+  });
 });
 
 test('Open step expands the exact phase and lesson, reveals the target step, and writes nothing', async ({ page }) => {
@@ -720,6 +1108,7 @@ test('fully complete and zero-step plans show distinct Next Action states', asyn
 
   await expect(page.locator('.learning-plan-next-card')).toContainText('Plan complete');
   await expect(page.locator('.learning-plan-next-card')).toContainText('All 2 steps finished.');
+  await expect(page.getByRole('button', { name: /Start Focus/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Open next step/ })).toHaveCount(0);
 
   await page.locator('[data-lp-action="toggle-phase"][data-phase-id="phase-a"]').click();
@@ -1014,6 +1403,7 @@ test('long Learning Plan titles remain usable without mobile horizontal overflow
 
   await expect(page.locator('.learning-plan-plan-title-display')).toContainText(longTitle);
   await expect(page.locator('.learning-plan-next-title')).toContainText('Step with a deliberately long checklist label');
+  await expect(page.locator('.learning-plan-next-actions')).toBeVisible();
   await page.getByRole('button', { name: 'How this works' }).click();
   await expect(page.getByRole('region', { name: 'How this works' })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

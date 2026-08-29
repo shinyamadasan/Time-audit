@@ -366,6 +366,83 @@ function openNextLearningPlanStep(nextAction) {
   focusRenderedStep(nextAction.stepId);
 }
 
+function nextActionMatchesTarget(nextAction, target) {
+  return !!nextAction
+    && nextAction.phaseId === target.dataset.phaseId
+    && nextAction.lessonId === target.dataset.lessonId
+    && nextAction.stepId === target.dataset.stepId;
+}
+
+function currentNextActionForControl(target) {
+  if (target.dataset.planId !== selectedPlanId) {
+    throw new Error('The selected Learning Plan changed. Nothing was started.');
+  }
+  const plan = selectedPlan();
+  if (!plan || plan.id !== target.dataset.planId) {
+    throw new Error('The selected Learning Plan no longer exists. Nothing was started.');
+  }
+  const nextAction = findNextLearningPlanStep(plan);
+  if (!nextActionMatchesTarget(nextAction, target)) {
+    throw new Error('The Next Action changed. Nothing was started.');
+  }
+  return { plan, nextAction };
+}
+
+function learningPlanFocusMetadata(plan, nextAction) {
+  return {
+    planId: plan.id,
+    phaseId: nextAction.phaseId,
+    lessonId: nextAction.lessonId,
+    stepId: nextAction.stepId,
+    planTitle: plan.title,
+    phaseTitle: nextAction.phaseTitle,
+    lessonTitle: nextAction.lessonTitle,
+    stepTitle: nextAction.stepTitle
+  };
+}
+
+function learningPlanFocusContext(metadata) {
+  return [metadata.planTitle, metadata.phaseTitle, metadata.lessonTitle]
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function resetLearningPlanFocusStartControl(target) {
+  target.disabled = false;
+  delete target.dataset.lpFocusStarting;
+}
+
+function startNextLearningPlanFocus(target) {
+  if (target.dataset.lpFocusStarting === '1') return;
+  target.dataset.lpFocusStarting = '1';
+  target.disabled = true;
+  try {
+    if (typeof window.enterFocusMode !== 'function') {
+      throw new Error('Focus mode is unavailable. Nothing was started.');
+    }
+    const { plan, nextAction } = currentNextActionForControl(target);
+    const metadata = learningPlanFocusMetadata(plan, nextAction);
+    const started = window.enterFocusMode({
+      task: metadata.stepTitle,
+      context: learningPlanFocusContext(metadata),
+      learningPlan: metadata,
+      autoStart: true
+    });
+    if (started === false) {
+      showLearningPlanError('Focus is already running. Nothing new was started.');
+      resetLearningPlanFocusStartControl(target);
+      return;
+    }
+    showLearningPlanError('');
+    resetLearningPlanFocusStartControl(target);
+  } catch (err) {
+    showLearningPlanError(err.message || 'Could not start Focus. Nothing was changed.');
+    resetLearningPlanFocusStartControl(target);
+    renderLearningPlanState();
+  }
+}
+
 function renderNextActionCard(plan, progress) {
   const nextAction = findNextLearningPlanStep(plan);
   if (!nextAction) {
@@ -392,10 +469,16 @@ function renderNextActionCard(plan, progress) {
       <div class="learning-plan-next-label">NEXT ACTION</div>
       <div class="learning-plan-next-title" id="learning-plan-next-title">${escapeHtml(nextAction.stepTitle)}</div>
       <div class="learning-plan-next-context">${escapeHtml(nextAction.phaseTitle)} - ${escapeHtml(nextAction.lessonTitle)}</div>
-      <button type="button" class="btn primary sm learning-plan-next-open" data-lp-action="open-next-step"
-        data-plan-id="${escapeHtml(plan.id)}" data-phase-id="${escapeHtml(nextAction.phaseId)}"
-        data-lesson-id="${escapeHtml(nextAction.lessonId)}" data-step-id="${escapeHtml(nextAction.stepId)}"
-        aria-label="Open next step: ${escapeHtml(nextAction.stepTitle)}">Open step</button>
+      <div class="learning-plan-next-actions">
+        <button type="button" class="btn primary sm learning-plan-next-focus" data-lp-action="start-next-focus"
+          data-plan-id="${escapeHtml(plan.id)}" data-phase-id="${escapeHtml(nextAction.phaseId)}"
+          data-lesson-id="${escapeHtml(nextAction.lessonId)}" data-step-id="${escapeHtml(nextAction.stepId)}"
+          aria-label="Start Focus: ${escapeHtml(nextAction.stepTitle)}">Start Focus</button>
+        <button type="button" class="btn sm learning-plan-next-open" data-lp-action="open-next-step"
+          data-plan-id="${escapeHtml(plan.id)}" data-phase-id="${escapeHtml(nextAction.phaseId)}"
+          data-lesson-id="${escapeHtml(nextAction.lessonId)}" data-step-id="${escapeHtml(nextAction.stepId)}"
+          aria-label="Open next step: ${escapeHtml(nextAction.stepTitle)}">Open step</button>
+      </div>
     </section>
   `;
 }
@@ -825,10 +908,17 @@ function handleClick(event) {
     return;
   }
   if (action === 'open-next-step') {
-    const plan = currentPlanFromDataset(target);
-    const nextAction = findNextLearningPlanStep(plan);
-    if (nextAction && nextAction.stepId === target.dataset.stepId) openNextLearningPlanStep(nextAction);
-    else renderLearningPlanState();
+    try {
+      const { nextAction } = currentNextActionForControl(target);
+      openNextLearningPlanStep(nextAction);
+    } catch (err) {
+      showLearningPlanError(err.message || 'The Next Action changed. Nothing was opened.');
+      renderLearningPlanState();
+    }
+    return;
+  }
+  if (action === 'start-next-focus') {
+    startNextLearningPlanFocus(target);
     return;
   }
   if (action === 'toggle-phase') {
