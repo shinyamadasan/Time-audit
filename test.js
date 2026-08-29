@@ -43,6 +43,7 @@ import {
   createLearningPlanRepository
 } from './learning-plan-repository.js';
 import { parseLearningPlanOutline } from './learning-plan-import.js';
+import { findNextLearningPlanStep } from './learning-plan-next-action.js';
 
 const { computeFocusWallet, getFocusWalletWeekKey } = globalThis;
 
@@ -1260,6 +1261,137 @@ function withGlobalLocalStorage(storage, fn) {
     else delete globalThis.localStorage;
   }
 }
+
+// -- Learning Plan Next Action -----------------------------------------------
+
+function nextActionMultiPlan() {
+  let plan = seededLearningPlan();
+  plan = addStep(plan, 'lesson-b', { title: 'Step C' }, {
+    idGenerator: sequencedIds('step-c'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  plan = addLesson(plan, 'phase-b', { title: 'Lesson C' }, {
+    idGenerator: sequencedIds('lesson-c'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  plan = addStep(plan, 'lesson-c', { title: 'Step D' }, {
+    idGenerator: sequencedIds('step-d'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  return plan;
+}
+
+function nextStepId(plan) {
+  return findNextLearningPlanStep(plan)?.stepId || null;
+}
+
+console.log('\nLearning Plan Next Action');
+test('one unfinished step returns it', () => {
+  const next = findNextLearningPlanStep(seededLearningPlan());
+  assert.equal(next.stepId, 'step-a');
+  assert.equal(next.stepTitle, 'Step A');
+});
+test('completed steps are skipped', () => {
+  const plan = completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  assert.equal(nextStepId(plan), 'step-b');
+});
+test('first unfinished step follows phase order', () => {
+  let plan = nextActionMultiPlan();
+  plan = completeStep(plan, 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  plan = completeStep(plan, 'step-b', { clock: fixedClock(LP_TIME.completed) });
+  plan = completeStep(plan, 'step-c', { clock: fixedClock(LP_TIME.completed) });
+  assert.equal(nextStepId(plan), 'step-d');
+});
+test('first unfinished step follows lesson order', () => {
+  let plan = nextActionMultiPlan();
+  plan = completeStep(plan, 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  plan = completeStep(plan, 'step-b', { clock: fixedClock(LP_TIME.completed) });
+  assert.equal(nextStepId(plan), 'step-c');
+});
+test('first unfinished step follows step order', () => {
+  const plan = completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  assert.equal(nextStepId(plan), 'step-b');
+});
+test('empty phases are skipped', () => {
+  let plan = createLearningPlan({ title: 'Empty phase first' }, {
+    idGenerator: sequencedIds('plan-empty-phase'),
+    clock: fixedClock(LP_TIME.created)
+  });
+  plan = addPhase(plan, { title: 'Empty phase' }, { idGenerator: sequencedIds('phase-empty'), clock: fixedClock() });
+  plan = addPhase(plan, { title: 'Action phase' }, { idGenerator: sequencedIds('phase-action'), clock: fixedClock() });
+  plan = addLesson(plan, 'phase-action', { title: 'Lesson' }, { idGenerator: sequencedIds('lesson-action'), clock: fixedClock() });
+  plan = addStep(plan, 'lesson-action', { title: 'First action' }, { idGenerator: sequencedIds('step-action'), clock: fixedClock() });
+  assert.equal(nextStepId(plan), 'step-action');
+});
+test('empty lessons are skipped', () => {
+  let plan = createLearningPlan({ title: 'Empty lesson first' }, {
+    idGenerator: sequencedIds('plan-empty-lesson'),
+    clock: fixedClock(LP_TIME.created)
+  });
+  plan = addPhase(plan, { title: 'Phase' }, { idGenerator: sequencedIds('phase-empty-lesson'), clock: fixedClock() });
+  plan = addLesson(plan, 'phase-empty-lesson', { title: 'Empty lesson' }, { idGenerator: sequencedIds('lesson-empty'), clock: fixedClock() });
+  plan = addLesson(plan, 'phase-empty-lesson', { title: 'Action lesson' }, { idGenerator: sequencedIds('lesson-action'), clock: fixedClock() });
+  plan = addStep(plan, 'lesson-action', { title: 'First action' }, { idGenerator: sequencedIds('step-action'), clock: fixedClock() });
+  assert.equal(nextStepId(plan), 'step-action');
+});
+test('duplicate titles do not affect returned identity', () => {
+  let plan = createLearningPlan({ title: 'Same' }, { idGenerator: sequencedIds('plan-same-next'), clock: fixedClock(LP_TIME.created) });
+  plan = addPhase(plan, { title: 'Same' }, { idGenerator: sequencedIds('phase-same-1'), clock: fixedClock() });
+  plan = addLesson(plan, 'phase-same-1', { title: 'Same' }, { idGenerator: sequencedIds('lesson-same-1'), clock: fixedClock() });
+  plan = addStep(plan, 'lesson-same-1', { title: 'Same' }, { idGenerator: sequencedIds('step-same-1'), clock: fixedClock() });
+  plan = addPhase(plan, { title: 'Same' }, { idGenerator: sequencedIds('phase-same-2'), clock: fixedClock() });
+  plan = addLesson(plan, 'phase-same-2', { title: 'Same' }, { idGenerator: sequencedIds('lesson-same-2'), clock: fixedClock() });
+  plan = addStep(plan, 'lesson-same-2', { title: 'Same' }, { idGenerator: sequencedIds('step-same-2'), clock: fixedClock() });
+  plan = completeStep(plan, 'step-same-1', { clock: fixedClock(LP_TIME.completed) });
+  const next = findNextLearningPlanStep(plan);
+  assert.deepEqual({
+    phaseId: next.phaseId,
+    lessonId: next.lessonId,
+    stepId: next.stepId
+  }, {
+    phaseId: 'phase-same-2',
+    lessonId: 'lesson-same-2',
+    stepId: 'step-same-2'
+  });
+});
+test('fully complete plan returns null', () => {
+  let plan = seededLearningPlan();
+  plan = completeStep(plan, 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  plan = completeStep(plan, 'step-b', { clock: fixedClock(LP_TIME.completed) });
+  assert.equal(findNextLearningPlanStep(plan), null);
+});
+test('zero-step plan returns null', () => {
+  const plan = createLearningPlan({ title: 'No steps' }, { idGenerator: sequencedIds('plan-no-steps'), clock: fixedClock(LP_TIME.created) });
+  assert.equal(findNextLearningPlanStep(plan), null);
+});
+test('next action derivation does not mutate input', () => {
+  const plan = nextActionMultiPlan();
+  const before = JSON.stringify(plan);
+  findNextLearningPlanStep(plan);
+  assert.equal(JSON.stringify(plan), before);
+});
+test('same input produces deterministic next action', () => {
+  const plan = nextActionMultiPlan();
+  assert.deepEqual(findNextLearningPlanStep(plan), findNextLearningPlanStep(plan));
+});
+test('returned phaseId, lessonId, and stepId exactly match source IDs', () => {
+  const next = findNextLearningPlanStep(nextActionMultiPlan());
+  assert.equal(next.phaseId, 'phase-a');
+  assert.equal(next.lessonId, 'lesson-a');
+  assert.equal(next.stepId, 'step-a');
+});
+test('reopening an earlier step makes it the first unfinished step again', () => {
+  let plan = nextActionMultiPlan();
+  plan = completeStep(plan, 'step-a', { clock: fixedClock(LP_TIME.completed) });
+  plan = completeStep(plan, 'step-b', { clock: fixedClock(LP_TIME.completed) });
+  plan = reopenStep(plan, 'step-a', { clock: fixedClock(LP_TIME.reopened) });
+  assert.equal(nextStepId(plan), 'step-a');
+});
+test('completion order is based on stored hierarchy, not completedAt recency', () => {
+  let plan = nextActionMultiPlan();
+  plan = completeStep(plan, 'step-a', { clock: fixedClock(LP_TIME.later) });
+  assert.equal(nextStepId(plan), 'step-b');
+});
 
 // -- Learning Plan import parser ---------------------------------------------
 

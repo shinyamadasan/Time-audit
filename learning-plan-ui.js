@@ -13,6 +13,7 @@ import {
 } from './learning-plan-model.js';
 import { parseLearningPlanOutline } from './learning-plan-import.js';
 import { createLearningPlanRepository } from './learning-plan-repository.js';
+import { findNextLearningPlanStep } from './learning-plan-next-action.js';
 
 let repository = null;
 let learningPlans = [];
@@ -23,6 +24,7 @@ let learningPlansAvailable = true;
 let importPreview = null;
 let importPreviewFingerprint = '';
 let openCreationPanel = null;
+let learningGuideOpen = false;
 let expansionPlanId = null;
 let activeAddEditor = null;
 let activeRenameEditor = null;
@@ -90,6 +92,13 @@ function applyCreationPanelVisibility() {
   if (importSection) importSection.hidden = !showControls || openCreationPanel !== 'import';
   document.querySelector('[data-lp-action="show-import"]')?.setAttribute('aria-expanded', openCreationPanel === 'import' ? 'true' : 'false');
   document.querySelector('[data-lp-action="show-create"]')?.setAttribute('aria-expanded', openCreationPanel === 'manual' ? 'true' : 'false');
+}
+
+function applyLearningGuideVisibility() {
+  const button = document.querySelector('[data-lp-action="toggle-guide"]');
+  const guide = document.getElementById('learning-plan-guide');
+  if (button) button.setAttribute('aria-expanded', learningGuideOpen ? 'true' : 'false');
+  if (guide) guide.hidden = !learningGuideOpen;
 }
 
 function setLearningPlanControlsAvailable(available) {
@@ -303,18 +312,6 @@ function shortProgressLabel(progress) {
   return `${progress.completed} / ${progress.total}`;
 }
 
-function sectionIsComplete(progress) {
-  return progress.total > 0 && progress.completed === progress.total;
-}
-
-function firstUnfinishedPhase(plan) {
-  return plan.phases.find(phase => !sectionIsComplete(phaseProgress(phase))) || null;
-}
-
-function firstUnfinishedLesson(phase) {
-  return phase.lessons.find(lesson => !sectionIsComplete(lessonProgress(lesson))) || null;
-}
-
 function resetExpansionForPlan(plan) {
   expandedPhaseIds.clear();
   expandedLessonIds.clear();
@@ -322,11 +319,10 @@ function resetExpansionForPlan(plan) {
   activeRenameEditor = null;
   expansionPlanId = plan?.id || null;
   if (!plan) return;
-  const phase = firstUnfinishedPhase(plan);
-  if (!phase) return;
-  expandedPhaseIds.add(phase.id);
-  const lesson = firstUnfinishedLesson(phase);
-  if (lesson) expandedLessonIds.add(lesson.id);
+  const nextAction = findNextLearningPlanStep(plan);
+  if (!nextAction) return;
+  expandedPhaseIds.add(nextAction.phaseId);
+  expandedLessonIds.add(nextAction.lessonId);
 }
 
 function ensureExpansionForPlan(plan) {
@@ -345,6 +341,63 @@ function expandAroundLesson(plan, lessonId) {
   const phase = findPhaseForLesson(plan, lessonId);
   if (phase) expandedPhaseIds.add(phase.id);
   expandedLessonIds.add(lessonId);
+}
+
+function findRenderedStep(stepId) {
+  return Array.from(document.querySelectorAll('[data-lp-step-target]'))
+    .find(item => item.dataset.lpStepTarget === stepId) || null;
+}
+
+function focusRenderedStep(stepId) {
+  window.requestAnimationFrame(() => {
+    const target = findRenderedStep(stepId);
+    if (!target) return;
+    target.scrollIntoView({ block: 'center', inline: 'nearest' });
+    target.focus({ preventScroll: true });
+  });
+}
+
+function openNextLearningPlanStep(nextAction) {
+  expandedPhaseIds.add(nextAction.phaseId);
+  expandedLessonIds.add(nextAction.lessonId);
+  activeAddEditor = null;
+  activeRenameEditor = null;
+  renderLearningPlanState();
+  focusRenderedStep(nextAction.stepId);
+}
+
+function renderNextActionCard(plan, progress) {
+  const nextAction = findNextLearningPlanStep(plan);
+  if (!nextAction) {
+    if (progress.totalSteps === 0) {
+      return `
+        <section class="learning-plan-next-card empty" aria-label="Learning Plan next action" aria-live="polite">
+          <div class="learning-plan-next-label">NEXT ACTION</div>
+          <div class="learning-plan-next-title">No steps yet</div>
+          <div class="learning-plan-next-context">Add a step to begin.</div>
+        </section>
+      `;
+    }
+    return `
+      <section class="learning-plan-next-card complete" aria-label="Learning Plan complete" aria-live="polite">
+        <div class="learning-plan-next-label">PLAN COMPLETE</div>
+        <div class="learning-plan-next-title">Plan complete</div>
+        <div class="learning-plan-next-context">All ${progress.totalSteps} steps finished.</div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="learning-plan-next-card" aria-labelledby="learning-plan-next-title">
+      <div class="learning-plan-next-label">NEXT ACTION</div>
+      <div class="learning-plan-next-title" id="learning-plan-next-title">${escapeHtml(nextAction.stepTitle)}</div>
+      <div class="learning-plan-next-context">${escapeHtml(nextAction.phaseTitle)} - ${escapeHtml(nextAction.lessonTitle)}</div>
+      <button type="button" class="btn primary sm learning-plan-next-open" data-lp-action="open-next-step"
+        data-plan-id="${escapeHtml(plan.id)}" data-phase-id="${escapeHtml(nextAction.phaseId)}"
+        data-lesson-id="${escapeHtml(nextAction.lessonId)}" data-step-id="${escapeHtml(nextAction.stepId)}"
+        aria-label="Open next step: ${escapeHtml(nextAction.stepTitle)}">Open step</button>
+    </section>
+  `;
 }
 
 function renderPlanList() {
@@ -387,6 +440,7 @@ function renderLearningPlanState() {
         <span>${progress.completedSteps} / ${progress.totalSteps} steps</span>
         <strong>${progress.completionPercent}%</strong>
       </div>
+      ${renderNextActionCard(plan, progress)}
       <div class="learning-plan-phases">
         ${plan.phases.length ? plan.phases.map(phase => renderPhase(plan, phase)).join('') : '<div class="learning-plan-muted">No phases yet.</div>'}
       </div>
@@ -488,7 +542,8 @@ function renderLesson(plan, phase, lesson) {
 
 function renderStep(plan, lesson, step) {
   return `
-    <div class="learning-plan-step${step.completed ? ' done' : ''}" data-step-id="${escapeHtml(step.id)}">
+    <div class="learning-plan-step${step.completed ? ' done' : ''}" data-step-id="${escapeHtml(step.id)}"
+      data-lp-step-target="${escapeHtml(step.id)}" tabindex="-1">
       <input type="checkbox" ${step.completed ? 'checked' : ''}
         data-lp-action="toggle-step" data-plan-id="${escapeHtml(plan.id)}"
         data-lesson-id="${escapeHtml(lesson.id)}" data-step-id="${escapeHtml(step.id)}"
@@ -743,6 +798,11 @@ function handleClick(event) {
   const target = event.target.closest('[data-lp-action]');
   if (!target) return;
   const action = target.dataset.lpAction;
+  if (action === 'toggle-guide') {
+    learningGuideOpen = !learningGuideOpen;
+    applyLearningGuideVisibility();
+    return;
+  }
   if (action === 'show-import' || action === 'show-create') {
     openCreationPanel = action === 'show-import' ? 'import' : 'manual';
     applyCreationPanelVisibility();
@@ -762,6 +822,13 @@ function handleClick(event) {
   if (action === 'remove-plan') {
     const plan = currentPlanFromDataset(target);
     if (window.confirm(`Delete Learning Plan "${plan.title}"?`)) removeLearningPlan(plan.id);
+    return;
+  }
+  if (action === 'open-next-step') {
+    const plan = currentPlanFromDataset(target);
+    const nextAction = findNextLearningPlanStep(plan);
+    if (nextAction && nextAction.stepId === target.dataset.stepId) openNextLearningPlanStep(nextAction);
+    else renderLearningPlanState();
     return;
   }
   if (action === 'toggle-phase') {
@@ -844,6 +911,7 @@ function initLearningPlans() {
 
 export function renderLearningPlans() {
   initLearningPlans();
+  applyLearningGuideVisibility();
   const load = loadLearningPlans();
   if (!load.ok) {
     renderLearningPlansUnavailable("We couldn't load your saved Learning Plans. Your stored data was left unchanged.");

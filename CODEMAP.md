@@ -17,7 +17,7 @@
 - `storage.js` — line 1299 → **EXTRACTED** (see below)
 - `insights.js` — line 1300 → **EXTRACTED** (see below)
 - `focus-wallet.js` — line 1301 → **EXTRACTED** (see below)
-- `learning-plan-ui.js` — line 1507 → **EXTRACTED** (see below; imports `learning-plan-import.js`)
+- `learning-plan-ui.js` — line 1533 → **EXTRACTED** (see below; imports `learning-plan-import.js`, `learning-plan-next-action.js`)
 - `focus-mode.js` — line 7562 → **EXTRACTED** (see below)
 
 ---
@@ -59,12 +59,19 @@ Functions: `parseLearningPlanOutline()`
 Variables: —
 Depends on: no app globals
 
+### learning-plan-next-action.js
+Lines: external file
+Purpose: Pure deterministic Next Action derivation for the selected Learning Plan. Traverses phases, lessons, and steps in stored array order, returning the first unfinished step's immutable IDs and display context, or `null` when no actionable unfinished step exists.
+Functions: `findNextLearningPlanStep()`
+Variables: `LEARNING_PLAN_NEXT_ACTION_V1`
+Depends on: no app globals
+
 ### learning-plan-ui.js
 Lines: external file
-Purpose: Learning Plans browser UI, including repository load/error handling, manual plan creation/editing, progress rendering, and Quick Import preview/import flow.
+Purpose: Learning Plans browser UI, including repository load/error handling, the compact "How this works" guide, selected-plan Next Action card/open-step behavior, manual plan creation/editing, progress rendering, and Quick Import preview/import flow.
 Functions: `renderLearningPlans()` plus internal handlers for create, rename, add phase/lesson/step, complete/reopen step, delete, preview import, and import plan.
-Variables: `repository`, `learningPlans`, `selectedPlanId`, `initialized`, `busy`, `learningPlansAvailable`, `importPreview`, `importPreviewFingerprint`
-Depends on: `learning-plan-model.js`, `learning-plan-repository.js`, `learning-plan-import.js`, DOM globals
+Variables: `repository`, `learningPlans`, `selectedPlanId`, `initialized`, `busy`, `learningPlansAvailable`, `importPreview`, `importPreviewFingerprint`, `learningGuideOpen`, `expandedPhaseIds`, `expandedLessonIds`
+Depends on: `learning-plan-model.js`, `learning-plan-repository.js`, `learning-plan-import.js`, `learning-plan-next-action.js`, DOM globals
 
 ---
 
@@ -110,10 +117,10 @@ Key IDs: `view-week`, `view-reflect`, `view-settings`, `reflect-streak-cal` (str
 Depends on: —
 
 ## [HTML — Learning Plans View]
-Lines: ~532–574
-Purpose: Learning Plans tab markup: primary Quick Import form (plan title, outline textarea, preview/import actions, preview mount), secondary manual plan creation form, and list/detail shell.
+Lines: 536–613
+Purpose: Learning Plans tab markup: compact "How this works" guide, primary Quick Import form (plan title, outline textarea, preview/import actions, preview mount), secondary manual plan creation form, and list/detail shell.
 Functions: —
-Key IDs: `view-learning`, `learning-plan-error`, `learning-plan-import-form`, `learning-plan-import-title-input`, `learning-plan-import-outline`, `learning-plan-import-preview`, `learning-plan-create-form`, `learning-plan-title-input`, `learning-plan-list`, `learning-plan-main`
+Key IDs: `view-learning`, `learning-plan-guide`, `learning-plan-error`, `learning-plan-import-form`, `learning-plan-import-title-input`, `learning-plan-import-outline`, `learning-plan-import-preview`, `learning-plan-create-form`, `learning-plan-title-input`, `learning-plan-list`, `learning-plan-main`
 Depends on: `learning-plan-ui.js`
 
 ## [HTML — Desktop Side Panels]
@@ -510,7 +517,8 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Task switch panel (mid-block) | Task Switching Panel | 5023–5092 |
 | "Log same as last" CTA / sleep pill shortcut | Quick-Log Special Shortcuts | 5162–5266 |
 | Away mode (Sleep, Eat, Walk…) | Away & Status Management | 5267–5415 |
-| Learning Plans manual/create/edit/import | HTML — Learning Plans View + learning-plan-ui.js + learning-plan-import.js | ~532–574 + EXTRACTED |
+| Learning Plans manual/create/edit/import | HTML — Learning Plans View + learning-plan-ui.js + learning-plan-import.js | 536–613 + EXTRACTED |
+| Learning Plans Next Action / How this works guide | learning-plan-next-action.js + learning-plan-ui.js | EXTRACTED |
 | Week view (energy split, top activities, table) | Week View | 5427–6009 |
 | Month overview | Week View → `renderMonthOverview()` | ~5490 |
 | Sleep reminder / sleep entry logging | Sleep Tracking | 6083–6211 |
