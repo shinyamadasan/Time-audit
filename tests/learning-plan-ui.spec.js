@@ -15,6 +15,7 @@ import {
   LEARNING_PLAN_REPOSITORY_KEY,
   LEARNING_PLAN_REPOSITORY_SCHEMA_VERSION
 } from '../learning-plan-repository.js';
+import { LIFE_LEDGER_RUNTIME_KEY, learningPlanStepSourceEntityId } from '../life-ledger-runtime.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
@@ -368,6 +369,71 @@ async function renameThroughUi(page, kind, currentTitle, nextTitle) {
 
 async function storedEnvelope(page) {
   return page.evaluate(key => JSON.parse(localStorage.getItem(key)), LEARNING_PLAN_REPOSITORY_KEY);
+}
+
+async function lifeLedgerEnvelope(page) {
+  return page.evaluate(key => {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  }, LIFE_LEDGER_RUNTIME_KEY);
+}
+
+async function lifeLedgerEvents(page) {
+  const envelope = await lifeLedgerEnvelope(page);
+  return envelope?.records?.map(record => record.event) || [];
+}
+
+async function installSelectiveLedgerFailure(page, needles = []) {
+  return page.evaluate(({ key, needles }) => {
+    window.__realLedgerSetItem = window.__realLedgerSetItem || Storage.prototype.setItem;
+    window.__blockedLedgerNeedles = needles;
+    window.__blockAllLedgerWrites = false;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      let sourceEntityIds = [];
+      try {
+        sourceEntityIds = (JSON.parse(String(value)).records || []).map(record => record?.event?.sourceEntityId);
+      } catch {
+        sourceEntityIds = [];
+      }
+      if (
+        keyName === key
+        && (
+          window.__blockAllLedgerWrites
+          || (window.__blockedLedgerNeedles || []).some(needle => sourceEntityIds.includes(needle))
+        )
+      ) {
+        throw new Error('blocked ledger write');
+      }
+      return window.__realLedgerSetItem.call(this, keyName, value);
+    };
+  }, { key: LIFE_LEDGER_RUNTIME_KEY, needles });
+}
+
+async function blockAllLedgerWrites(page) {
+  return page.evaluate(({ key }) => {
+    window.__realLedgerSetItem = window.__realLedgerSetItem || Storage.prototype.setItem;
+    window.__blockAllLedgerWrites = true;
+    window.__blockedLedgerNeedles = [];
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key && window.__blockAllLedgerWrites) throw new Error('blocked ledger write');
+      return window.__realLedgerSetItem.call(this, keyName, value);
+    };
+  }, { key: LIFE_LEDGER_RUNTIME_KEY });
+}
+
+async function setBlockedLedgerNeedles(page, needles = []) {
+  return page.evaluate(needles => {
+    window.__blockAllLedgerWrites = false;
+    window.__blockedLedgerNeedles = needles;
+  }, needles);
+}
+
+async function restoreLedgerWrites(page) {
+  return page.evaluate(() => {
+    if (window.__realLedgerSetItem) Storage.prototype.setItem = window.__realLedgerSetItem;
+    window.__blockAllLedgerWrites = false;
+    window.__blockedLedgerNeedles = [];
+  });
 }
 
 async function countLearningPlanWrites(page) {
@@ -876,6 +942,14 @@ test('Done completes the exact Learning Plan step once and advances Next Action'
   expect(stored.plans[0].phases[0].lessons[0].steps[0].id).toBe('step-a');
   expect(stored.plans[0].phases[0].lessons[0].steps[0].completed).toBe(true);
   expect(stored.plans[0].phases[0].lessons[0].steps[1].completed).toBe(false);
+  const events = await lifeLedgerEvents(page);
+  expect(events.map(event => event.type).sort()).toEqual(['focus_session_completed', 'plan_step_completed']);
+  const stepEvent = events.find(event => event.type === 'plan_step_completed');
+  const focusEvent = events.find(event => event.type === 'focus_session_completed');
+  expect(stepEvent.sourceEntityId).toBe(learningPlanStepSourceEntityId('plan-a', 'step-a'));
+  expect(stepEvent.payload.stepLabel).toBe('Step A');
+  expect(stepEvent.payload.trackedMinutes).toBe(25);
+  expect(focusEvent.sourceEntityId).toBe(focusEvent.payload.source.focusEntryId);
   await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(0);
   await expect(page.locator('.learning-plan-next-title')).toHaveText('Step B');
 });
@@ -891,6 +965,9 @@ test('Continue performs zero Learning Plan writes and leaves the same Next Actio
 
   expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(0);
   expect(await storedEnvelope(page)).toEqual(before);
+  const events = await lifeLedgerEvents(page);
+  expect(events.map(event => event.type)).toEqual(['focus_session_completed']);
+  expect(events[0].payload.additiveForTimeTotals).toBe(false);
   await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(0);
   await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
 });
@@ -989,6 +1066,67 @@ test('Done save failure keeps the outcome prompt and does not falsely advance', 
   await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
 });
 
+test('Focus Life Ledger failure keeps the time entry and retries without duplicate focus events', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await page.evaluate(key => {
+    window.__realLedgerSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) throw new Error('blocked ledger write');
+      return window.__realLedgerSetItem.call(this, keyName, value);
+    };
+  }, LIFE_LEDGER_RUNTIME_KEY);
+
+  await finishLearningPlanFocusWork(page);
+
+  await expect(page.locator('#learning-plan-error')).toContainText('Life Ledger history is pending');
+  await expect(page.locator('.learning-plan-focus-outcome-warning')).toContainText('Focus history pending');
+  const savedWhileBlocked = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-entries') || '[]'));
+  expect(savedWhileBlocked).toHaveLength(1);
+  expect(await lifeLedgerEnvelope(page)).toBeNull();
+
+  await page.evaluate(() => { Storage.prototype.setItem = window.__realLedgerSetItem; });
+  await focusOutcomeButton(page, 'Continue').click();
+
+  const events = await lifeLedgerEvents(page);
+  expect(events).toHaveLength(1);
+  expect(events[0].type).toBe('focus_session_completed');
+  expect(events[0].payload.additiveForTimeTotals).toBe(false);
+  await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(0);
+});
+
+test('Done plan save success with step ledger failure keeps retryable pending outcome', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page);
+  await countLearningPlanWrites(page);
+  await page.evaluate(key => {
+    window.__realLedgerSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) throw new Error('blocked ledger write');
+      return window.__realLedgerSetItem.call(this, keyName, value);
+    };
+  }, LIFE_LEDGER_RUNTIME_KEY);
+
+  await focusOutcomeButton(page, 'Done').click();
+
+  const stored = await storedEnvelope(page);
+  expect(stored.plans[0].phases[0].lessons[0].steps[0].completed).toBe(true);
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(1);
+  await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(1);
+  await expect(page.locator('.learning-plan-focus-outcome-warning')).toContainText('Step completion history pending');
+  expect((await lifeLedgerEvents(page)).map(event => event.type)).toEqual(['focus_session_completed']);
+
+  await page.evaluate(() => { Storage.prototype.setItem = window.__realLedgerSetItem; });
+  await focusOutcomeButton(page, 'Done').click();
+
+  const events = await lifeLedgerEvents(page);
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(1);
+  expect(events.map(event => event.type).sort()).toEqual(['focus_session_completed', 'plan_step_completed']);
+  await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(0);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step B');
+});
+
 test('repository corruption during Done does not overwrite or reset stored data', async ({ page }) => {
   await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
   await openLearningPlans(page);
@@ -1084,7 +1222,7 @@ test('abandoned unlogged Learning Plan Focus exit does not show outcome prompt',
   await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
 });
 
-test('Learning Plan outcome does not persist provenance, Firebase provenance, or Life Ledger events', async ({ page }) => {
+test('Learning Plan outcome keeps provenance out of entries, timer sync, and Firebase while writing local Life Ledger', async ({ page }) => {
   await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
   await openLearningPlans(page);
   await page.evaluate(() => {
@@ -1113,10 +1251,14 @@ test('Learning Plan outcome does not persist provenance, Firebase provenance, or
   expectNoLearningPlanProvenance(state.entries);
   expectNoLearningPlanProvenance(state.payloads);
   expect(state.timer).toBeNull();
-  expect(JSON.stringify(state.allStorage)).not.toContain('plan_step_completed');
-  expect(JSON.stringify(state.allStorage)).not.toContain('focus_session_completed');
+  expect(state.allStorage).toHaveProperty('ta3-life-ledger-v1');
   expect(JSON.stringify(state.dispatchedEvents)).not.toContain('plan_step_completed');
   expect(JSON.stringify(state.dispatchedEvents)).not.toContain('focus_session_completed');
+  const events = await lifeLedgerEvents(page);
+  expect(events).toHaveLength(1);
+  expect(events[0].type).toBe('focus_session_completed');
+  expect(events[0].payload.source.stepId).toBe('step-a');
+  expect(events[0].payload.additiveForTimeTotals).toBe(false);
 });
 
 test('mobile Learning Plan outcome controls fit without horizontal overflow', async ({ page }) => {
@@ -1481,6 +1623,167 @@ test('completing and reopening steps updates Next Action from durable hierarchy'
   await expect(page.locator('.learning-plan-next-title')).toHaveText('Step B');
   await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').uncheck();
   await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+});
+
+test('manual complete records a plan_step_completed Life Ledger event', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').check();
+
+  const events = await lifeLedgerEvents(page);
+  expect(events).toHaveLength(1);
+  expect(events[0].type).toBe('plan_step_completed');
+  expect(events[0].sourceEntityId).toBe(learningPlanStepSourceEntityId('plan-a', 'step-a'));
+  expect(events[0].payload.stepLabel).toBe('Step A');
+  expect(events[0].tombstone.active).toBe(false);
+});
+
+test('manual reopen tombstones the existing plan_step_completed event', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').check();
+  const [created] = await lifeLedgerEvents(page);
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').uncheck();
+
+  const [event] = await lifeLedgerEvents(page);
+  expect(event.eventId).toBe(created.eventId);
+  expect(event.revision).toBe(2);
+  expect(event.tombstone.active).toBe(true);
+  expect(event.tombstone.reason).toBe('user_delete');
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+});
+
+test('manual complete after reopen restores the same Life Ledger event', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').check();
+  const [created] = await lifeLedgerEvents(page);
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').uncheck();
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').check();
+
+  const [event] = await lifeLedgerEvents(page);
+  expect(event.eventId).toBe(created.eventId);
+  expect(event.revision).toBe(3);
+  expect(event.tombstone.active).toBe(false);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step B');
+});
+
+test('manual ledger write failure leaves completion saved with retry evidence', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await page.evaluate(key => {
+    window.__realLedgerSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) throw new Error('blocked ledger write');
+      return window.__realLedgerSetItem.call(this, keyName, value);
+    };
+  }, LIFE_LEDGER_RUNTIME_KEY);
+
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').check();
+
+  const stored = await storedEnvelope(page);
+  expect(stored.plans[0].phases[0].lessons[0].steps[0].completed).toBe(true);
+  await expect(page.locator('#learning-plan-error')).toContainText('Life Ledger history is pending');
+  await expect(page.getByRole('region', { name: 'Life Ledger retry' })).toBeVisible();
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(1);
+  expect(await lifeLedgerEnvelope(page)).toBeNull();
+
+  await page.getByRole('region', { name: 'Life Ledger retry' }).getByRole('button', { name: 'Retry history' }).click();
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(1);
+
+  await page.evaluate(() => { Storage.prototype.setItem = window.__realLedgerSetItem; });
+  await page.getByRole('region', { name: 'Life Ledger retry' }).getByRole('button', { name: 'Retry history' }).click();
+
+  await expect(page.getByRole('region', { name: 'Life Ledger retry' })).toHaveCount(0);
+  expect((await lifeLedgerEvents(page)).map(event => event.type)).toEqual(['plan_step_completed']);
+});
+
+test('successful later step write does not clear an earlier pending step retry', async ({ page }) => {
+  const stepAIdentity = learningPlanStepSourceEntityId('plan-a', 'step-a');
+  const stepBIdentity = learningPlanStepSourceEntityId('plan-a', 'step-b');
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await installSelectiveLedgerFailure(page, [stepAIdentity]);
+
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').check();
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(1);
+
+  await setBlockedLedgerNeedles(page, []);
+  await page.locator('[data-lp-step-target="step-b"] input[type="checkbox"]').check();
+
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(1);
+  expect((await lifeLedgerEvents(page)).map(event => event.sourceEntityId)).toEqual([stepBIdentity]);
+
+  await restoreLedgerWrites(page);
+  await page.getByRole('region', { name: 'Life Ledger retry' }).getByRole('button', { name: 'Retry history' }).click();
+
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(0);
+  expect((await lifeLedgerEvents(page)).map(event => event.sourceEntityId).sort()).toEqual([stepAIdentity, stepBIdentity].sort());
+});
+
+test('two failed step writes both remain pending and recoverable', async ({ page }) => {
+  const stepAIdentity = learningPlanStepSourceEntityId('plan-a', 'step-a');
+  const stepBIdentity = learningPlanStepSourceEntityId('plan-a', 'step-b');
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await installSelectiveLedgerFailure(page, [stepAIdentity, stepBIdentity]);
+
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').check();
+  await page.locator('[data-lp-step-target="step-b"] input[type="checkbox"]').check();
+
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(2);
+  expect(await lifeLedgerEnvelope(page)).toBeNull();
+
+  await restoreLedgerWrites(page);
+  await page.getByRole('region', { name: 'Life Ledger retry' }).getByRole('button', { name: 'Retry history' }).click();
+
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(0);
+  expect((await lifeLedgerEvents(page)).map(event => event.sourceEntityId).sort()).toEqual([stepAIdentity, stepBIdentity].sort());
+});
+
+test('failed step retry followed by failed Focus event keeps both retries', async ({ page }) => {
+  const stepAIdentity = learningPlanStepSourceEntityId('plan-a', 'step-a');
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await installSelectiveLedgerFailure(page, [stepAIdentity]);
+
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').check();
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(1);
+
+  await blockAllLedgerWrites(page);
+  await finishLearningPlanFocusWork(page, 'Start Focus: Step B');
+
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(2);
+  await expect(page.locator('[data-ledger-retry-key]').filter({ hasText: 'Learning Plan step was saved' })).toHaveCount(1);
+  await expect(page.locator('[data-ledger-retry-key]').filter({ hasText: 'Focus session was saved' })).toHaveCount(1);
+});
+
+test('retry history clears only successful retry items and preserves remaining failures', async ({ page }) => {
+  const stepAIdentity = learningPlanStepSourceEntityId('plan-a', 'step-a');
+  const stepBIdentity = learningPlanStepSourceEntityId('plan-a', 'step-b');
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await installSelectiveLedgerFailure(page, [stepAIdentity, stepBIdentity]);
+
+  await page.locator('[data-lp-step-target="step-a"] input[type="checkbox"]').check();
+  await page.locator('[data-lp-step-target="step-b"] input[type="checkbox"]').check();
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(2);
+
+  await setBlockedLedgerNeedles(page, [stepBIdentity]);
+  await page.getByRole('region', { name: 'Life Ledger retry' }).getByRole('button', { name: 'Retry history' }).click();
+
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(1);
+  await expect(page.locator('[data-ledger-retry-key]').first()).toContainText('Learning Plan step');
+  expect((await lifeLedgerEvents(page)).map(event => event.sourceEntityId)).toEqual([stepAIdentity]);
+
+  await restoreLedgerWrites(page);
+  await page.getByRole('region', { name: 'Life Ledger retry' }).getByRole('button', { name: 'Retry history' }).click();
+
+  await expect(page.locator('[data-ledger-retry-key]')).toHaveCount(0);
+  expect((await lifeLedgerEvents(page)).map(event => event.sourceEntityId).sort()).toEqual([stepAIdentity, stepBIdentity].sort());
 });
 
 test('fully complete and zero-step plans show distinct Next Action states', async ({ page }) => {

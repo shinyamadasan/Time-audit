@@ -17,7 +17,7 @@
 - `storage.js` — line 1299 → **EXTRACTED** (see below)
 - `insights.js` — line 1300 → **EXTRACTED** (see below)
 - `focus-wallet.js` — line 1301 → **EXTRACTED** (see below)
-- `learning-plan-ui.js` — line 1533 → **EXTRACTED** (see below; imports `learning-plan-import.js`, `learning-plan-next-action.js`)
+- `learning-plan-ui.js` — line 1533 → **EXTRACTED** (see below; imports `learning-plan-import.js`, `learning-plan-next-action.js`, `life-ledger-runtime.js`)
 - `focus-mode.js` — line 7562 → **EXTRACTED** (see below)
 
 ---
@@ -68,10 +68,17 @@ Depends on: no app globals
 
 ### learning-plan-ui.js
 Lines: external file
-Purpose: Learning Plans browser UI, including repository load/error handling, the compact "How this works" guide, selected-plan Next Action card/open-step behavior, manual plan creation/editing, progress rendering, and Quick Import preview/import flow.
-Functions: `renderLearningPlans()` plus internal handlers for create, rename, add phase/lesson/step, complete/reopen step, delete, preview import, and import plan.
-Variables: `repository`, `learningPlans`, `selectedPlanId`, `initialized`, `busy`, `learningPlansAvailable`, `importPreview`, `importPreviewFingerprint`, `learningGuideOpen`, `expandedPhaseIds`, `expandedLessonIds`
-Depends on: `learning-plan-model.js`, `learning-plan-repository.js`, `learning-plan-import.js`, `learning-plan-next-action.js`, DOM globals
+Purpose: Learning Plans browser UI, including repository load/error handling, the compact "How this works" guide, selected-plan Next Action card/open-step behavior, manual plan creation/editing, progress rendering, Quick Import preview/import flow, and local Life Ledger writes for Focus outcomes and step completion/reopen.
+Functions: `renderLearningPlans()` plus internal handlers for create, rename, add phase/lesson/step, complete/reopen step, delete, preview import, import plan, Focus outcome Done/Continue, and Life Ledger retry.
+Variables: `repository`, `learningPlans`, `selectedPlanId`, `initialized`, `busy`, `learningPlansAvailable`, `importPreview`, `importPreviewFingerprint`, `learningGuideOpen`, `expandedPhaseIds`, `expandedLessonIds`, `pendingFocusOutcome`, `pendingLedgerRetries`
+Depends on: `learning-plan-model.js`, `learning-plan-repository.js`, `learning-plan-import.js`, `learning-plan-next-action.js`, `life-ledger-runtime.js`, DOM globals
+
+### life-ledger-runtime.js
+Lines: external file
+Purpose: Local runtime Life Ledger persistence and ChronaSense Learning Plan/Focus event bridge. Stores a versioned `ta3-life-ledger-v1` localStorage envelope, validates persisted records, delegates identity/revision/tombstone/restore rules to `life-ledger-core.js`, and builds contract-valid `focus_session_completed` / `plan_step_completed` drafts.
+Functions: `createLocalLifeLedgerStore()`, `learningPlanStepSourceEntityId()`, `buildLearningPlanFocusSessionCompletedDraft()`, `buildLearningPlanStepCompletedDraft()`, `buildLearningPlanStepReopenedDraft()`, `recordLearningPlanFocusSessionCompleted()`, `recordLearningPlanStepCompleted()`, `recordLearningPlanStepReopened()`
+Variables: `LIFE_LEDGER_RUNTIME_SCHEMA_VERSION`, `LIFE_LEDGER_RUNTIME_KEY`, `LIFE_LEDGER_RUNTIME_ADAPTER_VERSION`
+Depends on: `life-ledger-core.js`, `localStorage` or injected storage
 
 ---
 

@@ -14,6 +14,12 @@ import {
 import { parseLearningPlanOutline } from './learning-plan-import.js';
 import { createLearningPlanRepository } from './learning-plan-repository.js';
 import { findNextLearningPlanStep } from './learning-plan-next-action.js';
+import {
+  learningPlanStepSourceEntityId,
+  recordLearningPlanFocusSessionCompleted,
+  recordLearningPlanStepCompleted,
+  recordLearningPlanStepReopened
+} from './life-ledger-runtime.js';
 
 let repository = null;
 let learningPlans = [];
@@ -30,6 +36,7 @@ let activeAddEditor = null;
 let activeRenameEditor = null;
 let pendingFocusOutcome = null;
 let focusOutcomeBusy = false;
+let pendingLedgerRetries = new Map();
 const expandedPhaseIds = new Set();
 const expandedLessonIds = new Set();
 
@@ -117,6 +124,7 @@ function renderLearningPlansUnavailable(message) {
   if (main) {
     main.innerHTML = `
       ${renderLearningPlanFocusOutcome()}
+      ${renderLearningPlanLedgerRetry()}
       <div class="learning-plan-unavailable">
         <div class="learning-plan-unavailable-title">Learning Plans unavailable</div>
         <div class="learning-plan-muted">${escapeHtml(message || "We couldn't load your saved Learning Plans. Your stored data was left unchanged.")}</div>
@@ -265,6 +273,101 @@ function saveLearningPlan(plan, failureMessage = 'Could not save Learning Plan c
     showLearningPlanError(`${failureMessage} ${err.message}`);
     if (renderOnFailure) renderLearningPlanState();
     return null;
+  }
+}
+
+function planStepLedgerRetryKey(planId, stepId) {
+  return `chronasense:${learningPlanStepSourceEntityId(planId, stepId)}:plan_step_completed`;
+}
+
+function focusLedgerRetryKey(outcome) {
+  const focusEntryId = String(outcome?.focusEntryId || '').trim();
+  return focusEntryId ? `chronasense:${focusEntryId}:focus_session_completed` : '';
+}
+
+function clearPendingLedgerRetry(retryKey) {
+  if (!retryKey) return;
+  pendingLedgerRetries.delete(retryKey);
+}
+
+function rememberPendingLedgerRetry(retryKey, message, retry) {
+  if (!retryKey) return;
+  pendingLedgerRetries.set(retryKey, { message, retry, baseMessage: message });
+}
+
+function lifeLedgerFailureMessage(err) {
+  return err?.message || String(err || 'Life Ledger write failed');
+}
+
+function renderLearningPlanLedgerRetry() {
+  const retries = Array.from(pendingLedgerRetries.entries());
+  if (retries.length === 0) return '';
+  const countLabel = retries.length === 1 ? '1 pending write' : `${retries.length} pending writes`;
+  return `
+    <section class="learning-plan-ledger-retry" aria-label="Life Ledger retry" aria-live="polite">
+      <div class="learning-plan-ledger-retry-body">
+        <div class="learning-plan-ledger-retry-text">Life Ledger history has ${escapeHtml(countLabel)}.</div>
+        <div class="learning-plan-ledger-retry-list">
+          ${retries.map(([retryKey, retry]) => `
+            <div class="learning-plan-ledger-retry-item" data-ledger-retry-key="${escapeHtml(retryKey)}">${escapeHtml(retry.message)}</div>
+          `).join('')}
+        </div>
+      </div>
+      <button type="button" class="btn sm" data-lp-action="retry-ledger">Retry history</button>
+    </section>
+  `;
+}
+
+function retryPendingLedgerWrite() {
+  if (pendingLedgerRetries.size === 0) return;
+  let failed = 0;
+  for (const [retryKey, pending] of Array.from(pendingLedgerRetries.entries())) {
+    try {
+      pending.retry();
+      clearPendingLedgerRetry(retryKey);
+    } catch (err) {
+      failed++;
+      const baseMessage = pending.baseMessage || pending.message;
+      pendingLedgerRetries.set(retryKey, {
+        ...pending,
+        message: `${baseMessage} ${lifeLedgerFailureMessage(err)}`,
+        baseMessage
+      });
+    }
+  }
+  showLearningPlanError(failed > 0
+    ? `Life Ledger history is still pending. ${failed} write${failed === 1 ? '' : 's'} could not be retried.`
+    : '');
+  renderLearningPlanState();
+}
+
+function recordManualCompletionLedger(savedPlan, stepId) {
+  const retryKey = planStepLedgerRetryKey(savedPlan.id, stepId);
+  try {
+    recordLearningPlanStepCompleted(savedPlan, stepId);
+    clearPendingLedgerRetry(retryKey);
+    showLearningPlanError('');
+    return true;
+  } catch (err) {
+    const message = `Learning Plan step was saved, but Life Ledger history is pending. ${lifeLedgerFailureMessage(err)}`;
+    rememberPendingLedgerRetry(retryKey, message, () => recordLearningPlanStepCompleted(savedPlan, stepId));
+    showLearningPlanError(message);
+    return false;
+  }
+}
+
+function recordManualReopenLedger(previousPlan, stepId) {
+  const retryKey = planStepLedgerRetryKey(previousPlan.id, stepId);
+  try {
+    recordLearningPlanStepReopened(previousPlan, stepId);
+    clearPendingLedgerRetry(retryKey);
+    showLearningPlanError('');
+    return true;
+  } catch (err) {
+    const message = `Learning Plan step was reopened, but Life Ledger history is pending. ${lifeLedgerFailureMessage(err)}`;
+    rememberPendingLedgerRetry(retryKey, message, () => recordLearningPlanStepReopened(previousPlan, stepId));
+    showLearningPlanError(message);
+    return false;
   }
 }
 
@@ -440,14 +543,84 @@ function cloneLearningPlanFocusOutcome(value) {
   };
 }
 
+function recordFocusOutcomeLedger(outcome) {
+  const retryKey = focusLedgerRetryKey(outcome);
+  if (outcome.focusLedgerRecorded === true) {
+    clearPendingLedgerRetry(retryKey);
+    return true;
+  }
+  try {
+    recordLearningPlanFocusSessionCompleted(outcome);
+    outcome.focusLedgerRecorded = true;
+    outcome.focusLedgerError = '';
+    clearPendingLedgerRetry(retryKey);
+    return true;
+  } catch (err) {
+    outcome.focusLedgerRecorded = false;
+    outcome.focusLedgerError = lifeLedgerFailureMessage(err);
+    rememberPendingLedgerRetry(retryKey, `Focus session was saved, but Life Ledger history is pending. ${outcome.focusLedgerError}`, () => {
+      recordLearningPlanFocusSessionCompleted(outcome);
+      outcome.focusLedgerRecorded = true;
+      outcome.focusLedgerError = '';
+    });
+    return false;
+  }
+}
+
+function recordFocusOutcomeStepLedger(plan, outcome) {
+  const retryKey = planStepLedgerRetryKey(plan.id, outcome.stepId);
+  if (outcome.planStepLedgerRecorded === true) {
+    clearPendingLedgerRetry(retryKey);
+    return true;
+  }
+  try {
+    recordLearningPlanStepCompleted(plan, outcome.stepId, {
+      focusOutcome: outcome,
+      trackedMinutes: outcome.focusDurationMin,
+      captureMethod: 'pomodoro'
+    });
+    outcome.planStepLedgerRecorded = true;
+    outcome.planStepLedgerError = '';
+    clearPendingLedgerRetry(retryKey);
+    return true;
+  } catch (err) {
+    outcome.planStepLedgerRecorded = false;
+    outcome.planStepLedgerError = lifeLedgerFailureMessage(err);
+    rememberPendingLedgerRetry(retryKey, `Learning Plan step was saved, but Life Ledger history is pending. ${outcome.planStepLedgerError}`, () => {
+      recordLearningPlanStepCompleted(plan, outcome.stepId, {
+        focusOutcome: outcome,
+        trackedMinutes: outcome.focusDurationMin,
+        captureMethod: 'pomodoro'
+      });
+      outcome.planStepLedgerRecorded = true;
+      outcome.planStepLedgerError = '';
+    });
+    return false;
+  }
+}
+
+function focusOutcomeLedgerStatus() {
+  if (!pendingFocusOutcome) return '';
+  const messages = [];
+  if (pendingFocusOutcome.focusLedgerError) {
+    messages.push(`Focus history pending: ${pendingFocusOutcome.focusLedgerError}`);
+  }
+  if (pendingFocusOutcome.planStepLedgerError) {
+    messages.push(`Step completion history pending: ${pendingFocusOutcome.planStepLedgerError}`);
+  }
+  return messages.join(' ');
+}
+
 function renderLearningPlanFocusOutcome() {
   if (!pendingFocusOutcome) return '';
+  const ledgerStatus = focusOutcomeLedgerStatus();
   return `
     <section class="learning-plan-focus-outcome" aria-label="Focus outcome" aria-live="polite">
       <div class="learning-plan-focus-outcome-kicker">Focus complete</div>
       <div class="learning-plan-focus-outcome-question">Did you finish this step?</div>
       <div class="learning-plan-focus-outcome-step">${escapeHtml(pendingFocusOutcome.stepTitle)}</div>
       <div class="learning-plan-focus-outcome-context">${escapeHtml(learningPlanFocusContext(pendingFocusOutcome))}</div>
+      ${ledgerStatus ? `<div class="learning-plan-focus-outcome-warning">${escapeHtml(ledgerStatus)}</div>` : ''}
       <div class="learning-plan-focus-outcome-actions">
         <button type="button" class="btn primary sm" data-lp-action="focus-outcome-done"
           data-outcome-id="${escapeHtml(pendingFocusOutcome.outcomeId)}">Done</button>
@@ -500,6 +673,7 @@ function completePendingFocusOutcome(target) {
   focusOutcomeBusy = true;
   target.disabled = true;
   const outcome = pendingFocusOutcome;
+  const focusLedgerRecorded = recordFocusOutcomeLedger(outcome);
   const plans = loadLearningPlansForFocusOutcome(outcome);
   if (!plans) {
     focusOutcomeBusy = false;
@@ -514,6 +688,15 @@ function completePendingFocusOutcome(target) {
     return;
   }
   if (located.step.completed === true) {
+    const stepLedgerRecorded = outcome.planStepLedgerRecorded === false
+      ? recordFocusOutcomeStepLedger(located.plan, outcome)
+      : true;
+    if (!focusLedgerRecorded || !stepLedgerRecorded) {
+      focusOutcomeBusy = false;
+      renderLearningPlanState();
+      showLearningPlanError('Learning Plan step is saved, but Life Ledger history is still pending. Retry Done to finish recording history.');
+      return;
+    }
     clearLearningPlanFocusOutcome();
     resetExpansionForPlan(located.plan);
     expandAroundLesson(located.plan, outcome.lessonId);
@@ -532,6 +715,15 @@ function completePendingFocusOutcome(target) {
     renderLearningPlanState();
     return;
   }
+  const stepLedgerRecorded = recordFocusOutcomeStepLedger(saved, outcome);
+  if (!focusLedgerRecorded || !stepLedgerRecorded) {
+    focusOutcomeBusy = false;
+    resetExpansionForPlan(saved);
+    expandAroundLesson(saved, outcome.lessonId);
+    renderLearningPlanState();
+    showLearningPlanError('Learning Plan step was saved, but Life Ledger history is still pending. Retry Done to finish recording history.');
+    return;
+  }
   clearLearningPlanFocusOutcome();
   resetExpansionForPlan(saved);
   expandAroundLesson(saved, outcome.lessonId);
@@ -540,7 +732,15 @@ function completePendingFocusOutcome(target) {
 
 function continuePendingFocusOutcome(target) {
   if (!pendingFocusOutcome || target.dataset.outcomeId !== pendingFocusOutcome.outcomeId || focusOutcomeBusy) return;
+  focusOutcomeBusy = true;
+  target.disabled = true;
   const outcome = pendingFocusOutcome;
+  if (!recordFocusOutcomeLedger(outcome)) {
+    focusOutcomeBusy = false;
+    renderLearningPlanState();
+    showLearningPlanError('Focus session was saved, but Life Ledger history is still pending. Retry Continue to finish recording history.');
+    return;
+  }
   clearLearningPlanFocusOutcome();
   const plans = loadLearningPlansForFocusOutcome(outcome);
   if (plans) {
@@ -562,6 +762,10 @@ function receiveLearningPlanFocusOutcome(value) {
   focusOutcomeBusy = false;
   selectedPlanId = outcome.planId;
   showLearningPlansForFocusOutcome();
+  if (!recordFocusOutcomeLedger(pendingFocusOutcome)) {
+    renderLearningPlanState();
+    showLearningPlanError('Focus session was saved, but Life Ledger history is pending. Use Done or Continue to retry recording history.');
+  }
   return true;
 }
 
@@ -659,12 +863,13 @@ function renderLearningPlanState() {
   const plan = selectedPlan();
   ensureExpansionForPlan(plan);
   if (!plan) {
-    main.innerHTML = `${renderLearningPlanFocusOutcome()}<div class="empty learning-plan-empty">Import a plan or create one manually to start a checklist.</div>`;
+    main.innerHTML = `${renderLearningPlanFocusOutcome()}${renderLearningPlanLedgerRetry()}<div class="empty learning-plan-empty">Import a plan or create one manually to start a checklist.</div>`;
     return;
   }
   const progress = getLearningPlanProgress(plan);
   main.innerHTML = `
     ${renderLearningPlanFocusOutcome()}
+    ${renderLearningPlanLedgerRetry()}
     <div class="learning-plan-detail">
       <div class="learning-plan-detail-head">
         <div class="learning-plan-title-block">
@@ -1082,6 +1287,10 @@ function handleClick(event) {
     continuePendingFocusOutcome(target);
     return;
   }
+  if (action === 'retry-ledger') {
+    retryPendingLedgerWrite();
+    return;
+  }
   if (action === 'toggle-phase') {
     toggleSet(expandedPhaseIds, target.dataset.phaseId);
     activeAddEditor = null;
@@ -1132,7 +1341,17 @@ function handleChange(event) {
       const nextPlan = target.checked
         ? completeStep(plan, target.dataset.stepId)
         : reopenStep(plan, target.dataset.stepId);
-      saveLearningPlan(nextPlan);
+      const saved = saveLearningPlan(nextPlan, undefined, {
+        renderOnSuccess: false,
+        renderOnFailure: false
+      });
+      if (!saved) {
+        renderLearningPlanState();
+        return;
+      }
+      if (target.checked) recordManualCompletionLedger(saved, target.dataset.stepId);
+      else recordManualReopenLedger(plan, target.dataset.stepId);
+      renderLearningPlanState();
     } catch (err) {
       showLearningPlanError(`Could not update Learning Plan. Nothing was changed. ${err.message}`);
       renderLearningPlanState();

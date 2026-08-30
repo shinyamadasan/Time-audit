@@ -808,8 +808,16 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .learning-plan-focus-outcome-question{font-size:14px;font-weight:800;color:var(--text);line-height:1.3}
 .learning-plan-focus-outcome-step{font-size:17px;font-weight:800;line-height:1.25;color:var(--text);overflow-wrap:anywhere}
 .learning-plan-focus-outcome-context{font-size:12px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}
+.learning-plan-focus-outcome-warning{font-size:12px;line-height:1.4;color:#ffc107;background:rgba(255,193,7,0.08);
+  border:1px solid rgba(255,193,7,0.22);border-radius:7px;padding:7px 9px;overflow-wrap:anywhere}
 .learning-plan-focus-outcome-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .learning-plan-focus-outcome-actions .btn{flex-shrink:0}
+.learning-plan-ledger-retry{background:rgba(255,193,7,0.08);border:1px solid rgba(255,193,7,0.24);border-radius:8px;
+  padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.learning-plan-ledger-retry-body{display:grid;gap:5px;min-width:0;flex:1}
+.learning-plan-ledger-retry-text{font-size:12px;line-height:1.4;color:#ffc107;overflow-wrap:anywhere;min-width:0}
+.learning-plan-ledger-retry-list{display:grid;gap:4px;min-width:0}
+.learning-plan-ledger-retry-item{font-size:11px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere;min-width:0}
 .learning-plan-title-display,.learning-plan-section-summary{display:flex;align-items:center;gap:8px;min-width:0}
 .learning-plan-title-text,.learning-plan-section-title{min-width:0;overflow-wrap:anywhere;line-height:1.3}
 .learning-plan-plan-title-display .learning-plan-title-text{font-size:18px;font-weight:800;color:var(--text)}

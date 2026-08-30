@@ -16,6 +16,18 @@ import {
   validateLifeLedgerEventDraft
 } from './life-ledger-core.js';
 import {
+  LIFE_LEDGER_RUNTIME_KEY,
+  LifeLedgerRuntimeStoreError,
+  buildLearningPlanFocusSessionCompletedDraft,
+  buildLearningPlanStepCompletedDraft,
+  buildLearningPlanStepReopenedDraft,
+  createLocalLifeLedgerStore,
+  learningPlanStepSourceEntityId,
+  recordLearningPlanFocusSessionCompleted,
+  recordLearningPlanStepCompleted,
+  recordLearningPlanStepReopened
+} from './life-ledger-runtime.js';
+import {
   addLesson,
   addPhase,
   addStep,
@@ -1232,6 +1244,26 @@ function secondSeededLearningPlan() {
     clock: fixedClock(LP_TIME.updated)
   });
   return plan;
+}
+
+function completedPlanWithSharedStepId(planId, title) {
+  let plan = createLearningPlan({ title }, {
+    idGenerator: sequencedIds(planId),
+    clock: fixedClock(LP_TIME.created)
+  });
+  plan = addPhase(plan, { title: `${title} phase` }, {
+    idGenerator: sequencedIds(`${planId}-phase`),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  plan = addLesson(plan, `${planId}-phase`, { title: `${title} lesson` }, {
+    idGenerator: sequencedIds(`${planId}-lesson`),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  plan = addStep(plan, `${planId}-lesson`, { title: `${title} shared step` }, {
+    idGenerator: sequencedIds('shared-step'),
+    clock: fixedClock(LP_TIME.updated)
+  });
+  return completeStep(plan, 'shared-step', { clock: fixedClock(LP_TIME.completed) });
 }
 
 function learningPlanIds(plan) {
@@ -3125,6 +3157,303 @@ test('source-owned timestamp-style ChronaSense IDs remain stable strings', () =>
   assert.equal(result.event.sourceEntityId, '1700000000000');
   assert.notEqual(result.event.eventId, result.event.sourceEntityId);
   assert.equal(deriveLifeLedgerKey({ sourceApp: 'chronasense', sourceEntityId: 1700000000000, type: 'activity_logged' }), deriveLifeLedgerKey(result.event));
+});
+
+// -- Life Ledger runtime store and Learning Plan bridge -----------------------
+
+function runtimeStore(storage = makeMemoryStorage()) {
+  return createLocalLifeLedgerStore({ storage, key: LIFE_LEDGER_RUNTIME_KEY });
+}
+
+function runtimeEnvelope(storage) {
+  return JSON.parse(storage.raw(LIFE_LEDGER_RUNTIME_KEY));
+}
+
+function completedLearningPlan() {
+  return completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.completed) });
+}
+
+function focusOutcome(overrides = {}) {
+  const start = Date.parse('2026-08-27T16:00:00.000Z');
+  const end = Date.parse('2026-08-27T16:25:00.000Z');
+  return {
+    outcomeId: '1700001500000:plan-1:phase-a:lesson-a:step-a',
+    planId: 'plan-1',
+    phaseId: 'phase-a',
+    lessonId: 'lesson-a',
+    stepId: 'step-a',
+    planTitle: 'Frontend fundamentals',
+    phaseTitle: 'Phase A',
+    lessonTitle: 'Lesson A',
+    stepTitle: 'Step A',
+    focusEntryId: '1700001500000',
+    focusActivity: 'Step A',
+    focusStartedAt: start,
+    focusEndedAt: end,
+    focusDurationMin: 25,
+    ...overrides
+  };
+}
+
+function runtimeOpts(overrides = {}) {
+  return {
+    sourceTimezone: 'America/Phoenix',
+    createId: () => 'abababab-abab-4aba-8bab-abababababab',
+    clock: fixedClock(LL_TIME.recorded),
+    ...overrides
+  };
+}
+
+console.log('\nLife Ledger runtime Learning Plan bridge');
+test('runtime store treats missing localStorage key as an empty ledger', () => {
+  assert.deepEqual(runtimeStore().listEvents(), []);
+});
+test('runtime store writes a versioned localStorage envelope after first upsert', () => {
+  const storage = makeMemoryStorage();
+  const store = runtimeStore(storage);
+  const result = recordLearningPlanStepCompleted(completedLearningPlan(), 'step-a', {
+    ...runtimeOpts(),
+    store
+  });
+  const envelope = runtimeEnvelope(storage);
+  assert.equal(result.action, 'created');
+  assert.equal(envelope.schemaVersion, 1);
+  assert.equal(envelope.records.length, 1);
+  assert.equal(envelope.records[0].event.type, 'plan_step_completed');
+});
+test('runtime store rejects malformed JSON without clearing stored bytes', () => {
+  const storage = makeMemoryStorage({ [LIFE_LEDGER_RUNTIME_KEY]: '{bad json' });
+  assert.throws(() => runtimeStore(storage).listEvents(), error => error instanceof LifeLedgerRuntimeStoreError && error.code === 'invalid_json');
+  assert.equal(storage.raw(LIFE_LEDGER_RUNTIME_KEY), '{bad json');
+});
+test('runtime store rejects unsupported schema without rewriting storage', () => {
+  const raw = JSON.stringify({ schemaVersion: 999, records: [] });
+  const storage = makeMemoryStorage({ [LIFE_LEDGER_RUNTIME_KEY]: raw });
+  assert.throws(() => runtimeStore(storage).listEvents(), error => error.code === 'unsupported_schema_version');
+  assert.equal(storage.raw(LIFE_LEDGER_RUNTIME_KEY), raw);
+});
+test('runtime store rejects persisted records with mismatched fingerprints', () => {
+  const draft = buildLearningPlanStepCompletedDraft(completedLearningPlan(), 'step-a', runtimeOpts());
+  const memory = createLifeLedgerMemoryStore();
+  const created = upsertLifeLedgerEvent(memory, draft, runtimeOpts());
+  const bad = {
+    schemaVersion: 1,
+    records: [{ key: created.key, event: created.event, fingerprint: 'fnv1a32:00000000' }]
+  };
+  const storage = makeMemoryStorage({ [LIFE_LEDGER_RUNTIME_KEY]: JSON.stringify(bad) });
+  assert.throws(() => runtimeStore(storage).listEvents(), error => error.code === 'invalid_record');
+});
+test('runtime store write failure preserves the previously persisted envelope', () => {
+  const storage = makeMemoryStorage();
+  const store = runtimeStore(storage);
+  recordLearningPlanStepCompleted(completedLearningPlan(), 'step-a', { ...runtimeOpts(), store });
+  const before = storage.raw(LIFE_LEDGER_RUNTIME_KEY);
+  const failingStore = createLocalLifeLedgerStore({
+    key: LIFE_LEDGER_RUNTIME_KEY,
+    storage: {
+      getItem: storage.getItem,
+      setItem() {
+        throw new Error('blocked write');
+      }
+    }
+  });
+  const nextPlan = completeStep(reopenStep(completedLearningPlan(), 'step-a', { clock: fixedClock(LP_TIME.reopened) }), 'step-a', { clock: fixedClock(LP_TIME.later) });
+  assert.throws(() => recordLearningPlanStepCompleted(nextPlan, 'step-a', { ...runtimeOpts({ clock: fixedClock(LL_TIME.revised) }), store: failingStore }), error => error.code === 'storage_write_failed');
+  assert.equal(storage.raw(LIFE_LEDGER_RUNTIME_KEY), before);
+});
+test('focus session draft is valid, non-additive, and keyed by the focus entry id', () => {
+  const draft = buildLearningPlanFocusSessionCompletedDraft(focusOutcome(), runtimeOpts());
+  assert.equal(validateLifeLedgerEventDraft(draft).ok, true);
+  assert.equal(draft.type, 'focus_session_completed');
+  assert.equal(draft.sourceEntityId, focusOutcome().focusEntryId);
+  assert.equal(draft.payload.additiveForTimeTotals, false);
+  assert.equal(draft.payload.durationMinutes, 25);
+  assert.ok(draft.provenance.evidence.includes(`chronasense.focus_outcome:${focusOutcome().outcomeId}`));
+  assert.ok(draft.provenance.evidence.includes('chronasense.entry:1700001500000'));
+});
+test('focus session recording creates one Life Ledger focus event', () => {
+  const store = runtimeStore();
+  const result = recordLearningPlanFocusSessionCompleted(focusOutcome(), { ...runtimeOpts(), store });
+  assert.equal(result.action, 'created');
+  assert.equal(store.listEvents()[0].type, 'focus_session_completed');
+});
+test('focus session retry is idempotent and does not mint another UUID', () => {
+  let ids = 0;
+  const store = runtimeStore();
+  const opts = runtimeOpts({
+    store,
+    createId: () => {
+      ids++;
+      return 'bcbcbcbc-bcbc-4bcb-8bcb-bcbcbcbcbcbc';
+    }
+  });
+  const first = recordLearningPlanFocusSessionCompleted(focusOutcome(), opts);
+  const retry = recordLearningPlanFocusSessionCompleted(focusOutcome(), opts);
+  assert.equal(first.action, 'created');
+  assert.equal(retry.action, 'unchanged');
+  assert.equal(store.listEvents().length, 1);
+  assert.equal(ids, 1);
+});
+test('same focus entry retry preserves the same event id even when outcome id changes', () => {
+  let ids = 0;
+  const store = runtimeStore();
+  const opts = runtimeOpts({
+    store,
+    createId: () => {
+      ids++;
+      return 'abababab-abab-4bab-8bab-abababababab';
+    }
+  });
+  const first = recordLearningPlanFocusSessionCompleted(focusOutcome({ outcomeId: 'outcome-first' }), opts);
+  const retry = recordLearningPlanFocusSessionCompleted(focusOutcome({ outcomeId: 'outcome-retry' }), opts);
+  assert.equal(retry.event.eventId, first.event.eventId);
+  assert.equal(store.listEvents().length, 1);
+  assert.equal(ids, 1);
+});
+test('focus and activity facts for the same entry remain separate and non-duplicating', () => {
+  const focusDraft = buildLearningPlanFocusSessionCompletedDraft(focusOutcome(), runtimeOpts());
+  const activityDraft = sampleActivityDraft({ sourceEntityId: focusOutcome().focusEntryId });
+  assert.notEqual(deriveLifeLedgerKey(focusDraft), deriveLifeLedgerKey(activityDraft));
+  assert.equal(focusDraft.sourceEntityId, activityDraft.sourceEntityId);
+  assert.equal(focusDraft.payload.additiveForTimeTotals, false);
+});
+test('plan step source identity is a canonical plan and step composite', () => {
+  assert.equal(learningPlanStepSourceEntityId('plan-1', 'step-a'), '["plan-1","step-a"]');
+  assert.equal(learningPlanStepSourceEntityId('plan,1', 'step"]a'), JSON.stringify(['plan,1', 'step"]a']));
+  assert.notEqual(learningPlanStepSourceEntityId('plan-a', 'shared-step'), learningPlanStepSourceEntityId('plan-b', 'shared-step'));
+});
+test('plan step completion draft preserves the stable composite step identity and step label', () => {
+  const draft = buildLearningPlanStepCompletedDraft(completedLearningPlan(), 'step-a', runtimeOpts());
+  assert.equal(validateLifeLedgerEventDraft(draft).ok, true);
+  assert.equal(draft.type, 'plan_step_completed');
+  assert.equal(draft.sourceEntityId, learningPlanStepSourceEntityId('plan-1', 'step-a'));
+  assert.equal(draft.payload.stepLabel, 'Step A');
+  assert.equal(draft.payload.planDate, '2026-08-27');
+  assert.equal(draft.provenance.sourceRecordKind, 'chronasense.plan_step');
+});
+test('matching nested step ids in different Learning Plans create distinct Life Ledger events', () => {
+  let ids = 0;
+  const store = runtimeStore();
+  const opts = runtimeOpts({
+    store,
+    createId: () => {
+      ids++;
+      return ids === 1 ? '11111111-1111-4111-8111-111111111111' : '22222222-2222-4222-8222-222222222222';
+    }
+  });
+  const first = recordLearningPlanStepCompleted(completedPlanWithSharedStepId('plan-a', 'Plan A'), 'shared-step', opts);
+  const second = recordLearningPlanStepCompleted(completedPlanWithSharedStepId('plan-b', 'Plan B'), 'shared-step', opts);
+  assert.equal(store.listEvents().length, 2);
+  assert.notEqual(first.event.sourceEntityId, second.event.sourceEntityId);
+  assert.notEqual(first.event.eventId, second.event.eventId);
+});
+test('plan step completion recording creates a durable Life Ledger event', () => {
+  const store = runtimeStore();
+  const result = recordLearningPlanStepCompleted(completedLearningPlan(), 'step-a', { ...runtimeOpts(), store });
+  assert.equal(result.action, 'created');
+  assert.equal(store.listEvents()[0].payload.completedAt, LP_TIME.completed);
+});
+test('plan step completion retry keeps one event and one eventId', () => {
+  let ids = 0;
+  const store = runtimeStore();
+  const opts = runtimeOpts({
+    store,
+    createId: () => {
+      ids++;
+      return 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd';
+    }
+  });
+  const first = recordLearningPlanStepCompleted(completedLearningPlan(), 'step-a', opts);
+  const retry = recordLearningPlanStepCompleted(completedLearningPlan(), 'step-a', opts);
+  assert.equal(retry.action, 'unchanged');
+  assert.equal(retry.event.eventId, first.event.eventId);
+  assert.equal(ids, 1);
+});
+test('plan step completion from a focus outcome includes tracked minutes as source context', () => {
+  const draft = buildLearningPlanStepCompletedDraft(completedLearningPlan(), 'step-a', {
+    ...runtimeOpts(),
+    focusOutcome: focusOutcome(),
+    trackedMinutes: 25,
+    captureMethod: 'pomodoro'
+  });
+  assert.equal(draft.payload.trackedMinutes, 25);
+  assert.equal(draft.payload.source.focusEntryId, '1700001500000');
+  assert.equal(draft.provenance.captureMethod, 'pomodoro');
+});
+test('plan step reopen draft is a user_delete tombstone for the same logical completion event', () => {
+  const draft = buildLearningPlanStepReopenedDraft(completedLearningPlan(), 'step-a', runtimeOpts());
+  assert.equal(validateLifeLedgerEventDraft(draft).ok, true);
+  assert.equal(draft.sourceEntityId, learningPlanStepSourceEntityId('plan-1', 'step-a'));
+  assert.equal(draft.tombstone.active, true);
+  assert.equal(draft.tombstone.reason, 'user_delete');
+  assert.equal(draft.provenance.sourceOperation, 'delete');
+});
+test('plan step reopen tombstones an existing completion and preserves eventId', () => {
+  const store = runtimeStore();
+  const opts = runtimeOpts({
+    store,
+    createId: () => 'dededede-dede-4ede-8ede-dededededede',
+    clock: sequencedClock(LL_TIME.recorded, LL_TIME.revised, '2026-08-27T17:30:00.000Z', '2026-08-27T17:45:00.000Z')
+  });
+  const created = recordLearningPlanStepCompleted(completedLearningPlan(), 'step-a', opts);
+  const deleted = recordLearningPlanStepReopened(completedLearningPlan(), 'step-a', opts);
+  assert.equal(deleted.action, 'tombstoned');
+  assert.equal(deleted.event.eventId, created.event.eventId);
+  assert.equal(deleted.event.tombstone.active, true);
+});
+test('repeated identical reopen retry does not increment revision again', () => {
+  const store = runtimeStore();
+  const opts = runtimeOpts({
+    store,
+    createId: () => 'efefefef-efef-4fef-8fef-efefefefefef',
+    clock: fixedClock(LL_TIME.recorded)
+  });
+  recordLearningPlanStepCompleted(completedLearningPlan(), 'step-a', opts);
+  const deleted = recordLearningPlanStepReopened(completedLearningPlan(), 'step-a', opts);
+  const retry = recordLearningPlanStepReopened(completedLearningPlan(), 'step-a', opts);
+  assert.equal(retry.action, 'unchanged');
+  assert.equal(retry.event.revision, deleted.event.revision);
+});
+test('completion after reopen restores the existing tombstoned event', () => {
+  const store = runtimeStore();
+  const opts = runtimeOpts({
+    store,
+    createId: () => 'fafafafa-fafa-4afa-8afa-fafafafafafa',
+    clock: sequencedClock(LL_TIME.recorded, LL_TIME.revised, '2026-08-27T17:05:00.000Z', '2026-08-27T17:10:00.000Z', '2026-08-27T17:30:00.000Z', '2026-08-27T17:35:00.000Z')
+  });
+  const completed = completedLearningPlan();
+  const created = recordLearningPlanStepCompleted(completed, 'step-a', opts);
+  recordLearningPlanStepReopened(completed, 'step-a', opts);
+  const recompleted = completeStep(reopenStep(completed, 'step-a', { clock: fixedClock(LP_TIME.reopened) }), 'step-a', { clock: fixedClock(LP_TIME.later) });
+  const restored = recordLearningPlanStepCompleted(recompleted, 'step-a', opts);
+  assert.equal(restored.action, 'restored');
+  assert.equal(restored.event.eventId, created.event.eventId);
+  assert.equal(restored.event.sourceEntityId, created.event.sourceEntityId);
+  assert.equal(restored.event.tombstone.active, false);
+});
+test('completion for an incomplete step is rejected before any runtime write', () => {
+  const storage = makeMemoryStorage();
+  assert.throws(() => recordLearningPlanStepCompleted(seededLearningPlan(), 'step-a', {
+    ...runtimeOpts(),
+    store: runtimeStore(storage)
+  }), error => error.code === 'step_not_completed');
+  assert.equal(storage.raw(LIFE_LEDGER_RUNTIME_KEY), undefined);
+});
+test('runtime source timezone maps legacy UTC setting to a contract-valid IANA name', () => {
+  const storage = makeMemoryStorage();
+  storage.setItem('ta3-tz', 'UTC');
+  withGlobalLocalStorage(storage, () => {
+    const draft = buildLearningPlanStepCompletedDraft(completedLearningPlan(), 'step-a', runtimeOpts({ sourceTimezone: null }));
+    assert.equal(draft.sourceTimezone, 'Etc/UTC');
+    assert.equal(validateLifeLedgerEventDraft(draft).ok, true);
+  });
+});
+test('runtime list results are cloned and cannot mutate persisted state', () => {
+  const store = runtimeStore();
+  recordLearningPlanStepCompleted(completedLearningPlan(), 'step-a', { ...runtimeOpts(), store });
+  const listed = store.listEvents();
+  listed[0].payload.stepLabel = 'Mutated';
+  assert.equal(store.listEvents()[0].payload.stepLabel, 'Step A');
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────────
