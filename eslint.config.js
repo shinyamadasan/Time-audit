@@ -2,7 +2,7 @@
 // Targets the extracted .js files only (not index.html which requires an HTML plugin).
 export default [
   {
-    files: ['life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'life-ledger-runtime.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js'],
+    files: ['life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'life-ledger-runtime.js', 'obsidian-life-ledger-renderer.js', 'obsidian-life-ledger-writer.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -21,7 +21,7 @@ export default [
   },
   {
     files: ['*.js'],
-    ignores: ['www/**', 'node_modules/**', 'life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'life-ledger-runtime.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js'],
+    ignores: ['www/**', 'node_modules/**', 'life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'life-ledger-runtime.js', 'obsidian-life-ledger-renderer.js', 'obsidian-life-ledger-writer.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script', // classic <script> tags — not ES modules

@@ -1,5 +1,8 @@
 // node test.js
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import './focus-wallet.js';
 import {
   normalizeChronaSenseEntries,
@@ -56,6 +59,14 @@ import {
 } from './learning-plan-repository.js';
 import { parseLearningPlanOutline } from './learning-plan-import.js';
 import { findNextLearningPlanStep } from './learning-plan-next-action.js';
+import {
+  OBSIDIAN_LIFE_LEDGER_SENTINEL,
+  buildObsidianLifeLedgerExport
+} from './obsidian-life-ledger-renderer.js';
+import {
+  resolveObsidianLifeLedgerPath,
+  writeObsidianLifeLedgerExport
+} from './obsidian-life-ledger-writer.js';
 
 const { computeFocusWallet, getFocusWalletWeekKey } = globalThis;
 
@@ -528,6 +539,7 @@ function getTimeByActivity(entriesArr, intervalMin = 30) {
 
 let passed = 0;
 let failed = 0;
+const asyncTests = [];
 
 function test(name, fn) {
   try {
@@ -539,6 +551,20 @@ function test(name, fn) {
     console.error(`    ${err.message}`);
     failed++;
   }
+}
+
+function asyncTest(name, fn) {
+  asyncTests.push((async () => {
+    try {
+      await fn();
+      console.log(`  ✓ ${name}`);
+      passed++;
+    } catch (err) {
+      console.error(`  ✗ ${name}`);
+      console.error(`    ${err.message}`);
+      failed++;
+    }
+  })());
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -3455,6 +3481,466 @@ test('runtime list results are cloned and cannot mutate persisted state', () => 
   listed[0].payload.stepLabel = 'Mutated';
   assert.equal(store.listEvents()[0].payload.stepLabel, 'Step A');
 });
+
+// -- Obsidian Life Ledger export ---------------------------------------------
+
+const OBS_TIME = {
+  start: '2026-08-30T16:00:00.000Z',
+  end: '2026-08-30T16:25:00.000Z',
+  step: '2026-08-30T16:30:00.000Z',
+  recorded: '2026-08-30T16:31:00.000Z'
+};
+
+function obsidianFocusEvent(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    eventId: '10101010-1010-4010-8010-101010101010',
+    sourceApp: 'chronasense',
+    sourceEntityId: 'focus-entry-1',
+    type: 'focus_session_completed',
+    occurredAt: OBS_TIME.end,
+    recordedAt: OBS_TIME.recorded,
+    revisedAt: null,
+    sourceTimezone: 'America/Phoenix',
+    payload: {
+      activity: 'Synthetic focus',
+      startedAt: OBS_TIME.start,
+      endedAt: OBS_TIME.end,
+      durationMinutes: 25,
+      additiveForTimeTotals: false,
+      source: { focusEntryId: 'focus-entry-1' }
+    },
+    provenance: {
+      source: 'chronasense',
+      sourceRecordKind: 'chronasense.focus_outcome',
+      adapterVersion: 'test-v1',
+      observedAt: OBS_TIME.recorded,
+      captureMethod: 'pomodoro',
+      evidence: ['synthetic.focus:1']
+    },
+    confidence: { score: 1, basis: 'source-recorded' },
+    revision: 1,
+    tombstone: { active: false, deletedAt: null, reason: null, provenance: null },
+    ...overrides
+  };
+}
+
+function obsidianStepEvent(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    eventId: '20202020-2020-4020-8020-202020202020',
+    sourceApp: 'chronasense',
+    sourceEntityId: '["synthetic-plan","synthetic-step"]',
+    type: 'plan_step_completed',
+    occurredAt: OBS_TIME.step,
+    recordedAt: OBS_TIME.recorded,
+    revisedAt: null,
+    sourceTimezone: 'America/Phoenix',
+    payload: {
+      planDate: '2026-08-30',
+      stepLabel: 'Synthetic step',
+      completedAt: OBS_TIME.step,
+      source: {
+        planTitle: 'Synthetic course',
+        phaseTitle: 'Phase 1',
+        lessonTitle: 'Lesson 2'
+      }
+    },
+    provenance: {
+      source: 'chronasense',
+      sourceRecordKind: 'chronasense.plan_step',
+      adapterVersion: 'test-v1',
+      observedAt: OBS_TIME.recorded,
+      captureMethod: 'plan_toggle',
+      evidence: ['synthetic.step:1']
+    },
+    confidence: { score: 1, basis: 'source-recorded' },
+    revision: 1,
+    tombstone: { active: false, deletedAt: null, reason: null, provenance: null },
+    ...overrides
+  };
+}
+
+function dailyFile(exportPlan, dateKey = '2026-08-30') {
+  return exportPlan.files.find(file => file.relativePath === `Life Ledger/Daily/${dateKey}.md`);
+}
+
+async function withTempVault(fn) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'chronasense-life-ledger-'));
+  await fs.mkdir(path.join(root, 'Life Ledger'), { recursive: true });
+  try {
+    return await fn(root);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function mockObsidianStats(kind) {
+  return {
+    mode: kind === 'link' ? 0x400 : 0,
+    isSymbolicLink: () => kind === 'link',
+    isFile: () => kind === 'file',
+    isDirectory: () => kind === 'dir'
+  };
+}
+
+function createMockObsidianFs({ dirs = [], files = {}, links = [], realpaths = {}, readdir = {} } = {}) {
+  const calls = { readFile: [], writeFile: [], rename: [], unlink: [], readdir: [], lstat: [], realpath: [] };
+  const normalize = value => path.resolve(value);
+  const dirSet = new Set(dirs.map(normalize));
+  const linkSet = new Set(links.map(normalize));
+  const fileMap = new Map(Object.entries(files).map(([filePath, content]) => [normalize(filePath), content]));
+  const realpathMap = new Map(Object.entries(realpaths).map(([filePath, realPath]) => [normalize(filePath), normalize(realPath)]));
+  const readdirMap = new Map(Object.entries(readdir).map(([dirPath, names]) => [normalize(dirPath), names]));
+  const missing = target => Object.assign(new Error(`ENOENT: ${target}`), { code: 'ENOENT' });
+  const adapter = {
+    async mkdir(target) {
+      dirSet.add(normalize(target));
+    },
+    async readFile(target) {
+      const key = normalize(target);
+      calls.readFile.push(key);
+      if (!fileMap.has(key)) throw missing(target);
+      return fileMap.get(key);
+    },
+    async writeFile(target, content) {
+      const key = normalize(target);
+      calls.writeFile.push(key);
+      fileMap.set(key, content);
+    },
+    async rename(from, to) {
+      const fromKey = normalize(from);
+      const toKey = normalize(to);
+      calls.rename.push([fromKey, toKey]);
+      if (!fileMap.has(fromKey)) throw missing(from);
+      fileMap.set(toKey, fileMap.get(fromKey));
+      fileMap.delete(fromKey);
+    },
+    async unlink(target) {
+      const key = normalize(target);
+      calls.unlink.push(key);
+      fileMap.delete(key);
+      linkSet.delete(key);
+    },
+    async readdir(target) {
+      const key = normalize(target);
+      calls.readdir.push(key);
+      if (!readdirMap.has(key)) throw missing(target);
+      return readdirMap.get(key).map(name => ({ name, isFile: () => fileMap.has(path.join(key, name)) }));
+    },
+    async lstat(target) {
+      const key = normalize(target);
+      calls.lstat.push(key);
+      if (linkSet.has(key)) return mockObsidianStats('link');
+      if (fileMap.has(key)) return mockObsidianStats('file');
+      if (dirSet.has(key)) return mockObsidianStats('dir');
+      throw missing(target);
+    },
+    async realpath(target) {
+      const key = normalize(target);
+      calls.realpath.push(key);
+      if (realpathMap.has(key)) return realpathMap.get(key);
+      if (dirSet.has(key) || fileMap.has(key) || linkSet.has(key)) return key;
+      throw missing(target);
+    }
+  };
+  return { adapter, calls, fileMap, linkSet };
+}
+
+console.log('\nObsidian Life Ledger export');
+test('renderer emits only the system note for an empty event set', () => {
+  const exportPlan = buildObsidianLifeLedgerExport([]);
+  assert.deepEqual(exportPlan.files.map(file => file.relativePath), ['Life Ledger/System/README.md']);
+  assert.ok(exportPlan.files[0].content.includes(OBSIDIAN_LIFE_LEDGER_SENTINEL));
+});
+test('renderer renders focus_session_completed as human-readable focus Markdown', () => {
+  const content = dailyFile(buildObsidianLifeLedgerExport([obsidianFocusEvent()])).content;
+  assert.ok(content.includes('## Focus'));
+  assert.ok(content.includes('- 09:00-09:25 - **Synthetic focus** · 25 min'));
+  assert.ok(content.includes('<!-- life-ledger:event:10101010-1010-4010-8010-101010101010 -->'));
+});
+test('renderer renders plan_step_completed with available learning context', () => {
+  const content = dailyFile(buildObsidianLifeLedgerExport([obsidianStepEvent()])).content;
+  assert.ok(content.includes('## Learning'));
+  assert.ok(content.includes('- 09:30 - Completed **Synthetic step**'));
+  assert.ok(content.includes('  - Synthetic course / Phase 1 / Lesson 2'));
+});
+test('renderer omits tombstoned events from active daily output', () => {
+  const exportPlan = buildObsidianLifeLedgerExport([obsidianStepEvent({
+    tombstone: { active: true, deletedAt: OBS_TIME.recorded, reason: 'user_delete', provenance: { sourceOperation: 'delete' } }
+  })]);
+  assert.equal(dailyFile(exportPlan), undefined);
+});
+test('renderer includes a restored event when tombstone is inactive again', () => {
+  const exportPlan = buildObsidianLifeLedgerExport([obsidianStepEvent({ revision: 3, tombstone: { active: false, deletedAt: null, reason: null, provenance: null } })]);
+  assert.ok(dailyFile(exportPlan).content.includes('Completed **Synthetic step**'));
+});
+test('renderer sorts events by occurredAt, type, and eventId', () => {
+  const later = obsidianFocusEvent({ eventId: '30303030-3030-4030-8030-303030303030', occurredAt: '2026-08-30T17:25:00.000Z', payload: { ...obsidianFocusEvent().payload, activity: 'Later focus', startedAt: '2026-08-30T17:00:00.000Z', endedAt: '2026-08-30T17:25:00.000Z' } });
+  const earlier = obsidianFocusEvent({ eventId: '40404040-4040-4040-8040-404040404040', occurredAt: '2026-08-30T15:25:00.000Z', payload: { ...obsidianFocusEvent().payload, activity: 'Earlier focus', startedAt: '2026-08-30T15:00:00.000Z', endedAt: '2026-08-30T15:25:00.000Z' } });
+  const content = dailyFile(buildObsidianLifeLedgerExport([later, obsidianStepEvent(), earlier])).content;
+  assert.ok(content.indexOf('Earlier focus') < content.indexOf('Later focus'));
+  assert.ok(content.indexOf('Later focus') < content.indexOf('Synthetic step'));
+});
+test('renderer output is byte-identical for the same input', () => {
+  const first = JSON.stringify(buildObsidianLifeLedgerExport([obsidianStepEvent(), obsidianFocusEvent()]));
+  const second = JSON.stringify(buildObsidianLifeLedgerExport([obsidianStepEvent(), obsidianFocusEvent()]));
+  assert.equal(first, second);
+});
+test('renderer partitions days using sourceTimezone', () => {
+  const exportPlan = buildObsidianLifeLedgerExport([obsidianFocusEvent({
+    sourceTimezone: 'Asia/Manila',
+    occurredAt: '2026-08-30T16:25:00.000Z',
+    payload: { ...obsidianFocusEvent().payload, startedAt: '2026-08-30T16:00:00.000Z', endedAt: '2026-08-30T16:25:00.000Z' }
+  })]);
+  assert.ok(dailyFile(exportPlan, '2026-08-31'));
+});
+test('renderer uses deterministic UTC fallback when sourceTimezone is missing', () => {
+  const exportPlan = buildObsidianLifeLedgerExport([obsidianFocusEvent({ sourceTimezone: '' })]);
+  assert.ok(dailyFile(exportPlan, '2026-08-30'));
+});
+test('renderer escapes hostile Markdown and HTML-like titles', () => {
+  const content = dailyFile(buildObsidianLifeLedgerExport([obsidianStepEvent({
+    payload: {
+      ...obsidianStepEvent().payload,
+      stepLabel: '# Own heading\n<script>alert(`x`)</script> [link](bad)'
+    }
+  })])).content;
+  assert.ok(content.includes('\\# Own heading / &lt;script&gt;alert\\(\\`x\\`\\)&lt;/script&gt; \\[link\\]\\(bad\\)'));
+  assert.equal(content.includes('\n# Own heading'), false);
+  assert.equal(content.includes('<script>'), false);
+});
+test('renderer does not fabricate missing optional learning context', () => {
+  const content = dailyFile(buildObsidianLifeLedgerExport([obsidianStepEvent({ payload: { planDate: '2026-08-30', stepLabel: 'Bare step', completedAt: OBS_TIME.step } })])).content;
+  assert.ok(content.includes('Completed **Bare step**'));
+  assert.equal(content.includes('undefined'), false);
+  assert.equal(content.includes(' / '), false);
+});
+test('renderer handles unknown event types explicitly', () => {
+  assert.throws(() => buildObsidianLifeLedgerExport([{ ...obsidianStepEvent(), type: 'meal_prepared' }]), /Unsupported Life Ledger event type/);
+  const skipped = buildObsidianLifeLedgerExport([{ ...obsidianStepEvent(), type: 'meal_prepared' }], { unsupportedEventPolicy: 'skip' });
+  assert.equal(skipped.skipped.length, 1);
+});
+test('renderer does not turn non-additive focus events into duplicate totals', () => {
+  const content = dailyFile(buildObsidianLifeLedgerExport([obsidianFocusEvent()])).content;
+  assert.equal((content.match(/25 min/g) || []).length, 1);
+  assert.equal(/total/i.test(content), false);
+});
+
+asyncTest('writer accepts an ordinary managed Daily path', async () => withTempVault(async root => {
+  const resolved = await resolveObsidianLifeLedgerPath(root, 'Life Ledger/Daily/2026-08-30.md');
+  assert.ok(resolved.destinationPath.endsWith(path.join('Life Ledger', 'Daily', '2026-08-30.md')));
+}));
+asyncTest('writer rejects ../ traversal paths', async () => withTempVault(async root => {
+  await assert.rejects(() => resolveObsidianLifeLedgerPath(root, 'Life Ledger/../outside.md'), error => error.code === 'invalid_path');
+}));
+asyncTest('writer rejects absolute child paths', async () => withTempVault(async root => {
+  await assert.rejects(() => resolveObsidianLifeLedgerPath(root, path.join(root, 'Life Ledger', 'Daily', '2026-08-30.md')), error => error.code === 'invalid_path');
+}));
+asyncTest('writer rejects drive-qualified child paths', async () => withTempVault(async root => {
+  await assert.rejects(() => resolveObsidianLifeLedgerPath(root, 'C:\\tmp\\escape.md'), error => error.code === 'invalid_path');
+}));
+asyncTest('writer rejects UNC child paths', async () => withTempVault(async root => {
+  await assert.rejects(() => resolveObsidianLifeLedgerPath(root, '\\\\server\\share\\escape.md'), error => error.code === 'invalid_path');
+}));
+asyncTest('writer rejects normalized escapes', async () => withTempVault(async root => {
+  await assert.rejects(() => resolveObsidianLifeLedgerPath(root, 'Life Ledger/Daily/../../outside.md'), error => error.code === 'invalid_path');
+}));
+asyncTest('writer rejects symlink or junction escapes when supported', async () => withTempVault(async root => {
+  const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'chronasense-life-ledger-outside-'));
+  try {
+    await fs.mkdir(path.join(root, 'Life Ledger', 'Daily'), { recursive: true });
+    await fs.rm(path.join(root, 'Life Ledger', 'Daily'), { recursive: true, force: true });
+    try {
+      await fs.symlink(outside, path.join(root, 'Life Ledger', 'Daily'), process.platform === 'win32' ? 'junction' : 'dir');
+    } catch (err) {
+      if (['EPERM', 'EACCES'].includes(err?.code)) return;
+      throw err;
+    }
+    await assert.rejects(() => resolveObsidianLifeLedgerPath(root, 'Life Ledger/Daily/2026-08-30.md'), error => error.code === 'link_escape');
+  } finally {
+    await fs.rm(outside, { recursive: true, force: true });
+  }
+}));
+asyncTest('writer rejects parent link escapes with injected filesystem', async () => {
+  const root = 'C:\\SafeVault';
+  const dailyRoot = path.join(root, 'Life Ledger', 'Daily');
+  const { adapter } = createMockObsidianFs({
+    dirs: [root, path.join(root, 'Life Ledger')],
+    links: [dailyRoot]
+  });
+  await assert.rejects(() => resolveObsidianLifeLedgerPath(root, 'Life Ledger/Daily/2026-08-30.md', { fs: adapter }), error => error.code === 'link_escape');
+});
+asyncTest('writer rejects an existing Daily target link before reading it', async () => {
+  const root = 'C:\\SafeVault';
+  const target = path.join(root, 'Life Ledger', 'Daily', '2026-08-30.md');
+  const { adapter, calls } = createMockObsidianFs({
+    dirs: [root, path.join(root, 'Life Ledger'), path.join(root, 'Life Ledger', 'Daily')],
+    links: [target]
+  });
+  await assert.rejects(() => writeObsidianLifeLedgerExport([{
+    relativePath: 'Life Ledger/Daily/2026-08-30.md',
+    content: `${OBSIDIAN_LIFE_LEDGER_SENTINEL}\n# Generated\n`
+  }], { vaultRoot: root, fs: adapter }), error => error.code === 'link_escape');
+  assert.equal(calls.readFile.includes(path.resolve(target)), false);
+});
+asyncTest('writer rejects an existing System target link before reading it', async () => {
+  const root = 'C:\\SafeVault';
+  const target = path.join(root, 'Life Ledger', 'System', 'README.md');
+  const { adapter, calls } = createMockObsidianFs({
+    dirs: [root, path.join(root, 'Life Ledger'), path.join(root, 'Life Ledger', 'System')],
+    links: [target]
+  });
+  await assert.rejects(() => writeObsidianLifeLedgerExport([{
+    relativePath: 'Life Ledger/System/README.md',
+    content: `${OBSIDIAN_LIFE_LEDGER_SENTINEL}\n# Generated\n`
+  }], { vaultRoot: root, fs: adapter }), error => error.code === 'link_escape');
+  assert.equal(calls.readFile.includes(path.resolve(target)), false);
+});
+asyncTest('writer rejects stale Daily target links without reading or deleting them', async () => {
+  const root = 'C:\\SafeVault';
+  const dailyRoot = path.join(root, 'Life Ledger', 'Daily');
+  const target = path.join(dailyRoot, '2026-08-30.md');
+  const { adapter, calls, linkSet } = createMockObsidianFs({
+    dirs: [root, path.join(root, 'Life Ledger'), dailyRoot],
+    links: [target],
+    readdir: { [dailyRoot]: ['2026-08-30.md'] }
+  });
+  await assert.rejects(() => writeObsidianLifeLedgerExport([], { vaultRoot: root, fs: adapter }), error => error.code === 'link_escape');
+  assert.equal(calls.readFile.includes(path.resolve(target)), false);
+  assert.equal(calls.unlink.includes(path.resolve(target)), false);
+  assert.equal(linkSet.has(path.resolve(target)), true);
+});
+asyncTest('writer keeps hostile titles out of output paths', async () => withTempVault(async root => {
+  const exportPlan = buildObsidianLifeLedgerExport([obsidianStepEvent({ payload: { ...obsidianStepEvent().payload, stepLabel: '../escape' } })]);
+  assert.deepEqual(exportPlan.files.map(file => file.relativePath).sort(), ['Life Ledger/Daily/2026-08-30.md', 'Life Ledger/System/README.md']);
+  await writeObsidianLifeLedgerExport(exportPlan.files, { vaultRoot: root });
+  assert.equal(await pathExists(path.join(root, 'escape')), false);
+}));
+asyncTest('writer denies the production OneDrive vault root for this slice', async () => {
+  await assert.rejects(() => resolveObsidianLifeLedgerPath('C:\\Users\\Admin\\OneDrive\\2nd Brain', 'Life Ledger/Daily/2026-08-30.md'), error => error.code === 'denied_vault_root');
+});
+asyncTest('writer denies child vaults under the production OneDrive root', async () => {
+  await assert.rejects(() => resolveObsidianLifeLedgerPath('C:\\Users\\Admin\\OneDrive\\2nd Brain\\SubVault', 'Life Ledger/Daily/2026-08-30.md'), error => error.code === 'denied_vault_root');
+});
+asyncTest('writer denies aliases that resolve beneath the production OneDrive root', async () => {
+  const aliasRoot = 'C:\\SafeAliasVault';
+  const { adapter } = createMockObsidianFs({
+    dirs: [aliasRoot],
+    realpaths: { [aliasRoot]: 'C:\\Users\\Admin\\OneDrive\\2nd Brain\\SubVault' }
+  });
+  await assert.rejects(() => resolveObsidianLifeLedgerPath(aliasRoot, 'Life Ledger/Daily/2026-08-30.md', { fs: adapter }), error => error.code === 'denied_vault_root');
+});
+asyncTest('writer denies the stale Desktop vault root for this slice', async () => {
+  await assert.rejects(() => resolveObsidianLifeLedgerPath('C:\\Users\\Admin\\Desktop\\2nd Brain', 'Life Ledger/Daily/2026-08-30.md'), error => error.code === 'denied_vault_root');
+});
+asyncTest('writer denies child vaults under the stale Desktop root', async () => {
+  await assert.rejects(() => resolveObsidianLifeLedgerPath('C:\\Users\\Admin\\Desktop\\2nd Brain\\Anything', 'Life Ledger/Daily/2026-08-30.md'), error => error.code === 'denied_vault_root');
+});
+asyncTest('writer allows the OneDrive prefix-lookalike backup vault', async () => {
+  const root = 'C:\\Users\\Admin\\OneDrive\\2nd Brain Backup';
+  const { adapter } = createMockObsidianFs({
+    dirs: [root, path.join(root, 'Life Ledger'), path.join(root, 'Life Ledger', 'Daily')]
+  });
+  const resolved = await resolveObsidianLifeLedgerPath(root, 'Life Ledger/Daily/2026-08-30.md', { fs: adapter });
+  assert.equal(resolved.relativePath, 'Life Ledger/Daily/2026-08-30.md');
+  assert.ok(resolved.destinationPath.endsWith(path.join('2nd Brain Backup', 'Life Ledger', 'Daily', '2026-08-30.md')));
+});
+asyncTest('writer first export writes expected files', async () => withTempVault(async root => {
+  const result = await writeObsidianLifeLedgerExport(buildObsidianLifeLedgerExport([obsidianFocusEvent(), obsidianStepEvent()]).files, { vaultRoot: root });
+  assert.deepEqual(result.written.map(item => item.relativePath).sort(), ['Life Ledger/Daily/2026-08-30.md', 'Life Ledger/System/README.md']);
+  assert.ok((await fs.readFile(path.join(root, 'Life Ledger', 'Daily', '2026-08-30.md'), 'utf8')).includes('Synthetic focus'));
+}));
+asyncTest('writer identical second export writes nothing', async () => withTempVault(async root => {
+  const plan = buildObsidianLifeLedgerExport([obsidianFocusEvent(), obsidianStepEvent()]).files;
+  await writeObsidianLifeLedgerExport(plan, { vaultRoot: root });
+  const second = await writeObsidianLifeLedgerExport(plan, { vaultRoot: root });
+  assert.equal(second.written.length, 0);
+  assert.equal(second.deleted.length, 0);
+  assert.equal(second.skipped.length, 2);
+}));
+asyncTest('writer replaces ordinary generated Daily files safely', async () => withTempVault(async root => {
+  const firstPlan = buildObsidianLifeLedgerExport([obsidianStepEvent()]).files;
+  const secondPlan = buildObsidianLifeLedgerExport([obsidianStepEvent({
+    revision: 2,
+    payload: { ...obsidianStepEvent().payload, stepLabel: 'Updated synthetic step' }
+  })]).files;
+  await writeObsidianLifeLedgerExport(firstPlan, { vaultRoot: root });
+  const result = await writeObsidianLifeLedgerExport(secondPlan, { vaultRoot: root });
+  const dailyReplace = result.written.find(item => item.relativePath === 'Life Ledger/Daily/2026-08-30.md');
+  assert.equal(dailyReplace.action, 'replace');
+  assert.ok((await fs.readFile(path.join(root, 'Life Ledger', 'Daily', '2026-08-30.md'), 'utf8')).includes('Updated synthetic step'));
+}));
+asyncTest('writer never overwrites an existing unmanaged target file', async () => withTempVault(async root => {
+  const target = path.join(root, 'Life Ledger', 'Daily', '2026-08-30.md');
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, '# Human note\n', 'utf8');
+  const result = await writeObsidianLifeLedgerExport(buildObsidianLifeLedgerExport([obsidianStepEvent()]).files, { vaultRoot: root });
+  assert.equal(result.conflicts.length, 1);
+  assert.equal(await fs.readFile(target, 'utf8'), '# Human note\n');
+}));
+asyncTest('writer may remove stale generated Daily files', async () => withTempVault(async root => {
+  const plan = buildObsidianLifeLedgerExport([obsidianStepEvent()]).files;
+  await writeObsidianLifeLedgerExport(plan, { vaultRoot: root });
+  const empty = await writeObsidianLifeLedgerExport(buildObsidianLifeLedgerExport([]).files, { vaultRoot: root });
+  assert.deepEqual(empty.deleted.map(item => item.relativePath), ['Life Ledger/Daily/2026-08-30.md']);
+  assert.equal(await pathExists(path.join(root, 'Life Ledger', 'Daily', '2026-08-30.md')), false);
+}));
+asyncTest('writer preserves stale unmarked Daily files and surfaces conflict', async () => withTempVault(async root => {
+  const target = path.join(root, 'Life Ledger', 'Daily', '2026-08-29.md');
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, '# Manual daily note\n', 'utf8');
+  const result = await writeObsidianLifeLedgerExport(buildObsidianLifeLedgerExport([]).files, { vaultRoot: root });
+  assert.deepEqual(result.conflicts.map(item => item.reason), ['stale_daily_missing_generated_sentinel']);
+  assert.equal(await fs.readFile(target, 'utf8'), '# Manual daily note\n');
+}));
+asyncTest('writer failure does not leave a partial final output', async () => withTempVault(async root => {
+  const adapter = {
+    mkdir: fs.mkdir,
+    readFile: fs.readFile,
+    rename: fs.rename,
+    unlink: fs.unlink,
+    readdir: fs.readdir,
+    lstat: fs.lstat,
+    realpath: fs.realpath,
+    writeFile() {
+      throw new Error('synthetic write failure');
+    }
+  };
+  await assert.rejects(() => writeObsidianLifeLedgerExport(buildObsidianLifeLedgerExport([obsidianStepEvent()]).files, { vaultRoot: root, fs: adapter }), /synthetic write failure/);
+  assert.equal(await pathExists(path.join(root, 'Life Ledger', 'Daily', '2026-08-30.md')), false);
+}));
+asyncTest('writer only touches the managed Life Ledger subtree', async () => withTempVault(async root => {
+  await assert.rejects(() => writeObsidianLifeLedgerExport([{ relativePath: '../outside.md', content: 'bad' }], { vaultRoot: root }), error => error.code === 'invalid_path');
+  assert.equal(await pathExists(path.join(root, 'outside.md')), false);
+}));
+asyncTest('writer removes false generated history after a tombstone rebuild', async () => withTempVault(async root => {
+  await writeObsidianLifeLedgerExport(buildObsidianLifeLedgerExport([obsidianStepEvent()]).files, { vaultRoot: root });
+  const tombstoned = obsidianStepEvent({
+    tombstone: { active: true, deletedAt: OBS_TIME.recorded, reason: 'user_delete', provenance: { sourceOperation: 'delete' } }
+  });
+  const result = await writeObsidianLifeLedgerExport(buildObsidianLifeLedgerExport([tombstoned]).files, { vaultRoot: root });
+  assert.deepEqual(result.deleted.map(item => item.relativePath), ['Life Ledger/Daily/2026-08-30.md']);
+}));
+asyncTest('writer restores generated history after a restored completion rebuild', async () => withTempVault(async root => {
+  const tombstoned = obsidianStepEvent({
+    tombstone: { active: true, deletedAt: OBS_TIME.recorded, reason: 'user_delete', provenance: { sourceOperation: 'delete' } }
+  });
+  await writeObsidianLifeLedgerExport(buildObsidianLifeLedgerExport([tombstoned]).files, { vaultRoot: root });
+  await writeObsidianLifeLedgerExport(buildObsidianLifeLedgerExport([obsidianStepEvent({ revision: 3 })]).files, { vaultRoot: root });
+  assert.ok((await fs.readFile(path.join(root, 'Life Ledger', 'Daily', '2026-08-30.md'), 'utf8')).includes('Synthetic step'));
+}));
+
+await Promise.all(asyncTests);
 
 // ── Summary ──────────────────────────────────────────────────────────────────
 
