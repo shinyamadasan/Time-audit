@@ -90,6 +90,44 @@ function focusPhaseSubText(workMin) {
     : `work session · ${workMin} min`;
 }
 
+function learningPlanFocusSessionOutcome(metadata, entry, tsStart, tsEnd) {
+  if (!metadata || !entry) return null;
+  return {
+    ...cloneFocusLearningPlanMetadata(metadata),
+    focusEntryId: entry.id,
+    focusActivity: entry.activity,
+    focusStartedAt: tsStart,
+    focusEndedAt: tsEnd,
+    focusDurationMin: entry.blockIntervalMin
+  };
+}
+
+function notifyLearningPlanFocusSessionEnded(entry, tsStart, tsEnd) {
+  const metadata = cloneFocusLearningPlanMetadata(activeFocusLearningPlan);
+  const outcome = learningPlanFocusSessionOutcome(metadata, entry, tsStart, tsEnd);
+  if (!outcome || typeof globalThis.onLearningPlanFocusSessionEnded !== 'function') return false;
+  try {
+    return globalThis.onLearningPlanFocusSessionEnded(outcome) !== false;
+  } catch (err) {
+    showToast(`Learning Plan outcome unavailable: ${err.message || err}`);
+    return false;
+  }
+}
+
+function finishLearningPlanFocusSession() {
+  pomodoroPhase = 'idle';
+  pomodoroPhaseStartedAt = null;
+  pomodoroRemaining = 0;
+  stopFocusMusic();
+  focusModeOn = false;
+  document.getElementById('focus-overlay')?.classList.remove('open');
+  if (typeof _stopHeartbeat === 'function') _stopHeartbeat();
+  syncTimerState({ stopped: true, lastTask: null, mode: 'focus' });
+  timerOwnerDeviceId = null;
+  currentTask = '';
+  renderToday();
+}
+
 // Audio served from GitHub Pages — not bundled in APK (keeps APK ~12MB)
 const _AUDIO_BASE = 'https://shinyamadasan.github.io/Time-audit/Sounds/';
 const _BREAK_TRANSITION = _AUDIO_BASE + 'natureseye-trapped-introoutro-144328.mp3';
@@ -410,7 +448,10 @@ function saveActiveFocusSession() {
   const tsStart = focusStartTime;
   focusStartTime = null;
   if (pomodoroPhase !== 'work') return null;
-  return logFocusSession(tsStart);
+  const tsEnd = Date.now();
+  const entry = logFocusSession(tsStart, tsEnd);
+  notifyLearningPlanFocusSessionEnded(entry, tsStart, tsEnd);
+  return entry;
 }
 
 function tickPomodoro() {
@@ -434,8 +475,14 @@ function endWorkSession() {
   const tsEnd = Date.now();
   const tsStart = focusStartTime || (tsEnd - pomodoroWorkMin * 60000);
   focusStartTime = null;
-  logFocusSession(tsStart, tsEnd);
+  const entry = logFocusSession(tsStart, tsEnd);
+  const learningPlanOutcomeShown = notifyLearningPlanFocusSessionEnded(entry, tsStart, tsEnd);
   clearFocusLearningPlanContext();
+
+  if (learningPlanOutcomeShown) {
+    finishLearningPlanFocusSession();
+    return;
+  }
 
   pomodoroPhase = 'break';
   pomodoroPhaseStartedAt = tsEnd;

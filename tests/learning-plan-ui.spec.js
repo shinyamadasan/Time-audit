@@ -370,6 +370,69 @@ async function storedEnvelope(page) {
   return page.evaluate(key => JSON.parse(localStorage.getItem(key)), LEARNING_PLAN_REPOSITORY_KEY);
 }
 
+async function countLearningPlanWrites(page) {
+  return page.evaluate(key => {
+    window.__learningPlanSetCalls = 0;
+    window.__learningPlanRealSetItem = window.__learningPlanRealSetItem || Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) window.__learningPlanSetCalls++;
+      return window.__learningPlanRealSetItem.call(this, keyName, value);
+    };
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+}
+
+async function finishLearningPlanFocusWork(page, buttonName = 'Start Focus: Step A', elapsedMin = 25) {
+  await stubFocusAudio(page);
+  await page.getByRole('button', { name: buttonName }).click();
+  await page.evaluate(minutes => {
+    focusStartTime = Date.now() - minutes * 60 * 1000;
+    endWorkSession();
+  }, elapsedMin);
+}
+
+function focusOutcomeButton(page, name) {
+  return page.getByRole('region', { name: 'Focus outcome' }).getByRole('button', { name });
+}
+
+function planWithBackendStep() {
+  let plan = secondLearningPlan();
+  plan = addPhase(plan, { title: 'API phase' }, { idGenerator: sequencedIds('phase-b'), clock: fixedClock() });
+  plan = addLesson(plan, 'phase-b', { title: 'API lesson' }, { idGenerator: sequencedIds('lesson-b'), clock: fixedClock() });
+  return addStep(plan, 'lesson-b', { title: 'Build endpoint' }, { idGenerator: sequencedIds('step-build-endpoint'), clock: fixedClock() });
+}
+
+function duplicateTitlePlan() {
+  let plan = createLearningPlan({ title: 'Same title plan' }, {
+    idGenerator: sequencedIds('plan-dup'),
+    clock: fixedClock()
+  });
+  plan = addPhase(plan, { title: 'Repeated phase' }, {
+    idGenerator: sequencedIds('phase-dup-a'),
+    clock: fixedClock()
+  });
+  plan = addLesson(plan, 'phase-dup-a', { title: 'Repeated lesson' }, {
+    idGenerator: sequencedIds('lesson-dup-a'),
+    clock: fixedClock()
+  });
+  plan = addStep(plan, 'lesson-dup-a', { title: 'Repeated step' }, {
+    idGenerator: sequencedIds('step-dup-a'),
+    clock: fixedClock()
+  });
+  plan = addPhase(plan, { title: 'Repeated phase' }, {
+    idGenerator: sequencedIds('phase-dup-b'),
+    clock: fixedClock()
+  });
+  plan = addLesson(plan, 'phase-dup-b', { title: 'Repeated lesson' }, {
+    idGenerator: sequencedIds('lesson-dup-b'),
+    clock: fixedClock()
+  });
+  plan = addStep(plan, 'lesson-dup-b', { title: 'Repeated step' }, {
+    idGenerator: sequencedIds('step-dup-b'),
+    clock: fixedClock()
+  });
+  return completeStep(plan, 'step-dup-a', { clock: fixedClock('2026-08-28T12:10:00.000Z') });
+}
+
 function entityIds(plan) {
   return [
     plan.id,
@@ -749,6 +812,324 @@ test('Start Focus starts existing Focus with exact Next Action IDs and readable 
   expect(state.entries).toHaveLength(0);
   expect(state.timer).toBeNull();
   expect(await storedEnvelope(page)).toEqual(before);
+});
+
+test('generic Focus work completion logs normally without showing a Learning Plan outcome prompt', async ({ page }) => {
+  await openApp(page);
+  await stubFocusAudio(page);
+  const state = await page.evaluate(() => {
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Generic focus';
+    startPomodoro();
+    focusStartTime = Date.now() - 25 * 60 * 1000;
+    endWorkSession();
+    return {
+      outcomePrompts: document.querySelectorAll('.learning-plan-focus-outcome').length,
+      phase: pomodoroPhase,
+      label: document.getElementById('focus-phase-label').textContent,
+      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+    };
+  });
+
+  expect(state.outcomePrompts).toBe(0);
+  expect(state.phase).toBe('break');
+  expect(state.label).toBe('BREAK ☕');
+  expect(state.entries).toHaveLength(1);
+  expect(state.entries[0].activity).toBe('Generic focus');
+});
+
+test('Learning Plan Focus completion shows one Done or Continue prompt with correct context and does not auto-complete', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+
+  await finishLearningPlanFocusWork(page);
+
+  const prompt = page.getByRole('region', { name: 'Focus outcome' });
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('Focus complete');
+  await expect(prompt).toContainText('Did you finish this step?');
+  await expect(prompt).toContainText('Step A');
+  await expect(prompt).toContainText('Frontend fundamentals · Phase A · Lesson A');
+  await expect(prompt.getByRole('button', { name: 'Done' })).toBeVisible();
+  await expect(prompt.getByRole('button', { name: 'Continue' })).toBeVisible();
+  await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(1);
+  await expect(page.locator('#focus-overlay')).not.toHaveClass(/open/);
+
+  const stored = await storedEnvelope(page);
+  expect(stored.plans[0].phases[0].lessons[0].steps[0].completed).toBe(false);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+});
+
+test('Done completes the exact Learning Plan step once and advances Next Action', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page);
+  await countLearningPlanWrites(page);
+
+  await focusOutcomeButton(page, 'Done').click();
+
+  const stored = await storedEnvelope(page);
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(1);
+  expect(stored.plans[0].id).toBe('plan-a');
+  expect(stored.plans[0].phases[0].id).toBe('phase-a');
+  expect(stored.plans[0].phases[0].lessons[0].id).toBe('lesson-a');
+  expect(stored.plans[0].phases[0].lessons[0].steps[0].id).toBe('step-a');
+  expect(stored.plans[0].phases[0].lessons[0].steps[0].completed).toBe(true);
+  expect(stored.plans[0].phases[0].lessons[0].steps[1].completed).toBe(false);
+  await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(0);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step B');
+});
+
+test('Continue performs zero Learning Plan writes and leaves the same Next Action', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  const before = await storedEnvelope(page);
+  await finishLearningPlanFocusWork(page);
+  await countLearningPlanWrites(page);
+
+  await focusOutcomeButton(page, 'Continue').click();
+
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(0);
+  expect(await storedEnvelope(page)).toEqual(before);
+  await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(0);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+});
+
+test('rapid Done activation creates at most one completion save', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page);
+  await countLearningPlanWrites(page);
+
+  await focusOutcomeButton(page, 'Done').dblclick();
+
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(1);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step B');
+});
+
+test('duplicate-title Learning Plan outcome completes the step by immutable IDs only', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([duplicateTitlePlan()]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page, 'Start Focus: Repeated step');
+
+  await focusOutcomeButton(page, 'Done').click();
+
+  const stepStates = await page.evaluate(key => {
+    const plan = JSON.parse(localStorage.getItem(key)).plans[0];
+    return plan.phases.flatMap(phase => phase.lessons.flatMap(lesson => lesson.steps.map(step => ({
+      id: step.id,
+      completed: step.completed
+    }))));
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+  expect(stepStates).toEqual([
+    { id: 'step-dup-a', completed: true },
+    { id: 'step-dup-b', completed: true }
+  ]);
+});
+
+test('stale deleted outcome target cannot complete another Learning Plan step', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page);
+  await countLearningPlanWrites(page);
+  await page.evaluate(key => {
+    const stored = JSON.parse(localStorage.getItem(key));
+    stored.plans[0].phases[0].lessons[0].steps = stored.plans[0].phases[0].lessons[0].steps.filter(step => step.id !== 'step-a');
+    window.__learningPlanRealSetItem.call(localStorage, key, JSON.stringify(stored));
+    window.__learningPlanSetCalls = 0;
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+
+  await focusOutcomeButton(page, 'Done').click();
+
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(0);
+  await expect(page.locator('#learning-plan-error')).toContainText('no longer exists');
+  const stored = await storedEnvelope(page);
+  expect(stored.plans[0].phases[0].lessons[0].steps.map(step => step.id)).toEqual(['step-b']);
+  expect(stored.plans[0].phases[0].lessons[0].steps[0].completed).toBe(false);
+});
+
+test('already-completed outcome target clears deterministically without another save', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page);
+  await countLearningPlanWrites(page);
+  await page.evaluate(key => {
+    const stored = JSON.parse(localStorage.getItem(key));
+    stored.plans[0].phases[0].lessons[0].steps[0].completed = true;
+    stored.plans[0].phases[0].lessons[0].steps[0].completedAt = '2026-08-28T12:30:00.000Z';
+    window.__learningPlanRealSetItem.call(localStorage, key, JSON.stringify(stored));
+    window.__learningPlanSetCalls = 0;
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+
+  await focusOutcomeButton(page, 'Done').click();
+
+  expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(0);
+  await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(0);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step B');
+});
+
+test('Done save failure keeps the outcome prompt and does not falsely advance', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  const before = await storedEnvelope(page);
+  await finishLearningPlanFocusWork(page);
+  await page.evaluate(key => {
+    const realSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(keyName, value) {
+      if (keyName === key) throw new Error('blocked write');
+      return realSetItem.call(this, keyName, value);
+    };
+  }, LEARNING_PLAN_REPOSITORY_KEY);
+
+  await focusOutcomeButton(page, 'Done').click();
+
+  await expect(page.locator('#learning-plan-error')).toContainText('Unable to write Learning Plan storage');
+  await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(1);
+  expect(await storedEnvelope(page)).toEqual(before);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+});
+
+test('repository corruption during Done does not overwrite or reset stored data', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page);
+  await page.evaluate(key => localStorage.setItem(key, '{bad json'), LEARNING_PLAN_REPOSITORY_KEY);
+
+  await focusOutcomeButton(page, 'Done').click();
+
+  await expect(page.locator('#learning-plan-error')).toContainText('malformed JSON');
+  expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBe('{bad json');
+});
+
+test('completion context clears after Done and after Continue', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page);
+  await focusOutcomeButton(page, 'Done').click();
+  await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(0);
+
+  const plan = completeStep(seededLearningPlan(), 'step-a', { clock: fixedClock('2026-08-28T12:10:00.000Z') });
+  await page.evaluate(({ key, raw }) => {
+    localStorage.setItem(key, raw);
+    window.renderLearningPlans();
+  }, { key: LEARNING_PLAN_REPOSITORY_KEY, raw: envelope([plan]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page, 'Start Focus: Step B');
+  await focusOutcomeButton(page, 'Continue').click();
+
+  await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(0);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step B');
+});
+
+test('later generic Focus gets no stale Learning Plan outcome decision', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page);
+  await focusOutcomeButton(page, 'Continue').click();
+
+  const state = await page.evaluate(() => {
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Generic follow-up';
+    startPomodoro();
+    focusStartTime = Date.now() - 5 * 60 * 1000;
+    endWorkSession();
+    return {
+      outcomePrompts: document.querySelectorAll('.learning-plan-focus-outcome').length,
+      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+    };
+  });
+
+  expect(state.outcomePrompts).toBe(0);
+  expect(state.entries.map(entry => entry.activity)).toEqual(['Generic follow-up', 'Step A']);
+});
+
+test('Learning Plan Focus A then B cannot reuse the A outcome decision', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan(), planWithBackendStep()]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page, 'Start Focus: Step A');
+  await focusOutcomeButton(page, 'Continue').click();
+  await page.locator('.learning-plan-list-item').filter({ hasText: 'Backend fundamentals' }).click();
+  await finishLearningPlanFocusWork(page, 'Start Focus: Build endpoint');
+
+  const prompt = page.getByRole('region', { name: 'Focus outcome' });
+  await expect(prompt).toContainText('Build endpoint');
+  await expect(prompt).toContainText('Backend fundamentals · API phase · API lesson');
+  await expect(prompt).not.toContainText('Step A');
+});
+
+test('early logged Learning Plan Focus exit still asks for explicit outcome', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await stubFocusAudio(page);
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+
+  await page.evaluate(() => {
+    focusStartTime = Date.now() - 3 * 60 * 1000;
+    confirmExitFocus();
+  });
+
+  await expect(page.getByRole('region', { name: 'Focus outcome' })).toBeVisible();
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+});
+
+test('abandoned unlogged Learning Plan Focus exit does not show outcome prompt', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await stubFocusAudio(page);
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+
+  await page.evaluate(() => { confirmExitFocus(); });
+
+  await expect(page.locator('.learning-plan-focus-outcome')).toHaveCount(0);
+  await expect(page.locator('.learning-plan-next-title')).toHaveText('Step A');
+});
+
+test('Learning Plan outcome does not persist provenance, Firebase provenance, or Life Ledger events', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await page.evaluate(() => {
+    window.__dispatchedEvents = [];
+    const realDispatch = window.dispatchEvent.bind(window);
+    window.dispatchEvent = event => {
+      window.__dispatchedEvents.push(event.type);
+      return realDispatch(event);
+    };
+  });
+  await captureSyncWrites(page);
+  await finishLearningPlanFocusWork(page);
+
+  const state = await page.evaluate(() => ({
+    entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]'),
+    timer: JSON.parse(localStorage.getItem('ta3-timer') || 'null'),
+    payloads: window.__syncPayloads,
+    dispatchedEvents: window.__dispatchedEvents,
+    allStorage: Object.fromEntries(Array.from({ length: localStorage.length }, (_, index) => {
+      const key = localStorage.key(index);
+      return [key, localStorage.getItem(key)];
+    }))
+  }));
+
+  expect(state.entries).toHaveLength(1);
+  expectNoLearningPlanProvenance(state.entries);
+  expectNoLearningPlanProvenance(state.payloads);
+  expect(state.timer).toBeNull();
+  expect(JSON.stringify(state.allStorage)).not.toContain('plan_step_completed');
+  expect(JSON.stringify(state.allStorage)).not.toContain('focus_session_completed');
+  expect(JSON.stringify(state.dispatchedEvents)).not.toContain('plan_step_completed');
+  expect(JSON.stringify(state.dispatchedEvents)).not.toContain('focus_session_completed');
+});
+
+test('mobile Learning Plan outcome controls fit without horizontal overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await finishLearningPlanFocusWork(page);
+
+  await expect(page.getByRole('region', { name: 'Focus outcome' })).toBeVisible();
+  await expect(focusOutcomeButton(page, 'Done')).toBeVisible();
+  await expect(focusOutcomeButton(page, 'Continue')).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
 });
 
 test('Learning Plan provenance clears before skipped break starts the next Pomodoro', async ({ page }) => {
