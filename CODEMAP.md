@@ -80,6 +80,20 @@ Functions: `createLocalLifeLedgerStore()`, `learningPlanStepSourceEntityId()`, `
 Variables: `LIFE_LEDGER_RUNTIME_SCHEMA_VERSION`, `LIFE_LEDGER_RUNTIME_KEY`, `LIFE_LEDGER_RUNTIME_ADAPTER_VERSION`
 Depends on: `life-ledger-core.js`, `localStorage` or injected storage
 
+### obsidian-life-ledger-renderer.js
+Lines: external file
+Purpose: Pure deterministic Life Ledger V1 to Obsidian Markdown renderer. Builds generated `Life Ledger/System/README.md` and current-state `Life Ledger/Daily/YYYY-MM-DD.md` export plans for supported `focus_session_completed` and `plan_step_completed` events without touching disk.
+Functions: `buildObsidianLifeLedgerExport()`
+Variables: `OBSIDIAN_LIFE_LEDGER_SENTINEL`, `OBSIDIAN_LIFE_LEDGER_DAILY_DIR`, `OBSIDIAN_LIFE_LEDGER_SYSTEM_README`
+Depends on: no app globals
+
+### obsidian-life-ledger-writer.js
+Lines: external file
+Purpose: Node-only safe writer for Obsidian Life Ledger export plans. Enforces denied vault roots, managed subtree containment, symlink/junction parent checks, generated-file conflict protection, idempotent writes, and constrained stale generated Daily cleanup.
+Functions: `resolveObsidianLifeLedgerPath()`, `writeObsidianLifeLedgerExport()`
+Variables: `OBSIDIAN_LIFE_LEDGER_MANAGED_DIR`
+Depends on: Node `fs/promises`, Node `path`, `obsidian-life-ledger-renderer.js`
+
 ---
 
 ## CSS SECTIONS
