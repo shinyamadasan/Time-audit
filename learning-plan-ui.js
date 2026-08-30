@@ -28,6 +28,8 @@ let learningGuideOpen = false;
 let expansionPlanId = null;
 let activeAddEditor = null;
 let activeRenameEditor = null;
+let pendingFocusOutcome = null;
+let focusOutcomeBusy = false;
 const expandedPhaseIds = new Set();
 const expandedLessonIds = new Set();
 
@@ -114,6 +116,7 @@ function renderLearningPlansUnavailable(message) {
   if (list) list.innerHTML = '';
   if (main) {
     main.innerHTML = `
+      ${renderLearningPlanFocusOutcome()}
       <div class="learning-plan-unavailable">
         <div class="learning-plan-unavailable-title">Learning Plans unavailable</div>
         <div class="learning-plan-muted">${escapeHtml(message || "We couldn't load your saved Learning Plans. Your stored data was left unchanged.")}</div>
@@ -413,6 +416,155 @@ function resetLearningPlanFocusStartControl(target) {
   delete target.dataset.lpFocusStarting;
 }
 
+function cloneLearningPlanFocusOutcome(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const required = ['planId', 'phaseId', 'lessonId', 'stepId'];
+  if (required.some(key => typeof value[key] !== 'string' || !value[key].trim())) return null;
+  const focusEntryId = String(value.focusEntryId || '').trim();
+  if (!focusEntryId) return null;
+  return {
+    outcomeId: `${focusEntryId}:${value.planId}:${value.phaseId}:${value.lessonId}:${value.stepId}`,
+    planId: value.planId,
+    phaseId: value.phaseId,
+    lessonId: value.lessonId,
+    stepId: value.stepId,
+    planTitle: String(value.planTitle || ''),
+    phaseTitle: String(value.phaseTitle || ''),
+    lessonTitle: String(value.lessonTitle || ''),
+    stepTitle: String(value.stepTitle || ''),
+    focusEntryId,
+    focusActivity: String(value.focusActivity || ''),
+    focusStartedAt: Number(value.focusStartedAt || 0),
+    focusEndedAt: Number(value.focusEndedAt || 0),
+    focusDurationMin: Number(value.focusDurationMin || 0)
+  };
+}
+
+function renderLearningPlanFocusOutcome() {
+  if (!pendingFocusOutcome) return '';
+  return `
+    <section class="learning-plan-focus-outcome" aria-label="Focus outcome" aria-live="polite">
+      <div class="learning-plan-focus-outcome-kicker">Focus complete</div>
+      <div class="learning-plan-focus-outcome-question">Did you finish this step?</div>
+      <div class="learning-plan-focus-outcome-step">${escapeHtml(pendingFocusOutcome.stepTitle)}</div>
+      <div class="learning-plan-focus-outcome-context">${escapeHtml(learningPlanFocusContext(pendingFocusOutcome))}</div>
+      <div class="learning-plan-focus-outcome-actions">
+        <button type="button" class="btn primary sm" data-lp-action="focus-outcome-done"
+          data-outcome-id="${escapeHtml(pendingFocusOutcome.outcomeId)}">Done</button>
+        <button type="button" class="btn sm" data-lp-action="focus-outcome-continue"
+          data-outcome-id="${escapeHtml(pendingFocusOutcome.outcomeId)}">Continue</button>
+      </div>
+    </section>
+  `;
+}
+
+function showLearningPlansForFocusOutcome() {
+  if (typeof window.showView === 'function') {
+    window.showView('learning');
+    return;
+  }
+  renderLearningPlans();
+}
+
+function findLearningPlanFocusTarget(plan, outcome) {
+  const phase = plan?.phases?.find(item => item.id === outcome.phaseId);
+  const lesson = phase?.lessons?.find(item => item.id === outcome.lessonId);
+  const step = lesson?.steps?.find(item => item.id === outcome.stepId);
+  if (!plan || !phase || !lesson || !step) return null;
+  return { plan, phase, lesson, step };
+}
+
+function loadLearningPlansForFocusOutcome(outcome) {
+  try {
+    const plans = ensureRepository().listPlans();
+    learningPlans = plans;
+    learningPlansAvailable = true;
+    selectedPlanId = outcome.planId;
+    setSelectedPlan(selectedPlanId);
+    return plans;
+  } catch (err) {
+    learningPlansAvailable = false;
+    showLearningPlanError(`Could not load Learning Plan outcome. Nothing was changed. ${err.message}`);
+    renderLearningPlanState();
+    return null;
+  }
+}
+
+function clearLearningPlanFocusOutcome() {
+  pendingFocusOutcome = null;
+  focusOutcomeBusy = false;
+}
+
+function completePendingFocusOutcome(target) {
+  if (!pendingFocusOutcome || target.dataset.outcomeId !== pendingFocusOutcome.outcomeId || focusOutcomeBusy) return;
+  focusOutcomeBusy = true;
+  target.disabled = true;
+  const outcome = pendingFocusOutcome;
+  const plans = loadLearningPlansForFocusOutcome(outcome);
+  if (!plans) {
+    focusOutcomeBusy = false;
+    return;
+  }
+  const plan = plans.find(item => item.id === outcome.planId) || null;
+  const located = findLearningPlanFocusTarget(plan, outcome);
+  if (!located) {
+    showLearningPlanError('The Learning Plan step from this Focus session no longer exists. Nothing was completed.');
+    focusOutcomeBusy = false;
+    renderLearningPlanState();
+    return;
+  }
+  if (located.step.completed === true) {
+    clearLearningPlanFocusOutcome();
+    resetExpansionForPlan(located.plan);
+    expandAroundLesson(located.plan, outcome.lessonId);
+    showLearningPlanError('');
+    renderLearningPlanState();
+    return;
+  }
+
+  const nextPlan = completeStep(located.plan, outcome.stepId);
+  const saved = saveLearningPlan(nextPlan, 'Could not complete Learning Plan step. Nothing was changed.', {
+    renderOnSuccess: false,
+    renderOnFailure: false
+  });
+  if (!saved) {
+    focusOutcomeBusy = false;
+    renderLearningPlanState();
+    return;
+  }
+  clearLearningPlanFocusOutcome();
+  resetExpansionForPlan(saved);
+  expandAroundLesson(saved, outcome.lessonId);
+  renderLearningPlanState();
+}
+
+function continuePendingFocusOutcome(target) {
+  if (!pendingFocusOutcome || target.dataset.outcomeId !== pendingFocusOutcome.outcomeId || focusOutcomeBusy) return;
+  const outcome = pendingFocusOutcome;
+  clearLearningPlanFocusOutcome();
+  const plans = loadLearningPlansForFocusOutcome(outcome);
+  if (plans) {
+    const plan = plans.find(item => item.id === outcome.planId) || selectedPlan();
+    if (plan) {
+      resetExpansionForPlan(plan);
+      if (findLearningPlanFocusTarget(plan, outcome)) expandAroundLesson(plan, outcome.lessonId);
+    }
+    showLearningPlanError('');
+  }
+  renderLearningPlanState();
+}
+
+function receiveLearningPlanFocusOutcome(value) {
+  const outcome = cloneLearningPlanFocusOutcome(value);
+  if (!outcome) return false;
+  if (pendingFocusOutcome?.outcomeId === outcome.outcomeId) return true;
+  pendingFocusOutcome = outcome;
+  focusOutcomeBusy = false;
+  selectedPlanId = outcome.planId;
+  showLearningPlansForFocusOutcome();
+  return true;
+}
+
 function startNextLearningPlanFocus(target) {
   if (target.dataset.lpFocusStarting === '1') return;
   target.dataset.lpFocusStarting = '1';
@@ -507,11 +659,12 @@ function renderLearningPlanState() {
   const plan = selectedPlan();
   ensureExpansionForPlan(plan);
   if (!plan) {
-    main.innerHTML = '<div class="empty learning-plan-empty">Import a plan or create one manually to start a checklist.</div>';
+    main.innerHTML = `${renderLearningPlanFocusOutcome()}<div class="empty learning-plan-empty">Import a plan or create one manually to start a checklist.</div>`;
     return;
   }
   const progress = getLearningPlanProgress(plan);
   main.innerHTML = `
+    ${renderLearningPlanFocusOutcome()}
     <div class="learning-plan-detail">
       <div class="learning-plan-detail-head">
         <div class="learning-plan-title-block">
@@ -921,6 +1074,14 @@ function handleClick(event) {
     startNextLearningPlanFocus(target);
     return;
   }
+  if (action === 'focus-outcome-done') {
+    completePendingFocusOutcome(target);
+    return;
+  }
+  if (action === 'focus-outcome-continue') {
+    continuePendingFocusOutcome(target);
+    return;
+  }
   if (action === 'toggle-phase') {
     toggleSet(expandedPhaseIds, target.dataset.phaseId);
     activeAddEditor = null;
@@ -1012,4 +1173,5 @@ export function renderLearningPlans() {
 }
 
 window.renderLearningPlans = renderLearningPlans;
+window.onLearningPlanFocusSessionEnded = receiveLearningPlanFocusOutcome;
 initLearningPlans();
