@@ -31,6 +31,16 @@ import {
   recordLearningPlanStepReopened
 } from './life-ledger-runtime.js';
 import {
+  LIFE_LEDGER_TRANSPORT_KIND,
+  LIFE_LEDGER_TRANSPORT_SCHEMA_VERSION,
+  createLifeLedgerSnapshotFromEvents,
+  exportLifeLedgerSnapshot,
+  exportLifeLedgerSnapshotJson,
+  parseLifeLedgerSnapshotJson,
+  serializeLifeLedgerSnapshot,
+  snapshotHasOnlyLedgerEnvelope
+} from './life-ledger-transport.js';
+import {
   addLesson,
   addPhase,
   addStep,
@@ -67,6 +77,7 @@ import {
   resolveObsidianLifeLedgerPath,
   writeObsidianLifeLedgerExport
 } from './obsidian-life-ledger-writer.js';
+import { runLifeLedgerObsidianExport } from './scripts/export-life-ledger-to-obsidian.mjs';
 
 const { computeFocusWallet, getFocusWalletWeekKey } = globalThis;
 
@@ -3594,7 +3605,7 @@ function mockObsidianStats(kind) {
 }
 
 function createMockObsidianFs({ dirs = [], files = {}, links = [], realpaths = {}, readdir = {} } = {}) {
-  const calls = { readFile: [], writeFile: [], rename: [], unlink: [], readdir: [], lstat: [], realpath: [] };
+  const calls = { readFile: [], writeFile: [], rename: [], unlink: [], readdir: [], lstat: [], realpath: [], stat: [] };
   const normalize = value => path.resolve(value);
   const dirSet = new Set(dirs.map(normalize));
   const linkSet = new Set(links.map(normalize));
@@ -3605,6 +3616,13 @@ function createMockObsidianFs({ dirs = [], files = {}, links = [], realpaths = {
   const adapter = {
     async mkdir(target) {
       dirSet.add(normalize(target));
+    },
+    async stat(target) {
+      const key = normalize(target);
+      calls.stat.push(key);
+      if (fileMap.has(key)) return { size: fileMap.get(key).length, isFile: () => true };
+      if (dirSet.has(key)) return { size: 0, isFile: () => false };
+      throw missing(target);
     },
     async readFile(target) {
       const key = normalize(target);
@@ -3656,7 +3674,429 @@ function createMockObsidianFs({ dirs = [], files = {}, links = [], realpaths = {
   return { adapter, calls, fileMap, linkSet };
 }
 
+function lifeLedgerDraftFromEvent(event) {
+  const { eventId, recordedAt, revisedAt, revision, ...draft } = event;
+  return draft;
+}
+
+async function withTempSnapshotFile(content, fn) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'chronasense-life-ledger-snapshot-'));
+  const filePath = path.join(root, 'chronasense-life-ledger-v1.json');
+  try {
+    await fs.writeFile(filePath, content, 'utf8');
+    return await fn(filePath, root);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}
+
+function createCliSpyOptions(fsAdapter) {
+  const calls = { renderer: 0, resolvePath: 0, writeExport: 0 };
+  return {
+    calls,
+    options: {
+      fs: fsAdapter,
+      buildExportPlan(events) {
+        calls.renderer++;
+        return buildObsidianLifeLedgerExport(events);
+      },
+      async resolvePath(vaultRoot, relativePath, options) {
+        calls.resolvePath++;
+        return resolveObsidianLifeLedgerPath(vaultRoot, relativePath, options);
+      },
+      async writeExport(plan, options) {
+        calls.writeExport++;
+        return writeObsidianLifeLedgerExport(plan, options);
+      }
+    }
+  };
+}
+
+async function assertCliSnapshotRejectedWithoutSideEffects(snapshotText, expectedCode) {
+  const input = 'C:\\Snapshot\\bad.json';
+  const vault = 'C:\\SafeVault';
+  const { adapter, calls: fsCalls } = createMockObsidianFs({
+    dirs: [vault],
+    files: { [input]: snapshotText }
+  });
+  const { calls, options } = createCliSpyOptions(adapter);
+  await assert.rejects(() => runLifeLedgerObsidianExport(['--input', input, '--vault', vault], options), error => error.code === expectedCode);
+  assert.equal(calls.renderer, 0);
+  assert.equal(calls.resolvePath, 0);
+  assert.equal(calls.writeExport, 0);
+  assert.equal(fsCalls.lstat.length, 0);
+  assert.equal(fsCalls.writeFile.length, 0);
+  assert.equal(fsCalls.unlink.length, 0);
+}
+
+async function assertCliArgsRejectedBeforeSnapshotRead(argv, expectedCode) {
+  const { adapter, calls } = createMockObsidianFs();
+  const { calls: cliCalls, options } = createCliSpyOptions(adapter);
+  await assert.rejects(() => runLifeLedgerObsidianExport(argv, options), error => error.code === expectedCode);
+  assert.equal(calls.stat.length, 0);
+  assert.equal(calls.readFile.length, 0);
+  assert.equal(calls.lstat.length, 0);
+  assert.equal(cliCalls.renderer, 0);
+  assert.equal(cliCalls.resolvePath, 0);
+  assert.equal(cliCalls.writeExport, 0);
+}
+
 console.log('\nObsidian Life Ledger export');
+test('transport exports an empty runtime Ledger as a valid envelope', () => {
+  const storage = makeMemoryStorage();
+  const snapshot = exportLifeLedgerSnapshot({ storage });
+  assert.equal(snapshot.transportSchemaVersion, LIFE_LEDGER_TRANSPORT_SCHEMA_VERSION);
+  assert.equal(snapshot.kind, LIFE_LEDGER_TRANSPORT_KIND);
+  assert.deepEqual(snapshot.events, []);
+});
+test('transport exports all runtime Ledger events without regenerating identity', () => {
+  const storage = makeMemoryStorage();
+  const store = createLocalLifeLedgerStore({ storage });
+  store.upsertEvent(lifeLedgerDraftFromEvent(obsidianFocusEvent()), {
+    createId: () => obsidianFocusEvent().eventId,
+    clock: () => obsidianFocusEvent().recordedAt
+  });
+  store.upsertEvent(lifeLedgerDraftFromEvent(obsidianStepEvent()), {
+    createId: () => obsidianStepEvent().eventId,
+    clock: () => obsidianStepEvent().recordedAt
+  });
+  const snapshot = exportLifeLedgerSnapshot({ store });
+  assert.deepEqual(snapshot.events.map(event => event.eventId).sort(), [obsidianFocusEvent().eventId, obsidianStepEvent().eventId].sort());
+  assert.deepEqual(snapshot.events.map(event => event.revision), [1, 1]);
+});
+test('transport preserves tombstones, event IDs, and revisions', () => {
+  const tombstoned = obsidianStepEvent({
+    revision: 2,
+    revisedAt: '2026-08-30T16:32:00.000Z',
+    tombstone: {
+      active: true,
+      deletedAt: '2026-08-30T16:32:00.000Z',
+      reason: 'user_delete',
+      provenance: { sourceOperation: 'delete', sourceRecordKind: 'chronasense.plan_step', evidence: ['synthetic.step:1:deleted'] }
+    }
+  });
+  const snapshot = createLifeLedgerSnapshotFromEvents([tombstoned]);
+  assert.equal(snapshot.events[0].eventId, tombstoned.eventId);
+  assert.equal(snapshot.events[0].revision, 2);
+  assert.equal(snapshot.events[0].tombstone.active, true);
+});
+test('transport serialization is byte-identical for identical Ledger state', () => {
+  const snapshot = createLifeLedgerSnapshotFromEvents([obsidianStepEvent(), obsidianFocusEvent()]);
+  assert.equal(serializeLifeLedgerSnapshot(snapshot), serializeLifeLedgerSnapshot(snapshot));
+});
+test('transport serialization is byte-identical for the same event set in different array order', () => {
+  const first = serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianFocusEvent(), obsidianStepEvent()]));
+  const second = serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent(), obsidianFocusEvent()]));
+  assert.equal(first, second);
+});
+test('transport serialization does not mutate the caller event array order or events', () => {
+  const events = [obsidianStepEvent(), obsidianFocusEvent()];
+  const before = JSON.stringify(events);
+  serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents(events));
+  assert.equal(JSON.stringify(events), before);
+  assert.deepEqual(events.map(event => event.eventId), [obsidianStepEvent().eventId, obsidianFocusEvent().eventId]);
+});
+test('transport export does not mutate the runtime Ledger', () => {
+  const storage = makeMemoryStorage();
+  const store = createLocalLifeLedgerStore({ storage });
+  store.upsertEvent(lifeLedgerDraftFromEvent(obsidianStepEvent()), {
+    createId: () => obsidianStepEvent().eventId,
+    clock: () => obsidianStepEvent().recordedAt
+  });
+  const before = JSON.stringify(store.listEvents());
+  exportLifeLedgerSnapshot({ store });
+  assert.equal(JSON.stringify(store.listEvents()), before);
+});
+test('transport refuses malformed runtime Ledger state through the runtime boundary', () => {
+  const storage = makeMemoryStorage({
+    [LIFE_LEDGER_RUNTIME_KEY]: JSON.stringify({ schemaVersion: 1, records: [{ key: 'bad', fingerprint: 'bad', event: { nope: true } }] })
+  });
+  assert.throws(() => exportLifeLedgerSnapshot({ storage }), error => error.code === 'invalid_record');
+});
+test('transport accepts a valid snapshot and preserves event identity on import', () => {
+  const snapshot = parseLifeLedgerSnapshotJson(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent()])));
+  assert.equal(snapshot.events[0].eventId, obsidianStepEvent().eventId);
+  assert.equal(snapshot.events[0].revision, 1);
+});
+test('transport rejects malformed JSON, wrong version, wrong kind, invalid events, and duplicate logical events', () => {
+  assert.throws(() => parseLifeLedgerSnapshotJson('{bad'), error => error.code === 'invalid_json');
+  assert.throws(() => parseLifeLedgerSnapshotJson(JSON.stringify({ transportSchemaVersion: 2, kind: LIFE_LEDGER_TRANSPORT_KIND, events: [] })), error => error.code === 'unsupported_transport_schema');
+  assert.throws(() => parseLifeLedgerSnapshotJson(JSON.stringify({ transportSchemaVersion: 1, kind: 'other', events: [] })), error => error.code === 'invalid_snapshot_kind');
+  assert.throws(() => parseLifeLedgerSnapshotJson(JSON.stringify({ transportSchemaVersion: 1, kind: LIFE_LEDGER_TRANSPORT_KIND, events: [{ nope: true }] })), error => error.code === 'invalid_event');
+  assert.throws(() => createLifeLedgerSnapshotFromEvents([obsidianStepEvent(), { ...obsidianStepEvent(), eventId: '30303030-3030-4030-8030-303030303030' }]), error => error.code === 'duplicate_logical_event');
+});
+test('transport privacy envelope excludes unrelated storage and token-like values', () => {
+  const storage = makeMemoryStorage({ firebaseAuthToken: 'secret-token', 'ta3-settings': '{"timezone":"UTC"}' });
+  const snapshot = exportLifeLedgerSnapshot({ storage });
+  assert.equal(snapshotHasOnlyLedgerEnvelope(snapshot), true);
+  assert.equal(JSON.stringify(snapshot).includes('secret-token'), false);
+  assert.deepEqual(Object.keys(snapshot).sort(), ['events', 'kind', 'transportSchemaVersion']);
+});
+test('transport snapshot import preserves tombstones as tombstones', () => {
+  const tombstoned = obsidianStepEvent({
+    revision: 2,
+    revisedAt: '2026-08-30T16:32:00.000Z',
+    tombstone: {
+      active: true,
+      deletedAt: '2026-08-30T16:32:00.000Z',
+      reason: 'user_delete',
+      provenance: { sourceOperation: 'delete', sourceRecordKind: 'chronasense.plan_step', evidence: ['synthetic.step:1:deleted'] }
+    }
+  });
+  const snapshot = parseLifeLedgerSnapshotJson(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([tombstoned])));
+  assert.equal(snapshot.events[0].tombstone.active, true);
+  assert.equal(snapshot.events[0].eventId, tombstoned.eventId);
+  assert.equal(snapshot.events[0].revision, 2);
+});
+
+asyncTest('CLI validation failure performs zero writer filesystem calls', async () => {
+  const input = 'C:\\Snapshot\\bad.json';
+  const vault = 'C:\\SafeVault';
+  const { adapter, calls } = createMockObsidianFs({
+    files: { [input]: '{bad json' }
+  });
+  await assert.rejects(() => runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--apply'], { fs: adapter }), error => error.code === 'invalid_json');
+  assert.equal(calls.lstat.length, 0);
+  assert.equal(calls.writeFile.length, 0);
+  assert.equal(calls.unlink.length, 0);
+});
+asyncTest('CLI rejects malformed JSON before renderer or writer calls', async () => {
+  await assertCliSnapshotRejectedWithoutSideEffects('{bad json', 'invalid_json');
+});
+asyncTest('CLI rejects wrong transport schema before renderer or writer calls', async () => {
+  await assertCliSnapshotRejectedWithoutSideEffects(JSON.stringify({ transportSchemaVersion: 2, kind: LIFE_LEDGER_TRANSPORT_KIND, events: [] }), 'unsupported_transport_schema');
+});
+asyncTest('CLI rejects wrong snapshot kind before renderer or writer calls', async () => {
+  await assertCliSnapshotRejectedWithoutSideEffects(JSON.stringify({ transportSchemaVersion: 1, kind: 'other', events: [] }), 'invalid_snapshot_kind');
+});
+asyncTest('CLI rejects non-array snapshot events before renderer or writer calls', async () => {
+  await assertCliSnapshotRejectedWithoutSideEffects(JSON.stringify({ transportSchemaVersion: 1, kind: LIFE_LEDGER_TRANSPORT_KIND, events: {} }), 'invalid_snapshot_events');
+});
+asyncTest('CLI rejects invalid Life Ledger events before renderer or writer calls', async () => {
+  await assertCliSnapshotRejectedWithoutSideEffects(JSON.stringify({ transportSchemaVersion: 1, kind: LIFE_LEDGER_TRANSPORT_KIND, events: [{ nope: true }] }), 'invalid_event');
+});
+asyncTest('CLI rejects duplicate logical events before renderer or writer calls', async () => {
+  await assertCliSnapshotRejectedWithoutSideEffects(JSON.stringify({
+    transportSchemaVersion: 1,
+    kind: LIFE_LEDGER_TRANSPORT_KIND,
+    events: [obsidianStepEvent(), { ...obsidianStepEvent(), eventId: '30303030-3030-4030-8030-303030303030' }]
+  }), 'duplicate_logical_event');
+});
+asyncTest('CLI rejects duplicate event IDs before renderer or writer calls', async () => {
+  await assertCliSnapshotRejectedWithoutSideEffects(JSON.stringify({
+    transportSchemaVersion: 1,
+    kind: LIFE_LEDGER_TRANSPORT_KIND,
+    events: [obsidianStepEvent(), obsidianFocusEvent({ eventId: obsidianStepEvent().eventId })]
+  }), 'duplicate_event_id');
+});
+asyncTest('CLI defaults to dry run and reports planned managed paths without writing', async () => withTempVault(async vault => {
+  await fs.writeFile(path.join(vault, 'TEST-VAULT.md'), 'test vault\n', 'utf8');
+  await withTempSnapshotFile(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianFocusEvent(), obsidianStepEvent()])), async input => {
+    const summary = await runLifeLedgerObsidianExport(['--input', input, '--vault', vault]);
+    assert.equal(summary.dryRun, true);
+    assert.equal(summary.written, 2);
+    assert.deepEqual(summary.plannedPaths.sort(), ['Life Ledger/Daily/2026-08-30.md', 'Life Ledger/System/README.md']);
+    assert.equal(await pathExists(path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md')), false);
+  });
+}));
+asyncTest('CLI explicit dry run remains dry run and reports planned managed paths without writing', async () => withTempVault(async vault => {
+  await fs.writeFile(path.join(vault, 'TEST-VAULT.md'), 'test vault\n', 'utf8');
+  await withTempSnapshotFile(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent()])), async input => {
+    const summary = await runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--dry-run']);
+    assert.equal(summary.dryRun, true);
+    assert.equal(summary.written, 2);
+    assert.equal(await pathExists(path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md')), false);
+  });
+}));
+asyncTest('CLI apply requires TEST-VAULT marker', async () => withTempVault(async vault => {
+  await withTempSnapshotFile(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent()])), async input => {
+    await assert.rejects(() => runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--apply']), error => error.code === 'apply_not_authorized');
+    assert.equal(await pathExists(path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md')), false);
+  });
+}));
+asyncTest('CLI apply authorization succeeds with a real regular TEST-VAULT marker', async () => {
+  const input = 'C:\\Snapshot\\ledger.json';
+  const vault = 'C:\\SafeVault';
+  const marker = path.join(vault, 'TEST-VAULT.md');
+  const { adapter } = createMockObsidianFs({
+    dirs: [vault, path.join(vault, 'Life Ledger')],
+    files: {
+      [input]: serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent()])),
+      [marker]: 'test vault\n'
+    }
+  });
+  const summary = await runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--apply'], { fs: adapter });
+  assert.equal(summary.dryRun, false);
+  assert.equal(summary.applyAuthorized, true);
+  assert.equal(summary.written, 2);
+});
+asyncTest('CLI apply rejects a TEST-VAULT marker symlink or reparse point before writer calls', async () => {
+  const input = 'C:\\Snapshot\\ledger.json';
+  const vault = 'C:\\SafeVault';
+  const marker = path.join(vault, 'TEST-VAULT.md');
+  const { adapter, calls: fsCalls } = createMockObsidianFs({
+    dirs: [vault],
+    files: { [input]: serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent()])) },
+    links: [marker]
+  });
+  const { calls, options } = createCliSpyOptions(adapter);
+  await assert.rejects(() => runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--apply'], options), error => error.code === 'apply_not_authorized');
+  assert.equal(calls.renderer, 0);
+  assert.equal(calls.resolvePath, 0);
+  assert.equal(calls.writeExport, 0);
+  assert.equal(fsCalls.writeFile.length, 0);
+  assert.equal(fsCalls.unlink.length, 0);
+});
+asyncTest('CLI apply rejects a TEST-VAULT.md directory marker', async () => {
+  const input = 'C:\\Snapshot\\ledger.json';
+  const vault = 'C:\\SafeVault';
+  const marker = path.join(vault, 'TEST-VAULT.md');
+  const { adapter, calls: fsCalls } = createMockObsidianFs({
+    dirs: [vault, marker],
+    files: { [input]: serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent()])) }
+  });
+  const { calls, options } = createCliSpyOptions(adapter);
+  await assert.rejects(() => runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--apply'], options), error => error.code === 'apply_not_authorized');
+  assert.equal(calls.writeExport, 0);
+  assert.equal(fsCalls.writeFile.length, 0);
+  assert.equal(fsCalls.unlink.length, 0);
+});
+asyncTest('CLI apply rejects nested TEST-VAULT.md when the vault-root marker is absent', async () => {
+  const input = 'C:\\Snapshot\\ledger.json';
+  const vault = 'C:\\SafeVault';
+  const nested = path.join(vault, 'Nested', 'TEST-VAULT.md');
+  const { adapter, calls: fsCalls } = createMockObsidianFs({
+    dirs: [vault, path.join(vault, 'Nested')],
+    files: {
+      [input]: serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent()])),
+      [nested]: 'test vault\n'
+    }
+  });
+  const { calls, options } = createCliSpyOptions(adapter);
+  await assert.rejects(() => runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--apply'], options), error => error.code === 'apply_not_authorized');
+  assert.equal(calls.writeExport, 0);
+  assert.equal(fsCalls.writeFile.length, 0);
+  assert.equal(fsCalls.unlink.length, 0);
+});
+asyncTest('CLI rejects duplicate --input before reading snapshots', async () => {
+  await assertCliArgsRejectedBeforeSnapshotRead(['--input', 'one.json', '--input', 'two.json', '--vault', 'C:\\SafeVault'], 'duplicate_input');
+});
+asyncTest('CLI rejects duplicate --vault before reading snapshots', async () => {
+  await assertCliArgsRejectedBeforeSnapshotRead(['--input', 'one.json', '--vault', 'C:\\SafeVault', '--vault', 'C:\\OtherVault'], 'duplicate_vault');
+});
+asyncTest('CLI rejects --apply combined with --dry-run before reading snapshots', async () => {
+  await assertCliArgsRejectedBeforeSnapshotRead(['--input', 'one.json', '--vault', 'C:\\SafeVault', '--apply', '--dry-run'], 'conflicting_mode');
+});
+asyncTest('CLI rejects duplicate --apply before reading snapshots', async () => {
+  await assertCliArgsRejectedBeforeSnapshotRead(['--input', 'one.json', '--vault', 'C:\\SafeVault', '--apply', '--apply'], 'duplicate_apply');
+});
+asyncTest('CLI rejects duplicate --dry-run before reading snapshots', async () => {
+  await assertCliArgsRejectedBeforeSnapshotRead(['--input', 'one.json', '--vault', 'C:\\SafeVault', '--dry-run', '--dry-run'], 'duplicate_dry_run');
+});
+asyncTest('CLI rejects missing --input value before reading snapshots', async () => {
+  await assertCliArgsRejectedBeforeSnapshotRead(['--input', '--vault', 'C:\\SafeVault'], 'missing_input_value');
+});
+asyncTest('CLI rejects missing --vault value before reading snapshots', async () => {
+  await assertCliArgsRejectedBeforeSnapshotRead(['--input', 'one.json', '--vault'], 'missing_vault_value');
+});
+asyncTest('CLI rejects unknown flags before reading snapshots', async () => {
+  await assertCliArgsRejectedBeforeSnapshotRead(['--input', 'one.json', '--vault', 'C:\\SafeVault', '--surprise'], 'unknown_arg');
+});
+asyncTest('CLI rejects positional garbage before reading snapshots', async () => {
+  await assertCliArgsRejectedBeforeSnapshotRead(['--input', 'one.json', '--vault', 'C:\\SafeVault', 'garbage'], 'unexpected_position');
+});
+asyncTest('CLI apply rejects denied Obsidian vault roots', async () => {
+  const input = 'C:\\Snapshot\\ledger.json';
+  const oneDriveRoot = 'C:\\Users\\Admin\\OneDrive\\2nd Brain';
+  const desktopRoot = 'C:\\Users\\Admin\\Desktop\\2nd Brain';
+  for (const deniedRoot of [oneDriveRoot, desktopRoot]) {
+    const { adapter } = createMockObsidianFs({
+      dirs: [deniedRoot],
+      files: {
+        [input]: serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent()])),
+        [path.join(deniedRoot, 'TEST-VAULT.md')]: 'test vault\n'
+      }
+    });
+    await assert.rejects(() => runLifeLedgerObsidianExport(['--input', input, '--vault', deniedRoot, '--apply'], { fs: adapter }), error => error.code === 'denied_vault_root');
+  }
+});
+asyncTest('CLI dry run rejects denied Obsidian vault roots without apply authorization', async () => {
+  await withTempSnapshotFile(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent()])), async input => {
+    await assert.rejects(() => runLifeLedgerObsidianExport(['--input', input, '--vault', 'C:\\Users\\Admin\\OneDrive\\2nd Brain']), error => error.code === 'denied_vault_root');
+    await assert.rejects(() => runLifeLedgerObsidianExport(['--input', input, '--vault', 'C:\\Users\\Admin\\Desktop\\2nd Brain']), error => error.code === 'denied_vault_root');
+  });
+});
+asyncTest('CLI apply uses the reviewed renderer and writer for authorized test vaults', async () => withTempVault(async vault => {
+  await fs.writeFile(path.join(vault, 'TEST-VAULT.md'), 'test vault\n', 'utf8');
+  await withTempSnapshotFile(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianFocusEvent(), obsidianStepEvent()])), async input => {
+    const summary = await runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--apply']);
+    assert.equal(summary.dryRun, false);
+    assert.equal(summary.written, 2);
+    const daily = await fs.readFile(path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md'), 'utf8');
+    assert.ok(daily.includes('Synthetic focus'));
+    assert.ok(daily.includes('Synthetic step'));
+    assert.ok(daily.includes(OBSIDIAN_LIFE_LEDGER_SENTINEL));
+  });
+}));
+asyncTest('CLI apply preserves unmanaged conflicts and identical second apply is a no-op', async () => withTempVault(async vault => {
+  await fs.writeFile(path.join(vault, 'TEST-VAULT.md'), 'test vault\n', 'utf8');
+  const inputContent = serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent()]));
+  await withTempSnapshotFile(inputContent, async input => {
+    await runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--apply']);
+    const second = await runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--apply']);
+    assert.equal(second.written, 0);
+    assert.equal(second.deleted, 0);
+    assert.equal(second.skipped, 2);
+  });
+  const manualVault = await fs.mkdtemp(path.join(os.tmpdir(), 'chronasense-life-ledger-manual-'));
+  try {
+    await fs.mkdir(path.join(manualVault, 'Life Ledger', 'Daily'), { recursive: true });
+    await fs.writeFile(path.join(manualVault, 'TEST-VAULT.md'), 'test vault\n', 'utf8');
+    await fs.writeFile(path.join(manualVault, 'Life Ledger', 'Daily', '2026-08-30.md'), '# Manual\n', 'utf8');
+    await withTempSnapshotFile(inputContent, async input => {
+      const conflict = await runLifeLedgerObsidianExport(['--input', input, '--vault', manualVault, '--apply']);
+      assert.equal(conflict.conflicts, 1);
+      assert.equal(await fs.readFile(path.join(manualVault, 'Life Ledger', 'Daily', '2026-08-30.md'), 'utf8'), '# Manual\n');
+    });
+  } finally {
+    await fs.rm(manualVault, { recursive: true, force: true });
+  }
+}));
+asyncTest('CLI apply preserves stale generated Daily cleanup semantics', async () => withTempVault(async vault => {
+  await fs.writeFile(path.join(vault, 'TEST-VAULT.md'), 'test vault\n', 'utf8');
+  await withTempSnapshotFile(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent()])), async input => {
+    await runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--apply']);
+  });
+  await withTempSnapshotFile(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([])), async input => {
+    const summary = await runLifeLedgerObsidianExport(['--input', input, '--vault', vault, '--apply']);
+    assert.equal(summary.deleted, 1);
+    assert.equal(await pathExists(path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md')), false);
+  });
+}));
+test('transport round trip renders focus, live step, tombstoned step, and restored step semantics', () => {
+  const live = parseLifeLedgerSnapshotJson(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianFocusEvent(), obsidianStepEvent()])));
+  assert.ok(dailyFile(buildObsidianLifeLedgerExport(live.events)).content.includes('Synthetic focus'));
+  assert.ok(dailyFile(buildObsidianLifeLedgerExport(live.events)).content.includes('Synthetic step'));
+
+  const tombstoned = obsidianStepEvent({
+    revision: 2,
+    revisedAt: '2026-08-30T16:32:00.000Z',
+    tombstone: {
+      active: true,
+      deletedAt: '2026-08-30T16:32:00.000Z',
+      reason: 'user_delete',
+      provenance: { sourceOperation: 'delete', sourceRecordKind: 'chronasense.plan_step', evidence: ['synthetic.step:1:deleted'] }
+    }
+  });
+  const tombstonePlan = buildObsidianLifeLedgerExport(parseLifeLedgerSnapshotJson(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([tombstoned]))).events);
+  assert.equal(dailyFile(tombstonePlan), undefined);
+
+  const restored = parseLifeLedgerSnapshotJson(serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([obsidianStepEvent({
+    revision: 3,
+    revisedAt: '2026-08-30T16:33:00.000Z'
+  })])));
+  assert.ok(dailyFile(buildObsidianLifeLedgerExport(restored.events)).content.includes('Synthetic step'));
+});
 test('renderer emits only the system note for an empty event set', () => {
   const exportPlan = buildObsidianLifeLedgerExport([]);
   assert.deepEqual(exportPlan.files.map(file => file.relativePath), ['Life Ledger/System/README.md']);
