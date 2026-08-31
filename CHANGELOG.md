@@ -1,5 +1,63 @@
 # ChronaSense — Changelog
 
+## Capability/Career V1 reviewer fix packet — ready (branch: feat/capability-career-v1) — 2026-08-31
+changed:
+  - capability-career-analytics.js (filters current evidence to exclude future timestamps and
+    unavailable/tombstoned Life Ledger references; treats active targets with no linked active
+    skills as setup; prevents archived/paused project portfolio stalls and project next actions)
+  - capability-career-model.js (repository/hydration validation now enforces the same string caps as
+    constructors for names, titles, summaries, notes, references, and evidence fields)
+  - capability-career-ui.js and capability-career.css (Life Ledger picker only offers live events,
+    dashboard shows held-aside historical evidence, analytics receives full Ledger availability, and
+    actionable projects can be explicitly marked portfolio-ready)
+  - test.js and tests/capability-career-ui.spec.js (regressions for archived/paused projects,
+    target-skill mapping, future evidence boundaries, Ledger tombstone/restore, portfolio-ready UI
+    resolution, and oversized durable strings)
+tests:
+  - `npm test` — 424 passed, 0 failed
+  - `npx playwright test tests/capability-career-ui.spec.js` — 8 passed
+  - `npx playwright test tests/learning-plan-ui.spec.js` — 77 passed
+  - `npm run test:smoke` — 176 passed
+  - `npm run lint` — 0 errors; 19 pre-existing warnings outside Career files
+  - `node --check capability-career-model.js capability-career-repository.js capability-career-import.js capability-career-analytics.js capability-career-ui.js test.js tests/capability-career-ui.spec.js` — passed
+  - `git diff --check` — passed; only existing LF/CRLF normalization warnings on touched files
+blockers: none
+deviations: no TASKS.md status was changed because this was a bounded reviewer fix packet, not an
+  active TASKS.md Codex task; no commit, push, merge, deploy, Firebase write, Obsidian write, or
+  external data access was performed.
+
+## Capability/Career V1 — milestone ready (branch: feat/capability-career-v1) — 2026-08-31
+changed:
+  - capability-career-model.js (new local profile schema, constructors, validation, archival, and
+    mutation helpers for explicit skills, targets, projects, artifacts, and evidence)
+  - capability-career-repository.js (new versioned localStorage repository at
+    `ta3-capability-career-v1`, with read/write validation and corruption-safe errors)
+  - capability-career-import.js (new strict JSON preview/import pipeline with name/title references,
+    no caller-supplied durable IDs, and no partial persistence on invalid imports)
+  - capability-career-analytics.js (new deterministic, non-LLM stall and next-action analysis over
+    explicit evidence dimensions)
+  - capability-career-ui.js and capability-career.css (new Career dashboard, progressive setup,
+    import preview, Life Ledger evidence picker, project/proof/artifact flows, and mobile-safe
+    styling)
+  - index.html (wired the Career view, nav entry, stylesheet, module script, and render hook)
+  - test.js and tests/capability-career-ui.spec.js (new model/repository/import/analytics unit
+    coverage and browser workflow coverage)
+  - package.json and eslint.config.js (included new Career modules in lint/test tooling)
+  - CODEMAP.md, docs/ARCHITECTURE.md, docs/DECISIONS.md (documented the new Career module map,
+    storage boundary, Life Ledger read-only evidence rule, and deterministic analytics rule)
+tests:
+  - `npm test` — 412 passed, 0 failed
+  - `npm run lint` — 0 errors; 19 pre-existing warnings outside the Career files
+  - `npx playwright test tests/capability-career-ui.spec.js` — 7 passed
+  - `npx playwright test tests/learning-plan-ui.spec.js` — 77 passed
+  - `npm run test:smoke` — 175 passed
+  - `node --check capability-career-model.js capability-career-repository.js capability-career-import.js capability-career-analytics.js capability-career-ui.js` — passed
+  - `git diff --check` — passed; only existing LF/CRLF normalization warnings on touched files
+blockers: none
+deviations: no TASKS.md status was changed because this was a bounded Goal Mode milestone, not an
+  active TASKS.md Codex task; no commit, push, merge, deploy, Firebase write, or Obsidian write was
+  performed.
+
 ## TASK-003 — approved, held for /merge (branch: task-003) — 2026-07-21
 changed:
   - tools/Run-Codex-Build.ps1 (new `Get-TaskBlockText`/`Get-TaskDeclaredFiles` helpers; after the

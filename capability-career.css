@@ -1,0 +1,227 @@
+.cap-career-error {
+  background: var(--bg3);
+  border: 1px solid var(--distraction);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.cap-career-actions,
+.cap-career-form-actions,
+.cap-career-section-head,
+.cap-career-card-top {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.cap-career-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-bottom: 12px;
+}
+
+.cap-career-hero,
+.cap-career-next,
+.cap-career-section,
+.cap-career-empty {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  padding: 14px;
+}
+
+.cap-career-hero h2,
+.cap-career-next h3 {
+  color: var(--text);
+  font-size: 20px;
+  letter-spacing: 0;
+  line-height: 1.15;
+  margin: 4px 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.cap-career-next h3 {
+  font-size: 17px;
+}
+
+.cap-career-hero p,
+.cap-career-next p,
+.cap-career-card-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cap-career-kicker {
+  color: var(--deep);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cap-career-linked-line,
+.cap-career-muted,
+.cap-career-preview-list {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.cap-career-linked-line {
+  margin-top: 8px;
+}
+
+.cap-career-confidence,
+.cap-career-pill {
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+.cap-career-dimensions,
+.cap-career-card-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+}
+
+.cap-career-dimension,
+.cap-career-card,
+.cap-career-preview,
+.cap-career-signal,
+.cap-career-ledger-item {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.cap-career-dimension {
+  display: flex;
+  justify-content: space-between;
+}
+
+.cap-career-dimension span,
+.cap-career-dimension strong {
+  font-size: 12px;
+}
+
+.cap-career-dimension strong {
+  color: var(--text);
+  font-family: var(--mono);
+}
+
+.cap-career-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+
+.cap-career-card-title,
+.cap-career-empty-title,
+.cap-career-preview-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.cap-career-mini-dims,
+.cap-career-card-actions,
+.cap-career-signal-list,
+.cap-career-ledger-list,
+.cap-career-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cap-career-card-actions,
+.cap-career-mini-dims {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.cap-career-mini-dims span {
+  background: var(--bg4);
+  border-radius: 6px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 6px;
+}
+
+.cap-career-signal strong,
+.cap-career-ledger-item strong,
+.cap-career-ledger-item small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.cap-career-signal strong,
+.cap-career-ledger-item strong {
+  color: var(--text);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.cap-career-signal span,
+.cap-career-ledger-item small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.cap-career-checks label,
+.cap-career-ledger-item {
+  align-items: flex-start;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+}
+
+.cap-career-ledger-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.cap-career-panel input,
+.cap-career-panel select,
+.cap-career-panel textarea {
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .cap-career-actions,
+  .cap-career-form-actions,
+  .cap-career-section-head,
+  .cap-career-card-top,
+  .cap-career-next {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cap-career-actions .btn,
+  .cap-career-form-actions .btn {
+    width: 100%;
+  }
+}

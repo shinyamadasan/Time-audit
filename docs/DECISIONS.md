@@ -62,3 +62,41 @@ human `/merge`.
 
 **Supersedes:** nothing directly; extends the existing deny-list scope guard with a narrower,
 task-specific, advisory-only companion check.
+
+## D-003 — Capability/Career evidence is explicit interpretation, not Life Ledger history
+
+**Context:** Capability/Career V1 needs to answer career questions such as what skills are developing,
+what proof exists, and what should happen next. The existing Life Ledger contract already owns durable
+facts and event identity, and it must not become a generic profile database.
+
+**Decision:** Capability/Career data lives in a separate local-only repository at
+`ta3-capability-career-v1`. It stores skills, knowledge areas, tools, career targets, projects,
+portfolio artifacts, and evidence mappings. Evidence mappings can reference a Life Ledger `eventId`
+and logical key, but they never copy the event into a pseudo-event, mutate the source event, infer
+meaning from the event title, or write Career metadata back to Life Ledger.
+
+**Why:** The product needs both factual history and user-owned interpretation. Keeping them separate
+preserves Life Ledger's "this happened" semantics while letting Capability/Career say "this fact
+demonstrates this capability in this dimension."
+
+**Trade-off:** V1 relies on explicit user selection and can feel less automatic than keyword tagging.
+That is intentional: conservative empty/insufficient states are better than fabricated career
+intelligence.
+
+## D-004 — Career intelligence V1 uses deterministic rules and visible dimensions
+
+**Context:** Momentum, stalls, and next action recommendations can easily look more precise than they
+are. The feature must distinguish learning from practice, execution, shipping, and portfolio proof.
+
+**Decision:** `capability-career-analytics.js` centralizes thresholds and returns explainable,
+deterministic classifications: momentum (`no-evidence`, `active`, `growing`, `stale`), neutral stall
+signals, dimension counts, and one primary next action. Business logic takes an injected `now` for
+tests and does not call an LLM.
+
+**Why:** Deterministic rules are inspectable, testable, and safer for local private career context.
+Separate dimensions prevent a pile of learning notes from masquerading as execution or portfolio
+readiness.
+
+**Trade-off:** Recommendations are useful but deliberately conservative. When context is thin, the
+system recommends setup/evidence capture instead of pretending to know the highest-leverage career
+move.
