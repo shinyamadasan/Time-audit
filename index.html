@@ -846,8 +846,10 @@
     <div class="settings-title">Data</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn sm" onclick="exportCSV()">Export CSV</button>
+      <button class="btn sm" type="button" id="life-ledger-export-btn">Export Life Ledger</button>
       <button class="btn sm danger" onclick="clearAll()">Clear all</button>
     </div>
+    <div id="life-ledger-export-status" hidden style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.45">Contains your Life Ledger history.</div>
     <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
       <select id="clear-day-select" style="font-family:var(--head);font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex:1;min-width:0"></select>
       <button class="btn sm danger" onclick="clearSelectedDay()">Clear day</button>
@@ -1531,6 +1533,7 @@
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
+<script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 
 <script>
 // ══════════════════════════════════════════════════════

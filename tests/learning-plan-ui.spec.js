@@ -16,6 +16,12 @@ import {
   LEARNING_PLAN_REPOSITORY_SCHEMA_VERSION
 } from '../learning-plan-repository.js';
 import { LIFE_LEDGER_RUNTIME_KEY, learningPlanStepSourceEntityId } from '../life-ledger-runtime.js';
+import { deriveLifeLedgerKey, fingerprintLifeLedgerEvent } from '../life-ledger-core.js';
+import {
+  LIFE_LEDGER_EXPORT_FILENAME,
+  LIFE_LEDGER_TRANSPORT_KIND,
+  LIFE_LEDGER_TRANSPORT_SCHEMA_VERSION
+} from '../life-ledger-transport.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
@@ -238,13 +244,58 @@ function envelope(plans) {
   });
 }
 
-async function openApp(page, { learningPlanRaw = null, dailyPlans = {} } = {}) {
+function browserFocusEvent(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    eventId: '50505050-5050-4050-8050-505050505050',
+    sourceApp: 'chronasense',
+    sourceEntityId: 'browser-focus-1',
+    type: 'focus_session_completed',
+    occurredAt: '2026-08-30T16:25:00.000Z',
+    recordedAt: '2026-08-30T16:26:00.000Z',
+    revisedAt: null,
+    sourceTimezone: 'Etc/UTC',
+    payload: {
+      activity: 'Browser synthetic focus',
+      startedAt: '2026-08-30T16:00:00.000Z',
+      endedAt: '2026-08-30T16:25:00.000Z',
+      durationMinutes: 25,
+      additiveForTimeTotals: false,
+      source: { focusEntryId: 'browser-focus-1' }
+    },
+    provenance: {
+      source: 'chronasense',
+      sourceRecordKind: 'chronasense.focus_outcome',
+      adapterVersion: 'test-v1',
+      observedAt: '2026-08-30T16:26:00.000Z',
+      captureMethod: 'pomodoro',
+      evidence: ['browser.synthetic.focus:1']
+    },
+    confidence: { score: 1, basis: 'source-recorded' },
+    revision: 1,
+    tombstone: { active: false, deletedAt: null, reason: null, provenance: null },
+    ...overrides
+  };
+}
+
+function runtimeLedgerEnvelope(events) {
+  return JSON.stringify({
+    schemaVersion: 1,
+    records: events.map(event => ({
+      key: deriveLifeLedgerKey(event),
+      event,
+      fingerprint: fingerprintLifeLedgerEvent(event)
+    }))
+  });
+}
+
+async function openApp(page, { learningPlanRaw = null, dailyPlans = {}, lifeLedgerRaw = null } = {}) {
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({
     status: 200,
     contentType: 'application/javascript',
     body: firebaseStub
   }));
-  await page.addInitScript(({ learningPlanRaw, dailyPlans, settings }) => {
+  await page.addInitScript(({ learningPlanRaw, dailyPlans, lifeLedgerRaw, settings }) => {
     if (localStorage.getItem('ta3-learning-ui-test-seeded')) return;
     localStorage.clear();
     sessionStorage.clear();
@@ -257,8 +308,10 @@ async function openApp(page, { learningPlanRaw = null, dailyPlans = {} } = {}) {
     localStorage.setItem('ta3-plans', JSON.stringify(dailyPlans));
     localStorage.setItem('ta3-reviews', '{}');
     if (learningPlanRaw !== null) localStorage.setItem('ta3-learning-plans-v1', learningPlanRaw);
+    if (lifeLedgerRaw !== null) localStorage.setItem('ta3-life-ledger-v1', lifeLedgerRaw);
+    localStorage.setItem('firebase-auth-token', 'unrelated-secret-token');
     localStorage.setItem('ta3-learning-ui-test-seeded', '1');
-  }, { learningPlanRaw, dailyPlans, settings: baseSettings() });
+  }, { learningPlanRaw, dailyPlans, lifeLedgerRaw, settings: baseSettings() });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.renderLearningPlans === 'function');
   await expect(page.locator('#signin-overlay')).toBeHidden();
@@ -267,6 +320,11 @@ async function openApp(page, { learningPlanRaw = null, dailyPlans = {} } = {}) {
 async function openLearningPlans(page) {
   await page.locator('#nav-learning').click();
   await expect(page.locator('#view-learning')).toHaveClass(/active/);
+}
+
+async function openSettings(page) {
+  await page.locator('#nav-settings').click();
+  await expect(page.locator('#view-settings')).toHaveClass(/active/);
 }
 
 async function stubFocusAudio(page) {
@@ -511,6 +569,87 @@ function entityIds(plan) {
     ])
   ];
 }
+
+test('Life Ledger export button exists in Settings data controls', async ({ page }) => {
+  await openApp(page);
+  await openSettings(page);
+  await expect(page.getByRole('button', { name: 'Export Life Ledger' })).toBeVisible();
+});
+
+test('Life Ledger export downloads the fixed filename and current snapshot', async ({ page }) => {
+  const event = browserFocusEvent();
+  await openApp(page, { lifeLedgerRaw: runtimeLedgerEnvelope([event]) });
+  await openSettings(page);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export Life Ledger' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe(LIFE_LEDGER_EXPORT_FILENAME);
+  const snapshot = JSON.parse(await fs.readFile(await download.path(), 'utf8'));
+  expect(snapshot).toMatchObject({
+    transportSchemaVersion: LIFE_LEDGER_TRANSPORT_SCHEMA_VERSION,
+    kind: LIFE_LEDGER_TRANSPORT_KIND
+  });
+  expect(snapshot.events).toHaveLength(1);
+  expect(snapshot.events[0].eventId).toBe(event.eventId);
+  expect(snapshot.events[0].revision).toBe(event.revision);
+  expect(JSON.stringify(snapshot)).not.toContain('unrelated-secret-token');
+});
+
+test('Life Ledger export revokes object URLs and uses no vault filesystem API', async ({ page }) => {
+  await openApp(page, { lifeLedgerRaw: runtimeLedgerEnvelope([browserFocusEvent()]) });
+  await openSettings(page);
+  await page.evaluate(() => {
+    window.__ledgerExportUrls = [];
+    window.__ledgerExportFsCalls = 0;
+    const realCreate = URL.createObjectURL.bind(URL);
+    const realRevoke = URL.revokeObjectURL.bind(URL);
+    URL.createObjectURL = blob => {
+      const url = realCreate(blob);
+      window.__ledgerExportUrls.push({ url, revoked: false });
+      return url;
+    };
+    URL.revokeObjectURL = url => {
+      const entry = window.__ledgerExportUrls.find(item => item.url === url);
+      if (entry) entry.revoked = true;
+      return realRevoke(url);
+    };
+    window.showOpenFilePicker = () => { window.__ledgerExportFsCalls++; throw new Error('blocked'); };
+    window.showDirectoryPicker = () => { window.__ledgerExportFsCalls++; throw new Error('blocked'); };
+    window.showSaveFilePicker = () => { window.__ledgerExportFsCalls++; throw new Error('blocked'); };
+  });
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export Life Ledger' }).click();
+  await downloadPromise;
+  const result = await page.evaluate(() => ({
+    urls: window.__ledgerExportUrls,
+    fsCalls: window.__ledgerExportFsCalls
+  }));
+  expect(result.urls).toHaveLength(1);
+  expect(result.urls[0].revoked).toBe(true);
+  expect(result.fsCalls).toBe(0);
+});
+
+test('Life Ledger export downloads an empty valid snapshot', async ({ page }) => {
+  await openApp(page);
+  await openSettings(page);
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export Life Ledger' }).click();
+  const download = await downloadPromise;
+  const snapshot = JSON.parse(await fs.readFile(await download.path(), 'utf8'));
+  expect(download.suggestedFilename()).toBe(LIFE_LEDGER_EXPORT_FILENAME);
+  expect(snapshot.events).toEqual([]);
+});
+
+test('Life Ledger export failure is shown truthfully', async ({ page }) => {
+  await openApp(page, { lifeLedgerRaw: runtimeLedgerEnvelope([browserFocusEvent()]) });
+  await openSettings(page);
+  await page.evaluate(() => {
+    URL.createObjectURL = () => { throw new Error('synthetic download failure'); };
+  });
+  await page.getByRole('button', { name: 'Export Life Ledger' }).click();
+  await expect(page.locator('#life-ledger-export-status')).toContainText('Life Ledger export failed: synthetic download failure');
+});
 
 test('Learning Plans opens an empty repository without error', async ({ page }) => {
   await openApp(page);

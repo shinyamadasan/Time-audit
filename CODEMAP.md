@@ -18,6 +18,7 @@
 - `insights.js` — line 1300 → **EXTRACTED** (see below)
 - `focus-wallet.js` — line 1301 → **EXTRACTED** (see below)
 - `learning-plan-ui.js` — line 1533 → **EXTRACTED** (see below; imports `learning-plan-import.js`, `learning-plan-next-action.js`, `life-ledger-runtime.js`)
+- `life-ledger-export-ui.js` — line 1534 → **EXTRACTED** (see below; imports `life-ledger-transport.js`)
 - `focus-mode.js` — line 7562 → **EXTRACTED** (see below)
 
 ---
@@ -80,6 +81,20 @@ Functions: `createLocalLifeLedgerStore()`, `learningPlanStepSourceEntityId()`, `
 Variables: `LIFE_LEDGER_RUNTIME_SCHEMA_VERSION`, `LIFE_LEDGER_RUNTIME_KEY`, `LIFE_LEDGER_RUNTIME_ADAPTER_VERSION`
 Depends on: `life-ledger-core.js`, `localStorage` or injected storage
 
+### life-ledger-transport.js
+Lines: external file
+Purpose: Browser/Node-safe Life Ledger snapshot transport. Reads through the reviewed runtime store, validates stored events with `life-ledger-core.js`, preserves tombstones/revisions/event IDs, and serializes deterministic `chronasense-life-ledger` JSON snapshots for explicit download or CLI import.
+Functions: `exportLifeLedgerSnapshot()`, `exportLifeLedgerSnapshotJson()`, `createLifeLedgerSnapshotFromStore()`, `createLifeLedgerSnapshotFromEvents()`, `validateLifeLedgerSnapshot()`, `parseLifeLedgerSnapshotJson()`, `serializeLifeLedgerSnapshot()`, `snapshotHasOnlyLedgerEnvelope()`
+Variables: `LIFE_LEDGER_TRANSPORT_SCHEMA_VERSION`, `LIFE_LEDGER_TRANSPORT_KIND`, `LIFE_LEDGER_EXPORT_FILENAME`
+Depends on: `life-ledger-core.js`, `life-ledger-runtime.js`
+
+### life-ledger-export-ui.js
+Lines: external file
+Purpose: Browser-only Settings export action for Life Ledger transport. Builds a validated snapshot from the local runtime store, downloads `chronasense-life-ledger-v1.json` via Blob/object URL, revokes the URL immediately, and never accesses vault files.
+Functions: `downloadLifeLedgerSnapshot()`
+Variables: —
+Depends on: `life-ledger-transport.js`, DOM globals
+
 ### obsidian-life-ledger-renderer.js
 Lines: external file
 Purpose: Pure deterministic Life Ledger V1 to Obsidian Markdown renderer. Builds generated `Life Ledger/System/README.md` and current-state `Life Ledger/Daily/YYYY-MM-DD.md` export plans for supported `focus_session_completed` and `plan_step_completed` events without touching disk.
@@ -93,6 +108,13 @@ Purpose: Node-only safe writer for Obsidian Life Ledger export plans. Enforces d
 Functions: `resolveObsidianLifeLedgerPath()`, `writeObsidianLifeLedgerExport()`
 Variables: `OBSIDIAN_LIFE_LEDGER_MANAGED_DIR`
 Depends on: Node `fs/promises`, Node `path`, `obsidian-life-ledger-renderer.js`
+
+### scripts/export-life-ledger-to-obsidian.mjs
+Lines: external file
+Purpose: Node CLI transport from downloaded Life Ledger snapshot JSON to the reviewed Obsidian renderer/writer. Defaults to dry-run, validates untrusted snapshots before rendering, and requires `TEST-VAULT.md` at the vault root for apply mode.
+Functions: `runLifeLedgerObsidianExport()`
+Variables: —
+Depends on: Node `fs/promises`, Node `path`, `life-ledger-transport.js`, `obsidian-life-ledger-renderer.js`, `obsidian-life-ledger-writer.js`
 
 ---
 
@@ -557,7 +579,7 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Recurring schedule templates | Day Templates | ~6729 |
 | Settings form (timezone, interval, presets…) | Settings View | 6010–6092 |
 | Toast notifications | Overlay, Toast & Modal Utilities | 7106–7181 |
-| Data Doctor / CSV export / clear data | Export & Data Management | ~7123 |
+| Data Doctor / CSV export / clear data / Life Ledger snapshot export | Export & Data Management | ~7123 |
 | PWA install banner / Service Worker setup | PWA Installation | 7202–7228 |
 | Voice logging | Voice Input | 7229–7270 |
 | Push notifications (Capacitor) | Native Notifications (Capacitor) | 7347–7495 |
