@@ -5,6 +5,45 @@
 
 ---
 
+## Capability/Career V1 reviewer fix packet · 2026-08-31
+suite: `npm test`; `npx playwright test tests/capability-career-ui.spec.js`;
+  `npx playwright test tests/learning-plan-ui.spec.js`; `npm run test:smoke`; `npm run lint`;
+  `node --check capability-career-model.js capability-career-repository.js
+  capability-career-import.js capability-career-analytics.js capability-career-ui.js test.js
+  tests/capability-career-ui.spec.js`; `git diff --check`; targeted `rg` boundary checks over the
+  Career runtime modules for Firebase/sync, Obsidian/file writes, fetch/XHR, Meal/Workout coupling,
+  Life Ledger write APIs, title/keyword inference, random IDs, hidden Date.now, and raw code eval.
+result: `npm test` passed 424/424. Career Playwright spec passed 8/8. Learning Plan UI regression
+  spec passed 77/77. Full smoke passed 176/176 after the final code change. Lint completed with 0
+  errors and the same 19 pre-existing warnings in `focus-mode.js`, `insights.js`, and `storage.js`;
+  no Career file warnings. Syntax checks passed. `git diff --check` reported no whitespace errors,
+  only the repository's existing LF/CRLF normalization warnings. Boundary checks found no forbidden
+  integration calls in the Career runtime modules. `npm run lint` first hit sandbox `ENOTCACHED` and
+  was rerun with approved escalation. `npm run test:smoke` first hit sandbox EPERM creating
+  Playwright artifacts and was rerun with approved escalation.
+untested: no production deploy, mobile device install, Firebase sync, Obsidian write/export, external
+  service, or real user data flow was exercised; those remain intentionally outside this local-only
+  reviewer fix packet.
+
+## Capability/Career V1 · 2026-08-31
+suite: `npm test`; `npm run lint`; `npx playwright test tests/capability-career-ui.spec.js`;
+  `npx playwright test tests/learning-plan-ui.spec.js`; `npm run test:smoke`;
+  `node --check capability-career-model.js capability-career-repository.js
+  capability-career-import.js capability-career-analytics.js capability-career-ui.js`;
+  `git diff --check`; targeted `rg` boundary checks over the new Career modules for Firebase,
+  Obsidian/file writes, fetch/XHR, Meal/Workout coupling, and Life Ledger write APIs.
+result: `npm test` passed 412/412. Career Playwright spec passed 7/7. Learning Plan UI regression
+  spec passed 77/77. Smoke suite passed 175/175. Lint completed with 0 errors and 19 pre-existing
+  warnings outside the new Career files. New Career JS modules passed syntax checks. `git diff
+  --check` reported no whitespace errors, only the repository's existing LF/CRLF normalization
+  warnings for touched files. Boundary checks found no Firebase calls, no Obsidian/file writes, no
+  fetch/XHR, no Meal/Workout coupling, and no Life Ledger write API usage in the new Career modules.
+  `npm run lint` initially hit an npm cache/network `ENOTCACHED` condition inside the sandbox and
+  was rerun with approved escalation. `npm run test:smoke` initially hit a sandbox EPERM creating
+  Playwright artifacts and was rerun with approved escalation.
+untested: no production deploy, mobile device install, Firebase sync flow, or Obsidian integration
+  was exercised; those are intentionally outside this local-only Capability/Career V1 milestone.
+
 ## TASK-003 · 2026-07-21
 suite: [System.Management.Automation.Language.Parser]::ParseFile on tools/Run-Codex-Build.ps1 and
   tools/Run-Claude-Review.ps1; direct diff against Meal Prep's pre-port versions of both files;

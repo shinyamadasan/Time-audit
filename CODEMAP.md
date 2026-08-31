@@ -17,8 +17,9 @@
 - `storage.js` — line 1299 → **EXTRACTED** (see below)
 - `insights.js` — line 1300 → **EXTRACTED** (see below)
 - `focus-wallet.js` — line 1301 → **EXTRACTED** (see below)
-- `learning-plan-ui.js` — line 1533 → **EXTRACTED** (see below; imports `learning-plan-import.js`, `learning-plan-next-action.js`, `life-ledger-runtime.js`)
-- `life-ledger-export-ui.js` — line 1534 → **EXTRACTED** (see below; imports `life-ledger-transport.js`)
+- `learning-plan-ui.js` — module script include → **EXTRACTED** (see below; imports `learning-plan-import.js`, `learning-plan-next-action.js`, `life-ledger-runtime.js`)
+- `capability-career-ui.js` — module script include → **EXTRACTED** (see below; imports Capability/Career model, repository, import, analytics, and reads Life Ledger runtime)
+- `life-ledger-export-ui.js` — module script include → **EXTRACTED** (see below; imports `life-ledger-transport.js`)
 - `focus-mode.js` — line 7562 → **EXTRACTED** (see below)
 
 ---
@@ -95,6 +96,41 @@ Functions: `downloadLifeLedgerSnapshot()`
 Variables: —
 Depends on: `life-ledger-transport.js`, DOM globals
 
+### capability-career-model.js
+Lines: external file
+Purpose: Pure Capability/Career V1 data model for skills, knowledge areas, tools, career targets, projects, portfolio artifacts, and explicit evidence mappings. Validates stable IDs, JSON-safe state, timestamps, references, archive-safe links, and duplicate Life Ledger evidence mappings.
+Functions: `createEmptyCapabilityProfile()`, `createCapabilitySkill()`, `createCapabilityKnowledgeArea()`, `createCapabilityTool()`, `createCareerTarget()`, `createCapabilityProject()`, `createPortfolioArtifact()`, `createCapabilityEvidence()`, `validateCapabilityProfile()`, `hydrateCapabilityProfile()`, `addSkill()`, `addKnowledgeArea()`, `addTool()`, `addCareerTarget()`, `addProject()`, `addPortfolioArtifact()`, `addEvidence()`, `archiveSkill()`, `updateProjectPortfolioStatus()`
+Variables: `CAPABILITY_PROFILE_SCHEMA_VERSION`, `CAPABILITY_EVIDENCE_DIMENSIONS`, `CAPABILITY_SKILL_STATUSES`, `CAPABILITY_PROJECT_STATUSES`, `CAPABILITY_PORTFOLIO_STATUSES`, `CAPABILITY_TARGET_STATUSES`, `CAPABILITY_ARTIFACT_TYPES`, `CAPABILITY_EVIDENCE_SOURCES`
+Depends on: no app globals
+
+### capability-career-repository.js
+Lines: external file
+Purpose: Local-only versioned Capability/Career repository around `ta3-capability-career-v1`, with injected storage for tests, corruption/write-failure errors, and full profile validation before persistence.
+Functions: `createCapabilityCareerRepository()`
+Variables: `CAPABILITY_CAREER_REPOSITORY_KEY`, `CAPABILITY_CAREER_REPOSITORY_SCHEMA_VERSION`, `CapabilityCareerRepositoryError`
+Depends on: `capability-career-model.js`, `localStorage` or injected storage
+
+### capability-career-import.js
+Lines: external file
+Purpose: Strict JSON import preview/build path for initial Capability/Career setup. Rejects user-supplied durable IDs, duplicate names/titles, malformed references, and invalid evidence dimensions before any persistence.
+Functions: `parseCapabilityCareerImportJson()`, `buildCapabilityProfileFromImportDraft()`, `importPreviewSummary()`
+Variables: —
+Depends on: `capability-career-model.js`
+
+### capability-career-analytics.js
+Lines: external file
+Purpose: Deterministic Capability/Career intelligence: dimension counts, skill momentum, conservative stall detection, project portfolio signals, career alignment checks, and one explainable next action with injected clock.
+Functions: `analyzeCapabilityCareer()`
+Variables: `CAPABILITY_CAREER_ANALYTICS_RULES`
+Depends on: `capability-career-model.js`
+
+### capability-career-ui.js
+Lines: external file
+Purpose: Browser UI for the Career tab: dashboard-first Capability/Career overview, setup/import/manual forms, explicit manual/project/Life Ledger evidence entry, read-only recent Life Ledger event picker, portfolio artifact entry, and local-only persistence.
+Functions: `renderCapabilityCareer()`
+Variables: module-local UI state (`repository`, `profile`, panel selection, import preview, selected evidence targets)
+Depends on: Capability/Career modules, `life-ledger-runtime.js`, DOM globals
+
 ### obsidian-life-ledger-renderer.js
 Lines: external file
 Purpose: Pure deterministic Life Ledger V1 to Obsidian Markdown renderer. Builds generated `Life Ledger/System/README.md` and current-state `Life Ledger/Daily/YYYY-MM-DD.md` export plans for supported `focus_session_completed` and `plan_step_completed` events without touching disk.
@@ -165,6 +201,13 @@ Purpose: Learning Plans tab markup: compact "How this works" guide, primary Quic
 Functions: —
 Key IDs: `view-learning`, `learning-plan-guide`, `learning-plan-error`, `learning-plan-import-form`, `learning-plan-import-title-input`, `learning-plan-import-outline`, `learning-plan-import-preview`, `learning-plan-create-form`, `learning-plan-title-input`, `learning-plan-list`, `learning-plan-main`
 Depends on: `learning-plan-ui.js`
+
+## [HTML — Capability / Career View]
+Lines: near Learning Plans / Settings views
+Purpose: Career tab markup mount for Capability/Career dashboard and progressive setup panels.
+Functions: —
+Key IDs: `view-career`, `cap-career-error`, `cap-career-dashboard`, `cap-career-setup`, `nav-career`
+Depends on: `capability-career-ui.js`, `capability-career.css`
 
 ## [HTML — Desktop Side Panels]
 Lines: 1579–1613
@@ -285,7 +328,7 @@ Lines: 3070–3087
 Purpose: Tab switching — activate the correct view div, highlight the nav button, trigger view-specific renders.
 Functions: `showView()`
 Variables: —
-Depends on: `renderToday()`, `renderWeek()`, `renderSettings()`
+Depends on: `renderToday()`, `renderWeek()`, `renderLearningPlans()`, `renderCapabilityCareer()`, `renderSettings()`
 
 ## [Utility — Formatting & Quick Actions]
 Lines: 3084–3160
@@ -562,6 +605,7 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Away mode (Sleep, Eat, Walk…) | Away & Status Management | 5267–5415 |
 | Learning Plans manual/create/edit/import | HTML — Learning Plans View + learning-plan-ui.js + learning-plan-import.js | 536–613 + EXTRACTED |
 | Learning Plans Next Action / How this works guide | learning-plan-next-action.js + learning-plan-ui.js | EXTRACTED |
+| Capability/Career profile, evidence, momentum, stalls, next action | HTML — Capability / Career View + capability-career-*.js | EXTRACTED |
 | Week view (energy split, top activities, table) | Week View | 5427–6009 |
 | Month overview | Week View → `renderMonthOverview()` | ~5490 |
 | Sleep reminder / sleep entry logging | Sleep Tracking | 6083–6211 |

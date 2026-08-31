@@ -13,6 +13,7 @@
 <link rel="manifest" id="pwa-manifest">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=20260719-template-sync-doctor-2">
+<link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
 </head>
 <body>
 <div id="desktop-layout">
@@ -612,6 +613,20 @@
   </section>
 </div>
 
+<!-- ══ CAPABILITY / CAREER ══ -->
+<div class="view" id="view-career">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Career</div>
+      <div class="cap-career-muted">Capability, proof, momentum, and next action.</div>
+    </div>
+  </div>
+
+  <div class="cap-career-error" id="cap-career-error" role="alert" hidden></div>
+  <div id="cap-career-dashboard"></div>
+  <div id="cap-career-setup"></div>
+</div>
+
 <!-- ══ SETTINGS ══ -->
 <div class="view" id="view-settings">
   <div class="page-header">
@@ -941,6 +956,9 @@
   </button>
   <button class="nav-btn" id="nav-learning" onclick="showView('learning')">
     <svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2"/><path d="M8 7h7"/><path d="M8 11h5"/></svg>Learn
+  </button>
+  <button class="nav-btn" id="nav-career" onclick="showView('career')">
+    <svg viewBox="0 0 24 24"><path d="M4 19V7a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>Career
   </button>
   <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>Settings
@@ -1533,6 +1551,7 @@
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
+<script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 
 <script>
@@ -3102,6 +3121,7 @@ function showView(name) {
   if (name==='today') renderToday();
   if (name==='week') renderWeek();
   if (name==='learning' && window.renderLearningPlans) window.renderLearningPlans();
+  if (name==='career' && window.renderCapabilityCareer) window.renderCapabilityCareer();
   if (name==='settings') renderSettings();
   window.scrollTo({ top: 0, behavior: 'auto' });
 

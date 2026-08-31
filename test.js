@@ -70,6 +70,28 @@ import {
 import { parseLearningPlanOutline } from './learning-plan-import.js';
 import { findNextLearningPlanStep } from './learning-plan-next-action.js';
 import {
+  addCareerTarget,
+  addEvidence,
+  addPortfolioArtifact,
+  addProject,
+  addSkill,
+  addTool,
+  archiveSkill,
+  createEmptyCapabilityProfile,
+  updateProjectPortfolioStatus,
+  validateCapabilityProfile
+} from './capability-career-model.js';
+import {
+  CAPABILITY_CAREER_REPOSITORY_KEY,
+  CapabilityCareerRepositoryError,
+  createCapabilityCareerRepository
+} from './capability-career-repository.js';
+import {
+  buildCapabilityProfileFromImportDraft,
+  parseCapabilityCareerImportJson
+} from './capability-career-import.js';
+import { analyzeCapabilityCareer } from './capability-career-analytics.js';
+import {
   OBSIDIAN_LIFE_LEDGER_SENTINEL,
   buildObsidianLifeLedgerExport
 } from './obsidian-life-ledger-renderer.js';
@@ -1330,6 +1352,459 @@ function withGlobalLocalStorage(storage, fn) {
     else delete globalThis.localStorage;
   }
 }
+
+// -- Capability/Career model -------------------------------------------------
+
+const CC_TIME = {
+  created: '2026-08-30T12:00:00.000Z',
+  recent: '2026-08-29T12:00:00.000Z',
+  stale: '2026-06-01T12:00:00.000Z',
+  now: '2026-08-31T12:00:00.000Z'
+};
+
+function ccOptions(...ids) {
+  return { idGenerator: sequencedIds(...ids), clock: fixedClock(CC_TIME.created) };
+}
+
+function createCapabilityEvidenceLike(id) {
+  return {
+    id,
+    skillId: 'skill-js',
+    dimension: 'knowledge',
+    source: 'manual',
+    summary: 'Synthetic evidence',
+    observedAt: CC_TIME.recent,
+    createdAt: CC_TIME.recent,
+    updatedAt: CC_TIME.recent
+  };
+}
+
+function seededCapabilityProfile() {
+  let profile = createEmptyCapabilityProfile({ clock: fixedClock(CC_TIME.created) });
+  profile = addSkill(profile, { name: 'JavaScript', category: 'Engineering' }, ccOptions('skill-js'));
+  profile = addSkill(profile, { name: 'API integration', category: 'Engineering' }, ccOptions('skill-api'));
+  profile = addTool(profile, { name: 'GitHub', skillIds: ['skill-js'] }, ccOptions('tool-github'));
+  profile = addCareerTarget(profile, {
+    title: 'Automation developer',
+    objective: 'Build durable automations',
+    skillIds: ['skill-js', 'skill-api'],
+    priority: 'primary'
+  }, ccOptions('target-auto'));
+  profile = addProject(profile, {
+    title: 'Adapter project',
+    summary: 'Connect app facts to the ledger',
+    skillIds: ['skill-js', 'skill-api'],
+    toolIds: ['tool-github'],
+    careerTargetIds: ['target-auto'],
+    portfolioStatus: 'candidate'
+  }, ccOptions('project-adapter'));
+  return profile;
+}
+
+function addCcEvidence(profile, id, skillId, dimension, observedAt = CC_TIME.recent, extra = {}) {
+  return addEvidence(profile, {
+    skillId,
+    dimension,
+    source: extra.source || 'manual',
+    summary: extra.summary || `${dimension} evidence`,
+    observedAt,
+    ...extra
+  }, ccOptions(id));
+}
+
+function ccLedgerEvent(eventId, tombstoned = false) {
+  return {
+    eventId,
+    tombstone: tombstoned
+      ? {
+          active: true,
+          deletedAt: '2026-08-30T13:00:00.000Z',
+          reason: 'user_delete',
+          provenance: { sourceOperation: 'delete', sourceRecordKind: 'test', evidence: ['test'] }
+        }
+      : { active: false, deletedAt: null, reason: null, provenance: null }
+  };
+}
+
+function setCcProjectStatus(profile, projectId, status, portfolioStatus = 'candidate') {
+  return {
+    ...profile,
+    projects: profile.projects.map(project => project.id === projectId
+      ? { ...project, status, portfolioStatus, updatedAt: CC_TIME.created }
+      : project)
+  };
+}
+
+console.log('\nCapability/Career model');
+test('empty Capability/Career profile is versioned and valid', () => {
+  const profile = createEmptyCapabilityProfile({ clock: fixedClock(CC_TIME.created) });
+  assert.equal(profile.schemaVersion, 1);
+  assert.deepEqual(validateCapabilityProfile(profile), { ok: true, errors: [] });
+});
+test('stable IDs are generated once and not derived from names', () => {
+  const profile = seededCapabilityProfile();
+  assert.equal(profile.skills[0].id, 'skill-js');
+  assert.equal(profile.skills[0].name, 'JavaScript');
+  assert.notEqual(profile.skills[0].id, profile.skills[0].name);
+});
+test('validation rejects duplicate IDs and missing references', () => {
+  const profile = seededCapabilityProfile();
+  assert.equal(validateCapabilityProfile({ ...profile, skills: [...profile.skills, { ...profile.skills[0] }] }).ok, false);
+  const broken = validateCapabilityProfile({ ...profile, evidence: [{ ...createCapabilityEvidenceLike('e1'), skillId: 'missing' }] });
+  assert.equal(broken.ok, false);
+  assert.match(broken.errors.join('; '), /missing skill/);
+});
+test('validation enforces constructor string limits during hydration', () => {
+  const profile = seededCapabilityProfile();
+  const oversizedSkill = { ...profile.skills[0], name: 'x'.repeat(161) };
+  const oversizedEvidence = { ...createCapabilityEvidenceLike('e-long-summary'), summary: 'x'.repeat(241) };
+  const result = validateCapabilityProfile({
+    ...profile,
+    skills: [oversizedSkill, profile.skills[1]],
+    evidence: [oversizedEvidence]
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join('; '), /skills\[0\]\.name must be 160 characters or fewer/);
+  assert.match(result.errors.join('; '), /evidence\[0\]\.summary must be 240 characters or fewer/);
+});
+test('archiving a referenced skill preserves references without cascading evidence', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-js-1', 'skill-js', 'execution');
+  profile = archiveSkill(profile, 'skill-js', ccOptions());
+  assert.equal(profile.skills.find(skill => skill.id === 'skill-js').status, 'archived');
+  assert.equal(profile.evidence[0].skillId, 'skill-js');
+  assert.equal(validateCapabilityProfile(profile).ok, true);
+});
+test('portfolio artifacts are separate from evidence and link through projects', () => {
+  let profile = seededCapabilityProfile();
+  profile = addPortfolioArtifact(profile, {
+    projectId: 'project-adapter',
+    type: 'repository',
+    label: 'Repo',
+    reference: 'https://example.test/repo'
+  }, ccOptions('artifact-repo'));
+  assert.equal(profile.artifacts[0].id, 'artifact-repo');
+  assert.equal(profile.projects[0].artifactIds[0], 'artifact-repo');
+  assert.equal(profile.evidence.length, 0);
+});
+test('project portfolio status updates without changing project identity', () => {
+  let profile = seededCapabilityProfile();
+  profile = updateProjectPortfolioStatus(profile, 'project-adapter', 'ready', ccOptions());
+  assert.equal(profile.projects[0].id, 'project-adapter');
+  assert.equal(profile.projects[0].portfolioStatus, 'ready');
+});
+test('Life Ledger evidence can support different skills but not duplicate the same skill dimension', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-ledger-js', 'skill-js', 'execution', CC_TIME.recent, {
+    source: 'life-ledger',
+    lifeLedgerEventId: 'ledger-event-1',
+    lifeLedgerKey: 'chronasense:entry-1:focus_session_completed'
+  });
+  profile = addCcEvidence(profile, 'e-ledger-api', 'skill-api', 'execution', CC_TIME.recent, {
+    source: 'life-ledger',
+    lifeLedgerEventId: 'ledger-event-1',
+    lifeLedgerKey: 'chronasense:entry-1:focus_session_completed'
+  });
+  assert.equal(validateCapabilityProfile(profile).ok, true);
+  assert.throws(() => addCcEvidence(profile, 'e-ledger-dup', 'skill-js', 'execution', CC_TIME.recent, {
+    source: 'life-ledger',
+    lifeLedgerEventId: 'ledger-event-1'
+  }), /duplicates/);
+});
+
+console.log('\nCapability/Career repository');
+test('repository returns an empty profile for missing storage', () => {
+  const storage = makeMemoryStorage();
+  const loaded = createCapabilityCareerRepository({ storage }).loadProfile();
+  assert.equal(loaded.schemaVersion, 1);
+  assert.equal(loaded.skills.length, 0);
+});
+test('repository saves and reloads a validated profile', () => {
+  const storage = makeMemoryStorage();
+  const repo = createCapabilityCareerRepository({ storage });
+  repo.saveProfile(seededCapabilityProfile());
+  assert.equal(createCapabilityCareerRepository({ storage }).loadProfile().projects[0].title, 'Adapter project');
+});
+test('repository does not leak aliases from reads', () => {
+  const storage = makeMemoryStorage();
+  const repo = createCapabilityCareerRepository({ storage });
+  repo.saveProfile(seededCapabilityProfile());
+  const loaded = repo.loadProfile();
+  loaded.skills[0].name = 'Mutated elsewhere';
+  assert.equal(repo.loadProfile().skills[0].name, 'JavaScript');
+});
+test('repository surfaces corruption and unsupported versions without resetting storage', () => {
+  const storage = makeMemoryStorage({ [CAPABILITY_CAREER_REPOSITORY_KEY]: '{bad json' });
+  assert.throws(() => createCapabilityCareerRepository({ storage }).loadProfile(), error => error.code === 'invalid_json');
+  assert.equal(storage.raw(CAPABILITY_CAREER_REPOSITORY_KEY), '{bad json');
+  const unsupported = makeMemoryStorage({ [CAPABILITY_CAREER_REPOSITORY_KEY]: JSON.stringify({ schemaVersion: 99, profile: {} }) });
+  assert.throws(() => createCapabilityCareerRepository({ storage: unsupported }).loadProfile(), error => error.code === 'unsupported_schema_version');
+});
+test('repository write failure preserves prior stored state', () => {
+  const storage = makeMemoryStorage();
+  const repo = createCapabilityCareerRepository({ storage });
+  repo.saveProfile(seededCapabilityProfile());
+  const before = storage.raw(CAPABILITY_CAREER_REPOSITORY_KEY);
+  const failingStorage = {
+    getItem: storage.getItem,
+    setItem() { throw new Error('blocked write'); }
+  };
+  const next = addSkill(repo.loadProfile(), { name: 'Blocked' }, ccOptions('skill-blocked'));
+  assert.throws(() => createCapabilityCareerRepository({ storage: failingStorage }).saveProfile(next), error => error.code === 'storage_write_failed');
+  assert.equal(storage.raw(CAPABILITY_CAREER_REPOSITORY_KEY), before);
+});
+test('repository rejects invalid storage/key contracts', () => {
+  assert.throws(() => createCapabilityCareerRepository({ storage: null }), error => error instanceof CapabilityCareerRepositoryError);
+  assert.throws(() => createCapabilityCareerRepository({ storage: makeMemoryStorage(), key: '' }), error => error.code === 'invalid_key');
+});
+test('repository rejects oversized hydrated strings without clearing stored data', () => {
+  const profile = seededCapabilityProfile();
+  const invalid = { ...profile, skills: [{ ...profile.skills[0], description: 'x'.repeat(1001) }, profile.skills[1]] };
+  const raw = JSON.stringify({ schemaVersion: 1, profile: invalid });
+  const storage = makeMemoryStorage({ [CAPABILITY_CAREER_REPOSITORY_KEY]: raw });
+  assert.throws(() => createCapabilityCareerRepository({ storage }).loadProfile(), error => error.code === 'invalid_profile');
+  assert.equal(storage.raw(CAPABILITY_CAREER_REPOSITORY_KEY), raw);
+});
+
+console.log('\nCapability/Career import');
+test('valid import previews counts and builds a linked profile', () => {
+  const result = parseCapabilityCareerImportJson(JSON.stringify({
+    skills: [{ name: 'JavaScript' }, { name: 'API integration' }],
+    tools: [{ name: 'GitHub', skills: ['JavaScript'] }],
+    careerTargets: [{ title: 'Automation developer', skills: ['JavaScript', 'API integration'] }],
+    projects: [{ title: 'Adapter', skills: ['JavaScript'], tools: ['GitHub'], careerTargets: ['Automation developer'], portfolioStatus: 'candidate' }],
+    artifacts: [{ project: 'Adapter', type: 'repository', label: 'Repo', reference: 'https://example.test/repo' }],
+    evidence: [{ skill: 'JavaScript', dimension: 'execution', source: 'manual', summary: 'Built adapter', project: 'Adapter' }]
+  }));
+  assert.equal(result.ok, true);
+  assert.equal(result.counts.evidence, 1);
+  const imported = buildCapabilityProfileFromImportDraft(result.draft, {
+    idGenerator: sequencedIds('skill-js', 'skill-api', 'tool-gh', 'target-auto', 'project-adapter', 'artifact-repo', 'e-js'),
+    clock: fixedClock(CC_TIME.created)
+  });
+  assert.equal(imported.projects[0].skillIds[0], 'skill-js');
+  assert.equal(imported.artifacts[0].projectId, 'project-adapter');
+  assert.equal(imported.evidence[0].projectId, 'project-adapter');
+});
+test('import rejects malformed JSON, duplicate names, missing references, and user-supplied IDs', () => {
+  assert.equal(parseCapabilityCareerImportJson('{bad').ok, false);
+  const result = parseCapabilityCareerImportJson(JSON.stringify({
+    skills: [{ id: 'not-accepted', name: 'JavaScript' }, { name: 'JavaScript' }],
+    projects: [{ title: 'Broken', skills: ['Missing skill'] }]
+  }));
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join('; '), /id is not accepted/);
+  assert.match(result.errors.join('; '), /duplicates/);
+  assert.match(result.errors.join('; '), /references missing skill/);
+});
+test('malformed import does not partially persist through repository flow', () => {
+  const storage = makeMemoryStorage();
+  const parsed = parseCapabilityCareerImportJson(JSON.stringify({ evidence: [{ skill: 'Missing', dimension: 'knowledge', summary: 'Bad' }] }));
+  assert.equal(parsed.ok, false);
+  assert.equal(storage.raw(CAPABILITY_CAREER_REPOSITORY_KEY), undefined);
+});
+
+console.log('\nCapability/Career analytics');
+test('insufficient data recommends explicit setup without fabricated gaps', () => {
+  const analysis = analyzeCapabilityCareer(createEmptyCapabilityProfile({ clock: fixedClock(CC_TIME.created) }), { now: CC_TIME.now });
+  assert.equal(analysis.insufficientData, true);
+  assert.equal(analysis.nextAction.kind, 'setup-target');
+  assert.equal(analysis.stalls.length, 0);
+});
+test('knowledge-heavy target skill produces application and execution stalls', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-k1', 'skill-js', 'knowledge');
+  profile = addCcEvidence(profile, 'e-p1', 'skill-js', 'practice');
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  assert.ok(analysis.stalls.some(stall => stall.type === 'application-stall'));
+  assert.ok(analysis.stalls.some(stall => stall.type === 'execution-stall'));
+  assert.equal(analysis.nextAction.kind, 'execute-skill');
+});
+test('active target with no linked active skills is setup, not generic continuation', () => {
+  let profile = createEmptyCapabilityProfile({ clock: fixedClock(CC_TIME.created) });
+  profile = addSkill(profile, { name: 'Unrelated skill' }, ccOptions('skill-other'));
+  profile = addCareerTarget(profile, { title: 'Automation developer', skillIds: [], priority: 'primary' }, ccOptions('target-empty'));
+  profile = addCcEvidence(profile, 'e-other-1', 'skill-other', 'execution');
+  profile = addCcEvidence(profile, 'e-other-2', 'skill-other', 'shipping');
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  assert.equal(analysis.insufficientData, true);
+  assert.equal(analysis.nextAction.kind, 'map-target-skills');
+  assert.deepEqual(analysis.targetSkillIds, []);
+});
+test('active target linked only to archived skills is setup even with unrelated evidence', () => {
+  let profile = seededCapabilityProfile();
+  profile = archiveSkill(profile, 'skill-js', ccOptions());
+  profile = archiveSkill(profile, 'skill-api', ccOptions());
+  profile = addSkill(profile, { name: 'Video editing' }, ccOptions('skill-video'));
+  profile = addCcEvidence(profile, 'e-v1', 'skill-video', 'execution');
+  profile = addCcEvidence(profile, 'e-v2', 'skill-video', 'shipping');
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  assert.equal(analysis.insufficientData, true);
+  assert.equal(analysis.nextAction.kind, 'map-target-skills');
+});
+test('active linked target skill resumes normal analytics while unrelated targets stay irrelevant', () => {
+  let profile = seededCapabilityProfile();
+  profile = addSkill(profile, { name: 'Video editing' }, ccOptions('skill-video'));
+  profile = addCareerTarget(profile, { title: 'Video target', skillIds: ['skill-video'], priority: 'secondary' }, ccOptions('target-video'));
+  profile = addCcEvidence(profile, 'e-js-1', 'skill-js', 'execution');
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  assert.equal(analysis.insufficientData, false);
+  assert.equal(analysis.target.id, 'target-auto');
+  assert.deepEqual(analysis.targetSkillIds, ['skill-js', 'skill-api']);
+  assert.notEqual(analysis.nextAction.kind, 'map-target-skills');
+});
+test('old evidence produces stale momentum only after enough evidence exists', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-old-1', 'skill-api', 'knowledge', CC_TIME.stale);
+  profile = addCcEvidence(profile, 'e-old-2', 'skill-api', 'practice', CC_TIME.stale);
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  const api = analysis.skills.find(skill => skill.skillId === 'skill-api');
+  assert.equal(api.momentum, 'stale');
+  assert.ok(analysis.stalls.some(stall => stall.type === 'knowledge-stall' && stall.skillId === 'skill-api'));
+});
+test('future evidence is excluded from current momentum and dimension coverage', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-now', 'skill-js', 'execution', CC_TIME.now);
+  profile = addCcEvidence(profile, 'e-future', 'skill-js', 'shipping', '2026-08-31T12:00:00.001Z');
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  const js = analysis.skills.find(skill => skill.skillId === 'skill-js');
+  assert.equal(js.totalEvidence, 1);
+  assert.equal(js.momentum, 'active');
+  assert.equal(analysis.dimensionTotals.execution, 1);
+  assert.equal(analysis.dimensionTotals.shipping, 0);
+  assert.deepEqual(analysis.excludedEvidence.map(item => item.reason), ['future']);
+});
+test('recency boundaries are deterministic around now, 30 days, and 45 days', () => {
+  const cases = [
+    ['exact now', CC_TIME.now, 'active', 1],
+    ['just before now', '2026-08-31T11:59:59.999Z', 'active', 1],
+    ['just after now', '2026-08-31T12:00:00.001Z', 'no-evidence', 0],
+    ['substantially future', '2026-09-30T12:00:00.000Z', 'no-evidence', 0],
+    ['exactly 30 days', '2026-08-01T12:00:00.000Z', 'active', 1],
+    ['just over 30 days', '2026-08-01T11:59:59.999Z', 'stale', 1],
+    ['exactly 45 days', '2026-07-17T12:00:00.000Z', 'stale', 1],
+    ['just over 45 days', '2026-07-17T11:59:59.999Z', 'stale', 1]
+  ];
+  cases.forEach(([label, observedAt, expectedMomentum, expectedEvidence]) => {
+    let profile = seededCapabilityProfile();
+    profile = addCcEvidence(profile, `e-${label.replaceAll(' ', '-')}`, 'skill-js', 'knowledge', observedAt);
+    const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+    const js = analysis.skills.find(skill => skill.skillId === 'skill-js');
+    assert.equal(js.momentum, expectedMomentum, label);
+    assert.equal(js.totalEvidence, expectedEvidence, label);
+  });
+});
+test('execution without shipping or portfolio prioritizes portfolio proof', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-ex-1', 'skill-js', 'execution');
+  profile = addCcEvidence(profile, 'e-ex-2', 'skill-js', 'execution');
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  assert.ok(analysis.stalls.some(stall => stall.type === 'shipping-stall'));
+  assert.ok(analysis.stalls.some(stall => stall.type === 'portfolio-stall'));
+  assert.equal(analysis.nextAction.kind, 'portfolio-proof');
+});
+test('shipping without portfolio proof creates portfolio next action', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-ex-1', 'skill-js', 'execution');
+  profile = addCcEvidence(profile, 'e-ship-1', 'skill-js', 'shipping');
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  assert.equal(analysis.nextAction.kind, 'portfolio-proof');
+});
+test('project progress without ready portfolio creates a project portfolio stall', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-project', 'skill-js', 'execution', CC_TIME.recent, {
+    source: 'project',
+    projectId: 'project-adapter'
+  });
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  assert.ok(analysis.stalls.some(stall => stall.type === 'portfolio-stall' && stall.projectId === 'project-adapter'));
+});
+test('archived and paused projects do not generate actionable portfolio recommendations', () => {
+  ['archived', 'paused'].forEach(status => {
+    let profile = setCcProjectStatus(seededCapabilityProfile(), 'project-adapter', status, 'candidate');
+    profile = addCcEvidence(profile, `e-${status}`, 'skill-js', 'execution', CC_TIME.recent, {
+      source: 'project',
+      projectId: 'project-adapter'
+    });
+    const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+    assert.equal(analysis.projects.find(project => project.projectId === 'project-adapter').actionable, false);
+    assert.equal(analysis.stalls.some(stall => stall.projectId === 'project-adapter'), false);
+    assert.equal(analysis.nextAction.title.includes('Adapter project'), false);
+  });
+});
+test('archived project artifacts remain historical and do not create project actions', () => {
+  let profile = setCcProjectStatus(seededCapabilityProfile(), 'project-adapter', 'archived', 'candidate');
+  profile = addPortfolioArtifact(profile, {
+    projectId: 'project-adapter',
+    type: 'link',
+    label: 'Historical proof',
+    reference: 'https://example.test/historical'
+  }, ccOptions('artifact-history'));
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  assert.equal(profile.artifacts.length, 1);
+  assert.equal(analysis.stalls.some(stall => stall.projectId === 'project-adapter'), false);
+  assert.equal(analysis.nextAction.title.includes('Adapter project'), false);
+});
+test('active project still produces a resolvable portfolio recommendation', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-active-project', 'skill-js', 'execution', CC_TIME.recent, {
+    source: 'project',
+    projectId: 'project-adapter'
+  });
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  assert.ok(analysis.stalls.some(stall => stall.projectId === 'project-adapter'));
+  assert.equal(analysis.nextAction.title, 'Turn Adapter project into presentable proof');
+});
+test('Life Ledger evidence counts only while the referenced event is live and available', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-ledger-live', 'skill-js', 'execution', CC_TIME.recent, {
+    source: 'life-ledger',
+    lifeLedgerEventId: 'ledger-event-1'
+  });
+  const live = analyzeCapabilityCareer(profile, { now: CC_TIME.now, lifeLedgerEvents: [ccLedgerEvent('ledger-event-1')] });
+  assert.equal(live.skills.find(skill => skill.skillId === 'skill-js').totalEvidence, 1);
+  const tombstoned = analyzeCapabilityCareer(profile, { now: CC_TIME.now, lifeLedgerEvents: [ccLedgerEvent('ledger-event-1', true)] });
+  assert.equal(tombstoned.skills.find(skill => skill.skillId === 'skill-js').totalEvidence, 0);
+  assert.equal(tombstoned.excludedEvidence[0].reason, 'life-ledger-tombstoned');
+  assert.equal(profile.evidence.length, 1);
+  const restored = analyzeCapabilityCareer(profile, { now: CC_TIME.now, lifeLedgerEvents: [ccLedgerEvent('ledger-event-1')] });
+  assert.equal(restored.skills.find(skill => skill.skillId === 'skill-js').totalEvidence, 1);
+});
+test('missing Life Ledger references are preserved but unavailable for current proof', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-ledger-missing', 'skill-js', 'execution', CC_TIME.recent, {
+    source: 'life-ledger',
+    lifeLedgerEventId: 'ledger-event-missing'
+  });
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now, lifeLedgerEvents: [] });
+  assert.equal(analysis.skills.find(skill => skill.skillId === 'skill-js').totalEvidence, 0);
+  assert.equal(analysis.excludedEvidence[0].reason, 'life-ledger-unavailable');
+  assert.equal(validateCapabilityProfile(profile).ok, true);
+});
+test('non-target activity can trigger career alignment stall conservatively', () => {
+  let profile = seededCapabilityProfile();
+  profile = addSkill(profile, { name: 'Video editing' }, ccOptions('skill-video'));
+  profile = addCcEvidence(profile, 'e-v1', 'skill-video', 'knowledge');
+  profile = addCcEvidence(profile, 'e-v2', 'skill-video', 'practice');
+  profile = addCcEvidence(profile, 'e-v3', 'skill-video', 'execution');
+  profile = addCcEvidence(profile, 'e-v4', 'skill-video', 'shipping');
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  assert.ok(analysis.stalls.some(stall => stall.type === 'career-alignment-stall'));
+});
+test('balanced target evidence avoids stall diagnosis and recommends continuing', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-k', 'skill-js', 'knowledge');
+  profile = addCcEvidence(profile, 'e-p', 'skill-js', 'practice');
+  profile = addCcEvidence(profile, 'e-ex', 'skill-js', 'execution');
+  profile = addCcEvidence(profile, 'e-ship', 'skill-js', 'shipping');
+  profile = addCcEvidence(profile, 'e-port', 'skill-js', 'portfolio');
+  profile = addCcEvidence(profile, 'e-api-ex', 'skill-api', 'execution');
+  profile = addCcEvidence(profile, 'e-api-ship', 'skill-api', 'shipping');
+  profile = addCcEvidence(profile, 'e-api-port', 'skill-api', 'portfolio');
+  const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now });
+  assert.equal(analysis.stalls.filter(stall => stall.skillId === 'skill-js').length, 0);
+  assert.equal(analysis.nextAction.kind, 'continue');
+});
 
 // -- Learning Plan Next Action -----------------------------------------------
 
