@@ -1,0 +1,186 @@
+# MEAL_LEDGER_SOURCE_CONTRACT_V1
+
+Status: **ACTIVE**
+Adapter: [`meal-life-ledger-adapter.js`](../meal-life-ledger-adapter.js) (`MEAL_LIFE_LEDGER_ADAPTER_VERSION = 'meal-v1'`)
+Source app: Meal prep app (`shinyamadasan/Meal-Prep`)
+Source verified against: `Meal prep app` commit `1ac5554721eaa20d5bbbf24b6f142fa3203b1726` (branch `main`), `app.js`
+functions `normalizeCookedMeal(s)`, `recordMealConsumption`, `useCookedPortion`, `canonicalizeMealConsumption`,
+`mergeMealConsumptions`, `generateMealConsumptionId`, `writeTombstone` / `recordLocalDeletions` / `saveToFirestore`.
+
+## Purpose
+
+This document is the **stable factual interface** the Meal → Life Ledger adapter depends on — not documentation of
+the Meal app. Pantry, recipes, grocery list, flavors, athletic/UI state, etc. can change freely. Only the fields and
+behaviors below are load-bearing for `normalizeMealPrepared` / `normalizeMealConsumed` / `normalizeMealSnapshot` /
+`importMealSnapshot`.
+
+**A future Meal change that violates a REQUIRED or FORBIDDEN clause below must fail the compatibility gate
+(`tests/ledger-source-contract.spec.js` in the Meal repo, and `meal-source-contract-gate.test.js` in this repo)
+before it reaches the Life Ledger integration.**
+
+## 1. Transport shape
+
+- The adapter reads a **snapshot** object with exactly three relevant top-level keys: `cookedMeals` (array,
+  REQUIRED to be present and be an array), `mealConsumptions` (array, OPTIONAL — a pre-wave export with the key
+  entirely absent defaults to `[]`, not a fatal error), and `deletions.cookedMeals` (a map, OPTIONAL). Every other
+  key on the snapshot (`recipes`, `pantry`, `groceryList`, `customIngredients`, ...) is **IGNORED**.
+- This snapshot shape is exactly what `exportData()` / the Firestore payload builder already produce — the adapter
+  does not require a bespoke export format.
+
+## 2. Cooked meal (`meal_prepared`)
+
+- **REQUIRED**: stable, source-owned `cookedMeal.id` (string) — the sole identity (`sourceEntityId`); never
+  generated or inferred by the adapter.
+- **REQUIRED**: `cookedMeal.name` (non-empty, ≤200 chars, control-character-safe, whitespace allowed) — snapshotted
+  verbatim into `payload.mealName`.
+- **REQUIRED**: `cookedMeal.cookedDate` is a `YYYY-MM-DD` string that must round-trip through a `Date.UTC()`
+  reconstruction (rejects calendar-impossible dates like `2026-02-30`, not just the regex shape).
+- **REQUIRED — temporal precision invariant**: `cookedDate` is a **date-precision** fact, asserting a real calendar
+  day and **never** a time-of-day. It is published as `payload.preparedDate` / `temporalPrecision: 'date'` /
+  `occurredDate`, and the draft **never carries `occurredAt`** for `meal_prepared` — not even a constructed local
+  midnight. `normalizeCookedMeal()` performs no clamping or defaulting of this field beyond what the caller supplies
+  (a deliberately backdated manual leftovers/takeout entry is asserted exactly as given).
+- **OPTIONAL**: `cookedMeal.initialPortions` — a positive integer, `1..99` (mirrors Meal's own `PORTION_COUNT_MAX`).
+  Published as `payload.portionsPrepared` only when present; an untracked batch (no portion count at all — the real,
+  common shape for a manual/backdated leftovers entry) omits the field entirely rather than defaulting to `1`.
+- **REQUIRED — no current-state leakage**: `cookedMeal.portionsRemaining` and `cookedMeal.storage`
+  (fridge/freezer/current location) are **never published**. They describe the batch's *current, mutable* state,
+  not a fact this preparation event proves — publishing them would let a later state change look like a retroactive
+  edit to a historical preparation fact. `initialPortions` is the only portion count in scope, precisely because it
+  is asserted once at creation and never mutated afterward by any code path this contract has found.
+- **REQUIRED**: `preparationKind` is derived, never independently supplied — `'recipe'` when `recipeId != null`,
+  else `meal.source` when it is exactly `'leftovers'` or `'takeout'`, else omitted entirely (a legacy record with
+  neither). **REQUIRED**: an unrecognized non-null `meal.source` value (anything other than `'leftovers'`/`'takeout'`)
+  is rejected (`unrecognized_preparation_source`), never silently dropped or coerced to "unknown".
+- **OPTIONAL**: `cookedMeal.recipeId` (stable id string) → `payload.source.recipeId`.
+
+## 3. Meal consumption (`meal_consumed`)
+
+- **REQUIRED — closed six-field canonical schema.** A real `mealConsumption` record is produced only by
+  `recordMealConsumption()` / `canonicalizeMealConsumption()` and consists of **exactly** these keys, no more, no
+  fewer: `id`, `cookedMealId`, `recipeId`, `mealName`, `portionsConsumed`, `consumedAt`. Meal's own source rejects
+  (`canonicalizeMealConsumption` returns `null`) any record carrying an extra key — this is a genuinely closed
+  schema on the source side, not just an adapter-side allowlist.
+- **REQUIRED**: `id` is source-owned and immutable, generated by `generateMealConsumptionId()` —
+  `'mc_' + crypto.randomUUID()` (36-char UUID), with an explicit collision-checked fallback generator when
+  `crypto.randomUUID` is unavailable. It is never regenerated or reused; a caller must never invent this id.
+- **REQUIRED**: `cookedMealId` is a stable id string and is **always present** on every real record —
+  `recordMealConsumption()` unconditionally sets it. There is no legacy code path that ever produced a Meal
+  consumption record without it, so a record missing this linkage is rejected (`missing_cooked_meal_id`), never
+  published without it.
+- **OPTIONAL**: `recipeId` — snapshotted from the cooked meal at the moment of consumption (nullable; `null` when
+  the batch had no recipe link).
+- **REQUIRED**: `mealName` — snapshotted (not looked up live) at consumption time, so the fact reads correctly even
+  after the originating cooked meal is later removed.
+- **REQUIRED**: `portionsConsumed` — a positive integer, `1..99`. Zero, negative, fractional, non-numeric, or
+  oversized values are all rejected, never clamped or rounded.
+- **REQUIRED**: `consumedAt` — an ISO-8601 instant, captured live (`new Date().toISOString()`) at the moment of the
+  "Used 1" tap. This is **instant precision** (contrast §2's date precision for `cookedDate`) and is published as
+  `occurredAt` with `confidence.score: 1, basis: 'source-recorded'` — the one fact in this contract the adapter
+  trusts as directly observed rather than derived.
+- **REQUIRED — append-only, one action only**: a consumption record is written **only** by the "Used 1" tap
+  (`useCookedPortion` → `recordMealConsumption`), never by the "Done / remove" action (`removeCookedMeal` /
+  `finishCookedMeal`), whose own affordance explicitly covers discarding food too and is therefore not a trustworthy
+  consumption signal. There is no edit or delete affordance for an already-recorded consumption anywhere in the app.
+
+## 4. Sync / merge semantics
+
+- **REQUIRED — append-only union merge.** `mergeMealConsumptions(existing, incoming)` combines two consumption
+  arrays by id: an id present on only one side survives in the union (append-only); an id present on both sides with
+  **identical** canonical facts dedupes to one; an id present on both sides with **different** canonical facts keeps
+  the **first-argument** record as authoritative and records **durable conflict evidence**
+  (`mealConsumptionConflictFor`) carrying both canonical variants — it is never resolved by which side is "newer",
+  "local" vs "remote", or by array order alone. Callers reconciling against the cloud pass the accepted remote
+  document first specifically so cloud-accepted facts win ties, not because "remote" is inherently authoritative in
+  the algorithm itself.
+- **REQUIRED**: sign-in / realtime / backup-import reconciliation must all route through this same
+  `mergeMealConsumptions` (directly, or via `reconcileMealConsumptions`) rather than a wholesale snapshot
+  replacement — a consumption fact already accepted on this device or the cloud must never simply vanish because a
+  differently-shaped snapshot arrived.
+- **REQUIRED — durable conflict evidence, not silent drop.** `reconcileMealConsumptionConflicts` persists collision
+  evidence into `AppState.mealConsumptionConflicts`, itself synced/merged the same append-only way
+  (`mergeMealConsumptionConflicts`) so the evidence itself is never lost across a reload or a second sync.
+- **REQUIRED — a rejected record is reported, not silently absorbed.** `mergeMealConsumptions` returns `rejected`
+  for any input outside the closed six-field schema (§3); `reconcileMealConsumptions` logs and reports this via
+  `reportError`, it never treats a malformed record as if it had simply not arrived.
+
+## 5. Deletion (`cookedMeal` only)
+
+- **REQUIRED — deletion evidence exists ONLY for `cookedMeals`**, via `deletions.cookedMeals: { [id]: isoTimestamp }`,
+  and **only** `meal_prepared` may ever be tombstoned by the adapter (`MEAL_LIFE_LEDGER_CAPABILITIES.meal_consumed.deletion`
+  is `'unsupported-no-source-deletion-path'` — there is no consumption-deletion concept in the source at all, by
+  design; see §3, consumption is append-only with no edit/delete affordance).
+- **REQUIRED — double confirmation.** A tombstone requires **both**: the id is present in `deletions.cookedMeals`
+  with a valid ISO timestamp, **and** the id is absent from the live `cookedMeals[]` in the same snapshot. Presence
+  in the deletion map alone (while the record is still live in `cookedMeals`) is **not** enough — Meal's own
+  `applyTombstones()` may have already reconciled a newer local edit back to life. Absence from `cookedMeals` alone
+  is likewise **never** enough (§6).
+- **REQUIRED — deletion evidence is diff-based and cloud-sync-gated.** `writeTombstone()` is never called directly
+  by a UI delete action. `removeCookedMeal()` (the "Done" button) and the last-portion-depletion path inside
+  `useCookedPortion()` both simply remove the id from `AppState.cookedMeals` via a plain array operation. The
+  **only** place that turns a vanished id into a real `deletions.cookedMeals` tombstone is `recordLocalDeletions()`
+  — a generic before/after id-set diff against a per-session baseline (`snapshotIdBaseline()`) — and
+  `recordLocalDeletions()` itself is invoked **only from `saveToFirestore()`**, i.e. only when this device is
+  signed in, online, and has already established a cloud baseline (`AppState.cloudReady`). A purely local/offline/
+  guest session that removes or fully depletes a cooked meal produces **no tombstone at all** until (and unless) a
+  cloud sync cycle subsequently runs.
+- **REQUIRED — mass-delete guard.** `recordLocalDeletions()` refuses to tombstone more than `MASS_DELETE_GUARD = 5`
+  simultaneous vanishes across all tombstone-tracked collections combined, treating a larger vanish as a transient
+  load-race artifact rather than a real bulk delete, and leaves its baseline unchanged so it can reconcile once the
+  transient state resolves. ("Clear All Data" tombstones explicitly through a separate path and is unaffected.)
+- **REQUIRED — narrow, truthful tombstone reason.** The adapter's own tombstone reason is always the generic
+  `source_marked_deleted` — never `user_delete` — because the source only ever proves "this collection lost this id
+  between two snapshots", never *why* (user intent vs. some other disposal path).
+- **FORBIDDEN**: restoring a tombstoned `meal_prepared` event because it reappears live in a later snapshot, without
+  new, explicit restore evidence. Meal has no dedicated restore/undo marker — only a generic "newer `updatedAt` beats
+  the tombstone" LWW reconciliation inside the source app itself, which is not adapter-visible explicit evidence.
+
+## 6. What absence never means
+
+- **FORBIDDEN / SEMANTICALLY DANGEROUS**: an id's mere absence from `cookedMeals[]` in a given snapshot is never,
+  on its own, evidence of deletion (§5 requires the paired deletion-map entry).
+- **FORBIDDEN**: a consumption id's absence from a later `mealConsumptions[]` snapshot is never evidence of
+  deletion — there is no deletion path for consumptions at all (§3, §4); a missing id there means only "this
+  snapshot didn't carry it," never "it was un-recorded."
+
+## 7. Correction / conflict semantics (both event types)
+
+- **REQUIRED**: both `meal_prepared` and `meal_consumed` are immutable after first Ledger acceptance, using the
+  identical policy `workout_completed` already established — because Meal's own sync model is whole-document
+  last-write-wins by `updatedAt`, not a per-field edit log, a later snapshot disagreeing with an already-accepted
+  fact is exactly as likely to be stale/reordered data as a genuine correction. Identical canonical facts on retry
+  are an idempotent no-op; changed facts under the same key are an explicit `immutable_meal_conflict`, never a
+  silent revision — and never resolved by which snapshot arrived later.
+
+## 8. Explicit classification summary
+
+| Field / behavior | Classification |
+|---|---|
+| snapshot `.cookedMeals[]` present and an array | REQUIRED |
+| snapshot `.mealConsumptions` absent ⇒ empty batch | REQUIRED (not fatal) |
+| other snapshot keys (pantry, recipes, ...) | IGNORED |
+| `cookedMeal.id`, `.name`, `.cookedDate` (calendar-valid) | REQUIRED |
+| `cookedDate` is date-precision, never `occurredAt` | REQUIRED |
+| `cookedMeal.initialPortions` | OPTIONAL |
+| `cookedMeal.portionsRemaining`, `.storage` published | **FORBIDDEN** |
+| `preparationKind` derivation; unrecognized `.source` rejected | REQUIRED |
+| consumption record closed six-field schema | REQUIRED |
+| consumption `id` = `mc_` + UUID, source-owned | REQUIRED |
+| consumption `cookedMealId` always present | REQUIRED |
+| consumption `portionsConsumed` positive integer only | REQUIRED |
+| consumption `consumedAt` instant-precision, source-recorded | REQUIRED |
+| consumption written only by "Used 1", never editable | REQUIRED |
+| merge: append-only union, conflict evidence retained | REQUIRED |
+| merge: silently dropping a rejected/malformed record | **FORBIDDEN** |
+| `cookedMeal` deletion: double-confirmed (map + absence) | REQUIRED |
+| `cookedMeal` deletion: cloud-sync-gated, diff-based | REQUIRED (documented, not a bug) |
+| consumption deletion (any form) | **FORBIDDEN** (no such path) |
+| absence alone (either collection) ⇒ deletion | **FORBIDDEN** |
+| resurrecting a tombstone without new explicit evidence | **FORBIDDEN** |
+| same-id changed facts ⇒ silent revision (either type) | **FORBIDDEN** |
+
+## 9. What this contract explicitly does NOT cover
+
+Pantry, recipes, grocery list, flavors, protein-identity inference, freshness alerts, athletic/nutrition UI,
+photo storage, and any purely visual/UI state. None of these are read by the adapter; changes there are explicitly
+**benign** (see the compatibility gate's benign-change tests).

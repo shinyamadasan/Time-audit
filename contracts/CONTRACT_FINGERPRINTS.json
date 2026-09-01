@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-09-01T19:32:28.005Z",
+  "fingerprints": {
+    "workout-source-contract-v1": {
+      "contracts/WORKOUT_LEDGER_SOURCE_CONTRACT_V1.md": "62bdb8b61797e19b11dcef306d7276267b2633182e99f1f296f659faadf0012d",
+      "fixtures/workout-source-contract-v1.fixture.json": "6f89303675aab1d57154eeccb2624a7f688146ff64f9bba9e728dc8dcf530398"
+    },
+    "meal-source-contract-v1": {
+      "contracts/MEAL_LEDGER_SOURCE_CONTRACT_V1.md": "ad52d171f8ce68aa5d3fc24689ed58f507eb13ef6370b57ad41fc76b71a583a1",
+      "fixtures/meal-source-contract-v1.fixture.json": "dc329635bd75b1fd9b82a304ad2ed21787eabb4389de12c8e421db4258a5a87f"
+    }
+  }
+}

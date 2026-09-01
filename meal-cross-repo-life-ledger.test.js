@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
 import {
   createLifeLedgerMemoryStore,
@@ -16,6 +14,7 @@ import {
   normalizeMealConsumed,
   normalizeMealPrepared
 } from './meal-life-ledger-adapter.js';
+import { resolveMealFixture } from './fixtures/resolve-fixture.js';
 
 /**
  * Cross-repo Life Ledger proof, half B (adapter side).
@@ -24,33 +23,23 @@ import {
  * Playwright suite (tests/cross-repo-life-ledger-fixture.spec.js — actually calling
  * normalizeCookedMeals() and useCookedPortion() in a real browser page) and proves this
  * adapter accepts it end-to-end: normalization, snapshot import, full Life Ledger event
- * validation, and Obsidian export. This is deliberately NOT a hand-built fixture — it is
- * this repo reading the sibling Meal repo's actual test output, on the same filesystem.
+ * validation, and Obsidian export. This is deliberately NOT a hand-built fixture.
  *
- * If the fixture file is missing (e.g. a fresh checkout of only this repo, or the Meal
- * repo's cross-repo spec hasn't been run yet), these tests report why and skip rather than
- * fail — this repo cannot itself regenerate a sibling repo's fixture.
+ * Portability (Phase 5C): a live sibling Meal checkout is preferred when present (see
+ * fixtures/resolve-fixture.js), but this suite no longer depends on one existing — it falls
+ * back to fixtures/meal-source-contract-v1.fixture.json, a checked-in copy of the same real
+ * captured shape, kept in sync via `npm run fixture:update:meal`. These tests therefore run
+ * (not skip) on a fresh checkout, after any sibling worktree is cleaned up, and in CI.
  */
 
-const FIXTURE_PATH = path.resolve(
-  '..', 'Meal prep app - durable-consumption-events', 'tests', 'fixtures', 'cross-repo-life-ledger-fixture.json'
-);
-
-function loadFixture() {
-  if (!fs.existsSync(FIXTURE_PATH)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-const fixture = loadFixture();
+const resolved = resolveMealFixture();
+const fixture = resolved.fixture;
 const skip = !fixture;
 const tombstoneSkip = !fixture?.tombstoneScenario?.before || !fixture?.tombstoneScenario?.after;
 if (skip) {
-  console.log(`\nmeal-cross-repo-life-ledger.test.js: SKIPPED — fixture not found at ${FIXTURE_PATH}.`);
-  console.log('Run `npx playwright test tests/cross-repo-life-ledger-fixture.spec.js` in the Meal repo first.');
+  console.log(`\nmeal-cross-repo-life-ledger.test.js: SKIPPED — ${resolved.reason}`);
+} else {
+  console.log(`\nmeal-cross-repo-life-ledger.test.js: using fixture from ${resolved.source} (${resolved.path})`);
 }
 if (!skip && tombstoneSkip) {
   console.log('\nmeal-cross-repo-life-ledger.test.js: tombstone proof SKIPPED — regenerate the Meal cross-repo fixture with tombstoneScenario.');
