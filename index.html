@@ -533,6 +533,17 @@
   </div>
 </div>
 
+<!-- ══ UNIFIED LIFE FEED ══ -->
+<div class="view" id="view-life">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Life</div>
+      <div class="life-feed-subtitle">What actually happened, across time, learning, workouts and meals.</div>
+    </div>
+  </div>
+  <div id="life-feed-root" class="life-feed-root" aria-live="polite"></div>
+</div>
+
 <!-- ══ LEARNING PLANS ══ -->
 <div class="view" id="view-learning">
   <div class="page-header">
@@ -953,6 +964,9 @@
   </button>
 <button class="nav-btn" id="nav-reflect" onclick="showView('reflect');renderReflectView()">
     <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>Reflect
+  </button>
+  <button class="nav-btn" id="nav-life" onclick="showView('life')">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="4" cy="6" r="0.5"/></svg>Life
   </button>
   <button class="nav-btn" id="nav-learning" onclick="showView('learning')">
     <svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2"/><path d="M8 7h7"/><path d="M8 11h5"/></svg>Learn
@@ -1552,6 +1566,7 @@
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
 <script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
+<script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 
 <script>
@@ -3120,6 +3135,7 @@ function showView(name) {
   if (lpnb) lpnb.classList.add('active');
   if (name==='today') renderToday();
   if (name==='week') renderWeek();
+  if (name==='life' && window.renderLifeFeed) window.renderLifeFeed();
   if (name==='learning' && window.renderLearningPlans) window.renderLearningPlans();
   if (name==='career' && window.renderCapabilityCareer) window.renderCapabilityCareer();
   if (name==='settings') renderSettings();

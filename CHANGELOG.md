@@ -1,5 +1,59 @@
 # ChronaSense — Changelog
 
+## Phase 6 — Unified Life Feed V1 (branch: feat/unified-life-feed-v1) — 2026-09-01
+added:
+  - life-feed-model.js (new — the canonical, UI-independent Unified Life Feed projection. Pure
+    read over stored Life Ledger events: `buildLifeFeed(events, {now, referenceTimeZone})` →
+    `{ items, days, counts, skipped, isEmpty }`, plus `filterLifeFeed(feed, domain)` and the
+    exported `compareFeedItems` comparator. Domain mapping: activity_logged/focus_session_completed
+    → Time, plan_step_completed → Learning, workout_completed → Workout,
+    meal_prepared/meal_consumed → Meal. Ordering mirrors obsidian-life-ledger-renderer.js's
+    sortEvents() exactly — occurredAt (instant) / occurredDate (date-only, a lexicographic prefix
+    that sorts before the same day's timed events) as the primary key, recordedAt as a tiebreak
+    ONLY when a date-only event is involved, then type + eventId. Never fabricates a time for a
+    date-only meal_prepared, never assumes a weight unit, omits unknown durations rather than
+    printing "unknown". Tombstoned events excluded; unsupported/unreadable events collected into
+    `skipped[]` (never thrown, never reinterpreted). Intl.DateTimeFormat instances are cached per
+    zone so a multi-thousand-event history builds in well under a second.)
+  - life-feed-model.test.js (new — 30 tests: domain mapping, instant ordering, date-only handling,
+    deterministic ties, tombstone exclusion, revision/current-fact, unknown duration, unknown
+    workout unit, missing optional fields, unicode/HTML-like/long titles, unknown-event policy,
+    Today/Yesterday grouping, filtering, empty feed, no-input-mutation, temporal chaos (midnight,
+    multi-timezone, recordedAt≠occurredAt, DST boundary, equal start/end), the mixed-life chaos
+    day, a 3000-event performance check, and Obsidian fact-parity.)
+  - life-feed-ui.js (new — the Life tab renderer. Reads the runtime Life Ledger store once, builds
+    the feed with a cheap event-signature cache, renders date-grouped scannable rows with domain
+    filter chips + counts, domain-aware empty states, and an "N events not shown" footnote for
+    unrecognized types. role="tablist" filters, aria-selected state, keyboard-operable chips,
+    aria-live feed region, domain conveyed by text label + left border (not colour alone).
+    Strictly read-only w.r.t. the Life Ledger, Meal, and Workout.)
+  - tests/life-feed-ui.spec.js (new — 8 Playwright tests: empty state, mixed-life day render + order
+    + domains through the product, filter subsetting + aria state, zero-match domain empty message,
+    tombstone exclusion, hostile-HTML-is-text, read-only ledger after view/filter, keyboard filters.)
+  - index.html (new `#nav-life` bottom-nav button + `#view-life` container with `#life-feed-root`;
+    `showView('life')` calls `window.renderLifeFeed()`; `life-feed-ui.js` module script include)
+  - style.css (appended `.life-feed-*` block — mobile-first compact rows, sticky day headers,
+    filter chips, focus-visible outlines, per-domain left-border accents)
+  - eslint.config.js / package.json (new module files added to lint + module-config lists; new
+    `test:life-feed` script; `life-feed-model.test.js` added to `npm test`)
+  - CODEMAP.md (new life-feed-model.js / life-feed-ui.js stubs + "HTML — Unified Life Feed View")
+verification:
+  - npm test — all suites pass (test.js 448, node:test groups incl. life-feed-model 30/30)
+  - npm run test:adapter-contracts — pass
+  - npm run test:cross-repo-compat (STRICT, MEAL_REPO_PATH + OPENGYM_REPO_PATH set) — all legs
+    executed and passed, no SKIPs
+  - npm run lint — 0 errors (pre-existing warnings only)
+  - npx playwright test — smoke 64, learning-plan/career 85, plan 27, life-feed 8 — all pass
+  - node --check on all new/changed JS + eslint.config.js; git diff --check clean;
+    UTF-8/no-BOM/zero-control-byte scan clean on all changed files
+notes:
+  - The live app currently only writes plan_step_completed / focus_session_completed into the
+    runtime Life Ledger (via learning-plan-ui.js). activity_logged / workout_completed /
+    meal_prepared / meal_consumed have adapters + contracts but are not yet wired into the
+    ChronaSense runtime store — that wiring is source-adapter integration work, out of Phase 6
+    scope. The feed model + tests fully support and exercise all six types today.
+
+
 ## Workout → Life Ledger Adapter V1 — third targeted fix pass (branch: feat/workout-life-ledger-adapter-v1) — 2026-08-31
 changed:
   - obsidian-life-ledger-renderer.js (the previous pass's renderer/core "field-for-field mirror" claim
