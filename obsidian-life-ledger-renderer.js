@@ -2,9 +2,11 @@ export const OBSIDIAN_LIFE_LEDGER_SENTINEL = '<!-- life-ledger:generated:v1 -->'
 export const OBSIDIAN_LIFE_LEDGER_DAILY_DIR = 'Life Ledger/Daily';
 export const OBSIDIAN_LIFE_LEDGER_SYSTEM_README = 'Life Ledger/System/README.md';
 
-const SUPPORTED_EVENT_TYPES = new Set(['focus_session_completed', 'plan_step_completed', 'workout_completed']);
+const SUPPORTED_EVENT_TYPES = new Set([
+  'activity_logged', 'focus_session_completed', 'plan_step_completed', 'workout_completed',
+  'meal_prepared', 'meal_consumed'
+]);
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
-const UTC_FALLBACK_TIMEZONE = 'Etc/UTC';
 
 function isPlainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -28,7 +30,8 @@ function isValidTimezone(value) {
 
 function timezoneFor(event) {
   const timezone = String(event?.sourceTimezone || '').trim();
-  return isValidTimezone(timezone) ? timezone : UTC_FALLBACK_TIMEZONE;
+  if (!isValidTimezone(timezone)) throw new Error('Life Ledger export event has an invalid sourceTimezone');
+  return timezone;
 }
 
 function dateKeyFor(isoInstant, timezone) {
@@ -138,6 +141,16 @@ function isIsoInstant(value) {
 
 function normalizeIsoInstant(value) {
   return new Date(Date.parse(value)).toISOString();
+}
+
+// Mirrors life-ledger-core.js's isValidCalendarDate() exactly: rejects an impossible date
+// (2026-02-30) via a Date.UTC() round-trip, not just YYYY-MM-DD shape.
+function isValidCalendarDate(value) {
+  if (typeof value !== 'string' || !DATE_KEY_RE.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  if (month < 1 || month > 12) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
 function isUnsafeControlChar(code, allowWhitespace) {
@@ -365,6 +378,118 @@ function assertValidWorkoutCompletedPayload(event, index) {
   }
 }
 
+// Mirrors life-ledger-core.js's meal_prepared/meal_consumed deep payload shape checks
+// field for field, allowlist for allowlist — an independent, self-contained copy (not
+// an import) so this renderer stays dependency-free and still fails closed on a
+// malformed meal event handed to it directly, without relying on the caller having
+// already run it through life-ledger-core.js validation.
+const MEAL_TEXT_MAX_LENGTH = 200;
+const MEAL_ID_MAX_LENGTH = 200;
+const MEAL_PORTION_MAX = 99;
+const MEAL_PREPARATION_KINDS = new Set(['recipe', 'leftovers', 'takeout']);
+const MEAL_PREPARED_DATE_BASES = new Set(['source-local-date']);
+const MEAL_PREPARED_PAYLOAD_ALLOWED_KEYS = new Set([
+  'mealName', 'preparedDate', 'portionsPrepared', 'source'
+]);
+const MEAL_CONSUMED_PAYLOAD_ALLOWED_KEYS = new Set([
+  'mealName', 'consumedAt', 'portionCount', 'cookedMealId', 'source'
+]);
+// `storage` is deliberately NOT allowlisted: it is Meal's current, mutable location for the
+// batch, not a preparation-time fact (see life-ledger-core.js).
+const MEAL_PREPARED_SOURCE_ALLOWED_KEYS = new Set([
+  'cookedMealId', 'localDate', 'preparedDateBasis', 'recipeId', 'preparationKind'
+]);
+const MEAL_CONSUMED_SOURCE_ALLOWED_KEYS = new Set(['consumptionId', 'recipeId']);
+
+function isBoundedMealId(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= MEAL_ID_MAX_LENGTH
+    && !hasUnsafeControlChars(value, false);
+}
+
+function isBoundedMealText(value, maxLength) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength
+    && !hasUnsafeControlChars(value, true);
+}
+
+function isBoundedPortionCount(value, min) {
+  return Number.isInteger(value) && value >= min && value <= MEAL_PORTION_MAX;
+}
+
+function assertValidMealPreparedSource(source, event, label, path) {
+  if (!isPlainObject(source)) throw new Error(`${label}: ${path} must be an object`);
+  if (!isBoundedMealId(source.cookedMealId) || source.cookedMealId !== event.sourceEntityId) {
+    throw new Error(`${label}: ${path}.cookedMealId must match sourceEntityId`);
+  }
+  if (!isValidCalendarDate(source.localDate)) {
+    throw new Error(`${label}: ${path}.localDate must be a valid calendar date (YYYY-MM-DD)`);
+  }
+  if (!MEAL_PREPARED_DATE_BASES.has(source.preparedDateBasis)) {
+    throw new Error(`${label}: ${path}.preparedDateBasis is not recognized`);
+  }
+  if (hasOwn(source, 'recipeId') && source.recipeId != null && !isBoundedMealId(source.recipeId)) {
+    throw new Error(`${label}: ${path}.recipeId must be a bounded identifier`);
+  }
+  if (hasOwn(source, 'preparationKind') && source.preparationKind != null && !MEAL_PREPARATION_KINDS.has(source.preparationKind)) {
+    throw new Error(`${label}: ${path}.preparationKind is not recognized`);
+  }
+  assertNoUnknownKeys(source, MEAL_PREPARED_SOURCE_ALLOWED_KEYS, label, path);
+}
+
+function assertValidMealConsumedSource(source, event, label, path) {
+  if (!isPlainObject(source)) throw new Error(`${label}: ${path} must be an object`);
+  if (!isBoundedMealId(source.consumptionId) || source.consumptionId !== event.sourceEntityId) {
+    throw new Error(`${label}: ${path}.consumptionId must match sourceEntityId`);
+  }
+  if (hasOwn(source, 'recipeId') && source.recipeId != null && !isBoundedMealId(source.recipeId)) {
+    throw new Error(`${label}: ${path}.recipeId must be a bounded identifier`);
+  }
+  assertNoUnknownKeys(source, MEAL_CONSUMED_SOURCE_ALLOWED_KEYS, label, path);
+}
+
+// meal_prepared is date-precision (see life-ledger-core.js's temporal-precision invariant):
+// occurredAt must be ABSENT and occurredDate must equal payload.preparedDate exactly — the
+// renderer never falls back to a substitute time, and never fabricates a time-of-day for a
+// date-only fact.
+function assertValidMealPreparedPayload(event, index) {
+  const payload = event?.payload;
+  const label = `Malformed meal_prepared payload for Obsidian export at index ${index}`;
+  if (!isPlainObject(payload)) throw new Error(`${label}: payload must be an object`);
+  if (!isValidCalendarDate(event.occurredDate)) throw new Error(`${label}: occurredDate must be a valid calendar date`);
+  assertNoUnknownKeys(payload, MEAL_PREPARED_PAYLOAD_ALLOWED_KEYS, label, 'payload');
+  if (!isBoundedMealText(payload.mealName, MEAL_TEXT_MAX_LENGTH)) throw new Error(`${label}: mealName must be bounded text`);
+  if (!isValidCalendarDate(payload.preparedDate)) throw new Error(`${label}: preparedDate must be a valid calendar date`);
+  if (event.occurredDate !== payload.preparedDate) throw new Error(`${label}: occurredDate must match payload.preparedDate`);
+  if (hasOwn(payload, 'portionsPrepared') && payload.portionsPrepared != null && !isBoundedPortionCount(payload.portionsPrepared, 1)) {
+    throw new Error(`${label}: portionsPrepared must be an integer between 1 and 99`);
+  }
+  if (hasOwn(payload, 'source') && payload.source != null) {
+    assertValidMealPreparedSource(payload.source, event, label, 'payload.source');
+  }
+}
+
+function assertValidMealConsumedPayload(event, index) {
+  const payload = event?.payload;
+  const label = `Malformed meal_consumed payload for Obsidian export at index ${index}`;
+  if (!isPlainObject(payload)) throw new Error(`${label}: payload must be an object`);
+  assertNoUnknownKeys(payload, MEAL_CONSUMED_PAYLOAD_ALLOWED_KEYS, label, 'payload');
+  if (!isBoundedMealText(payload.mealName, MEAL_TEXT_MAX_LENGTH)) throw new Error(`${label}: mealName must be bounded text`);
+  if (!isIsoInstant(payload.consumedAt)) throw new Error(`${label}: consumedAt must be a UTC ISO instant`);
+  if (isIsoInstant(event.occurredAt) && normalizeIsoInstant(event.occurredAt) !== normalizeIsoInstant(payload.consumedAt)) {
+    throw new Error(`${label}: occurredAt must match payload.consumedAt`);
+  }
+  if (!Number.isInteger(payload.portionCount) || payload.portionCount < 1 || payload.portionCount > MEAL_PORTION_MAX) {
+    throw new Error(`${label}: portionCount must be an integer between 1 and 99`);
+  }
+  // Required: every real mealConsumption record durably captures cookedMealId (see
+  // meal-life-ledger-adapter.js) — there is no trustworthy legacy exception.
+  if (!isBoundedMealId(payload.cookedMealId)) {
+    throw new Error(`${label}: cookedMealId must be a bounded identifier`);
+  }
+  if (hasOwn(payload, 'source') && payload.source != null) {
+    assertValidMealConsumedSource(payload.source, event, label, 'payload.source');
+  }
+}
+
 function supportedEventOrThrow(event, index, policy, skipped) {
   if (SUPPORTED_EVENT_TYPES.has(event?.type)) return true;
   const type = String(event?.type || 'missing');
@@ -376,10 +501,68 @@ function supportedEventOrThrow(event, index, policy, skipped) {
   throw new Error(message);
 }
 
+function isDatePrecisionEvent(event) {
+  return event?.type === 'meal_prepared';
+}
+
+// Mirrors life-ledger-core.js's temporal envelope rule independently, without importing the
+// shared validator: supported event types have a fixed precision, valid IANA timezone, and
+// exactly one factual occurrence field. Keep this deliberately narrow; payload validation stays
+// in the type-specific guards below and the renderer does not become a second global envelope
+// validator.
+function assertValidTemporalEnvelope(event, index) {
+  const label = `Malformed Life Ledger temporal envelope for Obsidian export at index ${index}`;
+  if (!isValidTimezone(event.sourceTimezone)) throw new Error(`${label}: sourceTimezone must be a valid IANA timezone`);
+
+  const requiredPrecision = isDatePrecisionEvent(event) ? 'date' : 'instant';
+  if (hasOwn(event, 'temporalPrecision') && event.temporalPrecision != null) {
+    if (!['instant', 'date'].includes(event.temporalPrecision)) {
+      throw new Error(`${label}: temporalPrecision must be instant or date`);
+    }
+    if (event.temporalPrecision !== requiredPrecision) {
+      throw new Error(`${label}: temporalPrecision must be ${requiredPrecision} for ${event.type}`);
+    }
+  }
+
+  if (requiredPrecision === 'date') {
+    if (hasOwn(event, 'occurredAt')) throw new Error(`${label}: occurredAt must be absent for a date-precision event`);
+    if (!isValidCalendarDate(event.occurredDate)) throw new Error(`${label}: occurredDate must be a valid calendar date`);
+    return;
+  }
+
+  if (hasOwn(event, 'occurredDate')) throw new Error(`${label}: occurredDate must be absent for an instant-precision event`);
+  if (!isIsoInstant(event.occurredAt)) throw new Error(`${label}: occurredAt must be a UTC ISO instant`);
+}
+
+// A date-precision event has no occurredAt to sort by — its factual chronological anchor is
+// occurredDate alone (see the temporal-precision invariant). A bare YYYY-MM-DD string is a
+// lexicographic PREFIX of any same-day YYYY-MM-DDTHH:mm:ssZ instant string, so it naturally
+// sorts just before that day's timed events without needing special-casing.
+function sortKeyFor(event) {
+  return isDatePrecisionEvent(event) ? String(event.occurredDate) : String(event.occurredAt);
+}
+
 function sortEvents(a, b) {
-  return String(a.occurredAt).localeCompare(String(b.occurredAt))
-    || String(a.type).localeCompare(String(b.type))
+  const keyCompare = sortKeyFor(a).localeCompare(sortKeyFor(b));
+  if (keyCompare !== 0) return keyCompare;
+  // A technical, clearly non-factual tiebreaker — never a fabricated time-of-day — used ONLY
+  // when at least one side is date-precision and the primary key above ties (e.g. two
+  // meal_prepared events on the same calendar day with no time-of-day to order them by).
+  if (isDatePrecisionEvent(a) || isDatePrecisionEvent(b)) {
+    const recordedCompare = String(a.recordedAt || '').localeCompare(String(b.recordedAt || ''));
+    if (recordedCompare !== 0) return recordedCompare;
+  }
+  return String(a.type).localeCompare(String(b.type))
     || String(a.eventId).localeCompare(String(b.eventId));
+}
+
+function activityLine(event) {
+  const timezone = timezoneFor(event);
+  const startedAt = event.payload?.startedAt || event.occurredAt;
+  const endedAt = event.payload?.endedAt || event.occurredAt;
+  const duration = minutes(event.payload?.durationMinutes);
+  const durationText = duration == null ? '' : ` · ${duration} min`;
+  return `- ${timeFor(startedAt, timezone)}-${timeFor(endedAt, timezone)} - **${text(event.payload?.activity, 'Activity')}**${durationText}\n  ${eventMarker(event)}`;
 }
 
 function focusLine(event) {
@@ -432,16 +615,42 @@ function workoutLine(event) {
   return `- ${time} - Workout **${text(event.payload?.workoutName, 'Workout')}** · ${facts.join(' · ')}\n  ${eventMarker(event)}`;
 }
 
+// meal_prepared is date-precision: preparedDate is a factual calendar day with NO time-of-day
+// evidence, validated by assertValidMealPreparedPayload() before any meal_prepared event
+// reaches this renderer. This line therefore never renders a clock time (never "00:00") —
+// only the date itself, worded as a date-level fact ("Prepared — YYYY-MM-DD").
+function mealPreparedLine(event) {
+  const portions = event.payload?.portionsPrepared;
+  const portionsText = portions == null ? '' : ` · ${portions} ${portions === 1 ? 'portion' : 'portions'}`;
+  return `- Prepared **${text(event.payload?.mealName, 'Meal')}**${portionsText} — ${event.payload.preparedDate}\n  ${eventMarker(event)}`;
+}
+
+// consumedAt is required and validated by assertValidMealConsumedPayload() before any
+// meal_consumed event reaches this renderer — no `|| event.occurredAt` fallback here.
+function mealConsumedLine(event) {
+  const timezone = timezoneFor(event);
+  const portions = event.payload?.portionCount;
+  const portionsText = portions == null ? '' : ` · ${portions} ${portions === 1 ? 'portion' : 'portions'}`;
+  return `- ${timeFor(event.payload.consumedAt, timezone)} - Ate **${text(event.payload?.mealName, 'Meal')}**${portionsText}\n  ${eventMarker(event)}`;
+}
+
 function renderDaily(dateKey, events) {
+  const activityEvents = events.filter(event => event.type === 'activity_logged');
   const focusEvents = events.filter(event => event.type === 'focus_session_completed');
   const learningEvents = events.filter(event => event.type === 'plan_step_completed');
   const workoutEvents = events.filter(event => event.type === 'workout_completed');
+  // Already in the day's overall chronological order (buildObsidianLifeLedgerExport
+  // sorts `active` once before grouping into byDay), so this filter does not re-sort.
+  const mealEvents = events.filter(event => event.type === 'meal_prepared' || event.type === 'meal_consumed');
   const lines = [
     OBSIDIAN_LIFE_LEDGER_SENTINEL,
     '',
     `# Life Ledger - ${dateKey}`,
     ''
   ];
+  if (activityEvents.length) {
+    lines.push('## Activity', '', ...activityEvents.map(activityLine), '');
+  }
   if (focusEvents.length) {
     lines.push('## Focus', '', ...focusEvents.map(focusLine), '');
   }
@@ -450,6 +659,12 @@ function renderDaily(dateKey, events) {
   }
   if (workoutEvents.length) {
     lines.push('## Workouts', '', ...workoutEvents.map(workoutLine), '');
+  }
+  if (mealEvents.length) {
+    const mealLines = mealEvents.map(event => (
+      event.type === 'meal_prepared' ? mealPreparedLine(event) : mealConsumedLine(event)
+    ));
+    lines.push('## Meals', '', ...mealLines, '');
   }
   return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 }
@@ -474,8 +689,11 @@ function normalizeEvents(events, unsupportedEventPolicy) {
   const active = events.filter((event, index) => {
     if (!isPlainObject(event)) throw new Error(`Life Ledger export event at index ${index} must be an object`);
     if (!supportedEventOrThrow(event, index, unsupportedEventPolicy, skipped)) return false;
+    assertValidTemporalEnvelope(event, index);
     if (isTombstoned(event)) return false;
     if (event.type === 'workout_completed') assertValidWorkoutCompletedPayload(event, index);
+    if (event.type === 'meal_prepared') assertValidMealPreparedPayload(event, index);
+    if (event.type === 'meal_consumed') assertValidMealConsumedPayload(event, index);
     return true;
   });
   return { active, skipped };
@@ -489,7 +707,10 @@ export function buildObsidianLifeLedgerExport(events, options = {}) {
   const { active, skipped } = normalizeEvents(events, unsupportedEventPolicy);
   const byDay = new Map();
   active.slice().sort(sortEvents).forEach(event => {
-    const day = dateKeyFor(event.occurredAt, timezoneFor(event));
+    // A date-precision event's Daily file is its own asserted factual date directly — never
+    // derived via timezone conversion of a nonexistent instant (see the temporal-precision
+    // invariant).
+    const day = isDatePrecisionEvent(event) ? event.occurredDate : dateKeyFor(event.occurredAt, timezoneFor(event));
     if (!DATE_KEY_RE.test(day)) throw new Error(`Unable to derive Life Ledger export date for event ${event.eventId}`);
     if (!byDay.has(day)) byDay.set(day, []);
     byDay.get(day).push(event);

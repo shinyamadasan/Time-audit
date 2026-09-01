@@ -3271,12 +3271,13 @@ test('non-activity payload validation covers valid and invalid meal_prepared eve
     sourceApp: 'meal',
     sourceEntityId: 'cooked-meal-1',
     type: 'meal_prepared',
-    occurredAt: '2026-08-27T18:00:00.000Z',
+    temporalPrecision: 'date',
+    occurredDate: '2026-08-27',
     sourceTimezone: 'America/Phoenix',
     payload: {
       mealName: 'Chicken bowls',
-      preparedAt: '2026-08-27T18:00:00.000Z',
-      servingsPrepared: 4
+      preparedDate: '2026-08-27',
+      portionsPrepared: 4
     },
     provenance: {
       source: 'meal',
@@ -3291,6 +3292,10 @@ test('non-activity payload validation covers valid and invalid meal_prepared eve
   assert.equal(validateLifeLedgerEventDraft(valid).ok, true);
   const invalid = { ...valid, payload: { mealName: 'Chicken bowls' } };
   assert.equal(validateLifeLedgerEventDraft(invalid).ok, false);
+  const impossibleDate = { ...valid, occurredDate: '2026-02-30', payload: { ...valid.payload, preparedDate: '2026-02-30' } };
+  assert.equal(validateLifeLedgerEventDraft(impossibleDate).ok, false);
+  const fakeMidnight = { ...valid, occurredAt: '2026-08-27T00:00:00.000Z' };
+  assert.equal(validateLifeLedgerEventDraft(fakeMidnight).ok, false);
 });
 
 console.log('\nLife Ledger identity');
@@ -4047,6 +4052,39 @@ function obsidianStepEvent(overrides = {}) {
   };
 }
 
+function obsidianActivityEvent(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    eventId: '40404040-4040-4040-8040-404040404040',
+    sourceApp: 'chronasense',
+    sourceEntityId: 'synthetic-activity-1',
+    type: 'activity_logged',
+    occurredAt: OBS_TIME.end,
+    recordedAt: OBS_TIME.recorded,
+    revisedAt: null,
+    sourceTimezone: 'America/Phoenix',
+    payload: {
+      activity: 'Synthetic deep work',
+      category: 'work',
+      startedAt: OBS_TIME.start,
+      endedAt: OBS_TIME.end,
+      durationMinutes: 25
+    },
+    provenance: {
+      source: 'chronasense',
+      sourceRecordKind: 'chronasense.entries',
+      adapterVersion: 'test-v1',
+      observedAt: OBS_TIME.recorded,
+      captureMethod: 'manual',
+      evidence: ['synthetic.entries:1']
+    },
+    confidence: { score: 1, basis: 'source-recorded' },
+    revision: 1,
+    tombstone: { active: false, deletedAt: null, reason: null, provenance: null },
+    ...overrides
+  };
+}
+
 function obsidianWorkoutEvent(overrides = {}) {
   return {
     schemaVersion: 1,
@@ -4082,6 +4120,78 @@ function obsidianWorkoutEvent(overrides = {}) {
       evidence: ['opengym.backup:workouts/synthetic-workout']
     },
     confidence: { score: 0.9, basis: 'validated-supplied-backup-record' },
+    revision: 1,
+    tombstone: { active: false, deletedAt: null, reason: null, provenance: null },
+    ...overrides
+  };
+}
+
+function obsidianMealPreparedEvent(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    eventId: '50505050-5050-4050-8050-505050505050',
+    sourceApp: 'meal',
+    sourceEntityId: 'synthetic-cooked-meal',
+    type: 'meal_prepared',
+    temporalPrecision: 'date',
+    occurredDate: '2026-08-30',
+    recordedAt: OBS_TIME.recorded,
+    revisedAt: null,
+    sourceTimezone: 'America/Phoenix',
+    payload: {
+      mealName: 'Synthetic Chicken Bowls',
+      preparedDate: '2026-08-30',
+      portionsPrepared: 3,
+      source: {
+        cookedMealId: 'synthetic-cooked-meal',
+        localDate: '2026-08-30',
+        preparedDateBasis: 'source-local-date',
+        recipeId: 'synthetic-recipe',
+        preparationKind: 'recipe'
+      }
+    },
+    provenance: {
+      source: 'meal',
+      sourceRecordKind: 'meal.cooked_meal',
+      adapterVersion: 'test-v1',
+      observedAt: OBS_TIME.recorded,
+      captureMethod: 'meal_app',
+      evidence: ['synthetic.meal:cookedMeals/synthetic-cooked-meal']
+    },
+    confidence: { score: 0.85, basis: 'source-local-date-only-no-time-of-day-evidence' },
+    revision: 1,
+    tombstone: { active: false, deletedAt: null, reason: null, provenance: null },
+    ...overrides
+  };
+}
+
+function obsidianMealConsumedEvent(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    eventId: '60606060-6060-4060-8060-606060606060',
+    sourceApp: 'meal',
+    sourceEntityId: 'synthetic-consumption',
+    type: 'meal_consumed',
+    occurredAt: '2026-08-30T19:00:00.000Z',
+    recordedAt: OBS_TIME.recorded,
+    revisedAt: null,
+    sourceTimezone: 'America/Phoenix',
+    payload: {
+      mealName: 'Synthetic Chicken Bowls',
+      consumedAt: '2026-08-30T19:00:00.000Z',
+      portionCount: 1,
+      cookedMealId: 'synthetic-cooked-meal',
+      source: { consumptionId: 'synthetic-consumption', recipeId: 'synthetic-recipe' }
+    },
+    provenance: {
+      source: 'meal',
+      sourceRecordKind: 'meal.consumption',
+      adapterVersion: 'test-v1',
+      observedAt: OBS_TIME.recorded,
+      captureMethod: 'meal_app',
+      evidence: ['synthetic.meal:mealConsumptions/synthetic-consumption']
+    },
+    confidence: { score: 1, basis: 'source-recorded' },
     revision: 1,
     tombstone: { active: false, deletedAt: null, reason: null, provenance: null },
     ...overrides
@@ -4829,6 +4939,186 @@ test('workout_completed core/renderer validator parity matrix', () => {
     assert.equal(rendererOk, valid, `renderer validation mismatch for "${label}": ${rendererError}`);
   });
 });
+
+// Same drift guard as WORKOUT_PARITY_FIXTURES above, applied to meal_prepared and
+// meal_consumed: every fixture runs against both life-ledger-core.js's shared
+// validateLifeLedgerEvent() and the renderer's independent copy directly.
+const MEAL_PREPARED_PARITY_FIXTURES = [
+  { label: 'valid canonical meal_prepared', valid: true, mutate: payload => payload },
+  { label: 'unknown top-level payload key', valid: false, mutate: payload => ({ ...payload, portionsRemaining: 'nope', extraneous: true }) },
+  { label: 'unknown payload.source key', valid: false, mutate: payload => ({ ...payload, source: { ...payload.source, extra: 'x' } }) },
+  { label: 'cookedMealId not matching sourceEntityId', valid: false, mutate: payload => ({
+    ...payload, source: { ...payload.source, cookedMealId: 'someone-elses-id' }
+  }) },
+  { label: 'localDate not YYYY-MM-DD', valid: false, mutate: payload => ({ ...payload, source: { ...payload.source, localDate: '08/30/2026' } }) },
+  { label: 'localDate is an impossible calendar date', valid: false, mutate: payload => ({ ...payload, source: { ...payload.source, localDate: '2026-02-30' } }) },
+  { label: 'overclaiming preparedDateBasis', valid: false, mutate: payload => ({
+    ...payload, source: { ...payload.source, preparedDateBasis: 'captured-exact-moment' }
+  }) },
+  { label: 'reintroduced storage field is unrecognized', valid: false, mutate: payload => ({ ...payload, source: { ...payload.source, storage: 'fridge' } }) },
+  { label: 'invalid preparationKind enum', valid: false, mutate: payload => ({ ...payload, source: { ...payload.source, preparationKind: 'foraged' } }) },
+  { label: 'portionsPrepared out of range (0)', valid: false, mutate: payload => ({ ...payload, portionsPrepared: 0 }) },
+  { label: 'portionsPrepared out of range (>99)', valid: false, mutate: payload => ({ ...payload, portionsPrepared: 100 }) },
+  { label: 'portionsPrepared not an integer', valid: false, mutate: payload => ({ ...payload, portionsPrepared: 2.5 }) },
+  { label: 'reintroduced portionsRemaining field is unrecognized', valid: false, mutate: payload => ({ ...payload, portionsRemaining: 1 }) },
+  { label: 'reintroduced ingredients field is unrecognized', valid: false, mutate: payload => ({ ...payload, ingredients: ['chicken'] }) },
+  { label: 'missing mealName', valid: false, mutate: payload => { const { mealName, ...rest } = payload; return rest; } },
+  { label: 'mealName is an object', valid: false, mutate: payload => ({ ...payload, mealName: {} }) },
+  { label: 'oversized mealName', valid: false, mutate: payload => ({ ...payload, mealName: 'x'.repeat(201) }) },
+  { label: 'unsafe control character in mealName', valid: false, mutate: payload => ({ ...payload, mealName: `Chicken${String.fromCharCode(7)}` }) },
+  { label: 'missing preparedDate', valid: false, mutate: payload => { const { preparedDate, ...rest } = payload; return rest; } },
+  { label: 'invalid preparedDate (not YYYY-MM-DD)', valid: false, mutate: payload => ({ ...payload, preparedDate: 'not-a-date' }) },
+  { label: 'preparedDate is an impossible calendar date', valid: false, mutate: payload => ({ ...payload, preparedDate: '2026-02-30' }) },
+  { label: 'preparedDate does not match top-level occurredDate', valid: false, mutate: payload => ({ ...payload, preparedDate: '2026-08-31' }) },
+  { label: 'valid with no portionsPrepared (untracked batch)', valid: true, mutate: payload => {
+    const { portionsPrepared, ...rest } = payload;
+    return rest;
+  } }
+];
+test('meal_prepared core/renderer payload validator parity matrix', () => {
+  MEAL_PREPARED_PARITY_FIXTURES.forEach(({ label, valid, mutate }) => {
+    const event = obsidianMealPreparedEvent({ payload: mutate(obsidianMealPreparedEvent().payload) });
+    const coreResult = validateLifeLedgerEvent(event);
+    assert.equal(coreResult.ok, valid, `core validation mismatch for "${label}": ${JSON.stringify(coreResult.errors)}`);
+    let rendererOk = true;
+    let rendererError = null;
+    try {
+      buildObsidianLifeLedgerExport([event]);
+    } catch (err) {
+      rendererOk = false;
+      rendererError = err.message;
+    }
+    assert.equal(rendererOk, valid, `renderer validation mismatch for "${label}": ${rendererError}`);
+  });
+});
+test('meal_prepared temporalPrecision mismatch, fake-midnight, and occurredAt:null are rejected by both core and renderer', () => {
+  [
+    { ...obsidianMealPreparedEvent(), temporalPrecision: 'instant', occurredAt: '2026-08-30T00:00:00.000Z', occurredDate: undefined },
+    { ...obsidianMealPreparedEvent(), occurredAt: '2026-08-30T00:00:00.000Z' },
+    { ...obsidianMealPreparedEvent(), occurredAt: null }
+  ].forEach(event => {
+    assert.equal(validateLifeLedgerEvent(event).ok, false);
+    assert.throws(() => buildObsidianLifeLedgerExport([event]));
+  });
+});
+
+const MEAL_CONSUMED_PARITY_FIXTURES = [
+  { label: 'valid canonical meal_consumed', valid: true, mutate: payload => payload },
+  { label: 'unknown top-level payload key', valid: false, mutate: payload => ({ ...payload, extraneous: true }) },
+  { label: 'unknown payload.source key', valid: false, mutate: payload => ({ ...payload, source: { ...payload.source, extra: 'x' } }) },
+  { label: 'consumptionId not matching sourceEntityId', valid: false, mutate: payload => ({
+    ...payload, source: { ...payload.source, consumptionId: 'someone-elses-id' }
+  }) },
+  { label: 'cookedMealId wrong type', valid: false, mutate: payload => ({ ...payload, cookedMealId: 42 }) },
+  { label: 'missing cookedMealId (required — every real record captures it)', valid: false, mutate: payload => { const { cookedMealId, ...rest } = payload; return rest; } },
+  { label: 'missing mealName', valid: false, mutate: payload => { const { mealName, ...rest } = payload; return rest; } },
+  { label: 'mealName is an object', valid: false, mutate: payload => ({ ...payload, mealName: {} }) },
+  { label: 'missing consumedAt', valid: false, mutate: payload => { const { consumedAt, ...rest } = payload; return rest; } },
+  { label: 'invalid consumedAt (not an ISO instant)', valid: false, mutate: payload => ({ ...payload, consumedAt: 'not-a-date' }) },
+  { label: 'consumedAt does not match top-level occurredAt', valid: false, mutate: payload => ({ ...payload, consumedAt: '2026-08-30T20:00:00.000Z' }) },
+  { label: 'missing portionCount', valid: false, mutate: payload => { const { portionCount, ...rest } = payload; return rest; } },
+  { label: 'portionCount zero', valid: false, mutate: payload => ({ ...payload, portionCount: 0 }) },
+  { label: 'portionCount negative', valid: false, mutate: payload => ({ ...payload, portionCount: -1 }) },
+  { label: 'portionCount non-numeric', valid: false, mutate: payload => ({ ...payload, portionCount: 'one' }) },
+  { label: 'portionCount not an integer (1.5)', valid: false, mutate: payload => ({ ...payload, portionCount: 1.5 }) },
+  { label: 'portionCount out of range (100)', valid: false, mutate: payload => ({ ...payload, portionCount: 100 }) },
+  { label: 'valid without recipeId linkage (cookedMealId still required)', valid: true, mutate: payload => (
+    { ...payload, source: { consumptionId: payload.source.consumptionId } }
+  ) }
+];
+test('meal_consumed core/renderer payload validator parity matrix', () => {
+  MEAL_CONSUMED_PARITY_FIXTURES.forEach(({ label, valid, mutate }) => {
+    const event = obsidianMealConsumedEvent({ payload: mutate(obsidianMealConsumedEvent().payload) });
+    const coreResult = validateLifeLedgerEvent(event);
+    assert.equal(coreResult.ok, valid, `core validation mismatch for "${label}": ${JSON.stringify(coreResult.errors)}`);
+    let rendererOk = true;
+    let rendererError = null;
+    try {
+      buildObsidianLifeLedgerExport([event]);
+    } catch (err) {
+      rendererOk = false;
+      rendererError = err.message;
+    }
+    assert.equal(rendererOk, valid, `renderer validation mismatch for "${label}": ${rendererError}`);
+  });
+});
+
+function assertTemporalEnvelopeParity(label, event, valid) {
+  const coreResult = validateLifeLedgerEvent(event);
+  assert.equal(coreResult.ok, valid, `core temporal-envelope mismatch for "${label}": ${JSON.stringify(coreResult.errors)}`);
+  let rendererOk = true;
+  let rendererError = null;
+  try {
+    buildObsidianLifeLedgerExport([event]);
+  } catch (err) {
+    rendererOk = false;
+    rendererError = err.message;
+  }
+  assert.equal(rendererOk, valid, `renderer temporal-envelope mismatch for "${label}": ${rendererError}`);
+}
+
+test('meal_prepared core/renderer temporal envelope parity matrix', () => {
+  const withoutTemporalPrecision = obsidianMealPreparedEvent();
+  delete withoutTemporalPrecision.temporalPrecision;
+  const withoutOccurredDate = obsidianMealPreparedEvent();
+  delete withoutOccurredDate.occurredDate;
+  [
+    ['valid canonical date event', obsidianMealPreparedEvent(), true],
+    ['valid implicit type-required date precision', withoutTemporalPrecision, true],
+    ['invalid source timezone', obsidianMealPreparedEvent({ sourceTimezone: 'Not/AZone' }), false],
+    ['invalid precision mismatch', obsidianMealPreparedEvent({ temporalPrecision: 'instant' }), false],
+    ['invalid malformed precision', obsidianMealPreparedEvent({ temporalPrecision: 'calendar' }), false],
+    ['invalid occurredAt presence', obsidianMealPreparedEvent({ occurredAt: '2026-08-30T00:00:00.000Z' }), false],
+    ['invalid occurredAt null presence', obsidianMealPreparedEvent({ occurredAt: null }), false],
+    ['missing occurredDate', withoutOccurredDate, false],
+    ['malformed occurredDate', obsidianMealPreparedEvent({ occurredDate: 'August 30' }), false],
+    ['impossible occurredDate', obsidianMealPreparedEvent({ occurredDate: '2026-02-30', payload: { ...obsidianMealPreparedEvent().payload, preparedDate: '2026-02-30' } }), false]
+  ].forEach(([label, event, valid]) => assertTemporalEnvelopeParity(label, event, valid));
+});
+
+test('meal_consumed core/renderer temporal envelope parity matrix', () => {
+  const withoutOccurredAt = obsidianMealConsumedEvent();
+  delete withoutOccurredAt.occurredAt;
+  [
+    ['valid canonical instant event', obsidianMealConsumedEvent(), true],
+    ['invalid source timezone', obsidianMealConsumedEvent({ sourceTimezone: 'Not/AZone' }), false],
+    ['invalid precision mismatch', obsidianMealConsumedEvent({ temporalPrecision: 'date' }), false],
+    ['invalid malformed precision', obsidianMealConsumedEvent({ temporalPrecision: 'calendar' }), false],
+    ['invalid occurredDate presence', obsidianMealConsumedEvent({ occurredDate: '2026-08-30' }), false],
+    ['invalid occurredDate null presence', obsidianMealConsumedEvent({ occurredDate: null }), false],
+    ['missing occurredAt', withoutOccurredAt, false],
+    ['malformed occurredAt', obsidianMealConsumedEvent({ occurredAt: 'not-a-date' }), false]
+  ].forEach(([label, event, valid]) => assertTemporalEnvelopeParity(label, event, valid));
+});
+test('renderer renders a Meals section with both prepared and consumed lines, correctly formatted', () => {
+  const content = dailyFile(buildObsidianLifeLedgerExport([obsidianMealPreparedEvent(), obsidianMealConsumedEvent()])).content;
+  assert.ok(content.includes('## Meals'));
+  assert.ok(content.includes('Prepared **Synthetic Chicken Bowls** · 3 portions — 2026-08-30'));
+  assert.ok(content.includes('Ate **Synthetic Chicken Bowls** · 1 portion'));
+});
+test('renderer never fabricates a time-of-day (never 00:00) for a date-precision meal_prepared event', () => {
+  const content = dailyFile(buildObsidianLifeLedgerExport([obsidianMealPreparedEvent()])).content;
+  assert.equal(content.includes('00:00'), false);
+});
+test('renderer omits portions text when absent rather than fabricating a count', () => {
+  const prepared = obsidianMealPreparedEvent({ payload: (() => {
+    const { portionsPrepared, ...rest } = obsidianMealPreparedEvent().payload;
+    return rest;
+  })() });
+  const content = dailyFile(buildObsidianLifeLedgerExport([prepared])).content;
+  assert.ok(content.includes('Prepared **Synthetic Chicken Bowls** — 2026-08-30\n'));
+  assert.equal(content.includes('portions'), false);
+});
+test('renderer rejects a malformed meal_prepared or meal_consumed payload instead of fabricating a line', () => {
+  assert.throws(
+    () => buildObsidianLifeLedgerExport([obsidianMealPreparedEvent({ payload: { ...obsidianMealPreparedEvent().payload, mealName: {} } })]),
+    /Malformed meal_prepared payload/
+  );
+  assert.throws(
+    () => buildObsidianLifeLedgerExport([obsidianMealConsumedEvent({ payload: { ...obsidianMealConsumedEvent().payload, portionCount: -1 } })]),
+    /Malformed meal_consumed payload/
+  );
+});
 test('renderer omits tombstoned events from active daily output', () => {
   const exportPlan = buildObsidianLifeLedgerExport([obsidianStepEvent({
     tombstone: { active: true, deletedAt: OBS_TIME.recorded, reason: 'user_delete', provenance: { sourceOperation: 'delete' } }
@@ -4859,9 +5149,11 @@ test('renderer partitions days using sourceTimezone', () => {
   })]);
   assert.ok(dailyFile(exportPlan, '2026-08-31'));
 });
-test('renderer uses deterministic UTC fallback when sourceTimezone is missing', () => {
-  const exportPlan = buildObsidianLifeLedgerExport([obsidianFocusEvent({ sourceTimezone: '' })]);
-  assert.ok(dailyFile(exportPlan, '2026-08-30'));
+test('renderer rejects a missing sourceTimezone instead of falling back to UTC', () => {
+  assert.throws(
+    () => buildObsidianLifeLedgerExport([obsidianFocusEvent({ sourceTimezone: '' })]),
+    /sourceTimezone must be a valid IANA timezone/
+  );
 });
 test('renderer escapes hostile Markdown and HTML-like titles', () => {
   const content = dailyFile(buildObsidianLifeLedgerExport([obsidianStepEvent({
@@ -4881,14 +5173,46 @@ test('renderer does not fabricate missing optional learning context', () => {
   assert.equal(content.includes(' / '), false);
 });
 test('renderer handles unknown event types explicitly', () => {
-  assert.throws(() => buildObsidianLifeLedgerExport([{ ...obsidianStepEvent(), type: 'meal_prepared' }]), /Unsupported Life Ledger event type/);
-  const skipped = buildObsidianLifeLedgerExport([{ ...obsidianStepEvent(), type: 'meal_prepared' }], { unsupportedEventPolicy: 'skip' });
+  // Every V1 Life Ledger event type (life-ledger-core.js's ALLOWED_EVENT_TYPES) is now
+  // renderer-supported, including activity_logged — see the mixed-export test below. A
+  // genuinely unrecognized type string (never a real V1 type) still fails closed.
+  assert.throws(() => buildObsidianLifeLedgerExport([{ ...obsidianStepEvent(), type: 'some_future_event_type' }]), /Unsupported Life Ledger event type/);
+  const skipped = buildObsidianLifeLedgerExport([{ ...obsidianStepEvent(), type: 'some_future_event_type' }], { unsupportedEventPolicy: 'skip' });
   assert.equal(skipped.skipped.length, 1);
 });
 test('renderer does not turn non-additive focus events into duplicate totals', () => {
   const content = dailyFile(buildObsidianLifeLedgerExport([obsidianFocusEvent()])).content;
   assert.equal((content.match(/25 min/g) || []).length, 1);
   assert.equal(/total/i.test(content), false);
+});
+
+// The reviewer's requested mixed Ledger: activity, focus, plan, workout, meal prepared,
+// meal consumed, all in one export. This is the "compatibility plumbing" bar the
+// architectural review set for activity_logged support — not the full Unified Life Feed.
+test('a single export mixing activity_logged, focus, plan, workout, meal_prepared, and meal_consumed renders every section correctly', () => {
+  const events = [
+    obsidianActivityEvent(),
+    obsidianFocusEvent(),
+    obsidianStepEvent(),
+    obsidianWorkoutEvent(),
+    obsidianMealPreparedEvent(),
+    obsidianMealConsumedEvent()
+  ];
+  events.forEach(event => assert.equal(validateLifeLedgerEvent(event).ok, true, event.type));
+
+  const exportPlan = buildObsidianLifeLedgerExport(events);
+  const content = dailyFile(exportPlan).content;
+  assert.ok(content.includes('## Activity'));
+  assert.ok(content.includes('## Focus'));
+  assert.ok(content.includes('## Learning'));
+  assert.ok(content.includes('## Workouts'));
+  assert.ok(content.includes('## Meals'));
+  assert.ok(content.includes('Synthetic deep work'));
+  assert.ok(content.includes('Completed **Synthetic step**'));
+  assert.ok(content.includes('Workout **Synthetic workout**'));
+  assert.ok(content.includes('Prepared **Synthetic Chicken Bowls**'));
+  assert.ok(content.includes('Ate **Synthetic Chicken Bowls**'));
+  assert.equal(exportPlan.skipped.length, 0);
 });
 
 asyncTest('writer accepts an ordinary managed Daily path', async () => withTempVault(async root => {
