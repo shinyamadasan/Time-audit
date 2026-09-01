@@ -23,8 +23,21 @@ const TOMBSTONE_REASONS = Object.freeze([
   'user_delete',
   'bulk_clear',
   'merge_replaced',
-  'data_doctor_repair'
+  'data_doctor_repair',
+  // A source signaled "this record is gone" (e.g. absent from a live collection AND present in
+  // an explicit per-record deletion map) without itself distinguishing WHY — discard, expiry,
+  // correction, etc. Adapters must use this rather than overclaiming `user_delete` when their
+  // source evidence proves deletion occurred but not the agency/reason behind it.
+  'source_marked_deleted'
 ]);
+
+// V1 supports two mutually exclusive event-occurrence precisions. 'instant' (the default when
+// `temporalPrecision` is absent, for backward compatibility with every event type that predates
+// this) means `occurredAt` is a captured/derived UTC instant. 'date' means the source only ever
+// asserted a calendar day with no time-of-day evidence — `occurredAt` MUST be absent and
+// `occurredDate` (YYYY-MM-DD) carries the fact instead, so a technical sort/grouping anchor can
+// never be exposed as a factual occurrence instant (e.g. a fabricated local-midnight timestamp).
+const TEMPORAL_PRECISIONS = Object.freeze(['instant', 'date']);
 
 const PAYLOAD_RULES = Object.freeze({
   activity_logged: Object.freeze({
@@ -58,15 +71,24 @@ const PAYLOAD_RULES = Object.freeze({
     occurredAtField: 'endedAt',
     duration: 'optional'
   }),
+  // Meal's source only ever asserts a calendar day for preparation (cookedDate has no
+  // time-of-day evidence) — see the temporal-precision invariant above. `preparedDate` is the
+  // factual date; there is deliberately no `preparedAt` instant field to fabricate a fake
+  // midnight. `storage`/`portionsRemaining`/`ingredients` are NOT published: they are mutable
+  // current-state facts (Life Ledger review finding), not preparation-time evidence.
   meal_prepared: Object.freeze({
-    required: Object.freeze(['mealName', 'preparedAt']),
-    optional: Object.freeze(['servingsPrepared', 'portionsRemaining', 'ingredients', 'source']),
-    instantFields: Object.freeze(['preparedAt']),
-    occurredAtField: 'preparedAt'
+    required: Object.freeze(['mealName', 'preparedDate']),
+    optional: Object.freeze(['portionsPrepared', 'source']),
+    dateFields: Object.freeze(['preparedDate']),
+    occurredDateField: 'preparedDate',
+    temporalPrecision: 'date'
   }),
   meal_consumed: Object.freeze({
-    required: Object.freeze(['mealName', 'consumedAt', 'portionCount']),
-    optional: Object.freeze(['cookedMealId', 'source']),
+    // cookedMealId is required: every real mealConsumption record durably captures it (see
+    // Meal app.js's recordMealConsumption()) — there is no trustworthy legacy exception to
+    // support, so this adapter never has to fabricate a missing linkage.
+    required: Object.freeze(['mealName', 'consumedAt', 'portionCount', 'cookedMealId']),
+    optional: Object.freeze(['source']),
     instantFields: Object.freeze(['consumedAt']),
     occurredAtField: 'consumedAt'
   })
@@ -304,6 +326,97 @@ function validateWorkoutCompletedPayloadShape(event, errors) {
   }
 }
 
+// Deep `meal_prepared`/`meal_consumed` payload shape checks, mirroring the
+// workout_completed pattern above field for field: kept in dedicated type-scoped
+// blocks (only reached for their own event.type) rather than folded into the generic
+// PAYLOAD_RULES loop, so a malformed meal payload (mismatched cookedMealId, an
+// unrecognized preparationKind, a wrong-typed source object) cannot pass the generic
+// required/instant checks and reach the Obsidian renderer as a plausible-looking but
+// fabricated event. See meal-life-ledger-adapter.js's MEAL_LIFE_LEDGER_CAPABILITIES
+// comment for why meal_prepared/meal_consumed get workout_completed's SAME
+// immutable-after-first-acceptance policy — this block is validation-shape parity only;
+// the correction/conflict policy itself lives in the adapter (meal-life-ledger-adapter.js).
+const MEAL_TEXT_MAX_LENGTH = 200;
+const MEAL_ID_MAX_LENGTH = 200;
+const MEAL_PORTION_MAX = 99;
+const MEAL_PREPARATION_KINDS = new Set(['recipe', 'leftovers', 'takeout']);
+// Every value the adapter actually produces. Not a general-purpose enum: preparedDate is
+// always the source's own asserted local calendar date, so an importer cannot assert a
+// different, stronger basis (e.g. "captured-exact-moment") than what was really observed.
+const MEAL_PREPARED_DATE_BASES = new Set(['source-local-date']);
+// `storage` is deliberately NOT allowlisted here: it is a mutable current-location fact
+// (fridge/freezer can change after preparation), not preparation-time evidence — publishing
+// it as a `meal_prepared` payload fact would overstate what the preparation event itself
+// proves. See LIFE_LEDGER_CONTRACT.md's meal_prepared section.
+const MEAL_PREPARED_SOURCE_ALLOWED_KEYS = Object.freeze([
+  'cookedMealId', 'localDate', 'preparedDateBasis', 'recipeId', 'preparationKind'
+]);
+const MEAL_CONSUMED_SOURCE_ALLOWED_KEYS = Object.freeze(['consumptionId', 'recipeId']);
+
+function isBoundedMealId(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= MEAL_ID_MAX_LENGTH
+    && !hasUnsafeControlChars(value, false);
+}
+
+function isBoundedMealText(value, maxLength) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength
+    && !hasUnsafeControlChars(value, true);
+}
+
+function isBoundedPortionCount(value, min) {
+  return Number.isInteger(value) && value >= min && value <= MEAL_PORTION_MAX;
+}
+
+function validateMealPreparedSource(source, event, errors) {
+  const path = 'payload.source';
+  if (!isPlainObject(source)) { errors.push(`${path} must be an object`); return; }
+  pushIf(errors, !isBoundedMealId(source.cookedMealId) || source.cookedMealId !== event.sourceEntityId, `${path}.cookedMealId must match sourceEntityId`);
+  pushIf(errors, !isValidCalendarDate(source.localDate), `${path}.localDate must be a valid calendar date (YYYY-MM-DD)`);
+  pushIf(errors, !MEAL_PREPARED_DATE_BASES.has(source.preparedDateBasis), `${path}.preparedDateBasis is not recognized`);
+  if (hasOwn(source, 'recipeId') && source.recipeId != null) {
+    pushIf(errors, !isBoundedMealId(source.recipeId), `${path}.recipeId must be a bounded identifier`);
+  }
+  if (hasOwn(source, 'preparationKind') && source.preparationKind != null) {
+    pushIf(errors, !MEAL_PREPARATION_KINDS.has(source.preparationKind), `${path}.preparationKind is not recognized`);
+  }
+  rejectUnknownKeys(source, MEAL_PREPARED_SOURCE_ALLOWED_KEYS, errors, path);
+}
+
+function validateMealConsumedSource(source, event, errors) {
+  const path = 'payload.source';
+  if (!isPlainObject(source)) { errors.push(`${path} must be an object`); return; }
+  pushIf(errors, !isBoundedMealId(source.consumptionId) || source.consumptionId !== event.sourceEntityId, `${path}.consumptionId must match sourceEntityId`);
+  if (hasOwn(source, 'recipeId') && source.recipeId != null) {
+    pushIf(errors, !isBoundedMealId(source.recipeId), `${path}.recipeId must be a bounded identifier`);
+  }
+  rejectUnknownKeys(source, MEAL_CONSUMED_SOURCE_ALLOWED_KEYS, errors, path);
+}
+
+function validateMealPreparedPayloadShape(event, errors) {
+  const payload = event.payload;
+  pushIf(errors, !isBoundedMealText(payload.mealName, MEAL_TEXT_MAX_LENGTH), 'payload.mealName must be bounded text');
+  if (hasOwn(payload, 'portionsPrepared') && payload.portionsPrepared != null) {
+    pushIf(errors, !isBoundedPortionCount(payload.portionsPrepared, 1), 'payload.portionsPrepared must be an integer between 1 and 99');
+  }
+  if (hasOwn(payload, 'source') && payload.source != null) {
+    validateMealPreparedSource(payload.source, event, errors);
+  }
+}
+
+function validateMealConsumedPayloadShape(event, errors) {
+  const payload = event.payload;
+  pushIf(errors, !isBoundedMealText(payload.mealName, MEAL_TEXT_MAX_LENGTH), 'payload.mealName must be bounded text');
+  // cookedMealId is a required field (see PAYLOAD_RULES.meal_consumed) — presence is already
+  // enforced by the generic required-field loop; this only checks its format when present.
+  if (hasOwn(payload, 'cookedMealId') && payload.cookedMealId != null) {
+    pushIf(errors, !isBoundedMealId(payload.cookedMealId), 'payload.cookedMealId must be a bounded identifier');
+  }
+  pushIf(errors, !Number.isInteger(payload.portionCount) || payload.portionCount < 1 || payload.portionCount > MEAL_PORTION_MAX, 'payload.portionCount must be an integer between 1 and 99');
+  if (hasOwn(payload, 'source') && payload.source != null) {
+    validateMealConsumedSource(payload.source, event, errors);
+  }
+}
+
 function isPlainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const proto = Object.getPrototypeOf(value);
@@ -370,6 +483,17 @@ function normalizeIsoInstant(value) {
   return new Date(Date.parse(value)).toISOString();
 }
 
+// Strict calendar-date validity, not just YYYY-MM-DD shape: rejects an impossible date (e.g.
+// 2026-02-30) by round-tripping through Date.UTC() and checking every component survived —
+// a naive regex-only check would accept it (JS Date silently rolls it over to March 2).
+function isValidCalendarDate(value) {
+  if (typeof value !== 'string' || !DATE_KEY_RE.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  if (month < 1 || month > 12) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 function isIanaTimezone(value) {
   if (typeof value !== 'string' || !value.trim() || !value.includes('/')) return false;
   try {
@@ -393,7 +517,25 @@ function validateBaseEventShape(event, errors) {
   if (ALLOWED_EVENT_TYPES.includes(event.type)) {
     pushIf(errors, !EVENT_SOURCE_APPS[event.type].includes(event.sourceApp), `${event.type} is not allowed for sourceApp ${event.sourceApp}`);
   }
-  pushIf(errors, !isIsoInstant(event.occurredAt), 'occurredAt must be a UTC ISO instant');
+  // Temporal precision: exactly one of {occurredAt, occurredDate} is legal, and WHICH one is
+  // determined by the event type (see PAYLOAD_RULES[type].temporalPrecision), not by caller
+  // choice — an event type predating this redesign has no `temporalPrecision` entry and
+  // defaults to 'instant', preserving its exact prior validation behavior.
+  const typeRulesForPrecision = PAYLOAD_RULES[event.type];
+  const requiredPrecision = typeRulesForPrecision && typeRulesForPrecision.temporalPrecision === 'date' ? 'date' : 'instant';
+  if (hasOwn(event, 'temporalPrecision') && event.temporalPrecision != null) {
+    pushIf(errors, !TEMPORAL_PRECISIONS.includes(event.temporalPrecision), 'temporalPrecision must be instant or date');
+    if (ALLOWED_EVENT_TYPES.includes(event.type) && TEMPORAL_PRECISIONS.includes(event.temporalPrecision)) {
+      pushIf(errors, event.temporalPrecision !== requiredPrecision, `temporalPrecision must be ${requiredPrecision} for ${event.type}`);
+    }
+  }
+  if (requiredPrecision === 'date') {
+    pushIf(errors, hasOwn(event, 'occurredAt'), 'occurredAt must be absent for a date-precision event');
+    pushIf(errors, !isValidCalendarDate(event.occurredDate), 'occurredDate must be a valid calendar date');
+  } else {
+    pushIf(errors, hasOwn(event, 'occurredDate'), 'occurredDate must be absent for an instant-precision event');
+    pushIf(errors, !isIsoInstant(event.occurredAt), 'occurredAt must be a UTC ISO instant');
+  }
   pushIf(errors, !isIanaTimezone(event.sourceTimezone), 'sourceTimezone must be a valid IANA timezone');
 
   validatePayload(event, errors);
@@ -423,7 +565,7 @@ function validatePayload(event, errors) {
     if (hasOwn(payload, key) && !isIsoInstant(payload[key])) errors.push(`payload.${key} must be a UTC ISO instant`);
   });
   (rules.dateFields || []).forEach(key => {
-    if (hasOwn(payload, key) && !DATE_KEY_RE.test(payload[key])) errors.push(`payload.${key} must be YYYY-MM-DD`);
+    if (hasOwn(payload, key) && !isValidCalendarDate(payload[key])) errors.push(`payload.${key} must be a valid calendar date (YYYY-MM-DD)`);
   });
   if (rules.duration) {
     const hasDuration = hasOwn(payload, 'durationMinutes') && payload.durationMinutes != null;
@@ -440,14 +582,20 @@ function validatePayload(event, errors) {
       }
     }
   }
-  if (event.type === 'meal_consumed') {
-    pushIf(errors, typeof payload.portionCount !== 'number' || !Number.isFinite(payload.portionCount) || payload.portionCount <= 0, 'payload.portionCount must be a positive number');
-  }
   if (rules.occurredAtField && isIsoInstant(event.occurredAt) && isIsoInstant(payload[rules.occurredAtField])) {
     pushIf(errors, normalizeIsoInstant(event.occurredAt) !== normalizeIsoInstant(payload[rules.occurredAtField]), `occurredAt must match payload.${rules.occurredAtField}`);
   }
+  if (rules.occurredDateField && isValidCalendarDate(event.occurredDate) && isValidCalendarDate(payload[rules.occurredDateField])) {
+    pushIf(errors, event.occurredDate !== payload[rules.occurredDateField], `occurredDate must match payload.${rules.occurredDateField}`);
+  }
   if (event.type === 'workout_completed') {
     validateWorkoutCompletedPayloadShape(event, errors);
+  }
+  if (event.type === 'meal_prepared') {
+    validateMealPreparedPayloadShape(event, errors);
+  }
+  if (event.type === 'meal_consumed') {
+    validateMealConsumedPayloadShape(event, errors);
   }
 }
 
@@ -633,12 +781,23 @@ export function canonicalizeLifeLedgerFacts(event) {
   validateBaseEventShape(event, errors);
   if (errors.length) throw new Error(`Invalid Life Ledger event: ${errors.join('; ')}`);
 
+  // Precision is derived from the event TYPE (PAYLOAD_RULES), never from whether the caller
+  // happened to set `event.temporalPrecision` — validateBaseEventShape above already rejects
+  // any mismatch. For every pre-existing 'instant' type this keeps `temporalPrecision` and
+  // `occurredDate` both null, which orderedObject() drops entirely — so the canonical bytes
+  // (and therefore the fingerprint) of every event type that predates this redesign are
+  // byte-for-byte unchanged.
+  const typeRulesForPrecision = PAYLOAD_RULES[event.type];
+  const precision = typeRulesForPrecision && typeRulesForPrecision.temporalPrecision === 'date' ? 'date' : 'instant';
+
   return orderedObject({
     schemaVersion: SCHEMA_VERSION,
     sourceApp: event.sourceApp,
     sourceEntityId: String(event.sourceEntityId),
     type: event.type,
-    occurredAt: normalizeIsoInstant(event.occurredAt),
+    occurredAt: precision === 'date' ? null : normalizeIsoInstant(event.occurredAt),
+    occurredDate: precision === 'date' ? event.occurredDate : null,
+    temporalPrecision: precision === 'date' ? 'date' : null,
     sourceTimezone: event.sourceTimezone,
     payload: normalizePayload(event.type, event.payload),
     provenance: normalizeMeaningfulProvenance(event.provenance),
@@ -720,11 +879,15 @@ function hasExplicitRestoreEvidence(event) {
 }
 
 function buildStoredEvent(draft, eventId, recordedAt, revisedAt, revision) {
+  const { occurredAt, ...eventWithoutOccurredAt } = structuredCloneCompat(draft);
   return {
-    ...structuredCloneCompat(draft),
+    ...eventWithoutOccurredAt,
     eventId,
     sourceEntityId: String(draft.sourceEntityId),
-    occurredAt: normalizeIsoInstant(draft.occurredAt),
+    // A date-precision draft never carries occurredAt at all (see the temporal-precision
+    // invariant). Keep that key absent in stored records too; null would claim an event field
+    // exists while violating the contract's mutually-exclusive temporal envelope.
+    ...(occurredAt != null ? { occurredAt: normalizeIsoInstant(occurredAt) } : {}),
     recordedAt,
     revisedAt,
     revision

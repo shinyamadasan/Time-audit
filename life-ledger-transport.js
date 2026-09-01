@@ -45,8 +45,18 @@ function compareStrings(left, right) {
   return 0;
 }
 
+// A date-precision event (see life-ledger-core.js's temporal-precision invariant) has no
+// occurredAt to sort by — comparing `null` against a real ISO instant string coerces both
+// sides to NaN and silently reports "equal" for every such pair, which is not a sort at all.
+// occurredDate is the correct factual chronological anchor for those events instead; it is
+// also a lexicographic PREFIX of any same-day occurredAt instant string, so mixing the two
+// kinds still produces a stable, deterministic chronological-then-technical ordering.
+function transportSortKey(event) {
+  return event.temporalPrecision === 'date' ? String(event.occurredDate) : String(event.occurredAt);
+}
+
 function compareTransportEvents(left, right) {
-  return compareStrings(left.occurredAt, right.occurredAt)
+  return compareStrings(transportSortKey(left), transportSortKey(right))
     || compareStrings(left.type, right.type)
     || compareStrings(left.eventId, right.eventId);
 }

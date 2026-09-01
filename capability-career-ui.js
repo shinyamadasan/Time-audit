@@ -138,6 +138,14 @@ function formatDate(iso) {
   }
 }
 
+// A date-precision Life Ledger event (see life-ledger-core.js's temporal-precision
+// invariant, e.g. meal_prepared) has no occurredAt — occurredDate is its factual anchor
+// instead. formatDate() only ever renders the calendar date (no time-of-day), so passing
+// either through is safe; this just picks the one that actually exists for the event.
+function ledgerEventDate(event) {
+  return event && event.temporalPrecision === 'date' ? event.occurredDate : event && event.occurredAt;
+}
+
 function toIsoFromDateInput(value) {
   if (!value) return undefined;
   const parsed = Date.parse(`${value}T12:00:00.000Z`);
@@ -148,7 +156,7 @@ function toIsoFromDateInput(value) {
 function readLedgerEvents(options = {}) {
   try {
     const events = createLocalLifeLedgerStore().listEvents()
-      .sort((a, b) => String(b.occurredAt).localeCompare(String(a.occurredAt)));
+      .sort((a, b) => String(ledgerEventDate(b)).localeCompare(String(ledgerEventDate(a))));
     if (options.includeUnavailable) return events;
     return events.filter(event => !event.tombstone?.active).slice(0, 40);
   } catch {
@@ -539,7 +547,7 @@ function renderEvidenceSourceExtra(source) {
           <label class="cap-career-ledger-item">
             <input type="radio" name="lifeLedgerEventId" value="${escapeHtml(event.eventId)}" data-ledger-key="${escapeHtml(`${event.sourceApp}:${event.sourceEntityId}:${event.type}`)}" ${selectedLedgerEventId === event.eventId ? 'checked' : ''}>
             <span>
-              <strong>${escapeHtml(formatDate(event.occurredAt))} - ${escapeHtml(ledgerEventLabel(event))}</strong>
+              <strong>${escapeHtml(formatDate(ledgerEventDate(event)))} - ${escapeHtml(ledgerEventLabel(event))}</strong>
               <small>${escapeHtml(ledgerEventContext(event))}</small>
             </span>
           </label>

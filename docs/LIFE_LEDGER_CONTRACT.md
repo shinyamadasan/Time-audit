@@ -76,8 +76,13 @@ Envelope field rules:
 - `sourceEntityId`: the source app's existing ID, stored as a string without normalization-driven
   migration.
 - `type`: one of the V1 event types.
-- `occurredAt`: event occurrence instant in UTC ISO 8601. For interval events, this is the interval
-  completion/end time.
+- `temporalPrecision`: `"instant"` (default; may be omitted) or `"date"`. Determined by event
+  `type`, not caller choice — see "Temporal Precision" below. Absent/`"instant"` means `occurredAt`
+  carries the fact; `"date"` means `occurredDate` does and `occurredAt` MUST be absent.
+- `occurredAt`: REQUIRED for an instant-precision event; MUST be absent for a date-precision event.
+  UTC ISO 8601 instant. For interval events, this is the interval completion/end time.
+- `occurredDate`: REQUIRED for a date-precision event; MUST be absent for an instant-precision
+  event. `YYYY-MM-DD`, the source's own asserted local calendar date.
 - `recordedAt`: immutable UTC ISO 8601 timestamp when Life Ledger first created the logical event.
   It MUST NOT change on revision.
 - `revisedAt`: UTC ISO 8601 timestamp for the latest meaningful Life Ledger revision. It MAY be
@@ -90,8 +95,36 @@ Envelope field rules:
 - `revision`: monotonic integer revision for this logical event. First write is `1`.
 - `tombstone`: deletion marker. Tombstoned events remain addressable by `eventId`.
 
-Persisted timestamps MUST be ISO 8601 instants. Local-day grouping MUST use `sourceTimezone`, not
-the machine timezone at import time.
+Persisted instants MUST be ISO 8601. Local-day grouping for an instant event MUST use
+`sourceTimezone`, not the machine timezone at import time. Local-day grouping for a date-precision
+event MUST use `occurredDate` directly — never a timezone conversion of a constructed instant.
+
+## Temporal Precision
+
+V1 supports two mutually exclusive event-occurrence precisions:
+
+- **`instant`** (the default — every event type that predates this distinction uses it, and never
+  needs to set `temporalPrecision` at all): the source captured or reliably derived an actual UTC
+  instant. `occurredAt` carries it.
+- **`date`**: the source only ever asserted a calendar day, with NO time-of-day evidence.
+  `occurredDate` carries the fact instead. `occurredAt` MUST be absent — a technical sort/grouping
+  anchor (e.g. local midnight) MUST NEVER be exposed as if it were a factual occurrence instant.
+
+Which precision applies is fixed **per event type**, not chosen per event: `meal_prepared` is
+always `date`-precision (Meal's `cookedDate` has no time-of-day component); every other V1 type is
+always `instant`-precision. A date-precision event MUST NOT participate in time-of-day or interval
+(duration/`startedAt`/`endedAt`) calculations as if midnight had occurred — `meal_prepared`'s
+payload rules do not define a `duration` or `instantFields` rule at all, so a payload shaped like an
+interval event is rejected as containing unknown keys, not silently accepted.
+
+For deterministic ordering when comparing or sorting events that mix precisions (e.g. rendering a
+day that has both `meal_prepared` and `meal_consumed` events), use the event's own chronological key
+— `occurredDate` for a date event, `occurredAt` for an instant event — and, only when that ties (or
+one side has no `occurredAt` to compare), fall back to `recordedAt` and then `eventId`. Never
+fabricate a time-of-day to break a tie. A bare `YYYY-MM-DD` string is a lexicographic PREFIX of any
+same-day `YYYY-MM-DDTHH:mm:ssZ` instant string, so comparing the two chronological keys as plain
+strings naturally places a date-precision event before that same day's timed events without special
+casing.
 
 ## Core Rules
 
@@ -151,9 +184,15 @@ Known V1 source truth:
 - ChronaSense daily-plan IDs are stable enough to preserve as source IDs.
 - Future ChronaSense Learning Plan / Step entities should use immutable UUIDs.
 - Workout completed workouts already retain a stable workout ID. Preserve it.
-- Meal cooked meals have stable cooked-meal IDs. Preserve them.
-- Meal consumption does not currently have an independent source record. Do not fabricate historical
-  `meal_consumed` events.
+- Meal cooked meals have stable cooked-meal IDs (`cm_<epoch>_<rand>`). Preserve them.
+- Meal consumption now has an independent, append-only, IMMUTABLE source record
+  (`AppState.mealConsumptions`, written by `recordMealConsumption()` at the moment
+  `useCookedPortion()` runs — see `feat/durable-meal-consumption-events`, the durable
+  consumption/temporal precision redesign, and "Existing Meal Alignment Notes" below). Its own
+  collision-resistant stable ID (`mc_<uuid>`, via `crypto.randomUUID()`) is the `sourceEntityId` for
+  `meal_consumed`. Historical Meal data recorded before `feat/durable-meal-consumption-events` has no
+  such record and MUST NOT have `meal_consumed` events fabricated for it from `portionsRemaining`
+  deltas.
 
 Adapters MAY stringify source IDs for the envelope, but MUST NOT rewrite existing source records just
 to make ID formats uniform. Numeric source ID `1700000000000` and string source ID `"1700000000000"`
@@ -210,12 +249,24 @@ The fingerprint is calculated over normalized authoritative material only:
 - `sourceApp`
 - `sourceEntityId`
 - `type`
-- `occurredAt`
+- `occurredAt` (instant-precision events) OR `occurredDate` + `temporalPrecision` (date-precision
+  events) — never both; see "Temporal Precision". For every event type that predates the temporal
+  precision distinction, the fingerprint is byte-for-byte unchanged: `temporalPrecision` and
+  `occurredDate` are omitted entirely from the canonical form for an instant-precision event, not
+  merely set to `null`.
 - `sourceTimezone`
 - normalized statistical/factual `payload`
 - normalized semantically meaningful `provenance`
 - normalized semantically meaningful `confidence`
 - normalized `tombstone` state
+
+**The fingerprint is a 32-bit FNV-1a hash and CAN collide for genuinely different canonical facts**
+(reproduced in this codebase — see `workout-life-ledger-adapter.test.js`'s and
+`meal-life-ledger-adapter.test.js`'s forced-collision regression tests). Fingerprint equality is
+therefore only ever a hint. Any code path that decides whether an incoming record is the "same fact"
+as an already-accepted one — within a batch, or against an existing store record — MUST compare the
+actual canonical factual serialization directly (`serializeLifeLedgerFacts`), never the fingerprint
+alone.
 
 Canonical comparison semantics:
 
@@ -251,6 +302,17 @@ material changed, such as:
 
 V1 does not require full historical payload snapshots for every prior revision, but the storage
 design should not prevent adding that later.
+
+**Immutable-after-first-acceptance types.** `workout_completed`, `meal_prepared`, and
+`meal_consumed` do NOT use the generic "changed fingerprint → new revision" path described above.
+None of their sources supplies trustworthy causal correction/version ordering — a later snapshot
+disagreeing with an already-accepted fact is exactly as likely to be stale/reordered data as a
+genuine correction. Their adapters therefore enforce, before ever calling the shared upsert:
+identical canonical facts on retry are an idempotent no-op; different facts under the same key are
+rejected as an explicit conflict, and the existing stored fact is never revised, restored, or
+otherwise disturbed by that rejection. `meal_prepared`'s one exception is its own explicit
+tombstone lifecycle (see "Explicit Deletion Signals"), which is a distinct, separately-authorized
+mutation, not a content correction.
 
 ## Schema And Adapter Versioning
 
@@ -290,10 +352,17 @@ The following MUST NOT create a Life Ledger tombstone by themselves:
 
 Deletion reason/provenance MUST distinguish cases such as:
 
-- `user_delete`: source user explicitly deleted the fact.
+- `user_delete`: source user explicitly deleted the fact. Requires evidence of the user's own
+  deletion agency — do not use this merely because a record disappeared from a live collection.
 - `bulk_clear`: source explicitly marked many records deleted as a clear operation.
 - `merge_replaced`: source explicitly replaced one or more records as part of a merge edit.
 - `data_doctor_repair`: source explicitly deleted or replaced records as a data repair.
+- `source_marked_deleted`: the source proved deletion occurred (e.g. absent from a live collection
+  AND present in an explicit per-record deletion map) but does not itself distinguish agency or
+  reason (user intent vs. expiry vs. some other disposal path). Use this — never `user_delete` — when
+  the adapter's only evidence is "the source marked this record deleted", not "the user deleted it".
+  Meal's `meal_prepared` tombstones use this reason exclusively: Meal's `deletions.cookedMeals` map
+  proves deletion occurred but never proves why.
 
 `tombstone.provenance` should include the explicit deletion marker, source record kind, source
 operation, adapter version, and observed source metadata. Absence-only deletion provenance is invalid.
@@ -740,44 +809,232 @@ re-evaluation would produce.
 
 ### `meal_prepared`
 
-Source apps: `meal`.
+Source apps: `meal`. Implemented by `meal-life-ledger-adapter.js`, reading only a Meal snapshot's
+`cookedMeals[]` array (and, for deletion, `deletions.cookedMeals`) — never pantry, recipes, or
+grocery data, exactly as `workout-life-ledger-adapter.js` only ever reads `backup.workouts`.
+
+`meal_prepared` is **date-precision** (`temporalPrecision: 'date'`) — see "Temporal Precision" above.
+`occurredAt` is always absent; `occurredDate` always equals `payload.preparedDate`.
 
 Required payload fields:
 
 - `mealName`
-- `preparedAt`
+- `preparedDate` (`YYYY-MM-DD`, strict calendar-date validity — an impossible date such as
+  `2026-02-30` is rejected, not silently rolled over)
 
 Optional payload fields:
 
-- `servingsPrepared`
-- `portionsRemaining`
-- `ingredients`
-- `source`
+- `portionsPrepared` (integer, 1-99 — mirrors Meal app.js's own `PORTION_COUNT_MAX` cap; named for
+  what Meal's source model actually proves — a count of whole meal-sized portions, not
+  person-specific "servings")
+- `source` (see "Source context" below)
 
-The `sourceEntityId` is the existing stable cooked-meal ID.
+Deliberately NOT published, even though a naive mapping of Meal's `cookedMeal` record might suggest
+it: `storage` (fridge/freezer — Meal's CURRENT, mutable location for the batch, not a fact this
+preparation event proves), `portionsRemaining` (see below), `ingredients`, `nutrition`, and any other
+current-recipe-derived value. A field is only published here when real historical source evidence
+for it exists at preparation time.
+
+`mealName` and `payload.source` are validated against an explicit allowlisted schema, documented
+field by field below — not merely type-checked while tolerating arbitrary extra keys. Any payload
+key, or nested-object key, outside the lists in this section is REJECTED, not silently ignored. This
+is enforced identically in `life-ledger-core.js`'s shared `validateLifeLedgerEvent`/`Draft` and
+independently mirrored in `obsidian-life-ledger-renderer.js`, so a malformed payload handed directly
+to the renderer, bypassing the adapter and core validation entirely, still fails closed. See
+`test.js`'s `MEAL_PREPARED_PARITY_FIXTURES` for the canonical accept/reject matrix proving both
+validators agree on every case.
+
+The `sourceEntityId` is the existing stable cooked-meal ID, preserved without normalization-driven
+migration.
+
+#### `preparedDate` semantics — a factual date, never a constructed instant
+
+Meal's `cookedDate` is a source-asserted `YYYY-MM-DD` local calendar date with no time-of-day
+component. It is user-assertable, including deliberately backdated manual leftovers/takeout entries
+(`saveManualCookedMeal()`), independent of when the record was actually saved to the app.
+
+`preparedDate` is published EXACTLY as `cookedDate` asserts it — there is no timezone-aware
+conversion into an instant, and deliberately no fabricated local-midnight timestamp. An earlier
+design constructed `preparedAt` as the start of `cookedDate` in `sourceTimezone` and exposed it as
+`occurredAt`; that made a purely technical sort anchor look like a captured occurrence instant, which
+is factually false (Meal never captures a time-of-day for preparation) and was corrected by this
+temporal-precision redesign. `sourceTimezone` is still recorded on the event for context, but it is
+no longer used to derive the fact itself.
+
+Because only a calendar day is known, not a moment within it, `confidence.score` is `0.85`
+(below the `1` reserved for a directly source-recorded instant) with
+`basis: 'source-local-date-only-no-time-of-day-evidence'`.
+
+#### Why `portionsRemaining` is never emitted
+
+`portionsRemaining` is a live, ever-decrementing derived quantity — every `meal_consumed` event now
+durably records what changed it (see below), so it is fully reconstructable as
+`initialPortions - sum(meal_consumed.portionCount)` without being copied into `meal_prepared` at all.
+Publishing it as payload data would mean every single portion eaten also revises the `meal_prepared`
+event, which is architectural noise this adapter avoids — and, since `meal_prepared`/`meal_consumed`
+are now immutable-after-first-acceptance (see "Correction and deletion" below), such a "revision"
+would in fact be rejected outright as an immutable conflict rather than silently accepted. The field
+is simply never published: `meal_prepared` represents the preparation fact, fixed at creation, and
+`meal_consumed` represents each consumption fact.
+
+#### Source context (`payload.source`)
+
+Every field below is validated by TYPE/enum when present (the adapter always produces
+`cookedMealId`, `localDate`, and `preparedDateBasis`; `recipeId` and `preparationKind` are present
+only when the source supplied them). No key outside this list is allowed on `payload.source`:
+
+- `cookedMealId`: bounded identifier, and must equal the event's `sourceEntityId`.
+- `localDate`: `cookedDate` (`YYYY-MM-DD`), the same date `preparedDate` was taken from — kept as an
+  explicit separate fact for source-context symmetry with `workout_completed`'s `source.localDate`.
+- `preparedDateBasis`: exactly `source-local-date` — the only value V1 ever produces. An importer
+  cannot assert a stronger claim (e.g. `captured-exact-moment`); any other value is rejected.
+- `recipeId` (optional): bounded identifier, present when the batch came from a recipe
+  (`cookedMeal.recipeId != null`).
+- `preparationKind` (optional): exactly `recipe`, `leftovers`, or `takeout` — derived purely from two
+  existing durable fields (`recipeId != null` → `recipe`; otherwise `cookedMeal.source` when it is
+  `leftovers`/`takeout`), never from the meal's free-text name. An unrecognized `cookedMeal.source`
+  value is rejected outright rather than silently dropped.
+
+`storage` is NOT part of `payload.source` (see above).
+
+#### Correction and deletion
+
+`meal_prepared` is **immutable after first acceptance**, the same policy `workout_completed`
+established: neither Meal's own sync model (whole-document, last-write-wins by `updatedAt` — not a
+per-field edit log) nor its snapshot format supplies trustworthy causal correction/version ordering,
+so a later snapshot disagreeing with an already-accepted fact is exactly as likely to be stale or
+reordered data as a genuine correction. The adapter compares the incoming draft's canonical factual
+serialization directly against whatever is already stored for its key (never the fingerprint alone —
+see "Revision Fingerprint"), before ever calling the shared upsert: identical facts on retry are an
+idempotent no-op; different facts under the same key are rejected as an explicit
+`immutable_meal_conflict`, and the existing stored fact is never revised.
+
+Meal's `deletions.cookedMeals` map (`AppState.deletions.cookedMeals`, written by `writeTombstone()`
+and the diff-based `recordLocalDeletions()` — both guarded by `MASS_DELETE_GUARD` against
+transient-load false positives) is a real, explicit, per-record, durable deletion signal — genuinely
+stronger evidence than openGym ever supplied for `workout_completed`. This adapter therefore DOES
+support `meal_prepared` deletion when a snapshot supplies that map (a distinct, separately-authorized
+mutation, not a content correction — it never conflicts with the immutability policy above): an id
+present in `deletions.cookedMeals` AND absent from the current `cookedMeals[]` array becomes a
+tombstone, reusing the last known stored payload (a snapshot alone cannot supply full facts for a
+record it no longer contains) with `tombstone.reason: 'source_marked_deleted'` (NOT `user_delete` —
+Meal's deletion map proves deletion occurred, never that a user specifically chose to delete it) and
+`tombstone.provenance.sourceOperation: 'delete'`. Presence in the deletion map alone, while the
+record is still live in `cookedMeals[]` (for example because Meal's own `applyTombstones()` already
+reconciled a newer edit as beating a stale tombstone), is NOT treated as deletion. A deletion-map id
+with no prior known Life Ledger record for it is reported as a skipped, unresolved tombstone rather
+than fabricated.
+
+Restore is NOT supported: Meal has no dedicated restore/undo marker, only a generic
+last-write-wins "newer `updatedAt` beats the tombstone" reconciliation inside the source app itself —
+not adapter-visible explicit restore evidence. This adapter never sets
+`provenance.sourceOperation: 'restore'`, so `life-ledger-core.js`'s own `upsertLifeLedgerEvent()`
+naturally refuses to resurrect a tombstoned event without it: a tombstoned id reappearing live in a
+later snapshot is rejected (`restore_requires_explicit_evidence`), not silently un-deleted. An old
+backup carrying a since-tombstoned id likewise never resurrects it.
+
+`MEAL_LIFE_LEDGER_CAPABILITIES.meal_prepared`: `correction:
+'immutable-after-first-acceptance; changed-same-id-is-conflict'`, `deletion:
+'supported-when-source-deletion-map-present'`, `restore: 'unsupported-without-explicit-source-evidence'`.
 
 ### `meal_consumed`
 
-Source apps: `meal`.
+Source apps: `meal`. Implemented by `meal-life-ledger-adapter.js`, reading only a Meal snapshot's
+`mealConsumptions[]` array.
+
+`meal_consumed` is **instant-precision** — `consumedAt` is captured live by the source app at the
+moment of the "Used 1" tap, a real captured instant, unlike `meal_prepared`'s date-only evidence.
 
 Required payload fields:
 
 - `mealName`
 - `consumedAt`
-- `portionCount`
+- `portionCount` (positive INTEGER, 1-99 — mirrors Meal app.js's own `PORTION_COUNT_MAX` cap; no
+  fractional quantities, no value above 99)
+- `cookedMealId` (bounded identifier). REQUIRED, not optional: every real `mealConsumptions` record
+  Meal's source durably captures includes it (see `recordMealConsumption()` in Meal app.js), so there
+  is no trustworthy legacy exception to support. A consumption record missing it is rejected by the
+  adapter (`missing_cooked_meal_id`) rather than published without the linkage.
 
 Optional payload fields:
 
-- `cookedMealId`
-- `source`
+- `source` (see "Source context" below)
 
-Current Meal app behavior only decrements `portionsRemaining` when the user eats one portion. It
-does not create an independent consumption-history record. Therefore V1 MUST NOT fabricate
-historical `meal_consumed` events from portion deltas.
+Validated with the same allowlisted-schema strictness as `meal_prepared` above, in both
+`life-ledger-core.js` and `obsidian-life-ledger-renderer.js` independently. See test.js's
+`MEAL_CONSUMED_PARITY_FIXTURES` for the accept/reject matrix.
 
-Future implementation must create an append-only meal consumption record automatically when the
-current eat-one-portion action occurs, with no extra user interaction. That new consumption record's
-ID becomes the `sourceEntityId` for `meal_consumed`.
+The `sourceEntityId` is the append-only consumption record's own stable ID: `mc_<uuid>`, where
+`<uuid>` is generated by `crypto.randomUUID()` (with an explicit collision-checked fallback for a
+runtime that lacks it — see "Existing Meal Alignment Notes" below). An earlier design used
+`mc_<epoch>_<small-random-suffix>`, which could and did produce duplicate IDs for two distinct
+consumptions under a forced collision probe; that scheme has been replaced.
+
+#### Durable source: `AppState.mealConsumptions`
+
+Meal app.js's `useCookedPortion()` — the "Used 1" action, the only genuinely unambiguous "I ate a
+portion" signal the app has — calls `recordMealConsumption()` atomically with the SAME
+`portionsRemaining` decrement/batch-removal it always performed, appending
+`{ id, cookedMealId, recipeId, mealName, portionsConsumed: 1, consumedAt }` to
+`AppState.mealConsumptions`. This is an APPEND-ONLY, IMMUTABLE fact log: once a record exists, no
+sync/reconciliation/import/restore path may delete or silently overwrite it. See "Existing Meal
+Alignment Notes" below for the full source-side reconciliation redesign (sign-in, realtime,
+backup/restore, import) that enforces this.
+
+Deliberately NOT instrumented: `removeCookedMeal()` (the "Done" button, whose own UI title admits
+"Ate it all / remove" — ambiguous between consumption and discard, so not a trustworthy consumption
+signal) and `removeAttentionItem()`/`removeAllExpired()` (disposal of expired food, never
+consumption). Only the genuine one-tap-one-portion action records a fact, so this adapter never
+fabricates certainty the source app itself does not have.
+
+`consumedAt` is captured live by the source app (`new Date().toISOString()`) at the moment of the
+tap — a directly source-recorded fact, so `confidence.score: 1`, `basis: 'source-recorded'` (unlike
+`meal_prepared`'s constructed, lower-confidence date-only evidence). `occurredAt` always equals
+`payload.consumedAt` exactly.
+
+#### Source context (`payload.source`)
+
+- `consumptionId`: bounded identifier, and must equal the event's `sourceEntityId`.
+- `recipeId` (optional): bounded identifier, carried through from the cooked meal at consumption time
+  when known.
+
+#### Correction, deletion, and restore
+
+`meal_consumed` is **immutable after first acceptance**, the same policy as `meal_prepared` (see
+above): identical facts on retry are an idempotent no-op; different facts under the same
+`sourceEntityId` are rejected as an explicit `immutable_meal_conflict`, never a silent revision. This
+is a stronger guarantee than the prior generic-revision design, and matches reality: there is no edit
+UI for a consumption record, so a genuinely differing same-id record can only be a data-integrity
+problem (e.g. an id collision), never a legitimate correction — see "Consumption Identity" below.
+
+There is no source-side deletion or undo path for a consumption record in this wave (no "undo my last
+tap" affordance exists). A double-tap therefore durably records two consumption facts, matching the
+physical reality that the user tapped twice; there is no mechanism to distinguish an accidental
+double-tap from two genuine servings.
+
+`MEAL_LIFE_LEDGER_CAPABILITIES.meal_consumed`: `correction:
+'immutable-after-first-acceptance; changed-same-id-is-conflict'`, `deletion:
+'unsupported-no-source-deletion-path'`, `restore: 'unsupported-no-source-deletion-path'`.
+
+#### Consumption Identity
+
+`mc_<uuid>` (via `crypto.randomUUID()`) replaces the earlier `mc_<epoch>_<small-random-suffix>`
+scheme. Generation checks the candidate id against every id already known on the device and retries
+on collision (bounded attempts, then fails loud rather than silently reusing an id) — see Meal
+app.js's `generateMealConsumptionId()`. Two consumption records that happen to collide on ID with
+DIFFERENT canonical facts are never array-order-resolved into one: the source-side merge primitive
+(`mergeMealConsumptions()`) treats that as an explicit conflict, keeping the first-known record and
+never overwriting it — mirroring this adapter's own immutable-conflict policy above.
+
+#### Pre-wave data has no consumption evidence, and none is fabricated for it
+
+A Meal snapshot taken before `feat/durable-meal-consumption-events` landed has no
+`mealConsumptions` key at all. `normalizeMealSnapshot()` treats that as an empty batch (`[]`), not a
+fatal error — a pre-wave `cookedMeals[]`-only snapshot still produces `meal_prepared` events, with no
+`meal_consumed` events for any of it. Historical portion decrements recorded before this wave remain
+exactly what they always were: state deltas, not event history. This adapter MUST NOT and does NOT
+attempt to reconstruct historical `meal_consumed` events from `initialPortions`/`portionsRemaining`
+deltas for meals prepared before the source-side change.
 
 ## Obsidian Boundary
 
@@ -848,6 +1105,14 @@ V1 does not include:
 - Absence-based deletion inference.
 - Additive focus statistics without distinct source evidence.
 
+This list describes Phase 1's scope (the contract itself). Phase 5B narrowly superseded the "Meal app
+changes" line: `feat/durable-meal-consumption-events` added the smallest trustworthy source-side
+change this contract's own Implementation Order (step 7, below) already anticipated — an append-only
+consumption record — after tracing that no durable per-consumption evidence existed to adapt against
+otherwise. It did not touch UI, add cloud infrastructure, or expand into a nutrition/inventory engine.
+"Backfilling fabricated meal consumption history" remains a hard non-goal: no historical
+`meal_consumed` events were or are ever synthesized from pre-wave `portionsRemaining` deltas.
+
 ## Implementation Order
 
 1. Add Life Ledger storage with `eventId`, idempotency key, fingerprinted revisions, tombstones,
@@ -857,9 +1122,11 @@ V1 does not include:
 4. Implement ChronaSense `focus_session_completed` only after a distinct durable focus source
    marker/record exists, or mark it non-additive if it is metadata over the same interval.
 5. Implement Workout adapter for `workout_completed`.
-6. Add Meal adapter for `meal_prepared`.
+6. Add Meal adapter for `meal_prepared`. DONE — `meal-life-ledger-adapter.js`.
 7. Add Meal source change that writes append-only consumption records when eat-one-portion runs.
-8. Implement Meal adapter for future `meal_consumed` records only.
+   DONE — `feat/durable-meal-consumption-events` (`recordMealConsumption()` in Meal app.js).
+8. Implement Meal adapter for future `meal_consumed` records only. DONE — `meal-life-ledger-adapter.js`;
+   pre-wave data legitimately produces zero `meal_consumed` events, never fabricated ones.
 9. Add deterministic statistics over Life Ledger events.
 10. Add one-way Obsidian projection with canonical path safety inside the configured Life Ledger
    folder, with production restriction to `<vault-root>/Life Ledger/`.
@@ -935,10 +1202,14 @@ Restore:
 
 Missing evidence:
 
-- Given historical Meal records only show decremented `portionsRemaining`, no historical
-  `meal_consumed` events are created.
+- Given historical Meal records only show decremented `portionsRemaining` (recorded before
+  `feat/durable-meal-consumption-events` landed), no historical `meal_consumed` events are created —
+  verified by `meal-life-ledger-adapter.test.js`'s pre-wave-snapshot fixture.
 - Given a source fact is hard-deleted before Life Ledger observes it, the adapter does not fabricate
   the missing source fact.
+- Given a Meal `deletions.cookedMeals` entry exists for an id with no prior known Life Ledger record,
+  the adapter reports it as an unresolved, skipped tombstone rather than fabricating one from an
+  empty payload.
 
 Focus double counting:
 
@@ -1019,3 +1290,172 @@ Potential conflicts to resolve during implementation:
   or be flagged for review; Life Ledger must not select by array order.
 - Some ChronaSense corrections replace an entry object with the same `id`; Life Ledger should treat
   these as revisions only when the canonical normalized-event fingerprint changes.
+
+## Existing Meal Alignment Notes
+
+Observed Meal app behavior relevant to implementation (traced from `app.js` on Meal's `main` at
+`c7a0b1f`, before `feat/durable-meal-consumption-events`):
+
+- `AppState.cookedMeals[]` holds cooked/stored-food batches with a stable `cm_<epoch>_<rand>` id
+  (`_doMarkCooked()` for recipe-cooked batches, `saveManualCookedMeal()` for manual
+  leftovers/takeout). `normalizeCookedMeal()` repairs an incoherent `initialPortions`/
+  `portionsRemaining` pair idempotently but never invents portions for an untracked (both-null) batch.
+- `cookedDate` is a source-asserted local calendar date with no time-of-day. `_doMarkCooked()` always
+  sets it to today; `saveManualCookedMeal()` lets the user backdate it via a plain date input, with no
+  further validation against the record's actual save time.
+- `useCookedPortion()` ("Used 1", only rendered when `cookedMealTracksPortions()` is true) is the only
+  UI action whose own label unambiguously means "I ate a portion." Decrementing to zero routes through
+  `finishCookedMeal()` → `removeCookedMeal()`, the SAME removal path the separate "Done" button uses —
+  there is no second deletion concept to keep in sync, but it also means `removeCookedMeal()` alone
+  cannot distinguish "the last portion was eaten" from "Done" was tapped directly.
+- The "Done" button (`removeCookedMeal()`, rendered on every card, tracked or not) has the UI title
+  "Ate it all / remove" — the app's own copy admits this is ambiguous between consumption and
+  discarding food. This adapter's source-side counterpart, `recordMealConsumption()`, is therefore
+  wired only into `useCookedPortion()`'s decrement path, never into `removeCookedMeal()` directly.
+- `removeAttentionItem('cooked', id)` and `removeAllExpired()` remove expired cooked-meal records
+  (disposal, not consumption) and explicitly call `writeTombstone()` before removing them.
+- `AppState.deletions` (`{ collection: { id: deletedAtISO } }`) is a real, explicit, per-collection
+  tombstone map. `writeTombstone()`/`readTombstone()`/`clearTombstone()` manage individual entries.
+  `recordLocalDeletions()` additionally diffs the current id set against a per-session baseline
+  (`snapshotIdBaseline()`) at Firestore save time and tombstones anything that vanished locally —
+  covering `removeCookedMeal()` call sites (like the "Done" button and the last-portion finish path)
+  that do not call `writeTombstone()` directly. `MASS_DELETE_GUARD` (5) treats a larger simultaneous
+  vanish as a transient load-race artifact, not a real delete, and does not tombstone it — this
+  matches the Life Ledger contract's own "absence alone is never deletion evidence" rule.
+  `recordLocalDeletions()` only runs inside `saveToFirestore()`, gated on `cloudReady`/`isOnline`/a
+  signed-in user — a fully local-only, never-signed-in session's deletions are therefore never
+  tombstoned via the diff path (only the explicit `writeTombstone()` call sites are), which is why
+  this adapter treats deletion-map presence as evidence when available and treats its absence as "no
+  information," never as proof nothing was deleted.
+- `applyTombstones()` reconciles the live array against the deletion map with a last-write-wins rule:
+  a tombstoned item is dropped from `cookedMeals[]` UNLESS its own `updatedAt` is newer than the
+  tombstone's timestamp, in which case it stays live (the tombstone is treated as stale/beaten). This
+  is a generic reconciliation rule, not a dedicated per-record restore marker — this adapter does not
+  treat it as explicit restore evidence for Life Ledger purposes (see `meal_prepared`'s "Correction
+  and deletion" above).
+- Whole-document Firestore sync (`users/{uid}`, `buildFirestorePayload()`/`saveToFirestore()`): the
+  entire `AppState` collections (recipes, pantry, cooked meals, consumption facts, deletions, etc.)
+  round-trip as one document with optimistic-concurrency versioning and union-by-id conflict merging
+  (`mergeCloudConflict()`). There is no per-record Firestore path to cite as adapter evidence beyond
+  the document itself — consistent with this adapter's chosen transport (an already-reconciled
+  snapshot object, exactly as `workout-life-ledger-adapter.js` consumes an already-reconciled openGym
+  backup), not a direct Firestore connection.
+- `exportData()` (the user-facing "Export Data" JSON download) and `buildFirestorePayload()` both now
+  include `cookedMeals`, `mealConsumptions`, and `deletions` — either is a valid Meal snapshot for
+  `meal-life-ledger-adapter.js`'s `normalizeMealSnapshot()`/`importMealSnapshot()`, which read only
+  those three keys and ignore the rest of the object (pantry, recipes, grocery list, prices, etc.).
+
+`feat/durable-meal-consumption-events` (the minimal Meal-side change this phase required):
+
+- Adds `AppState.mealConsumptions: []` and `recordMealConsumption(meal, portionsConsumed)`, called
+  once inside `useCookedPortion()`'s tracked-portion path (both the decrement branch and the
+  decrement-to-zero/finish branch), atomically with the existing `portionsRemaining` mutation in the
+  same synchronous call — never as a separate save, so the fact and the state change it describes are
+  never observed out of sync with each other.
+- Each record is `{ id: 'mc_<epoch>_<rand>', cookedMealId, recipeId, mealName, portionsConsumed: 1,
+  consumedAt: <ISO instant captured live> }` — append-only; nothing in Meal app.js ever edits or
+  removes an existing `mealConsumptions[]` entry (no undo/correction UI was added — see "Remaining
+  limitations" in the milestone report).
+- Wired through every existing `cookedMeals` durability path identically: `saveToLocalStorage()` /
+  `loadFromLocalStorage()`, `buildFirestorePayload()` / `loadFromFirestore()` / the `onSnapshot`
+  realtime listener, `mergeCloudConflict()` (union-by-id, added to its key list), `snapshotData()` /
+  `restoreBackup()` (the pre-destructive-action local backup), and `exportData()` / `importData()`
+  (union-by-id on re-import; no `updatedAt`/LWW stamping, since the records are never edited). A
+  snapshot predating this change simply has no `mealConsumptions` key, which every read path treats
+  as `[]`, and which `normalizeMealSnapshot()` treats as a legitimately empty batch, not a fatal error.
+- Deliberately NOT added: any deletion/tombstone path for `mealConsumptions` (it is not in
+  `TOMBSTONE_KEYS`), any change to `removeCookedMeal()`/the "Done" button, and any change to
+  `exportData()`'s existing `KNOWN`-fields import-acceptance check beyond appending the two new keys.
+- Four pre-existing Meal test-suite assertions that pin the complete `AppState` key surface
+  (`kitchen-truth.spec.js`, `meal-lego.spec.js`, `ready-food-protein-hardening.spec.js`,
+  `ready-food-protein-identity.spec.js`) were updated to list `mealConsumptions` as a deliberate,
+  later, separately-owner-approved addition — the same pattern each of those tests already uses for
+  `preparedFlavors`/`inventoryVerifiedAt` from earlier waves.
+
+Potential conflicts to resolve during future implementation:
+
+- Meal's `deletions.cookedMeals` diff-based tombstoning only fires inside `saveToFirestore()`; a
+  fully local-only user's deletions are only tombstoned at the specific call sites that call
+  `writeTombstone()` directly (`removeAttentionItem()`, `removeAllExpired()`), not from
+  `removeCookedMeal()`/the "Done" button in that mode. A future snapshot importer that runs
+  exclusively against local-only exports should not assume deletion coverage is complete.
+- If Meal ever adds an edit or undo affordance for a `mealConsumptions[]` entry, this adapter's
+  current "no deletion/correction path" capability claim (`unsupported-no-source-deletion-path`) and
+  its immutable-after-first-acceptance correction policy will need to be revisited together, the same
+  way `workout_completed`'s immutable-conflict exception was added only after openGym's actual
+  behavior was traced — not speculatively.
+
+### Durable consumption source + temporal precision redesign (architectural review follow-up)
+
+An independent adversarial review of the wave above found several foundational gaps: Meal's
+persistence/reconciliation paths could silently delete or overwrite `mealConsumptions` facts; the
+consumption ID scheme (`mc_<epoch>_<rand>`) could and did collide under a forced probe;
+`meal_prepared`/`meal_consumed` used a generic revision policy that allowed a changed same-ID record
+to silently overwrite an accepted fact; `preparedAt` fabricated a midnight instant from a date-only
+source fact; and a real 32-bit fingerprint collision was demonstrated against this adapter's own
+canonical serialization. This subsection documents the corrective redesign layered on top of
+`feat/durable-meal-consumption-events` (which is preserved unmodified) as a separate, later commit.
+
+**Source-side (Meal `app.js`):**
+
+- **Consumption identity**: `generateMealConsumptionId()` replaces the timestamp+small-random-suffix
+  scheme with `mc_<uuid>` (`crypto.randomUUID()`), falling back to `crypto.getRandomValues()` and
+  then a much larger random space than the old scheme when `randomUUID` is unavailable — in every
+  case with an explicit collision check/retry against every id already known on the device before
+  returning, and a loud failure if a collision still cannot be avoided. Generation never intentionally
+  reuses an existing id.
+- **Canonical append-only merge primitive**: `consumptionCanonicalFacts()` +
+  `mergeMealConsumptions()` (id + full canonical content, never array order/precedence/a compact
+  hash) is now the ONE merge used at every touchpoint: `reconcileMealConsumptions()` wraps it against
+  `AppState.mealConsumptions` and is called from `loadFromLocalStorage()`, `restoreBackup()`,
+  `importData()`, `loadFromFirestore()`, the realtime `onSnapshot` listener, `mergeCloudConflict()`
+  (replacing its prior `unionById` "local wins on collision" handling for this key), and a new
+  explicit reconciliation step inside `loadUserData()`'s sign-in merge (previously `mealConsumptions`
+  was entirely absent from that merge's `UKEYS` list — the specific bug that let a sign-in silently
+  drop local-only consumption history). Same id + identical facts dedupes; same id + different facts
+  is an explicit conflict (the original record is kept, the conflicting one is logged via
+  `reportError()`/`console.warn` and never applied); missing from one side is never treated as
+  deletion.
+- **Deliberately unchanged**: `mealConsumptions` remains an immutable V1 fact log — there is still no
+  source-side correction/deletion action for it, so no generic mutation semantics were added merely
+  because Life Ledger supports revisions elsewhere.
+
+**Adapter-side (`meal-life-ledger-adapter.js`) and core (`life-ledger-core.js`):**
+
+- `meal_prepared` becomes date-precision (`temporalPrecision: 'date'`, `payload.preparedDate`,
+  `occurredDate`) — no more `preparedAt`/constructed midnight instant. See "Temporal Precision" above
+  and the `meal_prepared` section's "`preparedDate` semantics" subsection.
+- `payload.source.storage` is removed from `meal_prepared` — it asserted Meal's current, mutable
+  fridge/freezer location, not a preparation-time fact.
+- `servingsPrepared` is renamed `portionsPrepared` throughout (payload, contract, renderer, tests) to
+  avoid overstating person-specific serving-size evidence Meal's source model does not have.
+- `meal_consumed.payload.cookedMealId` becomes REQUIRED (every real record captures it).
+- `meal_consumed.payload.portionCount` is tightened to a strict INTEGER 1-99 (previously accepted any
+  positive number, including a fraction, with no upper bound enforced beyond the adapter's own
+  pre-check).
+- Both event types move from the generic "changed fingerprint → new revision" path to
+  `workout_completed`'s immutable-after-first-acceptance policy — see "Revision Fingerprint" and each
+  event type's "Correction and deletion"/"Correction, deletion, and restore" subsection above.
+- `meal_prepared` tombstones use the new `source_marked_deleted` tombstone reason instead of
+  `user_delete` — Meal's deletion map proves deletion occurred, never that a user specifically chose
+  it.
+- `life-ledger-core.js` gained the `instant`/`date` `temporalPrecision` distinction (backward
+  compatible — every pre-existing event type defaults to `instant` and its canonical
+  serialization/fingerprint is byte-for-byte unchanged), strict calendar-date validity checking
+  (rejecting e.g. `2026-02-30`, not just `YYYY-MM-DD` shape) for every date field in the contract, and
+  the `source_marked_deleted` tombstone reason.
+- `obsidian-life-ledger-renderer.js` never renders a time-of-day for a `meal_prepared` line (no
+  `00:00`), groups a date-precision event's Daily file by `occurredDate` directly (never a timezone
+  conversion), and gained minimal `activity_logged` rendering support (an "## Activity" section,
+  mirroring the existing Focus/Learning/Workouts/Meals pattern) so a mixed
+  activity/focus/plan/workout/meal export renders every section — compatibility plumbing only, not
+  the full Unified Life Feed.
+- `life-ledger-transport.js`'s snapshot event sort and `capability-career-ui.js`'s Life Ledger evidence
+  list both previously assumed every event has `occurredAt`; both now fall back to `occurredDate` for
+  a date-precision event.
+
+See `meal-life-ledger-adapter.test.js` (immutable-conflict and forced 32-bit-collision regression
+tests), `life-ledger-temporal-regression.test.js` (the full temporal-precision checklist), and
+`meal-cross-repo-life-ledger.test.js` (this adapter validated against Meal's own real captured
+`cookedMeal`/`mealConsumption` output, not only hand-built fixtures) for the corresponding test
+coverage.
