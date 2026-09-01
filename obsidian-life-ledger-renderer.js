@@ -2,7 +2,7 @@ export const OBSIDIAN_LIFE_LEDGER_SENTINEL = '<!-- life-ledger:generated:v1 -->'
 export const OBSIDIAN_LIFE_LEDGER_DAILY_DIR = 'Life Ledger/Daily';
 export const OBSIDIAN_LIFE_LEDGER_SYSTEM_README = 'Life Ledger/System/README.md';
 
-const SUPPORTED_EVENT_TYPES = new Set(['focus_session_completed', 'plan_step_completed']);
+const SUPPORTED_EVENT_TYPES = new Set(['focus_session_completed', 'plan_step_completed', 'workout_completed']);
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UTC_FALLBACK_TIMEZONE = 'Etc/UTC';
 
@@ -10,6 +10,10 @@ function isPlainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
+}
+
+function hasOwn(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function isValidTimezone(value) {
@@ -83,6 +87,284 @@ function eventMarker(event) {
   return `<!-- life-ledger:event:${text(event.eventId, 'missing-event-id')} -->`;
 }
 
+// Mirrors the type-scoped `workout_completed` payload shape checks in life-ledger-core.js field for
+// field, allowlist for allowlist, so the renderer never accepts a payload the shared core rejects.
+// Kept as an independent, self-contained copy (rather than an import) so this renderer stays
+// dependency-free and still fails closed on a malformed workout_completed event handed to it
+// directly, without relying on the caller having already run it through life-ledger-core.js
+// validation. See test.js's `WORKOUT_PARITY_FIXTURES` for the shared accept/reject matrix that
+// keeps this copy and life-ledger-core.js's validator from drifting apart.
+const WORKOUT_TEXT_MAX_LENGTH = 200;
+const WORKOUT_NOTE_MAX_LENGTH = 300;
+const WORKOUT_ID_MAX_LENGTH = 200;
+const WORKOUT_SET_MODES = new Set(['reps', 'time', 'cardio']);
+const WORKOUT_RATINGS = new Set(['easy', 'right', 'hard']);
+const WORKOUT_RECORD_CATEGORIES = new Set(['workouts_collection_record', 'csv_import_path_compatible']);
+const WORKOUT_DURATION_STATUSES = new Set(['unknown', 'zero-or-unknown', 'recorded-interval']);
+const WORKOUT_WEIGHT_UNITS = new Set(['kg', 'lb']);
+const WORKOUT_RECORD_ORIGINS = new Set(['indeterminate_from_backup']);
+const WORKOUT_COMPLETION_BASES = new Set(['validated-workouts-collection-membership', 'source-import-path-shape-compatible']);
+const WORKOUT_PAYLOAD_ALLOWED_KEYS = new Set([
+  'workoutName', 'startedAt', 'endedAt', 'durationMinutes', 'exercises', 'volume', 'bodyWeight', 'rating', 'note', 'source'
+]);
+const WORKOUT_SET_ALLOWED_KEYS = Object.freeze({
+  reps: new Set(['load', 'repetitions', 'rir', 'rpe']),
+  time: new Set(['seconds', 'load', 'rir', 'rpe']),
+  cardio: new Set(['minutes', 'speedKph', 'rir', 'rpe'])
+});
+const WORKOUT_PRESCRIPTION_NUMBER_KEYS = [
+  'plannedSets', 'plannedRepetitions', 'plannedLoad', 'plannedSeconds', 'plannedMinutes',
+  'plannedSpeedKph', 'progressionIncrement', 'progressionMinimumRepetitions'
+];
+const WORKOUT_PRESCRIPTION_ALLOWED_KEYS = new Set(['mode', ...WORKOUT_PRESCRIPTION_NUMBER_KEYS, 'progressionRule']);
+const WORKOUT_EXERCISE_ALLOWED_KEYS = new Set([
+  'exerciseId', 'mode', 'sets', 'exerciseName', 'topWeight', 'personalRecord', 'prescription'
+]);
+const WORKOUT_SOURCE_ALLOWED_KEYS = new Set([
+  'workoutId', 'localDate', 'recordCategory', 'recordOrigin', 'completionBasis', 'durationStatus',
+  'timezoneContext', 'weightUnitContext', 'routineId', 'personalRecordExerciseIds'
+]);
+const WORKOUT_TIMEZONE_CONTEXT_ALLOWED_KEYS = new Set(['authority', 'timeZone']);
+const WORKOUT_UNKNOWN_UNIT_CONTEXT_ALLOWED_KEYS = new Set(['authority']);
+const WORKOUT_ASSERTED_UNIT_CONTEXT_ALLOWED_KEYS = new Set(['authority', 'unit']);
+
+const ISO_INSTANT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+
+function isIsoInstant(value) {
+  if (typeof value !== 'string' || !ISO_INSTANT_RE.test(value)) return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === normalizeIsoInstant(value);
+}
+
+function normalizeIsoInstant(value) {
+  return new Date(Date.parse(value)).toISOString();
+}
+
+function isUnsafeControlChar(code, allowWhitespace) {
+  if (code === 0x7f) return true;
+  if (code >= 0x20) return false;
+  if (allowWhitespace && (code === 0x09 || code === 0x0a || code === 0x0d)) return false;
+  return true;
+}
+
+function hasUnsafeControlChars(value, allowWhitespace) {
+  for (let i = 0; i < value.length; i++) {
+    if (isUnsafeControlChar(value.charCodeAt(i), allowWhitespace)) return true;
+  }
+  return false;
+}
+
+function isBoundedWorkoutId(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= WORKOUT_ID_MAX_LENGTH
+    && !hasUnsafeControlChars(value, false);
+}
+
+function isBoundedWorkoutText(value, maxLength) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength
+    && !hasUnsafeControlChars(value, true);
+}
+
+function isFiniteNonNegative(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function assertNoUnknownKeys(obj, allowedKeys, label, path) {
+  Object.keys(obj).forEach(key => {
+    if (!allowedKeys.has(key)) throw new Error(`${label}: ${path}.${key} is not allowed`);
+  });
+}
+
+function assertValidWorkoutSet(set, mode, label, path) {
+  if (!isPlainObject(set)) throw new Error(`${label}: ${path} must be an object`);
+  if (mode === 'reps') {
+    if (!isFiniteNonNegative(set.load)) throw new Error(`${label}: ${path}.load must be a non-negative number`);
+    if (!Number.isInteger(set.repetitions) || set.repetitions < 0) throw new Error(`${label}: ${path}.repetitions must be a non-negative integer`);
+  } else if (mode === 'time') {
+    if (typeof set.seconds !== 'number' || !Number.isFinite(set.seconds) || set.seconds <= 0) throw new Error(`${label}: ${path}.seconds must be a positive number`);
+    if (hasOwn(set, 'load') && set.load != null && !isFiniteNonNegative(set.load)) throw new Error(`${label}: ${path}.load must be a non-negative number`);
+  } else if (mode === 'cardio') {
+    if (typeof set.minutes !== 'number' || !Number.isFinite(set.minutes) || set.minutes <= 0) throw new Error(`${label}: ${path}.minutes must be a positive number`);
+    if (hasOwn(set, 'speedKph') && set.speedKph != null && !isFiniteNonNegative(set.speedKph)) throw new Error(`${label}: ${path}.speedKph must be a non-negative number`);
+  }
+  ['rir', 'rpe'].forEach(key => {
+    if (hasOwn(set, key) && set[key] != null) {
+      if (typeof set[key] !== 'number' || !Number.isFinite(set[key]) || set[key] < 0 || set[key] > 10) {
+        throw new Error(`${label}: ${path}.${key} must be between 0 and 10`);
+      }
+    }
+  });
+  assertNoUnknownKeys(set, WORKOUT_SET_ALLOWED_KEYS[mode], label, path);
+}
+
+function assertValidWorkoutPrescription(prescription, mode, label, path) {
+  if (!isPlainObject(prescription)) throw new Error(`${label}: ${path} must be an object`);
+  if (hasOwn(prescription, 'mode') && prescription.mode != null && prescription.mode !== mode) {
+    throw new Error(`${label}: ${path}.mode must match the exercise mode`);
+  }
+  WORKOUT_PRESCRIPTION_NUMBER_KEYS.forEach(key => {
+    if (hasOwn(prescription, key) && prescription[key] != null && !isFiniteNonNegative(prescription[key])) {
+      throw new Error(`${label}: ${path}.${key} must be a non-negative number`);
+    }
+  });
+  if (hasOwn(prescription, 'progressionRule') && prescription.progressionRule != null
+    && !isBoundedWorkoutText(prescription.progressionRule, WORKOUT_TEXT_MAX_LENGTH)) {
+    throw new Error(`${label}: ${path}.progressionRule must be bounded text`);
+  }
+  assertNoUnknownKeys(prescription, WORKOUT_PRESCRIPTION_ALLOWED_KEYS, label, path);
+}
+
+function assertValidWorkoutExercise(exercise, label, path) {
+  if (!isPlainObject(exercise)) throw new Error(`${label}: ${path} must be an object`);
+  if (!isBoundedWorkoutId(exercise.exerciseId)) throw new Error(`${label}: ${path}.exerciseId must be a bounded identifier`);
+  const mode = WORKOUT_SET_MODES.has(exercise.mode) ? exercise.mode : null;
+  if (!mode) throw new Error(`${label}: ${path}.mode must be reps, time, or cardio`);
+  if (!Array.isArray(exercise.sets) || exercise.sets.length === 0) throw new Error(`${label}: ${path}.sets must be a non-empty array`);
+  exercise.sets.forEach((set, setIndex) => assertValidWorkoutSet(set, mode, label, `${path}.sets[${setIndex}]`));
+  if (hasOwn(exercise, 'exerciseName') && exercise.exerciseName != null
+    && !isBoundedWorkoutText(exercise.exerciseName, WORKOUT_TEXT_MAX_LENGTH)) {
+    throw new Error(`${label}: ${path}.exerciseName must be bounded text`);
+  }
+  if (hasOwn(exercise, 'topWeight') && exercise.topWeight != null && !isFiniteNonNegative(exercise.topWeight)) {
+    throw new Error(`${label}: ${path}.topWeight must be a non-negative number`);
+  }
+  if (hasOwn(exercise, 'personalRecord') && exercise.personalRecord != null && typeof exercise.personalRecord !== 'boolean') {
+    throw new Error(`${label}: ${path}.personalRecord must be boolean`);
+  }
+  if (hasOwn(exercise, 'prescription') && exercise.prescription != null) {
+    assertValidWorkoutPrescription(exercise.prescription, mode, label, `${path}.prescription`);
+  }
+  assertNoUnknownKeys(exercise, WORKOUT_EXERCISE_ALLOWED_KEYS, label, path);
+}
+
+function assertValidWorkoutTimezoneContext(timezoneContext, label, path) {
+  if (!isPlainObject(timezoneContext)) throw new Error(`${label}: ${path} must be an object`);
+  if (timezoneContext.authority !== 'import_assertion' || !isValidTimezone(timezoneContext.timeZone)) {
+    throw new Error(`${label}: ${path} must assert a valid IANA timezone`);
+  }
+  assertNoUnknownKeys(timezoneContext, WORKOUT_TIMEZONE_CONTEXT_ALLOWED_KEYS, label, path);
+}
+
+function assertValidWorkoutWeightUnitContext(weightUnitContext, label, path) {
+  if (!isPlainObject(weightUnitContext)) throw new Error(`${label}: ${path} must be an object`);
+  if (weightUnitContext.authority === 'unknown') {
+    assertNoUnknownKeys(weightUnitContext, WORKOUT_UNKNOWN_UNIT_CONTEXT_ALLOWED_KEYS, label, path);
+  } else if (weightUnitContext.authority === 'import_assertion') {
+    if (!WORKOUT_WEIGHT_UNITS.has(weightUnitContext.unit)) throw new Error(`${label}: ${path}.unit must be kg or lb`);
+    assertNoUnknownKeys(weightUnitContext, WORKOUT_ASSERTED_UNIT_CONTEXT_ALLOWED_KEYS, label, path);
+  } else {
+    throw new Error(`${label}: ${path}.authority must be 'unknown' or 'import_assertion'`);
+  }
+}
+
+function assertValidWorkoutSource(source, event, label, path) {
+  if (!isPlainObject(source)) throw new Error(`${label}: ${path} must be an object`);
+  if (hasOwn(source, 'workoutId') && source.workoutId != null
+    && (!isBoundedWorkoutId(source.workoutId) || source.workoutId !== event.sourceEntityId)) {
+    throw new Error(`${label}: ${path}.workoutId must match sourceEntityId`);
+  }
+  if (hasOwn(source, 'localDate') && source.localDate != null
+    && (typeof source.localDate !== 'string' || !DATE_KEY_RE.test(source.localDate))) {
+    throw new Error(`${label}: ${path}.localDate must be YYYY-MM-DD`);
+  }
+  if (hasOwn(source, 'recordCategory') && source.recordCategory != null && !WORKOUT_RECORD_CATEGORIES.has(source.recordCategory)) {
+    throw new Error(`${label}: ${path}.recordCategory is not recognized`);
+  }
+  if (hasOwn(source, 'recordOrigin') && source.recordOrigin != null && !WORKOUT_RECORD_ORIGINS.has(source.recordOrigin)) {
+    throw new Error(`${label}: ${path}.recordOrigin is not recognized`);
+  }
+  if (hasOwn(source, 'completionBasis') && source.completionBasis != null && !WORKOUT_COMPLETION_BASES.has(source.completionBasis)) {
+    throw new Error(`${label}: ${path}.completionBasis is not recognized`);
+  }
+  if (hasOwn(source, 'durationStatus') && source.durationStatus != null && !WORKOUT_DURATION_STATUSES.has(source.durationStatus)) {
+    throw new Error(`${label}: ${path}.durationStatus is not recognized`);
+  }
+  if (hasOwn(source, 'timezoneContext') && source.timezoneContext != null) {
+    assertValidWorkoutTimezoneContext(source.timezoneContext, label, `${path}.timezoneContext`);
+  }
+  if (hasOwn(source, 'weightUnitContext') && source.weightUnitContext != null) {
+    assertValidWorkoutWeightUnitContext(source.weightUnitContext, label, `${path}.weightUnitContext`);
+  }
+  if (hasOwn(source, 'routineId') && source.routineId != null && !isBoundedWorkoutId(source.routineId)) {
+    throw new Error(`${label}: ${path}.routineId must be a bounded identifier`);
+  }
+  if (hasOwn(source, 'personalRecordExerciseIds') && source.personalRecordExerciseIds != null) {
+    const idsOk = Array.isArray(source.personalRecordExerciseIds) && source.personalRecordExerciseIds.every(isBoundedWorkoutId);
+    if (!idsOk) throw new Error(`${label}: ${path}.personalRecordExerciseIds must be an array of bounded identifiers`);
+  }
+  assertNoUnknownKeys(source, WORKOUT_SOURCE_ALLOWED_KEYS, label, path);
+}
+
+// Mirrors life-ledger-core.js's PAYLOAD_RULES.workout_completed time/duration contract
+// (`duration: 'optional'`) exactly: startedAt/endedAt are required valid ISO instants;
+// durationMinutes, when present, must be a positive number (zero is rejected); the start/end
+// interval must never be negative; when durationMinutes is present the interval must be strictly
+// positive, and when it is omitted the interval must be exactly zero (the approved unknown-duration
+// case); and top-level occurredAt must equal payload.endedAt.
+function assertValidWorkoutCompletedTimeFacts(event, label) {
+  const payload = event.payload;
+  if (!hasOwn(payload, 'startedAt') || payload.startedAt == null || payload.startedAt === '') {
+    throw new Error(`${label}: startedAt is required`);
+  }
+  if (!hasOwn(payload, 'endedAt') || payload.endedAt == null || payload.endedAt === '') {
+    throw new Error(`${label}: endedAt is required`);
+  }
+  if (!isIsoInstant(payload.startedAt)) throw new Error(`${label}: startedAt must be a UTC ISO instant`);
+  if (!isIsoInstant(payload.endedAt)) throw new Error(`${label}: endedAt must be a UTC ISO instant`);
+
+  const hasDuration = hasOwn(payload, 'durationMinutes') && payload.durationMinutes != null;
+  if (hasDuration && (typeof payload.durationMinutes !== 'number' || !Number.isFinite(payload.durationMinutes) || payload.durationMinutes <= 0)) {
+    throw new Error(`${label}: durationMinutes must be a positive number`);
+  }
+
+  const interval = Date.parse(payload.endedAt) - Date.parse(payload.startedAt);
+  if (interval < 0) throw new Error(`${label}: endedAt must not be before startedAt`);
+  if (hasDuration) {
+    if (interval <= 0) throw new Error(`${label}: endedAt must be after startedAt when durationMinutes is present`);
+  } else if (interval !== 0) {
+    throw new Error(`${label}: durationMinutes is required when endedAt is after startedAt`);
+  }
+
+  if (isIsoInstant(event.occurredAt) && normalizeIsoInstant(event.occurredAt) !== normalizeIsoInstant(payload.endedAt)) {
+    throw new Error(`${label}: occurredAt must match payload.endedAt`);
+  }
+}
+
+function assertValidWorkoutCompletedPayload(event, index) {
+  const payload = event?.payload;
+  const label = `Malformed workout_completed payload for Obsidian export at index ${index}`;
+  if (!isPlainObject(payload)) throw new Error(`${label}: payload must be an object`);
+  assertNoUnknownKeys(payload, WORKOUT_PAYLOAD_ALLOWED_KEYS, label, 'payload');
+  assertValidWorkoutCompletedTimeFacts(event, label);
+  if (!isBoundedWorkoutText(payload.workoutName, WORKOUT_TEXT_MAX_LENGTH)) {
+    throw new Error(`${label}: workoutName must be bounded text`);
+  }
+  if (hasOwn(payload, 'exercises') && payload.exercises != null) {
+    if (!Array.isArray(payload.exercises)) throw new Error(`${label}: exercises must be an array`);
+    payload.exercises.forEach((exercise, exerciseIndex) => (
+      assertValidWorkoutExercise(exercise, label, `payload.exercises[${exerciseIndex}]`)
+    ));
+  }
+  if (hasOwn(payload, 'volume') && payload.volume != null && !isFiniteNonNegative(payload.volume)) {
+    throw new Error(`${label}: volume must be a non-negative number`);
+  }
+  if (hasOwn(payload, 'bodyWeight') && payload.bodyWeight != null) {
+    const bodyWeight = payload.bodyWeight;
+    const bodyWeightOk = isPlainObject(bodyWeight)
+      && Object.keys(bodyWeight).every(key => key === 'value')
+      && typeof bodyWeight.value === 'number' && Number.isFinite(bodyWeight.value) && bodyWeight.value > 0;
+    if (!bodyWeightOk) throw new Error(`${label}: bodyWeight must be { value: positive number }`);
+  }
+  if (hasOwn(payload, 'rating') && payload.rating != null && !WORKOUT_RATINGS.has(payload.rating)) {
+    throw new Error(`${label}: rating is not recognized`);
+  }
+  if (hasOwn(payload, 'note') && payload.note != null && !isBoundedWorkoutText(payload.note, WORKOUT_NOTE_MAX_LENGTH)) {
+    throw new Error(`${label}: note must be bounded text`);
+  }
+  if (hasOwn(payload, 'source') && payload.source != null) {
+    assertValidWorkoutSource(payload.source, event, label, 'payload.source');
+  }
+}
+
 function supportedEventOrThrow(event, index, policy, skipped) {
   if (SUPPORTED_EVENT_TYPES.has(event?.type)) return true;
   const type = String(event?.type || 'missing');
@@ -126,9 +408,34 @@ function learningLine(event) {
   ].filter(Boolean).join('\n');
 }
 
+function workoutLine(event) {
+  // startedAt/endedAt are required and validated by assertValidWorkoutCompletedTimeFacts() before
+  // any workout_completed event reaches this renderer — no `|| event.occurredAt` fallback here,
+  // so a missing/invalid timestamp fails closed at validation rather than silently rendering a
+  // fabricated time.
+  const timezone = timezoneFor(event);
+  const startedAt = event.payload.startedAt;
+  const endedAt = event.payload.endedAt;
+  const duration = minutes(event.payload?.durationMinutes);
+  const exercises = Array.isArray(event.payload?.exercises) ? event.payload.exercises : [];
+  const setCount = exercises.reduce((total, exercise) => (
+    total + (Array.isArray(exercise?.sets) ? exercise.sets.length : 0)
+  ), 0);
+  const time = startedAt === endedAt
+    ? timeFor(endedAt, timezone)
+    : `${timeFor(startedAt, timezone)}-${timeFor(endedAt, timezone)}`;
+  const facts = [
+    duration == null ? 'duration unknown' : `${duration} min`,
+    `${exercises.length} ${exercises.length === 1 ? 'exercise' : 'exercises'}`,
+    `${setCount} ${setCount === 1 ? 'set' : 'sets'}`
+  ];
+  return `- ${time} - Workout **${text(event.payload?.workoutName, 'Workout')}** · ${facts.join(' · ')}\n  ${eventMarker(event)}`;
+}
+
 function renderDaily(dateKey, events) {
   const focusEvents = events.filter(event => event.type === 'focus_session_completed');
   const learningEvents = events.filter(event => event.type === 'plan_step_completed');
+  const workoutEvents = events.filter(event => event.type === 'workout_completed');
   const lines = [
     OBSIDIAN_LIFE_LEDGER_SENTINEL,
     '',
@@ -140,6 +447,9 @@ function renderDaily(dateKey, events) {
   }
   if (learningEvents.length) {
     lines.push('## Learning', '', ...learningEvents.map(learningLine), '');
+  }
+  if (workoutEvents.length) {
+    lines.push('## Workouts', '', ...workoutEvents.map(workoutLine), '');
   }
   return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 }
@@ -163,7 +473,10 @@ function normalizeEvents(events, unsupportedEventPolicy) {
   const skipped = [];
   const active = events.filter((event, index) => {
     if (!isPlainObject(event)) throw new Error(`Life Ledger export event at index ${index} must be an object`);
-    return supportedEventOrThrow(event, index, unsupportedEventPolicy, skipped) && !isTombstoned(event);
+    if (!supportedEventOrThrow(event, index, unsupportedEventPolicy, skipped)) return false;
+    if (isTombstoned(event)) return false;
+    if (event.type === 'workout_completed') assertValidWorkoutCompletedPayload(event, index);
+    return true;
   });
   return { active, skipped };
 }

@@ -4047,6 +4047,47 @@ function obsidianStepEvent(overrides = {}) {
   };
 }
 
+function obsidianWorkoutEvent(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    eventId: '30303030-3030-4030-8030-303030303030',
+    sourceApp: 'workout',
+    sourceEntityId: 'synthetic-workout',
+    type: 'workout_completed',
+    occurredAt: '2026-08-30T18:00:00.000Z',
+    recordedAt: OBS_TIME.recorded,
+    revisedAt: null,
+    sourceTimezone: 'America/Phoenix',
+    payload: {
+      workoutName: 'Synthetic workout',
+      startedAt: '2026-08-30T17:00:00.000Z',
+      endedAt: '2026-08-30T18:00:00.000Z',
+      durationMinutes: 60,
+      exercises: [
+        { exerciseId: 'squat', mode: 'reps', sets: [{ load: 100, repetitions: 5 }] },
+        { exerciseId: 'plank', mode: 'time', sets: [{ seconds: 60 }] }
+      ],
+      source: {
+        localDate: '2026-08-30',
+        weightUnitContext: { authority: 'unknown' },
+        timezoneContext: { authority: 'import_assertion', timeZone: 'America/Phoenix' }
+      }
+    },
+    provenance: {
+      source: 'workout',
+      sourceRecordKind: 'opengym.workout',
+      adapterVersion: 'test-v1',
+      observedAt: OBS_TIME.recorded,
+      captureMethod: 'opengym_backup',
+      evidence: ['opengym.backup:workouts/synthetic-workout']
+    },
+    confidence: { score: 0.9, basis: 'validated-supplied-backup-record' },
+    revision: 1,
+    tombstone: { active: false, deletedAt: null, reason: null, provenance: null },
+    ...overrides
+  };
+}
+
 function dailyFile(exportPlan, dateKey = '2026-08-30') {
   return exportPlan.files.find(file => file.relativePath === `Life Ledger/Daily/${dateKey}.md`);
 }
@@ -4588,6 +4629,205 @@ test('renderer renders plan_step_completed with available learning context', () 
   assert.ok(content.includes('## Learning'));
   assert.ok(content.includes('- 09:30 - Completed **Synthetic step**'));
   assert.ok(content.includes('  - Synthetic course / Phase 1 / Lesson 2'));
+});
+test('workout_completed permits unknown duration only when the source interval is not negative', () => {
+  const payload = {
+    ...obsidianWorkoutEvent().payload,
+    startedAt: '2026-08-30T17:00:00.000Z',
+    endedAt: '2026-08-30T17:00:00.000Z'
+  };
+  delete payload.durationMinutes;
+  const unknownDuration = obsidianWorkoutEvent({
+    occurredAt: '2026-08-30T17:00:00.000Z',
+    payload
+  });
+  assert.equal(validateLifeLedgerEvent(unknownDuration).ok, true);
+  const negative = {
+    ...unknownDuration,
+    occurredAt: '2026-08-30T16:59:00.000Z',
+    payload: { ...unknownDuration.payload, endedAt: '2026-08-30T16:59:00.000Z' }
+  };
+  assert.equal(validateLifeLedgerEvent(negative).ok, false);
+  const missingKnownDuration = obsidianWorkoutEvent({
+    payload: { ...payload, endedAt: '2026-08-30T18:00:00.000Z' },
+    occurredAt: '2026-08-30T18:00:00.000Z'
+  });
+  assert.equal(validateLifeLedgerEvent(missingKnownDuration).ok, false);
+});
+test('renderer renders workout_completed as compact factual Markdown', () => {
+  const content = dailyFile(buildObsidianLifeLedgerExport([obsidianWorkoutEvent()])).content;
+  assert.ok(content.includes('## Workouts'));
+  assert.ok(content.includes('- 10:00-11:00 - Workout **Synthetic workout** · 60 min · 2 exercises · 2 sets'));
+  assert.ok(content.includes('<!-- life-ledger:event:30303030-3030-4030-8030-303030303030 -->'));
+});
+test('mixed focus, plan step, and workout snapshot renders deterministically', () => {
+  const snapshot = parseLifeLedgerSnapshotJson(serializeLifeLedgerSnapshot(
+    createLifeLedgerSnapshotFromEvents([obsidianWorkoutEvent(), obsidianStepEvent(), obsidianFocusEvent()])
+  ));
+  const first = buildObsidianLifeLedgerExport(snapshot.events);
+  const second = buildObsidianLifeLedgerExport(snapshot.events);
+  const content = dailyFile(first).content;
+  assert.equal(JSON.stringify(first), JSON.stringify(second));
+  assert.ok(content.includes('## Focus'));
+  assert.ok(content.includes('## Learning'));
+  assert.ok(content.includes('## Workouts'));
+});
+test('workout_completed rejects a null payload', () => {
+  assert.equal(validateLifeLedgerEvent(obsidianWorkoutEvent({ payload: null })).ok, false);
+});
+test('workout_completed rejects a non-string workoutName', () => {
+  const result = validateLifeLedgerEvent(obsidianWorkoutEvent({
+    payload: { ...obsidianWorkoutEvent().payload, workoutName: {} }
+  }));
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some(error => error.includes('workoutName')));
+});
+test('workout_completed rejects exercises given as a string', () => {
+  const result = validateLifeLedgerEvent(obsidianWorkoutEvent({
+    payload: { ...obsidianWorkoutEvent().payload, exercises: 'legs and back' }
+  }));
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some(error => error.includes('exercises')));
+});
+test('workout_completed rejects malformed nested exercise and set structures', () => {
+  const setsNotArray = validateLifeLedgerEvent(obsidianWorkoutEvent({
+    payload: { ...obsidianWorkoutEvent().payload, exercises: [{ exerciseId: 'squat', mode: 'reps', sets: 'not-an-array' }] }
+  }));
+  assert.equal(setsNotArray.ok, false);
+  const wrongTypedSet = validateLifeLedgerEvent(obsidianWorkoutEvent({
+    payload: { ...obsidianWorkoutEvent().payload, exercises: [{ exerciseId: 'squat', mode: 'reps', sets: [{ load: 'heavy', repetitions: 5 }] }] }
+  }));
+  assert.equal(wrongTypedSet.ok, false);
+});
+test('workout_completed rejects a non-object bodyWeight', () => {
+  const result = validateLifeLedgerEvent(obsidianWorkoutEvent({
+    payload: { ...obsidianWorkoutEvent().payload, bodyWeight: '82.4' }
+  }));
+  assert.equal(result.ok, false);
+});
+test('workout_completed rejects an out-of-enum rating', () => {
+  const result = validateLifeLedgerEvent(obsidianWorkoutEvent({
+    payload: { ...obsidianWorkoutEvent().payload, rating: 5 }
+  }));
+  assert.equal(result.ok, false);
+});
+test('workout_completed rejects a non-string note', () => {
+  const result = validateLifeLedgerEvent(obsidianWorkoutEvent({
+    payload: { ...obsidianWorkoutEvent().payload, note: {} }
+  }));
+  assert.equal(result.ok, false);
+});
+test('workout_completed rejects oversized free-text fields', () => {
+  const result = validateLifeLedgerEvent(obsidianWorkoutEvent({
+    payload: { ...obsidianWorkoutEvent().payload, workoutName: 'x'.repeat(201) }
+  }));
+  assert.equal(result.ok, false);
+});
+test('workout_completed rejects unsafe control characters in free text', () => {
+  const bell = String.fromCharCode(7);
+  const result = validateLifeLedgerEvent(obsidianWorkoutEvent({
+    payload: { ...obsidianWorkoutEvent().payload, workoutName: `Leg day${bell}` }
+  }));
+  assert.equal(result.ok, false);
+});
+test('renderer rejects a malformed workout_completed payload instead of fabricating a line', () => {
+  assert.throws(
+    () => buildObsidianLifeLedgerExport([obsidianWorkoutEvent({ payload: { ...obsidianWorkoutEvent().payload, workoutName: {} } })]),
+    /Malformed workout_completed payload/
+  );
+  assert.throws(
+    () => buildObsidianLifeLedgerExport([obsidianWorkoutEvent({ payload: { ...obsidianWorkoutEvent().payload, exercises: 'nope' } })]),
+    /Malformed workout_completed payload/
+  );
+});
+
+// Shared drift guard: every fixture here is run against BOTH life-ledger-core.js's shared
+// validateLifeLedgerEvent() and the renderer's buildObsidianLifeLedgerExport() directly. The
+// invariant under test is that the renderer never accepts a workout_completed payload the core
+// rejects (and vice versa for the one canonical valid fixture). A future change to either
+// validator that drifts from the other on any of these cases fails this test.
+const WORKOUT_PARITY_FIXTURES = [
+  { label: 'valid canonical workout', valid: true, mutate: payload => payload },
+  { label: 'reserved payload.program field', valid: false, mutate: payload => ({ ...payload, program: { bad: true } }) },
+  { label: 'reserved top-level payload.sets field', valid: false, mutate: payload => ({ ...payload, sets: 'bad' }) },
+  { label: 'unknown payload.source key', valid: false, mutate: payload => ({ ...payload, source: { ...payload.source, extra: 'x' } }) },
+  { label: 'extra key inside timezoneContext', valid: false, mutate: payload => ({
+    ...payload, source: { ...payload.source, timezoneContext: { ...payload.source.timezoneContext, extra: 'x' } }
+  }) },
+  { label: 'contradictory weightUnitContext (unknown authority + unit)', valid: false, mutate: payload => ({
+    ...payload, source: { ...payload.source, weightUnitContext: { authority: 'unknown', unit: 'lb' } }
+  }) },
+  { label: 'invalid weightUnitContext authority enum', valid: false, mutate: payload => ({
+    ...payload, source: { ...payload.source, weightUnitContext: { authority: 'bogus' } }
+  }) },
+  { label: 'overclaiming recordOrigin', valid: false, mutate: payload => ({
+    ...payload, source: { ...payload.source, recordOrigin: 'definitely_native' }
+  }) },
+  { label: 'overclaiming completionBasis', valid: false, mutate: payload => ({
+    ...payload, source: { ...payload.source, completionBasis: 'cryptographically_verified' }
+  }) },
+  { label: 'missing exerciseId', valid: false, mutate: payload => ({
+    ...payload, exercises: [{ mode: 'reps', sets: [{ load: 100, repetitions: 5 }] }]
+  }) },
+  { label: 'missing mode with invalid set shape', valid: false, mutate: payload => ({
+    ...payload, exercises: [{ exerciseId: 'x', sets: ['bad'] }]
+  }) },
+  { label: 'empty sets array', valid: false, mutate: payload => ({
+    ...payload, exercises: [{ exerciseId: 'x', mode: 'reps', sets: [] }]
+  }) },
+  { label: 'invalid rir out of range', valid: false, mutate: payload => ({
+    ...payload, exercises: [{ exerciseId: 'x', mode: 'reps', sets: [{ load: 1, repetitions: 1, rir: 99 }] }]
+  }) },
+  { label: 'invalid prescription (negative plannedSets)', valid: false, mutate: payload => ({
+    ...payload,
+    exercises: [{
+      exerciseId: 'x', mode: 'reps', sets: [{ load: 1, repetitions: 1 }],
+      prescription: { mode: 'reps', plannedSets: -1 }
+    }]
+  }) },
+  { label: 'bodyWeight with an extra field', valid: false, mutate: payload => ({
+    ...payload, bodyWeight: { value: 80, extra: true }
+  }) },
+  { label: 'missing startedAt', valid: false, mutate: payload => {
+    const { startedAt, ...rest } = payload;
+    return rest;
+  } },
+  { label: 'missing endedAt', valid: false, mutate: payload => {
+    const { endedAt, ...rest } = payload;
+    return rest;
+  } },
+  { label: 'invalid startedAt (not an ISO instant)', valid: false, mutate: payload => ({ ...payload, startedAt: 'not-a-date' }) },
+  { label: 'invalid endedAt (not an ISO instant)', valid: false, mutate: payload => ({ ...payload, endedAt: 'not-a-date' }) },
+  { label: 'endedAt before startedAt', valid: false, mutate: payload => ({
+    ...payload, startedAt: '2026-08-30T19:00:00.000Z', endedAt: '2026-08-30T18:00:00.000Z'
+  }) },
+  { label: 'durationMinutes: 0', valid: false, mutate: payload => ({ ...payload, durationMinutes: 0 }) },
+  { label: 'durationMinutes present but interval is zero (inconsistent)', valid: false, mutate: payload => ({
+    ...payload, startedAt: payload.endedAt, durationMinutes: 60
+  }) },
+  { label: 'endedAt does not match top-level occurredAt', valid: false, mutate: payload => ({
+    ...payload, endedAt: '2026-08-30T18:05:00.000Z'
+  }) },
+  { label: 'valid equal start/end with duration omitted (unknown duration)', valid: true, mutate: payload => {
+    const { durationMinutes, ...rest } = payload;
+    return { ...rest, startedAt: payload.endedAt };
+  } }
+];
+test('workout_completed core/renderer validator parity matrix', () => {
+  WORKOUT_PARITY_FIXTURES.forEach(({ label, valid, mutate }) => {
+    const event = obsidianWorkoutEvent({ payload: mutate(obsidianWorkoutEvent().payload) });
+    const coreResult = validateLifeLedgerEvent(event);
+    assert.equal(coreResult.ok, valid, `core validation mismatch for "${label}": ${JSON.stringify(coreResult.errors)}`);
+    let rendererOk = true;
+    let rendererError = null;
+    try {
+      buildObsidianLifeLedgerExport([event]);
+    } catch (err) {
+      rendererOk = false;
+      rendererError = err.message;
+    }
+    assert.equal(rendererOk, valid, `renderer validation mismatch for "${label}": ${rendererError}`);
+  });
 });
 test('renderer omits tombstoned events from active daily output', () => {
   const exportPlan = buildObsidianLifeLedgerExport([obsidianStepEvent({

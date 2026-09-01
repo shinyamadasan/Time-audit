@@ -6,9 +6,10 @@
   "main": "index.js",
   "scripts": {
     "build": "echo \"No build step needed\"",
-    "test": "node test.js",
+    "test": "node test.js && node workout-life-ledger-adapter.test.js",
+    "test:workout-adapter": "node workout-life-ledger-adapter.test.js",
     "test:smoke": "npx playwright test",
-    "lint": "npx eslint storage.js focus-mode.js insights.js focus-wallet.js life-ledger-core.js chronasense-life-ledger-adapter.js life-ledger-runtime.js life-ledger-transport.js life-ledger-export-ui.js obsidian-life-ledger-renderer.js obsidian-life-ledger-writer.js learning-plan-model.js learning-plan-repository.js learning-plan-import.js learning-plan-next-action.js learning-plan-ui.js capability-career-model.js capability-career-repository.js capability-career-import.js capability-career-analytics.js capability-career-ui.js scripts/export-life-ledger-to-obsidian.mjs",
+    "lint": "npx eslint storage.js focus-mode.js insights.js focus-wallet.js life-ledger-core.js chronasense-life-ledger-adapter.js workout-life-ledger-adapter.js life-ledger-runtime.js life-ledger-transport.js life-ledger-export-ui.js obsidian-life-ledger-renderer.js obsidian-life-ledger-writer.js learning-plan-model.js learning-plan-repository.js learning-plan-import.js learning-plan-next-action.js learning-plan-ui.js capability-career-model.js capability-career-repository.js capability-career-import.js capability-career-analytics.js capability-career-ui.js scripts/export-life-ledger-to-obsidian.mjs",
     "sync": "npx cap sync",
     "android": "npx cap run android",
     "open": "npx cap open android"
