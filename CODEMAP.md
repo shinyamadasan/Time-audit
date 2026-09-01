@@ -54,6 +54,52 @@ Functions: `canonicalFocusActivity()`, `enterFocusMode()`, `tryExitFocusMode()`,
 Variables: `focusModeOn`, `focusBlockCountdown`, `pomodoroPhase`, `pomodoroTimer`, `pomodoroRemaining`, `pomodoroWorkMin`, `pomodoroBreakMin`, `pomodoroCount`, `focusStartTime`, `pomodoroPhaseStartedAt`, `pomodoroWasPaused`, `_lastFocusSyncAt`, `_pomodoroAutoStart`, `_focusMusicVolume`, `_lofiTrackIdx`, `_shuffleMode`, `_shuffleQueue`, `_inBreakMode`, `_outroActive`, `_focusSugIndex`, `_LOFI_TRACKS`, `_BREAK_TRANSITION`, `_BREAK_LOOP`, `_OUTRO_LEAD_SEC`, `FOCUS_SYNC_REFRESH_MS`
 Depends on: `entries`, `settings`, `running`, `ticker`, `blockStartTime`, `currentTask`, `intention`, `lastTaskForRepeat`, `timerStartedAt`, `totalSecs`, `remaining`, `dailyCommitment`, `persist()`, `syncEntries()`, `syncTimerState()`, `showToast()`, `resetTimer()`, `getTodayEntries()`, `getActivityColor()`, `toDateKey()`, `fmtDur()`, `getBucket()`, `renderToday()`, `updateRing()`, `doPing()`, `buildHeroSuggestions()`, `buildSugItem()`, `canonicalizeActivityInput()`, `_startHeartbeat()`, `_stopHeartbeat()`
 
+### workout-life-ledger-adapter.js
+Lines: external file
+Purpose: Pure openGym backup adapter and explicit import boundary for Life Ledger
+`workout_completed` events. Reads only the supplied `workouts` collection, preserves stable workout
+IDs and bounded (length- and control-character-checked) workout facts, requires an observation clock
+and asserted IANA timezone, and treats an optional weight-unit assertion as importer context. Global
+`_ts` is non-causal snapshot metadata; the mutable global unit is not used. Exact retries deduplicate,
+changed same-ID facts become explicit immutable-source conflicts, every physical input record gets an
+explicit per-record outcome (`accepted` / `duplicate` / `conflict` / `invalid` / `failed`), the
+top-level `importWorkoutBackup()` status reflects any ledger-level upsert rejection (never reports
+`ok` when a record failed), a fatal batch/context rejection still returns one `invalid` outcome per
+physical record once the record count is known, and snapshot absence never implies deletion or
+restore. "Same workout" comparisons (within-batch duplicate/conflict grouping, and the
+against-existing-stored-record immutable-conflict check) compare the canonical factual serialization
+directly rather than trusting 32-bit fingerprint equality, which can collide for genuinely different
+facts. Deep `workout_completed` payload-shape validation — a fully allowlisted schema including the
+full time/interval contract (required valid startedAt/endedAt, positive-or-omitted duration,
+occurredAt/endedAt agreement), not just type-checking (unrecognized keys anywhere in the payload,
+including `program`/top-level `sets` and nested `payload.source`/context objects, are rejected;
+`recordOrigin`/`completionBasis` are enum-locked to the values this adapter actually produces) — is
+enforced in `life-ledger-core.js`'s shared validators and mirrored field-for-field, independently, in
+`obsidian-life-ledger-renderer.js`, so malformed payloads are rejected even for callers that bypass
+this adapter. `test.js`'s `WORKOUT_PARITY_FIXTURES` matrix guards the two independent copies against
+drifting apart.
+Functions: `normalizeWorkoutCompleted()`, `normalizeWorkoutBackup()`, `importWorkoutBackup()`
+Variables: `WORKOUT_LIFE_LEDGER_ADAPTER_VERSION`, `WORKOUT_LIFE_LEDGER_RECORD_KIND`,
+`WORKOUT_LIFE_LEDGER_CAPABILITIES`
+Depends on: `life-ledger-core.js`; an injected Life Ledger store for imports
+
+Source contract:
+- Native finish writes a stable ID, local date, start/end epochs, name/routine/body weight, exercise
+  blocks with set completion, target and topW, PR IDs, volume, and optional later rating/note. Backup
+  transport does not retain a durable marker proving that record used this path.
+- CSV history writes an `iw`-prefixed ID, local date, converted numeric loads with row units removed,
+  completed exercise sets/topW, volume, and `end === start` when duration was absent. The `iw` prefix
+  only means the ID/shape is compatible with openGym's CSV import path (`recordCategory:
+  'csv_import_path_compatible'`) — the backup cannot independently prove arbitrary matching JSON
+  actually took that path, so this is never claimed as definitive history.
+- Backup restore/replacement copies supplied state wholesale and restamps global `_ts`; no record-level
+  version, origin, deletion, or restore evidence is added. Structurally valid records are therefore
+  labeled as validated supplied-backup facts with record origin indeterminate.
+- Malformed/ambiguous records are rejected individually with an explicit `invalid` outcome; identical
+  duplicate and conflicting-duplicate physical rows within one batch each get their own explicit
+  `duplicate`/`conflict` outcome rather than being silently dropped. Active state is outside this
+  adapter boundary.
+
 ### learning-plan-import.js
 Lines: external file
 Purpose: Pure deterministic Markdown-style outline parser for Learning Plan Quick Import. Supports `# Phase`, `## Lesson`, and `-` / `*` steps; returns a preview draft plus counts or line-level parse errors without generating durable IDs.
@@ -133,7 +179,7 @@ Depends on: Capability/Career modules, `life-ledger-runtime.js`, DOM globals
 
 ### obsidian-life-ledger-renderer.js
 Lines: external file
-Purpose: Pure deterministic Life Ledger V1 to Obsidian Markdown renderer. Builds generated `Life Ledger/System/README.md` and current-state `Life Ledger/Daily/YYYY-MM-DD.md` export plans for supported `focus_session_completed` and `plan_step_completed` events without touching disk.
+Purpose: Pure deterministic Life Ledger V1 to Obsidian Markdown renderer. Builds generated `Life Ledger/System/README.md` and current-state `Life Ledger/Daily/YYYY-MM-DD.md` export plans for supported `focus_session_completed`, `plan_step_completed`, and `workout_completed` events without touching disk. Before rendering a `workout_completed` event it runs a self-contained payload-shape guard (mirroring, not importing, the equivalent check in `life-ledger-core.js`) and throws an explicit error on a malformed payload instead of emitting a fabricated/plausible-looking Workout line.
 Functions: `buildObsidianLifeLedgerExport()`
 Variables: `OBSIDIAN_LIFE_LEDGER_SENTINEL`, `OBSIDIAN_LIFE_LEDGER_DAILY_DIR`, `OBSIDIAN_LIFE_LEDGER_SYSTEM_README`
 Depends on: no app globals

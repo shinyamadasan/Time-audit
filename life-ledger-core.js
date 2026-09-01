@@ -49,11 +49,14 @@ const PAYLOAD_RULES = Object.freeze({
     occurredAtField: 'completedAt'
   }),
   workout_completed: Object.freeze({
-    required: Object.freeze(['workoutName', 'startedAt', 'endedAt', 'durationMinutes']),
-    optional: Object.freeze(['program', 'exercises', 'sets', 'volume', 'source']),
+    required: Object.freeze(['workoutName', 'startedAt', 'endedAt']),
+    // `program` and a top-level `sets` field are not part of Workout V1 semantics (per-exercise set
+    // data lives at exercises[].sets) and are intentionally NOT allowlisted here: an unrecognized
+    // payload key is rejected by the generic "not allowed for workout_completed" check below.
+    optional: Object.freeze(['durationMinutes', 'exercises', 'volume', 'bodyWeight', 'rating', 'note', 'source']),
     instantFields: Object.freeze(['startedAt', 'endedAt']),
     occurredAtField: 'endedAt',
-    duration: true
+    duration: 'optional'
   }),
   meal_prepared: Object.freeze({
     required: Object.freeze(['mealName', 'preparedAt']),
@@ -72,6 +75,234 @@ const PAYLOAD_RULES = Object.freeze({
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_INSTANT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Deep `workout_completed` payload shape checks. Kept in a single type-scoped block (only reached
+// when event.type === 'workout_completed') rather than generalized into PAYLOAD_RULES so no other
+// event type's validation behavior changes. This exists because malformed workout payloads
+// (object workoutName, string exercises, wrong-typed nested sets) can otherwise pass the generic
+// required/instant/duration checks above and reach the Obsidian renderer as plausible-looking but
+// fabricated Markdown. Only field TYPES are enforced here, not completeness, so hand-built partial
+// fixtures with a subset of `payload.source` keys keep validating exactly as before.
+const WORKOUT_TEXT_MAX_LENGTH = 200;
+const WORKOUT_NOTE_MAX_LENGTH = 300;
+const WORKOUT_ID_MAX_LENGTH = 200;
+const WORKOUT_SET_MODES = new Set(['reps', 'time', 'cardio']);
+const WORKOUT_RATINGS = new Set(['easy', 'right', 'hard']);
+const WORKOUT_RECORD_CATEGORIES = new Set(['workouts_collection_record', 'csv_import_path_compatible']);
+const WORKOUT_DURATION_STATUSES = new Set(['unknown', 'zero-or-unknown', 'recorded-interval']);
+const WORKOUT_WEIGHT_UNITS = new Set(['kg', 'lb']);
+// Every value the adapter actually produces. Not a general-purpose enum: an importer cannot assert
+// a stronger origin/basis than these, so arbitrary overclaiming strings (e.g. "definitely_native",
+// "cryptographically_verified") are rejected rather than accepted as free-form provenance text.
+const WORKOUT_RECORD_ORIGINS = new Set(['indeterminate_from_backup']);
+const WORKOUT_COMPLETION_BASES = new Set(['validated-workouts-collection-membership', 'source-import-path-shape-compatible']);
+
+const WORKOUT_SET_ALLOWED_KEYS = Object.freeze({
+  reps: Object.freeze(['load', 'repetitions', 'rir', 'rpe']),
+  time: Object.freeze(['seconds', 'load', 'rir', 'rpe']),
+  cardio: Object.freeze(['minutes', 'speedKph', 'rir', 'rpe'])
+});
+const WORKOUT_PRESCRIPTION_NUMBER_KEYS = Object.freeze([
+  'plannedSets', 'plannedRepetitions', 'plannedLoad', 'plannedSeconds', 'plannedMinutes',
+  'plannedSpeedKph', 'progressionIncrement', 'progressionMinimumRepetitions'
+]);
+const WORKOUT_PRESCRIPTION_ALLOWED_KEYS = Object.freeze(['mode', ...WORKOUT_PRESCRIPTION_NUMBER_KEYS, 'progressionRule']);
+const WORKOUT_EXERCISE_ALLOWED_KEYS = Object.freeze([
+  'exerciseId', 'mode', 'sets', 'exerciseName', 'topWeight', 'personalRecord', 'prescription'
+]);
+const WORKOUT_SOURCE_ALLOWED_KEYS = Object.freeze([
+  'workoutId', 'localDate', 'recordCategory', 'recordOrigin', 'completionBasis', 'durationStatus',
+  'timezoneContext', 'weightUnitContext', 'routineId', 'personalRecordExerciseIds'
+]);
+const WORKOUT_TIMEZONE_CONTEXT_ALLOWED_KEYS = Object.freeze(['authority', 'timeZone']);
+const WORKOUT_UNKNOWN_UNIT_CONTEXT_ALLOWED_KEYS = Object.freeze(['authority']);
+const WORKOUT_ASSERTED_UNIT_CONTEXT_ALLOWED_KEYS = Object.freeze(['authority', 'unit']);
+
+// Rejects any key on `obj` not present in `allowedKeys`, so a bounded object cannot carry arbitrary
+// extra nested fields that alter provenance/assertion meaning while still passing per-field checks.
+function rejectUnknownKeys(obj, allowedKeys, errors, path) {
+  const allowed = new Set(allowedKeys);
+  Object.keys(obj).forEach(key => {
+    if (!allowed.has(key)) errors.push(`${path}.${key} is not allowed`);
+  });
+}
+
+function isUnsafeControlChar(code, allowWhitespace) {
+  if (code === 0x7f) return true;
+  if (code >= 0x20) return false;
+  if (allowWhitespace && (code === 0x09 || code === 0x0a || code === 0x0d)) return false;
+  return true;
+}
+
+function hasUnsafeControlChars(value, allowWhitespace) {
+  for (let i = 0; i < value.length; i++) {
+    if (isUnsafeControlChar(value.charCodeAt(i), allowWhitespace)) return true;
+  }
+  return false;
+}
+
+function isBoundedWorkoutId(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= WORKOUT_ID_MAX_LENGTH
+    && !hasUnsafeControlChars(value, false);
+}
+
+function isBoundedWorkoutText(value, maxLength) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength
+    && !hasUnsafeControlChars(value, true);
+}
+
+function isFiniteNonNegative(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function validateWorkoutCompletedSet(set, mode, errors, path) {
+  if (!isPlainObject(set)) { errors.push(`${path} must be an object`); return; }
+  if (mode === 'reps') {
+    pushIf(errors, !isFiniteNonNegative(set.load), `${path}.load must be a non-negative number`);
+    pushIf(errors, !Number.isInteger(set.repetitions) || set.repetitions < 0, `${path}.repetitions must be a non-negative integer`);
+  } else if (mode === 'time') {
+    pushIf(errors, typeof set.seconds !== 'number' || !Number.isFinite(set.seconds) || set.seconds <= 0, `${path}.seconds must be a positive number`);
+    if (hasOwn(set, 'load') && set.load != null) pushIf(errors, !isFiniteNonNegative(set.load), `${path}.load must be a non-negative number`);
+  } else if (mode === 'cardio') {
+    pushIf(errors, typeof set.minutes !== 'number' || !Number.isFinite(set.minutes) || set.minutes <= 0, `${path}.minutes must be a positive number`);
+    if (hasOwn(set, 'speedKph') && set.speedKph != null) pushIf(errors, !isFiniteNonNegative(set.speedKph), `${path}.speedKph must be a non-negative number`);
+  }
+  ['rir', 'rpe'].forEach(key => {
+    if (hasOwn(set, key) && set[key] != null) {
+      pushIf(errors, typeof set[key] !== 'number' || !Number.isFinite(set[key]) || set[key] < 0 || set[key] > 10, `${path}.${key} must be between 0 and 10`);
+    }
+  });
+  rejectUnknownKeys(set, WORKOUT_SET_ALLOWED_KEYS[mode], errors, path);
+}
+
+function validateWorkoutCompletedPrescription(prescription, mode, errors, path) {
+  if (!isPlainObject(prescription)) { errors.push(`${path} must be an object`); return; }
+  if (hasOwn(prescription, 'mode') && prescription.mode != null) {
+    pushIf(errors, prescription.mode !== mode, `${path}.mode must match the exercise mode`);
+  }
+  WORKOUT_PRESCRIPTION_NUMBER_KEYS.forEach(key => {
+    if (hasOwn(prescription, key) && prescription[key] != null) {
+      pushIf(errors, !isFiniteNonNegative(prescription[key]), `${path}.${key} must be a non-negative number`);
+    }
+  });
+  if (hasOwn(prescription, 'progressionRule') && prescription.progressionRule != null) {
+    pushIf(errors, !isBoundedWorkoutText(prescription.progressionRule, WORKOUT_TEXT_MAX_LENGTH), `${path}.progressionRule must be bounded text`);
+  }
+  rejectUnknownKeys(prescription, WORKOUT_PRESCRIPTION_ALLOWED_KEYS, errors, path);
+}
+
+function validateWorkoutCompletedExercise(exercise, errors, path) {
+  if (!isPlainObject(exercise)) { errors.push(`${path} must be an object`); return; }
+  pushIf(errors, !isBoundedWorkoutId(exercise.exerciseId), `${path}.exerciseId must be a bounded identifier`);
+  const mode = WORKOUT_SET_MODES.has(exercise.mode) ? exercise.mode : null;
+  pushIf(errors, !mode, `${path}.mode must be reps, time, or cardio`);
+  if (!Array.isArray(exercise.sets) || exercise.sets.length === 0) {
+    errors.push(`${path}.sets must be a non-empty array`);
+  } else if (mode) {
+    exercise.sets.forEach((set, index) => validateWorkoutCompletedSet(set, mode, errors, `${path}.sets[${index}]`));
+  }
+  if (hasOwn(exercise, 'exerciseName') && exercise.exerciseName != null) {
+    pushIf(errors, !isBoundedWorkoutText(exercise.exerciseName, WORKOUT_TEXT_MAX_LENGTH), `${path}.exerciseName must be bounded text`);
+  }
+  if (hasOwn(exercise, 'topWeight') && exercise.topWeight != null) {
+    pushIf(errors, !isFiniteNonNegative(exercise.topWeight), `${path}.topWeight must be a non-negative number`);
+  }
+  if (hasOwn(exercise, 'personalRecord') && exercise.personalRecord != null) {
+    pushIf(errors, typeof exercise.personalRecord !== 'boolean', `${path}.personalRecord must be boolean`);
+  }
+  if (hasOwn(exercise, 'prescription') && exercise.prescription != null && mode) {
+    validateWorkoutCompletedPrescription(exercise.prescription, mode, errors, `${path}.prescription`);
+  }
+  rejectUnknownKeys(exercise, WORKOUT_EXERCISE_ALLOWED_KEYS, errors, path);
+}
+
+function validateWorkoutCompletedTimezoneContext(timezoneContext, errors, path) {
+  if (!isPlainObject(timezoneContext)) { errors.push(`${path} must be an object`); return; }
+  const ok = timezoneContext.authority === 'import_assertion' && isIanaTimezone(timezoneContext.timeZone);
+  pushIf(errors, !ok, `${path} must assert a valid IANA timezone`);
+  rejectUnknownKeys(timezoneContext, WORKOUT_TIMEZONE_CONTEXT_ALLOWED_KEYS, errors, path);
+}
+
+function validateWorkoutCompletedWeightUnitContext(weightUnitContext, errors, path) {
+  if (!isPlainObject(weightUnitContext)) { errors.push(`${path} must be an object`); return; }
+  if (weightUnitContext.authority === 'unknown') {
+    // An "unknown" authority asserts nothing about the unit; a `unit` key alongside it is a
+    // contradictory/nonsensical combination and must be rejected, not silently accepted.
+    rejectUnknownKeys(weightUnitContext, WORKOUT_UNKNOWN_UNIT_CONTEXT_ALLOWED_KEYS, errors, path);
+  } else if (weightUnitContext.authority === 'import_assertion') {
+    pushIf(errors, !WORKOUT_WEIGHT_UNITS.has(weightUnitContext.unit), `${path}.unit must be kg or lb`);
+    rejectUnknownKeys(weightUnitContext, WORKOUT_ASSERTED_UNIT_CONTEXT_ALLOWED_KEYS, errors, path);
+  } else {
+    errors.push(`${path}.authority must be 'unknown' or 'import_assertion'`);
+  }
+}
+
+function validateWorkoutCompletedSource(source, event, errors) {
+  const path = 'payload.source';
+  if (!isPlainObject(source)) { errors.push(`${path} must be an object`); return; }
+  if (hasOwn(source, 'workoutId') && source.workoutId != null) {
+    pushIf(errors, !isBoundedWorkoutId(source.workoutId) || source.workoutId !== event.sourceEntityId, `${path}.workoutId must match sourceEntityId`);
+  }
+  if (hasOwn(source, 'localDate') && source.localDate != null) {
+    pushIf(errors, typeof source.localDate !== 'string' || !DATE_KEY_RE.test(source.localDate), `${path}.localDate must be YYYY-MM-DD`);
+  }
+  if (hasOwn(source, 'recordCategory') && source.recordCategory != null) {
+    pushIf(errors, !WORKOUT_RECORD_CATEGORIES.has(source.recordCategory), `${path}.recordCategory is not recognized`);
+  }
+  if (hasOwn(source, 'recordOrigin') && source.recordOrigin != null) {
+    pushIf(errors, !WORKOUT_RECORD_ORIGINS.has(source.recordOrigin), `${path}.recordOrigin is not recognized`);
+  }
+  if (hasOwn(source, 'completionBasis') && source.completionBasis != null) {
+    pushIf(errors, !WORKOUT_COMPLETION_BASES.has(source.completionBasis), `${path}.completionBasis is not recognized`);
+  }
+  if (hasOwn(source, 'durationStatus') && source.durationStatus != null) {
+    pushIf(errors, !WORKOUT_DURATION_STATUSES.has(source.durationStatus), `${path}.durationStatus is not recognized`);
+  }
+  if (hasOwn(source, 'timezoneContext') && source.timezoneContext != null) {
+    validateWorkoutCompletedTimezoneContext(source.timezoneContext, errors, `${path}.timezoneContext`);
+  }
+  if (hasOwn(source, 'weightUnitContext') && source.weightUnitContext != null) {
+    validateWorkoutCompletedWeightUnitContext(source.weightUnitContext, errors, `${path}.weightUnitContext`);
+  }
+  if (hasOwn(source, 'routineId') && source.routineId != null) {
+    pushIf(errors, !isBoundedWorkoutId(source.routineId), `${path}.routineId must be a bounded identifier`);
+  }
+  if (hasOwn(source, 'personalRecordExerciseIds') && source.personalRecordExerciseIds != null) {
+    const idsOk = Array.isArray(source.personalRecordExerciseIds) && source.personalRecordExerciseIds.every(isBoundedWorkoutId);
+    pushIf(errors, !idsOk, `${path}.personalRecordExerciseIds must be an array of bounded identifiers`);
+  }
+  rejectUnknownKeys(source, WORKOUT_SOURCE_ALLOWED_KEYS, errors, path);
+}
+
+function validateWorkoutCompletedPayloadShape(event, errors) {
+  const payload = event.payload;
+  pushIf(errors, !isBoundedWorkoutText(payload.workoutName, WORKOUT_TEXT_MAX_LENGTH), 'payload.workoutName must be bounded text');
+  if (hasOwn(payload, 'exercises') && payload.exercises != null) {
+    if (!Array.isArray(payload.exercises)) {
+      errors.push('payload.exercises must be an array');
+    } else {
+      payload.exercises.forEach((exercise, index) => validateWorkoutCompletedExercise(exercise, errors, `payload.exercises[${index}]`));
+    }
+  }
+  if (hasOwn(payload, 'volume') && payload.volume != null) {
+    pushIf(errors, !isFiniteNonNegative(payload.volume), 'payload.volume must be a non-negative number');
+  }
+  if (hasOwn(payload, 'bodyWeight') && payload.bodyWeight != null) {
+    const bodyWeightOk = isPlainObject(payload.bodyWeight)
+      && Object.keys(payload.bodyWeight).every(key => key === 'value')
+      && typeof payload.bodyWeight.value === 'number' && Number.isFinite(payload.bodyWeight.value) && payload.bodyWeight.value > 0;
+    pushIf(errors, !bodyWeightOk, 'payload.bodyWeight must be { value: positive number }');
+  }
+  if (hasOwn(payload, 'rating') && payload.rating != null) {
+    pushIf(errors, !WORKOUT_RATINGS.has(payload.rating), 'payload.rating is not recognized');
+  }
+  if (hasOwn(payload, 'note') && payload.note != null) {
+    pushIf(errors, !isBoundedWorkoutText(payload.note, WORKOUT_NOTE_MAX_LENGTH), 'payload.note must be bounded text');
+  }
+  if (hasOwn(payload, 'source') && payload.source != null) {
+    validateWorkoutCompletedSource(payload.source, event, errors);
+  }
+}
 
 function isPlainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -195,9 +426,18 @@ function validatePayload(event, errors) {
     if (hasOwn(payload, key) && !DATE_KEY_RE.test(payload[key])) errors.push(`payload.${key} must be YYYY-MM-DD`);
   });
   if (rules.duration) {
-    pushIf(errors, typeof payload.durationMinutes !== 'number' || !Number.isFinite(payload.durationMinutes) || payload.durationMinutes <= 0, 'payload.durationMinutes must be a positive number');
+    const hasDuration = hasOwn(payload, 'durationMinutes') && payload.durationMinutes != null;
+    if (rules.duration === true || hasDuration) {
+      pushIf(errors, typeof payload.durationMinutes !== 'number' || !Number.isFinite(payload.durationMinutes) || payload.durationMinutes <= 0, 'payload.durationMinutes must be a positive number');
+    }
     if (isIsoInstant(payload.startedAt) && isIsoInstant(payload.endedAt)) {
-      pushIf(errors, Date.parse(payload.endedAt) <= Date.parse(payload.startedAt), 'payload.endedAt must be after payload.startedAt');
+      const interval = Date.parse(payload.endedAt) - Date.parse(payload.startedAt);
+      pushIf(errors, interval < 0, 'payload.endedAt must not be before payload.startedAt');
+      if (rules.duration === true || hasDuration) {
+        pushIf(errors, interval <= 0, 'payload.endedAt must be after payload.startedAt when durationMinutes is present');
+      } else if (rules.duration === 'optional') {
+        pushIf(errors, interval !== 0, 'payload.durationMinutes is required when payload.endedAt is after payload.startedAt');
+      }
     }
   }
   if (event.type === 'meal_consumed') {
@@ -205,6 +445,9 @@ function validatePayload(event, errors) {
   }
   if (rules.occurredAtField && isIsoInstant(event.occurredAt) && isIsoInstant(payload[rules.occurredAtField])) {
     pushIf(errors, normalizeIsoInstant(event.occurredAt) !== normalizeIsoInstant(payload[rules.occurredAtField]), `occurredAt must match payload.${rules.occurredAtField}`);
+  }
+  if (event.type === 'workout_completed') {
+    validateWorkoutCompletedPayloadShape(event, errors);
   }
 }
 

@@ -1,5 +1,157 @@
 # ChronaSense — Changelog
 
+## Workout → Life Ledger Adapter V1 — third targeted fix pass (branch: feat/workout-life-ledger-adapter-v1) — 2026-08-31
+changed:
+  - obsidian-life-ledger-renderer.js (the previous pass's renderer/core "field-for-field mirror" claim
+    was incomplete: it did not cover the `startedAt`/`endedAt`/`durationMinutes` time-and-interval
+    contract at all, so the renderer still accepted and rendered a workout_completed event with a
+    missing `startedAt`/`endedAt`, `durationMinutes: 0`, an end before its start, or an `endedAt` that
+    disagreed with the top-level `occurredAt` — all cases the shared core already rejected. Added an
+    independent time-facts guard mirroring `life-ledger-core.js`'s `PAYLOAD_RULES.workout_completed`
+    time/duration contract exactly (required valid ISO instants, positive-duration-or-omitted-with-
+    zero-interval, occurredAt/endedAt agreement), and removed the `event.payload?.startedAt ||
+    event.occurredAt` silent fallback from the rendered line — a missing/invalid workout timestamp now
+    fails validation before any Markdown is generated, instead of rendering a fabricated time)
+  - workout-life-ledger-adapter.js (fixed a genuine correctness defect, not merely a theoretical one:
+    a 32-bit FNV-1a fingerprint collision — reproduced end-to-end through this adapter's own
+    normalization pipeline — could cause a changed same-ID workout's `note` to be silently treated as
+    an idempotent unchanged retry instead of an `immutable_workout_conflict`, discarding the incoming
+    change without any conflict signal. Both places in the adapter that compare "is this the same
+    workout" — the within-batch duplicate/conflict grouping in `normalizeWorkoutBackup()`, and the
+    against-existing-stored-record check in `importWorkoutBackup()` — now compare the actual canonical
+    factual serialization (`serializeLifeLedgerFacts()`) directly rather than trusting fingerprint
+    equality as sufficient proof. The shared fingerprint algorithm in `life-ledger-core.js` itself is
+    unchanged; this is scoped entirely to the workout adapter's own conflict/duplicate comparisons.
+    `life-ledger-core.js`'s generic `upsertManyLifeLedgerEvents()` duplicate-physical-input check
+    still compares by fingerprint only — that generic path is out of this bounded fix's scope and is
+    called out as a remaining risk, not silently left undocumented)
+  - docs/LIFE_LEDGER_CONTRACT.md (corrected the "Immutable-after-first-acceptance conflict policy"
+    section, which previously described the comparison as fingerprint-based; it now documents the
+    canonical-factual-content comparison and explicitly notes the fingerprint collision risk that
+    motivated it. Expanded "Optional duration" to state the full time/interval contract explicitly and
+    that both validators enforce it identically)
+  - test.js and workout-life-ledger-adapter.test.js (expanded `WORKOUT_PARITY_FIXTURES` with 9 new
+    time/interval cases — missing/invalid startedAt or endedAt, end before start, zero duration, a
+    duration claimed against a zero interval, occurredAt/endedAt disagreement, and the valid
+    unknown-duration case — all proven to reject/accept identically in both validators; added a
+    verified real fingerprint-collision regression proving `immutable_workout_conflict` still fires,
+    the original event/eventId/revision/note are preserved unchanged, no duplicate event is created,
+    and a separate test confirming a true identical-facts retry still resolves to `unchanged`)
+tests:
+  - `npm run test:workout-adapter` — 33 passed
+  - `npm test` — 471 passed (438 ChronaSense/core/export tests + 33 adapter tests)
+blockers: none
+deviations: same as the entries below — openGym remained read-only, deletion/restore remain
+  unsupported, and no commit/push/merge/deploy/production write occurred in this fix pass either. The
+  reviewer's own example note-value collision pair (`n1v5w5xb15ui35j` / `n1h9c8k30sht75r`) could not
+  be reproduced against this repo's specific canonical fixture shape and was not used verbatim; an
+  equivalent genuine collision (`n6vl8` / `nnpd6`, both hashing to `fnv1a32:9ce28ae5`) was found by
+  direct search against this adapter's real serialization/hash output, independently re-verified
+  end-to-end before being committed to the regression test, and proves the identical class of defect.
+
+## Workout → Life Ledger Adapter V1 — second targeted fix pass (branch: feat/workout-life-ledger-adapter-v1) — 2026-08-31
+changed:
+  - life-ledger-core.js (the `workout_completed` payload shape validator is now a fully allowlisted
+    schema, not a type-check that tolerates arbitrary extra keys: `program` and a top-level `sets`
+    field are removed from the allowed payload keys and now rejected outright rather than passing
+    through unchecked; `payload.source`, `exercises[]`, `exercises[].sets[]`, and
+    `exercises[].prescription` each reject any key outside their documented allowlist;
+    `payload.source.timezoneContext`/`weightUnitContext` reject extra nested keys, and a
+    `weightUnitContext` of `{ authority: 'unknown', unit: 'lb' }` — a contradictory combination — is
+    now rejected instead of silently accepted; `recordOrigin` and `completionBasis` are now enum-locked
+    to the exact values the adapter produces instead of accepting any non-empty string, so an
+    overclaiming value such as `definitely_native` or `cryptographically_verified` is rejected.
+    Scoped entirely to `event.type === 'workout_completed'`; no other event type's validation changed)
+  - obsidian-life-ledger-renderer.js (the renderer's independent workout_completed payload guard is
+    now a field-for-field, allowlist-for-allowlist mirror of the core validator above — closing a
+    semantic-drift gap where the renderer previously accepted payloads the core rejected: missing
+    `exerciseId`, missing/invalid `mode` paired with an unchecked `sets` array, an empty `sets` array,
+    out-of-range `rir`/`rpe`, an entirely unvalidated `prescription` object, and a `bodyWeight` with
+    extra fields. `test.js`'s `WORKOUT_PARITY_FIXTURES` matrix now runs every fixture against both
+    validators and asserts they agree, acting as an ongoing drift guard between the two independent
+    copies)
+  - workout-life-ledger-adapter.js (a fatal batch/context rejection — missing observation clock,
+    invalid timezone/weight-unit assertion — now returns one `invalid` outcome per physical input
+    record, once the physical record count is known from a confirmed `backup.workouts` array, instead
+    of an empty `outcomes: []` that understated what was actually in the batch. A backup that isn't a
+    well-formed object, or whose `.workouts` isn't an array, still returns `outcomes: []` since no
+    coherent physical record set exists to enumerate in that case)
+  - docs/LIFE_LEDGER_CONTRACT.md (documented the exact allowlisted `workout_completed` payload shape —
+    per-mode set fields, prescription fields, the full `payload.source` enum/shape table — and the
+    complete top-level `importWorkoutBackup()` status matrix, including fatal-context outcome
+    accounting)
+  - test.js and workout-life-ledger-adapter.test.js (added the shared core/renderer parity matrix and
+    regression coverage for every case above, plus fatal-context outcome proofs for 3-record and
+    0-record batches and re-confirmed all previously approved source-authority behaviors)
+tests:
+  - `npm run test:workout-adapter` — 30 passed
+  - `npm test` — 468 passed (438 ChronaSense/core/export tests + 30 adapter tests)
+  - `npx playwright test` — 176 passed
+  - `node --check` on the adapter, adapter tests, core, runtime, transport, renderer, CLI export
+    script, and `test.js` — passed
+  - `git diff --check` — passed
+  - control-byte/UTF-8 round-trip scan over every changed file — passed
+  - ESLint — 0 errors; 19 pre-existing warnings outside the adapter/core/renderer
+blockers: none
+deviations: same as the entry below — openGym remained read-only, deletion/restore remain
+  unsupported, and no commit/push/merge/deploy/production write occurred in this fix pass either.
+
+## Workout → Life Ledger Adapter V1 — final consolidated fix pass (branch: feat/workout-life-ledger-adapter-v1) — 2026-08-31
+changed:
+  - workout-life-ledger-adapter.js (new deterministic openGym backup normalization/import boundary;
+    first-valid immutable acceptance; explicit same-ID conflicts; stable ID mapping; source-compatible
+    native/CSV fixtures; unknown duration; asserted timezone/optional weight-unit context; strength,
+    timed, cardio, bw, topW, rating, note, PR, and prescription facts; record-level partial results;
+    no inferred deletion or restore. Fix pass: bounded/control-character-safe text and identifier
+    validation (workout/exercise name, exercise/routine/PR IDs, progression rule, note); malformed
+    exercise-name values are now rejected instead of silently dropped; an explicit per-physical-record
+    outcome — `accepted` / `duplicate` / `conflict` / `invalid` / `failed` — for every backup row, so
+    identical duplicate rows are never silently collapsed without a trace; top-level `importWorkoutBackup()`
+    `status` now also reflects individual ledger-upsert rejections, not only normalization/conflict
+    counts; `iw`-prefixed records are now labeled `csv_import_path_compatible` with
+    `confidence.basis: 'validated-supplied-backup-record'` instead of the overclaiming
+    `csv_imported_history` / `validated-imported-history-record` labels)
+  - life-ledger-core.js (allows `workout_completed` to omit duration only for equal start/end instants;
+    removed the rejected generic source-snapshot watermark behavior. Fix pass: added a `workout_completed`-
+    only deep payload shape validator — reachable through `validateLifeLedgerEvent`/`validateLifeLedgerEventDraft`
+    for any caller, not only the adapter — so a hand-built or corrupted event with a wrong-typed
+    `workoutName`/`exercises`/`bodyWeight`/`rating`/`note`/nested set no longer passes shared validation.
+    Scoped to `event.type === 'workout_completed'` only; no other event type's validation changed)
+  - obsidian-life-ledger-renderer.js (deterministic compact Workout section for mixed Ledger exports.
+    Fix pass: added a self-contained `workout_completed` payload guard — mirroring the core validator's
+    checks without importing it, keeping the renderer dependency-free — so a malformed workout event
+    handed to the renderer directly throws an explicit error instead of producing a plausible-looking
+    fabricated line such as `Workout **[object Object]** · 0 exercises`)
+  - workout-life-ledger-adapter.test.js and test.js (source-compatible, adversarial, core-contract,
+    mixed-renderer, hostile-input, retry, conflict, and fail-closed coverage, plus fix-pass regression
+    coverage: malformed-payload rejection at the shared-validation and renderer layers, oversized/control-
+    character text and identifier rejection, per-record duplicate/conflict outcome classification with
+    reversed input order, forced ledger-upsert-rejection status proof, and a forged `iw`-prefixed record)
+  - package.json and eslint.config.js (included the adapter in focused/full test and lint tooling)
+  - CODEMAP.md (documented the adapter authority model and renderer support)
+  - docs/LIFE_LEDGER_CONTRACT.md (rewrote the `workout_completed` section to document the actual
+    reviewed V1 contract: stable source-owned identity, optional duration, the adapter-enforced
+    immutable-after-first-acceptance conflict policy as a documented exception to the general revision
+    rule, no `_ts` causal versioning, unit/timezone/observation-time assertion semantics, `payload.source`
+    field meanings, `iw`-prefix provenance uncertainty, unsupported deletion/restore, and per-record
+    malformed-input outcomes)
+tests:
+  - `npm run test:workout-adapter` — 27 passed
+  - `npm test` — 464 passed (437 ChronaSense/core/export tests + 27 adapter tests)
+  - `npx playwright test` — 176 passed
+  - `node --check` on the adapter, adapter tests, core, runtime, transport, renderer, CLI export
+    script, and `test.js` — passed
+  - `git diff --check` — passed
+  - ESLint — 0 errors; 19 pre-existing warnings outside the adapter/core/renderer
+blockers: none
+deviations: openGym remained read-only. Its backup supplies stable workout IDs, but no durable
+  per-workout version or historical unit; global `_ts` and current `unit` are therefore not authority.
+  Backup JSON cannot prove whether a structurally valid record was native, restored, or injected, so
+  provenance says supplied backup plus validation rather than claiming native origin. Deletion/restore
+  remain unsupported. No TASKS/status workflow file was changed because this was the user-directed
+  Goal Mode milestone. No commit, push, merge, deploy, production/Firebase/Obsidian write, Meal change,
+  openGym mutation, or real user-data import was performed.
+
 ## Capability/Career V1 reviewer fix packet — ready (branch: feat/capability-career-v1) — 2026-08-31
 changed:
   - capability-career-analytics.js (filters current evidence to exclude future timestamps and

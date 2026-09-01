@@ -5,6 +5,108 @@
 
 ---
 
+## Workout → Life Ledger Adapter V1 — third targeted fix pass · 2026-08-31
+suite: `npm run test:workout-adapter`; `npm test`; `npx playwright test`; ESLint over the repository's
+  configured production modules; `node --check` on the adapter, adapter tests, core, runtime,
+  transport, renderer, CLI export script, and `test.js`; `git diff --check`; a control-byte/UTF-8
+  round-trip scan over every changed file.
+result: focused adapter tests passed 33/33 (3 new: a real verified FNV-1a 32-bit fingerprint collision
+  between two distinct `note` values still produces `immutable_workout_conflict` — proven with the
+  original event's `eventId`/revision/note unchanged, no duplicate event created, and the top-level
+  `status` correctly `partial`, plus a sanity check that the collision genuinely occurs and a
+  companion test proving true identical-facts retries still resolve to `unchanged`). Full Node
+  regression passed 471/471 (438 ChronaSense/core/export tests, including 9 new time/interval cases
+  added to the `workout_completed core/renderer validator parity matrix`, + 33 adapter tests). Full
+  Playwright passed 176/176. ESLint completed with 0 errors and the same 19 pre-existing warnings
+  outside the adapter/core/renderer. Syntax checks, `git diff --check`, and the control-byte scan all
+  passed clean.
+  Independently confirmed by direct script proof that the renderer now rejects every one of the
+  reviewer's five reproduced time/interval cases (missing `endedAt`, missing `startedAt`,
+  `durationMinutes: 0`, end earlier than start, `endedAt` disagreeing with top-level `occurredAt`)
+  identically to the shared core, while the approved unknown-duration case (`startedAt === endedAt`,
+  `durationMinutes` omitted) still renders correctly. Also independently confirmed, end to end through
+  `importWorkoutBackup()`, that a genuine fingerprint collision (two distinct notes both hashing to
+  `fnv1a32:9ce28ae5`) no longer causes a changed workout to be silently accepted as unchanged.
+  Re-confirmed unchanged: `_ts` never orders corrections, restored backups cannot roll history
+  backward, future `_ts` cannot freeze ingestion, kg/lb toggles never relabel history, `observedAt`
+  comes only from the injected clock, unknown-duration history omits rather than fabricates duration,
+  a missing later record never tombstones, a forged `iw`-prefixed record remains path-compatible
+  provenance only, one outcome per physical record holds (including the fatal-context case), fatal
+  context rejection remains `rejected`, the malformed-payload allowlists remain strict, valid mixed
+  Obsidian export remains deterministic, and core validation remains scoped to `workout_completed`.
+untested: unchanged from the entries below — no production deployment, mobile install, Firebase/
+  shared storage, Obsidian export/write, Meal app, openGym source mutation, or real user backup
+  import was exercised in this fix pass either.
+
+## Workout → Life Ledger Adapter V1 — second targeted fix pass · 2026-08-31
+suite: `npm run test:workout-adapter`; `npm test`; `npx playwright test`; ESLint over the repository's
+  configured production modules; `node --check` on the adapter, adapter tests, core, runtime,
+  transport, renderer, CLI export script, and `test.js`; `git diff --check`; a control-byte/UTF-8
+  round-trip scan over every changed file.
+result: focused adapter tests passed 30/30 (3 new: fatal batch/context rejection returning one
+  `invalid` outcome per physical record for a 3-record batch, zero outcomes for a 0-record batch, and
+  zero outcomes for a structurally-malformed backup). Full Node regression passed 468/468 (438
+  ChronaSense/core/export tests, including the new `workout_completed core/renderer validator parity
+  matrix` test covering 15 fixtures, + 30 adapter tests). Full Playwright passed 176/176. ESLint
+  completed with 0 errors and the same 19 pre-existing warnings outside the adapter/core/renderer.
+  Syntax checks, `git diff --check`, and the control-byte scan all passed clean.
+  Confirmed by direct script proof (not just the test files) that every reviewer-reproduced case is
+  now rejected identically by both `validateLifeLedgerEvent()` and `buildObsidianLifeLedgerExport()`:
+  `program: {bad:true}`, a top-level `sets: "bad"`, an unknown `payload.source` key, an extra key
+  inside `timezoneContext`, a contradictory `{ authority: 'unknown', unit: 'lb' }` weightUnitContext,
+  an invalid `weightUnitContext.authority` enum, an overclaiming `recordOrigin`, an overclaiming
+  `completionBasis`, a missing `exerciseId`, a missing `mode` paired with an invalid set, an empty
+  `sets` array, an out-of-range `rir`, an invalid `prescription`, and a `bodyWeight` with an extra
+  field. Also re-confirmed unchanged: higher/future/newly-restamped `_ts` cannot revise or freeze
+  accepted facts, kg/lb toggles never relabel historical loads, observation time comes only from the
+  injected clock, unknown-duration history is represented without fabrication, backup absence never
+  implies deletion, and a forged `iw`-prefixed record is labeled shape-compatible only.
+untested: unchanged from the entries below — no production deployment, mobile install, Firebase/
+  shared storage, Obsidian export/write, Meal app, openGym source mutation, or real user backup
+  import was exercised in this fix pass either.
+
+## Workout → Life Ledger Adapter V1 · 2026-08-31
+suite: `npm run test:workout-adapter`; `npm test`; `npx playwright test`; ESLint over the repository's
+  configured production modules; `node --check` on the adapter, adapter tests, core, runtime,
+  renderer, and `test.js`; `git diff --check`; source-path inspection of openGym persist, finish,
+  rating/note, CSV import, backup replacement/export, deletion, reset, server pull, and native mirror.
+result: focused adapter tests passed 20/20. Full Node regression passed 447/447 (427 existing/core/
+  export + 20 adapter). Full Playwright passed 176/176. ESLint completed with 0 errors and the same
+  19 pre-existing warnings in `focus-mode.js`, `insights.js`, and `storage.js`; changed production
+  files had no warnings. Syntax checks and `git diff --check` passed. Adversarial proofs confirmed
+  higher/future/newly-restamped global `_ts` cannot revise or freeze facts, unit toggles cannot relabel
+  loads, observation time comes from the injected clock, unknown duration omits rather than fabricates
+  duration, partial batches remain explicit/retryable, and mixed focus/plan/workout export succeeds.
+  ESLint first hit sandbox `ENOTCACHED` and passed after the required approved registry retry.
+untested: no production deployment, mobile install, Firebase/shared storage, Obsidian export/write,
+  Meal app, openGym source mutation, or real user backup import was exercised. Deletion and restore
+  remain intentionally unsupported until openGym emits explicit durable evidence. Backup-only record
+  origin remains indeterminate when arbitrary/restored data matches a valid source shape.
+
+## Workout → Life Ledger Adapter V1 — final consolidated fix pass · 2026-08-31
+suite: `npm run test:workout-adapter`; `npm test`; `npx playwright test`; ESLint over the repository's
+  configured production modules; `node --check` on the adapter, adapter tests, core, runtime,
+  transport, renderer, CLI export script, and `test.js`; `git diff --check`.
+result: focused adapter tests passed 27/27 (7 new: duplicate/conflict per-record outcomes with
+  reversed order, forced ledger-upsert-rejection status, forged `iw`-prefixed record, oversized/
+  control-character text and identifier rejection). Full Node regression passed 464/464 (437
+  ChronaSense/core/export tests, including 10 new adversarial validation/renderer tests, + 27 adapter
+  tests). Full Playwright passed 176/176. ESLint completed with 0 errors and the same 19 pre-existing
+  warnings in `focus-mode.js`, `insights.js`, and `storage.js`; changed production files (adapter,
+  core, renderer) had no warnings. Syntax checks and `git diff --check` passed.
+  Reviewer-reproduced malformed payloads (null payload, object `workoutName`, string `exercises`,
+  string `bodyWeight`, numeric `rating`, object `note`) are now confirmed rejected by both
+  `validateLifeLedgerEvent()` (shared core) and `buildObsidianLifeLedgerExport()` (renderer) directly,
+  independent of the adapter. Two identical physical backup rows now produce an explicit `accepted` +
+  `duplicate` outcome pair (order-independent) instead of a silent collapse. A forced non-UUID
+  `createId` reproduces a rejected ledger upsert whose top-level `importWorkoutBackup()` `status` is
+  confirmed `partial`, never `ok`, and a retry with a valid `createId` is confirmed idempotent. A
+  forged `iw`-prefixed record is confirmed labeled `csv_import_path_compatible` /
+  `validated-supplied-backup-record`, never the old overclaiming `csv_imported_history` label.
+untested: unchanged from the entry above — no production deployment, mobile install, Firebase/shared
+  storage, Obsidian export/write, Meal app, openGym source mutation, or real user backup import was
+  exercised in this fix pass either.
+
 ## Capability/Career V1 reviewer fix packet · 2026-08-31
 suite: `npm test`; `npx playwright test tests/capability-career-ui.spec.js`;
   `npx playwright test tests/learning-plan-ui.spec.js`; `npm run test:smoke`; `npm run lint`;
