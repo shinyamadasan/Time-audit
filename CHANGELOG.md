@@ -1,5 +1,35 @@
 # ChronaSense — Changelog
 
+## Phase 6 — Unified Life Feed V1: targeted review fixes (branch: feat/unified-life-feed-v1) — 2026-09-01
+changed:
+  - life-feed-model.js (BLOCKER 1 — revision/tombstone-aware raw dedupe. `buildLifeFeed` now
+    resolves duplicate raw records that share an eventId into ONE deterministic current record
+    BEFORE any display or tombstone decision, via `resolveCurrentRecords()`: highest valid
+    `revision` wins regardless of input array order; records tied at the top revision must be
+    equivalent (exact-duplicate case) or the event is reported as a `revision_conflict` skip;
+    the winner then passes through the normal readable-guard + tombstone-exclusion checks, so a
+    newer tombstoned revision correctly supersedes an older active one. Replaces the previous
+    first-seen `seenEventIds` guard, which let output depend on array order and let a discarded
+    tombstone fail to supersede an older active revision. No Ledger-store redesign; no mutation
+    of input; comparison scoped to feed-relevant facts via a small `stableSerialize`.)
+  - life-feed-ui.js (BLOCKER 2 — honest empty state: "Nothing here yet. Finish a learning step
+    or a focus session and it shows up on your timeline." — no longer implies time logging /
+    workouts / meals populate the feed today. BLOCKER 3 — reason-neutral skipped footnote:
+    "N Ledger events could not be displayed." replaces "... not shown (unrecognized type)".
+    The model still preserves detailed `reason` codes.)
+  - index.html (BLOCKER 2 — honest Life tab subtitle: "Your timeline from the Life Ledger.
+    Learning steps and focus sessions appear now; time, workouts and meals join as their
+    integrations are connected.")
+  - life-feed-model.test.js (+6 tests: rev1/rev2 order-independence with byte-equal output,
+    newer-tombstone-supersedes-older-active in either order, older-active-never-wins,
+    same-revision contradiction → conflict skip, no input mutation, per-skip reason codes)
+  - tests/life-feed-ui.spec.js (empty-state test rewritten to assert honesty + absence of
+    over-promised domains; new subtitle-honesty test; note explaining the skipped footnote is
+    defensive-only and unreachable through the runtime store)
+verification: npm test, test:adapter-contracts, strict test:cross-repo-compat (no SKIPs,
+  exit 0), lint (0 errors), Playwright (life-feed 9, smoke + learning-plan 141, career + plan
+  35), node --check, git diff --check, UTF-8/control-byte scan — all pass.
+
 ## Phase 6 — Unified Life Feed V1 (branch: feat/unified-life-feed-v1) — 2026-09-01
 added:
   - life-feed-model.js (new — the canonical, UI-independent Unified Life Feed projection. Pure
