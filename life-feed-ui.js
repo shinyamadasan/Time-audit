@@ -91,8 +91,8 @@ function emptyStateHtml(view) {
     const label = LIFE_FEED_DOMAIN_LABELS[view.activeDomain];
     return `<p class="life-feed-empty">No ${escapeHtml(label)} events in your Life Ledger yet.</p>`;
   }
-  return '<p class="life-feed-empty">Nothing recorded yet. As you log time, finish learning steps, '
-    + 'work out, or prep and eat meals, your life timeline builds here.</p>';
+  return '<p class="life-feed-empty">Nothing here yet. Finish a learning step or a focus session '
+    + 'and it shows up on your timeline.</p>';
 }
 
 function render() {
@@ -116,8 +116,8 @@ function render() {
   }
 
   if (feed.skipped.length) {
-    parts.push(`<p class="life-feed-skipped">${feed.skipped.length} `
-      + `${feed.skipped.length === 1 ? 'event' : 'events'} not shown (unrecognized type).</p>`);
+    parts.push(`<p class="life-feed-skipped">${feed.skipped.length} Ledger `
+      + `${feed.skipped.length === 1 ? 'event' : 'events'} could not be displayed.</p>`);
   }
 
   root.innerHTML = parts.join('');

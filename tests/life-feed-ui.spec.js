@@ -163,12 +163,31 @@ async function openLife(page) {
   await expect(page.locator('#view-life')).toHaveClass(/active/);
 }
 
-test('empty ledger shows a useful empty state, not a crash or fake data', async ({ page }) => {
+test('empty ledger shows a useful, honest empty state (no over-promised domains)', async ({ page }) => {
   await openApp(page);
   await openLife(page);
-  await expect(page.locator('#life-feed-root')).toContainText('Nothing recorded yet');
+  const empty = page.locator('.life-feed-empty');
+  await expect(empty).toContainText('learning step');
+  await expect(empty).toContainText('focus session');
+  // must NOT claim time-logging / workouts / meals populate the feed today
+  await expect(empty).not.toContainText(/work out|meal|prep/i);
   await expect(page.locator('.life-feed-item')).toHaveCount(0);
 });
+
+test('the Life tab subtitle is honest about which domains are live today', async ({ page }) => {
+  await openApp(page);
+  await openLife(page);
+  const subtitle = page.locator('#view-life .life-feed-subtitle');
+  await expect(subtitle).toContainText('Learning steps and focus sessions appear now');
+  await expect(subtitle).toContainText(/integrations are connected/i);
+});
+
+// NOTE: the skipped-event footnote ("N Ledger events could not be displayed") is defensive.
+// The runtime Life Ledger store validates every record on read (life-ledger-runtime.js), so
+// `listEvents()` can only ever return well-formed events of a known type — feed.skipped is
+// unreachable through the product today. Its reason-neutral wording is asserted at the source
+// level (grep in the model regression) and its detailed `reason` codes are covered by
+// life-feed-model.test.js.
 
 test('a mixed-life day renders every fact once, in chronological order, with correct domains', async ({ page }) => {
   await openApp(page, { lifeLedgerRaw: envelope(mixedDayEvents()) });

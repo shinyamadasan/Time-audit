@@ -318,6 +318,105 @@ test('duplicate eventIds in a raw list collapse to one feed item', () => {
   const stored = ingest(store, focusDraft({ id: 'dup' }));
   const feed = buildLifeFeed([stored, structuredClone(stored), structuredClone(stored)], FEED_OPTS);
   assert.equal(feed.items.length, 1);
+  // exact raw duplicates are NOT a conflict
+  assert.equal(feed.skipped.length, 0);
+});
+
+console.log('\nUnified Life Feed — revision-aware raw dedupe (defensive input)');
+
+// Build two raw records for one identity: revision 1, then a revised revision 2.
+function revisionPair(store, draftFactory) {
+  const rev1 = ingest(store, draftFactory('Original title'));
+  const rev2Result = upsertLifeLedgerEvent(store, draftFactory('Corrected title'), {
+    createId: nextId,
+    clock: clockAt('2026-08-31T10:00:00.000Z')
+  });
+  assert.equal(rev2Result.action, 'revised');
+  return { rev1, rev2: rev2Result.event };
+}
+
+test('current truth does not depend on input order: [rev1, rev2] and [rev2, rev1] match', () => {
+  const store = makeStore();
+  const { rev1, rev2 } = revisionPair(store, title => activityDraft({ id: 'ord-1', activity: title }));
+  assert.equal(rev1.eventId, rev2.eventId);
+  assert.equal(rev1.revision, 1);
+  assert.equal(rev2.revision, 2);
+
+  const forward = buildLifeFeed([rev1, rev2], FEED_OPTS);
+  const backward = buildLifeFeed([rev2, rev1], FEED_OPTS);
+
+  assert.equal(forward.items.length, 1);
+  assert.equal(backward.items.length, 1);
+  assert.equal(forward.items[0].title, 'Corrected title');
+  assert.equal(forward.items[0].revision, 2);
+  // full projected item is byte-equivalent regardless of order
+  assert.deepEqual(forward.items, backward.items);
+  assert.deepEqual(forward.days, backward.days);
+  assert.deepEqual(forward.skipped, backward.skipped);
+});
+
+test('a newer tombstoned revision supersedes an older active one, in either input order', () => {
+  const store = makeStore();
+  const active = ingest(store, planStepDraft({ id: 'ts-1:step', stepLabel: 'Still here?' }));
+  const tombDraft = planStepDraft({ id: 'ts-1:step', stepLabel: 'Still here?' });
+  tombDraft.provenance.sourceOperation = 'delete';
+  tombDraft.tombstone = {
+    active: true,
+    deletedAt: '2026-08-31T09:00:00.000Z',
+    reason: 'user_delete',
+    provenance: { sourceOperation: 'delete', sourceRecordKind: 'chronasense.plan_step', evidence: ['chronasense.plan_step:ts-1:reopened'] }
+  };
+  const tombResult = upsertLifeLedgerEvent(store, tombDraft, { createId: nextId, clock: clockAt('2026-08-31T09:00:00.000Z') });
+  assert.equal(tombResult.action, 'tombstoned');
+  const tombstoned = tombResult.event;
+  assert.equal(active.eventId, tombstoned.eventId);
+  assert.equal(active.revision, 1);
+  assert.equal(tombstoned.revision, 2);
+
+  const forward = buildLifeFeed([active, tombstoned], FEED_OPTS);
+  const backward = buildLifeFeed([tombstoned, active], FEED_OPTS);
+  assert.equal(forward.items.length, 0);
+  assert.equal(backward.items.length, 0);
+  assert.equal(forward.isEmpty, true);
+  assert.equal(backward.isEmpty, true);
+  // a legitimate tombstone exclusion is NOT surfaced as a skipped/unshowable event
+  assert.deepEqual(forward.skipped, []);
+  assert.deepEqual(backward.skipped, []);
+});
+
+test('an older active revision never wins over a newer active revision (either order)', () => {
+  const store = makeStore();
+  const { rev1, rev2 } = revisionPair(store, title => focusDraft({ id: 'act-newer', activity: title }));
+  for (const input of [[rev1, rev2], [rev2, rev1], [rev1, rev2, structuredClone(rev1)]]) {
+    const feed = buildLifeFeed(input, FEED_OPTS);
+    assert.equal(feed.items.length, 1);
+    assert.equal(feed.items[0].title, 'Corrected title');
+    assert.equal(feed.items[0].revision, 2);
+  }
+});
+
+test('contradictory records at the SAME highest revision are skipped as a conflict, not guessed', () => {
+  const store = makeStore();
+  const base = ingest(store, activityDraft({ id: 'conflict-1', activity: 'Version A' }));
+  const impossibleTwin = { ...structuredClone(base), payload: { ...base.payload, activity: 'Version B' } };
+  const feed = buildLifeFeed([base, impossibleTwin], FEED_OPTS);
+  assert.equal(feed.items.length, 0);
+  assert.equal(feed.skipped.length, 1);
+  assert.equal(feed.skipped[0].reason, 'revision_conflict');
+  assert.equal(feed.skipped[0].eventId, base.eventId);
+  // order independence
+  const reversed = buildLifeFeed([impossibleTwin, base], FEED_OPTS);
+  assert.deepEqual(reversed.skipped, feed.skipped);
+});
+
+test('revision-aware dedupe does not mutate any input record', () => {
+  const store = makeStore();
+  const { rev1, rev2 } = revisionPair(store, title => activityDraft({ id: 'nomut', activity: title }));
+  const inputs = [rev2, rev1, structuredClone(rev1)];
+  const snapshot = JSON.stringify(inputs);
+  buildLifeFeed(inputs, FEED_OPTS);
+  buildLifeFeed([rev1, rev2], FEED_OPTS);
+  assert.equal(JSON.stringify(inputs), snapshot);
 });
 
 console.log('\nUnified Life Feed — event rendering by type');
@@ -433,6 +532,20 @@ test('structurally broken records are skipped, not thrown', () => {
   assert.equal(feed.items.length, 0);
   assert.equal(feed.skipped.length, 4);
   assert.ok(feed.isEmpty);
+});
+
+test('the model preserves a specific reason code for every skipped record', () => {
+  const store = makeStore();
+  const good = ingest(store, focusDraft({ id: 'keep' }));
+  const feed = buildLifeFeed([
+    good,
+    { ...structuredClone(good), eventId: '00000000-0000-4000-8000-aaaaaaaaaaaa', type: 'sleep_logged' },
+    { ...structuredClone(good), eventId: '00000000-0000-4000-8000-bbbbbbbbbbbb', sourceTimezone: 'x' },
+    { ...structuredClone(good), eventId: '00000000-0000-4000-8000-cccccccccccc', payload: null }
+  ], FEED_OPTS);
+  assert.equal(feed.items.length, 1);
+  const reasons = feed.skipped.map(s => s.reason).sort();
+  assert.deepEqual(reasons, ['invalid_source_timezone', 'missing_payload', 'unsupported_type']);
 });
 
 console.log('\nUnified Life Feed — Today / Recent / History grouping');

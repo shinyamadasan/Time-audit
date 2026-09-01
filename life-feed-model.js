@@ -388,6 +388,79 @@ function emptyCounts() {
   return { all: 0, time: 0, learning: 0, workout: 0, meal: 0 };
 }
 
+// A usable revision is a positive integer (life-ledger-core.js's `revision must be a positive
+// integer` invariant). Anything else ranks below every real revision so it can never win a
+// duplicate-eventId contest.
+function revisionRank(record) {
+  return Number.isInteger(record.revision) && record.revision >= 1 ? record.revision : 0;
+}
+
+function stableSerialize(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+  return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(',')}}`;
+}
+
+// The feed-relevant facts of a record. Two records that agree here are interchangeable for
+// display; two that disagree AT THE SAME revision are contradictory (impossible under valid
+// Ledger semantics) and the event is skipped as a conflict rather than guessed.
+function factSignature(record) {
+  return stableSerialize({
+    type: record.type ?? null,
+    occurredAt: record.occurredAt ?? null,
+    occurredDate: record.occurredDate ?? null,
+    temporalPrecision: record.temporalPrecision ?? null,
+    sourceTimezone: record.sourceTimezone ?? null,
+    recordedAt: record.recordedAt ?? null,
+    tombstoneActive: isPlainObject(record.tombstone) && record.tombstone.active === true,
+    payload: record.payload ?? null
+  });
+}
+
+// Collapse duplicate raw records that share an eventId into ONE deterministic current record
+// BEFORE any display item or tombstone decision:
+//   • highest valid revision wins — input order never changes the outcome;
+//   • records tied at the top revision must be equivalent (the exact-duplicate case);
+//     if they contradict, the event is reported as a `revision_conflict` skip;
+//   • the winner is then subject to the normal readable-guard and tombstone-exclusion checks,
+//     so a newer tombstoned revision correctly supersedes an older active one.
+// Never mutates input. Records with no usable eventId pass straight through to the per-record
+// readable guard (which reports them as `missing_event_id`).
+function resolveCurrentRecords(events) {
+  const groups = new Map();
+  const passthrough = [];
+  for (const event of events) {
+    if (!isPlainObject(event) || typeof event.eventId !== 'string' || !event.eventId) {
+      passthrough.push(event);
+      continue;
+    }
+    if (!groups.has(event.eventId)) groups.set(event.eventId, []);
+    groups.get(event.eventId).push(event);
+  }
+
+  const resolved = [];
+  const conflicts = [];
+  for (const [eventId, records] of groups) {
+    if (records.length === 1) {
+      resolved.push(records[0]);
+      continue;
+    }
+    let topRank = 0;
+    for (const record of records) {
+      const rank = revisionRank(record);
+      if (rank > topRank) topRank = rank;
+    }
+    const tied = records.filter(record => revisionRank(record) === topRank);
+    if (new Set(tied.map(factSignature)).size > 1) {
+      const typed = records.find(record => record.type != null);
+      conflicts.push({ eventId, type: typed ? String(typed.type) : null, reason: 'revision_conflict' });
+      continue;
+    }
+    resolved.push(tied[0]);
+  }
+  return { resolved: [...resolved, ...passthrough], conflicts };
+}
+
 /**
  * Build the Unified Life Feed from stored Life Ledger events.
  *
@@ -405,10 +478,15 @@ function emptyCounts() {
 export function buildLifeFeed(rawEvents, options = {}) {
   const events = Array.isArray(rawEvents) ? rawEvents : [];
   const skipped = [];
-  const seenEventIds = new Set();
   const items = [];
 
-  for (const event of events) {
+  // Resolve any duplicate raw records (same eventId) to one deterministic current record
+  // first — highest valid revision wins regardless of input order — so the tombstone and
+  // readable-guard decisions below always act on current truth, not a stale revision.
+  const { resolved, conflicts } = resolveCurrentRecords(events);
+  skipped.push(...conflicts);
+
+  for (const event of resolved) {
     const problem = feedReadableProblem(event);
     if (problem) {
       skipped.push({
@@ -418,12 +496,8 @@ export function buildLifeFeed(rawEvents, options = {}) {
       });
       continue;
     }
-    // Tombstoned events are not current factual history — excluded, never resurrected.
+    // Tombstoned current record → not current factual history. Excluded, never resurrected.
     if (isPlainObject(event.tombstone) && event.tombstone.active === true) continue;
-    // The runtime store already collapses revisions to one record per identity; this dedupe
-    // is defensive against a caller passing a raw list that repeats an eventId.
-    if (seenEventIds.has(event.eventId)) continue;
-    seenEventIds.add(event.eventId);
     items.push(buildFeedItem(event));
   }
 
