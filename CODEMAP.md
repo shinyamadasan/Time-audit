@@ -20,6 +20,8 @@
 - `learning-plan-ui.js` — module script include → **EXTRACTED** (see below; imports `learning-plan-import.js`, `learning-plan-next-action.js`, `life-ledger-runtime.js`)
 - `capability-career-ui.js` — module script include → **EXTRACTED** (see below; imports Capability/Career model, repository, import, analytics, and reads Life Ledger runtime)
 - `life-ledger-export-ui.js` — module script include → **EXTRACTED** (see below; imports `life-ledger-transport.js`)
+- `life-feed-model.js` — module → **EXTRACTED** (see below; pure Unified Life Feed projection over Life Ledger events)
+- `life-feed-ui.js` — module script include → **EXTRACTED** (see below; imports `life-feed-model.js`, `life-ledger-runtime.js`)
 - `focus-mode.js` — line 7562 → **EXTRACTED** (see below)
 
 ---
@@ -142,6 +144,20 @@ Functions: `downloadLifeLedgerSnapshot()`
 Variables: —
 Depends on: `life-ledger-transport.js`, DOM globals
 
+### life-feed-model.js
+Lines: external file
+Purpose: Unified Life Feed V1 canonical model. A read-only projection over stored Life Ledger events (`createLocalLifeLedgerStore().listEvents()`): maps the six event types to stable user-facing domains (Time / Learning / Workout / Meal), derives per-type human titles/details without fabricating missing facts, groups events into source-local calendar days with Today/Yesterday labels, and orders them deterministically (occurredAt / occurredDate anchor, then recordedAt only for date-only ties, then type + eventId) — fact-parity with `obsidian-life-ledger-renderer.js`. Excludes tombstoned events; skips unsupported/unreadable events into a `skipped[]` list rather than throwing. Never mutates a source event.
+Functions: `buildLifeFeed()`, `filterLifeFeed()`, `compareFeedItems()`
+Variables: `LIFE_FEED_DOMAINS`, `LIFE_FEED_FILTERS`, `LIFE_FEED_DOMAIN_LABELS`
+Depends on: `Intl` (formatter caches), no other modules
+
+### life-feed-ui.js
+Lines: external file
+Purpose: Browser UI for the Life tab (`#view-life`). Reads the runtime Life Ledger store once, builds the feed via `life-feed-model.js` with a cheap event-signature cache, renders date-grouped scannable rows with domain filter chips (All / Time / Learning / Workout / Meal), domain-aware empty states, and an unrecognized-event footnote. Read-only: never writes to the ledger, Meal, or Workout.
+Functions: `renderLifeFeed()`
+Variables: module-local UI state (`activeDomain`, `cachedFeed`, `cachedSignature`)
+Depends on: `life-feed-model.js`, `life-ledger-runtime.js`, DOM globals
+
 ### capability-career-model.js
 Lines: external file
 Purpose: Pure Capability/Career V1 data model for skills, knowledge areas, tools, career targets, projects, portfolio artifacts, and explicit evidence mappings. Validates stable IDs, JSON-safe state, timestamps, references, archive-safe links, and duplicate Life Ledger evidence mappings.
@@ -254,6 +270,13 @@ Purpose: Career tab markup mount for Capability/Career dashboard and progressive
 Functions: —
 Key IDs: `view-career`, `cap-career-error`, `cap-career-dashboard`, `cap-career-setup`, `nav-career`
 Depends on: `capability-career-ui.js`, `capability-career.css`
+
+## [HTML — Unified Life Feed View]
+Lines: after the Reflect view, before Learning Plans
+Purpose: Life tab markup: page header + subtitle and the `#life-feed-root` mount (has `aria-live="polite"`). Nav button `#nav-life` calls `showView('life')`, which calls `window.renderLifeFeed()`.
+Functions: —
+Key IDs: `view-life`, `life-feed-root`, `nav-life`
+Depends on: `life-feed-ui.js`; CSS `.life-feed-*` block appended to `style.css`
 
 ## [HTML — Desktop Side Panels]
 Lines: 1579–1613

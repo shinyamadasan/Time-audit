@@ -2,7 +2,7 @@
 // Targets the extracted .js files only (not index.html which requires an HTML plugin).
 export default [
   {
-    files: ['life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'workout-life-ledger-adapter.js', 'meal-life-ledger-adapter.js', 'life-ledger-runtime.js', 'life-ledger-transport.js', 'life-ledger-export-ui.js', 'obsidian-life-ledger-renderer.js', 'obsidian-life-ledger-writer.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js', 'capability-career-model.js', 'capability-career-repository.js', 'capability-career-import.js', 'capability-career-analytics.js', 'capability-career-ui.js', 'fixtures/resolve-fixture.js'],
+    files: ['life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'workout-life-ledger-adapter.js', 'meal-life-ledger-adapter.js', 'life-ledger-runtime.js', 'life-ledger-transport.js', 'life-ledger-export-ui.js', 'life-feed-model.js', 'life-feed-ui.js', 'obsidian-life-ledger-renderer.js', 'obsidian-life-ledger-writer.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js', 'capability-career-model.js', 'capability-career-repository.js', 'capability-career-import.js', 'capability-career-analytics.js', 'capability-career-ui.js', 'fixtures/resolve-fixture.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -12,6 +12,14 @@ export default [
         Blob: 'readonly',
         URL: 'readonly',
         process: 'readonly',
+        console: 'readonly',
+        Intl: 'readonly',
+        Date: 'readonly',
+        Math: 'readonly',
+        Set: 'readonly',
+        Map: 'readonly',
+        JSON: 'readonly',
+        structuredClone: 'readonly',
       },
     },
     rules: {
@@ -43,7 +51,7 @@ export default [
   },
   {
     files: ['*.js'],
-    ignores: ['www/**', 'node_modules/**', 'life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'workout-life-ledger-adapter.js', 'meal-life-ledger-adapter.js', 'life-ledger-runtime.js', 'life-ledger-transport.js', 'life-ledger-export-ui.js', 'obsidian-life-ledger-renderer.js', 'obsidian-life-ledger-writer.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js', 'capability-career-model.js', 'capability-career-repository.js', 'capability-career-import.js', 'capability-career-analytics.js', 'capability-career-ui.js', 'fixtures/resolve-fixture.js'],
+    ignores: ['www/**', 'node_modules/**', 'life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'workout-life-ledger-adapter.js', 'meal-life-ledger-adapter.js', 'life-ledger-runtime.js', 'life-ledger-transport.js', 'life-ledger-export-ui.js', 'life-feed-model.js', 'life-feed-ui.js', 'obsidian-life-ledger-renderer.js', 'obsidian-life-ledger-writer.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js', 'capability-career-model.js', 'capability-career-repository.js', 'capability-career-import.js', 'capability-career-analytics.js', 'capability-career-ui.js', 'fixtures/resolve-fixture.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script', // classic <script> tags — not ES modules

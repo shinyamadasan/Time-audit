@@ -1459,3 +1459,42 @@ button, a, [role="button"],
 .w-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 .w-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
 @media(max-width:380px){.w-grid-3{grid-template-columns:1fr}}
+
+/* ── Unified Life Feed (Phase 6) ── */
+.life-feed-subtitle{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;max-width:34ch}
+.life-feed-root{margin-top:4px}
+.life-feed-filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.life-feed-chip{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:999px;
+  border:1px solid var(--border2);background:var(--bg2);color:var(--muted);font-family:var(--head);
+  font-size:11px;font-weight:600;cursor:pointer;transition:color .15s,border-color .15s,background .15s}
+.life-feed-chip[aria-selected="true"]{color:var(--text);border-color:var(--border3);background:var(--bg3)}
+.life-feed-chip:focus-visible{outline:2px solid var(--deep);outline-offset:2px}
+.life-feed-chip-count{font-size:10px;color:var(--muted2);font-variant-numeric:tabular-nums}
+.life-feed-chip[aria-selected="true"] .life-feed-chip-count{color:var(--muted)}
+
+.life-feed-day{margin-bottom:18px}
+.life-feed-day-header{position:sticky;top:0;z-index:1;background:var(--bg);padding:6px 0 8px;
+  font-family:var(--head);font-size:13px;font-weight:700;color:var(--text);letter-spacing:0.01em;
+  display:flex;align-items:baseline;gap:8px}
+.life-feed-day-date{font-size:10px;font-weight:500;color:var(--muted)}
+.life-feed-list{list-style:none;margin:0;padding:0}
+
+.life-feed-item{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--border)}
+.life-feed-list .life-feed-item:first-child{border-top:none}
+.life-feed-domain-tag{flex-shrink:0;margin-top:1px;font-size:9px;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.06em;color:var(--muted);border-left:2px solid var(--border3);padding-left:7px;
+  min-width:52px}
+.life-feed-domain-time .life-feed-domain-tag{border-left-color:var(--deep);color:var(--deep)}
+.life-feed-domain-learning .life-feed-domain-tag{border-left-color:var(--learning);color:var(--learning)}
+.life-feed-domain-workout .life-feed-domain-tag{border-left-color:var(--exercise);color:var(--exercise)}
+.life-feed-domain-meal .life-feed-domain-tag{border-left-color:var(--social);color:var(--social)}
+.life-feed-body{flex:1;min-width:0}
+.life-feed-line{display:flex;gap:8px;align-items:baseline}
+.life-feed-time{flex-shrink:0;font-family:var(--mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.life-feed-time-none{color:var(--muted2)}
+.life-feed-title{font-size:12.5px;color:var(--text);line-height:1.35;overflow-wrap:anywhere}
+.life-feed-detail{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.35;overflow-wrap:anywhere}
+
+.life-feed-empty{font-size:12px;color:var(--muted);line-height:1.5;padding:24px 4px;text-align:center}
+.life-feed-error{font-size:12px;color:var(--distraction);line-height:1.5;padding:16px 4px}
+.life-feed-skipped{font-size:10px;color:var(--muted2);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
