@@ -9,6 +9,10 @@ const DENIED_VAULT_ROOTS = [
   'C:\\Users\\Admin\\OneDrive\\2nd Brain',
   'C:\\Users\\Admin\\Desktop\\2nd Brain'
 ];
+// Read-only alias so other Life Ledger Obsidian modules (e.g. the production-target sync
+// planner) can compose their own mode-aware denylists without duplicating these two paths.
+// This writer's own denylist and behavior are unchanged by this export.
+export const OBSIDIAN_LIFE_LEDGER_DENIED_VAULT_ROOTS = DENIED_VAULT_ROOTS;
 
 export class ObsidianLifeLedgerWriterError extends Error {
   constructor(code, message, details = {}) {
@@ -23,7 +27,7 @@ function slashPath(value) {
   return String(value || '').replace(/\\/g, '/');
 }
 
-function pathEqualsOrContains(parent, child) {
+export function pathEqualsOrContains(parent, child) {
   const normalizedParent = path.resolve(parent);
   const normalizedChild = path.resolve(child);
   if (normalizedParent.toLowerCase() === normalizedChild.toLowerCase()) return true;
@@ -31,11 +35,11 @@ function pathEqualsOrContains(parent, child) {
   return !!relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
-function isLinkStats(stats) {
+export function isLinkStats(stats) {
   return stats.isSymbolicLink?.() === true || ((stats.mode || 0) & 0x400) === 0x400;
 }
 
-function defaultFsAdapter() {
+export function defaultFsAdapter() {
   return {
     mkdir: fs.mkdir,
     readFile: fs.readFile,
@@ -48,7 +52,7 @@ function defaultFsAdapter() {
   };
 }
 
-async function realPathOrResolved(fsAdapter, target) {
+export async function realPathOrResolved(fsAdapter, target) {
   try {
     return await fsAdapter.realpath(target);
   } catch {
@@ -56,7 +60,7 @@ async function realPathOrResolved(fsAdapter, target) {
   }
 }
 
-function assertRelativePath(relativePath) {
+export function assertRelativePath(relativePath) {
   const raw = String(relativePath || '');
   const normalizedSlashes = slashPath(raw);
   if (!raw.trim()) throw new ObsidianLifeLedgerWriterError('invalid_path', 'Export path must be non-empty');
@@ -80,7 +84,7 @@ function assertRelativePath(relativePath) {
   return normalized;
 }
 
-async function assertNoLinkEscape(fsAdapter, canonicalVaultRoot, destinationPath) {
+export async function assertNoLinkEscape(fsAdapter, canonicalVaultRoot, destinationPath) {
   const relative = path.relative(canonicalVaultRoot, destinationPath);
   const parts = relative.split(path.sep).filter(Boolean);
   let current = canonicalVaultRoot;
@@ -111,7 +115,7 @@ function assertNotDeniedVaultRoot(vaultRoot, candidatePath) {
   }
 }
 
-async function assertSafeExistingLeaf(fsAdapter, canonicalManagedRoot, destinationPath) {
+export async function assertSafeExistingLeaf(fsAdapter, canonicalManagedRoot, destinationPath) {
   let stats;
   try {
     stats = await fsAdapter.lstat(destinationPath);
@@ -160,7 +164,7 @@ async function destinationFor(vaultRoot, relativePath, fsAdapter) {
   return { relativePath: normalizedRelative, destinationPath: resolvedDestination, canonicalManagedRoot };
 }
 
-async function readTextIfExists(fsAdapter, filePath) {
+export async function readTextIfExists(fsAdapter, filePath) {
   try {
     return await fsAdapter.readFile(filePath, 'utf8');
   } catch (err) {
@@ -186,7 +190,7 @@ async function listGeneratedDailyFiles(fsAdapter, canonicalManagedRoot) {
     }));
 }
 
-async function writeFileAtomically(fsAdapter, destinationPath, content) {
+export async function writeFileAtomically(fsAdapter, destinationPath, content) {
   const dir = path.dirname(destinationPath);
   await fsAdapter.mkdir(dir, { recursive: true });
   const tempPath = path.join(dir, `.${path.basename(destinationPath)}.tmp`);
