@@ -1,5 +1,57 @@
 # ChronaSense — Changelog
 
+## Phase 7 — Life Character Sheet V1 (branch: feat/life-character-sheet-v1) — 2026-09-01
+added:
+  - life-character-sheet-model.js (new — the canonical, UI-independent "where am I right now?"
+    projection. `buildLifeCharacterSheet({ ledgerEvents, learningPlans, capabilityProfile, now,
+    referenceTimeZone, liveIngestedTypes })` → a pure derived snapshot with focus / time /
+    learning / capability / workout / meal / coverage sections. Never persisted as a new truth
+    store; never mutates its inputs. Feed parity by construction: every Ledger-derived fact is
+    read off the item set produced by buildLifeFeed() (same accept / tombstone / revision /
+    day-bucketing rules), then joined back to the raw event only for a numeric payload value.
+    Capability facts come straight from analyzeCapabilityCareer() (tombstone-aware evidence
+    scope, no title/keyword inference). Learning progress + next step reuse
+    getLearningPlanProgress() and findNextLearningPlanStep().)
+  - life-character-sheet-ui.js (new — renders the snapshot into #life-character-sheet-root and
+    owns the new Life view sub-navigation (Character Sheet ⇄ Timeline). Reads the Life Ledger
+    runtime store, Learning Plan repository, and Capability profile ONCE per render; never
+    writes to any of them. <progress> element for bounded plan progress; semantic headings;
+    no color-only status; factual copy only — no scores, no advice, no red/yellow/green.)
+  - life-character-sheet-model.test.js (new — 32 model tests: focus today/7-day counts &
+    minutes, midnight/timezone/DST, learning active-plan selection + progress + next step,
+    workout unknown-duration vs zero, meal date-only prep, capability explicit-evidence-only,
+    coverage chaos A–F, Feed/Learning/Capability parity, revision & tombstone truth,
+    order-independence, read-only, performance.)
+  - tests/life-character-sheet-ui.spec.js (new — 10 Playwright tests: default-to-sheet, honest
+    empty state with no faked zeros, real focus/learning render with bounded progress bar,
+    imported-Workout "not updating automatically" coverage line, capability mirror,
+    sub-nav keyboard operability, no-coaching-language scan, byte-level read-only proof,
+    hostile-HTML escaping, aria-live.)
+  - ZERO vs UNKNOWN: `liveIngestedTypes` (default focus_session_completed + plan_step_completed)
+    controls when a domain may state a literal 0. Focus/Learning report a truthful 0 when live
+    and empty; Workout/Meal/activity_logged report "Not connected to the Life Ledger yet" (or
+    "loaded from an import · not updating automatically" when snapshot events exist) — an
+    absent adapter is never rendered as behavioural zero.
+changed:
+  - index.html (#view-life restructured: adds .life-subnav with Character Sheet / Timeline
+    buttons, #life-character-sheet-root mount, #life-feed-root now starts hidden. showView('life')
+    now calls window.renderLifeView() (falls back to renderLifeFeed). New module <script> include.
+    No 8th bottom-nav button — still 7 items.)
+  - life-feed-ui.js (now resolves a reference timezone the same way the Character Sheet does —
+    an explicit 'UTC' setting maps to 'Etc/UTC' — and passes it to buildLifeFeed so the two Life
+    surfaces bucket "today" identically for the same events. No change to the feed model.)
+  - style.css (appended .life-subnav + .lcs-* block — committed dark theme, matches existing
+    tokens; <progress> styled for the plan bar.)
+  - package.json (test script runs life-character-sheet-model.test.js; new
+    test:life-character-sheet script; lint covers the two new modules.)
+  - eslint.config.js (registers life-character-sheet-model.js + life-character-sheet-ui.js.)
+  - tests/life-feed-ui.spec.js (openLife() now selects the Timeline sub-tab, since the Life
+    view opens on the Character Sheet.)
+verification: npm test (219 model/unit incl. 32 new), test:adapter-contracts, strict
+  test:cross-repo-compat (no SKIPs, exit 0), lint (0 errors), Playwright 195 (life-character-sheet
+  10 + life-feed 9 + smoke/learning-plan/career/plan), node --check, git diff --check,
+  UTF-8/control-byte scan — all pass. Original main untouched.
+
 ## Phase 6 — Unified Life Feed V1: targeted review fixes (branch: feat/unified-life-feed-v1) — 2026-09-01
 changed:
   - life-feed-model.js (BLOCKER 1 — revision/tombstone-aware raw dedupe. `buildLifeFeed` now
