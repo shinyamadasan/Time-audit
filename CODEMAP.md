@@ -22,6 +22,8 @@
 - `life-ledger-export-ui.js` — module script include → **EXTRACTED** (see below; imports `life-ledger-transport.js`)
 - `life-feed-model.js` — module → **EXTRACTED** (see below; pure Unified Life Feed projection over Life Ledger events)
 - `life-feed-ui.js` — module script include → **EXTRACTED** (see below; imports `life-feed-model.js`, `life-ledger-runtime.js`)
+- `life-character-sheet-model.js` — module → **EXTRACTED** (see below; pure Life Character Sheet projection — Phase 7)
+- `life-character-sheet-ui.js` — module script include → **EXTRACTED** (see below; Life view Character Sheet + sub-nav; imports `life-character-sheet-model.js`, `life-ledger-runtime.js`, `learning-plan-repository.js`, `capability-career-repository.js`)
 - `focus-mode.js` — line 7562 → **EXTRACTED** (see below)
 
 ---
@@ -158,6 +160,20 @@ Functions: `renderLifeFeed()`
 Variables: module-local UI state (`activeDomain`, `cachedFeed`, `cachedSignature`)
 Depends on: `life-feed-model.js`, `life-ledger-runtime.js`, DOM globals
 
+### life-character-sheet-model.js
+Lines: external file
+Purpose: Life Character Sheet V1 canonical projection (Phase 7). Pure, read-only "where am I right now?" snapshot. `buildLifeCharacterSheet({ ledgerEvents, learningPlans, capabilityProfile, now, referenceTimeZone, liveIngestedTypes })` → `{ generatedAt, referenceTimeZone, todayKey, focus, time, learning, capability, workout, meal, coverage, skippedLedgerEvents }`. Ledger-derived facts (focus / workout / meal / learning completions) are read off `buildLifeFeed()`'s accepted item set — same tombstone / revision / day-bucketing rules — then joined to the raw event only for a numeric payload value; Capability comes straight from `analyzeCapabilityCareer()`; learning progress + next step from `getLearningPlanProgress()` / `findNextLearningPlanStep()`. Zero-vs-unknown: `liveIngestedTypes` (default `focus_session_completed` + `plan_step_completed`) decides when a domain may state a literal 0; everything else reports `not-connected` / `loaded-not-live`. Never mutates inputs, never persisted as a new store.
+Functions: `buildLifeCharacterSheet()`
+Variables: `LIFE_CHARACTER_SHEET_LIVE_INGESTED_TYPES`, `LIFE_CHARACTER_SHEET_MODEL_V1`
+Depends on: `life-feed-model.js`, `capability-career-analytics.js`, `learning-plan-next-action.js`, `learning-plan-model.js`
+
+### life-character-sheet-ui.js
+Lines: external file
+Purpose: Browser UI for the Life tab's Character Sheet sub-view (`#life-character-sheet-root`) and the `#view-life` sub-navigation (Character Sheet ⇄ Timeline; opens on Character Sheet, remembers the last choice in `ta3-life-subview`). Reads the Life Ledger runtime store, Learning Plan repository, and Capability profile ONCE per render, hands them to `buildLifeCharacterSheet()`, and paints factual sections + honest coverage lines. `<progress>` for bounded plan progress; semantic headings; no scores, no advice. Read-only: never writes to any store. Also resolves the reference timezone the same way `life-feed-ui.js` now does.
+Functions: `renderLifeView()` (entry point for `showView('life')`), `renderLifeCharacterSheet()` (window-exposed re-render)
+Variables: module-local (`initialized`)
+Depends on: `life-character-sheet-model.js`, `life-ledger-runtime.js`, `learning-plan-repository.js`, `capability-career-repository.js`, `life-feed-ui.js` (`window.renderLifeFeed`), DOM globals
+
 ### capability-career-model.js
 Lines: external file
 Purpose: Pure Capability/Career V1 data model for skills, knowledge areas, tools, career targets, projects, portfolio artifacts, and explicit evidence mappings. Validates stable IDs, JSON-safe state, timestamps, references, archive-safe links, and duplicate Life Ledger evidence mappings.
@@ -271,12 +287,12 @@ Functions: —
 Key IDs: `view-career`, `cap-career-error`, `cap-career-dashboard`, `cap-career-setup`, `nav-career`
 Depends on: `capability-career-ui.js`, `capability-career.css`
 
-## [HTML — Unified Life Feed View]
+## [HTML — Life View (Character Sheet + Unified Life Feed)]
 Lines: after the Reflect view, before Learning Plans
-Purpose: Life tab markup: page header + subtitle and the `#life-feed-root` mount (has `aria-live="polite"`). Nav button `#nav-life` calls `showView('life')`, which calls `window.renderLifeFeed()`.
+Purpose: Life tab markup: page header + `#life-view-subtitle`, a `.life-subnav` (Character Sheet / Timeline buttons), the `#life-character-sheet-root` mount, and the `#life-feed-root` mount (both `aria-live="polite"`; `#life-feed-root` starts `hidden`). Nav button `#nav-life` calls `showView('life')`, which calls `window.renderLifeView()` (Phase 7; falls back to `window.renderLifeFeed()`). The sub-nav opens on the Character Sheet.
 Functions: —
-Key IDs: `view-life`, `life-feed-root`, `nav-life`
-Depends on: `life-feed-ui.js`; CSS `.life-feed-*` block appended to `style.css`
+Key IDs: `view-life`, `life-view-subtitle`, `life-subnav-sheet`, `life-subnav-timeline`, `life-character-sheet-root`, `life-feed-root`, `nav-life`
+Depends on: `life-character-sheet-ui.js` (owns the sub-nav), `life-feed-ui.js`; CSS `.life-feed-*` and `.life-subnav` / `.lcs-*` blocks appended to `style.css`
 
 ## [HTML — Desktop Side Panels]
 Lines: 1579–1613

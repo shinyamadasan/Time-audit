@@ -25,6 +25,31 @@ function mount() {
   return document.getElementById('life-feed-root');
 }
 
+// Same reference-zone resolution the Life Character Sheet uses, so the two surfaces bucket
+// "today" identically for the same events. An explicit 'UTC' choice maps to 'Etc/UTC'.
+function referenceTimeZone() {
+  let hint = '';
+  try {
+    hint = (window.settings && window.settings.timezone) || globalThis.localStorage?.getItem('ta3-tz') || '';
+  } catch {
+    hint = '';
+  }
+  const normalized = hint === 'UTC' ? 'Etc/UTC' : hint;
+  try {
+    if (normalized) {
+      new Intl.DateTimeFormat('en-US', { timeZone: normalized });
+      return normalized;
+    }
+  } catch {
+    // not a usable IANA zone — fall through
+  }
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Etc/UTC';
+  } catch {
+    return 'Etc/UTC';
+  }
+}
+
 // Cheap change-detector so switching to the Life tab without any new ledger activity reuses
 // the already-built feed instead of recomputing over the whole history.
 function signatureFor(events) {
@@ -44,7 +69,7 @@ function loadFeed() {
   }
   const signature = signatureFor(events);
   if (!cachedFeed || signature !== cachedSignature) {
-    cachedFeed = buildLifeFeed(events, { now: new Date() });
+    cachedFeed = buildLifeFeed(events, { now: new Date(), referenceTimeZone: referenceTimeZone() });
     cachedSignature = signature;
   }
   return { feed: cachedFeed };

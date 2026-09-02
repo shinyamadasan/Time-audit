@@ -161,6 +161,9 @@ async function openApp(page, { lifeLedgerRaw = null } = {}) {
 async function openLife(page) {
   await page.locator('#nav-life').click();
   await expect(page.locator('#view-life')).toHaveClass(/active/);
+  // Phase 7: the Life view opens on the Character Sheet; these tests exercise the Timeline.
+  await page.locator('#life-subnav-timeline').click();
+  await expect(page.locator('#life-feed-root')).toBeVisible();
 }
 
 test('empty ledger shows a useful, honest empty state (no over-promised domains)', async ({ page }) => {

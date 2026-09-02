@@ -533,15 +533,20 @@
   </div>
 </div>
 
-<!-- ══ UNIFIED LIFE FEED ══ -->
+<!-- ══ LIFE (Character Sheet + Unified Life Feed) ══ -->
 <div class="view" id="view-life">
   <div class="page-header">
     <div>
       <div class="page-title">Life</div>
-      <div class="life-feed-subtitle">Your timeline from the Life Ledger. Learning steps and focus sessions appear now; time, workouts and meals join as their integrations are connected.</div>
+      <div class="life-feed-subtitle" id="life-view-subtitle">A factual snapshot of where things stand right now. Facts only — no scores or advice.</div>
     </div>
   </div>
-  <div id="life-feed-root" class="life-feed-root" aria-live="polite"></div>
+  <div class="life-subnav" role="group" aria-label="Life views">
+    <button type="button" class="life-subnav-btn active" id="life-subnav-sheet" aria-pressed="true" data-life-view="sheet">Character Sheet</button>
+    <button type="button" class="life-subnav-btn" id="life-subnav-timeline" aria-pressed="false" data-life-view="timeline">Timeline</button>
+  </div>
+  <div id="life-character-sheet-root" class="life-character-sheet-root" aria-live="polite"></div>
+  <div id="life-feed-root" class="life-feed-root" aria-live="polite" hidden></div>
 </div>
 
 <!-- ══ LEARNING PLANS ══ -->
@@ -1567,6 +1572,7 @@
 <script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
 <script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
+<script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 
 <script>
@@ -3135,7 +3141,7 @@ function showView(name) {
   if (lpnb) lpnb.classList.add('active');
   if (name==='today') renderToday();
   if (name==='week') renderWeek();
-  if (name==='life' && window.renderLifeFeed) window.renderLifeFeed();
+  if (name==='life') { if (window.renderLifeView) window.renderLifeView(); else if (window.renderLifeFeed) window.renderLifeFeed(); }
   if (name==='learning' && window.renderLearningPlans) window.renderLearningPlans();
   if (name==='career' && window.renderCapabilityCareer) window.renderCapabilityCareer();
   if (name==='settings') renderSettings();
