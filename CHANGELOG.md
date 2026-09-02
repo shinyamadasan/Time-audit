@@ -1,5 +1,95 @@
 # ChronaSense — Changelog
 
+## Phase 9 — Obsidian ownership + rollback hardening (post independent review) (branch: feat/real-obsidian-integration-v1) — 2026-09-02
+FIX FIRST pass. Architecture unchanged (Ledger → renderer → planner → authorization → apply);
+one consolidated filesystem/ownership hardening pass, one local fix commit. Still no push, no
+merge, no production enablement, no real-vault write. Ready for targeted independent re-review.
+changed:
+  - obsidian-life-ledger-sync.js — 12 hardening fixes; the plan/apply architecture is intact:
+    - FIX 1 NO SENTINEL-ONLY OWNERSHIP: a root counts as owned ONLY when a schema-v2 sentinel
+      validates, manifest.json exists and validates, AND `sha256(manifest bytes)` equals the
+      sentinel's `manifestSha256`. Sentinel-valid + manifest-absent → BLOCK
+      `missing_manifest_baseline`. Legacy v1 sentinel (no binding) → BLOCK
+      `legacy_sentinel_migration_required` — old Phase-1-pass content is never silently adopted.
+    - FIX 2 SENTINEL↔MANIFEST BINDING: sentinel schema advanced to v2 with a required
+      `manifestSha256: <sha-256>` field. Manifest bytes edited → mismatch → BLOCK
+      `manifest_integrity_mismatch`. Sentinel prose edited → `sentinelContent()` is fully
+      deterministic given its hash, so any deviation → BLOCK `sentinel_content_mismatch`.
+      Manifest present + sentinel missing → BLOCK. (Not called cryptographic authentication —
+      integrity detection for hand edits, OneDrive conflict copies, partial applies.)
+    - FIX 3 PER-FILE BASELINE REQUIRED: deleted the `adopting_sentinel_owned_file` UPDATE
+      branch. An existing generated file: byte-identical → UNCHANGED; differs + no sentinel
+      marker → CONFLICT `unowned_collision`; differs + marker + NO trusted manifest baseline →
+      CONFLICT `missing_manifest_baseline` (never UPDATE); differs + baseline ≠ disk → CONFLICT
+      `human_modified_owned_file`; differs + baseline == disk → UPDATE `content_drift`.
+    - FIX 4 WINDOWS-NORMALIZED MANIFEST KEYS: `manifestKeyIdentity()` lowercases + slash-
+      normalizes for identity/dedup only; the stored/rendered path stays the code-owned
+      canonical form. Case-only and slash-vs-backslash duplicates reject the whole manifest.
+    - FIX 5 MANIFEST ALLOWLIST: every manifest entry must be a known generated CONTENT path
+      (`System/README.md` or `Daily/YYYY-MM-DD.md`), 64-hex sha256, Windows-safe. Unknown /
+      absolute / traversal / duplicate entries reject the manifest → BLOCK.
+    - FIX 6 UNCHANGED TOCTOU: apply preflight now re-hashes EVERY operation (UNCHANGED and
+      STALE included), not just CREATE/UPDATE. Any drift → `precondition_changed`, zero writes.
+    - FIX 7 PER-WRITE LINK RECHECK: `guardedAtomicWrite()` re-resolves the destination and
+      re-runs containment + `assertNoLinkEscape` + `assertSafeExistingLeaf` immediately before
+      each write, and again after `mkdir` so a junction inserted for a not-yet-existing parent
+      is caught.
+    - FIX 8 CONTENT HASH ASSERTION: `sha256(operation.content) === operation.contentSha256`
+      is asserted before each write → `invalid_plan_content`, zero further writes.
+    - FIX 9 EXPLICIT APPLY ORDER: operations carry a `phase` (0 content, 1 manifest, 2
+      sentinel). Apply writes strictly by phase — content, then manifest, then sentinel LAST —
+      never by filename sort. A valid on-disk sentinel therefore implies a matching manifest
+      and complete content.
+    - FIX 10 PARTIAL-APPLY RECOVERY: a mid-apply failure throws `partial_apply_failure` with
+      the written list; a fresh plan afterward always fails closed (sentinel missing, or
+      `manifest_integrity_mismatch`) — partial state is never auto-adopted.
+    - FIX 11 REAL ROLLBACK ARTIFACT API: `prepareObsidianRollbackArtifact({ target, plan,
+      backupRoot })` → frozen receipt bound to canonical vault + managed root + plan
+      fingerprint + `managedRootExistedBefore`. First run: a pre-state receipt (managed root
+      must still be absent at verify time). Existing root: copies ONLY the `Life Ledger/`
+      subtree, hashes every file, invalidates on backup mutation. Refuses a `backupRoot`
+      inside the vault; never overwrites an existing artifact.
+      `verifyObsidianRollbackReceipt()` re-checks all bindings + the on-disk receipt hash +
+      the backup bytes.
+    - FIX 12 WINDOWS PATH HARDENING: `assertSyncRelativePath()` also rejects any `:` in a
+      segment, trailing dot/space, and reserved device names (CON/PRN/AUX/NUL/COM1-9/LPT1-9).
+    - PRODUCTION AUTH: `evaluateProductionAuthorization()` now requires `rollbackReceiptValid`
+      (verified receipt) before the first-run token. `OBSIDIAN_PRODUCTION_SYNC_ENABLED` stays
+      false; `applyObsidianSync` still throws `production_sync_disabled` before any receipt
+      check.
+  - scripts/sync-life-ledger-to-obsidian.mjs — `--first-run-backup-confirmed` replaced by
+    `--rollback-receipt <path>` (reads a receipt JSON); summary carries `blockState` +
+    `planFingerprint`.
+  - obsidian-life-ledger-sync.test.js — rewritten: 50 tests including the review's A–I
+    ownership-chaos matrix, J–M file-baseline matrix, N–Q manifest-identity matrix, R–T TOCTOU
+    matrix, explicit apply-order assertion (rename order instrumented), sentinel↔manifest
+    binding, rollback-artifact first-run + existing-root + tamper cases, production hard-block
+    with a valid receipt, and the CLI surface.
+  - obsidian-life-ledger-writer.js — no further change (still additive exports only from the
+    first pass). `writeFileAtomically` is no longer imported by the sync module (it uses
+    `guardedAtomicWrite`).
+  - CODEMAP.md — sync-module + CLI entries updated for the v2 schema and rollback API.
+verification: `node obsidian-life-ledger-sync.test.js` 50/50; `node test.js` 448/448; `npm test`
+  721 (0 fail, 0 skip); `npm run test:adapter-contracts` PASS; `npm run lint` 0 errors (19
+  pre-existing warnings); Playwright NOT run (no UI change). Test-vault E2E proof
+  (Second-Brain-Test-Vault): v1 pass-1 fixture correctly BLOCKED
+  `legacy_sentinel_migration_required` → Phase-9 test artifacts reset (authorized) → 5-file
+  CREATE → apply → schema-v2 sentinel with a matching `manifestSha256` binding, manifest lists
+  content files only → second plan all UNCHANGED → human edit → CONFLICT
+  `human_modified_owned_file`, apply refused, edit preserved → manifest byte appended → BLOCK
+  `manifest_integrity_mismatch` → clean restore. Real active vault
+  (C:\Users\Admin\OneDrive\2nd Brain): READ-ONLY; `Life Ledger/` absent before and after; git
+  HEAD d265b96 and 35-line status unchanged before and after; test mode → `denied_vault_root`,
+  production with every flag → `production_sync_disabled`, zero writes. `node --check` all
+  changed files OK; `git diff --check` clean; UTF-8/control-byte scan clean (only non-ASCII is
+  the em-dash, matching the renderer). STRICT `npm run test:cross-repo-compat`: ChronaSense +
+  Meal legs PASS; Workout leg STILL FAILS via the spawnSync path with the SAME pre-existing
+  Windows environment artifact ("Cannot read properties of undefined (reading 'config')" at
+  workout-ledger-source-contract.test.js:69) — reproduces identically on unmodified main and
+  when this Builder runs the compat script directly; the workout suite passes 29/29 invoked
+  directly and the Meal leg (also vitest) passes via the identical spawn path; NOT a Phase 9
+  regression; per review instruction the compat runner and the Workout repo were NOT modified.
+
 ## Phase 9 — Real Obsidian Integration V1 (production-safe, real-write-DISABLED) (branch: feat/real-obsidian-integration-v1) — 2026-09-02
 FIRST-PASS builder milestone. No commit beyond one local feature commit; no push, no merge, no
 real-vault write. Production apply is hard-blocked pending independent adversarial review.
