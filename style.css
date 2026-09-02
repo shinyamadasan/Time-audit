@@ -1537,3 +1537,59 @@ button, a, [role="button"],
 .lcs-note{font-size:11px;color:var(--muted);line-height:1.5;padding:4px 0}
 .lcs-coverage{font-size:10px;color:var(--muted2);margin-top:8px;line-height:1.4}
 .lcs-coverage[data-state="active"]{color:var(--muted)}
+
+/* ── Cross-Domain Intelligence — "Next" / what deserves attention (Phase 8) ── */
+.cross-domain-intelligence-root{margin-top:2px}
+.cdi-generated{font-family:var(--mono);font-size:10px;color:var(--muted2);margin-bottom:14px;letter-spacing:0.02em}
+.cdi-error{font-size:12px;color:var(--distraction);line-height:1.5;padding:16px 4px}
+.cdi-note{font-size:11px;color:var(--muted);line-height:1.5;padding:4px 0}
+
+.cdi-recommendation{border:1px solid var(--border3);border-radius:var(--r);background:var(--bg2);padding:16px 14px;margin-bottom:16px}
+.cdi-recommendation-none{border-style:dashed;border-color:var(--border2)}
+.cdi-kicker{font-family:var(--head);font-size:9px;font-weight:700;color:var(--muted2);
+  text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px}
+.cdi-headline{font-family:var(--head);font-size:15px;font-weight:700;color:var(--text);line-height:1.3;overflow-wrap:anywhere}
+.cdi-context{font-size:11px;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}
+.cdi-abstain{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px}
+
+.cdi-strength{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;margin:12px 0 4px}
+.cdi-strength-tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:0.06em;
+  padding:2px 8px;border-radius:999px;border:1px solid var(--border3);color:var(--text)}
+.cdi-strength[data-strength="HIGH"] .cdi-strength-tag{border-color:var(--learning);color:var(--learning)}
+.cdi-strength[data-strength="MEDIUM"] .cdi-strength-tag{border-color:var(--admin);color:var(--admin)}
+.cdi-strength[data-strength="LOW"] .cdi-strength-tag{border-color:var(--muted);color:var(--muted)}
+.cdi-strength-text{font-size:10.5px;color:var(--muted);line-height:1.4;flex:1 1 180px}
+
+.cdi-subhead{font-family:var(--head);font-size:10px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:0.08em;margin:12px 0 6px}
+.cdi-why{list-style:none;display:flex;flex-direction:column;gap:6px;margin:0 0 10px}
+.cdi-why li{font-size:12px;color:var(--text);line-height:1.45;padding-left:14px;position:relative;overflow-wrap:anywhere}
+.cdi-why li::before{content:"";position:absolute;left:2px;top:7px;width:5px;height:5px;border-radius:999px;background:var(--deep)}
+
+.cdi-evidence{list-style:none;display:flex;flex-direction:column;gap:4px;margin:0 0 12px;
+  border-left:2px solid var(--border2);padding-left:10px}
+.cdi-evidence li{display:flex;flex-wrap:wrap;gap:2px 8px;font-size:10.5px;line-height:1.4}
+.cdi-evidence-label{color:var(--muted2);text-transform:uppercase;letter-spacing:0.04em;font-size:9px;flex:0 0 auto;padding-top:1px}
+.cdi-evidence-value{color:var(--text);flex:1 1 140px;overflow-wrap:anywhere}
+.cdi-evidence-source{font-family:var(--mono);color:var(--muted2);font-size:9px;flex:0 0 auto}
+
+.cdi-open{margin-top:4px}
+
+.cdi-section{border-top:1px solid var(--border);padding:14px 0 12px}
+.cdi-section-title{font-family:var(--head);font-size:12px;font-weight:700;color:var(--text);
+  text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px}
+
+.cdi-alt-list,.cdi-signal-list,.cdi-blocked-list{list-style:none;display:flex;flex-direction:column;gap:10px;margin:0}
+.cdi-alt-action{font-size:12.5px;color:var(--text);line-height:1.35;overflow-wrap:anywhere}
+.cdi-alt-meta{font-size:10px;color:var(--muted2);margin-top:3px;line-height:1.4}
+
+.cdi-signal{display:flex;gap:10px;align-items:flex-start}
+.cdi-signal-severity{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:0.05em;
+  text-transform:uppercase;padding:2px 6px;border-radius:6px;flex:0 0 auto;margin-top:1px;
+  border:1px solid var(--border2);color:var(--muted)}
+.cdi-signal[data-severity="attention"] .cdi-signal-severity{border-color:var(--admin);color:var(--admin)}
+.cdi-signal-summary{font-size:12px;color:var(--text);line-height:1.4;overflow-wrap:anywhere}
+.cdi-signal-detail{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.4;overflow-wrap:anywhere}
+
+.cdi-not-evaluated .cdi-blocked-names{font-size:12px;color:var(--muted);margin-bottom:8px}
+.cdi-blocked-list li{font-size:10.5px;color:var(--muted2);line-height:1.45}

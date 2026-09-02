@@ -200,6 +200,7 @@ function buildLearning(plans, planItems, rawById, last7) {
   const latestCompletedStep = latest
     ? {
       stepLabel: latest.stepLabel,
+      planId: latest.planId,
       planTitle: latest.planTitle,
       completedAt: latest.completedAt,
       dayKey: latest.item.dayKey
@@ -222,6 +223,7 @@ function buildLearning(plans, planItems, rawById, last7) {
     const progress = getLearningPlanProgress(active);
     const next = findNextLearningPlanStep(active);
     activePlan = {
+      id: active.id,
       title: active.title,
       totalSteps: progress.totalSteps,
       completedSteps: progress.completedSteps,
@@ -229,7 +231,14 @@ function buildLearning(plans, planItems, rawById, last7) {
       isComplete: progress.totalSteps > 0 && progress.completedSteps === progress.totalSteps,
       hasSteps: progress.totalSteps > 0,
       nextStep: next
-        ? { stepTitle: next.stepTitle, lessonTitle: next.lessonTitle, phaseTitle: next.phaseTitle }
+        ? {
+          stepId: next.stepId,
+          stepTitle: next.stepTitle,
+          lessonId: next.lessonId,
+          lessonTitle: next.lessonTitle,
+          phaseId: next.phaseId,
+          phaseTitle: next.phaseTitle
+        }
         : null
     };
   }

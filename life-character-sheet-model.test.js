@@ -289,6 +289,23 @@ test('learning parity: sheet progress equals getLearningPlanProgress / findNextL
   assert.equal(sheet.learning.activePlan.nextStep.stepTitle, next.stepTitle);
 });
 
+test('learning exposes stable ids for the active plan and next step (Phase 8 provenance)', () => {
+  const plan = samplePlan({ id: 'plan-a', stepCount: 5, completeSteps: 3 });
+  const sheet = buildLifeCharacterSheet({ ledgerEvents: [], learningPlans: [plan], ...OPTS });
+  const next = findNextLearningPlanStep(plan);
+  assert.equal(sheet.learning.activePlan.id, plan.id);
+  assert.equal(sheet.learning.activePlan.nextStep.stepId, next.stepId);
+  assert.equal(sheet.learning.activePlan.nextStep.lessonId, next.lessonId);
+  assert.equal(sheet.learning.activePlan.nextStep.phaseId, next.phaseId);
+});
+
+test('latestCompletedStep carries the planId it belongs to (Phase 8 provenance)', () => {
+  const store = makeStore();
+  ingest(store, planStepDraft({ id: 'plan-a:s1', stepLabel: 'Ship webhook', completedAt: '2026-08-31T16:00:00.000Z', source: { planId: 'plan-a', planTitle: 'AI Automation Roadmap' } }));
+  const sheet = buildLifeCharacterSheet({ ledgerEvents: store.listEvents(), learningPlans: [], ...OPTS });
+  assert.equal(sheet.learning.latestCompletedStep.planId, 'plan-a');
+});
+
 // ─────────────────────────────────────────────────────────────────────────────────────────
 console.log('\nLife Character Sheet — WORKOUT');
 

@@ -533,7 +533,7 @@
   </div>
 </div>
 
-<!-- ══ LIFE (Character Sheet + Unified Life Feed) ══ -->
+<!-- ══ LIFE (Character Sheet · Timeline · Next) ══ -->
 <div class="view" id="view-life">
   <div class="page-header">
     <div>
@@ -544,9 +544,11 @@
   <div class="life-subnav" role="group" aria-label="Life views">
     <button type="button" class="life-subnav-btn active" id="life-subnav-sheet" aria-pressed="true" data-life-view="sheet">Character Sheet</button>
     <button type="button" class="life-subnav-btn" id="life-subnav-timeline" aria-pressed="false" data-life-view="timeline">Timeline</button>
+    <button type="button" class="life-subnav-btn" id="life-subnav-next" aria-pressed="false" data-life-view="next">Next</button>
   </div>
   <div id="life-character-sheet-root" class="life-character-sheet-root" aria-live="polite"></div>
   <div id="life-feed-root" class="life-feed-root" aria-live="polite" hidden></div>
+  <div id="cross-domain-intelligence-root" class="cross-domain-intelligence-root" aria-live="polite" hidden></div>
 </div>
 
 <!-- ══ LEARNING PLANS ══ -->
@@ -1572,6 +1574,7 @@
 <script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
 <script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
+<script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 

@@ -299,44 +299,53 @@ function render() {
   root.innerHTML = parts.filter(Boolean).join('');
 }
 
-// ── Life view sub-navigation (Character Sheet ↔ Timeline) ─────────────────────────────────
+// ── Life view sub-navigation (Character Sheet · Timeline · Next) ──────────────────────────
+const LIFE_SUBVIEWS = ['sheet', 'timeline', 'next'];
+const LIFE_SUBVIEW_SUBTITLES = {
+  sheet: 'A factual snapshot of where things stand right now. Facts only — no scores or advice.',
+  timeline: 'Your timeline from the Life Ledger. Learning steps and focus sessions appear now; time, workouts and meals join as their integrations are connected.',
+  next: 'What deserves attention next — built only from your explicit plans, targets and career signals. Facts first, then at most one suggested next action.'
+};
+
 function showLifeSubview(view) {
-  const wantSheet = view !== 'timeline';
-  const sheetRoot = document.getElementById('life-character-sheet-root');
-  const feedRoot = document.getElementById('life-feed-root');
-  const sheetBtn = document.getElementById('life-subnav-sheet');
-  const timelineBtn = document.getElementById('life-subnav-timeline');
+  const active = LIFE_SUBVIEWS.includes(view) ? view : 'sheet';
+  const roots = {
+    sheet: document.getElementById('life-character-sheet-root'),
+    timeline: document.getElementById('life-feed-root'),
+    next: document.getElementById('cross-domain-intelligence-root')
+  };
+  const btns = {
+    sheet: document.getElementById('life-subnav-sheet'),
+    timeline: document.getElementById('life-subnav-timeline'),
+    next: document.getElementById('life-subnav-next')
+  };
+  for (const key of LIFE_SUBVIEWS) {
+    if (roots[key]) roots[key].hidden = key !== active;
+    if (btns[key]) {
+      btns[key].classList.toggle('active', key === active);
+      btns[key].setAttribute('aria-pressed', String(key === active));
+    }
+  }
   const subtitle = document.getElementById('life-view-subtitle');
-  if (sheetRoot) sheetRoot.hidden = !wantSheet;
-  if (feedRoot) feedRoot.hidden = wantSheet;
-  if (sheetBtn) {
-    sheetBtn.classList.toggle('active', wantSheet);
-    sheetBtn.setAttribute('aria-pressed', String(wantSheet));
-  }
-  if (timelineBtn) {
-    timelineBtn.classList.toggle('active', !wantSheet);
-    timelineBtn.setAttribute('aria-pressed', String(!wantSheet));
-  }
-  if (subtitle) {
-    subtitle.textContent = wantSheet
-      ? 'A factual snapshot of where things stand right now. Facts only — no scores or advice.'
-      : 'Your timeline from the Life Ledger. Learning steps and focus sessions appear now; time, workouts and meals join as their integrations are connected.';
-  }
+  if (subtitle) subtitle.textContent = LIFE_SUBVIEW_SUBTITLES[active];
   try {
-    globalThis.localStorage?.setItem('ta3-life-subview', wantSheet ? 'sheet' : 'timeline');
+    globalThis.localStorage?.setItem('ta3-life-subview', active);
   } catch {
     // preference persistence is best-effort only
   }
-  if (wantSheet) {
+  if (active === 'sheet') {
     render();
-  } else if (typeof window.renderLifeFeed === 'function') {
+  } else if (active === 'timeline' && typeof window.renderLifeFeed === 'function') {
     window.renderLifeFeed();
+  } else if (active === 'next' && typeof window.renderCrossDomainIntelligence === 'function') {
+    window.renderCrossDomainIntelligence();
   }
 }
 
 function initialSubview() {
   try {
-    return globalThis.localStorage?.getItem('ta3-life-subview') === 'timeline' ? 'timeline' : 'sheet';
+    const stored = globalThis.localStorage?.getItem('ta3-life-subview');
+    return LIFE_SUBVIEWS.includes(stored) ? stored : 'sheet';
   } catch {
     return 'sheet';
   }

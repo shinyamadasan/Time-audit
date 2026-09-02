@@ -1,5 +1,85 @@
 # ChronaSense — Changelog
 
+## Phase 8 — Cross-Domain Intelligence / Highest-Leverage Next Action V1 (branch: feat/cross-domain-intelligence-v1) — 2026-09-01
+added:
+  - cross-domain-intelligence-model.js (new — the pure, deterministic, rule-based engine that
+    answers "what deserves my attention next, and what is the single highest-leverage next
+    action I can actually take?". `buildCrossDomainIntelligence({ characterSheet, ledgerEvents,
+    learningPlans, capabilityProfile })` → { coverage, capability, signals[], candidates[],
+    recommendedAction, alternatives[], blockedDomains[], abstained, abstentionReason,
+    explanation }. No LLM. Never persisted as a new truth store; never mutates its inputs;
+    order-independent. FOUR LAYERS kept separate: FACT (read off the Character Sheet /
+    analyzer) → SIGNAL (a factual condition that may deserve attention, no step implied) →
+    CANDIDATE (a bounded thing the system could recommend, with stable provenance) →
+    RECOMMENDATION (the single highest-ranked justified candidate + a fully traceable "why").)
+  - COVERAGE-AWARE REASONING: a domain participates only when its Character Sheet coverage is
+    `active` or `no-events-yet` (a truthful live zero). Workout / Meal / free-form activity are
+    reported in `blockedDomains` as "not evaluated" — never inactive / healthy / unhealthy /
+    on-track / off-track / behind. An old imported workout never becomes "you haven't worked
+    out"; no focus session today never becomes a productivity verdict. Missing data is never
+    turned into a negative signal.
+  - CANDIDATE SOURCES (V1): (a) `learning-plan-step` — the Character Sheet's active-plan next
+    unfinished step (reused verbatim, not re-traversed); (b) `capability-next-action` — the
+    analyzer's own `nextAction`, but only when it is stall-driven AND (for ship / portfolio
+    kinds) points at an explicit target-linked project. Setup states and bare shipping stalls
+    with nothing concrete to act on stay SIGNALS — no task is invented to fill the slot.
+  - ALIGNMENT CHAIN (explicit ids only, no keyword matching): a learning candidate is "aligned"
+    iff there is capability evidence (source: life-ledger, not future-dated) that points at a
+    plan_step_completed event of the active plan AND is attached to a skill linked to the
+    active career target — plan step → Ledger event → evidence → target skill → career target.
+  - RANKING: four discrete transparent tiers — (1) resolve a stall with a concrete
+    target-linked project, (2) advance target-aligned committed work, (3) resolve a bare
+    stall, (4) advance the learning plan — then evidence strength (HIGH / MEDIUM / LOW), then
+    a stable domain / candidateId tie-break. No fake points or percentages. First-time career
+    setup is an attention signal, never a candidate.
+  - ABSTENTION is a feature: `recommendedAction: null` + a plain-language reason when there is
+    no active plan step and no explicit career action. The engine never forces a recommendation
+    to fill the UI.
+  - cross-domain-intelligence-ui.js (new — renders the read-only "Next" view into
+    #cross-domain-intelligence-root. Reads the Life Ledger runtime, Learning Plan repository
+    and Capability profile ONCE per render, builds the pure Character Sheet, hands it to the
+    pure engine, and paints: recommendation (headline + "why this" + evidence + strength tag) →
+    other valid options → what's driving attention (signals) → data not evaluated. The only
+    control is a plain `showView()` navigation link — no plan-step completion, no focus start,
+    no writes. Semantic headings, textual (not colour-only) confidence, keyboard-operable,
+    escaped rendering.)
+  - cross-domain-intelligence-model.test.js (new — 35 model tests: scenario matrix A–L,
+    abstention, Character Sheet / Capability analyzer / Learning parity, driving-stall parity,
+    non-target-linked project → signal-not-candidate, determinism under event & profile
+    reordering, temporal chaos (stale import, future evidence, cross-zone step), coverage
+    chaos (imported-not-live, analyzer throw, malformed sheet), read-only,
+    hostile-text-stays-inert, neutral-language, performance.)
+  - tests/cross-domain-intelligence-ui.spec.js (new — 12 Playwright tests: third "Next"
+    sub-tab with still-7 bottom-nav, honest empty state, aligned recommendation with traceable
+    why + evidence, shipping-beats-learning with learning as alternative, data-not-evaluated
+    explained in words, "Open in Learning Plans" navigates with zero writes, byte-level
+    read-only proof across tab switches, keyboard operability, hostile-HTML escaping,
+    aria-live, no-horizontal-overflow on a 390px phone, no moral/productivity language.)
+changed:
+  - life-character-sheet-model.js (learning section now also exposes stable ids —
+    `activePlan.id`, `activePlan.nextStep.{stepId,lessonId,phaseId}`,
+    `latestCompletedStep.planId`. Additive only; ids are facts. Phase 8 consumes these for
+    candidate provenance and to reuse the exact active plan / next step the sheet already
+    picked, guaranteeing learning parity by construction. No change to any existing field.)
+  - life-character-sheet-model.test.js (2 new tests covering the exposed ids.)
+  - life-character-sheet-ui.js (the Life sub-navigation is now three-way — Character Sheet ·
+    Timeline · Next. `showLifeSubview()` / `initialSubview()` handle the third view and call
+    `window.renderCrossDomainIntelligence()`; the stored `ta3-life-subview` preference accepts
+    `next`. No change to the Character Sheet render itself.)
+  - index.html (#view-life gains a third `.life-subnav` button (`#life-subnav-next`) and a
+    `#cross-domain-intelligence-root` mount that starts hidden; new module `<script>` include.
+    Still 7 bottom-nav items — no 8th.)
+  - style.css (appended `.cdi-*` block — committed dark theme, reuses existing tokens; strength
+    tag is bordered text, never colour-only.)
+  - package.json (test script runs cross-domain-intelligence-model.test.js; new
+    test:cross-domain-intelligence script; lint covers the two new modules.)
+  - eslint.config.js (registers cross-domain-intelligence-model.js + -ui.js.)
+verification: npm test (661 model/unit — test.js 448 + 35 new intelligence + 2 new Character
+  Sheet id tests + the existing suites), test:adapter-contracts, strict test:cross-repo-compat
+  (3/3 legs, no skips, exit 0), lint (0 errors, 19 pre-existing warnings), Playwright smoke /
+  learning-plan-ui / capability-career-ui / plan / life-feed-ui / life-character-sheet-ui /
+  cross-domain-intelligence-ui (207/207), node --check, git diff --check, control-byte scan (0).
+
 ## Phase 7 — Life Character Sheet V1 (branch: feat/life-character-sheet-v1) — 2026-09-01
 added:
   - life-character-sheet-model.js (new — the canonical, UI-independent "where am I right now?"

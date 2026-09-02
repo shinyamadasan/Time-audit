@@ -23,7 +23,9 @@
 - `life-feed-model.js` — module → **EXTRACTED** (see below; pure Unified Life Feed projection over Life Ledger events)
 - `life-feed-ui.js` — module script include → **EXTRACTED** (see below; imports `life-feed-model.js`, `life-ledger-runtime.js`)
 - `life-character-sheet-model.js` — module → **EXTRACTED** (see below; pure Life Character Sheet projection — Phase 7)
-- `life-character-sheet-ui.js` — module script include → **EXTRACTED** (see below; Life view Character Sheet + sub-nav; imports `life-character-sheet-model.js`, `life-ledger-runtime.js`, `learning-plan-repository.js`, `capability-career-repository.js`)
+- `cross-domain-intelligence-model.js` — module → **EXTRACTED** (see below; pure rule-based "what deserves attention next" engine — Phase 8; consumes the Character Sheet + analyzer, no LLM)
+- `cross-domain-intelligence-ui.js` — module script include → **EXTRACTED** (see below; Life view "Next" sub-view — Phase 8; imports the Character Sheet model, the intelligence model, and the three Life stores)
+- `life-character-sheet-ui.js` — module script include → **EXTRACTED** (see below; Life view Character Sheet + the three-way sub-nav; imports `life-character-sheet-model.js`, `life-ledger-runtime.js`, `learning-plan-repository.js`, `capability-career-repository.js`)
 - `focus-mode.js` — line 7562 → **EXTRACTED** (see below)
 
 ---
@@ -162,17 +164,31 @@ Depends on: `life-feed-model.js`, `life-ledger-runtime.js`, DOM globals
 
 ### life-character-sheet-model.js
 Lines: external file
-Purpose: Life Character Sheet V1 canonical projection (Phase 7). Pure, read-only "where am I right now?" snapshot. `buildLifeCharacterSheet({ ledgerEvents, learningPlans, capabilityProfile, now, referenceTimeZone, liveIngestedTypes })` → `{ generatedAt, referenceTimeZone, todayKey, focus, time, learning, capability, workout, meal, coverage, skippedLedgerEvents }`. Ledger-derived facts (focus / workout / meal / learning completions) are read off `buildLifeFeed()`'s accepted item set — same tombstone / revision / day-bucketing rules — then joined to the raw event only for a numeric payload value; Capability comes straight from `analyzeCapabilityCareer()`; learning progress + next step from `getLearningPlanProgress()` / `findNextLearningPlanStep()`. Zero-vs-unknown: `liveIngestedTypes` (default `focus_session_completed` + `plan_step_completed`) decides when a domain may state a literal 0; everything else reports `not-connected` / `loaded-not-live`. Never mutates inputs, never persisted as a new store.
+Purpose: Life Character Sheet V1 canonical projection (Phase 7). Pure, read-only "where am I right now?" snapshot. `buildLifeCharacterSheet({ ledgerEvents, learningPlans, capabilityProfile, now, referenceTimeZone, liveIngestedTypes })` → `{ generatedAt, referenceTimeZone, todayKey, focus, time, learning, capability, workout, meal, coverage, skippedLedgerEvents }`. Ledger-derived facts (focus / workout / meal / learning completions) are read off `buildLifeFeed()`'s accepted item set — same tombstone / revision / day-bucketing rules — then joined to the raw event only for a numeric payload value; Capability comes straight from `analyzeCapabilityCareer()`; learning progress + next step from `getLearningPlanProgress()` / `findNextLearningPlanStep()`. Zero-vs-unknown: `liveIngestedTypes` (default `focus_session_completed` + `plan_step_completed`) decides when a domain may state a literal 0; everything else reports `not-connected` / `loaded-not-live`. Never mutates inputs, never persisted as a new store. Phase 8: the `learning` section also carries stable ids — `activePlan.id`, `activePlan.nextStep.{stepId,lessonId,phaseId}`, `latestCompletedStep.planId` — so Cross-Domain Intelligence can reuse the sheet's exact picks.
 Functions: `buildLifeCharacterSheet()`
 Variables: `LIFE_CHARACTER_SHEET_LIVE_INGESTED_TYPES`, `LIFE_CHARACTER_SHEET_MODEL_V1`
 Depends on: `life-feed-model.js`, `capability-career-analytics.js`, `learning-plan-next-action.js`, `learning-plan-model.js`
 
+### cross-domain-intelligence-model.js
+Lines: external file
+Purpose: Cross-Domain Intelligence V1 engine (Phase 8). Pure, deterministic, rule-based (no LLM) — answers "what deserves my attention next, and what is the single highest-leverage next action I can actually take?". `buildCrossDomainIntelligence({ characterSheet, ledgerEvents, learningPlans, capabilityProfile })` → `{ generatedAt, referenceTimeZone, todayKey, coverage, capability, signals[], candidates[], recommendedAction, alternatives[], blockedDomains[], abstained, abstentionReason, explanation }`. Keeps FACT → SIGNAL → CANDIDATE → RECOMMENDATION separate. CONSUMES the Character Sheet + a parity call to `analyzeCapabilityCareer()` (same `generatedAt` + `ledgerEvents`) + a parity call to `buildLifeFeed()` for the current-truth event set — it is not a second analyzer and not a truth store. Candidate sources: `learning-plan-step` (the sheet's active-plan next step, reused verbatim) and `capability-next-action` (the analyzer's own `nextAction`, only when stall-driven and — for ship/portfolio kinds — anchored to an explicit target-linked project). Coverage-aware: only `active` / `no-events-yet` domains participate; Workout / Meal / free-form activity land in `blockedDomains` as "not evaluated". Ranking = 5 discrete tiers → HIGH/MEDIUM/LOW strength → stable `candidateId` tie-break. Abstains (`recommendedAction: null`) rather than inventing a task. Never mutates inputs, never calls `Date.now()`, order-independent.
+Functions: `buildCrossDomainIntelligence()`, `rankCandidates()`, `dedupeCandidates()`
+Variables: `CDI_MODEL_V1`, `CDI_EVIDENCE_STRENGTH`, `CDI_PRIORITY_CLASS`
+Depends on: `life-feed-model.js`, `capability-career-analytics.js` (and consumes `life-character-sheet-model.js` output passed in)
+
+### cross-domain-intelligence-ui.js
+Lines: external file
+Purpose: Browser UI for the Life tab's "Next" sub-view (`#cross-domain-intelligence-root`). Reads the Life Ledger runtime store, Learning Plan repository, and Capability profile ONCE per render, builds `buildLifeCharacterSheet()`, hands it to `buildCrossDomainIntelligence()`, and paints: recommendation (headline + "why this" + evidence + textual strength tag) → other valid options → what's driving attention (signals) → data not evaluated. The only interactive control is a `[data-cdi-open]` button that calls the app's existing `window.showView('learning'|'career')` — no plan-step completion, no focus start, no writes to any store. Semantic headings, escaped rendering, `aria-live="polite"`. Resolves the reference timezone the same way the other two Life surfaces do.
+Functions: `renderCrossDomainIntelligence()` (window-exposed; called by `life-character-sheet-ui.js`'s sub-nav)
+Variables: module-local (`initialized`)
+Depends on: `life-character-sheet-model.js`, `cross-domain-intelligence-model.js`, `life-ledger-runtime.js`, `learning-plan-repository.js`, `capability-career-repository.js`, `window.showView`, DOM globals
+
 ### life-character-sheet-ui.js
 Lines: external file
-Purpose: Browser UI for the Life tab's Character Sheet sub-view (`#life-character-sheet-root`) and the `#view-life` sub-navigation (Character Sheet ⇄ Timeline; opens on Character Sheet, remembers the last choice in `ta3-life-subview`). Reads the Life Ledger runtime store, Learning Plan repository, and Capability profile ONCE per render, hands them to `buildLifeCharacterSheet()`, and paints factual sections + honest coverage lines. `<progress>` for bounded plan progress; semantic headings; no scores, no advice. Read-only: never writes to any store. Also resolves the reference timezone the same way `life-feed-ui.js` now does.
+Purpose: Browser UI for the Life tab's Character Sheet sub-view (`#life-character-sheet-root`) and the `#view-life` three-way sub-navigation (Character Sheet · Timeline · Next; opens on Character Sheet, remembers the last choice in `ta3-life-subview` — now also accepts `next`). Reads the Life Ledger runtime store, Learning Plan repository, and Capability profile ONCE per render, hands them to `buildLifeCharacterSheet()`, and paints factual sections + honest coverage lines. `<progress>` for bounded plan progress; semantic headings; no scores, no advice. Read-only: never writes to any store. Also resolves the reference timezone the same way `life-feed-ui.js` now does. `showLifeSubview('next')` calls `window.renderCrossDomainIntelligence()`.
 Functions: `renderLifeView()` (entry point for `showView('life')`), `renderLifeCharacterSheet()` (window-exposed re-render)
-Variables: module-local (`initialized`)
-Depends on: `life-character-sheet-model.js`, `life-ledger-runtime.js`, `learning-plan-repository.js`, `capability-career-repository.js`, `life-feed-ui.js` (`window.renderLifeFeed`), DOM globals
+Variables: module-local (`initialized`, `LIFE_SUBVIEWS`, `LIFE_SUBVIEW_SUBTITLES`)
+Depends on: `life-character-sheet-model.js`, `life-ledger-runtime.js`, `learning-plan-repository.js`, `capability-career-repository.js`, `life-feed-ui.js` (`window.renderLifeFeed`), `cross-domain-intelligence-ui.js` (`window.renderCrossDomainIntelligence`), DOM globals
 
 ### capability-career-model.js
 Lines: external file
@@ -287,12 +303,12 @@ Functions: —
 Key IDs: `view-career`, `cap-career-error`, `cap-career-dashboard`, `cap-career-setup`, `nav-career`
 Depends on: `capability-career-ui.js`, `capability-career.css`
 
-## [HTML — Life View (Character Sheet + Unified Life Feed)]
+## [HTML — Life View (Character Sheet · Timeline · Next)]
 Lines: after the Reflect view, before Learning Plans
-Purpose: Life tab markup: page header + `#life-view-subtitle`, a `.life-subnav` (Character Sheet / Timeline buttons), the `#life-character-sheet-root` mount, and the `#life-feed-root` mount (both `aria-live="polite"`; `#life-feed-root` starts `hidden`). Nav button `#nav-life` calls `showView('life')`, which calls `window.renderLifeView()` (Phase 7; falls back to `window.renderLifeFeed()`). The sub-nav opens on the Character Sheet.
+Purpose: Life tab markup: page header + `#life-view-subtitle`, a `.life-subnav` (Character Sheet / Timeline / Next buttons), the `#life-character-sheet-root` mount, the `#life-feed-root` mount, and the `#cross-domain-intelligence-root` mount (all `aria-live="polite"`; `#life-feed-root` and `#cross-domain-intelligence-root` start `hidden`). Nav button `#nav-life` calls `showView('life')`, which calls `window.renderLifeView()` (falls back to `window.renderLifeFeed()`). The sub-nav opens on the Character Sheet. Still 7 bottom-nav items — no 8th.
 Functions: —
-Key IDs: `view-life`, `life-view-subtitle`, `life-subnav-sheet`, `life-subnav-timeline`, `life-character-sheet-root`, `life-feed-root`, `nav-life`
-Depends on: `life-character-sheet-ui.js` (owns the sub-nav), `life-feed-ui.js`; CSS `.life-feed-*` and `.life-subnav` / `.lcs-*` blocks appended to `style.css`
+Key IDs: `view-life`, `life-view-subtitle`, `life-subnav-sheet`, `life-subnav-timeline`, `life-subnav-next`, `life-character-sheet-root`, `life-feed-root`, `cross-domain-intelligence-root`, `nav-life`
+Depends on: `life-character-sheet-ui.js` (owns the sub-nav), `life-feed-ui.js`, `cross-domain-intelligence-ui.js`; CSS `.life-feed-*` / `.life-subnav` / `.lcs-*` / `.cdi-*` blocks appended to `style.css`
 
 ## [HTML — Desktop Side Panels]
 Lines: 1579–1613
