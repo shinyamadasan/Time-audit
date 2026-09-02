@@ -5,6 +5,49 @@
 
 ---
 
+## Phase 8 — Cross-Domain Intelligence / Highest-Leverage Next Action V1 — first-pass build · 2026-09-01
+branch: `feat/cross-domain-intelligence-v1` (base `4857dc4d2a63c4aac4660edf8940f63c6e7f6d16`,
+  == origin/main after fetch at phase start). Isolated git worktree; original `main` untouched.
+suite: `npm test`; `npm run test:adapter-contracts`; `npm run lint`; strict
+  `npm run test:cross-repo-compat` with `MEAL_REPO_PATH` / `OPENGYM_REPO_PATH` set; Playwright
+  `smoke`, `learning-plan-ui`, `capability-career-ui`, `plan`, `life-feed-ui`,
+  `life-character-sheet-ui`, and the new `cross-domain-intelligence-ui`; `node --check` on every
+  new / changed `.js`; `git diff --check`; a control-byte / UTF-8 scan over every changed file.
+result:
+  - `npm test`: PASS. 661 model/unit tests — `test.js` 448/448; node:test suites
+    workout-adapter 33, meal-adapter 45, meal-cross-repo 10, temporal-regression 20,
+    life-feed-model 36, life-character-sheet-model 34 (+2 new: exposed learning ids),
+    cross-domain-intelligence-model 35 (new). 0 failures, 0 skips.
+  - Scenario matrix A–L: all pass. A concrete aligned learning candidate (HIGH); B a
+    concrete shipping/portfolio project beats more learning, learning kept as an alternative;
+    C a bare shipping stall with no project stays an attention signal and learning is
+    recommended (no task invented); D no target -> learning candidate at MEDIUM; E empty
+    profile -> abstain; F/G/H workout & meal never evaluated / never "you haven't ..."; I no
+    focus today -> no productivity verdict; J tombstoned completion cannot create alignment;
+    K duplicate candidates collapse by stable id; L deterministic tier + strength ordering.
+  - Parity: `intelligence.capability.{dimensionTotals,target,nextActionKind,stalls}` equals a
+    fresh `analyzeCapabilityCareer()` with the Character Sheet's own args; the recommended
+    learning step is exactly `characterSheet.learning.activePlan.nextStep` (no independent
+    traversal); explanation step counts equal the sheet exactly (never "5 of 10").
+  - `npm run test:adapter-contracts`: PASS (workout 33, meal 45, meal-cross-repo 10, workout
+    source-gate 12, meal source-gate 12, temporal 20).
+  - strict `npm run test:cross-repo-compat`: PASS — all 3 legs executed and passed
+    (ChronaSense adapter-contract gate, Meal source-contract gate, Workout source-contract
+    gate — 29 vitest tests). No skips, exit 0.
+  - `npm run lint`: 0 errors, 19 pre-existing warnings (all in index.html-extracted scripts,
+    none in the two new modules).
+  - Playwright: `cross-domain-intelligence-ui` 12/12, `life-character-sheet-ui` 10/10,
+    `life-feed-ui` 9/9, `capability-career-ui` 8/8, `learning-plan-ui` 77/77, `plan` 27/27,
+    `smoke` 64/64. Total 207/207, 0 failures.
+  - `node --check` clean on all new / changed files; `git diff --check` clean (autocrlf=true,
+    repo normalises to LF); control-byte / UTF-8 scan: 0 control bytes, all UTF-8 valid.
+untested: no production deployment, no mobile install, no Firebase / shared-storage path, no
+  Obsidian export or vault write (Phase 8 does not touch Obsidian — Phase 9), no background
+  automation (Phase 10), no real end-user data. The OUTBOX main-automation race is only
+  mitigated by worktree isolation so far — a fresh `origin/main` fetch + new-commit inspection
+  is still required before integration. STOPPED at the independent-review checkpoint; not
+  pushed, not merged, not deployed.
+
 ## Workout → Life Ledger Adapter V1 — third targeted fix pass · 2026-08-31
 suite: `npm run test:workout-adapter`; `npm test`; `npx playwright test`; ESLint over the repository's
   configured production modules; `node --check` on the adapter, adapter tests, core, runtime,
