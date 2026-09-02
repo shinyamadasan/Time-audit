@@ -6,7 +6,7 @@
   "main": "index.js",
   "scripts": {
     "build": "echo \"No build step needed\"",
-    "test": "node test.js && node workout-life-ledger-adapter.test.js && node meal-life-ledger-adapter.test.js && node meal-cross-repo-life-ledger.test.js && node life-ledger-temporal-regression.test.js && node life-feed-model.test.js && node life-character-sheet-model.test.js && node cross-domain-intelligence-model.test.js",
+    "test": "node test.js && node workout-life-ledger-adapter.test.js && node meal-life-ledger-adapter.test.js && node meal-cross-repo-life-ledger.test.js && node life-ledger-temporal-regression.test.js && node life-feed-model.test.js && node life-character-sheet-model.test.js && node cross-domain-intelligence-model.test.js && node --test scripts/cross-repo-compat-check.test.js",
     "test:life-feed": "node life-feed-model.test.js",
     "test:life-character-sheet": "node life-character-sheet-model.test.js",
     "test:cross-domain-intelligence": "node cross-domain-intelligence-model.test.js",
@@ -18,6 +18,7 @@
     "test:adapter-contracts": "node workout-life-ledger-adapter.test.js && node meal-life-ledger-adapter.test.js && node meal-cross-repo-life-ledger.test.js && node workout-source-contract-gate.test.js && node meal-source-contract-gate.test.js && node life-ledger-temporal-regression.test.js",
     "test:cross-repo-compat": "node scripts/cross-repo-compat-check.mjs --strict",
     "test:cross-repo-compat:local": "node scripts/cross-repo-compat-check.mjs",
+    "test:cross-repo-runner": "node --test scripts/cross-repo-compat-check.test.js",
     "test:temporal": "node life-ledger-temporal-regression.test.js",
     "test:smoke": "npx playwright test",
     "contracts:fingerprint": "node scripts/contract-fingerprint.mjs",

@@ -39,6 +39,24 @@ A failure at any stage names the specific contract clause it violates (see each 
 never a bare assertion failure. If you hit one and the change is intentional, see `CONTRACT_VERSIONING.md` for how
 to move the contract forward instead of silencing the gate.
 
+### Runner internals: per-leg process isolation
+
+`../scripts/cross-repo-compat-check.mjs` runs each leg (ChronaSense → Meal → Workout, always that order) as
+its own `spawnSync` child with an explicit, isolated context:
+
+- **Canonical cwd.** Every leg's working directory is passed through `realpath`'s native form before it reaches
+  `spawnSync`. Without this, a sibling path supplied via `OPENGYM_REPO_PATH` / `MEAL_REPO_PATH` (or inherited from a
+  Windows shell on a lower-case drive letter) reaches Vitest 4 / rolldown-vite 8 as `c:\…` rather than the on-disk
+  `C:\…`; the Workout contract file is then evaluated in a module graph where `@vitest/runner`'s internal `runner`
+  singleton was never bound, its first top-level `describe()` throws `Cannot read properties of undefined (reading
+  'config')`, and the leg reports **"0 test"** — a false gate failure unrelated to any contract.
+- **Private TEMP.** Each leg gets a fresh `TEMP`/`TMP`/`TMPDIR` so one runner's scratch (Vitest transform cache,
+  Vite optimize-deps, Playwright artifacts) can't hand state to the next leg. The dirs are removed on exit.
+
+None of this loosens the gate: a leg passes only on a real exit code 0, child output stays visible, and `--strict`
+still fails on any SKIP. The runner has its own test suite — `npm run test:cross-repo-runner`
+(`../scripts/cross-repo-compat-check.test.js`).
+
 ## Fixtures
 
 `../fixtures/workout-source-contract-v1.fixture.json` and `../fixtures/meal-source-contract-v1.fixture.json` are
