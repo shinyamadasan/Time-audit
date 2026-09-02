@@ -13,9 +13,9 @@ import {
 // existing scripts/export-life-ledger-to-obsidian.mjs (left untouched) rather than a
 // replacement — that script's own reviewed test-vault-only contract stays exactly as-is.
 // This one can target a production vault, but every production apply is gated behind
-// --mode production, --apply, an exact --expected-vault canonical-path match, and (on the
-// very first run against a given vault) --first-run-ack. No default supplies any of these —
-// omitting any one of them stops the run before a single byte is written.
+// --mode production, --apply, an exact --expected-vault canonical-path match, a verified
+// --rollback-receipt, and (on the very first run) --first-run-ack — AND the build-level
+// OBSIDIAN_PRODUCTION_SYNC_ENABLED constant, which is false. No default supplies any of these.
 
 const MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024;
 
@@ -41,7 +41,7 @@ function usage() {
     '  --apply                   execute the plan (otherwise: plan + preview only, zero writes)',
     '  --expected-vault <path>   production only: must exactly canonicalize to --vault',
     '  --first-run-ack <token>   production only, first run only: "FIRST-RUN-CONFIRMED:<canonical-vault-path>"',
-    '  --first-run-backup-confirmed   production only, first run only: assert a backup/preview was completed',
+    '  --rollback-receipt <path> production only: JSON receipt from prepareObsidianRollbackArtifact()',
     '  --json                    print the machine-readable summary instead of the text preview',
     '',
     'NOTE: production apply is hard-disabled in this build and will refuse regardless of flags.'
@@ -73,9 +73,9 @@ function parseArgs(argv) {
     } else if (arg === '--first-run-ack') {
       if (seen.has('first-run-ack')) throw new LifeLedgerSyncCliError('duplicate_first_run_ack', 'Duplicate --first-run-ack');
       seen.add('first-run-ack'); options.firstRunAck = takeValue('first-run-ack', index); index++;
-    } else if (arg === '--first-run-backup-confirmed') {
-      if (seen.has('first-run-backup-confirmed')) throw new LifeLedgerSyncCliError('duplicate_first_run_backup_confirmed', 'Duplicate --first-run-backup-confirmed');
-      seen.add('first-run-backup-confirmed'); options.firstRunBackupConfirmed = true;
+    } else if (arg === '--rollback-receipt') {
+      if (seen.has('rollback-receipt')) throw new LifeLedgerSyncCliError('duplicate_rollback_receipt', 'Duplicate --rollback-receipt');
+      seen.add('rollback-receipt'); options.rollbackReceiptPath = takeValue('rollback-receipt', index); index++;
     } else if (arg === '--apply') {
       if (seen.has('apply')) throw new LifeLedgerSyncCliError('duplicate_apply', 'Duplicate --apply');
       seen.add('apply'); options.apply = true;
@@ -110,8 +110,10 @@ function summarize(plan, applyResult) {
     schemaVersion: plan.schemaVersion,
     mode: plan.mode,
     blocked: plan.blocked,
+    blockState: plan.blockState,
     blockReason: plan.blockReason,
     isFirstRun: plan.isFirstRun,
+    planFingerprint: plan.planFingerprint,
     operations: plan.operations.map(op => ({ relativePath: op.relativePath, op: op.op, reason: op.reason })),
     applied: applyResult ? applyResult.applied : false,
     written: applyResult ? applyResult.written : []
@@ -138,9 +140,16 @@ export async function runLifeLedgerObsidianSync(argv, options = {}) {
 
   let applyResult = null;
   if (parsed.apply) {
-    const authorization = parsed.mode === 'production'
-      ? { mode: 'production', allowApply: true, apply: true, expectedCanonicalVaultPath: parsed.expectedVault, firstRunAck: parsed.firstRunAck, firstRunBackupAcknowledged: parsed.firstRunBackupConfirmed === true }
-      : { mode: 'test', apply: true };
+    let authorization;
+    if (parsed.mode === 'production') {
+      let rollbackReceipt;
+      if (parsed.rollbackReceiptPath) {
+        rollbackReceipt = JSON.parse(await fsAdapter.readFile(parsed.rollbackReceiptPath, 'utf8'));
+      }
+      authorization = { mode: 'production', allowApply: true, apply: true, expectedCanonicalVaultPath: parsed.expectedVault, firstRunAck: parsed.firstRunAck, rollbackReceipt };
+    } else {
+      authorization = { mode: 'test', apply: true };
+    }
     applyResult = await applyObsidianSync(plan, authorization, { fs: fsAdapter });
   }
 

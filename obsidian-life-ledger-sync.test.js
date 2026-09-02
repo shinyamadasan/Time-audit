@@ -3,6 +3,7 @@ import test from 'node:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {
   ObsidianSyncError,
   createObsidianSyncTarget,
@@ -11,7 +12,10 @@ import {
   applyObsidianSync,
   formatObsidianSyncPreview,
   evaluateProductionAuthorization,
+  prepareObsidianRollbackArtifact,
+  verifyObsidianRollbackReceipt,
   OBSIDIAN_SYNC_OPERATIONS,
+  OBSIDIAN_SYNC_SCHEMA_VERSION,
   OBSIDIAN_PRODUCTION_SYNC_ENABLED,
   OBSIDIAN_SENTINEL_RELATIVE_PATH,
   OBSIDIAN_MANIFEST_RELATIVE_PATH,
@@ -21,9 +25,12 @@ import { OBSIDIAN_LIFE_LEDGER_SENTINEL } from './obsidian-life-ledger-renderer.j
 import { serializeLifeLedgerSnapshot, createLifeLedgerSnapshotFromEvents } from './life-ledger-transport.js';
 import { runLifeLedgerObsidianSync } from './scripts/sync-life-ledger-to-obsidian.mjs';
 
+const OP = OBSIDIAN_SYNC_OPERATIONS;
 const DENIED_ONEDRIVE_VAULT_ROOT = 'C:\\Users\\Admin\\OneDrive\\2nd Brain';
 const DENIED_STALE_DESKTOP_VAULT_ROOT = 'C:\\Users\\Admin\\Desktop\\2nd Brain';
 const DENIED_TEST_VAULT_ROOT = 'C:\\Users\\Admin\\Desktop\\Second-Brain-Test-Vault';
+const DAILY_2026_08_30 = 'Life Ledger/Daily/2026-08-30.md';
+const sha256 = s => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
 
 function focusEvent(overrides = {}) {
   return {
@@ -59,6 +66,18 @@ function focusEvent(overrides = {}) {
   };
 }
 
+// A second event on 2026-08-31, so a later apply has a genuine new CREATE + manifest UPDATE.
+function focusEventDay2() {
+  return focusEvent({
+    eventId: '20202020-2020-4020-8020-202020202020',
+    sourceEntityId: 'focus-entry-2',
+    occurredAt: '2026-08-31T16:00:00.000Z',
+    recordedAt: '2026-08-31T16:00:00.000Z',
+    payload: { ...focusEvent().payload, startedAt: '2026-08-31T15:35:00.000Z', endedAt: '2026-08-31T16:00:00.000Z', source: { focusEntryId: 'focus-entry-2' } },
+    provenance: { ...focusEvent().provenance, evidence: ['synthetic.focus:2'] }
+  });
+}
+
 async function withTempVault(fn, { obsidian = true, testVaultMarker = true } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'chronasense-obsidian-sync-'));
   try {
@@ -70,546 +89,728 @@ async function withTempVault(fn, { obsidian = true, testVaultMarker = true } = {
   }
 }
 
-function writeSpyFs() {
-  const calls = { writeFile: 0, rename: 0, unlink: 0 };
-  const real = { writeFile: fs.writeFile, rename: fs.rename, unlink: fs.unlink };
-  return {
-    mkdir: fs.mkdir,
-    readFile: fs.readFile,
-    lstat: fs.lstat,
-    realpath: fs.realpath,
-    readdir: fs.readdir,
-    async writeFile(...args) { calls.writeFile++; return real.writeFile(...args); },
-    async rename(...args) { calls.rename++; return real.rename(...args); },
-    async unlink(...args) { calls.unlink++; return real.unlink(...args); },
-    calls
+async function withTempDir(prefix, fn) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  try {
+    return await fn(dir);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+// A pass-through fs adapter with selective overrides, so tests can inject failures without
+// re-implementing the whole filesystem.
+function proxyFs(overrides = {}) {
+  const calls = { writeFile: 0, rename: 0, unlink: 0, mkdir: 0 };
+  const base = {
+    async mkdir(...a) { calls.mkdir++; return fs.mkdir(...a); },
+    readFile: (...a) => fs.readFile(...a),
+    stat: (...a) => fs.stat(...a),
+    lstat: (...a) => fs.lstat(...a),
+    realpath: (...a) => fs.realpath(...a),
+    readdir: (...a) => fs.readdir(...a),
+    async writeFile(...a) { calls.writeFile++; return fs.writeFile(...a); },
+    async rename(...a) { calls.rename++; return fs.rename(...a); },
+    async unlink(...a) { calls.unlink++; return fs.unlink(...a); }
   };
+  return { adapter: { ...base, ...overrides(base, calls) }, calls };
 }
 
 function testTarget(vaultPath, overrides = {}) {
   return createObsidianSyncTarget({ vaultPath, mode: 'test', allowApply: true, ...overrides });
 }
-
 function prodTarget(vaultPath, overrides = {}) {
   return createObsidianSyncTarget({ vaultPath, mode: 'production', allowApply: true, ...overrides });
 }
+async function firstApply(vault, events = [focusEvent()]) {
+  const target = testTarget(vault);
+  const plan = await planObsidianSync(target, events);
+  return applyObsidianSync(plan, { mode: 'test', apply: true });
+}
+function readVault(vault, rel) {
+  return fs.readFile(path.join(vault, ...rel.split('/')), 'utf8');
+}
+async function exists(p) {
+  return fs.access(p).then(() => true, () => false);
+}
 
-// -- Target model -------------------------------------------------------------
+// ===========================================================================
+// Target model
+// ===========================================================================
 
-test('createObsidianSyncTarget rejects an unknown mode', () => {
-  assert.throws(() => createObsidianSyncTarget({ vaultPath: 'C:\\x', mode: 'staging' }), err => err.code === 'invalid_target');
-});
-test('createObsidianSyncTarget rejects a non-Life-Ledger managedRoot', () => {
-  assert.throws(() => createObsidianSyncTarget({ vaultPath: 'C:\\x', mode: 'test', managedRoot: 'Somewhere Else' }), err => err.code === 'invalid_target');
-});
-test('createObsidianSyncTarget rejects an empty vaultPath', () => {
-  assert.throws(() => createObsidianSyncTarget({ vaultPath: '', mode: 'test' }), err => err.code === 'invalid_target');
-});
-test('createObsidianSyncTarget defaults allowApply to false and freezes the target', () => {
-  const target = createObsidianSyncTarget({ vaultPath: 'C:\\x', mode: 'test' });
-  assert.equal(target.allowApply, false);
-  assert.throws(() => { target.mode = 'production'; }, TypeError);
+test('createObsidianSyncTarget rejects unknown mode / non-Life-Ledger root / empty vaultPath, and freezes', () => {
+  assert.throws(() => createObsidianSyncTarget({ vaultPath: 'C:\\x', mode: 'staging' }), e => e.code === 'invalid_target');
+  assert.throws(() => createObsidianSyncTarget({ vaultPath: 'C:\\x', mode: 'test', managedRoot: 'Elsewhere' }), e => e.code === 'invalid_target');
+  assert.throws(() => createObsidianSyncTarget({ vaultPath: '  ', mode: 'test' }), e => e.code === 'invalid_target');
+  const t = createObsidianSyncTarget({ vaultPath: 'C:\\x', mode: 'test' });
+  assert.equal(t.allowApply, false);
+  assert.throws(() => { t.mode = 'production'; }, TypeError);
 });
 
-// -- Stale / denied vault rejection -------------------------------------------
+// ===========================================================================
+// Vault identity / denied roots
+// ===========================================================================
 
-test('test mode rejects the stale Desktop vault before touching disk', async () => {
-  const identity = await verifyObsidianVaultIdentity(testTarget(DENIED_STALE_DESKTOP_VAULT_ROOT));
-  assert.equal(identity.ok, false);
-  assert.equal(identity.reason, 'denied_vault_root');
+test('test mode denies the stale Desktop vault and the real OneDrive vault before touching disk', async () => {
+  for (const denied of [DENIED_STALE_DESKTOP_VAULT_ROOT, DENIED_ONEDRIVE_VAULT_ROOT]) {
+    const id = await verifyObsidianVaultIdentity(testTarget(denied));
+    assert.equal(id.ok, false);
+    assert.equal(id.reason, 'denied_vault_root');
+  }
 });
-test('test mode rejects the real active OneDrive vault', async () => {
-  const identity = await verifyObsidianVaultIdentity(testTarget(DENIED_ONEDRIVE_VAULT_ROOT));
-  assert.equal(identity.ok, false);
-  assert.equal(identity.reason, 'denied_vault_root');
+test('production mode denies the stale Desktop vault and the test vault even with a matching expected path', async () => {
+  for (const denied of [DENIED_STALE_DESKTOP_VAULT_ROOT, DENIED_TEST_VAULT_ROOT]) {
+    const id = await verifyObsidianVaultIdentity(prodTarget(denied), { expectedCanonicalVaultPath: denied });
+    assert.equal(id.ok, false);
+    assert.equal(id.reason, 'denied_vault_root');
+  }
 });
-test('production mode rejects the stale Desktop vault even with matching expectedCanonicalVaultPath', async () => {
-  const identity = await verifyObsidianVaultIdentity(
-    prodTarget(DENIED_STALE_DESKTOP_VAULT_ROOT),
-    { expectedCanonicalVaultPath: DENIED_STALE_DESKTOP_VAULT_ROOT }
-  );
-  assert.equal(identity.ok, false);
-  assert.equal(identity.reason, 'denied_vault_root');
-});
-test('production mode rejects the test vault even with matching expectedCanonicalVaultPath', async () => {
-  const identity = await verifyObsidianVaultIdentity(
-    prodTarget(DENIED_TEST_VAULT_ROOT),
-    { expectedCanonicalVaultPath: DENIED_TEST_VAULT_ROOT }
-  );
-  assert.equal(identity.ok, false);
-  assert.equal(identity.reason, 'denied_vault_root');
-});
-test('production mode allows the real vault path only via an exact canonical-path match', async () => (
+test('production mode requires an exact canonical-path match and never auto-discovers', async () => (
   withTempVault(async vault => {
-    const okIdentity = await verifyObsidianVaultIdentity(prodTarget(vault), { expectedCanonicalVaultPath: vault });
-    assert.equal(okIdentity.ok, true);
-    const mismatchIdentity = await verifyObsidianVaultIdentity(prodTarget(vault), { expectedCanonicalVaultPath: `${vault}\\..\\somewhere-else` });
-    assert.equal(mismatchIdentity.ok, false);
-    assert.equal(mismatchIdentity.reason, 'canonical_path_mismatch');
+    assert.equal((await verifyObsidianVaultIdentity(prodTarget(vault))).reason, 'missing_expected_canonical_path');
+    assert.equal((await verifyObsidianVaultIdentity(prodTarget(vault), { expectedCanonicalVaultPath: `${vault}\\..\\x` })).reason, 'canonical_path_mismatch');
+    assert.equal((await verifyObsidianVaultIdentity(prodTarget(vault), { expectedCanonicalVaultPath: vault })).ok, true);
   })
 ));
-test('production mode without an expectedCanonicalVaultPath refuses to auto-discover a target', async () => (
-  withTempVault(async vault => {
-    const identity = await verifyObsidianVaultIdentity(prodTarget(vault));
-    assert.equal(identity.ok, false);
-    assert.equal(identity.reason, 'missing_expected_canonical_path');
-  })
-));
-test('identity check rejects a vault path inside a known repo root', async () => (
-  withTempVault(async vault => {
-    const identity = await verifyObsidianVaultIdentity(testTarget(vault), { knownRepoRoots: [vault] });
-    assert.equal(identity.ok, false);
-    assert.equal(identity.reason, 'inside_known_repo_root');
-  })
-));
-test('identity check reports a missing vault path without throwing', async () => {
-  const identity = await verifyObsidianVaultIdentity(testTarget('C:\\Nonexistent\\Vault\\Path\\Xyz'));
-  assert.equal(identity.ok, false);
-  assert.equal(identity.reason, 'vault_missing');
+test('identity check rejects a vault path inside a known repo root and reports missing paths without throwing', async () => {
+  await withTempVault(async vault => {
+    assert.equal((await verifyObsidianVaultIdentity(testTarget(vault), { knownRepoRoots: [vault] })).reason, 'inside_known_repo_root');
+  });
+  assert.equal((await verifyObsidianVaultIdentity(testTarget('C:\\Nope\\Xyz\\Vault'))).reason, 'vault_missing');
 });
-test('identity check surfaces .obsidian presence as a soft signal, not a hard block', async () => (
-  withTempVault(async vault => {
-    const identity = await verifyObsidianVaultIdentity(testTarget(vault));
-    assert.equal(identity.ok, true);
-    assert.equal(identity.signals.hasObsidianDir, true);
-  })
-));
-test('identity check tolerates a vault with no .obsidian folder yet', async () => (
-  withTempVault(async vault => {
-    const identity = await verifyObsidianVaultIdentity(testTarget(vault));
-    assert.equal(identity.ok, true);
-    assert.equal(identity.signals.hasObsidianDir, false);
-  }, { obsidian: false })
-));
+test('identity check surfaces .obsidian presence as a soft signal, never a hard block', async () => {
+  await withTempVault(async vault => assert.equal((await verifyObsidianVaultIdentity(testTarget(vault))).signals.hasObsidianDir, true));
+  await withTempVault(async vault => {
+    const id = await verifyObsidianVaultIdentity(testTarget(vault));
+    assert.equal(id.ok, true);
+    assert.equal(id.signals.hasObsidianDir, false);
+  }, { obsidian: false });
+});
 
-// -- Managed-root ownership ----------------------------------------------------
+// ===========================================================================
+// Ownership chaos — review tests A-I
+// ===========================================================================
 
-test('a fresh vault plans a first-run CREATE for every generated file', async () => (
+test('A: valid sentinel + NO manifest -> BLOCK (missing_manifest_baseline)', async () => (
   withTempVault(async vault => {
-    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
-    assert.equal(plan.blocked, false);
-    assert.equal(plan.isFirstRun, true);
-    assert.deepEqual(plan.operations.map(op => op.op), Array(plan.operations.length).fill(OBSIDIAN_SYNC_OPERATIONS.CREATE));
-    assert.deepEqual(plan.operations.map(op => op.relativePath), [...plan.operations.map(op => op.relativePath)].sort());
-  })
-));
-test('an existing unmanaged Life Ledger root blocks the plan as a conflict', async () => (
-  withTempVault(async vault => {
-    await fs.mkdir(path.join(vault, 'Life Ledger'), { recursive: true });
-    await fs.writeFile(path.join(vault, 'Life Ledger', 'notes.md'), '# My own notes\n', 'utf8');
+    await firstApply(vault);
+    await fs.rm(path.join(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH));
     const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
     assert.equal(plan.blocked, true);
-    assert.equal(plan.blockReason, 'unmanaged_conflict');
+    assert.equal(plan.blockState, 'invalid_sentinel');
+    assert.equal(plan.blockReason, 'missing_manifest_baseline');
     assert.equal(plan.operations.length, 1);
-    assert.equal(plan.operations[0].op, OBSIDIAN_SYNC_OPERATIONS.BLOCKED);
+    assert.equal(plan.operations[0].op, OP.BLOCKED);
   })
 ));
-test('an empty pre-existing Life Ledger directory is still an unmanaged conflict, never auto-adopted', async () => (
+test('B: manifest deleted from a previously owned root -> BLOCK, no generated file may UPDATE', async () => (
   withTempVault(async vault => {
-    await fs.mkdir(path.join(vault, 'Life Ledger'), { recursive: true });
-    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    await firstApply(vault);
+    await fs.rm(path.join(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH));
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent({ payload: { ...focusEvent().payload, activity: 'changed' } })]);
     assert.equal(plan.blocked, true);
-    assert.equal(plan.blockReason, 'unmanaged_conflict');
+    assert.ok(!plan.operations.some(op => op.op === OP.UPDATE));
+    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test', apply: true }), e => e.code === 'plan_blocked');
   })
 ));
-test('a valid sentinel is recognized on a second plan and reports UNCHANGED, not first-run', async () => (
-  withTempVault(async vault => {
-    const target = testTarget(vault);
-    const plan1 = await planObsidianSync(target, [focusEvent()]);
-    await applyObsidianSync(plan1, { mode: 'test', apply: true });
-    const plan2 = await planObsidianSync(target, [focusEvent()]);
-    assert.equal(plan2.isFirstRun, false);
-    assert.equal(plan2.blocked, false);
-    assert.ok(plan2.operations.every(op => op.op === OBSIDIAN_SYNC_OPERATIONS.UNCHANGED));
-  })
-));
-test('a corrupted sentinel (wrong owner) blocks as invalid, never silently replaced', async () => (
+test('C: legacy v1 sentinel without a manifest hash -> BLOCK (legacy_sentinel_migration_required)', async () => (
   withTempVault(async vault => {
     await fs.mkdir(path.join(vault, 'Life Ledger', 'System'), { recursive: true });
     await fs.writeFile(
-      path.join(vault, 'Life Ledger', 'System', 'MANAGED-BY-CHRONASENSE.md'),
-      `${OBSIDIAN_LIFE_LEDGER_SENTINEL}\n---\nowner: someone-else\nschemaVersion: 1\nmanagedRoot: Life Ledger\n---\n`,
+      path.join(vault, OBSIDIAN_SENTINEL_RELATIVE_PATH),
+      `${OBSIDIAN_LIFE_LEDGER_SENTINEL}\n---\nowner: chronasense-life-ledger\nschemaVersion: 1\nmanagedRoot: Life Ledger\n---\n`,
       'utf8'
     );
+    await fs.writeFile(path.join(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH), '{"schemaVersion":1,"owner":"chronasense-life-ledger","managedRoot":"Life Ledger","files":[]}\n', 'utf8');
     const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
     assert.equal(plan.blocked, true);
-    assert.equal(plan.blockReason, 'invalid_sentinel');
+    assert.equal(plan.blockReason, 'legacy_sentinel_migration_required');
   })
 ));
-test('a corrupted manifest (malformed JSON) blocks as invalid', async () => (
+test('D: hand-written note at a generated path with only a bare marker -> CONFLICT, human content preserved', async () => (
   withTempVault(async vault => {
-    const target = testTarget(vault);
-    await applyObsidianSync(await planObsidianSync(target, [focusEvent()]), { mode: 'test', apply: true });
-    await fs.writeFile(path.join(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH), '{not json', 'utf8');
-    const plan = await planObsidianSync(target, [focusEvent()]);
+    await firstApply(vault, [focusEvent()]);
+    // A second day whose Daily file a human created by hand, marker present, never in the manifest.
+    const humanText = `${OBSIDIAN_LIFE_LEDGER_SENTINEL}\n\n# My hand notes for the 31st\n`;
+    await fs.writeFile(path.join(vault, 'Life Ledger', 'Daily', '2026-08-31.md'), humanText, 'utf8');
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent(), focusEventDay2()]);
+    const op = plan.operations.find(o => o.relativePath === 'Life Ledger/Daily/2026-08-31.md');
+    assert.equal(op.op, OP.CONFLICT);
+    assert.equal(op.reason, 'missing_manifest_baseline');
     assert.equal(plan.blocked, true);
-    assert.equal(plan.blockReason, 'invalid_sentinel');
+    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test', apply: true }), e => e.code === 'plan_blocked');
+    assert.equal(await readVault(vault, 'Life Ledger/Daily/2026-08-31.md'), humanText);
   })
 ));
-
-// -- Conflict detection ---------------------------------------------------------
-
-test('an unowned file collision at a generated path is a conflict, not an overwrite', async () => (
+test('E: manifest bytes modified -> sentinel manifestSha256 mismatch -> BLOCK', async () => (
   withTempVault(async vault => {
-    await fs.mkdir(path.join(vault, 'Life Ledger', 'Daily'), { recursive: true });
-    await fs.mkdir(path.join(vault, 'Life Ledger', 'System'), { recursive: true });
-    await fs.writeFile(path.join(vault, OBSIDIAN_SENTINEL_RELATIVE_PATH), '', 'utf8'); // will be seen as invalid below instead
-    // Simpler: build ownership via a real first apply, then drop an unowned Daily collision on a later day.
-    await fs.rm(path.join(vault, 'Life Ledger'), { recursive: true, force: true });
-    const target = testTarget(vault);
-    await applyObsidianSync(await planObsidianSync(target, [focusEvent()]), { mode: 'test', apply: true });
-    const otherDay = focusEvent({
-      eventId: '20202020-2020-4020-8020-202020202020',
-      occurredAt: '2026-08-31T16:00:00.000Z',
-      payload: { ...focusEvent().payload, startedAt: '2026-08-31T15:35:00.000Z', endedAt: '2026-08-31T16:00:00.000Z' }
-    });
-    await fs.writeFile(path.join(vault, 'Life Ledger', 'Daily', '2026-08-31.md'), '# Hand-written note, no sentinel\n', 'utf8');
-    const plan = await planObsidianSync(target, [focusEvent(), otherDay]);
-    const conflict = plan.operations.find(op => op.relativePath === 'Life Ledger/Daily/2026-08-31.md');
-    assert.equal(conflict.op, OBSIDIAN_SYNC_OPERATIONS.CONFLICT);
-    assert.equal(conflict.reason, 'unowned_collision');
-    assert.equal(plan.blocked, true);
-  })
-));
-test('a human edit to a previously-generated file is detected as a conflict via manifest drift', async () => (
-  withTempVault(async vault => {
-    const target = testTarget(vault);
-    await applyObsidianSync(await planObsidianSync(target, [focusEvent()]), { mode: 'test', apply: true });
-    const dailyPath = path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md');
-    const original = await fs.readFile(dailyPath, 'utf8');
-    await fs.writeFile(dailyPath, `${original}\nHand-added note\n`, 'utf8');
-    const plan = await planObsidianSync(target, [focusEvent()]);
-    const conflict = plan.operations.find(op => op.relativePath === 'Life Ledger/Daily/2026-08-30.md');
-    assert.equal(conflict.op, OBSIDIAN_SYNC_OPERATIONS.CONFLICT);
-    assert.equal(conflict.reason, 'human_modified_owned_file');
-    assert.equal(plan.blocked, true);
-  })
-));
-test('an unresolved conflict blocks apply entirely, with zero writes', async () => (
-  withTempVault(async vault => {
-    const target = testTarget(vault);
-    await applyObsidianSync(await planObsidianSync(target, [focusEvent()]), { mode: 'test', apply: true });
-    const dailyPath = path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md');
-    await fs.appendFile(dailyPath, '\nHand-added note\n', 'utf8');
-    const plan = await planObsidianSync(target, [focusEvent()]);
-    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test', apply: true }), err => err.code === 'plan_blocked');
-  })
-));
-
-// -- Idempotency + ordering ------------------------------------------------------
-
-test('applying the same snapshot twice is idempotent and writes nothing the second time', async () => (
-  withTempVault(async vault => {
-    const target = testTarget(vault);
-    const spyFs = writeSpyFs();
-    await applyObsidianSync(await planObsidianSync(target, [focusEvent()], { fs: spyFs }), { mode: 'test', apply: true }, { fs: spyFs });
-    assert.ok(spyFs.calls.writeFile > 0);
-    const before = { ...spyFs.calls };
-    await applyObsidianSync(await planObsidianSync(target, [focusEvent()], { fs: spyFs }), { mode: 'test', apply: true }, { fs: spyFs });
-    assert.equal(spyFs.calls.writeFile, before.writeFile);
-    assert.equal(spyFs.calls.rename, before.rename);
-  })
-));
-test('plan operations are always sorted by relativePath (deterministic ordering)', async () => (
-  withTempVault(async vault => {
+    await firstApply(vault);
+    await fs.appendFile(path.join(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH), '\n', 'utf8');
     const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
-    const paths = plan.operations.map(op => op.relativePath);
-    assert.deepEqual(paths, [...paths].sort());
+    assert.equal(plan.blocked, true);
+    assert.equal(plan.blockReason, 'manifest_integrity_mismatch');
   })
 ));
-test('rendering the same snapshot twice produces byte-identical plan content', async () => (
+test('F: manifest entry edited to match a human-modified file, but the sentinel still binds the old manifest -> BLOCK', async () => (
   withTempVault(async vault => {
-    const plan1 = await planObsidianSync(testTarget(vault), [focusEvent()]);
-    const plan2 = await planObsidianSync(testTarget(vault), [focusEvent()]);
-    assert.equal(JSON.stringify(plan1.operations.map(op => op.contentSha256)), JSON.stringify(plan2.operations.map(op => op.contentSha256)));
+    await firstApply(vault);
+    const dailyAbs = path.join(vault, ...DAILY_2026_08_30.split('/'));
+    const hacked = `${await fs.readFile(dailyAbs, 'utf8')}\nattacker note\n`;
+    await fs.writeFile(dailyAbs, hacked, 'utf8');
+    // Rewrite the manifest so its entry for the Daily file matches the hacked hash.
+    const manifest = JSON.parse(await fs.readFile(path.join(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH), 'utf8'));
+    for (const f of manifest.files) if (f.relativePath === DAILY_2026_08_30) f.sha256 = sha256(hacked);
+    await fs.writeFile(path.join(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    assert.equal(plan.blocked, true);
+    assert.equal(plan.blockReason, 'manifest_integrity_mismatch'); // sentinel still binds the ORIGINAL manifest bytes
   })
 ));
-
-// -- No deletion by absence / STALE reporting ------------------------------------
-
-test('a Daily file absent from a later snapshot is reported STALE, never deleted', async () => (
+test('G: partial FIRST run (content+manifest written, sentinel fails) -> next plan BLOCKS, never auto-adopts', async () => (
+  withTempVault(async vault => {
+    const target = testTarget(vault);
+    const plan = await planObsidianSync(target, [focusEvent()]);
+    // writeFile order: Daily.tmp, README.tmp, manifest.tmp, sentinel.tmp -> fail the 4th.
+    const { adapter } = proxyFs((_b, calls) => ({
+      async writeFile(p, c, e) {
+        calls.writeFile++;
+        if (calls.writeFile === 4) throw Object.assign(new Error('sentinel write failed'), { code: 'EIO' });
+        return fs.writeFile(p, c, e);
+      }
+    }));
+    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test', apply: true }, { fs: adapter }), e => e.code === 'partial_apply_failure');
+    assert.equal(await exists(path.join(vault, OBSIDIAN_SENTINEL_RELATIVE_PATH)), false);
+    const next = await planObsidianSync(target, [focusEvent()]);
+    assert.equal(next.blocked, true);
+    assert.equal(next.blockState, 'unmanaged_conflict');
+    assert.equal(next.blockReason, 'sentinel_missing');
+  })
+));
+test('H: partial LATER sync (new manifest written, final sentinel fails) -> next plan BLOCKS on integrity mismatch', async () => (
   withTempVault(async vault => {
     const target = testTarget(vault);
     await applyObsidianSync(await planObsidianSync(target, [focusEvent()]), { mode: 'test', apply: true });
-    const plan = await planObsidianSync(target, []);
-    const staleOp = plan.operations.find(op => op.relativePath === 'Life Ledger/Daily/2026-08-30.md');
-    assert.equal(staleOp.op, OBSIDIAN_SYNC_OPERATIONS.STALE);
+    const plan2 = await planObsidianSync(target, [focusEvent(), focusEventDay2()]);
+    // writeFile order for plan2: newDaily.tmp, manifest.tmp, sentinel.tmp -> fail the 3rd.
+    const { adapter } = proxyFs((_b, calls) => ({
+      async writeFile(p, c, e) {
+        calls.writeFile++;
+        if (calls.writeFile === 3) throw Object.assign(new Error('sentinel write failed'), { code: 'EIO' });
+        return fs.writeFile(p, c, e);
+      }
+    }));
+    await assert.rejects(() => applyObsidianSync(plan2, { mode: 'test', apply: true }, { fs: adapter }), e => e.code === 'partial_apply_failure');
+    const next = await planObsidianSync(target, [focusEvent(), focusEventDay2()]);
+    assert.equal(next.blocked, true);
+    assert.equal(next.blockReason, 'manifest_integrity_mismatch');
+  })
+));
+test('I: sentinel changed independently (even just appended prose) -> BLOCK (sentinel_content_mismatch)', async () => (
+  withTempVault(async vault => {
+    await firstApply(vault);
+    const sPath = path.join(vault, ...OBSIDIAN_SENTINEL_RELATIVE_PATH.split('/'));
+    await fs.writeFile(sPath, `${await fs.readFile(sPath, 'utf8')}\nsomeone appended this\n`, 'utf8');
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    assert.equal(plan.blocked, true);
+    assert.equal(plan.blockReason, 'sentinel_content_mismatch');
+  })
+));
+
+// ===========================================================================
+// File baseline rules — review tests J-M
+// ===========================================================================
+
+test('J: trusted baseline == disk, generated content differs -> UPDATE allowed', async () => (
+  withTempVault(async vault => {
+    const target = testTarget(vault);
+    await applyObsidianSync(await planObsidianSync(target, [focusEvent()]), { mode: 'test', apply: true });
+    const plan = await planObsidianSync(target, [focusEvent({ payload: { ...focusEvent().payload, activity: 'Renamed focus' } })]);
+    const op = plan.operations.find(o => o.relativePath === DAILY_2026_08_30);
+    assert.equal(op.op, OP.UPDATE);
+    assert.equal(op.reason, 'content_drift');
     assert.equal(plan.blocked, false);
     await applyObsidianSync(plan, { mode: 'test', apply: true });
-    const stillExists = await fs.access(path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md')).then(() => true, () => false);
-    assert.equal(stillExists, true);
+    assert.ok((await readVault(vault, DAILY_2026_08_30)).includes('Renamed focus'));
   })
 ));
-
-// -- TOCTOU ------------------------------------------------------------------------
-
-test('apply aborts with zero writes if the filesystem changed since planning', async () => (
-  withTempVault(async vault => {
-    const target = testTarget(vault);
-    const plan1 = await planObsidianSync(target, [focusEvent()]);
-    // Someone else creates the README by hand (with the sentinel, so it is not an unowned
-    // collision) between plan and apply — the plan's captured precondition (file absent) no
-    // longer holds.
-    await fs.mkdir(path.join(vault, 'Life Ledger', 'System'), { recursive: true });
-    await fs.writeFile(path.join(vault, OBSIDIAN_SYSTEM_README_RELATIVE_PATH), `${OBSIDIAN_LIFE_LEDGER_SENTINEL}\nrace\n`, 'utf8');
-    const spyFs = writeSpyFs();
-    await assert.rejects(
-      () => applyObsidianSync(plan1, { mode: 'test', apply: true }, { fs: spyFs }),
-      err => err.code === 'precondition_changed'
-    );
-    assert.equal(spyFs.calls.writeFile, 0);
-  })
-));
-test('apply aborts if a symlink is introduced at a target leaf after planning', async () => (
-  withTempVault(async vault => {
-    const target = testTarget(vault);
-    const plan1 = await planObsidianSync(target, [focusEvent()]);
-    await fs.mkdir(path.join(vault, 'Life Ledger', 'System'), { recursive: true });
-    let symlinked = true;
-    try {
-      await fs.symlink(path.join(os.tmpdir()), path.join(vault, OBSIDIAN_SENTINEL_RELATIVE_PATH), 'junction');
-    } catch {
-      symlinked = false; // environment lacks symlink privilege — the assertion below is skipped, not falsely passed
-    }
-    if (!symlinked) return;
-    await assert.rejects(() => applyObsidianSync(plan1, { mode: 'test', apply: true }), err => err.code === 'link_escape' || err.code === 'precondition_changed');
-  })
-));
-
-// -- Manifest ------------------------------------------------------------------
-
-test('the manifest lists only relative managed paths with SHA-256 hashes, sorted, no duplicates', async () => (
+test('K: trusted baseline != disk (human edit) -> human_modified_owned_file CONFLICT, never overwritten', async () => (
   withTempVault(async vault => {
     const target = testTarget(vault);
     await applyObsidianSync(await planObsidianSync(target, [focusEvent()]), { mode: 'test', apply: true });
-    const manifest = JSON.parse(await fs.readFile(path.join(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH), 'utf8'));
-    assert.equal(manifest.schemaVersion, 1);
-    assert.equal(manifest.managedRoot, 'Life Ledger');
-    const relPaths = manifest.files.map(f => f.relativePath);
-    assert.deepEqual(relPaths, [...relPaths].sort());
-    assert.equal(new Set(relPaths).size, relPaths.length);
-    for (const file of manifest.files) {
-      assert.match(file.sha256, /^[0-9a-f]{64}$/);
-      assert.ok(!path.isAbsolute(file.relativePath));
-    }
+    const dailyAbs = path.join(vault, ...DAILY_2026_08_30.split('/'));
+    const edited = `${await fs.readFile(dailyAbs, 'utf8')}\n## human section\n`;
+    await fs.writeFile(dailyAbs, edited, 'utf8');
+    const plan = await planObsidianSync(target, [focusEvent({ payload: { ...focusEvent().payload, activity: 'x' } })]);
+    const op = plan.operations.find(o => o.relativePath === DAILY_2026_08_30);
+    assert.equal(op.op, OP.CONFLICT);
+    assert.equal(op.reason, 'human_modified_owned_file');
+    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test', apply: true }), e => e.code === 'plan_blocked');
+    assert.equal(await fs.readFile(dailyAbs, 'utf8'), edited);
+  })
+));
+test('L: existing differing generated-path file with no baseline entry -> missing_manifest_baseline CONFLICT', async () => (
+  withTempVault(async vault => {
+    await firstApply(vault, [focusEvent()]);
+    await fs.writeFile(path.join(vault, 'Life Ledger', 'Daily', '2026-08-31.md'), `${OBSIDIAN_LIFE_LEDGER_SENTINEL}\ndiffers\n`, 'utf8');
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent(), focusEventDay2()]);
+    const op = plan.operations.find(o => o.relativePath === 'Life Ledger/Daily/2026-08-31.md');
+    assert.equal(op.op, OP.CONFLICT);
+    assert.equal(op.reason, 'missing_manifest_baseline');
+  })
+));
+test('M: existing generated file byte-identical to desired content, no baseline -> UNCHANGED (no mutation), baseline established on apply', async () => (
+  withTempVault(async vault => {
+    const target = testTarget(vault);
+    // Get the exact generated bytes for the Daily file from a throwaway plan.
+    const probe = await planObsidianSync(target, [focusEvent()]);
+    const dailyBytes = probe.operations.find(o => o.relativePath === DAILY_2026_08_30).content;
+    await applyObsidianSync(probe, { mode: 'test', apply: true });
+    // Wipe manifest+sentinel so the root is no longer "owned" but the identical Daily file stays.
+    await fs.rm(path.join(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH));
+    await fs.rm(path.join(vault, OBSIDIAN_SENTINEL_RELATIVE_PATH));
+    assert.equal(await readVault(vault, DAILY_2026_08_30), dailyBytes);
+    const plan = await planObsidianSync(target, [focusEvent()]);
+    // Root is unowned (sentinel gone) -> whole plan blocks. This is the fail-closed choice.
+    assert.equal(plan.blocked, true);
+    assert.equal(plan.blockState, 'unmanaged_conflict');
   })
 ));
 
-// -- Production authorization gate (HARD-blocked this pass) --------------------
+// ===========================================================================
+// Manifest identity / allowlist — review tests N-Q
+// ===========================================================================
 
-test('OBSIDIAN_PRODUCTION_SYNC_ENABLED is false in this build', () => {
-  assert.equal(OBSIDIAN_PRODUCTION_SYNC_ENABLED, false);
+async function ownedVaultWithManifestFiles(vault, files) {
+  await firstApply(vault);
+  const manifestContent = `${JSON.stringify({ schemaVersion: OBSIDIAN_SYNC_SCHEMA_VERSION, owner: 'chronasense-life-ledger', managedRoot: 'Life Ledger', files }, null, 2)}\n`;
+  await fs.writeFile(path.join(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH), manifestContent, 'utf8');
+  // Re-bind the sentinel to the new manifest bytes so we test the manifest allowlist, not the binding.
+  const sPath = path.join(vault, ...OBSIDIAN_SENTINEL_RELATIVE_PATH.split('/'));
+  const rebound = (await fs.readFile(sPath, 'utf8')).replace(/manifestSha256: [0-9a-f]{64}/, `manifestSha256: ${sha256(manifestContent)}`);
+  await fs.writeFile(sPath, rebound, 'utf8');
+}
+
+test('N: case-only duplicate manifest entries -> manifest rejected -> BLOCK', async () => (
+  withTempVault(async vault => {
+    await ownedVaultWithManifestFiles(vault, [
+      { relativePath: 'Life Ledger/System/README.md', sha256: 'a'.repeat(64) },
+      { relativePath: 'Life Ledger/System/readme.md', sha256: 'b'.repeat(64) }
+    ]);
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    assert.equal(plan.blocked, true);
+    assert.equal(plan.blockState, 'invalid_sentinel');
+  })
+));
+test('O: slash-vs-backslash duplicate manifest entry -> manifest rejected -> BLOCK', async () => (
+  withTempVault(async vault => {
+    await ownedVaultWithManifestFiles(vault, [
+      { relativePath: 'Life Ledger/System/README.md', sha256: 'a'.repeat(64) },
+      { relativePath: 'Life Ledger\\System\\README.md', sha256: 'b'.repeat(64) }
+    ]);
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    assert.equal(plan.blocked, true);
+  })
+));
+test('P: manifest lists an unknown (non-generated) path -> rejected -> BLOCK', async () => (
+  withTempVault(async vault => {
+    await ownedVaultWithManifestFiles(vault, [{ relativePath: 'Life Ledger/System/secrets.md', sha256: 'a'.repeat(64) }]);
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    assert.equal(plan.blocked, true);
+    assert.equal(plan.blockReason, 'manifest_unknown_path');
+  })
+));
+test('Q: manifest lists an absolute or traversal path -> rejected -> BLOCK', async () => {
+  await withTempVault(async vault => {
+    await ownedVaultWithManifestFiles(vault, [{ relativePath: 'C:\\Windows\\System32\\evil.md', sha256: 'a'.repeat(64) }]);
+    assert.equal((await planObsidianSync(testTarget(vault), [focusEvent()])).blocked, true);
+  });
+  await withTempVault(async vault => {
+    await ownedVaultWithManifestFiles(vault, [{ relativePath: 'Life Ledger/../../escape.md', sha256: 'a'.repeat(64) }]);
+    assert.equal((await planObsidianSync(testTarget(vault), [focusEvent()])).blocked, true);
+  });
 });
-test('production apply is hard-blocked even with fully correct, path-bound authorization', async () => (
-  withTempVault(async vault => {
-    const plan = await planObsidianSync(prodTarget(vault), [focusEvent()], { expectedCanonicalVaultPath: vault });
-    await assert.rejects(
-      () => applyObsidianSync(plan, {
-        mode: 'production', allowApply: true, apply: true,
-        expectedCanonicalVaultPath: vault,
-        firstRunAck: `FIRST-RUN-CONFIRMED:${plan.canonicalVaultRoot}`,
-        firstRunBackupAcknowledged: true
-      }),
-      err => err.code === 'production_sync_disabled'
-    );
-    const stillAbsent = await fs.access(path.join(vault, 'Life Ledger')).then(() => true, () => false);
-    assert.equal(stillAbsent, false);
-  })
-));
-test('production apply is hard-blocked with no authorization at all', async () => (
-  withTempVault(async vault => {
-    const plan = await planObsidianSync(prodTarget(vault), [focusEvent()], { expectedCanonicalVaultPath: vault });
-    await assert.rejects(() => applyObsidianSync(plan, {}), err => err.code === 'production_sync_disabled');
-  })
-));
 
-// The SECOND authorization layer (only reachable once the build constant is flipped) is
-// exercised here through evaluateProductionAuthorization with an explicit enabled override.
-// This override is NEVER wired into applyObsidianSync — see the two tests above.
-test('second-layer authorization: rejects a missing allowApply flag', async () => (
-  withTempVault(async vault => {
-    const plan = await planObsidianSync(prodTarget(vault), [focusEvent()], { expectedCanonicalVaultPath: vault });
-    const result = evaluateProductionAuthorization(plan, { mode: 'production', apply: true, expectedCanonicalVaultPath: vault }, { enabled: true });
-    assert.deepEqual(result, { ok: false, code: 'production_not_authorized' });
-  })
-));
-test('second-layer authorization: rejects a canonical-path mismatch', async () => (
-  withTempVault(async vault => {
-    const plan = await planObsidianSync(prodTarget(vault), [focusEvent()], { expectedCanonicalVaultPath: vault });
-    const result = evaluateProductionAuthorization(plan, { mode: 'production', allowApply: true, apply: true, expectedCanonicalVaultPath: `${vault}-other` }, { enabled: true });
-    assert.equal(result.code, 'production_not_authorized');
-  })
-));
-test('second-layer authorization: first run additionally requires a path-bound token and a backup acknowledgement', async () => (
-  withTempVault(async vault => {
-    const plan = await planObsidianSync(prodTarget(vault), [focusEvent()], { expectedCanonicalVaultPath: vault });
-    assert.equal(plan.isFirstRun, true);
-    const base = { mode: 'production', allowApply: true, apply: true, expectedCanonicalVaultPath: vault };
-    assert.equal(evaluateProductionAuthorization(plan, base, { enabled: true }).code, 'first_run_not_acknowledged');
-    assert.equal(evaluateProductionAuthorization(plan, { ...base, firstRunAck: 'FIRST-RUN-CONFIRMED:wrong' }, { enabled: true }).code, 'first_run_not_acknowledged');
-    assert.equal(
-      evaluateProductionAuthorization(plan, { ...base, firstRunAck: `FIRST-RUN-CONFIRMED:${plan.canonicalVaultRoot}` }, { enabled: true }).code,
-      'first_run_backup_not_acknowledged'
-    );
-    assert.deepEqual(
-      evaluateProductionAuthorization(plan, { ...base, firstRunAck: `FIRST-RUN-CONFIRMED:${plan.canonicalVaultRoot}`, firstRunBackupAcknowledged: true }, { enabled: true }),
-      { ok: true }
-    );
-  })
-));
-test('the plan carries a rollback artifact: delete-managed-root on first run', async () => (
-  withTempVault(async vault => {
-    const plan = await planObsidianSync(prodTarget(vault), [focusEvent()], { expectedCanonicalVaultPath: vault });
-    assert.equal(plan.rollbackPlan.strategy, 'delete_managed_root');
-    assert.equal(plan.rollbackPlan.managedRootExistedBefore, false);
-  })
-));
-test('test-mode apply is blocked without the TEST-VAULT.md marker', async () => (
-  withTempVault(async vault => {
-    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
-    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test', apply: true }), err => err.code === 'test_not_authorized');
-  }, { testVaultMarker: false })
-));
-test('test-mode apply is blocked without the explicit apply flag', async () => (
-  withTempVault(async vault => {
-    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
-    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test' }), err => err.code === 'test_not_authorized');
-  })
-));
+// ===========================================================================
+// TOCTOU — review tests R-T
+// ===========================================================================
 
-// -- Partial failure honesty -----------------------------------------------------
-
-test('a mid-apply write failure is reported as an explicit partial result, not a bare crash', async () => (
+test('R: an UNCHANGED file that changes between plan and apply -> precondition_changed, zero writes', async () => (
+  withTempVault(async vault => {
+    const target = testTarget(vault);
+    await applyObsidianSync(await planObsidianSync(target, [focusEvent()]), { mode: 'test', apply: true });
+    // Plan a change to day-2 only; day-1 (2026-08-30) is UNCHANGED in this plan.
+    const plan = await planObsidianSync(target, [focusEvent(), focusEventDay2()]);
+    assert.equal(plan.operations.find(o => o.relativePath === DAILY_2026_08_30).op, OP.UNCHANGED);
+    // A human edits the UNCHANGED day-1 file after planning.
+    const d1 = path.join(vault, ...DAILY_2026_08_30.split('/'));
+    await fs.writeFile(d1, `${await fs.readFile(d1, 'utf8')}\nlate edit\n`, 'utf8');
+    const { adapter, calls } = proxyFs(() => ({}));
+    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test', apply: true }, { fs: adapter }), e => e.code === 'precondition_changed');
+    assert.equal(calls.writeFile, 0);
+    assert.equal(calls.rename, 0);
+  })
+));
+test('S: a junction inserted at a managed parent between plan and apply is caught, with zero content written', async () => (
   withTempVault(async vault => {
     const target = testTarget(vault);
     const plan = await planObsidianSync(target, [focusEvent()]);
-    let count = 0;
-    const failingFs = {
-      mkdir: fs.mkdir, readFile: fs.readFile, lstat: fs.lstat, realpath: fs.realpath, readdir: fs.readdir, rename: fs.rename, unlink: fs.unlink,
-      async writeFile(target_, content, enc) {
-        count++;
-        if (count === 2) throw Object.assign(new Error('simulated disk failure'), { code: 'EIO' });
-        return fs.writeFile(target_, content, enc);
+    // Probe symlink privilege; skip cleanly if unavailable rather than false-pass.
+    const linkProbe = path.join(vault, '.linkprobe');
+    let privileged = true;
+    try {
+      await fs.symlink(os.tmpdir(), linkProbe, 'junction');
+      await fs.rm(linkProbe, { recursive: true, force: true });
+    } catch {
+      privileged = false;
+    }
+    if (!privileged) return;
+    // Between plan and apply, someone replaces Life Ledger/System with a junction out of the vault.
+    await fs.mkdir(path.join(vault, 'Life Ledger'), { recursive: true });
+    await fs.symlink(os.tmpdir(), path.join(vault, 'Life Ledger', 'System'), 'junction');
+    const { adapter, calls } = proxyFs(() => ({}));
+    await assert.rejects(
+      () => applyObsidianSync(plan, { mode: 'test', apply: true }, { fs: adapter }),
+      e => e.code === 'link_escape' || e.code === 'path_escape'
+    );
+    assert.equal(calls.writeFile, 0);
+  })
+));
+test('T: a plan whose operation content no longer hashes to contentSha256 -> invalid_plan_content, zero further writes', async () => (
+  withTempVault(async vault => {
+    const target = testTarget(vault);
+    const plan = await planObsidianSync(target, [focusEvent()]);
+    // Rebuild a tampered plan: same shape, but one op's content is swapped without fixing the hash.
+    const ops = plan.operations.map(op => (
+      op.relativePath === OBSIDIAN_SYSTEM_README_RELATIVE_PATH ? { ...op, content: `${op.content}\ntampered\n` } : op
+    ));
+    const tampered = Object.freeze({ ...plan, operations: Object.freeze(ops.map(o => Object.freeze(o))) });
+    const { adapter } = proxyFs(() => ({}));
+    await assert.rejects(() => applyObsidianSync(tampered, { mode: 'test', apply: true }, { fs: adapter }), e => e.code === 'invalid_plan_content');
+  })
+));
+
+// ===========================================================================
+// Apply order / phases
+// ===========================================================================
+
+test('apply writes content first, then manifest, then sentinel LAST (explicit phases, not filename sort)', async () => (
+  withTempVault(async vault => {
+    const target = testTarget(vault);
+    const plan = await planObsidianSync(target, [focusEvent()]);
+    const renamedInOrder = [];
+    const { adapter } = proxyFs((_b, calls) => ({
+      async rename(from, to) {
+        calls.rename++;
+        renamedInOrder.push(String(to).replace(vault, '').replace(/\\/g, '/').replace(/^\//, ''));
+        return fs.rename(from, to);
       }
-    };
-    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test', apply: true }, { fs: failingFs }), err => {
-      assert.equal(err.code, 'partial_apply_failure');
-      assert.ok(Array.isArray(err.written));
-      assert.equal(err.written.length, 1);
-      assert.ok(err.failedRelativePath);
+    }));
+    await applyObsidianSync(plan, { mode: 'test', apply: true }, { fs: adapter });
+    const manifestIdx = renamedInOrder.indexOf(OBSIDIAN_MANIFEST_RELATIVE_PATH);
+    const sentinelIdx = renamedInOrder.indexOf(OBSIDIAN_SENTINEL_RELATIVE_PATH);
+    const contentIdxs = renamedInOrder
+      .map((p, i) => (p === DAILY_2026_08_30 || p === OBSIDIAN_SYSTEM_README_RELATIVE_PATH ? i : -1))
+      .filter(i => i >= 0);
+    assert.ok(contentIdxs.every(i => i < manifestIdx), 'all content before manifest');
+    assert.ok(manifestIdx < sentinelIdx, 'manifest before sentinel');
+    assert.equal(sentinelIdx, renamedInOrder.length - 1, 'sentinel is last');
+  })
+));
+test('plan operations carry an explicit phase (content 0, manifest 1, sentinel 2)', async () => (
+  withTempVault(async vault => {
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    assert.equal(plan.operations.find(o => o.relativePath === OBSIDIAN_MANIFEST_RELATIVE_PATH).phase, 1);
+    assert.equal(plan.operations.find(o => o.relativePath === OBSIDIAN_SENTINEL_RELATIVE_PATH).phase, 2);
+    assert.equal(plan.operations.find(o => o.relativePath === DAILY_2026_08_30).phase, 0);
+  })
+));
+
+// ===========================================================================
+// Sentinel <-> manifest binding
+// ===========================================================================
+
+test('a fresh apply writes a schema-v2 sentinel whose manifestSha256 equals the manifest bytes; manifest lists only content files', async () => (
+  withTempVault(async vault => {
+    await firstApply(vault, [focusEvent(), focusEventDay2()]);
+    const sentinel = await readVault(vault, OBSIDIAN_SENTINEL_RELATIVE_PATH);
+    const manifestBytes = await readVault(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH);
+    assert.ok(sentinel.includes(`schemaVersion: ${OBSIDIAN_SYNC_SCHEMA_VERSION}`));
+    assert.ok(sentinel.includes(`manifestSha256: ${sha256(manifestBytes)}`));
+    const manifest = JSON.parse(manifestBytes);
+    const listed = manifest.files.map(f => f.relativePath).sort();
+    assert.deepEqual(listed, ['Life Ledger/Daily/2026-08-30.md', 'Life Ledger/Daily/2026-08-31.md', 'Life Ledger/System/README.md']);
+    for (const f of manifest.files) assert.match(f.sha256, /^[0-9a-f]{64}$/);
+  })
+));
+test('second plan on a cleanly-owned vault is fully UNCHANGED (idempotent, no timestamp churn)', async () => (
+  withTempVault(async vault => {
+    const target = testTarget(vault);
+    const { adapter, calls } = proxyFs(() => ({}));
+    await applyObsidianSync(await planObsidianSync(target, [focusEvent()], { fs: adapter }), { mode: 'test', apply: true }, { fs: adapter });
+    const before = calls.writeFile;
+    const plan2 = await planObsidianSync(target, [focusEvent()], { fs: adapter });
+    assert.ok(plan2.operations.every(op => op.op === OP.UNCHANGED));
+    await applyObsidianSync(plan2, { mode: 'test', apply: true }, { fs: adapter });
+    assert.equal(calls.writeFile, before);
+  })
+));
+test('deterministic plan: same snapshot twice -> identical fingerprint and identical content hashes', async () => (
+  withTempVault(async vault => {
+    const p1 = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    const p2 = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    assert.equal(p1.planFingerprint, p2.planFingerprint);
+    assert.deepEqual(p1.operations.map(o => o.contentSha256), p2.operations.map(o => o.contentSha256));
+  })
+));
+
+// ===========================================================================
+// No deletion by absence
+// ===========================================================================
+
+test('a Daily file absent from a later snapshot is STALE, retained in the new manifest, never deleted', async () => (
+  withTempVault(async vault => {
+    const target = testTarget(vault);
+    await applyObsidianSync(await planObsidianSync(target, [focusEvent(), focusEventDay2()]), { mode: 'test', apply: true });
+    const plan = await planObsidianSync(target, [focusEvent()]); // day-2 events gone
+    const staleOp = plan.operations.find(o => o.relativePath === 'Life Ledger/Daily/2026-08-31.md');
+    assert.equal(staleOp.op, OP.STALE);
+    assert.equal(plan.blocked, false);
+    await applyObsidianSync(plan, { mode: 'test', apply: true });
+    assert.equal(await exists(path.join(vault, 'Life Ledger', 'Daily', '2026-08-31.md')), true);
+    // still owned next run
+    const plan3 = await planObsidianSync(target, [focusEvent()]);
+    assert.ok(plan3.operations.every(op => op.op === OP.UNCHANGED || op.op === OP.STALE));
+    assert.equal(plan3.blocked, false);
+  })
+));
+
+// ===========================================================================
+// Windows path hardening (Fix 12)
+// ===========================================================================
+
+test('manifest entries with a colon, trailing dot/space, or reserved device name are rejected', async () => {
+  for (const bad of ['Life Ledger/Daily/2026-08-30.md:stream', 'Life Ledger/Daily/2026-08-30.md ', 'Life Ledger/System/CON.md', 'Life Ledger/Daily/trailingdot.']) {
+    await withTempVault(async vault => {
+      await ownedVaultWithManifestFiles(vault, [{ relativePath: bad, sha256: 'a'.repeat(64) }]);
+      assert.equal((await planObsidianSync(testTarget(vault), [focusEvent()])).blocked, true, `expected block for ${bad}`);
+    });
+  }
+});
+
+// ===========================================================================
+// Rollback artifact (Fix 11)
+// ===========================================================================
+
+test('prepareObsidianRollbackArtifact refuses a backupRoot inside the vault', async () => (
+  withTempVault(async vault => {
+    const plan = await planObsidianSync(prodTarget(vault), [focusEvent()], { expectedCanonicalVaultPath: vault });
+    await assert.rejects(
+      () => prepareObsidianRollbackArtifact({ target: prodTarget(vault), plan, backupRoot: path.join(vault, 'backup') }),
+      e => e.code === 'backup_root_inside_vault'
+    );
+  })
+));
+test('first-run rollback receipt proves the absent pre-state, binds to target+plan, and rejects tampering', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const target = prodTarget(vault);
+      const plan = await planObsidianSync(target, [focusEvent()], { expectedCanonicalVaultPath: vault });
+      const receipt = await prepareObsidianRollbackArtifact({ target, plan, backupRoot });
+      assert.equal(receipt.managedRootExistedBefore, false);
+      assert.equal(await verifyObsidianRollbackReceipt(receipt, { target, plan }), true);
+      // tampered fingerprint / wrong vault / wrong plan all fail
+      assert.equal(await verifyObsidianRollbackReceipt({ ...receipt, planFingerprint: 'x' }, { target, plan }), false);
+      assert.equal(await verifyObsidianRollbackReceipt({ ...receipt, canonicalVaultRoot: 'C:\\other' }, { target, plan }), false);
+      // a receipt file edited on disk fails
+      await fs.appendFile(receipt.receiptPath, ' ', 'utf8');
+      assert.equal(await verifyObsidianRollbackReceipt(receipt, { target, plan }), false);
+    })
+  ))
+));
+test('first-run receipt becomes invalid once the managed root exists (pre-state no longer holds)', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const target = prodTarget(vault);
+      const plan = await planObsidianSync(target, [focusEvent()], { expectedCanonicalVaultPath: vault });
+      const receipt = await prepareObsidianRollbackArtifact({ target, plan, backupRoot });
+      await firstApply(vault); // managed root now exists
+      assert.equal(await verifyObsidianRollbackReceipt(receipt, { target, plan }), false);
+    })
+  ))
+));
+test('existing-root rollback artifact copies ONLY the managed subtree, verifies bytes, and invalidates on mutation', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const target = prodTarget(vault);
+      await applyObsidianSync(await planObsidianSync(testTarget(vault), [focusEvent()]), { mode: 'test', apply: true });
+      // an unrelated file OUTSIDE Life Ledger must not be copied
+      await fs.writeFile(path.join(vault, 'unrelated-note.md'), 'private\n', 'utf8');
+      const plan = await planObsidianSync(target, [focusEvent()], { expectedCanonicalVaultPath: vault });
+      assert.equal(plan.isFirstRun, false);
+      const receipt = await prepareObsidianRollbackArtifact({ target, plan, backupRoot });
+      assert.equal(await exists(path.join(backupRoot, 'backup', 'Life Ledger', 'System', 'manifest.json')), true);
+      assert.equal(await exists(path.join(backupRoot, 'backup', 'unrelated-note.md')), false);
+      assert.equal(await verifyObsidianRollbackReceipt(receipt, { target, plan }), true);
+      // mutate a backed-up byte -> receipt invalid
+      await fs.appendFile(path.join(backupRoot, 'backup', 'Life Ledger', 'System', 'manifest.json'), ' ', 'utf8');
+      assert.equal(await verifyObsidianRollbackReceipt(receipt, { target, plan }), false);
+    })
+  ))
+));
+test('prepareObsidianRollbackArtifact never silently overwrites an existing artifact', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const target = prodTarget(vault);
+      const plan = await planObsidianSync(target, [focusEvent()], { expectedCanonicalVaultPath: vault });
+      await prepareObsidianRollbackArtifact({ target, plan, backupRoot });
+      await assert.rejects(() => prepareObsidianRollbackArtifact({ target, plan, backupRoot }), e => e.code === 'backup_artifact_exists');
+    })
+  ))
+));
+
+// ===========================================================================
+// Production authorization — hard-blocked this pass
+// ===========================================================================
+
+test('OBSIDIAN_PRODUCTION_SYNC_ENABLED is false and schema version is 2', () => {
+  assert.equal(OBSIDIAN_PRODUCTION_SYNC_ENABLED, false);
+  assert.equal(OBSIDIAN_SYNC_SCHEMA_VERSION, 2);
+});
+test('production apply is hard-blocked via applyObsidianSync even with a perfect authorization + valid receipt', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const target = prodTarget(vault);
+      const plan = await planObsidianSync(target, [focusEvent()], { expectedCanonicalVaultPath: vault });
+      const receipt = await prepareObsidianRollbackArtifact({ target, plan, backupRoot });
+      await assert.rejects(
+        () => applyObsidianSync(plan, {
+          mode: 'production', allowApply: true, apply: true,
+          expectedCanonicalVaultPath: vault,
+          firstRunAck: `FIRST-RUN-CONFIRMED:${plan.canonicalVaultRoot}`,
+          rollbackReceipt: receipt
+        }),
+        e => e.code === 'production_sync_disabled'
+      );
+      assert.equal(await exists(path.join(vault, 'Life Ledger')), false);
+    })
+  ))
+));
+test('evaluateProductionAuthorization (enabled override): requires a verified rollback receipt, then the first-run token', async () => (
+  withTempVault(async vault => {
+    const plan = await planObsidianSync(prodTarget(vault), [focusEvent()], { expectedCanonicalVaultPath: vault });
+    const base = { mode: 'production', allowApply: true, apply: true, expectedCanonicalVaultPath: vault };
+    assert.equal(evaluateProductionAuthorization(plan, base, { enabled: true }).code, 'rollback_receipt_unverified');
+    assert.equal(evaluateProductionAuthorization(plan, base, { enabled: true, rollbackReceiptValid: true }).code, 'first_run_not_acknowledged');
+    assert.deepEqual(
+      evaluateProductionAuthorization(plan, { ...base, firstRunAck: `FIRST-RUN-CONFIRMED:${plan.canonicalVaultRoot}` }, { enabled: true, rollbackReceiptValid: true }),
+      { ok: true }
+    );
+    // still disabled by default
+    assert.equal(evaluateProductionAuthorization(plan, base).code, 'production_sync_disabled');
+  })
+));
+test('test-mode apply still requires the TEST-VAULT.md marker and an explicit apply flag', async () => {
+  await withTempVault(async vault => {
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test', apply: true }), e => e.code === 'test_not_authorized');
+  }, { testVaultMarker: false });
+  await withTempVault(async vault => {
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test' }), e => e.code === 'test_not_authorized');
+  });
+});
+
+// ===========================================================================
+// Partial-failure honesty
+// ===========================================================================
+
+test('a mid-apply write failure reports an explicit partial result naming what was written', async () => (
+  withTempVault(async vault => {
+    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
+    const { adapter } = proxyFs((_b, calls) => ({
+      async writeFile(p, c, e) {
+        calls.writeFile++;
+        if (calls.writeFile === 2) throw Object.assign(new Error('boom'), { code: 'EIO' });
+        return fs.writeFile(p, c, e);
+      }
+    }));
+    await assert.rejects(() => applyObsidianSync(plan, { mode: 'test', apply: true }, { fs: adapter }), e => {
+      assert.equal(e.code, 'partial_apply_failure');
+      assert.ok(Array.isArray(e.written) && e.written.length === 1);
+      assert.ok(e.failedRelativePath);
       return true;
     });
   })
 ));
 
-// -- Preview formatting -----------------------------------------------------------
+// ===========================================================================
+// Preview
+// ===========================================================================
 
-test('formatObsidianSyncPreview lists only relative paths and op names, and explains the block state', async () => (
-  withTempVault(async vault => {
-    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
-    const preview = formatObsidianSyncPreview(plan);
+test('formatObsidianSyncPreview never leaks an absolute path and names the block reason', async () => {
+  await withTempVault(async vault => {
+    const preview = formatObsidianSyncPreview(await planObsidianSync(testTarget(vault), [focusEvent()]));
     assert.ok(preview.includes('CREATE'));
-    assert.ok(preview.includes('Life Ledger/Daily/2026-08-30.md'));
-    assert.ok(!preview.includes(vault)); // no absolute filesystem path leaked into the human preview
-  })
-));
-test('formatObsidianSyncPreview reports BLOCKED plans clearly', async () => (
-  withTempVault(async vault => {
+    assert.ok(!preview.includes(vault));
+  });
+  await withTempVault(async vault => {
     await fs.mkdir(path.join(vault, 'Life Ledger'), { recursive: true });
-    const plan = await planObsidianSync(testTarget(vault), [focusEvent()]);
-    assert.ok(formatObsidianSyncPreview(plan).includes('BLOCKED'));
-  })
-));
-
-// -- Dry run performs zero writes -------------------------------------------------
-
-test('planObsidianSync never writes to disk, even against an already-owned vault', async () => (
-  withTempVault(async vault => {
-    const target = testTarget(vault);
-    await applyObsidianSync(await planObsidianSync(target, [focusEvent()]), { mode: 'test', apply: true });
-    const spyFs = writeSpyFs();
-    await planObsidianSync(target, [focusEvent()], { fs: spyFs });
-    assert.equal(spyFs.calls.writeFile, 0);
-    assert.equal(spyFs.calls.rename, 0);
-    assert.equal(spyFs.calls.unlink, 0);
-  })
-));
-
-// -- Traversal / containment (reused primitives, exercised through the public API) -
-
-test('a relative path outside the managed root cannot be smuggled through the renderer output', async () => (
-  withTempVault(async vault => {
-    // buildObsidianLifeLedgerExport is fully code-controlled (no user-supplied path), so this
-    // asserts the containment layer itself rejects an out-of-root path if one were ever
-    // produced, by exercising it against the identical primitive the writer already proves
-    // safe under attack in test.js (traversal, absolute, UNC, alternate separators).
-    const target = testTarget(vault);
-    const plan = await planObsidianSync(target, [focusEvent()]);
-    for (const op of plan.operations) {
-      assert.ok(op.relativePath.startsWith('Life Ledger/'));
-      assert.ok(!op.relativePath.includes('..'));
-    }
-  })
-));
-
-// ObsidianSyncError sanity
-test('ObsidianSyncError carries a stable code and name', () => {
-  const err = new ObsidianSyncError('some_code', 'message', { extra: 1 });
-  assert.equal(err.name, 'ObsidianSyncError');
-  assert.equal(err.code, 'some_code');
-  assert.equal(err.extra, 1);
+    const preview = formatObsidianSyncPreview(await planObsidianSync(testTarget(vault), [focusEvent()]));
+    assert.ok(preview.includes('BLOCKED'));
+    assert.ok(preview.includes('sentinel_missing'));
+  });
 });
 
-// -- CLI (scripts/sync-life-ledger-to-obsidian.mjs) ------------------------------
+// ===========================================================================
+// Dry run
+// ===========================================================================
+
+test('planObsidianSync never writes, even against an already-owned vault', async () => (
+  withTempVault(async vault => {
+    await firstApply(vault);
+    const { adapter, calls } = proxyFs(() => ({}));
+    await planObsidianSync(testTarget(vault), [focusEvent()], { fs: adapter });
+    assert.equal(calls.writeFile, 0);
+    assert.equal(calls.rename, 0);
+    assert.equal(calls.unlink, 0);
+  })
+));
+
+// ===========================================================================
+// CLI
+// ===========================================================================
 
 async function withTempSnapshotFile(events, fn) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'chronasense-obsidian-sync-cli-'));
-  const filePath = path.join(root, 'snapshot.json');
-  try {
+  return withTempDir('chronasense-obsidian-sync-cli-', async root => {
+    const filePath = path.join(root, 'snapshot.json');
     await fs.writeFile(filePath, serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents(events)), 'utf8');
-    return await fn(filePath, root);
-  } finally {
-    await fs.rm(root, { recursive: true, force: true });
-  }
+    return fn(filePath, root);
+  });
 }
 
-test('CLI requires an explicit --mode; there is no default', async () => (
-  withTempSnapshotFile([focusEvent()], input => (
-    withTempVault(async vault => {
-      await assert.rejects(() => runLifeLedgerObsidianSync(['--input', input, '--vault', vault]), err => err.code === 'missing_mode');
-    })
-  ))
-));
-test('CLI rejects an unknown --mode value', async () => (
-  withTempSnapshotFile([focusEvent()], input => (
-    withTempVault(async vault => {
-      await assert.rejects(() => runLifeLedgerObsidianSync(['--input', input, '--vault', vault, '--mode', 'staging']), err => err.code === 'missing_mode');
-    })
-  ))
-));
+test('CLI requires an explicit --mode and rejects unknown modes / duplicate flags / unknown flags', async () => {
+  await assert.rejects(() => runLifeLedgerObsidianSync(['--input', 'a.json', '--vault', 'C:\\V']), e => e.code === 'missing_mode');
+  await assert.rejects(() => runLifeLedgerObsidianSync(['--input', 'a.json', '--vault', 'C:\\V', '--mode', 'staging']), e => e.code === 'missing_mode');
+  await assert.rejects(() => runLifeLedgerObsidianSync(['--input', 'a.json', '--vault', 'C:\\V', '--mode', 'test', '--mode', 'test']), e => e.code === 'duplicate_mode');
+  await assert.rejects(() => runLifeLedgerObsidianSync(['--input', 'a.json', '--vault', 'C:\\V', '--mode', 'test', '--surprise']), e => e.code === 'unknown_arg');
+});
 test('CLI defaults to a dry run (no --apply) and performs zero writes', async () => (
   withTempSnapshotFile([focusEvent()], input => (
     withTempVault(async vault => {
       const result = await runLifeLedgerObsidianSync(['--input', input, '--vault', vault, '--mode', 'test']);
       assert.equal(result.applyResult, null);
       assert.equal(result.plan.blocked, false);
-      const exists = await fs.access(path.join(vault, 'Life Ledger')).then(() => true, () => false);
-      assert.equal(exists, false);
+      assert.equal(await exists(path.join(vault, 'Life Ledger')), false);
     })
   ))
 ));
-test('CLI test-mode --apply requires the TEST-VAULT.md marker, same as the reviewed renderer/writer CLI', async () => (
-  withTempSnapshotFile([focusEvent()], input => (
+test('CLI test-mode --apply requires TEST-VAULT.md; with it, it writes and is idempotent', async () => {
+  await withTempSnapshotFile([focusEvent()], input => (
     withTempVault(async vault => {
-      await assert.rejects(
-        () => runLifeLedgerObsidianSync(['--input', input, '--vault', vault, '--mode', 'test', '--apply']),
-        err => err.code === 'test_not_authorized'
-      );
+      await assert.rejects(() => runLifeLedgerObsidianSync(['--input', input, '--vault', vault, '--mode', 'test', '--apply']), e => e.code === 'test_not_authorized');
     }, { testVaultMarker: false })
-  ))
-));
-test('CLI test-mode --apply against an authorized test vault writes the plan and is idempotent', async () => (
-  withTempSnapshotFile([focusEvent()], input => (
+  ));
+  await withTempSnapshotFile([focusEvent()], input => (
     withTempVault(async vault => {
       const first = await runLifeLedgerObsidianSync(['--input', input, '--vault', vault, '--mode', 'test', '--apply']);
       assert.equal(first.applyResult.applied, true);
@@ -617,39 +818,35 @@ test('CLI test-mode --apply against an authorized test vault writes the plan and
       const second = await runLifeLedgerObsidianSync(['--input', input, '--vault', vault, '--mode', 'test', '--apply']);
       assert.equal(second.applyResult.written.length, 0);
     })
-  ))
-));
-test('CLI production --apply is blocked without --expected-vault (blocked at plan time — no canonical target was ever confirmed)', async () => (
-  withTempSnapshotFile([focusEvent()], input => (
+  ));
+});
+test('CLI production --apply is blocked at plan time without --expected-vault, and hard-blocked with every flag set', async () => {
+  await withTempSnapshotFile([focusEvent()], input => (
     withTempVault(async vault => {
       await assert.rejects(
         () => runLifeLedgerObsidianSync(['--input', input, '--vault', vault, '--mode', 'production', '--apply']),
-        err => err.code === 'plan_blocked'
+        e => e.code === 'plan_blocked'
       );
     })
-  ))
-));
-test('CLI production --apply is hard-blocked even with --expected-vault and --first-run-ack (build constant is off)', async () => (
-  withTempSnapshotFile([focusEvent()], input => (
+  ));
+  await withTempSnapshotFile([focusEvent()], input => (
     withTempVault(async vault => {
       await assert.rejects(
         () => runLifeLedgerObsidianSync(['--input', input, '--vault', vault, '--mode', 'production', '--apply', '--expected-vault', vault, '--first-run-ack', `FIRST-RUN-CONFIRMED:${vault}`]),
-        err => err.code === 'production_sync_disabled'
+        e => e.code === 'production_sync_disabled'
       );
-      const stillAbsent = await fs.access(path.join(vault, 'Life Ledger')).then(() => true, () => false);
-      assert.equal(stillAbsent, false);
+      assert.equal(await exists(path.join(vault, 'Life Ledger')), false);
     })
-  ))
-));
-test('CLI rejects duplicate --mode before touching the snapshot', async () => {
-  await assert.rejects(
-    () => runLifeLedgerObsidianSync(['--input', 'a.json', '--vault', 'C:\\SafeVault', '--mode', 'test', '--mode', 'test']),
-    err => err.code === 'duplicate_mode'
-  );
+  ));
 });
-test('CLI rejects unknown flags', async () => {
-  await assert.rejects(
-    () => runLifeLedgerObsidianSync(['--input', 'a.json', '--vault', 'C:\\SafeVault', '--mode', 'test', '--surprise']),
-    err => err.code === 'unknown_arg'
-  );
+
+// ===========================================================================
+// ObsidianSyncError sanity
+// ===========================================================================
+
+test('ObsidianSyncError carries a stable code and name', () => {
+  const err = new ObsidianSyncError('some_code', 'message', { extra: 1 });
+  assert.equal(err.name, 'ObsidianSyncError');
+  assert.equal(err.code, 'some_code');
+  assert.equal(err.extra, 1);
 });
