@@ -167,7 +167,7 @@ function learningBlock(sheet) {
     parts.push(noteLine('No learning plan yet.'));
   } else if (l.activePlan) {
     const p = l.activePlan;
-    parts.push(statLine('Current plan', p.title));
+    parts.push(statLine('Most recent plan', p.title));
     if (p.hasSteps) {
       parts.push(
         `<div class="lcs-progress-row">`
