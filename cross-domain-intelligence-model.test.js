@@ -21,7 +21,7 @@ import test from 'node:test';
 
 import { createLifeLedgerMemoryStore, upsertLifeLedgerEvent } from './life-ledger-core.js';
 import { buildLifeFeed } from './life-feed-model.js';
-import { analyzeCapabilityCareer } from './capability-career-analytics.js';
+import { analyzeCapabilityCareer, CAPABILITY_CAREER_ANALYTICS_RULES } from './capability-career-analytics.js';
 import {
   createLearningPlan, addPhase, addLesson, addStep, completeStep
 } from './learning-plan-model.js';
@@ -186,6 +186,22 @@ function intelFrom({ events = [], plans = [], profile: prof = null } = {}) {
   return buildCrossDomainIntelligence({ characterSheet: cs, ledgerEvents: events, learningPlans: plans, capabilityProfile: prof });
 }
 
+// One live plan-step completion mapping to `planId` — makes that plan "actively tracked" so a
+// non-heuristic learning candidate can exist (a plan picked only by recency never can).
+function trackedCompletion(planId, o = {}) {
+  return planStepDraft({
+    id: `${planId}:${o.stepId || 'tracked-s1'}`,
+    stepId: o.stepId || 'tracked-s1',
+    completedAt: o.completedAt || '2026-08-29T12:00:00.000Z',
+    source: { planId, planTitle: o.planTitle || 'tracked', stepId: o.stepId || 'tracked-s1' }
+  });
+}
+function ledgerWithTracked(planId, o = {}) {
+  const store = makeStore();
+  ingest(store, trackedCompletion(planId, o));
+  return store.listEvents();
+}
+
 // ═════════════════════════════════════════════════════════════════════════════════════════
 console.log('\nCross-Domain Intelligence — SCENARIO MATRIX');
 
@@ -221,7 +237,11 @@ test('A. career target + incomplete aligned plan → concrete learning candidate
   assert.ok(intel.recommendedAction.why.some(r => /Automation Specialist/.test(r)));
 });
 
-test('B. career target + shipping stall + explicit shippable project → shipping candidate beats more learning', () => {
+test('B. career target + shipping stall + explicit shippable project → shipping candidate beats aligned learning', () => {
+  const store = makeStore();
+  ingest(store, trackedCompletion('plan-a', { stepId: 's1' }));
+  const events = store.listEvents();
+  const planStepEventId = events[0].eventId;
   const plan = samplePlan({ id: 'plan-a', stepCount: 5, completeSteps: 1 });
   const prof = profile({
     skills: [skill('sk1', 'Automation')],
@@ -230,22 +250,32 @@ test('B. career target + shipping stall + explicit shippable project → shippin
     evidence: [
       ev('e1', 'sk1', 'execution', '2026-08-20T00:00:00.000Z', { projectId: 'pr1' }),
       ev('e2', 'sk1', 'execution', '2026-08-22T00:00:00.000Z', { projectId: 'pr1' }),
-      ev('e3', 'sk1', 'shipping', '2026-08-24T00:00:00.000Z', { projectId: 'pr1' })
+      ev('e3', 'sk1', 'shipping', '2026-08-24T00:00:00.000Z', { projectId: 'pr1' }),
+      // recent link → the learning candidate is genuinely target-aligned (HIGH / tier 2)
+      ledgerEv('e4', 'sk1', 'practice', '2026-08-28T00:00:00.000Z', planStepEventId)
     ]
   });
-  const intel = intelFrom({ plans: [plan], profile: prof });
+  const intel = buildCrossDomainIntelligence({
+    characterSheet: sheetFrom({ events, plans: [plan], profile: prof }),
+    ledgerEvents: events, learningPlans: [plan], capabilityProfile: prof
+  });
 
+  const learning = intel.candidates.find(c => c.sourceKind === 'learning-plan-step');
+  assert.ok(learning && learning.aligned === true, 'learning is genuinely aligned here');
+  assert.equal(learning.priorityClass, CDI_PRIORITY_CLASS.ADVANCE_ALIGNED_COMMITTED_WORK);
+
+  // ...and the anchored shipping/portfolio action still outranks it
   assert.equal(intel.recommendedAction.sourceKind, 'capability-next-action');
   assert.equal(intel.recommendedAction.priorityClass, CDI_PRIORITY_CLASS.RESOLVE_STALL_WITH_CONCRETE_PROJECT);
   assert.equal(intel.recommendedAction.evidenceStrength, CDI_EVIDENCE_STRENGTH.HIGH);
   assert.match(intel.recommendedAction.action, /Webhook Demo/);
-  // the learning step is still offered as an alternative, not dropped
   assert.equal(intel.alternatives.length, 1);
   assert.equal(intel.alternatives[0].sourceKind, 'learning-plan-step');
   assert.ok(intel.alternatives[0].outrankedBy.reason.length > 0);
 });
 
-test('C. shipping stall but NO explicit project action → shipping is an attention SIGNAL, learning is recommended, no task invented', () => {
+test('C. shipping stall but NO explicit project action → shipping is an attention SIGNAL, actively tracked learning is recommended, no task invented', () => {
+  const events = ledgerWithTracked('plan-a');
   const plan = samplePlan({ id: 'plan-a', stepCount: 5, completeSteps: 1 });
   const prof = profile({
     skills: [skill('sk1', 'Automation')],
@@ -255,11 +285,12 @@ test('C. shipping stall but NO explicit project action → shipping is an attent
       ev('e2', 'sk1', 'execution', '2026-08-22T00:00:00.000Z')
     ]
   });
-  const intel = intelFrom({ plans: [plan], profile: prof });
+  const intel = intelFrom({ events, plans: [plan], profile: prof });
 
   // no capability candidate — the shipping stall has nothing concrete to point at
   assert.ok(!intel.candidates.some(c => c.sourceKind === 'capability-next-action'));
   assert.equal(intel.recommendedAction.sourceKind, 'learning-plan-step');
+  assert.equal(intel.recommendedAction.evidenceStrength, CDI_EVIDENCE_STRENGTH.MEDIUM);
   // shipping stall is present as an attention signal
   assert.ok(intel.signals.some(s => s.id.startsWith('capability-stall::shipping-stall') && s.severity === 'attention'));
 });
@@ -344,7 +375,9 @@ test('I. no focus session today → no productivity/moral recommendation or atte
 
 test('J. tombstoned / revised evidence → only current truth drives the result', () => {
   const store = makeStore();
-  // completed then reopened (tombstone) — must not count as a live completion
+  // a LIVE completion of step s2 keeps the plan actively tracked
+  ingest(store, trackedCompletion('plan-a', { stepId: 's2', completedAt: '2026-08-28T16:00:00.000Z' }));
+  // step s1 completed then reopened (tombstone) — must not count as a live completion
   ingest(store, planStepDraft({ id: 'plan-a:s1', stepId: 's1', completedAt: '2026-08-30T16:00:00.000Z', source: { planId: 'plan-a', planTitle: 'Roadmap', stepId: 's1' } }));
   ingest(store, {
     ...planStepDraft({ id: 'plan-a:s1', stepId: 's1', completedAt: '2026-08-30T16:00:00.000Z', source: { planId: 'plan-a', planTitle: 'Roadmap', stepId: 's1' } }),
@@ -352,23 +385,27 @@ test('J. tombstoned / revised evidence → only current truth drives the result'
     tombstone: { active: true, deletedAt: '2026-08-31T09:00:00.000Z', reason: 'user_delete', provenance: { sourceOperation: 'delete', sourceRecordKind: 'chronasense.plan_step', evidence: ['chronasense.plan_step:s1:reopened'] } }
   });
   const events = store.listEvents();
+  const tombstonedEventId = events.find(e => e.tombstone && e.tombstone.active).eventId;
   const plan = samplePlan({ id: 'plan-a', stepCount: 4, completeSteps: 0 });
   const prof = profile({
     skills: [skill('sk1', 'Automation')],
     careerTargets: [target('ct1', 'Automation Specialist', ['sk1'])],
     evidence: [
       ev('e1', 'sk1', 'knowledge', '2026-08-10T00:00:00.000Z'),
-      ledgerEv('e2', 'sk1', 'practice', '2026-08-30T17:00:00.000Z', events[0].eventId)
+      // recent, target-linked — but points at the TOMBSTONED step event
+      ledgerEv('e2', 'sk1', 'practice', '2026-08-30T17:00:00.000Z', tombstonedEventId)
     ]
   });
   const intel = buildCrossDomainIntelligence({
     characterSheet: sheetFrom({ events, plans: [plan], profile: prof }),
     ledgerEvents: events, learningPlans: [plan], capabilityProfile: prof
   });
-  // the tombstoned completion cannot make the learning candidate "aligned"
+  // the plan is actively tracked (live s2 completion) so a candidate exists…
   const learningCandidate = intel.candidates.find(c => c.sourceKind === 'learning-plan-step');
   assert.ok(learningCandidate);
+  // …but the tombstoned completion cannot make it "aligned" → MEDIUM, not HIGH
   assert.equal(learningCandidate.aligned, false);
+  assert.equal(learningCandidate.evidenceStrength, CDI_EVIDENCE_STRENGTH.MEDIUM);
 });
 
 test('K. duplicate candidates collapse deterministically (stable provenance, not display text)', () => {
@@ -401,10 +438,162 @@ test('L. multiple valid candidates rank deterministically by explicit tier then 
     characterSheet: sheetFrom({ events, plans: [plan], profile: prof }),
     ledgerEvents: events, learningPlans: [plan], capabilityProfile: prof
   });
-  // execute-skill stall (class 3) outranks a non-aligned learning step (class 4)
+  // execute-skill stall (class 3) outranks a non-aligned but actively tracked learning step (class 4)
   assert.equal(intel.recommendedAction.sourceKind, 'capability-next-action');
   assert.equal(intel.recommendedAction.priorityClass, CDI_PRIORITY_CLASS.RESOLVE_STALL);
   assert.equal(intel.alternatives[0].sourceKind, 'learning-plan-step');
+  assert.equal(intel.alternatives[0].evidenceStrength, CDI_EVIDENCE_STRENGTH.MEDIUM);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════
+console.log('\nCross-Domain Intelligence — SCENARIOS M / N / O (recommendation honesty)');
+
+test('M. a recency-fallback plan (no mapped completion, no alignment, old updatedAt) is NEVER a candidate — abstain, signal stays', () => {
+  const planOld = samplePlan({ id: 'plan-old', title: 'Old Plan', stepCount: 5, completeSteps: 1, updatedAt: '2026-01-01T00:00:00.000Z' });
+  // no ledgerEvents, no capabilityProfile → nothing maps to plan-old, no target
+  const intel = intelFrom({ plans: [planOld] });
+
+  assert.equal(intel.abstained, true);
+  assert.equal(intel.recommendedAction, null);
+  assert.ok(!intel.candidates.some(c => c.sourceKind === 'learning-plan-step'));
+  assert.equal(intel.explanation.confidence, CDI_EVIDENCE_STRENGTH.INSUFFICIENT);
+  // the factual attention signal remains and still identifies plan + progress + next step
+  const signal = intel.signals.find(s => s.id === 'learning-plan-incomplete::plan-old');
+  assert.ok(signal && signal.severity === 'attention');
+  assert.ok(signal.summary.includes('Old Plan') && signal.summary.includes('1 of 5 steps complete'));
+  assert.ok(/next unfinished step/i.test(signal.detail));
+});
+
+test('M2. multiple recency-fallback plans → still no candidate, still abstain', () => {
+  const a = samplePlan({ id: 'plan-a', title: 'Plan A', stepCount: 4, completeSteps: 0, updatedAt: '2026-02-01T00:00:00.000Z' });
+  const b = samplePlan({ id: 'plan-b', title: 'Plan B', stepCount: 6, completeSteps: 2, updatedAt: '2026-03-01T00:00:00.000Z' });
+  const intel = intelFrom({ plans: [a, b] });
+  assert.equal(intel.abstained, true);
+  assert.ok(!intel.candidates.length);
+});
+
+test('N. metadata-only updatedAt bump makes the Character Sheet pick Plan B, but Phase 8 must NOT recommend a Plan B step', () => {
+  // Plan A: older updatedAt. Plan B: updatedAt bumped "today" by a title edit; NO Ledger completion maps to B.
+  const planA = samplePlan({ id: 'plan-a', title: 'Plan A', stepCount: 5, completeSteps: 1, updatedAt: '2026-08-01T00:00:00.000Z' });
+  const planB = samplePlan({ id: 'plan-b', title: 'Plan B (renamed today)', stepCount: 5, completeSteps: 1, updatedAt: NOW_ISO });
+  const cs = sheetFrom({ plans: [planA, planB] });
+  // Character Sheet's heuristic picks the most-recently-updated plan…
+  assert.equal(cs.learning.activePlan.id, 'plan-b');
+  assert.equal(cs.learning.activePlan.title, 'Plan B (renamed today)');
+
+  const intel = buildCrossDomainIntelligence({ characterSheet: cs, ledgerEvents: [], learningPlans: [planA, planB], capabilityProfile: null });
+  // …but Phase 8 refuses to escalate that guess into a recommendation
+  assert.equal(intel.abstained, true);
+  assert.equal(intel.recommendedAction, null);
+  assert.ok(!JSON.stringify(intel.candidates).includes('plan-b'));
+  // Plan B still appears as factual "most recent plan" context in the attention signal only
+  const signal = intel.signals.find(s => s.id === 'learning-plan-incomplete::plan-b');
+  assert.ok(signal && signal.summary.includes('Plan B (renamed today)'));
+  assert.ok(/picked only by recency/i.test(intel.abstentionReason));
+});
+
+test('N2. flipping which plan updatedAt is newest does not change the (abstained) outcome — no recommendation churn from metadata', () => {
+  const mk = (aUpdated, bUpdated) => {
+    const planA = samplePlan({ id: 'plan-a', title: 'Plan A', stepCount: 5, completeSteps: 1, updatedAt: aUpdated });
+    const planB = samplePlan({ id: 'plan-b', title: 'Plan B', stepCount: 5, completeSteps: 1, updatedAt: bUpdated });
+    return intelFrom({ plans: [planA, planB] });
+  };
+  const aNewer = mk('2026-08-31T00:00:00.000Z', '2026-08-01T00:00:00.000Z');
+  const bNewer = mk('2026-08-01T00:00:00.000Z', '2026-08-31T00:00:00.000Z');
+  assert.equal(aNewer.abstained, true);
+  assert.equal(bNewer.abstained, true);
+  assert.equal(aNewer.recommendedAction, null);
+  assert.equal(bNewer.recommendedAction, null);
+});
+
+test('O. an OLD target-linked completion link → candidate stays (plan is tracked) but MEDIUM, not HIGH; explanation does not imply current alignment', () => {
+  const store = makeStore();
+  // a CURRENT tracked completion keeps the plan actionable
+  ingest(store, trackedCompletion('plan-a', { stepId: 's9', completedAt: '2026-08-28T12:00:00.000Z' }));
+  // a target-linkable completion whose linking evidence is OLD
+  ingest(store, planStepDraft({ id: 'plan-a:s1', stepId: 's1', completedAt: '2026-05-01T16:00:00.000Z', source: { planId: 'plan-a', planTitle: 'Roadmap', stepId: 's1' } }));
+  const events = store.listEvents();
+  const oldLinkedEventId = events.find(e => e.sourceEntityId === 'plan-a:s1').eventId;
+  const plan = samplePlan({ id: 'plan-a', stepCount: 6, completeSteps: 1 });
+  const prof = profile({
+    skills: [skill('sk1', 'Automation')],
+    careerTargets: [target('ct1', 'Automation Specialist', ['sk1'])],
+    evidence: [
+      ev('e1', 'sk1', 'execution', '2026-05-02T00:00:00.000Z'),
+      // observedAt is ~120 days before NOW → older than CAPABILITY_CAREER_ANALYTICS_RULES.recentDays (30)
+      ledgerEv('e2', 'sk1', 'practice', '2026-05-02T00:00:00.000Z', oldLinkedEventId)
+    ]
+  });
+  const intel = buildCrossDomainIntelligence({
+    characterSheet: sheetFrom({ events, plans: [plan], profile: prof }),
+    ledgerEvents: events, learningPlans: [plan], capabilityProfile: prof
+  });
+  const learning = intel.candidates.find(c => c.sourceKind === 'learning-plan-step');
+  assert.ok(learning, 'the plan is actively tracked, so a candidate remains');
+  assert.equal(learning.evidenceStrength, CDI_EVIDENCE_STRENGTH.MEDIUM);
+  assert.equal(learning.aligned, false);
+  assert.equal(learning.priorityClass, CDI_PRIORITY_CLASS.ADVANCE_LEARNING_PLAN);
+  // explanation must not claim current target alignment
+  const whyBlob = learning.why.join(' ');
+  assert.ok(!/links? .*to the career target/i.test(whyBlob));
+  assert.ok(/actively tracked plan/i.test(whyBlob));
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════
+console.log('\nCross-Domain Intelligence — ALIGNMENT RECENCY BOUNDARY');
+
+const RECENT_DAYS_MS = CAPABILITY_CAREER_ANALYTICS_RULES.recentDays * 86400000;
+
+test('the alignment recency window is the Career analyzer recentDays (no independent magic number)', () => {
+  assert.equal(typeof CAPABILITY_CAREER_ANALYTICS_RULES.recentDays, 'number');
+  assert.ok(CAPABILITY_CAREER_ANALYTICS_RULES.recentDays > 0);
+});
+
+function alignmentBoundaryIntel(linkObservedAt) {
+  const store = makeStore();
+  // current tracked completion → candidate is always actionable
+  ingest(store, trackedCompletion('plan-a', { stepId: 's9', completedAt: '2026-08-20T12:00:00.000Z' }));
+  // the completion the capability evidence links to
+  ingest(store, planStepDraft({ id: 'plan-a:s1', stepId: 's1', completedAt: '2026-07-15T16:00:00.000Z', source: { planId: 'plan-a', planTitle: 'Roadmap', stepId: 's1' } }));
+  const events = store.listEvents();
+  const linkedId = events.find(e => e.sourceEntityId === 'plan-a:s1').eventId;
+  const plan = samplePlan({ id: 'plan-a', stepCount: 6, completeSteps: 1 });
+  const prof = profile({
+    skills: [skill('sk1', 'Automation')],
+    careerTargets: [target('ct1', 'Automation Specialist', ['sk1'])],
+    evidence: [
+      ev('e1', 'sk1', 'execution', '2026-07-01T00:00:00.000Z'),
+      ledgerEv('e2', 'sk1', 'practice', linkObservedAt, linkedId)
+    ]
+  });
+  return buildCrossDomainIntelligence({
+    characterSheet: sheetFrom({ events, plans: [plan], profile: prof }),
+    ledgerEvents: events, learningPlans: [plan], capabilityProfile: prof
+  });
+}
+
+test('observedAt exactly at the lower bound (generatedAt - recentDays) → qualifies → HIGH', () => {
+  const lowerBound = new Date(NOW.getTime() - RECENT_DAYS_MS).toISOString();
+  const intel = alignmentBoundaryIntel(lowerBound);
+  const learning = intel.candidates.find(c => c.sourceKind === 'learning-plan-step');
+  assert.equal(learning.aligned, true);
+  assert.equal(learning.evidenceStrength, CDI_EVIDENCE_STRENGTH.HIGH);
+});
+
+test('observedAt 1 ms before the lower bound → does NOT qualify → MEDIUM (tracked)', () => {
+  const justOutside = new Date(NOW.getTime() - RECENT_DAYS_MS - 1).toISOString();
+  const intel = alignmentBoundaryIntel(justOutside);
+  const learning = intel.candidates.find(c => c.sourceKind === 'learning-plan-step');
+  assert.equal(learning.aligned, false);
+  assert.equal(learning.evidenceStrength, CDI_EVIDENCE_STRENGTH.MEDIUM);
+});
+
+test('observedAt after generatedAt (future) → does NOT qualify → MEDIUM (tracked)', () => {
+  const future = new Date(NOW.getTime() + 1).toISOString();
+  const intel = alignmentBoundaryIntel(future);
+  const learning = intel.candidates.find(c => c.sourceKind === 'learning-plan-step');
+  assert.equal(learning.aligned, false);
+  assert.equal(learning.evidenceStrength, CDI_EVIDENCE_STRENGTH.MEDIUM);
 });
 
 // ═════════════════════════════════════════════════════════════════════════════════════════
@@ -462,11 +651,29 @@ test('Character Sheet parity: coverage states are copied, never re-judged', () =
   }
 });
 
-test('Character Sheet parity: explanation step counts equal the sheet exactly', () => {
+test('Character Sheet parity: step counts Phase 8 reports equal the sheet exactly (never off by one)', () => {
+  // A recency-only plan (no Ledger completion, no target) is NOT a recommendation — but the
+  // factual attention signal still carries the plan progress, and it must match the sheet.
   const plan = samplePlan({ id: 'plan-a', stepCount: 10, completeSteps: 6 });
   const cs = sheetFrom({ plans: [plan] });
   const intel = buildCrossDomainIntelligence({ characterSheet: cs, ledgerEvents: [], learningPlans: [plan], capabilityProfile: null });
   assert.equal(cs.learning.activePlan.completedSteps, 6);
+  assert.equal(intel.abstained, true);
+  assert.equal(intel.recommendedAction, null);
+  const signal = intel.signals.find(s => s.id === 'learning-plan-incomplete::plan-a');
+  assert.ok(signal, 'the learning-plan-incomplete attention signal remains');
+  assert.ok(signal.summary.includes('6 of 10 steps complete'));
+  assert.ok(signal.evidence.some(e => e.value === '6/10'));
+  assert.ok(!JSON.stringify(intel).includes('5 of 10') && !JSON.stringify(intel).includes('5/10'));
+});
+
+test('Character Sheet parity: an actively tracked plan reports the sheet count in the recommendation why', () => {
+  const events = ledgerWithTracked('plan-a');
+  const plan = samplePlan({ id: 'plan-a', stepCount: 10, completeSteps: 6 });
+  const cs = sheetFrom({ events, plans: [plan] });
+  const intel = buildCrossDomainIntelligence({ characterSheet: cs, ledgerEvents: events, learningPlans: [plan], capabilityProfile: null });
+  assert.equal(cs.learning.activePlan.completedSteps, 6);
+  assert.equal(intel.recommendedAction.sourceKind, 'learning-plan-step');
   assert.ok(intel.recommendedAction.why.some(r => r.includes('6 of 10 steps complete')));
   assert.ok(!JSON.stringify(intel).includes('5 of 10'));
 });
@@ -503,9 +710,10 @@ test('Capability analyzer parity: stalls / target / dimensionTotals match a fres
 });
 
 test('Learning parity: the recommended step is exactly the Character Sheet next step (no independent traversal)', () => {
+  const events = ledgerWithTracked('plan-a');
   const plan = samplePlan({ id: 'plan-a', stepCount: 6, completeSteps: 2 });
-  const cs = sheetFrom({ plans: [plan] });
-  const intel = buildCrossDomainIntelligence({ characterSheet: cs, ledgerEvents: [], learningPlans: [plan], capabilityProfile: null });
+  const cs = sheetFrom({ events, plans: [plan] });
+  const intel = buildCrossDomainIntelligence({ characterSheet: cs, ledgerEvents: events, learningPlans: [plan], capabilityProfile: null });
   assert.equal(intel.recommendedAction.sourceId, `${plan.id}::${cs.learning.activePlan.nextStep.stepId}`);
   assert.equal(intel.recommendedAction.title, cs.learning.activePlan.nextStep.stepTitle);
 });
@@ -541,11 +749,12 @@ test('a portfolio/shipping action whose project is NOT linked to the target → 
       ev('e3', 'sk2', 'execution', '2026-08-14T00:00:00.000Z', { projectId: 'pr1' })
     ]
   });
+  const events = ledgerWithTracked('plan-a');
   const plan = samplePlan({ id: 'plan-a', stepCount: 4, completeSteps: 1 });
-  const intel = intelFrom({ plans: [plan], profile: prof });
+  const intel = intelFrom({ events, plans: [plan], profile: prof });
   assert.ok(!intel.candidates.some(c => c.sourceKind === 'capability-next-action' && /Unrelated Side Project/.test(c.action)));
   assert.ok(intel.signals.some(s => s.id.startsWith('capability-stall::portfolio-stall')));
-  // learning remains the recommendation; nothing about the unrelated project is invented
+  // the actively tracked learning plan remains the recommendation; nothing about the unrelated project is invented
   assert.equal(intel.recommendedAction.sourceKind, 'learning-plan-step');
 });
 
@@ -631,9 +840,11 @@ test('an old recordedAt with a recent occurrence still counts by occurrence (imp
 
 test('a revised plan step is read at its current facts: a revision that re-points the planId breaks a stale alignment', () => {
   const store = makeStore();
-  // rev 1 completes a step of plan-a
+  // a live completion of a different step keeps plan-a actively tracked
+  ingest(store, trackedCompletion('plan-a', { stepId: 's9', completedAt: '2026-08-27T12:00:00.000Z' }));
+  // rev 1 completes step s1, attributed to plan-a
   ingest(store, planStepDraft({ id: 'ps1', stepId: 's1', completedAt: '2026-08-30T16:00:00.000Z', source: { planId: 'plan-a', planTitle: 'Roadmap', stepId: 's1' } }));
-  const eventId = store.listEvents()[0].eventId;
+  const eventId = store.listEvents().find(e => e.sourceEntityId === 'ps1').eventId;
   // rev 2 (same identity) corrects the plan it belonged to -> now plan-b
   ingest(store, planStepDraft({ id: 'ps1', stepId: 's1', completedAt: '2026-08-30T16:00:00.000Z', source: { planId: 'plan-b', planTitle: 'Other Roadmap', stepId: 's1' } }));
   const events = store.listEvents();
@@ -641,13 +852,15 @@ test('a revised plan step is read at its current facts: a revision that re-point
   const prof = profile({
     skills: [skill('sk1', 'Automation')],
     careerTargets: [target('ct1', 'Automation Specialist', ['sk1'])],
+    // recent, target-linked — but points at the event whose CURRENT truth now belongs to plan-b
     evidence: [ev('e1', 'sk1', 'execution', '2026-08-10T00:00:00.000Z'), ledgerEv('e2', 'sk1', 'practice', '2026-08-30T17:00:00.000Z', eventId)]
   });
   const cs = sheetFrom({ events, plans: [planA], profile: prof });
   const intel = buildCrossDomainIntelligence({ characterSheet: cs, ledgerEvents: events, learningPlans: [planA], capabilityProfile: prof });
   const learningCandidate = intel.candidates.find(c => c.sourceKind === 'learning-plan-step');
-  // the evidence points at an event whose CURRENT truth belongs to plan-b, not plan-a -> not aligned
+  assert.ok(learningCandidate, 'plan-a is still actively tracked via its live s9 completion');
   assert.equal(learningCandidate.aligned, false);
+  assert.equal(learningCandidate.evidenceStrength, CDI_EVIDENCE_STRENGTH.MEDIUM);
 });
 
 test('a future-dated capability evidence record cannot create alignment', () => {
@@ -710,14 +923,16 @@ test('workout+meal events present but not live → still not evaluated, still no
   assert.ok(!/nutrition|calorie|protein|diet|exercise more|work out more/.test(blob));
 });
 
-test('capability profile that throws in the analyzer → capability not evaluated, learning still works', () => {
+test('capability profile that throws in the analyzer → capability not evaluated, an actively tracked learning plan still works', () => {
+  const events = ledgerWithTracked('plan-a');
   const plan = samplePlan({ id: 'plan-a', stepCount: 4, completeSteps: 1 });
   const brokenProfile = { schemaVersion: 1, skills: [{ id: 'x' }], knowledgeAreas: [], tools: [], careerTargets: [], projects: [], artifacts: [], evidence: [], createdAt: T0, updatedAt: T0 };
-  const cs = buildLifeCharacterSheet({ ledgerEvents: [], learningPlans: [plan], capabilityProfile: brokenProfile, ...OPTS });
-  const intel = buildCrossDomainIntelligence({ characterSheet: cs, ledgerEvents: [], learningPlans: [plan], capabilityProfile: brokenProfile });
+  const cs = buildLifeCharacterSheet({ ledgerEvents: events, learningPlans: [plan], capabilityProfile: brokenProfile, ...OPTS });
+  const intel = buildCrossDomainIntelligence({ characterSheet: cs, ledgerEvents: events, learningPlans: [plan], capabilityProfile: brokenProfile });
   assert.equal(intel.capability.readable, false);
   assert.ok(intel.signals.some(s => s.id === 'capability-unreadable'));
   assert.equal(intel.recommendedAction.sourceKind, 'learning-plan-step');
+  assert.equal(intel.recommendedAction.evidenceStrength, CDI_EVIDENCE_STRENGTH.MEDIUM);
 });
 
 test('malformed / empty character sheet input throws a clear error', () => {
@@ -767,10 +982,11 @@ test('hostile text in a plan / target / project name stays inert plain data (no 
   // the evil string is carried verbatim as a string value, never parsed or expanded
   assert.ok(JSON.stringify(intel).includes(evil.replace(/"/g, '\\"')));
   assert.equal(typeof intel.recommendedAction.action, 'string');
-  // control characters are stripped from rationale text
+  // control characters are stripped from rationale text (recommendation why + attention signals)
   const plan2 = samplePlan({ id: 'p2', title: 'Line1\nLine2\tTab', stepCount: 2, completeSteps: 0 });
-  const intel2 = intelFrom({ plans: [plan2] });
+  const intel2 = intelFrom({ events: ledgerWithTracked('p2'), plans: [plan2] });
   assert.ok(!/[\n\t]/.test(intel2.recommendedAction.why.join(' ')));
+  assert.ok(!/[\n\t]/.test(JSON.stringify(intel2.signals)));
 });
 
 test('language stays neutral — never "failed" / "lazy" / "behind"', () => {
@@ -795,6 +1011,7 @@ test('language stays neutral — never "failed" / "lazy" / "behind"', () => {
 
 test('performance: a large ledger + profile still builds quickly', () => {
   const store = makeStore();
+  ingest(store, trackedCompletion('plan-a')); // one plan-step completion among many events
   for (let i = 0; i < 1500; i += 1) {
     const day = 10 + (i % 18);
     ingest(store, focusDraft({ id: `f-${i}`, startedAt: `2026-08-${String(day).padStart(2, '0')}T14:00:00.000Z`, endedAt: `2026-08-${String(day).padStart(2, '0')}T14:25:00.000Z` }));
