@@ -1,5 +1,41 @@
 # ChronaSense — Changelog
 
+## Phase 8 — recommendation-honesty fixes (post independent review) (branch: feat/cross-domain-intelligence-v1) — 2026-09-02
+changed:
+  - cross-domain-intelligence-model.js — two bounded fixes from the independent review; no
+    redesign, no UI code change:
+    - BLOCKER 1 (bare recency-fallback plan): `learningCandidate()` now returns null when the
+      active plan is neither target-aligned nor actively tracked. The Character Sheet's
+      active-plan pick can fall back to `updatedAt` (a metadata-only edit can flip it) — that
+      heuristic alone must never become a top-level recommendation. The
+      `learning-plan-incomplete` attention signal still carries plan title + progress + next
+      step; the engine abstains (`recommendedAction: null`, confidence INSUFFICIENT). "Actively
+      tracked" = ≥1 current-truth `plan_step_completed` maps to the plan (derived from the feed,
+      not the `latestCompletedStep` proxy).
+    - BLOCKER 2 (plan-level historical alignment): `learningAlignment()` now imports
+      `CAPABILITY_CAREER_ANALYTICS_RULES` and requires a linking evidence record within
+      `recentDays` of `generatedAt` (identical temporal test to `analytics.recentEvidence()` —
+      no new magic number). An old historical link no longer grants HIGH / tier 2 indefinitely;
+      it falls through to non-aligned logic (MEDIUM when the plan is actively tracked).
+    - explanation: HIGH now says recent evidence links *past completed steps* to the target
+      "— not the next step itself"; MEDIUM (tracked, unaligned) states factual tracking only;
+      the recency-fallback abstention reason names the plan as "picked only by recency".
+  - cross-domain-intelligence-model.test.js — 45 model tests (was 35): scenarios M / M2 / N /
+    N2 / O added; alignment recency-boundary tests (observedAt at the lower bound / 1 ms before
+    / in the future); the "Character Sheet parity: step counts" test split into an abstention
+    variant + a tracked-plan variant; B / C / J / L / analyzer-throw / hostile-text /
+    performance / revised-planId / non-target-project fixtures updated to seed an actively
+    tracked completion where a candidate is genuinely expected (they previously encoded the
+    now-removed bare-LOW behavior).
+  - tests/cross-domain-intelligence-ui.spec.js — 13 tests (was 12): a new "recency-only plan
+    is not recommended" abstention-rendering test; the shipping-beats-learning fixture now
+    seeds a tracked completion so learning is a valid alternative; the "aligned learning" test
+    renamed to "actively tracked learning" and asserts the MEDIUM strength tag exactly.
+verification: `node cross-domain-intelligence-model.test.js` 45/45; `npm test` 671 model/unit
+  (0 fail, 0 skip); `npm run test:adapter-contracts` PASS; `npm run lint` 0 errors (19
+  pre-existing warnings); Playwright full suite 208/208; strict `npm run test:cross-repo-compat`
+  3/3 legs PASS, no skips, exit 0; `node --check`, `git diff --check`, control-byte scan (0).
+
 ## Phase 8 — Cross-Domain Intelligence / Highest-Leverage Next Action V1 (branch: feat/cross-domain-intelligence-v1) — 2026-09-01
 added:
   - cross-domain-intelligence-model.js (new — the pure, deterministic, rule-based engine that

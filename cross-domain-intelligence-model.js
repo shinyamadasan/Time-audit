@@ -36,7 +36,12 @@
 // surfaced as an attention SIGNAL — a task is never fabricated to fill the slot.
 
 import { buildLifeFeed } from './life-feed-model.js';
-import { analyzeCapabilityCareer } from './capability-career-analytics.js';
+import { analyzeCapabilityCareer, CAPABILITY_CAREER_ANALYTICS_RULES } from './capability-career-analytics.js';
+
+// A plan→target capability link only counts as CURRENT alignment when a linking evidence
+// record is within the same recency window the Career analyzer itself uses (recentEvidence()).
+// Reused, never re-invented — an old historical link falls through to non-aligned logic.
+const ALIGNMENT_RECENT_WINDOW_MS = CAPABILITY_CAREER_ANALYTICS_RULES.recentDays * 86400000;
 
 // ── Public vocabulary (documented, frozen) ───────────────────────────────────────────────
 
@@ -255,42 +260,51 @@ function anchorProject(analysis) {
   return asArray(project.skillIds).some(id => targetSkillIds.has(id)) ? project : null;
 }
 
-// ── The learning alignment chain (explicit IDs only) ─────────────────────────────────────
-// aligned  ⇔  there is capability evidence (source: 'life-ledger', dimension counted as
-// current) that points at a plan_step_completed event of THIS active plan AND is attached to
-// a skill that is linked to the active career target. This is a real chain of explicit ids:
-//   plan step → Ledger event → capability evidence → target skill → career target.
-function learningAlignment(activePlanId, feed, rawById, capabilityProfile, analysis) {
-  const empty = { aligned: false, evidence: [] };
-  if (!activePlanId || !analysis || !analysis.target) return empty;
-  const targetSkillIds = new Set(asArray(analysis.targetSkillIds));
-  if (!targetSkillIds.size) return empty;
-
-  // current-truth plan_step_completed eventIds for the active plan
-  const planStepEventIds = new Set();
+// current-truth plan_step_completed eventIds for a plan. buildLifeFeed() already excludes
+// tombstones and superseded revisions, so this is exactly the plan's live completion set — a
+// non-empty set means the plan is "actively tracked" (a real signal that this is the plan
+// being worked, unlike the Character Sheet's `updatedAt` recency fallback).
+function planStepEventIdsFor(planId, feed, rawById) {
+  const out = new Set();
+  if (!planId) return out;
   for (const item of asArray(feed.items)) {
     if (item.type !== 'plan_step_completed') continue;
     const raw = rawById.get(item.eventId);
     const source = raw && isPlainObject(raw.payload) && isPlainObject(raw.payload.source) ? raw.payload.source : null;
-    if (source && source.planId === activePlanId) planStepEventIds.add(item.eventId);
+    if (source && source.planId === planId) out.add(item.eventId);
   }
-  if (!planStepEventIds.size) return empty;
+  return out;
+}
 
-  const generatedMs = Date.parse(feed.generatedAt);
-  const links = asArray(capabilityProfile && capabilityProfile.evidence).filter(evidence =>
-    isPlainObject(evidence)
-    && evidence.source === 'life-ledger'
-    && planStepEventIds.has(evidence.lifeLedgerEventId)
-    && targetSkillIds.has(evidence.skillId)
-    && isIsoInstant(evidence.observedAt)
-    && Date.parse(evidence.observedAt) <= generatedMs
-  );
+// ── The learning alignment chain (explicit IDs only) ─────────────────────────────────────
+// aligned  ⇔  there is CURRENT capability evidence (source: 'life-ledger') that points at a
+// plan_step_completed event of THIS active plan AND is attached to a skill linked to the
+// active career target — a real chain of explicit ids:
+//   plan step → Ledger event → capability evidence → target skill → career target.
+// "Current" uses the SAME recency window the Career analyzer applies to evidence
+// (CAPABILITY_CAREER_ANALYTICS_RULES.recentDays): a linking record older than that window is
+// historical, not present alignment, and must fall through to non-aligned logic (no HIGH).
+function learningAlignment(activePlanId, planStepEventIds, capabilityProfile, analysis, generatedMs) {
+  const empty = { aligned: false, evidence: [] };
+  if (!activePlanId || !analysis || !analysis.target) return empty;
+  const targetSkillIds = new Set(asArray(analysis.targetSkillIds));
+  if (!targetSkillIds.size || !planStepEventIds.size) return empty;
+
+  const links = asArray(capabilityProfile && capabilityProfile.evidence).filter(evidence => {
+    if (!isPlainObject(evidence) || evidence.source !== 'life-ledger') return false;
+    if (!planStepEventIds.has(evidence.lifeLedgerEventId)) return false;
+    if (!targetSkillIds.has(evidence.skillId)) return false;
+    if (!isIsoInstant(evidence.observedAt)) return false;
+    // identical temporal test to analytics.recentEvidence(): not future, within recentDays
+    const ageMs = generatedMs - Date.parse(evidence.observedAt);
+    return ageMs >= 0 && ageMs <= ALIGNMENT_RECENT_WINDOW_MS;
+  });
   if (!links.length) return empty;
   return {
     aligned: true,
     evidence: [{
       label: 'Plan → target link',
-      value: `${links.length} capability evidence record${links.length === 1 ? '' : 's'} tie this plan's completed steps to ${quoted(analysis.target.title, 'the career target')}`,
+      value: `${links.length} recent capability evidence record${links.length === 1 ? '' : 's'} tie past completed steps of this plan to ${quoted(analysis.target.title, 'the career target')}`,
       source: 'Capability profile'
     }]
   };
@@ -298,20 +312,25 @@ function learningAlignment(activePlanId, feed, rawById, capabilityProfile, analy
 
 // ── Candidate generation ─────────────────────────────────────────────────────────────────
 
-function learningCandidate(characterSheet, alignment) {
+function learningCandidate(characterSheet, alignment, activelyTracked) {
   const learning = characterSheet.learning;
   if (!learning || learning.status !== 'data') return null;
   const plan = learning.activePlan;
   if (!plan || !plan.hasSteps || plan.isComplete || !plan.nextStep || !plan.id || !plan.nextStep.stepId) {
     return null;
   }
+
+  // BLOCKER fix (review Finding 1): a plan that is neither target-aligned nor actively tracked
+  // was selected by the Character Sheet's `updatedAt` fallback — a heuristic a metadata-only
+  // edit can flip. That must NEVER become a top-level recommendation. The factual
+  // `learning-plan-incomplete` attention signal still carries the plan title, progress and next
+  // step; the engine abstains instead of escalating a guess.
+  if (!alignment.aligned && !activelyTracked) return null;
+
   const next = plan.nextStep;
   const context = [next.lessonTitle, next.phaseTitle].map(v => clean(v)).filter(Boolean);
-  const activelyTracked = !!(learning.latestCompletedStep && learning.latestCompletedStep.planId === plan.id);
 
-  const evidenceStrength = alignment.aligned
-    ? CDI_EVIDENCE_STRENGTH.HIGH
-    : (activelyTracked ? CDI_EVIDENCE_STRENGTH.MEDIUM : CDI_EVIDENCE_STRENGTH.LOW);
+  const evidenceStrength = alignment.aligned ? CDI_EVIDENCE_STRENGTH.HIGH : CDI_EVIDENCE_STRENGTH.MEDIUM;
   const priorityClass = alignment.aligned
     ? CDI_PRIORITY_CLASS.ADVANCE_ALIGNED_COMMITTED_WORK
     : CDI_PRIORITY_CLASS.ADVANCE_LEARNING_PLAN;
@@ -541,12 +560,16 @@ function decorate(candidate, analysisState) {
     evidence.push({ label: 'Active learning plan', value: `${candidate.planTitle} — ${stepsPhrase(candidate._facts.completedSteps, candidate._facts.totalSteps)}`, source: 'Life Character Sheet' });
     evidence.push({ label: 'Next unfinished step', value: candidate.title, source: 'findNextLearningPlanStep' });
     if (candidate.alignment.aligned) {
-      why.push(`Your Capability profile links completed steps of this plan to the career target ${quoted(analysis && analysis.target && analysis.target.title, 'you set')}.`);
+      // HIGH: only claim the PAST completed steps are target-linked — never the next step
+      // itself, which has no direct evidence.
+      why.push(`Recent Capability evidence links past completed steps of this plan to the career target ${quoted(analysis && analysis.target && analysis.target.title, 'you set')} — not the next step itself.`);
       evidence.push(...candidate.alignment.evidence);
-    } else if (analysis && !analysis.target) {
-      why.push('No active career target is set, so this ranks as plan progress rather than target-aligned work.');
-    } else if (!candidate._facts.activelyTracked) {
-      why.push('This plan was selected as the most recently updated one; no recent Ledger completion maps to it, so confidence is lower.');
+    } else {
+      // MEDIUM: actively tracked but not target-aligned — state factual tracking / progress only.
+      why.push('A current Ledger plan-step completion maps to this plan, so it is treated as the actively tracked plan.');
+      if (analysis && !analysis.target) {
+        why.push('No active career target is set, so this is ranked as plan progress, not target-aligned work.');
+      }
     }
   } else if (candidate.sourceKind === 'capability-next-action') {
     if (candidate._facts.analyzerReason) why.push(candidate._facts.analyzerReason);
@@ -632,15 +655,18 @@ export function buildCrossDomainIntelligence(input = {}) {
   const analysisState = runCapabilityAnalysis(capabilityProfile, generatedAt, ledgerEvents);
   const analysis = analysisState.analysis;
 
+  const generatedMs = Date.parse(generatedAt);
   const activePlanId = characterSheet.learning
     && characterSheet.learning.activePlan
     && characterSheet.learning.activePlan.id
     ? characterSheet.learning.activePlan.id
     : null;
-  const alignment = learningAlignment(activePlanId, feed, rawById, capabilityProfile, analysis);
+  const activePlanStepEventIds = planStepEventIdsFor(activePlanId, feed, rawById);
+  const activelyTracked = activePlanStepEventIds.size > 0;
+  const alignment = learningAlignment(activePlanId, activePlanStepEventIds, capabilityProfile, analysis, generatedMs);
 
   const rawCandidates = [
-    learningCandidate(characterSheet, alignment),
+    learningCandidate(characterSheet, alignment, activelyTracked),
     capabilityCandidate(analysisState, coverage)
   ].filter(Boolean);
 
@@ -660,9 +686,12 @@ export function buildCrossDomainIntelligence(input = {}) {
   let abstentionReason = null;
   if (!recommendedAction) {
     const attentionSignals = signals.filter(s => s.severity === 'attention');
-    abstentionReason = attentionSignals.length
-      ? 'There are attention areas below, but no bounded next action is explicitly defined yet. Nothing is being invented to fill the slot.'
-      : 'No active learning plan step and no explicit career action are available, so there is no cross-domain recommendation yet.';
+    const hasHeuristicPlan = signals.some(s => s.id.startsWith('learning-plan-incomplete::'));
+    abstentionReason = hasHeuristicPlan
+      ? 'A learning plan has unfinished steps, but no recent Ledger completion maps to it and it is not tied to a career target — it was picked only by recency, so it stays an attention area rather than a recommendation. Nothing is being invented to fill the slot.'
+      : attentionSignals.length
+        ? 'There are attention areas below, but none rises to a confident, bounded next action yet. Nothing is being invented to fill the slot.'
+        : 'No active learning plan step and no explicit career action are available, so there is no cross-domain recommendation yet.';
   }
 
   const explanation = recommendedAction

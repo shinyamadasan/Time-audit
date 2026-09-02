@@ -234,7 +234,7 @@ test('empty state: honest "no recommendation yet" plus a Data-not-evaluated list
   }
 });
 
-test('aligned learning plan → a bounded recommendation with a traceable "Why this" and evidence', async ({ page }) => {
+test('an actively tracked learning plan → a bounded recommendation with a traceable "Why this" and evidence', async ({ page }) => {
   const { plan, envelope: plans } = planEnvelope({ id: 'plan-a', steps: 10, done: 6 });
   const stepId = plan.phases[0].lessons[0].steps[0].id;
   const ledger = envelope([planStepEvent(1, 'plan-a', stepId)]);
@@ -245,13 +245,34 @@ test('aligned learning plan → a bounded recommendation with a traceable "Why t
   await expect(root).toContainText('Why this');
   await expect(root).toContainText('6 of 10 steps complete');
   await expect(root.locator('.cdi-evidence')).toContainText('AI Automation Roadmap');
-  // strength tag is textual, not colour-only
-  await expect(root.locator('.cdi-strength-tag')).toHaveText(/HIGH|MEDIUM|LOW/);
+  // strength tag is textual, not colour-only; a tracked-but-unaligned plan is MEDIUM
+  await expect(root.locator('.cdi-strength-tag')).toHaveText('MEDIUM');
 });
 
-test('shipping stall + explicit project → shipping recommendation, learning offered as an alternative', async ({ page }) => {
-  const { envelope: plans } = planEnvelope({ id: 'plan-a', steps: 6, done: 1 });
-  await openApp(page, { plans, profile: shippingProfileEnvelope() });
+test('a recency-only learning plan is NOT recommended — the Next view abstains and shows it as an attention area', async ({ page }) => {
+  // a plan with unfinished steps, but no plan_step_completed maps to it and no career target
+  const { envelope: plans } = planEnvelope({ id: 'plan-a', title: 'Recency Only Plan', steps: 8, done: 3 });
+  await openApp(page, { plans });
+  await openNext(page);
+  const root = page.locator('#cross-domain-intelligence-root');
+  // no recommendation headline action
+  await expect(root.locator('.cdi-recommendation-none')).toBeVisible();
+  expect(await root.locator('.cdi-headline').innerText()).toBe('No cross-domain recommendation yet');
+  await expect(root).toContainText('picked only by recency');
+  // the factual attention signal for this plan remains, with plan title + progress + next step
+  const planSignal = root.locator('.cdi-signal', { hasText: 'Recency Only Plan' });
+  await expect(planSignal).toHaveAttribute('data-severity', 'attention');
+  await expect(planSignal).toContainText('3 of 8 steps complete');
+  await expect(planSignal).toContainText(/next unfinished step/i);
+  // nothing is escalated into a "Complete ..." recommendation
+  await expect(root.locator('.cdi-recommendation .cdi-headline')).not.toContainText('Complete');
+});
+
+test('shipping stall + explicit project → shipping recommendation, actively tracked learning offered as an alternative', async ({ page }) => {
+  const { plan, envelope: plans } = planEnvelope({ id: 'plan-a', steps: 6, done: 1 });
+  const stepId = plan.phases[0].lessons[0].steps[0].id;
+  const ledger = envelope([planStepEvent(1, 'plan-a', stepId)]);
+  await openApp(page, { ledger, plans, profile: shippingProfileEnvelope() });
   await openNext(page);
   const root = page.locator('#cross-domain-intelligence-root');
   await expect(root.locator('.cdi-headline')).toContainText('Webhook Demo');
