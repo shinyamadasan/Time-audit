@@ -23,7 +23,7 @@ import {
 } from './obsidian-life-ledger-sync.js';
 import { OBSIDIAN_LIFE_LEDGER_SENTINEL } from './obsidian-life-ledger-renderer.js';
 import { serializeLifeLedgerSnapshot, createLifeLedgerSnapshotFromEvents } from './life-ledger-transport.js';
-import { runLifeLedgerObsidianSync } from './scripts/sync-life-ledger-to-obsidian.mjs';
+import { runLifeLedgerObsidianSync, loadRollbackReceiptFromDisk } from './scripts/sync-life-ledger-to-obsidian.mjs';
 
 const OP = OBSIDIAN_SYNC_OPERATIONS;
 const DENIED_ONEDRIVE_VAULT_ROOT = 'C:\\Users\\Admin\\OneDrive\\2nd Brain';
@@ -850,3 +850,206 @@ test('ObsidianSyncError carries a stable code and name', () => {
   assert.equal(err.code, 'some_code');
   assert.equal(err.extra, 1);
 });
+
+// ===========================================================================
+// Phase 9B hardening — FIX 1: first-run receipt MUST bind backup === null
+// ===========================================================================
+
+async function firstRunReceipt(vault, backupRoot, events = [focusEvent()]) {
+  const target = prodTarget(vault);
+  const plan = await planObsidianSync(target, events, { expectedCanonicalVaultPath: vault });
+  const receipt = await prepareObsidianRollbackArtifact({ target, plan, backupRoot });
+  return { target, plan, receipt };
+}
+
+test('FIX 1 — first-run valid receipt with backup:null verifies true', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const { target, plan, receipt } = await firstRunReceipt(vault, backupRoot);
+      assert.equal(receipt.managedRootExistedBefore, false);
+      assert.equal(receipt.backup, null);
+      assert.equal(await verifyObsidianRollbackReceipt(receipt, { target, plan }), true);
+    })
+  ))
+));
+
+test('FIX 1 — first-run receipt with backup:{...} verifies false', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const { target, plan, receipt } = await firstRunReceipt(vault, backupRoot);
+      const tampered = { ...receipt, backup: { backupArtifactPath: 'C:\\x', files: [], backupManifestSha256: 'a'.repeat(64) } };
+      assert.equal(await verifyObsidianRollbackReceipt(tampered, { target, plan }), false);
+    })
+  ))
+));
+
+test('FIX 1 — first-run receipt with backup:"anything" verifies false', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const { target, plan, receipt } = await firstRunReceipt(vault, backupRoot);
+      assert.equal(await verifyObsidianRollbackReceipt({ ...receipt, backup: 'anything' }, { target, plan }), false);
+      assert.equal(await verifyObsidianRollbackReceipt({ ...receipt, backup: undefined }, { target, plan }), false);
+      assert.equal(await verifyObsidianRollbackReceipt({ ...receipt, backup: {} }, { target, plan }), false);
+    })
+  ))
+));
+
+test('FIX 1 — non-first-run receipt semantics unchanged (real backup verifies, backup:null rejects)', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const target = prodTarget(vault);
+      await applyObsidianSync(await planObsidianSync(testTarget(vault), [focusEvent()]), { mode: 'test', apply: true });
+      const plan = await planObsidianSync(target, [focusEvent()], { expectedCanonicalVaultPath: vault });
+      assert.equal(plan.isFirstRun, false);
+      const receipt = await prepareObsidianRollbackArtifact({ target, plan, backupRoot });
+      assert.equal(receipt.managedRootExistedBefore, true);
+      assert.ok(receipt.backup && typeof receipt.backup === 'object');
+      assert.equal(await verifyObsidianRollbackReceipt(receipt, { target, plan }), true);
+      // The first-run backup-null rule must NOT leak into the existing-root path.
+      assert.equal(await verifyObsidianRollbackReceipt({ ...receipt, backup: null }, { target, plan }), false);
+    })
+  ))
+));
+
+test('FIX 1 — first-run managed root appears after the receipt -> verifies false', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const { target, plan, receipt } = await firstRunReceipt(vault, backupRoot);
+      assert.equal(await verifyObsidianRollbackReceipt(receipt, { target, plan }), true);
+      await firstApply(vault); // managed root now exists
+      assert.equal(await verifyObsidianRollbackReceipt(receipt, { target, plan }), false);
+    })
+  ))
+));
+
+// ===========================================================================
+// Phase 9B hardening — FIX 2: safe CLI rollback-receipt loading
+// ===========================================================================
+
+test('FIX 2 — loader reads real bytes, computes SHA-256, attaches receiptPath/receiptSha256, never mutates the file', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const { target, plan, receipt } = await firstRunReceipt(vault, backupRoot);
+      const diskBefore = await fs.readFile(receipt.receiptPath);
+      const persisted = JSON.parse(diskBefore.toString('utf8'));
+      assert.equal('receiptPath' in persisted, false);
+      assert.equal('receiptSha256' in persisted, false);
+
+      const loaded = await loadRollbackReceiptFromDisk(receipt.receiptPath, fs);
+      assert.equal(loaded.receiptPath, path.resolve(receipt.receiptPath));
+      assert.equal(loaded.receiptSha256, sha256(diskBefore.toString('utf8')));
+      assert.equal(loaded.receiptSha256, receipt.receiptSha256);
+      assert.equal(loaded.planFingerprint, receipt.planFingerprint);
+
+      const diskAfter = await fs.readFile(receipt.receiptPath);
+      assert.ok(diskBefore.equals(diskAfter), 'receipt file bytes unchanged by the loader');
+
+      assert.equal(await verifyObsidianRollbackReceipt(loaded, { target, plan }), true);
+    })
+  ))
+));
+
+test('FIX 2 — a receipt whose disk bytes change AFTER loading is rejected against the prior runtime metadata', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const { target, plan, receipt } = await firstRunReceipt(vault, backupRoot);
+      const loaded = await loadRollbackReceiptFromDisk(receipt.receiptPath, fs);
+      assert.equal(await verifyObsidianRollbackReceipt(loaded, { target, plan }), true);
+      await fs.appendFile(receipt.receiptPath, ' ', 'utf8'); // one trailing byte
+      assert.equal(await verifyObsidianRollbackReceipt(loaded, { target, plan }), false);
+    })
+  ))
+));
+
+test('FIX 2 — a modified receipt reloaded fresh still fails the semantic/plan binding', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const { target, plan, receipt } = await firstRunReceipt(vault, backupRoot);
+      // Rewrite the receipt file with a bogus planFingerprint, then reload it so its
+      // receiptSha256 matches the NEW disk bytes (the on-disk hash gate passes)...
+      const body = JSON.parse(await fs.readFile(receipt.receiptPath, 'utf8'));
+      body.planFingerprint = 'deadbeef'.repeat(8);
+      await fs.writeFile(receipt.receiptPath, `${JSON.stringify(body, null, 2)}\n`, 'utf8');
+      const reloaded = await loadRollbackReceiptFromDisk(receipt.receiptPath, fs);
+      // ...but the plan-fingerprint binding still rejects it.
+      assert.equal(await verifyObsidianRollbackReceipt(reloaded, { target, plan }), false);
+    })
+  ))
+));
+
+test('FIX 2 — loader fails closed on a missing receipt file', async () => {
+  await assert.rejects(
+    () => loadRollbackReceiptFromDisk(path.join(os.tmpdir(), 'definitely-not-here-9b.json'), fs),
+    e => e.code === 'rollback_receipt_unreadable'
+  );
+});
+
+test('FIX 2 — loader fails closed on invalid JSON and on non-object JSON', async () => (
+  withTempDir('chronasense-obsidian-receipt-', async dir => {
+    const bad = path.join(dir, 'bad.json');
+    await fs.writeFile(bad, '{ not valid json ', 'utf8');
+    await assert.rejects(() => loadRollbackReceiptFromDisk(bad, fs), e => e.code === 'rollback_receipt_invalid_json');
+    const arr = path.join(dir, 'arr.json');
+    await fs.writeFile(arr, '[1,2,3]', 'utf8');
+    await assert.rejects(() => loadRollbackReceiptFromDisk(arr, fs), e => e.code === 'rollback_receipt_malformed');
+  })
+));
+
+test('FIX 2 — loaded receipt with a planFingerprint mismatch fails closed in verification', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const { target, plan } = await firstRunReceipt(vault, backupRoot);
+      const otherDir = path.join(backupRoot, 'other');
+      await fs.mkdir(otherDir, { recursive: true });
+      const rogue = path.join(otherDir, 'obsidian-rollback-receipt.json');
+      await fs.writeFile(rogue, `${JSON.stringify({
+        kind: 'obsidian-rollback-receipt', schemaVersion: OBSIDIAN_SYNC_SCHEMA_VERSION,
+        canonicalVaultRoot: plan.canonicalVaultRoot, canonicalManagedRoot: plan.canonicalManagedRoot,
+        managedRoot: 'Life Ledger', managedRootExistedBefore: false,
+        planFingerprint: 'f'.repeat(64), backup: null
+      }, null, 2)}\n`, 'utf8');
+      const loaded = await loadRollbackReceiptFromDisk(rogue, fs);
+      assert.equal(await verifyObsidianRollbackReceipt(loaded, { target, plan }), false);
+    })
+  ))
+));
+
+test('FIX 2 — loaded receipt with a canonical-vault mismatch fails closed in verification', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const { target, plan } = await firstRunReceipt(vault, backupRoot);
+      const rogue = path.join(backupRoot, 'wrong-vault-receipt.json');
+      await fs.writeFile(rogue, `${JSON.stringify({
+        kind: 'obsidian-rollback-receipt', schemaVersion: OBSIDIAN_SYNC_SCHEMA_VERSION,
+        canonicalVaultRoot: 'C:\\Users\\Admin\\Somewhere\\Else', canonicalManagedRoot: 'C:\\Users\\Admin\\Somewhere\\Else\\Life Ledger',
+        managedRoot: 'Life Ledger', managedRootExistedBefore: false,
+        planFingerprint: plan.planFingerprint, backup: null
+      }, null, 2)}\n`, 'utf8');
+      const loaded = await loadRollbackReceiptFromDisk(rogue, fs);
+      assert.equal(await verifyObsidianRollbackReceipt(loaded, { target, plan }), false);
+    })
+  ))
+));
+
+test('FIX 2 — CLI production --apply with a real receipt path stays hard-blocked and never rewrites the receipt', async () => (
+  withTempSnapshotFile([focusEvent()], input => (
+    withTempVault(async vault => (
+      withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+        const target = prodTarget(vault);
+        const plan = await planObsidianSync(target, [focusEvent()], { expectedCanonicalVaultPath: vault });
+        const receipt = await prepareObsidianRollbackArtifact({ target, plan, backupRoot });
+        const before = await fs.readFile(receipt.receiptPath);
+        await assert.rejects(
+          () => runLifeLedgerObsidianSync([
+            '--input', input, '--vault', vault, '--mode', 'production', '--apply',
+            '--expected-vault', vault, '--first-run-ack', `FIRST-RUN-CONFIRMED:${vault}`,
+            '--rollback-receipt', receipt.receiptPath
+          ]),
+          e => e.code === 'production_sync_disabled'
+        );
+        assert.ok(before.equals(await fs.readFile(receipt.receiptPath)), 'receipt file untouched by the CLI');
+        assert.equal(await exists(path.join(vault, 'Life Ledger')), false);
+      })
+    ))
+  ))
+));

@@ -686,7 +686,11 @@ export async function verifyObsidianRollbackReceipt(receipt, { target, plan, fs:
   if (onDisk === null || sha256(onDisk) !== receipt.receiptSha256) return false;
 
   if (receipt.managedRootExistedBefore === false) {
-    // First-run pre-state receipt: the managed root must still be absent.
+    // First-run pre-state receipt: there is no prior content to back up, so `backup` MUST be
+    // exactly null. A first-run receipt carrying any backup payload is structurally wrong (a
+    // crossed-wires or hand-edited receipt) and is rejected before the pre-state check.
+    if (receipt.backup !== null) return false;
+    // The managed root must still be absent.
     try {
       await fsAdapter.lstat(plan.canonicalManagedRoot);
       return false; // it exists now — pre-state no longer holds

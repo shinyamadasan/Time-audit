@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseLifeLedgerSnapshotJson } from '../life-ledger-transport.js';
 import {
@@ -105,6 +106,33 @@ async function readSnapshotFile(inputPath, fsAdapter) {
   return fsAdapter.readFile(inputPath, 'utf8');
 }
 
+// Safe rollback-receipt loading for CLI activation. The persisted receipt intentionally does
+// NOT carry `receiptPath` / `receiptSha256`, but verifyObsidianRollbackReceipt() needs both as
+// runtime metadata. This resolves the supplied path, reads the exact bytes off disk, parses
+// them, and attaches ONLY those two runtime-only fields to the in-memory object. The SHA-256 is
+// always computed from the live disk bytes — a hash is never accepted from the caller — and the
+// enriched object is never written back to disk. Every failure is fail-closed.
+export async function loadRollbackReceiptFromDisk(receiptPathArg, fsAdapter) {
+  const resolvedReceiptPath = path.resolve(receiptPathArg);
+  let bytes;
+  try {
+    bytes = await fsAdapter.readFile(resolvedReceiptPath); // Buffer — exact on-disk bytes
+  } catch (err) {
+    throw new LifeLedgerSyncCliError('rollback_receipt_unreadable', `Cannot read --rollback-receipt at ${resolvedReceiptPath}: ${err.message}`);
+  }
+  const receiptSha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+  let parsed;
+  try {
+    parsed = JSON.parse(bytes.toString('utf8'));
+  } catch (err) {
+    throw new LifeLedgerSyncCliError('rollback_receipt_invalid_json', `--rollback-receipt is not valid JSON: ${err.message}`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new LifeLedgerSyncCliError('rollback_receipt_malformed', '--rollback-receipt must be a JSON object');
+  }
+  return { ...parsed, receiptPath: resolvedReceiptPath, receiptSha256 };
+}
+
 function summarize(plan, applyResult) {
   return {
     schemaVersion: plan.schemaVersion,
@@ -144,7 +172,7 @@ export async function runLifeLedgerObsidianSync(argv, options = {}) {
     if (parsed.mode === 'production') {
       let rollbackReceipt;
       if (parsed.rollbackReceiptPath) {
-        rollbackReceipt = JSON.parse(await fsAdapter.readFile(parsed.rollbackReceiptPath, 'utf8'));
+        rollbackReceipt = await loadRollbackReceiptFromDisk(parsed.rollbackReceiptPath, fsAdapter);
       }
       authorization = { mode: 'production', allowApply: true, apply: true, expectedCanonicalVaultPath: parsed.expectedVault, firstRunAck: parsed.firstRunAck, rollbackReceipt };
     } else {

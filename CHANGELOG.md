@@ -1,5 +1,53 @@
 # ChronaSense — Changelog
 
+## Phase 9B — receipt activation-path hardening (pre-production, still disabled) (branch: fix/phase9b-receipt-activation-hardening) — 2026-09-03
+Small hardening slice closing the two activation-path findings from the independent review of
+the approved first-run rollback receipt. No production enablement, no real-vault write, no
+receipt modification. `OBSIDIAN_PRODUCTION_SYNC_ENABLED` stays `false`. One local commit; not
+pushed, not integrated. Stops for independent hardening review.
+changed:
+  - obsidian-life-ledger-sync.js — FIX 1: `verifyObsidianRollbackReceipt()` now requires
+    `receipt.backup === null` (strict) whenever `receipt.managedRootExistedBefore === false`.
+    A first-run receipt carrying any backup payload is structurally wrong and is rejected
+    before the pre-state check. The existing-root path (`managedRootExistedBefore === true`)
+    is untouched — it still requires a present, byte-verified backup.
+  - scripts/sync-life-ledger-to-obsidian.mjs — FIX 2: `--rollback-receipt` is now loaded via
+    `loadRollbackReceiptFromDisk()` (exported), which resolves/canonicalises the path, reads
+    the exact on-disk bytes, `JSON.parse`s them, and attaches runtime-only `receiptPath`
+    (resolved path) + `receiptSha256` (SHA-256 of the live bytes — never a caller-supplied
+    hash) to the in-memory object only. Nothing is written back to the receipt JSON. Fails
+    closed on a missing / unreadable receipt, invalid JSON, or non-object JSON. The previous
+    bare `JSON.parse(readFile(...))` (which never attached the runtime metadata the verifier
+    needs) is replaced.
+  - obsidian-life-ledger-sync.test.js — +13 tests: first-run receipt backup:null valid;
+    backup:{...} / backup:"anything" / backup:{} / backup:undefined invalid; non-first-run
+    semantics preserved (real backup valid, backup:null rejected); first-run managed root
+    appears -> invalid; CLI loader reads real bytes / computes SHA-256 / attaches
+    receiptPath+receiptSha256 / does not mutate the file; post-load byte change rejected;
+    reloaded-modified receipt still rejected on plan binding; missing receipt / malformed
+    JSON fail closed; planFingerprint mismatch and canonical-vault mismatch fail closed; CLI
+    production --apply with a real receipt path stays `production_sync_disabled` and never
+    rewrites the receipt.
+verification: `node obsidian-life-ledger-sync.test.js` 63/63; `npm test` all green (0 fail;
+  the single skip is the pre-existing env-gated cross-repo control test); `npm run lint` 0
+  errors (19 pre-existing warnings); STRICT `npm run test:cross-repo-compat` PASS ChronaSense
+  / PASS Meal / PASS Workout 29/29, zero leg skips, exit 0; `git diff --check` clean;
+  `node --check` on all three changed files OK; non-ASCII scan clean (em-dash only, matching
+  the file). Real approved receipt (Phase9B-FirstRun-Receipt-20260903-102747), READ-ONLY:
+  disk SHA-256 still cb5dea254938e7cfa9da9c7a1906c3b5eda6192b2c4c48bd264f2f141168763f; the
+  CLI loader enriches it (receiptPath resolved, receiptSha256 = live-byte hash, file
+  unmodified); `verifyObsidianRollbackReceipt()` returns true against a plan carrying the
+  approved fingerprint 10cb4dc2326674ebc141c1ff2c358b108cb63690341aaf9ad90d00251a153286
+  (the approved plan's source snapshot is live-only and not persisted, so the plan was
+  reconstructed from the receipt's own bindings — the receipt→planFingerprint binding is the
+  generic mechanism). Real vault `C:\Users\Admin\OneDrive\2nd Brain\Life Ledger` absent
+  before and after. Authoritative main unchanged at 90ea1f0 (M README.md / ?? APP_CONTEXT.md
+  intact, protected hashes unchanged).
+future work (NOT in this slice):
+  - No `delete_managed_root` rollback executor exists. Any future one MUST call
+    `inspectManagedRoot`, require `state === 'owned'`, verify the sentinel↔manifest binding,
+    and never blindly `rm -rf` an unverified subtree. Separately reviewed change.
+
 ## Phase 9 — Obsidian ownership + rollback hardening (post independent review) (branch: feat/real-obsidian-integration-v1) — 2026-09-02
 FIX FIRST pass. Architecture unchanged (Ledger → renderer → planner → authorization → apply);
 one consolidated filesystem/ownership hardening pass, one local fix commit. Still no push, no
