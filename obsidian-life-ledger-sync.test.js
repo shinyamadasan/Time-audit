@@ -825,6 +825,20 @@ test('formatObsidianSyncPreview never leaks an absolute path and names the block
   });
 });
 
+test('production-mode preview no longer claims build-level disabled, and states the real authorization gates', async () => (
+  withTempVault(async vault => {
+    const plan = await planObsidianSync(prodTarget(vault), [focusEvent()], { expectedCanonicalVaultPath: vault });
+    assert.equal(plan.blocked, false); // unblocked plan is the only path that reaches the footer line below
+    const preview = formatObsidianSyncPreview(plan);
+    assert.ok(!preview.includes('disabled in this build'), 'preview must not claim production is disabled in this build');
+    assert.ok(!/production.*disabled/i.test(preview), 'preview must not claim production is disabled at all');
+    assert.ok(preview.includes('--apply authorization'));
+    assert.ok(preview.includes('expected vault'));
+    assert.ok(preview.includes('verified rollback receipt'));
+    assert.ok(preview.includes('first-run acknowledgement'));
+  })
+));
+
 // ===========================================================================
 // Dry run
 // ===========================================================================
@@ -851,6 +865,17 @@ async function withTempSnapshotFile(events, fn) {
     return fn(filePath, root);
   });
 }
+
+test('CLI --help no longer claims production is build-level disabled, and states the real gates', async () => {
+  const result = await runLifeLedgerObsidianSync(['--help']);
+  assert.equal(result.help, true);
+  assert.ok(!result.text.includes('hard-disabled'), 'help text must not claim production is hard-disabled');
+  assert.ok(!/production.*disabled in this build/i.test(result.text), 'help text must not claim production is disabled in this build');
+  assert.ok(result.text.includes('--apply authorization'));
+  assert.ok(result.text.includes('expected vault'));
+  assert.ok(result.text.includes('verified rollback receipt'));
+  assert.ok(result.text.includes('first-run acknowledgement'));
+});
 
 test('CLI requires an explicit --mode and rejects unknown modes / duplicate flags / unknown flags', async () => {
   await assert.rejects(() => runLifeLedgerObsidianSync(['--input', 'a.json', '--vault', 'C:\\V']), e => e.code === 'missing_mode');
