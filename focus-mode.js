@@ -420,6 +420,9 @@ function getFocusTaskLabel() {
   return (label && label !== '—') ? label : (currentTask || intention || 'Deep work');
 }
 
+const GENERIC_FOCUS_LEDGER_CLARIFICATION =
+  'Focus saved to your timeline. To count toward your Life Ledger, start Focus from a Learning Plan step.';
+
 function logFocusSession(tsStart, tsEnd = Date.now()) {
   const dur = Math.round((tsEnd - tsStart) / 60000);
   if (dur < 1) return null;
@@ -438,7 +441,11 @@ function logFocusSession(tsStart, tsEnd = Date.now()) {
   entries.sort((a, b) => b.ts - a.ts);
   lastTaskForRepeat = task;
   persist(); syncEntries();
-  showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+  if (cloneFocusLearningPlanMetadata(activeFocusLearningPlan)) {
+    showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+  } else {
+    showToast(GENERIC_FOCUS_LEDGER_CLARIFICATION);
+  }
   updateFocusDeepBar();
   return entry;
 }
