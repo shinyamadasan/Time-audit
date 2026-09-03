@@ -669,44 +669,108 @@ test('prepareObsidianRollbackArtifact never silently overwrites an existing arti
 ));
 
 // ===========================================================================
-// Production authorization — hard-blocked this pass
+// Production authorization — Phase 9B: code-level block released, full
+// authorization chain still enforced (mode/allowApply/apply/expected-vault/
+// receipt/first-run-ack/preflight/containment). Every test in this section
+// runs against a disposable temp vault created by withTempVault/withTempDir
+// (mkdtemp under os.tmpdir(), removed in a finally block) — never the real
+// vault.
 // ===========================================================================
 
-test('OBSIDIAN_PRODUCTION_SYNC_ENABLED is false and schema version is 2', () => {
-  assert.equal(OBSIDIAN_PRODUCTION_SYNC_ENABLED, false);
+test('OBSIDIAN_PRODUCTION_SYNC_ENABLED is true (Phase 9B enabled) and schema version is 2', () => {
+  assert.equal(OBSIDIAN_PRODUCTION_SYNC_ENABLED, true);
   assert.equal(OBSIDIAN_SYNC_SCHEMA_VERSION, 2);
 });
-test('production apply is hard-blocked via applyObsidianSync even with a perfect authorization + valid receipt', async () => (
+
+// The one fully-authorized SUCCESS path this slice proves. Every gate is satisfied and the
+// switch is read at its real default (no `enabled` override) — this exercises the exact code
+// path a real activation would use, against a disposable temp vault only.
+test('Phase 9B enable proof: a fully-authorized production apply succeeds, but ONLY against a disposable temp vault', async () => (
+  withTempVault(async vault => (
+    withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+      const target = prodTarget(vault);
+      const plan = await planObsidianSync(target, [focusEvent()], { expectedCanonicalVaultPath: vault });
+      assert.equal(plan.blocked, false);
+      assert.equal(plan.isFirstRun, true);
+      const receipt = await prepareObsidianRollbackArtifact({ target, plan, backupRoot });
+      assert.equal(receipt.backup, null);
+
+      const result = await applyObsidianSync(plan, {
+        mode: 'production', allowApply: true, apply: true,
+        expectedCanonicalVaultPath: vault,
+        firstRunAck: `FIRST-RUN-CONFIRMED:${plan.canonicalVaultRoot}`,
+        rollbackReceipt: receipt
+      });
+
+      assert.equal(result.applied, true);
+      assert.ok(result.written.length > 0);
+      assert.equal(await exists(path.join(vault, OBSIDIAN_SENTINEL_RELATIVE_PATH)), true);
+      assert.equal(await exists(path.join(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH)), true);
+      assert.equal(await exists(path.join(vault, OBSIDIAN_SYSTEM_README_RELATIVE_PATH)), true);
+      const sentinelText = await readVault(vault, OBSIDIAN_SENTINEL_RELATIVE_PATH);
+      assert.ok(sentinelText.includes(OBSIDIAN_LIFE_LEDGER_SENTINEL));
+      const manifestJson = JSON.parse(await readVault(vault, OBSIDIAN_MANIFEST_RELATIVE_PATH));
+      assert.equal(manifestJson.owner, 'chronasense-life-ledger');
+      assert.ok(Array.isArray(manifestJson.files) && manifestJson.files.length > 0);
+    })
+  ))
+));
+
+// FAIL-CLOSED CONTROL PROOF — remove exactly ONE required authorization condition at a time
+// from an otherwise-perfect production authorization (switch genuinely on, no `enabled`
+// override) and confirm zero writes every time.
+test('Phase 9B fail-closed matrix: removing any single required condition still blocks the apply with zero writes', async () => (
   withTempVault(async vault => (
     withTempDir('chronasense-obsidian-backup-', async backupRoot => {
       const target = prodTarget(vault);
       const plan = await planObsidianSync(target, [focusEvent()], { expectedCanonicalVaultPath: vault });
       const receipt = await prepareObsidianRollbackArtifact({ target, plan, backupRoot });
-      await assert.rejects(
-        () => applyObsidianSync(plan, {
-          mode: 'production', allowApply: true, apply: true,
-          expectedCanonicalVaultPath: vault,
-          firstRunAck: `FIRST-RUN-CONFIRMED:${plan.canonicalVaultRoot}`,
-          rollbackReceipt: receipt
-        }),
-        e => e.code === 'production_sync_disabled'
-      );
-      assert.equal(await exists(path.join(vault, 'Life Ledger')), false);
+      const fullAuth = {
+        mode: 'production', allowApply: true, apply: true,
+        expectedCanonicalVaultPath: vault,
+        firstRunAck: `FIRST-RUN-CONFIRMED:${plan.canonicalVaultRoot}`,
+        rollbackReceipt: receipt
+      };
+
+      const cases = [
+        { name: 'no authorization at all', auth: {}, code: 'production_not_authorized' },
+        { name: 'mode is not production', auth: { ...fullAuth, mode: 'test' }, code: 'production_not_authorized' },
+        { name: 'allowApply is false', auth: { ...fullAuth, allowApply: false }, code: 'production_not_authorized' },
+        { name: 'apply is false', auth: { ...fullAuth, apply: false }, code: 'production_not_authorized' },
+        { name: 'expected canonical vault mismatch', auth: { ...fullAuth, expectedCanonicalVaultPath: 'C:\\Users\\Admin\\Somewhere\\Else' }, code: 'production_not_authorized' },
+        { name: 'rollback receipt missing entirely', auth: { ...fullAuth, rollbackReceipt: undefined }, code: 'rollback_receipt_unverified' },
+        { name: 'rollback receipt structurally invalid (first-run backup !== null)', auth: { ...fullAuth, rollbackReceipt: { ...receipt, backup: { backupArtifactPath: 'C:\\x', files: [], backupManifestSha256: 'a'.repeat(64) } } }, code: 'rollback_receipt_unverified' },
+        { name: 'first-run acknowledgement missing', auth: { ...fullAuth, firstRunAck: undefined }, code: 'first_run_not_acknowledged' },
+        { name: 'first-run acknowledgement does not match the canonical vault', auth: { ...fullAuth, firstRunAck: 'FIRST-RUN-CONFIRMED:C:\\wrong\\path' }, code: 'first_run_not_acknowledged' }
+      ];
+
+      for (const { name, auth, code } of cases) {
+        await assert.rejects(() => applyObsidianSync(plan, auth), e => e.code === code, name);
+        assert.equal(await exists(path.join(vault, 'Life Ledger')), false, `zero writes expected for: ${name}`);
+      }
     })
   ))
 ));
-test('evaluateProductionAuthorization (enabled override): requires a verified rollback receipt, then the first-run token', async () => (
+
+// evaluateProductionAuthorization is the testable second layer independent of applyObsidianSync
+// wiring: default reads the real (now-true) constant, and the `enabled` override still lets a
+// caller force-disable it (e.g. an operational kill switch) without touching the code constant.
+test('evaluateProductionAuthorization defaults to enabled now (Phase 9B), still requires the full chain, and an explicit override can still force-disable', async () => (
   withTempVault(async vault => {
     const plan = await planObsidianSync(prodTarget(vault), [focusEvent()], { expectedCanonicalVaultPath: vault });
     const base = { mode: 'production', allowApply: true, apply: true, expectedCanonicalVaultPath: vault };
-    assert.equal(evaluateProductionAuthorization(plan, base, { enabled: true }).code, 'rollback_receipt_unverified');
-    assert.equal(evaluateProductionAuthorization(plan, base, { enabled: true, rollbackReceiptValid: true }).code, 'first_run_not_acknowledged');
+    // No `enabled` override supplied anywhere below — this reads OBSIDIAN_PRODUCTION_SYNC_ENABLED directly.
+    assert.equal(evaluateProductionAuthorization(plan, base).code, 'rollback_receipt_unverified');
+    assert.equal(evaluateProductionAuthorization(plan, base, { rollbackReceiptValid: true }).code, 'first_run_not_acknowledged');
     assert.deepEqual(
-      evaluateProductionAuthorization(plan, { ...base, firstRunAck: `FIRST-RUN-CONFIRMED:${plan.canonicalVaultRoot}` }, { enabled: true, rollbackReceiptValid: true }),
+      evaluateProductionAuthorization(plan, { ...base, firstRunAck: `FIRST-RUN-CONFIRMED:${plan.canonicalVaultRoot}` }, { rollbackReceiptValid: true }),
       { ok: true }
     );
-    // still disabled by default
-    assert.equal(evaluateProductionAuthorization(plan, base).code, 'production_sync_disabled');
+    // The override remains available to force-disable even though the build-level constant is true.
+    assert.equal(
+      evaluateProductionAuthorization(plan, { ...base, firstRunAck: `FIRST-RUN-CONFIRMED:${plan.canonicalVaultRoot}` }, { enabled: false, rollbackReceiptValid: true }).code,
+      'production_sync_disabled'
+    );
   })
 ));
 test('test-mode apply still requires the TEST-VAULT.md marker and an explicit apply flag', async () => {
@@ -820,7 +884,7 @@ test('CLI test-mode --apply requires TEST-VAULT.md; with it, it writes and is id
     })
   ));
 });
-test('CLI production --apply is blocked at plan time without --expected-vault, and hard-blocked with every flag set', async () => {
+test('CLI production --apply is blocked at plan time without --expected-vault, and fails closed on a missing rollback receipt with every other flag set', async () => {
   await withTempSnapshotFile([focusEvent()], input => (
     withTempVault(async vault => {
       await assert.rejects(
@@ -829,11 +893,14 @@ test('CLI production --apply is blocked at plan time without --expected-vault, a
       );
     })
   ));
+  // Every other production flag correct (mode/apply/expected-vault/first-run-ack) but NO
+  // --rollback-receipt: the code-level switch is on, so this now reaches the receipt gate and
+  // fails closed there instead of at the top-level production_sync_disabled block.
   await withTempSnapshotFile([focusEvent()], input => (
     withTempVault(async vault => {
       await assert.rejects(
         () => runLifeLedgerObsidianSync(['--input', input, '--vault', vault, '--mode', 'production', '--apply', '--expected-vault', vault, '--first-run-ack', `FIRST-RUN-CONFIRMED:${vault}`]),
-        e => e.code === 'production_sync_disabled'
+        e => e.code === 'rollback_receipt_unverified'
       );
       assert.equal(await exists(path.join(vault, 'Life Ledger')), false);
     })
@@ -1031,25 +1098,32 @@ test('FIX 2 — loaded receipt with a canonical-vault mismatch fails closed in v
   ))
 ));
 
-test('FIX 2 — CLI production --apply with a real receipt path stays hard-blocked and never rewrites the receipt', async () => (
+test('FIX 2 — CLI production --apply with a real, well-formed receipt bound to a DIFFERENT vault plan fails closed and never writes', async () => (
   withTempSnapshotFile([focusEvent()], input => (
-    withTempVault(async vault => (
-      withTempDir('chronasense-obsidian-backup-', async backupRoot => {
-        const target = prodTarget(vault);
-        const plan = await planObsidianSync(target, [focusEvent()], { expectedCanonicalVaultPath: vault });
-        const receipt = await prepareObsidianRollbackArtifact({ target, plan, backupRoot });
-        const before = await fs.readFile(receipt.receiptPath);
-        await assert.rejects(
-          () => runLifeLedgerObsidianSync([
-            '--input', input, '--vault', vault, '--mode', 'production', '--apply',
-            '--expected-vault', vault, '--first-run-ack', `FIRST-RUN-CONFIRMED:${vault}`,
-            '--rollback-receipt', receipt.receiptPath
-          ]),
-          e => e.code === 'production_sync_disabled'
-        );
-        assert.ok(before.equals(await fs.readFile(receipt.receiptPath)), 'receipt file untouched by the CLI');
-        assert.equal(await exists(path.join(vault, 'Life Ledger')), false);
-      })
+    withTempVault(async vaultA => (
+      withTempVault(async vaultB => (
+        withTempDir('chronasense-obsidian-backup-', async backupRoot => {
+          // Receipt is genuinely prepared and on-disk for vaultB's plan...
+          const targetB = prodTarget(vaultB);
+          const planB = await planObsidianSync(targetB, [focusEvent()], { expectedCanonicalVaultPath: vaultB });
+          const receiptB = await prepareObsidianRollbackArtifact({ target: targetB, plan: planB, backupRoot });
+          const before = await fs.readFile(receiptB.receiptPath);
+
+          // ...but supplied to a CLI production apply targeting vaultA. The switch is on and
+          // every flag is otherwise correct; only the receipt/vault binding is wrong.
+          await assert.rejects(
+            () => runLifeLedgerObsidianSync([
+              '--input', input, '--vault', vaultA, '--mode', 'production', '--apply',
+              '--expected-vault', vaultA, '--first-run-ack', `FIRST-RUN-CONFIRMED:${vaultA}`,
+              '--rollback-receipt', receiptB.receiptPath
+            ]),
+            e => e.code === 'rollback_receipt_unverified'
+          );
+          assert.ok(before.equals(await fs.readFile(receiptB.receiptPath)), 'receipt file untouched by the CLI');
+          assert.equal(await exists(path.join(vaultA, 'Life Ledger')), false);
+          assert.equal(await exists(path.join(vaultB, 'Life Ledger')), false);
+        })
+      ))
     ))
   ))
 ));
