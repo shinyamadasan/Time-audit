@@ -234,17 +234,31 @@ Depends on: no app globals
 
 ### obsidian-life-ledger-writer.js
 Lines: external file
-Purpose: Node-only safe writer for Obsidian Life Ledger export plans. Enforces denied vault roots, managed subtree containment, symlink/junction parent checks, generated-file conflict protection, idempotent writes, and constrained stale generated Daily cleanup.
-Functions: `resolveObsidianLifeLedgerPath()`, `writeObsidianLifeLedgerExport()`
-Variables: `OBSIDIAN_LIFE_LEDGER_MANAGED_DIR`
+Purpose: Node-only safe writer for Obsidian Life Ledger export plans. Enforces denied vault roots, managed subtree containment, symlink/junction parent checks, generated-file conflict protection, idempotent writes, and constrained stale generated Daily cleanup. Test-vault-only by design — its denylist unconditionally blocks both real vaults. Phase 9 added additive `export` keywords to its denylist-agnostic containment primitives so `obsidian-life-ledger-sync.js` can reuse them; no behavior change.
+Functions: `resolveObsidianLifeLedgerPath()`, `writeObsidianLifeLedgerExport()`, and (reused by the sync planner) `assertRelativePath()`, `assertNoLinkEscape()`, `assertSafeExistingLeaf()`, `pathEqualsOrContains()`, `isLinkStats()`, `realPathOrResolved()`, `readTextIfExists()`, `writeFileAtomically()`, `defaultFsAdapter()`
+Variables: `OBSIDIAN_LIFE_LEDGER_MANAGED_DIR`, `OBSIDIAN_LIFE_LEDGER_DENIED_VAULT_ROOTS`
 Depends on: Node `fs/promises`, Node `path`, `obsidian-life-ledger-renderer.js`
+
+### obsidian-life-ledger-sync.js
+Lines: external file
+Purpose: Phase 9 production-capable Obsidian sync planner/applier. Adds a `{ vaultPath, managedRoot, mode: test|production, allowApply }` target model, a multi-signal read-only vault identity check, a durable machine-readable ownership sentinel (`Life Ledger/System/MANAGED-BY-CHRONASENSE.md`), a deterministic SHA-256 manifest (`Life Ledger/System/manifest.json`), an immutable `planObsidianSync()` → `applyObsidianSync(plan, authorization)` split with a TOCTOU precondition re-check, allowlist-only generated-file ownership, manifest-drift human-edit conflict detection (never silent overwrite), STALE-not-delete semantics (no deletion by absence), honest partial-failure reporting, and a per-mode denylist (test denies both real vaults; production denies the stale Desktop vault + the test vault and needs an exact canonical-path match). Production apply is HARD-disabled via `OBSIDIAN_PRODUCTION_SYNC_ENABLED = false`; `evaluateProductionAuthorization()` is the testable second-layer gate for when that constant is flipped.
+Functions: `createObsidianSyncTarget()`, `verifyObsidianVaultIdentity()`, `planObsidianSync()`, `applyObsidianSync()`, `evaluateProductionAuthorization()`, `formatObsidianSyncPreview()`
+Variables: `OBSIDIAN_SYNC_SCHEMA_VERSION`, `OBSIDIAN_SYNC_OWNER`, `OBSIDIAN_PRODUCTION_SYNC_ENABLED`, `OBSIDIAN_SYNC_OPERATIONS`, `OBSIDIAN_SENTINEL_RELATIVE_PATH`, `OBSIDIAN_MANIFEST_RELATIVE_PATH`, `OBSIDIAN_SYSTEM_README_RELATIVE_PATH`
+Depends on: Node `fs/promises`, Node `path`, Node `crypto`, `obsidian-life-ledger-writer.js`, `obsidian-life-ledger-renderer.js`
 
 ### scripts/export-life-ledger-to-obsidian.mjs
 Lines: external file
-Purpose: Node CLI transport from downloaded Life Ledger snapshot JSON to the reviewed Obsidian renderer/writer. Defaults to dry-run, validates untrusted snapshots before rendering, and requires `TEST-VAULT.md` at the vault root for apply mode.
+Purpose: Node CLI transport from downloaded Life Ledger snapshot JSON to the reviewed Obsidian renderer/writer. Defaults to dry-run, validates untrusted snapshots before rendering, and requires `TEST-VAULT.md` at the vault root for apply mode. Unchanged in Phase 9 — the legacy test-vault-only path.
 Functions: `runLifeLedgerObsidianExport()`
 Variables: —
 Depends on: Node `fs/promises`, Node `path`, `life-ledger-transport.js`, `obsidian-life-ledger-renderer.js`, `obsidian-life-ledger-writer.js`
+
+### scripts/sync-life-ledger-to-obsidian.mjs
+Lines: external file
+Purpose: Phase 9 production-capable CLI over `obsidian-life-ledger-sync.js`. Requires an explicit `--mode test|production` (no default), always plans + prints a preview first, writes only with `--apply`. Production apply additionally needs `--expected-vault` (exact canonical match), `--first-run-ack`, `--first-run-backup-confirmed` — and is still refused because production sync is hard-disabled in this build.
+Functions: `runLifeLedgerObsidianSync()`
+Variables: —
+Depends on: Node `fs/promises`, Node `path`, `life-ledger-transport.js`, `obsidian-life-ledger-sync.js`
 
 ---
 

@@ -1,5 +1,99 @@
 # ChronaSense — Changelog
 
+## Phase 9 — Real Obsidian Integration V1 (production-safe, real-write-DISABLED) (branch: feat/real-obsidian-integration-v1) — 2026-09-02
+FIRST-PASS builder milestone. No commit beyond one local feature commit; no push, no merge, no
+real-vault write. Production apply is hard-blocked pending independent adversarial review.
+added:
+  - obsidian-life-ledger-sync.js (new — the production-capable Obsidian sync planner/applier,
+    deliberately separate from obsidian-life-ledger-writer.js because that writer is
+    test-vault-only by design and its own tests assert it unconditionally blocks both real
+    vaults):
+    - TARGET MODEL: `createObsidianSyncTarget({ vaultPath, managedRoot:'Life Ledger',
+      mode:'test'|'production', allowApply:false })` — frozen, validated; managedRoot must be
+      exactly 'Life Ledger' (an arbitrary caller string can never pick the filesystem target).
+    - IDENTITY CHECK: `verifyObsidianVaultIdentity()` — read-only, never throws for an ordinary
+      "not safe" outcome (returns `{ ok:false, reason }`). Canonical realpath; rejects a
+      missing path, a non-directory, a symlink/junction vault root, the stale Desktop vault
+      (always), the real OneDrive vault (test mode), the test vault (production mode), and a
+      vault path inside a supplied known-repo-root list. Production mode additionally requires
+      an exact `expectedCanonicalVaultPath` match — it never auto-discovers a vault. Soft
+      signals: `.obsidian` presence, OneDrive-path heuristic.
+    - OWNERSHIP SENTINEL: `Life Ledger/System/MANAGED-BY-CHRONASENSE.md` — deterministic
+      machine-readable frontmatter (owner + schemaVersion + managedRoot), no volatile fields.
+      Presence alone is NOT ownership proof; it is one signal.
+    - MANIFEST: `Life Ledger/System/manifest.json` — deterministic (sorted, SHA-256 per file,
+      schema version, relative managed paths only, duplicate entries reject the whole
+      manifest). Drives human-edit drift detection. manifest.json is treated as pure
+      operational metadata (always safe to rewrite once the sentinel proves the root owned).
+    - PLAN / APPLY SPLIT: `planObsidianSync()` returns a frozen plan of
+      `CREATE|UPDATE|UNCHANGED|CONFLICT|BLOCKED|STALE` ops (sorted by relativePath, each with
+      contentSha256 + previousSha256) plus `rollbackPlan`. `applyObsidianSync(plan,
+      authorization)` re-verifies every writable target's precondition hash against the plan
+      (TOCTOU) with ZERO writes if anything changed, then two-phase preflight-then-write.
+    - OWNERSHIP MODEL (safest coherent V1): only code-allowlisted generated paths
+      (`System/README.md`, `System/MANAGED-BY-CHRONASENSE.md`, `System/manifest.json`,
+      `Daily/YYYY-MM-DD.md`) are app-owned. An existing `Life Ledger/` without a valid
+      sentinel (INCLUDING an empty dir, and INCLUDING the pre-Phase-9 old-schema test-vault
+      folder) is classified `unmanaged_conflict` and never auto-adopted or merged. A
+      sentinel-bearing generated file whose on-disk SHA-256 ≠ its last manifest hash is a
+      `human_modified_owned_file` CONFLICT — never silently overwritten. Any CONFLICT blocks
+      the entire apply.
+    - NO DELETION BY ABSENCE: a manifested Daily file absent from a later snapshot is reported
+      `STALE` and left on disk (this new module supersedes the legacy writer's stale-Daily
+      cleanup for production-capable flows; the legacy CLI/writer behavior is unchanged).
+    - PARTIAL FAILURE: a mid-apply write error throws `partial_apply_failure` carrying the
+      list of files already written — never a bare fs error that looks like "nothing
+      happened", never a false success.
+    - PRODUCTION HARD BLOCK: `OBSIDIAN_PRODUCTION_SYNC_ENABLED = false` — every production
+      apply throws `production_sync_disabled` before any other check, regardless of flags or
+      tokens. `evaluateProductionAuthorization()` is the pure, separately-testable second
+      layer (mode + allowApply + apply + exact canonical-path match + path-bound
+      `FIRST-RUN-CONFIRMED:<path>` token + first-run backup acknowledgement) for when the
+      constant is deliberately flipped after review.
+  - scripts/sync-life-ledger-to-obsidian.mjs (new — production-capable CLI parallel to the
+    untouched export-life-ledger-to-obsidian.mjs. `--mode test|production` required, no
+    default; plans + previews always; writes only with `--apply`; production needs
+    `--expected-vault` / `--first-run-ack` / `--first-run-backup-confirmed` and is still
+    refused by the build constant).
+  - obsidian-life-ledger-sync.test.js (new — 54 tests: target-model validation, denied/stale
+    vault rejection in both modes, exact canonical-path binding, known-repo-root rejection,
+    unmanaged-root conflict (incl. empty dir), valid/invalid sentinel, malformed manifest,
+    unowned collision, manifest-drift human-edit conflict, block-entire-apply-on-conflict,
+    idempotency, deterministic ordering + byte-identical plan content, STALE-not-delete,
+    TOCTOU abort with zero writes, symlink-after-plan abort, manifest shape (SHA-256, sorted,
+    no dupes, relative paths), production hard-block via applyObsidianSync even with perfect
+    auth, second-layer authorization via evaluateProductionAuthorization, rollback artifact,
+    partial-failure honesty, preview format (no absolute paths leaked), plus 10 CLI tests).
+changed:
+  - obsidian-life-ledger-writer.js — additive `export` keywords only on the denylist-agnostic
+    containment primitives (assertRelativePath, assertNoLinkEscape, assertSafeExistingLeaf,
+    pathEqualsOrContains, isLinkStats, realPathOrResolved, readTextIfExists, writeFileAtomically,
+    defaultFsAdapter) + a read-only `OBSIDIAN_LIFE_LEDGER_DENIED_VAULT_ROOTS` alias. Zero logic
+    or behavior change; existing 448 test.js tests unaffected.
+  - package.json — `test` chains `node obsidian-life-ledger-sync.test.js`; new
+    `test:obsidian-sync` script; `lint` covers the two new files.
+  - eslint.config.js — obsidian-life-ledger-sync.js added to both file lists (scripts/**/*.mjs
+    glob already covered the new CLI).
+  - CODEMAP.md — entries for obsidian-life-ledger-sync.js and scripts/sync-life-ledger-to-obsidian.mjs.
+verification: `node obsidian-life-ledger-sync.test.js` 54/54; `npm test` 725 model/unit
+  (0 fail, 0 skip — test.js 448 + workout-adapter 33 + meal-adapter 45 + meal-cross-repo 10 +
+  temporal 20 + life-feed 36 + life-character-sheet 34 + cross-domain 45 + obsidian-sync 54);
+  `npm run test:adapter-contracts` PASS; `npm run lint` 0 errors (19 pre-existing warnings);
+  Playwright NOT run (no UI change). Strict `npm run test:cross-repo-compat`: ChronaSense +
+  Meal legs PASS; Workout leg FAILS via the spawnSync path with a pre-existing Windows
+  nested-npm/vitest environment artifact ("Cannot read properties of undefined (reading
+  'config')") that reproduces IDENTICALLY on unmodified main and is NOT a Phase 9 regression —
+  the workout source-contract suite itself passes 29/29 when invoked directly. `node --check`
+  on all changed/new files OK; `git diff --check` clean; UTF-8/control-byte scan clean.
+  Test-vault E2E proof (real Second-Brain-Test-Vault): old-schema fixture correctly BLOCKED as
+  unmanaged_conflict → fixture reset (authorized by TEST-VAULT.md + spec §22) → CREATE plan →
+  authorized test apply (4 files) → second plan all UNCHANGED → human edit → CONFLICT + apply
+  refused + edit preserved on disk → reset to a clean Phase-9 managed subtree. Real active
+  vault (C:\Users\Admin\OneDrive\2nd Brain): READ-ONLY inspection only; `Life Ledger/` absent
+  before and after; git status 29 lines and HEAD d265b96 unchanged before and after; test
+  mode → denied_vault_root, production mode with every correct flag → production_sync_disabled,
+  zero writes.
+
 ## Phase 8 — recommendation-honesty fixes (post independent review) (branch: feat/cross-domain-intelligence-v1) — 2026-09-02
 changed:
   - cross-domain-intelligence-model.js — two bounded fixes from the independent review; no
