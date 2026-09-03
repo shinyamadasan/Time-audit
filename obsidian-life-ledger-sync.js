@@ -29,12 +29,16 @@ import { OBSIDIAN_LIFE_LEDGER_SENTINEL, buildObsidianLifeLedgerExport } from './
 export const OBSIDIAN_SYNC_SCHEMA_VERSION = 2; // v2: sentinel carries manifestSha256 binding
 export const OBSIDIAN_SYNC_OWNER = 'chronasense-life-ledger';
 
-// PHASE 9 HARD BLOCK. Production apply is disabled at the code level, independent of any
-// runtime flag, CLI argument, or token a caller can supply. Flipping this is a deliberate,
-// reviewed, one-line commit made ONLY after independent review and explicit authorization
-// (spec sections 21 and 49). Until then every production apply throws production_sync_disabled
-// before any other check.
-export const OBSIDIAN_PRODUCTION_SYNC_ENABLED = false;
+// PHASE 9 HARD BLOCK — RELEASED (Phase 9B). This is the deliberate, reviewed, one-line change
+// the previous note described: the code-level production-apply block is now lifted. Flipping
+// this constant ONLY removes the highest-level hard stop — it does NOT make writes automatic.
+// Every production apply still requires the full authorization chain enforced by
+// evaluateProductionAuthorization() and applyObsidianSync(): mode === 'production',
+// allowApply === true, apply === true, an exact expectedCanonicalVaultPath match, a verified
+// rollback receipt bound to the current plan fingerprint, and — on the first run — the exact
+// FIRST-RUN-CONFIRMED:<canonical-vault-path> acknowledgement, plus the per-operation preflight
+// and containment/link/leaf re-checks. No default supplies any of those.
+export const OBSIDIAN_PRODUCTION_SYNC_ENABLED = true;
 
 export const OBSIDIAN_SENTINEL_RELATIVE_PATH = 'Life Ledger/System/MANAGED-BY-CHRONASENSE.md';
 export const OBSIDIAN_MANIFEST_RELATIVE_PATH = 'Life Ledger/System/manifest.json';
