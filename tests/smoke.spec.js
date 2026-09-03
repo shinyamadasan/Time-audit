@@ -176,6 +176,59 @@ test('focus overlay exit logs and renders the active session', async ({ page }) 
   await expect(page.locator('#recent-list')).toContainText('Focus exit save');
 });
 
+test('generic focus session exit shows the Life Ledger clarification toast', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.confirm = () => true;
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Generic focus toast check';
+    startPomodoro();
+    focusStartTime = Date.now() - 5 * 60 * 1000;
+    exitFocusConfirm();
+
+    const saved = entries.filter(e => e.activity === 'Generic focus toast check');
+    return {
+      savedCount: saved.length,
+      toastText: document.getElementById('toast').textContent,
+      toastShowing: document.getElementById('toast').classList.contains('show')
+    };
+  });
+
+  expect(result.savedCount).toBe(1);
+  expect(result.toastShowing).toBe(true);
+  expect(result.toastText).toBe(
+    'Focus saved to your timeline. To count toward your Life Ledger, start Focus from a Learning Plan step.'
+  );
+});
+
+test('focus session under one minute is not logged and does not claim a save', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.confirm = () => true;
+    window.__toastCalls = [];
+    const originalShowToast = showToast;
+    showToast = (msg, ...rest) => { window.__toastCalls.push(msg); return originalShowToast(msg, ...rest); };
+    enterFocusMode();
+    document.getElementById('focus-task-input').value = 'Too short to log';
+    startPomodoro();
+    // focusStartTime left at "now" so elapsed duration rounds to 0 minutes.
+    exitFocusConfirm();
+
+    const saved = entries.filter(e => e.activity === 'Too short to log');
+    return {
+      savedCount: saved.length,
+      toastCalls: window.__toastCalls
+    };
+  });
+
+  expect(result.savedCount).toBe(0);
+  expect(result.toastCalls).toEqual([]);
+});
+
 test('leaving during a focus break does not duplicate the completed work session', async ({ page }) => {
   await openApp(page);
 
@@ -2625,6 +2678,43 @@ test('focus overlay mirrors a remote PC focus session without taking ownership',
     stoppedWrites: 0
   });
   expect(result.countdown).toMatch(/^2[2-3]:\d{2}$/);
+});
+
+test('exiting a mirrored remote focus session does not show a local save toast', async ({ page }) => {
+  await openApp(page);
+  const remoteStart = Date.now() - 2 * 60 * 1000;
+
+  const result = await page.evaluate((startTs) => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    window.__toastCalls = [];
+    const originalShowToast = showToast;
+    showToast = (msg, ...rest) => { window.__toastCalls.push(msg); return originalShowToast(msg, ...rest); };
+    applyRemoteTimerState({
+      running: true,
+      mode: 'focus',
+      focusPhase: 'work',
+      lastTask: 'PC focus mirror',
+      intervalSecs: 25 * 60,
+      startedAt: startTs,
+      taskStartTime: startTs,
+      blockStartTime: startTs,
+      ownerDeviceId: 'pc-device',
+      updatedAt: Date.now(),
+      updatedBy: 'pc-device',
+      deviceName: 'PC'
+    });
+
+    enterFocusMode();
+    confirmExitFocus();
+
+    return {
+      entryCount: entries.length,
+      toastCalls: window.__toastCalls
+    };
+  }, remoteStart);
+
+  expect(result.entryCount).toBe(0);
+  expect(result.toastCalls).toEqual([]);
 });
 
 test('remote owner banner can intentionally take over a synced focus timer', async ({ page }) => {
