@@ -873,7 +873,7 @@ export function formatObsidianSyncPreview(plan) {
     lines.push(`${op.op}${op.op === OP.CONFLICT ? ` (${op.reason})` : ''}`, op.relativePath, '');
   }
   lines.push(plan.mode === 'production'
-    ? 'Production apply blocked until explicit authorization (production sync is disabled in this build).'
+    ? 'Production apply requires explicit --apply authorization, the exact expected vault, a verified rollback receipt, and first-run acknowledgement when required.'
     : `Test apply ${plan.blocked ? `blocked: ${plan.blockReason}.` : 'requires --apply plus a TEST-VAULT.md marker.'}`);
   return lines.join('\n').trimEnd();
 }

@@ -13,10 +13,11 @@ import {
 // Phase 9 production-capable CLI. This is deliberately a NEW entry point alongside the
 // existing scripts/export-life-ledger-to-obsidian.mjs (left untouched) rather than a
 // replacement — that script's own reviewed test-vault-only contract stays exactly as-is.
-// This one can target a production vault, but every production apply is gated behind
+// This one can target a production vault. The build-level OBSIDIAN_PRODUCTION_SYNC_ENABLED
+// switch is on, but that alone never writes anything — every production apply still requires
 // --mode production, --apply, an exact --expected-vault canonical-path match, a verified
-// --rollback-receipt, and (on the very first run) --first-run-ack — AND the build-level
-// OBSIDIAN_PRODUCTION_SYNC_ENABLED constant, which is false. No default supplies any of these.
+// --rollback-receipt bound to the current plan, and (on the very first run) --first-run-ack.
+// No default supplies any of these, and a missing or invalid one fails closed with zero writes.
 
 const MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024;
 
@@ -45,7 +46,9 @@ function usage() {
     '  --rollback-receipt <path> production only: JSON receipt from prepareObsidianRollbackArtifact()',
     '  --json                    print the machine-readable summary instead of the text preview',
     '',
-    'NOTE: production apply is hard-disabled in this build and will refuse regardless of flags.'
+    'NOTE: production apply is available only with explicit --apply authorization, the exact',
+    '      expected vault, a verified rollback receipt, and first-run acknowledgement when',
+    '      required — any missing or invalid gate fails closed with zero writes.'
   ].join('\n');
 }
 
