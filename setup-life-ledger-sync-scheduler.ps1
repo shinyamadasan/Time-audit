@@ -75,25 +75,53 @@ switch ($Action) {
         $nodePath = Get-NodeCommand
         $applyArg = if ($Apply) { ' --apply' } else { '' }
 
-        # Idempotent: remove any prior registration of this exact task name first.
+        # Idempotent: remove any prior registration of this exact task name first (exact name
+        # only -- never a wildcard, never touches any other task). NOTE: if registration below
+        # fails after this succeeds, the owner is left with NO task registered under this name
+        # until Install is re-run successfully -- there is no transactional rollback here by
+        # design (Phase 10 does not build Task Scheduler rollback machinery). That failure is now
+        # always reported loudly (see below), so it is never silently mistaken for success.
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
-        # No -Principal is supplied, so this registers to run as the current user, "only when
-        # user is logged on", with no elevation -- see the top-of-file note. That is intentional.
-        $action = New-ScheduledTaskAction -Execute $nodePath -Argument "`"$workerScript`"$applyArg" -WorkingDirectory $repoRoot
-        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-            -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) `
-            -RepetitionDuration $RepetitionDuration
-        $settings = New-ScheduledTaskSettingsSet `
-            -MultipleInstances IgnoreNew `
-            -StartWhenAvailable `
-            -ExecutionTimeLimit (New-TimeSpan -Minutes 5) `
-            -DontStopOnIdleEnd
+        try {
+            # No -Principal is supplied, so this registers to run as the current user, "only when
+            # user is logged on", with no elevation -- see the top-of-file note. That is
+            # intentional. The CIM action object below is deliberately named $taskAction, NOT
+            # $action -- PowerShell variable names are case-insensitive, and $action would
+            # silently collide with this script's own [ValidateSet]-constrained -Action
+            # parameter, causing the assignment to fail its validation set while looking like an
+            # ordinary local variable (confirmed live during the disposable scheduler proof: the
+            # script printed "Task registered" while Register-ScheduledTask had never actually
+            # run). Every step below uses -ErrorAction Stop so any real failure here throws
+            # instead of being silently swallowed.
+            $taskAction = New-ScheduledTaskAction -Execute $nodePath -Argument "`"$workerScript`"$applyArg" -WorkingDirectory $repoRoot -ErrorAction Stop
+            $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+                -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) `
+                -RepetitionDuration $RepetitionDuration -ErrorAction Stop
+            $settings = New-ScheduledTaskSettingsSet `
+                -MultipleInstances IgnoreNew `
+                -StartWhenAvailable `
+                -ExecutionTimeLimit (New-TimeSpan -Minutes 5) `
+                -DontStopOnIdleEnd -ErrorAction Stop
 
-        $modeDescription = if ($Apply) { 'REAL WRITES ENABLED (--apply).' } else { 'Dry-run only (no --apply) -- identifies pending changes, writes nothing.' }
-        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings `
-            -Description "Runs the ChronaSense Life Ledger background sync worker every $IntervalMinutes minute(s). $modeDescription Runs only while logged on; no elevation required." `
-            -Force | Out-Null
+            $modeDescription = if ($Apply) { 'REAL WRITES ENABLED (--apply).' } else { 'Dry-run only (no --apply) -- identifies pending changes, writes nothing.' }
+            Register-ScheduledTask -TaskName $TaskName -Action $taskAction -Trigger $trigger -Settings $settings `
+                -Description "Runs the ChronaSense Life Ledger background sync worker every $IntervalMinutes minute(s). $modeDescription Runs only while logged on; no elevation required." `
+                -Force -ErrorAction Stop | Out-Null
+
+            # Never trust Register-ScheduledTask's own success alone -- independently verify the
+            # EXACT task now exists before printing any success text. This is what would have
+            # caught the collision bug above instead of reporting a false success.
+            $verifiedTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+            if (-not $verifiedTask) {
+                throw "Register-ScheduledTask reported success but Get-ScheduledTask -TaskName '$TaskName' found nothing."
+            }
+        } catch {
+            Write-Host ""
+            Write-Host "FAILED to register scheduled task '$TaskName'." -ForegroundColor Red
+            Write-Host "Error: $_" -ForegroundColor Red
+            exit 1
+        }
 
         Write-Host ""
         Write-Host "Task registered: '$TaskName'" -ForegroundColor Green
