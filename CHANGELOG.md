@@ -1,5 +1,84 @@
 # ChronaSense — Changelog
 
+## Phase 10 — Life Ledger background sync automation (built, NOT activated) (branch: feat/life-ledger-background-automation-v1) — 2026-09-03
+Removes the manual "export JSON, run the sync CLI by hand" step from the proven Phase 9 flow.
+Adds a browser-side durable outbox mirror, a one-shot Windows background worker, and an
+existing-root safe sync transaction (fresh rollback artifact per changing cycle, fail-closed on
+any conflict, no blind retry after a partial write). All Phase 9 write-path safety logic
+(ownership sentinel, manifest binding, preflight precondition re-check, production authorization
+chain) is reused unchanged — Phase 10 is transport and scheduling around it, not a rewrite of it.
+The real Windows scheduled task was never registered and the real OneDrive vault was never
+written to during this build; see `docs/PHASE10_BACKGROUND_AUTOMATION.md` for the full design and
+the post-review activation steps.
+changed:
+  - life-ledger-sync-cycle.js (new) — `runLifeLedgerSyncCycle()`: parses an outbox snapshot,
+    plans (read-only), classifies into `no_source` / `unchanged` / `would_sync` (dry run) /
+    `conflict` / `synced` / `intervention_required` / `error`, and — only for safe changes —
+    prepares a fresh `prepareObsidianRollbackArtifact()`, verifies it, applies, and re-plans to
+    verify the resulting state. Refuses to auto-acknowledge a first-run state
+    (`unexpected_first_run_state`) — recreating a managed root stays a human-only decision via
+    the existing `--first-run-ack` CLI path. `summarizeCycleResultForOutbox()` trims a result to
+    a small, path-free subset safe for the browser-writable outbox folder.
+  - scripts/life-ledger-sync-worker.mjs (new) — one-shot CLI: config resolution (flags override
+    `scripts/life-ledger-sync-worker.config.json`, gitignored), a single-instance lock file with
+    stale-lock detection (dead PID or >30min old), reads the outbox snapshot, calls the cycle
+    (dry run unless `--apply`), writes a run log + `status.json` under `backupsRoot`, and writes
+    a truthful status file back into the outbox folder.
+  - life-ledger-sync-bridge.js (new) — browser-side durable transport: a one-time
+    `showDirectoryPicker()` grant (persisted in IndexedDB) lets every successful Life Ledger
+    write mirror the exact deterministic `exportLifeLedgerSnapshotJson()` envelope into a local
+    outbox file, with no manual export click. Never throws into the caller; never auto-prompts
+    for a lapsed permission (only an explicit user-gesture `resume()` re-requests it). Fully
+    dependency-injected for testing (fake handle store / picker / digest).
+  - life-ledger-sync-status-ui.js (new) — Settings UI wiring plus the pure, DOM-free
+    `describeLifeLedgerSyncStatus()`: only ever renders "Life Ledger synced." when the worker's
+    own reported outcome AND its recorded outbox hash match the CURRENT local snapshot — local
+    persistence alone is never treated as proof of sync.
+  - learning-plan-ui.js — added `mirrorLifeLedgerToOutbox()` (fire-and-forget, swallows its own
+    errors) called after each of the five existing successful Life Ledger record paths (manual
+    complete, manual reopen, focus-session-completed, plan-step-completed, and the retry-queue
+    success path). No existing function signature changed.
+  - index.html — added the Background Sync button/status elements under Settings → Data, and the
+    `life-ledger-sync-status-ui.js` module script include. No existing markup removed or altered.
+  - setup-life-ledger-sync-scheduler.ps1 (new) — `-Action Install|Uninstall|Status|RunOnce`
+    Windows Task Scheduler install/start/stop/diagnostic interface, mirroring the existing
+    `setup-task-scheduler.ps1` registration pattern (`MultipleInstances = IgnoreNew`). `Install`
+    defaults to dry-run-only scheduled cycles unless `-Apply` is passed. Not run against the real
+    task name during this Builder phase.
+  - scripts/life-ledger-sync-worker.config.example.json (new) — committed placeholder shape;
+    the real, machine-specific config file is gitignored.
+  - eslint.config.js — added the three new browser-facing `.js` files to the ESM file list (and
+    its `sourceType:'script'` fallback block's `ignores`), matching the existing pattern for
+    every other `import`/`export`-using root file.
+  - package.json — wired the four new test files (`life-ledger-sync-cycle.test.js`,
+    `life-ledger-sync-bridge.test.js`, `life-ledger-sync-status-ui.test.js`,
+    `scripts/life-ledger-sync-worker.test.js`) into the aggregate `test` script plus individual
+    `test:life-ledger-sync-*` shortcuts, added `life-ledger-sync:run-once`, and added the four
+    new source files to `lint`.
+  - .gitignore — ignores the real (non-example) worker config file.
+  - CODEMAP.md — five new module entries; corrected two stale "production sync is hard-disabled
+    (`OBSIDIAN_PRODUCTION_SYNC_ENABLED = false`)" claims left over from before Phase 9B enabled
+    it, found while documenting the module Phase 10 builds directly on top of.
+  - docs/PHASE10_BACKGROUND_AUTOMATION.md (new) — full architecture writeup: transport authority,
+    worker model, existing-root transaction, rollback-artifact lifecycle, failure taxonomy, status
+    truthfulness contract, install/start/stop, what's automated vs. manual, known limitations.
+  - New test files: life-ledger-sync-cycle.test.js (20), life-ledger-sync-bridge.test.js (14),
+    life-ledger-sync-status-ui.test.js (11), scripts/life-ledger-sync-worker.test.js (9),
+    tests/life-ledger-background-sync-ui.spec.js (2, Playwright) — 54 new Node tests + 2 new
+    Playwright tests, all against disposable temp vaults/dirs; the real vault was never touched
+    by any test.
+verification: `npm test` 356/357 pass, 0 fail (the one skip is the pre-existing env-gated
+  cross-repo control test, same as baseline); `npm run lint` 0 errors (same 19 pre-existing
+  warnings in files this phase did not touch); `npx playwright test` 216/216 (214 pre-existing +
+  2 new); STRICT `npm run test:cross-repo-compat` (explicit MEAL_REPO_PATH / OPENGYM_REPO_PATH)
+  PASS ChronaSense / PASS Meal / PASS Workout 29/29, zero leg skips, exit 0. Real vault
+  (`C:\Users\Admin\OneDrive\2nd Brain\Life Ledger`) hashes verified byte-identical before and
+  after this entire build. Sibling repos (Meal prep app, openGym-longevity) and the authoritative
+  main ChronaSense checkout were not modified. `OBSIDIAN_PRODUCTION_SYNC_ENABLED` left
+  untouched at `true`. Real Windows Task Scheduler registration and any real-vault write were
+  both explicitly NOT performed — see `docs/PHASE10_BACKGROUND_AUTOMATION.md`'s Activation
+  section for the deliberate post-review steps.
+
 ## Phase 9B — receipt activation-path hardening (pre-production, still disabled) (branch: fix/phase9b-receipt-activation-hardening) — 2026-09-03
 Small hardening slice closing the two activation-path findings from the independent review of
 the approved first-run rollback receipt. No production enablement, no real-vault write, no
