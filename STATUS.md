@@ -18,7 +18,7 @@ for the real history, not the entries below.
 STEP A/B (as this file's own template would report them): unchanged from 2026-08-17 -- the 13
 `planning/PROPOSALS.md` proposals are still `pending`, `planning/ROADMAP.md`'s Current Objective
 and Approved Backlog are still empty. This is not a new finding; it is carried-forward and, per
-Phase 11.5's scope, explicitly not resolved here (resolving the two-track split is a Phase 11.6
+Phase 11.5's scope, explicitly not resolved here (resolving the two-track split is a Phase 11.7
 question).
 
 What Phase 11.5 actually did (docs/context only, no feature code, no production systems touched):
@@ -40,9 +40,12 @@ surfaces (Day Review Modal, Review Plan Picker, Reflect View) for overlap; live-
 prototype files); scope-limited the future distraction-signals direction to derived metrics on
 existing screens only. Full detail in `APP_CONTEXT.md`.
 
-Next action: owner: you. The two-track split (this pipeline vs. the Phase-branch track) and the
-motivation-layer overlap (identity level vs. Awareness Signal) are the two concrete decisions
-carried into Phase 11.6. No blockers to Phase 11.6 starting.
+Next action: owner: you. Per the Phase 11.5 review-fix pass, the confirmed-live
+`triggerPenaltyMode()` bug moved Phase 11.6 to core-loop bug cleanup (it lives inside the same
+motivation/escalation subsystem that consolidation decisions below will evaluate). The two-track
+split (this pipeline vs. the Phase-branch track) and the motivation-layer overlap (identity level
+vs. Awareness Signal) are the two concrete decisions carried into Phase 11.7 (bloat
+consolidation). No blockers to Phase 11.6 starting.
 
 ---
 

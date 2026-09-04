@@ -124,7 +124,7 @@ module correctly colocated in this repo for now, C = should eventually live else
 |---|---|---|
 | Learning Plans (`learning-plan-*.js`) | B | Personal knowledge-development tracking with its own top-level nav tab; writes `plan_step_completed` evidence into Life Ledger and reads Focus outcomes, but browsing/editing plans is not time-audit capture. |
 | Capability/Career (`capability-career-*.js`) | B | Explicitly documented (`docs/ARCHITECTURE.md`) as *contextual interpretation* ("this fact demonstrates this capability"), distinct from Life Ledger's *factual history*. Career development, not time tracking. |
-| Life Character Sheet (`life-character-sheet-*.js`) | B leaning C | A cross-domain "where am I right now" snapshot spanning Focus/Time/Learning/Capability/Workout/Meal — 4 of 5 sections are about domains outside ChronaSense. |
+| Life Character Sheet (`life-character-sheet-*.js`) | B leaning C | A cross-domain "where am I right now" snapshot with 6 raw domain-coverage fields (`focus`, `time`, `learning`, `capability`, `workout`, `meal`) — 4 of 5 conceptual sections are about domains outside ChronaSense, with `focus` + `time` grouped as one ChronaSense section. |
 | Cross-Domain Intelligence (`cross-domain-intelligence-*.js`) | B, strongest C candidate | Does the job the boundary above assigns to "Claude / intelligence layer" (recommendation/synthesis), just without an LLM. Legitimate today because no external intelligence layer exists yet; first candidate to migrate out once one does. |
 | Life Feed (`life-feed-*.js`) | B | A read-only unified timeline over Life Ledger events. A viewer for shared infrastructure, not itself time-audit capture. |
 
@@ -135,12 +135,17 @@ per the phase's own scope boundary.
 - `ai_studio_code (1) - Copy.html` and `ai_studio_code (1) copy.html` — dead prototype files.
   They are also the *only* place `triggerPenaltyMode()` is actually defined (see Known Live
   Bugs below) — the production port of that function was apparently never finished.
-- `docs/DECISIONS.md` — an unfilled ADR-lite template (entries literally read "Decision: TODO").
-  The real, current architectural-decisions record is the root `DECISIONS.md`.
+- `docs/DECISIONS.md` — a duplicate/parallel decision record, not an empty one: D-001 is an
+  unfilled placeholder ("Decision: TODO"), but D-002, D-003, and D-004 are real, substantive
+  decisions — D-003 and D-004 specifically are the Capability/Career architectural decisions
+  ("evidence is explicit interpretation, not Life Ledger history"; "career intelligence uses
+  deterministic rules") that this file's own product-boundary section above relies on. The root
+  `DECISIONS.md` is the other, larger decisions record. Consolidation candidate (Phase 11.7)
+  because of the duplication/scope overlap between the two files, not because either is empty.
 
 ## Motivation Layer (current inventory, Phase 11.5)
 
-No mechanism removed or merged here — Phase 11.6 decides that. Recorded so it doesn't need
+No mechanism removed or merged here — Phase 11.7 decides that. Recorded so it doesn't need
 re-deriving:
 
 | Mechanism | Behavior it targets | KEEP / FREEZE / CONSOLIDATE-CANDIDATE |
@@ -148,7 +153,7 @@ re-deriving:
 | Focus Wallet | Turns deep-work minutes into spendable "points," costs waste/sports time against balance; allows negative debt. Weekly-scoped, reward-redemption loop. | KEEP — unique job (the only mechanism with a spendable balance and rewards). |
 | Identity level (`computeIdentityScore()` / `getIdentityLevelWithEmoji()`) | Labels the user by deep-work percentage ("who you're becoming"). Shown on Today's side panel. | CONSOLIDATE-CANDIDATE — overlaps with the Awareness Signal's own deep/waste % framing; two different UI surfaces state the same underlying number. |
 | Streaks (`computeStreak()`, `computeCleanStreak()`, 60-day streak calendar) | Consecutive-day consistency pressure. | KEEP — distinct time axis (day-to-day) from Focus Wallet's within-week axis. |
-| Penalty / escalation (`checkEscalation()` → `triggerPenaltyMode()`) | The most forceful nudge: 5+ consecutive waste/missed entries should force a 60-min recovery session and lock the focus-mode exit delay. | FREEZE — currently non-functional, see Known Live Bugs. Do not build on top of it until Phase 11.7 fixes it. |
+| Penalty / escalation (`checkEscalation()` → `triggerPenaltyMode()`) | The most forceful nudge: 5+ consecutive waste/missed entries should force a 60-min recovery session and lock the focus-mode exit delay. | FREEZE — currently non-functional, see Known Live Bugs. Do not build on top of it until Phase 11.6 fixes it. |
 | Awareness Signal ("Today's Signal", `renderAwarenessSignal()`) | Real-time honest read of today (deep/waste %, peak focus hour, worst waste activity, time since last deep block). | KEEP — this is Goal #4 ("insight must change behaviour") made concrete; the natural home for any future minimal distraction metrics (see below). |
 | Focus Mode | Pomodoro session + full-screen blocker + exit-delay friction. | KEEP — the only mechanism that *intervenes* in the moment rather than reporting after the fact. |
 
@@ -161,7 +166,7 @@ re-deriving:
 | Reflect View (`renderReflectView()`) | Weekly review, weekly planning, streak calendar, focus heatmap, daily-reflection history — Week/Month view lives here too (`renderMonthOverview()` is a mode toggle inside the Week tab, not a separate view). | KEEP — already the single consolidated weekly surface; Week/Month is one view, not two. |
 
 Net finding: this inventory is already fairly consolidated. The overlap worth acting on in
-Phase 11.6 is in the **motivation layer** (identity level vs. Awareness Signal), not the review
+Phase 11.7 is in the **motivation layer** (identity level vs. Awareness Signal), not the review
 surfaces.
 
 ## Distraction Signals — Explicitly Scope-Limited (Phase 11.5)
@@ -186,8 +191,10 @@ is a scope note for later, not a plan being executed.
   escalation); `exitDelay` is still set to 60s just before the throw, so that half of the
   escalation does work. Confirmed still live by direct `grep` on 2026-09-04 — this is the same
   bug a prior audit (`planning/PROPOSALS.md` PROP-007) already caught and the human never
-  approved into `ROADMAP.md`. Scheduled for Phase 11.7 (core-loop bug cleanup); not touched in
-  Phase 11.5 per that phase's docs-only scope.
+  approved into `ROADMAP.md`. Scheduled for Phase 11.6 (core-loop bug cleanup) — sequenced
+  before bloat consolidation because the bug lives inside the same motivation/escalation
+  subsystem that later consolidation decisions (identity level vs. Awareness Signal, etc.) will
+  evaluate. Not touched in Phase 11.5 per that phase's docs-only scope.
 
 ## Fragile Areas
 
@@ -232,9 +239,10 @@ Known stale or incomplete (corrected 2026-09-04):
   subsystem yet. Treat it as "real but partial," not "placeholder."
 - `docs/DATA_MODEL.md`: still a placeholder (`TODO.` only, 4 lines).
 - `docs/FEATURES.md`: still a placeholder (`TODO.` only, 5 lines).
-- `docs/DECISIONS.md`: an unfilled ADR-lite template (entries read "Decision: TODO"). The real
-  decisions record is the root `DECISIONS.md` — a duplication worth resolving in Phase 11.6, not
-  fixed here.
+- `docs/DECISIONS.md`: a duplicate/parallel decision record — D-001 is an unfilled placeholder,
+  but D-002/D-003/D-004 are real, substantive decisions (D-003/D-004 are the Capability/Career
+  architectural decisions this file relies on elsewhere). The real, larger decisions record is
+  the root `DECISIONS.md` — a duplication worth resolving in Phase 11.7, not fixed here.
 - `planning/ROADMAP.md`, `planning/PROPOSALS.md`, `planning/BUILD_QUEUE.md`, `TASKS.md`,
   `HANDOFF.md`: structurally fine but describe a pipeline (captures → triage → PROPOSALS →
   human-approves → ROADMAP → BUILD_QUEUE → TASKS → Codex) that has been stalled since
@@ -259,7 +267,7 @@ This repo has been running two disconnected workflows since late July:
 
 Practical effect: reading `STATUS.md`, `HANDOFF.md`, or `TASKS.md` alone gives a *false* picture
 that the app has been frozen since 2026-07-21. Reading `CHANGELOG.md` gives the true picture.
-This split itself is a Phase 11.6 candidate (either retire the unused gated-pipeline docs, or
+This split itself is a Phase 11.7 candidate (either retire the unused gated-pipeline docs, or
 resume feeding them) — not resolved here, per Phase 11.5's docs-only, no-decisions-beyond-
 reconciliation scope.
 

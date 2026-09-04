@@ -23,15 +23,18 @@ section for how the two relate. The sequence below is that Phase-branch track's 
 reconciled against live repo evidence as of 2026-09-04 -- it is not itself an approved-proposal
 Current Objective.)_
 
-### Reconciled phase sequence (from Phase 11.5)
+### Reconciled phase sequence (from Phase 11.5, order corrected in Phase 11.5 review-fix)
 
 - Phase 11.5 -- Context Reconciliation + Product Boundary (this phase; done 2026-09-04).
-- Phase 11.6 -- Bloat Consolidation / UX Simplification. Concrete candidates already identified:
+- Phase 11.6 -- Core-loop Bug Cleanup. Leads with the confirmed-live `triggerPenaltyMode()`
+  `ReferenceError` (`insights.js:248`; see `APP_CONTEXT.md` Known Live Bugs). Sequenced before
+  bloat consolidation because the bug lives inside the same motivation/escalation subsystem that
+  Phase 11.7's consolidation decisions will evaluate.
+- Phase 11.7 -- Bloat Consolidation / UX Simplification. Concrete candidates already identified:
   the identity-level vs. Awareness Signal overlap, the two-DECISIONS.md duplication
-  (`docs/DECISIONS.md` unfilled template vs. root `DECISIONS.md`), and whether to resume or
-  retire the stalled gated pipeline (`PROPOSALS.md`/`BUILD_QUEUE.md`/`TASKS.md`/`HANDOFF.md`).
-- Phase 11.7 -- Core-loop Bug Cleanup. Leads with the confirmed-live `triggerPenaltyMode()`
-  `ReferenceError` (`insights.js:248`; see `APP_CONTEXT.md` Known Live Bugs).
+  (`docs/DECISIONS.md` -- one placeholder entry, D-001, plus three real filled decisions,
+  D-002/D-003/D-004 -- vs. root `DECISIONS.md`), and whether to resume or retire the stalled
+  gated pipeline (`PROPOSALS.md`/`BUILD_QUEUE.md`/`TASKS.md`/`HANDOFF.md`).
 - Phase 11.8 -- Minimal Distraction Signals. Scope-limited to derived metrics on existing
   screens (attention switches today, longest uninterrupted focus stretch) surfaced on the
   Awareness Signal / Reflect view. Explicitly excludes a new tab, dashboard, tracking engine,
