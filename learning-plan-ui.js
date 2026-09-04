@@ -20,6 +20,16 @@ import {
   recordLearningPlanStepCompleted,
   recordLearningPlanStepReopened
 } from './life-ledger-runtime.js';
+import { lifeLedgerSyncBridge } from './life-ledger-sync-bridge.js';
+
+// Phase 10: after a Life Ledger write actually lands in localStorage, best-effort mirror the
+// current snapshot into the background-sync outbox (if the user has enabled it). This is the
+// hook that removes the need to manually click "Export Life Ledger" for the background worker to
+// eventually see the event. Never throws, never blocks the UI, never re-signals the failure this
+// module already surfaces via its own retry machinery above.
+function mirrorLifeLedgerToOutbox() {
+  lifeLedgerSyncBridge.writeOutboxSnapshotIfEnabled().catch(() => {});
+}
 
 let repository = null;
 let learningPlans = [];
@@ -321,10 +331,12 @@ function renderLearningPlanLedgerRetry() {
 function retryPendingLedgerWrite() {
   if (pendingLedgerRetries.size === 0) return;
   let failed = 0;
+  let succeeded = 0;
   for (const [retryKey, pending] of Array.from(pendingLedgerRetries.entries())) {
     try {
       pending.retry();
       clearPendingLedgerRetry(retryKey);
+      succeeded++;
     } catch (err) {
       failed++;
       const baseMessage = pending.baseMessage || pending.message;
@@ -335,6 +347,7 @@ function retryPendingLedgerWrite() {
       });
     }
   }
+  if (succeeded > 0) mirrorLifeLedgerToOutbox();
   showLearningPlanError(failed > 0
     ? `Life Ledger history is still pending. ${failed} write${failed === 1 ? '' : 's'} could not be retried.`
     : '');
@@ -347,6 +360,7 @@ function recordManualCompletionLedger(savedPlan, stepId) {
     recordLearningPlanStepCompleted(savedPlan, stepId);
     clearPendingLedgerRetry(retryKey);
     showLearningPlanError('');
+    mirrorLifeLedgerToOutbox();
     return true;
   } catch (err) {
     const message = `Learning Plan step was saved, but Life Ledger history is pending. ${lifeLedgerFailureMessage(err)}`;
@@ -362,6 +376,7 @@ function recordManualReopenLedger(previousPlan, stepId) {
     recordLearningPlanStepReopened(previousPlan, stepId);
     clearPendingLedgerRetry(retryKey);
     showLearningPlanError('');
+    mirrorLifeLedgerToOutbox();
     return true;
   } catch (err) {
     const message = `Learning Plan step was reopened, but Life Ledger history is pending. ${lifeLedgerFailureMessage(err)}`;
@@ -554,6 +569,7 @@ function recordFocusOutcomeLedger(outcome) {
     outcome.focusLedgerRecorded = true;
     outcome.focusLedgerError = '';
     clearPendingLedgerRetry(retryKey);
+    mirrorLifeLedgerToOutbox();
     return true;
   } catch (err) {
     outcome.focusLedgerRecorded = false;
@@ -582,6 +598,7 @@ function recordFocusOutcomeStepLedger(plan, outcome) {
     outcome.planStepLedgerRecorded = true;
     outcome.planStepLedgerError = '';
     clearPendingLedgerRetry(retryKey);
+    mirrorLifeLedgerToOutbox();
     return true;
   } catch (err) {
     outcome.planStepLedgerRecorded = false;

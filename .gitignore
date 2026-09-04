@@ -16,3 +16,7 @@ www/Sounds/
 automation.lock
 .last-phase-result.txt
 .scope-note.txt
+
+# Phase 10 — machine-specific Life Ledger background sync config (real local paths).
+# Commit only scripts/life-ledger-sync-worker.config.example.json.
+scripts/life-ledger-sync-worker.config.json

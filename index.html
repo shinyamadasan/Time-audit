@@ -887,6 +887,12 @@
       <select id="clear-day-select" style="font-family:var(--head);font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex:1;min-width:0"></select>
       <button class="btn sm danger" onclick="clearSelectedDay()">Clear day</button>
     </div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn sm" type="button" id="life-ledger-sync-enable-btn" hidden>Enable Background Sync</button>
+      </div>
+      <div id="life-ledger-sync-status" hidden style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.45"></div>
+    </div>
     <details style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
       <summary style="cursor:pointer;color:var(--muted2);font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;margin-bottom:8px">Advanced: Activity Cleanup</summary>
       <div style="font-size:12px;color:var(--muted);line-height:1.45;margin:8px 0 10px">Merge task-name variants without deleting entries. This updates live entries only; deleted tombstones stay untouched.</div>
@@ -1577,6 +1583,7 @@
 <script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
+<script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
