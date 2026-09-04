@@ -1,5 +1,86 @@
 # ChronaSense — Changelog
 
+## Phase 10 review-fix pass — intervention latch, serialized mirror writes, lock hardening (built, NOT activated) (branch: feat/life-ledger-background-automation-v1) — 2026-09-04
+Closes four findings from the independent adversarial review of Phase 10 (architecture approved,
+bounded hardening requested). No redesign — every fix composes on top of the existing modules.
+Real scheduler activation and real-vault writes remain explicitly out of scope for this pass.
+changed:
+  - scripts/life-ledger-sync-worker.mjs — **persisted intervention latch** (Finding 1): a real
+    (`--apply`) cycle result of `outcome === 'intervention_required'` now writes
+    `<backupsRoot>/intervention-required.json` (schema version, `createdAt`, `runId`, outcome/
+    category/reason/message, `planFingerprint`, `outboxSha256`, `receiptPath`, `written`,
+    `failedRelativePath` — no vault contents, no secrets). Every later `--apply` invocation checks
+    for the latch BEFORE calling the cycle at all and, if present, is refused outright: zero
+    rollback-artifact preparation, zero backup copy, zero managed write, zero new receipt-
+    directory churn no matter how many times the scheduler fires. New `--clear-intervention` flag
+    (also exposed as `setup-life-ledger-sync-scheduler.ps1 -Action ClearIntervention`) removes
+    only the latch file, touches nothing else, reports what was cleared, and is idempotent when
+    nothing is latched. Dry runs may still observe/report the same underlying state while latched
+    but never create or clear the latch. — **atomic stale-lock takeover** (Finding 3): breaking a
+    stale lock is now a rename-to-a-unique-tombstone (`fs.rename`, atomic on a shared source path)
+    instead of an unconditional `rm` + `open('wx')`; two contenders racing the same stale lock now
+    resolve to exactly one winner, with the loser getting a clean `ENOENT` and backing off as
+    "already running" rather than an unhandled exception or a double-acquisition. —
+    **liveness-over-age lock semantics** (Finding 4): a lock with a parsable, confirmed-alive PID
+    is now held regardless of age (previously a live-owner lock older than 30 minutes was
+    incorrectly stolen); a confirmed-dead PID remains immediately reclaimable regardless of age;
+    only a lock with no usable PID at all falls back to the 30-minute age ceiling, documented as a
+    conservative last resort.
+  - life-ledger-sync-bridge.js — **serialized mirror writes** (Finding 2): `writeOutboxSnapshotIfEnabled()`
+    is now a strict FIFO promise queue (`enqueueWrite()`) — each call's snapshot is captured only
+    when its task actually starts executing, and a later call's task cannot begin until every
+    call enqueued before it has fully settled. This guarantees disk-commit order always matches
+    call order and the final on-disk content always reflects the state at the time of the LAST
+    call to actually execute, even when an earlier call's I/O is slower. A failed write resolves
+    (never throws), so one failure never blocks the queue for later calls. `enable()`/`resume()`
+    now route through the same queue. Also adds a best-effort **self-healing mirror refresh**
+    (soft requirement): `getStatus()` compares the current canonical hash against the hash of what
+    this bridge instance last successfully wrote and, on mismatch, schedules exactly one refresh
+    through the same queue — never an aggressive retry loop — so a failed last-action mirror can
+    recover the next time Settings is opened or the app reloads, without needing an unrelated new
+    Ledger event.
+  - life-ledger-sync-status-ui.js — `worker.outcome === 'intervention_required'` with
+    `category === 'latched'` now renders distinct "paused pending manual review — clear the
+    intervention latch" wording (still tone `error`), so the UI accurately implies automation has
+    stopped pending a human action rather than the generic "needs attention" phrasing.
+  - setup-life-ledger-sync-scheduler.ps1 — added `-Action ClearIntervention`; replaced
+    `-RepetitionDuration ([TimeSpan]::MaxValue)` with a documented 10-year finite `TimeSpan`
+    (some Windows Task Scheduler builds have been reported to handle a near-int64-max repetition
+    duration inconsistently); `-Action Status` now surfaces whether the intervention latch is
+    set; added explicit documentation that the registered task runs only while the owner is
+    logged on and requires no elevation (intentional for this single-user desktop setup, not an
+    oversight) — no scheduling-behavior change, comments/description text only plus the TimeSpan
+    fix. Still not run with `-Action Install` in this pass.
+  - docs/PHASE10_BACKGROUND_AUTOMATION.md — new "Persisted intervention latch" section; failure
+    taxonomy table updated to reflect latch behavior (previously said a partial-write failure was
+    just "never auto-retried" without mentioning the durable cross-invocation block this pass
+    adds); new "Mirror write serialization" and "Self-healing mirror refresh" notes; documented
+    run-log/receipt/backup retention as unbounded except where the latch itself prevents a fault
+    loop from creating new receipts; documented Task Scheduler logged-on/no-elevation behavior and
+    the TimeSpan fix; recorded orphaned-`.tmp`-file cleanup as Phase 11 info (pre-existing
+    Phase-9-level characteristic, not a Phase 10 gap — no automatic deletion of unrecognized files
+    was added).
+  - CODEMAP.md — updated the four changed-module entries with the new latch/lock/queue behavior.
+  - Test additions: life-ledger-sync-worker.test.js +9 (two-contender atomic takeover; latch
+    scenarios A/B+C/D/E/E-idempotent/F/G per the review's required list), life-ledger-sync-bridge.test.js
+    +8 (delayed-older-write ordering, three rapid writes, failure-does-not-poison-queue, revision,
+    tombstone, focus+plan-step back-to-back, two self-healing tests), life-ledger-sync-status-ui.test.js
+    +1 (latched wording). One existing worker test (`an old lock ... is broken even if the PID
+    happens to be reused`) was rewritten to assert the CORRECTED Finding-4 behavior (a live-PID
+    lock is now held, not broken, regardless of age) plus a new companion test for the
+    malformed-lock age-fallback path.
+verification: `node obsidian-life-ledger-sync.test.js` 66/66 unchanged; `npm test` (node:test
+  aggregate) 374/375 pass, 0 fail, 1 pre-existing env-gated skip; `npm run lint` 0 errors (same
+  19 pre-existing warnings, none in files this phase touched); STRICT `npm run test:cross-repo-compat`
+  (explicit MEAL_REPO_PATH / OPENGYM_REPO_PATH) PASS ChronaSense / PASS Meal / PASS Workout 29/29,
+  zero leg skips, exit 0; `npx playwright test` 214/214 unchanged; `git diff --check` clean;
+  `node --check` clean on every Phase 10 JS/MJS file; PowerShell AST parser clean on the updated
+  scheduler script. Real vault (`C:\Users\Admin\OneDrive\2nd Brain\Life Ledger`) hashes verified
+  byte-identical before and after this fix pass. Sibling repos (Meal prep app, openGym-longevity)
+  and the authoritative main ChronaSense checkout were not modified.
+  `OBSIDIAN_PRODUCTION_SYNC_ENABLED` untouched at `true`. Real Windows Task Scheduler registration
+  and any real-vault write were both explicitly NOT performed.
+
 ## Phase 10 — Life Ledger background sync automation (built, NOT activated) (branch: feat/life-ledger-background-automation-v1) — 2026-09-03
 Removes the manual "export JSON, run the sync CLI by hand" step from the proven Phase 9 flow.
 Adds a browser-side durable outbox mirror, a one-shot Windows background worker, and an
@@ -62,15 +143,18 @@ changed:
   - docs/PHASE10_BACKGROUND_AUTOMATION.md (new) — full architecture writeup: transport authority,
     worker model, existing-root transaction, rollback-artifact lifecycle, failure taxonomy, status
     truthfulness contract, install/start/stop, what's automated vs. manual, known limitations.
-  - New test files: life-ledger-sync-cycle.test.js (20), life-ledger-sync-bridge.test.js (14),
+  - New test files: life-ledger-sync-cycle.test.js (19), life-ledger-sync-bridge.test.js (14),
     life-ledger-sync-status-ui.test.js (11), scripts/life-ledger-sync-worker.test.js (9),
-    tests/life-ledger-background-sync-ui.spec.js (2, Playwright) — 54 new Node tests + 2 new
+    tests/life-ledger-background-sync-ui.spec.js (2, Playwright) — 53 new node:test cases + 2 new
     Playwright tests, all against disposable temp vaults/dirs; the real vault was never touched
-    by any test.
-verification: `npm test` 356/357 pass, 0 fail (the one skip is the pre-existing env-gated
-  cross-repo control test, same as baseline); `npm run lint` 0 errors (same 19 pre-existing
-  warnings in files this phase did not touch); `npx playwright test` 216/216 (214 pre-existing +
-  2 new); STRICT `npm run test:cross-repo-compat` (explicit MEAL_REPO_PATH / OPENGYM_REPO_PATH)
+    by any test. [Corrected 2026-09-04: the original count here said 20/54 — off by one on the
+    cycle suite; see the review-fix entry above this one.]
+verification: `npm test` (node:test aggregate across all suites) 356/357 pass, 0 fail (the one
+  skip is the pre-existing env-gated cross-repo control test, same as baseline); `npm run lint`
+  0 errors (same 19 pre-existing warnings in files this phase did not touch); `npx playwright
+  test` 214/214, all 214 pre-existing-plus-new tests counted together (not 216 as originally and
+  incorrectly stated — see the correction above); STRICT `npm run test:cross-repo-compat`
+  (explicit MEAL_REPO_PATH / OPENGYM_REPO_PATH)
   PASS ChronaSense / PASS Meal / PASS Workout 29/29, zero leg skips, exit 0. Real vault
   (`C:\Users\Admin\OneDrive\2nd Brain\Life Ledger`) hashes verified byte-identical before and
   after this entire build. Sibling repos (Meal prep app, openGym-longevity) and the authoritative

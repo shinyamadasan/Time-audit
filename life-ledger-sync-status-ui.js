@@ -25,6 +25,9 @@ export function describeLifeLedgerSyncStatus(status) {
   if (worker.outcome === 'conflict') {
     return { text: `Sync blocked: conflict (${worker.reason || 'unresolved'}). Action required.`, tone: 'error', action: null };
   }
+  if (worker.outcome === 'intervention_required' && worker.category === 'latched') {
+    return { text: 'Sync is paused pending manual review. Resolve the issue, then clear the intervention latch to resume. Action required.', tone: 'error', action: null };
+  }
   if (worker.outcome === 'intervention_required') {
     return { text: 'Sync needs attention — a change could not be completed safely. Action required.', tone: 'error', action: null };
   }

@@ -6,9 +6,10 @@ import path from 'node:path';
 import {
   runLifeLedgerSyncWorker,
   LIFE_LEDGER_SYNC_WORKER_OUTBOX_FILENAME,
-  LIFE_LEDGER_SYNC_WORKER_STATUS_FILENAME
+  LIFE_LEDGER_SYNC_WORKER_STATUS_FILENAME,
+  LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME
 } from './life-ledger-sync-worker.mjs';
-import { createObsidianSyncTarget, planObsidianSync, applyObsidianSync } from '../obsidian-life-ledger-sync.js';
+import { createObsidianSyncTarget, planObsidianSync, applyObsidianSync, OBSIDIAN_MANIFEST_RELATIVE_PATH } from '../obsidian-life-ledger-sync.js';
 import { serializeLifeLedgerSnapshot, createLifeLedgerSnapshotFromEvents } from '../life-ledger-transport.js';
 
 function focusEvent(overrides = {}) {
@@ -37,6 +38,17 @@ function focusEvent(overrides = {}) {
   };
 }
 
+function focusEventDay2() {
+  return focusEvent({
+    eventId: '20202020-2020-4020-8020-202020202020',
+    sourceEntityId: 'focus-entry-2',
+    occurredAt: '2026-08-31T16:00:00.000Z',
+    recordedAt: '2026-08-31T16:00:00.000Z',
+    payload: { ...focusEvent().payload, startedAt: '2026-08-31T15:35:00.000Z', endedAt: '2026-08-31T16:00:00.000Z', source: { focusEntryId: 'focus-entry-2' } },
+    provenance: { ...focusEvent().provenance, evidence: ['synthetic.focus:2'] }
+  });
+}
+
 async function withTempDir(prefix, fn) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
   try {
@@ -60,6 +72,47 @@ async function writeOutbox(outboxDir, events) {
   const json = serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents(events));
   await fs.writeFile(path.join(outboxDir, LIFE_LEDGER_SYNC_WORKER_OUTBOX_FILENAME), json, 'utf8');
   return json;
+}
+
+// A fs adapter that lets the SECOND write to a ".tmp" file (i.e. the second writable op in
+// content->manifest->sentinel phase order) fail, simulating a real mid-apply crash.
+function breaksOnSecondTmpWriteFs() {
+  const real = fs;
+  let tmpWriteCount = 0;
+  return {
+    mkdir: (...a) => real.mkdir(...a),
+    readFile: (...a) => real.readFile(...a),
+    writeFile: async (p, content, enc) => {
+      if (String(p).endsWith('.tmp')) {
+        tmpWriteCount++;
+        if (tmpWriteCount === 2) throw Object.assign(new Error('simulated disk failure mid-apply'), { code: 'EIO' });
+      }
+      return real.writeFile(p, content, enc);
+    },
+    rename: (...a) => real.rename(...a),
+    unlink: (...a) => real.unlink(...a),
+    readdir: (...a) => real.readdir(...a),
+    lstat: (...a) => real.lstat(...a),
+    realpath: (...a) => real.realpath(...a)
+  };
+}
+
+async function readLatch(backupsRoot) {
+  try {
+    return JSON.parse(await fs.readFile(path.join(backupsRoot, LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME), 'utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+async function countReceiptDirs(backupsRoot) {
+  try {
+    return (await fs.readdir(path.join(backupsRoot, 'receipts'))).length;
+  } catch (err) {
+    if (err.code === 'ENOENT') return 0;
+    throw err;
+  }
 }
 
 test('missing required config raises missing_config', async () => (
@@ -203,23 +256,52 @@ test('a stale lock (process no longer running) is broken and the cycle proceeds'
   ))
 ));
 
-test('an old lock (past the staleness ceiling) is broken even if the PID happens to be reused', async () => (
+test('Finding 4: an old lock with a CONFIRMED-LIVE pid is NEVER broken by age alone', async () => (
   withTempDir('chronasense-p10-worker-', async cwd => (
     withTempDir('chronasense-p10-outbox-', async outboxDir => (
       withTempDir('chronasense-p10-vault-', async vault => (
         withTempDir('chronasense-p10-backups-', async backupsRoot => {
           await fs.mkdir(backupsRoot, { recursive: true });
-          const old = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1 hour ago
+          const old = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1 hour ago — well past STALE_LOCK_MS
           await fs.writeFile(
             path.join(backupsRoot, 'life-ledger-sync-worker.lock'),
-            JSON.stringify({ pid: process.pid, startedAt: old, hostname: 'test' }),
+            JSON.stringify({ pid: process.pid, startedAt: old, hostname: 'test' }), // process.pid is definitely alive (it's us)
             'utf8'
           );
           const outcome = await runLifeLedgerSyncWorker(
             ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot],
             { cwd }
           );
-          assert.equal(outcome.skipped, false);
+          assert.equal(outcome.skipped, true, 'a live PID must hold the lock regardless of age');
+          assert.equal(outcome.reason, 'already_running');
+        })
+      ))
+    ))
+  ))
+));
+
+test('Finding 4: a malformed/unverifiable lock (no parsable pid) falls back to the age ceiling', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          await fs.mkdir(backupsRoot, { recursive: true });
+          const old = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+          // No usable pid at all -- liveness can't be established, so this must fall back to age.
+          await fs.writeFile(path.join(backupsRoot, 'life-ledger-sync-worker.lock'), JSON.stringify({ startedAt: old, hostname: 'test' }), 'utf8');
+          const oldLockOutcome = await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot],
+            { cwd }
+          );
+          assert.equal(oldLockOutcome.skipped, false, 'an old unparsable-pid lock must be reclaimable via the age fallback');
+
+          const fresh = new Date().toISOString();
+          await fs.writeFile(path.join(backupsRoot, 'life-ledger-sync-worker.lock'), JSON.stringify({ startedAt: fresh, hostname: 'test' }), 'utf8');
+          const freshLockOutcome = await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot],
+            { cwd }
+          );
+          assert.equal(freshLockOutcome.skipped, true, 'a FRESH unparsable-pid lock must be conservatively held, not stolen');
         })
       ))
     ))
@@ -246,6 +328,237 @@ test('config file supplies defaults, CLI flags override them', async () => (
             assert.equal(outcome.result.outcome, 'would_sync');
           })
         ))
+      ))
+    ))
+  ))
+));
+
+// ===========================================================================
+// Finding 3 — atomic stale-lock takeover: two concurrent contenders, one stale lock
+// ===========================================================================
+
+test('Finding 3: two concurrent contenders racing the same stale lock -- exactly one obtains execution authority', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          await fs.mkdir(backupsRoot, { recursive: true });
+          // A dead PID -- unambiguously stale and reclaimable.
+          await fs.writeFile(
+            path.join(backupsRoot, 'life-ledger-sync-worker.lock'),
+            JSON.stringify({ pid: 999999, startedAt: new Date().toISOString(), hostname: 'test' }),
+            'utf8'
+          );
+          const argv = ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot];
+          const [a, b] = await Promise.all([
+            runLifeLedgerSyncWorker(argv, { cwd }),
+            runLifeLedgerSyncWorker(argv, { cwd })
+          ]);
+          const skippedCount = [a, b].filter(r => r.skipped === true).length;
+          const proceededCount = [a, b].filter(r => r.skipped === false).length;
+          assert.equal(proceededCount, 1, 'exactly one contender must obtain execution authority');
+          assert.equal(skippedCount, 1, 'the loser must back off safely, not crash or also proceed');
+        })
+      ))
+    ))
+  ))
+));
+
+// ===========================================================================
+// Finding 1 — persisted intervention latch
+// ===========================================================================
+
+test('A: a partial-apply failure during a real --apply run creates a durable intervention latch', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          await seedOwnedVault(vault, [focusEvent()]);
+          await writeOutbox(outboxDir, [focusEvent(), focusEventDay2()]);
+          const outcome = await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--apply'],
+            { cwd, fs: breaksOnSecondTmpWriteFs() }
+          );
+          assert.equal(outcome.result.outcome, 'intervention_required');
+          assert.equal(outcome.result.category, 'after_write_partial');
+
+          const latch = await readLatch(backupsRoot);
+          assert.ok(latch, 'a latch file must be written');
+          assert.equal(latch.outcome, 'intervention_required');
+          assert.equal(latch.category, 'after_write_partial');
+          assert.equal(latch.runId, outcome.result.runId);
+          assert.equal(latch.failedRelativePath, OBSIDIAN_MANIFEST_RELATIVE_PATH);
+          assert.ok(Array.isArray(latch.written) && latch.written.length === 1);
+          assert.equal(typeof latch.createdAt, 'string');
+          const latchJson = JSON.stringify(latch);
+          assert.ok(!latchJson.includes(vault), 'latch must not leak the vault path');
+        })
+      ))
+    ))
+  ))
+));
+
+test('B+C: repeated scheduled --apply invocations while latched create zero receipts and zero managed writes', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          await seedOwnedVault(vault, [focusEvent()]);
+          await writeOutbox(outboxDir, [focusEvent(), focusEventDay2()]);
+          await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--apply'],
+            { cwd, fs: breaksOnSecondTmpWriteFs() }
+          );
+          const receiptCountAfterFailure = await countReceiptDirs(backupsRoot);
+          assert.equal(receiptCountAfterFailure, 1, 'the failed run itself prepared exactly one receipt');
+
+          for (let i = 0; i < 3; i++) {
+            const outcome = await runLifeLedgerSyncWorker(
+              ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--apply'],
+              { cwd }
+            );
+            assert.equal(outcome.result.outcome, 'intervention_required');
+            assert.equal(outcome.result.category, 'latched');
+            assert.equal(outcome.result.reason, 'intervention_latch_present');
+          }
+          assert.equal(await countReceiptDirs(backupsRoot), receiptCountAfterFailure, 'no NEW receipt directories from blocked apply attempts');
+        })
+      ))
+    ))
+  ))
+));
+
+test('D: a dry run while latched may report state, but never clears or bypasses the latch', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          await seedOwnedVault(vault, [focusEvent()]);
+          await writeOutbox(outboxDir, [focusEvent(), focusEventDay2()]);
+          await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--apply'],
+            { cwd, fs: breaksOnSecondTmpWriteFs() }
+          );
+          const filesBefore = await fs.readdir(path.join(vault, 'Life Ledger', 'Daily')).catch(() => []);
+
+          const dryRunOutcome = await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot],
+            { cwd }
+          );
+          // No --apply -> the latch-block short-circuit never triggers; the cycle runs in dry-run
+          // mode and reports real state, purely informational.
+          assert.notEqual(dryRunOutcome.result.outcome, 'error');
+
+          const latchAfter = await readLatch(backupsRoot);
+          assert.ok(latchAfter, 'the latch must still exist after a dry run');
+
+          const filesAfter = await fs.readdir(path.join(vault, 'Life Ledger', 'Daily')).catch(() => []);
+          assert.deepEqual(filesAfter, filesBefore, 'a dry run while latched must not write to the vault');
+        })
+      ))
+    ))
+  ))
+));
+
+test('E: --clear-intervention removes only the latch, and reports what was cleared', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          await seedOwnedVault(vault, [focusEvent()]);
+          await writeOutbox(outboxDir, [focusEvent(), focusEventDay2()]);
+          await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--apply'],
+            { cwd, fs: breaksOnSecondTmpWriteFs() }
+          );
+          const receiptCountBeforeClear = await countReceiptDirs(backupsRoot);
+          const vaultFilesBefore = await fs.readdir(path.join(vault, 'Life Ledger', 'Daily'));
+
+          const clearOutcome = await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--clear-intervention'],
+            { cwd }
+          );
+          assert.equal(clearOutcome.cleared, true);
+          assert.equal(clearOutcome.result.outcome, 'intervention_cleared');
+          assert.match(clearOutcome.result.message, /Cleared/);
+
+          assert.equal(await readLatch(backupsRoot), null, 'the latch file itself must be gone');
+          assert.equal(await countReceiptDirs(backupsRoot), receiptCountBeforeClear, 'clearing must not touch receipts/backups');
+          assert.deepEqual(await fs.readdir(path.join(vault, 'Life Ledger', 'Daily')), vaultFilesBefore, 'clearing must not touch the vault');
+        })
+      ))
+    ))
+  ))
+));
+
+test('E (idempotent): clearing when no latch exists is a safe no-op', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          const outcome = await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--clear-intervention'],
+            { cwd }
+          );
+          assert.equal(outcome.cleared, false);
+          assert.equal(outcome.result.outcome, 'no_intervention_latch');
+        })
+      ))
+    ))
+  ))
+));
+
+test('F: after clearing, a manually-triggered recovery cycle can proceed and finish once the underlying state is safe', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          await seedOwnedVault(vault, [focusEvent()]);
+          await writeOutbox(outboxDir, [focusEvent(), focusEventDay2()]);
+          await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--apply'],
+            { cwd, fs: breaksOnSecondTmpWriteFs() }
+          );
+          await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--clear-intervention'],
+            { cwd }
+          );
+
+          // The underlying vault state is actually safe to complete (the one file that landed is
+          // already byte-identical to the target) -- a normal fs, no injected failure this time.
+          const recoveryOutcome = await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--apply'],
+            { cwd }
+          );
+          assert.equal(recoveryOutcome.result.outcome, 'synced');
+          assert.equal(await readLatch(backupsRoot), null, 'a successful recovery must not re-create the latch');
+        })
+      ))
+    ))
+  ))
+));
+
+test('G: outbox status while latched says action is required, never synced, never "retry automatically"', async () => (
+  withTempDir('chronasense-p10-worker-', async cwd => (
+    withTempDir('chronasense-p10-outbox-', async outboxDir => (
+      withTempDir('chronasense-p10-vault-', async vault => (
+        withTempDir('chronasense-p10-backups-', async backupsRoot => {
+          await seedOwnedVault(vault, [focusEvent()]);
+          await writeOutbox(outboxDir, [focusEvent(), focusEventDay2()]);
+          await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--apply'],
+            { cwd, fs: breaksOnSecondTmpWriteFs() }
+          );
+          // A later blocked --apply attempt is what the scheduler would actually experience.
+          await runLifeLedgerSyncWorker(
+            ['--outbox-dir', outboxDir, '--vault', vault, '--backups-root', backupsRoot, '--apply'],
+            { cwd }
+          );
+          const status = JSON.parse(await fs.readFile(path.join(outboxDir, LIFE_LEDGER_SYNC_WORKER_STATUS_FILENAME), 'utf8'));
+          assert.equal(status.outcome, 'intervention_required');
+          const statusJson = JSON.stringify(status).toLowerCase();
+          assert.ok(!statusJson.includes('"synced"'));
+        })
       ))
     ))
   ))
