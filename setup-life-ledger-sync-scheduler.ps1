@@ -168,7 +168,16 @@ switch ($Action) {
     }
     'RunOnce' {
         $nodePath = Get-NodeCommand
-        $applyArgs = if ($Apply) { @('--apply') } else { @() }
+        # NOTE: do not write `$applyArgs = if ($Apply) { @('--apply') } else { @() }`. Capturing
+        # an if/else statement's output collapses a one-element array literal to its bare scalar
+        # element (confirmed live: $applyArgs ended up as the STRING "--apply", not an array
+        # containing it), and splatting a string with @ then expands it character-by-character --
+        # this produced the observed "Unknown argument: -" from the worker CLI. Building the
+        # array by explicit accumulation (+=) instead never goes through that collapse.
+        [string[]]$applyArgs = @()
+        if ($Apply) {
+            $applyArgs += '--apply'
+        }
         Write-Host "Running one diagnostic Life Ledger sync cycle$(if ($Apply) { ' WITH --apply (real writes possible)' } else { ' as a dry run (no writes)' })..." -ForegroundColor Cyan
         & $nodePath $workerScript @applyArgs
         exit $LASTEXITCODE

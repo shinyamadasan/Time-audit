@@ -1,5 +1,55 @@
 # ChronaSense — Changelog
 
+## Phase 10 — RunOnce argument fix (built, NOT activated) (branch: feat/life-ledger-background-automation-v1) — 2026-09-04
+The retry of the disposable Windows Task Scheduler proof PASSED (Install, exact
+task registration, live task properties, finite repetition, scheduler-fired
+`--apply` execution, idempotent later cycles, intervention latch,
+ClearIntervention, and Uninstall all verified live). It also surfaced one new,
+narrowly-isolated defect: `setup-life-ledger-sync-scheduler.ps1 -Action RunOnce -Apply`
+failed with `Unknown argument: -`. Root cause: `$applyArgs = if ($Apply) { @('--apply') } else { @() }`
+— capturing an `if`/`else` statement's output collapses a one-element array
+literal to its bare scalar element in PowerShell, and splatting that scalar
+with `@` then expands it character-by-character. This was isolated to
+`RunOnce` — the `Install` branch's argument string (built by plain string
+concatenation, never an array/splat) was unaffected, and so was the actual
+registered scheduled task's arguments (both proven correct in the disposable
+proof).
+changed:
+  - setup-life-ledger-sync-scheduler.ps1 — `RunOnce` now builds
+    `[string[]]$applyArgs = @()` then conditionally `$applyArgs += '--apply'`,
+    an explicit typed-array accumulation that never goes through the
+    collapsing assignment pattern. No other action, no scheduling semantics
+    (interval/repetition/`IgnoreNew`/`StartWhenAvailable`/logged-on-only/
+    no-elevation/task naming), and no worker CLI behavior changed.
+  - scripts/test-life-ledger-sync-scheduler-install.ps1 — added Part C
+    (AST-based static checks: no collapsing `if/else` assignment to
+    `$applyArgs`, the typed-array initializer is present, the `+=`
+    accumulation is present — correctly written against the AST rather than
+    raw text, since the fix's own explanatory comment quotes the buggy
+    pattern as a documentation example and would otherwise false-positive a
+    plain text search) and Part D (dynamic: runs the real `RunOnce` action
+    against a disposable owned vault + outbox, no Task Scheduler involved,
+    proving `--apply` forwards as exactly one argument, no-`-Apply` forwards
+    zero worker flags, the worker script path survives intact despite
+    containing spaces, exit 0 propagates on success, and a genuine business
+    failure — missing vault — propagates non-zero without ever being confused
+    with the argument-parsing bug). 26/26 checks pass.
+verification: PowerShell AST parser clean; the harness reports 26/26 checks
+  passed; live-repro-style check against a disposable config (temporary
+  gitignored `scripts/life-ledger-sync-worker.config.json`, removed after)
+  confirmed both `RunOnce` and `RunOnce -Apply` now complete with no
+  "Unknown argument" and exit 0; `npm test` (node:test aggregate) 374/375
+  pass, 0 fail, 1 pre-existing env-gated skip — unchanged, no JS touched;
+  `npm run lint` 0 errors, same 19 pre-existing warnings; STRICT
+  `npm run test:cross-repo-compat` (explicit MEAL_REPO_PATH /
+  OPENGYM_REPO_PATH) PASS ChronaSense / PASS Meal / PASS Workout 29/29, zero
+  leg skips, exit 0; `git diff --check` clean. Playwright not re-run (no
+  browser-facing code changed). Real vault
+  (`C:\Users\Admin\OneDrive\2nd Brain\Life Ledger`) hashes verified
+  byte-identical before and after. No real or disposable scheduled task
+  exists afterward. Sibling repos and the authoritative main ChronaSense
+  checkout unmodified.
+
 ## Phase 10 — scheduler installer fail-safe fix (built, NOT activated) (branch: feat/life-ledger-background-automation-v1) — 2026-09-04
 An owner-authorized disposable Windows Task Scheduler proof found that
 `setup-life-ledger-sync-scheduler.ps1 -Action Install` printed "Task registered"
