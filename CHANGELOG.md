@@ -1,5 +1,69 @@
 # ChronaSense — Changelog
 
+## Phase 11.6 — Core-loop bug cleanup (built, NOT integrated) (branch: fix/core-loop-bugs-v1) — 2026-09-04
+Live-verified the five historical bug candidates from `planning/PROPOSALS.md` (PROP-004, 007,
+008, 009, 013) against current source and fixed the three that were confirmed active,
+data/correctness-affecting bugs. No feature work, no motivation-system redesign, no UI
+consolidation — see `APP_CONTEXT.md`'s Phase 11.5 product boundary and Known Live Bugs section,
+which this phase resolves.
+changed:
+  - index.html — `triggerPenaltyMode()` (PROP-007) is now defined. `checkEscalation()` in
+    `insights.js` called it on a 5+ consecutive waste/missed streak, but it only ever existed in
+    dead prototype HTML files and as an ESLint `readonly` global — every call threw a silent
+    `ReferenceError`, which also skipped `checkBudget()` on the same call path (two of three
+    `checkEscalation()` call sites call `checkBudget()` immediately after). Fixed by defining it
+    next to `startSprint()`, reusing the same safe pattern (adjust `totalSecs`/`remaining` for an
+    already-running block via `syncTimerState()`, otherwise queue the 60-min duration for the next
+    start via `settings.intervalMin`/the interval input) rather than the prototype's force-start
+    approach, which depends on `intention` being set and can't run unattended from escalation.
+    Penalty/escalation remains FREEZE per Phase 11.5 — this is a correctness fix, not an
+    expansion: no new mechanism, no forced-start behavior beyond what the exit-delay lock already
+    did.
+  - storage.js — `persist()`/`load()` (PROP-004) now round-trip `blockStartTime` through the
+    `ta3-timer` localStorage record. It was the only running-timer field never saved or restored:
+    `running`, `timerStartedAt`, `currentTask`, etc. all survived an app close/reopen but
+    `blockStartTime` silently reset to `null`. Confirmed live: reopening with a timer running and
+    then entering Focus Mode (`enterFocusMode()`'s `if (running && blockStartTime …)` auto-log
+    guard) silently dropped the pre-reopen block with no log entry and left `running: true`
+    stuck — a genuine silent time-loss bug, not just a display issue. `load()` now restores
+    `blockStartTime = saved.blockStartTime || saved.timerStartedAt` (old saved sessions without
+    the field fall back to the block starting when the current ping interval did).
+  - focus-wallet.js — `isFocusWalletSportsEntry()` (PROP-009) now requires a left word boundary
+    before a sports keyword match instead of plain substring `includes()`. `'transport'.includes
+    ('sport')` was `true`, so any "Public transport" / "Transport to office" activity silently
+    consumed a free Focus Wallet sports-session slot and could incur real point costs. Fixed with
+    a boundary-anchored regex per keyword (`sport` still matches `sport`/`sports`, no longer
+    matches `transport`/`transportation`).
+added:
+  - tests/smoke.spec.js — "a 5-waste-streak escalation does not throw…" (PROP-007): drives
+    `checkEscalation()` with 5 seeded waste entries through a real page, asserting no `pageerror`
+    and that the recovery duration is truthfully set. Fails with
+    `ReferenceError: triggerPenaltyMode is not defined` before the fix.
+  - tests/smoke.spec.js — "reopening the app with a running block preserves blockStartTime…"
+    (PROP-004): starts a real timer, rewinds it 5 minutes, reloads the page (simulating close +
+    reopen) without wiping localStorage, then enters Focus Mode and asserts the block is logged
+    instead of silently dropped. Fails (`blockStartTime: null`, 0 entries logged) before the fix.
+  - test.js — "transport activities are not misclassified as sports sessions" and
+    `"sport"`/`"sports"` still-match coverage (PROP-009) for `isFocusWalletSportsEntry()` via
+    `computeFocusWallet()`.
+not fixed (see reconciliation below):
+  - PROP-013 (unlogged-day navigation off-by-one) — live-verified, could not reproduce. Traced
+    the full chain (`renderUnloggedHours()` → `setViewDate()` → `getViewingDateKey()` →
+    `getEntriesForDateWindow()` → `tzParseTime()`/`getDateInTZ()`) and found it already correctly
+    timezone-aware (iterative self-correcting UTC conversion + a final date-boundary check).
+    Reproduced the exact repro shape (viewing Friday, clicking Wednesday from the unlogged-hours
+    list, entries seeded on both Wednesday and Thursday) against a real negative-UTC-offset
+    timezone (America/New_York) both by calling the click handler directly and by dispatching a
+    real DOM click — both correctly showed Wednesday's data in the header and the timeline body.
+    Classified STALE / CANNOT REPRODUCE; not fixed. See `planning/PROPOSALS.md` PROP-013 for the
+    original report.
+  - PROP-008 (Focus Mode auto-log has no undo) — confirmed live (`enterFocusMode()` calls
+    `showToast()` instead of the `rememberCreatedUndo()` + `showUndoToast()` pattern every other
+    logging path uses), but classified UX debt, not a correctness/data-safety bug: the auto-
+    logged entry is not irreversible — it remains editable/deletable from the timeline exactly
+    like any other entry, only without the 1-tap undo convenience. Deferred to Phase 11.7 or a
+    dedicated UX pass, per this phase's scope boundary.
+
 ## Phase 11 — Review fix pass (built, NOT integrated) (branch: feat/life-ledger-production-hardening-v1) — 2026-09-04
 Fixes for seven confirmed findings from an independent adversarial review of the Phase 11
 commit below. Built and tested entirely against disposable fixtures; the real scheduler, worker

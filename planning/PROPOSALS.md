@@ -65,7 +65,9 @@ captures: 20260714T1414Z-40
 
 id: PROP-004
 captures: 20260715T1346Z-52
-- **status:** pending
+- **status:** fixed (Phase 11.6, branch `fix/core-loop-bugs-v1`, 2026-09-04) — root cause was
+  `blockStartTime` silently missing from the `ta3-timer` restore record (`persist()`/`load()` in
+  `storage.js`); see `CHANGELOG.md` Phase 11.6 entry for detail and regression test.
 dup-count: 1
 
 > **Decision: Approve** — First user-reported bug; maps directly to Hard Rule #8 (timer restore order in INIT). When the app is closed mid-session and reopened, the hero resets to starting "work" instead of resuming the active entry. Data correctness issue: the gap between close and reopen is untracked, and the resumed state is wrong.
@@ -106,7 +108,10 @@ dup-count: 4
 
 id: PROP-007
 source: /audit (this run)
-- **status:** pending
+- **status:** fixed (Phase 11.6, branch `fix/core-loop-bugs-v1`, 2026-09-04) — `triggerPenaltyMode()`
+  now defined in `index.html`, reusing the existing `startSprint()`-style safe timer-duration
+  pattern rather than porting the prototype's force-start version; see `CHANGELOG.md` Phase 11.6
+  entry for detail and regression test.
 
 > **Decision: Approve** — Confirmed runtime bug. `checkEscalation()` in `insights.js:248` calls `triggerPenaltyMode()` which is not defined in `index.html`. A `ReferenceError` is thrown silently whenever five or more consecutive waste/missed entries are logged in a day. The function exists only in old prototype files and the `eslint.config.js` legacy globals list — it was never ported. The escalation path (the most forceful behavioral nudge in the app) silently never fires.
 
@@ -130,7 +135,10 @@ source: /audit (this run)
 
 id: PROP-008
 source: /audit (this run)
-- **status:** pending
+- **status:** deferred (Phase 11.6, 2026-09-04) — confirmed still live, but classified UX debt
+  rather than a correctness/data-safety bug: the auto-logged entry is not irreversible, it stays
+  editable/deletable from the timeline exactly like any other entry. Phase 11.6's scope was bounded
+  to correctness/data-integrity fixes; deferred to Phase 11.7 or a dedicated UX pass.
 
 > **Decision: Approve** — UX gap confirmed in `focus-mode.js:608–626`. When the user opens Focus Mode with an active interval timer, `enterFocusMode()` auto-logs the running block. It calls `showToast()` (not `showUndoToast()`), so no undo action is registered. If the wrong energy is assigned (heuristic: most recent logged entry's energy, defaulting to `'deep'`), the user must manually find and edit or delete the entry from the timeline — there is no 1-tap correction.
 
@@ -154,7 +162,9 @@ source: /audit (this run)
 
 id: PROP-009
 source: /audit (this run)
-- **status:** pending
+- **status:** fixed (Phase 11.6, branch `fix/core-loop-bugs-v1`, 2026-09-04) —
+  `isFocusWalletSportsEntry()` now uses a left-word-boundary regex per keyword instead of plain
+  substring `includes()`; see `CHANGELOG.md` Phase 11.6 entry for detail and regression tests.
 
 > **Decision: Approve** — Confirmed precision bug in `focus-wallet.js:isFocusWalletSportsEntry()`. The function uses `label.includes("sport")` where `label` is the lowercased activity name. The word "transport" contains "sport" as a substring (positions 4–8 of "transport"). Any activity logged as "Public transport", "Transport to office", "Air transport", etc. is silently classified as a weekly sports session, consuming a free-session slot and potentially incurring wallet costs (10 pts for session 4, 25 pts for each beyond that).
 
@@ -275,7 +285,15 @@ dup-count: 1
 
 id: PROP-013
 captures: 20260724T1519Z-120
-- **status:** pending
+- **status:** stale / cannot reproduce (Phase 11.6, 2026-09-04) — the only "unlogged-time day
+  list" in current code (`renderUnloggedHours()` in `index.html`, the Week tab's segmented bar
+  and chips) was traced end to end (`setViewDate()` → `getViewingDateKey()` →
+  `getEntriesForDateWindow()` → `tzParseTime()`/`getDateInTZ()`) and found already timezone-aware
+  (iterative self-correcting UTC conversion, final date-boundary check). Empirically reproduced
+  the repro shape against a real negative-UTC-offset timezone (America/New_York), entries seeded
+  on both the clicked day and the adjacent day, via both a direct call and a real DOM click —
+  both correctly resolved to the clicked day in the header and the timeline body. Not fixed; see
+  `CHANGELOG.md` Phase 11.6 entry.
 dup-count: 1
 
 > **Decision: Approve** — Real usage bug report: from an unlogged-time day list, clicking a specific day (user's example: Wednesday, while today is Friday) opens the *next* day's timeline (Thursday) instead. The header date label stays correct, so this isn't a global date-state bug — it's isolated to whatever click handler resolves the clicked day into a date key for the timeline view. The "off by one, toward the future" pattern is the classic symptom of a `YYYY-MM-DD` string being parsed as UTC midnight and re-rendered in a negative-UTC-offset local timezone, but that's a hypothesis, not a confirmed root cause.
