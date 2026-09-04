@@ -5,6 +5,47 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-04 — Phase 11.5: Context Reconciliation + Product Boundary
+
+This entry exists because every entry below is stale in a specific, important way: they are all
+from the gated `captures -> PROPOSALS -> ROADMAP -> BUILD_QUEUE -> TASKS` pipeline, which has been
+stalled since 2026-07-20 (human never set `planning/ROADMAP.md`'s Current Objective). Real feature
+work did not stop -- it moved to a separate, ungated Phase-branch track that never touched this
+file. **Phase 6 (Unified Life Feed) through Phase 11 (production hardening + review-fix pass)
+shipped between 2026-09-01 and 2026-09-04, entirely outside this pipeline** -- see `CHANGELOG.md`
+for the real history, not the entries below.
+
+STEP A/B (as this file's own template would report them): unchanged from 2026-08-17 -- the 13
+`planning/PROPOSALS.md` proposals are still `pending`, `planning/ROADMAP.md`'s Current Objective
+and Approved Backlog are still empty. This is not a new finding; it is carried-forward and, per
+Phase 11.5's scope, explicitly not resolved here (resolving the two-track split is a Phase 11.6
+question).
+
+What Phase 11.5 actually did (docs/context only, no feature code, no production systems touched):
+verified HEAD (`1fe439a`) and the intentionally dirty state (`M README.md`, `?? APP_CONTEXT.md`)
+live against the briefed values (hash-matched); inventoried every context file in the repo;
+reconciled `APP_CONTEXT.md` against live code (`CODEMAP.md`) and live production state (the
+`ChronaSense Life Ledger Sync` Windows Scheduled Task, confirmed `Enabled`/`Ready`, 15-min cadence,
+last run succeeded at 11:47 AM today -- genuinely live despite `CHANGELOG.md`'s Phase 10/11 entries
+correctly saying "NOT activated" as of their own commits); established the ChronaSense/Life
+Ledger/Obsidian/intelligence-layer product boundary and classified Learning Plans,
+Capability/Career, Life Character Sheet, Cross-Domain Intelligence, and Life Feed against it (all
+B, i.e. legitimately-colocated Personal-OS modules for now -- Cross-Domain Intelligence flagged as
+the strongest future migration-out candidate, since it does the "recommendation/synthesis" job the
+boundary assigns to an eventual Claude/intelligence layer); inventoried the motivation layer (Focus
+Wallet, identity level, streaks, penalty/escalation, Awareness Signal, Focus Mode) and review
+surfaces (Day Review Modal, Review Plan Picker, Reflect View) for overlap; live-reconfirmed the
+`triggerPenaltyMode()` ReferenceError from `planning/PROPOSALS.md` PROP-007 is still present
+(`insights.js:248` calls it, it is defined nowhere but the two dead `ai_studio_code (1)*.html`
+prototype files); scope-limited the future distraction-signals direction to derived metrics on
+existing screens only. Full detail in `APP_CONTEXT.md`.
+
+Next action: owner: you. The two-track split (this pipeline vs. the Phase-branch track) and the
+motivation-layer overlap (identity level vs. Awareness Signal) are the two concrete decisions
+carried into Phase 11.6. No blockers to Phase 11.6 starting.
+
+---
+
 ## 2026-08-17 — Triage + Plan
 
 STEP A: 0 new captures. All 15 `captures/inbox/*.md` carry `status: triaged` — verified by reading the
