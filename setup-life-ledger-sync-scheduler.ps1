@@ -55,7 +55,17 @@ param(
     [string]$Action = 'Status',
     [string]$TaskName = 'ChronaSense Life Ledger Sync',
     [int]$IntervalMinutes = 15,
-    [switch]$Apply
+    [switch]$Apply,
+    # Phase 11 fix pass (Review Finding 7) — RunOnce previously had no way to point at a
+    # disposable config, which forced test harnesses to temporarily overwrite the REAL
+    # scripts/life-ledger-sync-worker.config.json in place (move it aside, copy a test config
+    # over it, run, restore it) just to exercise RunOnce against a throwaway fixture. That is
+    # exactly the kind of real-production-config risk this project's own safety rules forbid, and
+    # it left the harness fragile to any interruption between the swap and the restore. -ConfigPath
+    # forwards straight to the worker's own --config flag, so RunOnce (and diagnostics) can target
+    # a disposable config directly and never need to touch the real one. Optional — omitted, RunOnce
+    # behaves exactly as before (the worker's own default: scripts/life-ledger-sync-worker.config.json).
+    [string]$ConfigPath
 )
 
 $OnWindows = if ($null -eq $IsWindows) { $true } else { $IsWindows }
@@ -253,10 +263,15 @@ switch ($Action) {
         # element (confirmed live: $applyArgs ended up as the STRING "--apply", not an array
         # containing it), and splatting a string with @ then expands it character-by-character --
         # this produced the observed "Unknown argument: -" from the worker CLI. Building the
-        # array by explicit accumulation (+=) instead never goes through that collapse.
+        # array by explicit accumulation (+=) instead never goes through that collapse. -ConfigPath
+        # (optional) is forwarded the same way, for the same reason -- see its param() comment.
         [string[]]$applyArgs = @()
         if ($Apply) {
             $applyArgs += '--apply'
+        }
+        if ($ConfigPath) {
+            $applyArgs += '--config'
+            $applyArgs += $ConfigPath
         }
         Write-Host "Running one diagnostic Life Ledger sync cycle$(if ($Apply) { ' WITH --apply (real writes possible)' } else { ' as a dry run (no writes)' })..." -ForegroundColor Cyan
         & $nodePath $workerScript @applyArgs

@@ -1,5 +1,75 @@
 # ChronaSense — Changelog
 
+## Phase 11 — Review fix pass (built, NOT integrated) (branch: feat/life-ledger-production-hardening-v1) — 2026-09-04
+Fixes for seven confirmed findings from an independent adversarial review of the Phase 11
+commit below. Built and tested entirely against disposable fixtures; the real scheduler, worker
+config, outbox, backups root, and vault were never mutated during this fix pass.
+changed:
+  - scripts/life-ledger-sync-retention.mjs (Finding 1) — a CORRUPT (present but unparseable)
+    intervention latch now blocks ALL run-log and receipt pruning outright
+    (`retentionBlocked: true, retentionBlockedReason: 'corrupt_intervention_latch'`), not merely
+    the count-floor fallback it silently relied on before. Lock-tombstone cleanup is unaffected
+    (always-orphaned, never references incident evidence). Resumes normal pruning once a human
+    clears the corrupt latch via the already-reviewed `--clear-intervention`.
+  - scripts/life-ledger-sync-restore.mjs (Findings 2, 3, 5) — an existing file whose bytes differ
+    from a receipt's pre-incident backup is no longer auto-overwritten: this system keeps no
+    durable evidence of the expected post-incident bytes (`written[]`/`failedRelativePath` are
+    paths only, never content or hashes, and the in-memory plan is gone once the failed process
+    exits), so such a difference could be the failed apply's own write OR a later human edit, and
+    the two are indistinguishable from evidence this system actually keeps. Now classified
+    `ambiguous_current_state` with full diagnostic detail (current/pre-incident sha256, backup
+    source path) and left completely untouched. A file CREATEd by an apply that later failed
+    (absent from that apply's own pre-incident backup by construction) is classified
+    `residual_created_file` — write-only restore cannot remove it, and its presence always forces
+    the result to `manual_review_required`, never a false "restored successfully". Every
+    preview/apply result now carries a `completeness` field
+    (`noop` / `exact_restore_possible` / `exact_restore_complete` / `manual_review_required`).
+    `applyRestore` no longer accepts/requires `--backups-root` (nothing is ever overwritten, so
+    there is nothing to copy aside as evidence — the untouched file already is the evidence).
+    `planFingerprint` trust semantics documented precisely: shape-validated only, never compared
+    against a freshly re-derived plan (that would require the original outbox snapshot bytes,
+    not guaranteed to still exist); the bindings actually verified are live vault/root identity
+    and backup content-integrity hash reproduction (integrity, explicitly not authentication).
+  - scripts/life-ledger-sync-health.mjs (Finding 4) — the current outbox snapshot's sha256 and
+    the worker's last-*processed* outbox sha256 (`backupsRoot/status.json`'s `outboxSha256`) were
+    both already computed but never compared. Now compared and surfaced as
+    `facts.outboxProcessed`: a mismatch (or no worker status yet, given a snapshot exists) is
+    PENDING, not HEALTHY; a malformed `status.json` is UNAVAILABLE (worker status genuinely
+    unknown). No wall-clock "stale evidence" threshold was added on the Node side — documented
+    reason: no reliable cadence context is available there (the scheduling interval lives only in
+    the Windows Task Scheduler trigger, which this module cannot read).
+  - setup-life-ledger-sync-scheduler.ps1 (Finding 7) — `-Action RunOnce` gained an optional
+    `-ConfigPath`, forwarded to the worker's own `--config` flag.
+  - scripts/test-life-ledger-sync-scheduler-install.ps1 (Finding 7) — Part D's `Invoke-RealRunOnce`
+    previously moved the REAL `scripts/life-ledger-sync-worker.config.json` aside, copied a
+    disposable config over that exact path, ran RunOnce, then restored it — a real-production-
+    config risk this project's own rules forbid, and the root cause of a harness/environment
+    discrepancy a reviewer observed (a fragile swap, not a worker regression). Rewritten to use
+    `-ConfigPath` directly; the real config path is never read, written, or moved by this harness
+    now. Two new regression checks added (C.4 static, D.4 dynamic — the real config path's
+    presence/bytes are proven identical before and after Part D). Reproducibly 27/27 across
+    repeated runs, independent of working directory.
+  - docs/PHASE11_PRODUCTION_HARDENING.md — corrected per Finding 6: corrupt- vs healthy-latch
+    retention behavior, restore ambiguity/human-edit/residual-file behavior in full, the
+    integrity-vs-authentication distinction, `planFingerprint` trust semantics, Health's
+    outbox-processed comparison, and the harness-isolation fix.
+added:
+  - scripts/life-ledger-sync-restore.test.js — REQUIRED end-to-end scenarios using a REAL injected
+    partial-apply failure (not simulated): a human edit made to an already-owned file after the
+    failure is never overwritten (Finding 2), and a file CREATEd just before the failure is a
+    named residual that restore never claims to have fully resolved (Finding 3). Plus unit-level
+    ambiguous/residual/malformed-receipt/no-delete-capability coverage.
+  - scripts/life-ledger-sync-retention.test.js — corrupt latch + old evidence far outside the
+    min-keep floor + many newer entries -> zero run/receipt pruning; lock tombstones still prune;
+    normal pruning resumes after an explicit human clear.
+  - scripts/life-ledger-sync-health.test.js — outbox hash mismatch -> PENDING; malformed
+    status.json -> UNAVAILABLE; snapshot with no worker status yet -> PENDING; matching hashes
+    contribute to HEALTHY.
+  - scripts/life-ledger-sync-chaos.test.js — CORRUPT-LATCH UNDER LOAD: many real cycles, a real
+    latch made corrupt afterward, retention blocks ALL run/receipt pruning (not just the one
+    receipt the latch used to reference).
+verification: full suite re-run — see the fix-pass final report for exact counts.
+
 ## Phase 11 — Production hardening (built, NOT integrated) (branch: feat/life-ledger-production-hardening-v1) — 2026-09-04
 Operational hardening for the now-live Phase 10 background sync, built entirely against
 disposable fixtures — the real scheduler, worker config, outbox, backups root, and vault were

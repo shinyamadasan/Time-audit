@@ -346,3 +346,72 @@ test('N: a malformed/corrupt run log file does not crash retention planning and 
     assert.ok(!(await fs.access(corruptRun).then(() => true, () => false)));
   })
 ));
+
+// Review-required chaos regression (Phase 11 fix pass): CORRUPT-LATCH UNDER LOAD. Many real
+// cycles accumulate real runs/receipts, a real incident latches, and the latch file itself then
+// becomes corrupt (e.g. a hand-edit gone wrong, or a rare torn write to that one file) BEFORE
+// retention ever runs against it. Required invariant: with the latch corrupt, retention must
+// refuse to prune ANY run/receipt evidence at all (not just the one the latch used to reference)
+// until a human clears it — see life-ledger-sync-retention.mjs's retentionBlocked behavior.
+test('O: CORRUPT-LATCH UNDER LOAD — with many real runs/receipts and old incident evidence, a corrupt latch blocks ALL run/receipt pruning', async () => (
+  withTempDir('chronasense-p11-chaos-', async cwd => {
+    const { outboxDir, backupsRoot, configPath } = await setupFixture(cwd);
+
+    // 15 real cycles, one new day each — real run logs and real receipts accumulate.
+    for (let d = 1; d <= 15; d++) {
+      const day = `2026-07-${String(d).padStart(2, '0')}`;
+      await writeOutbox(outboxDir, [focusEventForDay(day, d)]);
+      const outcome = await runLifeLedgerSyncWorker(['--apply', '--config', configPath]);
+      assert.equal(outcome.result.outcome, 'synced');
+    }
+
+    // A genuine intervention latch via a real partial-apply failure on the 16th event.
+    let tmpWriteCount = 0;
+    const realFs = fs;
+    const breaksOnSecondTmpWrite = {
+      mkdir: (...a) => realFs.mkdir(...a),
+      readFile: (...a) => realFs.readFile(...a),
+      writeFile: async (p, content, enc) => {
+        if (String(p).endsWith('.tmp')) {
+          tmpWriteCount++;
+          if (tmpWriteCount === 2) throw Object.assign(new Error('simulated disk failure mid-apply'), { code: 'EIO' });
+        }
+        return realFs.writeFile(p, content, enc);
+      },
+      rename: (...a) => realFs.rename(...a),
+      unlink: (...a) => realFs.unlink(...a),
+      readdir: (...a) => realFs.readdir(...a),
+      lstat: (...a) => realFs.lstat(...a),
+      realpath: (...a) => realFs.realpath(...a)
+    };
+    await writeOutbox(outboxDir, [focusEventForDay('2026-07-01', 1), focusEventForDay('2026-07-16', 16)]);
+    const latched = await runLifeLedgerSyncWorker(['--apply', '--config', configPath], { fs: breaksOnSecondTmpWrite });
+    assert.equal(latched.result.outcome, 'intervention_required');
+    const latchPath = path.join(backupsRoot, 'intervention-required.json');
+    const originalLatch = await fs.readFile(latchPath, 'utf8');
+    assert.ok(JSON.parse(originalLatch).receiptPath);
+
+    // The latch file itself becomes corrupt (its own reference info is now unreadable).
+    await fs.writeFile(latchPath, '{ this latch is now corrupt, its runId/receiptPath are unreadable', 'utf8');
+
+    // Age every run log and every receipt dir well past the default retention window, so a naive
+    // policy would prune everything.
+    const past = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const runNamesBefore = await fs.readdir(path.join(backupsRoot, 'runs'));
+    const receiptNamesBefore = await fs.readdir(path.join(backupsRoot, 'receipts'));
+    for (const name of runNamesBefore) await fs.utimes(path.join(backupsRoot, 'runs', name), past, past);
+    for (const name of receiptNamesBefore) await fs.utimes(path.join(backupsRoot, 'receipts', name), past, past);
+
+    const plan = await planLifeLedgerRetention(backupsRoot, { retentionDays: 30, minKeep: 1 });
+    assert.equal(plan.retentionBlocked, true);
+    assert.equal(plan.retentionBlockedReason, 'corrupt_intervention_latch');
+    assert.equal(plan.summary.runsToDelete, 0);
+    assert.equal(plan.summary.receiptsToDelete, 0);
+
+    await applyLifeLedgerRetentionPlan(plan);
+    const runNamesAfter = await fs.readdir(path.join(backupsRoot, 'runs'));
+    const receiptNamesAfter = await fs.readdir(path.join(backupsRoot, 'receipts'));
+    assert.deepEqual(runNamesAfter.sort(), runNamesBefore.sort(), 'not one run log may be pruned while the latch is corrupt, even far outside the min-keep floor');
+    assert.deepEqual(receiptNamesAfter.sort(), receiptNamesBefore.sort(), 'not one receipt may be pruned while the latch is corrupt, even far outside the min-keep floor');
+  })
+));
