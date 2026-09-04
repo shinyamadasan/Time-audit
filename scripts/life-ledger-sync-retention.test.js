@@ -9,7 +9,7 @@ import {
   computeLifeLedgerBackupsFootprint,
   runLifeLedgerRetentionCli
 } from './life-ledger-sync-retention.mjs';
-import { LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME } from './life-ledger-sync-worker.mjs';
+import { LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME, runLifeLedgerSyncWorker } from './life-ledger-sync-worker.mjs';
 
 async function withTempDir(prefix, fn) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -126,7 +126,7 @@ test('an active intervention latch protects its exact run log and receipt dir re
   })
 ));
 
-test('a corrupt (unparseable) latch does not crash retention and the min-keep floor still applies', async () => (
+test('a corrupt (unparseable) latch does not crash retention and blocks pruning outright (not merely via the min-keep floor)', async () => (
   withTempDir('chronasense-p11-retention-', async tmp => {
     const backupsRoot = path.join(tmp, 'backups');
     await touchWithAge(path.join(backupsRoot, 'runs', 'a.json'), 90 * DAY);
@@ -135,7 +135,9 @@ test('a corrupt (unparseable) latch does not crash retention and the min-keep fl
     const plan = await planLifeLedgerRetention(backupsRoot, { retentionDays: 1, minKeep: 1 });
     assert.equal(plan.latch.present, true);
     assert.equal(plan.latch.parsed, false);
-    assert.equal(plan.runs[0].decision, 'keep', 'min-keep floor still protects the only run log');
+    assert.equal(plan.retentionBlocked, true);
+    assert.equal(plan.runs[0].decision, 'keep');
+    assert.equal(plan.runs[0].why, 'retention_blocked_corrupt_latch', 'kept because retention is blocked, not merely because of the min-keep floor');
   })
 ));
 
@@ -222,5 +224,83 @@ test('CLI dry-run makes no changes; CLI --apply performs the same plan', async (
     assert.equal(applied.applied.deleted.length, 1);
     assert.ok(!(await fs.access(path.join(backupsRoot, 'runs', 'old.json')).then(() => true, () => false)));
     assert.ok(await fs.access(path.join(backupsRoot, 'runs', 'new.json')).then(() => true, () => false));
+  })
+));
+
+// Review Finding 1 (Phase 11 fix pass) — a CORRUPT (present but unparseable) intervention latch
+// must block ALL run/receipt pruning, not just fall back to count-floor protection, because which
+// specific run/receipt it references is unknown while it can't be parsed.
+test('a CORRUPT intervention latch blocks all run/receipt pruning outright, even far outside the min-keep floor', async () => (
+  withTempDir('chronasense-p11-retention-corrupt-latch-', async tmp => {
+    const backupsRoot = path.join(tmp, 'backups');
+    // "referenced-style" old evidence, 90+ days old, far outside a tight min-keep floor.
+    await touchWithAge(path.join(backupsRoot, 'runs', 'incident-run.json'), 90 * DAY);
+    await makeReceiptDir(backupsRoot, 'incident-run', 90 * DAY);
+    // Many newer, otherwise-prunable-looking run logs/receipts, so a naive age/count policy
+    // would clearly want to prune SOMETHING here if it weren't blocked.
+    for (let i = 0; i < 25; i++) {
+      await touchWithAge(path.join(backupsRoot, 'runs', `newer-${i}.json`), (i + 1) * DAY);
+    }
+    for (let i = 0; i < 5; i++) {
+      await makeReceiptDir(backupsRoot, `newer-receipt-${i}`, (i + 1) * DAY);
+    }
+    await fs.writeFile(path.join(backupsRoot, LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME), '{ not valid json !!', 'utf8');
+
+    const plan = await planLifeLedgerRetention(backupsRoot, { retentionDays: 1, minKeep: 1 });
+    assert.equal(plan.retentionBlocked, true);
+    assert.equal(plan.retentionBlockedReason, 'corrupt_intervention_latch');
+    assert.equal(plan.summary.runsToDelete, 0, 'zero run logs may be deleted while the latch is corrupt');
+    assert.equal(plan.summary.receiptsToDelete, 0, 'zero receipts may be deleted while the latch is corrupt');
+    assert.ok(plan.runs.every(e => e.decision !== 'delete'));
+    assert.ok(plan.receipts.every(e => e.decision !== 'delete'));
+    assert.ok(plan.runs.find(e => e.name === 'incident-run.json').why === 'retention_blocked_corrupt_latch');
+
+    const applied = await applyLifeLedgerRetentionPlan(plan);
+    assert.deepEqual(applied.deleted.filter(d => d.kind !== 'lock_tombstone'), [], 'apply must honor the block too');
+    assert.ok(await fs.access(path.join(backupsRoot, 'runs', 'incident-run.json')).then(() => true, () => false));
+    assert.ok(await fs.access(path.join(backupsRoot, 'receipts', 'incident-run')).then(() => true, () => false));
+    for (let i = 0; i < 25; i++) {
+      assert.ok(await fs.access(path.join(backupsRoot, 'runs', `newer-${i}.json`)).then(() => true, () => false), `newer-${i}.json must also survive — blocked means blocked`);
+    }
+  })
+));
+
+test('lock tombstone cleanup still proceeds normally while a corrupt latch blocks run/receipt pruning', async () => (
+  withTempDir('chronasense-p11-retention-corrupt-latch-', async tmp => {
+    const backupsRoot = path.join(tmp, 'backups');
+    await fs.mkdir(backupsRoot, { recursive: true });
+    await fs.writeFile(path.join(backupsRoot, LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME), '{ not valid json !!', 'utf8');
+    const oldTombstone = path.join(backupsRoot, 'life-ledger-sync-worker.lock.stale-1234-1690000000000-abcd1234');
+    await touchWithAge(oldTombstone, 2 * 60 * 60 * 1000);
+    const plan = await planLifeLedgerRetention(backupsRoot, { staleLockMinutes: 60 });
+    assert.equal(plan.retentionBlocked, true);
+    assert.equal(plan.lockTombstones.find(e => e.path === oldTombstone).decision, 'delete', 'tombstones are provably unrelated to incident evidence and stay prunable');
+    const applied = await applyLifeLedgerRetentionPlan(plan);
+    assert.ok(applied.deleted.some(d => d.path === oldTombstone));
+  })
+));
+
+test('after an explicit human clear of the corrupt latch, normal retention becomes eligible again', async () => (
+  withTempDir('chronasense-p11-retention-corrupt-latch-', async tmp => {
+    const backupsRoot = path.join(tmp, 'backups');
+    await touchWithAge(path.join(backupsRoot, 'runs', 'old.json'), 90 * DAY);
+    await fs.writeFile(path.join(backupsRoot, LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME), '{ not valid json !!', 'utf8');
+
+    const blockedPlan = await planLifeLedgerRetention(backupsRoot, { retentionDays: 1, minKeep: 0 });
+    assert.equal(blockedPlan.retentionBlocked, true);
+    assert.equal(blockedPlan.summary.runsToDelete, 0);
+
+    // The already-reviewed explicit corrupt-latch clear action (never auto-invoked by retention).
+    const configPath = path.join(tmp, 'worker.config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      outboxDir: path.join(tmp, 'outbox-unused'), vault: path.join(tmp, 'vault-unused'), backupsRoot
+    }), 'utf8');
+    const clearOutcome = await runLifeLedgerSyncWorker(['--clear-intervention', '--config', configPath]);
+    assert.equal(clearOutcome.result.clearedLatchWasCorrupt, true);
+    await assert.rejects(fs.access(path.join(backupsRoot, LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME)), /ENOENT/);
+
+    const resumedPlan = await planLifeLedgerRetention(backupsRoot, { retentionDays: 1, minKeep: 0 });
+    assert.equal(resumedPlan.retentionBlocked, false);
+    assert.equal(resumedPlan.summary.runsToDelete, 1, 'normal age/count pruning resumes once the corrupt latch is gone');
   })
 ));

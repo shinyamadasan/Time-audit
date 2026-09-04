@@ -240,9 +240,33 @@ $accumulation = $applyArgsAssignments | Where-Object {
 }
 Assert-True ($accumulation.Count -ge 1) 'Part C.3: --apply is added via explicit array accumulation (+=), not a captured if/else value'
 
+# C.4 -- Review Finding 7 regression guard: the script under test's RunOnce branch actually
+# forwards -ConfigPath to the worker's --config flag (static AST check, so this can never silently
+# regress back to a version with no config-isolation option -- which is what forced Part D below
+# into touching the real config path in the first place).
+$runOnceBranch = $ast.FindAll({
+    param($n) $n -is [System.Management.Automation.Language.SwitchStatementAst]
+}, $true) | ForEach-Object {
+    $_.Clauses | Where-Object { $_.Item1.Extent.Text -match "'RunOnce'" }
+} | Select-Object -First 1
+$forwardsConfigFlag = $runOnceBranch -and ($runOnceBranch.Item2.Extent.Text -match "'--config'")
+Assert-True ([bool]$forwardsConfigFlag) "Part C.4: RunOnce forwards -ConfigPath to the worker's --config flag"
+
 # ===========================================================================
 # Part D -- dynamic RunOnce proof against a disposable owned vault (no Task Scheduler involved)
 # ===========================================================================
+#
+# Review Finding 7 (Phase 11 fix pass): Part D previously moved the REAL
+# scripts\life-ledger-sync-worker.config.json aside, copied a disposable config over that exact
+# path, ran RunOnce, then restored it -- real-production-config risk this project's rules forbid,
+# and non-isolated (fragile to anything else touching that path mid-test). Part D now points
+# RunOnce at the disposable fixture directly via -ConfigPath; the real config path is never read,
+# written, or moved by this harness. D.0 proves that directly: whatever state the real config path
+# is in (present with real content, or absent -- either is a legitimate environment, and this
+# harness must behave identically either way) is EXACTLY the same before and after Part D runs.
+$realConfigPath = Join-Path $repoRoot 'scripts\life-ledger-sync-worker.config.json'
+$realConfigExistedBefore = Test-Path $realConfigPath
+$realConfigHashBefore = if ($realConfigExistedBefore) { (Get-FileHash $realConfigPath -Algorithm SHA256).Hash } else { $null }
 
 function New-DisposableRunOnceFixture {
     $root = Join-Path ([System.IO.Path]::GetTempPath()) "ChronaSense-P10-RunOnce-Fix-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
@@ -299,21 +323,21 @@ await fs.writeFile(path.join(outboxDir, "chronasense-life-ledger-outbox-v1.json"
 }
 
 function Invoke-RealRunOnce {
+    # Review Finding 7 (Phase 11 fix pass) -- this PREVIOUSLY moved the REAL
+    # scripts\life-ledger-sync-worker.config.json aside, copied a disposable test config over
+    # that exact real path, ran RunOnce, then restored the original. That is precisely the kind
+    # of real-production-config risk this project's own safety rules forbid (a crash, a Ctrl-C, or
+    # an AV/OneDrive lock between the swap and the restore could lose or corrupt the real config),
+    # and it made this harness's Part D non-isolated -- its correctness depended on nothing else
+    # touching that exact file at that exact moment. setup-life-ledger-sync-scheduler.ps1 -Action
+    # RunOnce now accepts -ConfigPath, forwarded straight to the worker's own --config flag, so
+    # this harness can point RunOnce at the disposable fixture directly. The real config path is
+    # never read, written, moved, or touched by Part D at all anymore.
     param([bool]$Apply, [string]$ConfigJsonPath)
-    $configTarget = Join-Path $repoRoot 'scripts\life-ledger-sync-worker.config.json'
-    $existedBefore = Test-Path $configTarget
-    $backupPath = "$configTarget.harness-backup"
-    if ($existedBefore) { Move-Item $configTarget $backupPath -Force }
-    try {
-        Copy-Item $ConfigJsonPath $configTarget -Force
-        $args = @('-Action', 'RunOnce')
-        if ($Apply) { $args += '-Apply' }
-        $output = & pwsh -NoProfile -File $scriptUnderTest @args 2>&1 | Out-String
-        return [PSCustomObject]@{ ExitCode = $LASTEXITCODE; Output = $output }
-    } finally {
-        Remove-Item $configTarget -Force -ErrorAction SilentlyContinue
-        if ($existedBefore) { Move-Item $backupPath $configTarget -Force }
-    }
+    $args = @('-Action', 'RunOnce', '-ConfigPath', $ConfigJsonPath)
+    if ($Apply) { $args += '-Apply' }
+    $output = & pwsh -NoProfile -File $scriptUnderTest @args 2>&1 | Out-String
+    return [PSCustomObject]@{ ExitCode = $LASTEXITCODE; Output = $output }
 }
 
 $disposable = $null
@@ -352,6 +376,14 @@ try {
         Remove-Item $disposable.Root -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
+
+# D.4 -- Review Finding 7: the real production config path is EXACTLY as it was before any of
+# Part D ran -- same presence/absence, same bytes if present. This is the direct proof that this
+# harness never touched it, regardless of whether a real config happens to exist in this
+# environment.
+$realConfigExistedAfter = Test-Path $realConfigPath
+$realConfigHashAfter = if ($realConfigExistedAfter) { (Get-FileHash $realConfigPath -Algorithm SHA256).Hash } else { $null }
+Assert-True ($realConfigExistedAfter -eq $realConfigExistedBefore -and $realConfigHashAfter -eq $realConfigHashBefore) 'Part D.4: the real production config path is untouched (same presence and bytes) after Part D'
 
 # ===========================================================================
 # Summary

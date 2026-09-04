@@ -177,6 +177,42 @@ export async function computeLifeLedgerHealth({ configPath, cwd = process.cwd() 
     reasons.push('outbox directory does not exist yet — background sync may not be enabled in the browser');
   }
 
+  // Review Finding 4 (Phase 11 fix pass) — the current outbox snapshot hash and the worker's
+  // last-PROCESSED outbox hash (backupsRoot/status.json's outboxSha256, the same field the run
+  // log and the trimmed outbox-dir status both carry) were both already computed but never
+  // compared. A mismatch means either a newly-mirrored event hasn't reached the worker yet, or
+  // the scheduler is stuck silently reporting a stale success while newer data waits — neither is
+  // HEALTHY, even though every other component looks fine in isolation.
+  const currentOutboxSha256 = outbox.snapshotSha256;
+  const processedOutboxSha256 = workerStatus.parsed?.outboxSha256 ?? null;
+  if (workerStatus.present && workerStatus.parsed === null) {
+    // Malformed status.json means worker status is genuinely UNKNOWN, not merely "stale" — never
+    // say HEALTHY when the thing that would prove it can't be read.
+    classification = worseClassification(classification, 'UNAVAILABLE');
+    reasons.push('backupsRoot/status.json exists but could not be parsed — worker status is unknown');
+  } else if (outbox.snapshotPresent && !workerStatus.present) {
+    classification = worseClassification(classification, 'PENDING');
+    reasons.push('an outbox snapshot exists but the worker has not reported any status yet — waiting for the first sync');
+  } else if (outbox.snapshotPresent && processedOutboxSha256 != null && currentOutboxSha256 !== processedOutboxSha256) {
+    classification = worseClassification(classification, 'PENDING');
+    reasons.push('the current outbox snapshot has not been processed by the worker yet (hash mismatch) — waiting for the next scheduled cycle');
+  }
+
+  // Health freshness (Phase 11 fix pass, reviewer note): the reviewer also asked for a
+  // conservative "the last successful evidence is implausibly old" signal. Node-side health has
+  // NO reliable cadence context to judge that against: the configured scheduling interval lives
+  // only in the registered Windows Task Scheduler trigger, which this module cannot read (that is
+  // PowerShell/Task-Scheduler-only information — see setup-life-ledger-sync-scheduler.ps1's own
+  // -Action Health, which DOES have LastRunTime/NextRunTime/LastTaskResult and already folds a
+  // non-zero LastTaskResult into the merged classification). Inventing a hardcoded clock
+  // threshold here (e.g. "stale after N hours") would misclassify a machine that was legitimately
+  // off or asleep overnight as unhealthy — exactly what the review explicitly warned against — so
+  // per the review's own escape hatch ("if reliable cadence context is unavailable... limit the
+  // mandatory fix to exact source/status hash mismatch"), no clock-based freshness rule is added
+  // here. The hash-mismatch check above is the freshness signal Node-side health can respond to
+  // truthfully; wall-clock staleness detection stays with the PowerShell side, which has the
+  // actual schedule to reason about.
+
   if (!retentionPlan.error && retentionPlan.summary?.pruningDue) {
     classification = worseClassification(classification, 'PENDING');
     reasons.push('local run-log/receipt/lock-tombstone pruning is due — see life-ledger-sync-retention.mjs');
@@ -187,7 +223,15 @@ export async function computeLifeLedgerHealth({ configPath, cwd = process.cwd() 
   return {
     classification,
     reasons,
-    facts: { config, outbox, workerStatus, latch, ownership, evidence, footprint, retentionDue: retentionPlan.summary?.pruningDue ?? null }
+    facts: {
+      config, outbox, workerStatus, latch, ownership, evidence, footprint,
+      retentionDue: retentionPlan.summary?.pruningDue ?? null,
+      outboxProcessed: {
+        currentSha256: currentOutboxSha256,
+        processedSha256: processedOutboxSha256,
+        matches: currentOutboxSha256 != null && processedOutboxSha256 != null ? currentOutboxSha256 === processedOutboxSha256 : null
+      }
+    }
   };
 }
 

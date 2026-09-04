@@ -3,6 +3,7 @@ import test from 'node:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {
   loadRestoreReceipt,
   verifyRestoreReceipt,
@@ -11,7 +12,7 @@ import {
   runLifeLedgerRestoreCli
 } from './life-ledger-sync-restore.mjs';
 import { runLifeLedgerSyncWorker, LIFE_LEDGER_SYNC_WORKER_OUTBOX_FILENAME } from './life-ledger-sync-worker.mjs';
-import { createObsidianSyncTarget, planObsidianSync, applyObsidianSync } from '../obsidian-life-ledger-sync.js';
+import { createObsidianSyncTarget, planObsidianSync, applyObsidianSync, prepareObsidianRollbackArtifact } from '../obsidian-life-ledger-sync.js';
 import { serializeLifeLedgerSnapshot, createLifeLedgerSnapshotFromEvents } from '../life-ledger-transport.js';
 
 async function withTempDir(prefix, fn) {
@@ -95,14 +96,17 @@ async function realCycleReceipt(cwd, extraEvents = [focusEventDay2()]) {
   return { vault, outboxDir, backupsRoot, receiptPath: outcome.result.receiptPath };
 }
 
-test('inspect -> verify -> preview -> apply restores a damaged file back to its exact backed-up bytes', async () => (
+// Review Finding 2 (Phase 11 fix pass) — a file whose current bytes differ from the pre-incident
+// backup can NEVER be proven to be the failed incident's bytes rather than a later human edit
+// (this system keeps no durable evidence of the expected post-incident bytes — see the module
+// header). Restore must never auto-overwrite it.
+test('a file whose current bytes differ from the pre-incident backup is reported ambiguous and NEVER auto-overwritten', async () => (
   withTempDir('chronasense-p11-restore-', async cwd => {
-    const { vault, backupsRoot, receiptPath } = await realCycleReceipt(cwd);
+    const { vault, receiptPath } = await realCycleReceipt(cwd);
     const dailyPath = path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md');
     const originalContent = await fs.readFile(dailyPath, 'utf8');
-    // Simulate exactly the failure this tool exists for: a partial/corrupted write left a
-    // previously-owned file damaged.
-    await fs.writeFile(dailyPath, 'CORRUPTED CONTENT — not the real Daily note\n', 'utf8');
+    const editedContent = 'edited after the fact — could be damage OR a deliberate human change\n';
+    await fs.writeFile(dailyPath, editedContent, 'utf8');
 
     const { receipt } = await loadRestoreReceipt(receiptPath);
     const verification = await verifyRestoreReceipt(receipt, { vault, mode: 'test' });
@@ -110,32 +114,27 @@ test('inspect -> verify -> preview -> apply restores a damaged file back to its 
 
     const preview = await previewRestore(receipt, { vault });
     const dailyEntry = preview.entries.find(e => e.relativePath === 'Life Ledger/Daily/2026-08-30.md');
-    assert.equal(dailyEntry.action, 'restore_overwrite');
+    assert.equal(dailyEntry.action, 'ambiguous_current_state');
+    assert.equal(dailyEntry.currentSha256, crypto.createHash('sha256').update(editedContent, 'utf8').digest('hex'));
+    assert.equal(dailyEntry.preIncidentBackupSha256, crypto.createHash('sha256').update(originalContent, 'utf8').digest('hex'));
+    assert.ok(dailyEntry.backupSourcePath);
+    assert.ok(dailyEntry.note.length > 0);
+    assert.equal(preview.completeness, 'manual_review_required');
 
-    // Preview alone must never write anything.
-    assert.equal(await fs.readFile(dailyPath, 'utf8'), 'CORRUPTED CONTENT — not the real Daily note\n');
+    const applied = await applyRestore(receipt, preview, { vault });
+    assert.equal(applied.completeness, 'manual_review_required', 'must never claim success when an ambiguous file exists');
+    assert.equal(applied.written.length, 0, 'the ambiguous file must not be among the writes');
+    assert.ok(applied.ambiguous.some(a => a.relativePath === 'Life Ledger/Daily/2026-08-30.md'));
 
-    const applied = await applyRestore(receipt, preview, { vault, backupsRoot });
-    assert.ok(applied.written.some(w => w.relativePath === 'Life Ledger/Daily/2026-08-30.md'));
-    const restoredContent = await fs.readFile(dailyPath, 'utf8');
-    assert.equal(restoredContent, originalContent);
-
-    // Evidence of the corrupted bytes was preserved before being overwritten.
-    assert.ok(applied.evidenceDir);
-    const evidenceContent = await fs.readFile(path.join(applied.evidenceDir, 'Life Ledger', 'Daily', '2026-08-30.md'), 'utf8');
-    assert.equal(evidenceContent, 'CORRUPTED CONTENT — not the real Daily note\n');
-
-    // Idempotent: re-running preview against the now-restored vault reports no further changes
-    // for that file.
-    const preview2 = await previewRestore(receipt, { vault });
-    const dailyEntry2 = preview2.entries.find(e => e.relativePath === 'Life Ledger/Daily/2026-08-30.md');
-    assert.equal(dailyEntry2.action, 'noop_already_matches');
+    // The file — and therefore the evidence needed to manually decide what to do — is completely
+    // untouched by the whole inspect/verify/preview/apply cycle.
+    assert.equal(await fs.readFile(dailyPath, 'utf8'), editedContent);
   })
 ));
 
 test('restore never touches files outside the managed Life Ledger subtree', async () => (
   withTempDir('chronasense-p11-restore-', async cwd => {
-    const { vault, backupsRoot, receiptPath } = await realCycleReceipt(cwd);
+    const { vault, receiptPath } = await realCycleReceipt(cwd);
     await fs.writeFile(path.join(vault, '.obsidian', 'workspace.json'), '{"untouched":true}', 'utf8');
     const obsidianConfigBefore = await fs.readFile(path.join(vault, '.obsidian', 'workspace.json'), 'utf8');
 
@@ -145,7 +144,7 @@ test('restore never touches files outside the managed Life Ledger subtree', asyn
     const { receipt } = await loadRestoreReceipt(receiptPath);
     await verifyRestoreReceipt(receipt, { vault, mode: 'test' });
     const preview = await previewRestore(receipt, { vault });
-    await applyRestore(receipt, preview, { vault, backupsRoot });
+    await applyRestore(receipt, preview, { vault });
 
     const obsidianConfigAfter = await fs.readFile(path.join(vault, '.obsidian', 'workspace.json'), 'utf8');
     assert.equal(obsidianConfigAfter, obsidianConfigBefore);
@@ -154,9 +153,9 @@ test('restore never touches files outside the managed Life Ledger subtree', asyn
   })
 ));
 
-test('a file created after the receipt was captured is reported but never restored/deleted', async () => (
+test('a file created after the receipt was captured is a residual: reported, never restored/deleted, forces manual_review_required', async () => (
   withTempDir('chronasense-p11-restore-', async cwd => {
-    const { vault, backupsRoot, receiptPath } = await realCycleReceipt(cwd);
+    const { vault, receiptPath } = await realCycleReceipt(cwd);
     const { receipt } = await loadRestoreReceipt(receiptPath);
 
     // A legitimate later write adds a new daily file the old receipt never saw.
@@ -167,10 +166,14 @@ test('a file created after the receipt was captured is reported but never restor
     await verifyRestoreReceipt(receipt, { vault, mode: 'test' });
     const preview = await previewRestore(receipt, { vault });
     assert.ok(preview.extraCurrentFiles.includes('Life Ledger/Daily/2026-09-01.md'));
+    assert.ok(preview.residualFiles.some(r => r.relativePath === 'Life Ledger/Daily/2026-09-01.md' && r.classification === 'residual_created_file'));
     assert.ok(!preview.entries.some(e => e.relativePath === 'Life Ledger/Daily/2026-09-01.md'));
+    assert.equal(preview.completeness, 'manual_review_required');
 
-    const applied = await applyRestore(receipt, preview, { vault, backupsRoot });
+    const applied = await applyRestore(receipt, preview, { vault });
+    assert.equal(applied.completeness, 'manual_review_required', 'a residual file must prevent claiming full success');
     assert.ok(applied.notTouched.includes('Life Ledger/Daily/2026-09-01.md'));
+    assert.ok(applied.residualFiles.some(r => r.relativePath === 'Life Ledger/Daily/2026-09-01.md'));
     assert.equal(await fs.readFile(laterPath, 'utf8'), 'later content, unrelated to this receipt\n');
   })
 ));
@@ -251,19 +254,205 @@ test('a symlinked receipt path is refused, never followed', async () => {
   });
 });
 
-test('CLI: preview without --apply-restore makes no writes; with it, writes happen', async () => (
+test('a receipt missing required fields (malformed) is rejected before any vault contact', async () => (
   withTempDir('chronasense-p11-restore-', async cwd => {
-    const { vault, backupsRoot, receiptPath } = await realCycleReceipt(cwd);
+    const malformedPath = path.join(cwd, 'malformed-receipt.json');
+    await fs.writeFile(malformedPath, JSON.stringify({ kind: 'obsidian-rollback-receipt', schemaVersion: 2 }), 'utf8');
+    await assert.rejects(loadRestoreReceipt(malformedPath), /receipt_malformed|Receipt is missing required field/);
+  })
+));
+
+test('no delete-capable path exists anywhere in this module — grep-level static proof', async () => {
+  const source = await fs.readFile(new URL('./life-ledger-sync-restore.mjs', import.meta.url), 'utf8');
+  assert.ok(!/fsAdapter\.(rm|unlink|rmdir)\(/.test(source), 'restore must never call a filesystem delete primitive');
+});
+
+test('CLI: preview without --apply-restore makes no writes; with it, only the safe missing-file create happens', async () => (
+  withTempDir('chronasense-p11-restore-', async cwd => {
+    // This scenario needs a receipt whose backup exactly matches the vault's current CONSISTENT
+    // state (manifest/sentinel/content all mutually agreeing) — i.e. an "accidental deletion of
+    // an already-owned file, nothing else changed" recovery, not an in-progress/failed apply. A
+    // receipt from a real worker cycle (any real cycle, even a fully successful one) legitimately
+    // advances manifest.json/the sentinel relative to ITS OWN pre-apply backup — correctly
+    // ambiguous under Finding 2's rule, same as any other file, and not what this test is after.
+    // So the receipt here is captured directly (prepareObsidianRollbackArtifact), snapshotting a
+    // vault that is not about to change at all.
+    const vault = path.join(cwd, 'vault');
+    const backupsRoot = path.join(cwd, 'backups');
+    await seedOwnedVault(vault, [focusEvent()]);
+    const target = createObsidianSyncTarget({ vaultPath: vault, mode: 'test', allowApply: true });
+    const stablePlan = await planObsidianSync(target, [focusEvent()]); // same events -> nothing writable, pure snapshot
+    assert.equal(stablePlan.blocked, false);
+    const receiptRoot = path.join(backupsRoot, 'receipts', 'manual-snapshot');
+    const receipt = await prepareObsidianRollbackArtifact({ target, plan: stablePlan, backupRoot: receiptRoot });
+    const receiptPath = receipt.receiptPath;
+
     const dailyPath = path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md');
     const original = await fs.readFile(dailyPath, 'utf8');
-    await fs.writeFile(dailyPath, 'damaged via CLI test\n', 'utf8');
+    // A MISSING (not edited) previously-owned file is the one case restore can safely recreate —
+    // nothing existing is at risk.
+    await fs.unlink(dailyPath);
 
     const previewOnly = await runLifeLedgerRestoreCli(['--receipt', receiptPath, '--vault', vault]);
     assert.equal(previewOnly.applied, null);
-    assert.equal(await fs.readFile(dailyPath, 'utf8'), 'damaged via CLI test\n');
+    assert.equal(previewOnly.preview.completeness, 'exact_restore_possible');
+    assert.equal(await fs.access(dailyPath).then(() => true, () => false), false);
 
-    const applied = await runLifeLedgerRestoreCli(['--receipt', receiptPath, '--vault', vault, '--apply-restore', '--backups-root', backupsRoot]);
+    const applied = await runLifeLedgerRestoreCli(['--receipt', receiptPath, '--vault', vault, '--apply-restore']);
+    assert.equal(applied.applied.completeness, 'exact_restore_complete');
     assert.ok(applied.applied.written.length > 0);
     assert.equal(await fs.readFile(dailyPath, 'utf8'), original);
+  })
+));
+
+test('CLI: an ambiguous edit is never overwritten via --apply-restore, and the result is explicit about it', async () => (
+  withTempDir('chronasense-p11-restore-', async cwd => {
+    const { vault, receiptPath } = await realCycleReceipt(cwd);
+    const dailyPath = path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md');
+    await fs.writeFile(dailyPath, 'a human or a failed apply wrote this — restore cannot tell which\n', 'utf8');
+
+    const applied = await runLifeLedgerRestoreCli(['--receipt', receiptPath, '--vault', vault, '--apply-restore']);
+    assert.equal(applied.applied.completeness, 'manual_review_required');
+    assert.equal(await fs.readFile(dailyPath, 'utf8'), 'a human or a failed apply wrote this — restore cannot tell which\n');
+  })
+));
+
+// ---------------------------------------------------------------------------
+// Review-required end-to-end scenarios (Phase 11 fix pass) — real worker, real fs, a REAL
+// injected partial-apply failure (not a simulated/artificial one), disposable fixtures only.
+// ---------------------------------------------------------------------------
+
+// A fs adapter that lets the SECOND write to a ".tmp" file fail — same technique used in
+// life-ledger-sync-worker.test.js and life-ledger-sync-chaos.test.js to produce a REAL
+// partial_apply_failure / intervention_required outcome via the real, reviewed write path.
+function breaksOnSecondTmpWriteFs() {
+  const real = fs;
+  let tmpWriteCount = 0;
+  return {
+    mkdir: (...a) => real.mkdir(...a),
+    readFile: (...a) => real.readFile(...a),
+    writeFile: async (p, content, enc) => {
+      if (String(p).endsWith('.tmp')) {
+        tmpWriteCount++;
+        if (tmpWriteCount === 2) throw Object.assign(new Error('simulated disk failure mid-apply'), { code: 'EIO' });
+      }
+      return real.writeFile(p, content, enc);
+    },
+    rename: (...a) => real.rename(...a),
+    unlink: (...a) => real.unlink(...a),
+    readdir: (...a) => real.readdir(...a),
+    lstat: (...a) => real.lstat(...a),
+    realpath: (...a) => real.realpath(...a)
+  };
+}
+
+// REQUIRED: human-edit-after-failure test.
+// 1. valid owned pre-state; 2. prepare a real existing-root receipt; 3. simulate a partial
+// failure; 4. modify an affected managed file AFTER the failure with human bytes; 5. preview
+// restore; 6. attempt --apply-restore. Required: the human edit is NOT overwritten, restore
+// blocks/refuses that path, output clearly identifies ambiguity/manual review, no misleading
+// "restore succeeded fully", and evidence (the human's edited file itself) remains available.
+test('REQUIRED: a human edit made to an already-owned file AFTER a real partial-apply failure is never overwritten by restore', async () => (
+  withTempDir('chronasense-p11-restore-human-edit-', async cwd => {
+    const vault = path.join(cwd, 'vault');
+    const outboxDir = path.join(cwd, 'outbox');
+    const backupsRoot = path.join(cwd, 'backups');
+    // 1. Valid owned pre-state: Daily/2026-08-30.md + System files, all consistent.
+    await seedOwnedVault(vault, [focusEvent()]);
+    // Introduce a second day so the apply has real writable ops (CREATE the new day, UPDATE
+    // manifest, UPDATE sentinel) — 2026-08-30.md itself has nothing to write (already correct).
+    await writeOutbox(outboxDir, [focusEvent(), focusEventDay2()]);
+    const configPath = path.join(cwd, 'worker.config.json');
+    await fs.writeFile(configPath, JSON.stringify({ outboxDir, vault, backupsRoot }), 'utf8');
+
+    // 2 + 3. A REAL partial failure: the second .tmp write (manifest.json, phase 1, after the
+    // new day's content phase 0 succeeds) fails — a real existing-root receipt is prepared
+    // before any of this, and a real intervention latch is created.
+    const failing = await runLifeLedgerSyncWorker(['--apply', '--config', configPath], { fs: breaksOnSecondTmpWriteFs() });
+    assert.equal(failing.result.outcome, 'intervention_required');
+    assert.equal(failing.result.category, 'after_write_partial');
+    const receiptPath = failing.result.receiptPath;
+    assert.ok(receiptPath, 'a real rollback receipt must exist for this incident');
+
+    // 4. A human edits an AFFECTED managed file (one this receipt's backup actually covers)
+    // AFTER the failure — e.g. manually correcting the Daily note by hand.
+    const dailyPath = path.join(vault, 'Life Ledger', 'Daily', '2026-08-30.md');
+    const humanBytes = 'I fixed this by hand after the sync broke, please do not overwrite me\n';
+    await fs.writeFile(dailyPath, humanBytes, 'utf8');
+
+    // 5. Preview restore.
+    const { receipt } = await loadRestoreReceipt(receiptPath);
+    const verification = await verifyRestoreReceipt(receipt, { vault, mode: 'test' });
+    assert.equal(verification.ok, true, JSON.stringify(verification));
+    const preview = await previewRestore(receipt, { vault });
+    const dailyEntry = preview.entries.find(e => e.relativePath === 'Life Ledger/Daily/2026-08-30.md');
+    assert.equal(dailyEntry.action, 'ambiguous_current_state');
+    assert.equal(preview.completeness, 'manual_review_required');
+
+    // 6. Attempt --apply-restore.
+    const applied = await applyRestore(receipt, preview, { vault });
+
+    // Required assertions.
+    assert.equal(await fs.readFile(dailyPath, 'utf8'), humanBytes, 'the human edit must survive completely untouched');
+    assert.ok(!applied.written.some(w => w.relativePath === 'Life Ledger/Daily/2026-08-30.md'), 'restore must refuse to write this path');
+    assert.ok(applied.ambiguous.some(a => a.relativePath === 'Life Ledger/Daily/2026-08-30.md'), 'output must clearly identify the ambiguity');
+    assert.notEqual(applied.completeness, 'exact_restore_complete', 'must never claim the restore fully succeeded');
+    assert.equal(applied.completeness, 'manual_review_required');
+    // Evidence remains available: the human's bytes are still on disk, and the pre-incident
+    // backup bytes are still intact and readable for comparison.
+    const backupSrc = path.join(receipt.backup.backupArtifactPath, 'Life Ledger', 'Daily', '2026-08-30.md');
+    assert.ok(await fs.access(backupSrc).then(() => true, () => false));
+  })
+));
+
+// REQUIRED: CREATE-before-failure / incomplete-restore test.
+// Pre-state: Daily/old-date.md, System/README.md, manifest, sentinel. Target introduces
+// Daily/new-date.md. Partial apply creates it, then fails before completing manifest/sentinel.
+// Receipt backup naturally does NOT contain Daily/new-date.md. Restore must truthfully represent
+// that the exact pre-state (here: "new-date.md never existed") has not been achieved.
+test('REQUIRED: a file CREATEd just before a real partial-apply failure is a named residual, restore never claims complete success', async () => (
+  withTempDir('chronasense-p11-restore-residual-', async cwd => {
+    const vault = path.join(cwd, 'vault');
+    const outboxDir = path.join(cwd, 'outbox');
+    const backupsRoot = path.join(cwd, 'backups');
+    // Pre-state: Daily/2026-08-30.md ("old-date"), System/README.md, manifest, sentinel.
+    await seedOwnedVault(vault, [focusEvent()]);
+    // Target introduces Daily/2026-08-31.md ("new-date") via a second event.
+    await writeOutbox(outboxDir, [focusEvent(), focusEventDay2()]);
+    const configPath = path.join(cwd, 'worker.config.json');
+    await fs.writeFile(configPath, JSON.stringify({ outboxDir, vault, backupsRoot }), 'utf8');
+
+    // Partial apply: content phase (the new day) succeeds, then the SECOND .tmp write
+    // (manifest.json) fails — manifest/sentinel are never completed.
+    const failing = await runLifeLedgerSyncWorker(['--apply', '--config', configPath], { fs: breaksOnSecondTmpWriteFs() });
+    assert.equal(failing.result.outcome, 'intervention_required');
+    assert.ok(failing.result.written.includes('Life Ledger/Daily/2026-08-31.md'), 'the new day must have actually been created before the failure');
+    const newDatePath = path.join(vault, 'Life Ledger', 'Daily', '2026-08-31.md');
+    assert.ok(await fs.access(newDatePath).then(() => true, () => false), 'the residual file is really there');
+
+    const { receipt } = await loadRestoreReceipt(failing.result.receiptPath);
+    // The receipt's own pre-apply backup naturally does NOT contain the new day.
+    assert.ok(!receipt.backup.files.some(f => f.relativePath === 'Life Ledger/Daily/2026-08-31.md'));
+
+    const verification = await verifyRestoreReceipt(receipt, { vault, mode: 'test' });
+    assert.equal(verification.ok, true, JSON.stringify(verification));
+    const preview = await previewRestore(receipt, { vault });
+
+    // Required: names the exact residual path, states write-only restore cannot remove it,
+    // states the exact pre-incident state will not be achieved, and this must never be silently
+    // treated as "handled".
+    const residual = preview.residualFiles.find(r => r.relativePath === 'Life Ledger/Daily/2026-08-31.md');
+    assert.ok(residual, 'the exact residual path must be named');
+    assert.equal(residual.classification, 'residual_created_file');
+    assert.match(residual.note, /cannot remove|not.*achieved|review/i);
+    assert.equal(preview.completeness, 'manual_review_required');
+
+    const applied = await applyRestore(receipt, preview, { vault });
+    assert.notEqual(applied.completeness, 'exact_restore_complete', 'must never report complete/full success while a residual exists');
+    assert.equal(applied.completeness, 'manual_review_required');
+    assert.ok(applied.residualFiles.some(r => r.relativePath === 'Life Ledger/Daily/2026-08-31.md'));
+    // The residual file itself is left exactly as it was — restore is write-only and never
+    // deletes it, but also never pretends it isn't there.
+    assert.ok(await fs.access(newDatePath).then(() => true, () => false));
   })
 ));

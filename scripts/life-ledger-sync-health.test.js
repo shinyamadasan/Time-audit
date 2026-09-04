@@ -173,5 +173,66 @@ test('a real end-to-end synced cycle produces HEALTHY with correct outbox/status
     assert.ok(health.facts.evidence.latestRunAt);
     assert.ok(health.facts.evidence.latestReceiptAt);
     assert.ok(health.facts.footprint.fileCount > 0);
+    // Review Finding 4 — matching hashes contribute HEALTHY when everything else is fine too.
+    assert.equal(health.facts.outboxProcessed.matches, true);
+    assert.equal(health.facts.outboxProcessed.currentSha256, health.facts.outboxProcessed.processedSha256);
+  })
+));
+
+// Review Finding 4 (Phase 11 fix pass) — the current outbox SHA and the worker's last PROCESSED
+// outbox SHA were both already computed but never compared.
+test('a newer outbox snapshot than the worker has processed is PENDING, never HEALTHY', async () => (
+  withTempDir('chronasense-p11-health-', async cwd => {
+    const vault = path.join(cwd, 'vault');
+    const outboxDir = path.join(cwd, 'outbox');
+    const backupsRoot = path.join(cwd, 'backups');
+    await seedOwnedVault(vault, []);
+    await fs.mkdir(outboxDir, { recursive: true });
+    const json1 = serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([focusEvent()]));
+    await fs.writeFile(path.join(outboxDir, LIFE_LEDGER_SYNC_WORKER_OUTBOX_FILENAME), json1, 'utf8');
+    const configPath = path.join(cwd, 'worker.config.json');
+    await fs.writeFile(configPath, JSON.stringify({ outboxDir, vault, backupsRoot }), 'utf8');
+    const first = await runLifeLedgerSyncWorker(['--apply', '--config', configPath]);
+    assert.equal(first.result.outcome, 'synced');
+
+    // The browser mirrors a NEW event — the scheduler has not processed it yet (no further
+    // worker invocation happens here, simulating "the next cycle just hasn't fired yet").
+    const day2 = {
+      ...focusEvent(),
+      eventId: '20202020-2020-4020-8020-202020202020', sourceEntityId: 'focus-entry-2',
+      occurredAt: '2026-08-31T16:00:00.000Z', recordedAt: '2026-08-31T16:00:00.000Z',
+      payload: { ...focusEvent().payload, startedAt: '2026-08-31T15:35:00.000Z', endedAt: '2026-08-31T16:00:00.000Z', source: { focusEntryId: 'focus-entry-2' } },
+      provenance: { ...focusEvent().provenance, evidence: ['synthetic.focus:2'] }
+    };
+    const json2 = serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([focusEvent(), day2]));
+    await fs.writeFile(path.join(outboxDir, LIFE_LEDGER_SYNC_WORKER_OUTBOX_FILENAME), json2, 'utf8');
+
+    const health = await computeLifeLedgerHealth({ configPath });
+    assert.equal(health.classification, 'PENDING');
+    assert.equal(health.facts.outboxProcessed.matches, false);
+    assert.notEqual(health.facts.outboxProcessed.currentSha256, health.facts.outboxProcessed.processedSha256);
+  })
+));
+
+test('a malformed backupsRoot/status.json makes worker status UNKNOWN — UNAVAILABLE, never HEALTHY', async () => (
+  withTempDir('chronasense-p11-health-', async cwd => {
+    const { configPath, backupsRoot, outboxDir } = await setupBasicFixture(cwd);
+    await fs.mkdir(outboxDir, { recursive: true });
+    await fs.writeFile(path.join(outboxDir, LIFE_LEDGER_SYNC_WORKER_OUTBOX_FILENAME), serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([focusEvent()])), 'utf8');
+    await fs.mkdir(backupsRoot, { recursive: true });
+    await fs.writeFile(path.join(backupsRoot, 'status.json'), '{ not valid json !!', 'utf8');
+    const health = await computeLifeLedgerHealth({ configPath });
+    assert.equal(health.classification, 'UNAVAILABLE');
+  })
+));
+
+test('an outbox snapshot with no worker status yet at all is PENDING (waiting for first sync), not HEALTHY', async () => (
+  withTempDir('chronasense-p11-health-', async cwd => {
+    const { configPath, outboxDir } = await setupBasicFixture(cwd);
+    await fs.mkdir(outboxDir, { recursive: true });
+    await fs.writeFile(path.join(outboxDir, LIFE_LEDGER_SYNC_WORKER_OUTBOX_FILENAME), serializeLifeLedgerSnapshot(createLifeLedgerSnapshotFromEvents([focusEvent()])), 'utf8');
+    // No backupsRoot/status.json has ever been written — the worker has never run yet.
+    const health = await computeLifeLedgerHealth({ configPath });
+    assert.equal(health.classification, 'PENDING');
   })
 ));

@@ -28,6 +28,19 @@ import { LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME } from './life-ledger-sync
 // Active-latch protection is absolute and independent of age/count: if backupsRoot/
 // intervention-required.json exists and parses, the run log for its runId and the receipt
 // directory at its receiptPath are never candidates for deletion, full stop.
+//
+// Review Finding 1 (Phase 11 fix pass) — a CORRUPT (present but unparseable) latch is the
+// dangerous case: its runId/receiptPath can't be read, so which specific run log and receipt
+// it references is UNKNOWN. Silently falling back to "protect nothing specific, count-floor
+// still applies" could prune exactly the evidence an active incident depends on. So when the
+// latch is present but does not parse, ALL run-log and receipt pruning is blocked outright —
+// `retentionBlocked: true, retentionBlockedReason: 'corrupt_intervention_latch'` — regardless of
+// age or count floor, until a human runs the already-reviewed corrupt-latch clear action
+// (`--clear-intervention`). Lock tombstones are unaffected by this block: they are always-orphaned
+// by construction (see below) and never reference incident evidence, so pruning them stays safe
+// even while a corrupt latch blocks everything else. `restore-evidence/` (written by
+// life-ledger-sync-restore.mjs) is never walked or touched by this module at all, corrupt latch
+// or not — it is simply out of this module's scope.
 
 export const RETENTION_DEFAULT_DAYS = 30;
 export const RETENTION_MIN_KEEP = 20;
@@ -93,9 +106,14 @@ async function listDirSafe(dirPath) {
   }
 }
 
-function classifyByAgeAndRank(entries, { retentionDays, minKeep }) {
+function classifyByAgeAndRank(entries, { retentionDays, minKeep, retentionBlocked }) {
   // entries: [{ name, mtimeMs, protected }] — newest first after sort.
   const sorted = [...entries].sort((a, b) => b.mtimeMs - a.mtimeMs);
+  if (retentionBlocked) {
+    // A corrupt latch means we cannot know what it references — every run/receipt is kept,
+    // full stop, until a human clears the corrupt latch. See the Review Finding 1 note above.
+    return sorted.map(entry => ({ ...entry, decision: 'keep', why: 'retention_blocked_corrupt_latch' }));
+  }
   const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
   const clampedMinKeep = Math.max(1, minKeep);
   return sorted.map((entry, rank) => {
@@ -138,7 +156,11 @@ export async function planLifeLedgerRetention(backupsRoot, options = {}) {
     else throw err;
   }
   if (!rootExists) {
-    return { backupsRoot: resolvedRoot, rootExists: false, runs: [], receipts: [], lockTombstones: [], latch: { present: false }, summary: summarize([], [], []) };
+    return {
+      backupsRoot: resolvedRoot, rootExists: false, runs: [], receipts: [], lockTombstones: [],
+      latch: { present: false }, retentionBlocked: false, retentionBlockedReason: null,
+      summary: summarize([], [], [])
+    };
   }
   const containerRealRoot = await realPathOrResolved(resolvedRoot);
 
@@ -147,6 +169,9 @@ export async function planLifeLedgerRetention(backupsRoot, options = {}) {
   const protectedReceiptDirName = latch.parsed?.receiptPath
     ? path.basename(path.dirname(path.resolve(latch.parsed.receiptPath)))
     : null;
+  // Review Finding 1: present-but-unparseable is the dangerous case — see the module-header note.
+  const retentionBlocked = latch.present === true && latch.parsed === null;
+  const retentionBlockedReason = retentionBlocked ? 'corrupt_intervention_latch' : null;
 
   // --- runs/*.json ---
   const runsDir = path.join(resolvedRoot, RUNS_DIRNAME);
@@ -168,7 +193,7 @@ export async function planLifeLedgerRetention(backupsRoot, options = {}) {
   }
   const settledRuns = runEntries.filter(e => e.decision !== 'skip');
   const skippedRuns = runEntries.filter(e => e.decision === 'skip');
-  const classifiedRuns = classifyByAgeAndRank(settledRuns, { retentionDays, minKeep }).concat(skippedRuns);
+  const classifiedRuns = classifyByAgeAndRank(settledRuns, { retentionDays, minKeep, retentionBlocked }).concat(skippedRuns);
 
   // --- receipts/<runId>/ ---
   const receiptsDir = path.join(resolvedRoot, RECEIPTS_DIRNAME);
@@ -188,7 +213,7 @@ export async function planLifeLedgerRetention(backupsRoot, options = {}) {
   }
   const settledReceipts = receiptEntries.filter(e => e.decision !== 'skip');
   const skippedReceipts = receiptEntries.filter(e => e.decision === 'skip');
-  const classifiedReceipts = classifyByAgeAndRank(settledReceipts, { retentionDays, minKeep }).concat(skippedReceipts);
+  const classifiedReceipts = classifyByAgeAndRank(settledReceipts, { retentionDays, minKeep, retentionBlocked }).concat(skippedReceipts);
 
   // --- lock tombstones directly under backupsRoot ---
   const tombstones = [];
@@ -213,6 +238,8 @@ export async function planLifeLedgerRetention(backupsRoot, options = {}) {
     rootExists: true,
     policy: { retentionDays, minKeep, staleLockMinutes },
     latch: { present: latch.present, parsed: latch.parsed !== null, protectedRunId, protectedReceiptDirName },
+    retentionBlocked,
+    retentionBlockedReason,
     runs: classifiedRuns,
     receipts: classifiedReceipts,
     lockTombstones: tombstones,
@@ -389,7 +416,10 @@ async function main() {
       console.log(`backupsRoot does not exist yet — nothing to prune (${plan.backupsRoot}).`);
       return;
     }
-    console.log(JSON.stringify({ plan: plan.summary, applied }, null, 2));
+    console.log(JSON.stringify({ plan: plan.summary, retentionBlocked: plan.retentionBlocked, retentionBlockedReason: plan.retentionBlockedReason, applied }, null, 2));
+    if (plan.retentionBlocked) {
+      console.log(`\nRETENTION BLOCKED: ${plan.retentionBlockedReason}. Run/receipt pruning is refused until the corrupt intervention latch is cleared by a human (--clear-intervention). Only lock-tombstone cleanup (if any) proceeds normally.`);
+    }
     if (!applied) {
       console.log(`\nDry run only. ${plan.summary.runsToDelete} run log(s), ${plan.summary.receiptsToDelete} receipt dir(s), ${plan.summary.tombstonesToDelete} lock tombstone(s) would be deleted. Pass --apply to actually delete.`);
     } else if (applied.errors.length) {
