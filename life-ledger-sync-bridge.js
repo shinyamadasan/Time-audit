@@ -14,6 +14,13 @@ import { exportLifeLedgerSnapshotJson } from './life-ledger-transport.js';
 // Deliberately dependency-injected (handleStore / pickDirectory / digestHex / exportSnapshotJson)
 // so the full enable/disable/status/write lifecycle is unit-testable with an in-memory fake
 // FileSystemDirectoryHandle, with no real browser and no real File System Access API required.
+//
+// Review Finding 2 — mirror writes are SERIALIZED through one process-local promise queue. A
+// snapshot is captured (exportSnapshotJson()) at the moment a queued write task actually starts
+// executing, not when the caller happened to invoke writeOutboxSnapshotIfEnabled() — so even if
+// an earlier write's I/O is slow, it cannot land on disk after a later, logically-newer write:
+// the later task's own task function simply cannot begin until the earlier one has fully
+// settled. A failed write resolves (never throws) and never blocks the queue for later calls.
 
 export const LIFE_LEDGER_SYNC_OUTBOX_FILENAME = 'chronasense-life-ledger-outbox-v1.json';
 export const LIFE_LEDGER_SYNC_STATUS_FILENAME = 'chronasense-life-ledger-outbox-v1.status.json';
@@ -122,11 +129,14 @@ export function createLifeLedgerSyncBridge(deps = {}) {
     }
   }
 
-  // Writes the current deterministic snapshot into the outbox, if background sync is enabled
-  // and permission is currently granted. Never throws — a failure here must never break the
-  // caller's primary localStorage write. Pass { force: true } to also (re-)request permission,
-  // which only succeeds when called from within a user gesture (e.g. a button click handler).
-  async function writeOutboxSnapshotIfEnabled({ force = false } = {}) {
+  // Tracks the hash of the last snapshot this bridge instance itself successfully wrote, purely
+  // as a self-healing signal for getStatus() (never persisted, never trusted as proof of sync —
+  // that proof only ever comes from the worker's own status file).
+  let lastMirroredHash = null;
+
+  // The actual write, captured and executed only when the serialization queue below runs it —
+  // this is what makes the capture-at-execution-time ordering guarantee work.
+  async function performWrite({ force = false } = {}) {
     if (!supported()) return { ok: false, reason: 'unsupported' };
     const handle = await getHandle();
     if (!handle) return { ok: false, reason: 'not_configured' };
@@ -136,10 +146,31 @@ export function createLifeLedgerSyncBridge(deps = {}) {
     try {
       const json = exportSnapshotJson();
       await writeFile(handle, LIFE_LEDGER_SYNC_OUTBOX_FILENAME, json);
+      try { lastMirroredHash = await digestHex(json); } catch { /* self-healing hint only */ }
       return { ok: true };
     } catch (err) {
       return { ok: false, reason: 'write_failed', message: err.message };
     }
+  }
+
+  // Review Finding 2 — a strict FIFO promise chain. Each call's task only begins once every
+  // task enqueued before it has fully settled (success OR failure) — `.then(fn, fn)` on both
+  // branches means one failed write can never poison the chain for later calls.
+  let writeQueue = Promise.resolve();
+  function enqueueWrite(taskFn) {
+    const settled = writeQueue.then(taskFn, taskFn);
+    writeQueue = settled.then(() => undefined, () => undefined);
+    return settled;
+  }
+
+  // Writes the current deterministic snapshot into the outbox, if background sync is enabled
+  // and permission is currently granted. Never throws — a failure here must never break the
+  // caller's primary localStorage write. Pass { force: true } to also (re-)request permission,
+  // which only succeeds when called from within a user gesture (e.g. a button click handler).
+  // Serialized: concurrent/rapid calls always commit in call order, and the final on-disk
+  // content always matches the LAST call's canonical state at the time it actually executes.
+  function writeOutboxSnapshotIfEnabled(options = {}) {
+    return enqueueWrite(() => performWrite(options));
   }
 
   // Opt-in entry point. Must be called from a user gesture (a click handler) — showDirectoryPicker
@@ -180,6 +211,14 @@ export function createLifeLedgerSyncBridge(deps = {}) {
     try {
       outboxSha256 = await digestHex(exportSnapshotJson());
     } catch { /* leave null — status must still render */ }
+    // Self-healing (soft requirement): a previous mirror write may have failed, or simply never
+    // ran for the CURRENT local state (e.g. permission just lapsed and was resumed). Whenever
+    // Settings is opened/reloaded and the current canonical hash doesn't match what this bridge
+    // last successfully wrote, schedule exactly one refresh attempt through the same serialized
+    // queue — never an aggressive retry loop, never awaited here (status must still render fast).
+    if (outboxSha256 && outboxSha256 !== lastMirroredHash) {
+      writeOutboxSnapshotIfEnabled().catch(() => {});
+    }
     let worker = null;
     try {
       const statusJson = await readFileIfExists(handle, LIFE_LEDGER_SYNC_STATUS_FILENAME);

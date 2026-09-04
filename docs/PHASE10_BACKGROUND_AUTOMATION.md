@@ -63,6 +63,23 @@ any mirror fires — no new wiring required per producer. Workout/Meal adapters 
 today but are not wired into a live runtime producer path in this app; Phase 10 does not change
 that (see "What is NOT automated" below).
 
+**Mirror write serialization.** Ledger mutations can fire two mirror calls back-to-back (e.g. a
+focus session's outcome followed immediately by its plan-step completion). `writeOutboxSnapshotIfEnabled()`
+captures the current snapshot only when its queued task actually starts executing, and every call
+is chained through one strict FIFO promise queue — a later call's task literally cannot begin
+until every call enqueued before it has fully settled. This guarantees disk-commit order always
+matches call order and the final on-disk content always reflects the *last* call's state at
+execution time, even if an earlier call's I/O happens to be slower (proven in
+`life-ledger-sync-bridge.test.js` with an artificially delayed older write). A failed write
+resolves rather than throws, so one failure never blocks later calls.
+
+**Self-healing mirror refresh (best-effort).** A mirror write can fail transiently (a lapsed
+permission, a momentary I/O error) and previously would only recover on the next unrelated Ledger
+mutation. `getStatus()` now compares the current canonical hash against the hash of what this
+bridge instance itself last successfully wrote, and — when they differ — schedules exactly one
+refresh attempt through the same serialized queue (never an aggressive retry loop, never blocking
+the status read). Opening Settings or reloading the app is enough to trigger recovery.
+
 ## Background worker (`scripts/life-ledger-sync-worker.mjs`)
 
 **One-shot, not a daemon.** The script runs exactly one cycle and exits; a repeating Windows Task
@@ -74,14 +91,24 @@ active" directly.
 
 - **Concurrency:** a lock file (`<backupsRoot>/life-ledger-sync-worker.lock`, PID + timestamp) is
   the worker's own belt; Task Scheduler's `MultipleInstances = IgnoreNew` setting is the
-  suspenders. A lock is only ever broken if its PID is no longer running or it is older than 30
-  minutes (far beyond the expected sub-minute cycle time) — never on a live, fresh lock.
+  suspenders. **Liveness is authoritative over age:** a lock whose PID is confirmed running is
+  held regardless of how old it is; a lock whose PID is confirmed dead is reclaimable immediately
+  regardless of age; only a lock whose content can't even be parsed (no usable PID at all) falls
+  back to a 30-minute age ceiling as a documented, conservative last resort. Breaking a stale lock
+  is an atomic rename-to-a-unique-tombstone, not an unconditional delete-then-recreate — if two
+  contenders both judge the same lock stale, exactly one wins the rename; the other gets a clean
+  `ENOENT` and backs off as "already running," never a crash, never a double-acquisition (proven
+  in `scripts/life-ledger-sync-worker.test.js` with two concurrent contenders racing one stale
+  lock).
 - **Config:** `scripts/life-ledger-sync-worker.config.json` (gitignored — see the committed
   `.example.json`) supplies `outboxDir` / `vault` / `expectedVault` / `backupsRoot`; CLI flags
   override it.
 - **Default is a dry run.** `--apply` is required for the worker to actually write; without it,
   every cycle only reports what it *would* do. This is a second, independent safety layer beyond
   not-registering-the-real-task.
+- **Intervention latch:** see the dedicated section below — a real apply that reports
+  `intervention_required` persists a durable latch that blocks every later `--apply` invocation
+  until a human explicitly clears it.
 
 ## Existing-root safe sync transaction (`life-ledger-sync-cycle.js`)
 
@@ -124,9 +151,45 @@ Phase 11 concern (see Known Limitations).
 |---|---|---|
 | `error` / `before_write` | Nothing was written (bad config, unreadable vault, transient I/O, a receipt-prep failure) | Safe — a later cycle with the same inputs can succeed |
 | `conflict` | Ownership/content mismatch, or a plan/apply-window precondition race | Safe to re-run (it only replans); requires a human to resolve the underlying conflict |
-| `intervention_required` / `after_write_partial` | `applyObsidianSync` threw `partial_apply_failure` mid-write | **Never auto-retried within the same call.** Reported with exact `written` + `failedRelativePath` evidence. (The underlying content→manifest→sentinel ordering means a *later, independent* cycle can often safely complete an interrupted apply — proven in `life-ledger-sync-cycle.test.js` — but the failure is still always surfaced, never silently absorbed.) |
-| `intervention_required` / `unexpected_first_run_state` | Managed root unexpectedly absent | Never auto-resolved — human-only path |
-| `intervention_required` / `after_write_verification` | Apply succeeded but the post-apply replan doesn't show a fully-synced state | Apply already happened; report only |
+| `intervention_required` / `after_write_partial` | `applyObsidianSync` threw `partial_apply_failure` mid-write | **Never auto-retried within the same call, and now latched** (see below) — every later `--apply` invocation is refused until a human explicitly clears it. Reported with exact `written` + `failedRelativePath` evidence. |
+| `intervention_required` / `unexpected_first_run_state` | Managed root unexpectedly absent | Never auto-resolved, and latched — human-only path |
+| `intervention_required` / `after_write_verification` | Apply succeeded but the post-apply replan doesn't show a fully-synced state | Apply already happened; latched — report only |
+| `intervention_required` / `latched` | A prior real apply already latched; this `--apply` invocation was refused before touching anything | Not applicable — clear the latch first (see below) |
+
+### Persisted intervention latch
+
+The cycle module (`life-ledger-sync-cycle.js`) itself is unchanged and still never loops or
+retries within a single call — that part of the design held up under review. What was missing was
+persistence *across* calls: on its own, nothing stopped the *next* scheduled worker invocation,
+15 minutes later, from re-planning, preparing another rollback artifact, and attempting to
+continue an interrupted write automatically. That contradicted the intended "action required, no
+blind auto-retry" behavior, so the worker (`scripts/life-ledger-sync-worker.mjs`) now owns a
+durable latch on top of the cycle's per-call result:
+
+- **Trigger:** any *real* (`--apply`, non-dry-run) cycle result with `outcome === 'intervention_required'`
+  writes `<backupsRoot>/intervention-required.json` — schema version, `createdAt`, `runId`,
+  `outcome`/`category`/`reason`/`message`, `planFingerprint`, `outboxSha256`, `receiptPath`,
+  `written`, `failedRelativePath`. No vault contents, no secrets, no arbitrary paths beyond the
+  receipt location. Dry runs never create or touch the latch — they may still observe and report
+  the same underlying state (e.g. an unexpected first-run condition), purely informationally.
+- **While latched, every `--apply` invocation is refused before the cycle is ever called:** zero
+  rollback-artifact preparation, zero backup copy, zero managed write, and — critically — zero new
+  receipt-directory churn no matter how many times the scheduler fires (proven with three
+  consecutive blocked `--apply` invocations creating no new receipts). The worker still writes a
+  run log and outbox status each time (`outcome: 'intervention_required', category: 'latched'`) so
+  the audit trail stays honest, but nothing under the vault or the backup receipts is touched.
+- **Explicit human clear:** `node scripts/life-ledger-sync-worker.mjs --clear-intervention` (or
+  `setup-life-ledger-sync-scheduler.ps1 -Action ClearIntervention`) removes only the latch file —
+  never receipts, never backups, never the vault — and reports what was cleared. Idempotent: with
+  no latch present it reports `no_intervention_latch` and exits cleanly rather than erroring.
+- **Recovery:** once cleared, the next `--apply` invocation runs the cycle normally. If the
+  underlying vault state is actually safe (per the content→manifest→sentinel ordering, an
+  already-landed file is byte-identical and simply gets skipped, not rewritten), that invocation
+  can complete the interrupted sync and report `synced` without re-creating the latch.
+- **Status:** while latched, the Settings UI shows "Sync is paused pending manual review... Action
+  required" — it never says "synced" (the worker's recorded hash for a latched result never
+  matches the current one) and never says the generic transient-error "will retry automatically"
+  wording, because a latch is not a transient condition.
 
 ## Sync status (truthfulness contract)
 
@@ -146,6 +209,9 @@ write access to; the Settings UI reads it back from there. `describeLifeLedgerSy
   is currently in localStorage.
 - **Blocked: conflict** / **needs attention** / **temporarily unavailable** — the corresponding
   worker outcome, verbatim reason included where available.
+- **"Sync is paused pending manual review... Action required."** — an intervention latch is set
+  (see above). Distinct wording from the generic "needs attention" case, and never rendered as
+  "temporarily unavailable / will retry automatically" — a latch is not a transient condition.
 
 This is unit-tested directly (`life-ledger-sync-status-ui.test.js`): every non-synced/non-unchanged
 worker outcome is asserted to never render the string "Life Ledger synced."
@@ -157,14 +223,27 @@ pwsh ./setup-life-ledger-sync-scheduler.ps1 -Action Install [-IntervalMinutes 15
 pwsh ./setup-life-ledger-sync-scheduler.ps1 -Action Status
 pwsh ./setup-life-ledger-sync-scheduler.ps1 -Action Uninstall
 pwsh ./setup-life-ledger-sync-scheduler.ps1 -Action RunOnce [-Apply]
+pwsh ./setup-life-ledger-sync-scheduler.ps1 -Action ClearIntervention
 ```
 
 `Install` registers a Task Scheduler task named `ChronaSense Life Ledger Sync` running
 `node scripts/life-ledger-sync-worker.mjs` on a repeating trigger with
-`MultipleInstances = IgnoreNew`. Without `-Apply`, the scheduled task runs forever in dry-run mode
-(useful to observe worker behavior before trusting it with real writes). `RunOnce` runs a single
-diagnostic cycle directly, no scheduler involved — the manual-run path required for diagnostics
-without touching Task Scheduler at all.
+`MultipleInstances = IgnoreNew` and a 10-year finite `-RepetitionDuration` (a large but *finite*
+`TimeSpan`, not `[TimeSpan]::MaxValue` — some Windows Task Scheduler builds have been reported to
+handle a near-int64-max repetition duration inconsistently; `Install` is idempotent and trivially
+re-registered long before ten years matters). Without `-Apply`, the scheduled task runs forever in
+dry-run mode (useful to observe worker behavior before trusting it with real writes). `RunOnce`
+runs a single diagnostic cycle directly, no scheduler involved. `ClearIntervention` forwards to the
+worker's own `--clear-intervention` (see the latch section above) and does not itself touch the
+vault, receipts, or backups.
+
+**Runs only while logged on; no elevation.** No `-Principal` is supplied to `Register-ScheduledTask`,
+so the task runs as the current interactive user, only while that user is logged on to Windows —
+no stored credentials, no "run whether user is logged on or not". It requires no admin rights (no
+`-RunLevel Highest`). If the machine is off, asleep, or logged out at a trigger time, that cycle is
+simply skipped; the next trigger a few minutes later covers it. This is a deliberate simplicity
+choice for the current single-user desktop setup, not an oversight — `Status` surfaces the task's
+actual last/next run times so this is always observable.
 
 ## What is automated vs. what remains manual
 
@@ -183,6 +262,8 @@ without touching Task Scheduler at all.
 - Registering the real scheduled task (this Builder phase deliberately stops short of that).
 - Recovering from a `partial_apply_failure` — the receipt + backup exist for a human to restore
   from if needed; Phase 10 does not build an automated restore executor (see Known Limitations).
+- Clearing an intervention latch (`--clear-intervention` / `-Action ClearIntervention`) — a
+  deliberate, explicit human action; automation never clears its own latch.
 
 ## Known limitations / Phase 11 debt
 
@@ -190,15 +271,30 @@ without touching Task Scheduler at all.
   available in Firefox or the Capacitor Android WebView. On those, Background Sync reports
   "not available" and the Phase 9 manual export/CLI path remains the only option — this is an
   accepted, documented gap, not a silent failure.
-- **No automated receipt/backup retention or pruning.** `Second-Brain-Backups\life-ledger-sync\`
-  will accumulate one receipt directory per changing cycle indefinitely.
+- **No automated retention or pruning of run logs, receipts, or backups.** The worker writes
+  `<backupsRoot>/runs/<runId>.json` and `<backupsRoot>/status.json` on **every** invocation,
+  including `unchanged`/`no_source` cycles, and `<backupsRoot>/receipts/<runId>/` on every
+  *changing* cycle — none of it is ever pruned by Phase 10. Left running indefinitely, these will
+  grow without bound. The intervention latch (above) *does* prevent one specific runaway case — a
+  fault loop where a broken condition would otherwise cause a fresh receipt directory on every
+  scheduled tick — by refusing all further `--apply` cycles (and therefore all further receipt
+  creation) until a human clears it. Outside that specific case, retention/pruning policy is
+  explicitly Phase 11's to own.
 - **No automated rollback executor.** A `partial_apply_failure` or a conflict leaves the operator
   with a verified receipt and backup, but restoring from it is still a manual step — building a
   safe, ownership-reverifying automated restore is explicitly out of scope for Phase 10 (per the
   existing debt already noted in `obsidian-life-ledger-sync.js`'s own design notes).
 - **The one-shot worker lock check is not cross-machine.** It protects one machine's Task
-  Scheduler + manual invocations from racing each other; it says nothing about two different
-  machines pointed at the same vault (not a scenario this single-user setup creates today).
+  Scheduler + manual invocations from racing each other (including an atomic stale-lock takeover
+  so two local contenders can never both proceed); it says nothing about two different machines
+  pointed at the same vault (not a scenario this single-user setup creates today).
+- **No automatic cleanup of orphaned `.tmp` files.** `guardedAtomicWrite()` in
+  `obsidian-life-ledger-sync.js` writes to a `.<name>.tmp` file before renaming it into place; a
+  hard-killed process (not a clean `partial_apply_failure`, an actual crash mid-syscall) could in
+  principle leave an orphaned `.tmp` file behind in a managed directory. This is a pre-existing,
+  Phase-9-level characteristic, not something Phase 10 introduces — flagged here as Phase 11 info,
+  not a Phase 10 gap, and no automatic deletion of unrecognized files was added (that would be its
+  own new risk surface not justified by this Phase's scope).
 - **Workout/Meal are not live producers into this app's runtime Life Ledger** — their adapters and
   model support exist, but Phase 10 does not fabricate a live wiring the source apps don't
   actually provide (see `docs/LIFE_LEDGER_CONTRACT.md` for the adapter contract; ChronaSense's own

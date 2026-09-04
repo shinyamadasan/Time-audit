@@ -61,6 +61,18 @@ test('worker conflict -> action required, no synced claim', () => {
   assert.equal(d.tone, 'error');
 });
 
+test('worker intervention_required/latched -> action required, mentions clearing the latch, never "synced" or "retry automatically"', () => {
+  const d = describeLifeLedgerSyncStatus({
+    supported: true, configured: true, permission: 'granted',
+    worker: { outcome: 'intervention_required', category: 'latched', reason: 'intervention_latch_present' }, outboxSha256: 'x'
+  });
+  assert.match(d.text, /action required/i);
+  assert.match(d.text, /clear/i);
+  assert.equal(d.tone, 'error');
+  assert.ok(!/synced/i.test(d.text));
+  assert.ok(!/retry automatically/i.test(d.text));
+});
+
 test('worker intervention_required -> action required', () => {
   const d = describeLifeLedgerSyncStatus({
     supported: true, configured: true, permission: 'granted',

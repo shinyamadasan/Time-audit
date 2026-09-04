@@ -10,15 +10,23 @@ import { runLifeLedgerSyncCycle, summarizeCycleResultForOutbox } from '../life-l
 // daemon — that keeps startup/restart trivially safe (there is no in-process state to recover)
 // and matches the "no dependence on VS Code / the coding agent being active" requirement.
 //
-// It does three things beyond calling the cycle: (1) reads the browser-written outbox snapshot
+// It does four things beyond calling the cycle: (1) reads the browser-written outbox snapshot
 // from a configured local folder, (2) holds a single-instance lock for the duration of the run,
 // (3) writes a run log plus a truthful, secret-free status file BACK into the outbox folder so
-// the ChronaSense Settings UI can read it without ever touching the vault or backup filesystem.
+// the ChronaSense Settings UI can read it without ever touching the vault or backup filesystem,
+// and (4) enforces the intervention latch — once a real apply reports `intervention_required`,
+// every later `--apply` invocation is blocked (zero rollback prep, zero managed writes) until a
+// human explicitly runs `--clear-intervention`.
 
 export const LIFE_LEDGER_SYNC_WORKER_OUTBOX_FILENAME = 'chronasense-life-ledger-outbox-v1.json';
 export const LIFE_LEDGER_SYNC_WORKER_STATUS_FILENAME = 'chronasense-life-ledger-outbox-v1.status.json';
+export const LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME = 'intervention-required.json';
+export const LIFE_LEDGER_SYNC_INTERVENTION_LATCH_SCHEMA_VERSION = 1;
 const LOCK_FILENAME = 'life-ledger-sync-worker.lock';
-const STALE_LOCK_MS = 30 * 60 * 1000; // 30 minutes — generous vs. the expected sub-minute cycle time
+// Used ONLY as a fallback when a lock's PID cannot be parsed/verified (Review Finding 4) — a
+// confirmed-live PID is always held regardless of age, and a confirmed-dead PID is always
+// reclaimable regardless of age. 30 minutes is generous vs. the expected sub-minute cycle time.
+const STALE_LOCK_MS = 30 * 60 * 1000;
 
 export class LifeLedgerSyncWorkerError extends Error {
   constructor(code, message) {
@@ -43,16 +51,24 @@ function usage() {
     '  --backups-root <path>   base directory for fresh per-run rollback artifacts (overrides config)',
     '  --apply                 perform a real cycle (plan + prepare + apply). Without it, this run',
     '                          is a dry run: it reports what would happen and writes nothing.',
+    '  --clear-intervention    explicitly clear a persisted intervention latch (see below). Does',
+    '                          not run a sync cycle in the same invocation.',
     '  --once                  no effect beyond documentation intent — this script is always one-shot',
     '  --json                  print the machine-readable result instead of a text summary',
     '  --help                  show this message',
     '',
-    'Config file shape: { "outboxDir": "...", "vault": "...", "expectedVault": "...", "backupsRoot": "..." }'
+    'Config file shape: { "outboxDir": "...", "vault": "...", "expectedVault": "...", "backupsRoot": "..." }',
+    '',
+    'Intervention latch: if a real (--apply) cycle ever reports intervention_required (e.g. a',
+    'partial-write failure), a durable latch file is written under --backups-root. Every later',
+    '--apply invocation is refused (zero rollback-artifact prep, zero managed writes) until a',
+    'human runs --clear-intervention after resolving the underlying issue. Dry runs may still',
+    'observe and report state while latched, but never clear or bypass the latch.'
   ].join('\n');
 }
 
 function parseArgs(argv) {
-  const options = { apply: false, json: false, once: true };
+  const options = { apply: false, json: false, once: true, clearIntervention: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const takeValue = () => {
@@ -67,6 +83,7 @@ function parseArgs(argv) {
     else if (arg === '--expected-vault') options.expectedVault = takeValue();
     else if (arg === '--backups-root') options.backupsRoot = takeValue();
     else if (arg === '--apply') options.apply = true;
+    else if (arg === '--clear-intervention') options.clearIntervention = true;
     else if (arg === '--once') options.once = true;
     else if (arg === '--json') options.json = true;
     else if (arg === '--help' || arg === '-h') options.help = true;
@@ -102,11 +119,20 @@ async function resolveConfig(options, { cwd = process.cwd() } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Single-instance lock. A plain exclusive-create lock file; a lock older than STALE_LOCK_MS or
-// whose PID is no longer running is treated as abandoned (e.g. the machine was rebooted mid-run)
-// and is safely broken. This is a diagnostic/courtesy layer — Task Scheduler's own "do not start
-// a new instance if already running" setting is the primary concurrency guard (see the installer
-// script); this lock protects manual/diagnostic invocations too.
+// Single-instance lock (Review Findings 3 & 4)
+//
+// Finding 4 — liveness is authoritative, never overridden by age:
+//   - a lock with a parsable, confirmed-LIVE pid is held, full stop, regardless of age.
+//   - a lock with a parsable, confirmed-DEAD pid is stale and reclaimable, regardless of age.
+//   - a lock whose content can't even be parsed / has no usable pid falls back to the age
+//     ceiling as a documented, conservative last resort (liveness cannot be established any
+//     other way here).
+//
+// Finding 3 — atomic takeover: breaking a stale lock is a rename-to-a-unique-tombstone, not an
+// unconditional rm+open. `fs.rename` on a shared source path is atomic — if two contenders both
+// judge the same lock stale and both attempt to rename it away, exactly one rename succeeds; the
+// loser gets ENOENT (the source is already gone) and backs off safely as "already running",
+// never throwing an unhandled exception and never allowing both contenders through.
 // ---------------------------------------------------------------------------
 
 function pidIsRunning(pid) {
@@ -118,40 +144,112 @@ function pidIsRunning(pid) {
   }
 }
 
-async function acquireLock(backupsRoot) {
-  await fs.mkdir(backupsRoot, { recursive: true });
-  const lockPath = path.join(backupsRoot, LOCK_FILENAME);
-  const payload = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), hostname: process.env.COMPUTERNAME || process.env.HOSTNAME || null });
+function isLockStale(existing) {
+  const hasParsablePid = existing && typeof existing.pid === 'number' && Number.isFinite(existing.pid);
+  if (hasParsablePid) {
+    return !pidIsRunning(existing.pid); // authoritative — age is never consulted here
+  }
+  const ageMs = existing?.startedAt ? Date.now() - new Date(existing.startedAt).getTime() : Infinity;
+  return ageMs >= STALE_LOCK_MS;
+}
+
+async function tryCreateLockFile(lockPath, payload) {
   try {
     const handle = await fs.open(lockPath, 'wx');
     await handle.writeFile(payload, 'utf8');
     await handle.close();
-    return lockPath;
+    return true;
   } catch (err) {
-    if (err.code !== 'EEXIST') throw err;
+    if (err.code === 'EEXIST') return false;
+    throw err;
   }
-  // Lock exists — decide whether it is stale.
+}
+
+async function acquireLock(backupsRoot) {
+  await fs.mkdir(backupsRoot, { recursive: true });
+  const lockPath = path.join(backupsRoot, LOCK_FILENAME);
+  const payload = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), hostname: process.env.COMPUTERNAME || process.env.HOSTNAME || null });
+
+  if (await tryCreateLockFile(lockPath, payload)) return lockPath;
+
+  // A lock already exists. Decide staleness from its content.
   let existing;
   try {
     existing = JSON.parse(await fs.readFile(lockPath, 'utf8'));
   } catch {
     existing = null;
   }
-  const ageMs = existing?.startedAt ? Date.now() - new Date(existing.startedAt).getTime() : Infinity;
-  const stillRunning = existing?.pid != null && pidIsRunning(existing.pid);
-  if (stillRunning && ageMs < STALE_LOCK_MS) {
-    return null; // genuinely already running — caller should skip this cycle
+  if (!isLockStale(existing)) {
+    return null; // held by a live (or unverifiable-and-fresh) owner — caller should skip this cycle
   }
-  // Stale (process gone, or older than the generous ceiling regardless of PID reuse) — break it.
-  await fs.rm(lockPath, { force: true });
-  const handle = await fs.open(lockPath, 'wx');
-  await handle.writeFile(payload, 'utf8');
-  await handle.close();
-  return lockPath;
+
+  // Atomic takeover attempt: claim the stale lock by renaming it to a name only this process
+  // could have generated. If another contender wins the rename first, ours gets ENOENT here —
+  // that is a clean "lost the race", not an error.
+  const tombstonePath = `${lockPath}.stale-${process.pid}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  try {
+    await fs.rename(lockPath, tombstonePath);
+  } catch (err) {
+    if (err.code === 'ENOENT') return null; // another contender already took it over
+    throw err;
+  }
+  await fs.rm(tombstonePath, { force: true });
+
+  // We exclusively cleared the stale lock. Create our own — if some third process somehow beat
+  // us to a brand-new lock in this narrow window, back off safely rather than fight over it.
+  if (await tryCreateLockFile(lockPath, payload)) return lockPath;
+  return null;
 }
 
 async function releaseLock(lockPath) {
   if (lockPath) await fs.rm(lockPath, { force: true });
+}
+
+// ---------------------------------------------------------------------------
+// Intervention latch (Review Finding 1)
+// ---------------------------------------------------------------------------
+
+function interventionLatchPath(backupsRoot) {
+  return path.join(backupsRoot, LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME);
+}
+
+async function readInterventionLatch(backupsRoot) {
+  try {
+    return JSON.parse(await fs.readFile(interventionLatchPath(backupsRoot), 'utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw new LifeLedgerSyncWorkerError('intervention_latch_unreadable', `Cannot read intervention latch: ${err.message}`);
+  }
+}
+
+async function writeInterventionLatch(backupsRoot, result) {
+  await fs.mkdir(backupsRoot, { recursive: true });
+  const latch = {
+    schemaVersion: LIFE_LEDGER_SYNC_INTERVENTION_LATCH_SCHEMA_VERSION,
+    createdAt: new Date().toISOString(),
+    runId: result.runId,
+    outcome: result.outcome,
+    category: result.category || null,
+    reason: result.reason || null,
+    message: result.message || '',
+    planFingerprint: result.planFingerprint || null,
+    outboxSha256: result.outboxSha256 || null,
+    receiptPath: result.receiptPath || null,
+    written: Array.isArray(result.written) ? result.written : [],
+    failedRelativePath: result.failedRelativePath || null
+  };
+  const target = interventionLatchPath(backupsRoot);
+  const tempPath = `${target}.tmp`;
+  await fs.writeFile(tempPath, `${JSON.stringify(latch, null, 2)}\n`, 'utf8');
+  await fs.rename(tempPath, target);
+  return latch;
+}
+
+async function clearInterventionLatch(backupsRoot) {
+  const existing = await readInterventionLatch(backupsRoot);
+  if (!existing) return { cleared: false, latch: null };
+  await fs.rm(interventionLatchPath(backupsRoot), { force: true });
+  return { cleared: true, latch: existing };
 }
 
 // ---------------------------------------------------------------------------
@@ -186,16 +284,29 @@ async function writeRunLog(backupsRoot, result) {
   return logPath;
 }
 
+async function maybeWriteOutboxStatus(outboxDir, result) {
+  const outboxDirExists = await fs.access(outboxDir).then(() => true, () => false);
+  if (outboxDirExists) await writeOutboxStatus(outboxDir, result);
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
-export async function runLifeLedgerSyncWorker(argv, { cwd = process.cwd(), clock } = {}) {
+function newRunId(clock) {
+  return `${new Date(typeof clock === 'function' ? clock() : Date.now()).toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+function isoNow(clock) {
+  return new Date(typeof clock === 'function' ? clock() : Date.now()).toISOString();
+}
+
+export async function runLifeLedgerSyncWorker(argv, { cwd = process.cwd(), clock, fs: cycleFsOverride } = {}) {
   const options = parseArgs(argv);
   if (options.help) return { help: true, text: usage() };
 
   const config = await resolveConfig(options, { cwd });
-  const runId = `${new Date(typeof clock === 'function' ? clock() : Date.now()).toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}`;
+  const runId = newRunId(clock);
 
   const lockPath = await acquireLock(config.backupsRoot);
   if (!lockPath) {
@@ -203,6 +314,46 @@ export async function runLifeLedgerSyncWorker(argv, { cwd = process.cwd(), clock
   }
 
   try {
+    // --clear-intervention is a standalone action: it never runs a sync cycle in the same
+    // invocation, and it requires the lock too (so it never races an in-progress cycle).
+    if (options.clearIntervention) {
+      const { cleared, latch } = await clearInterventionLatch(config.backupsRoot);
+      const result = {
+        runId,
+        startedAt: isoNow(clock),
+        endedAt: isoNow(clock),
+        outcome: cleared ? 'intervention_cleared' : 'no_intervention_latch',
+        message: cleared
+          ? `Cleared the intervention latch from run ${latch.runId} (${latch.outcome}${latch.category ? `/${latch.category}` : ''}${latch.reason ? `: ${latch.reason}` : ''}).`
+          : 'No intervention latch was present — nothing to clear.',
+        clearedLatch: latch
+      };
+      await writeRunLog(config.backupsRoot, result);
+      await maybeWriteOutboxStatus(config.outboxDir, result);
+      return { skipped: false, result, json: options.json, cleared };
+    }
+
+    const existingLatch = await readInterventionLatch(config.backupsRoot);
+
+    // A real apply-style invocation while a latch is present is refused BEFORE the cycle is ever
+    // called — no rollback-artifact preparation, no backup copy, no managed write, and no new
+    // backup-directory churn on repeated scheduled invocations.
+    if (options.apply === true && existingLatch) {
+      const result = {
+        runId,
+        startedAt: isoNow(clock),
+        endedAt: isoNow(clock),
+        outcome: 'intervention_required',
+        category: 'latched',
+        reason: 'intervention_latch_present',
+        message: `Automated apply is blocked by an unresolved intervention from run ${existingLatch.runId} (${existingLatch.outcome}${existingLatch.category ? `/${existingLatch.category}` : ''}, recorded ${existingLatch.createdAt}). Resolve the underlying issue, then run --clear-intervention to resume.`,
+        latch: existingLatch
+      };
+      await writeRunLog(config.backupsRoot, result);
+      await maybeWriteOutboxStatus(config.outboxDir, result);
+      return { skipped: false, result, json: options.json };
+    }
+
     const outboxSnapshotJson = await readOutboxSnapshot(config.outboxDir);
     const result = await runLifeLedgerSyncCycle({
       runId,
@@ -211,15 +362,25 @@ export async function runLifeLedgerSyncWorker(argv, { cwd = process.cwd(), clock
       vaultPath: config.vault,
       expectedCanonicalVaultPath: config.expectedVault,
       backupRoot: path.join(config.backupsRoot, 'receipts', runId),
-      dryRun: options.apply !== true
+      dryRun: options.apply !== true,
+      ...(cycleFsOverride ? { fs: cycleFsOverride } : {})
     });
-    await writeRunLog(config.backupsRoot, result);
-    // Only write outbox status back if there IS an outbox to write into (an outbox folder the
-    // browser can read requires the folder to already exist, which it will once the browser has
-    // ever picked it — if it does not exist yet there is no UI to serve status to).
-    const outboxDirExists = await fs.access(config.outboxDir).then(() => true, () => false);
-    if (outboxDirExists) await writeOutboxStatus(config.outboxDir, result);
-    return { skipped: false, result, json: options.json };
+
+    let finalResult = result;
+    if (options.apply === true && result.outcome === 'intervention_required') {
+      // Only a REAL (non-dry-run) intervention_required latches. Dry runs can observe the same
+      // outcome (e.g. an unexpected first-run state) without ever creating the latch.
+      await writeInterventionLatch(config.backupsRoot, result);
+    } else if (existingLatch) {
+      // A dry run (or diagnostic) executed while a latch from an earlier run is still present —
+      // annotate a COPY of the (frozen) cycle result so status/logs stay accurate. Never touches
+      // the latch itself.
+      finalResult = { ...result, latched: true, latch: existingLatch };
+    }
+
+    await writeRunLog(config.backupsRoot, finalResult);
+    await maybeWriteOutboxStatus(config.outboxDir, finalResult);
+    return { skipped: false, result: finalResult, json: options.json };
   } finally {
     await releaseLock(lockPath);
   }
