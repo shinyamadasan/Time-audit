@@ -87,7 +87,12 @@
   function isFocusWalletSportsEntry(entry, cfg) {
     if (!entry || !entry.activity) return false;
     const label = String(entry.activity).toLowerCase();
-    return cfg.sportsActivities.some(term => label.includes(String(term).toLowerCase()));
+    // Left word-boundary match, not plain substring: "sport"/"sports" should match, but
+    // "transport"/"transportation" must not just because they contain "sport".
+    return cfg.sportsActivities.some(term => {
+      const escaped = String(term).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`(?:^|[^a-z0-9])${escaped}`).test(label);
+    });
   }
 
   function getDailyGoalMin(appSettings, cfg) {

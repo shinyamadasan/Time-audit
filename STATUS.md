@@ -5,6 +5,45 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-04 — Phase 11.6 review fix: Capacitor www runtime parity (built, NOT integrated)
+
+Same branch/worktree as below (`fix/core-loop-bugs-v1` / `chronasense-phase11-6`), on top of
+`f3887db`. Independent review of the Phase 11.6 commit passed all three source fixes but found
+one blocking gap: Capacitor's `webDir` is `"www"`, so `www/*.js`/`www/index.html` are the runtime
+an Android build actually ships — not stale reference output — and nothing regenerates them
+automatically except `sync.bat`, which also commits and pushes to `origin main` and so was not
+run. `www/index.html`, `www/storage.js`, and `www/focus-wallet.js` had drifted from root (the
+three PROP-007/004/009 fixes were missing there) before this phase even started; they are now
+byte-identical to the reviewed root files (sha256-verified, straight copy, no fix re-edited).
+
+`npx cap sync android` was attempted in the feature worktree to determine necessity and failed
+immediately (`android platform has not been added yet`) — the real native `android/` project is
+gitignored and lives only in the authoritative main working directory outside this branch, so it
+produces zero tracked diff here regardless; that step belongs to an actual Android build, which
+remains out of scope. `sync.bat` was read, not executed, because it also commits and pushes.
+
+Added a parity regression test (`test.js`, "Capacitor www runtime mirror parity") asserting the
+three mirrored files stay byte-identical to root; verified it fails on a stale mirror and passes
+once synced.
+
+Two findings from the review pass were logged, not fixed, per the review's explicit scope: Focus
+Wallet's sports-keyword match still lets "sportscar"/"sports-car" count as a sports session (no
+existing spec defines compound-word semantics; recorded as a PROP-009 follow-up) — and a
+pre-existing, Phase-11.6-unrelated DST defect: `tzParseTime()` collapses to a zero-width day
+window on `America/New_York`'s 2026-03-08 spring-forward date. Logged as `PROP-014`. Neither PROP-013's original symptom nor this phase's fixes are affected by it; the earlier "already
+correctly timezone-aware" wording for PROP-013 was corrected in `CHANGELOG.md`/`planning/PROPOSALS.md`
+to not overclaim universal DST correctness.
+
+Gates run clean: full `npm test` (453/453, incl. the new parity test), `npm run lint` (0 errors,
+same 19 pre-existing warnings), full `tests/smoke.spec.js` Playwright suite (69/69), `git diff
+--check`, `node --check` on all changed `.js` files. No Android build/install/deploy. Production
+and main untouched; README protected hash re-verified unchanged.
+
+Next action: owner: targeted re-review of just the www-parity fix (see final report). Same
+Phase 11.7 backlog as below, plus PROP-014 and the PROP-009 compound-word follow-up.
+
+---
+
 ## 2026-09-04 — Phase 11.6: Core-loop bug cleanup (built, NOT integrated)
 
 Branch `fix/core-loop-bugs-v1`, worktree `chronasense-phase11-6`, base `28f56e7` (== `origin/main`

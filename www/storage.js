@@ -621,6 +621,7 @@ function persist() {
       lastTask: lastTaskForRepeat,
       currentTask,
       taskStartTime,
+      blockStartTime,
       timerUpdatedAt: currentTimerSyncStamp(),
       ownerDeviceId: timerOwnerDeviceId || null
     }));
@@ -697,6 +698,7 @@ function load() {
         lastTaskForRepeat = saved.lastTask || '';
         if (saved.currentTask) currentTask = saved.currentTask;
         if (saved.taskStartTime) taskStartTime = saved.taskStartTime;
+        blockStartTime = saved.blockStartTime || saved.timerStartedAt;
         if (saved.timerUpdatedAt) rememberTimerSyncStamp(saved.timerUpdatedAt);
         if (saved.ownerDeviceId) timerOwnerDeviceId = saved.ownerDeviceId;
       }

@@ -1,6 +1,7 @@
 // node test.js
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import './focus-wallet.js';
@@ -5436,6 +5437,24 @@ asyncTest('writer restores generated history after a restored completion rebuild
   await writeObsidianLifeLedgerExport(buildObsidianLifeLedgerExport([obsidianStepEvent({ revision: 3 })]).files, { vaultRoot: root });
   assert.ok((await fs.readFile(path.join(root, 'Life Ledger', 'Daily', '2026-08-30.md'), 'utf8')).includes('Synthetic step'));
 }));
+
+// ── Capacitor www runtime mirror parity ─────────────────────────────────────
+// Capacitor's webDir is "www" (capacitor.config.json), so www/*.js and
+// www/index.html are what a real Android build ships — not just a stale
+// reference copy. Nothing regenerates them automatically (sync.bat does, but
+// it also commits and pushes, so it's not run in CI/tests). A root bug fix
+// that isn't mirrored here ships fixed on web/PWA but still-broken on Android.
+console.log('\nCapacitor www runtime mirror parity');
+['index.html', 'storage.js', 'focus-wallet.js'].forEach(name => {
+  test(`www/${name} is byte-identical to root ${name}`, () => {
+    const root = readFileSync(new URL(`./${name}`, import.meta.url));
+    const mirrored = readFileSync(new URL(`./www/${name}`, import.meta.url));
+    assert.ok(
+      root.equals(mirrored),
+      `www/${name} has drifted from root ${name} — copy the reviewed root file to www/${name} (see sync.bat's copy step; do not hand-edit).`
+    );
+  });
+});
 
 await Promise.all(asyncTests);
 

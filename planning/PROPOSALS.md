@@ -165,6 +165,12 @@ source: /audit (this run)
 - **status:** fixed (Phase 11.6, branch `fix/core-loop-bugs-v1`, 2026-09-04) —
   `isFocusWalletSportsEntry()` now uses a left-word-boundary regex per keyword instead of plain
   substring `includes()`; see `CHANGELOG.md` Phase 11.6 entry for detail and regression tests.
+  **Non-blocking residual found in the Phase 11.6 www-parity review (2026-09-04):** the
+  left-boundary-only match still lets `"sports-car"` / `"sportscar"` count as a sports entry
+  (the left boundary before "sport" is satisfied, and nothing currently defines whether compound
+  activities like these should count). No existing spec settles this either way, so it was left
+  as-is rather than inventing new matching semantics. Follow-up candidate for whoever next
+  touches Focus Wallet matching — not reproduced as user-impacting and not blocking.
 
 > **Decision: Approve** — Confirmed precision bug in `focus-wallet.js:isFocusWalletSportsEntry()`. The function uses `label.includes("sport")` where `label` is the lowercased activity name. The word "transport" contains "sport" as a substring (positions 4–8 of "transport"). Any activity logged as "Public transport", "Transport to office", "Air transport", etc. is silently classified as a weekly sports session, consuming a free-session slot and potentially incurring wallet costs (10 pts for session 4, 25 pts for each beyond that).
 
@@ -285,15 +291,19 @@ dup-count: 1
 
 id: PROP-013
 captures: 20260724T1519Z-120
-- **status:** stale / cannot reproduce (Phase 11.6, 2026-09-04) — the only "unlogged-time day
-  list" in current code (`renderUnloggedHours()` in `index.html`, the Week tab's segmented bar
-  and chips) was traced end to end (`setViewDate()` → `getViewingDateKey()` →
-  `getEntriesForDateWindow()` → `tzParseTime()`/`getDateInTZ()`) and found already timezone-aware
-  (iterative self-correcting UTC conversion, final date-boundary check). Empirically reproduced
-  the repro shape against a real negative-UTC-offset timezone (America/New_York), entries seeded
-  on both the clicked day and the adjacent day, via both a direct call and a real DOM click —
-  both correctly resolved to the clicked day in the header and the timeline body. Not fixed; see
-  `CHANGELOG.md` Phase 11.6 entry.
+- **status:** stale / cannot reproduce (Phase 11.6, 2026-09-04; wording corrected in the Phase
+  11.6 www-parity review pass) — the only "unlogged-time day list" in current code
+  (`renderUnloggedHours()` in `index.html`, the Week tab's segmented bar and chips) was traced
+  end to end (`setViewDate()` → `getViewingDateKey()` → `getEntriesForDateWindow()` →
+  `tzParseTime()`/`getDateInTZ()`) and empirically tested against the exact repro shape (a real
+  negative-UTC-offset timezone, America/New_York; entries seeded on both the clicked day and the
+  adjacent day; both a direct call and a real DOM click) — all correctly resolved to the clicked
+  day in the header and the timeline body on the specific dates tested. **This is not a claim
+  that the date-window logic is universally timezone-correct**: a separate, PRE-EXISTING
+  DST-transition defect in `tzParseTime()` was found during the same review pass and is tracked
+  separately as PROP-014 — it produces a zero-width day window on the US spring-forward date and
+  was not the mechanism behind this proposal's original symptom (which used a non-DST date and
+  still reproduced fine). Not fixed; see `CHANGELOG.md` Phase 11.6 entry and PROP-014 below.
 dup-count: 1
 
 > **Decision: Approve** — Real usage bug report: from an unlogged-time day list, clicking a specific day (user's example: Wednesday, while today is Friday) opens the *next* day's timeline (Thursday) instead. The header date label stays correct, so this isn't a global date-state bug — it's isolated to whatever click handler resolves the clicked day into a date key for the timeline view. The "off by one, toward the future" pattern is the classic symptom of a `YYYY-MM-DD` string being parsed as UTC midnight and re-rendered in a negative-UTC-offset local timezone, but that's a hypothesis, not a confirmed root cause.
@@ -311,5 +321,48 @@ dup-count: 1
 **Why now vs later:** Now-ish — this is a correctness/trust bug in the app's core "review your day" loop, same category of concern as PROP-004, though it doesn't destroy data (the underlying entries are presumably intact; only the wrong day's data is displayed). Should be scoped once PROP-004 (data loss, higher severity) is handled.
 
 **Goal-adjusted priority:** P2 — Real correctness bug affecting trust in day navigation, but ranked below PROP-004 (actual data loss) and PROP-007 (silently dead escalation feedback) since no data is lost or miscomputed here, only mis-displayed.
+
+---
+
+### PROP-014 — `tzParseTime()` collapses to a zero-width day window on a DST spring-forward date
+
+id: PROP-014
+source: Phase 11.6 www-parity independent review (2026-09-04)
+- **status:** pending — logged, not fixed. Discovered while re-verifying PROP-013, not caused by
+  and not in scope for Phase 11.6 (core-loop bug cleanup). Not the mechanism behind PROP-013's
+  original reported symptom, which reproduces (or rather, fails to) on a non-DST date.
+
+> **Finding:** `tzParseTime(dateKey, '00:00')` (`storage.js`) computes both the start of one
+> calendar day and the start of the next by converging on the local wall-clock time via
+> iteration, then correcting the landed date if it drifted. On a spring-forward DST transition
+> day (verified: `America/New_York`, `2026-03-08`, where local clocks skip 02:00–02:59),
+> `tzParseTime('2026-03-08', '00:00')` and `tzParseTime('2026-03-09', '00:00')` both resolve to
+> the identical UTC instant `2026-03-08T05:00:00.000Z` — a zero-width window for March 8. Any
+> caller that derives a day's bounds as `[tzParseTime(dateKey, '00:00'), tzParseTime(nextDateKey,
+> '00:00'))` (this pattern is used by `getEntriesForDateWindow()`/`clipEntryToDateForDisplay()`
+> in `index.html` and `dayStart`/`renderUnloggedHours()`'s `availableMins` calculation, among
+> others) would show zero available minutes and clip out all entries for that specific date, in
+> that specific timezone, once a year.
+
+> **Risk:** Unclassified — not triaged for a risk gate as part of this discovery; whoever picks
+> this up should re-derive `Risk` per the normal `/audit` process before scoping a fix. Likely
+> Medium: display/gap-computation only (no evidence of a write-path or entry-schema interaction),
+> but it touches `getEntriesForDateWindow()`, which several Timeline Helper-adjacent paths depend
+> on — confirm no red-zone (Hard Rule #3) interaction before treating as a simple gate.
+
+**Evidence:** Reproduced directly (Node, `Intl.DateTimeFormat` with `timeZone: 'America/New_York'`)
+by calling the exact algorithm in `storage.js`'s `tzParseTime()`/`getDateInTZ()`/`tzHHMM()` against
+`2026-03-08`: both day-boundary calls converge to the same UTC timestamp. Not yet checked against
+other DST-observing timezones, the fall-back transition (ambiguous, not missing, local time — a
+different failure mode), or whether any call site actually surfaces this to a user versus silently
+absorbing it (e.g. if `computeGaps()` or a caller treats an inverted/zero window as "no gap" rather
+than crashing). None of that triage was done here — this entry exists so the finding isn't lost,
+not as a completed root-cause analysis.
+
+**Why now vs later:** Not scoped. Logged for a future date/timezone-focused bug pass. Does not
+block Phase 11.6 or Phase 11.7.
+
+**Goal-adjusted priority:** Unscored — needs its own `/audit` pass (user value, evidence of real
+occurrence beyond this synthetic repro, effort) before a priority is assigned.
 
 ---
