@@ -3251,3 +3251,105 @@ test('crossing-day entries are clipped instead of displayed as one 28h block', a
   await expect(page.locator('#timeline-blocks')).toContainText('24h');
   await expect(page.locator('#timeline-blocks')).not.toContainText('28h');
 });
+
+test('a 5-waste-streak escalation does not throw and truthfully sets the recovery duration (PROP-007)', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
+  const dayStart = Date.UTC(2026, 6, 15, 9, 0, 0);
+  const wasteEntries = [4, 3, 2, 1, 0].map(i => {
+    const tsStart = dayStart + i * 10 * 60 * 1000;
+    const ts = tsStart + 10 * 60 * 1000;
+    return {
+      id: ts,
+      ts,
+      tsStart,
+      updatedAt: ts,
+      blockIntervalMin: 10,
+      date: utcDateKey(tsStart),
+      activity: 'Scrolling',
+      energy: 'waste',
+      category: 'waste',
+      originalLabel: 'waste',
+      onPlan: false,
+      retro: true
+    };
+  });
+  await openApp(page, { entries: wasteEntries, nowTs });
+
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(String(err)));
+
+  const result = await page.evaluate(() => {
+    const before = { running, intervalInput: document.getElementById('interval-input').value };
+    checkEscalation();
+    return {
+      before,
+      exitDelay: settings.exitDelay,
+      intervalMin: settings.intervalMin,
+      intervalInput: document.getElementById('interval-input').value,
+      running,
+      toastText: document.getElementById('toast').textContent
+    };
+  });
+
+  expect(pageErrors).toEqual([]);
+  expect(result.exitDelay).toBe(60);
+  expect(result.intervalMin).toBe(60);
+  expect(result.intervalInput).toBe('60');
+  // No timer was running before escalation, so triggerPenaltyMode() must not claim it
+  // force-started one — only that the next session's duration was set.
+  expect(result.before.running).toBe(false);
+  expect(result.toastText).toBe('Penalty mode: next session set to 60 min');
+});
+
+test('reopening the app with a running block preserves blockStartTime so it is not silently dropped (PROP-004)', async ({ page }) => {
+  // This test deliberately does not use openApp(): its addInitScript-based localStorage.clear()
+  // would also wipe the "prior session" state on the reload that simulates reopening the app.
+  await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/javascript',
+    body: firebaseStub
+  }));
+
+  await page.goto(APP_URL);
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    localStorage.setItem('ta3-onboarded', '1');
+    sessionStorage.setItem('ta3-session-started', '1');
+    localStorage.setItem('ta3-tz', 'UTC');
+  });
+  await page.reload();
+  await page.waitForFunction(() => typeof window.quickRetroLog === 'function' && !!document.getElementById('timeline-blocks'));
+
+  // Start a real timer, then rewind it 5 minutes to simulate having been mid-block
+  // when the app was closed.
+  await page.evaluate(async () => {
+    await _startTimer('Deep work session');
+    blockStartTime -= 5 * 60 * 1000;
+    timerStartedAt -= 5 * 60 * 1000;
+    taskStartTime -= 5 * 60 * 1000;
+    persist();
+  });
+
+  // Simulate closing and reopening the app.
+  await page.reload();
+  await page.waitForFunction(() => typeof window.quickRetroLog === 'function' && !!document.getElementById('timeline-blocks'));
+
+  const afterReopen = await page.evaluate(() => ({ running, blockStartTime }));
+  expect(afterReopen.running).toBe(true);
+  expect(afterReopen.blockStartTime).not.toBeNull();
+
+  // The user's next action after reopening (e.g. entering Focus Mode) must account for
+  // the restored block instead of silently discarding it.
+  const afterFocusEnter = await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.resolve();
+    enterFocusMode();
+    return {
+      running,
+      loggedEntry: entries.find(e => e.activity === 'Deep work session')
+    };
+  });
+  expect(afterFocusEnter.running).toBe(false);
+  expect(afterFocusEnter.loggedEntry).toBeTruthy();
+  expect(afterFocusEnter.loggedEntry.blockIntervalMin).toBe(5);
+});

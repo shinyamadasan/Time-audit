@@ -26,10 +26,12 @@ Current Objective.)_
 ### Reconciled phase sequence (from Phase 11.5, order corrected in Phase 11.5 review-fix)
 
 - Phase 11.5 -- Context Reconciliation + Product Boundary (this phase; done 2026-09-04).
-- Phase 11.6 -- Core-loop Bug Cleanup. Leads with the confirmed-live `triggerPenaltyMode()`
-  `ReferenceError` (`insights.js:248`; see `APP_CONTEXT.md` Known Live Bugs). Sequenced before
-  bloat consolidation because the bug lives inside the same motivation/escalation subsystem that
-  Phase 11.7's consolidation decisions will evaluate.
+- Phase 11.6 -- Core-loop Bug Cleanup (built, NOT integrated; 2026-09-04, branch
+  `fix/core-loop-bugs-v1`, awaiting independent review). Fixed the confirmed-live
+  `triggerPenaltyMode()` `ReferenceError` (`insights.js:248`; see `APP_CONTEXT.md` Known Live
+  Bugs), plus two other confirmed core-loop bugs found during live reconciliation (timer restore
+  dropping `blockStartTime`; Focus Wallet's "sport" substring matching "transport"). See
+  `CHANGELOG.md` for full detail.
 - Phase 11.7 -- Bloat Consolidation / UX Simplification. Concrete candidates already identified:
   the identity-level vs. Awareness Signal overlap, the two-DECISIONS.md duplication
   (`docs/DECISIONS.md` -- one placeholder entry, D-001, plus three real filled decisions,

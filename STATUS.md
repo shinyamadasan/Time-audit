@@ -5,6 +5,44 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-04 — Phase 11.6: Core-loop bug cleanup (built, NOT integrated)
+
+Branch `fix/core-loop-bugs-v1`, worktree `chronasense-phase11-6`, base `28f56e7` (== `origin/main`
+at the time this phase started). Live-verified all five historical bug candidates from
+`planning/PROPOSALS.md` against current source, per the Phase 11.5 Known Live Bugs handoff.
+
+Fixed (all with a regression test that fails before the fix and passes after; full detail in
+`CHANGELOG.md`):
+- **PROP-007** `triggerPenaltyMode()` ReferenceError — defined it in `index.html`, reusing the
+  existing `startSprint()`-style safe timer-duration pattern instead of the dead prototype's
+  force-start approach. Penalty/escalation stays FREEZE (Phase 11.5) — no new mechanism added.
+- **PROP-004** timer restore drops `blockStartTime` on reopen — `persist()`/`load()` in
+  `storage.js` now round-trip it through `ta3-timer`. Confirmed this caused real silent time
+  loss (a running block auto-log-guard in `enterFocusMode()` silently skipped, no entry, `running`
+  left stuck true) — not just a display issue.
+- **PROP-009** Focus Wallet "sport" substring matches "transport" — `focus-wallet.js`'s
+  `isFocusWalletSportsEntry()` now uses a left-word-boundary regex per keyword.
+
+Not fixed, both documented in `CHANGELOG.md`'s Phase 11.6 entry with reasoning:
+- **PROP-013** unlogged-day navigation off-by-one — live-verified, could not reproduce against
+  current code (full timezone-aware date chain traced and empirically tested against a real
+  negative-UTC-offset timezone, direct call and real DOM click both correct). STALE / CANNOT
+  REPRODUCE.
+- **PROP-008** Focus Mode auto-log has no undo — confirmed live, but classified UX debt: the
+  entry is editable/deletable like any other, nothing is irreversible. Deferred to 11.7+.
+
+Gates run clean: `npm test` (450/450), `npm run lint` (0 errors, same 19 pre-existing warnings),
+full `tests/smoke.spec.js` Playwright suite (69/69, including the two new regression tests),
+`git diff --check`, `node --check` on every changed `.js` file. Production untouched (no
+scheduler/config/outbox/vault file in the diff). Main's protected `M README.md` verified
+unchanged (hash-matched) before and after this phase.
+
+Next action: owner: independent review of this branch. Do not integrate, deploy, or begin Phase
+11.7 until reviewed. The two-track split and motivation-layer overlap from Phase 11.5 are still
+open, plus PROP-013 and PROP-008 above, all carried into Phase 11.7.
+
+---
+
 ## 2026-09-04 — Phase 11.5: Context Reconciliation + Product Boundary
 
 This entry exists because every entry below is stale in a specific, important way: they are all

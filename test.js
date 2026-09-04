@@ -1141,6 +1141,24 @@ test('long sports sessions cost points even inside free session count', () => {
   assert.equal(wallet.autoCosts, 10);
 });
 
+test('transport activities are not misclassified as sports sessions (PROP-009)', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('t1', 0, 8, 30, 'Public transport', 'errands'),
+    walletEntry('t2', 1, 8, 30, 'Transport to office', 'errands'),
+    walletEntry('t3', 2, 8, 30, 'Air transportation', 'errands')
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.sportsSessions, 0);
+  assert.equal(wallet.autoCosts, 0);
+});
+
+test('"sport" and "sports" activities still count as sports sessions', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('s1', 0, 18, 60, 'Sport', 'exercise'),
+    walletEntry('s2', 1, 18, 60, 'Watching sports', 'exercise')
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.sportsSessions, 2);
+});
+
 test('reward redemptions subtract from the same week balance', () => {
   const wallet = computeFocusWallet([
     walletEntry('d1', 0, 9, 60, 'Build feature', 'deep')

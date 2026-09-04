@@ -3729,6 +3729,26 @@ function startSprint() {
   showToast('25-min sprint started');
 }
 
+// Called from checkEscalation() (insights.js) on a 5+ consecutive waste/missed streak.
+// Sets the recovery-block duration to 60 min without force-starting a timer: forcing a
+// start would require the user's current intention/task, which escalation can't supply,
+// and silently no-op-ing while claiming otherwise would be untruthful. If a block is
+// already running its duration is extended in place (same safe pattern as startSprint()'s
+// running branch); otherwise the 60-min duration is just queued for the next start.
+function triggerPenaltyMode() {
+  settings.intervalMin = 60;
+  document.getElementById('interval-input').value = 60;
+  if (running) {
+    totalSecs = 60 * 60;
+    remaining = totalSecs;
+    updateRing();
+    syncTimerState();
+    showToast('Penalty mode: current block extended to 60 min');
+  } else {
+    showToast('Penalty mode: next session set to 60 min');
+  }
+}
+
 // ══════════════════════════════════════════════════════
 // STATS & RENDER
 // ══════════════════════════════════════════════════════
