@@ -205,6 +205,21 @@ async function releaseLock(lockPath) {
   if (lockPath) await fs.rm(lockPath, { force: true });
 }
 
+// Phase 11 — exposed read-only for the stale-artifact cleanup tool (life-ledger-sync-cleanup.mjs):
+// reuses the exact same liveness/staleness judgment the lock itself uses, so cleanup can refuse
+// to touch a known-generated .tmp filename while a worker might still be actively writing it,
+// without duplicating the liveness logic.
+export async function isBackupsRootLockLive(backupsRoot) {
+  let existing;
+  try {
+    existing = JSON.parse(await fs.readFile(path.join(backupsRoot, LOCK_FILENAME), 'utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return false; // no lock file at all — nothing is running
+    existing = null; // unparsable — fall through to the same conservative staleness ceiling
+  }
+  return !isLockStale(existing);
+}
+
 // ---------------------------------------------------------------------------
 // Intervention latch (Review Finding 1)
 // ---------------------------------------------------------------------------
@@ -245,11 +260,45 @@ async function writeInterventionLatch(backupsRoot, result) {
   return latch;
 }
 
+// Phase 11 — clearing must work even when the latch file itself is corrupt/unparseable JSON
+// (readInterventionLatch() above intentionally still THROWS in the normal apply/dry-run path on
+// a corrupt latch, so every automated cycle keeps failing loud until a human clears it — that
+// part is unchanged). --clear-intervention is the one explicit, human-authorized action that
+// must never itself get stuck behind the corruption it is meant to resolve. It never touches
+// readInterventionLatch: it inspects and clears the exact latch path directly, refuses anything
+// that is not a plain file (a symlink/reparse point or a directory at that exact path is left
+// alone and reported, never removed), and — when the JSON is corrupt — preserves the bytes by
+// renaming them aside instead of deleting them outright, so a human can still inspect what was
+// there.
 async function clearInterventionLatch(backupsRoot) {
-  const existing = await readInterventionLatch(backupsRoot);
-  if (!existing) return { cleared: false, latch: null };
-  await fs.rm(interventionLatchPath(backupsRoot), { force: true });
-  return { cleared: true, latch: existing };
+  const target = interventionLatchPath(backupsRoot);
+  let stats;
+  try {
+    stats = await fs.lstat(target);
+  } catch (err) {
+    if (err.code === 'ENOENT') return { cleared: false, latch: null, corrupt: false };
+    throw new LifeLedgerSyncWorkerError('intervention_latch_unreadable', `Cannot inspect intervention latch: ${err.message}`);
+  }
+  if (!stats.isFile()) {
+    throw new LifeLedgerSyncWorkerError(
+      'intervention_latch_not_a_plain_file',
+      `Refusing to clear: ${target} is not a plain file (symlink/reparse point or directory) — resolve this manually before retrying.`
+    );
+  }
+  const raw = await fs.readFile(target, 'utf8');
+  let parsed = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // Corrupt latch: preserve the evidence by renaming it aside (same directory, exact target
+    // name only — no other files touched) rather than unlinking it. This still "clears" the
+    // latch, since every future --apply check looks for the exact original filename.
+    const evidencePath = `${target}.corrupt-${Date.now()}`;
+    await fs.rename(target, evidencePath);
+    return { cleared: true, latch: null, corrupt: true, evidencePath };
+  }
+  await fs.rm(target, { force: true });
+  return { cleared: true, latch: parsed, corrupt: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -317,16 +366,21 @@ export async function runLifeLedgerSyncWorker(argv, { cwd = process.cwd(), clock
     // --clear-intervention is a standalone action: it never runs a sync cycle in the same
     // invocation, and it requires the lock too (so it never races an in-progress cycle).
     if (options.clearIntervention) {
-      const { cleared, latch } = await clearInterventionLatch(config.backupsRoot);
+      const { cleared, latch, corrupt, evidencePath } = await clearInterventionLatch(config.backupsRoot);
+      const message = !cleared
+        ? 'No intervention latch was present — nothing to clear.'
+        : corrupt
+          ? `Cleared an intervention latch whose JSON was corrupt/unparseable. The original bytes were preserved for review at ${evidencePath}.`
+          : `Cleared the intervention latch from run ${latch.runId} (${latch.outcome}${latch.category ? `/${latch.category}` : ''}${latch.reason ? `: ${latch.reason}` : ''}).`;
       const result = {
         runId,
         startedAt: isoNow(clock),
         endedAt: isoNow(clock),
         outcome: cleared ? 'intervention_cleared' : 'no_intervention_latch',
-        message: cleared
-          ? `Cleared the intervention latch from run ${latch.runId} (${latch.outcome}${latch.category ? `/${latch.category}` : ''}${latch.reason ? `: ${latch.reason}` : ''}).`
-          : 'No intervention latch was present — nothing to clear.',
-        clearedLatch: latch
+        message,
+        clearedLatch: latch,
+        clearedLatchWasCorrupt: corrupt === true,
+        ...(evidencePath ? { corruptLatchEvidencePath: evidencePath } : {})
       };
       await writeRunLog(config.backupsRoot, result);
       await maybeWriteOutboxStatus(config.outboxDir, result);

@@ -1,5 +1,49 @@
 # ChronaSense — Changelog
 
+## Phase 11 — Production hardening (built, NOT integrated) (branch: feat/life-ledger-production-hardening-v1) — 2026-09-04
+Operational hardening for the now-live Phase 10 background sync, built entirely against
+disposable fixtures — the real scheduler, worker config, outbox, backups root, and vault were
+never mutated during this Builder pass (read-only inspection only, confirmed before and after).
+No product features, no architecture changes.
+added:
+  - scripts/life-ledger-sync-retention.mjs — age-with-a-count-floor bounded retention for
+    `runs/*.json`, `receipts/<runId>/`, and `life-ledger-sync-worker.lock.stale-*` tombstones
+    under one worker's backupsRoot. Dry-run by default, idempotent, reparse-safe (lstat +
+    realpath containment on every entry), and never prunes the run log or receipt an active
+    intervention latch depends on.
+  - scripts/life-ledger-sync-tmp-cleanup.mjs — cleanup for the two exact, fully-known orphaned
+    `.tmp` atomic-write artifacts the worker can leave behind after a hard kill
+    (`intervention-required.json.tmp`, the outbox status `.tmp`). Gated on both an age threshold
+    and the worker lock not currently being live, so a possibly-in-progress write is never
+    touched. Per-vault-content-file `.tmp` cleanup (inside the managed `Life Ledger/` subtree) is
+    explicitly out of scope — see the Phase 11 final report.
+  - scripts/life-ledger-sync-restore.mjs — human-authorized recovery assistant
+    (inspect -> verify -> preview -> explicit `--apply-restore`) for a Phase 9/10 rollback
+    receipt. Write-only: restores exactly the files a verified receipt backed up back to their
+    exact backed-up bytes; never deletes anything. Preserves the pre-restore bytes of anything
+    it overwrites before touching it.
+  - scripts/life-ledger-sync-health.mjs — one read-only health command classifying the worker as
+    HEALTHY / PENDING / BLOCKED / ACTION_REQUIRED / UNAVAILABLE from config validity, outbox
+    state, last-run status, the intervention latch, current vault ownership, and backup-root
+    storage footprint / pruning-due state.
+  - setup-life-ledger-sync-scheduler.ps1 -Action Health — merges the Scheduled Task's own
+    state/LastTaskResult with the Node health script's classification (always the worse of the
+    two), so the owner has one command to run without understanding hashes or receipts.
+  - scripts/life-ledger-sync-{retention,tmp-cleanup,restore,health,chaos}.test.js,
+    scripts/life-ledger-sync-intervention-latch-recovery.test.js — new coverage, all against
+    disposable temp vaults/backups roots.
+changed:
+  - scripts/life-ledger-sync-worker.mjs — `--clear-intervention` now succeeds even when
+    `intervention-required.json` is corrupt/unparseable JSON (previously it threw and could not
+    clear itself): it now inspects the exact latch path directly, refuses anything that isn't a
+    plain file, and — on corrupt JSON — renames the file aside (preserving the bytes as evidence)
+    instead of requiring a parseable latch to clear one. Healthy-latch clearing is unchanged.
+    Also exports `isBackupsRootLockLive()`, reused by the tmp-cleanup tool.
+verification: `npm test` (426 checks, 0 failures, including all new Phase 11 suites), `npm run
+  lint` (0 errors, 0 new warnings), `node --check` on every changed/new file, `git diff --check`
+  clean, `scripts/test-life-ledger-sync-scheduler-install.ps1` (26/26, unchanged), strict
+  cross-repo compatibility gate PASS.
+
 ## Phase 10 — RunOnce argument fix (built, NOT activated) (branch: feat/life-ledger-background-automation-v1) — 2026-09-04
 The retry of the disposable Windows Task Scheduler proof PASSED (Install, exact
 task registration, live task properties, finite repetition, scheduler-fired

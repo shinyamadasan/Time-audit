@@ -12,9 +12,21 @@ independent review.
 Usage:
   pwsh ./setup-life-ledger-sync-scheduler.ps1 -Action Install [-IntervalMinutes 15] [-Apply]
   pwsh ./setup-life-ledger-sync-scheduler.ps1 -Action Status
+  pwsh ./setup-life-ledger-sync-scheduler.ps1 -Action Health
   pwsh ./setup-life-ledger-sync-scheduler.ps1 -Action Uninstall
   pwsh ./setup-life-ledger-sync-scheduler.ps1 -Action RunOnce [-Apply]
   pwsh ./setup-life-ledger-sync-scheduler.ps1 -Action ClearIntervention
+
+Health (Phase 11) is the one command the owner should run to answer "is this OK?" without
+understanding hashes, manifests, or receipts. It is entirely READ-ONLY: it never writes, prunes,
+or touches the vault beyond the same read-only ownership check the worker already performs every
+cycle. It combines the one fact only Windows can see (the registered Scheduled Task's own
+state/LastTaskResult) with everything scripts/life-ledger-sync-health.mjs can see from this repo
+(config validity, outbox state, the worker's last-run status, the intervention latch, current
+vault ownership, backup-root storage footprint, and whether pruning is due), and prints one of
+five classifications: HEALTHY, PENDING, BLOCKED, ACTION REQUIRED, UNAVAILABLE — always the WORSE
+of the two sides, so a healthy-looking task with an actual problem underneath is never reported as
+fine.
 
 -Apply controls whether SCHEDULED runs perform real writes. Without it, Install registers a task
 that only ever dry-runs (identifies pending changes, writes nothing) — useful for observing
@@ -39,7 +51,7 @@ Required local configuration (not committed — see scripts/life-ledger-sync-wor
   scripts/life-ledger-sync-worker.config.json — { "outboxDir", "vault", "expectedVault", "backupsRoot" }
 #>
 param(
-    [ValidateSet('Install', 'Uninstall', 'Status', 'RunOnce', 'ClearIntervention')]
+    [ValidateSet('Install', 'Uninstall', 'Status', 'Health', 'RunOnce', 'ClearIntervention')]
     [string]$Action = 'Status',
     [string]$TaskName = 'ChronaSense Life Ledger Sync',
     [int]$IntervalMinutes = 15,
@@ -165,6 +177,74 @@ switch ($Action) {
             Write-Host "INTERVENTION LATCH IS SET -- automated applies are blocked until 'ClearIntervention' is run after review." -ForegroundColor Red
             Write-Host "Latch details: $latchFile"
         }
+    }
+    'Health' {
+        $severity = @{ HEALTHY = 0; PENDING = 1; BLOCKED = 2; ACTION_REQUIRED = 3; UNAVAILABLE = 4 }
+
+        $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+        $taskClassification = 'UNAVAILABLE'
+        $taskReason = "Scheduled task '$TaskName' is not registered — run -Action Install."
+        $info = $null
+        if ($task) {
+            $info = Get-ScheduledTaskInfo -TaskName $TaskName
+            if ($task.State -eq 'Disabled') {
+                $taskClassification = 'ACTION_REQUIRED'
+                $taskReason = "Scheduled task '$TaskName' is registered but DISABLED."
+            } elseif ($info.LastRunTime -and $info.LastTaskResult -ne 0) {
+                $taskClassification = 'BLOCKED'
+                $taskReason = "Last scheduled run did not report success (result code $($info.LastTaskResult))."
+            } else {
+                $taskClassification = 'HEALTHY'
+                $taskReason = 'Scheduled task is registered and its last recorded result was healthy.'
+            }
+        }
+
+        $nodePath = Get-NodeCommand
+        $healthScript = Join-Path $repoRoot 'scripts\life-ledger-sync-health.mjs'
+        $nodeOutputRaw = & $nodePath $healthScript '--json' 2>&1
+        $nodeHealth = $null
+        try { $nodeHealth = $nodeOutputRaw | ConvertFrom-Json } catch { }
+        $nodeClassification = if ($nodeHealth) { $nodeHealth.classification } else { 'UNAVAILABLE' }
+
+        $overall = if ($severity[$taskClassification] -ge $severity[$nodeClassification]) { $taskClassification } else { $nodeClassification }
+        $displayOverall = $overall -replace '_', ' '
+
+        $color = switch ($overall) {
+            'HEALTHY' { 'Green' }
+            'PENDING' { 'Cyan' }
+            'BLOCKED' { 'Yellow' }
+            'ACTION_REQUIRED' { 'Red' }
+            default { 'Red' }
+        }
+
+        Write-Host ""
+        Write-Host "ChronaSense Life Ledger Sync — Health: $displayOverall" -ForegroundColor $color
+        Write-Host ""
+        Write-Host "Scheduler:" -ForegroundColor DarkGray
+        if ($task) {
+            Write-Host "  Task state: $($task.State)"
+            Write-Host "  Last run: $($info.LastRunTime)  (result code: $($info.LastTaskResult))"
+            Write-Host "  Next run: $($info.NextRunTime)"
+        }
+        Write-Host "  $taskReason"
+        Write-Host ""
+        if ($nodeHealth) {
+            Write-Host "Worker / vault / storage:" -ForegroundColor DarkGray
+            foreach ($reason in $nodeHealth.reasons) { Write-Host "  - $reason" }
+            if ($nodeHealth.facts.footprint) {
+                $mb = [math]::Round($nodeHealth.facts.footprint.totalBytes / 1MB, 2)
+                Write-Host "  Local automation storage: $($nodeHealth.facts.footprint.fileCount) file(s), $mb MB under backupsRoot."
+            }
+            if ($nodeHealth.facts.evidence) {
+                Write-Host "  Latest run log: $($nodeHealth.facts.evidence.latestRunAt)"
+                Write-Host "  Latest receipt: $($nodeHealth.facts.evidence.latestReceiptAt)"
+            }
+        } else {
+            Write-Host "Worker / vault / storage: UNAVAILABLE — could not parse scripts\life-ledger-sync-health.mjs output:" -ForegroundColor Red
+            Write-Host "  $nodeOutputRaw"
+        }
+        Write-Host ""
+        if ($overall -eq 'ACTION_REQUIRED' -or $overall -eq 'UNAVAILABLE') { exit 1 }
     }
     'RunOnce' {
         $nodePath = Get-NodeCommand
