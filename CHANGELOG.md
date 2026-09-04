@@ -47,22 +47,63 @@ added:
     `"sport"`/`"sports"` still-match coverage (PROP-009) for `isFocusWalletSportsEntry()` via
     `computeFocusWallet()`.
 not fixed (see reconciliation below):
-  - PROP-013 (unlogged-day navigation off-by-one) — live-verified, could not reproduce. Traced
-    the full chain (`renderUnloggedHours()` → `setViewDate()` → `getViewingDateKey()` →
-    `getEntriesForDateWindow()` → `tzParseTime()`/`getDateInTZ()`) and found it already correctly
-    timezone-aware (iterative self-correcting UTC conversion + a final date-boundary check).
-    Reproduced the exact repro shape (viewing Friday, clicking Wednesday from the unlogged-hours
-    list, entries seeded on both Wednesday and Thursday) against a real negative-UTC-offset
-    timezone (America/New_York) both by calling the click handler directly and by dispatching a
-    real DOM click — both correctly showed Wednesday's data in the header and the timeline body.
-    Classified STALE / CANNOT REPRODUCE; not fixed. See `planning/PROPOSALS.md` PROP-013 for the
-    original report.
+  - PROP-013 (unlogged-day navigation off-by-one) — live-verified, could not reproduce on the
+    original reported symptom. Traced the full chain (`renderUnloggedHours()` → `setViewDate()`
+    → `getViewingDateKey()` → `getEntriesForDateWindow()` → `tzParseTime()`/`getDateInTZ()`) and
+    empirically reproduced the exact repro shape (viewing Friday, clicking Wednesday from the
+    unlogged-hours list, entries seeded on both Wednesday and Thursday) against a real
+    negative-UTC-offset timezone (America/New_York, non-DST date) both by calling the click
+    handler directly and by dispatching a real DOM click — both correctly showed Wednesday's data
+    in the header and the timeline body. Classified STALE / CANNOT REPRODUCE; not fixed. **Correction
+    (2026-09-04 www-parity review):** this is not a claim that the date-window logic is
+    universally timezone-correct — a separate, pre-existing DST-transition defect in
+    `tzParseTime()` was found in the same review pass (see PROP-014 below) and was not the
+    mechanism behind PROP-013's original symptom. See `planning/PROPOSALS.md` PROP-013/PROP-014
+    for both.
   - PROP-008 (Focus Mode auto-log has no undo) — confirmed live (`enterFocusMode()` calls
     `showToast()` instead of the `rememberCreatedUndo()` + `showUndoToast()` pattern every other
     logging path uses), but classified UX debt, not a correctness/data-safety bug: the auto-
     logged entry is not irreversible — it remains editable/deletable from the timeline exactly
     like any other entry, only without the 1-tap undo convenience. Deferred to Phase 11.7 or a
     dedicated UX pass, per this phase's scope boundary.
+
+### Phase 11.6 review fix — Capacitor www runtime parity — 2026-09-04
+Independent review of the Phase 11.6 commit above passed all three source fixes but found one
+blocking gap: Capacitor's `webDir` is `"www"` (`capacitor.config.json`), so `www/*.js` /
+`www/index.html` are what an Android build actually ships, not a stale reference copy — and
+nothing regenerates them automatically (`sync.bat` does, but it also commits and pushes to
+`origin main`, so it isn't something this fix pass runs). The three fixed root files had drifted
+from their `www/` mirrors before this phase even started, so PROP-007/004/009 shipped fixed on
+web/PWA but would still have shipped broken on a current Android build.
+changed:
+  - www/index.html, www/storage.js, www/focus-wallet.js — synchronized to be byte-identical to
+    the reviewed root files (sha256-verified), mirroring exactly what `sync.bat`'s own copy step
+    does. No fix was re-edited a second time; this is a straight file copy of the already-reviewed
+    root source.
+added:
+  - test.js — "Capacitor www runtime mirror parity": asserts `www/index.html`, `www/storage.js`,
+    and `www/focus-wallet.js` are byte-identical to their root counterparts. Fails (3/3) if any of
+    the three mirrors goes stale again; verified failing before this fix and passing after.
+not run:
+  - `npx cap sync android` — attempted in the feature worktree to determine necessity per the
+    review's instruction; failed immediately with `[error] android platform has not been added
+    yet.` The real native `android/` project is gitignored (`.gitignore`: `android/`) and exists
+    only in the authoritative main working directory outside this worktree/branch, so it produces
+    no tracked diff in this repo regardless of whether or when it's run — that step belongs to an
+    actual Android build, which remains out of scope (no build, install, or deploy was performed).
+    `git status` before and after the attempt was identical (only the three `www/*` files above).
+  - `sync.bat` — read, not executed: besides the file copy, it also runs `git commit` and
+    `git push origin main` unconditionally, which this bounded review-fix pass must not do.
+deferred (found during this review pass, not fixed):
+  - Focus Wallet sports-keyword matching still lets compound activities like `"sports-car"` /
+    `"sportscar"` count as a sports session (the left-word-boundary fix from PROP-009 only
+    guarantees "sport"/"sports" match while "transport" doesn't — it doesn't define compound-word
+    semantics either way). No existing spec settles this; recorded as a non-blocking follow-up on
+    PROP-009 in `planning/PROPOSALS.md` rather than inventing new matching rules.
+  - PROP-014 (new) — `tzParseTime()` in `storage.js` collapses to a zero-width day window on a
+    DST spring-forward date (verified: `America/New_York`, `2026-03-08`). Pre-existing, unrelated
+    to and not caused by Phase 11.6, and not the mechanism behind PROP-013's original symptom.
+    Logged in `planning/PROPOSALS.md` as its own entry for a future date/timezone bug pass.
 
 ## Phase 11 — Review fix pass (built, NOT integrated) (branch: feat/life-ledger-production-hardening-v1) — 2026-09-04
 Fixes for seven confirmed findings from an independent adversarial review of the Phase 11

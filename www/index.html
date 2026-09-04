@@ -13,6 +13,7 @@
 <link rel="manifest" id="pwa-manifest">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=20260719-template-sync-doctor-2">
+<link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
 </head>
 <body>
 <div id="desktop-layout">
@@ -532,6 +533,118 @@
   </div>
 </div>
 
+<!-- ══ LIFE (Character Sheet · Timeline · Next) ══ -->
+<div class="view" id="view-life">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Life</div>
+      <div class="life-feed-subtitle" id="life-view-subtitle">A factual snapshot of where things stand right now. Facts only — no scores or advice.</div>
+    </div>
+  </div>
+  <div class="life-subnav" role="group" aria-label="Life views">
+    <button type="button" class="life-subnav-btn active" id="life-subnav-sheet" aria-pressed="true" data-life-view="sheet">Character Sheet</button>
+    <button type="button" class="life-subnav-btn" id="life-subnav-timeline" aria-pressed="false" data-life-view="timeline">Timeline</button>
+    <button type="button" class="life-subnav-btn" id="life-subnav-next" aria-pressed="false" data-life-view="next">Next</button>
+  </div>
+  <div id="life-character-sheet-root" class="life-character-sheet-root" aria-live="polite"></div>
+  <div id="life-feed-root" class="life-feed-root" aria-live="polite" hidden></div>
+  <div id="cross-domain-intelligence-root" class="cross-domain-intelligence-root" aria-live="polite" hidden></div>
+</div>
+
+<!-- ══ LEARNING PLANS ══ -->
+<div class="view" id="view-learning">
+  <div class="page-header">
+    <div class="page-title">Learning Plans</div>
+    <button class="btn sm" type="button" data-lp-action="toggle-guide" aria-expanded="false" aria-controls="learning-plan-guide">How this works</button>
+  </div>
+
+  <div class="learning-plan-error" id="learning-plan-error" role="alert" hidden></div>
+
+  <section class="learning-plan-guide" id="learning-plan-guide" role="region" aria-label="How this works" hidden>
+    <div class="learning-plan-guide-rule">Don't decide what to study. Do the next unfinished step.</div>
+    <div class="learning-plan-guide-grid">
+      <div>
+        <div class="learning-plan-guide-label">Setup once</div>
+        <div class="learning-plan-guide-line">Research -> Customize -> Import</div>
+      </div>
+      <div>
+        <div class="learning-plan-guide-label">Every session</div>
+        <div class="learning-plan-guide-line">Next Step -> Focus -> Complete -> Repeat</div>
+      </div>
+      <div>
+        <div class="learning-plan-guide-label">Review</div>
+        <div class="learning-plan-guide-line">Review and adjust the plan periodically.</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="learning-plan-entry-actions">
+    <button class="btn primary" type="button" data-lp-action="show-import" aria-expanded="false" aria-controls="learning-plan-import-panel">+ Import plan</button>
+    <button class="btn" type="button" data-lp-action="show-create" aria-expanded="false" aria-controls="learning-plan-create-panel">Create manually</button>
+  </div>
+
+  <section class="settings-section learning-plan-import" id="learning-plan-import-panel" aria-labelledby="learning-plan-import-title" hidden>
+    <div class="settings-title" id="learning-plan-import-title">Import / Paste Plan</div>
+    <form id="learning-plan-import-form" class="learning-plan-import-form">
+      <div class="field learning-plan-field">
+        <label for="learning-plan-import-title-input">Plan title</label>
+        <input type="text" id="learning-plan-import-title-input" maxlength="120" autocomplete="off" placeholder="e.g. JavaScript fundamentals">
+      </div>
+      <div class="field learning-plan-field">
+        <label for="learning-plan-import-outline">Paste outline</label>
+        <textarea id="learning-plan-import-outline" rows="9" spellcheck="true" placeholder="# Phase 1&#10;## Lesson 1&#10;- First task&#10;- Second task"></textarea>
+      </div>
+      <div class="learning-plan-import-actions">
+        <button class="btn" type="button" data-lp-import-action="preview">Preview</button>
+        <button class="btn primary" type="submit" data-lp-import-action="import" disabled>Import plan</button>
+        <button class="btn" type="button" data-lp-action="cancel-creation">Cancel</button>
+      </div>
+      <div class="learning-plan-import-help" aria-label="Supported import format">
+        # Phase title<br>
+        ## Lesson title<br>
+        - Step title
+      </div>
+      <div id="learning-plan-import-preview" class="learning-plan-import-preview" role="region" aria-label="Learning Plan import preview" aria-live="polite" hidden></div>
+    </form>
+  </section>
+
+  <section class="settings-section learning-plan-create" id="learning-plan-create-panel" aria-labelledby="learning-plan-create-title" hidden>
+    <div class="settings-title" id="learning-plan-create-title">Create manually</div>
+    <form id="learning-plan-create-form" class="learning-plan-form">
+      <div class="field learning-plan-field">
+        <label for="learning-plan-title-input">Plan title</label>
+        <input type="text" id="learning-plan-title-input" maxlength="120" autocomplete="off" placeholder="e.g. JavaScript fundamentals">
+      </div>
+      <button class="btn" type="submit">Create plan</button>
+      <button class="btn" type="button" data-lp-action="cancel-creation">Cancel</button>
+    </form>
+  </section>
+
+  <section class="settings-section learning-plan-shell" aria-labelledby="learning-plan-list-title">
+    <div class="learning-plan-grid">
+      <aside class="learning-plan-sidebar" aria-labelledby="learning-plan-list-title">
+        <div class="settings-title" id="learning-plan-list-title">Plans</div>
+        <div id="learning-plan-list" class="learning-plan-list"></div>
+      </aside>
+      <div class="learning-plan-main" id="learning-plan-main"></div>
+    </div>
+  </section>
+</div>
+
+<!-- ══ CAPABILITY / CAREER ══ -->
+<div class="view" id="view-career">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Career</div>
+      <div class="cap-career-muted">Capability, proof, momentum, and next action.</div>
+    </div>
+  </div>
+
+  <div class="cap-career-error" id="cap-career-error" role="alert" hidden></div>
+  <div id="cap-career-dashboard"></div>
+  <div id="cap-career-setup"></div>
+</div>
+
 <!-- ══ SETTINGS ══ -->
 <div class="view" id="view-settings">
   <div class="page-header">
@@ -766,11 +879,19 @@
     <div class="settings-title">Data</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn sm" onclick="exportCSV()">Export CSV</button>
+      <button class="btn sm" type="button" id="life-ledger-export-btn">Export Life Ledger</button>
       <button class="btn sm danger" onclick="clearAll()">Clear all</button>
     </div>
+    <div id="life-ledger-export-status" hidden style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.45">Contains your Life Ledger history.</div>
     <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
       <select id="clear-day-select" style="font-family:var(--head);font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex:1;min-width:0"></select>
       <button class="btn sm danger" onclick="clearSelectedDay()">Clear day</button>
+    </div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn sm" type="button" id="life-ledger-sync-enable-btn" hidden>Enable Background Sync</button>
+      </div>
+      <div id="life-ledger-sync-status" hidden style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.45"></div>
     </div>
     <details style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
       <summary style="cursor:pointer;color:var(--muted2);font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;margin-bottom:8px">Advanced: Activity Cleanup</summary>
@@ -856,6 +977,15 @@
   </button>
 <button class="nav-btn" id="nav-reflect" onclick="showView('reflect');renderReflectView()">
     <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>Reflect
+  </button>
+  <button class="nav-btn" id="nav-life" onclick="showView('life')">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="4" cy="6" r="0.5"/></svg>Life
+  </button>
+  <button class="nav-btn" id="nav-learning" onclick="showView('learning')">
+    <svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2"/><path d="M8 7h7"/><path d="M8 11h5"/></svg>Learn
+  </button>
+  <button class="nav-btn" id="nav-career" onclick="showView('career')">
+    <svg viewBox="0 0 24 24"><path d="M4 19V7a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>Career
   </button>
   <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>Settings
@@ -1447,6 +1577,13 @@
 <script src="storage.js?v=20260719-template-sync-doctor-2"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
+<script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
+<script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
+<script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
+<script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
+<script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
+<script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
+<script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -3014,6 +3151,9 @@ function showView(name) {
   if (lpnb) lpnb.classList.add('active');
   if (name==='today') renderToday();
   if (name==='week') renderWeek();
+  if (name==='life') { if (window.renderLifeView) window.renderLifeView(); else if (window.renderLifeFeed) window.renderLifeFeed(); }
+  if (name==='learning' && window.renderLearningPlans) window.renderLearningPlans();
+  if (name==='career' && window.renderCapabilityCareer) window.renderCapabilityCareer();
   if (name==='settings') renderSettings();
   window.scrollTo({ top: 0, behavior: 'auto' });
 
@@ -3587,6 +3727,26 @@ function startSprint() {
   document.getElementById('interval-input').value=25; updateRing(); closeModal('log-overlay');
   if (!running) toggleTimer(); else syncTimerState();
   showToast('25-min sprint started');
+}
+
+// Called from checkEscalation() (insights.js) on a 5+ consecutive waste/missed streak.
+// Sets the recovery-block duration to 60 min without force-starting a timer: forcing a
+// start would require the user's current intention/task, which escalation can't supply,
+// and silently no-op-ing while claiming otherwise would be untruthful. If a block is
+// already running its duration is extended in place (same safe pattern as startSprint()'s
+// running branch); otherwise the 60-min duration is just queued for the next start.
+function triggerPenaltyMode() {
+  settings.intervalMin = 60;
+  document.getElementById('interval-input').value = 60;
+  if (running) {
+    totalSecs = 60 * 60;
+    remaining = totalSecs;
+    updateRing();
+    syncTimerState();
+    showToast('Penalty mode: current block extended to 60 min');
+  } else {
+    showToast('Penalty mode: next session set to 60 min');
+  }
 }
 
 // ══════════════════════════════════════════════════════
