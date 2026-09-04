@@ -1,5 +1,66 @@
 # ChronaSense — Changelog
 
+## Phase 10 — scheduler installer fail-safe fix (built, NOT activated) (branch: feat/life-ledger-background-automation-v1) — 2026-09-04
+An owner-authorized disposable Windows Task Scheduler proof found that
+`setup-life-ledger-sync-scheduler.ps1 -Action Install` printed "Task registered"
+success text even though no task was ever created. Root cause (confirmed by an
+isolated repro): PowerShell variable names are case-insensitive, and the
+script's own `-Action` parameter (`[ValidateSet('Install','Uninstall','Status',
+'RunOnce','ClearIntervention')] [string]$Action`) collided with a local
+`$action` variable the `Install` branch used to hold the `New-ScheduledTaskAction`
+CIM object — the assignment failed its inherited validation set, the
+subsequent `Register-ScheduledTask` call received a stale string instead of a
+real action object, and because neither failure was caught (no terminating-
+error handling anywhere in that branch), execution fell through to the
+hardcoded success messages regardless. No task was ever registered; the real
+vault and all other tasks were unaffected — see the disposable-proof
+transcript for full verification.
+changed:
+  - setup-life-ledger-sync-scheduler.ps1 — renamed the colliding local variable
+    to `$taskAction`; audited every other branch for the same case-insensitive
+    collision pattern against all four parameters (`$Action`/`$TaskName`/
+    `$IntervalMinutes`/`$Apply`) — none found. Wrapped `New-ScheduledTaskAction`
+    / `New-ScheduledTaskTrigger` / `New-ScheduledTaskSettingsSet` /
+    `Register-ScheduledTask` in a `try`/`catch` with `-ErrorAction Stop` on
+    each, so a real failure now throws instead of being silently swallowed.
+    Added an independent `Get-ScheduledTask -ErrorAction Stop` verification
+    inside that same `try` block immediately after registration — the
+    "Task registered" success text can now only ever print after the exact
+    task has been confirmed to actually exist. A failure at any step now
+    prints a clear error and exits non-zero; documented that a failed
+    replacement can leave no task registered under that name until Install
+    is re-run (no transactional rollback built — out of scope for Phase 10).
+    No change to interval/repetition/`IgnoreNew`/`StartWhenAvailable`/user-
+    elevation semantics.
+  - scripts/test-life-ledger-sync-scheduler-install.ps1 (new) — 14-check
+    regression harness, no new test framework: static AST checks (no `$action`
+    collision, `$taskAction` present, `Register-ScheduledTask` inside a `try`
+    with `-ErrorAction Stop`, `Get-ScheduledTask` verification inside the same
+    `try`, success text ordered strictly after verification) plus three
+    dynamic scenarios that run the real `Install` branch in a disposable child
+    `pwsh` process with all six `ScheduledTasks` cmdlets replaced by mock
+    functions (success; `Register-ScheduledTask` throws; `Register-ScheduledTask`
+    "succeeds" but `Get-ScheduledTask` finds nothing) — proving the exact false-
+    success regression this fix closes can never recur, without ever touching
+    a real scheduled task. (Along the way, confirmed empirically that `exit N`
+    inside a dot-sourced/called nested script only sets `$LASTEXITCODE` in the
+    caller's scope — the caller must itself re-`exit $LASTEXITCODE` for a real
+    process exit code; documented inline in the harness.)
+verification: PowerShell AST parser clean on both files; the new harness
+  itself reports 14/14 checks passed (0 real/mock tasks left behind — confirmed
+  via `Get-ScheduledTask` before and after); `npm test` (node:test aggregate)
+  374/375 pass, 0 fail, 1 pre-existing env-gated skip — unchanged from before
+  this fix, since no JS/browser file was touched; `npm run lint` 0 errors,
+  same 19 pre-existing warnings; STRICT `npm run test:cross-repo-compat`
+  (explicit MEAL_REPO_PATH / OPENGYM_REPO_PATH) PASS ChronaSense / PASS Meal /
+  PASS Workout 29/29, zero leg skips, exit 0; `git diff --check` clean.
+  Playwright not re-run (no browser-facing code changed). Real vault
+  (`C:\Users\Admin\OneDrive\2nd Brain\Life Ledger`) hashes verified byte-
+  identical before and after. No real or disposable scheduled task exists
+  afterward (`ChronaSense Claude Overnight` / `ChronaSense Command Dispatcher`
+  — the two pre-existing unrelated tasks — confirmed untouched throughout).
+  Sibling repos and the authoritative main ChronaSense checkout unmodified.
+
 ## Phase 10 review-fix pass — intervention latch, serialized mirror writes, lock hardening (built, NOT activated) (branch: feat/life-ledger-background-automation-v1) — 2026-09-04
 Closes four findings from the independent adversarial review of Phase 10 (architecture approved,
 bounded hardening requested). No redesign — every fix composes on top of the existing modules.
