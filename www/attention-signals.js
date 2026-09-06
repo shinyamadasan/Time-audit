@@ -332,11 +332,19 @@ export function attentionSignalLines(signals) {
   if (!signals || !signals.hasData) return [];
   const lines = [];
 
-  lines.push({
-    key: 'longest',
-    label: 'Longest coherent stretch',
-    value: signals.longestStretchMin > 0 ? `${signals.longestStretchMin} min` : '—'
-  });
+  // The longest coherent stretch is a wall-clock SPAN — it can legitimately
+  // contain short neutral runs and sub-debounce distraction dips. Show the
+  // classified focus minutes alongside the span whenever they differ, so the
+  // span can never be misread as "N minutes of actual focus".
+  let longestValue = '—';
+  if (signals.longestStretchMin > 0) {
+    const ls = signals.meta && signals.meta.longestStretch;
+    const focusMin = ls && Number.isFinite(ls.focusMin) ? ls.focusMin : signals.longestStretchMin;
+    longestValue = focusMin < signals.longestStretchMin
+      ? `${signals.longestStretchMin} min span · ${focusMin} min focused`
+      : `${signals.longestStretchMin} min`;
+  }
+  lines.push({ key: 'longest', label: 'Longest coherent stretch', value: longestValue });
 
   if (signals.coherentStretchCount > 0 || signals.attentionBreaks > 0) {
     lines.push({

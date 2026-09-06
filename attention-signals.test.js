@@ -275,6 +275,32 @@ test('render lines withhold unsupported metrics (progressive disclosure)', () =>
   assert.equal(byKey.rating, 'Mixed');
 });
 
+// ── Coherent-stretch display: span vs. actual focused minutes ────────
+test('the longest-stretch line shows span AND focused minutes when they differ', () => {
+  // Review's adversarial case: 10 focus / 29 neutral / 10 focus.
+  const s = deriveAttentionSignals([
+    blk(0, 10, 'deep', 'A'),
+    blk(10, 29, 'shallow', 'Email'),
+    blk(39, 10, 'deep', 'A')
+  ]);
+  assert.equal(s.coherentStretchCount, 1);
+  assert.equal(s.meta.longestStretch.durationMin, 49);
+  assert.equal(s.meta.longestStretch.focusMin, 20);
+  assert.equal(s.longestStretchMin, 49);
+
+  const line = attentionSignalLines(s).find(l => l.key === 'longest');
+  assert.equal(line.value, '49 min span · 20 min focused');
+  // Must be impossible to read the span as pure focus.
+  assert.ok(/span/.test(line.value) && /focused/.test(line.value));
+  assert.ok(line.value.includes('49') && line.value.includes('20'));
+});
+
+test('the longest-stretch line stays concise when the whole span is focus', () => {
+  const s = deriveAttentionSignals([blk(0, 47, 'deep', 'A')]);
+  const line = attentionSignalLines(s).find(l => l.key === 'longest');
+  assert.equal(line.value, '47 min');
+});
+
 // ── Determinism + input immutability ─────────────────────────────────
 test('same input yields deeply-equal output', () => {
   const input = [

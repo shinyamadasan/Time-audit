@@ -22,7 +22,10 @@ added:
       must reach `minStretchMin` (10) focused minutes to count. It ends only on: a distracting
       block ≥ `debounceMin` (10 min); an untracked gap ≥ `idleGapMin` (25 min); or an unbroken
       non-focus run ≥ `contextShiftMin` (30 min). A context-shift trims trailing neutral time
-      and is NOT a break.
+      and is NOT a break. Because a stretch can hold short neutral runs and sub-debounce
+      distraction dips, the line renders as `N min span · M min focused` whenever the classified
+      focus minutes are below the span, and the concise `N min` only when the whole span is
+      focus — the span can never be misread as actual focused time.
     - **Attention breaks:** count of stretch-ending events that are a sustained distraction or a
       long idle gap. A distraction shorter than `debounceMin` is a within-stretch dip, not a
       break (rapid-noise debounce). A budding run below `minStretchMin` broken by real drift
@@ -33,8 +36,8 @@ added:
       `recoveryWindowMin` (60). `medianRecoveryMin` reported only with ≥ 2 recoveries.
     - Returns supporting metadata (`segments`, `stretches`, `breaks`, `config`, `meta`) so the
       computation is inspectable. Phase 12 may interpret the outputs; it must not change them.
-  - `attention-signals.test.js` — 24 deterministic tests over synthetic timelines. Wired into
-    `npm test` and `npm run test:attention-signals`.
+  - `attention-signals.test.js` — 26 deterministic tests over synthetic timelines (incl. the
+    span-vs-focused-minutes display case). Wired into `npm test` and `npm run test:attention-signals`.
   - `insights.js` / `www/insights.js` — `renderReviewAttention(dateKey, selfRating)`. Formats the
     derived signals into the existing `.rv-closeout` card style and hosts the three optional
     rating buttons. Only data-supported metrics render (progressive disclosure). Copy is hedged.
