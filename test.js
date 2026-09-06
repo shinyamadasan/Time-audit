@@ -545,17 +545,6 @@ function computeDeepHrs(arr, intervalMin = 30, dateKey = null) {
   return +(sumEntryMinutes(arr, e => e.energy === 'deep', intervalMin, dateKey) / 60).toFixed(1);
 }
 
-function computeIdentityScore(arr) {
-  return arr.filter(e => e.onPlan === true && e.energy === 'deep').length;
-}
-
-function getIdentityLevelWithEmoji(score) {
-  if (score >= 8) return 'Operator 🟢';
-  if (score >= 5) return 'Builder 🟡';
-  if (score >= 3) return 'Trying 🟠';
-  return 'Drifting 🔴';
-}
-
 function getTimeByActivity(entriesArr, intervalMin = 30) {
   const map = {};
   entriesArr.forEach(e => {
@@ -874,29 +863,6 @@ test('does not flag overlaps when the raw day total stays under 24 hours', () =>
   assert.equal(scan.issues.overflowOverlaps.length, 0);
   assert.equal(getDataDoctorFlaggedIndexes(scan, entriesArr).size, 0);
 });
-
-console.log('\ncomputeIdentityScore(arr)');
-test('empty array returns 0', () => assert.equal(computeIdentityScore([]), 0));
-test('counts only onPlan+deep entries', () => {
-  const arr = [
-    {energy:'deep', onPlan:true},
-    {energy:'deep', onPlan:false},
-    {energy:'shallow', onPlan:true},
-    {energy:'deep', onPlan:true},
-  ];
-  assert.equal(computeIdentityScore(arr), 2);
-});
-test('onPlan null is not counted', () => {
-  const arr = [{energy:'deep', onPlan:null}];
-  assert.equal(computeIdentityScore(arr), 0);
-});
-
-console.log('\ngetIdentityLevelWithEmoji(score)');
-test('0 → Drifting', () => assert.equal(getIdentityLevelWithEmoji(0), 'Drifting 🔴'));
-test('3 → Trying', () => assert.equal(getIdentityLevelWithEmoji(3), 'Trying 🟠'));
-test('5 → Builder', () => assert.equal(getIdentityLevelWithEmoji(5), 'Builder 🟡'));
-test('8 → Operator', () => assert.equal(getIdentityLevelWithEmoji(8), 'Operator 🟢'));
-test('10 → Operator', () => assert.equal(getIdentityLevelWithEmoji(10), 'Operator 🟢'));
 
 console.log('\ngetTimeByActivity(arr)');
 test('aggregates by activity key', () => {

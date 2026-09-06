@@ -1,6 +1,48 @@
 # ChronaSense — Changelog
 
-## Phase 11.6 — Core-loop bug cleanup (built, NOT integrated) (branch: fix/core-loop-bugs-v1) — 2026-09-04
+## Phase 11.7 — Bloat consolidation / UX simplification (built, NOT integrated) (branch: refactor/bloat-consolidation-v1) — 2026-09-05
+A simplification phase, not a feature phase. Reduces two genuine conceptual duplications without
+weakening the core behavioral loop (capture → understand → interrupt → review → improve) and
+without splitting the app. Small, high-confidence, reversible changes only; everything else
+audited and deferred (see `planning/ROADMAP.md`). Focus Mode, Awareness Signal, streaks, Focus
+Wallet, and the daily/weekly/missed-recovery review surfaces are unchanged. Penalty/escalation
+stays FREEZE — audited as already quiet (two toasts on a 5+ waste streak, no dedicated UI or
+settings), so no change was warranted.
+
+removed:
+  - index.html / www/index.html — **Identity level** (`computeIdentityScore()`,
+    `getIdentityLevelWithEmoji()`, the `#s-identity` / `#s-identity-sub` stat tile, and the
+    ~17-line tier/colour render block in `renderToday()`). The tile had been `display:none` since
+    2026-07-10 (`21af9cc` "Simplify daily driver view"); this finishes that removal. Its only
+    input was today's deep-block count — identical to the `#s-deep` "Deep blocks" tile beside it —
+    bucketed into four labels (Drifting/Trying/Builder/Operator). It gated no behaviour, unlocked
+    nothing, and persisted no data (computed live from the entries array each render), so there is
+    nothing to migrate. The Awareness Signal already gives the honest deep/waste read the label
+    was gesturing at.
+  - test.js — the `computeIdentityScore()` / `getIdentityLevelWithEmoji()` unit blocks (their
+    local test copy had already drifted from production: it filtered `onPlan === true && energy
+    === 'deep'` where production filtered only `energy === 'deep'`).
+  - CODEMAP.md — the two removed functions dropped from the `[Statistics & Scoring]` map.
+
+changed:
+  - DECISIONS.md — declared the **canonical decision log**. The repo had two parallel decision
+    records (root `DECISIONS.md`, 22 numbered architecture entries; `docs/DECISIONS.md`, an
+    ADR-lite scaffold whose `D-001` was never filled in, plus three real entries
+    D-002/D-003/D-004). D-002/D-003/D-004 were migrated verbatim into the root log as entries
+    23/24/25 with their original `D-0NN` ids retained as aliases — no decision history lost.
+  - docs/DECISIONS.md — replaced with a pointer stub: canonical log is `../DECISIONS.md`, plus a
+    migration table and a note that the file is retained (not deleted) because
+    `tools/Verify-Decisions.ps1` and `tools/Check-DocsConsistency.ps1` still read that exact path.
+    Rewiring those scripts is deferred (they touch the `tools/` red zone).
+  - PROMPTS.md (P6), AGENTS.md (task-read step, escalation policy) — decision-log pointers now
+    name the root `DECISIONS.md`.
+  - APP_CONTEXT.md — motivation-layer inventory: Identity level row marked REMOVED (Phase 11.7);
+    penalty/escalation row and Known Live Bugs section de-staled (Phase 11.6 restored
+    `triggerPenaltyMode()`); decision-log duplication marked resolved.
+  - STATUS.md, planning/ROADMAP.md — Phase 11.7 recorded; stale "(built, NOT integrated)" wording
+    on the Phase 11.6 line corrected where touched.
+
+## Phase 11.6 — Core-loop bug cleanup (integrated to main 2026-09-04, commits f3887db + dbbbc31) (branch: fix/core-loop-bugs-v1) — 2026-09-04
 Live-verified the five historical bug candidates from `planning/PROPOSALS.md` (PROP-004, 007,
 008, 009, 013) against current source and fixed the three that were confirmed active,
 data/correctness-affecting bugs. No feature work, no motivation-system redesign, no UI

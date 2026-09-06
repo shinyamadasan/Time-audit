@@ -501,8 +501,8 @@ Depends on: `entries`, `getDateInTZ()`, `entryTimeRange()`, `tzParseTime()`, `_d
 
 ## [Statistics & Scoring]
 Lines: 3025–3124
-Purpose: Per-array metrics: deep score %, overlap-safe duration/deep-hour helpers, consecutive-day streaks, identity score + level label.
-Functions: `computeDeepScore()`, `_dateKeyPlusDays()`, `entryDurationMinutes()`, `entryTimeRange()`, `sumEntryMinutes()`, `sumEnergyMinutes()`, `computeDeepHrs()`, `computeStreak()`, `computeCleanStreak()`, `computeIdentityScore()`, `getIdentityLevelWithEmoji()`
+Purpose: Per-array metrics: deep score %, overlap-safe duration/deep-hour helpers, consecutive-day streaks.
+Functions: `computeDeepScore()`, `_dateKeyPlusDays()`, `entryDurationMinutes()`, `entryTimeRange()`, `sumEntryMinutes()`, `sumEnergyMinutes()`, `computeDeepHrs()`, `computeStreak()`, `computeCleanStreak()`
 Variables: —
 Depends on: `entries`, `getDateInTZ()`, `toDateKey()`
 

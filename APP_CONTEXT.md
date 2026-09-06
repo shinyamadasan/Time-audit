@@ -131,29 +131,26 @@ module correctly colocated in this repo for now, C = should eventually live else
 No subsystem was moved in Phase 11.5 — this table is the conceptual-ownership decision only,
 per the phase's own scope boundary.
 
-**Legacy / consolidation candidates found, not touched:**
-- `ai_studio_code (1) - Copy.html` and `ai_studio_code (1) copy.html` — dead prototype files.
-  They are also the *only* place `triggerPenaltyMode()` is actually defined (see Known Live
-  Bugs below) — the production port of that function was apparently never finished.
-- `docs/DECISIONS.md` — a duplicate/parallel decision record, not an empty one: D-001 is an
-  unfilled placeholder ("Decision: TODO"), but D-002, D-003, and D-004 are real, substantive
-  decisions — D-003 and D-004 specifically are the Capability/Career architectural decisions
-  ("evidence is explicit interpretation, not Life Ledger history"; "career intelligence uses
-  deterministic rules") that this file's own product-boundary section above relies on. The root
-  `DECISIONS.md` is the other, larger decisions record. Consolidation candidate (Phase 11.7)
-  because of the duplication/scope overlap between the two files, not because either is empty.
+**Legacy / consolidation candidates:**
+- `ai_studio_code (1) - Copy.html` and `ai_studio_code (1) copy.html` — dead prototype files
+  (~250 KB). No longer the only home of `triggerPenaltyMode()` (Phase 11.6 defined it in
+  `index.html`). Still dead weight; deletion deferred (Phase 11.7 kept scope to conceptual/UI
+  duplication, not repo file hygiene).
+- `docs/DECISIONS.md` — **resolved in Phase 11.7.** Was a parallel decision record (D-001 an
+  unfilled placeholder; D-002/D-003/D-004 real, substantive — D-003/D-004 are the
+  Capability/Career architectural decisions this file relies on above). Root `DECISIONS.md` is now
+  the single canonical log; D-002/D-003/D-004 were migrated into it verbatim as entries 23/24/25
+  (original ids kept as aliases); `docs/DECISIONS.md` is now a pointer stub, retained only because
+  `tools/Verify-Decisions.ps1` / `tools/Check-DocsConsistency.ps1` still read that path.
 
-## Motivation Layer (current inventory, Phase 11.5)
+## Motivation Layer (current inventory, Phase 11.5; Phase 11.7 outcomes noted inline)
 
-No mechanism removed or merged here — Phase 11.7 decides that. Recorded so it doesn't need
-re-deriving:
-
-| Mechanism | Behavior it targets | KEEP / FREEZE / CONSOLIDATE-CANDIDATE |
+| Mechanism | Behavior it targets | Disposition |
 |---|---|---|
 | Focus Wallet | Turns deep-work minutes into spendable "points," costs waste/sports time against balance; allows negative debt. Weekly-scoped, reward-redemption loop. | KEEP — unique job (the only mechanism with a spendable balance and rewards). |
-| Identity level (`computeIdentityScore()` / `getIdentityLevelWithEmoji()`) | Labels the user by deep-work percentage ("who you're becoming"). Shown on Today's side panel. | CONSOLIDATE-CANDIDATE — overlaps with the Awareness Signal's own deep/waste % framing; two different UI surfaces state the same underlying number. |
+| Identity level (`computeIdentityScore()` / `getIdentityLevelWithEmoji()`) | Labelled the user by deep-work block count ("who you're becoming"), shown in a Today stat tile. | **REMOVED (Phase 11.7).** The tile had been `display:none` since 2026-07-10; its only input was today's deep-block count, identical to the `#s-deep` tile beside it. No unique behavioral value, no persisted data. Awareness Signal covers the honest deep/waste read. |
 | Streaks (`computeStreak()`, `computeCleanStreak()`, 60-day streak calendar) | Consecutive-day consistency pressure. | KEEP — distinct time axis (day-to-day) from Focus Wallet's within-week axis. |
-| Penalty / escalation (`checkEscalation()` → `triggerPenaltyMode()`) | The most forceful nudge: 5+ consecutive waste/missed entries should force a 60-min recovery session and lock the focus-mode exit delay. | FREEZE — currently non-functional, see Known Live Bugs. Do not build on top of it until Phase 11.6 fixes it. |
+| Penalty / escalation (`checkEscalation()` → `triggerPenaltyMode()`) | The most forceful nudge: 5+ consecutive waste/missed entries set a 60-min recovery-block duration and lock the focus-mode exit delay to 60s. | FREEZE — functional as of Phase 11.6 (`triggerPenaltyMode()` restored, commit `f3887db`). Audited in Phase 11.7: surface is two `showToast()` calls, no dedicated UI or settings, so no "quieter" change was needed. Do not expand. |
 | Awareness Signal ("Today's Signal", `renderAwarenessSignal()`) | Real-time honest read of today (deep/waste %, peak focus hour, worst waste activity, time since last deep block). | KEEP — this is Goal #4 ("insight must change behaviour") made concrete; the natural home for any future minimal distraction metrics (see below). |
 | Focus Mode | Pomodoro session + full-screen blocker + exit-delay friction. | KEEP — the only mechanism that *intervenes* in the moment rather than reporting after the fact. |
 
@@ -165,9 +162,10 @@ re-deriving:
 | Review Plan Picker (`openReviewPlan()`) | Turns the review's "tomorrow's focus" into the next day's 1–3 item Today Plan; the plan picker. | KEEP — tightly coupled to the Day Review Modal, not a separate concern. |
 | Reflect View (`renderReflectView()`) | Weekly review, weekly planning, streak calendar, focus heatmap, daily-reflection history — Week/Month view lives here too (`renderMonthOverview()` is a mode toggle inside the Week tab, not a separate view). | KEEP — already the single consolidated weekly surface; Week/Month is one view, not two. |
 
-Net finding: this inventory is already fairly consolidated. The overlap worth acting on in
-Phase 11.7 is in the **motivation layer** (identity level vs. Awareness Signal), not the review
-surfaces.
+Net finding: this inventory is already consolidated. Phase 11.7 re-verified all three surfaces
+against live code — daily review / weekly Reflect / missed-closeout each serve a distinct job —
+and left them unchanged (KEEP). The Phase 11.7 change in the motivation layer was removing
+identity level (see above); Awareness Signal, streaks, Focus Wallet, and Focus Mode are untouched.
 
 ## Distraction Signals — Explicitly Scope-Limited (Phase 11.5)
 
@@ -180,21 +178,15 @@ a new dashboard, a new tracking engine, an OS-level daemon, a leaderboard, a new
 Firebase subsystem, or Life Ledger coupling. Distraction tracking is NOT being built now — this
 is a scope note for later, not a plan being executed.
 
-## Known Live Bugs (bounded, not fixed here)
+## Known Live Bugs (bounded)
 
-- **`triggerPenaltyMode()` is undefined in production.** `insights.js:248` calls it from
-  `checkEscalation()` whenever 5+ consecutive waste/missed entries are logged; the function is
-  never defined in `index.html` or any loaded module — it only exists in the two dead
-  `ai_studio_code (1)*.html` prototype files, and is listed as an ESLint `readonly` global
-  (`eslint.config.js:104`), which is what has kept this from surfacing as a lint error. Effect:
-  a silent `ReferenceError` at the app's most-assertive intervention point (5-waste-streak
-  escalation); `exitDelay` is still set to 60s just before the throw, so that half of the
-  escalation does work. Confirmed still live by direct `grep` on 2026-09-04 — this is the same
-  bug a prior audit (`planning/PROPOSALS.md` PROP-007) already caught and the human never
-  approved into `ROADMAP.md`. Scheduled for Phase 11.6 (core-loop bug cleanup) — sequenced
-  before bloat consolidation because the bug lives inside the same motivation/escalation
-  subsystem that later consolidation decisions (identity level vs. Awareness Signal, etc.) will
-  evaluate. Not touched in Phase 11.5 per that phase's docs-only scope.
+- **`triggerPenaltyMode()` was undefined in production — FIXED in Phase 11.6** (`f3887db`,
+  integrated to main). `insights.js:248` calls it from `checkEscalation()` on a 5+ consecutive
+  waste/missed streak; the function had only ever existed in the dead `ai_studio_code (1)*.html`
+  prototypes and as an ESLint `readonly` global, so every call threw a silent `ReferenceError`
+  (`exitDelay` was still set to 60s just before the throw, so that half worked). It is now defined
+  next to `startSprint()` in `index.html`. Penalty/escalation remains FREEZE — this was a
+  correctness fix, not an expansion. (Original audit: `planning/PROPOSALS.md` PROP-007.)
 
 ## Fragile Areas
 
@@ -239,10 +231,8 @@ Known stale or incomplete (corrected 2026-09-04):
   subsystem yet. Treat it as "real but partial," not "placeholder."
 - `docs/DATA_MODEL.md`: still a placeholder (`TODO.` only, 4 lines).
 - `docs/FEATURES.md`: still a placeholder (`TODO.` only, 5 lines).
-- `docs/DECISIONS.md`: a duplicate/parallel decision record — D-001 is an unfilled placeholder,
-  but D-002/D-003/D-004 are real, substantive decisions (D-003/D-004 are the Capability/Career
-  architectural decisions this file relies on elsewhere). The real, larger decisions record is
-  the root `DECISIONS.md` — a duplication worth resolving in Phase 11.7, not fixed here.
+- `docs/DECISIONS.md`: **resolved in Phase 11.7** — now a pointer stub. Root `DECISIONS.md` is the
+  single canonical decision log; D-002/D-003/D-004 were migrated into it (entries 23/24/25).
 - `planning/ROADMAP.md`, `planning/PROPOSALS.md`, `planning/BUILD_QUEUE.md`, `TASKS.md`,
   `HANDOFF.md`: structurally fine but describe a pipeline (captures → triage → PROPOSALS →
   human-approves → ROADMAP → BUILD_QUEUE → TASKS → Codex) that has been stalled since
@@ -267,9 +257,13 @@ This repo has been running two disconnected workflows since late July:
 
 Practical effect: reading `STATUS.md`, `HANDOFF.md`, or `TASKS.md` alone gives a *false* picture
 that the app has been frozen since 2026-07-21. Reading `CHANGELOG.md` gives the true picture.
-This split itself is a Phase 11.7 candidate (either retire the unused gated-pipeline docs, or
-resume feeding them) — not resolved here, per Phase 11.5's docs-only, no-decisions-beyond-
-reconciliation scope.
+This split itself was a Phase 11.7 candidate (either retire the unused gated-pipeline docs, or
+resume feeding them). **Phase 11.7 verdict: DEFER.** The dormant layers (`PLAN.md`,
+`planning/BUILD_QUEUE.md`, `planning/DONE.md`, `planning/CODEX_READY.md`, `planning/DIGEST.md`,
+`HANDOFF.md`, `TASKS.md`) are wired into six `tools/*.ps1` scripts; retiring them safely is an
+AI-Dev-OS (`tools/` red-zone) task on its own, out of scope for a phase that must stop for
+independent review. `planning/PROPOSALS.md` (13 real enriched proposals) and `planning/ROADMAP.md`
+stay as the live idea/backlog record. See `planning/ROADMAP.md` "Deferred (Phase 11.7)".
 
 ## Current Repo State As Of This Update
 
