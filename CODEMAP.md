@@ -64,7 +64,7 @@ Functions: `deriveAttentionSignals(entries, options)`, `attentionSignalLines(sig
 Variables: `ATTENTION_SIGNALS_VERSION`, `ATTENTION_SIGNALS_CONFIG` (frozen defaults)
 Depends on: no app globals; ESM exports + attaches `deriveAttentionSignals` /
 `attentionSignalLines` / `ATTENTION_SIGNALS_CONFIG` to `globalThis`
-Tests: `attention-signals.test.js` (24 synthetic-timeline cases)
+Tests: `attention-signals.test.js` (26 synthetic-timeline cases)
 
 ### focus-wallet.js
 Lines: external file
