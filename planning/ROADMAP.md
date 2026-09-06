@@ -85,6 +85,10 @@ visibility, not as an approval.)*
   phases synced only the files they touched). `www/index.html` is in parity. Not widened here.
 - **Settings section titled "Identity"** contains only "Coach tone" -- a stale label; rename to
   "Coaching" in a future labels pass.
+- **`README.md` still lists a removed feature.** Its feature list contains the bullet
+  "Identity level based on deep work percentage", but Identity Level was removed in Phase 11.7.
+  The README correction is deferred because `README.md` is protected (no edits) during this phase.
+  Future housekeeping should remove or update that stale feature bullet.
 - **Adjacent Personal-OS modules** (Learn, Career, Life = Character Sheet / Life Feed /
   Cross-Domain Intelligence): all KEEP -- each has a nav entry, a model with tests, and a
   Playwright spec; none abandoned. Life Feed and Cross-Domain Intelligence remain the strongest
