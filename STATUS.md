@@ -5,6 +5,37 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-06 — Phase 11.8 integrated; Phase 12 Personal Intelligence design fixed
+
+**Phase 11.8 is integrated to `main`** (`bc552ca`) and its independent review is done —
+the review fix `254ab57` is the current HEAD (`origin/main` == HEAD). The entry below is
+stale: "(built, NOT integrated)", "Stop for independent review; do not push main / integrate /
+start Phase 12", and "Next task: independent Phase 11.8 review" no longer hold; this entry
+supersedes them. Test count is **26** attention-signal tests (the "24" below predates the
+review fix). `CHANGELOG.md`, `planning/ROADMAP.md`, and `APP_CONTEXT.md` (Phase 11.8 status
+lines) corrected accordingly.
+
+**Phase 12 — Personal Intelligence v1** went through an independent adversarial design review
+(verdict: FIX FIRST — direction accepted, 14 bounded fixes). The corrected design is now a
+committed document: `docs/PHASE12_PERSONAL_INTELLIGENCE.md`, on branch
+`docs/phase12-personal-intelligence-design` (this pass — documentation only, not merged).
+Key shape: extend Cross-Domain Intelligence as the single recommendation engine (no parallel
+ranker); deterministic v1 shipped and reviewed **before** any Claude layer; Claude 12.5 is
+**phrase-only**; one primary next action or explicit INSUFFICIENT_DATA; read-only advisory
+(no durable override state); "Life → Next" is the home + a soft-branch-only Today teaser.
+`DECISIONS.md` gains #26 (one-next-action) and #27 (extend-CDI / deterministic-first /
+phrase-only / read-only). The old single 12.0 slice is split into 12.0A (static root↔www
+parity + mirror/check-only `sync.bat` + parity test/CI) and 12.0B (Android runtime compat +
+APK smoke), each independently reviewed.
+
+**Next task:** re-review `docs/PHASE12_PERSONAL_INTELLIGENCE.md`. No Phase 12 code, no 12.0A,
+no `sync.bat`/`www/` changes yet.
+
+Base: `main` @ `254ab57e1a6453a7301fd79110d9b1dd4ee5089f`. `README.md` remains intentionally
+` M` (stale identity reference) — untouched, not staged.
+
+---
+
 ## 2026-09-05 — Phase 11.8: Minimal distraction signals (built, NOT integrated)
 
 Branch `feat/minimal-distraction-signals-v1`, worktree `chronasense-phase11-8`, from `origin/main`

@@ -1,6 +1,6 @@
 # ChronaSense — Changelog
 
-## Phase 11.8 — Minimal distraction signals (built, NOT integrated) (branch: feat/minimal-distraction-signals-v1) — 2026-09-05
+## Phase 11.8 — Minimal distraction signals (integrated to main — bc552ca; independent-review fix 254ab57) — 2026-09-05
 
 A thin, mostly-automatic attention-awareness layer derived from data ChronaSense already
 captures. Not a new tracking product: no new collector, tab, dashboard, score, daemon, blocker,
