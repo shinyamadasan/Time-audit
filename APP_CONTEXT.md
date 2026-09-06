@@ -167,7 +167,7 @@ against live code — daily review / weekly Reflect / missed-closeout each serve
 and left them unchanged (KEEP). The Phase 11.7 change in the motivation layer was removing
 identity level (see above); Awareness Signal, streaks, Focus Wallet, and Focus Mode are untouched.
 
-## Distraction Signals — Explicitly Scope-Limited (Phase 11.5; built as Phase 11.8)
+## Distraction Signals — Explicitly Scope-Limited (Phase 11.5; built and integrated as Phase 11.8)
 
 Existing infrastructure already covers distraction *detection* (browser tab sessions, Android
 UsageStats, distraction heuristics in `insights.js`, Focus Mode intervention). Phase 11.8 built
@@ -186,7 +186,7 @@ daemon, blocker, Firebase subsystem, or Life Ledger coupling:
   'distracted'` or `null`. Stored in the existing `reviews` object, synced via the existing
   `rooms/<code>/reviews` path. Never fused into the automatic numbers; Phase 12 may interpret the
   two side by side. Awareness Signal, streaks, Focus Wallet, Focus Mode, and penalty/escalation
-  (FREEZE) are untouched. Not integrated to main.
+  (FREEZE) are untouched. Integrated to main as `bc552ca` (independent-review fix `254ab57`).
 
 ## Known Live Bugs (bounded)
 

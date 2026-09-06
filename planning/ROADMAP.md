@@ -39,15 +39,19 @@ Current Objective.)_
   `docs/DECISIONS.md` reduced to a pointer stub. Awareness Signal, streaks, Focus Wallet,
   penalty/escalation (FREEZE, audited as already quiet), Focus Mode, and all review surfaces
   unchanged. Everything else audited and deferred -- see below.
-- Phase 11.8 -- Minimal Distraction Signals (built, NOT integrated; 2026-09-05, branch
-  `feat/minimal-distraction-signals-v1`, awaiting independent review). Adds `attention-signals.js`
-  -- a pure deterministic `deriveAttentionSignals()` over the existing `entries` array -- and
-  surfaces longest coherent focus stretch, meaningful attention breaks, likely distraction
-  (`~N min`), and recoveries inside the existing end-of-day review only. One optional
-  `reviews[].focusRating` self-rating (Focused / Mixed / Distracted). No new collector, tab,
-  dashboard, score, daemon, blocker, Firebase subsystem, or Life Ledger coupling. Related
+- Phase 11.8 -- Minimal Distraction Signals (integrated and complete; independently reviewed
+  and merged to main as `bc552ca`, with the review fix `254ab57` -- current HEAD -- 2026-09-05).
+  Adds `attention-signals.js` -- a pure deterministic `deriveAttentionSignals()` over the existing
+  `entries` array -- and surfaces longest coherent focus stretch, meaningful attention breaks,
+  likely distraction (`~N min`), and recoveries inside the existing end-of-day review only. One
+  optional `reviews[].focusRating` self-rating (Focused / Mixed / Distracted). No new collector,
+  tab, dashboard, score, daemon, blocker, Firebase subsystem, or Life Ledger coupling. Related
   work-tool switching is not treated as distraction.
-- Phase 12 -- Personal Intelligence v1.
+- Phase 12 -- Personal Intelligence v1 (design checkpoint fixed post independent review, 2026-09-06;
+  see `docs/PHASE12_PERSONAL_INTELLIGENCE.md`). Deterministic engine extending Cross-Domain
+  Intelligence (single ranker, no parallel engine); one primary next action or explicit
+  INSUFFICIENT_DATA; read-only advisory; Claude interpretation deferred to a later phrase-only
+  slice (12.5). NOT built.
 
 ---
 

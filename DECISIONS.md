@@ -343,3 +343,86 @@ readiness.
 **Trade-off:** Recommendations are useful but deliberately conservative. When context is thin, the
 system recommends setup/evidence capture instead of pretending to know the highest-leverage career
 move.
+
+---
+
+## 26. Personal Intelligence exposes exactly ONE primary next action, or an explicit INSUFFICIENT_DATA state
+
+**Decision:** The Phase 12 Personal Intelligence Brief returns exactly one
+`nextAction`, OR abstains with `abstained: true` / `nextAction: null` /
+`confidence: "insufficient_data"` and a plain `abstentionReason`. Supporting
+alternatives are capped at two (`supporting[]`), rendered visually subordinate — a
+"then / also" hint, never a second call-to-action. On the Today surface the existing
+`renderTodayActionStrip()` mechanical cascade stays the single visible primary
+action; the Personal Intelligence teaser only annotates a chosen soft branch ("Why
+this? →"), never a second "Next action" title or button. When two candidates are
+genuinely indistinguishable and no evidence can justify a winner, prefer abstention
+or a low-confidence current-intent fallback over presenting a coin-flip as
+confidence. See `docs/PHASE12_PERSONAL_INTELLIGENCE.md` (design; not built).
+
+**Why:** The product's value is cutting through overwhelm. A list of recommendations
+is just another dashboard and pushes the prioritisation decision back onto the user.
+One action is falsifiable — it was done or it wasn't — which makes the next review
+meaningful, and it forces the engine to actually make the precedence call. This
+mirrors the shapes already shipped: Cross-Domain Intelligence produces "at most one
+`recommendedAction`", Capability/Career returns "one primary next action", and both
+abstain rather than invent (`DECISIONS.md` #21).
+
+**What NOT to do:** Do not render two primary recommendations, a ranked backlog, or
+"5 insights". Do not let `supporting[]` grow past two or gain its own button. Do not
+fill an empty screen with a fabricated action — say what data is missing instead. Do
+not add a second "Next" surface on Today that competes with the mechanical strip.
+
+---
+
+## 27. Phase 12 extends Cross-Domain Intelligence as the single recommendation engine; deterministic v1 ships before any LLM; Claude is phrase-only; the feature is read-only advisory
+
+**Decision:** Personal Intelligence v1 extends
+`cross-domain-intelligence-model.js`'s `buildCrossDomainIntelligence()` — widening
+its inputs (Today's Plan, timer `entries`, `deriveAttentionSignals` output, daily/
+weekly reviews, all read from the native `ta3-*` stores) and adding `today-plan-item`
+/ `resume-unfinished` candidate sources plus a deterministic constraint classifier.
+It is **not** a new engine and there is **no** second ranker. CDI's existing
+`FACT → SIGNAL → CANDIDATE → RECOMMENDATION` firewall, its
+`HIGH/MEDIUM/LOW/INSUFFICIENT` vocabulary, its coverage-aware "not evaluated"
+discipline, its abstention behaviour, and its 59 model tests are preserved as
+regression fences — a Phase 12 change that breaks an existing CDI assertion is a
+design signal, not a test to update; new tiers/inputs get additive test files.
+
+The deterministic engine is implemented, independently reviewed, and integrated as a
+real shipped feature (slices 12.2–12.4) **before** any Claude/LLM layer. The Claude
+layer (slice 12.5, its own review and integration) is **phrase-only**: deterministic
+code owns candidate generation, ranking, the chosen action, the constraint, all
+facts and derived facts, confidence, and abstention; Claude receives the already-
+chosen candidate + resolved evidence ids and returns only bounded language
+(`whatMatters` / `whyLines` / `constraintSentence`), citing only existing ids, never
+authoring a number, an evidence id, a raised confidence, or an alternative candidate,
+with a deterministic fallback on any invalid field.
+
+The feature is **read-only advisory**. The only persistent artifact is a disposable
+local brief cache (`ta3-personal-intelligence-v1`, never Firebase-synced). There is
+no durable user-override state — disagreement is expressed by real behaviour, which
+the next build re-reads. Every recommendation and inference is traceable to evidence
+ids that resolve at build time; an unresolved id is dropped and confidence
+recomputed. See `docs/PHASE12_PERSONAL_INTELLIGENCE.md`.
+
+**Why:** CDI already does exactly this job deterministically and is documented
+(#21/#22) as the component to migrate into the intelligence layer once one exists. A
+parallel engine would drift from it and create two competing "what next?" answers —
+the failure mode the boundary work was done to prevent. Shipping the deterministic
+engine on its own review makes "deterministic v1" a real, observed artifact rather
+than a way-station, honouring #21 ("AI interpretation is a later layer"). Phrase-only
+keeps the LLM out of every path where a silent, hard-to-debug wrong answer could
+enter (global `CLAUDE.md` §5) and keeps the Life Ledger contract's ban on
+LLM-computed facts/statistics/confidence intact. Read-only advisory keeps the whole
+feature reversible and cheap to be wrong.
+
+**What NOT to do:** Do not add a second scoring function or a second
+`recommendedAction` producer. Do not let Claude choose among candidates, invent an
+action, raise confidence, or author a number or evidence id. Do not bundle the Claude
+slice into the deterministic-v1 integration. Do not persist an override key, sync the
+brief cache to Firebase, or write back to any store (plan, learning, capability,
+ledger, Obsidian). Do not route the intention/behaviour axis through the Life Ledger
+— its live store only carries learning-plan events. Do not reuse
+`attention-signals.js`'s `distractionSupportMin` (a display floor) as the
+sufficiency-to-recommend threshold; Phase 12 owns its own sufficiency rule.
