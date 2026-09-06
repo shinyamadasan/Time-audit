@@ -584,6 +584,34 @@ test('today defaults to clean mode and can reveal details', async ({ page }) => 
   await expect(page.locator('#recent-entries-section')).toBeHidden();
 });
 
+test('today stat row renders without the removed identity tile (Phase 11.7)', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 18, 0, 0);
+  const dayStart = Date.UTC(2026, 6, 15, 9, 0, 0);
+  const deepEntries = [0, 1, 2].map(i => {
+    const tsStart = dayStart + i * 60 * 60 * 1000;
+    const ts = tsStart + 60 * 60 * 1000;
+    return {
+      id: ts, ts, tsStart, updatedAt: ts, blockIntervalMin: 60,
+      date: utcDateKey(tsStart), activity: 'Deep work', energy: 'deep',
+      category: 'deep_work', originalLabel: 'deep', onPlan: true, retro: false
+    };
+  });
+
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(String(err)));
+  await openApp(page, { entries: deepEntries, nowTs });
+  await page.locator('#today-details-toggle').click();
+
+  // The two surviving tiles still render their live values.
+  await expect(page.locator('#s-deep')).toHaveText('3');
+  await expect(page.locator('#s-streak')).toBeVisible();
+  // Identity level was removed in Phase 11.7 — the tile and its sub-label are gone,
+  // and renderToday() must not throw dereferencing the missing element.
+  await expect(page.locator('#s-identity')).toHaveCount(0);
+  await expect(page.locator('#s-identity-sub')).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
+
 test('today daily basics logs common mandatory activity from clean mode', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 10, 12, 0, 0);
   await openApp(page, { nowTs });

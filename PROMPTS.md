@@ -71,9 +71,10 @@ change app logic.
 ## P6 — Record a decision (→ DECISIONS.md)
 *Use when you made a non-obvious architectural or tech choice.*
 ```
-Add a DECISIONS.md entry for: <the choice>. Use the next D-0NN id and the file's format (Context /
-Decision / Why / Trade-off / Supersedes). Keep it to the rationale and the "don't undo this"
-boundary. If it reverses an existing decision, mark the old one "Superseded by D-0NN".
+Add an entry to the root DECISIONS.md (the canonical log) for: <the choice>. Use the next
+sequential number and the file's format (Decision / Why / What NOT to do — or Context / Decision /
+Why / Trade-off for a larger one). Keep it to the rationale and the "don't undo this" boundary. If
+it reverses an existing decision, mark the old one "Superseded by #NN".
 ```
 
 ## P7 — Checkpoint (stopping mid-task)

@@ -5,6 +5,37 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-05 — Phase 11.7: Bloat consolidation / UX simplification (built, NOT integrated)
+
+Branch `refactor/bloat-consolidation-v1`, worktree `chronasense-phase11-7`, from `origin/main`
+`dbbbc31`. Phase 11.6 is now **integrated to main** (`f3887db` + `dbbbc31`) — the "(built, NOT
+integrated)" wording on older entries below is stale; this entry supersedes it.
+
+A simplification phase. Two high-confidence, reversible changes:
+
+1. **Removed identity level.** `computeIdentityScore()` / `getIdentityLevelWithEmoji()`, the
+   `#s-identity` stat tile (already `display:none` since `21af9cc`, 2026-07-10), and the
+   tier/colour render block in `renderToday()`. Its only input was today's deep-block count —
+   identical to the `#s-deep` tile beside it. No behavior gated on it, no persisted data. Dead
+   test blocks and the CODEMAP entry removed too.
+2. **Consolidated the two decision records.** Root `DECISIONS.md` is now the single canonical log.
+   `docs/DECISIONS.md` D-002/D-003/D-004 migrated in verbatim as entries 23/24/25 (ids kept as
+   aliases); `docs/DECISIONS.md` reduced to a pointer stub (retained — `tools/Verify-Decisions.ps1`
+   and `tools/Check-DocsConsistency.ps1` still read the path). Pointers in PROMPTS.md/AGENTS.md
+   updated.
+
+FREEZE / KEEP verified live and unchanged: penalty/escalation (already quiet — two toasts, no UI),
+Awareness Signal, streaks, Focus Wallet, Focus Mode, daily/weekly/missed-recovery reviews.
+Learn / Career / Life modules all KEEP. Everything else audited + deferred — see
+`planning/ROADMAP.md` "Deferred from Phase 11.7".
+
+Tests: `npm test` (unit), `npm run lint`, Playwright smoke, `node --check`, `git diff --check`,
+root/www parity — see report. Stop for independent review; do not push main / integrate / start 11.8.
+
+Next task: independent Phase 11.7 review.
+
+---
+
 ## 2026-09-04 — Phase 11.6 review fix: Capacitor www runtime parity (built, NOT integrated)
 
 Same branch/worktree as below (`fix/core-loop-bugs-v1` / `chronasense-phase11-6`), on top of
