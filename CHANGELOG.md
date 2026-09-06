@@ -1,6 +1,65 @@
 # ChronaSense — Changelog
 
-## Phase 11.7 — Bloat consolidation / UX simplification (built, NOT integrated) (branch: refactor/bloat-consolidation-v1) — 2026-09-05
+## Phase 11.8 — Minimal distraction signals (built, NOT integrated) (branch: feat/minimal-distraction-signals-v1) — 2026-09-05
+
+A thin, mostly-automatic attention-awareness layer derived from data ChronaSense already
+captures. Not a new tracking product: no new collector, tab, dashboard, score, daemon, blocker,
+Firebase subsystem, or Life Ledger coupling. Awareness Signal, Focus Wallet, streaks, Focus Mode
+KEEP unchanged; penalty/escalation stays FREEZE.
+
+added:
+  - `attention-signals.js` / `www/attention-signals.js` — new pure computation module.
+    `deriveAttentionSignals(entries, options)` and `attentionSignalLines(signals)`. ESM with a
+    `globalThis` attach (mirrors `focus-wallet.js`). No DOM, no `Date.now()`, no mutation of
+    inputs, no network, no ML/AI — deterministic: same input → same output. Loaded from
+    `index.html` as `<script type="module">`.
+    - **Context class per block:** `focus` (energy `deep`/`learning`, or the activity matches a
+      Today Plan task), `distraction` (energy `waste`/`distraction`), else `neutral` (`shallow`,
+      `nine5`, `errands`, `exercise`, `recovery`, `social`, `admin`). Classification is by the
+      block's own label — never by app/site/window — so switching VS Code → Claude → GitHub →
+      docs while all logged `deep` stays ONE coherent stretch.
+    - **Longest coherent stretch:** wall-clock span of the longest run of focus blocks. A run
+      must reach `minStretchMin` (10) focused minutes to count. It ends only on: a distracting
+      block ≥ `debounceMin` (10 min); an untracked gap ≥ `idleGapMin` (25 min); or an unbroken
+      non-focus run ≥ `contextShiftMin` (30 min). A context-shift trims trailing neutral time
+      and is NOT a break.
+    - **Attention breaks:** count of stretch-ending events that are a sustained distraction or a
+      long idle gap. A distraction shorter than `debounceMin` is a within-stretch dip, not a
+      break (rapid-noise debounce). A budding run below `minStretchMin` broken by real drift
+      produces no break.
+    - **Likely distraction:** `~N min` = sum of distraction-class block minutes, surfaced only
+      when ≥ `distractionSupportMin` (15); withheld (null) below that rather than forced.
+    - **Recovery:** each break matched to the next coherent stretch beginning within
+      `recoveryWindowMin` (60). `medianRecoveryMin` reported only with ≥ 2 recoveries.
+    - Returns supporting metadata (`segments`, `stretches`, `breaks`, `config`, `meta`) so the
+      computation is inspectable. Phase 12 may interpret the outputs; it must not change them.
+  - `attention-signals.test.js` — 24 deterministic tests over synthetic timelines. Wired into
+    `npm test` and `npm run test:attention-signals`.
+  - `insights.js` / `www/insights.js` — `renderReviewAttention(dateKey, selfRating)`. Formats the
+    derived signals into the existing `.rv-closeout` card style and hosts the three optional
+    rating buttons. Only data-supported metrics render (progressive disclosure). Copy is hedged.
+  - `index.html` / `www/index.html` — an **"Attention today"** block (`#rv-attention`) in the
+    end-of-day review modal, between the closeout summary and the win/waste fields. New review
+    field `reviews[dateKey].focusRating` (`'focused' | 'mixed' | 'distracted' | null`), toggled
+    by `setReviewFocusRating()`, loaded in `openReview()`, persisted in `saveReview()`, synced
+    through the existing `rooms/<code>/reviews` last-writer-wins merge. No schema migration —
+    `reviews` is raw JSON and the field is optional.
+  - `eslint.config.js` — `attention-signals.js` moved to the module-sourceType group; new app
+    globals registered for `insights.js`.
+  - `package.json` — `attention-signals.test.js` added to `test`; new `test:attention-signals`
+    script; `attention-signals.js` added to `lint`.
+
+not done (deliberately):
+  - No Awareness Signal ("Today's Signal") line and no weekly Reflect surface — kept to the
+    single daily-review host to stay minimal. Both are natural follow-ups.
+  - No persistence of the derived numbers — recomputable from `entries`; only the subjective
+    `focusRating` is stored.
+  - `focus-mode.js` NOT touched — the module reads finished `entries`, so the known root/www
+    `focus-mode.js` Learning-Plan drift is not widened here.
+  - PROP-014 (DST date-window) untouched — not on the derivation path (the module is
+    timestamp-only and day-agnostic; the caller owns the date window).
+
+## Phase 11.7 — Bloat consolidation / UX simplification (integrated to main — b1b0fa0) — 2026-09-05
 A simplification phase, not a feature phase. Reduces two genuine conceptual duplications without
 weakening the core behavioral loop (capture → understand → interrupt → review → improve) and
 without splitting the app. Small, high-confidence, reversible changes only; everything else

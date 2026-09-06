@@ -17,6 +17,7 @@
 - `storage.js` — line 1299 → **EXTRACTED** (see below)
 - `insights.js` — line 1300 → **EXTRACTED** (see below)
 - `focus-wallet.js` — line 1301 → **EXTRACTED** (see below)
+- `attention-signals.js` — module script include → **EXTRACTED** (see below; pure Phase 11.8 attention-signal derivation, attaches to `globalThis`)
 - `learning-plan-ui.js` — module script include → **EXTRACTED** (see below; imports `learning-plan-import.js`, `learning-plan-next-action.js`, `life-ledger-runtime.js`)
 - `capability-career-ui.js` — module script include → **EXTRACTED** (see below; imports Capability/Career model, repository, import, analytics, and reads Life Ledger runtime)
 - `life-ledger-export-ui.js` — module script include → **EXTRACTED** (see below; imports `life-ledger-transport.js`)
@@ -41,10 +42,29 @@ Depends on: Firebase SDK globals, `focusRedemptions` global, `sumEnergyMinutes()
 
 ### insights.js
 Lines: external file
-Purpose: Weekly insight computation (deep hours, waste patterns, best day, peak hour).
-Functions: `computeInsights(weekKey)`
+Purpose: Per-entry feedback flash, escalation check, Awareness Signal ("Today's Signal"), daily
+pulse summary, weekly insight computation, and the Phase 11.8 review "Attention today" block.
+Functions: `analyzeBehavior()`, `renderFeedbackFlash()`, `dismissFeedbackFlash()`,
+`checkEscalation()`, `generateInsights()`, `renderAwarenessSignal()`, `getDailySummaryInsight()`,
+`buildDailySummaryHTML()`, `computeInsights(weekKey)`, `renderReviewAttention(dateKey, selfRating)`
 Variables: (managed internally)
-Depends on: `entries` global, `storage.js` helpers, `sumEntryMinutes()`, `sumEnergyMinutes()`
+Depends on: `entries` / `settings` / `reviews` globals, `storage.js` helpers, `sumEntryMinutes()`,
+`sumEnergyMinutes()`, `getEntriesForDateWindow()`, `getPlanItems()`, `deriveAttentionSignals()`,
+`attentionSignalLines()`
+
+### attention-signals.js
+Lines: external file (Phase 11.8 — new computation module)
+Purpose: Pure deterministic derivation of the "minimal distraction signals" attention-awareness
+layer from the existing `entries` array — longest coherent focus stretch, meaningful attention
+breaks, likely distraction (`~N min`), recoveries + median recovery time. Blocks are classified
+focus / neutral / distraction by their own energy label or Today Plan membership, never by
+app/site/window, so related-tool switching stays one coherent stretch. No DOM, no `Date.now()`,
+no mutation, no network, no ML/AI. Thresholds + exact semantics in the module header.
+Functions: `deriveAttentionSignals(entries, options)`, `attentionSignalLines(signals)`
+Variables: `ATTENTION_SIGNALS_VERSION`, `ATTENTION_SIGNALS_CONFIG` (frozen defaults)
+Depends on: no app globals; ESM exports + attaches `deriveAttentionSignals` /
+`attentionSignalLines` / `ATTENTION_SIGNALS_CONFIG` to `globalThis`
+Tests: `attention-signals.test.js` (24 synthetic-timeline cases)
 
 ### focus-wallet.js
 Lines: external file
@@ -590,9 +610,15 @@ accountability banner; format week labels and save timestamps. `checkReviewPromp
 this at `settings.reviewTime` (default 22:00); morning times such as 08:00 make the prior
 calendar day due the next morning for graveyard-shift closeout. **This is the daily habit hook
 the whole plan loop hangs on.**
-Functions: `openReview()`, `saveReview()`, `renderYesterdayPromise()`, `formatWeekLabel()`, `formatSavedAt()`, `computeDailySummary()`, `renderDailySummary()`, `checkReviewPrompt()`
-Variables: `_reviewDateKey`, `_reviewUnloggedOk`
-Depends on: `reviews`, `plans`, `entries`, `persist()`, `renderToday()`, Review Plan Picker, Statistics section
+Functions: `openReview()`, `saveReview()`, `setReviewFocusRating()`, `renderYesterdayPromise()`, `formatWeekLabel()`, `formatSavedAt()`, `computeDailySummary()`, `renderDailySummary()`, `checkReviewPrompt()`
+Variables: `_reviewDateKey`, `_reviewUnloggedOk`, `_reviewFocusRating`
+Depends on: `reviews`, `plans`, `entries`, `persist()`, `renderToday()`, Review Plan Picker, Statistics section, `renderReviewAttention()` (insights.js)
+
+Phase 11.8: the modal hosts an **"Attention today"** block (`#rv-attention`, rendered by
+`renderReviewAttention()` in `insights.js`) showing the derived attention signals, plus one
+optional `reviews[dateKey].focusRating` (`focused` / `mixed` / `distracted` / `null`) set by
+`setReviewFocusRating()`. The rating is stored in `reviews` and synced like every other review
+field; it never feeds the automatic numbers.
 
 ⚠ `applyPromiseAsIntention()` and the banner's "Set focus" row were **retired** — the Today Plan
 strip owns "what you said you'd do today". The banner now renders only yesterday's waste traps and

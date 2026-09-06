@@ -5,6 +5,39 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-05 — Phase 11.8: Minimal distraction signals (built, NOT integrated)
+
+Branch `feat/minimal-distraction-signals-v1`, worktree `chronasense-phase11-8`, from `origin/main`
+`ff28aa9`. **Phase 11.7 is now integrated to main** (`b1b0fa0`, directly under HEAD) — the
+"(built, NOT integrated)" wording on the 11.7 entry below is stale; this entry supersedes it.
+`planning/ROADMAP.md` and `CHANGELOG.md` corrected accordingly.
+
+A thin attention-awareness layer over data already captured. No new collector, tab, dashboard,
+score, daemon, blocker, Firebase subsystem, or Life Ledger coupling.
+
+- **`attention-signals.js`** (+ `www/` mirror) — pure deterministic `deriveAttentionSignals(entries,
+  opts)`: longest coherent focus stretch, meaningful attention breaks, likely distraction
+  (`~N min`, withheld < 15 min), recoveries + median recovery time. Blocks classified focus /
+  neutral / distraction by their own energy label or Today Plan membership — never by app/window —
+  so related-tool switching stays one stretch. Thresholds documented in the module header.
+- **Surface:** an "Attention today" block in the existing end-of-day review modal only
+  (`renderReviewAttention()` in `insights.js`). Progressive disclosure — only data-supported
+  metrics render.
+- **Calibration:** one optional `reviews[dateKey].focusRating` (`focused` / `mixed` /
+  `distracted`), stored in the existing `reviews` object, synced via the existing path. Never
+  fused into the automatic numbers.
+- FREEZE / KEEP unchanged: Awareness Signal, Focus Wallet, streaks, Focus Mode,
+  penalty/escalation. `focus-mode.js` untouched (module reads finished entries).
+
+Tests: `npm test` (446 unit incl. 24 new attention-signal tests, 0 fail), `npm run lint`
+(0 errors), Playwright smoke (217 passed), `node --check` on changed JS, `git diff --check`
+clean, root/www parity verified for the 3 runtime files. Stop for independent review; do not push
+main / integrate / start Phase 12.
+
+Next task: independent Phase 11.8 review.
+
+---
+
 ## 2026-09-05 — Phase 11.7: Bloat consolidation / UX simplification (built, NOT integrated)
 
 Branch `refactor/bloat-consolidation-v1`, worktree `chronasense-phase11-7`, from `origin/main`
