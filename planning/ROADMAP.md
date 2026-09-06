@@ -30,8 +30,8 @@ Current Objective.)_
   `dbbbc31`). Fixed the confirmed-live `triggerPenaltyMode()` `ReferenceError` (`insights.js:248`),
   plus two other confirmed core-loop bugs found during live reconciliation (timer restore dropping
   `blockStartTime`; Focus Wallet's "sport" substring matching "transport"). See `CHANGELOG.md`.
-- Phase 11.7 -- Bloat Consolidation / UX Simplification (built, NOT integrated; 2026-09-05, branch
-  `refactor/bloat-consolidation-v1`, awaiting independent review). Two high-confidence changes:
+- Phase 11.7 -- Bloat Consolidation / UX Simplification (integrated and complete; reviewed and
+  merged to main as `b1b0fa0`, 2026-09-05). Two high-confidence changes:
   (1) removed **identity level** (a hidden-since-July stat tile whose only input was the deep-block
   count already shown beside it; no unique behavioral value, no persisted data); (2) consolidated
   the **two decision records** -- root `DECISIONS.md` is now the single canonical log,
@@ -39,10 +39,14 @@ Current Objective.)_
   `docs/DECISIONS.md` reduced to a pointer stub. Awareness Signal, streaks, Focus Wallet,
   penalty/escalation (FREEZE, audited as already quiet), Focus Mode, and all review surfaces
   unchanged. Everything else audited and deferred -- see below.
-- Phase 11.8 -- Minimal Distraction Signals. Scope-limited to derived metrics on existing
-  screens (attention switches today, longest uninterrupted focus stretch) surfaced on the
-  Awareness Signal / Reflect view. Explicitly excludes a new tab, dashboard, tracking engine,
-  OS-level daemon, leaderboard, blocker, Firebase subsystem, or Life Ledger coupling.
+- Phase 11.8 -- Minimal Distraction Signals (built, NOT integrated; 2026-09-05, branch
+  `feat/minimal-distraction-signals-v1`, awaiting independent review). Adds `attention-signals.js`
+  -- a pure deterministic `deriveAttentionSignals()` over the existing `entries` array -- and
+  surfaces longest coherent focus stretch, meaningful attention breaks, likely distraction
+  (`~N min`), and recoveries inside the existing end-of-day review only. One optional
+  `reviews[].focusRating` self-rating (Focused / Mixed / Distracted). No new collector, tab,
+  dashboard, score, daemon, blocker, Firebase subsystem, or Life Ledger coupling. Related
+  work-tool switching is not treated as distraction.
 - Phase 12 -- Personal Intelligence v1.
 
 ---

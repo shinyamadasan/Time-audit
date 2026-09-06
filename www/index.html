@@ -1454,6 +1454,7 @@
   </div>
 
   <div id="rv-closeout-summary" style="display:none"></div>
+  <div id="rv-attention" style="display:none"></div>
   <div id="rv-unlogged-decision" style="display:none"></div>
 
   <!-- Plan vs actual for the day being reviewed — closes yesterday's loop -->
@@ -1572,6 +1573,7 @@
 <script src="storage.js?v=20260719-template-sync-doctor-2"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
+<script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
 <script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
 <script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
@@ -8063,12 +8065,22 @@ let _reviewDateKey = null; // which date is currently open in the review modal
 let _reviewPlanDraft = [];        // tomorrow's plan being picked (carries tombstones)
 let _reviewPlanTargetKey = null;  // the date that draft is FOR (= reviewed day + 1)
 let _reviewUnloggedOk = false;    // true when missing time was seen and intentionally left blank
+let _reviewFocusRating = null;    // Phase 11.8 optional subjective rating: 'focused' | 'mixed' | 'distracted'
+
+// Phase 11.8 — toggle the optional end-of-day attention self-rating.
+function setReviewFocusRating(value) {
+  _reviewFocusRating = _reviewFocusRating === value ? null : value;
+  if (typeof renderReviewAttention === 'function') {
+    renderReviewAttention(_reviewDateKey || getViewingDateKey(), _reviewFocusRating);
+  }
+}
 
 function openReview(dateKey) {
   _reviewDateKey = dateKey || toDateKey(new Date());
   const isToday = _reviewDateKey === toDateKey(new Date());
   const r = reviews[_reviewDateKey] || {};
   _reviewUnloggedOk = !!r.unloggedOk;
+  _reviewFocusRating = r.focusRating || null;
 
   // Date label in modal header
   const dateLabel = document.getElementById('rv-date-label');
@@ -8102,6 +8114,7 @@ function openReview(dateKey) {
   document.getElementById('rv-avoid').value = r.avoid || '';
   openReviewPlan();
   renderReviewCloseoutSummary();
+  if (typeof renderReviewAttention === 'function') renderReviewAttention(_reviewDateKey, _reviewFocusRating);
   renderReviewUnloggedDecision();
   renderReviewPlanVsActual();
 
@@ -8358,6 +8371,7 @@ function saveReview(){
     avoid:document.getElementById('rv-avoid').value,
     tomorrow:tomorrowText,
     unloggedOk: summary.unloggedMin >= 30 ? _reviewUnloggedOk : false,
+    focusRating: _reviewFocusRating || null,
     _savedAt:Date.now()
   };
 

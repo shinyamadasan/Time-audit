@@ -167,16 +167,26 @@ against live code — daily review / weekly Reflect / missed-closeout each serve
 and left them unchanged (KEEP). The Phase 11.7 change in the motivation layer was removing
 identity level (see above); Awareness Signal, streaks, Focus Wallet, and Focus Mode are untouched.
 
-## Distraction Signals — Explicitly Scope-Limited (Phase 11.5)
+## Distraction Signals — Explicitly Scope-Limited (Phase 11.5; built as Phase 11.8)
 
 Existing infrastructure already covers distraction *detection* (browser tab sessions, Android
-UsageStats, distraction heuristics in `insights.js`, Focus Mode intervention). Phase 11.8's
-minimum scope, when it happens, is **derived metrics surfaced on existing screens only**:
-attention switches today, longest uninterrupted focus stretch — shown on the Awareness Signal
-and/or the Reflect weekly review. Explicitly out of scope for that phase: a new distraction tab,
-a new dashboard, a new tracking engine, an OS-level daemon, a leaderboard, a new blocker, a new
-Firebase subsystem, or Life Ledger coupling. Distraction tracking is NOT being built now — this
-is a scope note for later, not a plan being executed.
+UsageStats, distraction heuristics in `insights.js`, Focus Mode intervention). Phase 11.8 built
+**derived metrics surfaced on existing screens only** — no new collector, tab, dashboard, score,
+daemon, blocker, Firebase subsystem, or Life Ledger coupling:
+
+- `attention-signals.js` — pure, deterministic `deriveAttentionSignals(entries, opts)`. Reads the
+  `entries` array only. Classifies each block as focus / neutral / distraction by its own energy
+  label or Today Plan membership (never by app/window), so related-tool switching stays one
+  coherent stretch. Outputs: longest coherent stretch (min), attention breaks, likely distraction
+  (`~N min`, withheld below 15 classified min), recoveries + median recovery time. Hedged
+  language throughout — an estimate of attention, not an exact cognitive measure.
+- Surface: the existing end-of-day review modal (`openReview()`), in an "Attention today" block
+  above the win/waste fields. No other surface.
+- Manual calibration: one optional `reviews[dateKey].focusRating` — `'focused' | 'mixed' |
+  'distracted'` or `null`. Stored in the existing `reviews` object, synced via the existing
+  `rooms/<code>/reviews` path. Never fused into the automatic numbers; Phase 12 may interpret the
+  two side by side. Awareness Signal, streaks, Focus Wallet, Focus Mode, and penalty/escalation
+  (FREEZE) are untouched. Not integrated to main.
 
 ## Known Live Bugs (bounded)
 

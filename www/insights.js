@@ -662,3 +662,67 @@ function computeInsights(weekKey) {
            topActivity, topActivityMin, worstDist, worstDistMin,
            peakHourLabel, bestDay, bestDayMin };
 }
+
+// ══════════════════════════════════════════════════════
+// ATTENTION SIGNALS (Phase 11.8) — render the derived attention-awareness
+// layer inside the existing end-of-day review. Deterministic numbers come
+// from deriveAttentionSignals() (attention-signals.js); this function only
+// formats them and hosts the one optional subjective rating.
+//
+// Automatic behaviour data is not guaranteed mental attention — the copy is
+// deliberately hedged and the auto metrics are visually separated from the
+// self-rating.
+// ══════════════════════════════════════════════════════
+function renderReviewAttention(dateKey, selfRating) {
+  const el = document.getElementById('rv-attention');
+  if (!el) return;
+
+  const key = dateKey || (typeof getViewingDateKey === 'function' ? getViewingDateKey() : null);
+  const derive = globalThis.deriveAttentionSignals;
+  const toLines = globalThis.attentionSignalLines;
+  if (!key || typeof derive !== 'function' || typeof toLines !== 'function') {
+    el.style.display = 'none'; el.innerHTML = ''; return;
+  }
+
+  const dayEntries = (typeof getEntriesForDateWindow === 'function'
+    ? getEntriesForDateWindow(key)
+    : []).filter(e => e && !e.missed && !e.deleted);
+  const planTasks = (typeof getPlanItems === 'function' ? getPlanItems(key) : [])
+    .map(i => i && i.task)
+    .filter(Boolean);
+
+  const signals = derive(dayEntries, { planTasks, selfRating: selfRating || null, dateKey: key });
+  const lines = toLines(signals).filter(l => l.key !== 'rating');
+
+  const ratingBtn = (val, label) => {
+    const on = (selfRating || null) === val;
+    return `<button type="button" class="btn sm ${on ? 'primary' : 'ghost'}"
+      onclick="setReviewFocusRating('${val}')" aria-pressed="${on}">${label}</button>`;
+  };
+
+  const autoBlock = signals.hasData && lines.length
+    ? `<div class="rv-closeout-grid" style="margin-top:6px">
+        ${lines.map(l => `<div class="rv-closeout-cell"><span>${l.label}</span><strong>${l.value}</strong></div>`).join('')}
+      </div>
+      <div class="note" style="margin-top:6px;font-size:10px;line-height:1.5">
+        Read from your logged activity — an estimate of attention, not an exact measure.
+      </div>`
+    : `<div class="note" style="margin-top:6px;font-size:11px">
+        Not enough logged activity today to read a focus pattern.
+      </div>`;
+
+  el.style.display = 'block';
+  el.innerHTML = `<div class="rv-closeout">
+      <div class="rv-closeout-head">Attention today</div>
+      ${autoBlock}
+      <div style="margin-top:10px">
+        <div class="note" style="font-size:11px;margin-bottom:5px">How did today feel? (optional)</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${ratingBtn('focused', 'Focused')}
+          ${ratingBtn('mixed', 'Mixed')}
+          ${ratingBtn('distracted', 'Distracted')}
+        </div>
+      </div>
+    </div>`;
+}
+if (typeof globalThis !== 'undefined') globalThis.renderReviewAttention = renderReviewAttention;
