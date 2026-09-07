@@ -1,7 +1,6 @@
 // node test.js
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import './focus-wallet.js';
@@ -5405,21 +5404,38 @@ asyncTest('writer restores generated history after a restored completion rebuild
 }));
 
 // ── Capacitor www runtime mirror parity ─────────────────────────────────────
-// Capacitor's webDir is "www" (capacitor.config.json), so www/*.js and
-// www/index.html are what a real Android build ships — not just a stale
-// reference copy. Nothing regenerates them automatically (sync.bat does, but
-// it also commits and pushes, so it's not run in CI/tests). A root bug fix
-// that isn't mirrored here ships fixed on web/PWA but still-broken on Android.
+// Capacitor's webDir is "www" (capacitor.config.json), so www/ is what a real
+// Android build ships — not just a stale reference copy. The required set is
+// the browser-runtime dependency closure rooted at the LIVE index.html
+// (<script>/<link>/serviceWorker + transitive local ES imports), computed by
+// scripts/runtime-mirror.mjs — NOT a hand-maintained list, so a new <script>
+// tag or module import is picked up here automatically. A root fix that isn't
+// mirrored ships fixed on web/PWA but still-broken on Android.
+// Contract/negative tests for the closure parser live in
+// scripts/runtime-mirror.test.js; this is the live guard on the real tree.
 console.log('\nCapacitor www runtime mirror parity');
-['index.html', 'storage.js', 'focus-wallet.js'].forEach(name => {
-  test(`www/${name} is byte-identical to root ${name}`, () => {
-    const root = readFileSync(new URL(`./${name}`, import.meta.url));
-    const mirrored = readFileSync(new URL(`./www/${name}`, import.meta.url));
-    assert.ok(
-      root.equals(mirrored),
-      `www/${name} has drifted from root ${name} — copy the reviewed root file to www/${name} (see sync.bat's copy step; do not hand-edit).`
-    );
-  });
+const { computeClosure, checkParity } = await import('./scripts/runtime-mirror.mjs');
+
+test('index.html runtime closure has no unresolved or dev-only dependencies', () => {
+  const closure = computeClosure();
+  assert.deepEqual(
+    closure.missing,
+    [],
+    `unresolved runtime dependencies referenced from index.html: ${closure.missing.join(', ')}`
+  );
+  assert.deepEqual(
+    closure.devLeaks,
+    [],
+    `dev-only files treated as runtime: ${closure.devLeaks.join(', ')}`
+  );
+});
+
+test('www/ is a byte-identical mirror of the index.html runtime closure', () => {
+  const result = checkParity();
+  assert.ok(
+    result.ok,
+    `www/ runtime parity drift — run \`node scripts/runtime-mirror.mjs --write\`, review the diff, commit:\n  ${result.problems.join('\n  ')}`
+  );
 });
 
 await Promise.all(asyncTests);
