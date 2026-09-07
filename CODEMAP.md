@@ -17,9 +17,16 @@
 - `storage.js` — line 1299 → **EXTRACTED** (see below)
 - `insights.js` — line 1300 → **EXTRACTED** (see below)
 - `focus-wallet.js` — line 1301 → **EXTRACTED** (see below)
+- `attention-signals.js` — module script include → **EXTRACTED** (see below; pure Phase 11.8 attention-signal derivation, attaches to `globalThis`)
 - `learning-plan-ui.js` — module script include → **EXTRACTED** (see below; imports `learning-plan-import.js`, `learning-plan-next-action.js`, `life-ledger-runtime.js`)
 - `capability-career-ui.js` — module script include → **EXTRACTED** (see below; imports Capability/Career model, repository, import, analytics, and reads Life Ledger runtime)
 - `life-ledger-export-ui.js` — module script include → **EXTRACTED** (see below; imports `life-ledger-transport.js`)
+- `life-feed-model.js` — module → **EXTRACTED** (see below; pure Unified Life Feed projection over Life Ledger events)
+- `life-feed-ui.js` — module script include → **EXTRACTED** (see below; imports `life-feed-model.js`, `life-ledger-runtime.js`)
+- `life-character-sheet-model.js` — module → **EXTRACTED** (see below; pure Life Character Sheet projection — Phase 7)
+- `cross-domain-intelligence-model.js` — module → **EXTRACTED** (see below; pure rule-based "what deserves attention next" engine — Phase 8; consumes the Character Sheet + analyzer, no LLM)
+- `cross-domain-intelligence-ui.js` — module script include → **EXTRACTED** (see below; Life view "Next" sub-view — Phase 8; imports the Character Sheet model, the intelligence model, and the three Life stores)
+- `life-character-sheet-ui.js` — module script include → **EXTRACTED** (see below; Life view Character Sheet + the three-way sub-nav; imports `life-character-sheet-model.js`, `life-ledger-runtime.js`, `learning-plan-repository.js`, `capability-career-repository.js`)
 - `focus-mode.js` — line 7562 → **EXTRACTED** (see below)
 
 ---
@@ -35,10 +42,29 @@ Depends on: Firebase SDK globals, `focusRedemptions` global, `sumEnergyMinutes()
 
 ### insights.js
 Lines: external file
-Purpose: Weekly insight computation (deep hours, waste patterns, best day, peak hour).
-Functions: `computeInsights(weekKey)`
+Purpose: Per-entry feedback flash, escalation check, Awareness Signal ("Today's Signal"), daily
+pulse summary, weekly insight computation, and the Phase 11.8 review "Attention today" block.
+Functions: `analyzeBehavior()`, `renderFeedbackFlash()`, `dismissFeedbackFlash()`,
+`checkEscalation()`, `generateInsights()`, `renderAwarenessSignal()`, `getDailySummaryInsight()`,
+`buildDailySummaryHTML()`, `computeInsights(weekKey)`, `renderReviewAttention(dateKey, selfRating)`
 Variables: (managed internally)
-Depends on: `entries` global, `storage.js` helpers, `sumEntryMinutes()`, `sumEnergyMinutes()`
+Depends on: `entries` / `settings` / `reviews` globals, `storage.js` helpers, `sumEntryMinutes()`,
+`sumEnergyMinutes()`, `getEntriesForDateWindow()`, `getPlanItems()`, `deriveAttentionSignals()`,
+`attentionSignalLines()`
+
+### attention-signals.js
+Lines: external file (Phase 11.8 — new computation module)
+Purpose: Pure deterministic derivation of the "minimal distraction signals" attention-awareness
+layer from the existing `entries` array — longest coherent focus stretch, meaningful attention
+breaks, likely distraction (`~N min`), recoveries + median recovery time. Blocks are classified
+focus / neutral / distraction by their own energy label or Today Plan membership, never by
+app/site/window, so related-tool switching stays one coherent stretch. No DOM, no `Date.now()`,
+no mutation, no network, no ML/AI. Thresholds + exact semantics in the module header.
+Functions: `deriveAttentionSignals(entries, options)`, `attentionSignalLines(signals)`
+Variables: `ATTENTION_SIGNALS_VERSION`, `ATTENTION_SIGNALS_CONFIG` (frozen defaults)
+Depends on: no app globals; ESM exports + attaches `deriveAttentionSignals` /
+`attentionSignalLines` / `ATTENTION_SIGNALS_CONFIG` to `globalThis`
+Tests: `attention-signals.test.js` (26 synthetic-timeline cases)
 
 ### focus-wallet.js
 Lines: external file
@@ -142,6 +168,48 @@ Functions: `downloadLifeLedgerSnapshot()`
 Variables: —
 Depends on: `life-ledger-transport.js`, DOM globals
 
+### life-feed-model.js
+Lines: external file
+Purpose: Unified Life Feed V1 canonical model. A read-only projection over stored Life Ledger events (`createLocalLifeLedgerStore().listEvents()`): maps the six event types to stable user-facing domains (Time / Learning / Workout / Meal), derives per-type human titles/details without fabricating missing facts, groups events into source-local calendar days with Today/Yesterday labels, and orders them deterministically (occurredAt / occurredDate anchor, then recordedAt only for date-only ties, then type + eventId) — fact-parity with `obsidian-life-ledger-renderer.js`. Excludes tombstoned events; skips unsupported/unreadable events into a `skipped[]` list rather than throwing. Never mutates a source event.
+Functions: `buildLifeFeed()`, `filterLifeFeed()`, `compareFeedItems()`
+Variables: `LIFE_FEED_DOMAINS`, `LIFE_FEED_FILTERS`, `LIFE_FEED_DOMAIN_LABELS`
+Depends on: `Intl` (formatter caches), no other modules
+
+### life-feed-ui.js
+Lines: external file
+Purpose: Browser UI for the Life tab (`#view-life`). Reads the runtime Life Ledger store once, builds the feed via `life-feed-model.js` with a cheap event-signature cache, renders date-grouped scannable rows with domain filter chips (All / Time / Learning / Workout / Meal), domain-aware empty states, and an unrecognized-event footnote. Read-only: never writes to the ledger, Meal, or Workout.
+Functions: `renderLifeFeed()`
+Variables: module-local UI state (`activeDomain`, `cachedFeed`, `cachedSignature`)
+Depends on: `life-feed-model.js`, `life-ledger-runtime.js`, DOM globals
+
+### life-character-sheet-model.js
+Lines: external file
+Purpose: Life Character Sheet V1 canonical projection (Phase 7). Pure, read-only "where am I right now?" snapshot. `buildLifeCharacterSheet({ ledgerEvents, learningPlans, capabilityProfile, now, referenceTimeZone, liveIngestedTypes })` → `{ generatedAt, referenceTimeZone, todayKey, focus, time, learning, capability, workout, meal, coverage, skippedLedgerEvents }`. Ledger-derived facts (focus / workout / meal / learning completions) are read off `buildLifeFeed()`'s accepted item set — same tombstone / revision / day-bucketing rules — then joined to the raw event only for a numeric payload value; Capability comes straight from `analyzeCapabilityCareer()`; learning progress + next step from `getLearningPlanProgress()` / `findNextLearningPlanStep()`. Zero-vs-unknown: `liveIngestedTypes` (default `focus_session_completed` + `plan_step_completed`) decides when a domain may state a literal 0; everything else reports `not-connected` / `loaded-not-live`. Never mutates inputs, never persisted as a new store. Phase 8: the `learning` section also carries stable ids — `activePlan.id`, `activePlan.nextStep.{stepId,lessonId,phaseId}`, `latestCompletedStep.planId` — so Cross-Domain Intelligence can reuse the sheet's exact picks.
+Functions: `buildLifeCharacterSheet()`
+Variables: `LIFE_CHARACTER_SHEET_LIVE_INGESTED_TYPES`, `LIFE_CHARACTER_SHEET_MODEL_V1`
+Depends on: `life-feed-model.js`, `capability-career-analytics.js`, `learning-plan-next-action.js`, `learning-plan-model.js`
+
+### cross-domain-intelligence-model.js
+Lines: external file
+Purpose: Cross-Domain Intelligence V1 engine (Phase 8). Pure, deterministic, rule-based (no LLM) — answers "what deserves my attention next, and what is the single highest-leverage next action I can actually take?". `buildCrossDomainIntelligence({ characterSheet, ledgerEvents, learningPlans, capabilityProfile })` → `{ generatedAt, referenceTimeZone, todayKey, coverage, capability, signals[], candidates[], recommendedAction, alternatives[], blockedDomains[], abstained, abstentionReason, explanation }`. Keeps FACT → SIGNAL → CANDIDATE → RECOMMENDATION separate. CONSUMES the Character Sheet + a parity call to `analyzeCapabilityCareer()` (same `generatedAt` + `ledgerEvents`) + a parity call to `buildLifeFeed()` for the current-truth event set — it is not a second analyzer and not a truth store. Candidate sources: `learning-plan-step` (the sheet's active-plan next step, reused verbatim — emitted ONLY when the plan is target-aligned OR actively tracked, i.e. ≥ 1 current-truth `plan_step_completed` maps to it; a plan the sheet picked only by `updatedAt` recency is a signal, never a candidate) and `capability-next-action` (the analyzer's own `nextAction`, only when stall-driven and — for ship/portfolio kinds — anchored to an explicit target-linked project). Alignment → HIGH only when a plan→target capability link is within `CAPABILITY_CAREER_ANALYTICS_RULES.recentDays` of `generatedAt` (same window as `analytics.recentEvidence()`); an old link falls through to MEDIUM. Coverage-aware: only `active` / `no-events-yet` domains participate; Workout / Meal / free-form activity land in `blockedDomains` as "not evaluated". Ranking = 4 discrete tiers → HIGH/MEDIUM/LOW strength → stable `candidateId` tie-break. Abstains (`recommendedAction: null`) rather than inventing a task. Never mutates inputs, never calls `Date.now()`, order-independent.
+Functions: `buildCrossDomainIntelligence()`, `rankCandidates()`, `dedupeCandidates()`
+Variables: `CDI_MODEL_V1`, `CDI_EVIDENCE_STRENGTH`, `CDI_PRIORITY_CLASS`
+Depends on: `life-feed-model.js`, `capability-career-analytics.js` (and consumes `life-character-sheet-model.js` output passed in)
+
+### cross-domain-intelligence-ui.js
+Lines: external file
+Purpose: Browser UI for the Life tab's "Next" sub-view (`#cross-domain-intelligence-root`). Reads the Life Ledger runtime store, Learning Plan repository, and Capability profile ONCE per render, builds `buildLifeCharacterSheet()`, hands it to `buildCrossDomainIntelligence()`, and paints: recommendation (headline + "why this" + evidence + textual strength tag) → other valid options → what's driving attention (signals) → data not evaluated. The only interactive control is a `[data-cdi-open]` button that calls the app's existing `window.showView('learning'|'career')` — no plan-step completion, no focus start, no writes to any store. Semantic headings, escaped rendering, `aria-live="polite"`. Resolves the reference timezone the same way the other two Life surfaces do.
+Functions: `renderCrossDomainIntelligence()` (window-exposed; called by `life-character-sheet-ui.js`'s sub-nav)
+Variables: module-local (`initialized`)
+Depends on: `life-character-sheet-model.js`, `cross-domain-intelligence-model.js`, `life-ledger-runtime.js`, `learning-plan-repository.js`, `capability-career-repository.js`, `window.showView`, DOM globals
+
+### life-character-sheet-ui.js
+Lines: external file
+Purpose: Browser UI for the Life tab's Character Sheet sub-view (`#life-character-sheet-root`) and the `#view-life` three-way sub-navigation (Character Sheet · Timeline · Next; opens on Character Sheet, remembers the last choice in `ta3-life-subview` — now also accepts `next`). Reads the Life Ledger runtime store, Learning Plan repository, and Capability profile ONCE per render, hands them to `buildLifeCharacterSheet()`, and paints factual sections + honest coverage lines. `<progress>` for bounded plan progress; semantic headings; no scores, no advice. Read-only: never writes to any store. Also resolves the reference timezone the same way `life-feed-ui.js` now does. `showLifeSubview('next')` calls `window.renderCrossDomainIntelligence()`.
+Functions: `renderLifeView()` (entry point for `showView('life')`), `renderLifeCharacterSheet()` (window-exposed re-render)
+Variables: module-local (`initialized`, `LIFE_SUBVIEWS`, `LIFE_SUBVIEW_SUBTITLES`)
+Depends on: `life-character-sheet-model.js`, `life-ledger-runtime.js`, `learning-plan-repository.js`, `capability-career-repository.js`, `life-feed-ui.js` (`window.renderLifeFeed`), `cross-domain-intelligence-ui.js` (`window.renderCrossDomainIntelligence`), DOM globals
+
 ### capability-career-model.js
 Lines: external file
 Purpose: Pure Capability/Career V1 data model for skills, knowledge areas, tools, career targets, projects, portfolio artifacts, and explicit evidence mappings. Validates stable IDs, JSON-safe state, timestamps, references, archive-safe links, and duplicate Life Ledger evidence mappings.
@@ -186,17 +254,64 @@ Depends on: no app globals
 
 ### obsidian-life-ledger-writer.js
 Lines: external file
-Purpose: Node-only safe writer for Obsidian Life Ledger export plans. Enforces denied vault roots, managed subtree containment, symlink/junction parent checks, generated-file conflict protection, idempotent writes, and constrained stale generated Daily cleanup.
-Functions: `resolveObsidianLifeLedgerPath()`, `writeObsidianLifeLedgerExport()`
-Variables: `OBSIDIAN_LIFE_LEDGER_MANAGED_DIR`
+Purpose: Node-only safe writer for Obsidian Life Ledger export plans. Enforces denied vault roots, managed subtree containment, symlink/junction parent checks, generated-file conflict protection, idempotent writes, and constrained stale generated Daily cleanup. Test-vault-only by design — its denylist unconditionally blocks both real vaults. Phase 9 added additive `export` keywords to its denylist-agnostic containment primitives so `obsidian-life-ledger-sync.js` can reuse them; no behavior change.
+Functions: `resolveObsidianLifeLedgerPath()`, `writeObsidianLifeLedgerExport()`, and (reused by the sync planner) `assertRelativePath()`, `assertNoLinkEscape()`, `assertSafeExistingLeaf()`, `pathEqualsOrContains()`, `isLinkStats()`, `realPathOrResolved()`, `readTextIfExists()`, `writeFileAtomically()`, `defaultFsAdapter()`
+Variables: `OBSIDIAN_LIFE_LEDGER_MANAGED_DIR`, `OBSIDIAN_LIFE_LEDGER_DENIED_VAULT_ROOTS`
 Depends on: Node `fs/promises`, Node `path`, `obsidian-life-ledger-renderer.js`
+
+### obsidian-life-ledger-sync.js
+Lines: external file
+Purpose: Phase 9 production-capable Obsidian sync planner/applier (hardened after independent review). Target model `{ vaultPath, managedRoot, mode: test|production, allowApply }`; multi-signal read-only vault identity check; a schema-v2 ownership sentinel (`Life Ledger/System/MANAGED-BY-CHRONASENSE.md`) that carries `manifestSha256` cryptographically binding it to the exact bytes of the deterministic manifest (`Life Ledger/System/manifest.json`). PRIMARY INVARIANT: no file is overwritten without a proven previous-content baseline — a marker comment, a bare sentinel, or an unbound manifest are each insufficient, and any gap fails closed (`missing_manifest_baseline`, `manifest_integrity_mismatch`, `sentinel_content_mismatch`, `legacy_sentinel_migration_required`). Immutable `planObsidianSync()` → `applyObsidianSync(plan, authorization)` split with a `planFingerprint`, a preflight that re-hashes EVERY operation (UNCHANGED/STALE included) for TOCTOU, per-write re-resolution + link/leaf re-check + content-hash assertion, and an explicit content→manifest→sentinel(LAST) apply order. Manifest is treated as untrusted disk input: Windows-canonical key identity, normalized-duplicate rejection, generated-path allowlist, reserved-name / colon / trailing-dot rejection. STALE-not-delete (no deletion by absence). Partial-apply failures report what was written and force the next plan to fail closed on the incomplete ownership chain. Real rollback-artifact API (`prepareObsidianRollbackArtifact` / `verifyObsidianRollbackReceipt`) — first-run pre-state receipt (must bind `backup === null`; any payload is rejected) or managed-subtree-only backup copy, bound to canonical vault + plan fingerprint + on-disk receipt SHA-256. Per-mode denylist (test denies both real vaults; production denies stale Desktop + test vault, needs exact canonical-path match). Production apply requires `OBSIDIAN_PRODUCTION_SYNC_ENABLED === true` (flipped on in Phase 9B, after independent review) PLUS the full runtime authorization chain — mode/allowApply/apply, exact expected-vault match, a verified rollback receipt, and (first run only) an explicit first-run acknowledgement; the code-level switch alone never causes a write. `evaluateProductionAuthorization()` is the testable second layer.
+Functions: `createObsidianSyncTarget()`, `verifyObsidianVaultIdentity()`, `planObsidianSync()`, `applyObsidianSync()`, `evaluateProductionAuthorization()`, `prepareObsidianRollbackArtifact()`, `verifyObsidianRollbackReceipt()`, `formatObsidianSyncPreview()`
+Variables: `OBSIDIAN_SYNC_SCHEMA_VERSION` (2), `OBSIDIAN_SYNC_OWNER`, `OBSIDIAN_PRODUCTION_SYNC_ENABLED` (true, as of Phase 9B), `OBSIDIAN_SYNC_OPERATIONS`, `OBSIDIAN_SENTINEL_RELATIVE_PATH`, `OBSIDIAN_MANIFEST_RELATIVE_PATH`, `OBSIDIAN_SYSTEM_README_RELATIVE_PATH`
+Depends on: Node `fs/promises`, Node `path`, Node `crypto`, `obsidian-life-ledger-writer.js`, `obsidian-life-ledger-renderer.js`
 
 ### scripts/export-life-ledger-to-obsidian.mjs
 Lines: external file
-Purpose: Node CLI transport from downloaded Life Ledger snapshot JSON to the reviewed Obsidian renderer/writer. Defaults to dry-run, validates untrusted snapshots before rendering, and requires `TEST-VAULT.md` at the vault root for apply mode.
+Purpose: Node CLI transport from downloaded Life Ledger snapshot JSON to the reviewed Obsidian renderer/writer. Defaults to dry-run, validates untrusted snapshots before rendering, and requires `TEST-VAULT.md` at the vault root for apply mode. Unchanged in Phase 9 — the legacy test-vault-only path.
 Functions: `runLifeLedgerObsidianExport()`
 Variables: —
 Depends on: Node `fs/promises`, Node `path`, `life-ledger-transport.js`, `obsidian-life-ledger-renderer.js`, `obsidian-life-ledger-writer.js`
+
+### scripts/sync-life-ledger-to-obsidian.mjs
+Lines: external file
+Purpose: Phase 9 production-capable CLI over `obsidian-life-ledger-sync.js`. Requires an explicit `--mode test|production` (no default), always plans + prints a preview first, writes only with `--apply`. Production apply additionally needs `--expected-vault` (exact canonical match), `--first-run-ack` (first run only), and `--rollback-receipt <path>` (a JSON receipt from `prepareObsidianRollbackArtifact`) — every gate is still independently enforced even though the code-level `OBSIDIAN_PRODUCTION_SYNC_ENABLED` switch is on. `--rollback-receipt` is loaded by `loadRollbackReceiptFromDisk()`: resolve the path, read the exact disk bytes, `JSON.parse`, attach runtime-only `receiptPath` + `receiptSha256` (SHA-256 of the live bytes, never caller-supplied) to the in-memory object only — the receipt JSON is never rewritten; fails closed on missing / unreadable / invalid-JSON / non-object. This CLI remains the manual, human-operated path — Phase 10's background worker (below) does not invoke it and does not replace it.
+Functions: `runLifeLedgerObsidianSync()`, `loadRollbackReceiptFromDisk()`
+Variables: —
+Depends on: Node `fs/promises`, Node `path`, Node `crypto`, `life-ledger-transport.js`, `obsidian-life-ledger-sync.js`
+
+### life-ledger-sync-cycle.js
+Lines: external file
+Purpose: Phase 10 — the "existing-root safe sync transaction". Pure orchestration composing the already-reviewed `obsidian-life-ledger-sync.js` primitives into one full worker cycle: parse an outbox snapshot → plan → classify (no source / unchanged / would-sync / conflict / synced / intervention-required / error) → for safe changes, prepare a FRESH existing-root rollback artifact → verify it → apply → verify the resulting state. Never creates a managed root and never supplies a first-run acknowledgement on a human's behalf (`plan.isFirstRun` is always treated as `intervention_required`). Distinguishes before-write failures (safe to retry later, zero writes) from after-write-started failures (`partial_apply_failure` — reported precisely via `written`/`failedRelativePath`, never blindly retried). `summarizeCycleResultForOutbox()` trims a result to the small, path-free subset safe to write back into the browser-writable outbox folder.
+Functions: `runLifeLedgerSyncCycle()`, `summarizeCycleResultForOutbox()`
+Variables: `LIFE_LEDGER_SYNC_CYCLE_SCHEMA_VERSION`, `LIFE_LEDGER_SYNC_OUTCOMES`
+Depends on: Node `crypto`, `obsidian-life-ledger-sync.js`, `obsidian-life-ledger-writer.js` (`defaultFsAdapter`), `life-ledger-transport.js`
+
+### scripts/life-ledger-sync-worker.mjs
+Lines: external file
+Purpose: Phase 10 — the one-shot background worker CLI, meant to be invoked repeatedly by an external scheduler (see `setup-life-ledger-sync-scheduler.ps1`), never run as a long-lived daemon. Resolves config (CLI flags override `scripts/life-ledger-sync-worker.config.json`, gitignored), acquires a single-instance lock file, reads the browser-written outbox snapshot, calls `runLifeLedgerSyncCycle()` (dry-run unless `--apply` is passed), writes a full run log + `status.json` under `backupsRoot`, and writes a small truthful status file back into the outbox folder for the Settings UI to read. Review-fix hardening: (1) **intervention latch** — a real (`--apply`) cycle result of `outcome === 'intervention_required'` persists `<backupsRoot>/intervention-required.json`; every later `--apply` invocation is refused before the cycle is ever called (zero rollback-artifact prep, zero managed writes, zero receipt-directory churn) until `--clear-intervention` explicitly removes the latch (idempotent; touches nothing else). Dry runs may still observe/report state while latched but never create or clear it. (2) **lock hardening** — liveness (PID alive/dead) is authoritative over age; only an unparsable/PID-less lock falls back to a 30-minute age ceiling. Breaking a stale lock is an atomic rename-to-a-unique-tombstone (`isLockStale()` + `tryCreateLockFile()`), so two concurrent contenders racing the same stale lock can never both proceed — the loser gets a clean `ENOENT` and backs off, never an unhandled exception.
+Functions: `runLifeLedgerSyncWorker()`
+Variables: `LIFE_LEDGER_SYNC_WORKER_OUTBOX_FILENAME`, `LIFE_LEDGER_SYNC_WORKER_STATUS_FILENAME`, `LIFE_LEDGER_SYNC_INTERVENTION_LATCH_FILENAME`, `LIFE_LEDGER_SYNC_INTERVENTION_LATCH_SCHEMA_VERSION`
+Depends on: Node `fs/promises`, Node `path`, Node `crypto`, `life-ledger-sync-cycle.js`
+
+### life-ledger-sync-bridge.js
+Lines: external file
+Purpose: Phase 10 — the browser-side durable transport. Wraps the File System Access API (a user-granted, persisted local folder handle stored in IndexedDB) so every successful Life Ledger write can be mirrored, without a manual export click, into a local outbox file using the exact same deterministic `exportLifeLedgerSnapshotJson()` envelope the manual export already produces. Reads the worker's status file back from the same folder. Fully dependency-injected (`handleStore` / `pickDirectory` / `digestHex` / `exportSnapshotJson`) so the whole enable/resume/disable/status/write lifecycle is unit-testable with an in-memory fake handle — no real browser required. Never throws; a write failure is reported, not raised, so it can never break the caller's primary localStorage write. Review-fix hardening: all mirror writes are serialized through one strict FIFO promise queue (`enqueueWrite()`) — a snapshot is captured only when its task actually starts executing, so a slower older write can never land on disk after a logically-newer one, and one failed write never blocks later calls. `getStatus()` also does a best-effort self-healing refresh (queued, never awaited, never a retry loop) whenever the current canonical hash differs from what this bridge instance last successfully wrote.
+Functions: `createLifeLedgerSyncBridge()`, `isLifeLedgerBackgroundSyncSupported()`
+Variables: `LIFE_LEDGER_SYNC_OUTBOX_FILENAME`, `LIFE_LEDGER_SYNC_STATUS_FILENAME`, `lifeLedgerSyncBridge` (real singleton)
+Depends on: `life-ledger-transport.js`, browser File System Access API + IndexedDB (real singleton only; injectable for tests)
+
+### life-ledger-sync-status-ui.js
+Lines: external file
+Purpose: Phase 10 — Settings UI wiring for Background Sync (`#life-ledger-sync-enable-btn` / `#life-ledger-sync-status` in `index.html`). `describeLifeLedgerSyncStatus()` is a pure, DOM-free function (unit-testable) that renders truthful status text — it only ever claims "Life Ledger synced." when the worker's own status file reports success AND its recorded outbox hash matches the CURRENT local snapshot's hash; local persistence alone is never treated as proof of sync. A `worker.outcome === 'intervention_required'` with `category === 'latched'` gets distinct "paused pending manual review — clear the intervention latch" wording, still tone `error`, never rendered as the generic transient "will retry automatically" case.
+Functions: `describeLifeLedgerSyncStatus()`
+Variables: —
+Depends on: `life-ledger-sync-bridge.js`
+
+### setup-life-ledger-sync-scheduler.ps1
+Lines: external file
+Purpose: Phase 10 — install/start/stop/diagnostic interface for the background worker's Windows Task Scheduler registration. `-Action Install [-IntervalMinutes N] [-Apply]` registers a repeating task (MultipleInstances=IgnoreNew, a 10-year finite `-RepetitionDuration` — not `[TimeSpan]::MaxValue`) that runs `scripts/life-ledger-sync-worker.mjs`, as the current user only while logged on and with no elevation (no `-Principal` supplied); without `-Apply` every scheduled run stays a dry run regardless of what the task does. `-Action Status` / `-Action Uninstall` / `-Action RunOnce` cover the rest of the lifecycle; `-Action Status` also surfaces whether the intervention latch is set. `-Action ClearIntervention` forwards to the worker's `--clear-intervention`. Mirrors the existing `setup-task-scheduler.ps1` registration pattern. NOT run with `-Action Install` during Phase 10's Builder phase — real activation is a separate, post-review step.
+Depends on: Windows Task Scheduler cmdlets, `scripts/life-ledger-sync-worker.mjs`, Node on PATH
 
 ---
 
@@ -254,6 +369,13 @@ Purpose: Career tab markup mount for Capability/Career dashboard and progressive
 Functions: —
 Key IDs: `view-career`, `cap-career-error`, `cap-career-dashboard`, `cap-career-setup`, `nav-career`
 Depends on: `capability-career-ui.js`, `capability-career.css`
+
+## [HTML — Life View (Character Sheet · Timeline · Next)]
+Lines: after the Reflect view, before Learning Plans
+Purpose: Life tab markup: page header + `#life-view-subtitle`, a `.life-subnav` (Character Sheet / Timeline / Next buttons), the `#life-character-sheet-root` mount, the `#life-feed-root` mount, and the `#cross-domain-intelligence-root` mount (all `aria-live="polite"`; `#life-feed-root` and `#cross-domain-intelligence-root` start `hidden`). Nav button `#nav-life` calls `showView('life')`, which calls `window.renderLifeView()` (falls back to `window.renderLifeFeed()`). The sub-nav opens on the Character Sheet. Still 7 bottom-nav items — no 8th.
+Functions: —
+Key IDs: `view-life`, `life-view-subtitle`, `life-subnav-sheet`, `life-subnav-timeline`, `life-subnav-next`, `life-character-sheet-root`, `life-feed-root`, `cross-domain-intelligence-root`, `nav-life`
+Depends on: `life-character-sheet-ui.js` (owns the sub-nav), `life-feed-ui.js`, `cross-domain-intelligence-ui.js`; CSS `.life-feed-*` / `.life-subnav` / `.lcs-*` / `.cdi-*` blocks appended to `style.css`
 
 ## [HTML — Desktop Side Panels]
 Lines: 1579–1613
@@ -399,8 +521,8 @@ Depends on: `entries`, `getDateInTZ()`, `entryTimeRange()`, `tzParseTime()`, `_d
 
 ## [Statistics & Scoring]
 Lines: 3025–3124
-Purpose: Per-array metrics: deep score %, overlap-safe duration/deep-hour helpers, consecutive-day streaks, identity score + level label.
-Functions: `computeDeepScore()`, `_dateKeyPlusDays()`, `entryDurationMinutes()`, `entryTimeRange()`, `sumEntryMinutes()`, `sumEnergyMinutes()`, `computeDeepHrs()`, `computeStreak()`, `computeCleanStreak()`, `computeIdentityScore()`, `getIdentityLevelWithEmoji()`
+Purpose: Per-array metrics: deep score %, overlap-safe duration/deep-hour helpers, consecutive-day streaks.
+Functions: `computeDeepScore()`, `_dateKeyPlusDays()`, `entryDurationMinutes()`, `entryTimeRange()`, `sumEntryMinutes()`, `sumEnergyMinutes()`, `computeDeepHrs()`, `computeStreak()`, `computeCleanStreak()`
 Variables: —
 Depends on: `entries`, `getDateInTZ()`, `toDateKey()`
 
@@ -488,9 +610,15 @@ accountability banner; format week labels and save timestamps. `checkReviewPromp
 this at `settings.reviewTime` (default 22:00); morning times such as 08:00 make the prior
 calendar day due the next morning for graveyard-shift closeout. **This is the daily habit hook
 the whole plan loop hangs on.**
-Functions: `openReview()`, `saveReview()`, `renderYesterdayPromise()`, `formatWeekLabel()`, `formatSavedAt()`, `computeDailySummary()`, `renderDailySummary()`, `checkReviewPrompt()`
-Variables: `_reviewDateKey`, `_reviewUnloggedOk`
-Depends on: `reviews`, `plans`, `entries`, `persist()`, `renderToday()`, Review Plan Picker, Statistics section
+Functions: `openReview()`, `saveReview()`, `setReviewFocusRating()`, `renderYesterdayPromise()`, `formatWeekLabel()`, `formatSavedAt()`, `computeDailySummary()`, `renderDailySummary()`, `checkReviewPrompt()`
+Variables: `_reviewDateKey`, `_reviewUnloggedOk`, `_reviewFocusRating`
+Depends on: `reviews`, `plans`, `entries`, `persist()`, `renderToday()`, Review Plan Picker, Statistics section, `renderReviewAttention()` (insights.js)
+
+Phase 11.8: the modal hosts an **"Attention today"** block (`#rv-attention`, rendered by
+`renderReviewAttention()` in `insights.js`) showing the derived attention signals, plus one
+optional `reviews[dateKey].focusRating` (`focused` / `mixed` / `distracted` / `null`) set by
+`setReviewFocusRating()`. The rating is stored in `reviews` and synced like every other review
+field; it never feeds the automatic numbers.
 
 ⚠ `applyPromiseAsIntention()` and the banner's "Set focus" row were **retired** — the Today Plan
 strip owns "what you said you'd do today". The banner now renders only yesterday's waste traps and

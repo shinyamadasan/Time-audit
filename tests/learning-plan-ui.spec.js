@@ -1497,6 +1497,26 @@ test('later generic Focus cannot inherit Learning Plan provenance', async ({ pag
   expectNoLearningPlanProvenance(state.entries);
 });
 
+test('Learning Plan Focus does not show the generic Life Ledger clarification toast', async ({ page }) => {
+  await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
+  await openLearningPlans(page);
+  await stubFocusAudio(page);
+  await page.getByRole('button', { name: 'Start Focus: Step A' }).click();
+
+  const state = await page.evaluate(() => {
+    focusStartTime = Date.now() - 7 * 60 * 1000;
+    confirmExitFocus();
+    return {
+      toastText: document.getElementById('toast').textContent,
+      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+    };
+  });
+
+  expect(state.entries).toHaveLength(1);
+  expect(state.toastText).not.toContain('Focus saved to your timeline');
+  expect(state.toastText).toContain('Logged:');
+});
+
 test('Learning Plan Focus A followed by Learning Plan Focus B carries only B provenance', async ({ page }) => {
   let second = secondLearningPlan();
   second = addPhase(second, { title: 'API phase' }, { idGenerator: sequencedIds('phase-b'), clock: fixedClock() });

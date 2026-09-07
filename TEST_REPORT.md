@@ -5,6 +5,101 @@
 
 ---
 
+## Phase 8 — recommendation-honesty fixes (post independent review) · 2026-09-02
+branch: `feat/cross-domain-intelligence-v1`. Pre-fix HEAD `5fb7dc280732c26cd7fb2ba81ca0a8de32708d9a`,
+  base `4857dc4d2a63c4aac4660edf8940f63c6e7f6d16` (verified). Isolated worktree; original `main`,
+  Meal, and Workout untouched (status + protected hashes re-verified).
+scope: the two BLOCKER fixes only — bare recency-fallback plan must not be a recommendation
+  (Finding 1); plan-level historical alignment must not grant HIGH indefinitely (Finding 2,
+  reuses `CAPABILITY_CAREER_ANALYTICS_RULES.recentDays`). 3 files changed:
+  `cross-domain-intelligence-model.js`, `cross-domain-intelligence-model.test.js`,
+  `tests/cross-domain-intelligence-ui.spec.js`. No UI code, no `index.html`, no `style.css`, no
+  Character Sheet model.
+suite: `node cross-domain-intelligence-model.test.js`; `npm test`; `npm run test:adapter-contracts`;
+  `npm run lint`; `npx playwright test tests/cross-domain-intelligence-ui.spec.js` + the full
+  Playwright suite; strict `npm run test:cross-repo-compat` with `MEAL_REPO_PATH` /
+  `OPENGYM_REPO_PATH`; `node --check`; `git diff --check`; control-byte / UTF-8 scan.
+result:
+  - `node cross-domain-intelligence-model.test.js`: 45/45 (was 35). New: M (single recency
+    plan → no candidate, abstain, signal stays), M2 (multiple recency plans → same), N
+    (metadata-only `updatedAt` bump makes the sheet pick Plan B, engine still abstains, Plan B
+    never in `candidates`, abstention reason says "picked only by recency"), N2 (flipping which
+    plan is newest doesn't change the abstained outcome), O (old target-linked completion link
+    → candidate stays MEDIUM/tier-4 because the plan is actively tracked, `aligned:false`,
+    explanation does not imply current alignment), and 3 recency-boundary tests (observedAt ==
+    lower bound → HIGH; 1 ms before → MEDIUM; future → MEDIUM). "Character Sheet parity: step
+    counts" split into an abstention variant (signal carries `6 of 10` / `6/10`, never `5 of
+    10`) and a tracked-plan variant (count in the recommendation `why`).
+  - self-audit script (10 explicit proofs) — all PASS: bare recency → no candidate; metadata
+    `updatedAt` → no recommendation; recent explicit chain → HIGH; old linkage → MEDIUM not
+    HIGH; tracked-not-aligned → MEDIUM/tier-4 actionable; neither → abstain; coverage behavior
+    unchanged; capability ranking unchanged; Character Sheet unchanged; no source/project
+    stores modified.
+  - `npm test`: PASS. 671 model/unit — `test.js` 448; workout-adapter 33, meal-adapter 45,
+    meal-cross-repo 10, temporal-regression 20, life-feed-model 36, life-character-sheet-model
+    34, cross-domain-intelligence-model 45. 0 fail, 0 skip.
+  - Scenario A–L re-checked: A still HIGH when the link is recent; B anchored shipping still
+    beats (now genuinely) aligned learning, learning kept as alternative; C shipping-without-
+    project stays a signal, an actively tracked learning plan is recommended; D no-target but
+    actively tracked → MEDIUM candidate; E empty → abstain; F/G/H workout/meal never
+    recommend; I focus-zero context only; J tombstone/revision — tombstoned completion can't
+    create alignment (candidate is MEDIUM via a separate live completion); K dedupe unchanged;
+    L capability tier-3 still beats non-aligned tracked learning (MEDIUM alternative).
+  - `npm run test:adapter-contracts`: PASS (33 / 45 / 10 / 12 / 12 / 20).
+  - `npm run lint`: 0 errors, 19 pre-existing warnings, exit 0.
+  - Playwright: `cross-domain-intelligence-ui` 13/13; full suite 208/208, 0 failures.
+  - strict `npm run test:cross-repo-compat`: 3/3 legs PASS (ChronaSense / Meal / Workout), no
+    skips, exit 0.
+  - `node --check` clean; `git diff --check` clean; control-byte / UTF-8 scan: 0 control bytes,
+    all UTF-8 valid.
+untested: unchanged from the first-pass entry — no deployment, mobile install, Firebase, Obsidian,
+  background automation, or real end-user data. Pre-integration `origin/main` re-fetch +
+  new-commit inspection still owed. STOPPED for targeted independent re-review; not pushed,
+  not merged, not integrated.
+
+## Phase 8 — Cross-Domain Intelligence / Highest-Leverage Next Action V1 — first-pass build · 2026-09-01
+branch: `feat/cross-domain-intelligence-v1` (base `4857dc4d2a63c4aac4660edf8940f63c6e7f6d16`,
+  == origin/main after fetch at phase start). Isolated git worktree; original `main` untouched.
+suite: `npm test`; `npm run test:adapter-contracts`; `npm run lint`; strict
+  `npm run test:cross-repo-compat` with `MEAL_REPO_PATH` / `OPENGYM_REPO_PATH` set; Playwright
+  `smoke`, `learning-plan-ui`, `capability-career-ui`, `plan`, `life-feed-ui`,
+  `life-character-sheet-ui`, and the new `cross-domain-intelligence-ui`; `node --check` on every
+  new / changed `.js`; `git diff --check`; a control-byte / UTF-8 scan over every changed file.
+result:
+  - `npm test`: PASS. 661 model/unit tests — `test.js` 448/448; node:test suites
+    workout-adapter 33, meal-adapter 45, meal-cross-repo 10, temporal-regression 20,
+    life-feed-model 36, life-character-sheet-model 34 (+2 new: exposed learning ids),
+    cross-domain-intelligence-model 35 (new). 0 failures, 0 skips.
+  - Scenario matrix A–L: all pass. A concrete aligned learning candidate (HIGH); B a
+    concrete shipping/portfolio project beats more learning, learning kept as an alternative;
+    C a bare shipping stall with no project stays an attention signal and learning is
+    recommended (no task invented); D no target -> learning candidate at MEDIUM; E empty
+    profile -> abstain; F/G/H workout & meal never evaluated / never "you haven't ..."; I no
+    focus today -> no productivity verdict; J tombstoned completion cannot create alignment;
+    K duplicate candidates collapse by stable id; L deterministic tier + strength ordering.
+  - Parity: `intelligence.capability.{dimensionTotals,target,nextActionKind,stalls}` equals a
+    fresh `analyzeCapabilityCareer()` with the Character Sheet's own args; the recommended
+    learning step is exactly `characterSheet.learning.activePlan.nextStep` (no independent
+    traversal); explanation step counts equal the sheet exactly (never "5 of 10").
+  - `npm run test:adapter-contracts`: PASS (workout 33, meal 45, meal-cross-repo 10, workout
+    source-gate 12, meal source-gate 12, temporal 20).
+  - strict `npm run test:cross-repo-compat`: PASS — all 3 legs executed and passed
+    (ChronaSense adapter-contract gate, Meal source-contract gate, Workout source-contract
+    gate — 29 vitest tests). No skips, exit 0.
+  - `npm run lint`: 0 errors, 19 pre-existing warnings (all in index.html-extracted scripts,
+    none in the two new modules).
+  - Playwright: `cross-domain-intelligence-ui` 12/12, `life-character-sheet-ui` 10/10,
+    `life-feed-ui` 9/9, `capability-career-ui` 8/8, `learning-plan-ui` 77/77, `plan` 27/27,
+    `smoke` 64/64. Total 207/207, 0 failures.
+  - `node --check` clean on all new / changed files; `git diff --check` clean (autocrlf=true,
+    repo normalises to LF); control-byte / UTF-8 scan: 0 control bytes, all UTF-8 valid.
+untested: no production deployment, no mobile install, no Firebase / shared-storage path, no
+  Obsidian export or vault write (Phase 8 does not touch Obsidian — Phase 9), no background
+  automation (Phase 10), no real end-user data. The OUTBOX main-automation race is only
+  mitigated by worktree isolation so far — a fresh `origin/main` fetch + new-commit inspection
+  is still required before integration. STOPPED at the independent-review checkpoint; not
+  pushed, not merged, not deployed.
+
 ## Workout → Life Ledger Adapter V1 — third targeted fix pass · 2026-08-31
 suite: `npm run test:workout-adapter`; `npm test`; `npx playwright test`; ESLint over the repository's
   configured production modules; `node --check` on the adapter, adapter tests, core, runtime,

@@ -544,17 +544,6 @@ function computeDeepHrs(arr, intervalMin = 30, dateKey = null) {
   return +(sumEntryMinutes(arr, e => e.energy === 'deep', intervalMin, dateKey) / 60).toFixed(1);
 }
 
-function computeIdentityScore(arr) {
-  return arr.filter(e => e.onPlan === true && e.energy === 'deep').length;
-}
-
-function getIdentityLevelWithEmoji(score) {
-  if (score >= 8) return 'Operator 🟢';
-  if (score >= 5) return 'Builder 🟡';
-  if (score >= 3) return 'Trying 🟠';
-  return 'Drifting 🔴';
-}
-
 function getTimeByActivity(entriesArr, intervalMin = 30) {
   const map = {};
   entriesArr.forEach(e => {
@@ -874,29 +863,6 @@ test('does not flag overlaps when the raw day total stays under 24 hours', () =>
   assert.equal(getDataDoctorFlaggedIndexes(scan, entriesArr).size, 0);
 });
 
-console.log('\ncomputeIdentityScore(arr)');
-test('empty array returns 0', () => assert.equal(computeIdentityScore([]), 0));
-test('counts only onPlan+deep entries', () => {
-  const arr = [
-    {energy:'deep', onPlan:true},
-    {energy:'deep', onPlan:false},
-    {energy:'shallow', onPlan:true},
-    {energy:'deep', onPlan:true},
-  ];
-  assert.equal(computeIdentityScore(arr), 2);
-});
-test('onPlan null is not counted', () => {
-  const arr = [{energy:'deep', onPlan:null}];
-  assert.equal(computeIdentityScore(arr), 0);
-});
-
-console.log('\ngetIdentityLevelWithEmoji(score)');
-test('0 → Drifting', () => assert.equal(getIdentityLevelWithEmoji(0), 'Drifting 🔴'));
-test('3 → Trying', () => assert.equal(getIdentityLevelWithEmoji(3), 'Trying 🟠'));
-test('5 → Builder', () => assert.equal(getIdentityLevelWithEmoji(5), 'Builder 🟡'));
-test('8 → Operator', () => assert.equal(getIdentityLevelWithEmoji(8), 'Operator 🟢'));
-test('10 → Operator', () => assert.equal(getIdentityLevelWithEmoji(10), 'Operator 🟢'));
-
 console.log('\ngetTimeByActivity(arr)');
 test('aggregates by activity key', () => {
   const arr = [
@@ -1139,6 +1105,24 @@ test('long sports sessions cost points even inside free session count', () => {
     walletEntry('s1', 0, 18, 180, 'Basketball', 'exercise')
   ], [], { intervalMin: 30 }, FW_WEEK);
   assert.equal(wallet.autoCosts, 10);
+});
+
+test('transport activities are not misclassified as sports sessions (PROP-009)', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('t1', 0, 8, 30, 'Public transport', 'errands'),
+    walletEntry('t2', 1, 8, 30, 'Transport to office', 'errands'),
+    walletEntry('t3', 2, 8, 30, 'Air transportation', 'errands')
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.sportsSessions, 0);
+  assert.equal(wallet.autoCosts, 0);
+});
+
+test('"sport" and "sports" activities still count as sports sessions', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('s1', 0, 18, 60, 'Sport', 'exercise'),
+    walletEntry('s2', 1, 18, 60, 'Watching sports', 'exercise')
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.sportsSessions, 2);
 });
 
 test('reward redemptions subtract from the same week balance', () => {
@@ -5418,6 +5402,41 @@ asyncTest('writer restores generated history after a restored completion rebuild
   await writeObsidianLifeLedgerExport(buildObsidianLifeLedgerExport([obsidianStepEvent({ revision: 3 })]).files, { vaultRoot: root });
   assert.ok((await fs.readFile(path.join(root, 'Life Ledger', 'Daily', '2026-08-30.md'), 'utf8')).includes('Synthetic step'));
 }));
+
+// ── Capacitor www runtime mirror parity ─────────────────────────────────────
+// Capacitor's webDir is "www" (capacitor.config.json), so www/ is what a real
+// Android build ships — not just a stale reference copy. The required set is
+// the browser-runtime dependency closure rooted at the LIVE index.html
+// (<script>/<link>/serviceWorker + transitive local ES imports), computed by
+// scripts/runtime-mirror.mjs — NOT a hand-maintained list, so a new <script>
+// tag or module import is picked up here automatically. A root fix that isn't
+// mirrored ships fixed on web/PWA but still-broken on Android.
+// Contract/negative tests for the closure parser live in
+// scripts/runtime-mirror.test.js; this is the live guard on the real tree.
+console.log('\nCapacitor www runtime mirror parity');
+const { computeClosure, checkParity } = await import('./scripts/runtime-mirror.mjs');
+
+test('index.html runtime closure has no unresolved or dev-only dependencies', () => {
+  const closure = computeClosure();
+  assert.deepEqual(
+    closure.missing,
+    [],
+    `unresolved runtime dependencies referenced from index.html: ${closure.missing.join(', ')}`
+  );
+  assert.deepEqual(
+    closure.devLeaks,
+    [],
+    `dev-only files treated as runtime: ${closure.devLeaks.join(', ')}`
+  );
+});
+
+test('www/ is a byte-identical mirror of the index.html runtime closure', () => {
+  const result = checkParity();
+  assert.ok(
+    result.ok,
+    `www/ runtime parity drift — run \`node scripts/runtime-mirror.mjs --write\`, review the diff, commit:\n  ${result.problems.join('\n  ')}`
+  );
+});
 
 await Promise.all(asyncTests);
 
