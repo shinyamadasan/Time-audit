@@ -2,15 +2,28 @@
 // Targets the extracted .js files only (not index.html which requires an HTML plugin).
 export default [
   {
-    files: ['life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'workout-life-ledger-adapter.js', 'meal-life-ledger-adapter.js', 'life-ledger-runtime.js', 'life-ledger-transport.js', 'life-ledger-export-ui.js', 'obsidian-life-ledger-renderer.js', 'obsidian-life-ledger-writer.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js', 'capability-career-model.js', 'capability-career-repository.js', 'capability-career-import.js', 'capability-career-analytics.js', 'capability-career-ui.js', 'capability-career-date.js'],
+    files: ['life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'workout-life-ledger-adapter.js', 'meal-life-ledger-adapter.js', 'life-ledger-runtime.js', 'life-ledger-transport.js', 'life-ledger-export-ui.js', 'life-feed-model.js', 'life-feed-ui.js', 'life-character-sheet-model.js', 'life-character-sheet-ui.js', 'cross-domain-intelligence-model.js', 'cross-domain-intelligence-ui.js', 'obsidian-life-ledger-renderer.js', 'obsidian-life-ledger-writer.js', 'obsidian-life-ledger-sync.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js', 'capability-career-model.js', 'capability-career-repository.js', 'capability-career-import.js', 'capability-career-analytics.js', 'capability-career-ui.js', 'fixtures/resolve-fixture.js', 'life-ledger-sync-cycle.js', 'life-ledger-sync-bridge.js', 'life-ledger-sync-status-ui.js', 'attention-signals.js', 'capability-career-date.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: {
+        globalThis: 'readonly',
         window: 'readonly',
         document: 'readonly',
         Blob: 'readonly',
         URL: 'readonly',
+        process: 'readonly',
+        console: 'readonly',
+        Intl: 'readonly',
+        Date: 'readonly',
+        Math: 'readonly',
+        Set: 'readonly',
+        Map: 'readonly',
+        JSON: 'readonly',
+        structuredClone: 'readonly',
+        crypto: 'readonly',
+        TextEncoder: 'readonly',
+        indexedDB: 'readonly',
       },
     },
     rules: {
@@ -42,12 +55,13 @@ export default [
   },
   {
     files: ['*.js'],
-    ignores: ['www/**', 'node_modules/**', 'life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'workout-life-ledger-adapter.js', 'meal-life-ledger-adapter.js', 'life-ledger-runtime.js', 'life-ledger-transport.js', 'life-ledger-export-ui.js', 'obsidian-life-ledger-renderer.js', 'obsidian-life-ledger-writer.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js', 'capability-career-model.js', 'capability-career-repository.js', 'capability-career-import.js', 'capability-career-analytics.js', 'capability-career-ui.js', 'capability-career-date.js'],
+    ignores: ['www/**', 'node_modules/**', 'attention-signals.js', 'life-ledger-core.js', 'chronasense-life-ledger-adapter.js', 'workout-life-ledger-adapter.js', 'meal-life-ledger-adapter.js', 'life-ledger-runtime.js', 'life-ledger-transport.js', 'life-ledger-export-ui.js', 'life-feed-model.js', 'life-feed-ui.js', 'life-character-sheet-model.js', 'life-character-sheet-ui.js', 'cross-domain-intelligence-model.js', 'cross-domain-intelligence-ui.js', 'obsidian-life-ledger-renderer.js', 'obsidian-life-ledger-writer.js', 'obsidian-life-ledger-sync.js', 'learning-plan-model.js', 'learning-plan-repository.js', 'learning-plan-import.js', 'learning-plan-next-action.js', 'learning-plan-ui.js', 'capability-career-model.js', 'capability-career-repository.js', 'capability-career-import.js', 'capability-career-analytics.js', 'capability-career-ui.js', 'fixtures/resolve-fixture.js', 'life-ledger-sync-cycle.js', 'life-ledger-sync-bridge.js', 'life-ledger-sync-status-ui.js', 'capability-career-date.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script', // classic <script> tags — not ES modules
       globals: {
         // Browser globals
+        globalThis: 'readonly',
         window: 'readonly', document: 'readonly', console: 'readonly',
         localStorage: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly',
         setInterval: 'readonly', clearInterval: 'readonly', Date: 'readonly',
@@ -81,6 +95,10 @@ export default [
         getDailyGoalHrs: 'readonly', getDailyGoalMins: 'readonly',
         getWeeklyGoalMins: 'readonly', getWorkDayStartTs: 'readonly',
         getTodayEntries: 'readonly', getEntriesForWeekKey: 'readonly',
+        getEntriesForDateWindow: 'readonly', getViewingDateKey: 'readonly',
+        getPlanItems: 'readonly', deriveAttentionSignals: 'readonly',
+        attentionSignalLines: 'readonly', renderReviewAttention: 'readonly',
+        setReviewFocusRating: 'readonly',
         sumEntryMinutes: 'readonly', sumEnergyMinutes: 'readonly',
         persist: 'readonly', syncEntries: 'readonly',
         fmtDur: 'readonly', getActivityColor: 'readonly', resetTimer: 'readonly',

@@ -5,6 +5,262 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-06 — Phase 12.0A (static root↔www parity + safe tooling) integrated
+
+**Phase 12.0A is built, independently reviewed (verdict: PASS), and integrated to
+`main`** — fast-forward, `main` now `922297d4e4b1748d7b6f69cc3ca33c90a6f04828`
+(implementation) on top of `bf95046` (approved Phase 12 design doc, also now on
+`main`). Built on branch `fix/phase12-0a-www-runtime-parity` in a worktree from the
+approved design commit; branch preserved, not deleted.
+
+What shipped: `scripts/runtime-mirror.mjs` computes the browser-runtime dependency
+closure live from `index.html` (`<script>`/`<link>`/`serviceWorker` + transitive
+local ES imports) — 31 files — and mirrors it into `www/` byte-for-byte (`--check` /
+`--write`); `sync.bat`/`sync.sh` are now thin mirror/check-only wrappers with **no**
+`git add`/`commit`/`push`/`cap sync` path (the old unconditional-push-to-main
+pipeline is gone); `scripts/deploy-release.ps1` is the sole, explicit, opt-in
+`cap sync android` path (refuses `main`, dry-run by default, no VCS mutations,
+never run yet); `www/` gained the 8 missing module entrypoints + 15 transitive
+modules + `capability-career.css` (Learn/Career/Life/Next/Life-Ledger-export/sync
+views were previously absent from the Android bundle entirely), and dropped 3
+stale dev-only copies. Parity is enforced by `scripts/runtime-mirror.test.js` (14
+tests) + two live guards in `test.js`, wired into CI (`check:www-parity`).
+Verified post-integration: runtime-mirror tests 14/14, `node test.js` 444/444,
+`npm test` pass, lint 0 errors / 19 pre-existing warnings, smoke 217/217 — no
+regressions. No Android runtime compatibility work; no APK; no Personal
+Intelligence code.
+
+Non-blocking observations carried forward (not fixed in 12.0A, not blocking): the
+`../` escape-reporting path in `runtime-mirror.mjs` has no direct unit test;
+empty-directory cleanup after removing stale `www/` files isn't automatic;
+`package.json`'s `"sync": "npx cap sync"` script is a residual, separate from the
+new safe tooling.
+
+**Next task: Phase 12.0B** (Android runtime compatibility + APK smoke — feature-
+detect `showDirectoryPicker`/browser-only APIs, resync any further drift, manual
+APK smoke checklist). NOT started.
+
+Base: `main` @ `922297d4e4b1748d7b6f69cc3ca33c90a6f04828`. `README.md` remains
+intentionally ` M` (stale identity reference) — untouched, not staged.
+
+---
+
+## 2026-09-06 — Phase 11.8 integrated; Phase 12 Personal Intelligence design fixed
+
+**Phase 11.8 is integrated to `main`** (`bc552ca`) and its independent review is done —
+the review fix `254ab57` is the current HEAD (`origin/main` == HEAD). The entry below is
+stale: "(built, NOT integrated)", "Stop for independent review; do not push main / integrate /
+start Phase 12", and "Next task: independent Phase 11.8 review" no longer hold; this entry
+supersedes them. Test count is **26** attention-signal tests (the "24" below predates the
+review fix). `CHANGELOG.md`, `planning/ROADMAP.md`, and `APP_CONTEXT.md` (Phase 11.8 status
+lines) corrected accordingly.
+
+**Phase 12 — Personal Intelligence v1** went through an independent adversarial design review
+(verdict: FIX FIRST — direction accepted, 14 bounded fixes). The corrected design is now a
+committed document: `docs/PHASE12_PERSONAL_INTELLIGENCE.md`, on branch
+`docs/phase12-personal-intelligence-design` (this pass — documentation only, not merged).
+Key shape: extend Cross-Domain Intelligence as the single recommendation engine (no parallel
+ranker); deterministic v1 shipped and reviewed **before** any Claude layer; Claude 12.5 is
+**phrase-only**; one primary next action or explicit INSUFFICIENT_DATA; read-only advisory
+(no durable override state); "Life → Next" is the home + a soft-branch-only Today teaser.
+`DECISIONS.md` gains #26 (one-next-action) and #27 (extend-CDI / deterministic-first /
+phrase-only / read-only). The old single 12.0 slice is split into 12.0A (static root↔www
+parity + mirror/check-only `sync.bat` + parity test/CI) and 12.0B (Android runtime compat +
+APK smoke), each independently reviewed.
+
+**Next task:** re-review `docs/PHASE12_PERSONAL_INTELLIGENCE.md`. No Phase 12 code, no 12.0A,
+no `sync.bat`/`www/` changes yet.
+
+Base: `main` @ `254ab57e1a6453a7301fd79110d9b1dd4ee5089f`. `README.md` remains intentionally
+` M` (stale identity reference) — untouched, not staged.
+
+---
+
+## 2026-09-05 — Phase 11.8: Minimal distraction signals (built, NOT integrated)
+
+Branch `feat/minimal-distraction-signals-v1`, worktree `chronasense-phase11-8`, from `origin/main`
+`ff28aa9`. **Phase 11.7 is now integrated to main** (`b1b0fa0`, directly under HEAD) — the
+"(built, NOT integrated)" wording on the 11.7 entry below is stale; this entry supersedes it.
+`planning/ROADMAP.md` and `CHANGELOG.md` corrected accordingly.
+
+A thin attention-awareness layer over data already captured. No new collector, tab, dashboard,
+score, daemon, blocker, Firebase subsystem, or Life Ledger coupling.
+
+- **`attention-signals.js`** (+ `www/` mirror) — pure deterministic `deriveAttentionSignals(entries,
+  opts)`: longest coherent focus stretch, meaningful attention breaks, likely distraction
+  (`~N min`, withheld < 15 min), recoveries + median recovery time. Blocks classified focus /
+  neutral / distraction by their own energy label or Today Plan membership — never by app/window —
+  so related-tool switching stays one stretch. Thresholds documented in the module header.
+- **Surface:** an "Attention today" block in the existing end-of-day review modal only
+  (`renderReviewAttention()` in `insights.js`). Progressive disclosure — only data-supported
+  metrics render.
+- **Calibration:** one optional `reviews[dateKey].focusRating` (`focused` / `mixed` /
+  `distracted`), stored in the existing `reviews` object, synced via the existing path. Never
+  fused into the automatic numbers.
+- FREEZE / KEEP unchanged: Awareness Signal, Focus Wallet, streaks, Focus Mode,
+  penalty/escalation. `focus-mode.js` untouched (module reads finished entries).
+
+Tests: `npm test` (446 unit incl. 24 new attention-signal tests, 0 fail), `npm run lint`
+(0 errors), Playwright smoke (217 passed), `node --check` on changed JS, `git diff --check`
+clean, root/www parity verified for the 3 runtime files. Stop for independent review; do not push
+main / integrate / start Phase 12.
+
+Next task: independent Phase 11.8 review.
+
+---
+
+## 2026-09-05 — Phase 11.7: Bloat consolidation / UX simplification (built, NOT integrated)
+
+Branch `refactor/bloat-consolidation-v1`, worktree `chronasense-phase11-7`, from `origin/main`
+`dbbbc31`. Phase 11.6 is now **integrated to main** (`f3887db` + `dbbbc31`) — the "(built, NOT
+integrated)" wording on older entries below is stale; this entry supersedes it.
+
+A simplification phase. Two high-confidence, reversible changes:
+
+1. **Removed identity level.** `computeIdentityScore()` / `getIdentityLevelWithEmoji()`, the
+   `#s-identity` stat tile (already `display:none` since `21af9cc`, 2026-07-10), and the
+   tier/colour render block in `renderToday()`. Its only input was today's deep-block count —
+   identical to the `#s-deep` tile beside it. No behavior gated on it, no persisted data. Dead
+   test blocks and the CODEMAP entry removed too.
+2. **Consolidated the two decision records.** Root `DECISIONS.md` is now the single canonical log.
+   `docs/DECISIONS.md` D-002/D-003/D-004 migrated in verbatim as entries 23/24/25 (ids kept as
+   aliases); `docs/DECISIONS.md` reduced to a pointer stub (retained — `tools/Verify-Decisions.ps1`
+   and `tools/Check-DocsConsistency.ps1` still read the path). Pointers in PROMPTS.md/AGENTS.md
+   updated.
+
+FREEZE / KEEP verified live and unchanged: penalty/escalation (already quiet — two toasts, no UI),
+Awareness Signal, streaks, Focus Wallet, Focus Mode, daily/weekly/missed-recovery reviews.
+Learn / Career / Life modules all KEEP. Everything else audited + deferred — see
+`planning/ROADMAP.md` "Deferred from Phase 11.7".
+
+Tests: `npm test` (unit), `npm run lint`, Playwright smoke, `node --check`, `git diff --check`,
+root/www parity — see report. Stop for independent review; do not push main / integrate / start 11.8.
+
+Next task: independent Phase 11.7 review.
+
+---
+
+## 2026-09-04 — Phase 11.6 review fix: Capacitor www runtime parity (built, NOT integrated)
+
+Same branch/worktree as below (`fix/core-loop-bugs-v1` / `chronasense-phase11-6`), on top of
+`f3887db`. Independent review of the Phase 11.6 commit passed all three source fixes but found
+one blocking gap: Capacitor's `webDir` is `"www"`, so `www/*.js`/`www/index.html` are the runtime
+an Android build actually ships — not stale reference output — and nothing regenerates them
+automatically except `sync.bat`, which also commits and pushes to `origin main` and so was not
+run. `www/index.html`, `www/storage.js`, and `www/focus-wallet.js` had drifted from root (the
+three PROP-007/004/009 fixes were missing there) before this phase even started; they are now
+byte-identical to the reviewed root files (sha256-verified, straight copy, no fix re-edited).
+
+`npx cap sync android` was attempted in the feature worktree to determine necessity and failed
+immediately (`android platform has not been added yet`) — the real native `android/` project is
+gitignored and lives only in the authoritative main working directory outside this branch, so it
+produces zero tracked diff here regardless; that step belongs to an actual Android build, which
+remains out of scope. `sync.bat` was read, not executed, because it also commits and pushes.
+
+Added a parity regression test (`test.js`, "Capacitor www runtime mirror parity") asserting the
+three mirrored files stay byte-identical to root; verified it fails on a stale mirror and passes
+once synced.
+
+Two findings from the review pass were logged, not fixed, per the review's explicit scope: Focus
+Wallet's sports-keyword match still lets "sportscar"/"sports-car" count as a sports session (no
+existing spec defines compound-word semantics; recorded as a PROP-009 follow-up) — and a
+pre-existing, Phase-11.6-unrelated DST defect: `tzParseTime()` collapses to a zero-width day
+window on `America/New_York`'s 2026-03-08 spring-forward date. Logged as `PROP-014`. Neither PROP-013's original symptom nor this phase's fixes are affected by it; the earlier "already
+correctly timezone-aware" wording for PROP-013 was corrected in `CHANGELOG.md`/`planning/PROPOSALS.md`
+to not overclaim universal DST correctness.
+
+Gates run clean: full `npm test` (453/453, incl. the new parity test), `npm run lint` (0 errors,
+same 19 pre-existing warnings), full `tests/smoke.spec.js` Playwright suite (69/69), `git diff
+--check`, `node --check` on all changed `.js` files. No Android build/install/deploy. Production
+and main untouched; README protected hash re-verified unchanged.
+
+Next action: owner: targeted re-review of just the www-parity fix (see final report). Same
+Phase 11.7 backlog as below, plus PROP-014 and the PROP-009 compound-word follow-up.
+
+---
+
+## 2026-09-04 — Phase 11.6: Core-loop bug cleanup (built, NOT integrated)
+
+Branch `fix/core-loop-bugs-v1`, worktree `chronasense-phase11-6`, base `28f56e7` (== `origin/main`
+at the time this phase started). Live-verified all five historical bug candidates from
+`planning/PROPOSALS.md` against current source, per the Phase 11.5 Known Live Bugs handoff.
+
+Fixed (all with a regression test that fails before the fix and passes after; full detail in
+`CHANGELOG.md`):
+- **PROP-007** `triggerPenaltyMode()` ReferenceError — defined it in `index.html`, reusing the
+  existing `startSprint()`-style safe timer-duration pattern instead of the dead prototype's
+  force-start approach. Penalty/escalation stays FREEZE (Phase 11.5) — no new mechanism added.
+- **PROP-004** timer restore drops `blockStartTime` on reopen — `persist()`/`load()` in
+  `storage.js` now round-trip it through `ta3-timer`. Confirmed this caused real silent time
+  loss (a running block auto-log-guard in `enterFocusMode()` silently skipped, no entry, `running`
+  left stuck true) — not just a display issue.
+- **PROP-009** Focus Wallet "sport" substring matches "transport" — `focus-wallet.js`'s
+  `isFocusWalletSportsEntry()` now uses a left-word-boundary regex per keyword.
+
+Not fixed, both documented in `CHANGELOG.md`'s Phase 11.6 entry with reasoning:
+- **PROP-013** unlogged-day navigation off-by-one — live-verified, could not reproduce against
+  current code (full timezone-aware date chain traced and empirically tested against a real
+  negative-UTC-offset timezone, direct call and real DOM click both correct). STALE / CANNOT
+  REPRODUCE.
+- **PROP-008** Focus Mode auto-log has no undo — confirmed live, but classified UX debt: the
+  entry is editable/deletable like any other, nothing is irreversible. Deferred to 11.7+.
+
+Gates run clean: `npm test` (450/450), `npm run lint` (0 errors, same 19 pre-existing warnings),
+full `tests/smoke.spec.js` Playwright suite (69/69, including the two new regression tests),
+`git diff --check`, `node --check` on every changed `.js` file. Production untouched (no
+scheduler/config/outbox/vault file in the diff). Main's protected `M README.md` verified
+unchanged (hash-matched) before and after this phase.
+
+Next action: owner: independent review of this branch. Do not integrate, deploy, or begin Phase
+11.7 until reviewed. The two-track split and motivation-layer overlap from Phase 11.5 are still
+open, plus PROP-013 and PROP-008 above, all carried into Phase 11.7.
+
+---
+
+## 2026-09-04 — Phase 11.5: Context Reconciliation + Product Boundary
+
+This entry exists because every entry below is stale in a specific, important way: they are all
+from the gated `captures -> PROPOSALS -> ROADMAP -> BUILD_QUEUE -> TASKS` pipeline, which has been
+stalled since 2026-07-20 (human never set `planning/ROADMAP.md`'s Current Objective). Real feature
+work did not stop -- it moved to a separate, ungated Phase-branch track that never touched this
+file. **Phase 6 (Unified Life Feed) through Phase 11 (production hardening + review-fix pass)
+shipped between 2026-09-01 and 2026-09-04, entirely outside this pipeline** -- see `CHANGELOG.md`
+for the real history, not the entries below.
+
+STEP A/B (as this file's own template would report them): unchanged from 2026-08-17 -- the 13
+`planning/PROPOSALS.md` proposals are still `pending`, `planning/ROADMAP.md`'s Current Objective
+and Approved Backlog are still empty. This is not a new finding; it is carried-forward and, per
+Phase 11.5's scope, explicitly not resolved here (resolving the two-track split is a Phase 11.7
+question).
+
+What Phase 11.5 actually did (docs/context only, no feature code, no production systems touched):
+verified HEAD (`1fe439a`) and the intentionally dirty state (`M README.md`, `?? APP_CONTEXT.md`)
+live against the briefed values (hash-matched); inventoried every context file in the repo;
+reconciled `APP_CONTEXT.md` against live code (`CODEMAP.md`) and live production state (the
+`ChronaSense Life Ledger Sync` Windows Scheduled Task, confirmed `Enabled`/`Ready`, 15-min cadence,
+last run succeeded at 11:47 AM today -- genuinely live despite `CHANGELOG.md`'s Phase 10/11 entries
+correctly saying "NOT activated" as of their own commits); established the ChronaSense/Life
+Ledger/Obsidian/intelligence-layer product boundary and classified Learning Plans,
+Capability/Career, Life Character Sheet, Cross-Domain Intelligence, and Life Feed against it (all
+B, i.e. legitimately-colocated Personal-OS modules for now -- Cross-Domain Intelligence flagged as
+the strongest future migration-out candidate, since it does the "recommendation/synthesis" job the
+boundary assigns to an eventual Claude/intelligence layer); inventoried the motivation layer (Focus
+Wallet, identity level, streaks, penalty/escalation, Awareness Signal, Focus Mode) and review
+surfaces (Day Review Modal, Review Plan Picker, Reflect View) for overlap; live-reconfirmed the
+`triggerPenaltyMode()` ReferenceError from `planning/PROPOSALS.md` PROP-007 is still present
+(`insights.js:248` calls it, it is defined nowhere but the two dead `ai_studio_code (1)*.html`
+prototype files); scope-limited the future distraction-signals direction to derived metrics on
+existing screens only. Full detail in `APP_CONTEXT.md`.
+
+Next action: owner: you. Per the Phase 11.5 review-fix pass, the confirmed-live
+`triggerPenaltyMode()` bug moved Phase 11.6 to core-loop bug cleanup (it lives inside the same
+motivation/escalation subsystem that consolidation decisions below will evaluate). The two-track
+split (this pipeline vs. the Phase-branch track) and the motivation-layer overlap (identity level
+vs. Awareness Signal) are the two concrete decisions carried into Phase 11.7 (bloat
+consolidation). No blockers to Phase 11.6 starting.
+
+---
+
 ## 2026-08-17 — Triage + Plan
 
 STEP A: 0 new captures. All 15 `captures/inbox/*.md` carry `status: triaged` — verified by reading the

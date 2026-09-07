@@ -396,11 +396,6 @@
       <div class="s-val" id="s-streak">0</div>
       <div class="s-sub" id="s-streak-sub">days</div>
     </div>
-    <div class="stat-card" style="flex:1;text-align:center;display:none">
-      <div class="s-label">Identity</div>
-      <div class="s-val" id="s-identity" style="font-size:13px">—</div>
-      <div class="s-sub" id="s-identity-sub" style="margin-top:3px;line-height:1.3"></div>
-    </div>
   </div>
   <div id="recent-entries-section" class="today-detail">
     <div class="page-header" style="margin-bottom:8px">
@@ -531,6 +526,24 @@
     <div class="settings-title">History</div>
     <div id="reflect-history" style="display:flex;flex-direction:column;gap:12px"></div>
   </div>
+</div>
+
+<!-- ══ LIFE (Character Sheet · Timeline · Next) ══ -->
+<div class="view" id="view-life">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Life</div>
+      <div class="life-feed-subtitle" id="life-view-subtitle">A factual snapshot of where things stand right now. Facts only — no scores or advice.</div>
+    </div>
+  </div>
+  <div class="life-subnav" role="group" aria-label="Life views">
+    <button type="button" class="life-subnav-btn active" id="life-subnav-sheet" aria-pressed="true" data-life-view="sheet">Character Sheet</button>
+    <button type="button" class="life-subnav-btn" id="life-subnav-timeline" aria-pressed="false" data-life-view="timeline">Timeline</button>
+    <button type="button" class="life-subnav-btn" id="life-subnav-next" aria-pressed="false" data-life-view="next">Next</button>
+  </div>
+  <div id="life-character-sheet-root" class="life-character-sheet-root" aria-live="polite"></div>
+  <div id="life-feed-root" class="life-feed-root" aria-live="polite" hidden></div>
+  <div id="cross-domain-intelligence-root" class="cross-domain-intelligence-root" aria-live="polite" hidden></div>
 </div>
 
 <!-- ══ LEARNING PLANS ══ -->
@@ -869,6 +882,12 @@
       <select id="clear-day-select" style="font-family:var(--head);font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);flex:1;min-width:0"></select>
       <button class="btn sm danger" onclick="clearSelectedDay()">Clear day</button>
     </div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn sm" type="button" id="life-ledger-sync-enable-btn" hidden>Enable Background Sync</button>
+      </div>
+      <div id="life-ledger-sync-status" hidden style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.45"></div>
+    </div>
     <details style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
       <summary style="cursor:pointer;color:var(--muted2);font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;margin-bottom:8px">Advanced: Activity Cleanup</summary>
       <div style="font-size:12px;color:var(--muted);line-height:1.45;margin:8px 0 10px">Merge task-name variants without deleting entries. This updates live entries only; deleted tombstones stay untouched.</div>
@@ -953,6 +972,9 @@
   </button>
 <button class="nav-btn" id="nav-reflect" onclick="showView('reflect');renderReflectView()">
     <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>Reflect
+  </button>
+  <button class="nav-btn" id="nav-life" onclick="showView('life')">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="4" cy="6" r="0.5"/></svg>Life
   </button>
   <button class="nav-btn" id="nav-learning" onclick="showView('learning')">
     <svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2"/><path d="M8 7h7"/><path d="M8 11h5"/></svg>Learn
@@ -1432,6 +1454,7 @@
   </div>
 
   <div id="rv-closeout-summary" style="display:none"></div>
+  <div id="rv-attention" style="display:none"></div>
   <div id="rv-unlogged-decision" style="display:none"></div>
 
   <!-- Plan vs actual for the day being reviewed — closes yesterday's loop -->
@@ -1550,9 +1573,14 @@
 <script src="storage.js?v=20260719-template-sync-doctor-2"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
+<script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
 <script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
 <script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
+<script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
+<script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
+<script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
+<script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -3120,6 +3148,7 @@ function showView(name) {
   if (lpnb) lpnb.classList.add('active');
   if (name==='today') renderToday();
   if (name==='week') renderWeek();
+  if (name==='life') { if (window.renderLifeView) window.renderLifeView(); else if (window.renderLifeFeed) window.renderLifeFeed(); }
   if (name==='learning' && window.renderLearningPlans) window.renderLearningPlans();
   if (name==='career' && window.renderCapabilityCareer) window.renderCapabilityCareer();
   if (name==='settings') renderSettings();
@@ -3697,6 +3726,26 @@ function startSprint() {
   showToast('25-min sprint started');
 }
 
+// Called from checkEscalation() (insights.js) on a 5+ consecutive waste/missed streak.
+// Sets the recovery-block duration to 60 min without force-starting a timer: forcing a
+// start would require the user's current intention/task, which escalation can't supply,
+// and silently no-op-ing while claiming otherwise would be untruthful. If a block is
+// already running its duration is extended in place (same safe pattern as startSprint()'s
+// running branch); otherwise the 60-min duration is just queued for the next start.
+function triggerPenaltyMode() {
+  settings.intervalMin = 60;
+  document.getElementById('interval-input').value = 60;
+  if (running) {
+    totalSecs = 60 * 60;
+    remaining = totalSecs;
+    updateRing();
+    syncTimerState();
+    showToast('Penalty mode: current block extended to 60 min');
+  } else {
+    showToast('Penalty mode: next session set to 60 min');
+  }
+}
+
 // ══════════════════════════════════════════════════════
 // STATS & RENDER
 // ══════════════════════════════════════════════════════
@@ -3970,16 +4019,6 @@ function getActivityColor(activity) {
   }
   return settings.activityColors[activity];
 }
-function computeIdentityScore(arr) {
-  return arr.filter(e => e.energy === 'deep').length;
-}
-function getIdentityLevelWithEmoji(score) {
-  if (score >= 8) return "Operator 🟢";
-  if (score >= 5) return "Builder 🟡";
-  if (score >= 3) return "Trying 🟠";
-  return "Drifting 🔴";
-}
-
 // getWorkDayStartTs — moved to storage.js
 
 // ── Overlap clipping: display-only shallow copies, earlier block clipped to next block's start ──
@@ -5695,23 +5734,6 @@ function renderToday() {
   const cleanStreak = computeCleanStreak();
   const streakSubEl = document.getElementById('s-streak-sub');
   if (streakSubEl) streakSubEl.textContent = cleanStreak > 0 ? `days · ${cleanStreak}d clean` : 'days deep';
-  const identScore = computeIdentityScore(displayTodayE);
-  const identEl = document.getElementById('s-identity');
-  const identSubEl = document.getElementById('s-identity-sub');
-  identEl.textContent = getIdentityLevelWithEmoji(identScore);
-  if (identScore >= 8) {
-    identEl.style.color = 'var(--deep)';
-    if (identSubEl) identSubEl.textContent = 'Peak form';
-  } else if (identScore >= 5) {
-    identEl.style.color = '#f9c74f';
-    if (identSubEl) identSubEl.textContent = `${8 - identScore} more to Operator`;
-  } else if (identScore >= 3) {
-    identEl.style.color = '#fb923c';
-    if (identSubEl) identSubEl.textContent = `${5 - identScore} more to Builder`;
-  } else {
-    identEl.style.color = 'var(--distraction)';
-    if (identSubEl) identSubEl.textContent = `${3 - identScore} deep block${3 - identScore === 1 ? '' : 's'} to Trying`;
-  }
 
   renderTodayPlan();
   renderFocusWallet();
@@ -8043,12 +8065,22 @@ let _reviewDateKey = null; // which date is currently open in the review modal
 let _reviewPlanDraft = [];        // tomorrow's plan being picked (carries tombstones)
 let _reviewPlanTargetKey = null;  // the date that draft is FOR (= reviewed day + 1)
 let _reviewUnloggedOk = false;    // true when missing time was seen and intentionally left blank
+let _reviewFocusRating = null;    // Phase 11.8 optional subjective rating: 'focused' | 'mixed' | 'distracted'
+
+// Phase 11.8 — toggle the optional end-of-day attention self-rating.
+function setReviewFocusRating(value) {
+  _reviewFocusRating = _reviewFocusRating === value ? null : value;
+  if (typeof renderReviewAttention === 'function') {
+    renderReviewAttention(_reviewDateKey || getViewingDateKey(), _reviewFocusRating);
+  }
+}
 
 function openReview(dateKey) {
   _reviewDateKey = dateKey || toDateKey(new Date());
   const isToday = _reviewDateKey === toDateKey(new Date());
   const r = reviews[_reviewDateKey] || {};
   _reviewUnloggedOk = !!r.unloggedOk;
+  _reviewFocusRating = r.focusRating || null;
 
   // Date label in modal header
   const dateLabel = document.getElementById('rv-date-label');
@@ -8082,6 +8114,7 @@ function openReview(dateKey) {
   document.getElementById('rv-avoid').value = r.avoid || '';
   openReviewPlan();
   renderReviewCloseoutSummary();
+  if (typeof renderReviewAttention === 'function') renderReviewAttention(_reviewDateKey, _reviewFocusRating);
   renderReviewUnloggedDecision();
   renderReviewPlanVsActual();
 
@@ -8338,6 +8371,7 @@ function saveReview(){
     avoid:document.getElementById('rv-avoid').value,
     tomorrow:tomorrowText,
     unloggedOk: summary.unloggedMin >= 30 ? _reviewUnloggedOk : false,
+    focusRating: _reviewFocusRating || null,
     _savedAt:Date.now()
   };
 

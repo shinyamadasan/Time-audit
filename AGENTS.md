@@ -28,7 +28,7 @@ or the lifecycle model; read CLAUDE.md for those if you need the wider picture.
 5. If this task previously returned from review, read `REVIEW.md` before continuing — see Rework
    Path.
 6. Read the task's `acceptance:` checklist, `files:`, and `constraints:`.
-7. Read `docs/ARCHITECTURE.md` and `docs/DECISIONS.md` for the areas the task touches.
+7. Read `docs/ARCHITECTURE.md` and the root `DECISIONS.md` (canonical decision log) for the areas the task touches.
 8. Proceed to Definition of Ready before writing code.
 
 Do not read `planning/BUILD_QUEUE.md` — it is Claude's planning input, not an execution source.
@@ -85,7 +85,7 @@ sets `status: done` or sends a task back to `status: codex`.
 
 ## Escalation Policy
 
-1. Try to resolve it from `docs/ARCHITECTURE.md` and `docs/DECISIONS.md`.
+1. Try to resolve it from `docs/ARCHITECTURE.md` and the root `DECISIONS.md`.
 2. If still blocked, set `status: blocked` in `TASKS.md` and write the specific blocker under the
    task (what's missing or contradictory, not just "unclear").
 3. Do not invent requirements or silently reinterpret scope to make the task work.

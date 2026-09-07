@@ -2,6 +2,12 @@
 
 Non-obvious choices baked into the code. Read before refactoring.
 
+**This is the canonical decision log.** Numbered entries are architecture/code rationale. The
+`D-0NN` entries at the end were migrated here from `docs/DECISIONS.md` in Phase 11.7 (the two
+files had drifted into a parallel decision record); their original `D-0NN` ids are retained as
+aliases. Record new decisions here — `docs/DECISIONS.md` is now a pointer stub, kept only because
+some `tools/*.ps1` automation still reads that path.
+
 ---
 
 ## 1. Single-file SPA — no build step
@@ -217,3 +223,206 @@ Non-obvious choices baked into the code. Read before refactoring.
 **Why:** Both bugs were found live in the same session, back to back. A 12-proposal digest hit ~5000 characters and Telegram rejected the send outright — the human got nothing that morning, not even a partial digest, and had no way to know delivery had failed at all. Separately, a genuinely hung process (confirmed by hand: 0% CPU, no log output since before the run even started, no working child process) held `automation.lock` for 48+ minutes with two `/merge` commands queued uselessly behind it, and the only way anyone found out was a human happening to open Task Manager. Two hours was never a considered number — it was inherited from "this repo's Task Scheduler execution-time limit," a completely different constraint from "how long could a legitimate run plausibly take," which this codebase's own numbers already answer: 20 minutes (`Run-Codex-Build.ps1`'s build cap) plus 10 minutes (`Run-Merge.ps1`'s npm-test cap), with room to spare at 45.
 
 **What NOT to do:** Do not have the stale-lock check also kill the lingering process automatically. Clearing a lock file is reversible and low-stakes; killing a process based on a time heuristic alone is not, and this project already has a deliberate, human-triggered way to do that (`/stop`) rather than needing an unattended one. Do not truncate the digest by cutting the final joined string at a character count — build it up incrementally and stop at an item boundary instead, or a truncation can land mid-Markdown-entity and turn one delivery failure into a different one ("can't parse entities").
+
+---
+
+## 21. Cross-Domain Intelligence (Phase 8) is a pure rule-based engine that CONSUMES the Character Sheet + analyzer — it is not a new analyzer, not a truth store, and not an LLM
+
+**Decision:** `cross-domain-intelligence-model.js` answers "what deserves attention next / what is the highest-leverage next action" with a deterministic, rule-based `buildCrossDomainIntelligence({ characterSheet, ledgerEvents, learningPlans, capabilityProfile })`. It keeps four layers separate — FACT → SIGNAL → CANDIDATE → RECOMMENDATION — and produces at most one `recommendedAction` plus up to two `alternatives`, or abstains (`recommendedAction: null`). It calls `analyzeCapabilityCareer()` with the Character Sheet's own `generatedAt` + the same `ledgerEvents`, and reuses the Character Sheet's `learning.activePlan.nextStep` verbatim. It never calls `Date.now()` (only the injected Character Sheet clock), never mutates an input, and is order-independent. There is no LLM call anywhere in the path.
+
+**Why:** Phase 8's value is *auditable, offline-capable, stable* attention triage. An LLM router would introduce silent failure modes that are hard to debug (global CLAUDE.md §5). A second career analyzer would drift from the first. Recomputing factual metrics would let the "Next" view contradict the Character Sheet. Consuming the two established derivations makes parity a property of construction: the recommended step *is* the sheet's next step; the stalls *are* the analyzer's stalls; the driving stall behind a capability action *is* the one `chooseNextAction()` acted on (re-derived with the identical priority order + id tie-break). Determinism (same facts, any array order → identical output) is what makes the engine testable at all — so every list that comes from a possibly-unordered source (`analysis.stalls`, `profile.skills`) is sorted by stable id before use, and ranking ends in a `candidateId` tie-break. Ranking is four discrete tiers, not a score: (1) resolve a stall with a concrete target-linked project, (2) advance target-aligned committed work, (3) resolve a bare stall, (4) advance the plan.
+
+**What NOT to do:** Do not add an LLM to pick or phrase the recommendation in V1 (AI interpretation is a later layer). Do not let the engine write capability evidence, complete a plan step, start a focus session, or change a career target — the only UI control is a plain `showView()` navigation. Do not turn absence of data into a signal: Workout / Meal / free-form activity are `not evaluated` (their sources are not live), never inactive / healthy / unhealthy / behind, and an old imported workout never becomes "you haven't worked out". Do not infer a goal from events — a workout does not mean fitness is a priority, a focus session does not mean "work more". Do not fabricate a task to fill the UI: when a stall exists but no concrete action does (e.g. a shipping stall with no explicit project), surface the stall as an attention SIGNAL and let the engine abstain or recommend the learning step instead. Do not claim a learning plan is "aligned" to a career target without the explicit id chain (plan step → Ledger event → capability evidence → target skill → target) — no keyword matching. Do not use fake confidence percentages — only HIGH / MEDIUM / LOW / INSUFFICIENT with documented meaning.
+
+**Post-review honesty tightening (2026-09-02):** Two failure modes were closed. (1) The Character Sheet's active-plan pick can fall back to "most recently updated" — a heuristic a metadata-only `updatedAt` edit can flip. A plan that is neither target-aligned nor **actively tracked** (≥ 1 current-truth `plan_step_completed` maps to it) is therefore NOT a candidate at all: the `learning-plan-incomplete` attention signal still states the plan, progress and next step, but the engine abstains rather than escalating the guess into "Recommended next: Complete Step X". Do not resurrect a bare LOW learning candidate. (2) A plan→target capability link only counts as **current** alignment (HIGH / tier 2) when a linking evidence record is within `CAPABILITY_CAREER_ANALYTICS_RULES.recentDays` of `generatedAt` — the same window `analytics.recentEvidence()` uses. An old historical link falls through to non-aligned logic (MEDIUM when the plan is actively tracked). Do not introduce a separate recency constant; import the analyzer's.
+
+---
+
+## 22. The Character Sheet's learning section now exposes stable ids (additive) so Phase 8 can reuse its picks instead of re-deriving them
+
+**Decision:** `life-character-sheet-model.js` `buildLearning()` now also returns `activePlan.id`, `activePlan.nextStep.{stepId, lessonId, phaseId}`, and `latestCompletedStep.planId`. These are additive — no existing field changed, no existing test touched a whole-object shape.
+
+**Why:** Phase 8 needs the active plan / next step *that the Character Sheet already selected* (via the private `pickActivePlan()` + `findNextLearningPlanStep()`), both to build stable candidate provenance (`learning-plan-step::<planId>::<stepId>` — never derived from mutable display text) and to guarantee "learning parity" (Phase 8 must not run its own plan traversal). Exposing the ids the sheet already computed is a smaller, safer surface change than exporting internal helpers or duplicating the selection logic, and an id is itself a fact — squarely within the Character Sheet's "facts only" mandate.
+
+**What NOT to do:** Do not let Phase 8 (or anything downstream) re-implement "which plan is active" or "what is the next step" — always read `characterSheet.learning.activePlan`. Do not add interpretation, scores, or recommendations to the Character Sheet model to serve Phase 8 — the boundary is: Character Sheet states facts, Cross-Domain Intelligence interprets them.
+
+---
+
+# Migrated from docs/DECISIONS.md (Phase 11.7)
+
+These three entries were the only substantive content in the parallel `docs/DECISIONS.md` record
+(its `D-001` was never filled in — see entry 1 above for the real "no framework, no build step"
+decision). They are reproduced verbatim here; original `D-0NN` ids kept as aliases.
+
+## 23. (alias D-002) — Per-task scope note: soft-gate builds that touch files their own task never declared (ported from Meal Prep)
+
+**Context:** Prompted by comparing the shared AI Dev OS template against
+`github.com/cathrynlavery/codex-build`, a similar Claude-orchestrates/Codex-builds skill, at the
+user's request. `Run-Codex-Build.ps1` already has `$deniedPatterns`, a repo-wide deny-list that
+blocks Codex/Claude from ever touching `tools/`, `docs/`, `CLAUDE.md`, and the rest of the OS
+surface, regardless of which task is running. `codex-build` does something narrower and
+complementary: `check_scope.py` mechanically fails a run if a task touches a file outside an
+allowlist declared for THAT specific task. This app had no equivalent — a task declaring
+`files: app.js` that also edited `style.css` would pass the deny-list untouched (CSS is legitimate
+app-code surface), with nothing prompting the reviewer to notice the extra file was never
+requested.
+
+**Decision:** Added `Get-TaskBlockText`/`Get-TaskDeclaredFiles` to `Run-Codex-Build.ps1`, parsing a
+task's `files:` field into a flat path list, stripping `(new)` annotations. After the existing
+deny-list guard passes, the script computes the union of declared files across every tracked task
+in the invocation and flags any changed file that's neither declared nor a standard evidence file
+(`CHANGELOG.md`/`TEST_REPORT.md`/`TASKS.md`). Deliberately a **soft gate**: a mismatch never blocks
+the build or marks anything blocked — it only writes a note to a new gitignored
+`.scope-note.txt`, prefixed with the covered task ID(s), when the tracked set reaches
+`status: review`. `Run-Claude-Review.ps1` reads that file, uses it only if the task currently under
+review is one of the named IDs (always deleting it after reading either way, so a stale note from
+an unrelated run can never attach to the wrong task), and folds it into the Claude reviewer's
+prompt as an explicit item: state in `REVIEW.md` whether the extra file is a legitimate dependency
+or unrequested scope creep. This is a direct port of the Meal Prep app's TASK-034/D-053 — both
+apps share the identical template file, confirmed via direct diff before porting (only two
+comment-line differences, no logic differences).
+
+**Why:** The soft-gate choice was explicit and deliberate, not a compromise — when asked, the user
+specifically flagged that a hard-block version of `codex-build`'s allowlist enforcer would
+"occasionally block a legitimate small necessary touch outside the declared scope... and trade
+silent scope creep for false-positive blocks that need you to intervene." That's the same class of
+problem this app's own TASK-001 already fixed elsewhere on this codebase (a no-op rework retry and
+a crashed review both existed because automation was *silently* wrong, not because it was too
+permissive) — recreating that shape as a rigid hard gate here, on a purely heuristic signal, would
+have been a step backward dressed as a safety improvement.
+
+**Trade-off:** Purely heuristic — a task with an out-of-date or incompletely-declared `files:`
+field will generate false-positive notes the reviewer has to dismiss, and a task with no `files:`
+field at all skips the check entirely rather than defaulting to "flag everything." The
+Codex-as-reviewer fallback path does not receive this signal — only the Claude reviewer's inline
+prompt was wired up, consistent with that path's existing degraded-capability status (no Guardian
+Gauntlet either). Verified via a fixture harness re-run against this app's own copy of the ported
+functions (8/8 assertions pass) plus a direct diff confirming the note round-trip logic is
+character-for-character identical to Meal Prep's already-tested version; no live end-to-end run in
+either app, disclosed as unverified-live in `TEST_REPORT.md` rather than claimed. Same
+same-session build+review caveat as TASK-001/TASK-002: held at `approved`, not auto-merged, for a
+human `/merge`.
+
+**Supersedes:** nothing directly; extends the existing deny-list scope guard with a narrower,
+task-specific, advisory-only companion check.
+
+## 24. (alias D-003) — Capability/Career evidence is explicit interpretation, not Life Ledger history
+
+**Context:** Capability/Career V1 needs to answer career questions such as what skills are developing,
+what proof exists, and what should happen next. The existing Life Ledger contract already owns durable
+facts and event identity, and it must not become a generic profile database.
+
+**Decision:** Capability/Career data lives in a separate local-only repository at
+`ta3-capability-career-v1`. It stores skills, knowledge areas, tools, career targets, projects,
+portfolio artifacts, and evidence mappings. Evidence mappings can reference a Life Ledger `eventId`
+and logical key, but they never copy the event into a pseudo-event, mutate the source event, infer
+meaning from the event title, or write Career metadata back to Life Ledger.
+
+**Why:** The product needs both factual history and user-owned interpretation. Keeping them separate
+preserves Life Ledger's "this happened" semantics while letting Capability/Career say "this fact
+demonstrates this capability in this dimension."
+
+**Trade-off:** V1 relies on explicit user selection and can feel less automatic than keyword tagging.
+That is intentional: conservative empty/insufficient states are better than fabricated career
+intelligence.
+
+## 25. (alias D-004) — Career intelligence V1 uses deterministic rules and visible dimensions
+
+**Context:** Momentum, stalls, and next action recommendations can easily look more precise than they
+are. The feature must distinguish learning from practice, execution, shipping, and portfolio proof.
+
+**Decision:** `capability-career-analytics.js` centralizes thresholds and returns explainable,
+deterministic classifications: momentum (`no-evidence`, `active`, `growing`, `stale`), neutral stall
+signals, dimension counts, and one primary next action. Business logic takes an injected `now` for
+tests and does not call an LLM.
+
+**Why:** Deterministic rules are inspectable, testable, and safer for local private career context.
+Separate dimensions prevent a pile of learning notes from masquerading as execution or portfolio
+readiness.
+
+**Trade-off:** Recommendations are useful but deliberately conservative. When context is thin, the
+system recommends setup/evidence capture instead of pretending to know the highest-leverage career
+move.
+
+---
+
+## 26. Personal Intelligence exposes exactly ONE primary next action, or an explicit INSUFFICIENT_DATA state
+
+**Decision:** The Phase 12 Personal Intelligence Brief returns exactly one
+`nextAction`, OR abstains with `abstained: true` / `nextAction: null` /
+`confidence: "insufficient_data"` and a plain `abstentionReason`. Supporting
+alternatives are capped at two (`supporting[]`), rendered visually subordinate — a
+"then / also" hint, never a second call-to-action. On the Today surface the existing
+`renderTodayActionStrip()` mechanical cascade stays the single visible primary
+action; the Personal Intelligence teaser only annotates a chosen soft branch ("Why
+this? →"), never a second "Next action" title or button. When two candidates are
+genuinely indistinguishable and no evidence can justify a winner, prefer abstention
+or a low-confidence current-intent fallback over presenting a coin-flip as
+confidence. See `docs/PHASE12_PERSONAL_INTELLIGENCE.md` (design; not built).
+
+**Why:** The product's value is cutting through overwhelm. A list of recommendations
+is just another dashboard and pushes the prioritisation decision back onto the user.
+One action is falsifiable — it was done or it wasn't — which makes the next review
+meaningful, and it forces the engine to actually make the precedence call. This
+mirrors the shapes already shipped: Cross-Domain Intelligence produces "at most one
+`recommendedAction`", Capability/Career returns "one primary next action", and both
+abstain rather than invent (`DECISIONS.md` #21).
+
+**What NOT to do:** Do not render two primary recommendations, a ranked backlog, or
+"5 insights". Do not let `supporting[]` grow past two or gain its own button. Do not
+fill an empty screen with a fabricated action — say what data is missing instead. Do
+not add a second "Next" surface on Today that competes with the mechanical strip.
+
+---
+
+## 27. Phase 12 extends Cross-Domain Intelligence as the single recommendation engine; deterministic v1 ships before any LLM; Claude is phrase-only; the feature is read-only advisory
+
+**Decision:** Personal Intelligence v1 extends
+`cross-domain-intelligence-model.js`'s `buildCrossDomainIntelligence()` — widening
+its inputs (Today's Plan, timer `entries`, `deriveAttentionSignals` output, daily/
+weekly reviews, all read from the native `ta3-*` stores) and adding `today-plan-item`
+/ `resume-unfinished` candidate sources plus a deterministic constraint classifier.
+It is **not** a new engine and there is **no** second ranker. CDI's existing
+`FACT → SIGNAL → CANDIDATE → RECOMMENDATION` firewall, its
+`HIGH/MEDIUM/LOW/INSUFFICIENT` vocabulary, its coverage-aware "not evaluated"
+discipline, its abstention behaviour, and its 59 model tests are preserved as
+regression fences — a Phase 12 change that breaks an existing CDI assertion is a
+design signal, not a test to update; new tiers/inputs get additive test files.
+
+The deterministic engine is implemented, independently reviewed, and integrated as a
+real shipped feature (slices 12.2–12.4) **before** any Claude/LLM layer. The Claude
+layer (slice 12.5, its own review and integration) is **phrase-only**: deterministic
+code owns candidate generation, ranking, the chosen action, the constraint, all
+facts and derived facts, confidence, and abstention; Claude receives the already-
+chosen candidate + resolved evidence ids and returns only bounded language
+(`whatMatters` / `whyLines` / `constraintSentence`), citing only existing ids, never
+authoring a number, an evidence id, a raised confidence, or an alternative candidate,
+with a deterministic fallback on any invalid field.
+
+The feature is **read-only advisory**. The only persistent artifact is a disposable
+local brief cache (`ta3-personal-intelligence-v1`, never Firebase-synced). There is
+no durable user-override state — disagreement is expressed by real behaviour, which
+the next build re-reads. Every recommendation and inference is traceable to evidence
+ids that resolve at build time; an unresolved id is dropped and confidence
+recomputed. See `docs/PHASE12_PERSONAL_INTELLIGENCE.md`.
+
+**Why:** CDI already does exactly this job deterministically and is documented
+(#21/#22) as the component to migrate into the intelligence layer once one exists. A
+parallel engine would drift from it and create two competing "what next?" answers —
+the failure mode the boundary work was done to prevent. Shipping the deterministic
+engine on its own review makes "deterministic v1" a real, observed artifact rather
+than a way-station, honouring #21 ("AI interpretation is a later layer"). Phrase-only
+keeps the LLM out of every path where a silent, hard-to-debug wrong answer could
+enter (global `CLAUDE.md` §5) and keeps the Life Ledger contract's ban on
+LLM-computed facts/statistics/confidence intact. Read-only advisory keeps the whole
+feature reversible and cheap to be wrong.
+
+**What NOT to do:** Do not add a second scoring function or a second
+`recommendedAction` producer. Do not let Claude choose among candidates, invent an
+action, raise confidence, or author a number or evidence id. Do not bundle the Claude
+slice into the deterministic-v1 integration. Do not persist an override key, sync the
+brief cache to Firebase, or write back to any store (plan, learning, capability,
+ledger, Obsidian). Do not route the intention/behaviour axis through the Life Ledger
+— its live store only carries learning-plan events. Do not reuse
+`attention-signals.js`'s `distractionSupportMin` (a display floor) as the
+sufficiency-to-recommend threshold; Phase 12 owns its own sufficiency rule.

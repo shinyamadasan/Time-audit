@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
@@ -17,30 +15,27 @@ import {
   normalizeMealConsumed,
   normalizeMealPrepared
 } from './meal-life-ledger-adapter.js';
+import { resolveMealFixture } from './fixtures/resolve-fixture.js';
 
 /**
  * Cross-repo Life Ledger proof, half B (adapter side).
  *
  * Proves this adapter accepts REAL Meal cookedMeal/mealConsumption output end-to-end:
  * normalization, snapshot import, full Life Ledger event validation, and Obsidian export.
+ * This is deliberately NOT a hand-built fixture.
  *
- * The fixture is a committed, deterministic capture of the Meal repo's real runtime output
- * (`normalizeCookedMeals()` / `useCookedPortion()` in a real browser page), checked in at a
- * stable repo-relative path so this proof runs from a clone of THIS repo alone. It is
- * refreshed only by the explicit `npm run fixture:update` workflow (see
- * scripts/update-meal-cross-repo-fixture.mjs), which copies the Meal repo's own committed
- * fixture — an ordinary `npm test` never regenerates it, so the UUID/timestamp bytes stay
- * frozen and the assertions stay deterministic.
+ * Fixture resolution goes through the shared portability layer (fixtures/resolve-fixture.js,
+ * Phase 5C): an explicit env override, then a live sibling Meal checkout when present, then the
+ * checked-in fixtures/meal-source-contract-v1.fixture.json floor. That floor is refreshed only
+ * by the explicit `npm run fixture:update:meal` workflow -- an ordinary `npm test` never
+ * regenerates it, so the UUID/timestamp bytes stay frozen and every assertion below stays
+ * deterministic regardless of which tier actually resolved the fixture.
  *
- * This is a REQUIRED contract gate. A missing or malformed fixture FAILS the suite — it must
- * never silently skip, because a skipped cross-repo proof is indistinguishable from a broken
- * one.
+ * This is a REQUIRED contract gate (Phase 5B). If every resolution tier fails -- i.e.
+ * resolveMealFixture() itself returns no fixture, which only happens if the checked-in floor is
+ * missing or corrupt -- this FAILS the suite. It must never silently skip: a skipped cross-repo
+ * proof is indistinguishable from a broken one.
  */
-
-const FIXTURE_PATH = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'tests', 'fixtures', 'meal-cross-repo-life-ledger-fixture.json'
-);
 
 function assertLedgerShape(ledger, where) {
   assert.ok(ledger && typeof ledger === 'object' && !Array.isArray(ledger), `${where} must be an object`);
@@ -50,25 +45,22 @@ function assertLedgerShape(ledger, where) {
 }
 
 function loadRequiredFixture() {
-  if (!fs.existsSync(FIXTURE_PATH)) {
+  const resolved = resolveMealFixture();
+  if (!resolved.fixture) {
     throw new Error(
-      `REQUIRED cross-repo fixture missing at ${FIXTURE_PATH}. ` +
-      'This contract gate fails closed — it does not skip. Run `npm run fixture:update` ' +
-      '(with the sibling Meal repo present) to regenerate it.'
+      `REQUIRED cross-repo fixture unavailable: ${resolved.reason} ` +
+      'This contract gate fails closed -- it does not skip. Run `npm run fixture:update:meal` ' +
+      '(with a sibling Meal repo present, or MEAL_REPO_PATH set) to refresh the checked-in floor.'
     );
   }
-  let parsed;
-  try {
-    parsed = JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf8'));
-  } catch (error) {
-    throw new Error(`REQUIRED cross-repo fixture at ${FIXTURE_PATH} is not valid JSON: ${error.message}`);
-  }
+  const parsed = resolved.fixture;
   assertLedgerShape(parsed, 'fixture');
   assert.equal(parsed.cookedMeals.length, 2, 'fixture must carry exactly two real cookedMeal records');
   assert.equal(parsed.mealConsumptions.length, 1, 'fixture must carry exactly one real mealConsumption record');
   assert.ok(parsed.tombstoneScenario, 'fixture must carry a tombstoneScenario');
   assertLedgerShape(parsed.tombstoneScenario.before, 'fixture.tombstoneScenario.before');
   assertLedgerShape(parsed.tombstoneScenario.after, 'fixture.tombstoneScenario.after');
+  console.log(`\nmeal-cross-repo-life-ledger.test.js: using fixture from ${resolved.source} (${resolved.path})`);
   return parsed;
 }
 
@@ -92,10 +84,10 @@ const ctx = { assertedTimezone: TZ, observedAt: '2026-09-01T06:20:00.000Z' };
 console.log('\nCross-repo: real Meal source output through the ChronaSense adapter');
 
 test('REQUIRED contract gate: the committed cross-repo fixture is present and well-formed (fails closed, never skips)', () => {
-  // loadRequiredFixture() already ran at module load and would have aborted the file if the
-  // fixture were missing/malformed. This test makes the gate an explicit, visible pass/fail
-  // line rather than an absence.
-  assert.ok(fs.existsSync(FIXTURE_PATH));
+  // loadRequiredFixture() already ran at module load and would have aborted the file if every
+  // resolution tier failed. This test makes the gate an explicit, visible pass/fail line.
+  const resolved = resolveMealFixture();
+  assert.ok(resolved.fixture, 'resolveMealFixture() must resolve a fixture for this required gate');
   assert.equal(fixture.cookedMeals.length, 2);
   assert.equal(fixture.mealConsumptions.length, 1);
   assert.ok(fixture.tombstoneScenario.before && fixture.tombstoneScenario.after);

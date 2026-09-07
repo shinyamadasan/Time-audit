@@ -25,6 +25,10 @@ let pomodoroCount = 0;
 let focusStartTime = null;
 let pomodoroPhaseStartedAt = null;
 let pomodoroWasPaused = false;
+let activeFocusLearningPlan = null;
+let activeFocusContext = '';
+let pendingFocusLearningPlan = null;
+let pendingFocusContext = '';
 let _pomodoroAutoStart = localStorage.getItem('ta3-pomo-auto') === '1';
 let _lastFocusSyncAt = 0;
 const FOCUS_SYNC_REFRESH_MS = 15000;
@@ -40,6 +44,88 @@ let _outroActive = false;
 function canonicalFocusActivity(task) {
   const fn = globalThis.canonicalizeActivityInput;
   return typeof fn === 'function' ? fn(task) : String(task || '').trim();
+}
+
+function cloneFocusLearningPlanMetadata(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const required = ['planId', 'phaseId', 'lessonId', 'stepId'];
+  if (required.some(key => typeof value[key] !== 'string' || !value[key].trim())) return null;
+  return {
+    planId: value.planId,
+    phaseId: value.phaseId,
+    lessonId: value.lessonId,
+    stepId: value.stepId,
+    planTitle: String(value.planTitle || ''),
+    phaseTitle: String(value.phaseTitle || ''),
+    lessonTitle: String(value.lessonTitle || ''),
+    stepTitle: String(value.stepTitle || '')
+  };
+}
+
+function getFocusLearningPlanMetadata() {
+  return cloneFocusLearningPlanMetadata(activeFocusLearningPlan);
+}
+
+function clearFocusLearningPlanContext() {
+  activeFocusLearningPlan = null;
+  activeFocusContext = '';
+  pendingFocusLearningPlan = null;
+  pendingFocusContext = '';
+}
+
+function isFocusSessionRunning() {
+  return pomodoroPhase !== 'idle';
+}
+
+function focusContextText(metadata) {
+  return [metadata?.planTitle, metadata?.phaseTitle, metadata?.lessonTitle]
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function focusPhaseSubText(workMin) {
+  return activeFocusContext
+    ? `${activeFocusContext} · ${workMin} min`
+    : `work session · ${workMin} min`;
+}
+
+function learningPlanFocusSessionOutcome(metadata, entry, tsStart, tsEnd) {
+  if (!metadata || !entry) return null;
+  return {
+    ...cloneFocusLearningPlanMetadata(metadata),
+    focusEntryId: entry.id,
+    focusActivity: entry.activity,
+    focusStartedAt: tsStart,
+    focusEndedAt: tsEnd,
+    focusDurationMin: entry.blockIntervalMin
+  };
+}
+
+function notifyLearningPlanFocusSessionEnded(entry, tsStart, tsEnd) {
+  const metadata = cloneFocusLearningPlanMetadata(activeFocusLearningPlan);
+  const outcome = learningPlanFocusSessionOutcome(metadata, entry, tsStart, tsEnd);
+  if (!outcome || typeof globalThis.onLearningPlanFocusSessionEnded !== 'function') return false;
+  try {
+    return globalThis.onLearningPlanFocusSessionEnded(outcome) !== false;
+  } catch (err) {
+    showToast(`Learning Plan outcome unavailable: ${err.message || err}`);
+    return false;
+  }
+}
+
+function finishLearningPlanFocusSession() {
+  pomodoroPhase = 'idle';
+  pomodoroPhaseStartedAt = null;
+  pomodoroRemaining = 0;
+  stopFocusMusic();
+  focusModeOn = false;
+  document.getElementById('focus-overlay')?.classList.remove('open');
+  if (typeof _stopHeartbeat === 'function') _stopHeartbeat();
+  syncTimerState({ stopped: true, lastTask: null, mode: 'focus' });
+  timerOwnerDeviceId = null;
+  currentTask = '';
+  renderToday();
 }
 
 // Audio served from GitHub Pages — not bundled in APK (keeps APK ~12MB)
@@ -281,19 +367,25 @@ function takeOverSyncedFocusTimer() {
   return true;
 }
 
-function startPomodoro() {
+function startPomodoro(options = {}) {
+  if (pomodoroPhase !== 'idle') return false;
   pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min').value) || 25;
   pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min').value) || 5;
 
   const taskInput = document.getElementById('focus-task-input');
+  if (options.task) taskInput.value = options.task;
   const focusTask = canonicalFocusActivity(taskInput.value.trim());
   if (!focusTask) {
     taskInput.classList.add('focus-task-error');
     taskInput.placeholder = 'Name your focus session first';
     taskInput.focus();
     setTimeout(() => { taskInput.classList.remove('focus-task-error'); taskInput.placeholder = 'What are you focusing on?'; }, 2000);
-    return;
+    return false;
   }
+  activeFocusLearningPlan = cloneFocusLearningPlanMetadata(options.learningPlan || pendingFocusLearningPlan);
+  activeFocusContext = String(options.context || pendingFocusContext || focusContextText(activeFocusLearningPlan) || '').trim();
+  pendingFocusLearningPlan = null;
+  pendingFocusContext = '';
   pomodoroPhase = 'work';
   pomodoroRemaining = pomodoroWorkMin * 60;
   focusStartTime = Date.now();
@@ -312,7 +404,7 @@ function startPomodoro() {
   }
 
   document.getElementById('focus-phase-label').textContent = 'FOCUS';
-  document.getElementById('focus-phase-sub').textContent = `work session · ${pomodoroWorkMin} min`;
+  document.getElementById('focus-phase-sub').textContent = focusPhaseSubText(pomodoroWorkMin);
   document.getElementById('focus-settings-row').style.display = 'none';
   document.getElementById('focus-start-btn').style.display = 'none';
 
@@ -320,12 +412,16 @@ function startPomodoro() {
   pomodoroTimer = setInterval(tickPomodoro, 1000);
   updateFocusDeepBar();
   syncFocusTimerState();
+  return true;
 }
 
 function getFocusTaskLabel() {
   const label = document.getElementById('focus-intention-text')?.textContent?.trim();
   return (label && label !== '—') ? label : (currentTask || intention || 'Deep work');
 }
+
+const GENERIC_FOCUS_LEDGER_CLARIFICATION =
+  'Focus saved to your timeline. To count toward your Life Ledger, start Focus from a Learning Plan step.';
 
 function logFocusSession(tsStart, tsEnd = Date.now()) {
   const dur = Math.round((tsEnd - tsStart) / 60000);
@@ -345,7 +441,11 @@ function logFocusSession(tsStart, tsEnd = Date.now()) {
   entries.sort((a, b) => b.ts - a.ts);
   lastTaskForRepeat = task;
   persist(); syncEntries();
-  showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+  if (cloneFocusLearningPlanMetadata(activeFocusLearningPlan)) {
+    showToast(`Logged: ${task} · ${fmtDur(dur)}`);
+  } else {
+    showToast(GENERIC_FOCUS_LEDGER_CLARIFICATION);
+  }
   updateFocusDeepBar();
   return entry;
 }
@@ -355,7 +455,10 @@ function saveActiveFocusSession() {
   const tsStart = focusStartTime;
   focusStartTime = null;
   if (pomodoroPhase !== 'work') return null;
-  return logFocusSession(tsStart);
+  const tsEnd = Date.now();
+  const entry = logFocusSession(tsStart, tsEnd);
+  notifyLearningPlanFocusSessionEnded(entry, tsStart, tsEnd);
+  return entry;
 }
 
 function tickPomodoro() {
@@ -379,7 +482,14 @@ function endWorkSession() {
   const tsEnd = Date.now();
   const tsStart = focusStartTime || (tsEnd - pomodoroWorkMin * 60000);
   focusStartTime = null;
-  logFocusSession(tsStart, tsEnd);
+  const entry = logFocusSession(tsStart, tsEnd);
+  const learningPlanOutcomeShown = notifyLearningPlanFocusSessionEnded(entry, tsStart, tsEnd);
+  clearFocusLearningPlanContext();
+
+  if (learningPlanOutcomeShown) {
+    finishLearningPlanFocusSession();
+    return;
+  }
 
   pomodoroPhase = 'break';
   pomodoroPhaseStartedAt = tsEnd;
@@ -404,6 +514,7 @@ function endPomodoroBreak() {
   pomodoroPhaseStartedAt = null;
   _exitBreakMusic();
   playAlertSound();
+  clearFocusLearningPlanContext();
 
   if (_pomodoroAutoStart) {
     startPomodoro();
@@ -426,7 +537,9 @@ function endPomodoroBreak() {
 function skipBreak() {
   clearInterval(pomodoroTimer);
   _skipBreakMusic();
+  pomodoroPhase = 'idle';
   pomodoroPhaseStartedAt = null;
+  clearFocusLearningPlanContext();
   startPomodoro();
 }
 
@@ -602,7 +715,13 @@ function resumeFocusMusic() {
 // ENTER / EXIT
 // ══════════════════════════════════════════════════════
 
-function enterFocusMode() {
+function enterFocusMode(options = {}) {
+  const launch = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+  if (isFocusSessionRunning()) {
+    focusModeOn = true;
+    document.getElementById('focus-overlay')?.classList.add('open');
+    return false;
+  }
   const mirroredRemoteTimer = running && timerOwnerDeviceId && timerOwnerDeviceId !== syncedDeviceId;
   const ownedSyncedFocus = running && syncedFocusTimer?.running && syncedFocusTimer.ownerDeviceId === syncedDeviceId;
   if (running && blockStartTime && !mirroredRemoteTimer && !ownedSyncedFocus) {
@@ -645,9 +764,13 @@ function enterFocusMode() {
   pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min')?.value) || 5;
 
   const taskInput = document.getElementById('focus-task-input');
-  taskInput.value = '';
+  const launchTask = String(launch.task || '').trim();
+  clearFocusLearningPlanContext();
+  pendingFocusLearningPlan = cloneFocusLearningPlanMetadata(launch.learningPlan);
+  pendingFocusContext = String(launch.context || focusContextText(pendingFocusLearningPlan) || '').trim();
+  taskInput.value = launchTask;
   taskInput.style.display = 'block';
-  setTimeout(() => taskInput.focus(), 300);
+  if (!launch.autoStart) setTimeout(() => taskInput.focus(), 300);
   document.getElementById('focus-intention-text').style.display = 'none';
 
   document.getElementById('pomo-autostart-btn')?.classList.toggle('active', _pomodoroAutoStart);
@@ -663,6 +786,12 @@ function enterFocusMode() {
   updateFocusDeepBar();
   if (ownedSyncedFocus) takeOverSyncedFocusTimer();
   else syncFocusOverlayFromRemote();
+  if (launch.autoStart) return startPomodoro({
+    task: launchTask,
+    learningPlan: pendingFocusLearningPlan,
+    context: pendingFocusContext
+  });
+  return true;
 }
 
 function tryExitFocusMode() {
@@ -684,6 +813,7 @@ function confirmExitFocus() {
     stopFocusMusic();
     focusModeOn = false;
     document.getElementById('focus-overlay').classList.remove('open');
+    clearFocusLearningPlanContext();
     renderToday();
     return;
   }
@@ -705,6 +835,7 @@ function confirmExitFocus() {
     if (typeof _startHeartbeat === 'function') _startHeartbeat();
   }
   pomodoroWasPaused = false;
+  clearFocusLearningPlanContext();
   syncTimerState({ stopped: true, lastTask: null, mode: 'focus' });
   timerOwnerDeviceId = null;
   currentTask = '';
