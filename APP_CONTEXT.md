@@ -318,4 +318,4 @@ For product/context work:
 
 ## Phase 6 — Daily Operating Loop V1 (review candidate, 2026-09-07)
 
-Today now derives reusable routines with exact, window, context, and anytime cues. Intentions never auto-log facts. Local routine state reuses existing Learning, Focus, and Ledger completion boundaries. Workout depends on a real fact reaching the local Ledger; no live ingestion was added. [Model, limits, friction audit, and chaos evidence](docs/DAILY_OPERATING_LOOP_V1.md). Not merged or deployed.
+Today now derives reusable routines with exact, window, context, and anytime cues. Intentions never auto-log facts. Local routine state reuses existing Learning, Focus, and Ledger completion boundaries. Workout requires an explicit stable routine link and a unique fact with agreeing source/start date; otherwise use existing Manual completion. Learning binds only Next Step, never a completed fact; streaks require current scheduled occurrences. No live ingestion was added. [Model, limits, friction audit, and chaos evidence](docs/DAILY_OPERATING_LOOP_V1.md). Not merged or deployed.

@@ -29,17 +29,8 @@ function readView() {
   for (const item of instances.filter(i => i.routine.source === 'learning')) {
     const plan = plans.find(p => p.id === item.routine.planId);
     const current = state.links[item.id];
-    const exists = current && current.planId === plan?.id && plan.phases.some(p => p.lessons.some(l => l.steps.some(s => s.id === current.stepId)));
-    if (!exists) {
-      const completed = events.filter(e => !e.tombstone?.active && e.type === 'plan_step_completed' && e.sourceApp === 'chronasense' && e.payload.source.planId === plan?.id && Date.parse(e.occurredAt) <= now && localContext(e.occurredAt, state.timezone).date === date).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.eventId.localeCompare(b.eventId));
-      const factualStep = completed.map(e => {
-        for (const phase of plan.phases) for (const lesson of phase.lessons) {
-          const step = lesson.steps.find(s => s.id === e.payload.source.stepId && s.completed);
-          if (step) return { phaseId: phase.id, phaseTitle: phase.title, lessonId: lesson.id, lessonTitle: lesson.title, stepId: step.id, stepTitle: step.title };
-        }
-        return null;
-      }).find(Boolean);
-      const next = factualStep || findNextLearningPlanStep(plan);
+    if (!current) {
+      const next = findNextLearningPlanStep(plan);
       if (next) bindings[item.id] = { ...next, planId: plan.id, planTitle: plan.title };
     }
   }
@@ -72,9 +63,9 @@ function renderCard(item, completion, status) {
   if (view.state.manual[item.id]) actions += button('undo', r.id, 'Undo manual Done');
   if (!complete && ['learning', 'focus'].includes(r.source) && hasStep) actions = button('start', r.id, 'Start Focus') + actions;
   let note = '';
-  if (r.source === 'workout' && !complete) note = 'Completes when an unambiguous workout fact reaches this device’s Life Ledger. No live openGym connection.';
+  if (r.source === 'workout' && !complete) note = 'Automatic completion requires an explicit openGym routine ID and exactly one matching fact with agreeing source/start date. Choose Manual completion if unavailable. No live openGym connection.';
   if (r.source === 'learning' && !hasStep) note = 'No unfinished step available. Add or select a Learning Plan step.';
-  if (completion?.source === 'ambiguous') note = 'More than one routine could match this fact. Adjust the completion links; nothing was guessed.';
+  if (completion?.source === 'ambiguous') note = 'Multiple facts or routines match this intention. Automatic completion is unavailable; choose Manual completion if needed.';
   if (completion?.level === 'incomplete' && completion.duration) note = `${completion.duration} min recorded · below minimum/target.`;
   return `<article class="daily-routine-card" data-instance-id="${escape(item.id)}">
     <div><strong>${complete ? '✓ ' : ''}${escape(r.title)}</strong>

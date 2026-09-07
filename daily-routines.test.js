@@ -98,8 +98,8 @@ test('target/minimum/unknown duration and score remain distinct', () => {
   assert.equal(completionLevel(r,4),'incomplete'); assert.equal(completionLevel(r,undefined),'complete');
   assert.deepEqual(dailyScore([{level:'target'},{level:'minimum'},{level:'complete'},null]),{planned:4,completed:3,target:1,minimum:1});
 });
-function workoutEvent() {
-  const raw={id:'w-1',d:'2026-09-08',start:Date.parse('2026-09-09T00:30:00Z'),end:Date.parse('2026-09-09T01:12:00Z'),name:'Workout',entries:[]};
+function workoutEvent(overrides = {}) {
+  const raw={id:'w-1',d:'2026-09-08',start:Date.parse('2026-09-09T00:30:00Z'),end:Date.parse('2026-09-09T01:12:00Z'),name:'Workout',routineId:'gym-routine',entries:[],...overrides};
   const normalized=normalizeWorkoutCompleted(raw,{observedAt:now,assertedTimezone:tz});
   // Use the actual adapter, including its strict source schema.
   assert.equal(normalized.ok,true,JSON.stringify(normalized));
@@ -108,7 +108,7 @@ function workoutEvent() {
   return store.listEvents()[0];
 }
 test('real adapter workout 18:12 matches; wrong day/source, tombstone and ambiguous routines abstain; duplicates count once', () => {
-  const event=workoutEvent(), r=routine({source:'workout',mode:'window',time:'17:00',endTime:'20:00',targetMinutes:30,minimumMinutes:15}),i=instance(r);
+  const event=workoutEvent(), r=routine({source:'workout',workoutRoutineId:'gym-routine',mode:'window',time:'17:00',endTime:'20:00',targetMinutes:30,minimumMinutes:15}),i=instance(r);
   const result=matchCompletion(i,input(r,{events:[event,event]}),now);
   assert.equal(result.level,'target'); assert.equal(result.source,'workout');
   assert.equal(matchCompletion(i,input(r,{events:[{...event,sourceApp:'other'}]}),now),null);
@@ -140,4 +140,91 @@ test('streak counts consecutive calendar days, preserves yesterday until today e
   const r=routine(), completed=new Set(['2026-09-06','2026-09-07']);
   assert.equal(routineStreak(r,'2026-09-08',d=>completed.has(d)),2);
   assert.equal(routineStreak(r,'2026-09-09',d=>completed.has(d)),0);
+});
+
+
+test('review Workout: unlinked same-day and morning facts never identify an evening intention', () => {
+  const r=routine({source:'workout',mode:'window',time:'17:00',endTime:'20:00'}), i=instance(r);
+  for(const e of [workoutEvent(),workoutEvent({start:Date.parse('2026-09-08T14:00:00Z'),end:Date.parse('2026-09-08T14:30:00Z')})]) {
+    assert.equal(matchCompletion(i,input(r,{events:[e]}),now),null);
+  }
+});
+test('review Workout: cross-midnight belongs to source start date, not next-day evening; disagreement abstains', () => {
+  const r=routine({source:'workout',workoutRoutineId:'gym-routine'}), i=instance(r);
+  const event=workoutEvent({start:Date.parse('2026-09-09T06:30:00Z'),end:Date.parse('2026-09-09T07:15:00Z')});
+  const later='2026-09-10T02:00:00Z';
+  assert.equal(matchCompletion(i,input(r,{events:[event]}),later).source,'workout');
+  const next=generateInstances([r],'2026-09-09',tz)[0];
+  assert.equal(matchCompletion(next,input(r,{events:[event]}),later),null);
+  const mismatch=workoutEvent({d:'2026-09-09'});
+  assert.equal(matchCompletion(next,input(r,{events:[mismatch]}),later),null);
+});
+test('review Workout: two distinct linked facts abstain regardless of duration or order; duplicate delivery is one', () => {
+  const r=routine({source:'workout',workoutRoutineId:'gym-routine'}),i=instance(r);
+  const a=workoutEvent(), b=workoutEvent({id:'w-2',start:Date.parse('2026-09-09T00:00:00Z')});
+  for(const events of [[a,b],[b,a]])assert.equal(matchCompletion(i,input(r,{events}),now).source,'ambiguous');
+  assert.equal(matchCompletion(i,input(r,{events:[a,a]}),now).source,'workout');
+  const unrelated=workoutEvent({id:'w-other',routineId:'another-gym-routine'});
+  assert.equal(matchCompletion(i,input(r,{events:[a,unrelated]}),now).evidenceId,a.eventId);
+});
+test('review Workout: only enabled occurring explicitly linked routines participate in ambiguity', () => {
+  const r=routine({source:'workout',workoutRoutineId:'gym-routine'}),i=instance(r),event=workoutEvent();
+  const other={...r,id:'other'};
+  assert.equal(matchCompletion(i,{routines:[r,other],events:[event]},now).source,'ambiguous');
+  for(const second of [{...other,enabled:false},{...other,cadence:'selected',days:[1]},{...other,workoutRoutineId:'different'},{...other,workoutRoutineId:''}]) {
+    assert.equal(matchCompletion(i,{routines:[r,second],events:[event]},now).source,'workout');
+  }
+});
+test('review Workout: existing manual assertion then linked fact counts once; ambiguous facts preserve assertion', () => {
+  const storage=memory(),repo=createDailyRoutineRepository(storage),r=routine(),i=instance(r);
+  repo.update(tz,s=>s.routines.push(r));repo.manualDone(tz,i.id,'complete');
+  const state=repo.update(tz,s=>Object.assign(s.routines[0],{source:'workout',workoutRoutineId:'gym-routine'}));
+  const linked=instance(state.routines[0]),a=workoutEvent();
+  const completion=matchCompletion(linked,{...state,events:[a,a]},now);
+  assert.equal(dailyScore([completion]).completed,1);
+  assert.equal(completion.source,'workout');
+  const b=workoutEvent({id:'w-other'});
+  assert.equal(matchCompletion(linked,{...state,events:[a,b]},now).source,'manual');
+});
+test('review Learning: historical same-plan facts without a pinned intention never count', () => {
+  const r=routine({source:'learning',planId:'p'}),i=instance(r);
+  const event={sourceApp:'chronasense',type:'plan_step_completed',occurredAt:now,eventId:'e',payload:{source:{planId:'p',stepId:'b'}}};
+  assert.equal(matchCompletion(i,input(r,{events:[event]}),'2026-09-10T02:00:00Z'),null);
+});
+test('review streak: daily three days; minimum/manual count only on current scheduled occurrences', () => {
+  const r=routine(),manual=Object.fromEntries(['2026-09-06','2026-09-07','2026-09-08'].map(date=>[instanceId(r.id,date),{level:date.endsWith('07')?'minimum':'complete'}]));
+  const check=date=>matchCompletion({...instance(r),date,id:instanceId(r.id,date)},input(r,{manual}),now)?.level;
+  assert.equal(routineStreak(r,'2026-09-08',check),3);
+  const edited={...r,cadence:'selected',days:[0,2]};
+  const evaluated=[];
+  assert.equal(routineStreak(edited,'2026-09-08',date=>{evaluated.push(date);return check(date);}),1);
+  assert.ok(!evaluated.includes('2026-09-07'));
+  assert.equal(routineStreak({...r,enabled:false},'2026-09-08',()=>{assert.fail('disabled routine must not evaluate completion');}),0);
+});
+test('review streak: weekdays do not bridge weekends, even with retained Focus or manual history', () => {
+  const r=routine({cadence:'weekdays'}),evaluated=[];
+  const complete=date=>{evaluated.push(date);return true;};
+  assert.equal(routineStreak(r,'2026-09-14',complete),1);
+  assert.ok(evaluated.every(date=>date==='2026-09-14'));
+  assert.equal(routineStreak(r,'2026-09-12',()=>{assert.fail('Saturday must break the calendar streak');}),0);
+  assert.equal(routineStreak(r,'2026-09-13',()=>{assert.fail('Sunday/Saturday must not evaluate completion');}),0);
+});
+
+test('review streak: retained Focus receipts cannot bridge a date removed by cadence edit', () => {
+  const r=routine({source:'focus'}),i=instance(r),focus={},entries=[];
+  for(const date of ['2026-09-06','2026-09-07','2026-09-08']) {
+    const startedAt=Date.parse(`${date}T18:00:00Z`),endedAt=startedAt+15*60000;
+    entries.push({id:endedAt,tsStart:startedAt,ts:endedAt,blockIntervalMin:15});
+    focus[endedAt]={instanceId:instanceId(r.id,date),entryId:String(endedAt),startedAt,endedAt,duration:15};
+  }
+  const complete=date=>matchCompletion({...i,id:instanceId(r.id,date),date},input(r,{focus,entries}),now)?.level==='target';
+  assert.equal(routineStreak(r,'2026-09-08',complete),3);
+  assert.equal(routineStreak({...r,cadence:'selected',days:[0,2]},'2026-09-08',complete),1);
+  assert.equal(Object.keys(focus).length,3);
+});
+test('review Learning: a duplicate linked fact counts once; same step ID in another plan is unrelated', () => {
+  const r=routine({source:'learning',planId:'p'}),i=instance(r),links={[i.id]:{planId:'p',stepId:'a'}};
+  const e={sourceApp:'chronasense',type:'plan_step_completed',occurredAt:now,eventId:'e',payload:{source:{planId:'p',stepId:'a'}}};
+  assert.equal(dailyScore([matchCompletion(i,input(r,{links,events:[e,e]}),now)]).completed,1);
+  assert.equal(matchCompletion(i,input(r,{links,events:[{...e,payload:{source:{planId:'other',stepId:'a'}}}]}),now),null);
 });
