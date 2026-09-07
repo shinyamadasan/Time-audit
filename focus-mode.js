@@ -386,9 +386,12 @@ function startPomodoro(options = {}) {
   activeFocusContext = String(options.context || pendingFocusContext || focusContextText(activeFocusLearningPlan) || '').trim();
   pendingFocusLearningPlan = null;
   pendingFocusContext = '';
+  const startedAt = Date.now();
+  if (options.dailyRoutine && typeof globalThis.onDailyRoutineFocusStarted === 'function' &&
+      globalThis.onDailyRoutineFocusStarted(options.dailyRoutine, startedAt) === false) return false;
   pomodoroPhase = 'work';
   pomodoroRemaining = pomodoroWorkMin * 60;
-  focusStartTime = Date.now();
+  focusStartTime = startedAt;
   pomodoroPhaseStartedAt = focusStartTime;
   taskInput.style.display = 'none';
   const intentionEl = document.getElementById('focus-intention-text');
@@ -483,6 +486,9 @@ function endWorkSession() {
   const tsStart = focusStartTime || (tsEnd - pomodoroWorkMin * 60000);
   focusStartTime = null;
   const entry = logFocusSession(tsStart, tsEnd);
+  if (entry && typeof globalThis.onDailyRoutineFocusCompleted === 'function') {
+    globalThis.onDailyRoutineFocusCompleted(entry, tsStart, tsEnd);
+  }
   const learningPlanOutcomeShown = notifyLearningPlanFocusSessionEnded(entry, tsStart, tsEnd);
   clearFocusLearningPlanContext();
 
@@ -781,12 +787,17 @@ function enterFocusMode(options = {}) {
   document.getElementById('focus-start-btn').textContent = 'Start';
   document.getElementById('focus-start-btn').onclick = startPomodoro;
   document.getElementById('focus-start-btn').style.display = 'block';
+  if (Number.isInteger(launch.workMinutes) && launch.workMinutes >= 1 && launch.workMinutes <= 240) {
+    pomodoroWorkMin = launch.workMinutes;
+    document.getElementById('pomo-work-min').value = launch.workMinutes;
+  }
   setPomodoroCountdown(pomodoroWorkMin * 60);
   renderPomoDots();
   updateFocusDeepBar();
   if (ownedSyncedFocus) takeOverSyncedFocusTimer();
   else syncFocusOverlayFromRemote();
   if (launch.autoStart) return startPomodoro({
+    dailyRoutine: launch.dailyRoutine,
     task: launchTask,
     learningPlan: pendingFocusLearningPlan,
     context: pendingFocusContext

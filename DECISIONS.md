@@ -426,3 +426,7 @@ ledger, Obsidian). Do not route the intention/behaviour axis through the Life Le
 — its live store only carries learning-plan events. Do not reuse
 `attention-signals.js`'s `distractionSupportMin` (a display floor) as the
 sufficiency-to-recommend threshold; Phase 12 owns its own sufficiency rule.
+
+## 28. Phase 6 routines are local intentions with source-owned completion
+
+Use the existing local Learning/Ledger persistence pattern, not auto-log day templates. Stable routine/date identity derives daily instances; manual assertions and Focus linkage remain scheduler-owned. Pin and display one timezone for all scheduler calculations. Times/windows are soft cues until day end, with no overdue rollover. Only exact linked source completions count; ambiguous Workout/Learning matches abstain. Notifications and cross-device/timezone migration are deferred. See [Phase 6 semantics and review limits](docs/DAILY_OPERATING_LOOP_V1.md).

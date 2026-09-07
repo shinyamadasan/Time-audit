@@ -13,6 +13,7 @@
 <link rel="manifest" id="pwa-manifest">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=20260719-template-sync-doctor-2">
+<link rel="stylesheet" href="daily-routines.css?v=20260907">
 <link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
 </head>
 <body>
@@ -105,6 +106,36 @@
 
   <!-- Daily Summary Card -->
   <div class="daily-summary today-detail" id="daily-summary" style="display:none"></div>
+
+  <section id="daily-routines" class="daily-routines" aria-label="Daily routines">
+    <div class="routine-heading"><h2>Today’s routines</h2><button type="button" class="btn sm" data-routine-action="add">Add routine</button></div>
+    <p id="daily-routines-error" class="routine-error" role="alert"></p>
+    <div id="daily-routines-list"></div>
+  </section>
+  <dialog id="daily-routine-dialog" class="daily-routine-dialog" aria-labelledby="daily-routine-title">
+    <form id="daily-routine-form">
+      <h2 id="daily-routine-title">Routine</h2>
+      <p class="routine-meta">Set it once. Time and cue edits apply today. Disabling hides today’s intention and keeps completion history. Saved on this device.</p>
+      <div class="routine-fields">
+        <label class="routine-wide">Title<input name="title" required maxlength="200" placeholder="Spanish — Duolingo"></label>
+        <label class="routine-check routine-wide"><input name="enabled" type="checkbox" checked>Enabled</label>
+        <label>Cadence<select name="cadence"><option value="daily">Daily</option><option value="weekdays">Weekdays</option><option value="selected">Selected weekdays</option></select></label>
+        <label>Schedule<select name="mode"><option value="anytime">Anytime today</option><option value="exact">Exact time</option><option value="window">Flexible window</option><option value="cue">Routine / context cue</option></select></label>
+        <fieldset class="routine-wide" data-weekdays hidden><legend>Days</legend><div class="routine-days"><label class="routine-check"><input name="days" type="checkbox" value="0">Sun</label><label class="routine-check"><input name="days" type="checkbox" value="1">Mon</label><label class="routine-check"><input name="days" type="checkbox" value="2">Tue</label><label class="routine-check"><input name="days" type="checkbox" value="3">Wed</label><label class="routine-check"><input name="days" type="checkbox" value="4">Thu</label><label class="routine-check"><input name="days" type="checkbox" value="5">Fri</label><label class="routine-check"><input name="days" type="checkbox" value="6">Sat</label></div></fieldset>
+        <label data-modes="exact window" hidden>Preferred / start time<input name="time" type="time"></label>
+        <label data-modes="window" hidden>Window end<input name="endTime" type="time"></label>
+        <label class="routine-wide" data-modes="cue" hidden>Routine cue<input name="cue" maxlength="200" placeholder="After dinner"></label>
+        <label>Target minutes<input name="targetMinutes" type="number" min="1" max="240" required value="15"></label>
+        <label>Minimum minutes (optional)<input name="minimumMinutes" type="number" min="1" max="240"></label>
+        <label class="routine-wide">Fallback cue (optional)<input name="fallback" maxlength="200" placeholder="Before bed"></label>
+        <label class="routine-wide">Completion<select name="source"><option value="manual">Manual Done · unsupported activity</option><option value="workout">Workout fact · Life Ledger</option><option value="learning">Learning step · existing Plan</option><option value="focus">Focus · completed scheduled session</option></select></label>
+        <label class="routine-wide" data-learning hidden>Learning Plan<select name="planId"></select></label>
+        <label class="routine-wide" data-workout hidden>openGym routine ID (optional)<input name="workoutRoutineId" maxlength="200" placeholder="Leave empty for one Workout routine"></label>
+      </div>
+      <p class="routine-error" data-form-error role="alert"></p>
+      <div class="routine-actions"><button class="btn primary" type="submit">Save routine</button><button class="btn" type="button" id="daily-routine-cancel">Cancel</button></div>
+    </form>
+  </dialog>
 
   <!-- ── Activity Hero ── -->
   <div class="activity-hero" id="activity-hero">
@@ -1574,6 +1605,7 @@
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
+<script type="module" src="daily-routines-ui.js?v=20260907"></script>
 <script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
 <script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
@@ -5705,7 +5737,11 @@ function renderSidePanel() {
 }
 
 /** Re-renders the Today view: stats, commitment bar, timeline, recent list, and all sub-components. */
+function getDailyRoutineAppContext() {
+  return { timezone: settings.timezone, entries, browsingHistory: !isViewingToday() };
+}
 function renderToday() {
+  if (typeof globalThis.renderDailyRoutines === 'function') globalThis.renderDailyRoutines();
   let perfStageStart = perfNow();
   resetRetroBar();
   autoLogDueTemplates({ notify: isViewingToday() });

@@ -876,3 +876,7 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Weekly insight computation | insights.js | EXTRACTED |
 | Color tokens / dark theme variables | CSS — Base & Layout | 1–46 |
 | Desktop side panel layout / breakpoint | CSS — Desktop Panels | 985–1014 |
+
+## Daily Operating Loop V1 (Phase 6)
+
+`daily-routines-model.js` derives stable routine/date intentions, time-aware states, completion matching, streak and score. `daily-routines-repository.js` validates local `ta3-daily-routines-v1` state. `daily-routines-ui.js` renders `daily-routines`, edits via `daily-routine-dialog`, reads Learning/Ledger sources, and bridges scheduled Focus start/full completion. `daily-routines.css` supplies scoped styling and compact landscape rules. `getDailyRoutineAppContext()` exposes read context from Today; Focus uses optional `onDailyRoutineFocusStarted` / `onDailyRoutineFocusCompleted` hooks. Runtime mirrors are managed by the existing mirror script. See [Phase 6](docs/DAILY_OPERATING_LOOP_V1.md).
