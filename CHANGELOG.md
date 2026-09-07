@@ -1510,3 +1510,7 @@ deviations: ported directly from the Meal Prep app (sibling project, sharing thi
   Added physical-split versus unsplit midnight coverage; the date suite now has 21 tests.
 - Clarified source-record ownership versus clipped UI daily accounting in CODEMAP.
 - Remains uncommitted for targeted re-review; no Meal/Workout or Phase 5C changes.
+
+## Phase 6 — Daily Operating Loop V1 (branch: feat/daily-operating-loop-v1)
+
+Added Today reusable routines, a compact editor, hybrid cues, deterministic daily identities, local persistence, manual correction, source completion matching, and calendar streak/count. Reused existing Learning and Focus; added bounded full-session hooks and local launch linkage. Updated browser/Capacitor runtime parity. Added focused model/browser tests and narrow documentation. No merge/deploy or external production writes. Execution contract: explicit user Phase 6 brief; legacy TASKS.md has no Phase 6 task and remains unchanged. Independent review required; see docs/DAILY_OPERATING_LOOP_V1.md and TEST_REPORT.md.

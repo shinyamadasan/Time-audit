@@ -1,0 +1,25 @@
+.daily-routines{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:14px}
+.daily-routines[hidden]{display:none}
+.routine-heading,.routine-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.routine-heading{justify-content:space-between}
+.daily-routines h2{font-size:18px;margin:0}
+.daily-routines h3{font-size:12px;text-transform:uppercase;color:var(--deep);letter-spacing:.08em;margin:16px 0 6px}
+.daily-routine-card{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--border);padding:12px 0;overflow-wrap:anywhere}
+.daily-routine-card>div:first-child{min-width:0;flex:1}
+.routine-meta{font-size:12px;color:var(--muted);line-height:1.5;margin:4px 0}
+.routine-actions .btn{min-height:40px}
+.routine-error{color:var(--waste);font-size:13px}
+.routine-error:empty{display:none}
+.daily-routine-dialog{background:var(--bg2);color:var(--text);border:1px solid var(--border2);border-radius:var(--r2);width:min(520px,92vw);max-height:88dvh;overflow:auto;padding:20px}
+.daily-routine-dialog::backdrop{background:var(--bg)}
+.routine-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.routine-fields label{display:flex;flex-direction:column;gap:5px;font-size:13px;min-width:0}
+.routine-fields input,.routine-fields select{font:inherit;font-size:16px;width:100%;box-sizing:border-box;background:var(--bg3);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:8px}
+.routine-fields [hidden]{display:none}
+.routine-fields .routine-wide{grid-column:1/-1}
+.routine-fields .routine-check{flex-direction:row;align-items:center}
+.routine-check input{width:auto}
+.routine-days{display:flex;gap:10px;flex-wrap:wrap}
+@media(max-width:768px){.daily-routine-card{align-items:flex-start;flex-direction:column}.routine-actions{width:100%}}
+@media(max-height:500px) and (orientation:landscape){body.view-today .activity-hero{padding:12px}body.view-today .hero-active-top{gap:10px}body.view-today .hero-ring-wrap svg{width:56px;height:56px}body.view-today .hero-elapsed{font-size:24px}}
+@media(max-height:500px) and (orientation:landscape){.focus-overlay{gap:6px;padding:12px;justify-content:flex-start;overflow-y:auto}.focus-countdown-big{font-size:58px}.focus-intention-text{font-size:18px}.focus-next{font-size:12px}}

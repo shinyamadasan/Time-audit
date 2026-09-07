@@ -437,3 +437,49 @@ Scope and safety:
 - No Meal, Workout/openGym, core/transport, Phase 5C machinery, or original checkout edits.
 - No commit, staging, push, merge, deployment, Firebase write, or real Obsidian write.
 - Remaining blocker: none found. Ready for targeted independent re-review.
+
+## Phase 6 — Daily Operating Loop V1 · 2026-09-07
+
+Execution contract: user's explicit Phase 6 brief. Review candidate on
+`feat/daily-operating-loop-v1`, based on freshly fetched and finally re-fetched
+`origin/main` = `c1d9a96b22abbcefb17736f112d756e477ef8700`.
+
+- Full `npm test`: **973 passed, 0 failed**, including existing Focus/Learning,
+  Life Ledger, Workout, Meal/cross-repo fixture, temporal/date-scoped export,
+  background-sync and runtime-mirror regressions. Log: `phase6-npm-test-final.log`.
+- Full Playwright: **228 passed, 0 failed** (`phase6-playwright-final.log`).
+  After the small initial Focus countdown fix, the affected Focus/Learning/routine
+  suites were re-run: **159 passed** (`phase6-focus-regression.log`).
+  Final launch-error and exact-plan-link hardening: focused Node **19 passed**,
+  final routine browser suite **12 passed** (`phase6-focused-final.log`).
+- ESLint: **0 errors, 19 pre-existing warnings** in Focus/storage/insights.
+  New scheduler modules: no warnings. `phase6-lint-final.log`.
+- `node --check`: changed JS and both actual inline scripts pass. Initial regex
+  extraction incorrectly included a commented script marker; the HTML-parser
+  extraction correctly checks real script elements and passes.
+- Runtime parity: all **36 files** in the loaded dependency closure match `www/`.
+- `git diff --check`, strict UTF-8 decode/control-byte scan: pass.
+- Browser viewport checks: 390×844 and 844×390, no horizontal overflow; 16px
+  inputs; compact, scrollable active Focus overlay. Screenshots inspected under
+  `test-results/daily-routines-landscape.png` and
+  `test-results/daily-routines-active-focus-landscape.png`.
+- Chaos cases 1–10: pass across focused model/browser checks; source ambiguity
+  abstains and already-completed Learning binds the same-day factual step.
+- Local dependency install required `npm ci --ignore-scripts --offline
+  --legacy-peer-deps` due to the existing Capacitor 8 / google-auth peer conflict.
+  No package versions or lockfile changes. No production credentials needed.
+
+Self-review: scoped modules and small Focus hooks, no new timer/Plan/factual
+schema, no source mutations, escaped UI text, fail-visible storage, stable IDs,
+no sample-data writes, unchanged timer heartbeat/device guard/timeline rules.
+Fixed own test fixture/selector issues and verified actual adapter/runtime events.
+No task was silently skipped; legacy TASKS.md has no Phase 6 entry and was not
+repurposed. No production/native release was attempted. Physical iOS/Android
+usability is pending human review; no new strict live-sibling compatibility gate
+was claimed (the requested adapter/full regression suites use existing fixtures).
+
+Safety: protected Workout adapter checkout remains clean at `eed35fec8492bfed72225522771a0bdc14dbcadc`;
+protected stabilization checkout remains clean at `4b3ac04`. No Meal/openGym source,
+production Firebase, real Obsidian, main merge/push, or deployment writes.
+See `docs/DAILY_OPERATING_LOOP_V1.md` for semantics, limitations, friction and
+highest-risk independent-review targets.

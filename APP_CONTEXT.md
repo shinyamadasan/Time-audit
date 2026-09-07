@@ -315,3 +315,7 @@ For product/context work:
    excluded there).
 3. Use `docs/PROJECT.md` for north-star decisions.
 4. Use `planning/ROADMAP.md` for the forward-looking phase sequence.
+
+## Phase 6 — Daily Operating Loop V1 (review candidate, 2026-09-07)
+
+Today now derives reusable routines with exact, window, context, and anytime cues. Intentions never auto-log facts. Local routine state reuses existing Learning, Focus, and Ledger completion boundaries. Workout depends on a real fact reaching the local Ledger; no live ingestion was added. [Model, limits, friction audit, and chaos evidence](docs/DAILY_OPERATING_LOOP_V1.md). Not merged or deployed.
