@@ -382,3 +382,21 @@ export function normalizeChronaSenseEntries(entries, context = {}) {
 
   return { drafts: collapsedDrafts, rejected: rejectedEntries };
 }
+
+// Read-only projection using storage.js:getEntriesForDate (injected by the caller).
+// Pass one explicit sourceTimezone to selection and normalization; fix observedAt for replayable bytes.
+// Returns existing validated drafts/rejections, never stored events or minted eventIds.
+export function readChronaSenseLifeLedgerForDate(date, { getEntriesForDate, ...context } = {}) {
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)
+    || !Number.isFinite(Date.parse(date))
+    || new Date(date).toISOString().slice(0, 10) !== date) {
+    throw new RangeError('date must be a valid YYYY-MM-DD calendar date');
+  }
+  if (typeof getEntriesForDate !== 'function') {
+    throw new TypeError('getEntriesForDate must be the ChronaSense date reader');
+  }
+  if (!isIanaTimezone(context.sourceTimezone)) {
+    throw new RangeError('sourceTimezone must be an explicit valid IANA timezone containing /');
+  }
+  return normalizeChronaSenseEntries(getEntriesForDate(date, { sourceTimezone: context.sourceTimezone }), context);
+}

@@ -207,9 +207,9 @@ function getTodayEntries() {
   });
 }
 
-/** @param {string} dateKey YYYY-MM-DD @returns {Array} */
-function getEntriesForDate(dateKey) {
-  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+/** @param {string} dateKey YYYY-MM-DD @param {{sourceTimezone?: string}} [options] @returns {Array} */
+function getEntriesForDate(dateKey, { sourceTimezone } = {}) {
+  const tz = sourceTimezone ?? (settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
   return entries.filter(e => {
     if (e.deleted) return false;
     return getDateInTZ(e.tsStart || e.ts, tz) === dateKey;

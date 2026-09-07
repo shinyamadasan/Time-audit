@@ -299,3 +299,141 @@ untested: full live end-to-end verification -- a real crashed claude/codex revie
   hit and fixed this bug live first).
 
 <!-- Entries go here, newest first. -->
+
+## Date-scoped ChronaSense Life Ledger read V1 · 2026-09-07
+
+status: ready for independent review; uncommitted.
+base / fetched origin/main: `059a5ce204a12ff1c425e635f491b677fd706f5c`.
+worktree: `C:\Users\Admin\Desktop\Vibe code\Time audit app - date-scoped-ledger-export`.
+branch: `feat/date-scoped-life-ledger-export-v1`.
+execution contract: explicit user slice request; no unrelated TASKS status changed.
+
+Implementation and safety:
+- `readChronaSenseLifeLedgerForDate()` validates the query, calls the supplied existing
+  `storage.js:getEntriesForDate()`, then delegates directly to `normalizeChronaSenseEntries()`.
+- Real source-read semantics tested: effective configured/device timezone; `tsStart || ts`
+  local date; deleted rows excluded; stale stored date ignored. Source intervals and end
+  occurrence instants are not rewritten or clipped.
+- Existing `{ drafts, rejected }` output, draft validator, identity, canonical factual
+  serialization, fingerprints, and dedup semantics are unchanged. This is not a persistent
+  snapshot: no event IDs/revisions are minted, and transport/UI remain unchanged.
+- Frozen source records and storage snapshots remain unchanged. Tests load the real
+  storage reader, arm localStorage/network/UUID traps after its normal startup, and prove
+  no read-time calls. A separate global-access trap covers the exported API itself.
+- No changes to source storage code, core, transport, Meal, Workout, Phase 5C contracts,
+  Firebase, or real Obsidian. No merge, push, commit, or deployment.
+- Self-review: additive 15-line read wrapper; no duplicated selection/normalization logic,
+  schema, identity, persistence, UI, or unnecessary abstraction. Existing hard-rule runtime
+  functions remain byte-unchanged. Applicable code-health and data-integrity checks pass.
+
+Verification:
+- `node --test chronasense-life-ledger-date.test.js`: 15 passed, 0 failed/skipped.
+- `npm test`: 948 total; 947 passed, 0 failed, 1 skipped.
+  Includes legacy `test.js`: 444 passed (ChronaSense adapter, Life Ledger core,
+  runtime/transport/export, and existing shared-stack checks).
+- The single default skip is `scripts/cross-repo-compat-check.test.js`'s opt-in
+  raw-lower-case-drive versus canonicalized-cwd control proof. It requires
+  `CROSS_REPO_COMPAT_CONTROL_PROOF=1` and runs against a real openGym checkout;
+  it was not enabled for this bounded change. No mandatory suite was omitted.
+- `npm run test:adapter-contracts`: Workout adapter 33, Meal adapter 45,
+  Meal cross-repo fixture replay 11, Workout source gate 12, Meal source gate 12,
+  temporal regression 20; all 133 passed, no failures/skips.
+  Meal fixture resolved read-only from the existing sibling repo.
+- `npm run test:smoke`: 217 passed, 0 failed (Chromium, isolated app fixtures).
+- `npm run lint`: exit 0, 0 errors, 19 warnings in unchanged
+  `focus-mode.js`, `insights.js`, and `storage.js`; no new adapter warnings.
+- `node --check`: adapter and new test file passed.
+- `npm run check:www-parity`: passed, 32-file runtime closure. The adapter is not
+  loaded by the runtime entrypoint, so no mirror changes are necessary.
+- `git diff --check` and strict UTF-8/control-character scan of all six changed/new
+  files passed.
+- Initial sandbox Node test invocation could not spawn (EPERM); rerun outside the sandbox
+  passed. Initial offline dependency install hit the existing Capacitor 8 / Google Auth
+  Capacitor 6 peer conflict; `npm ci --ignore-scripts --offline --legacy-peer-deps`
+  succeeded without changing the manifest dependencies or lockfile.
+- Ignored evidence logs: `date-export-npm-test.log`, `date-export-contracts.log`,
+  `date-export-smoke.log`, `date-export-lint.log`.
+
+Date and determinism evidence:
+- Normal day, empty date, before/exact/after midnight: passed.
+- Asia/Tokyo (+09:00), America/Phoenix (-07:00): passed.
+- America/New_York spring-forward (2026-03-08) and repeated fall-back hour
+  (2026-11-01): passed; distinct instants preserved and next local day excluded.
+- Missing start selects by end even when inferred duration starts on the previous day.
+- Source IDs preserved; same source/context serializes identically; permuted valid source
+  rows produce identical output; changed observation time preserves canonical facts and
+  fingerprints. Selected malformed and duplicate rows exactly match the legacy adapter.
+- Caller must supply the existing synchronous read-only date reader and its matching
+  effective timezone. Explicit fixed observation context is required for replayable draft
+  bytes; a changing clock changes operational provenance. Rejection indexes retain selected
+  input order. Source-reader failures propagate rather than inventing a recovery policy.
+- No new UI was requested or added; no real-device checks apply to this API-only slice.
+
+Independent-review priorities:
+1. Confirm the existing start-or-end date ownership (including cross-midnight and deleted
+   rows) is the intended source-selection boundary.
+2. Confirm existing draft output is the correct read-only boundary; stored transport requires
+   durable Ledger-owned fields and is intentionally not used.
+3. Review caller obligations for timezone/observation context and the distinction between
+   canonical fact determinism and operational provenance/rejection indexes.
+
+## Date-scoped ChronaSense export V1 — bounded review fixes · 2026-09-07
+
+status: ready for targeted re-review; uncommitted. This entry supersedes the pre-review
+implementation/context statements and counts in the preceding date-scoped export report.
+worktree: `C:\Users\Admin\Desktop\Vibe code\Time audit app - date-scoped-ledger-export`.
+branch: `feat/date-scoped-life-ledger-export-v1`.
+HEAD and local origin/main verified unchanged at `059a5ce204a12ff1c425e635f491b677fd706f5c`.
+
+Bounded fixes:
+- The wrapper reuses `isIanaTimezone()` to validate required sourceTimezone before reading,
+  independent of row count. Missing/invalid values throw RangeError, with no implicit fallback.
+- The same explicit sourceTimezone is passed to `getEntriesForDate(date, { sourceTimezone })`
+  and unchanged normalization. The storage reader accepts this optional override; legacy
+  one-argument calls retain configured/device timezone behavior. Required www mirror updated.
+- CODEMAP distinguishes whole source-record ownership, UI day clipping, and physical source
+  splits. Export never clips/splits records or changes canonical occurrence timestamps.
+- Injected readers remain trusted synchronous read-only callbacks that must honor the second
+  argument. The API does not inspect arbitrary callback implementations. UTC aliases remain
+  unsupported by the unchanged normalizer predicate; use a supported name such as Etc/UTC.
+
+Regression-first evidence:
+- Before production changes, the expanded date suite had 16 passes and 5 expected failures:
+  exact Tokyo/Phoenix mismatch plus empty/populated missing/invalid timezone cases.
+- After the fix, `node chronasense-life-ledger-date.test.js`: 21 passed, no failures/skips.
+- Exact original bug separately reproduced during self-review using the real Tokyo-configured
+  storage reader and a Sept 7 00:05 Tokyo record: Phoenix export Sept 6 includes the record;
+  Phoenix Sept 7 is empty. Draft sourceTimezone is Phoenix and original UTC instants survive.
+- Missing/invalid timezone on empty/populated days throws before reader invocation (zero calls).
+  Valid timezone plus empty date still returns the legitimate empty result.
+- Positive/negative offsets, midnight boundaries, spring-forward/fall-back, deleted/stale-date
+  records, and missing-start fallback pass. Unsplit 23:55–00:10 stays wholly on day 1;
+  physical 23:55–00:00 and 00:00–00:10 records land on day 1 and day 2 respectively.
+- Replaced the device-fallback equality test with successful explicit-timezone draft validation
+  while storage settings have no configured timezone.
+- Deep-frozen source and store snapshots plus localStorage/Firebase/network/UUID traps pass.
+  No source mutation, durable ID/revision minting, or persistent Ledger access during export.
+- Fixed-context replay and changed-observation canonical facts/fingerprints remain stable.
+
+Full checks on the fixed implementation:
+- `npm test`: 954 total, 953 passed, 0 failed, 1 existing opt-in skip. Includes 444 legacy
+  checks covering ChronaSense adapter and Life Ledger core/runtime/transport, plus 21 date tests.
+- Existing skip: cross-repo control proof requiring CROSS_REPO_COMPAT_CONTROL_PROOF=1.
+- `npm run test:adapter-contracts`: 133 passed (Workout 33, Meal 45, Meal cross-repo 11,
+  Workout gate 12, Meal gate 12, temporal 20), no failures/skips.
+- Playwright with output redirected to a temporary directory: 217 passed, no failures.
+- `npm run lint`: 0 errors, 19 pre-existing warnings at unchanged code locations.
+- `node --check`: storage, www/storage, adapter, and date test passed.
+- `npm run check:www-parity`: passed, 32-file closure; storage mirror byte-identical.
+- `git diff --check` and strict UTF-8/control-byte scan: passed on all eight changed/new files.
+- Existing adapter prefix matches HEAD: no existing normalizer implementation changed.
+  An initial Node-based comparison could not spawn git under sandbox (EPERM); the equivalent
+  direct Git pipeline comparison succeeded. Full npm and browser suites used approved
+  child-process execution; no required test suite was skipped.
+
+Scope and safety:
+- Seven files edited for this repair: adapter, date tests, storage, www/storage, CODEMAP,
+  CHANGELOG, TEST_REPORT. package.json retains only the original date-test script addition.
+- No Meal, Workout/openGym, core/transport, Phase 5C machinery, or original checkout edits.
+- No commit, staging, push, merge, deployment, Firebase write, or real Obsidian write.
+- Remaining blocker: none found. Ready for targeted independent re-review.

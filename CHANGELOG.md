@@ -1484,3 +1484,29 @@ deviations: ported directly from the Meal Prep app (sibling project, sharing thi
 - Settings tab
 - Daily review — win, waste, tomorrow's focus
 - Live cost tracker ($x drifting)
+
+## Date-scoped ChronaSense Life Ledger read V1 — ready for review — 2026-09-07
+
+- Added `readChronaSenseLifeLedgerForDate()` to the existing adapter. It validates the
+  query date, delegates source selection to the injected existing date reader, and calls
+  `normalizeChronaSenseEntries()` unchanged.
+- Returns contract-valid drafts and existing rejection outcomes without creating durable
+  event IDs or accessing a Ledger store, localStorage, Firebase, or Obsidian.
+- Added 15 regression tests and included them in `npm test`; API usage and precise date,
+  observation-context, error, and transport boundaries are documented in `CODEMAP.md`.
+- Base: `059a5ce204a12ff1c425e635f491b677fd706f5c`; branch:
+  `feat/date-scoped-life-ledger-export-v1`. Implementation left uncommitted for independent review.
+- Scope follows the explicit user request; no unrelated TASKS status or Phase 5C machinery changed.
+
+## Date-scoped ChronaSense export V1 — bounded review fixes — 2026-09-07
+
+- Bound export selection and normalization to the same explicit validated `sourceTimezone`.
+  `getEntriesForDate(date, { sourceTimezone })` overrides settings for that read; existing
+  one-argument callers retain their behavior. Updated the required `www/storage.js` mirror.
+- Missing/invalid export timezone now throws before source reading, even for empty dates;
+  the existing normalizer, canonical drafts, identity, fingerprints and dedup remain unchanged.
+- Added the exact Tokyo/Phoenix omitted-day regression and invalid-context cases. Replaced
+  the misleading device fallback test with successful explicit-timezone export coverage.
+  Added physical-split versus unsplit midnight coverage; the date suite now has 21 tests.
+- Clarified source-record ownership versus clipped UI daily accounting in CODEMAP.
+- Remains uncommitted for targeted re-review; no Meal/Workout or Phase 5C changes.
