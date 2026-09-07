@@ -1,0 +1,165 @@
+{
+  "capturedAt": "2026-09-01T15:05:37.363Z",
+  "capturedFrom": "feat/durable-meal-consumption-events (post architectural redesign)",
+  "cookedMeals": [
+    {
+      "id": "cm_xrepo_1700000000000_001",
+      "recipeId": "r_xrepo_42",
+      "source": null,
+      "name": "Cross-Repo Chicken Bowls",
+      "cookedDate": "2026-08-28",
+      "storage": "fridge",
+      "fridgeLife": 4,
+      "freezerLife": 90,
+      "initialPortions": 3,
+      "portionsRemaining": 2,
+      "updatedAt": "2026-09-01T15:05:37.357Z"
+    },
+    {
+      "id": "cm_xrepo_1700000000000_002",
+      "recipeId": null,
+      "source": "leftovers",
+      "name": "Cross-Repo Backdated Leftover Pork",
+      "cookedDate": "2026-08-20",
+      "storage": "freezer",
+      "fridgeLife": 3,
+      "freezerLife": 90,
+      "initialPortions": null,
+      "portionsRemaining": null
+    }
+  ],
+  "mealConsumptions": [
+    {
+      "id": "mc_0aafcf9f-89ae-4856-8e54-34c917d7ec15",
+      "cookedMealId": "cm_xrepo_1700000000000_001",
+      "recipeId": "r_xrepo_42",
+      "mealName": "Cross-Repo Chicken Bowls",
+      "portionsConsumed": 1,
+      "consumedAt": "2026-09-01T15:05:37.357Z"
+    }
+  ],
+  "deletions": {
+    "recipes": {},
+    "pantry": {},
+    "customIngredients": {},
+    "customHacks": {},
+    "flavors": {},
+    "preparedFlavors": {},
+    "cookedMeals": {},
+    "userIngredients": {}
+  },
+  "tombstoneScenario": {
+    "before": {
+      "cookedMeals": [
+        {
+          "id": "cm_xrepo_1700000000000_001",
+          "recipeId": "r_xrepo_42",
+          "source": null,
+          "name": "Cross-Repo Chicken Bowls",
+          "cookedDate": "2026-08-28",
+          "storage": "fridge",
+          "fridgeLife": 4,
+          "freezerLife": 90,
+          "initialPortions": 3,
+          "portionsRemaining": 2,
+          "updatedAt": "2026-09-01T15:05:37.357Z"
+        },
+        {
+          "id": "cm_xrepo_1700000000000_002",
+          "recipeId": null,
+          "source": "leftovers",
+          "name": "Cross-Repo Backdated Leftover Pork",
+          "cookedDate": "2026-08-20",
+          "storage": "freezer",
+          "fridgeLife": 3,
+          "freezerLife": 90,
+          "initialPortions": null,
+          "portionsRemaining": null
+        },
+        {
+          "id": "cm_xrepo_1700000000000_003",
+          "recipeId": "r_xrepo_99",
+          "source": null,
+          "name": "Cross-Repo Tombstone Meal",
+          "cookedDate": "2026-08-27",
+          "storage": "fridge",
+          "fridgeLife": 4,
+          "freezerLife": 90,
+          "initialPortions": 2,
+          "portionsRemaining": 2
+        }
+      ],
+      "mealConsumptions": [
+        {
+          "id": "mc_0aafcf9f-89ae-4856-8e54-34c917d7ec15",
+          "cookedMealId": "cm_xrepo_1700000000000_001",
+          "recipeId": "r_xrepo_42",
+          "mealName": "Cross-Repo Chicken Bowls",
+          "portionsConsumed": 1,
+          "consumedAt": "2026-09-01T15:05:37.357Z"
+        }
+      ],
+      "deletions": {
+        "recipes": {},
+        "pantry": {},
+        "customIngredients": {},
+        "customHacks": {},
+        "flavors": {},
+        "preparedFlavors": {},
+        "cookedMeals": {},
+        "userIngredients": {}
+      }
+    },
+    "after": {
+      "cookedMeals": [
+        {
+          "id": "cm_xrepo_1700000000000_001",
+          "recipeId": "r_xrepo_42",
+          "source": null,
+          "name": "Cross-Repo Chicken Bowls",
+          "cookedDate": "2026-08-28",
+          "storage": "fridge",
+          "fridgeLife": 4,
+          "freezerLife": 90,
+          "initialPortions": 3,
+          "portionsRemaining": 2,
+          "updatedAt": "2026-09-01T15:05:37.357Z"
+        },
+        {
+          "id": "cm_xrepo_1700000000000_002",
+          "recipeId": null,
+          "source": "leftovers",
+          "name": "Cross-Repo Backdated Leftover Pork",
+          "cookedDate": "2026-08-20",
+          "storage": "freezer",
+          "fridgeLife": 3,
+          "freezerLife": 90,
+          "initialPortions": null,
+          "portionsRemaining": null
+        }
+      ],
+      "mealConsumptions": [
+        {
+          "id": "mc_0aafcf9f-89ae-4856-8e54-34c917d7ec15",
+          "cookedMealId": "cm_xrepo_1700000000000_001",
+          "recipeId": "r_xrepo_42",
+          "mealName": "Cross-Repo Chicken Bowls",
+          "portionsConsumed": 1,
+          "consumedAt": "2026-09-01T15:05:37.357Z"
+        }
+      ],
+      "deletions": {
+        "recipes": {},
+        "pantry": {},
+        "customIngredients": {},
+        "customHacks": {},
+        "flavors": {},
+        "preparedFlavors": {},
+        "cookedMeals": {
+          "cm_xrepo_1700000000000_003": "2026-09-01T15:05:37.363Z"
+        },
+        "userIngredients": {}
+      }
+    }
+  }
+}

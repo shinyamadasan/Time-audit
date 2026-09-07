@@ -15,6 +15,7 @@ import {
 } from './capability-career-import.js';
 import { analyzeCapabilityCareer } from './capability-career-analytics.js';
 import { createLocalLifeLedgerStore } from './life-ledger-runtime.js';
+import { formatLedgerDate, ledgerEventDate } from './capability-career-date.js';
 
 let repository = null;
 let profile = null;
@@ -127,23 +128,6 @@ function skillName(id) {
 
 function toolName(id) {
   return profile?.tools.find(tool => tool.id === id)?.name || 'Unknown tool';
-}
-
-function formatDate(iso) {
-  if (!iso) return 'No date';
-  try {
-    return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-  } catch {
-    return iso;
-  }
-}
-
-// A date-precision Life Ledger event (see life-ledger-core.js's temporal-precision
-// invariant, e.g. meal_prepared) has no occurredAt — occurredDate is its factual anchor
-// instead. formatDate() only ever renders the calendar date (no time-of-day), so passing
-// either through is safe; this just picks the one that actually exists for the event.
-function ledgerEventDate(event) {
-  return event && event.temporalPrecision === 'date' ? event.occurredDate : event && event.occurredAt;
 }
 
 function toIsoFromDateInput(value) {
@@ -547,7 +531,7 @@ function renderEvidenceSourceExtra(source) {
           <label class="cap-career-ledger-item">
             <input type="radio" name="lifeLedgerEventId" value="${escapeHtml(event.eventId)}" data-ledger-key="${escapeHtml(`${event.sourceApp}:${event.sourceEntityId}:${event.type}`)}" ${selectedLedgerEventId === event.eventId ? 'checked' : ''}>
             <span>
-              <strong>${escapeHtml(formatDate(ledgerEventDate(event)))} - ${escapeHtml(ledgerEventLabel(event))}</strong>
+              <strong>${escapeHtml(formatLedgerDate(ledgerEventDate(event)))} - ${escapeHtml(ledgerEventLabel(event))}</strong>
               <small>${escapeHtml(ledgerEventContext(event))}</small>
             </span>
           </label>
