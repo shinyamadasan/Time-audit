@@ -5,6 +5,46 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-06 — Phase 12.0A (static root↔www parity + safe tooling) integrated
+
+**Phase 12.0A is built, independently reviewed (verdict: PASS), and integrated to
+`main`** — fast-forward, `main` now `922297d4e4b1748d7b6f69cc3ca33c90a6f04828`
+(implementation) on top of `bf95046` (approved Phase 12 design doc, also now on
+`main`). Built on branch `fix/phase12-0a-www-runtime-parity` in a worktree from the
+approved design commit; branch preserved, not deleted.
+
+What shipped: `scripts/runtime-mirror.mjs` computes the browser-runtime dependency
+closure live from `index.html` (`<script>`/`<link>`/`serviceWorker` + transitive
+local ES imports) — 31 files — and mirrors it into `www/` byte-for-byte (`--check` /
+`--write`); `sync.bat`/`sync.sh` are now thin mirror/check-only wrappers with **no**
+`git add`/`commit`/`push`/`cap sync` path (the old unconditional-push-to-main
+pipeline is gone); `scripts/deploy-release.ps1` is the sole, explicit, opt-in
+`cap sync android` path (refuses `main`, dry-run by default, no VCS mutations,
+never run yet); `www/` gained the 8 missing module entrypoints + 15 transitive
+modules + `capability-career.css` (Learn/Career/Life/Next/Life-Ledger-export/sync
+views were previously absent from the Android bundle entirely), and dropped 3
+stale dev-only copies. Parity is enforced by `scripts/runtime-mirror.test.js` (14
+tests) + two live guards in `test.js`, wired into CI (`check:www-parity`).
+Verified post-integration: runtime-mirror tests 14/14, `node test.js` 444/444,
+`npm test` pass, lint 0 errors / 19 pre-existing warnings, smoke 217/217 — no
+regressions. No Android runtime compatibility work; no APK; no Personal
+Intelligence code.
+
+Non-blocking observations carried forward (not fixed in 12.0A, not blocking): the
+`../` escape-reporting path in `runtime-mirror.mjs` has no direct unit test;
+empty-directory cleanup after removing stale `www/` files isn't automatic;
+`package.json`'s `"sync": "npx cap sync"` script is a residual, separate from the
+new safe tooling.
+
+**Next task: Phase 12.0B** (Android runtime compatibility + APK smoke — feature-
+detect `showDirectoryPicker`/browser-only APIs, resync any further drift, manual
+APK smoke checklist). NOT started.
+
+Base: `main` @ `922297d4e4b1748d7b6f69cc3ca33c90a6f04828`. `README.md` remains
+intentionally ` M` (stale identity reference) — untouched, not staged.
+
+---
+
 ## 2026-09-06 — Phase 11.8 integrated; Phase 12 Personal Intelligence design fixed
 
 **Phase 11.8 is integrated to `main`** (`bc552ca`) and its independent review is done —

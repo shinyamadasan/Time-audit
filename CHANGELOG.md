@@ -1,5 +1,60 @@
 # ChronaSense — Changelog
 
+## Phase 12.0A — Static root↔www runtime parity + safe tooling (integrated to main — 922297d) — 2026-09-06
+
+Infrastructure-only slice ahead of Phase 12 (Personal Intelligence). Split out of
+the original 12.0 per design review so Android runtime work stays independently
+reviewable from tooling safety; deterministic v1 itself is unbuilt (12.1+).
+
+added:
+  - `scripts/runtime-mirror.mjs` — computes the browser-runtime dependency closure
+    live from root `index.html` (`<script src>`, `<script type="module" src>`,
+    `<link rel="stylesheet">`, `navigator.serviceWorker.register(...)`, plus
+    transitive local `import`/`export ... from`/`import()`), not a hand-maintained
+    file list or a blind `*.js` glob. `--check` (default): verifies every closure
+    file exists in `www/` and is byte-identical to root, flags any dev-only file
+    that leaked into the closure or any stale file in `www/` outside the closure,
+    performs zero writes, non-zero exit on drift. `--write`: mirrors the closure
+    into `www/` and removes stale copies.
+  - `scripts/runtime-mirror.test.js` — 14 contract/negative tests (resolution,
+    fixture-based drift/missing-file detection, dev-file exclusion, ordering
+    independence, external/CDN URL exclusion, check-mode-zero-writes, and
+    static assertions that `sync.bat`/`sync.sh`/`deploy-release.ps1` contain no
+    git mutation or `cap sync` path).
+  - `scripts/deploy-release.ps1` — the only script that runs `npx cap sync
+    android`. Refuses to run on `main`, dry-run by default (`-Confirm` required),
+    runs the parity check first, performs no git add/commit/merge/push. Not run
+    yet.
+  - `www/`: the 7 previously-missing module entrypoints (`learning-plan-ui.js`,
+    `capability-career-ui.js`, `life-feed-ui.js`, `cross-domain-intelligence-ui.js`,
+    `life-character-sheet-ui.js`, `life-ledger-export-ui.js`,
+    `life-ledger-sync-status-ui.js`) plus 15 transitive modules and
+    `capability-career.css` — all of Learn / Career / Life / Next / Life-Ledger
+    export+sync-status were previously absent from the Capacitor Android bundle.
+
+changed:
+  - `sync.bat` / `sync.sh` reduced to thin wrappers around `runtime-mirror.mjs`.
+    Removed: `npx cap sync android`, `git add`/`git commit`/`git push origin
+    main` (the old pipeline could publish to production main unconditionally on
+    every run); `sync.sh`'s `<!-- DO NOT EDIT -->` header injection (which made
+    byte-identical parity impossible) is gone.
+  - `www/focus-mode.js`, `www/style.css` resynced to byte-identical (had drifted
+    behind root).
+  - `test.js`: the hardcoded 3-file parity block (`index.html`, `storage.js`,
+    `focus-wallet.js`) replaced with two closure-derived live guards that pick up
+    new `<script>` tags/imports automatically.
+  - `package.json`: `check:www-parity` / `mirror:www` scripts; parity test wired
+    into `npm test`; lint covers `scripts/runtime-mirror.mjs`.
+  - `.github/workflows/ci.yml`: explicit "Check www/ runtime parity" step on
+    every push/PR to `main`.
+
+removed:
+  - `www/eslint.config.js`, `www/playwright.config.js`, `www/test.js` — stale
+    dev-only files that had no business being mirrored to the Android bundle.
+
+Not done here (12.0B / later): Android runtime compatibility, `showDirectoryPicker`
+feature-detection, APK build/smoke, Personal Intelligence code.
+
 ## Phase 11.8 — Minimal distraction signals (integrated to main — bc552ca; independent-review fix 254ab57) — 2026-09-05
 
 A thin, mostly-automatic attention-awareness layer derived from data ChronaSense already
