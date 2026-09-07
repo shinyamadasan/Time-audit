@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   createLifeLedgerMemoryStore,
   validateLifeLedgerEvent
@@ -20,41 +21,58 @@ import {
 /**
  * Cross-repo Life Ledger proof, half B (adapter side).
  *
- * Reads the REAL cookedMeal/mealConsumption output captured by the Meal repo's own
- * Playwright suite (tests/cross-repo-life-ledger-fixture.spec.js — actually calling
- * normalizeCookedMeals() and useCookedPortion() in a real browser page) and proves this
- * adapter accepts it end-to-end: normalization, snapshot import, full Life Ledger event
- * validation, and Obsidian export. This is deliberately NOT a hand-built fixture — it is
- * this repo reading the sibling Meal repo's actual test output, on the same filesystem.
+ * Proves this adapter accepts REAL Meal cookedMeal/mealConsumption output end-to-end:
+ * normalization, snapshot import, full Life Ledger event validation, and Obsidian export.
  *
- * If the fixture file is missing (e.g. a fresh checkout of only this repo, or the Meal
- * repo's cross-repo spec hasn't been run yet), these tests report why and skip rather than
- * fail — this repo cannot itself regenerate a sibling repo's fixture.
+ * The fixture is a committed, deterministic capture of the Meal repo's real runtime output
+ * (`normalizeCookedMeals()` / `useCookedPortion()` in a real browser page), checked in at a
+ * stable repo-relative path so this proof runs from a clone of THIS repo alone. It is
+ * refreshed only by the explicit `npm run fixture:update` workflow (see
+ * scripts/update-meal-cross-repo-fixture.mjs), which copies the Meal repo's own committed
+ * fixture — an ordinary `npm test` never regenerates it, so the UUID/timestamp bytes stay
+ * frozen and the assertions stay deterministic.
+ *
+ * This is a REQUIRED contract gate. A missing or malformed fixture FAILS the suite — it must
+ * never silently skip, because a skipped cross-repo proof is indistinguishable from a broken
+ * one.
  */
 
-const FIXTURE_PATH = path.resolve(
-  '..', 'Meal prep app - durable-consumption-events', 'tests', 'fixtures', 'cross-repo-life-ledger-fixture.json'
+const FIXTURE_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'tests', 'fixtures', 'meal-cross-repo-life-ledger-fixture.json'
 );
 
-function loadFixture() {
-  if (!fs.existsSync(FIXTURE_PATH)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf8'));
-  } catch {
-    return null;
-  }
+function assertLedgerShape(ledger, where) {
+  assert.ok(ledger && typeof ledger === 'object' && !Array.isArray(ledger), `${where} must be an object`);
+  assert.ok(Array.isArray(ledger.cookedMeals), `${where}.cookedMeals must be an array`);
+  assert.ok(Array.isArray(ledger.mealConsumptions), `${where}.mealConsumptions must be an array`);
+  assert.ok(ledger.deletions && typeof ledger.deletions === 'object', `${where}.deletions must be an object`);
 }
 
-const fixture = loadFixture();
-const skip = !fixture;
-const tombstoneSkip = !fixture?.tombstoneScenario?.before || !fixture?.tombstoneScenario?.after;
-if (skip) {
-  console.log(`\nmeal-cross-repo-life-ledger.test.js: SKIPPED — fixture not found at ${FIXTURE_PATH}.`);
-  console.log('Run `npx playwright test tests/cross-repo-life-ledger-fixture.spec.js` in the Meal repo first.');
+function loadRequiredFixture() {
+  if (!fs.existsSync(FIXTURE_PATH)) {
+    throw new Error(
+      `REQUIRED cross-repo fixture missing at ${FIXTURE_PATH}. ` +
+      'This contract gate fails closed — it does not skip. Run `npm run fixture:update` ' +
+      '(with the sibling Meal repo present) to regenerate it.'
+    );
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf8'));
+  } catch (error) {
+    throw new Error(`REQUIRED cross-repo fixture at ${FIXTURE_PATH} is not valid JSON: ${error.message}`);
+  }
+  assertLedgerShape(parsed, 'fixture');
+  assert.equal(parsed.cookedMeals.length, 2, 'fixture must carry exactly two real cookedMeal records');
+  assert.equal(parsed.mealConsumptions.length, 1, 'fixture must carry exactly one real mealConsumption record');
+  assert.ok(parsed.tombstoneScenario, 'fixture must carry a tombstoneScenario');
+  assertLedgerShape(parsed.tombstoneScenario.before, 'fixture.tombstoneScenario.before');
+  assertLedgerShape(parsed.tombstoneScenario.after, 'fixture.tombstoneScenario.after');
+  return parsed;
 }
-if (!skip && tombstoneSkip) {
-  console.log('\nmeal-cross-repo-life-ledger.test.js: tombstone proof SKIPPED — regenerate the Meal cross-repo fixture with tombstoneScenario.');
-}
+
+const fixture = loadRequiredFixture();
 
 function makeMemoryStorage() {
   const data = new Map();
@@ -73,7 +91,17 @@ const ctx = { assertedTimezone: TZ, observedAt: '2026-09-01T06:20:00.000Z' };
 
 console.log('\nCross-repo: real Meal source output through the ChronaSense adapter');
 
-test('a real captured cookedMeal record normalizes to a valid date-precision meal_prepared event', { skip }, () => {
+test('REQUIRED contract gate: the committed cross-repo fixture is present and well-formed (fails closed, never skips)', () => {
+  // loadRequiredFixture() already ran at module load and would have aborted the file if the
+  // fixture were missing/malformed. This test makes the gate an explicit, visible pass/fail
+  // line rather than an absence.
+  assert.ok(fs.existsSync(FIXTURE_PATH));
+  assert.equal(fixture.cookedMeals.length, 2);
+  assert.equal(fixture.mealConsumptions.length, 1);
+  assert.ok(fixture.tombstoneScenario.before && fixture.tombstoneScenario.after);
+});
+
+test('a real captured cookedMeal record normalizes to a valid date-precision meal_prepared event', () => {
   const realCookedMeal = fixture.cookedMeals[0];
   const result = normalizeMealPrepared(realCookedMeal, ctx);
   assert.equal(result.ok, true, JSON.stringify(result));
@@ -83,7 +111,7 @@ test('a real captured cookedMeal record normalizes to a valid date-precision mea
   assert.equal(result.draft.payload.mealName, realCookedMeal.name);
 });
 
-test('the real untracked/manual cookedMeal record (no portion count) also normalizes cleanly', { skip }, () => {
+test('the real untracked/manual cookedMeal record (no portion count) also normalizes cleanly', () => {
   const manualMeal = fixture.cookedMeals[1];
   const result = normalizeMealPrepared(manualMeal, ctx);
   assert.equal(result.ok, true, JSON.stringify(result));
@@ -91,7 +119,7 @@ test('the real untracked/manual cookedMeal record (no portion count) also normal
   assert.equal(result.draft.payload.source.preparationKind, 'leftovers');
 });
 
-test('the real useCookedPortion() output produces exactly one durable mealConsumption record', { skip }, () => {
+test('the real useCookedPortion() output produces exactly one durable mealConsumption record', () => {
   assert.equal(fixture.mealConsumptions.length, 1);
   const realConsumption = fixture.mealConsumptions[0];
   assert.equal(realConsumption.id.indexOf('mc_'), 0);
@@ -100,7 +128,7 @@ test('the real useCookedPortion() output produces exactly one durable mealConsum
   assert.equal(realConsumption.cookedMealId, fixture.cookedMeals[0].id);
 });
 
-test('that real mealConsumption record normalizes to a valid meal_consumed event', { skip }, () => {
+test('that real mealConsumption record normalizes to a valid meal_consumed event', () => {
   const realConsumption = fixture.mealConsumptions[0];
   const result = normalizeMealConsumed(realConsumption, ctx);
   assert.equal(result.ok, true, JSON.stringify(result));
@@ -110,7 +138,7 @@ test('that real mealConsumption record normalizes to a valid meal_consumed event
   assert.equal(result.draft.payload.portionCount, realConsumption.portionsConsumed);
 });
 
-test('importMealSnapshot accepts the full real snapshot end-to-end and every stored event passes full Life Ledger validation', { skip }, () => {
+test('importMealSnapshot accepts the full real snapshot end-to-end and every stored event passes full Life Ledger validation', () => {
   const store = createLifeLedgerMemoryStore();
   const result = importMealSnapshot(
     { cookedMeals: fixture.cookedMeals, mealConsumptions: fixture.mealConsumptions, deletions: fixture.deletions },
@@ -124,7 +152,7 @@ test('importMealSnapshot accepts the full real snapshot end-to-end and every sto
   });
 });
 
-test('the real snapshot survives an Obsidian export with no time-of-day fabricated for the date-precision meal_prepared events', { skip }, () => {
+test('the real snapshot survives an Obsidian export with no time-of-day fabricated for the date-precision meal_prepared events', () => {
   const store = createLifeLedgerMemoryStore();
   importMealSnapshot(
     { cookedMeals: fixture.cookedMeals, mealConsumptions: fixture.mealConsumptions },
@@ -138,7 +166,7 @@ test('the real snapshot survives an Obsidian export with no time-of-day fabricat
   assert.equal(allContent.includes('00:00'), false);
 });
 
-test('duplicate reconnect import of the exact same real snapshot is a fully idempotent no-op', { skip }, () => {
+test('duplicate reconnect import of the exact same real snapshot is a fully idempotent no-op', () => {
   const store = createLifeLedgerMemoryStore();
   const snapshot = { cookedMeals: fixture.cookedMeals, mealConsumptions: fixture.mealConsumptions };
   importMealSnapshot(snapshot, { store, assertedTimezone: TZ, observationClock: () => '2026-09-01T06:20:00.000Z' });
@@ -153,7 +181,7 @@ test('duplicate reconnect import of the exact same real snapshot is a fully idem
   assert.equal(store.listEvents().length, before);
 });
 
-test('local + an identical cloud-arrived copy of the real snapshot collapse to one logical fact per source record', { skip }, () => {
+test('local + an identical cloud-arrived copy of the real snapshot collapse to one logical fact per source record', () => {
   // Simulates: this device already imported it locally, then the "cloud" (a second,
   // structurally-identical copy of the same real snapshot) arrives and is imported again.
   const store = createLifeLedgerMemoryStore();
@@ -164,7 +192,7 @@ test('local + an identical cloud-arrived copy of the real snapshot collapse to o
   assert.equal(store.listEvents().length, fixture.cookedMeals.length + fixture.mealConsumptions.length);
 });
 
-test('local + a cloud copy with the same source id but different facts produces an explicit conflict, never a silent overwrite', { skip }, () => {
+test('local + a cloud copy with the same source id but different facts produces an explicit conflict, never a silent overwrite', () => {
   const store = createLifeLedgerMemoryStore();
   importMealSnapshot(
     { cookedMeals: fixture.cookedMeals, mealConsumptions: [] },
@@ -182,7 +210,7 @@ test('local + a cloud copy with the same source id but different facts produces 
   assert.equal(stored.event.payload.preparedDate, fixture.cookedMeals[0].cookedDate); // original never overwritten
 });
 
-test('a real Meal deletion fixture tombstones a runtime-stored meal_prepared event and survives reload', { skip: tombstoneSkip }, () => {
+test('a real Meal deletion fixture tombstones a runtime-stored meal_prepared event and survives reload', () => {
   const storage = makeMemoryStorage();
   const store = createLocalLifeLedgerStore({ storage, key: LIFE_LEDGER_RUNTIME_KEY });
   const before = fixture.tombstoneScenario.before;
