@@ -173,12 +173,13 @@ async function openApp(page, { learningPlanRaw = null, dailyPlans = {}, lifeLedg
 }
 
 
-async function addRoutine(page, { title='Spanish', source='manual', mode='anytime' }={}) {
+async function addRoutine(page, { title='Spanish', source='manual', mode='anytime', workoutRoutineId='' }={}) {
   await page.getByRole('button',{name:'Add routine',exact:true}).click();
   const form=page.locator('#daily-routine-form');
   await form.locator('[name=title]').fill(title);
   await form.locator('[name=mode]').selectOption(mode);
   await form.locator('[name=source]').selectOption(source);
+  if(source==='workout') await form.locator('[name=workoutRoutineId]').fill(workoutRoutineId);
   if(source==='learning') await form.locator('[name=planId]').selectOption('plan-a');
   if(mode==='exact') await form.locator('[name=time]').fill('20:00');
   await form.locator('[name=minimumMinutes]').fill('5');
@@ -286,12 +287,12 @@ test('23:59 to 00:01 reload creates one new intention, never yesterday’s overd
 });
 test('real Workout fact completes automatically, duplicate stays one completion',async({page})=>{
   await page.clock.setFixedTime(new Date('2026-09-08T19:00:00Z'));
-  await openApp(page); await addRoutine(page,{title:'Workout',source:'workout'});
+  await openApp(page); await addRoutine(page,{title:'Workout',source:'workout',workoutRoutineId:'gym-routine'});
   await expect(card(page)).toContainText('No live openGym connection');
   await page.evaluate(async()=>{
     const {normalizeWorkoutCompleted}=await import('./workout-life-ledger-adapter.js');
     const {createLocalLifeLedgerStore}=await import('./life-ledger-runtime.js');
-    const result=normalizeWorkoutCompleted({id:'test-workout',d:'2026-09-08',start:Date.parse('2026-09-08T17:30:00Z'),end:Date.parse('2026-09-08T18:12:00Z'),name:'Workout',entries:[]},{observedAt:'2026-09-08T19:00:00Z',assertedTimezone:'Etc/UTC'});
+    const result=normalizeWorkoutCompleted({id:'test-workout',d:'2026-09-08',start:Date.parse('2026-09-08T17:30:00Z'),end:Date.parse('2026-09-08T18:12:00Z'),name:'Workout',routineId:'gym-routine',entries:[]},{observedAt:'2026-09-08T19:00:00Z',assertedTimezone:'Etc/UTC'});
     if(!result.ok)throw new Error(JSON.stringify(result));
     const store=createLocalLifeLedgerStore();store.upsertEvent(result.draft);store.upsertEvent(result.draft);
     renderDailyRoutines();
@@ -300,20 +301,23 @@ test('real Workout fact completes automatically, duplicate stays one completion'
   await expect(page.locator('#daily-routines')).toContainText('1 / 1');
   await page.reload();await expect(card(page)).toHaveCount(1);await expect(card(page)).toContainText('Target complete');
 });
-test('Learning already completed before Today opens binds today’s factual step',async({page})=>{
+test('review Learning: out-of-order B before first bind cannot replace next unfinished A',async({page})=>{
   await openApp(page,{learningPlanRaw:JSON.stringify({schemaVersion:1,plans:[seededLearningPlan()]})});
   await page.evaluate(async()=>{
     const {createLearningPlanRepository}=await import('./learning-plan-repository.js');
     const {completeStep}=await import('./learning-plan-model.js');
     const {recordLearningPlanStepCompleted}=await import('./life-ledger-runtime.js');
     const repo=createLearningPlanRepository();
-    const plan=completeStep(repo.listPlans()[0],'step-a');
+    const plan=completeStep(repo.listPlans()[0],'step-b');
     repo.savePlan(plan);
-    recordLearningPlanStepCompleted(plan,'step-a',{sourceTimezone:'Etc/UTC'});
+    recordLearningPlanStepCompleted(plan,'step-b',{sourceTimezone:'Etc/UTC'});
   });
   await addRoutine(page,{title:'Learning',source:'learning'});
   await expect(card(page)).toContainText('Step A');
-  await expect(page.locator('#daily-routines')).toContainText('1 / 1');
+  await expect(page.locator('#daily-routines')).toContainText('0 / 1');
+  await page.reload();
+  await expect(card(page)).toContainText('Step A');
+  await expect(page.locator('#daily-routines')).toContainText('0 / 1');
 });
 
 test('scheduled Focus linkage survives reload and existing same-device timer takeover',async({page})=>{
@@ -349,4 +353,45 @@ test('failed launch persistence reports the actual error and does not start the 
   await card(page).getByRole('button',{name:'Start Focus',exact:true}).click();
   expect(await page.evaluate(()=>pomodoroPhase)).toBe('idle');
   await expect(page.locator('#daily-routines-error')).toContainText('Quota exceeded');
+});
+
+async function toggleLearningFact(page, stepId, reopen=false) {
+  await page.evaluate(async({stepId,reopen})=>{
+    const {createLearningPlanRepository}=await import('./learning-plan-repository.js');
+    const {completeStep,reopenStep}=await import('./learning-plan-model.js');
+    const {recordLearningPlanStepCompleted,recordLearningPlanStepReopened}=await import('./life-ledger-runtime.js');
+    const repo=createLearningPlanRepository(),before=repo.listPlans()[0];
+    const after=reopen?reopenStep(before,stepId):completeStep(before,stepId);
+    repo.savePlan(after);
+    if(reopen)recordLearningPlanStepReopened(before,stepId,{sourceTimezone:'Etc/UTC'});
+    else {recordLearningPlanStepCompleted(after,stepId,{sourceTimezone:'Etc/UTC'});recordLearningPlanStepCompleted(after,stepId,{sourceTimezone:'Etc/UTC'});}
+    renderDailyRoutines();
+  },{stepId,reopen});
+}
+test('review Learning: pinned A survives advancement, duplicate B facts, reopen and reload',async({page})=>{
+  await openApp(page,{learningPlanRaw:JSON.stringify({schemaVersion:1,plans:[seededLearningPlan()]})});
+  await addRoutine(page,{title:'Learning',source:'learning'});
+  await toggleLearningFact(page,'step-a');
+  await expect(card(page)).toContainText('Step A');
+  await expect(page.locator('#daily-routines')).toContainText('1 / 1');
+  const next=await page.evaluate(async()=>{
+    const {createLearningPlanRepository}=await import('./learning-plan-repository.js');
+    const {findNextLearningPlanStep}=await import('./learning-plan-next-action.js');
+    return findNextLearningPlanStep(createLearningPlanRepository().listPlans()[0]).stepId;
+  });
+  expect(next).toBe('step-b');
+  await toggleLearningFact(page,'step-b');
+  await expect(card(page)).toHaveCount(1);await expect(card(page)).toContainText('Step A');
+  await toggleLearningFact(page,'step-a',true);
+  await expect(page.locator('#daily-routines')).toContainText('0 / 1');
+  await page.reload();await expect(card(page)).toContainText('Step A');
+  await expect(page.locator('#daily-routines')).toContainText('0 / 1');
+});
+test('review Learning: no unfinished step means no daily binding, despite completion facts',async({page})=>{
+  await openApp(page,{learningPlanRaw:JSON.stringify({schemaVersion:1,plans:[seededLearningPlan()]})});
+  await toggleLearningFact(page,'step-a');await toggleLearningFact(page,'step-b');
+  await addRoutine(page,{title:'Learning',source:'learning'});
+  await expect(card(page)).toContainText('No unfinished step available');
+  await expect(page.locator('#daily-routines')).toContainText('0 / 1');
+  expect(await page.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('ta3-daily-routines-v1')).links))).toHaveLength(0);
 });

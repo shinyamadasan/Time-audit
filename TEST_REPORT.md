@@ -438,7 +438,7 @@ Scope and safety:
 - No commit, staging, push, merge, deployment, Firebase write, or real Obsidian write.
 - Remaining blocker: none found. Ready for targeted independent re-review.
 
-## Phase 6 — Daily Operating Loop V1 · 2026-09-07
+## Phase 6 — Daily Operating Loop V1 · original implementation evidence (superseded by review fixes below)
 
 Execution contract: user's explicit Phase 6 brief. Review candidate on
 `feat/daily-operating-loop-v1`, based on freshly fetched and finally re-fetched
@@ -447,7 +447,7 @@ Execution contract: user's explicit Phase 6 brief. Review candidate on
 - Full `npm test`: **973 passed, 0 failed**, including existing Focus/Learning,
   Life Ledger, Workout, Meal/cross-repo fixture, temporal/date-scoped export,
   background-sync and runtime-mirror regressions. Log: `phase6-npm-test-final.log`.
-- Full Playwright: **228 passed, 0 failed** (`phase6-playwright-final.log`).
+- Pre-review Playwright run: **228 passed, 0 failed** (`phase6-playwright-final.log`).
   After the small initial Focus countdown fix, the affected Focus/Learning/routine
   suites were re-run: **159 passed** (`phase6-focus-regression.log`).
   Final launch-error and exact-plan-link hardening: focused Node **19 passed**,
@@ -464,7 +464,8 @@ Execution contract: user's explicit Phase 6 brief. Review candidate on
   `test-results/daily-routines-landscape.png` and
   `test-results/daily-routines-active-focus-landscape.png`.
 - Chaos cases 1–10: pass across focused model/browser checks; source ambiguity
-  abstains and already-completed Learning binds the same-day factual step.
+  was covered under the original policy. The unsafe completion-derived Learning
+  binding and weak Workout policy are superseded by the review fixes below.
 - Local dependency install required `npm ci --ignore-scripts --offline
   --legacy-peer-deps` due to the existing Capacitor 8 / google-auth peer conflict.
   No package versions or lockfile changes. No production credentials needed.
@@ -483,3 +484,64 @@ protected stabilization checkout remains clean at `4b3ac04`. No Meal/openGym sou
 production Firebase, real Obsidian, main merge/push, or deployment writes.
 See `docs/DAILY_OPERATING_LOOP_V1.md` for semantics, limitations, friction and
 highest-risk independent-review targets.
+
+
+## Phase 6 — independent-review bounded fixes · 2026-09-07
+
+Status: ready for targeted re-review after the FIX FIRST findings. Original feature
+commit `51173dc38f263be64db3bc63ee15c50f02f2118e` retained. Fetched main is unchanged
+at `c1d9a96b22abbcefb17736f112d756e477ef8700`; no rebase/reconciliation.
+
+Findings reproduced with failing regressions before implementation, then fixed:
+
+- Workout requires explicit `workoutRoutineId == payload.source.routineId`, an
+  enabled occurring routine, exactly one distinct Ledger event and exactly one
+  eligible linked routine. Duplicate event IDs collapse. No same-day uniqueness,
+  longest-duration, nearest-time, or title heuristic. Preserved source local date
+  and start date in the scheduler timezone must agree with the instance date;
+  date disagreement abstains without changing source facts. Overnight Sept 8 ->
+  Sept 9 cannot satisfy Sept 9 evening. Disabled/non-occurring routines do not
+  create ambiguity. A pre-existing Manual assertion remains one completion when
+  factual evidence later arrives; ambiguous evidence cannot replace it.
+- Learning binds only the existing Next Step. Out-of-order completed B cannot
+  replace unfinished A before materialization. A remains pinned after completion,
+  Next Step advancement, B completion, reopening/tombstone, and reload. Historical
+  unbound dates cannot borrow same-plan facts. No next step means no new binding.
+- Calendar streak first gates every completion lookup on current occurrence;
+  disabled or non-scheduled today returns zero. Weekend gaps and cadence edits
+  break streaks even with retained manual assertions or Focus receipts. Minimum
+  and Manual completion count only on scheduled occurrences; no revision history.
+
+Validation:
+
+- Targeted final scheduler/domain suite: **29 passed, 0 failed**
+  (`phase6-review-domain-final.log`). Browser routine suite: **14 passed**
+  (`phase6-review-targeted.log`).
+- Current full Playwright discovery/run: **231/231 passed**, not the stale 228
+  (`phase6-review-playwright.log`). The reviewed branch had 229 cases; two added
+  Learning browser regressions raise the current count to 231.
+- Final full `npm test`: **983 passed, 0 failed**
+  (`phase6-review-npm-final.log`), covering Focus/Learning/Ledger/date export,
+  Workout/Meal adapters, temporal and remaining existing regressions.
+- Workout source gate: **12/12 passed**, zero skipped.
+  Meal source gate: **12/12 passed**, zero skipped. These are the existing
+  adapter-side captured-source fixture gates, not production source mutations.
+- ESLint: **0 errors, 19 existing warnings**; changed modules have no warnings.
+- Changed JS and both real inline scripts pass `node --check`; strict UTF-8 and
+  control-byte scan, `git diff --check`, and all **36** runtime mirror files pass.
+
+Self-chaos: all five reproduced cases now fail closed or retain the correct
+intention/streak: overnight workout; unrelated morning workout; two same-day
+workouts; B completed before A binding; cadence edit removing a completed date.
+
+Friction: normally **2 tracking-only Done taps/day** when Workout needs Manual
+completion (Workout + unsupported habit), or **1** with strong Workout linkage,
+unique factual delivery, and agreeing dates. Manual uses the existing Completion
+option; no new assertion model. No live ingestion claim.
+
+Scope: scheduler matching/binding/streak logic, corrective user copy, adversarial
+tests, exact runtime mirrors, and corrected existing documentation only. Focus,
+manual persistence, IDs, schedule modes, timezone, and Phase 5 machinery unchanged.
+Protected adapter/stabilization worktrees remain clean. No push/merge/deploy,
+Firebase writes, real Obsidian writes, or Meal/openGym modifications. Real-device
+checks and the previously documented V1 limitations remain deferred.

@@ -69,14 +69,16 @@ export function matchCompletion(instance, { routines, events = [], manual = {}, 
   const candidates = [];
   let ambiguous = false;
   const dateOf = value => localContext(value, instance.timezone).date;
-  const sameDay = e => !e.tombstone?.active && Date.parse(e.occurredAt) <= Number(new Date(now)) && dateOf(e.occurredAt) === instance.date;
-  for (const e of events.filter(sameDay)) {
-    if (r.source === 'workout' && e.sourceApp === 'workout' && e.type === 'workout_completed' && (!r.workoutRoutineId || e.payload.source.routineId === r.workoutRoutineId)) {
-      const eligible = routines.filter(other => other.source === 'workout' && occursOn(other, instance.date) && (!other.workoutRoutineId || other.workoutRoutineId === e.payload.source.routineId));
+  const liveFacts = events.filter(e => !e.tombstone?.active && Date.parse(e.occurredAt) <= Number(new Date(now)));
+  for (const e of new Map(liveFacts.map(event => [event.eventId, event])).values()) {
+    // The adapter preserves source localDate and startedAt as separate facts.
+    // Require agreement; never re-date a workout using its completion instant.
+    if (r.source === 'workout' && r.enabled && occursOn(r, instance.date) && r.workoutRoutineId && e.sourceApp === 'workout' && e.type === 'workout_completed' && e.payload.source.routineId === r.workoutRoutineId && e.payload.source.localDate === instance.date && dateOf(e.payload.startedAt) === instance.date) {
+      const eligible = routines.filter(other => other.enabled && other.source === 'workout' && occursOn(other, instance.date) && other.workoutRoutineId === r.workoutRoutineId);
       if (eligible.length !== 1) { ambiguous = true; continue; }
       candidates.push({ evidenceId: e.eventId, duration: e.payload.durationMinutes, source: 'workout' });
     }
-    if (r.source === 'learning' && e.sourceApp === 'chronasense' && e.type === 'plan_step_completed' && e.payload.source.planId === r.planId && (link ? link.planId === r.planId && e.payload.source.stepId === link.stepId : instance.date < dateOf(now))) {
+    if (r.source === 'learning' && dateOf(e.occurredAt) === instance.date && e.sourceApp === 'chronasense' && e.type === 'plan_step_completed' && e.payload.source.planId === r.planId && link && link.planId === r.planId && e.payload.source.stepId === link.stepId) {
       const eligible = routines.filter(other => other.source === 'learning' && occursOn(other, instance.date) && other.planId === r.planId);
       if (eligible.length !== 1) { ambiguous = true; continue; }
       candidates.push({ evidenceId: e.eventId, duration: e.payload.trackedMinutes, source: 'learning' });
@@ -87,6 +89,10 @@ export function matchCompletion(instance, { routines, events = [], manual = {}, 
       const entry = entries.find(e => String(e.id) === receipt.entryId && !e.deleted && !e.missed && e.tsStart === receipt.startedAt && e.ts === receipt.endedAt && e.blockIntervalMin === receipt.duration);
       if (entry && receipt.endedAt <= Number(new Date(now)) && dateOf(receipt.startedAt) === instance.date) candidates.push({ evidenceId: receipt.entryId, duration: receipt.duration, source: 'focus' });
     }
+  }
+  if (r.source === 'workout' && (ambiguous || candidates.length > 1)) {
+    ambiguous = true;
+    candidates.length = 0;
   }
   const rank = { target: 3, complete: 2, minimum: 1, incomplete: 0 };
   const automatic = candidates.map(c => ({ ...c, level: completionLevel(r, c.duration) })).sort((a, b) => rank[b.level] - rank[a.level] || String(a.evidenceId).localeCompare(String(b.evidenceId)))[0];
@@ -102,9 +108,11 @@ export function previousDate(date) {
 }
 // Consecutive calendar days, intentionally not "scheduled opportunities".
 export function routineStreak(routine, date, isComplete) {
-  let cursor = isComplete(date) ? date : previousDate(date);
+  if (!routine.enabled || !occursOn(routine, date)) return 0;
+  const completedOccurrence = day => occursOn(routine, day) && isComplete(day);
+  let cursor = completedOccurrence(date) ? date : previousDate(date);
   let days = 0;
-  while (cursor >= routine.createdDate && isComplete(cursor)) { days++; cursor = previousDate(cursor); }
+  while (cursor >= routine.createdDate && completedOccurrence(cursor)) { days++; cursor = previousDate(cursor); }
   return days;
 }
 export function dailyScore(completions) {

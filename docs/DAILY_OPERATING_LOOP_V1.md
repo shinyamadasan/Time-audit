@@ -52,7 +52,9 @@ source facts or manual history. No historical schedule-audit UI is introduced.
 The envelope pins one explicit timezone from the app's configured timezone when
 first saved. It is displayed on Today. Every scheduler date, cadence, wall-clock
 comparison, fact-date selection, and Focus binding uses that same timezone. It
-never uses a fact's stored display date or another implicit host timezone.
+never uses another implicit host timezone. Workout additionally requires its preserved
+source-local date to agree with the start date in this timezone; disagreement
+means no automatic match, not a rewrite of either source fact.
 Changing app timezone later does not migrate an existing scheduler; travel/timezone
 migration is deferred, avoiding silent history re-dating.
 
@@ -76,22 +78,35 @@ only tomorrow's normal instance, with no overdue copies.
 
 - **Manual:** Done records an explicit scheduler assertion; optional Minimum done
   records only minimum. Undo removes only that assertion. No Ledger fabrication.
-- **Workout:** an active `workout_completed` event from `sourceApp: workout` on the
-  scheduler date matches one eligible routine, optionally constrained by the actual
-  `payload.source.routineId`. Multiple eligible routines abstain visibly. The
-  setup flow rejects overlapping active source/link configurations conservatively.
-  A time window is a preference, so a same-day workout outside it may complete it.
+- **Workout:** automatic completion requires an explicit stable `workoutRoutineId`
+  matching the actual `payload.source.routineId` on an active `workout_completed`
+  fact from `sourceApp: workout`. Exactly one distinct matching fact and one active,
+  occurring, explicitly linked scheduler routine are required. Disabled and
+  non-occurring routines, and routines linked to other IDs, do not participate.
+  Repeated delivery of the same Ledger event is deduplicated by stable `eventId`;
+  multiple distinct candidates abstain, with no strongest/longest selection.
+  The adapter preserves `payload.source.localDate`, `startedAt`, and completion
+  instant independently. Automatic matching requires both the preserved source
+  date and start date in the scheduler timezone to equal the instance date.
+  If these facts disagree, matching fails closed without re-dating the workout.
+  A Sept 8 23:30 -> Sept 9 00:15 workout cannot satisfy Sept 9's evening intention.
+  An unrelated morning workout cannot satisfy an evening intention; an explicit
+  source routine link can prove a match despite a different preferred time.
+  Without linkage, switch Completion to the existing Manual option and use
+  Done/Undo. The optional ID is optional for saving, not for auto-completion.
   The adapter's supplied-backup provenance is unchanged. There is **no live openGym
-  connection** here: automatic completion starts when a real fact reaches this
-  device's existing Ledger, not simply when another app finishes a workout.
-- **Learning:** pins the actual first unfinished step by immutable plan/step IDs,
-  without copying Plan state. If Today first opens after an existing same-day
-  completion, it binds that factual completed step instead. A same-day completion
-  keeps that step on the Done card; tomorrow surfaces the next unfinished step.
-  Deleted steps can rebind; source reopening/tombstones remove automatic completion.
-  A missing plan/step is reported rather than replaced by a vague study task.
-  Existing `plan_step_completed` facts match the binding. Historical dates without
-  a saved binding can use same-plan completion facts, subject to source ambiguity.
+  connection**: even a linked fact must reach this device's existing Ledger.
+- **Learning:** materialization binds only the actual next unfinished step returned
+  by `findNextLearningPlanStep`, using immutable plan/step IDs. Already-completed
+  facts never supply an intention, including for historical unbound dates. If no
+  next unfinished step exists, the routine stays unbound/unavailable.
+  Once pinned, today's binding stays on that step through completion, advancement
+  of Next Step, reload, and reopening. Other step completions do not rebind it.
+  Source reopening/tombstones revoke completion. A missing/deleted pinned step
+  remains unavailable rather than silently selecting a replacement. Existing
+  explicit source/plan editing can clear today's link; a newly materialized link
+  still uses only Next Step. Tomorrow derives its own next unfinished step.
+  `plan_step_completed` must match both pinned plan and step IDs and instance date.
 - **Focus:** Start launches the existing timer with the routine target. A local
   launch reference is persisted before starting. Only `endWorkSession` records a
   scheduler receipt, and matching requires its exact source entry ID, start/end,
@@ -117,7 +132,8 @@ is below the routine threshold; the schedule can honestly remain below minimum.
 A compact section precedes the existing activity hero: Now, Next, Later, Anytime,
 Done (empty sections omitted), plus Add/Edit and collapsed Other routines for
 unscheduled/disabled definitions. Manual sources get Done; Learning/Focus get
-Start Focus. Workout has no redundant scheduler Done control. The form supports
+Start Focus. Workout uses automatic matching only with strong linkage; unlinked or ambiguous
+Workout can select the existing Manual completion option to get Done/Undo. The form supports
 all four cues and all three cadences. Scheduler hides while browsing another
 Today timeline date. Existing daily-plan setup is not required by routines.
 
@@ -132,9 +148,15 @@ is explicitly reported; source time survives, but scheduler completion may need
 retry/recovery outside V1 if the callback cannot persist it.
 
 Score: completed / planned, with a separate count of minimum completions. Streak:
-consecutive **calendar** days completed, allowing today to remain pending until
-midnight. Non-scheduled days break this deliberately simple calendar streak;
-it is not a scheduled-opportunity streak, XP, or a productivity score.
+consecutive **calendar** days completed, allowing a scheduled today to remain
+pending until midnight. Before reading any historical completion, the current
+mutable cadence must say the routine occurs on that date. Non-scheduled days
+break the streak (including when today itself is non-scheduled); disabled routines
+report zero without evaluating history. Re-enabling may recover a streak from
+retained evidence under current cadence. Manual and minimum completion count,
+but only on occurring dates. Cadence edits may shorten a streak without deleting
+assertions or Focus receipts. No definition snapshots or revision history.
+This is not a scheduled-opportunity streak, XP, or a productivity score.
 
 Reminders are deferred. Existing Capacitor IDs and service-worker timers handle
 interval pings; their cancellation/permission/retry semantics are not a safe
@@ -149,20 +171,23 @@ iOS Safari/Android usability remains an independent human check.
 
 | Typical activity | Existing activity action | Extra scheduler tracking actions |
 |---|---|---:|
-| Workout | Finish in openGym; existing ingestion must deliver its fact | 0 once fact arrives |
+| Workout | Finish in openGym; explicit routine link and unique fact required | 0 with strong evidence; otherwise 1 Manual Done |
 | Learning | Start real step; existing Done outcome/toggle | 0 |
 | Deep Work | Start Focus; complete work session | 0 |
 | Unsupported habit | Perform activity; tap scheduler Done | 1 |
 
-Estimated extra tracking actions: **1/day**, conditional on Workout fact delivery.
-There is no automatic ingestion claim; any existing backup/import effort is outside
-this scheduler and can make total real-world friction higher. One-time setup and
+Estimated extra tracking actions: **2/day** when Workout lacks strong linkage or
+is ambiguous (Workout Manual Done + unsupported habit Done), or **1/day** when
+strong Workout linkage and unique fact delivery are available. There is no
+automatic ingestion claim; existing backup/import effort is outside this scheduler
+and can make total real-world friction higher. One-time setup and
 optional corrections are not daily requirements.
 
 ## Chaos and review evidence
 
 1. Yesterday missed: next-day generation/reload shows exactly one instance.
-2. Workout completed at 18:12: actual adapter event automatically completes it.
+2. Workout completed at 18:12: only explicit linkage with one eligible fact/routine
+   and agreeing source/start date completes it; unlinked same-day facts do not.
 3. Start/abandon Focus: no completion; no Workout completion from Focus.
 4. Learning next changes: today keeps completed step, no duplicate; next date derives anew.
 5. 20:00 -> 21:00 edit: same identity, new time immediately.
@@ -170,7 +195,12 @@ optional corrections are not daily requirements.
 7. DST spring/fall: correct local date and one stable identity.
 8. 23:59 -> 00:01 reload: one new identity and no old overdue copy.
 9. Duplicate Ledger fact: one completion.
-10. Manual then automatic: one result; minimum and target remain distinct.
+10. Manual then strongly linked automatic: one result; minimum and target remain distinct.
+
+Independent-review adversarial cases now covered: overnight Sept 8 -> Sept 9
+Workout, unrelated morning Workout, two distinct same-day linked workouts, Step B
+completed out of order before Step A binds, and cadence edit removing a completed
+date. All abstain or retain the correct intention/streak, without changing source facts.
 
 Focused tests live in `daily-routines.test.js` and `tests/daily-routines-ui.spec.js`.
 Gate totals and final git/safety checks are recorded in `TEST_REPORT.md`.

@@ -1514,3 +1514,14 @@ deviations: ported directly from the Meal Prep app (sibling project, sharing thi
 ## Phase 6 — Daily Operating Loop V1 (branch: feat/daily-operating-loop-v1)
 
 Added Today reusable routines, a compact editor, hybrid cues, deterministic daily identities, local persistence, manual correction, source completion matching, and calendar streak/count. Reused existing Learning and Focus; added bounded full-session hooks and local launch linkage. Updated browser/Capacitor runtime parity. Added focused model/browser tests and narrow documentation. No merge/deploy or external production writes. Execution contract: explicit user Phase 6 brief; legacy TASKS.md has no Phase 6 task and remains unchanged. Independent review required; see docs/DAILY_OPERATING_LOOP_V1.md and TEST_REPORT.md.
+
+
+## Phase 6 — bounded independent-review fixes (feat/daily-operating-loop-v1)
+
+Require strong Workout routine linkage and unique eligible facts, with agreeing
+source/start dates; fail closed on unlinked or ambiguous evidence. Bind Learning
+only from Next Step and retain the pin. Gate streak history on current occurrence
+and enabled state. Preserve existing identity, Focus/manual/timezone/persistence
+architecture. Add adversarial domain/browser regressions, update runtime mirrors,
+and correct policy/friction/count documentation. See TEST_REPORT.md for green
+regressions and docs/DAILY_OPERATING_LOOP_V1.md for final semantics. No push.
