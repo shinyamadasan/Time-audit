@@ -80,6 +80,69 @@ Functions: `canonicalFocusActivity()`, `enterFocusMode()`, `tryExitFocusMode()`,
 Variables: `focusModeOn`, `focusBlockCountdown`, `pomodoroPhase`, `pomodoroTimer`, `pomodoroRemaining`, `pomodoroWorkMin`, `pomodoroBreakMin`, `pomodoroCount`, `focusStartTime`, `pomodoroPhaseStartedAt`, `pomodoroWasPaused`, `_lastFocusSyncAt`, `_pomodoroAutoStart`, `_focusMusicVolume`, `_lofiTrackIdx`, `_shuffleMode`, `_shuffleQueue`, `_inBreakMode`, `_outroActive`, `_focusSugIndex`, `_LOFI_TRACKS`, `_BREAK_TRANSITION`, `_BREAK_LOOP`, `_OUTRO_LEAD_SEC`, `FOCUS_SYNC_REFRESH_MS`
 Depends on: `entries`, `settings`, `running`, `ticker`, `blockStartTime`, `currentTask`, `intention`, `lastTaskForRepeat`, `timerStartedAt`, `totalSecs`, `remaining`, `dailyCommitment`, `persist()`, `syncEntries()`, `syncTimerState()`, `showToast()`, `resetTimer()`, `getTodayEntries()`, `getActivityColor()`, `toDateKey()`, `fmtDur()`, `getBucket()`, `renderToday()`, `updateRing()`, `doPing()`, `buildHeroSuggestions()`, `buildSugItem()`, `canonicalizeActivityInput()`, `_startHeartbeat()`, `_stopHeartbeat()`
 
+
+### chronasense-life-ledger-adapter.js: date-scoped read
+
+`readChronaSenseLifeLedgerForDate(date, options)` is a synchronous read-only projection.
+Inject `storage.js:getEntriesForDate` and supply an explicit `sourceTimezone` plus adapter
+observation context. The wrapper validates that timezone, then passes the same value to
+`getEntriesForDate(date, { sourceTimezone })` and normalization. Explicit timezone overrides
+storage settings for this read; there is no implicit device/host fallback in the export.
+Legacy one-argument storage calls keep their configured/device fallback. For example:
+
+```js
+const { readChronaSenseLifeLedgerForDate } =
+  await import('./chronasense-life-ledger-adapter.js');
+const result = readChronaSenseLifeLedgerForDate('2026-09-06', {
+  getEntriesForDate,
+  sourceTimezone: 'America/Phoenix', // explicit selection and normalization authority
+  observedAt: '2026-09-07T12:00:00.000Z' // caller-supplied observation time
+});
+```
+
+This export selects whole stored source records: exclude `deleted` rows; use the explicit
+timezone's calendar date of `tsStart || ts`; ignore stored `entry.date`. An unsplit
+23:55–00:10 record belongs wholly to its start date, without clipping. If `tsStart` is
+absent/falsy, selection uses `ts` even when normalization infers an earlier interval start. `occurredAt` remains the source end
+instant, which can fall on a different calendar day. The query date never enters event identity
+or replaces an occurrence timestamp.
+
+This source-record ownership is distinct from UI daily accounting: `getEntriesForDateWindow()`
+can clip intervals into each viewed calendar day. Retro/quick-log paths may instead create
+physical source splits at midnight. Those records are selected independently: a 23:55–00:00
+record belongs to day 1 and a 00:00–00:10 record belongs to day 2. This export neither splits
+records nor rewrites canonical timestamps to imitate clipped UI totals.
+
+Output is the existing `normalizeChronaSenseEntries()` result, `{ drafts, rejected }`.
+Each emitted draft passes `validateLifeLedgerEventDraft()`; logical-key ordering, duplicate
+collapse/conflict rejection, source IDs, and fingerprint semantics are inherited unchanged.
+Use existing `serializeLifeLedgerFacts(draft)` / `fingerprintLifeLedgerEvent(draft)` for
+canonical factual bytes/fingerprints. `JSON.stringify(result)` is repeatable for unchanged
+input order and identical context; changing observation time changes operational provenance
+but not canonical facts. Valid draft output is also invariant under source permutation;
+rejection indexes intentionally refer to positions in the selected input, as in the adapter.
+A changing `clock` is supported by the existing adapter context but is not byte-replayable.
+
+Invalid query dates throw `RangeError` before reading. A missing reader throws `TypeError`.
+Missing/invalid `sourceTimezone` throws `RangeError` before reading, including empty days.
+Validation reuses the existing adapter timezone predicate: a valid IANA name containing `/`
+is required (`UTC` aliases remain unsupported; `Etc/UTC` is accepted). No `timezone` alias
+or device fallback substitutes for this required export argument.
+The injected reader must be synchronous, read-only, and honor its second argument
+`{ sourceTimezone }`; pass the updated storage reader directly, not a one-argument closure
+that discards options. Arbitrary callbacks are trusted to honor this contract.
+Read failures propagate (including upstream records whose date cannot be read); selected
+malformed records and remaining observation context retain the existing normalizer's policy.
+With valid timezone context, empty dates return `{ drafts: [], rejected: [] }`.
+No source/store loading is performed here.
+
+This is a draft read API, not a stored-event snapshot. The existing transport requires
+Ledger-owned UUIDs/revisions, so it is deliberately not used and no IDs are minted. No new
+event schema, store, source contract, UI/download binding, or persistence path is added.
+The adapter remains outside the root app's loaded runtime closure. The bounded storage
+reader signature change is mirrored byte-for-byte in `www/storage.js`.
+Tests: `chronasense-life-ledger-date.test.js` (also in `npm test`).
+
 ### workout-life-ledger-adapter.js
 Lines: external file
 Purpose: Pure openGym backup adapter and explicit import boundary for Life Ledger
