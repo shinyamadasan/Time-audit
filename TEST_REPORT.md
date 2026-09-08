@@ -520,7 +520,7 @@ Validation:
 - Current full Playwright discovery/run: **231/231 passed**, not the stale 228
   (`phase6-review-playwright.log`). The reviewed branch had 229 cases; two added
   Learning browser regressions raise the current count to 231.
-- Final full `npm test`: **983 passed, 0 failed**
+- Final full `npm test`: **983 total: 982 passed, 1 skipped, 0 failed**
   (`phase6-review-npm-final.log`), covering Focus/Learning/Ledger/date export,
   Workout/Meal adapters, temporal and remaining existing regressions.
 - Workout source gate: **12/12 passed**, zero skipped.
