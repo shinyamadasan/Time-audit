@@ -1213,16 +1213,81 @@ function syncLocalActiveTimerState() {
 
 function applyRemoteTimerState(data) {
   if (!data) return false;
-  if (isLocalFocusTimerActive() && data.updatedBy && data.updatedBy !== syncedDeviceId && !data.takeover) {
+
+  // Reload-restore reconciliation: a Focus session reconstructed from
+  // localStorage (restoreFocusSession() in focus-mode.js) sets this
+  // in-memory-only flag so its restored ownership claim is provisional for
+  // exactly one incoming snapshot, instead of permanently outranking a
+  // takeover that legitimately completed while this device was closed. A
+  // freshly-started local Focus (this flag never set) falls straight
+  // through to the untouched pre-existing ownership check below.
+  const reconciling = typeof restoredFocusAwaitingSyncReconciliation !== 'undefined'
+    && restoredFocusAwaitingSyncReconciliation;
+  const conflictingOwner = isLocalFocusTimerActive() && data.updatedBy && data.updatedBy !== syncedDeviceId && !data.takeover;
+  // Reconciliation only answers "did a Focus takeover happen while this
+  // device was away?" — a conflicting snapshot that isn't itself a Focus
+  // snapshot (e.g. another device's ordinary ping/interval timer) can't
+  // answer that question either way, so it must not be allowed to win the
+  // restored Focus session, and must not consume the window pending a real
+  // Focus takeover snapshot.
+  const conflictingFocusOwner = conflictingOwner && data.mode === 'focus';
+  const nonFocusConflictDuringWindow = reconciling && conflictingOwner && !conflictingFocusOwner;
+  // A same-owner snapshot (most commonly restoreFocusSession()'s own
+  // outbound syncFocusTimerState() push echoing straight back through the
+  // already-attached listener) is not an ownership-reconciliation signal at
+  // all — it isn't from another device, so it can't confirm or refute the
+  // "did a takeover happen while this device was away?" question the window
+  // exists to answer. Treating it as "the first snapshot" would close the
+  // window before a real conflicting snapshot ever gets a chance to be
+  // evaluated. Missing updatedBy is grouped in defensively for the same
+  // reason: it doesn't identify a different device either.
+  const sameOwnerEcho = reconciling && !conflictingOwner
+    && (!data.updatedBy || data.updatedBy === syncedDeviceId);
+  let reconciledRemoteWins = false;
+
+  if (conflictingFocusOwner && reconciling) {
+    // Consumed exactly once, whichever way it resolves.
+    restoredFocusAwaitingSyncReconciliation = false;
+    // Reuse the same recency signal isStaleRemoteTimerState() is built on
+    // (remoteTimerSyncStamp), but compare against the local recency stamp
+    // as it stood BEFORE this restore's own outbound push could touch it
+    // (currentTimerSyncStamp() would be contaminated by that push). A zero
+    // baseline means this device has no prior recorded sync history at all
+    // (never actually synced) — that proves nothing about the remote being
+    // newer, so it stays conservative and keeps local, same as always.
+    reconciledRemoteWins = restoredFocusBaselineSyncStamp > 0
+      && remoteTimerSyncStamp(data) > restoredFocusBaselineSyncStamp;
+    restoredFocusBaselineSyncStamp = 0;
+  } else if (reconciling && !sameOwnerEcho && !nonFocusConflictDuringWindow) {
+    // Non-conflicting for a reason other than a same-owner echo — e.g. an
+    // explicit different-owner takeover snapshot (data.takeover, excluded
+    // from conflictingOwner above by design so it always applies), or local
+    // Focus somehow isn't active after all. Nothing to reconcile against;
+    // the window closes having seen no conflict.
+    restoredFocusAwaitingSyncReconciliation = false;
+    restoredFocusBaselineSyncStamp = 0;
+  }
+  // else: sameOwnerEcho, or a non-Focus conflicting snapshot, while
+  // reconciling — leave the flag/baseline untouched (a genuine Focus
+  // takeover snapshot may still arrive) and fall through to the ordinary
+  // conflictingOwner-ignore handling below exactly as it already runs
+  // outside of any reconciliation window.
+
+  if (conflictingOwner && !reconciledRemoteWins) {
     fbTimerReceived = true;
     updateTimerSyncDetail(data, 'ignored remote timer; focus owned here');
     syncLocalActiveTimerState();
     return false;
   }
-  if (isStaleRemoteTimerState(data)) {
+  if (!reconciledRemoteWins && isStaleRemoteTimerState(data)) {
     fbTimerReceived = true;
     updateTimerSyncDetail(data, 'ignored stale timer');
     return false;
+  }
+  if (reconciledRemoteWins && typeof clearPersistedFocusSession === 'function') {
+    // The remote takeover wins: drop A's persisted local claim so a later
+    // reload can't resurrect it (device A restoring the same stale record).
+    clearPersistedFocusSession();
   }
   if ('ownerDeviceId' in data) timerOwnerDeviceId = data.ownerDeviceId || null;
   if (data.intervalSecs) {
