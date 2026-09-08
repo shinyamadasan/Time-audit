@@ -32,6 +32,7 @@ let pendingFocusContext = '';
 let _pomodoroAutoStart = localStorage.getItem('ta3-pomo-auto') === '1';
 let _lastFocusSyncAt = 0;
 const FOCUS_SYNC_REFRESH_MS = 15000;
+let _hudFocusLinkType = 'none'; // Phase 6B.1: 'daily-routine' | 'learning-plan' | 'none' — truthful source, never fabricated
 
 // ── Music state ──
 let _focusMusicVolume = parseFloat(localStorage.getItem('ta3-focus-vol') || '0.3');
@@ -71,6 +72,7 @@ function clearFocusLearningPlanContext() {
   activeFocusContext = '';
   pendingFocusLearningPlan = null;
   pendingFocusContext = '';
+  _hudFocusLinkType = 'none';
 }
 
 function isFocusSessionRunning() {
@@ -125,6 +127,7 @@ function finishLearningPlanFocusSession() {
   syncTimerState({ stopped: true, lastTask: null, mode: 'focus' });
   timerOwnerDeviceId = null;
   currentTask = '';
+  pushHudFocusEnded();
   renderToday();
 }
 
@@ -249,6 +252,29 @@ function refreshFocusTimerSync(force = false) {
   return true;
 }
 
+// Phase 6B.1 — Windows Ambient Focus HUD projection. Purely additive: reflects
+// whatever focus-mode.js already decided, creates no state of its own. A
+// no-op if windows-hud-bridge.js hasn't loaded or no companion is running.
+function pushHudFocusState(startedAtOverride) {
+  const bridge = globalThis.chronaSenseHudBridge;
+  if (!bridge || typeof bridge.pushActive !== 'function') return;
+  const startedAt = startedAtOverride || pomodoroPhaseStartedAt || focusStartTime || Date.now();
+  const intervalSecs = (pomodoroPhase === 'break' ? pomodoroBreakMin : pomodoroWorkMin) * 60;
+  bridge.pushActive({
+    title: getFocusTaskLabel(),
+    phase: pomodoroPhase,
+    startedAt,
+    plannedEndAt: startedAt + intervalSecs * 1000,
+    linkType: _hudFocusLinkType,
+    deviceOwned: timerOwnerDeviceId === syncedDeviceId
+  });
+}
+
+function pushHudFocusEnded() {
+  const bridge = globalThis.chronaSenseHudBridge;
+  if (bridge && typeof bridge.pushEnded === 'function') bridge.pushEnded();
+}
+
 function isSyncedFocusMirrorActive() {
   return !!(syncedFocusTimer
     && syncedFocusTimer.running
@@ -364,6 +390,7 @@ function takeOverSyncedFocusTimer() {
   updateFocusDeepBar();
   clearInterval(pomodoroTimer);
   pomodoroTimer = setInterval(tickPomodoro, 1000);
+  pushHudFocusState(syncedFocusTimer.startedAt);
   return true;
 }
 
@@ -389,6 +416,7 @@ function startPomodoro(options = {}) {
   const startedAt = Date.now();
   if (options.dailyRoutine && typeof globalThis.onDailyRoutineFocusStarted === 'function' &&
       globalThis.onDailyRoutineFocusStarted(options.dailyRoutine, startedAt) === false) return false;
+  _hudFocusLinkType = options.dailyRoutine ? 'daily-routine' : (activeFocusLearningPlan ? 'learning-plan' : 'none');
   pomodoroPhase = 'work';
   pomodoroRemaining = pomodoroWorkMin * 60;
   focusStartTime = startedAt;
@@ -415,6 +443,7 @@ function startPomodoro(options = {}) {
   pomodoroTimer = setInterval(tickPomodoro, 1000);
   updateFocusDeepBar();
   syncFocusTimerState();
+  pushHudFocusState();
   return true;
 }
 
@@ -511,6 +540,7 @@ function endWorkSession() {
 
   renderToday();
   syncFocusTimerState(tsEnd);
+  pushHudFocusState(tsEnd);
   pomodoroTimer = setInterval(tickPomodoro, 1000);
 }
 
@@ -526,6 +556,7 @@ function endPomodoroBreak() {
     startPomodoro();
     return;
   }
+  pushHudFocusEnded();
 
   document.getElementById('focus-phase-label').textContent = 'BREAK DONE';
   document.getElementById('focus-phase-sub').textContent = 'ready for the next one?';
@@ -850,6 +881,7 @@ function confirmExitFocus() {
   syncTimerState({ stopped: true, lastTask: null, mode: 'focus' });
   timerOwnerDeviceId = null;
   currentTask = '';
+  pushHudFocusEnded();
   renderToday();
 }
 
