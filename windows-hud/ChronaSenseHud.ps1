@@ -133,7 +133,7 @@ $shared.Lock = New-Object object
         <TextBlock x:Name="EndLabelCollapsed" Text="" Foreground="#9CA3AF" FontSize="11" FontFamily="Segoe UI" Margin="0,2,0,0"/>
       </StackPanel>
 
-      <StackPanel x:Name="ExpandedPanel" Visibility="Collapsed" Width="250">
+      <StackPanel x:Name="ExpandedPanel" Visibility="Collapsed" Width="270">
         <StackPanel Orientation="Horizontal">
           <Ellipse x:Name="StatusDotExp" Width="8" Height="8" Fill="#4ade80" Margin="0,1,7,0" VerticalAlignment="Center"/>
           <TextBlock x:Name="PhaseLabelExp" Text="FOCUS" Foreground="#E5E7EB" FontWeight="Bold" FontSize="12" FontFamily="Segoe UI"/>
@@ -148,7 +148,7 @@ $shared.Lock = New-Object object
           <Button x:Name="OpenChronaSenseBtn" Content="Open ChronaSense" Padding="8,3" HorizontalAlignment="Stretch" Margin="0,0,0,6"/>
           <StackPanel Orientation="Horizontal">
             <Button x:Name="PrivacyBtn" Content="Privacy" Padding="8,3" Margin="0,0,6,0"/>
-            <Button x:Name="HideBtn" Content="Hide" Padding="8,3" Margin="0,0,6,0"/>
+            <Button x:Name="HideBtn" Content="Hide until Focus ends" Padding="8,3" Margin="0,0,6,0"/>
             <Button x:Name="CollapseBtn" Content="Collapse" Padding="8,3"/>
           </StackPanel>
         </StackPanel>
@@ -278,10 +278,17 @@ $RootBorder.Add_MouseLeftButtonUp({
 
 # ── Hide until Focus ends (does not touch Focus state at all) ───────────
 $hiddenUntilEnd = $false
-$HideBtn.Add_Click({
+function Hide-HudUntilFocusEnds {
   $script:hiddenUntilEnd = $true
   $window.Hide()
-})
+}
+
+function Show-Hud {
+  $script:hiddenUntilEnd = $false
+  Render-HudState
+}
+
+$HideBtn.Add_Click({ Hide-HudUntilFocusEnds })
 
 # ── Privacy mode: conceal the task title, keep phase + time only ────────
 function Render-Privacy {
@@ -559,14 +566,14 @@ $trayIcon.Visible = $true
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $showItem = $menu.Items.Add('Show HUD')
-$hideItem = $menu.Items.Add('Hide HUD')
+$hideItem = $menu.Items.Add('Hide until Focus ends')
 $openItem = $menu.Items.Add('Open ChronaSense')
 $menu.Items.Add('-') | Out-Null
 $exitItem = $menu.Items.Add('Exit HUD companion')
 $trayIcon.ContextMenuStrip = $menu
 
-$showItem.Add_Click({ $script:hiddenUntilEnd = $false; Render-HudState })
-$hideItem.Add_Click({ $script:hiddenUntilEnd = $true; $window.Hide() })
+$showItem.Add_Click({ Show-Hud })
+$hideItem.Add_Click({ Hide-HudUntilFocusEnds })
 $openItem.Add_Click({ Start-Process 'https://shinyamadasan.github.io/Time-audit/' })
 function Stop-HudListener {
   try { $listener.Stop() } catch { }

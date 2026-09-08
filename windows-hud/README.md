@@ -5,27 +5,45 @@ session already running in the ChronaSense web app. It never runs its own
 timer, and it cannot change Focus state in any way — it only ever displays
 the last state ChronaSense pushed to it.
 
-## Run it
+## Run it manually
 
 ```
-pwsh -File windows-hud/ChronaSenseHud.ps1
+pwsh -File .\windows-hud\ChronaSenseHud.ps1
 ```
 
 To run without a visible console window:
 
 ```
-pwsh -WindowStyle Hidden -File windows-hud/ChronaSenseHud.ps1
+pwsh -WindowStyle Hidden -File .\windows-hud\ChronaSenseHud.ps1
 ```
 
-No install step, no build, no dependency to fetch — it only uses .NET
-components that ship in every Windows 10/11 install (WPF, HttpListener,
+Manual launch needs no install step, build, or dependency fetch — it only uses
+.NET components that ship in every Windows 10/11 install (WPF, HttpListener,
 WinForms' `NotifyIcon`/`Screen`). Requires PowerShell 7+ (`pwsh`), which this
 repo's own tooling already assumes (`run-claude.ps1`, the `setup-*.ps1`
 scheduler scripts).
 
-There is deliberately no auto-start-on-login wiring. Launch it explicitly
-each session until it's proven useful in real dogfooding (per the milestone's
-own instructions).
+## Optional auto-start at Windows login
+
+From the repository root, opt in once:
+
+```
+pwsh -File .\windows-hud\Install-HudStartup.ps1
+```
+
+This creates one per-user Startup-folder shortcut to the current HUD script.
+It needs no administrator rights, launches PowerShell hidden at the next
+login, and is safe to run again. It does not start the HUD immediately.
+
+To remove only that installer-owned shortcut:
+
+```
+pwsh -File .\windows-hud\Remove-HudStartup.ps1
+```
+
+Install from the checkout you intend to keep, because the shortcut records
+the HUD script's current absolute path. Auto-start never passes `-DevOrigin`;
+normal login launches accept only the production ChronaSense origin.
 
 `-DevOrigin <exact origin>`: for local testing only. ChronaSense's real local
 dev/test workflow loads `index.html` via `file://` (see `tests/smoke.spec.js`,
@@ -218,7 +236,7 @@ next step before this pattern suited anyone but the app's own author.
 
 | | |
 |---|---|
-| Install footprint | 0 bytes — no package, no download, ships as a script |
+| Install footprint | One small optional per-user `.lnk`; no package or download |
 | Idle memory (no Focus active) | ~137 MB working set |
 | Memory with a session active | ~170–175 MB working set |
 | Idle CPU | ~0.5% average (one 20s render tick; effectively 0 between ticks) |
@@ -245,6 +263,8 @@ beyond the local loopback heartbeat, no background wakeups when idle.
 
 - `ChronaSenseHud.ps1` — the whole companion: WPF window, local HTTP bridge,
   tray icon, position/privacy persistence.
+- `Install-HudStartup.ps1` / `Remove-HudStartup.ps1` — optional, reversible
+  per-user Windows login startup.
 - Settings persisted to `%LOCALAPPDATA%\ChronaSenseHud\settings.json`
   (window position, privacy-mode toggle only — no Focus data is ever
   written to disk by this process).
@@ -271,16 +291,16 @@ Scheduled routine        (or "Learning plan", or nothing — see below)
 Synced                   (or "Not confirmed — ...")
 
 [Open ChronaSense]
-[Privacy] [Hide] [Collapse]
+[Privacy] [Hide until Focus ends] [Collapse]
 ```
 
 No End Focus, no Pause, no Resume — see above. "Open ChronaSense",
-"Privacy", "Hide", and "Collapse" are the only controls, and none of them
+"Privacy", "Hide until Focus ends", and "Collapse" are the only controls, and none of them
 touch Focus state:
 - **Open ChronaSense** opens the real app in the default browser so the user
   can use its authoritative controls.
 - **Privacy** blanks the title (phase + time only) — for screen-share safety.
-- **Hide** hides the HUD window until Focus ends; does not pause or end
+- **Hide until Focus ends** hides the HUD window until Focus ends; does not pause or end
   anything. This is a true "until Focus ends," not "until you find the tray
   icon": the hide automatically clears the moment a `focus-ended` snapshot
   arrives (same code path as "no active Focus" on companion startup), so the
@@ -289,6 +309,11 @@ touch Focus state:
   `$hiddenUntilEnd` set indefinitely across a `focus-ended`, so a later
   session could stay hidden until the user found "Show HUD" in the tray.
 - **Collapse** returns to the small collapsed card.
+
+After Hide, right-click the green tray icon and choose **Show HUD** to restore
+the current Focus immediately. This cancels the current session's hide
+suppression. With no active Focus, Show HUD keeps the window hidden and does
+not invent a session; the next real Focus still appears normally.
 
 Position and the Privacy toggle persist across restarts; Hide does not
 (a fresh companion process always starts visible if a session is active, and
