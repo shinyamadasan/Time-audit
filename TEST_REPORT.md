@@ -788,3 +788,14 @@ Screenshots (local verification artifacts, ignored by Git):
 15. Default removes competing logging/analytics/history surfaces rather than simply repositioning them.
 
 No independent review was performed in this implementation session. Leave this candidate uncommitted and unpushed.
+
+## Phase 6D.1 - 2026-09-09
+suite: npx playwright test tests/today-simplification.spec.js tests/guided-measurement-loop.spec.js tests/plan.spec.js tests/daily-routines-ui.spec.js tests/focus-reload-recovery.spec.js
+result: 97 passed (53.1 seconds).
+static: runtime-mirror --check passed (40 files); npm run lint passed with 29 warnings in unchanged JS; node --check tests/today-simplification.spec.js passed; git diff --check passed.
+visual: inspected actual Chromium screenshots in test-results/phase6d at 390 and 1280 widths: idle/no plan, known priority, Needs You present/absent, commitments/empty, long names, active Focus, keyboard focus. Start remains dominant; Edit/Manage routines/Fix/action row are bounded neutral controls; Details/More/Quick correction/Leave unknown are underlined and quieter. No new cards or metric emphasis.
+height: representative commitments state 390px 849 -> 849; 1280px 753 -> 753.
+contrast: calculated default secondary label 12.81:1, secondary border against control 3.49:1, tertiary label against page 10.13:1, primary label 9.93:1, focus ring against control 7.71:1. Disabled labels 3.78:1 are intentionally subdued.
+self-review: scoped CSS only in runtime; existing sizes and information hierarchy preserved; no business logic, handlers, persistence or sync changed. No excessive large controls; static copy remains quieter.
+untested: npm test model suite intentionally not rerun because production JS/markup is unchanged; dedicated Plan Tomorrow suite not rerun because its styles are unaffected (existing plan regression suite covers its flows). Physical Safari/Android devices not tested. Existing fixed navigation/sync toast overlaps portions of long full-page screenshots. Active Focus overlay controls retain their existing styling.
+safety: local fixtures with Firebase stub; no production Firebase or real Obsidian writes; no commit, push, merge or deploy; no unrelated worktree edits.

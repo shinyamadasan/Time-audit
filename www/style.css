@@ -1647,3 +1647,21 @@ button, a, [role="button"],
 #up-next,#up-next button,#so-far,#needs-you{font-family:var(--ui)}
 
 @media(max-width:600px){#up-next .today-action-strip{align-items:stretch}}
+
+/* Phase 6D.1: Today action hierarchy, without changing layout or shared controls. */
+#view-today{--action-border:color-mix(in srgb,var(--text) 42%,var(--bg4));--action-link:color-mix(in srgb,var(--text) 78%,var(--bg));--action-hover:color-mix(in srgb,var(--text) 9%,var(--bg4))}
+#up-next{border-color:var(--border3)}
+/* Secondary: neutral surfaces remain distinct from the page and Up Next card. */
+#up-next .btn.ghost,#today-commitments .plan-head .btn,#today-commitments [data-routine-action="manage"],#today-commitments button.plan-check,#needs-you .btn,#view-today .today-secondary .btn{
+  background:var(--bg4);border-color:var(--action-border);color:var(--text)}
+#up-next .btn.ghost:hover:not(:disabled),#today-commitments .plan-head .btn:hover:not(:disabled),#today-commitments [data-routine-action="manage"]:hover:not(:disabled),#today-commitments button.plan-check:hover:not(:disabled),#needs-you .btn:hover:not(:disabled),#view-today .today-secondary .btn:hover:not(:disabled){background:var(--action-hover);border-color:var(--action-link)}
+/* Tertiary: a persistent underline supplies affordance without another rectangle. */
+#up-next #choose-work,#up-next #idle-away-btn,#needs-you #gap-recovery > .btn:last-child,#needs-you #needs-you-more,#so-far .btn,#routine-details > summary,#needs-you summary{
+  background:transparent;border-color:transparent;color:var(--action-link);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px;cursor:pointer;border-radius:8px}
+#up-next #choose-work:hover:not(:disabled),#up-next #idle-away-btn:hover:not(:disabled),#needs-you #gap-recovery > .btn:last-child:hover:not(:disabled),#needs-you #needs-you-more:hover:not(:disabled),#so-far .btn:hover:not(:disabled),#routine-details > summary:hover,#needs-you summary:hover{background:var(--bg3);color:var(--text);border-color:transparent}
+/* Primary retains the existing accent; states also work without hover. */
+#up-next :is(.today-action-btn,.btn.primary){background:var(--deep);color:var(--bg);border-color:var(--deep);font-weight:700}
+#up-next :is(.today-action-btn,.btn.primary):hover:not(:disabled){background:color-mix(in srgb,var(--deep) 72%,white)}
+#view-today :is(#up-next,#today-commitments .plan-head,#needs-you,#so-far,.today-secondary) button:active:not(:disabled),#today-commitments :is(button.plan-check,[data-routine-action="manage"]):active:not(:disabled),#routine-details > summary:active,#needs-you summary:active{filter:brightness(.85);transform:scale(.97)}
+#view-today :is(#up-next,#today-commitments,#needs-you,#so-far,.today-secondary) :is(button,summary):focus-visible{outline:2px solid var(--deep);outline-offset:3px}
+#view-today :is(#up-next,#today-commitments,#needs-you,#so-far,.today-secondary) button:disabled{background:var(--bg3);color:var(--muted);border-color:var(--border2);opacity:1;cursor:not-allowed;filter:none;transform:none;text-decoration:none}

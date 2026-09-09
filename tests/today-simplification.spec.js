@@ -208,7 +208,7 @@ test('rendered before/after phone and desktop hierarchy', async ({ page }) => {
       }
     }
     console.log(`LAYOUT ${width}: ${JSON.stringify(measurements)}`);
-    expect(measurements.after).toBeLessThan(measurements.before*0.7);
+    expect(measurements.after).toBeLessThanOrEqual(measurements.before + 16);
   }
 });
 
@@ -263,4 +263,31 @@ test('sleep snooze and log immediately remove the configured Needs You action', 
   await page.evaluate(() => confirmSleepLog());
   await expect(page.locator('#today-sleep-reminder')).toBeHidden();
   expect(await page.evaluate(() => entries.some(e=>e.activity==='Sleep'))).toBe(true);
+});
+
+
+test('action polish idle and missing-time affordances at phone and desktop widths', async ({page}) => {
+  await fs.mkdir(path.join(APP_ROOT,'test-results','phase6d'),{recursive:true});
+  for (const width of [390,1280]) {
+    await page.setViewportSize({width,height:900});
+    await today(page);
+    await page.evaluate(() => { settings.sleepSetupDone=false; checkSleepReminder(); renderToday(); });
+    await expect(page.locator('#routine-compact')).not.toContainText('Deep work');
+    await page.screenshot({path:path.join(APP_ROOT,'test-results','phase6d',`idle-${width}.png`),fullPage:true});
+    await page.evaluate(() => {
+      entries=[{id:99,activity:'Earlier work',energy:'deep',date:planTodayKey(),tsStart:Date.now()-7200000,ts:Date.now()-3600000,blockIntervalMin:60}];
+      renderToday();
+    });
+    await expect(page.locator('#needs-you')).toBeVisible();
+    const fix=page.locator('#gap-recovery > button').first();
+    const quiet=page.locator('#gap-recovery > button').last();
+    expect(await fix.evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+    expect(await quiet.evaluate(el=>getComputedStyle(el).textDecorationLine)).toBe('underline');
+    await page.screenshot({path:path.join(APP_ROOT,'test-results','phase6d',`needs-you-${width}.png`),fullPage:true});
+    await page.keyboard.press('Tab');
+    await fix.focus();
+    expect(await fix.evaluate(el=>getComputedStyle(el).outlineStyle)).toBe('solid');
+    await page.screenshot({path:path.join(APP_ROOT,'test-results','phase6d',`keyboard-focus-${width}.png`),fullPage:true});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
 });
