@@ -131,5 +131,17 @@ export default [
       'no-unreachable': 'warn',
       'eqeqeq': ['warn', 'smart'],
     }
+  },
+  {
+    files: ['plan-tomorrow-model.js', 'plan-tomorrow-ui.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        globalThis: 'readonly', document: 'readonly', window: 'readonly',
+        Date: 'readonly', Intl: 'readonly', Number: 'readonly', String: 'readonly',
+        Set: 'readonly', Map: 'readonly', JSON: 'readonly', FormData: 'readonly'
+      }
+    }
   }
 ];

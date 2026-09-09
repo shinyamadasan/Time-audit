@@ -28,6 +28,7 @@ let _lastTimerSyncDetail = null;
 let _syncDetailAgeTicker = null;
 let _syncReconcileTicker = null;
 let _syncReconcileInFlight = false;
+const pendingPlanRemoteByDate = new Map();
 const TIMER_SYNC_STAMP_KEY = 'ta3-timer-updated-at';
 const AWAY_SYNC_STAMP_KEY = 'ta3-away-updated-at';
 const SYNC_EVENT_LOG_KEY = 'ta3-sync-event-log';
@@ -923,31 +924,28 @@ function startSync() {
     if (changed) { localStorage.setItem('ta3-reviews', JSON.stringify(reviews)); renderToday(); }
   });
 
-  // Plans merge per date-key, then per item id by updatedAt. A whole-object last-writer-wins
-  // would drop a done-toggle made on one device while another device added an item the same day.
+  // Plan conflicts are resolved only by the canonical model. If it is not ready yet,
+  // preserve the local date plan and defer the remote candidate for canonical replay.
   fbDb.ref(`rooms/${roomCode}/plans`).on('value', snap => {
     const val = snap.val();
     if (!val) return;
     let changed = false;
     Object.entries(val).forEach(([date, remote]) => {
       if (!remote) return;
-      const remoteItems = normalizePlanItems(remote.items);
       const local = plans[date];
-      if (!local) {
-        plans[date] = { items: remoteItems, updatedAt: remote.updatedAt || 0 };
-        changed = true;
-        return;
+      let merged;
+      if (globalThis.PlanTomorrowModel) {
+        merged = globalThis.PlanTomorrowModel.mergeDatePlans(local, remote, date);
+      } else if (!local) {
+        merged = JSON.parse(JSON.stringify(remote));
+      } else {
+        pendingPlanRemoteByDate.set(date, JSON.parse(JSON.stringify(remote)));
+        merged = local.preparation == null && remote.preparation != null
+          ? { ...local, preparation: JSON.parse(JSON.stringify(remote.preparation)) }
+          : local;
       }
-      const byId = new Map(normalizePlanItems(local.items).map(i => [i.id, i]));
-      remoteItems.forEach(ri => {
-        if (!ri || !ri.id) return;
-        const li = byId.get(ri.id);
-        if (!li || (ri.updatedAt || 0) > (li.updatedAt || 0)) { byId.set(ri.id, ri); changed = true; }
-      });
-      plans[date] = {
-        items: Array.from(byId.values()),
-        updatedAt: Math.max(local.updatedAt || 0, remote.updatedAt || 0)
-      };
+      if (JSON.stringify(local || null) !== JSON.stringify(merged)) changed = true;
+      plans[date] = merged;
     });
     if (changed) {
       localStorage.setItem('ta3-plans', JSON.stringify(plans));
@@ -1633,9 +1631,59 @@ function normalizePlanItems(items) {
   return [];
 }
 
+function replayPendingPlanRemotes() {
+  const model = globalThis.PlanTomorrowModel;
+  if (!model) return { pending: pendingPlanRemoteByDate.size, replayed: 0, changed: false };
+
+  let changed = false;
+  const replayedDates = [];
+  pendingPlanRemoteByDate.forEach((remote, date) => {
+    const local = plans[date];
+    const merged = model.mergeDatePlans(local, remote, date);
+    if (JSON.stringify(local || null) !== JSON.stringify(merged)) changed = true;
+    plans[date] = merged;
+    replayedDates.push(date);
+  });
+
+  if (changed) {
+    localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
+    renderToday();
+  }
+  replayedDates.forEach(date => pendingPlanRemoteByDate.delete(date));
+  return { pending: pendingPlanRemoteByDate.size, replayed: replayedDates.length, changed };
+}
+
+globalThis.replayPendingPlanRemotes = replayPendingPlanRemotes;
+
 function syncPlans(dateKey) {
-  if (!fbRoomRef || !dateKey || !plans[dateKey]) return;
-  fbRoomRef.update({ [`plans/${dateKey}`]: plans[dateKey] });
+  if (!fbRoomRef || !dateKey || !plans[dateKey]) return Promise.resolve(false);
+  const model = globalThis.PlanTomorrowModel;
+  if (!model) {
+    notifySyncWriteFailed(new Error('Plan sync is waiting for the Plan Tomorrow merge model.'));
+    return Promise.resolve(false);
+  }
+  const candidate = JSON.parse(JSON.stringify(plans[dateKey]));
+  let dateRef;
+  try {
+    dateRef = fbRoomRef.child('plans').child(dateKey);
+    if (typeof dateRef.transaction !== 'function') throw new Error('Firebase plan transactions are unavailable.');
+  } catch (err) {
+    notifySyncWriteFailed(err);
+    return Promise.resolve(false);
+  }
+  return dateRef.transaction(remote => model.mergeDatePlans(remote, candidate, dateKey), undefined, false)
+    .then(result => {
+      if (!result?.committed || !result.snapshot) return false;
+      const committed = model.mergeDatePlans(null, result.snapshot.val(), dateKey);
+      if (typeof globalThis.writeDatePlanLocal === 'function') globalThis.writeDatePlanLocal(dateKey, committed);
+      else {
+        plans[dateKey] = committed;
+        localStorage.setItem('ta3-plans', JSON.stringify(plans));
+      }
+      return true;
+    })
+    .catch(err => { notifySyncWriteFailed(err); return false; });
 }
 
 function disconnectSync() {

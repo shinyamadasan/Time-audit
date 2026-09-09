@@ -1,0 +1,27 @@
+.plan-tomorrow-modal{width:min(620px,calc(100vw - 24px));max-height:min(86vh,760px);overflow:auto}
+.pt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.pt-kicker{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--deep);font-weight:700}
+.pt-title{font-size:20px;font-weight:700;margin-top:3px}
+.pt-date{font-size:13px;color:var(--muted);margin-top:4px}
+.pt-readiness{font-size:11px;color:var(--muted);margin-top:3px}
+.pt-readiness[data-ready="true"]{color:var(--deep)}
+.pt-mode-row{display:flex;gap:6px;margin:10px 0 16px}
+.pt-mode-row .selected,.pt-open-day.selected{border-color:var(--deep);color:var(--deep);background:var(--deep-dim2)}
+#plan-tomorrow-body section{margin:0 0 18px}
+#plan-tomorrow-body h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:flex;justify-content:space-between;margin:0 0 8px}
+.pt-routine,.pt-oneoff{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--border2);border-radius:var(--r);padding:10px 12px;margin-bottom:7px;background:var(--bg3)}
+.pt-routine.skipped{opacity:.58}
+.pt-muted{font-size:12px;color:var(--muted);line-height:1.45}
+.pt-learning{font-size:12px;color:var(--deep);margin-top:4px}
+.pt-warning{font-size:12px;line-height:1.45;padding:10px;border:1px solid rgba(251,191,36,.35);background:rgba(251,191,36,.08);border-radius:var(--r);margin-bottom:10px}
+.pt-add{display:grid;grid-template-columns:minmax(90px,.5fr) minmax(160px,1.5fr) auto;gap:7px;margin-top:9px}
+.pt-add input{min-width:0;background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:8px 10px}
+.pt-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.pt-rescue{padding:18px;border:1px solid var(--border2);border-radius:var(--r);background:var(--bg3);text-align:center}
+.pt-rescue h3{display:block!important;font-size:17px!important;color:var(--text)!important;text-transform:none!important;letter-spacing:0!important}
+.pt-rescue .pt-add{grid-template-columns:1fr auto;max-width:440px;margin:12px auto}
+.pt-or{display:block;color:var(--muted);font-size:11px;margin:9px}
+.pt-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+#plan-tomorrow-error{min-height:18px;color:var(--distraction);font-size:12px;margin-top:8px}
+.rv-plan-routines{font-size:12px;color:var(--muted);margin:7px 0}
+@media(max-width:560px){.pt-add{grid-template-columns:1fr}.pt-routine{align-items:flex-start}.pt-routine .btn{flex-shrink:0}.pt-footer{position:sticky;bottom:-1px;background:var(--bg2);padding-top:10px}}

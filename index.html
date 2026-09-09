@@ -14,6 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=20260719-template-sync-doctor-2">
 <link rel="stylesheet" href="daily-routines.css?v=20260907">
+<link rel="stylesheet" href="plan-tomorrow.css?v=20260908-plan-tomorrow-v1">
 <link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
 </head>
 <body>
@@ -51,6 +52,7 @@
                border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden">
         <div class="hdr-menu-item" onclick="openReflectionsHistory();toggleHdrMenu()">Reflections</div>
         <div class="hdr-menu-item" onclick="openReview();toggleHdrMenu()">Review day</div>
+        <div class="hdr-menu-item" onclick="openPlanTomorrow();toggleHdrMenu()">Plan tomorrow</div>
         <div class="hdr-menu-item" onclick="showView('settings');toggleHdrMenu()">Settings</div>
       </div>
     </div>
@@ -1499,6 +1501,7 @@
   <div class="field">
     <label>Tomorrow — pick up to 3</label>
     <div class="rv-plan-ref" id="rv-plan-ref"></div>
+    <div class="rv-plan-routines" id="rv-plan-routines"></div>
     <div id="rv-plan-list"></div>
     <div id="rv-plan-chips"></div>
     <div class="rv-plan-add" id="rv-plan-add">
@@ -1506,10 +1509,35 @@
       <input type="text" id="rv-plan-task" class="plan-input task" maxlength="80" placeholder="what will you do?">
       <button type="button" class="btn sm" onclick="addReviewPlanItem()">Add</button>
     </div>
+    <button type="button" class="btn sm ghost" id="rv-plan-blank" onclick="toggleReviewPlanBlank()">Open day / no commitments</button>
   </div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
     <button class="btn ghost" onclick="closeModal('review-overlay')">Skip</button>
     <button class="btn primary" onclick="saveReview()">Save</button>
+  </div>
+</div></div>
+
+<!-- ══ PLAN TOMORROW MODAL ══ -->
+<div class="review-overlay" id="plan-tomorrow-overlay">
+<div class="review-modal plan-tomorrow-modal" role="dialog" aria-modal="true" aria-labelledby="plan-tomorrow-title">
+  <div class="pt-head">
+    <div>
+      <div class="pt-kicker">Preparation, not execution</div>
+      <div class="pt-title" id="plan-tomorrow-title">Plan tomorrow</div>
+      <div class="pt-date"><span id="plan-tomorrow-date"></span> · <span id="plan-tomorrow-timezone"></span></div>
+      <div class="pt-readiness" id="plan-tomorrow-readiness"></div>
+    </div>
+    <button type="button" class="btn sm ghost" data-pt-action="close">Close</button>
+  </div>
+  <div class="pt-mode-row" aria-label="Planning mode">
+    <button type="button" class="btn sm" data-pt-mode="normal">Plan</button>
+    <button type="button" class="btn sm" data-pt-mode="rescue">Rescue / minimum</button>
+  </div>
+  <div id="plan-tomorrow-body"></div>
+  <div id="plan-tomorrow-error" role="alert"></div>
+  <div class="pt-footer">
+    <button type="button" class="btn ghost" data-pt-action="close">Cancel</button>
+    <button type="button" class="btn primary" id="plan-tomorrow-confirm" data-pt-action="confirm">Tomorrow is ready</button>
   </div>
 </div></div>
 
@@ -1606,6 +1634,7 @@
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
 <script type="module" src="daily-routines-ui.js?v=20260907"></script>
+<script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
 <script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
 <script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
@@ -1727,7 +1756,7 @@ let snoozeTimer = null;
 let quickLogBusy = false;
 let switchingTask = false;
 let dailyCommitment = 0;   // derived from today's plan item count — see syncCommitmentFromPlan()
-let plans = {};            // { '<dateKey>': { items: [{id,task,when,done,doneAt,deleted,updatedAt}], updatedAt } }
+let plans = {};            // date plans: existing one-off items plus optional Plan Tomorrow preparation metadata
 let lastTaskForRepeat = '';
 let breakActive = false;
 let breakEndsAt = null;
@@ -6405,14 +6434,20 @@ function getPlanItemsRaw(dateKey) {
 }
 
 function createPlanItem(task, when = '') {
+  const now = Date.now();
   return {
-    id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    id: 'p' + now.toString(36) + Math.random().toString(36).slice(2, 6),
     task,
     when,
     done: false,
     doneAt: null,
-    updatedAt: Date.now()
+    updatedAt: now,
+    updatedBy: syncedDeviceId
   };
+}
+
+function stampPlanItemMutation(item, updatedAt = Date.now()) {
+  return { ...item, updatedAt, updatedBy: syncedDeviceId };
 }
 
 /** The plan IS the daily target — focus-mode's deep bar reads dailyCommitment. */
@@ -6454,12 +6489,103 @@ function isPlannableTask(task) {
 }
 
 function savePlanItems(dateKey, items) {
-  plans[dateKey] = { items, updatedAt: Date.now() };
-  syncCommitmentFromPlan();
-  persist();
+  const now = Date.now();
+  const current = plans[dateKey] && typeof plans[dateKey] === 'object' ? plans[dateKey] : {};
+  writeDatePlanLocal(dateKey, { ...current, items, updatedAt: now, updatedBy: syncedDeviceId });
   if (typeof syncPlans === 'function') syncPlans(dateKey);
-  renderTodayPlan();
 }
+
+function writeDatePlanLocal(dateKey, nextPlan) {
+  const hadPlan = Object.prototype.hasOwnProperty.call(plans, dateKey);
+  const previous = plans[dateKey];
+  const previousRaw = localStorage.getItem('ta3-plans');
+  plans[dateKey] = nextPlan;
+  try {
+    localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    const readback = JSON.parse(localStorage.getItem('ta3-plans') || '{}');
+    if (JSON.stringify(readback[dateKey] || null) !== JSON.stringify(nextPlan)) throw new Error('Plan local readback did not match the saved plan.');
+    localStorage.setItem('ta3-lv', Date.now());
+  } catch (err) {
+    if (hadPlan) plans[dateKey] = previous;
+    else delete plans[dateKey];
+    try {
+      if (previousRaw === null) localStorage.removeItem('ta3-plans');
+      else localStorage.setItem('ta3-plans', previousRaw);
+    } catch (restoreErr) {
+      console.warn('Plan storage rollback failed', restoreErr);
+    }
+    throw err;
+  }
+  syncCommitmentFromPlan();
+  renderTodayPlan();
+  return nextPlan;
+}
+
+globalThis.writeDatePlanLocal = writeDatePlanLocal;
+
+function confirmPreparedDatePlan({ targetDate, items, mode, intentionalBlank, routineInstanceIds, actionableRoutineInstanceIds = routineInstanceIds }) {
+  if (!Array.isArray(routineInstanceIds)) throw new Error('Routine preparation references are invalid.');
+  if (!Array.isArray(actionableRoutineInstanceIds)) throw new Error('Actionable routine references are invalid.');
+  const now = Date.now();
+  const current = plans[targetDate] && typeof plans[targetDate] === 'object' ? plans[targetDate] : {};
+  // Legacy/file harnesses can run the classic app without loading module graphs. Preserve the old
+  // one-off Review save in that degraded environment; the live runtime always loads the model.
+  if (!globalThis.PlanTomorrowModel) {
+    const nextPlan = { ...current, items: normalizePlanItems(items), updatedAt: now, updatedBy: syncedDeviceId };
+    writeDatePlanLocal(targetDate, nextPlan);
+    const syncPromise = typeof syncPlans === 'function' ? syncPlans(targetDate) : Promise.resolve(false);
+    return { localSaved: true, syncPromise };
+  }
+  const activeItems = normalizePlanItems(items).filter(item => !item.deleted);
+  if (activeItems.length > PLAN_MAX) throw new Error(`Reduce the plan to ${PLAN_MAX} priorities before confirming.`);
+  const hasAction = activeItems.some(item => !item.done) || actionableRoutineInstanceIds.length > 0;
+  if (!hasAction && intentionalBlank !== true) throw new Error('Add one priority, keep a routine, or choose Open day.');
+  const preparation = globalThis.PlanTomorrowModel.buildPreparation(current.preparation, {
+    targetDate,
+    timezone: settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    now,
+    mode,
+    updatedBy: syncedDeviceId,
+    intentionalBlank: !hasAction && intentionalBlank === true,
+    routineInstanceIds,
+    oneOffItemIds: activeItems.map(item => item.id)
+  });
+  const nextPlan = { ...current, items: normalizePlanItems(items), preparation, updatedAt: now, updatedBy: syncedDeviceId };
+  writeDatePlanLocal(targetDate, nextPlan);
+  const syncPromise = typeof syncPlans === 'function' ? syncPlans(targetDate) : Promise.resolve(false);
+  return { localSaved: true, syncPromise };
+}
+
+function planTomorrowSuggestions(targetDate) {
+  const chosen = new Set(getPlanItems(targetDate).map(item => normalizePlanTask(item.task)));
+  const out = [];
+  const push = (task, tag) => {
+    const normalized = normalizePlanTask(task);
+    if (!normalized || chosen.has(normalized) || out.some(item => normalizePlanTask(item.task) === normalized)) return;
+    out.push({ task, tag });
+  };
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  getPlanItems(todayKey).filter(item => !item.done).forEach(item => push(item.task, 'unfinished today'));
+  const weekKey = getWeekKey(new Date(tzParseTime(targetDate, '12:00')));
+  const weeklyPlan = (weeklyReviews[weekKey] || {}).plan || {};
+  [weeklyPlan.p1, weeklyPlan.p2, weeklyPlan.p3].forEach(item => { if (item && item.trim()) push(item.trim(), 'this week'); });
+  (buildHeroSuggestions().recent || []).filter(isPlannableTask).slice(0, 4).forEach(item => push(item, 'recent'));
+  return out.slice(0, 8);
+}
+
+globalThis.getPlanTomorrowAppContext = () => ({
+  timezone: settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+  maxItems: PLAN_MAX,
+  entries,
+  plan: dateKey => plans[dateKey] || null,
+  rawItems: getPlanItemsRaw,
+  createItem: createPlanItem,
+  stampItem: stampPlanItemMutation,
+  normalizeTask: normalizePlanTask,
+  suggestions: planTomorrowSuggestions,
+  confirm: confirmPreparedDatePlan
+});
 
 /** Minutes actually tracked against a planned task — the honest signal a checkbox can't fake. */
 function planTrackedMin(task, dateKey) {
@@ -6644,7 +6770,7 @@ function removePlanItem(id) {
   if (!isViewingToday()) return;
   const dateKey = planTodayKey();
   const raw = getPlanItemsRaw(dateKey).map(i =>
-    i.id === id ? { ...i, deleted: true, updatedAt: Date.now() } : i
+    i.id === id ? stampPlanItemMutation({ ...i, deleted: true }) : i
   );
   savePlanItems(dateKey, raw);
 }
@@ -6655,7 +6781,8 @@ function togglePlanDone(id) {
   const raw = getPlanItemsRaw(dateKey).map(i => {
     if (i.id !== id) return i;
     const done = !i.done;
-    return { ...i, done, doneAt: done ? Date.now() : null, updatedAt: Date.now() };
+    const now = Date.now();
+    return stampPlanItemMutation({ ...i, done, doneAt: done ? now : null }, now);
   });
   savePlanItems(dateKey, raw);
 }
@@ -8101,6 +8228,7 @@ function removePreset(i){settings.presets.splice(i,1);persist();renderSettings()
 let _reviewDateKey = null; // which date is currently open in the review modal
 let _reviewPlanDraft = [];        // tomorrow's plan being picked (carries tombstones)
 let _reviewPlanTargetKey = null;  // the date that draft is FOR (= reviewed day + 1)
+let _reviewPlanIntentionalBlank = false;
 let _reviewUnloggedOk = false;    // true when missing time was seen and intentionally left blank
 let _reviewFocusRating = null;    // Phase 11.8 optional subjective rating: 'focused' | 'mixed' | 'distracted'
 
@@ -8247,6 +8375,7 @@ function openReviewPlan() {
   _reviewPlanTargetKey = reviewPlanTargetKey();
   // Draft carries tombstones so a removal here still propagates through the sync merge.
   _reviewPlanDraft = getPlanItemsRaw(_reviewPlanTargetKey).map(i => ({ ...i }));
+  _reviewPlanIntentionalBlank = !!globalThis.PlanTomorrowModel?.normalizePreparation(plans[_reviewPlanTargetKey]?.preparation, _reviewPlanTargetKey)?.intentionalBlank;
   renderReviewPlan();
 }
 
@@ -8309,6 +8438,8 @@ function renderReviewPlan() {
   const chipsEl = document.getElementById('rv-plan-chips');
   const addEl   = document.getElementById('rv-plan-add');
   const refEl   = document.getElementById('rv-plan-ref');
+  const routinesEl = document.getElementById('rv-plan-routines');
+  const blankEl = document.getElementById('rv-plan-blank');
   if (!listEl) return;
 
   const esc  = s => String(s).replace(/</g, '&lt;');
@@ -8332,6 +8463,24 @@ function renderReviewPlan() {
     : '';
 
   addEl.style.display = items.length >= PLAN_MAX ? 'none' : 'flex';
+  let actionableRoutines = 0;
+  if (routinesEl && typeof globalThis.getPlanTomorrowRoutineSummary === 'function') {
+    try {
+      const summary = globalThis.getPlanTomorrowRoutineSummary(_reviewPlanTargetKey);
+      actionableRoutines = summary.rows.filter(row => !row.skipped && row.actionable).length;
+      const skipped = summary.rows.filter(row => row.skipped).length;
+      routinesEl.textContent = summary.mismatch
+        ? `Routines use ${summary.state.timezone}; Today uses ${settings.timezone}. One-offs only.`
+        : `${actionableRoutines} routine${actionableRoutines === 1 ? '' : 's'} included${skipped ? ` · ${skipped} skipped for this date` : ''}. Open Plan tomorrow to change routine skips.`;
+    } catch (err) {
+      routinesEl.textContent = `Routine preview unavailable: ${err.message}`;
+    }
+  }
+  if (blankEl) {
+    const canBeBlank = items.length === 0 && actionableRoutines === 0;
+    blankEl.style.display = canBeBlank ? 'inline-flex' : 'none';
+    blankEl.textContent = `${_reviewPlanIntentionalBlank ? '✓ ' : ''}Open day / no commitments`;
+  }
   if (refEl) {
     const line = reviewPlanReferenceLine();
     refEl.textContent = line;
@@ -8341,10 +8490,13 @@ function renderReviewPlan() {
 
 function pushReviewPlanItem(task, when) {
   if (reviewPlanVisible().length >= PLAN_MAX) { showToast(`${PLAN_MAX} is the cap`); return; }
-  _reviewPlanDraft.push({
-    id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    task, when: when || '', done: false, doneAt: null, updatedAt: Date.now()
-  });
+  _reviewPlanDraft.push(createPlanItem(task, when || ''));
+  _reviewPlanIntentionalBlank = false;
+  renderReviewPlan();
+}
+
+function toggleReviewPlanBlank() {
+  _reviewPlanIntentionalBlank = !_reviewPlanIntentionalBlank;
   renderReviewPlan();
 }
 
@@ -8364,7 +8516,7 @@ function addReviewPlanChip(task) {
 
 function removeReviewPlanItem(id) {
   _reviewPlanDraft = _reviewPlanDraft.map(i =>
-    i.id === id ? { ...i, deleted: true, updatedAt: Date.now() } : i
+    i.id === id ? stampPlanItemMutation({ ...i, deleted: true }) : i
   );
   renderReviewPlan();
 }
@@ -8374,22 +8526,40 @@ function removeReviewPlanItem(id) {
 function renderReviewPlanVsActual() {
   const el = document.getElementById('rv-plan-vs-actual');
   if (!el) return;
-  const items = getPlanItems(_reviewDateKey);
-  if (!items.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
-
+  const plan = plans[_reviewDateKey] || {};
+  const preparation = globalThis.PlanTomorrowModel?.normalizePreparation(plan.preparation, _reviewDateKey);
+  const rawItems = getPlanItemsRaw(_reviewDateKey);
+  const itemIds = preparation ? new Set(preparation.oneOffItemIds) : null;
+  const items = itemIds ? rawItems.filter(item => itemIds.has(item.id)) : rawItems.filter(item => !item.deleted);
   const esc = s => String(s).replace(/</g, '&lt;');
-  const logged = items.filter(i => i.done || planTrackedMin(i.task, _reviewDateKey) > 0).length;
-  const skipped = Math.max(0, items.length - logged);
+  const labels = {
+    'done-early': 'Done early', done: 'Done', 'worked-on': 'Worked on', 'not-done': 'Not done', removed: 'Removed',
+    target: 'Target', minimum: 'Minimum', complete: 'Complete'
+  };
+  const itemRows = items.map(item => {
+    const minutes = planTrackedMin(item.task, _reviewDateKey);
+    const status = globalThis.PlanTomorrowModel
+      ? globalThis.PlanTomorrowModel.classifyOneOffActual(item, { targetDate: _reviewDateKey, timezone: preparation?.timezone || settings.timezone, trackedMinutes: minutes, preparedAt: preparation?.firstPreparedAt || 0 })
+      : (item.done ? 'done' : minutes > 0 ? 'worked-on' : 'not-done');
+    return { title: item.task, status, detail: minutes > 0 ? `${fmtPlanMin(minutes)} tracked with the same label` : '' };
+  });
+  let routineRows = [];
+  if (preparation && typeof globalThis.getPlanTomorrowRoutineActual === 'function') {
+    try { routineRows = globalThis.getPlanTomorrowRoutineActual(_reviewDateKey, preparation); }
+    catch (err) { routineRows = [{ title: `Routine actual unavailable: ${err.message}`, status: 'removed' }]; }
+  }
+  const rows = [...itemRows, ...routineRows];
+  if (!rows.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const actual = globalThis.PlanTomorrowModel?.summarizeActual(rows) || { planned: rows.length, active: rows.length, completed: rows.filter(row => row.status !== 'not-done').length, removed: 0 };
   el.style.display = 'block';
   el.innerHTML = `<div class="rv-pva">
-      <div class="rv-pva-head">You planned ${items.length} · logged ${logged} · skipped ${skipped}</div>
-      ${items.map(it => {
-        const m = planTrackedMin(it.task, _reviewDateKey);
-        const loggedItem = it.done || m > 0;
+      <div class="rv-pva-head">Planned ${actual.planned} · active ${actual.active} · done/worked on ${actual.completed}${actual.removed ? ` · removed ${actual.removed}` : ''}</div>
+      ${rows.map(row => {
+        const positive = !['not-done', 'removed'].includes(row.status);
         return `<div class="rv-pva-row">
-          <span class="rv-pva-mark${loggedItem ? ' on' : ''}">${loggedItem ? '✓' : '○'}</span>
-          <span class="rv-pva-task">${esc(it.task)}</span>
-          <span class="rv-pva-min${m > 0 ? ' on' : ''}">${fmtPlanMin(m)}</span>
+          <span class="rv-pva-mark${positive ? ' on' : ''}">${positive ? '✓' : row.status === 'removed' ? '−' : '○'}</span>
+          <span class="rv-pva-task">${esc(row.title)}${row.detail ? `<small>${esc(row.detail)}</small>` : ''}</span>
+          <span class="rv-pva-min${positive ? ' on' : ''}">${labels[row.status] || row.status}</span>
         </div>`;
       }).join('')}
     </div>`;
@@ -8400,6 +8570,29 @@ function saveReview(){
   const targetKey = _reviewPlanTargetKey || _dateKeyPlusDays(k, 1);
   const visible = reviewPlanVisible();
   const summary = computeCloseoutSummary(k);
+  let routineRows = [];
+  let routineAuditRows = [];
+  try {
+    if (typeof globalThis.getPlanTomorrowRoutineSummary === 'function') {
+      const routineSummary = globalThis.getPlanTomorrowRoutineSummary(targetKey);
+      if (!routineSummary.mismatch) {
+        routineAuditRows = routineSummary.rows.filter(row => row.actionable);
+        routineRows = routineAuditRows.filter(row => !row.skipped);
+      }
+    }
+    const preparationSave = confirmPreparedDatePlan({
+      targetDate: targetKey,
+      items: _reviewPlanDraft.map(item => ({ ...item })),
+      mode: 'normal',
+      intentionalBlank: _reviewPlanIntentionalBlank,
+      routineInstanceIds: routineAuditRows.map(row => row.id),
+      actionableRoutineInstanceIds: routineRows.map(row => row.id)
+    });
+    if (!preparationSave.localSaved) throw new Error('Tomorrow was not saved locally.');
+  } catch (err) {
+    showToast(`Review not saved — ${err.message}`);
+    return;
+  }
   // reviews[].tomorrow stays populated so Reflect history and existing records keep rendering.
   const tomorrowText = visible.map(i => i.task).join(' · ');
   reviews[k]={
@@ -8412,11 +8605,8 @@ function saveReview(){
     _savedAt:Date.now()
   };
 
-  plans[targetKey] = { items: _reviewPlanDraft.map(i => ({ ...i })), updatedAt: Date.now() };
-
   persist();
   if (fbRoomRef) fbRoomRef.update({ [`reviews/${k}`]: reviews[k] });
-  if (typeof syncPlans === 'function') syncPlans(targetKey);
   closeModal('review-overlay');
   renderTodayPlan();
   renderMissedCloseoutCta();
