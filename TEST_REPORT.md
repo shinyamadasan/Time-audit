@@ -799,3 +799,212 @@ contrast: calculated default secondary label 12.81:1, secondary border against c
 self-review: scoped CSS only in runtime; existing sizes and information hierarchy preserved; no business logic, handlers, persistence or sync changed. No excessive large controls; static copy remains quieter.
 untested: npm test model suite intentionally not rerun because production JS/markup is unchanged; dedicated Plan Tomorrow suite not rerun because its styles are unaffected (existing plan regression suite covers its flows). Physical Safari/Android devices not tested. Existing fixed navigation/sync toast overlaps portions of long full-page screenshots. Active Focus overlay controls retain their existing styling.
 safety: local fixtures with Firebase stub; no production Firebase or real Obsidian writes; no commit, push, merge or deploy; no unrelated worktree edits.
+
+
+## Phase 6E — Review Simplification V1 · 2026-09-09
+
+### Status and candidate (A–C, AM–AN)
+
+Ready for independent milestone review; uncommitted, unstaged, unpushed.
+Fetched origin/main: `34b06e261d3ea6b45de0ef77c0af9118923291e8`, exactly the requested base.
+Registered worktree: `C:/Users/Admin/Desktop/Vibe code/Time audit app - review-simplification-v1`.
+Branch: `feat/review-simplification-v1`. No commits, merges, deployments, production Firebase
+writes, real Obsidian writes, or edits to unrelated worktrees. The explicit Phase 6E request
+supersedes stale task-dispatch instructions; TASKS.md and other phases remain untouched.
+
+### Implementation record (D–AB)
+
+| Return item | Result |
+|---|---|
+| D Before/after hierarchy | Before: score, five tiles, attention/feeling, gaps, actuals, three text inputs, preparation warning, Save. After: factual summary, feeling, optional win, conditional missing time, Save/Close, separate optional reflection details and Full analysis, preparation link. |
+| E Reality Score | Active markup and count-based calculation removed; not promoted elsewhere. |
+| F Judgmental wording | Both “You moved forward” and “You regressed” removed from active Review. Existing stored category labels remain. |
+| G Replacement score | NO. |
+| H Factual summary | Existing `sumEntryMinutes(getEntriesForDateWindow(...), null, dateKey)` with missed/deleted entries excluded. |
+| I Summary semantics | Recorded duration uses existing overlap-union/date-window logic. Optional Plan count is exactly existing `planDone/planCount`, labeled “done or worked on”; never merged with full actuals/routine population. No productive/completed inference. |
+| J Feeling | Focused/Mixed/Distracted always independent of analytics availability, optional, toggleable to null, stored as existing focusRating. |
+| K Win | Optional, never prefilled, same win field. Empty Save and feeling-only/win-only Save remain valid. |
+| L Missing time | Existing 30-minute threshold, one compact item, Log time and Leave unknown; no mandatory repair. Raw intervals remain in analysis and the existing Timeline model. |
+| M Unknown acknowledgement | Existing date-wide unloggedOk; only durable through Save. Original threshold-conditioned Save behavior retained. Acknowledgement creates no entry and removes no raw gaps; existing Today suppression verified. |
+| N Repair detour | A bounded in-memory flag returns from the explicit retro editor to the existing Review DOM. Evidence refresh does not reinitialize inputs. Cancel and successful repair preserve date, focusRating, win, waste, avoid, acknowledgement and edited legacy tomorrow. |
+| O Plan vs actual | Existing renderer/classifications unchanged, behind Full analysis. Done early, Done, Worked on, Not done, Removed, routine levels and tracked attribution remain distinct. |
+| P Unplanned activity | Existing grouping/exclusions and “Unplanned tracked activity” label unchanged, behind Full analysis. |
+| Q Waste | Existing saved values remain editable in Optional reflection details; same semantics. |
+| R Automatic waste prefill | Removed, including saved empty waste on today's review. |
+| S Avoid | Same optional avoid field, behind Optional reflection details. |
+| T Hidden historical fields | Inputs initialize even while collapsed; Save preserves them and other existing record properties. Legacy tomorrow uses a textarea; untouched original text, including CRLF, is retained exactly. Explicit edits/clears still save. |
+| U Tomorrow preparation | Secondary link after Save/details; no preparation warning or Review auto-save. Uses canonical editor. |
+| V Historical preparation | Existing tomorrow-relative-to-now target retained; historical link names target ISO date and says “relative to today.” No planning-contract change. |
+| W Save | Primary “Save reflection”; preserves record/persistence, _savedAt, existing reviews/date Firebase payload, close and dependent refresh calls. |
+| X Close | Secondary “Close”; backdrop also dismisses without saving. Ordinary reopen restores saved data, not a claimed saved draft. |
+| Y Completion | Existing record-existence semantics; no closed/completed workflow flags. |
+| Z Full analysis | Separate native details disclosure for existing metric tiles, attention calculations/caveat, full actuals/unplanned and raw gaps. No new destination/backend. |
+| AA Today Details | Opens Review with Full analysis expanded and scrolled into view; verified. Existing Timeline destination remains on Today. |
+| AB Default inputs | Four inputs (feeling, win, waste, avoid) become two optional inputs (feeling and win). Legacy fields have a separate disclosure from analytics. |
+
+### Responsive evidence (AC–AE, AP)
+
+Same fixture at 390×844, current day with a morning entry and missing time:
+
+- Base content height 1,263px; Save top approximately 1,229px from viewport top.
+- Candidate content height 606px; Save top approximately 523px. About 52% less content.
+- The audit's approximately 1,540px was a different fixture; not presented as our measured baseline.
+- Simulated 390×480 viewport: 606px scroll content, 438px client height; Save within viewport
+  (top 413px, bottom 447px). Keyboard Tab navigation from win reaches Save.
+- 1280×900 desktop: centered 420px form, 606px content; no unnecessary stretched whitespace.
+- No horizontal overflow in tested phone/desktop sizes, including expanded historical analysis
+  with a very long activity label. Historical date wraps and legacy inputs remain editable.
+- Phone and desktop screenshots were visually inspected; default input font is 16px. Expanded
+  analysis scrolls within the modal. Native disclosures remain keyboard-operable.
+- No physical mobile keyboard, iOS Safari, Android device, or human nightly dogfood session was
+  performed. Height reduction is measured browser evidence, not a claim about physical typing.
+
+Screenshots retained under ignored `test-results/phase6e/review-verified-results/` and baseline
+under `test-results/phase6e/baseline-test-results/`. Logs: `phase6e-verified.log`,
+`phase6e-browser-final.log`, `phase6e-regressions.log`, `phase6e-baseline.log`,
+`phase6e-npm-test.log`, `phase6e-lint.log` (ignored local evidence).
+
+### Chaos verification (AF)
+
+All 33 requested scenarios were covered by synthetic browser cases or the relevant existing
+regressions. These verify functional behavior, not the subjective quality of a real day.
+
+| Requested cases | Evidence |
+|---|---|
+| 1 perfect planned day; 2 no plan; 3 partial plan | Dedicated chaos cases; save and unchanged source data, correct done-or-worked-on summary. |
+| 4 valuable unplanned work | Dedicated learning-category case plus guided-loop unmatched-list population assertions. |
+| 5 classified distraction; 6 intentional Facebook | Dedicated distraction/social cases; no new grade or reclassification, empty waste stays empty. |
+| 7 no deep work; 8 long deep session; 9 no tracked time | Dedicated cases, nullable feeling and zero-input saves. |
+| 10 many gaps; 11 acknowledged unknown | Multiple-gap case plus durable acknowledgement/no gap deletion and Today suppression assertions. |
+| 12 remembered repair | Actual retro save returns to historical Review; new entry has the historical date and selected social category. |
+| 13 sleep missing; 14 routines incomplete | Dedicated cases and existing routines/Today suites; Review save remains independent. |
+| 15 difficult debugging; 16 emergency | Dedicated cases, source arrays/plans unchanged by reflection save. |
+| 17 productive feeling/weak metrics; 18 bad feeling/strong metrics | Independent subjective ratings saved exactly; no metric override. |
+| 19 empty win; 20 empty waste | Zero-input save and waste-prefill tests. |
+| 21 historical waste; 22 historical avoid | Collapsed save tests, retained exact strings, then explicit editing. |
+| 23 detailed analysis | Default hidden, disclosure reachable, collapse retains draft; exact existing terminology regressions. |
+| 24 30-second closeout | Zero-input save path without repair/preparation (workflow tested; no timed human session claimed). |
+| 25 prepared tomorrow; 26 unprepared tomorrow | Existing preparation regression plus confirmed Open day return; Review saves independently. |
+| 27 Advisor absent | No Advisor dependency; feeling also verified with attention derivation unavailable. |
+| 28 mobile | 390×844 and 390×480, keyboard navigation, screenshots, overflow checks. |
+| 29 historical edit | Collapsed field retention, multiline tomorrow, all explicit detours and long-label mobile test. |
+| 30 offline/local | Browser offline with no room ref; localStorage review persisted and reopened. |
+| 31 repair detour | Cancel and save both preserve all unsaved inputs without Review persistence. |
+| 32 Plan Tomorrow detour | Cancel and confirm both preserve all unsaved inputs without Review persistence. |
+| 33 Today Details | Expands and reaches Full analysis immediately. |
+
+### Files and verification (AG–AL)
+
+Changed runtime sources: `index.html`, `insights.js`, `style.css` and their three generated
+`www/` mirrors. Tests: new `tests/review-simplification.spec.js`; adjusted
+`tests/guided-measurement-loop.spec.js`, `tests/plan.spec.js`, `tests/plan-tomorrow-ui.spec.js`.
+Documentation: `CODEMAP.md`, `CHANGELOG.md`, `TEST_REPORT.md`.
+
+- Focused browser coverage: 32 passing tests in the final candidate.
+- Final command: `npx playwright test tests/review-simplification.spec.js tests/guided-measurement-loop.spec.js tests/plan-tomorrow-ui.spec.js --project=chromium --output=review-verified-results`: **66 passed**.
+- Existing regression command included guided measurement loop, plan, Plan Tomorrow, Today
+  simplification, daily routines and smoke (including Timeline correction). Initial result:
+  162 passed, 1 stale visibility assertion failed. Updated that assertion to explicitly open
+  analysis; the entire 27-case plan suite then passed. All 163 selected existing cases passed
+  across these runs; there is no unresolved failure.
+- Initial detour fixtures had no source entries, so the existing gap helper produced no gap.
+  Fixtures now supply real interval evidence. An empty preparation fixture now explicitly chooses
+  Open day before confirming. No gap/planning semantics were changed to make tests pass.
+- `npm test`: **passed, exit 0**, all chained suites completed.
+- `node scripts/runtime-mirror.mjs --check`: **passed**, 40-file closure byte-identical.
+- `npm run lint`: **passed**, 0 errors, 29 existing warnings.
+- `node --check`: **passed** on insights.js, all four touched test JS files, and both actual
+  executable inline script blocks parsed from HTML (excluding dormant commented markup).
+- `git diff --check`: **passed**.
+- Fresh `npm ci --ignore-scripts` encountered the repository's existing Capacitor 8 vs Google Auth
+  Capacitor 6 peer conflict. `npm ci --ignore-scripts --legacy-peer-deps` succeeded. No dependency
+  manifest/lockfile changes. No package remediation was folded into this task.
+- Temporary baseline test removed; measurement screenshots retained only as ignored artifacts.
+
+### Explicit self-review answers
+
+1. Reality Score gone from default Review: **yes**, also removed its active computation.
+2. “You regressed” gone: **yes**.
+3. New replacement grade: **no**.
+4. Factual summary accurate: **yes**, existing union duration and separate existing Plan population.
+5. Feeling visible without analysis: **yes**, even if derivation is unavailable.
+6. Win optional: **yes**.
+7. Missing time optional: **yes**.
+8. Save with unresolved gaps: **yes**, tested.
+9. Unknown stays unknown: **yes**, no synthetic activity or removed gap.
+10. Full plan-v-actual behind analysis: **yes**.
+11. Unplanned activity behind analysis: **yes**.
+12. Automatic waste prefill gone: **yes**.
+13. Historical waste/avoid preserved: **yes**, tested.
+14. Collapsed fields survive Save: **yes**, including multiline tomorrow and unknown existing properties.
+15. Gap repair preserves unsaved inputs: **yes**, cancel/save tested on historical Review.
+16. Plan Tomorrow return preserves inputs: **yes**, cancel/confirm tested.
+17. Tomorrow subordinate: **yes**.
+18. Save obvious primary action: **yes**, inspected at phone/desktop sizes.
+19. Close clearly no-save: **yes**, tested and not called Skip.
+20. Today Details reaches analysis: **yes**, expanded by the route.
+21. Offline/local works: **yes**, tested.
+22. Default mobile height materially fell: **yes**, 1,263 to 606px with the same fixture.
+23. Data contracts preserved: **yes**, no changes to source entries, calculations, classifications,
+    planning/routine/Focus/Ledger models, date keys, nullable rating or sync path.
+24. Simpler rather than one giant toggle: **yes**, a standalone two-input reflection, separate
+    optional legacy editing and analysis disclosures, with no score or automatic waste suggestion.
+
+Code-health self-review: small presentation changes using existing helpers; only bounded detour
+state; no new persistence/backend/grade; no unrelated refactor. Existing timer/gap/model code and
+hard-rule call sites were not modified. No new hardcoded CSS colors. User instructions to stop
+uncommitted supersede legacy commit/status handoff checklist items.
+
+### Remaining risks and physical checks (AO–AP)
+
+In-memory detour preservation is intentionally limited to the explicit Review retro editor and
+existing Plan Tomorrow return. It is not reload persistence; ordinary Close discards unsaved edits.
+Historical preparation still means tomorrow relative to now, now stated explicitly. Existing gap
+helper behavior for days with no entries is unchanged. Real cloud connectivity, physical keyboards,
+iOS/Android rendering and actual nightly dogfood require human/device checks; no such results are
+claimed. No remaining automated blocker; candidate is ready for independent review.
+
+
+## Phase 6E — bounded keyboard focus fix · 2026-09-09
+
+A. Fix status: ready for targeted re-review.
+B. Root cause: keyboard activation called `renderReviewFeeling`, replacing the focused
+button through innerHTML. All three new keyboard tests reproduced focus loss before the fix.
+C. Approach: initialize button values, then update aria-pressed and the existing primary/ghost
+classes in place in `setReviewFocusRating`. The focused DOM node survives activation.
+D–F. Actual Enter activation (Mixed, Focused) and Space activation (Distracted) retain focus
+on selection and toggle-to-null. Tab advances Mixed → Distracted, Focused → Mixed,
+Distracted → One win. Shift+Tab returns coherently before testing the clear activation.
+G–I. Mouse behavior, local saved-state restoration and historical editing passed, including
+historical mouse selection → Save → reopen selected → clear → Save null. Existing tests
+also retain optional feeling, independent strong/weak metric cases, detours and sync payloads.
+J. Production changes for this rework only: index.html and generated www/index.html.
+K. Test changes: tests/review-simplification.spec.js (four new cases). Documentation appended
+to CHANGELOG.md and TEST_REPORT.md. Other dirty files belong to the existing Phase 6E candidate.
+L. New regressions: three parameterized real keyboard cases and one historical mouse/persistence case.
+M. `npx playwright test tests/review-simplification.spec.js --project=chromium`: 36 passed.
+Directly relevant plan/guided-loop/Plan Tomorrow cases (`--grep 'Review|review'`): 14 passed.
+N. `node scripts/runtime-mirror.mjs --check`: exact 40-file closure parity.
+O. Both actual executable inline scripts and the modified test file pass node --check;
+git diff --check passes. No unrelated full-suite rerun was needed for this bounded helper fix.
+P. Product logic/data-semantic changes: NONE. Only DOM update behavior changed to retain focus.
+Q. origin/main fetched first and unchanged; HEAD remains
+34b06e261d3ea6b45de0ef77c0af9118923291e8 on feat/review-simplification-v1.
+The candidate remains unstaged, uncommitted and unpushed.
+R. No styling, wording, layout, Save/Close, analytics, gap, planning, or unrelated worktree changes.
+No production Firebase or real Obsidian writes; no commit, push, merge or deployment.
+S. No remaining required finding identified; targeted independent re-review remains outstanding.
+
+Explicit self-review:
+1. Keyboard activation retained focus: yes, all three buttons.
+2. Toggle-to-null retained focus: yes, all three buttons.
+3. Subsequent Tab moved forward: yes, asserted after selection and clearing.
+4. Mouse behavior unchanged: yes, selection and clearing tested.
+5. focusRating semantics unchanged: yes, same values, null behavior and persistence.
+6. Historical editing unchanged: yes, saved selection restored and then cleared successfully.
+7. Any other Phase 6E behavior changed: no.
+8. www parity exact: yes.
+9. Scope bounded: yes, two runtime functions and their mirror, tests and verification notes only.
+
+Evidence: ignored phase6e-keyboard-before.log (three reproduced failures),
+phase6e-keyboard-after.log (36 passes), phase6e-keyboard-regressions.log (14 passes).

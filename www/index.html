@@ -134,7 +134,7 @@
     </div>
     <button id="needs-you-more" class="btn sm ghost" onclick="this.parentElement.classList.toggle('expanded');this.setAttribute('aria-expanded',this.parentElement.classList.contains('expanded'))" aria-expanded="false" hidden>Show all</button>
   </section>
-  <section id="so-far" aria-label="So far"><h2>So far</h2><span id="so-far-summary">No time recorded yet.</span> <button class="btn sm ghost" onclick="openReview()">Details</button></section>
+  <section id="so-far" aria-label="So far"><h2>So far</h2><span id="so-far-summary">No time recorded yet.</span> <button class="btn sm ghost" onclick="openReview(undefined, true)">Details</button></section>
   <nav class="today-secondary" aria-label="Today actions">
     <button class="btn sm ghost" onclick="toggleTodayDestination('log-time-details')">Log time</button>
     <button class="btn sm ghost" onclick="scrollToTimeline()">Timeline</button>
@@ -1507,36 +1507,35 @@
 
 <!-- ══ REVIEW MODAL ══ -->
 <div class="review-overlay" id="review-overlay" onclick="overlayClose(event,'review-overlay')">
-<div class="review-modal">
+<div class="review-modal" role="dialog" aria-modal="true" aria-label="60-second reflection">
   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--deep);font-weight:700;margin-bottom:3px">End of day</div>
-  <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:16px">
+  <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;margin-bottom:16px">
     <div style="font-size:18px;font-weight:700">60-second reflection</div>
     <div id="rv-date-label" class="note"></div>
   </div>
 
-  <!-- REALITY SCORE UI -->
-  <div id="reality-score-wrap" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:12px;text-align:center;margin-bottom:16px">
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:4px;font-weight:600">Reality Score</div>
-    <div id="reality-score-val" style="font-family:var(--mono);font-size:24px;font-weight:500;margin-bottom:2px">0</div>
-    <div id="reality-score-sub" style="font-size:12px;font-weight:500"></div>
-  </div>
-
-  <div id="rv-closeout-summary" style="display:none"></div>
-  <div id="rv-attention" style="display:none"></div>
+  <div id="rv-closeout-summary"></div>
+  <div class="field" id="rv-feeling"></div>
+  <div class="field"><label for="rv-win">One win today <span class="note">(optional)</span></label><input type="text" id="rv-win" placeholder="What went well?"></div>
   <div id="rv-unlogged-decision" style="display:none"></div>
-
-  <!-- Plan vs actual for the day being reviewed — closes yesterday's loop -->
-  <div id="rv-plan-vs-actual" style="display:none"></div>
-
-  <div class="field"><label>One win today</label><input type="text" id="rv-win" placeholder="What went well?"></div>
-  <div class="field"><label>One waste today</label><input type="text" id="rv-waste" placeholder="What cost you time?"></div>
-  <div class="field"><label>How to avoid it next time</label><input type="text" id="rv-avoid" placeholder="e.g. Phone in another room..."></div>
-
-  <div class="field" id="rv-tomorrow-status"></div>
-  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-    <button class="btn ghost" onclick="closeModal('review-overlay')">Skip</button>
-    <button class="btn primary" onclick="saveReview()">Save</button>
+  <div class="rv-save-actions">
+    <button class="btn ghost" onclick="closeModal('review-overlay')">Close</button>
+    <button class="btn primary" onclick="saveReview()">Save reflection</button>
   </div>
+  <details id="rv-optional-details">
+    <summary>Optional reflection details</summary>
+    <div class="field"><label for="rv-waste">One waste today (optional)</label><input type="text" id="rv-waste" placeholder="What cost you time?"></div>
+    <div class="field"><label for="rv-avoid">How to avoid it next time (optional)</label><input type="text" id="rv-avoid" placeholder="e.g. Phone in another room..."></div>
+    <div class="field" id="rv-legacy-tomorrow-field" hidden><label for="rv-legacy-tomorrow">Tomorrow (legacy reflection)</label><textarea id="rv-legacy-tomorrow" rows="2"></textarea></div>
+  </details>
+  <details id="rv-full-analysis">
+    <summary>Full analysis</summary>
+    <div id="rv-metric-details"></div>
+    <div id="rv-attention" style="display:none"></div>
+    <div id="rv-plan-vs-actual" style="display:none"></div>
+    <div id="rv-gap-details"></div>
+  </details>
+  <div id="rv-tomorrow-status"></div>
 </div></div>
 
 <!-- ══ PLAN TOMORROW MODAL ══ -->
@@ -5053,8 +5052,8 @@ function renderReviewCloseoutSummary() {
   if (!el) return;
   const dateKey = _reviewDateKey || getViewingDateKey();
   const summary = computeCloseoutSummary(dateKey);
-  if (!summary.entryCount && !summary.planCount) { el.style.display = 'none'; el.innerHTML = ''; return; }
-
+  const recorded = sumEntryMinutes(getEntriesForDateWindow(dateKey).filter(e => !e.missed && !e.deleted), null, dateKey);
+  el.innerHTML = `<div class="rv-closeout-head">${dateKey === toDateKey(new Date()) ? 'Today' : 'This day'}</div><p>${fmtDur(recorded)} recorded${summary.planCount ? ` · ${summary.planDone} of ${summary.planCount} done or worked on` : ''}</p>`;
   el.style.display = 'block';
   const planLabel = summary.planCount ? `${summary.planDone}/${summary.planCount}` : 'none';
   const unloggedLabel = summary.unloggedOk || _reviewUnloggedOk ? 'Blank ok' : 'Unlogged';
@@ -5063,8 +5062,8 @@ function renderReviewCloseoutSummary() {
         <span>Wallet</span>
         <strong>${formatFocusPoints(summary.walletBalance)} pts</strong>
       </div>`;
-  el.innerHTML = `<div class="rv-closeout">
-      <div class="rv-closeout-head">Closeout summary</div>
+  document.getElementById('rv-metric-details').innerHTML = `<div class="rv-closeout">
+      <div class="rv-closeout-head">Day details</div>
       <div class="rv-closeout-grid">
         <div class="rv-closeout-cell"><span>Plan</span><strong>${planLabel}</strong></div>
         <div class="rv-closeout-cell"><span>Deep</span><strong>${fmtDur(summary.deepMin)}</strong></div>
@@ -5086,19 +5085,16 @@ function renderReviewUnloggedDecision() {
     return;
   }
 
-  const gap = summary.firstUnloggedGap;
-  const gapLabel = summary.unloggedGapCount === 1 ? '1 gap' : `${summary.unloggedGapCount} gaps`;
-  const timeLabel = gap ? `${localTime(gap.tsStart)} - ${localTime(gap.ts)}` : 'missing time';
   const ok = _reviewUnloggedOk;
   el.style.display = 'block';
   el.innerHTML = `<div class="rv-gap-check${ok ? ' ok' : ''}">
-      <div class="rv-gap-head">${ok ? 'Missing time acknowledged' : 'Missing time check'}</div>
+      <div class="rv-gap-head">${ok ? 'Left unknown' : 'Needs you'}</div>
       <div class="rv-gap-copy">
-        ${fmtDur(summary.unloggedMin)} is unlogged across ${gapLabel}. ${ok ? 'You marked it intentionally blank for this review.' : `First gap: ${timeLabel}. Fill it if you remember, or mark it blank if you do not.`}
+        ${ok ? 'This date’s unlogged time will stay unknown when you save.' : 'Some time is unlogged. Add it if you remember, or leave it unknown.'}
       </div>
       <div class="rv-gap-actions">
-        <button type="button" class="btn sm ghost" onclick="openReviewFirstGap()">Log first gap</button>
-        <button type="button" class="btn sm ${ok ? 'primary' : 'ghost'}" onclick="markReviewUnloggedIntentional()">${ok ? 'Marked blank' : 'Mark blank'}</button>
+        <button type="button" class="btn sm ghost" onclick="openReviewFirstGap()">Log time</button>
+        <button type="button" class="btn sm ${ok ? 'primary' : 'ghost'}" onclick="markReviewUnloggedIntentional()">${ok ? 'Unknown' : 'Leave unknown'}</button>
       </div>
     </div>`;
 }
@@ -5115,6 +5111,7 @@ function openReviewFirstGap() {
   const gap = summary.firstUnloggedGap;
   if (!gap) { showToast('No reviewable gap found'); return; }
   closeModal('review-overlay');
+  _reviewGapDetour = true;
   openRetroLogPrefilled(gap.tsStart, Math.round(gap.ts));
 }
 
@@ -8119,19 +8116,39 @@ function removePreset(i){settings.presets.splice(i,1);persist();renderSettings()
 // ══════════════════════════════════════════════════════
 // REVIEW
 // ══════════════════════════════════════════════════════
+let _reviewGapDetour = false; // bounded return from the Review gap editor; fields stay in the DOM
 let _reviewDateKey = null; // which date is currently open in the review modal
 let _reviewUnloggedOk = false;    // true when missing time was seen and intentionally left blank
 let _reviewFocusRating = null;    // Phase 11.8 optional subjective rating: 'focused' | 'mixed' | 'distracted'
 
-// Phase 11.8 — toggle the optional end-of-day attention self-rating.
-function setReviewFocusRating(value) {
-  _reviewFocusRating = _reviewFocusRating === value ? null : value;
-  if (typeof renderReviewAttention === 'function') {
-    renderReviewAttention(_reviewDateKey || getViewingDateKey(), _reviewFocusRating);
-  }
+function renderReviewFeeling() {
+  document.getElementById('rv-feeling').innerHTML = `<label>How did today feel? <span class="note">(optional)</span></label><div class="rv-feeling-options">${['focused', 'mixed', 'distracted'].map(value => `<button type="button" class="btn sm ${_reviewFocusRating === value ? 'primary' : 'ghost'}" value="${value}" aria-pressed="${_reviewFocusRating === value}" onclick="setReviewFocusRating('${value}')">${value[0].toUpperCase() + value.slice(1)}</button>`).join('')}</div>`;
 }
 
-function openReview(dateKey) {
+function setReviewFocusRating(value) {
+  _reviewFocusRating = _reviewFocusRating === value ? null : value;
+  document.querySelectorAll('#rv-feeling button').forEach(button => {
+    const selected = button.value === _reviewFocusRating;
+    button.setAttribute('aria-pressed', String(selected));
+    button.classList.toggle('primary', selected);
+    button.classList.toggle('ghost', !selected);
+  });
+  if (typeof renderReviewAttention === 'function') renderReviewAttention(_reviewDateKey, _reviewFocusRating);
+}
+
+function refreshReviewAnalysis() {
+  renderReviewCloseoutSummary();
+  renderReviewUnloggedDecision();
+  renderReviewPlanVsActual();
+  if (typeof renderReviewAttention === 'function') renderReviewAttention(_reviewDateKey, _reviewFocusRating);
+  const gaps = getCloseoutGaps(_reviewDateKey);
+  document.getElementById('rv-gap-details').innerHTML = gaps.length ? `<div class="rv-pva"><div class="rv-pva-head">Unlogged intervals</div>${gaps.map(gap => `<div class="rv-pva-row">${localTime(gap.tsStart)} – ${localTime(gap.ts)} · ${fmtDur(gap.gapMin)}</div>`).join('')}</div>` : '';
+}
+
+function openReview(dateKey, fullAnalysis = false) {
+  _reviewGapDetour = false;
+  document.getElementById('rv-full-analysis').open = fullAnalysis;
+  document.getElementById('rv-optional-details').open = false;
   _reviewDateKey = dateKey || toDateKey(new Date());
   const isToday = _reviewDateKey === toDateKey(new Date());
   const r = reviews[_reviewDateKey] || {};
@@ -8151,40 +8168,20 @@ function openReview(dateKey) {
 
   document.getElementById('rv-win').value = r.win || '';
 
-  // Pre-fill waste from actual data if not yet written (today only)
-  if (!r.waste && isToday) {
-    const wasteMap = {};
-    getTodayEntries().filter(e => e.energy === 'waste' && e.activity).forEach(e => {
-      const key = activityGroupKey(e.activity);
-      if (!key) return;
-      if (!wasteMap[key]) wasteMap[key] = { label: activityDisplayLabel(e.activity), min: 0 };
-      else wasteMap[key].label = preferActivityLabel(wasteMap[key].label, activityDisplayLabel(e.activity));
-      wasteMap[key].min += e.blockIntervalMin || 0;
-    });
-    const worst = Object.values(wasteMap).sort((a, b) => b.min - a.min)[0];
-    document.getElementById('rv-waste').value = worst ? `${worst.label} · ${worst.min >= 60 ? (worst.min/60).toFixed(1)+'h' : worst.min+'m'}` : '';
-  } else {
-    document.getElementById('rv-waste').value = r.waste || '';
-  }
+  document.getElementById('rv-waste').value = r.waste || '';
+  const tomorrowInput = document.getElementById('rv-legacy-tomorrow');
+  tomorrowInput.value = r.tomorrow || '';
+  tomorrowInput.defaultValue = tomorrowInput.value;
+  document.getElementById('rv-legacy-tomorrow-field').hidden = !r.tomorrow;
 
   document.getElementById('rv-avoid').value = r.avoid || '';
   renderReviewTomorrowStatus();
-  renderReviewCloseoutSummary();
-  if (typeof renderReviewAttention === 'function') renderReviewAttention(_reviewDateKey, _reviewFocusRating);
-  renderReviewUnloggedDecision();
-  renderReviewPlanVsActual();
-
-  // Reality score — use entries for that date
-  const dayE = entries.filter(e => !e.missed && !e.deleted && getDateInTZ(e.tsStart || e.ts) === _reviewDateKey);
-  const realityScore = dayE.filter(e => e.energy === 'deep').length - dayE.filter(e => e.energy === 'waste').length;
-  const rsVal = document.getElementById('reality-score-val');
-  const rsSub = document.getElementById('reality-score-sub');
-  rsVal.textContent = realityScore > 0 ? '+' + realityScore : realityScore;
-  rsVal.style.color = realityScore >= 0 ? 'var(--deep)' : 'var(--distraction)';
-  rsSub.textContent = realityScore >= 0 ? 'You moved forward' : 'You regressed';
-  rsSub.style.color = realityScore >= 0 ? 'var(--deep)' : 'var(--distraction)';
+  renderReviewFeeling();
+  refreshReviewAnalysis();
 
   document.getElementById('review-overlay').classList.add('open');
+  document.querySelector('#review-overlay .review-modal').scrollTop = 0;
+  if (fullAnalysis) document.getElementById('rv-full-analysis').scrollIntoView({ block: 'start' });
 }
 
 function openReflectionsHistory() {
@@ -8255,8 +8252,7 @@ function openReflectionsHistory() {
 // Review links to the canonical preparation editor; reflection saves independently.
 function renderReviewTomorrowStatus() {
   const targetDate = globalThis.PlanTomorrowModel?.planTomorrowTargetDate(Date.now(), settings.timezone);
-  const prepared = targetDate && globalThis.PlanTomorrowModel.normalizePreparation(plans[targetDate]?.preparation, targetDate);
-  document.getElementById('rv-tomorrow-status').innerHTML = `<label>${prepared ? 'Tomorrow ready' : 'Tomorrow not prepared'}</label><button type="button" class="btn sm ghost" onclick="prepareTomorrowFromReview()">${prepared ? 'Edit' : 'Prepare tomorrow'}</button>`;
+  document.getElementById('rv-tomorrow-status').innerHTML = `<button type="button" class="btn sm ghost" onclick="prepareTomorrowFromReview()">Prepare tomorrow${_reviewDateKey !== toDateKey(new Date()) && targetDate ? ` (${targetDate}, relative to today)` : ''} →</button>`;
 }
 
 function prepareTomorrowFromReview() {
@@ -8319,8 +8315,10 @@ function saveReview(){
   const k = _reviewDateKey || toDateKey(new Date());
   const summary = computeCloseoutSummary(k);
   // Keep legacy reflection text; preparation is owned solely by Plan Tomorrow.
-  const tomorrowText = reviews[k]?.tomorrow || '';
+  const tomorrowInput = document.getElementById('rv-legacy-tomorrow');
+  const tomorrowText = tomorrowInput.value === tomorrowInput.defaultValue ? reviews[k]?.tomorrow || '' : tomorrowInput.value;
   reviews[k]={
+    ...reviews[k],
     win:document.getElementById('rv-win').value,
     waste:document.getElementById('rv-waste').value,
     avoid:document.getElementById('rv-avoid').value,
@@ -10039,7 +10037,14 @@ function updateLiveCost() {
 // ══════════════════════════════════════════════════════
 // UTILS
 // ══════════════════════════════════════════════════════
-function closeModal(id){document.getElementById(id).classList.remove('open');}
+function closeModal(id){
+  document.getElementById(id).classList.remove('open');
+  if (id === 'retro-overlay' && _reviewGapDetour) {
+    _reviewGapDetour = false;
+    refreshReviewAnalysis();
+    document.getElementById('review-overlay').classList.add('open');
+  }
+}
 function overlayClose(e,id){if(e.target.id===id)closeModal(id);}
 let _toastTimer = null;
 function toastBorderColor(energy) {

@@ -1572,3 +1572,33 @@ changed:
 tests: 97 focused browser tests passed; runtime mirror and static checks passed.
 blockers: none
 deviations: explicit user brief is the contract; TASKS.md left unchanged. No commit or push.
+
+
+## Phase 6E — Review Simplification V1 (branch: feat/review-simplification-v1)
+changed:
+  - index.html: compact factual summary, independent feeling/win, optional legacy fields,
+    separate full analysis, bounded gap-editor return, explicit historical planning destination,
+    no-save Close and primary Save reflection; remove active Reality Score and waste prefill.
+  - insights.js: retain automatic attention analysis/caveat; move feeling into Review itself.
+  - style.css: scoped compact Review disclosures, wrapping, 16px fields and reachable Save.
+  - www/index.html, www/insights.js, www/style.css: generated runtime mirrors.
+  - tests/review-simplification.spec.js: data, detour, sync, offline, chaos and responsive coverage.
+  - tests/guided-measurement-loop.spec.js, tests/plan.spec.js, tests/plan-tomorrow-ui.spec.js:
+    adapt presentation assertions to the intentional new labels/disclosures.
+  - CODEMAP.md: describe Review entry points and bounded return behavior.
+verification: see the Phase 6E entry in TEST_REPORT.md.
+blockers: none.
+deviations: direct user-approved Phase 6E request is the execution contract; no unrelated
+TASKS.md status changed. Historical planning date semantics deliberately remain unchanged.
+Candidate remains uncommitted and unpushed for one independent milestone review.
+
+
+## Phase 6E — bounded keyboard focus rework
+- Confirmed feeling activation removed the focused button by rebuilding its group.
+- `setReviewFocusRating` now updates existing button pressed states and existing classes
+  in place; `renderReviewFeeling` supplies stable button values. No styling, wording,
+  layout, persistence, analytics, or other product semantics changed.
+- Generated only the corresponding `www/index.html` mirror update.
+- Added three actual keyboard selection/clear/Tab cases and historical mouse save/restore
+  coverage. Review suite: 36 passed; directly relevant Review regressions: 14 passed.
+- Candidate remains uncommitted and unpushed for targeted re-review.
