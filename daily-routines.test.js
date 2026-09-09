@@ -83,6 +83,24 @@ test('manual Done, minimum, undo and reload never write Ledger or duplicate inst
   assert.equal(generateInstances(state.routines,'2026-09-09',tz).length,1);
   assert.equal(repo.read('Asia/Tokyo').timezone,tz);
 });
+test('one-date skip uses canonical occurrence identity, survives reload, and unskip restores only that date', () => {
+  const storage=memory(),repo=createDailyRoutineRepository(storage),r=routine();
+  repo.update(tz,state=>state.routines.push(r));
+  const id=instanceId(r.id,'2026-09-09');
+  repo.setDateSkip(tz,id,true,100);
+  assert.deepEqual(createDailyRoutineRepository(storage).read(tz).skips[id],{skippedAt:100,updatedAt:100});
+  assert.equal(createDailyRoutineRepository(storage).read(tz).skips[instanceId(r.id,'2026-09-10')],undefined);
+  repo.setDateSkip(tz,id,false,200);
+  assert.equal(repo.read(tz).skips[id],undefined);
+  assert.throws(()=>repo.setDateSkip(tz,JSON.stringify(['missing','2026-09-09']),true,300),/identity/);
+});
+test('legacy routine envelopes hydrate empty skips; corrupt skips fail diagnostically', () => {
+  const storage=memory(),repo=createDailyRoutineRepository(storage);
+  storage.setItem('ta3-daily-routines-v1',JSON.stringify({schemaVersion:1,timezone:tz,routines:[routine()],manual:{},links:{},focus:{}}));
+  assert.deepEqual(repo.read(tz).skips,{});
+  storage.setItem('ta3-daily-routines-v1',JSON.stringify({schemaVersion:1,timezone:tz,routines:[routine()],manual:{},links:{},focus:{},skips:{[instanceId('routine-1','2026-09-09')]:{skippedAt:'bad',updatedAt:1}}}));
+  assert.throws(()=>repo.read(tz),/date skip/);
+});
 test('bad storage and failed writes fail visibly without replacing valid state', () => {
   const storage=memory(), repo=createDailyRoutineRepository(storage);
   repo.update(tz,s=>s.routines.push(routine()));

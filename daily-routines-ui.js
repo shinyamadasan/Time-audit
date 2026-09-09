@@ -24,7 +24,9 @@ function readView() {
   const date = localContext(now, state.timezone).date;
   const plans = createLearningPlanRepository().listPlans();
   const events = createLocalLifeLedgerStore().listEvents();
-  const instances = generateInstances(state.routines, date, state.timezone);
+  const allInstances = generateInstances(state.routines, date, state.timezone);
+  const skipped = allInstances.filter(item => state.skips[item.id]);
+  const instances = allInstances.filter(item => !state.skips[item.id]);
   const bindings = {};
   for (const item of instances.filter(i => i.routine.source === 'learning')) {
     const plan = plans.find(p => p.id === item.routine.planId);
@@ -36,7 +38,7 @@ function readView() {
   }
   if (Object.keys(bindings).length) state = repository.update(context.timezone, s => Object.assign(s.links, bindings));
   const input = { ...state, events, entries: context.entries };
-  return { state, instances, plans, input, now, date, browsingHistory: context.browsingHistory };
+  return { state, instances, skipped, plans, input, now, date, browsingHistory: context.browsingHistory };
 }
 function scheduleLabel(r) {
   if (r.mode === 'exact') return r.time;
@@ -93,7 +95,8 @@ export function renderDailyRoutines() {
       const members = rows.filter(row => row.status.group === group).sort((a, b) => (a.item.routine.time || '').localeCompare(b.item.routine.time || '') || a.item.routine.id.localeCompare(b.item.routine.id));
       if (members.length) html += `<section aria-label="${group}"><h3>${group}</h3>${members.map(row => renderCard(row.item, row.completion, row.status)).join('')}</section>`;
     }
-    const inactive = view.state.routines.filter(r => !view.instances.some(i => i.routineId === r.id));
+    if (view.skipped.length) html += `<details class="routine-skipped"><summary>Skipped today (${view.skipped.length})</summary>${view.skipped.map(item => `<div class="routine-actions" data-instance-id="${escape(item.id)}">${escape(item.routine.title)} ${button('restore', item.routineId, 'Restore today')}</div>`).join('')}</details>`;
+    const inactive = view.state.routines.filter(r => !view.instances.some(i => i.routineId === r.id) && !view.skipped.some(i => i.routineId === r.id));
     if (inactive.length) html += `<details><summary>Other routines (${inactive.length})</summary>${inactive.map(r => `<div class="routine-actions">${escape(r.title)} · ${r.enabled ? 'Not scheduled today' : 'Disabled'} ${button('edit', r.id, 'Edit')}</div>`).join('')}</details>`;
     if (html !== rendered) { list.innerHTML = html; rendered = html; }
     error.textContent = '';
@@ -151,8 +154,9 @@ root.addEventListener('click', event => {
     if (action === 'edit' || action === 'add') { openEditor(id); return; }
     const clickedId = control.closest('[data-instance-id]')?.dataset.instanceId;
     view = readView();
-    const item = view.instances.find(i => i.routineId === id && i.id === clickedId);
+    const item = [...view.instances, ...view.skipped].find(i => i.routineId === id && i.id === clickedId);
     if (!item) throw new Error('The day or routine changed. Please use the refreshed Today card.');
+    if (action === 'restore') repository.setDateSkip(view.state.timezone, item.id, false);
     if (['done', 'minimum', 'undo'].includes(action)) repository.manualDone(view.state.timezone, item.id, action === 'undo' ? null : action === 'minimum' ? 'minimum' : 'complete');
     if (action === 'start') {
       const r = item.routine;

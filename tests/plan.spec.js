@@ -20,6 +20,10 @@ const firebaseStub = `
     update() { return Promise.resolve(); },
     set() { return Promise.resolve(); },
     remove() { return Promise.resolve(); },
+    transaction(updateFn) {
+      const value = updateFn(null);
+      return Promise.resolve({ committed: true, snapshot: snapshot(value) });
+    },
     push(value) {
       const pushed = makeRef(refPath + '/pushed');
       pushed.key = 'pushed';
@@ -350,6 +354,7 @@ test('removed items are tombstoned so sync cannot resurrect them', async ({ page
   const items = stored[Object.keys(stored)[0]].items;
   expect(items).toHaveLength(2);                       // still on disk...
   expect(items.find(i => i.task === 'Write report').deleted).toBe(true);   // ...as a tombstone
+  expect(items.find(i => i.task === 'Write report').updatedBy).toBeTruthy();
 });
 
 test('past days render the plan read-only', async ({ page }) => {
@@ -545,13 +550,14 @@ test('review shows plan vs actual for the day being reviewed', async ({ page }) 
 
   const pva = page.locator('#rv-plan-vs-actual');
   await expect(pva).toBeVisible();
-  await expect(pva.locator('.rv-pva-head')).toHaveText('You planned 2 · logged 1 · skipped 1');
+  await expect(pva.locator('.rv-pva-head')).toHaveText('Planned 2 · active 2 · done/worked on 1');
 
   const rows = pva.locator('.rv-pva-row');
   await expect(rows.nth(0)).toContainText('Write report');
-  await expect(rows.nth(0).locator('.rv-pva-min')).toHaveText('45m');
+  await expect(rows.nth(0)).toContainText('45m tracked with the same label');
+  await expect(rows.nth(0).locator('.rv-pva-min')).toHaveText('Done');
   await expect(rows.nth(1)).toContainText('Gym');
-  await expect(rows.nth(1).locator('.rv-pva-min')).toHaveText('0m');   // honest, not scolding
+  await expect(rows.nth(1).locator('.rv-pva-min')).toHaveText('Not done');   // honest, not scolding
 });
 
 test('close day CTA opens the review loop and marks today closed after save', async ({ page }) => {

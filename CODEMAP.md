@@ -18,6 +18,8 @@
 - `insights.js` — line 1300 → **EXTRACTED** (see below)
 - `focus-wallet.js` — line 1301 → **EXTRACTED** (see below)
 - `attention-signals.js` — module script include → **EXTRACTED** (see below; pure Phase 11.8 attention-signal derivation, attaches to `globalThis`)
+- `daily-routines-ui.js` — module script include → **EXTRACTED** (see Daily Operating Loop V1)
+- `plan-tomorrow-ui.js` — module script include → **EXTRACTED** (imports the pure Plan Tomorrow model, Daily Routines, Learning Next Action, and Life Ledger runtime)
 - `learning-plan-ui.js` — module script include → **EXTRACTED** (see below; imports `learning-plan-import.js`, `learning-plan-next-action.js`, `life-ledger-runtime.js`)
 - `capability-career-ui.js` — module script include → **EXTRACTED** (see below; imports Capability/Career model, repository, import, analytics, and reads Life Ledger runtime)
 - `life-ledger-export-ui.js` — module script include → **EXTRACTED** (see below; imports `life-ledger-transport.js`)
@@ -690,13 +692,13 @@ populated (joined item labels) so Reflect history and older records still render
 
 ## [Review Plan Picker]
 Lines: ~6210–6360
-Purpose: Turns the review's single "Tomorrow's focus" string into the 1–3 item plan the next day
-runs on. Offers one-tap chips (unfinished items from the reviewed day, this week's p1/p2/p3, recent
-tasks), shows a reference-class line, and renders plan-vs-actual for the day being reviewed.
+Purpose: Reuses Plan Tomorrow's shared confirmation contract for the next date while keeping the
+compact 1–3 one-off picker in Review. Shows the live routine count, supports intentional blank days,
+offers existing suggestion chips, and renders neutral one-off/routine plan-vs-actual states.
 Functions: `reviewPlanTargetKey()`, `openReviewPlan()`, `reviewPlanVisible()`, `reviewPlanChips()`,
 `reviewPlanReferenceLine()`, `renderReviewPlan()`, `pushReviewPlanItem()`, `addReviewPlanItem()`,
-`addReviewPlanChip()`, `removeReviewPlanItem()`, `renderReviewPlanVsActual()`
-Variables: `_reviewPlanDraft` (carries tombstones), `_reviewPlanTargetKey`
+`addReviewPlanChip()`, `removeReviewPlanItem()`, `toggleReviewPlanBlank()`, `renderReviewPlanVsActual()`
+Variables: `_reviewPlanDraft` (carries tombstones), `_reviewPlanTargetKey`, `_reviewPlanIntentionalBlank`
 Depends on: Today Plan section, `weeklyReviews`, `buildHeroSuggestions()`, `sumEnergyMinutes()`,
 `tzDow()`, `tzParseTime()`, `_dateKeyPlusDays()`, `getWeekKey()`
 
@@ -880,3 +882,16 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 ## Daily Operating Loop V1 (Phase 6)
 
 `daily-routines-model.js` derives stable routine/date intentions, time-aware states, completion matching, streak and score. `daily-routines-repository.js` validates local `ta3-daily-routines-v1` state. `daily-routines-ui.js` renders `daily-routines`, edits via `daily-routine-dialog`, reads Learning/Ledger sources, and bridges scheduled Focus start/full completion. `daily-routines.css` supplies scoped styling and compact landscape rules. `getDailyRoutineAppContext()` exposes read context from Today; Focus uses optional `onDailyRoutineFocusStarted` / `onDailyRoutineFocusCompleted` hooks. Runtime mirrors are managed by the existing mirror script. See [Phase 6](docs/DAILY_OPERATING_LOOP_V1.md).
+
+## Plan Tomorrow V1 (Phase 6B)
+
+`plan-tomorrow-model.js` owns zoned target-date calculation, validated preparation metadata,
+commutative/associative item and preparation merge using per-mutation writer provenance plus canonical
+fallback ordering, readiness, planning consistency, and neutral
+actual-status classification. `plan-tomorrow-ui.js` owns the standalone normal/rescue preparation
+overlay, live routine preview, Learning likely-next text, and date skip/unskip. The classic Today
+script exposes `getPlanTomorrowAppContext()` and one `confirmPreparedDatePlan()` local-first mutation
+used by both the overlay and Review. `storage.js:syncPlans()` transactionally merges each date node in
+Firebase and persists the committed canonical snapshot locally; sync-result wording follows that
+resolved transaction result. Routine snapshots are identity/audit references only; execution always
+regenerates live occurrences. Runtime mirrors are managed by the existing mirror script.
