@@ -1593,3 +1593,57 @@ button, a, [role="button"],
 
 .cdi-not-evaluated .cdi-blocked-names{font-size:12px;color:var(--muted);margin-bottom:8px}
 .cdi-blocked-list li{font-size:10.5px;color:var(--muted2);line-height:1.45}
+
+/* Phase 6D: bounded Today presentation; all detail destinations are intentional. */
+#up-next{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:16px;margin-bottom:16px}
+#up-next .today-action-strip{background:none;border:0;box-shadow:none;padding:0;margin:0 0 12px}
+#up-next .activity-hero{background:none;box-shadow:none;padding:0;margin:0}
+#up-next .today-action-title{overflow-wrap:anywhere}
+#up-next[data-state="known"]:not(.choose-work) #execution-controls,
+#up-next[data-state="remote"] #execution-controls,#up-next[data-state="focus"] #execution-controls,
+#up-next[data-state="break"] #hero-idle,#up-next[data-state="break"] #hero-active,#up-next[data-state="break"] #hero-away,
+#up-next[data-state="tracker"] #hero-idle,#up-next[data-state="away"] #hero-idle,
+#up-next.choose-work #today-action-primary{display:none!important}
+#up-next[data-state="free"] #hero-context-prompt{font-size:19px}
+#hero-context-sub,#recent-chips{display:none!important}
+.execution-options{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.execution-options[hidden]{display:none}
+#today-commitments,#needs-you,#so-far{margin-bottom:16px;padding:0 2px}
+#view-today h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin:0 0 10px;color:var(--muted)}
+#today-commitments .plan-strip,#today-commitments .daily-routines{padding:0;border:0;background:none;margin:0 0 10px}
+#today-commitments .plan-head{margin-bottom:4px}
+#plan-strip:not(.editing) .plan-editor,#plan-strip:not(.editing) .plan-remove,#plan-strip:not(.editing) .plan-start{display:none}
+#today-commitments .plan-task{overflow-wrap:anywhere;white-space:normal}
+#today-commitments .plan-item{padding:6px 0}
+#today-commitments .plan-meta{font-size:10px}
+#today-commitments .routine-heading h3{font-size:12px;font-weight:500}
+#routine-summary,.commitment-routine span{font-size:11px;color:var(--muted)}
+.commitment-routine{font-size:12px;overflow-wrap:anywhere;margin:4px 0}
+#routine-details summary,.today-destination summary{cursor:pointer;font-size:12px;color:var(--muted);padding:10px 0;min-height:40px}
+#needs-you[hidden]{display:none}
+#needs-you:not(.expanded) .needs-secondary{display:none!important}
+#needs-you .gap-recovery{border:0;background:none;padding:0;margin:0}
+#needs-you .gap-recovery-title{font-size:13px;font-weight:400;overflow-wrap:anywhere}
+#needs-you-count{font-size:11px;text-transform:none;letter-spacing:0}
+#so-far-summary{font-size:13px;color:var(--muted)}
+.today-secondary{display:flex;flex-wrap:wrap;gap:4px}
+.today-destination:not([open]){display:none}
+#view-today .btn.sm,#view-today .plan-check{min-height:40px}
+#view-today .plan-check{min-width:36px}
+#view-today .today-detail,#today-health,#active-device-banner,#sleep-pill-btn,#missed-closeout-card,#closeout-card,#yesterday-promise,#feedback-flash{display:none!important}
+#log-time-details .daily-basics{margin-top:8px}
+#log-time-details .sal-card{max-width:100%}
+@media(max-width:600px){#view-today .hero-input,#view-today .plan-input{font-size:16px}#view-today .hero-start-row{flex-wrap:wrap}#view-today .hero-input-wrap{min-width:0;flex-basis:180px}#today-commitments .routine-heading{flex-wrap:wrap}#up-next .hero-active-top{gap:10px}}
+
+#up-next .today-action-title{font-size:20px;line-height:1.3;margin-bottom:6px}
+#up-next .today-action-btn{min-height:44px;min-width:76px;font-size:14px;background:var(--deep);color:var(--bg)}
+#up-next .today-action-strip{align-items:center}
+#today-commitments .routine-heading h3{color:var(--muted);text-transform:none;letter-spacing:0}
+#plan-strip:not(.editing) .plan-item:nth-of-type(n+5){display:none}
+#needs-you summary{font-size:12px;color:var(--muted);cursor:pointer;padding:8px 0}
+
+#up-next.choose-work #today-action-title,#up-next.choose-work #today-action-sub{display:none}
+
+#up-next,#up-next button,#so-far,#needs-you{font-family:var(--ui)}
+
+@media(max-width:600px){#up-next .today-action-strip{align-items:stretch}}

@@ -1550,3 +1550,17 @@ the browser event for later use. Existing installation and iOS help remain suppo
 Direct browser regressions cover uniqueness, outcome denominators, data preservation, real
 install events, timer/Focus recovery, first-visit onboarding and deferred availability.
 The approved architecture and low-severity visual hierarchy remain unchanged. No commit/push.
+
+
+## Phase 6D — Today Surface Simplification V1 (uncommitted review candidate)
+
+- Consolidated Today around Up Next, compact commitments, conditional Needs You, and So Far.
+- Kept the Phase 6C action precedence and existing execution controls. Routine action discovery
+  now uses model state and a shared identity-checked handler instead of rendered card buttons.
+- Moved logging, timeline/corrections, wallet, and accountability behind intentional access.
+- Respected Review's date-scoped unknown-time acknowledgement, including immediate attention
+  refresh after Review save and configured sleep resolution.
+- Preserved models, repositories, sync, Focus internals, and primary navigation; mirrored runtime files.
+- Validation and A–AS milestone handoff: see the Phase 6D entry in TEST_REPORT.md.
+- No TASKS.md status changed: this milestone was directly authorized by the user, outside the
+  historical completed task queue. No commit, push, merge, deployment, or independent review performed.

@@ -95,7 +95,7 @@ async function today(page, options = {}) {
 test('no-plan day starts ordinary admin without a planning ceremony or skill inference', async ({ page }) => {
   await today(page);
   await expect(page.locator('#morning-startup')).toHaveCount(0);
-  await expect(page.locator('#today-action-title')).toHaveText('What would you like to work on?');
+  await expect(page.locator('#hero-context-prompt')).toHaveText('What are you working on?');
   await page.locator('#hero-task-input').click();
   await page.locator('#hero-task-input').fill('Ordinary admin');
   await page.locator('#hero-idle').getByRole('button', { name: 'Start', exact: true }).click();
@@ -114,8 +114,8 @@ for (const kind of ['priorities', 'routines', 'open', 'rescue']) {
     await expect(page.locator('#morning-startup')).toHaveCount(0);
     await expect(page.locator('#plan-strip')).toContainText('Priorities');
     if (kind === 'priorities') {
-      await expect(page.locator('#today-action-title')).toHaveText('Next: Client build');
-      await page.getByTitle('Focus on the current action').click();
+      await expect(page.locator('#today-action-title')).toHaveText('Client build');
+      await page.getByRole('button', { name: 'Focus mode', exact: true }).click();
       expect(await page.evaluate(() => ({ task: getFocusTaskLabel(), phase: pomodoroPhase }))).toEqual({ task: 'Client build', phase: 'work' });
     }
   });
@@ -124,9 +124,10 @@ for (const kind of ['priorities', 'routines', 'open', 'rescue']) {
 test('due routine wins, skip preserves intent and exposes the priority', async ({ page }) => {
   await today(page, { routines: routineState([routine({ time: '00:00', fallback: 'Later today' })]) });
   await page.evaluate(() => { savePlanItems(planTodayKey(), [createPlanItem('Client build', '')]); renderDailyRoutines(); });
-  await expect(page.locator('#today-action-title')).toHaveText('Next: Deep work');
+  await expect(page.locator('#today-action-title')).toHaveText('Deep work');
+  await page.locator('#routine-details > summary').click();
   await page.getByRole('button', { name: 'Skip today', exact: true }).click();
-  await expect(page.locator('#today-action-title')).toHaveText('Next: Client build');
+  await expect(page.locator('#today-action-title')).toHaveText('Client build');
   expect(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('ta3-daily-routines-v1')).skips).length)).toBe(1);
 });
 
@@ -142,7 +143,7 @@ test('Review links to one editor and leaves the draft reflection intact', async 
   await today(page);
   await page.evaluate(() => openReview());
   await page.locator('#rv-win').fill('Draft win');
-  await page.getByRole('button', { name: 'Prepare tomorrow', exact: true }).click();
+  await page.locator('#review-overlay').getByRole('button', { name: 'Prepare tomorrow', exact: true }).click();
   await expect(page.locator('#review-overlay')).not.toHaveClass(/open/);
   await expect(page.locator('#plan-tomorrow-overlay')).toHaveClass(/open/);
   await expect(page.locator('#rv-win')).toHaveValue('Draft win');
@@ -177,7 +178,7 @@ test('scheduled Learning starts from Today, preserves provenance, then returns a
   plan = addLesson(plan, plan.phases[0].id, { title: 'Webhooks' });
   plan = addStep(plan, plan.phases[0].lessons[0].id, { title: 'Practice webhook handling' });
   await today(page, { routines: routineState([routine({ source: 'learning', planId: plan.id, mode: 'anytime' })]), learningPlans: { schemaVersion: 1, plans: [plan] } });
-  await expect(page.locator('#today-action-title')).toHaveText('Next: Practice webhook handling');
+  await expect(page.locator('#today-action-title')).toHaveText('Practice webhook handling');
   await page.locator('#today-action-primary').click();
   expect(await page.evaluate(() => getFocusLearningPlanMetadata().planId)).toBe(plan.id);
   await page.evaluate(() => { focusStartTime = Date.now() - 30 * 60000; endWorkSession(); });
@@ -193,7 +194,7 @@ test('Learning plans without a scheduled occurrence create no daily obligation',
   plan = addLesson(plan, plan.phases[0].id, { title: 'Lesson' });
   plan = addStep(plan, plan.phases[0].lessons[0].id, { title: 'Study later' });
   await today(page, { learningPlans: { schemaVersion: 1, plans: [plan] } });
-  await expect(page.locator('#today-action-title')).not.toContainText('Study later');
+  await expect(page.locator('#up-next')).not.toContainText('Study later');
   await page.evaluate(() => openPlanTomorrow());
   await expect(page.locator('#plan-tomorrow-body')).not.toContainText('Study later');
 });
@@ -202,7 +203,7 @@ test('Today keeps one primary action usable at phone and desktop widths', async 
   await today(page);
   for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 });
-    await expect(page.locator('#today-action-primary')).toBeVisible();
+    await expect(page.locator('#hero-task-input')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: `test-results/today-${width}.png`, fullPage: false, animations: 'disabled' });
   }
@@ -210,7 +211,7 @@ test('Today keeps one primary action usable at phone and desktop widths', async 
 
 test('Focus on a manual routine hands off its label without claiming completion', async ({ page }) => {
   await today(page, { routines: routineState([routine({ mode: 'anytime' })]) });
-  await page.getByTitle('Focus on the current action').click();
+  await page.getByRole('button', { name: 'Focus mode', exact: true }).click();
   expect(await page.evaluate(() => getFocusTaskLabel())).toBe('Deep work');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-daily-routines-v1') || '{"manual":{}}').manual)).toEqual({});
 });

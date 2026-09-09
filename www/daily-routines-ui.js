@@ -67,7 +67,7 @@ function renderCard(item, completion, status) {
   let note = '';
   if (r.source === 'workout' && !complete) note = 'Completion appears when a matching workout is imported.';
   if (r.source === 'learning' && !hasStep) note = 'No unfinished step available today.';
-  if (completion?.source === 'ambiguous') note = 'Multiple facts or routines match this intention. Automatic completion is unavailable; choose Manual completion if needed.';
+  if (completion?.source === 'ambiguous') note = 'Multiple facts or routines match this intention. Automatic completion is unavailable; inspect the source facts and routine configuration.';
   if (completion?.level === 'incomplete' && completion.duration) note = `${completion.duration} min recorded · below minimum/target.`;
   return `<article class="daily-routine-card" data-instance-id="${escape(item.id)}">
     <div><strong>${complete ? '✓ ' : ''}${escape(r.title)}</strong>
@@ -88,9 +88,16 @@ export function renderDailyRoutines() {
     const upcoming = rows.filter(row => row.status.group === 'Next').sort((a, b) => a.item.routine.time.localeCompare(b.item.routine.time) || a.item.routine.id.localeCompare(b.item.routine.id));
     upcoming.slice(1).forEach(row => { row.status.group = 'Later'; });
     const score = dailyScore(rows.map(row => row.completion));
-    let html = `<p class="routine-meta">${view.date} · ${escape(view.state.timezone)} · Saved on this device</p>`;
+    const ambiguous = rows.filter(row => row.completion?.source === 'ambiguous');
+    document.getElementById('routine-needs-item').hidden = !ambiguous.length;
+    document.getElementById('routine-needs-copy').textContent = ambiguous.length ? `${ambiguous.length} routine${ambiguous.length === 1 ? '' : 's'} with ambiguous evidence. Resolve the source match to clear this item.` : '';
+    let html = '';
+    const relevant = rows.filter(row => ['Now', 'Anytime'].includes(row.status.group));
+    document.getElementById('routine-compact').innerHTML = relevant.slice(0, 2).map(row => `<div class="commitment-routine">${escape(row.item.routine.title)} <span>${escape(row.status.label)}</span></div>`).join('');
+    document.getElementById('routine-summary').textContent = rows.length ? `${relevant.length} due · ${score.completed}/${score.planned} complete` : '';
+    document.getElementById('routine-details').hidden = !rows.length && !view.skipped.length;
     html += `<p>${score.completed} / ${score.planned} planned routines completed${score.minimum ? ` · ${score.minimum} at minimum` : ''}</p>`;
-    if (!rows.length) html += '<p class="routine-meta">Set a routine once. Today’s intentions appear automatically. Try a language habit, Workout, Learning, or Deep Work.</p>';
+
     for (const group of ['Now', 'Next', 'Later', 'Anytime', 'Done']) {
       const members = rows.filter(row => row.status.group === group).sort((a, b) => (a.item.routine.time || '').localeCompare(b.item.routine.time || '') || a.item.routine.id.localeCompare(b.item.routine.id));
       if (members.length) html += `<section aria-label="${group}"><h3>${group}</h3>${members.map(row => renderCard(row.item, row.completion, row.status)).join('')}</section>`;
@@ -157,28 +164,30 @@ document.addEventListener('click', event => {
       return;
     }
     if (action === 'edit' || action === 'add') { document.getElementById('routine-manager').close(); openEditor(id); return; }
-    const clickedId = control.closest('[data-instance-id]')?.dataset.instanceId;
-    view = readView();
-    const item = [...view.instances, ...view.skipped].find(i => i.routineId === id && i.id === clickedId);
-    if (!item) throw new Error('The day or routine changed. Please use the refreshed Today card.');
-    if (action === 'skip') repository.setDateSkip(view.state.timezone, item.id, true);
-    if (action === 'restore') repository.setDateSkip(view.state.timezone, item.id, false);
-    if (['done', 'minimum', 'undo'].includes(action)) repository.manualDone(view.state.timezone, item.id, action === 'undo' ? null : action === 'minimum' ? 'minimum' : 'complete');
-    if (action === 'start') {
-      const r = item.routine;
-      let learningPlan = null;
-      if (r.source === 'learning') {
-        const plan = view.plans.find(p => p.id === r.planId);
-        const next = findNextLearningPlanStep(plan);
-        if (!next || next.stepId !== view.state.links[item.id]?.stepId) throw new Error('This step changed or is complete. Open Learning Plans to continue.');
-        learningPlan = { ...next, planId: plan.id, planTitle: plan.title };
-      }
-      const started = globalThis.enterFocusMode({ task: learningPlan?.stepTitle || r.title, context: learningPlan?.planTitle || r.title, learningPlan, dailyRoutine: r.source === 'focus' ? { instanceId: item.id, timezone: item.timezone } : null, workMinutes: r.targetMinutes, autoStart: true });
-      if (started === false) throw new Error('Focus is already running. Nothing new was started.');
-    }
+    performRoutineAction(action, id, control.closest('[data-instance-id]')?.dataset.instanceId);
     renderDailyRoutines();
   } catch (err) { renderDailyRoutines(); message(err); }
 });
+function performRoutineAction(action, id, clickedId) {
+  view = readView();
+  const item = [...view.instances, ...view.skipped].find(i => i.routineId === id && i.id === clickedId);
+  if (!item) throw new Error('The day or routine changed. Please use the refreshed Today card.');
+  if (action === 'skip') repository.setDateSkip(view.state.timezone, item.id, true);
+  if (action === 'restore') repository.setDateSkip(view.state.timezone, item.id, false);
+  if (['done', 'minimum', 'undo'].includes(action)) repository.manualDone(view.state.timezone, item.id, action === 'undo' ? null : action === 'minimum' ? 'minimum' : 'complete');
+  if (action === 'start') {
+    const r = item.routine;
+    let learningPlan = null;
+    if (r.source === 'learning') {
+      const plan = view.plans.find(p => p.id === r.planId);
+      const next = findNextLearningPlanStep(plan);
+      if (!next || next.stepId !== view.state.links[item.id]?.stepId) throw new Error('This step changed or is complete. Open Learning Plans to continue.');
+      learningPlan = { ...next, planId: plan.id, planTitle: plan.title };
+    }
+    const started = globalThis.enterFocusMode({ task: learningPlan?.stepTitle || r.title, context: learningPlan?.planTitle || r.title, learningPlan, dailyRoutine: r.source === 'focus' ? { instanceId: item.id, timezone: item.timezone } : null, workMinutes: r.targetMinutes, autoStart: true });
+    if (started === false) throw new Error('Focus is already running. Nothing new was started.');
+  }
+}
 // Persist the source session identity before starting; a same-device takeover can reuse it.
 globalThis.onDailyRoutineFocusStarted = (link, startedAt) => {
   // Let the Start action surface storage errors before the timer starts.
@@ -205,18 +214,31 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) rend
 window.setInterval(() => { if (!document.hidden && root.closest('.view')?.classList.contains('active')) renderDailyRoutines(); }, 30000);
 renderDailyRoutines();
 
-globalThis.getTodayRoutineAction = group => {
+function routineAction(group) {
   if (!view || view.browsingHistory) return null;
-  const candidates = [...list.querySelectorAll('.daily-routine-card')];
-  const card = candidates.find(el => el.closest('section')?.getAttribute('aria-label') === group && el.querySelector('[data-routine-action="start"], [data-routine-action="done"]'));
-  if (!card) return null;
-  const item = view.instances.find(item => item.id === card.dataset.instanceId);
-  const control = card.querySelector('[data-routine-action="start"], [data-routine-action="done"]');
-  return { title: `Next: ${view.state.links[item.id]?.stepTitle || item.routine.title}`, task: item.routine.title, focusLinked: control.dataset.routineAction === 'start', sub: scheduleLabel(item.routine), button: control.textContent };
-};
+  const candidates = view.instances.filter(item => {
+    const completion = matchCompletion(item, view.input, view.now);
+    if (completion && completion.level !== 'incomplete') return false;
+    if (scheduleState(item, view.now, completion).group !== group) return false;
+    const r = item.routine;
+    if (r.source === 'manual' || r.source === 'focus') return true;
+    if (r.source !== 'learning') return false;
+    const next = findNextLearningPlanStep(view.plans.find(p => p.id === r.planId));
+    return !!next && next.stepId === view.state.links[item.id]?.stepId;
+  }).sort((a, b) => (a.routine.time || '').localeCompare(b.routine.time || '') || a.routine.id.localeCompare(b.routine.id));
+  const item = candidates[0];
+  if (!item) return null;
+  const focusLinked = item.routine.source !== 'manual';
+  return { instanceId: item.id, routineId: item.routineId, title: view.state.links[item.id]?.stepTitle || item.routine.title, task: item.routine.title, focusLinked, sub: scheduleLabel(item.routine), button: focusLinked ? 'Start' : 'Done' };
+}
+globalThis.getTodayRoutineAction = routineAction;
 globalThis.startTodayRoutineAction = () => {
-  renderDailyRoutines();
-  const group = globalThis.getTodayRoutineAction('Now') ? 'Now' : 'Anytime';
-  list.querySelector(`section[aria-label="${group}"] [data-routine-action="start"], section[aria-label="${group}"] [data-routine-action="done"]`)?.click();
+  try {
+    view = readView();
+    const action = routineAction('Now') || routineAction('Anytime');
+    if (!action) throw new Error('The routine changed. Please use the refreshed Up Next action.');
+    performRoutineAction(action.focusLinked ? 'start' : 'done', action.routineId, action.instanceId);
+    renderDailyRoutines();
+  } catch (err) { renderDailyRoutines(); message(err); }
 };
 renderDailyRoutines();

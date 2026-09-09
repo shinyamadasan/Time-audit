@@ -141,10 +141,7 @@ async function clickToastUndo(page) {
 }
 
 async function openTodayDetails(page) {
-  const toggle = page.locator('#today-details-toggle');
-  if ((await toggle.getAttribute('aria-pressed')) !== 'true') {
-    await toggle.click();
-  }
+  await page.evaluate(() => { document.getElementById('timeline-details').open = true; document.querySelector('#timeline-content > details').open = true; document.getElementById('log-time-details').open = true; });
 }
 
 test('focus overlay exit logs and renders the active session', async ({ page }) => {
@@ -503,7 +500,8 @@ test('focus wallet spend can be undone without leaving point debt', async ({ pag
   await openApp(page, { entries: [deepEntry] });
 
   await expect(page.locator('#th-wallet')).toHaveText('17 pts');
-  await page.locator('#th-wallet').click();
+  await page.locator('#hdr-more-btn').click();
+  await page.locator('#hdr-menu').getByText('Focus wallet',{exact:true}).click();
   await page.locator('#fw-reward-label').fill('Movie smoke');
   await page.locator('#fw-reward-duration').fill('30');
   await page.locator('#fw-reward-points').fill('10');
@@ -559,27 +557,18 @@ test('today defaults to clean mode and can reveal details', async ({ page }) => 
   };
   await openApp(page, { entries: [deepEntry] });
 
-  await expect(page.locator('#today-details-toggle')).toHaveText('Details');
-  await expect(page.locator('#today-details-toggle')).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('#daily-basics')).toBeVisible();
-  await expect(page.locator('.quick-retro-bar')).toBeHidden();
-  await expect(page.locator('#timeline-section')).toBeHidden();
-  await expect(page.locator('#focus-wallet-card')).toBeHidden();
-  await expect(page.locator('#recent-entries-section')).toBeHidden();
-
-  await page.locator('#today-details-toggle').click();
-  await expect(page.locator('#today-details-toggle')).toHaveText('Clean');
-  await expect(page.locator('#today-details-toggle')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.quick-retro-bar')).toBeVisible();
+  await expect(page.locator('#today-details-toggle')).toHaveCount(0);
+  for (const id of ['daily-basics','timeline-section','recent-entries-section','focus-wallet-card']) await expect(page.locator(`#${id}`)).toBeHidden();
+  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Timeline',exact:true}).click();
   await expect(page.locator('#timeline-section')).toBeVisible();
-  await expect(page.locator('#focus-wallet-card')).toBeVisible();
-  await expect(page.locator('#recent-entries-section')).toBeVisible();
-
-  await page.locator('#today-details-toggle').click();
   await expect(page.locator('.quick-retro-bar')).toBeHidden();
-  await expect(page.locator('#timeline-section')).toBeHidden();
   await expect(page.locator('#focus-wallet-card')).toBeHidden();
   await expect(page.locator('#recent-entries-section')).toBeHidden();
+  await page.locator('#timeline-details > summary').click();
+  await expect(page.locator('#timeline-section')).toBeHidden();
+  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
+  await expect(page.locator('#daily-basics')).toBeVisible();
+  await expect(page.locator('.quick-retro-bar')).toBeVisible();
 });
 
 test('today stat row renders without the removed identity tile (Phase 11.7)', async ({ page }) => {
@@ -598,11 +587,11 @@ test('today stat row renders without the removed identity tile (Phase 11.7)', as
   const pageErrors = [];
   page.on('pageerror', err => pageErrors.push(String(err)));
   await openApp(page, { entries: deepEntries, nowTs });
-  await page.locator('#today-details-toggle').click();
+  await openTodayDetails(page);
 
   // The two surviving tiles still render their live values.
   await expect(page.locator('#s-deep')).toHaveText('3');
-  await expect(page.locator('#s-streak')).toBeVisible();
+  await expect(page.locator('#s-streak')).toBeHidden();
   // Identity level was removed in Phase 11.7 — the tile and its sub-label are gone,
   // and renderToday() must not throw dereferencing the missing element.
   await expect(page.locator('#s-identity')).toHaveCount(0);
@@ -613,6 +602,7 @@ test('today stat row renders without the removed identity tile (Phase 11.7)', as
 test('today daily basics logs common mandatory activity from clean mode', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 10, 12, 0, 0);
   await openApp(page, { nowTs });
+  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
 
   await expect(page.locator('#daily-basics')).toBeVisible();
   await expect(page.locator('#daily-basics')).not.toContainText('Chores');
@@ -620,7 +610,7 @@ test('today daily basics logs common mandatory activity from clean mode', async 
   await expect(page.locator('#daily-basics')).toContainText('Cooking');
   await expect(page.locator('#daily-basics')).toContainText('Dishes');
   await expect(page.locator('#daily-basics')).toContainText('Hygiene');
-  await expect(page.locator('.quick-retro-bar')).toBeHidden();
+  await expect(page.locator('.quick-retro-bar')).toBeVisible();
   await page.locator('#daily-basics').getByRole('button', { name: /Eat/ }).click();
 
   const saved = await page.evaluate(() => {
@@ -645,6 +635,7 @@ test('today daily basics logs common mandatory activity from clean mode', async 
 test('today sleep basic logs overnight sleep as recovery', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 10, 12, 0, 0);
   await openApp(page, { nowTs });
+  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
 
   await page.locator('#daily-basics').getByRole('button', { name: /Sleep/ }).click();
 
@@ -670,6 +661,7 @@ test('today sleep basic logs overnight sleep as recovery', async ({ page }) => {
 test('today routine prompt logs the current meal window', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 10, 12, 15, 0);
   await openApp(page, { nowTs });
+  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
 
   await expect(page.locator('#routine-prompt')).toBeVisible();
   await expect(page.locator('#routine-prompt')).toContainText('Lunch check');
@@ -719,6 +711,7 @@ test('today routine prompt stays quiet when the routine was already logged', asy
     retro: true
   }];
   await openApp(page, { entries, nowTs });
+  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
 
   await expect(page.locator('#routine-prompt')).toBeHidden();
 });
@@ -744,10 +737,11 @@ test('today gap recovery fills a missing block from clean mode', async ({ page }
   await openApp(page, { entries, nowTs, settings: { wakeTime: '09:00' } });
 
   await expect(page.locator('#gap-recovery')).toBeVisible();
-  await expect(page.locator('#gap-recovery')).toContainText('10:00 AM - 10:45 AM');
-  await expect(page.locator('#gap-recovery')).toContainText('45m');
+  await expect(page.locator('#gap-recovery')).toContainText('10:00 AM–10:45 AM');
+  await expect(page.locator('#needs-you')).toBeVisible();
   await expect(page.locator('.quick-retro-bar')).toBeHidden();
 
+  await page.locator('#gap-recovery summary').click();
   await page.locator('#gap-recovery').getByRole('button', { name: 'Cooking' }).click();
 
   const saved = await page.evaluate(() => {
@@ -792,7 +786,7 @@ test('today gap recovery other opens prefilled retro log', async ({ page }) => {
   }];
   await openApp(page, { entries, nowTs, settings: { wakeTime: '09:00' } });
 
-  await page.locator('#gap-recovery').getByRole('button', { name: 'Other' }).click();
+  await page.locator('#gap-recovery').getByRole('button', { name: 'Fix',exact:true }).click();
 
   await expect(page.locator('#retro-overlay')).toBeVisible();
   await expect(page.locator('#retro-start')).toHaveValue('10:00');
@@ -812,12 +806,12 @@ test('today long labels wrap on phone width without horizontal overflow', async 
 
   await expect(page.locator('#hero-task-name')).toContainText('Very long focus task name');
   await expect(page.locator('.plan-task')).toContainText('Very long focus task name');
-  await expect(page.locator('#today-action-title')).toBeVisible();
+  await expect(page.locator('#up-next')).toBeVisible();
 
   const layout = await page.evaluate(() => ({
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     heroWhiteSpace: getComputedStyle(document.getElementById('hero-task-name')).whiteSpace,
-    actionWhiteSpace: getComputedStyle(document.getElementById('today-action-title')).whiteSpace
+    actionWhiteSpace: getComputedStyle(document.getElementById('hero-task-name')).whiteSpace
   }));
   expect(layout.overflow).toBeLessThanOrEqual(1);
   expect(layout.heroWhiteSpace).toBe('normal');
@@ -834,7 +828,7 @@ test('today compact cards use readable UI text instead of the display font', asy
 
   const fonts = await page.evaluate(() => ({
     action: getComputedStyle(document.getElementById('today-action-strip')).fontFamily,
-    actionButton: getComputedStyle(document.getElementById('today-action-primary')).fontFamily,
+    actionButton: getComputedStyle(document.querySelector('#hero-idle .btn.primary')).fontFamily,
     health: getComputedStyle(document.getElementById('today-health')).fontFamily,
     dailyBasics: getComputedStyle(document.getElementById('daily-basics')).fontFamily,
     dailyBasicsButton: getComputedStyle(document.querySelector('#daily-basics .daily-basic-btn')).fontFamily,
@@ -891,13 +885,12 @@ test('today health shows compact daily accounting', async ({ page }) => {
   await expect(page.locator('#th-wallet')).toHaveText('15 pts');
   await expect(page.locator('#th-unlogged')).toContainText('unlogged');
 
-  await page.locator('#th-unlogged').click();
-  await expect(page.locator('#today-details-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Timeline',exact:true}).click();
+  await expect(page.locator('#timeline-details')).toHaveAttribute('open');
   await expect(page.locator('#timeline-section')).toBeVisible();
   await expect(page.locator('#timeline-blocks')).toBeInViewport({ ratio: 0.1 });
 
-  await page.locator('#today-health').scrollIntoViewIfNeeded();
-  await page.locator('#th-waste').click();
+  await page.evaluate(() => scrollToFirstEnergy('waste','distraction'));
   const wasteRow = page.locator('#timeline-blocks .tl-row[data-energy="waste"]').first();
   await expect(wasteRow).toBeInViewport({ ratio: 0.1 });
   await expect(wasteRow).toHaveClass(/tl-row-focus/);
@@ -2773,12 +2766,12 @@ test('remote owner banner can intentionally take over a synced focus timer', asy
     renderToday();
   }, remoteStart);
 
-  const banner = page.locator('#active-device-banner');
+  const banner = page.locator('#up-next[data-state=remote]');
   await expect(banner).toBeVisible();
   await expect(page.locator('#active-device-title')).toHaveText('PC is active');
   await expect(page.locator('#active-device-detail')).toContainText('Focus: Takeover focus');
 
-  await page.locator('#active-device-takeover-btn').click();
+  await page.locator('#today-action-primary').click();
   await expect(banner).toBeHidden();
 
   const state = await page.evaluate(() => ({
