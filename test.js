@@ -2915,6 +2915,40 @@ test('deleted:true plus updatedAt without explicit reason is rejected', () => {
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'ambiguous_deletion_evidence');
 });
+test('scheduled Ledger evidence is excluded from current capability proof without mutation', () => {
+  let profile = seededCapabilityProfile();
+  profile = addCcEvidence(profile, 'e-schedule', 'skill-js', 'execution', CC_TIME.recent, {
+    source: 'life-ledger', lifeLedgerEventId: 'scheduled-event'
+  });
+  const draft = adapterDraft({ scheduledAutoLog: true });
+  for (const location of ['both', 'payload', 'provenance']) {
+    const event = { ...structuredClone(draft), eventId: 'scheduled-event' };
+    if (location === 'payload') delete event.provenance.captureMethod;
+    if (location === 'provenance') delete event.payload.captureMethod;
+    const before = JSON.stringify({ profile, event });
+    const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now, lifeLedgerEvents: [event] });
+    assert.equal(analysis.currentEvidenceCount, 0, location);
+    assert.equal(analysis.dimensionTotals.execution, 0, location);
+    assert.equal(analysis.excludedEvidence[0].reason, 'life-ledger-schedule-assumption', location);
+    assert.equal(JSON.stringify({ profile, event }), before);
+  }
+});
+
+test('user assertions and timer Ledger evidence still support explicit capability mappings', () => {
+  for (const overrides of [{}, { retro: true }, { quickLogged: true }]) {
+    let profile = seededCapabilityProfile();
+    profile = addCcEvidence(profile, 'e-manual', 'skill-js', 'practice');
+    profile = addCcEvidence(profile, 'e-recorded', 'skill-js', 'execution', CC_TIME.recent, {
+      source: 'life-ledger', lifeLedgerEventId: 'recorded-event'
+    });
+    const event = { ...adapterDraft(overrides), eventId: 'recorded-event' };
+    const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now, lifeLedgerEvents: [event] });
+    assert.equal(analysis.currentEvidenceCount, 2);
+    assert.equal(analysis.dimensionTotals.execution, 1);
+    assert.deepEqual(analysis.excludedEvidence, []);
+  }
+});
+
 test('explicit user_delete can produce a valid tombstone draft', () => {
   const draft = adapterDraft({
     deleted: true,

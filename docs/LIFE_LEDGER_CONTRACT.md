@@ -429,6 +429,10 @@ Recommended provenance fields:
 `observedAt` is operational provenance only. It MUST NOT change `recordedAt` and MUST NOT cause
 revision increments by itself.
 
+Behavioral use and the limits of these fields are governed by the
+[canonical evidence contract V1](../contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md).
+Source confidence is not behavioral certainty; this wire contract does not establish evidence fitness.
+
 `confidence.score` is deterministic:
 
 - `1`: directly source-recorded fact.

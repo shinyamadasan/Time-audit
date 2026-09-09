@@ -12,6 +12,8 @@ import {
   createEmptyCapabilityProfile
 } from '../capability-career-model.js';
 import { CAPABILITY_CAREER_REPOSITORY_KEY } from '../capability-career-repository.js';
+import { analyzeCapabilityCareer } from '../capability-career-analytics.js';
+import { normalizeChronaSenseEntry } from '../chronasense-life-ledger-adapter.js';
 import { LIFE_LEDGER_RUNTIME_KEY } from '../life-ledger-runtime.js';
 import { deriveLifeLedgerKey, fingerprintLifeLedgerEvent } from '../life-ledger-core.js';
 
@@ -419,3 +421,63 @@ test('Career view remains usable on mobile without horizontal overflow', async (
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });
+
+for (const counts of [
+  { scheduled: 0, unavailable: 0, tombstoned: 0 },
+  { scheduled: 1, unavailable: 0, tombstoned: 0 },
+  { scheduled: 2, unavailable: 0, tombstoned: 0 },
+  { scheduled: 0, unavailable: 1, tombstoned: 0 },
+  { scheduled: 0, unavailable: 0, tombstoned: 1 },
+  { scheduled: 2, unavailable: 1, tombstoned: 1 }
+]) {
+  test(`exclusion notice distinguishes reasons: ${JSON.stringify(counts)}`, async ({ page }) => {
+    let profile = seededProfile();
+    const events = [];
+    let index = 0;
+    for (const [kind, count] of Object.entries(counts)) {
+      for (let i = 0; i < count; i++) {
+        index++;
+        const eventId = `50505050-5050-4050-8050-${String(index).padStart(12, '0')}`;
+        const result = normalizeChronaSenseEntry({
+          id: `notice-${index}`, activity: 'Scheduled work', energy: 'deep',
+          tsStart: Date.parse('2026-08-30T16:00:00.000Z'),
+          ts: Date.parse('2026-08-30T16:25:00.000Z'),
+          scheduledAutoLog: kind === 'scheduled'
+        }, { sourceTimezone: 'Etc/UTC', observedAt: '2026-08-30T16:26:00.000Z' });
+        expect(result.ok).toBe(true);
+        const event = browserFocusEvent({ ...result.draft, eventId });
+        if (kind === 'tombstoned') event.tombstone = tombstonedBrowserFocusEvent().tombstone;
+        if (kind !== 'unavailable') events.push(event);
+        profile = addEvidence(profile, {
+          skillId: 'skill-js', dimension: 'execution', source: 'life-ledger',
+          summary: 'Notice regression', observedAt: '2026-08-30T16:25:00.000Z',
+          lifeLedgerEventId: eventId, lifeLedgerKey: deriveLifeLedgerKey(event)
+        }, { idGenerator: sequencedIds(`notice-evidence-${index}`), clock: fixedClock() });
+      }
+    }
+    const analysis = analyzeCapabilityCareer(profile, {
+      now: '2026-08-31T12:00:00.000Z', lifeLedgerEvents: events
+    });
+    expect(analysis.currentEvidenceCount).toBe(0);
+    expect(analysis.excludedEvidence).toHaveLength(index);
+    const capabilityRaw = profileEnvelope(profile);
+    const lifeLedgerRaw = runtimeLedgerEnvelope(events);
+    await openApp(page, { capabilityRaw, lifeLedgerRaw });
+    await openCareer(page);
+    const dashboard = page.locator('#cap-career-dashboard');
+    if (counts.scheduled) {
+      await expect(dashboard).toContainText(`${counts.scheduled} scheduled Life Ledger item${counts.scheduled === 1 ? '' : 's'} not counted as confirmed evidence`);
+    } else {
+      await expect(dashboard).not.toContainText('not counted as confirmed evidence');
+    }
+    const missingCount = counts.unavailable + counts.tombstoned;
+    if (missingCount) {
+      await expect(dashboard).toContainText(`${missingCount} Life Ledger evidence link${missingCount === 1 ? '' : 's'} unavailable or tombstoned`);
+    } else {
+      await expect(dashboard).not.toContainText('unavailable or tombstoned');
+    }
+    if (!index) await expect(dashboard).not.toContainText('Historical evidence held aside');
+    expect(await storedProfile(page)).toEqual(profile);
+    expect(await page.evaluate(key => localStorage.getItem(key), LIFE_LEDGER_RUNTIME_KEY)).toBe(lifeLedgerRaw);
+  });
+}

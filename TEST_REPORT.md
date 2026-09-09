@@ -1008,3 +1008,70 @@ Explicit self-review:
 
 Evidence: ignored phase6e-keyboard-before.log (three reproduced failures),
 phase6e-keyboard-after.log (36 passes), phase6e-keyboard-regressions.log (14 passes).
+
+## Evidence contract V1 - 2026-09-09
+Base: eb977d007ab7082a0cdf8329613b008a0e502c4d, fetched origin/main and verified before worktree creation.
+Branch: feat/evidence-contract-v1. Registered worktree: C:/Users/Admin/Desktop/Vibe code/Time audit app - evidence-contract-v1.
+
+Validation:
+- Red/green: node test.js before guard: 445 passed, 1 failed (new schedule exclusion regression). After guard: 446 passed, 0 failed.
+- npm test: exit 0; 1,028 passed across the custom runner and Node suites, 0 failed, 1 opt-in control skipped. The skipped lower-case-drive reproduction requires CROSS_REPO_COMPAT_CONTROL_PROOF=1; it is not needed for this change.
+- Initial sandbox npm test failed with spawn EPERM; approved child-process execution passed the full suite.
+- node scripts/runtime-mirror.mjs --check: pass, 40-file closure byte-identical.
+- npm run lint: exit 0, 0 errors, 29 warnings. Initial attempt without local dependencies failed ENOTCACHED; final run reused existing dependencies through an ignored node_modules junction to adapter-stabilization, without installing or changing donor packages.
+- node --check: capability-career-analytics.js, www/capability-career-analytics.js, test.js all pass. No inline script changed.
+- git diff --check: pass. New contract whitespace and documentation links checked.
+- No browser/device test: no DOM/CSS/capture/UI path changes. Existing analytics outputs can change when excluding schedule-backed capability mappings.
+- No real source-app integration, Firebase, deployment, or real Obsidian writes. Export tests use fixture/temporary vaults only. Meal and Workout files unchanged.
+
+Self-review (numbers match the user milestone):
+1. YES: timeline gap and unknown are canonically separate.
+2. YES: interval, duration without placement and occurrence are separate.
+3. YES: provenance and resolution are separate.
+4. NO at the changed scope for explicit scheduled_template markers; unmarked legacy assumptions and existing direct-entry consumers are not universally quarantined.
+5. NO canonically: app/site identity alone is not confirmed meaning; existing passive UI labels remain a documented deviation, and capability mappings require explicit user interpretation.
+6. NO at the changed scope: it creates no duration. Existing duration fallbacks elsewhere remain documented deviations, not newly fixed behavior.
+7. NO canonically: unknown is not confirmed drift/waste. Legacy attention idle-recovery wording remains deferred.
+8. NO canonically: Ledger copy is one lineage, not corroboration; no universal new deduplication engine is claimed.
+9. NO universal confidence score created.
+10. NO coarse estimate storage added.
+11. NO Today gap prompting change.
+12. NO Review redesign.
+13. NO Focus behavior fix; reliable retrospective affected-record detection is unavailable.
+14. NO new user-facing complexity; schedule-backed capability counts/recommendations may correctly change.
+15. NO speculative unused infrastructure; two lines extend the existing evidence scope.
+
+Code-health review: minimal existing-path predicate, no new state/API/dependencies, no source mutation, preserved future/tombstone precedence and positive evidence controls; acceptable for independent review.
+Next: deterministic expired-Focus completion boundary and exactly-once restore logging, with planned end rather than reopen time; historical repair remains separate.
+Safety: candidate uncommitted, unstaged, unpushed and unmerged. No branch/worktree deletion, migration, production writes or unrelated worktree edits.
+
+## Evidence contract V1 - bounded notice review fix - 2026-09-09
+Fetched origin/main first: still eb977d007ab7082a0cdf8329613b008a0e502c4d, matching candidate HEAD on feat/evidence-contract-v1.
+Root cause: renderExcludedEvidenceNotice() grouped every life-ledger-prefixed reason into unavailable/tombstoned wording, including the valid schedule-assumption exclusion.
+Fix: count exact unavailable/tombstoned reasons and scheduled assumptions independently; preserve the existing notice surface and missing-link wording.
+
+Verification:
+- Before correction, six new browser cases: 3 passed, 3 failed (single/multiple schedule and mixed cases reproduced the false notice).
+- After correction, npx playwright test tests/capability-career-ui.spec.js --reporter=line: 14 passed, 0 failed, including all six new rendered-dashboard cases.
+- Cases cover no exclusions, one/two schedule assumptions, one unavailable link, one tombstoned link, and two schedule assumptions plus one unavailable and one tombstoned link. Actual adapter/analyzer and runtime-backed UI are exercised; profile/Ledger state remains unchanged.
+- node test.js: 446 passed, 0 failed.
+- node scripts/runtime-mirror.mjs --check: pass, 40-file closure byte-identical.
+- node --check: capability-career-ui.js, www/capability-career-ui.js and tests/capability-career-ui.spec.js pass.
+- git diff --check: pass.
+- Full npm test intentionally not rerun: explanation-only formatter change, no broader coupling or focused-test regression; the prior candidate full-suite result remains recorded above.
+- Analyzer SHA256 before/after correction remains D82973BC25700F9DBDC58121F6E363F116B7ED95D4E207D416474F20CCC4133D.
+
+Self-review:
+1. YES: schedule evidence remains excluded from confirmed current capability proof.
+2. NO: schedule exclusion no longer says unavailable/tombstoned.
+3. YES: genuine unavailable/tombstoned links retain their existing notice.
+4. YES: mixed exclusion reasons have independent correct counts and wording.
+5. NO: currentEvidenceScope() did not change in this correction.
+6. NO: evidence semantics did not change.
+7. NO: source/Ledger records did not change.
+8. NO: no new UI surface.
+9. NO: no later truth-fix work.
+10. YES: scope remained bounded.
+
+Deferred Low findings: unloggedOk acknowledges missingness without adding activity evidence; accounting boundaries are independent of sleep/wake/planning boundaries. Contract wording left unchanged as requested.
+Safety: local fixture browser tests with Firebase stub; no production Firebase/real Obsidian writes, Meal/Workout edits, history migration, Focus/gap changes, Review redesign or unrelated worktree modifications. No commit/push/merge/deploy. Candidate remains uncommitted and unpushed; no required finding remains unaddressed, pending independent targeted re-review.
