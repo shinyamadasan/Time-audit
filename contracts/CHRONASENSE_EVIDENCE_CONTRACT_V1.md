@@ -210,6 +210,27 @@ Keep historical repair separate: do not infer which old long sessions were affec
 Subsequent separate milestones can address schedule-v-actual capture and diagnostic gaps
 versus stable accounting boundaries. No estimate storage or full allocation engine here.
 
+**Implementation status (Phase 6G.1, branch `feat/source-truth-fixes-v1`, uncommitted
+candidate):** implemented. `endWorkSession()` now derives its end timestamp from the
+planned endpoint — phase start (`focusStartTime`, or `pomodoroPhaseStartedAt` as fallback)
+plus configured work minutes — instead of `Date.now()`. It is only ever reached by a phase
+that ran to its configured length (`tickPomodoro()` at zero, or `restoreFocusSession()`
+after the planned end passed), so the planned endpoint is the truthful end in every caller;
+early manual exit stays on `saveActiveFocusSession()` with real elapsed time and is
+unchanged. `restoreFocusSession()` additionally re-derives the following break's real
+remaining from the wall clock and concludes it once via the existing `endPomodoroBreak()`
+when that window also elapsed. Exactly-once: the planned-end timestamp is deterministic, so
+a repeat restoration, a second tab, or a page/HUD race recompute the same entry `id`;
+`logFocusSession()` now returns the existing entry instead of appending a duplicate when one
+with that `id`/`tsStart`/`energy` is already present. Downstream Daily-Routine and
+Learning-Plan hooks are keyed by that entry id and converge. Historical repair remains
+unavailable and was not attempted: stored fields still cannot distinguish a legitimate long
+timer/manual session from an old inflated restored one, so no history scan, cap, deletion or
+manufactured restoration metadata was added. Still deferred to 6G.2: Today/Review/insights/
+attention-signals/Focus-Wallet interpretation of any pre-fix inflated entries, and the
+schedule-v-actual, passive-device-purpose, PC-Time-purpose and unknown-as-drift semantics
+below.
+
 ## Verification and UX limit
 
 Two production-path regression tests in `test.js` cover schedule exclusion through either

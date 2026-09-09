@@ -214,6 +214,24 @@ function restoreFocusSession() {
       document.getElementById('focus-phase-label').textContent = 'FOCUS';
       document.getElementById('focus-phase-sub').textContent = focusPhaseSubText(pomodoroWorkMin);
       endWorkSession();
+      // endWorkSession() concluded the work phase at its planned endpoint, not
+      // the reopen time. If it then entered a break whose own planned window
+      // also fully elapsed while the app was closed, conclude that too — the
+      // same one-time endPomodoroBreak() a running tab would have applied. If
+      // the break is still legitimately in progress, re-derive its real
+      // remaining from the wall clock rather than the full fresh countdown
+      // endWorkSession() optimistically set.
+      if (pomodoroPhase === 'break' && Number.isFinite(pomodoroPhaseStartedAt)) {
+        const breakSecs = pomodoroBreakMin * 60;
+        const breakElapsedSecs = Math.max(0, Math.floor((Date.now() - pomodoroPhaseStartedAt) / 1000));
+        if (breakElapsedSecs >= breakSecs) {
+          clearInterval(pomodoroTimer);
+          endPomodoroBreak();
+        } else {
+          pomodoroRemaining = breakSecs - breakElapsedSecs;
+          setPomodoroCountdown(pomodoroRemaining);
+        }
+      }
     } else {
       document.getElementById('focus-phase-label').textContent = 'BREAK ☕';
       document.getElementById('focus-phase-sub').textContent = `take a breather · ${pomodoroBreakMin} min`;
@@ -623,6 +641,12 @@ function getFocusTaskLabel() {
 function logFocusSession(tsStart, tsEnd = Date.now()) {
   const dur = Math.round((tsEnd - tsStart) / 60000);
   if (dur < 1) return null;
+  // Exactly-once completion: a Focus phase that runs to its configured length
+  // has a deterministic end (its planned endpoint), so a repeat restoration, a
+  // second tab, or a page/HUD race all recompute the SAME id. Never append the
+  // same completion twice.
+  const duplicate = entries.find(e => e.id === tsEnd && e.tsStart === tsStart && e.energy === 'deep');
+  if (duplicate) return duplicate;
   const task = canonicalFocusActivity(getFocusTaskLabel());
   const entry = {
     id: tsEnd, ts: tsEnd, tsStart,
@@ -671,7 +695,20 @@ function endWorkSession() {
   renderPomoDots();
   playAlertSound();
 
-  const tsEnd = Date.now();
+  // A work phase only reaches endWorkSession() by running to its configured
+  // length: from tickPomodoro() at zero, or from restoreFocusSession() when
+  // the planned end already passed while the app was closed. Its truthful end
+  // is therefore the planned endpoint — phase start plus configured work
+  // minutes — never the wall clock at the instant this fires, which on a
+  // delayed restore can be hours after the session stopped being observed.
+  // Early manual exit is a separate path (saveActiveFocusSession()) and still
+  // uses real elapsed time.
+  const plannedEndBase = Number.isFinite(focusStartTime)
+    ? focusStartTime
+    : (Number.isFinite(pomodoroPhaseStartedAt) ? pomodoroPhaseStartedAt : null);
+  const tsEnd = plannedEndBase !== null
+    ? plannedEndBase + pomodoroWorkMin * 60000
+    : Date.now();
   const tsStart = focusStartTime || (tsEnd - pomodoroWorkMin * 60000);
   focusStartTime = null;
   const entry = logFocusSession(tsStart, tsEnd);

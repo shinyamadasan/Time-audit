@@ -924,4 +924,94 @@ test.describe('Focus reload recovery', () => {
     expect(after.entriesCount).toBe(1);
     expect(after.persisted).toBeNull();
   });
+
+  // ══════════════════════════════════════════════════════
+  // Deterministic Source Truth Fixes V1 (Phase 6G.1) — expired Focus
+  // restoration must NOT log through the reopen wall clock. endWorkSession()
+  // now caps a completed work phase at its planned endpoint (phase start +
+  // configured work minutes) regardless of when restoration runs. Historical
+  // entries are deliberately NOT touched. See CHRONASENSE_EVIDENCE_CONTRACT_V1
+  // "Expired Focus" and focus-mode.js endWorkSession()/restoreFocusSession().
+  // ══════════════════════════════════════════════════════
+
+  test('source-truth: a 25-minute Focus reopened 40 minutes in is capped at 25 min, not extended to reopen time', async ({ page }) => {
+    await openApp(page);
+    const before = await startFocusSession(page, 'Capped at planned end');
+    // App closed at ~10 min, reopened at 40 total minutes.
+    await page.clock.setFixedTime(before.pomodoroPhaseStartedAt + 40 * 60 * 1000);
+    await page.reload();
+
+    const entry = await page.evaluate(() => entries.find(e => e.activity === 'Capped at planned end'));
+    expect(entry.blockIntervalMin).toBe(25);           // planned length, not 40
+    expect(entry.tsStart).toBe(before.pomodoroPhaseStartedAt);
+    expect(entry.ts).toBe(before.pomodoroPhaseStartedAt + 25 * 60 * 1000); // planned end, not Date.now()
+    const after = await readFocusState(page);
+    expect(after.entriesCount).toBe(1);
+  });
+
+  test('source-truth: a 25-minute Focus reopened five hours later does NOT create a five-hour deep entry (self-review Q1)', async ({ page }) => {
+    await openApp(page);
+    const before = await startFocusSession(page, 'No five-hour deep block');
+    await page.clock.setFixedTime(before.pomodoroPhaseStartedAt + 5 * 60 * 60 * 1000);
+    await page.reload();
+
+    const entry = await page.evaluate(() => entries.find(e => e.activity === 'No five-hour deep block'));
+    expect(entry.blockIntervalMin).toBe(25);
+    expect(entry.ts - entry.tsStart).toBe(25 * 60 * 1000);
+    // The break window also long since elapsed → concluded once, back to idle.
+    const after = await readFocusState(page);
+    expect(after.pomodoroPhase).toBe('idle');
+    expect(after.entriesCount).toBe(1);
+    expect(after.persisted).toBeNull();
+  });
+
+  test('source-truth: exactly-once — repeated reopens after a delayed restore never add a second receipt', async ({ page }) => {
+    await openApp(page);
+    const before = await startFocusSession(page, 'Delayed restore exactly once');
+    await page.clock.setFixedTime(before.pomodoroPhaseStartedAt + 3 * 60 * 60 * 1000);
+    await page.reload();
+    await page.reload();
+    await page.reload();
+    const after = await readFocusState(page);
+    expect(after.pomodoroPhase).toBe('idle');
+    expect(after.entriesCount).toBe(1); // deterministic planned-end id collapses any duplicate
+  });
+
+  test('source-truth: reopen exactly at the planned endpoint logs 25 min and transitions once', async ({ page }) => {
+    await openApp(page);
+    const before = await startFocusSession(page, 'Exactly at endpoint');
+    await page.clock.setFixedTime(before.pomodoroPhaseStartedAt + 25 * 60 * 1000);
+    await page.reload();
+    const entry = await page.evaluate(() => entries.find(e => e.activity === 'Exactly at endpoint'));
+    expect(entry.blockIntervalMin).toBe(25);
+    expect(entry.ts).toBe(before.pomodoroPhaseStartedAt + 25 * 60 * 1000);
+    const after = await readFocusState(page);
+    expect(after.pomodoroPhase).toBe('break'); // break still has its full window
+    expect(after.entriesCount).toBe(1);
+  });
+
+  test('source-truth: manual Stop before the endpoint stays authoritative (real elapsed, not planned length)', async ({ page }) => {
+    await openApp(page);
+    const before = await startFocusSession(page, 'Manual stop authoritative');
+    // 8 real minutes in, user exits Focus — no reload involved.
+    await page.clock.setFixedTime(before.pomodoroPhaseStartedAt + 8 * 60 * 1000);
+    await page.evaluate(() => confirmExitFocus());
+    const entry = await page.evaluate(() => entries.find(e => e.activity === 'Manual stop authoritative'));
+    expect(entry.blockIntervalMin).toBe(8); // real elapsed, NOT the configured 25
+  });
+
+  test('source-truth: a delayed expired restore that crosses midnight dates the receipt to the planned end, not the reopen day', async ({ page }) => {
+    await openApp(page);
+    // Start at 23:50 UTC; 25-min session planned to end 00:15 the next day.
+    const start = Date.parse('2026-02-10T23:50:00.000Z');
+    await page.clock.setFixedTime(start);
+    const before = await startFocusSession(page, 'Crosses midnight');
+    expect(before.pomodoroPhaseStartedAt).toBe(start);
+    // Reopened two days later.
+    await page.clock.setFixedTime(start + 2 * 24 * 60 * 60 * 1000);
+    await page.reload();
+    const entry = await page.evaluate(() => entries.find(e => e.activity === 'Crosses midnight'));
+    expect(entry.blockIntervalMin).toBe(25);
+    expect(entry.date).toBe('2026-02-11'); // planned-end calendar day (UTC), not the reopen day
+  });
 });

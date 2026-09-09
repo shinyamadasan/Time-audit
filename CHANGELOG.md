@@ -1,5 +1,62 @@
 # ChronaSense — Changelog
 
+## Phase 6G.1 — Deterministic source truth fixes V1: expired Focus completion boundary (candidate — feat/source-truth-fixes-v1, uncommitted) — 2026-09-09
+
+Base `c47f1e5227c0a9993bf1c004b6939b7ce332cb71` (origin/main, verified). Isolated
+worktree; `main`, Meal and Workout source apps untouched. One production file changed
+(`focus-mode.js`, mirrored to `www/focus-mode.js`). No commit/push/merge/deploy; no
+Firebase or Obsidian writes; no historical data touched.
+
+Scope: only the one deterministic case where ChronaSense itself creates evidence claiming
+more than the source establishes and the fix is self-contained — a short Focus work
+session restored long after its planned end logging through `Date.now()` and producing
+hours of apparent deep work. Today, Review, analytics copy, reconciliation, coarse life
+estimates and the passive-observation / PC-Time / schedule-vs-actual interpretation layer
+are explicitly deferred to 6G.2.
+
+changed:
+  - `focus-mode.js` `endWorkSession()` — end timestamp is now the planned endpoint
+    (`focusStartTime`, or `pomodoroPhaseStartedAt` as fallback, plus configured work
+    minutes) instead of `Date.now()`. `endWorkSession()` is only ever reached by a work
+    phase that ran to its configured length (`tickPomodoro()` at zero, or
+    `restoreFocusSession()` after the planned end already passed), so the planned endpoint
+    is the truthful end for every caller. A delayed restore no longer asserts work
+    continued until reopen time; time after the planned endpoint stays unobserved.
+  - `focus-mode.js` `restoreFocusSession()` — after concluding an expired work phase, the
+    following break's real remaining is re-derived from the wall clock; if that window
+    also fully elapsed it is concluded once through the existing `endPomodoroBreak()`,
+    otherwise the break resumes with its true remaining rather than a full fresh
+    countdown.
+  - `focus-mode.js` `logFocusSession()` — exactly-once guard. The planned-end timestamp
+    is deterministic, so a repeat restoration, a second tab, or a page/HUD race recompute
+    the same entry `id`; the function now returns the existing entry instead of appending
+    a duplicate when one with the same `id`/`tsStart`/`energy: deep` is already present.
+    Downstream Daily-Routine and Learning-Plan hooks are keyed by that entry id and
+    converge.
+  - `www/focus-mode.js` — byte-identical mirror (runtime-mirror `--check` passes).
+
+unchanged: manual Focus exit (`saveActiveFocusSession()`) still logs real elapsed time and
+stays authoritative; `restoreFocusSession()` corrupt/incomplete/absent-record safety, the
+multi-device reconciliation window, HUD projection, break/skip flow, and the Learning-Plan
+linkage all behave as before. No adapter, Ledger, storage-schema, Today, Review, insights,
+attention-signals or Focus-Wallet change. No new screen, prompt, field, setting, badge,
+score or daily interaction.
+
+historical: not repaired and not attempted. Stored fields still cannot deterministically
+distinguish a legitimate long timer/manual session from an old inflated restored one, so
+no history scan, blind cap, deletion or manufactured restoration metadata was added
+(consistent with the Evidence Contract "no reliable retrospective quarantine" finding).
+
+tests: `tests/focus-reload-recovery.spec.js` +6 deterministic regressions (40-min reopen
+capped at 25; 5-hour reopen produces no 5-hour deep entry; repeated reopen exactly once;
+reopen exactly at the endpoint; manual Stop stays real-elapsed; delayed expired restore
+crossing midnight dates to the planned end). Full `npm test` green; full Playwright suite
+360/360; `node scripts/runtime-mirror.mjs --check` OK; `npm run lint` 0 errors;
+`git diff --check` clean; `node --check` on both touched files.
+
+status: uncommitted candidate for one independent review. Not a queued task — direct user
+milestone, TASKS.md unchanged.
+
 ## Phase 12.0A — Static root↔www runtime parity + safe tooling (integrated to main — 922297d) — 2026-09-06
 
 Infrastructure-only slice ahead of Phase 12 (Personal Intelligence). Split out of

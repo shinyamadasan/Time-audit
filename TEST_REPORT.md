@@ -1075,3 +1075,38 @@ Self-review:
 
 Deferred Low findings: unloggedOk acknowledges missingness without adding activity evidence; accounting boundaries are independent of sleep/wake/planning boundaries. Contract wording left unchanged as requested.
 Safety: local fixture browser tests with Firebase stub; no production Firebase/real Obsidian writes, Meal/Workout edits, history migration, Focus/gap changes, Review redesign or unrelated worktree modifications. No commit/push/merge/deploy. Candidate remains uncommitted and unpushed; no required finding remains unaddressed, pending independent targeted re-review.
+
+## Phase 6G.1 - Deterministic source truth fixes V1: expired Focus completion boundary - 2026-09-09
+Fetched origin/main first: c47f1e5227c0a9993bf1c004b6939b7ce332cb71, matching the expected base. Fresh registered worktree `Time audit app - source-truth-fixes-v1`, branch `feat/source-truth-fixes-v1`. `main`, Meal and Workout source repos untouched.
+
+Scope: the single deterministic source-truth defect whose fix is self-contained - a short Focus work session restored long after its planned end logging through `Date.now()` (traced in the Evidence Contract "Expired Focus" section). Sections 6-11 audited; corrections that would require touching Today/Review/analytics deferred to 6G.2. 1 production file changed: `focus-mode.js` (+ `www/focus-mode.js` mirror). 1 test file changed: `tests/focus-reload-recovery.spec.js`.
+
+Root cause: `restoreFocusSession()`, on an expired work phase, calls `endWorkSession()`, which used `tsEnd = Date.now()` with `tsStart = focusStartTime` (the persisted phase start). Reopen hours later => `blockIntervalMin` = hours; `logFocusSession()` writes an ordinary `energy: deep`, `onPlan: true` entry with `id = tsEnd`. Break transition and downstream (Today/Review deep totals, insights, attention signals, Focus Wallet, Daily-Routine + Learning-Plan hooks, ordinary-entry + Learning-Plan-focus drafts) all inherit the inflated interval.
+
+Fix:
+- `endWorkSession()` end timestamp = planned endpoint: `(focusStartTime ?? pomodoroPhaseStartedAt) + pomodoroWorkMin*60000`, falling back to `Date.now()` only if neither is finite. `endWorkSession()` is reached only by a phase that ran its configured length (`tickPomodoro()` at zero; `restoreFocusSession()` past planned end), so planned end is truthful for every caller. Early manual exit (`saveActiveFocusSession()`) is a separate path and still logs real elapsed time.
+- `restoreFocusSession()` expired-work branch: after `endWorkSession()`, if it entered a break, re-derive the break's real remaining from the wall clock; conclude it once via existing `endPomodoroBreak()` when that window also elapsed, else resume with the true remaining.
+- `logFocusSession()` exactly-once guard: planned-end timestamp is deterministic, so repeat restoration / second tab / page+HUD race recompute the same `id`; return the existing entry instead of appending a duplicate when one with the same `id`/`tsStart`/`energy: deep` exists. Downstream Daily-Routine (`state.focus[entry.id]`) and Learning-Plan (`sourceEntityId = focusEntryId`, upsert) hooks are id-keyed and converge.
+
+Verification:
+- `tests/focus-reload-recovery.spec.js`: 26/26 (was 20). 6 new deterministic regressions: 40-min reopen capped at 25 and dated/ended at planned end; 5-hour reopen produces no 5-hour deep entry and returns to idle once; repeated reopen after a delayed restore => exactly one receipt; reopen exactly at the endpoint => 25 min + single transition to break; manual Stop at 8 min stays 8 (not 25); delayed expired restore crossing midnight dates the receipt to the planned-end calendar day.
+- Full `npm test`: exit 0, all suites green (`test.js` 446/446; one pre-existing env-gated control test skipped, unrelated).
+- Full `npx playwright test`: 360/360 passed, exit 0 (no regression in smoke / learning-plan / life-* / today / review specs).
+- `node scripts/runtime-mirror.mjs --check`: OK, 40-file closure byte-identical.
+- `npm run lint`: 0 errors, 29 warnings (all pre-existing cross-file globals; none in the changed hunks).
+- `node --check focus-mode.js www/focus-mode.js tests/focus-reload-recovery.spec.js`: pass.
+- `git diff --check`: clean.
+
+Historical Focus data: NOT repaired and NOT attempted. Stored entry fields still cannot deterministically separate a legitimate long timer/manual session from an old inflated restored one (Evidence Contract finding stands). No history scan, blind cap, deletion, or manufactured restoration metadata.
+
+Audits (sections 6-11), no code change this milestone:
+- Scheduled templates (`autoLogDueTemplates`): entries already carry `scheduledAutoLog`/`autoLogged`/`templateId`; adapter `captureMethodFor()` -> `scheduled_template` preserves the assumption marker through payload + provenance; Career scope already excludes it. No changed path upgrades schedule -> confirmed actual. Time/plan/insight surfaces still reading scheduled as actual -> 6G.2.
+- Missing duration: adapter `intervalFor()` already rejects non-positive; equal-endpoint workout history stays occurrence-with-unknown-duration. This milestone's `logFocusSession()` keeps its `dur < 1 => null` guard and never manufactures an interval.
+- Passive device observation (`browser-extension/background.js` default `energy: 'waste'`; Android `syncPhoneUsage`): unchanged; the default classification is consumed directly by Today/Review/Wallet, so a source-level correction cannot be made without changing those surfaces (out of scope) -> 6G.2.
+- PC Time (`startPCTimeLive` -> `autoLogBlock('PC Time', lastEntry?.energy || 'deep', ...)`): the `|| 'deep'` fallback manufactures deep-work meaning from a "computer is on" signal, but `energy` is the exact field Today/Review/deep-count/Wallet read; no provenance/derived layer exists and none may be added here -> 6G.2.
+- `confidence.score: 1, basis: source-recorded`: only transported by the adapter; no changed path interprets it as behavioral certainty.
+- Ledger lineage: the Focus entry -> ordinary draft and Focus entry -> Learning-Plan `focus_session_completed` draft (`additiveForTimeTotals: false`, keyed by `focusEntryId`) remain one lineage each; the dedup guard reduces, not adds, duplication risk.
+
+Self-review: Q1 NO (25-min restore 5h later cannot create 5h deep - regression-tested). Q2 YES (deterministic id + guard). Q3 YES (manual Stop path untouched, regression-tested). Q4 NO (no history rewrite). Q5 NO (no scheduled path changed). Q6 NO (no fabricated interval). Q7 NO (no passive-observation promotion changed). Q8 NO (no numeric confidence). Q9 NO (Ledger copies not independent). Q10 NO (no analytics truth fixes). Q11 NO (no new routine UX). Q12 NO. Q13 NO (Today/Review unchanged).
+
+Safety: candidate uncommitted, unstaged, unpushed, unmerged. No branch/worktree deletion, migration, production Firebase/Obsidian writes, Meal/Workout edits, or unrelated worktree/artifact changes.
