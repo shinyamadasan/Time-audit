@@ -671,13 +671,11 @@ Depends on: `entries`, `settings`, `persist()`, `renderToday()`
 ## [Day Review Modal]
 Lines: ~6665–7335
 Purpose: Open and save the end-of-day reflection for any date; render yesterday's waste-trap
-accountability banner; format week labels and save timestamps. `checkReviewPrompt()` auto-opens
-this at `settings.reviewTime` (default 22:00); morning times such as 08:00 make the prior
-calendar day due the next morning for graveyard-shift closeout. **This is the daily habit hook
-the whole plan loop hangs on.**
+accountability banner; format week labels and save timestamps. `checkReviewPrompt()` refreshes
+passive CTAs using `settings.reviewTime`; it never opens Review automatically.
 Functions: `openReview()`, `saveReview()`, `setReviewFocusRating()`, `renderYesterdayPromise()`, `formatWeekLabel()`, `formatSavedAt()`, `computeDailySummary()`, `renderDailySummary()`, `checkReviewPrompt()`
 Variables: `_reviewDateKey`, `_reviewUnloggedOk`, `_reviewFocusRating`
-Depends on: `reviews`, `plans`, `entries`, `persist()`, `renderToday()`, Review Plan Picker, Statistics section, `renderReviewAttention()` (insights.js)
+Depends on: `reviews`, `plans`, `entries`, `persist()`, `renderToday()`, Plan Tomorrow link, Statistics section, `renderReviewAttention()` (insights.js)
 
 Phase 11.8: the modal hosts an **"Attention today"** block (`#rv-attention`, rendered by
 `renderReviewAttention()` in `insights.js`) showing the derived attention signals, plus one
@@ -687,27 +685,14 @@ field; it never feeds the automatic numbers.
 
 ⚠ `applyPromiseAsIntention()` and the banner's "Set focus" row were **retired** — the Today Plan
 strip owns "what you said you'd do today". The banner now renders only yesterday's waste traps and
-avoid strategy. `saveReview()` writes `plans[reviewedDay + 1]` and keeps `reviews[k].tomorrow`
-populated (joined item labels) so Reflect history and older records still render.
+avoid strategy. `saveReview()` preserves existing `reviews[k].tomorrow` text without editing plans.
 
-## [Review Plan Picker]
-Lines: ~6210–6360
-Purpose: Reuses Plan Tomorrow's shared confirmation contract for the next date while keeping the
-compact 1–3 one-off picker in Review. Shows the live routine count, supports intentional blank days,
-offers existing suggestion chips, and renders neutral one-off/routine plan-vs-actual states.
-Functions: `reviewPlanTargetKey()`, `openReviewPlan()`, `reviewPlanVisible()`, `reviewPlanChips()`,
-`reviewPlanReferenceLine()`, `renderReviewPlan()`, `pushReviewPlanItem()`, `addReviewPlanItem()`,
-`addReviewPlanChip()`, `removeReviewPlanItem()`, `toggleReviewPlanBlank()`, `renderReviewPlanVsActual()`
-Variables: `_reviewPlanDraft` (carries tombstones), `_reviewPlanTargetKey`, `_reviewPlanIntentionalBlank`
-Depends on: Today Plan section, `weeklyReviews`, `buildHeroSuggestions()`, `sumEnergyMinutes()`,
-`tzDow()`, `tzParseTime()`, `_dateKeyPlusDays()`, `getWeekKey()`
-
-⚠ Unfinished items from the reviewed day are **offered as chips, never auto-added**. Auto-carrying
-them into a 3-capped list would make it impossible to plan on a bad day — the same deadlock the
-original "circle of tasks" design had.
-
-⚠ `_reviewPlanDraft` holds tombstoned items so a removal made in the review still propagates
-through the per-item sync merge.
+## [Review preparation link and actual comparison]
+Purpose: Save reflection independently, link to the canonical Plan Tomorrow editor, and display
+neutral planned outcomes plus unplanned tracked activity. Routine and linked Learning labels are
+included in the planned-label comparison; matching remains label-based, not inferred identity.
+Functions: `renderReviewTomorrowStatus()`, `prepareTomorrowFromReview()`, `renderReviewPlanVsActual()`
+Depends on: existing date plans, entries, Plan Tomorrow projections, date-window accounting.
 
 ## [Reflect View]
 Lines: 6465–7085
@@ -754,9 +739,11 @@ Depends on: `entries`, `persist()`, `syncEntries()`, `renderToday()`, `renderWee
 ## [PWA Installation]
 Lines: 7202–7228
 Purpose: Service Worker registration, PWA install-prompt banner, iOS install hint, `beforeinstallprompt` capture.
-Functions: `showInstallBanner()`, `installApp()`, `dismissInstall()`
-Variables: `isIOS`, `isStandalone`, `installDismissed`, `deferredPrompt`, `_swReg`
-Depends on: Service Worker scheduler section
+Functions: `showInstallBanner()`, `installUiBlocked()`, `refreshInstallBanner()`, `installApp()`, `dismissInstall()`
+Variables: `isIOS`, `isStandalone`, `installDismissed`, `deferredPrompt`, `pendingInstallPlatform`, `_swReg`
+Depends on: Service Worker scheduler section and existing authentication/recovery/execution/onboarding surfaces.
+Install eligibility is retained while blocked. A scoped attribute observer refreshes banner visibility
+when those existing surfaces change; the gate also prevents invoking the native prompt while blocked.
 
 ## [Voice Input]
 Lines: 7229–7270
@@ -849,9 +836,8 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Month overview | Week View → `renderMonthOverview()` | ~5490 |
 | Sleep reminder / sleep entry logging | Sleep Tracking | 6083–6211 |
 | Yesterday's waste traps / day review modal | Day Review Modal | ~6090–6480 |
-| Nightly ritual: picking tomorrow's 1–3 | Review Plan Picker | ~6210–6360 |
-| "On a typical Tuesday you track…" line | Review Plan Picker → `reviewPlanReferenceLine()` | ~6260 |
-| Plan-vs-actual in the review | Review Plan Picker → `renderReviewPlanVsActual()` | ~6340 |
+| Daily preparation | Plan Tomorrow overlay (`plan-tomorrow-ui.js`) | EXTRACTED |
+| Plan-vs-actual in the review | `renderReviewPlanVsActual()` | Day Review Modal |
 | Plan chips inside the ping modal | Ping & Quick-Log → `renderQuickLogPlan()` | ~2160 |
 | Honest summary card (Reflect tab) | Reflect View | 6465–7085 |
 | Week comparison (this vs last week) | Reflect View → `renderWeekComparison()` | 6805 |
@@ -891,7 +877,31 @@ fallback ordering, readiness, planning consistency, and neutral
 actual-status classification. `plan-tomorrow-ui.js` owns the standalone normal/rescue preparation
 overlay, live routine preview, Learning likely-next text, and date skip/unskip. The classic Today
 script exposes `getPlanTomorrowAppContext()` and one `confirmPreparedDatePlan()` local-first mutation
-used by both the overlay and Review. `storage.js:syncPlans()` transactionally merges each date node in
+used by the canonical Plan Tomorrow overlay. Review saves independently. `storage.js:syncPlans()` transactionally merges each date node in
 Firebase and persists the committed canonical snapshot locally; sync-result wording follows that
 resolved transaction result. Routine snapshots are identity/audit references only; execution always
 regenerates live occurrences. Runtime mirrors are managed by the existing mirror script.
+
+
+## Guided Measurement Loop V1 (Phase 6C)
+
+`todayGuidedAction()` owns Today’s deterministic execution cascade: remote/local execution,
+due routines, unfinished priorities, anytime routines, then ordinary work. `focusTodayAction()`
+hands the selected label to Focus; scheduled Learning/Focus uses the existing routine controls
+and source linkage. `getTodayRoutineAction()` projects available occurrence controls;
+`startTodayRoutineAction()` revalidates before activating one. Definitions live in the
+`routine-manager` dialog; occurrences retain completion, skip, and correction actions on Today.
+
+`renderTodayPlan()` calls the existing plan/preparation readers and displays Priorities;
+the former Morning Startup ceremony/presets and duplicate Review plan picker are removed.
+`renderReviewTomorrowStatus()` / `prepareTomorrowFromReview()` link to Plan Tomorrow.
+`closePreparation()` returns to a preserved Review draft when opened from Review.
+`saveReview()` never writes preparation; `renderReviewPlanVsActual()` also displays unplanned
+tracked activity from existing date-window entries. No capability inference is applied.
+
+`checkReviewPrompt()` only refreshes passive CTAs. `checkSleepReminder()` only updates the
+Today sleep CTA; `checkSleepSetup()` is a Settings action. Learning Done/Continue returns
+to Today after the existing semantic and Ledger writes. Focus logging stays factual and
+no longer prompts generic work to become Learning work. No data contracts or HUD controls change.
+Tests: `tests/guided-measurement-loop.spec.js` plus existing plan, routine, Learning, Focus,
+recovery, and smoke suites. Runtime mirrors remain managed by `scripts/runtime-mirror.mjs`.

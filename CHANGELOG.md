@@ -1525,3 +1525,28 @@ and enabled state. Preserve existing identity, Focus/manual/timezone/persistence
 architecture. Add adversarial domain/browser regressions, update runtime mirrors,
 and correct policy/friction/count documentation. See TEST_REPORT.md for green
 regressions and docs/DAILY_OPERATING_LOOP_V1.md for final semantics. No push.
+
+
+## Phase 6C — Guided Measurement Loop V1 (branch: feat/guided-measurement-loop-v1)
+
+Today now leads with the next executable action and passes known task context into tracking/Focus.
+Priorities and prepared empty days no longer trigger Morning Startup. Review saves independently
+and links to Plan Tomorrow with draft preservation. Routine configuration is secondary; scheduled
+Learning can start from Today and returns after its outcome decision. Auto-Review and sleep setup
+popups are removed, sleep reminders are passive, and redundant success toasts are reduced.
+Review includes unplanned tracked activity while retaining routine/priority intent matching.
+
+Data/storage/source contracts and HUD controls are preserved. Tests and evidence are recorded in
+TEST_REPORT.md. User-supplied Phase 6C contract supersedes the historical task-queue workflow;
+TASKS.md is unchanged. Candidate intentionally left uncommitted/unpushed for independent review.
+
+
+## Phase 6C — Bounded review fixes · 2026-09-09
+
+Fixed the two independent-review blockers only: Review appends unplanned activity once after
+the planned rows, and install eligibility is deferred/suppressed during auth, recovery,
+execution and onboarding. The install gate also hides an already-visible banner and retains
+the browser event for later use. Existing installation and iOS help remain supported.
+Direct browser regressions cover uniqueness, outcome denominators, data preservation, real
+install events, timer/Focus recovery, first-visit onboarding and deferred availability.
+The approved architecture and low-severity visual hierarchy remain unchanged. No commit/push.

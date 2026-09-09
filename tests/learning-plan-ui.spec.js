@@ -1325,6 +1325,7 @@ test('Learning Plan Focus A then B cannot reuse the A outcome decision', async (
   await openLearningPlans(page);
   await finishLearningPlanFocusWork(page, 'Start Focus: Step A');
   await focusOutcomeButton(page, 'Continue').click();
+  await openLearningPlans(page);
   await page.locator('.learning-plan-list-item').filter({ hasText: 'Backend fundamentals' }).click();
   await finishLearningPlanFocusWork(page, 'Start Focus: Build endpoint');
 
@@ -1514,7 +1515,7 @@ test('Learning Plan Focus does not show the generic Life Ledger clarification to
 
   expect(state.entries).toHaveLength(1);
   expect(state.toastText).not.toContain('Focus saved to your timeline');
-  expect(state.toastText).toContain('Logged:');
+  expect(state.toastText).not.toContain('Logged:');
 });
 
 test('Learning Plan Focus A followed by Learning Plan Focus B carries only B provenance', async ({ page }) => {

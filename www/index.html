@@ -39,7 +39,7 @@
     <div style="display:flex;gap:6px;align-items:center;position:relative">
       <button class="btn sm" id="today-details-toggle" onclick="toggleTodayDetails()" aria-pressed="false"
         style="padding:7px 12px">Details</button>
-      <button class="btn sm" onclick="enterFocusMode()" title="Focus mode"
+      <button class="btn sm" onclick="focusTodayAction()" title="Focus on the current action"
         style="padding:7px 12px;border-color:rgba(76,199,240,0.3);color:var(--deep);background:var(--deep-dim2)">⊙ Focus</button>
       <button class="hdr-more-btn" id="hdr-more-btn" onclick="toggleHdrMenu()"
         style="width:32px;height:32px;border-radius:50%;background:none;border:1px solid var(--border2);
@@ -109,11 +109,22 @@
   <!-- Daily Summary Card -->
   <div class="daily-summary today-detail" id="daily-summary" style="display:none"></div>
 
+  <div class="today-action-strip" id="today-action-strip" style="display:none" aria-live="polite"></div>
+  <div class="routine-actions" style="margin-bottom:16px">
+    <button class="btn sm ghost" onclick="openPlanTomorrow()">Plan tomorrow</button>
+    <button class="btn sm ghost" onclick="openReview()">Review today</button>
+    <button class="btn sm ghost" id="today-sleep-reminder" onclick="openSleepReminder()" hidden>Log sleep</button>
+  </div>
   <section id="daily-routines" class="daily-routines" aria-label="Daily routines">
-    <div class="routine-heading"><h2>Today’s routines</h2><button type="button" class="btn sm" data-routine-action="add">Add routine</button></div>
+    <div class="routine-heading"><h2>Today’s routines</h2><button type="button" class="btn sm" data-routine-action="manage">Manage routines</button></div>
     <p id="daily-routines-error" class="routine-error" role="alert"></p>
     <div id="daily-routines-list"></div>
   </section>
+  <dialog id="routine-manager" class="daily-routine-dialog" aria-label="Manage routines">
+    <h2>Manage routines</h2><div id="routine-manager-list"></div>
+    <button type="button" class="btn sm" data-routine-action="add">Add routine</button>
+    <button type="button" class="btn sm ghost" onclick="document.getElementById('routine-manager').close()">Close</button>
+  </dialog>
   <dialog id="daily-routine-dialog" class="daily-routine-dialog" aria-labelledby="daily-routine-title">
     <form id="daily-routine-form">
       <h2 id="daily-routine-title">Routine</h2>
@@ -274,7 +285,7 @@
   <div class="plan-strip" id="plan-strip"></div>
 
   <!-- Contextual next action -->
-  <div class="today-action-strip" id="today-action-strip" style="display:none" aria-live="polite"></div>
+
 
   <!-- Today health -->
   <div class="today-health" id="today-health" aria-live="polite">
@@ -572,7 +583,7 @@
   <div class="life-subnav" role="group" aria-label="Life views">
     <button type="button" class="life-subnav-btn active" id="life-subnav-sheet" aria-pressed="true" data-life-view="sheet">Character Sheet</button>
     <button type="button" class="life-subnav-btn" id="life-subnav-timeline" aria-pressed="false" data-life-view="timeline">Timeline</button>
-    <button type="button" class="life-subnav-btn" id="life-subnav-next" aria-pressed="false" data-life-view="next">Next</button>
+    <button type="button" class="life-subnav-btn" id="life-subnav-next" aria-pressed="false" data-life-view="next">Guidance</button>
   </div>
   <div id="life-character-sheet-root" class="life-character-sheet-root" aria-live="polite"></div>
   <div id="life-feed-root" class="life-feed-root" aria-live="polite" hidden></div>
@@ -698,6 +709,7 @@
       <div><div class="setting-label">Focus block exit delay</div><div class="setting-sub">Seconds to wait before leaving focus</div></div>
       <div class="setting-control"><input type="number" id="set-exitdelay" value="10" min="3" max="60" onchange="saveSettings()"></div>
     </div>
+    <div class="setting-row"><div class="setting-label">Sleep schedule</div><button class="btn sm" onclick="checkSleepSetup()">Set up sleep</button></div>
     <div class="setting-row">
       <div><div class="setting-label">Close day time</div><div class="setting-sub">Morning times close the previous calendar day, useful for graveyard shifts</div></div>
       <div class="setting-control">
@@ -1010,7 +1022,7 @@
     <svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="4" cy="6" r="0.5"/></svg>Life
   </button>
   <button class="nav-btn" id="nav-learning" onclick="showView('learning')">
-    <svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2"/><path d="M8 7h7"/><path d="M8 11h5"/></svg>Learn
+    <svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2"/><path d="M8 7h7"/><path d="M8 11h5"/></svg>Learning plans
   </button>
   <button class="nav-btn" id="nav-career" onclick="showView('career')">
     <svg viewBox="0 0 24 24"><path d="M4 19V7a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>Career
@@ -1497,20 +1509,7 @@
   <div class="field"><label>One waste today</label><input type="text" id="rv-waste" placeholder="What cost you time?"></div>
   <div class="field"><label>How to avoid it next time</label><input type="text" id="rv-avoid" placeholder="e.g. Phone in another room..."></div>
 
-  <!-- Tomorrow's plan — the nightly ritual -->
-  <div class="field">
-    <label>Tomorrow — pick up to 3</label>
-    <div class="rv-plan-ref" id="rv-plan-ref"></div>
-    <div class="rv-plan-routines" id="rv-plan-routines"></div>
-    <div id="rv-plan-list"></div>
-    <div id="rv-plan-chips"></div>
-    <div class="rv-plan-add" id="rv-plan-add">
-      <input type="text" id="rv-plan-when" class="plan-input when" maxlength="40" placeholder="when">
-      <input type="text" id="rv-plan-task" class="plan-input task" maxlength="80" placeholder="what will you do?">
-      <button type="button" class="btn sm" onclick="addReviewPlanItem()">Add</button>
-    </div>
-    <button type="button" class="btn sm ghost" id="rv-plan-blank" onclick="toggleReviewPlanBlank()">Open day / no commitments</button>
-  </div>
+  <div class="field" id="rv-tomorrow-status"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
     <button class="btn ghost" onclick="closeModal('review-overlay')">Skip</button>
     <button class="btn primary" onclick="saveReview()">Save</button>
@@ -4955,125 +4954,39 @@ function renderRoutinePrompt(todayE) {
   `;
 }
 
-function focusTodayPlanInput() {
-  const input = document.getElementById('plan-task');
-  if (!input) { showToast('No plan input open right now'); return; }
-  input.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  input.focus();
+function todayGuidedAction() {
+  const remote = getActiveTimerOwnerSnapshot();
+  if (remote) return { title: `${remote.ownerName}: ${remote.task}`, sub: 'Running on another device.', button: 'Take over', action: 'takeOverActiveTimer()' };
+  if (typeof focusModeOn !== 'undefined' && focusModeOn) return { title: 'Focus session running', sub: getFocusTaskLabel(), button: 'Open focus', action: 'enterFocusMode()' };
+  if (breakActive) return { title: 'Break is running', sub: 'Return when ready.', button: 'End break', action: 'endBreak()' };
+  if (awayActive) return { title: `Away: ${awayLabel || 'Away'}`, sub: 'Return when ready.', button: 'Back to work', action: 'toggleAway()' };
+  if (running) return { title: 'Working now', sub: currentTask, task: currentTask, button: 'Switch', action: 'openSwitchPanel()' };
+  const routine = globalThis.getTodayRoutineAction?.('Now');
+  if (routine) return { ...routine, action: 'startTodayRoutineAction()' };
+  const next = getNextPlanItem(planTodayKey());
+  if (next) return { title: `Next: ${next.task}`, sub: 'Your next priority.', task: next.task, button: 'Start next', action: 'startNextPlanItem()' };
+  const anytime = globalThis.getTodayRoutineAction?.('Anytime');
+  if (anytime) return { ...anytime, action: 'startTodayRoutineAction()' };
+  return { title: 'What would you like to work on?', sub: 'Start something useful. Planning is optional; untracked time can stay unknown.', button: 'Name work', action: "document.getElementById('hero-task-input').focus()" };
 }
 
-function renderTodayActionStrip(todayE) {
+function focusTodayAction() {
+  const state = todayGuidedAction();
+  if (state.action === 'startTodayRoutineAction()' && state.focusLinked) { globalThis.startTodayRoutineAction(); return; }
+  if (state.task) { enterFocusMode({ task: state.task, autoStart: true }); return; }
+  enterFocusMode();
+}
+
+function renderTodayActionStrip() {
   const el = document.getElementById('today-action-strip');
   if (!el) return;
   if (!isViewingToday()) { el.style.display = 'none'; return; }
-
+  const state = todayGuidedAction();
   const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const dateKey = getViewingDateKey();
-  const planItems = getPlanItems(dateKey);
-  const health = computeTodayHealth(todayE, dateKey);
-  const missed = typeof getMissedCloseout === 'function' ? getMissedCloseout() : null;
-  const next = planItems.length ? getNextPlanItem(dateKey) : null;
-  const remoteActive = typeof getActiveTimerOwnerSnapshot === 'function' ? getActiveTimerOwnerSnapshot() : null;
-  let state = null;
-
-  if (remoteActive) {
-    state = {
-      tone: 'live',
-      title: `${remoteActive.ownerName}: ${remoteActive.task}`,
-      sub: `${remoteActive.mode} is running on another device.`,
-      button: 'Take over',
-      action: 'takeOverActiveTimer()'
-    };
-  } else if (typeof focusModeOn !== 'undefined' && focusModeOn && pomodoroPhase === 'work') {
-    state = {
-      tone: 'live',
-      title: 'Focus session running',
-      sub: typeof getFocusTaskLabel === 'function' ? getFocusTaskLabel() : 'Deep work is live.',
-      button: 'Open focus',
-      action: 'enterFocusMode()'
-    };
-  } else if (missed) {
-    state = {
-      tone: 'warn',
-      title: 'Close yesterday first',
-      sub: 'Recover the day, then choose today\'s plan.',
-      button: 'Close yesterday',
-      action: 'openMissedCloseoutReview()'
-    };
-  } else if (breakActive) {
-    state = {
-      tone: 'live',
-      title: 'Break is running',
-      sub: 'End it when you are ready to track again.',
-      button: 'End break',
-      action: 'endBreak()'
-    };
-  } else if (awayActive) {
-    state = {
-      tone: 'live',
-      title: `Away: ${awayLabel || 'Away'}`,
-      sub: 'Come back when you are ready to track work.',
-      button: 'Back to work',
-      action: 'toggleAway()'
-    };
-  } else if (running) {
-    state = {
-      tone: 'live',
-      title: 'Working now',
-      sub: currentTask || 'Keep the current block honest.',
-      button: 'Switch',
-      action: 'openSwitchPanel()'
-    };
-  } else if (!planItems.length) {
-    state = {
-      tone: '',
-      title: 'Set today\'s target',
-      sub: 'Pick 1-3 things. The app works best when the day has a shape.',
-      button: 'Pick target',
-      action: 'focusTodayPlanInput()'
-    };
-  } else if (health.unloggedMin >= 30) {
-    state = {
-      tone: 'warn',
-      title: `${fmtDur(health.unloggedMin)} unlogged`,
-      sub: 'Log the missing block, then move on.',
-      button: 'Log gap',
-      action: 'openRetroLog()'
-    };
-  } else if (next && !isPlanTaskActive(next.task)) {
-    state = {
-      tone: '',
-      title: `Next: ${next.task}`,
-      sub: 'Start the next planned block.',
-      button: 'Start next',
-      action: 'startNextPlanItem()'
-    };
-  } else if (isCloseoutDue(dateKey)) {
-    state = {
-      tone: '',
-      title: 'Close the loop',
-      sub: 'Review today and set tomorrow before the day disappears.',
-      button: 'Close day',
-      action: 'openCloseoutReview()'
-    };
-  } else if (planItems.length < PLAN_MAX) {
-    state = {
-      tone: '',
-      title: 'Plan clear',
-      sub: 'Add another target only if it would actually help.',
-      button: 'Add target',
-      action: 'focusTodayPlanInput()'
-    };
-  }
-
-  if (!state) { el.style.display = 'none'; return; }
-  el.className = `today-action-strip ${state.tone}`.trim();
   el.style.display = 'flex';
-  el.innerHTML = `<div class="today-action-main">
-      <div class="today-action-kicker">Next action</div>
-      <div class="today-action-title" id="today-action-title">${esc(state.title)}</div>
-      <div class="today-action-sub" id="today-action-sub">${esc(state.sub)}</div>
-    </div>
+  el.innerHTML = `<div class="today-action-main"><div class="today-action-kicker">Do now</div>
+    <div class="today-action-title" id="today-action-title">${esc(state.title)}</div>
+    <div class="today-action-sub" id="today-action-sub">${esc(state.sub)}</div></div>
     <button type="button" class="today-action-btn" id="today-action-primary" onclick="${state.action}">${esc(state.button)}</button>`;
 }
 
@@ -5670,7 +5583,7 @@ function renderSidePanel() {
     if (!planItems.length) {
       spStatus.innerHTML = `
         <div style="font-size:18px;font-family:var(--mono);color:var(--muted);margin-bottom:4px">No plan</div>
-        <div class="hint">Today Plan is the daily target.</div>`;
+        <div class="hint">Priorities are your daily intentions.</div>`;
     } else {
       spStatus.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
@@ -6391,27 +6304,6 @@ function quickLogSleep() {
 // TODAY PLAN — the 1-3 intentions that drive the day
 // ══════════════════════════════════════════════════════
 const PLAN_MAX = 3;
-const MORNING_PLAN_PRESETS = {
-  deep: {
-    label: 'Deep work day',
-    detail: 'Protect one first block',
-    task: 'Main deep work block',
-    when: 'first block'
-  },
-  maintenance: {
-    label: 'Maintenance day',
-    detail: 'Admin, cleanup, errands',
-    task: 'Maintenance block',
-    when: 'next block'
-  },
-  light: {
-    label: 'Light day',
-    detail: 'One honest focus block',
-    task: 'Light focus block',
-    when: 'next block'
-  }
-};
-
 function planTodayKey() {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   return getDateInTZ(Date.now(), tz);
@@ -6624,48 +6516,6 @@ function getNextPlanItem(dateKey) {
       || null;
 }
 
-function renderMorningStartup(esc, attr) {
-  const choices = Object.entries(MORNING_PLAN_PRESETS).map(([key, preset]) => `
-    <button type="button" class="morning-choice ${key}" onclick="setMorningPlan('${key}')">
-      <span>${esc(preset.label)}</span>
-      <small>${esc(preset.detail)}</small>
-    </button>`).join('');
-  return `<div class="morning-startup" id="morning-startup">
-      <div class="morning-kicker">Morning startup</div>
-      <div class="morning-title">What kind of day is this?</div>
-      <div class="morning-sub">Pick a mode, then name the first block. If you drift: log it, then restart.</div>
-      <div class="morning-choices">${choices}</div>
-      <div class="plan-add morning-add">
-        <input id="plan-when" class="plan-input when" maxlength="40" placeholder="when (optional)">
-        <input id="plan-task" class="plan-input task" maxlength="80" placeholder="first block or top task"
-               onkeydown="if(event.key==='Enter')addPlanItem()">
-        <button class="btn sm" onclick="addPlanItem()" title="${attr('Add a custom plan item')}">Add</button>
-      </div>
-    </div>`;
-}
-
-function setMorningPlan(type) {
-  if (!isViewingToday()) return;
-  const preset = MORNING_PLAN_PRESETS[type];
-  if (!preset) return;
-  const dateKey = planTodayKey();
-  if (getPlanItems(dateKey).length >= PLAN_MAX) {
-    showToast(`${PLAN_MAX} is the cap - remove one first`);
-    return;
-  }
-  const taskEl = document.getElementById('plan-task');
-  const whenEl = document.getElementById('plan-when');
-  const task = ((taskEl && taskEl.value) || preset.task).trim();
-  const when = ((whenEl && whenEl.value) || preset.when).trim();
-  if (!task) { showToast('Name the first block'); if (taskEl) taskEl.focus(); return; }
-  const raw = getPlanItemsRaw(dateKey).slice();
-  raw.push(createPlanItem(task, when));
-  savePlanItems(dateKey, raw);
-  showToast(`${preset.label} set`);
-}
-
-// Called directly by every plan mutation — never routed through renderToday(), whose
-// _todayRenderKey cache only tracks entries and would silently swallow plan edits.
 function renderTodayPlan() {
   const el = document.getElementById('plan-strip');
   if (!el) return;
@@ -6681,21 +6531,12 @@ function renderTodayPlan() {
     renderTodayActionStrip(getViewingEntries());
     return;
   }
-  if (!readOnly && !items.length && typeof getMissedCloseout === 'function' && getMissedCloseout()) {
-    el.style.display = 'none';
-    renderTodayActionStrip(getViewingEntries());
-    return;
-  }
   el.style.display = 'block';
 
   const doneCount = items.filter(i => i.done).length;
   const esc  = s => String(s).replace(/</g, '&lt;');
   const attr = s => String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
-  if (!readOnly && !items.length) {
-    el.innerHTML = renderMorningStartup(esc, attr);
-    renderTodayActionStrip(getViewingEntries());
-    return;
-  }
+  const preparation = globalThis.PlanTomorrowModel?.normalizePreparation(plans[dateKey]?.preparation, dateKey);
   const nextItem = readOnly || !items.length ? null : getNextPlanItem(dateKey);
   const nextIsActive = !!(nextItem && isPlanTaskActive(nextItem.task));
   const nextLabel = !nextItem ? 'All clear' : nextIsActive ? 'Working now' : 'Start next';
@@ -6705,8 +6546,8 @@ function renderTodayPlan() {
 
   const head = `<div class="plan-head">
       <div class="plan-head-text">
-        <span class="plan-title">${readOnly ? 'Planned that day' : 'Today'}</span>
-        <span class="plan-count">${items.length ? `${doneCount} of ${items.length} done` : `pick up to ${PLAN_MAX}`}</span>
+        <span class="plan-title">${readOnly ? 'Planned that day' : 'Priorities'}</span>
+        <span class="plan-count">${items.length ? `${doneCount} of ${items.length} done` : preparation ? (preparation.intentionalBlank ? 'Open day prepared' : 'Day prepared') : 'Optional · up to 3'}</span>
       </div>
       ${nextAction}
     </div>`;
@@ -8226,9 +8067,6 @@ function removePreset(i){settings.presets.splice(i,1);persist();renderSettings()
 // REVIEW
 // ══════════════════════════════════════════════════════
 let _reviewDateKey = null; // which date is currently open in the review modal
-let _reviewPlanDraft = [];        // tomorrow's plan being picked (carries tombstones)
-let _reviewPlanTargetKey = null;  // the date that draft is FOR (= reviewed day + 1)
-let _reviewPlanIntentionalBlank = false;
 let _reviewUnloggedOk = false;    // true when missing time was seen and intentionally left blank
 let _reviewFocusRating = null;    // Phase 11.8 optional subjective rating: 'focused' | 'mixed' | 'distracted'
 
@@ -8277,7 +8115,7 @@ function openReview(dateKey) {
   }
 
   document.getElementById('rv-avoid').value = r.avoid || '';
-  openReviewPlan();
+  renderReviewTomorrowStatus();
   renderReviewCloseoutSummary();
   if (typeof renderReviewAttention === 'function') renderReviewAttention(_reviewDateKey, _reviewFocusRating);
   renderReviewUnloggedDecision();
@@ -8361,164 +8199,16 @@ function openReflectionsHistory() {
   document.getElementById('reflections-history-overlay').classList.add('open');
 }
 
-// ══════════════════════════════════════════════════════
-// REVIEW PLAN PICKER — the nightly ritual that seeds tomorrow
-// ══════════════════════════════════════════════════════
-// The 22:00 review prompt already existed and already asked "tomorrow's focus" as one string.
-// This turns that single field into the 1-3 plan the next day actually runs on.
-
-function reviewPlanTargetKey() {
-  return _dateKeyPlusDays(_reviewDateKey || toDateKey(new Date()), 1);
+// Review links to the canonical preparation editor; reflection saves independently.
+function renderReviewTomorrowStatus() {
+  const targetDate = globalThis.PlanTomorrowModel?.planTomorrowTargetDate(Date.now(), settings.timezone);
+  const prepared = targetDate && globalThis.PlanTomorrowModel.normalizePreparation(plans[targetDate]?.preparation, targetDate);
+  document.getElementById('rv-tomorrow-status').innerHTML = `<label>${prepared ? 'Tomorrow ready' : 'Tomorrow not prepared'}</label><button type="button" class="btn sm ghost" onclick="prepareTomorrowFromReview()">${prepared ? 'Edit' : 'Prepare tomorrow'}</button>`;
 }
 
-function openReviewPlan() {
-  _reviewPlanTargetKey = reviewPlanTargetKey();
-  // Draft carries tombstones so a removal here still propagates through the sync merge.
-  _reviewPlanDraft = getPlanItemsRaw(_reviewPlanTargetKey).map(i => ({ ...i }));
-  _reviewPlanIntentionalBlank = !!globalThis.PlanTomorrowModel?.normalizePreparation(plans[_reviewPlanTargetKey]?.preparation, _reviewPlanTargetKey)?.intentionalBlank;
-  renderReviewPlan();
-}
-
-function reviewPlanVisible() {
-  return _reviewPlanDraft.filter(i => !i.deleted);
-}
-
-/** Candidate tasks offered as one-tap chips. Unfinished items from the reviewed day appear here
- *  as an OFFER — never auto-carried, which is what would deadlock a capped list. */
-function reviewPlanChips() {
-  const chosen = new Set(reviewPlanVisible().map(i => normalizePlanTask(i.task)));
-  const out = [];
-  const push = (task, tag) => {
-    const n = normalizePlanTask(task);
-    if (!n || chosen.has(n) || out.some(o => normalizePlanTask(o.task) === n)) return;
-    out.push({ task, tag });
-  };
-
-  getPlanItems(_reviewDateKey).filter(i => !i.done).forEach(i => push(i.task, 'undone'));
-
-  const wk = getWeekKey(new Date(tzParseTime(_reviewPlanTargetKey, '12:00')));
-  const wp = (weeklyReviews[wk] || {}).plan || {};
-  [wp.p1, wp.p2, wp.p3].forEach(p => { if (p && p.trim()) push(p.trim(), 'week'); });
-
-  // Recent-activity suggestions are unfiltered by energy, so without this guard the app offers
-  // "Drinking with friends" as one of tomorrow's three priorities. A plan is the things you
-  // deliberately commit to — you never plan to waste time, sleep, or socialise. Only the CHIPS
-  // are filtered; anything can still be typed in by hand.
-  (buildHeroSuggestions().recent || [])
-    .filter(isPlannableTask)
-    .slice(0, 4)
-    .forEach(t => push(t, 'recent'));
-  return out.slice(0, 6);
-}
-
-/** Reference-class line: what you ACTUALLY do on this weekday, so tomorrow is planned against
- *  reality rather than optimism. Recalling past actuals is the documented fix for the planning
- *  fallacy — and this app is the only thing that has the data. */
-function reviewPlanReferenceLine() {
-  const targetTs = tzParseTime(_reviewPlanTargetKey, '12:00');
-  const dow = tzDow(targetTs);
-  const samples = [];
-  for (let i = 1; i <= 56 && samples.length < 6; i++) {
-    const k = _dateKeyPlusDays(_reviewPlanTargetKey, -i);
-    if (tzDow(tzParseTime(k, '12:00')) !== dow) continue;
-    const dayE = getEntriesForDateWindow(k).filter(e => !e.missed && !e.deleted);
-    if (!dayE.length) continue;
-    samples.push(sumEnergyMinutes(dayE, 'deep', k));
-  }
-  if (samples.length < 2) return '';
-  const avg = Math.round(samples.reduce((a, b) => a + b, 0) / samples.length);
-  const wd = new Intl.DateTimeFormat('en-US', {
-    weekday: 'long', timeZone: settings.timezone || undefined
-  }).format(new Date(targetTs));
-  return `On a typical ${wd} you track ${fmtPlanMin(avg)} of deep work.`;
-}
-
-function renderReviewPlan() {
-  const listEl  = document.getElementById('rv-plan-list');
-  const chipsEl = document.getElementById('rv-plan-chips');
-  const addEl   = document.getElementById('rv-plan-add');
-  const refEl   = document.getElementById('rv-plan-ref');
-  const routinesEl = document.getElementById('rv-plan-routines');
-  const blankEl = document.getElementById('rv-plan-blank');
-  if (!listEl) return;
-
-  const esc  = s => String(s).replace(/</g, '&lt;');
-  const attr = s => String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
-  const items = reviewPlanVisible();
-
-  listEl.innerHTML = items.map(it => `
-    <div class="rv-plan-item">
-      <div class="rv-plan-task" title="${attr(it.task)}">
-        ${it.when ? `<span class="plan-when">${esc(it.when)} →</span> ` : ''}${esc(it.task)}
-      </div>
-      <button type="button" class="plan-remove" onclick="removeReviewPlanItem('${it.id}')" title="Remove">✕</button>
-    </div>`).join('');
-
-  const chips = items.length >= PLAN_MAX ? [] : reviewPlanChips();
-  chipsEl.innerHTML = chips.length
-    ? `<div class="rv-plan-chip-row">${chips.map(c =>
-        `<button type="button" class="rv-plan-chip ${c.tag}" onclick="addReviewPlanChip('${attr(c.task)}')">
-           ${esc(c.task)}<span class="rv-chip-tag">${c.tag === 'undone' ? 'undone' : c.tag === 'week' ? 'this week' : 'recent'}</span>
-         </button>`).join('')}</div>`
-    : '';
-
-  addEl.style.display = items.length >= PLAN_MAX ? 'none' : 'flex';
-  let actionableRoutines = 0;
-  if (routinesEl && typeof globalThis.getPlanTomorrowRoutineSummary === 'function') {
-    try {
-      const summary = globalThis.getPlanTomorrowRoutineSummary(_reviewPlanTargetKey);
-      actionableRoutines = summary.rows.filter(row => !row.skipped && row.actionable).length;
-      const skipped = summary.rows.filter(row => row.skipped).length;
-      routinesEl.textContent = summary.mismatch
-        ? `Routines use ${summary.state.timezone}; Today uses ${settings.timezone}. One-offs only.`
-        : `${actionableRoutines} routine${actionableRoutines === 1 ? '' : 's'} included${skipped ? ` · ${skipped} skipped for this date` : ''}. Open Plan tomorrow to change routine skips.`;
-    } catch (err) {
-      routinesEl.textContent = `Routine preview unavailable: ${err.message}`;
-    }
-  }
-  if (blankEl) {
-    const canBeBlank = items.length === 0 && actionableRoutines === 0;
-    blankEl.style.display = canBeBlank ? 'inline-flex' : 'none';
-    blankEl.textContent = `${_reviewPlanIntentionalBlank ? '✓ ' : ''}Open day / no commitments`;
-  }
-  if (refEl) {
-    const line = reviewPlanReferenceLine();
-    refEl.textContent = line;
-    refEl.style.display = line ? 'block' : 'none';
-  }
-}
-
-function pushReviewPlanItem(task, when) {
-  if (reviewPlanVisible().length >= PLAN_MAX) { showToast(`${PLAN_MAX} is the cap`); return; }
-  _reviewPlanDraft.push(createPlanItem(task, when || ''));
-  _reviewPlanIntentionalBlank = false;
-  renderReviewPlan();
-}
-
-function toggleReviewPlanBlank() {
-  _reviewPlanIntentionalBlank = !_reviewPlanIntentionalBlank;
-  renderReviewPlan();
-}
-
-function addReviewPlanItem() {
-  const taskEl = document.getElementById('rv-plan-task');
-  const whenEl = document.getElementById('rv-plan-when');
-  const task = (taskEl ? taskEl.value : '').trim();
-  if (!task) { showToast('What will you do?'); if (taskEl) taskEl.focus(); return; }
-  pushReviewPlanItem(task, (whenEl ? whenEl.value : '').trim());
-  if (taskEl) taskEl.value = '';
-  if (whenEl) whenEl.value = '';
-}
-
-function addReviewPlanChip(task) {
-  pushReviewPlanItem(task, '');
-}
-
-function removeReviewPlanItem(id) {
-  _reviewPlanDraft = _reviewPlanDraft.map(i =>
-    i.id === id ? stampPlanItemMutation({ ...i, deleted: true }) : i
-  );
-  renderReviewPlan();
+function prepareTomorrowFromReview() {
+  closeModal('review-overlay');
+  openPlanTomorrow({ returnToReview: true });
 }
 
 /** Yesterday's promise, answered with data instead of memory. Neutral by design — an unfinished
@@ -8549,7 +8239,14 @@ function renderReviewPlanVsActual() {
     catch (err) { routineRows = [{ title: `Routine actual unavailable: ${err.message}`, status: 'removed' }]; }
   }
   const rows = [...itemRows, ...routineRows];
-  if (!rows.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const plannedLabels = new Set([...items.map(item => item.task), ...routineRows.flatMap(row => [row.title, row.taskLabel])].filter(Boolean).map(normalizePlanTask));
+  const unplanned = new Map();
+  getEntriesForDateWindow(_reviewDateKey).filter(entry => !entry.deleted && !entry.missed && !entry.break && !entry.away && !plannedLabels.has(normalizePlanTask(entry.activity))).forEach(entry => {
+    const label = entry.activity || 'Unlabeled work';
+    unplanned.set(label, (unplanned.get(label) || 0) + (entry.blockIntervalMin || 0));
+  });
+  const unplannedHtml = unplanned.size ? `<div class="rv-pva"><div class="rv-pva-head">Unplanned tracked activity</div>${[...unplanned].map(([label, minutes]) => `<div class="rv-pva-row">${esc(label)} · ${fmtPlanMin(minutes)}</div>`).join('')}</div>` : '';
+  if (!rows.length && !unplanned.size) { el.style.display = 'none'; el.innerHTML = ''; return; }
   const actual = globalThis.PlanTomorrowModel?.summarizeActual(rows) || { planned: rows.length, active: rows.length, completed: rows.filter(row => row.status !== 'not-done').length, removed: 0 };
   el.style.display = 'block';
   el.innerHTML = `<div class="rv-pva">
@@ -8562,39 +8259,14 @@ function renderReviewPlanVsActual() {
           <span class="rv-pva-min${positive ? ' on' : ''}">${labels[row.status] || row.status}</span>
         </div>`;
       }).join('')}
-    </div>`;
+    </div>` + unplannedHtml;
 }
 
 function saveReview(){
   const k = _reviewDateKey || toDateKey(new Date());
-  const targetKey = _reviewPlanTargetKey || _dateKeyPlusDays(k, 1);
-  const visible = reviewPlanVisible();
   const summary = computeCloseoutSummary(k);
-  let routineRows = [];
-  let routineAuditRows = [];
-  try {
-    if (typeof globalThis.getPlanTomorrowRoutineSummary === 'function') {
-      const routineSummary = globalThis.getPlanTomorrowRoutineSummary(targetKey);
-      if (!routineSummary.mismatch) {
-        routineAuditRows = routineSummary.rows.filter(row => row.actionable);
-        routineRows = routineAuditRows.filter(row => !row.skipped);
-      }
-    }
-    const preparationSave = confirmPreparedDatePlan({
-      targetDate: targetKey,
-      items: _reviewPlanDraft.map(item => ({ ...item })),
-      mode: 'normal',
-      intentionalBlank: _reviewPlanIntentionalBlank,
-      routineInstanceIds: routineAuditRows.map(row => row.id),
-      actionableRoutineInstanceIds: routineRows.map(row => row.id)
-    });
-    if (!preparationSave.localSaved) throw new Error('Tomorrow was not saved locally.');
-  } catch (err) {
-    showToast(`Review not saved — ${err.message}`);
-    return;
-  }
-  // reviews[].tomorrow stays populated so Reflect history and existing records keep rendering.
-  const tomorrowText = visible.map(i => i.task).join(' · ');
+  // Keep legacy reflection text; preparation is owned solely by Plan Tomorrow.
+  const tomorrowText = reviews[k]?.tomorrow || '';
   reviews[k]={
     win:document.getElementById('rv-win').value,
     waste:document.getElementById('rv-waste').value,
@@ -8612,7 +8284,6 @@ function saveReview(){
   renderMissedCloseoutCta();
   renderCloseoutCta();
   if (document.getElementById('reflect-daily-reviews')) renderDailyReflections();
-  showToast('Review saved ✓');
 }
 // ── Sleep tracking ──────────────────────────────────────
 function makeDateAtTime(dateKey, hhmm) {
@@ -8677,11 +8348,8 @@ function logSleepEntry(sleepTs, wakeTs) {
 }
 
 function checkSleepSetup() {
-  if (!settings.sleepSetupDone) {
-    setTimeout(() => {
-      document.getElementById('sleep-setup-overlay').style.display = 'flex';
-    }, 1500);
-  }
+  // Settings-only entry point; startup never opens optional setup.
+  document.getElementById('sleep-setup-overlay').style.display = 'flex';
 }
 
 function saveSleepSetup() {
@@ -8692,7 +8360,6 @@ function saveSleepSetup() {
   persist();
   if (fbRoomRef) fbRoomRef.update({ settings });
   document.getElementById('sleep-setup-overlay').style.display = 'none';
-  showToast('Sleep schedule saved');
 }
 
 function skipSleepSetup() {
@@ -8703,6 +8370,8 @@ function skipSleepSetup() {
 }
 
 function checkSleepReminder() {
+  const reminder = document.getElementById('today-sleep-reminder');
+  reminder.hidden = true;
   if (!settings.sleepSetupDone) return;
   const todayKey = toDateKey(new Date());
   // Stop if already logged (or confirmed) today
@@ -8724,7 +8393,7 @@ function checkSleepReminder() {
   const nowMinutes = nowH * 60 + nowM;
   const triggerMin = wH * 60 + wM + reminderMin;
   if (nowMinutes >= triggerMin) {
-    openSleepReminder();
+    reminder.hidden = false;
   }
 }
 
@@ -8782,7 +8451,7 @@ function snoozeSleepReminder() {
 
 function checkReviewPrompt(){
   const dueDateKey = nextUnreviewedCloseoutDateKey();
-  if (dueDateKey) setTimeout(()=>openReview(dueDateKey),800);
+  if (dueDateKey) { renderCloseoutCta(); renderMissedCloseoutCta(); }
 }
 
 function renderYesterdayPromise() {
@@ -9422,7 +9091,6 @@ function saveWeeklyReview() {
   const reviewBadge = document.getElementById('weekly-review-saved');
   reviewBadge.textContent = '✓ Saved ' + formatSavedAt(weeklyReviews[weekKey].savedAt);
   reviewBadge.style.display = 'inline';
-  showToast('Review saved ✓');
   renderReflectHistory();
 }
 
@@ -10933,6 +10601,7 @@ document.getElementById('pwa-manifest').href=URL.createObjectURL(new Blob([JSON.
 // Service worker registration lives in the dedicated sw.js section below.
 
 let deferredPrompt=null;
+let pendingInstallPlatform=null;
 const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
 const isStandalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone;
 const installDismissed=localStorage.getItem('ta-install-dismissed');
@@ -10940,14 +10609,44 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPro
 if(isIOS&&!isStandalone&&!installDismissed)setTimeout(()=>showInstallBanner('ios'),3000);
 
 function showInstallBanner(p){
-  const b=document.getElementById('install-banner');
   const s=document.getElementById('install-sub');
   const btn=document.getElementById('install-btn');
   if(p==='ios'){s.textContent='Tap Share → "Add to Home Screen"';btn.style.display='none';}
   else{s.textContent='Install for offline use & home screen';}
-  b.style.display='flex';
+  pendingInstallPlatform=p;
+  refreshInstallBanner();
 }
-function installApp(){if(deferredPrompt){deferredPrompt.prompt();deferredPrompt.userChoice.then(r=>{if(r.outcome==='accepted')dismissInstall();deferredPrompt=null;});}}
+
+// Install stays optional. Observe existing surfaces instead of changing recovery or execution.
+function installUiBlocked() {
+  if (document.readyState === 'loading' || window._timerRecoveryState) return true;
+  if (running || breakActive || awayActive || (typeof focusModeOn !== 'undefined' && focusModeOn)) return true;
+  if (getActiveTimerOwnerSnapshot()) return true;
+  if (!localStorage.getItem('ta3-onboarded') || document.getElementById('ob-overlay')?.classList.contains('open')) return true;
+  return ['signin-overlay', 'recovery-overlay'].some(id => {
+    const el = document.getElementById(id);
+    return el && getComputedStyle(el).display !== 'none';
+  });
+}
+
+function refreshInstallBanner() {
+  const banner = document.getElementById('install-banner');
+  const eligible = pendingInstallPlatform && !isStandalone && !localStorage.getItem('ta-install-dismissed');
+  banner.style.display = eligible && !installUiBlocked() ? 'flex' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Attribute mutations run before paint, including an already-visible banner's suppression.
+  const observer = new MutationObserver(refreshInstallBanner);
+  ['signin-overlay', 'recovery-overlay', 'focus-overlay', 'ob-overlay',
+    'hero-idle', 'hero-active', 'hero-away', 'break-active-row', 'active-device-banner'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) observer.observe(el, { attributes: true, attributeFilter: ['class', 'style'] });
+  });
+  refreshInstallBanner();
+});
+
+function installApp(){if(deferredPrompt && !installUiBlocked()){deferredPrompt.prompt();deferredPrompt.userChoice.then(r=>{if(r.outcome==='accepted')dismissInstall();deferredPrompt=null;});}}
 function dismissInstall(){document.getElementById('install-banner').style.display='none';localStorage.setItem('ta-install-dismissed','1');}
 
 // ══════════════════════════════════════════════════════
@@ -11197,7 +10896,7 @@ updateRing();
 renderToday();
 initAutoSync();
 initNativeNotifications();
-setTimeout(() => { checkSleepSetup(); checkSleepReminder(); }, 2000);
+setTimeout(() => { checkSleepReminder(); }, 2000);
 setInterval(checkSleepReminder, 5 * 60 * 1000); // re-check every 5 min until sleep is logged
 setInterval(() => { if (isViewingToday()) { const e = getViewingEntries(); updateHeroPrompt(e); renderDayBar(e); renderStatusBanner(e); renderActiveDeviceBanner(); renderTodayHealth(e); renderTodayActionStrip(e); renderGapRecoveryInbox(e); renderRoutinePrompt(e); } }, 60000);
 // Auto-start "PC Time" on fresh browser open (desktop only, not mobile browsers)

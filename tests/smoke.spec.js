@@ -176,7 +176,7 @@ test('focus overlay exit logs and renders the active session', async ({ page }) 
   await expect(page.locator('#recent-list')).toContainText('Focus exit save');
 });
 
-test('generic focus session exit shows the Life Ledger clarification toast', async ({ page }) => {
+test('generic focus session exit saves time without a Learning obligation toast', async ({ page }) => {
   await openApp(page);
 
   const result = await page.evaluate(() => {
@@ -198,9 +198,7 @@ test('generic focus session exit shows the Life Ledger clarification toast', asy
 
   expect(result.savedCount).toBe(1);
   expect(result.toastShowing).toBe(true);
-  expect(result.toastText).toBe(
-    'Focus saved to your timeline. To count toward your Life Ledger, start Focus from a Learning Plan step.'
-  );
+  expect(result.toastText).not.toContain('To count toward your Life Ledger');
 });
 
 test('focus session under one minute is not logged and does not claim a save', async ({ page }) => {

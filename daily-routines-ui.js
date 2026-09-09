@@ -58,15 +58,15 @@ function renderCard(item, completion, status) {
     return !!result && result.level !== 'incomplete';
   });
   const hasStep = r.source !== 'learning' || (link && link.planId === r.planId && view.plans.some(p => p.id === link.planId && p.phases.some(ph => ph.lessons.some(l => l.steps.some(s => s.id === link.stepId)))));
-  let actions = button('edit', r.id, 'Edit');
+  let actions = !complete ? button('skip', r.id, 'Skip today') : '';
   if (!complete && r.source === 'manual') {
     actions = button('done', r.id, 'Done') + (r.minimumMinutes ? button('minimum', r.id, 'Minimum done') : '') + actions;
   }
   if (view.state.manual[item.id]) actions += button('undo', r.id, 'Undo manual Done');
   if (!complete && ['learning', 'focus'].includes(r.source) && hasStep) actions = button('start', r.id, 'Start Focus') + actions;
   let note = '';
-  if (r.source === 'workout' && !complete) note = 'Automatic completion requires an explicit openGym routine ID and exactly one matching fact with agreeing source/start date. Choose Manual completion if unavailable. No live openGym connection.';
-  if (r.source === 'learning' && !hasStep) note = 'No unfinished step available. Add or select a Learning Plan step.';
+  if (r.source === 'workout' && !complete) note = 'Completion appears when a matching workout is imported.';
+  if (r.source === 'learning' && !hasStep) note = 'No unfinished step available today.';
   if (completion?.source === 'ambiguous') note = 'Multiple facts or routines match this intention. Automatic completion is unavailable; choose Manual completion if needed.';
   if (completion?.level === 'incomplete' && completion.duration) note = `${completion.duration} min recorded · below minimum/target.`;
   return `<article class="daily-routine-card" data-instance-id="${escape(item.id)}">
@@ -96,10 +96,9 @@ export function renderDailyRoutines() {
       if (members.length) html += `<section aria-label="${group}"><h3>${group}</h3>${members.map(row => renderCard(row.item, row.completion, row.status)).join('')}</section>`;
     }
     if (view.skipped.length) html += `<details class="routine-skipped"><summary>Skipped today (${view.skipped.length})</summary>${view.skipped.map(item => `<div class="routine-actions" data-instance-id="${escape(item.id)}">${escape(item.routine.title)} ${button('restore', item.routineId, 'Restore today')}</div>`).join('')}</details>`;
-    const inactive = view.state.routines.filter(r => !view.instances.some(i => i.routineId === r.id) && !view.skipped.some(i => i.routineId === r.id));
-    if (inactive.length) html += `<details><summary>Other routines (${inactive.length})</summary>${inactive.map(r => `<div class="routine-actions">${escape(r.title)} · ${r.enabled ? 'Not scheduled today' : 'Disabled'} ${button('edit', r.id, 'Edit')}</div>`).join('')}</details>`;
     if (html !== rendered) { list.innerHTML = html; rendered = html; }
     error.textContent = '';
+    globalThis.renderTodayActionStrip?.();
   } catch (err) { view = null; message(err); }
 }
 function updateFields() {
@@ -145,17 +144,24 @@ form.addEventListener('submit', event => {
   } catch (err) { form.querySelector('[data-form-error]').textContent = err.message; }
 });
 document.getElementById('daily-routine-cancel').addEventListener('click', () => dialog.close());
-root.addEventListener('click', event => {
+document.addEventListener('click', event => {
   const control = event.target.closest('[data-routine-action]');
   if (!control) return;
   try {
     const action = control.dataset.routineAction;
     const id = control.dataset.routineId;
-    if (action === 'edit' || action === 'add') { openEditor(id); return; }
+    if (action === 'manage') {
+      view = readView();
+      document.getElementById('routine-manager-list').innerHTML = view.state.routines.map(r => `<p>${escape(r.title)} · ${r.enabled ? scheduleLabel(r) : 'Disabled'} ${button('edit', r.id, 'Edit')}</p>`).join('');
+      document.getElementById('routine-manager').showModal();
+      return;
+    }
+    if (action === 'edit' || action === 'add') { document.getElementById('routine-manager').close(); openEditor(id); return; }
     const clickedId = control.closest('[data-instance-id]')?.dataset.instanceId;
     view = readView();
     const item = [...view.instances, ...view.skipped].find(i => i.routineId === id && i.id === clickedId);
     if (!item) throw new Error('The day or routine changed. Please use the refreshed Today card.');
+    if (action === 'skip') repository.setDateSkip(view.state.timezone, item.id, true);
     if (action === 'restore') repository.setDateSkip(view.state.timezone, item.id, false);
     if (['done', 'minimum', 'undo'].includes(action)) repository.manualDone(view.state.timezone, item.id, action === 'undo' ? null : action === 'minimum' ? 'minimum' : 'complete');
     if (action === 'start') {
@@ -197,4 +203,20 @@ window.addEventListener('storage', renderDailyRoutines);
 window.addEventListener('focus', renderDailyRoutines);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDailyRoutines(); });
 window.setInterval(() => { if (!document.hidden && root.closest('.view')?.classList.contains('active')) renderDailyRoutines(); }, 30000);
+renderDailyRoutines();
+
+globalThis.getTodayRoutineAction = group => {
+  if (!view || view.browsingHistory) return null;
+  const candidates = [...list.querySelectorAll('.daily-routine-card')];
+  const card = candidates.find(el => el.closest('section')?.getAttribute('aria-label') === group && el.querySelector('[data-routine-action="start"], [data-routine-action="done"]'));
+  if (!card) return null;
+  const item = view.instances.find(item => item.id === card.dataset.instanceId);
+  const control = card.querySelector('[data-routine-action="start"], [data-routine-action="done"]');
+  return { title: `Next: ${view.state.links[item.id]?.stepTitle || item.routine.title}`, task: item.routine.title, focusLinked: control.dataset.routineAction === 'start', sub: scheduleLabel(item.routine), button: control.textContent };
+};
+globalThis.startTodayRoutineAction = () => {
+  renderDailyRoutines();
+  const group = globalThis.getTodayRoutineAction('Now') ? 'Now' : 'Anytime';
+  list.querySelector(`section[aria-label="${group}"] [data-routine-action="start"], section[aria-label="${group}"] [data-routine-action="done"]`)?.click();
+};
 renderDailyRoutines();
