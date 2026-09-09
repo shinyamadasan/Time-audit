@@ -680,3 +680,111 @@ label-based attribution and aggregation remain unchanged; no source events were 
 U. The LOW generic Start versus guided-action visual dominance finding remains deferred to dogfood.
 
 Final bounded results: 90/90 targeted Chromium tests passed; 26/26 relevant execution/startup smoke tests passed. Runtime parity passes for all 40 files; node --check and git diff --check pass. No tests skipped within these runs. Index remains empty and HEAD unchanged.
+
+
+## Phase 6D — Today Surface Simplification V1 · 2026-09-09
+
+### Milestone handoff (A–AS)
+
+| Requested item | Result |
+|---|---|
+| A. Final status | Implemented, validated, uncommitted candidate for one independent milestone review. |
+| B. Base/main | Fetched origin/main first; exact match: `4f430a5787c519447867910eed17037f77775d4a`. No reconciliation required. |
+| C. Worktree/branch | Fresh registered `C:\Users\Admin\Desktop\Vibe code\Time audit app - today-simplification-v1`; `feat/today-simplification-v1`. |
+| D. Hierarchy | Before: guided action + hero + priority/routine Start controls + logging/measurement/attention cards. After: Up Next → commitments → conditional Needs You → So Far → intentional secondary actions. |
+| E. Up Next | Existing `todayGuidedAction()` remains authoritative; known action has one dominant Start/Done; free-form input is available directly on empty days or through Choose something else. |
+| F. Execution states | Remote ownership, Focus, break, away, tracker, Now routine, priority, Anytime routine, free-form retain their existing precedence. Native controls live inside the single execution shell. Focus overlay, HUD, heartbeat and takeover semantics are unchanged. |
+| G. Routine discovery | Replaced DOM queries/clicks with eligible occurrence lookup and `performRoutineAction()`. Every launch rereads current state and checks routine/date identity. No storage or completion-model redesign. |
+| H. Routine regressions | 14 existing daily-routine browser cases plus Phase 6D/guided-loop tests pass: collapsed/unrendered Now and Anytime actions, Learning IDs, manual minimum/Done/undo, full-session Focus, imported Workout, reload, dates, errors. |
+| I. Commitments | One region contains priorities and a two-row compact routine projection, with intentional details. |
+| J. Priorities | Add/remove and row Start are behind Edit; existing tracked minutes, explicit Done, cap, IDs, tombstones, and convergence remain. Ordinary tracking does not set Done. |
+| K. Routines | Current/due rows are bounded; full Now/Next/Later/Anytime/Done/skipped lists expand intentionally. Manage routines remains visible. Workout never receives a fabricated manual Done action. |
+| L. Open/no-plan | Neutral open-day state and optional priorities; free-form execution works immediately without preparation. Empty routines show no setup advertisement. |
+| M. Needs You | One conditional region: leading actionable item plus count/expand. Qualifying gap, configured sleep, ambiguous routine evidence, or contextual routine error. Empty region is not displayed. |
+| N. Missing time | Uses the existing qualifying interval and original anchors. Fix opens exact prefilled retro times; optional quick corrections are expandable. No activity is inferred. |
+| O. Acknowledged unknown | Existing saved `reviews[date].unloggedOk` suppresses Today gap attention for that date. Review save updates the surface immediately. Raw gaps remain unchanged in Timeline/Review. |
+| P. Sleep | One configured reminder in Needs You; duplicate default pill hidden. Logging, snooze, existing records/settings remain; logging/snooze refresh attention immediately. Missing sleep without a due configured reminder creates no attention item. |
+| Q. So Far | Existing deep minutes and waste + distraction minutes, or “No time recorded yet.” Details opens Review. Deep is not renamed Focus. |
+| R. Default metrics removed | Health duplication, Pulse/Signal, ratios, detailed categories, streak tiles, wallet points, yesterday/distraction interpretations, and inline timeline summaries. Calculations remain. |
+| S. Analytics destinations | Existing Review, Reflect, Week, and Timeline/details remain; no analytics backend added. |
+| T. Routine Prompt | Retrospective shortcuts moved under Log time; independent of scheduled-routine completion. |
+| U. Daily Basics | All eight existing shortcuts preserved under Log time: Sleep, Eat, Cooking, Dishes, Hygiene, Walk, Commute, Exercise. |
+| V. Same-as-last | Preserved under Log time with its existing explicit “log + start” behavior. Tested distinct from Away state. |
+| W. Yesterday | Quiet secondary review link, conditional on an existing unresolved prior-day review; disappears when reviewed. No preparation claim. |
+| X. Timeline | One button opens the detailed timeline directly. Date browsing, gaps, nested browser data, recurring blocks, edit/correction and merged identities remain. |
+| Y. Recent Entries | Parity audit found direct delete controls worth retaining. Kept under Timeline → Entry actions; Past block also available under Log time. |
+| Z. Focus Wallet | Header secondary menu opens existing wallet/spending UI; scoring/debt/redemptions/persistence unchanged and tested. |
+| AA. Accountability | Existing buddy card is behind a dedicated secondary destination; no nudge inbox/scoring/lifecycle added. |
+| AB. Removed/collapsed | Separate hero authority, header Focus, always-open priority editor, full routine cards, full basics grid, standalone Routine Prompt/repeat, independent sleep pill, large closeout cards, default analytics and inline history. Legacy Details preference stored API remains without global expansion. |
+| AC. Conditional sections | Needs You only with candidates; yesterday link only while useful; full routine list only when occurrences/skips exist; detail destinations only when opened; active execution replaces idle input. |
+| AD. Measured heights | Prepared fixture: 390px width, 1766 → 849px (51.9% shorter); 1280px width, 1426 → 753px (47.2% shorter). Measured `#view-today` bounding boxes, including existing view padding; identical date/data before and after. Above the aspirational 450–650px phone estimate, but within the requested proportional reduction. |
+| AE. Phone inspection | Actual 390px screenshots inspected: main action appears immediately, one strong Start, no horizontal overflow, 44px main action, usable secondary controls, absent empty attention, long titles/routines bounded by row count, Focus controls usable. |
+| AF. Desktop inspection | Actual 1280px screenshots inspected: single dominant execution region, compact commitments, quiet metrics, no duplicated hero; active Focus remains unchanged and usable. |
+| AG. Decision fatigue | Prepared-day next action is visibly explicit. Five-second comprehension is a human dogfood target, not a measured user-study result. |
+| AH. Entry points | Representative prepared fixture previously exposed 6 execution controls: guided Start, header Focus, hero Start, priority-next Start, two row Starts. Now 1 dominant Start plus 1 quiet Focus-mode entry in the same component. Routine details/alternative work are intentional access. |
+| AI. Advisor compatibility | Existing Up Next space can host a future explanation/action. No AI, Advisor card, model, or inference was added. |
+| AJ. Files | Runtime: `index.html`, `style.css`, `daily-routines-ui.js`, their three `www/` mirrors. Tests: new `today-simplification.spec.js`; adapted guided-loop, routines, priorities, Plan Tomorrow and smoke specs. Documentation: CODEMAP, CHANGELOG, TEST_REPORT. |
+| AK. Targeted tests | 17 new Phase 6D Chromium cases, including parameterized execution states, compact routines, unknown-time/sleep handling, metrics, repeat/correction access, rendered before/after and stress screenshots. |
+| AL. Existing regressions | Guided loop 18; routines 14; priorities 27; Plan Tomorrow 16; Focus recovery 20; Learning 78; smoke 70; install interruption 9. Underlying npm model/adapter/sync tests also pass. |
+| AM. npm test | Passed twice; full retained log: `test-results/phase6d-npm.log`. One existing opt-in lower-case-drive control proof skipped by its environment gate (`CROSS_REPO_COMPAT_CONTROL_PROOF=1`); no failed tests. |
+| AN. Chromium | 269 unique affected-surface cases passed across final 141-case Today/Review/smoke run and 128-case source/Focus run. Earlier failures exposed stale UI selectors plus a real post-Review refresh defect; both repaired and verified. |
+| AO. Runtime/static | `runtime-mirror --check`: 40-file closure byte-identical. `npm run lint`: 0 errors, 29 warnings in unchanged files. `node --check`: touched JS/specs and all 3 extracted inline scripts pass. `git diff --check` passes. |
+| AP. Git state | HEAD remains the base; branch contains only unstaged/untracked milestone changes. No staged changes, commits, pushes or merges. |
+| AQ. Safety | Only requested worktree edited. Source/protected worktrees unchanged. No deployment, production Firebase write, real Obsidian write, or synthetic input against the active desktop. Browser tests use local fixtures and Firebase stubs; sync tests use temporary fixtures. |
+| AR. Remaining risks | Unknown acknowledgement is date-wide and therefore also suppresses later gaps that day; this honors existing semantics, not interval-scoped storage. Hidden analytics remain computed, so this is presentation reduction rather than a performance redesign. Full routine/timeline detail can still be long by intent. Existing dependency peer conflict required cached `npm ci --ignore-scripts --offline --legacy-peer-deps`; manifests/lockfile unchanged. |
+| AS. Physical/dogfood | Still needs independent review, real phone touch/scroll checks, actual cross-device/HUD dogfood, and five-second next-action comprehension assessment. Headless screenshots do not establish physical-device or human comprehension results. |
+
+### Reproduction
+
+```text
+npm test
+npx playwright test tests/today-simplification.spec.js tests/plan.spec.js tests/guided-measurement-loop.spec.js tests/smoke.spec.js tests/install-interruption.spec.js --workers=3
+npx playwright test tests/daily-routines-ui.spec.js tests/plan-tomorrow-ui.spec.js tests/focus-reload-recovery.spec.js tests/learning-plan-ui.spec.js --workers=3
+node scripts/runtime-mirror.mjs --check
+npm run lint
+git diff --check
+```
+
+Screenshots (local verification artifacts, ignored by Git):
+
+- `test-results/phase6d/before-390.png`, `after-390.png`
+- `test-results/phase6d/before-1280.png`, `after-1280.png`
+- `test-results/phase6d/long-commitments-390.png`, `long-commitments-1280.png`
+- `test-results/phase6d/focus-390.png`, `focus-1280.png`
+
+### Chaos coverage mapping
+
+| Required scenarios | Evidence |
+|---|---|
+| 1, 2, 14, 15, 33: planned/no priority, open/unprepared, three priorities | Guided loop, priority suite, Phase 6D known/free-form case. |
+| 3–7: Focus, tracker, break, away, remote | Five explicit Phase 6D state cases; Focus reload/ownership suites; smoke takeover. |
+| 8–13, 34: Now/several/no routines, Learning/manual/Workout, many routines | DOM-removal regression, bounded two-row tests, existing routine/Learning/imported Workout cases. |
+| 16–22: gap, acknowledged/no gap, due/not-due sleep, multiple/empty attention | Phase 6D attention cases and actual Review save regression; sleep log/snooze resolution. |
+| 23–25: productive/waste/no time | Parameterized factual So Far cases. |
+| 26–27: yesterday unreviewed/reviewed | Prior-day closeout/date-cutoff priority tests, linked review/save state. |
+| 28–31: basics/repeat/raw timeline/correction | Phase 6D intentional-access and repeat cases; smoke logging/edit/delete/merge suites. |
+| 32: many entries | 80-entry stress fixture with detailed timeline closed by default; recurring/nested/merged smoke cases. |
+| 35: no Learning activity | Guided test: unscheduled Learning plan creates no daily obligation. |
+| 36–37: active Focus + gap/sleep | Stress fixture retains qualifying history gap and due sleep behind uninterrupted active Focus. |
+| 38–39: phone/desktop | Measured actual renders and inspected screenshots at 390 and 1280px, including long commitments and Focus. |
+| 40: Advisor absent | Phase 6D assertion plus runtime diff inspection; no AI source added. |
+
+### Explicit self-review
+
+1. One visual execution authority: Up Next shell; no default second generic Start.
+2. Free-form work remains directly usable on unprepared/empty days and intentionally selectable otherwise.
+3. Manual, Focus, Learning, and source-backed routine paths retain their distinct semantics.
+4. DOM-based action discovery removed; executable behavior tested after removing rendered routine cards.
+5. Tracking does not set priority Done or manually complete source-backed routines.
+6. Retrospective basics/repeat actions remain separate from Away timer actions.
+7. Saved unknown-time acknowledgement removes attention while raw gaps stay unknown.
+8. No plan is required to execute.
+9. No routine is required; no primary setup advertisement appears.
+10. Active Focus/tracker/break/away/remote state replaces idle execution input; reminder overlays remain passive.
+11. Timeline opens directly with one intentional action.
+12. Review remains reflection/analysis and delegates preparation to the one Plan Tomorrow editor.
+13. Source models, stores, identity/provenance, ownership, clipping, gap calculation and sync contracts unchanged.
+14. Rendered default phone height is 51.9% lower in the representative prepared fixture.
+15. Default removes competing logging/analytics/history surfaces rather than simply repositioning them.
+
+No independent review was performed in this implementation session. Leave this candidate uncommitted and unpushed.

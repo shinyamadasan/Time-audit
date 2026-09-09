@@ -888,8 +888,8 @@ regenerates live occurrences. Runtime mirrors are managed by the existing mirror
 `todayGuidedAction()` owns Today’s deterministic execution cascade: remote/local execution,
 due routines, unfinished priorities, anytime routines, then ordinary work. `focusTodayAction()`
 hands the selected label to Focus; scheduled Learning/Focus uses the existing routine controls
-and source linkage. `getTodayRoutineAction()` projects available occurrence controls;
-`startTodayRoutineAction()` revalidates before activating one. Definitions live in the
+and source linkage. `getTodayRoutineAction()` projects eligible occurrence model state;
+`startTodayRoutineAction()` revalidates through the shared routine action handler. Definitions live in the
 `routine-manager` dialog; occurrences retain completion, skip, and correction actions on Today.
 
 `renderTodayPlan()` calls the existing plan/preparation readers and displays Priorities;
@@ -905,3 +905,28 @@ to Today after the existing semantic and Ledger writes. Focus logging stays fact
 no longer prompts generic work to become Learning work. No data contracts or HUD controls change.
 Tests: `tests/guided-measurement-loop.spec.js` plus existing plan, routine, Learning, Focus,
 recovery, and smoke suites. Runtime mirrors remain managed by `scripts/runtime-mirror.mjs`.
+
+
+## Today Surface Simplification V1 (Phase 6D)
+
+`initializeTodaySurfaces()` mounts the existing activity hero inside `up-next` and moves
+retrospective controls into `log-time-details`, timeline/corrections into `timeline-details`,
+and passive buddy information into `accountability-details`. `todayGuidedAction()` remains
+the execution authority. `renderTodayActionStrip()` chooses the existing state controls
+within that single shell; a presentation observer keeps it current after timer UI changes.
+
+`renderTodayPlan()` retains all plan operations behind intentional Edit. Daily routines
+show two relevant compact rows and an expandable full list. `routineAction()` derives
+eligible Now/Anytime actions from the existing model; `performRoutineAction()` is the shared
+identity-checked path for both Up Next and routine controls, independent of rendered cards.
+
+`renderNeedsYou()` combines one qualifying gap, configured sleep reminder, ambiguous routine
+evidence, and routine source/write errors. Empty attention is hidden. `getGapRecoveryCandidate()`
+respects the existing date-scoped Review `unloggedOk`; raw gap calculations are unchanged.
+Review save and sleep resolution refresh attention immediately. `renderTodayHealth()` also
+projects the existing deep/waste semantics into the quiet `so-far-summary`.
+
+The legacy Details preference API remains, without revealing unrelated default surfaces.
+Primary navigation, timer/Focus internals, repositories, and measurement contracts are unchanged.
+Tests: `tests/today-simplification.spec.js` and affected guided-loop, routine, priority,
+preparation, Focus recovery, Learning, smoke, and install-interruption suites.

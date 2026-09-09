@@ -161,16 +161,14 @@ function planForDate(dateKey, items) {
 }
 
 async function addItem(page, task, when = '') {
+  if (!(await page.locator('#plan-strip').getAttribute('class')).includes('editing')) await page.locator('#plan-strip').getByRole('button', {name:'Edit',exact:true}).click();
   if (when) await page.locator('#plan-when').fill(when);
   await page.locator('#plan-task').fill(task);
   await page.locator('#plan-strip').getByRole('button', { name: 'Add' }).click();
 }
 
 async function openTodayDetails(page) {
-  const toggle = page.locator('#today-details-toggle');
-  if ((await toggle.getAttribute('aria-pressed')) !== 'true') {
-    await toggle.click();
-  }
+  await page.evaluate(() => { document.getElementById('timeline-details').open = true; document.querySelector('#timeline-content > details').open = true; });
 }
 
 test('an unprepared day allows optional priorities without a ceremony', async ({ page }) => {
@@ -182,8 +180,8 @@ test('an unprepared day allows optional priorities without a ceremony', async ({
 
 test('today action strip starts work when no target exists', async ({ page }) => {
   await openApp(page);
-  await expect(page.locator('#today-action-title')).toHaveText('What would you like to work on?');
-  await page.locator('#today-action-primary').click();
+  await expect(page.locator('#hero-context-prompt')).toHaveText('What are you working on?');
+  await page.locator('#hero-task-input').click();
   await expect(page.locator('#hero-task-input')).toBeFocused();
 });
 
@@ -203,6 +201,7 @@ test('WIP cap holds at 3 and removing one frees a slot (no deadlock)', async ({ 
   await expect(page.locator('.plan-full')).toContainText('3 of 3');
 
   // Removing one must reopen the add row — this is the deadlock guard.
+  if (!(await page.locator('#plan-strip').getAttribute('class')).includes('editing')) await page.locator('#plan-strip').getByRole('button', {name:'Edit',exact:true}).click();
   await page.locator('.plan-item').first().locator('.plan-remove').click();
   await expect(page.locator('.plan-item')).toHaveCount(2);
   await expect(page.locator('.plan-add')).toHaveCount(1);
@@ -214,12 +213,12 @@ test('WIP cap holds at 3 and removing one frees a slot (no deadlock)', async ({ 
 test('today action strip starts the next planned item', async ({ page }) => {
   await openApp(page, { plans: planFor([{ task: 'Write report' }]) });
 
-  await expect(page.locator('#today-action-title')).toHaveText('Next: Write report');
+  await expect(page.locator('#today-action-title')).toHaveText('Write report');
   await page.locator('#today-action-primary').click();
 
   await expect(page.locator('#hero-task-name')).toHaveText('Write report');
-  await expect(page.locator('#today-action-title')).toHaveText('Working now');
-  await expect(page.locator('#today-action-sub')).toHaveText('Write report');
+  await expect(page.locator('#up-next')).toHaveAttribute('data-state','tracker');
+  await expect(page.locator('#hero-task-name')).toHaveText('Write report');
 });
 
 test('today details report plan progress instead of daily goal', async ({ page }) => {
@@ -294,6 +293,7 @@ test('tracked minutes are derived from real entries, not the checkbox', async ({
 test('one-tap start launches the timer with the planned task', async ({ page }) => {
   await openApp(page, { plans: planFor([{ task: 'Write report' }]) });
 
+  await page.locator('#plan-strip').getByRole('button', {name:'Edit',exact:true}).click();
   await page.locator('.plan-item').first().locator('.plan-start').click();
 
   await expect(page.locator('#hero-task-name')).toHaveText('Write report');
@@ -303,8 +303,7 @@ test('one-tap start launches the timer with the planned task', async ({ page }) 
   expect(await page.evaluate(() => currentTask)).toBe('Write report');
   await expect(page.locator('.plan-item').first().locator('.plan-status')).toHaveText('In progress');
   await expect(page.locator('.plan-item').first()).toHaveClass(/in-progress/);
-  await expect(page.locator('.plan-next')).toHaveText('Working now');
-  await expect(page.locator('.plan-next')).toBeDisabled();
+  await expect(page.locator('#up-next')).toHaveAttribute('data-state','tracker');
 });
 
 test('start next launches the first unstarted plan item', async ({ page }) => {
@@ -324,9 +323,9 @@ test('start next launches the first unstarted plan item', async ({ page }) => {
 
   await expect(page.locator('.plan-item').nth(0).locator('.plan-status')).toHaveText('Logged');
   await expect(page.locator('.plan-item').nth(1).locator('.plan-status')).toHaveText('Not started');
-  await expect(page.locator('.plan-next')).toHaveText('Start next');
+  await expect(page.locator('#today-action-primary')).toHaveText('Start');
 
-  await page.locator('.plan-next').click();
+  await page.locator('#today-action-primary').click();
 
   await expect(page.locator('#hero-task-name')).toHaveText('Gym');
   await expect(page.locator('.plan-item').nth(1).locator('.plan-status')).toHaveText('In progress');
@@ -353,6 +352,7 @@ test('plan survives a reload and drives the daily target', async ({ page }) => {
 test('removed items are tombstoned so sync cannot resurrect them', async ({ page }) => {
   await openApp(page, { plans: planFor([{ task: 'Write report' }, { task: 'Gym' }]) });
 
+  if (!(await page.locator('#plan-strip').getAttribute('class')).includes('editing')) await page.locator('#plan-strip').getByRole('button', {name:'Edit',exact:true}).click();
   await page.locator('.plan-item').first().locator('.plan-remove').click();
   await expect(page.locator('.plan-item')).toHaveCount(1);
 
@@ -576,13 +576,13 @@ test('close day CTA opens the review loop and marks today closed after save', as
     nowTs
   });
 
-  await expect(page.locator('#closeout-card')).toBeVisible();
+  await expect(page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Review',exact:true})).toBeVisible();
   await expect(page.locator('#closeout-title')).toHaveText('Close day');
   await expect(page.locator('#closeout-stats')).toContainText('1/2 plan');
   await expect(page.locator('#closeout-stats')).toContainText('45m deep');
   await expect(page.locator('#closeout-stats')).toContainText('20m waste');
 
-  await page.locator('#closeout-card').click();
+  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Review',exact:true}).click();
   await expect(page.locator('#review-overlay')).toHaveClass(/open/);
   await expect(page.locator('#rv-closeout-summary')).toBeVisible();
   await expect(page.locator('#rv-closeout-summary')).toContainText('Closeout summary');
@@ -605,6 +605,7 @@ test('close day CTA opens the review loop and marks today closed after save', as
   await expect(page.locator('#closeout-action')).toHaveText('Edit review');
   await expect(page.locator('#closeout-stats')).toContainText('blank ok');
   expect(await page.evaluate(() => reviews[planTodayKey()].unloggedOk)).toBe(true);
+  await expect(page.locator('#gap-recovery')).toBeHidden();
 });
 
 test('close day CTA waits until the configured closeout time', async ({ page }) => {
@@ -617,7 +618,7 @@ test('close day CTA waits until the configured closeout time', async ({ page }) 
   });
 
   await expect(page.locator('#closeout-card')).toBeHidden();
-  await expect(page.locator('#today-action-title')).not.toHaveText('Close the loop');
+  await expect(page.locator('#up-next')).not.toHaveText('Close the loop');
 });
 
 test('morning closeout time treats yesterday as due after the graveyard cutoff', async ({ page }) => {
@@ -629,11 +630,11 @@ test('morning closeout time treats yesterday as due after the graveyard cutoff',
     nowTs
   });
 
-  await expect(page.locator('#missed-closeout-card')).toBeVisible();
+  await expect(page.locator('#yesterday-review-link')).toBeVisible();
   await expect(page.locator('#missed-closeout-title')).toHaveText("Yesterday wasn't closed");
   await expect(page.locator('#closeout-card')).toBeHidden();
 
-  await page.locator('#missed-closeout-card').click();
+  await page.locator('#yesterday-review-link').click();
   await expect(page.locator('#review-overlay')).toHaveClass(/open/);
   await expect(page.locator('#rv-plan-vs-actual')).toContainText('Scribe shift');
   expect(await page.evaluate(() => _reviewDateKey)).toBe('2026-07-15');
@@ -650,7 +651,7 @@ test('morning closeout time does not nag before the graveyard cutoff', async ({ 
 
   await expect(page.locator('#missed-closeout-card')).toBeHidden();
   await expect(page.locator('#closeout-card')).toBeHidden();
-  await expect(page.locator('#today-action-title')).not.toHaveText('Close yesterday first');
+  await expect(page.locator('#up-next')).not.toHaveText('Close yesterday first');
 });
 
 test('missed closeout reviews yesterday without changing today priorities', async ({ page }) => {
@@ -662,12 +663,12 @@ test('missed closeout reviews yesterday without changing today priorities', asyn
     nowTs
   });
 
-  await expect(page.locator('#missed-closeout-card')).toBeVisible();
+  await expect(page.locator('#yesterday-review-link')).toBeVisible();
   await expect(page.locator('#missed-closeout-title')).toHaveText("Yesterday wasn't closed");
   await expect(page.locator('#missed-closeout-stats')).toContainText('1/2 plan');
   await expect(page.locator('#missed-closeout-stats')).toContainText('1h deep');
 
-  await page.locator('#missed-closeout-card').click();
+  await page.locator('#yesterday-review-link').click();
   await expect(page.locator('#review-overlay')).toHaveClass(/open/);
   await expect(page.locator('#rv-date-label')).not.toHaveText('');
   await expect(page.locator('#rv-plan-vs-actual')).toContainText('Write report');
@@ -707,6 +708,7 @@ test('ping offers the unfinished plan, and logging through it feeds auto-verify'
   });
 
   // The ping only fires mid-block, so start one first.
+  await page.locator('#plan-strip').getByRole('button', {name:'Edit',exact:true}).click();
   await page.locator('.plan-item').first().locator('.plan-start').click();
   await expect(page.locator('#activity-hero')).toHaveClass(/tracking/);
 
@@ -728,6 +730,7 @@ test('ping offers the unfinished plan, and logging through it feeds auto-verify'
 test('ping asks for a category rather than guessing one for a never-logged task', async ({ page }) => {
   await openApp(page, { plans: planFor([{ task: 'Brand new task' }]) });
 
+  await page.locator('#plan-strip').getByRole('button', {name:'Edit',exact:true}).click();
   await page.locator('.plan-item').first().locator('.plan-start').click();
   await page.evaluate(() => openQuickLog());
   await page.locator('.ql-plan-chip').first().click();
