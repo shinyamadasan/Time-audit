@@ -274,10 +274,12 @@ function renderNextAction(action) {
 
 function renderExcludedEvidenceNotice(analysis) {
   if (!analysis.excludedEvidence?.length) return '';
-  const ledgerCount = analysis.excludedEvidence.filter(item => item.reason.startsWith('life-ledger')).length;
+  const ledgerCount = analysis.excludedEvidence.filter(item => item.reason === 'life-ledger-unavailable' || item.reason === 'life-ledger-tombstoned').length;
+  const scheduleCount = analysis.excludedEvidence.filter(item => item.reason === 'life-ledger-schedule-assumption').length;
   const futureCount = analysis.excludedEvidence.filter(item => item.reason === 'future').length;
   const parts = [];
   if (ledgerCount) parts.push(`${ledgerCount} Life Ledger evidence link${ledgerCount === 1 ? '' : 's'} unavailable or tombstoned`);
+  if (scheduleCount) parts.push(`${scheduleCount} scheduled Life Ledger item${scheduleCount === 1 ? '' : 's'} not counted as confirmed evidence`);
   if (futureCount) parts.push(`${futureCount} future evidence record${futureCount === 1 ? '' : 's'}`);
   return `
     <section class="cap-career-section cap-career-subtle">

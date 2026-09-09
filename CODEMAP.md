@@ -3,6 +3,14 @@
 
 ---
 
+## Evidence semantics
+
+[Canonical evidence contract V1](contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md) defines
+accounting day, gap versus unknown, resolution, provenance, measured versus estimated,
+question-specific fitness, quarantined semantics, current deviations and the next Focus
+truth fix. `capability-career-analytics.js:currentEvidenceScope()` excludes explicit
+Ledger schedule assumptions from current capability proof; source records remain intact.
+
 ## FILE OVERVIEW
 
 | Block | Lines | Notes |

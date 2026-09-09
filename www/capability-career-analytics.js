@@ -77,6 +77,8 @@ function currentEvidenceScope(profile, now, options = {}) {
       const event = ledgerEvents.get(evidence.lifeLedgerEventId);
       if (!event) reason = 'life-ledger-unavailable';
       else if (event.tombstone?.active) reason = 'life-ledger-tombstoned';
+      else if (event.payload?.captureMethod === 'scheduled_template'
+        || event.provenance?.captureMethod === 'scheduled_template') reason = 'life-ledger-schedule-assumption';
     }
     if (reason) excluded.push({ evidence, reason });
     else current.push(evidence);

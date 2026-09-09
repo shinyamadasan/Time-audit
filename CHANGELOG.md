@@ -1602,3 +1602,20 @@ Candidate remains uncommitted and unpushed for one independent milestone review.
 - Added three actual keyboard selection/clear/Tab cases and historical mouse save/restore
   coverage. Review suite: 36 passed; directly relevant Review regressions: 14 passed.
 - Candidate remains uncommitted and unpushed for targeted re-review.
+
+## Evidence contract V1 - candidate (feat/evidence-contract-v1)
+changed:
+  - Added contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md as canonical semantic authority, with CODEMAP and Ledger confidence pointers.
+  - currentEvidenceScope() excludes explicit scheduled_template Ledger assumptions from current capability proof; source/profile records remain intact.
+  - Mirrored the two-line production guard in www/capability-career-analytics.js.
+tests: two regression cases in test.js (three provenance variants and three positive capture variants); full npm test passes.
+limits: no universal runtime fitness gate; Focus detection/repair and other documented deviations remain deferred. Existing capability outputs can change for schedule-backed mappings, with no new UI or user burden.
+status: uncommitted candidate for independent review; TASKS.md unchanged because this is a direct user milestone, not a queued task.
+
+## Evidence contract V1 - bounded notice review fix
+changed:
+  - renderExcludedEvidenceNotice() counts explicit unavailable/tombstoned reasons separately from schedule assumptions on the existing notice surface; runtime mirror updated.
+  - Added six rendered-browser regression cases for zero, single/multiple schedule, unavailable, tombstoned and mixed exclusions.
+unchanged: currentEvidenceScope(), evidence filtering, source/Ledger records and all later truth-fix milestones.
+status: uncommitted and unpushed; required Medium finding addressed, pending targeted re-review.
+deferred Low findings: explicit unloggedOk missingness wording; accounting boundaries versus sleep/wake/planning boundaries.
