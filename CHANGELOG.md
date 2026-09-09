@@ -1564,3 +1564,11 @@ The approved architecture and low-severity visual hierarchy remain unchanged. No
 - Validation and A–AS milestone handoff: see the Phase 6D entry in TEST_REPORT.md.
 - No TASKS.md status changed: this milestone was directly authorized by the user, outside the
   historical completed task queue. No commit, push, merge, deployment, or independent review performed.
+
+## Phase 6D.1 - Today action visibility polish (uncommitted candidate)
+changed:
+  - style.css and www/style.css: Today-scoped primary, neutral secondary, and underlined tertiary treatments; hover, pressed, focus-visible and disabled states. No layout or application logic changes.
+  - tests/today-simplification.spec.js: Phase 6D height-preservation baseline and idle/missing-time/focus-ring screenshots.
+tests: 97 focused browser tests passed; runtime mirror and static checks passed.
+blockers: none
+deviations: explicit user brief is the contract; TASKS.md left unchanged. No commit or push.
