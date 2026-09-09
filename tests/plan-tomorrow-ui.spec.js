@@ -132,7 +132,7 @@ test('normal plan includes live routine details, adds one-off, and persists Read
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
-  await expect(page.locator('#toast')).toContainText('Tomorrow is ready');
+  await expect(page.locator('#toast')).not.toHaveClass(/show/);
   const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
   expect(stored.items.filter(item => !item.deleted).map(item => item.task)).toEqual(['Ship report']);
   expect(stored.items[0].updatedBy).toBe('device-test');
@@ -424,17 +424,19 @@ test('two real clients converge through transaction retry and inbound synchroniz
   }
 });
 
-test('nightly Review uses the same preparation confirmation contract', async ({ page }) => {
+test('Review delegates preparation to Plan Tomorrow and saves independently', async ({ page }) => {
   await openApp(page, { routines: routineState([routine()]) });
   await page.locator('[data-pt-action="close"]').first().click();
   await page.evaluate(() => openReview('2026-09-08'));
-  await expect(page.locator('#rv-plan-routines')).toContainText('1 routine included');
-  await page.locator('#rv-plan-task').fill('Review priority');
-  await page.locator('#rv-plan-add').getByRole('button', { name: 'Add', exact: true }).click();
-  await page.locator('#review-overlay').getByRole('button', { name: 'Save' }).click();
-  const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target].preparation, TARGET);
-  expect(preparation).toMatchObject({ targetDate: TARGET, lastPreparedMode: 'normal' });
-  expect(preparation.routineInstanceIds).toEqual(['["routine-1","2026-09-09"]']);
+  await page.locator('#rv-win').fill('Saved reflection');
+  await page.getByRole('button', { name: 'Prepare tomorrow', exact: true }).click();
+  await page.locator('#plan-tomorrow-confirm').click();
+  await expect(page.locator('#review-overlay')).toHaveClass(/open/);
+  await expect(page.locator('#rv-win')).toHaveValue('Saved reflection');
+  await expect(page.locator('#rv-tomorrow-status')).toContainText('Tomorrow ready');
+  const before = await page.evaluate(() => JSON.stringify(plans));
+  await page.locator('#review-overlay').getByRole('button', { name: 'Save', exact: true }).click();
+  expect(await page.evaluate(() => JSON.stringify(plans))).toBe(before);
 });
 
 test('Review distinguishes done early and removed without calling unfinished work skipped', async ({ page }) => {

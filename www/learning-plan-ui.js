@@ -683,6 +683,7 @@ function loadLearningPlansForFocusOutcome(outcome) {
 function clearLearningPlanFocusOutcome() {
   pendingFocusOutcome = null;
   focusOutcomeBusy = false;
+  window.showView?.('today');
 }
 
 function completePendingFocusOutcome(target) {

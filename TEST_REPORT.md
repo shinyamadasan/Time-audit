@@ -545,3 +545,138 @@ manual persistence, IDs, schedule modes, timezone, and Phase 5 machinery unchang
 Protected adapter/stabilization worktrees remain clean. No push/merge/deploy,
 Firebase writes, real Obsidian writes, or Meal/openGym modifications. Real-device
 checks and the previously documented V1 limitations remain deferred.
+
+
+## Phase 6C — Guided Measurement Loop V1 · 2026-09-08
+
+A. Status: candidate implemented for independent milestone review; uncommitted and unpushed.
+B. Base/main: fetched origin/main, 471c041c295bc0628cd43800b78a89c455a3cea7 (expected hash matched).
+C. Worktree: C:/Users/Admin/Desktop/Vibe code/Time audit app - guided-measurement-loop-v1;
+branch feat/guided-measurement-loop-v1, registered from origin/main.
+
+| Requested area | Result |
+| --- | --- |
+| D–E. Hierarchy and daily loop | Today owns execution. Plan Tomorrow and Review are directly accessible secondary actions. Execution records continue through the existing timer/Focus/source paths. Review contrasts intent and factual activity. |
+| F. Today primary action | Deterministic precedence: remote execution, local Focus, break/away/tracking, Now routine, unfinished priority, anytime routine, generic work. Missing plans, gaps, and yesterday’s Review never displace work. |
+| G. Plan Tomorrow | Existing normal/Rescue, live recurring preview, skip/restore, optional three priorities and open-day confirmation retained. No automatic Learning suggestion merely because a Learning Plan exists. |
+| H. Review | Saves without tomorrow preparation; canonical preparation link preserves the reflection draft on return. Existing legacy tomorrow reflection text preserved. Planned outcomes and unplanned tracked activity shown. |
+| I–L. Prepared states | Priorities, routine-only, intentional-open and Rescue days remain executable without Morning Startup. No-plan day offers ordinary work and optional priorities. |
+| M–N. Terminology/routines | Priorities replaces Today Plan in the active user interface. Routine occurrences stay on Today; definitions, disabled routines and editing move behind Manage routines. Date skip/restore preserves the existing contract. |
+| O–Q. Learning/capabilities | Scheduled Learning resolves the pinned next step from Today and retains provenance. No scheduled Learning means no daily Learning obligation. Client work and admin remain ordinary factual work without inferred skill credit. |
+| R–U. Handoff/tracking/Focus/continuity | Priority labels pass directly to ordinary tracking or Focus. Scheduled Focus/Learning retain existing identity and reload paths. Focus for a manual routine carries its label without marking Done. Learning Done/Continue returns to Today after successful semantic/Ledger resolution. Existing Pomodoro break behavior remains. |
+| V–X. Measurement | No storage/model/schema, timestamp, timezone, source-completion, sync-merge, HUD, workout, sleep or Ledger contract changed. Actual time and explicit Done remain separate. Plan-vs-actual and unplanned comparisons retain existing label-based matching; routine/linked Learning labels are included. |
+| Y–AB. Interruptions/toasts | Auto-Review removed; passive Review CTAs remain. Startup no longer opens sleep setup. Eligible sleep reminder is a passive Today button. Setup is explicitly reachable from Settings. Visible Review/Plan Tomorrow/Focus-save success toasts removed; partial/offline saves and errors retained. |
+| AC–AD. Strategic/navigation hierarchy | Life Next becomes Guidance; Career Primary next action becomes Career next step. Learn nav label becomes Learning plans. No Do tab or arbitrary tab deletion. |
+| AE. Decision fatigue | Before: missing-plan/gap/close-yesterday detours and duplicate Review preparation. After: one dominant execution action, one click to start a known priority, one click to Focus the selected work, optional preparation. Human timing targets (5 seconds, 1–3 minutes, Rescue under 60 seconds) require dogfood, not claimed as measured. |
+| AF. Tracking burden | Existing factual sources continue completing linked routines automatically. No extra logging, capability classification, or requirement to account for every minute. Generic Focus no longer asks users to use Learning for work to count. |
+| AG. Files | Runtime: index.html, daily-routines-ui.js, plan-tomorrow-ui.js, learning-plan-ui.js, focus-mode.js, capability-career-ui.js, cross-domain-intelligence-ui.js, and byte-identical www mirrors. Tests: guided-measurement-loop.spec.js plus plan, plan-tomorrow, routines, Learning and smoke regression updates. Documentation: CODEMAP.md, CHANGELOG.md, TEST_REPORT.md. |
+| AM–AN. Git/safety | HEAD stays at the base; nothing staged, committed, pushed, deployed or merged. No production Firebase, real Obsidian vault, unrelated worktree, or synthetic desktop input writes. Tests use local fixtures/stubbed Firebase; npm’s existing test suite uses temporary fake vault fixtures. |
+| AO–AP. Risks/physical checks | Existing Capacitor peer mismatch required npm ci --ignore-scripts --legacy-peer-deps; lockfile unchanged. Physical phone/Android/HUD and whole-day dogfood not performed. Learning semantic outcome still appears in the existing Learning surface, then returns to Today. Routine state remains local-only as before. Label matching is not identity proof. |
+| AQ. Deferred | No Personal Model, personality/skill grading, behavioral inference, adaptive scheduling, optimizer, AI coach, recommendation engine, new capability UI, shared/Wife accountability or Phase 7 work. |
+
+### AH–AL. Verification
+
+- Main Chromium run: 168 passed across plan, Plan Tomorrow, Daily Routines, Learning UI, Focus reload and guided-loop suites.
+- Additional Chromium: 90 passed initially across smoke and strategic-guidance suites; one obsolete generic-Focus-toast assertion failed, was updated to the approved behavior, and passed individually.
+- Follow-up guided suite: 14 passed, including manual routine Focus without semantic completion and responsive widths 390/1280.
+- Final measurement/preparation run and final npm result are recorded below after completion.
+- npm test passed after the initial implementation; final full rerun follows the last measurement change.
+- Runtime mirror check: all 40 runtime closure files byte-identical.
+- ESLint changed modules: zero errors; three existing focus-mode warnings (numberFromStorage, TIMER_SYNC_STAMP_KEY, unused catch variable). Module-aware Plan Tomorrow ESLint passes.
+- node --check: touched runtime JS and extracted classic inline scripts pass. git diff --check passes.
+- Headless screenshots inspected at phone and desktop sizes; stable screenshots use animations disabled. Initial snapshot caught a closing-overlay transition and was replaced with stable captures.
+- Early runs exposed outdated tests for the removed morning ceremony, Review picker, routine Edit buttons, and success toasts. These were migrated to the approved workflows, not skipped. No production integrations were exercised.
+
+### Chaos coverage and practical limits
+
+| Cases from request | Evidence |
+| --- | --- |
+| 1–5. Priority, routine-only, open, Rescue, no-plan | Guided-loop prepared-state matrix; Plan Tomorrow normal/Rescue tests; ordinary admin start without preparation. |
+| 6–8. Due routine, Learning due, no Learning | Guided precedence/skip test; Learning start from Today; unscheduled Learning Plan creates no obligation. |
+| 9, 30. Real client work and ordinary admin | Label handoff and generic tracking/Focus tests; no inference writes added. Meaningful capability growth is intentionally not assessed. |
+| 10–13. Active Focus, ordinary tracking, reload, Learning completion | Focus recovery suite, existing smoke timer tests, new Learning-from-Today Done test, existing Done/Continue/Ledger retry suite. |
+| 14. Strong routine evidence | Existing imported Workout, Learning facts, scheduled Focus receipt, duplicate and ambiguous-source tests retained and passing. |
+| 15–16, 29. Unplanned work and untouched plans | Review contrasts Not done with unplanned debugging time; planned routine work excluded from the unplanned list. No automatic value judgment. |
+| 17. Morning edits | Existing live routine edit/disable/re-enable, date skip, plan add/remove/tombstone, and preparation readiness tests. |
+| 18–19. Independent Review, tomorrow ready | Guided save with no plan; canonical editor return retains draft, shows ready, and subsequent Review save leaves plans unchanged. |
+| 20–22. Sleep/optional prompts, startup/recovery | Guided Focus/Review/sleep eligibility test; sleep setup remains closed after startup; existing smoke and reload restoration tests. |
+| 23–24. Offline and cross-device plan | Existing local failure/offline acknowledgement and real two-browser transaction-convergence tests with stubbed Firebase. |
+| 25–26. Whole day without Learn/planning | Automated execution paths demonstrate no required Learn/configuration/planning visit. A physical whole-day session remains a dogfood check. |
+| 27–28. Over-cap and intentional routine skip | Existing concurrent over-cap preservation tests, three-priority cap, date-scoped skip/restore, and Today skip precedence test. |
+
+Measurement invariants remain in existing plan items/preparation/tombstones, entries, Focus receipts,
+routine state, Learning/Ledger events and imported facts. This milestone does not manufacture
+historical plan versions beyond the existing model or turn missing time into activity.
+
+
+### Final verification completion
+
+- Final npm test: exit 0, all chained suites completed after the final runtime changes.
+- Final guided/preparation Chromium: 31 passed (15 guided + 16 Plan Tomorrow), including the
+  routine/linked-label measurement correction; no failures or skipped tests.
+- Relevant unique Chromium coverage across the recorded runs: 261 tests passed (main suite
+  plus two added guided regressions plus 91 smoke/strategic tests; overlapping reruns excluded).
+- Final runtime mirror: 40/40 byte-identical. Final changed external JS and freshly extracted
+  inline scripts pass node --check. Direct node --check on HTML is unsupported; the corrected
+  validation extracts its script bodies without executing them.
+- ESLint: zero errors; only the three pre-existing Focus warnings described above.
+- Final git diff --check passes; index empty; HEAD remains the fetched base. No commit/push.
+
+
+## Phase 6C — Bounded review fixes · 2026-09-09
+
+A. Fix status: both blockers corrected; existing candidate remains uncommitted.
+B. Worktree: C:/Users/Admin/Desktop/Vibe code/Time audit app - guided-measurement-loop-v1.
+Branch: feat/guided-measurement-loop-v1. Rediscovered base/HEAD:
+471c041c295bc0628cd43800b78a89c455a3cea7. Earlier candidate edits preserved.
+
+C–E. Review: `unplannedHtml` was appended from inside each planned-row callback and after
+the complete list. Removed only the inner append. Existing grouping, label attribution,
+routine/Learning exclusions, classifications, totals and entries are unchanged. Three new
+actual-browser cases use two priorities with zero, one or two unplanned activities. Structural
+selectors prove section/row uniqueness; planned denominator/status and exact entry preservation
+are asserted. Before the fix, both nonempty cases reproduced the three-section defect.
+
+F–K. Install: eligibility previously displayed an optional z-index-400 banner unconditionally,
+above Focus. `installUiBlocked()` / `refreshInstallBanner()` now defer it during initial parsing,
+sign-in, pending/open timer recovery, active/restored Focus, ordinary tracking, break/away,
+remote execution, and first-visit/open onboarding. `pendingInstallPlatform` retains eligibility;
+`deferredPrompt` retains the browser event on the current page. A scoped MutationObserver watches
+class/style changes on the existing surfaces and hides an already-visible banner before paint.
+The native install button also checks the gate. Visibility is reconsidered after blockers clear;
+standalone/dismissal rules still apply. First-visit onboarding and delayed iOS help use the same gate.
+No auth/recovery/Focus/onboarding lifecycle handlers or z-index values were changed.
+
+L. Files changed in this fix round: index.html and its www/index.html mirror;
+tests/guided-measurement-loop.spec.js; new tests/install-interruption.spec.js;
+CODEMAP.md, CHANGELOG.md and TEST_REPORT.md. No other runtime file was edited in this round.
+Runtime-only round diff saved as test-results/bounded-runtime.diff for scope verification.
+
+M–O. Targeted browser command: npx playwright test tests/install-interruption.spec.js
+tests/guided-measurement-loop.spec.js tests/plan.spec.js tests/plan-tomorrow-ui.spec.js
+tests/focus-reload-recovery.spec.js --project=chromium --workers=2.
+Includes all guided-loop tests, relevant Review/preparation paths, real Focus reload/reconciliation,
+nine install cases, and the three new uniqueness cases. The first red run reproduced both blockers.
+Two initial recovery-test failures were mismatched button labels, corrected to the actual UI label;
+no production recovery change was needed.
+
+P. Existing execution/startup smoke subset: 26 passed using tests/smoke.spec.js with grep
+'focus|timer|reopening|restor|away|break'. Full npm test/broader Chromium not rerun: production
+changes stay inside Review rendering and the bounded PWA install path; shared startup, storage,
+Focus and recovery handlers are unchanged.
+
+Q. node --check passes on both actual inline classic scripts (HTMLParser extraction) and the two
+touched browser test files. Runtime mirror/check and git diff --check are recorded at final handoff.
+
+R–S. Candidate is unstaged/uncommitted/unpushed on the original base. No production Firebase,
+real Obsidian, deployment, commit, push, merge, unrelated worktree edits, or synthetic desktop input.
+Browser tests use local HTTP servers, stubbed Firebase and synthetic browser install eligibility
+events; the OS/browser installation prompt is stubbed, not invoked on the user's desktop.
+
+T. Remaining practical limits: native install-prompt UX and a physical iOS Add to Home Screen flow
+were not exercised. Browser install events are only retained within the current document; after
+reload, eligibility depends on the browser firing a new event, as before. Review's existing
+label-based attribution and aggregation remain unchanged; no source events were deduplicated.
+U. The LOW generic Start versus guided-action visual dominance finding remains deferred to dogfood.
+
+Final bounded results: 90/90 targeted Chromium tests passed; 26/26 relevant execution/startup smoke tests passed. Runtime parity passes for all 40 files; node --check and git diff --check pass. No tests skipped within these runs. Index remains empty and HEAD unchanged.

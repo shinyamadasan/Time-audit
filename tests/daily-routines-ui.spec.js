@@ -174,6 +174,7 @@ async function openApp(page, { learningPlanRaw = null, dailyPlans = {}, lifeLedg
 
 
 async function addRoutine(page, { title='Spanish', source='manual', mode='anytime', workoutRoutineId='' }={}) {
+  await page.getByRole('button',{name:'Manage routines',exact:true}).click();
   await page.getByRole('button',{name:'Add routine',exact:true}).click();
   const form=page.locator('#daily-routine-form');
   await form.locator('[name=title]').fill(title);
@@ -209,17 +210,19 @@ test('midday edit preserves identity; disabling preserves manual history and re-
   await openApp(page); await addRoutine(page,{mode:'exact'});
   const id=await card(page).getAttribute('data-instance-id');
   await card(page).getByRole('button',{name:'Done',exact:true}).click();
-  await card(page).getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByRole('button',{name:'Manage routines',exact:true}).click();
+  await page.locator('#routine-manager').getByRole('button',{name:'Edit',exact:true}).click();
   await page.locator('[name=time]').fill('21:00');
   await page.getByRole('button',{name:'Save routine',exact:true}).click();
   expect(await card(page).getAttribute('data-instance-id')).toBe(id);
   await expect(card(page)).toContainText('21:00');
-  await card(page).getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByRole('button',{name:'Manage routines',exact:true}).click();
+  await page.locator('#routine-manager').getByRole('button',{name:'Edit',exact:true}).click();
   await page.locator('[name=enabled]').uncheck();
   await page.getByRole('button',{name:'Save routine',exact:true}).click();
   await expect(card(page)).toHaveCount(0);
-  await page.locator('#daily-routines summary').click();
-  await page.locator('#daily-routines').getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByRole('button',{name:'Manage routines',exact:true}).click();
+  await page.locator('#routine-manager').getByRole('button',{name:'Edit',exact:true}).click();
   await page.locator('[name=enabled]').check();
   await page.getByRole('button',{name:'Save routine',exact:true}).click();
   await expect(card(page)).toContainText('Complete');
@@ -259,7 +262,8 @@ test('phone and compact landscape remain usable; form fits and inputs avoid zoom
     await page.setViewportSize(viewport);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
     await expect(card(page).getByRole('button',{name:'Done',exact:true})).toBeVisible();
-    await card(page).getByRole('button',{name:'Edit',exact:true}).click();
+    await page.getByRole('button',{name:'Manage routines',exact:true}).click();
+  await page.locator('#routine-manager').getByRole('button',{name:'Edit',exact:true}).click();
     expect(await page.locator('[name=title]').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
     await page.locator('#daily-routine-cancel').click();
   }
@@ -288,7 +292,7 @@ test('23:59 to 00:01 reload creates one new intention, never yesterday’s overd
 test('real Workout fact completes automatically, duplicate stays one completion',async({page})=>{
   await page.clock.setFixedTime(new Date('2026-09-08T19:00:00Z'));
   await openApp(page); await addRoutine(page,{title:'Workout',source:'workout',workoutRoutineId:'gym-routine'});
-  await expect(card(page)).toContainText('No live openGym connection');
+  await expect(card(page)).toContainText('Completion appears when a matching workout is imported.');
   await page.evaluate(async()=>{
     const {normalizeWorkoutCompleted}=await import('./workout-life-ledger-adapter.js');
     const {createLocalLifeLedgerStore}=await import('./life-ledger-runtime.js');

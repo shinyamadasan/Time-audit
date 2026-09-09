@@ -263,7 +263,7 @@ function renderNextAction(action) {
   return `
     <section class="cap-career-next">
       <div>
-        <div class="cap-career-kicker">Primary next action</div>
+        <div class="cap-career-kicker">Career next step</div>
         <h3>${escapeHtml(action.title)}</h3>
         <p>${escapeHtml(action.reason)}</p>
       </div>

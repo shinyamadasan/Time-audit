@@ -1,8 +1,26 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import fs from 'node:fs/promises';
+import http from 'node:http';
 
-const APP_URL = pathToFileURL(path.resolve('index.html')).href;
+let APP_URL;
+let appServer;
+test.beforeAll(async () => {
+  const root = path.resolve('.');
+  appServer = http.createServer(async (req, res) => {
+    try {
+      const pathname = new URL(req.url, 'http://localhost').pathname;
+      const file = path.resolve(root, '.' + (pathname === '/' ? '/index.html' : pathname));
+      if (!file.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
+      const body = await fs.readFile(file);
+      res.writeHead(200, { 'content-type': file.endsWith('.js') ? 'application/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html' });
+      res.end(body);
+    } catch { res.writeHead(404).end(); }
+  });
+  await new Promise(resolve => appServer.listen(0, '127.0.0.1', resolve));
+  APP_URL = `http://127.0.0.1:${appServer.address().port}/index.html`;
+});
+test.afterAll(async () => { await new Promise(resolve => appServer.close(resolve)); });
 
 const firebaseStub = `
 (() => {
@@ -113,7 +131,7 @@ async function openApp(page, { entries = [], plans = {}, reviews = {}, settings 
     localStorage.setItem('ta3-test-seeded', '1');
   }, { entries, plans, reviews, settings: baseSettings(settings), nowTs });
   await page.goto(APP_URL);
-  await page.waitForFunction(() => typeof window.renderTodayPlan === 'function' && !!document.getElementById('plan-strip'));
+  await page.waitForFunction(() => typeof window.renderTodayPlan === 'function' && typeof window.openPlanTomorrow === 'function');
   await expect(page.locator('#signin-overlay')).toBeHidden();
 }
 
@@ -155,30 +173,18 @@ async function openTodayDetails(page) {
   }
 }
 
-test('morning startup turns a day mode into the first plan item', async ({ page }) => {
+test('an unprepared day allows optional priorities without a ceremony', async ({ page }) => {
   await openApp(page);
-
-  await expect(page.locator('#morning-startup')).toBeVisible();
-  await expect(page.locator('#morning-startup')).toContainText('What kind of day is this?');
-
-  await page.locator('#plan-task').fill('Ship launch notes');
-  await page.locator('.morning-choice.deep').click();
-
-  await expect(page.locator('#morning-startup')).toBeHidden();
-  await expect(page.locator('.plan-item')).toHaveCount(1);
-  await expect(page.locator('.plan-item').first().locator('.plan-when')).toHaveText('first block →');
-  await expect(page.locator('.plan-item').first().locator('.plan-task')).toContainText('Ship launch notes');
-
-  const stored = await page.evaluate(() => getPlanItems(planTodayKey()).map(i => ({ task: i.task, when: i.when })));
-  expect(stored).toEqual([{ task: 'Ship launch notes', when: 'first block' }]);
+  await expect(page.locator('#morning-startup')).toHaveCount(0);
+  await addItem(page, 'Ship launch notes', 'first block');
+  expect(await page.evaluate(() => getPlanItems(planTodayKey()).map(i => ({ task: i.task, when: i.when })))).toEqual([{ task: 'Ship launch notes', when: 'first block' }]);
 });
 
-test('today action strip focuses the plan when no target exists', async ({ page }) => {
+test('today action strip starts work when no target exists', async ({ page }) => {
   await openApp(page);
-
-  await expect(page.locator('#today-action-title')).toHaveText("Set today's target");
+  await expect(page.locator('#today-action-title')).toHaveText('What would you like to work on?');
   await page.locator('#today-action-primary').click();
-  await expect(page.locator('#plan-task')).toBeFocused();
+  await expect(page.locator('#hero-task-input')).toBeFocused();
 });
 
 test('WIP cap holds at 3 and removing one frees a slot (no deadlock)', async ({ page }) => {
@@ -425,61 +431,59 @@ function datedEntry(dateKey, startHour, endHour, activity, energy = 'deep') {
   };
 }
 
-test('review picks tomorrow’s plan and writes it to the next day', async ({ page }) => {
+test('Plan Tomorrow writes priorities to the next day', async ({ page }) => {
   await openApp(page);
-  await page.evaluate(() => openReview());
+  await page.evaluate(() => openPlanTomorrow());
 
-  await page.locator('#rv-plan-when').fill('after lunch');
-  await page.locator('#rv-plan-task').fill('Ship the report');
-  await page.locator('#rv-plan-add').getByRole('button', { name: 'Add' }).click();
-  await page.locator('#rv-plan-task').fill('Gym');
-  await page.locator('#rv-plan-add').getByRole('button', { name: 'Add' }).click();
-  await expect(page.locator('.rv-plan-item')).toHaveCount(2);
+  await page.locator('#plan-tomorrow-add input[name="when"]').fill('after lunch');
+  await page.locator('#plan-tomorrow-add input[name="task"]').fill('Ship the report');
+  await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
+  await page.locator('#plan-tomorrow-add input[name="task"]').fill('Gym');
+  await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
+  await expect(page.locator('.pt-oneoff')).toHaveCount(2);
 
-  await page.locator('#review-overlay').getByRole('button', { name: 'Save' }).click();
+  await page.locator('#plan-tomorrow-confirm').click();
 
   const result = await page.evaluate(() => {
     const tomorrow = _dateKeyPlusDays(toDateKey(new Date()), 1);
     return {
       tasks: getPlanItems(tomorrow).map(i => i.task),
-      when: getPlanItems(tomorrow)[0].when,
-      legacy: reviews[toDateKey(new Date())].tomorrow   // Reflect history still renders this
+      when: getPlanItems(tomorrow)[0].when
     };
   });
   expect(result.tasks).toEqual(['Ship the report', 'Gym']);
   expect(result.when).toBe('after lunch');
-  expect(result.legacy).toBe('Ship the report · Gym');
 });
 
-test('review caps tomorrow at 3 items', async ({ page }) => {
+test('Plan Tomorrow caps tomorrow at 3 items', async ({ page }) => {
   await openApp(page);
-  await page.evaluate(() => openReview());
+  await page.evaluate(() => openPlanTomorrow());
 
   for (const t of ['A', 'B', 'C']) {
-    await page.locator('#rv-plan-task').fill(t);
-    await page.locator('#rv-plan-add').getByRole('button', { name: 'Add' }).click();
+    await page.locator('#plan-tomorrow-add input[name="task"]').fill(t);
+    await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
   }
-  await expect(page.locator('.rv-plan-item')).toHaveCount(3);
-  await expect(page.locator('#rv-plan-add')).toBeHidden();   // no way to enter a 4th
+  await expect(page.locator('.pt-oneoff')).toHaveCount(3);
+  await expect(page.locator('#plan-tomorrow-add')).toBeHidden();   // no way to enter a 4th
 });
 
 test('unfinished items are OFFERED as chips, never auto-carried', async ({ page }) => {
   await openApp(page, {
     plans: planFor([{ task: 'Write report', done: true }, { task: 'Gym', done: false }])
   });
-  await page.evaluate(() => openReview());
+  await page.evaluate(() => openPlanTomorrow());
 
   // Not pre-added to tomorrow — auto-carry into a capped list is exactly what would deadlock it.
-  await expect(page.locator('.rv-plan-item')).toHaveCount(0);
+  await expect(page.locator('.pt-oneoff')).toHaveCount(0);
 
-  const undoneChip = page.locator('.rv-plan-chip.undone');
+  const undoneChip = page.locator('.rv-plan-chip[data-pt-action="suggest"]');
   await expect(undoneChip).toHaveCount(1);
   await expect(undoneChip).toContainText('Gym');
   await expect(page.locator('.rv-plan-chip')).not.toContainText('Write report');  // finished work isn't re-offered
 
   await undoneChip.click();
-  await expect(page.locator('.rv-plan-item')).toHaveCount(1);
-  await expect(page.locator('.rv-plan-item')).toContainText('Gym');
+  await expect(page.locator('.pt-oneoff')).toHaveCount(1);
+  await expect(page.locator('.pt-oneoff')).toContainText('Gym');
 });
 
 test('this week’s priorities are offered as chips (weekly steers daily)', async ({ page }) => {
@@ -489,14 +493,14 @@ test('this week’s priorities are offered as chips (weekly steers daily)', asyn
     const wk = getWeekKey(new Date(tzParseTime(tomorrow, '12:00')));
     weeklyReviews[wk] = { plan: { p1: 'Ship the report', p2: 'Fix onboarding', p3: '' } };
   });
-  await page.evaluate(() => openReview());
+  await page.evaluate(() => openPlanTomorrow());
 
-  const weekChips = page.locator('.rv-plan-chip.week');
+  const weekChips = page.locator('.rv-plan-chip[data-pt-action="suggest"]');
   await expect(weekChips).toHaveCount(2);
   await expect(weekChips.first()).toContainText('Ship the report');
 
   await weekChips.first().click();
-  await expect(page.locator('.rv-plan-item')).toContainText('Ship the report');
+  await expect(page.locator('.pt-oneoff')).toContainText('Ship the report');
 });
 
 test('waste and downtime are never offered as tomorrow’s priorities', async ({ page }) => {
@@ -521,7 +525,7 @@ test('waste and downtime are never offered as tomorrow’s priorities', async ({
       logged('Gym', 'exercise', 3)
     ]
   });
-  await page.evaluate(() => openReview());
+  await page.evaluate(() => openPlanTomorrow());
 
   const chips = page.locator('.rv-plan-chip');
   const labels = await chips.allInnerTexts();
@@ -534,9 +538,9 @@ test('waste and downtime are never offered as tomorrow’s priorities', async ({
   expect(text).not.toContain('nap');          // recovery
 
   // The filter is on the CHIPS only — you can still hand-type anything at all.
-  await page.locator('#rv-plan-task').fill('Drinking with friends');
-  await page.locator('#rv-plan-add').getByRole('button', { name: 'Add' }).click();
-  await expect(page.locator('.rv-plan-item')).toContainText('Drinking with friends');
+  await page.locator('#plan-tomorrow-add input[name="task"]').fill('Drinking with friends');
+  await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
+  await expect(page.locator('.pt-oneoff')).toContainText('Drinking with friends');
 });
 
 test('review shows plan vs actual for the day being reviewed', async ({ page }) => {
@@ -649,7 +653,7 @@ test('morning closeout time does not nag before the graveyard cutoff', async ({ 
   await expect(page.locator('#today-action-title')).not.toHaveText('Close yesterday first');
 });
 
-test('missed closeout recovery reviews yesterday and writes today plan', async ({ page }) => {
+test('missed closeout reviews yesterday without changing today priorities', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 16, 10, 0, 0);
   const yesterday = utcDateKey(nowTs - DAY_MS);
   await openApp(page, {
@@ -669,8 +673,6 @@ test('missed closeout recovery reviews yesterday and writes today plan', async (
   await expect(page.locator('#rv-plan-vs-actual')).toContainText('Write report');
 
   await page.locator('#rv-win').fill('Closed yesterday late');
-  await page.locator('#rv-plan-task').fill('Today focus');
-  await page.locator('#rv-plan-add').getByRole('button', { name: 'Add' }).click();
   await page.locator('#review-overlay').getByRole('button', { name: 'Save' }).click();
 
   await expect(page.locator('#missed-closeout-card')).toBeHidden();
@@ -683,28 +685,14 @@ test('missed closeout recovery reviews yesterday and writes today plan', async (
     };
   });
   expect(result.reviewedYesterday).toBe(true);
-  expect(result.todayTasks).toContain('Today focus');
+  expect(result.todayTasks).toEqual([]);
 });
 
-test('reference-class line reports what you actually do on that weekday', async ({ page }) => {
-  // Tomorrow's weekday recurs at today-6 and today-13.
-  const sameWeekday = daysAgo => {
-    const d = new Date(Date.now() - daysAgo * DAY_MS);
-    const start = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0);
-    const end   = start + 2 * 60 * 60 * 1000;   // 2h deep
-    return {
-      id: end, ts: end, tsStart: start, updatedAt: end, blockIntervalMin: 120,
-      date: utcDateKey(start), activity: 'Deep work', energy: 'deep',
-      category: 'deep_work', originalLabel: 'deep', onPlan: true, retro: false
-    };
-  };
-  await openApp(page, { entries: [sameWeekday(6), sameWeekday(13)] });
+test('Review keeps tomorrow preparation secondary to factual reflection', async ({ page }) => {
+  await openApp(page);
   await page.evaluate(() => openReview());
-
-  const ref = page.locator('#rv-plan-ref');
-  await expect(ref).toBeVisible();
-  await expect(ref).toContainText('On a typical');
-  await expect(ref).toContainText('2.0h of deep work');
+  await expect(page.locator('#rv-tomorrow-status')).toContainText('Tomorrow not prepared');
+  await expect(page.locator('#rv-plan-task')).toHaveCount(0);
 });
 
 // ══════════════════════════════════════════════════════

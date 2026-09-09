@@ -115,7 +115,7 @@ function recommendationBlock(intel) {
   if (!rec) {
     return `
       <section class="cdi-recommendation cdi-recommendation-none" aria-labelledby="cdi-next-heading">
-        <div class="cdi-kicker">Next</div>
+        <div class="cdi-kicker">Guidance</div>
         <h3 id="cdi-next-heading" class="cdi-headline">No cross-domain recommendation yet</h3>
         <p class="cdi-abstain">${escapeHtml(intel.abstentionReason || 'Not enough explicit signal to recommend a single next action.')}</p>
       </section>`;
@@ -128,7 +128,7 @@ function recommendationBlock(intel) {
     : '';
   return `
     <section class="cdi-recommendation" aria-labelledby="cdi-next-heading">
-      <div class="cdi-kicker">Next</div>
+      <div class="cdi-kicker">Guidance</div>
       <h3 id="cdi-next-heading" class="cdi-headline">${escapeHtml(rec.action)}</h3>
       ${context}
       <p class="cdi-strength" data-strength="${escapeHtml(rec.evidenceStrength)}">

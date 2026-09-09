@@ -55,12 +55,6 @@ function refreshRoutines() {
 function suggestionRows() {
   const selected = new Set(activeItems().map(item => context().normalizeTask(item.task)));
   const suggestions = context().suggestions(draft.targetDate).slice();
-  const learningRepresented = draft.routines.rows.some(row => row.routine.source === 'learning');
-  if (!learningRepresented) {
-    const plans = createLearningPlanRepository().listPlans();
-    const next = plans.map(plan => ({ plan, step: findNextLearningPlanStep(plan) })).find(value => value.step);
-    if (next) suggestions.push({ task: next.step.stepTitle, tag: 'learning' });
-  }
   const seen = new Set();
   return suggestions.filter(item => {
     const key = context().normalizeTask(item.task);
@@ -127,7 +121,7 @@ function render() {
   error.textContent = '';
 }
 
-export function openPlanTomorrow() {
+export function openPlanTomorrow({ returnToReview = false } = {}) {
   try {
     const app = context();
     const targetDate = planTomorrowTargetDate(Date.now(), app.timezone);
@@ -135,6 +129,7 @@ export function openPlanTomorrow() {
     const preparation = normalizePreparation(plan?.preparation, targetDate);
     draft = {
       targetDate,
+      returnToReview,
       timezone: app.timezone,
       items: app.rawItems(targetDate).map(item => ({ ...item })),
       routines: routinePlan(targetDate, app.timezone),
@@ -145,6 +140,14 @@ export function openPlanTomorrow() {
     render();
   } catch (err) {
     globalThis.showToast(err.message);
+  }
+}
+
+function closePreparation() {
+  root.classList.remove('open');
+  if (draft?.returnToReview) {
+    globalThis.renderReviewTomorrowStatus();
+    document.getElementById('review-overlay').classList.add('open');
   }
 }
 
@@ -170,19 +173,19 @@ async function confirmDraft() {
   });
   const savedPlan = context().plan(draft.targetDate);
   if (!result.localSaved || !computeReadyNow({ plan: savedPlan, targetDate: draft.targetDate, routines })) throw new Error('Tomorrow could not be marked ready. Your draft is still open.');
-  root.classList.remove('open');
+  closePreparation();
   const cloudSynced = await Promise.resolve(result.syncPromise).catch(() => false);
-  globalThis.showToast(cloudSynced ? 'Tomorrow is ready' : 'Ready on this device');
+  if (!cloudSynced) globalThis.showToast('Ready on this device');
 }
 
 root?.addEventListener('click', async event => {
-  if (event.target === root) { root.classList.remove('open'); return; }
+  if (event.target === root) { closePreparation(); return; }
   const control = event.target.closest('[data-pt-action], [data-pt-mode]');
   if (!control || !draft) return;
   try {
     if (control.dataset.ptMode) { draft.mode = control.dataset.ptMode; render(); return; }
     const action = control.dataset.ptAction;
-    if (action === 'close') { root.classList.remove('open'); return; }
+    if (action === 'close') { closePreparation(); return; }
     if (action === 'blank') { draft.intentionalBlank = !draft.intentionalBlank; render(); return; }
     if (action === 'remove') draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, deleted: true }) : item);
     if (action === 'suggest') addItem(control.dataset.task);
@@ -226,7 +229,7 @@ export function getPlanTomorrowRoutineActual(targetDate, preparation) {
     if (!occurs) return { id, title: routine?.title || 'Removed routine', status: 'removed' };
     const instance = generateInstances([routine], targetDate, state.timezone)[0];
     const completion = matchCompletion(instance, { ...state, events, entries }, Date.now());
-    return { id, title: routine.title, status: classifyRoutineActual({ occurs, skipped: !!state.skips[id], completion }) };
+    return { id, title: routine.title, taskLabel: state.links[id]?.stepTitle || routine.title, status: classifyRoutineActual({ occurs, skipped: !!state.skips[id], completion }) };
   }).filter(row => ids.has(row.id));
 }
 
