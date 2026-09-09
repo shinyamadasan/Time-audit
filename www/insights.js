@@ -694,12 +694,6 @@ function renderReviewAttention(dateKey, selfRating) {
   const signals = derive(dayEntries, { planTasks, selfRating: selfRating || null, dateKey: key });
   const lines = toLines(signals).filter(l => l.key !== 'rating');
 
-  const ratingBtn = (val, label) => {
-    const on = (selfRating || null) === val;
-    return `<button type="button" class="btn sm ${on ? 'primary' : 'ghost'}"
-      onclick="setReviewFocusRating('${val}')" aria-pressed="${on}">${label}</button>`;
-  };
-
   const autoBlock = signals.hasData && lines.length
     ? `<div class="rv-closeout-grid" style="margin-top:6px">
         ${lines.map(l => `<div class="rv-closeout-cell"><span>${l.label}</span><strong>${l.value}</strong></div>`).join('')}
@@ -715,14 +709,6 @@ function renderReviewAttention(dateKey, selfRating) {
   el.innerHTML = `<div class="rv-closeout">
       <div class="rv-closeout-head">Attention today</div>
       ${autoBlock}
-      <div style="margin-top:10px">
-        <div class="note" style="font-size:11px;margin-bottom:5px">How did today feel? (optional)</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${ratingBtn('focused', 'Focused')}
-          ${ratingBtn('mixed', 'Mixed')}
-          ${ratingBtn('distracted', 'Distracted')}
-        </div>
-      </div>
     </div>`;
 }
 if (typeof globalThis !== 'undefined') globalThis.renderReviewAttention = renderReviewAttention;

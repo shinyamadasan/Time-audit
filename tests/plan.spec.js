@@ -553,6 +553,7 @@ test('review shows plan vs actual for the day being reviewed', async ({ page }) 
   await page.evaluate(() => openReview());
 
   const pva = page.locator('#rv-plan-vs-actual');
+  await page.locator('#rv-full-analysis > summary').click();
   await expect(pva).toBeVisible();
   await expect(pva.locator('.rv-pva-head')).toHaveText('Planned 2 · active 2 · done/worked on 1');
 
@@ -585,17 +586,18 @@ test('close day CTA opens the review loop and marks today closed after save', as
   await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Review',exact:true}).click();
   await expect(page.locator('#review-overlay')).toHaveClass(/open/);
   await expect(page.locator('#rv-closeout-summary')).toBeVisible();
-  await expect(page.locator('#rv-closeout-summary')).toContainText('Closeout summary');
-  await expect(page.locator('#rv-closeout-summary')).toContainText('45m');
-  await expect(page.locator('#rv-closeout-summary')).toContainText('20m');
-  await expect(page.locator('#rv-plan-vs-actual')).toBeVisible();
+  await expect(page.locator('#rv-closeout-summary')).toContainText('recorded');
+  await expect(page.locator('#rv-closeout-summary')).toContainText('1 of 2 done or worked on');
+  await expect(page.locator('#rv-metric-details')).toContainText('20m');
+  await expect(page.locator('#rv-plan-vs-actual')).toBeHidden();
   await expect(page.locator('#rv-unlogged-decision')).toBeVisible();
-  await expect(page.locator('#rv-unlogged-decision')).toContainText('Missing time check');
-  await expect(page.locator('#rv-unlogged-decision').getByRole('button', { name: 'Log first gap' })).toBeVisible();
-  await page.locator('#rv-unlogged-decision').getByRole('button', { name: 'Mark blank' }).click();
-  await expect(page.locator('#rv-unlogged-decision')).toContainText('Missing time acknowledged');
+  await expect(page.locator('#rv-unlogged-decision')).toContainText('Needs you');
+  await expect(page.locator('#rv-unlogged-decision').getByRole('button', { name: 'Log time' })).toBeVisible();
+  await page.locator('#rv-unlogged-decision').getByRole('button', { name: 'Leave unknown' }).click();
+  await expect(page.locator('#rv-unlogged-decision')).toContainText('Left unknown');
 
   await page.locator('#rv-win').fill('Shipped the report');
+  await page.locator('#rv-optional-details > summary').click();
   await page.locator('#rv-waste').fill('Scrolling');
   await page.locator('#rv-avoid').fill('Block the feed');
   await page.locator('#review-overlay').getByRole('button', { name: 'Save' }).click();
@@ -692,7 +694,7 @@ test('missed closeout reviews yesterday without changing today priorities', asyn
 test('Review keeps tomorrow preparation secondary to factual reflection', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => openReview());
-  await expect(page.locator('#rv-tomorrow-status')).toContainText('Tomorrow not prepared');
+  await expect(page.locator('#rv-tomorrow-status')).toContainText('Prepare tomorrow');
   await expect(page.locator('#rv-plan-task')).toHaveCount(0);
 });
 

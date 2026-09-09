@@ -930,3 +930,30 @@ The legacy Details preference API remains, without revealing unrelated default s
 Primary navigation, timer/Focus internals, repositories, and measurement contracts are unchanged.
 Tests: `tests/today-simplification.spec.js` and affected guided-loop, routine, priority,
 preparation, Focus recovery, Learning, smoke, and install-interruption suites.
+
+
+## Review Simplification V1 (Phase 6E)
+
+`openReview(dateKey, fullAnalysis)` initializes the existing Review record into two default
+optional inputs: feeling (`renderReviewFeeling`) and win. `renderReviewCloseoutSummary`
+uses the existing date-window union duration helper for recorded time and the unchanged
+closeout Plan population for done-or-worked-on counts. The former Reality Score and its
+verdict are removed from active Review; no score replaces them.
+
+`rv-optional-details` holds waste, avoid, and editable existing legacy tomorrow text.
+`rv-full-analysis` holds metric tiles, `renderReviewAttention` (analytics and caveat only),
+unchanged plan-v-actual/unplanned rows, and raw unlogged intervals. `refreshReviewAnalysis`
+refreshes those factual surfaces without initializing the reflection inputs. Today So Far
+Details opens Review with analysis expanded. Timeline remains the existing Today destination.
+
+`openReviewFirstGap` sets a bounded in-memory return flag after dismissing Review. Closing
+that retro editor through `closeModal` refreshes evidence and reopens the same Review DOM;
+unsaved fields and subjective state remain intact. Plan Tomorrow retains its existing DOM
+return behavior. Ordinary Close/backdrop is no-save dismissal; reopening starts from saved
+values. No reload-persistent draft is introduced. Historical preparation retains tomorrow
+relative to now, with its actual target date stated in the link.
+
+`saveReview` retains unknown existing record properties and untouched multiline legacy
+text. Date-wide `unloggedOk`, nullable `focusRating`, `_savedAt`, local persistence, Firebase
+review update, and dependent refresh contracts remain in place. Tests:
+`tests/review-simplification.spec.js` and affected plan/guided-loop/preparation suites.

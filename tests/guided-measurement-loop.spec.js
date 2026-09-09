@@ -135,7 +135,7 @@ test('Review saves without preparing tomorrow and preserves legacy reflection', 
   await today(page);
   await page.evaluate(() => { reviews[planTodayKey()] = { tomorrow: 'Old reflection' }; openReview(); });
   await page.locator('#rv-win').fill('Shipped client fix');
-  await page.locator('#review-overlay').getByRole('button', { name: 'Save', exact: true }).click();
+  await page.locator('#review-overlay').getByRole('button', { name: 'Save reflection', exact: true }).click();
   expect(await page.evaluate(() => ({ review: reviews[planTodayKey()], tomorrow: plans[PlanTomorrowModel.planTomorrowTargetDate(Date.now(), settings.timezone)] || null }))).toMatchObject({ review: { win: 'Shipped client fix', tomorrow: 'Old reflection' }, tomorrow: null });
 });
 
@@ -143,7 +143,7 @@ test('Review links to one editor and leaves the draft reflection intact', async 
   await today(page);
   await page.evaluate(() => openReview());
   await page.locator('#rv-win').fill('Draft win');
-  await page.locator('#review-overlay').getByRole('button', { name: 'Prepare tomorrow', exact: true }).click();
+  await page.locator('#review-overlay').getByRole('button', { name: /Prepare tomorrow/ }).click();
   await expect(page.locator('#review-overlay')).not.toHaveClass(/open/);
   await expect(page.locator('#plan-tomorrow-overlay')).toHaveClass(/open/);
   await expect(page.locator('#rv-win')).toHaveValue('Draft win');

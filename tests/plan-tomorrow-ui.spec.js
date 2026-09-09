@@ -429,13 +429,13 @@ test('Review delegates preparation to Plan Tomorrow and saves independently', as
   await page.locator('[data-pt-action="close"]').first().click();
   await page.evaluate(() => openReview('2026-09-08'));
   await page.locator('#rv-win').fill('Saved reflection');
-  await page.locator('#review-overlay').getByRole('button', { name: 'Prepare tomorrow', exact: true }).click();
+  await page.locator('#review-overlay').getByRole('button', { name: /Prepare tomorrow/ }).click();
   await page.locator('#plan-tomorrow-confirm').click();
   await expect(page.locator('#review-overlay')).toHaveClass(/open/);
   await expect(page.locator('#rv-win')).toHaveValue('Saved reflection');
-  await expect(page.locator('#rv-tomorrow-status')).toContainText('Tomorrow ready');
+  await expect(page.locator('#rv-tomorrow-status')).toContainText('Prepare tomorrow');
   const before = await page.evaluate(() => JSON.stringify(plans));
-  await page.locator('#review-overlay').getByRole('button', { name: 'Save', exact: true }).click();
+  await page.locator('#review-overlay').getByRole('button', { name: 'Save reflection', exact: true }).click();
   expect(await page.evaluate(() => JSON.stringify(plans))).toBe(before);
 });
 
