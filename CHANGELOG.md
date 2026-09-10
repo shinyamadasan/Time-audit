@@ -1,5 +1,120 @@
 # ChronaSense — Changelog
 
+## Plan Linkage + Up Next Ordering V1 — targeted fixes from independent review (same candidate) — 2026-09-10
+
+An independent review verdict of **FIX FIRST** (architecture accepted, four confirmed defects)
+was addressed before landing:
+
+1. **UP NEXT could contradict the plan strip's own chronological order before anything was due**
+   (e.g. at 08:00 with `13:00` typed before `09:00`, UP NEXT recommended the 13:00 item).
+   `getNextPlanItem()` no longer requires an item to be "due" for its own scheduled time to
+   matter — among not-done, unworked candidates it now reuses `planDisplayOrder()` (earliest
+   parseable time first, then everything else in stable order) instead of raw array/insertion
+   order. `dueTimedPlanItem()` (the separate, still due-gated check that decides whether a timed
+   one-off outranks a due-now routine) is unaffected in its own due-gating, only in tie-breaking.
+2. **An already-worked-on-but-not-done morning item could permanently block a newly-due
+   afternoon item** from ever reaching UP NEXT. Both `getNextPlanItem()` and `dueTimedPlanItem()`
+   now rank unworked candidates (`planTrackedMin === 0`) ahead of worked-on ones (new
+   `unworkedPlanItems()`/`workedOnPlanItems()` helpers) — restores the two-tier preference the
+   pre-linkage fallback always had, which the due-time fast path had silently dropped.
+3. **The `when` input was freeform text with a content-free placeholder**, so a normal `9am` /
+   `9:00` / `09:00 AM` entry silently produced no due-time behavior at all. `#plan-when` is now a
+   native `type="time"` input (the same convention already used in eleven other places in this
+   app), guaranteeing canonical `HH:MM` output for new entries with no natural-language parsing
+   added. Historical free-text `when` values already stored are untouched and still display
+   safely (never migrated, never rewritten).
+4. **The plain (non-Focus) running timer's plan link did not survive a page reload**, while every
+   other piece of that timer's state — task, elapsed time, even the cross-device owner id —
+   already did. `persist()`/`load()` (`storage.js`) now write/restore `planItemId` in the
+   `ta3-timer` blob alongside the existing fields; a pre-migration blob with no `planItemId` key
+   restores with `null` (no fabricated linkage), matching every other optional-field migration in
+   this codebase.
+
+Not changed: the accepted architecture (optional `planItemId`, id-preferred/text-fallback
+matching, no fuzzy matching, no new completion states, no Timeline layer, no new user action, no
+settings toggle for the routine-vs-priority precedence).
+
+tests: 9 new regressions in `tests/plan-linkage-up-next.spec.js` (before-first-due ordering,
+worked-on stickiness, plain-timer reload incl. a pre-migration-blob compatibility check, Focus
+reload, two switch-no-leak adversarial cases, the multiple-overdue tie-break pinned as
+intentional, and the `type="time"` input change). 3 pre-existing tests in `tests/plan.spec.js`
+were updated (not weakened) for the `type="time"` change — they used free-text `when` values
+(`"first block"`, `"after lunch"`) that a native time input can no longer accept on entry;
+historical free-text display itself stays covered by the new spec's own test. Full `npm test`
+(451), `npm run lint` (0 errors; 33 warnings — 31 prior + 2 new `no-undef` on
+`currentTaskPlanItemId` referenced in `storage.js`, same expected cross-script-file class as
+before), full `npx playwright test` (428/428, 0 failures this run), `node
+scripts/runtime-mirror.mjs --check` (clean after `--write`).
+
+## Plan Linkage + Up Next Ordering V1 (feat/plan-linkage-up-next-v1, candidate, uncommitted) — 2026-09-10
+
+Closes the two real gaps a Plan-to-Actual daily-loop audit found in an otherwise-shipped
+feature: plan-to-actual matching was pure text equality (a rename between planning and starting
+silently misclassified real work as "not done"), and UP NEXT ignored a planned item's own time,
+letting a due-now routine pre-empt a deliberately-scheduled priority. No new UI, no new
+completion states, no Timeline change, no structured-duration schema — both fixes are additive
+and backward-compatible.
+
+added (`index.html`):
+  - `currentTaskPlanItemId` — parallels `currentTask`; set only by a plan-linked
+    `_startTimer()`/`switchToTask()` call (i.e. `startPlanItem()`), reset to `null` by every other
+    start path and by `resetTimer()`. Consumed by every site that logs the block it names
+    (`stopAndLog`, `switchToTask`, `switchTaskMidBlock`, `startBreak`→`autoLogBlock`,
+    `enterFocusMode`'s pre-Focus auto-log), stamping the resulting entry's optional `planItemId`.
+  - `parsePlanItemTime(when)` — bounded parser: only an unambiguous zero-padded 24h `HH:MM`
+    (`09:00`, `13:30`) is ever treated as a real time; anything else (blank, "after lunch",
+    "9am") is left unparsed.
+  - `dueTimedPlanItem(items, dateKey)` — the earliest not-done one-off whose parseable `when` is
+    at/before right now, or `null`. Ties resolve to the earlier scheduled time.
+  - `planDisplayOrder(items)` — display-only projection for the plan strip (timed items first,
+    earliest first, then everything else in its existing stable order); never rewrites the
+    persisted item array.
+
+changed (`index.html`):
+  - `planTrackedMin(task, dateKey, planItemId)` — prefers an exact `planItemId` match; unlinked
+    entries (no `planItemId`) still fall back to the legacy normalized-text match. An entry
+    linked to a *different* plan item never counts, even on a text coincidence. Callers
+    (`renderTodayPlan`, `getNextPlanItem`, `renderReviewPlanVsActual`) now pass the item's id.
+  - `isPlanTaskActive`/`getPlanItemStatus`/`getActivePlanItem` — same id-preferred, text-fallback
+    rule, so a mid-run rename doesn't lose "In progress" status.
+  - `getNextPlanItem()` — checks `dueTimedPlanItem()` before its existing tracked-minutes
+    ordering.
+  - `todayGuidedAction()` — new precedence: remote → Focus/break/away/running → **a due timed
+    one-off** → due-now routine → next remaining one-off → anytime routine → free-text fallback.
+    A due timed priority now outranks a due-now routine (previously the routine always won,
+    undocumented anywhere as a deliberate choice).
+  - `startPlanItem(id)` passes the item's id into `_startTimer`/`switchToTask`.
+  - `renderReviewPlanVsActual()`'s "unplanned" bucket now also excludes entries whose
+    `planItemId` matches a planned item (previously text-only), so a renamed-but-linked entry is
+    never double-counted as both "worked on" and "unplanned".
+
+changed (`focus-mode.js`):
+  - `pendingFocusPlanItemId`/`activeFocusPlanItemId` — mirror the existing
+    `pendingFocusLearningPlan`/`activeFocusLearningPlan` pending→active→cleared lifecycle.
+    `enterFocusMode({planItemId})` (only `focusTodayAction()` ever passes one, from
+    `todayGuidedAction()`'s `state.planItemId`) → `startPomodoro()` commits it → `logFocusSession()`
+    stamps it on the completion entry. Persisted/restored across reload alongside the learning-plan
+    context. A daily-routine-linked Focus session never receives one.
+  - The pre-Focus auto-log in `enterFocusMode()` (when entering Focus while a plain-timer block
+    was already running) now also stamps that outgoing entry from `currentTaskPlanItemId`.
+
+not built (deliberately out of scope): structured time/duration fields, any Timeline plan layer,
+PC-time fragment collapsing, the mid-day-add-not-in-preparation edge case, any new completion
+state, any change to Plan Tomorrow's routine section, cross-device sync/persistence of
+`currentTaskPlanItemId` itself (an in-progress, not-yet-logged plain-timer block's linkage is
+best-effort and resets on reload — only the Focus-session linkage is reload-durable, matching how
+`activeFocusLearningPlan` already behaves).
+
+tests: 18 new scenarios in `tests/plan-linkage-up-next.spec.js` (A–R from the milestone spec:
+linkage survives Start/Focus/rename, legacy text-match preserved, unplanned work never
+double-counted, Done stays independent of tracked time, removed items still show Removed, the
+`when` parser and due-time precedence including routine-vs-priority, a routine-linked Focus never
+picks up a stray plan item id). Full `npm test` (465), `npm run lint` (0 errors; 31 warnings — the
+29 pre-existing plus 2 new `no-undef` on `currentTaskPlanItemId` in `focus-mode.js`, the same
+class of expected cross-script-file warning already present for `updateTimerTaskLabel`/
+`cancelNativePing`/etc. in this codebase), full `npx playwright test` (419/419), `node
+scripts/runtime-mirror.mjs --check` (clean after `--write`).
+
 ## Coarse Evidence Durability V1 — independent-review fix pass (same candidate) — 2026-09-10
 
 Three findings from an independent review, fixed before landing (no rebuild, same architecture):

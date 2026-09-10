@@ -1708,6 +1708,13 @@
 // ══════════════════════════════════════════════════════
 const APP_BUILD = '2026-07-19-template-sync-doctor-2';
 let currentTask = '';
+// Plan Linkage V1 — the plan item id (if any) the currently-running plain-timer block was
+// started from. Set only by a plan-linked _startTimer()/switchToTask() call; every other start
+// path calls them with no id, which naturally resets this to null. Consumed only when that
+// block's own entry is created (stopAndLog/switchToTask/switchTaskMidBlock/startBreak/
+// enterFocusMode's pre-Focus auto-log) — never synced, never persisted across reload: losing it
+// just falls back to text matching, same as any entry that predates this field.
+let currentTaskPlanItemId = null;
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let entries = [];
 let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22, reviewTime:'22:00', sleepTime:'23:00', wakeTime:'07:00', sleepReminderMin:30, sleepSetupDone:false, templates:[] };
@@ -2272,9 +2279,10 @@ function updateTimerTaskLabel() {
   }
 }
 
-async function _startTimer(task) {
+async function _startTimer(task, planItemId = null) {
   task = canonicalizeActivityInput(task);
   currentTask = task;
+  currentTaskPlanItemId = typeof planItemId === 'string' && planItemId ? planItemId : null;
   lastTaskForRepeat = task;
   taskStartTime = Date.now();
   blockStartTime = Date.now();
@@ -2365,7 +2373,7 @@ function resetTimer() {
   timerOwnerDeviceId = null;
   document.getElementById('main-btn').textContent = 'Start';
   document.getElementById('timer-status').textContent = 'Ready';
-  currentTask = ''; updateTimerTaskLabel();
+  currentTask = ''; currentTaskPlanItemId = null; updateTimerTaskLabel();
   // Hero UI: back to idle
   showHeroState('idle');
   document.getElementById('hero-task-input').value = '';
@@ -2395,6 +2403,7 @@ function stopAndLog() {
       activity: task, energy: prevEnergy,
       onPlan: true, retro: false
     };
+    if (currentTaskPlanItemId) entry.planItemId = currentTaskPlanItemId;
     entry.category = getBucket(entry);
     entry.originalLabel = prevEnergy;
     getActivityColor(task);
@@ -2429,6 +2438,7 @@ function switchTaskMidBlock() {
       activity: prevTask, energy: prevEnergy,
       onPlan: true, retro: false
     };
+    if (currentTaskPlanItemId) entry.planItemId = currentTaskPlanItemId;
     getActivityColor(prevTask);
     entries.push(entry);
     entries.sort((a, b) => b.ts - a.ts);
@@ -2437,6 +2447,7 @@ function switchTaskMidBlock() {
     rememberCreatedUndo('log', [entry]);
     showUndoToast(`Logged: ${prevTask} · ${fmtDur(dur)}`, prevEnergy);
   }
+  currentTaskPlanItemId = null; // the next task, chosen via pre-commit, is never plan-linked
 
   // Reset block timer and open pre-commit for next task
   blockStartTime = Date.now();
@@ -2480,7 +2491,7 @@ function startBreak(mins) {
     const tsEnd = Date.now();
     const tsStart = taskStartTime || blockStartTime || (tsEnd - totalSecs * 1000);
     const prevEnergy = entries.find(e => !e.missed && !e.deleted && !e.break && e.energy)?.energy || 'deep';
-    autoLogBlock(currentTask, prevEnergy, tsStart, tsEnd);
+    autoLogBlock(currentTask, prevEnergy, tsStart, tsEnd, currentTaskPlanItemId);
   }
 
   breakStartTs = Date.now();
@@ -2630,7 +2641,7 @@ function stopPCTimeLive() {
   pcTimeLiveTicker = null;
 }
 
-function autoLogBlock(activity, energy, tsStart, tsEnd) {
+function autoLogBlock(activity, energy, tsStart, tsEnd, planItemId = null) {
   if (!activity) activity = 'Work';
   activity = canonicalizeActivityInput(activity);
   const dur = Math.round((tsEnd - tsStart) / 60000);
@@ -2647,6 +2658,7 @@ function autoLogBlock(activity, energy, tsStart, tsEnd) {
     prev.ts = tsEnd;
     prev.blockIntervalMin = Math.round((tsEnd - (prev.tsStart || tsStart)) / 60000);
     prev.updatedAt = tsEnd;
+    if (planItemId && !prev.planItemId) prev.planItemId = planItemId;
     _lastLoggedEntryId = prev.id;
   } else {
     const entry = {
@@ -2657,6 +2669,7 @@ function autoLogBlock(activity, energy, tsStart, tsEnd) {
       onPlan: energy !== 'distraction' && energy !== 'waste',
       quickLogged: true, autoLogged: true
     };
+    if (planItemId) entry.planItemId = planItemId;
     entry.category = getBucket(entry);
     entry.originalLabel = entry.energy || null;
     learnWastePattern(activity, energy);
@@ -4911,10 +4924,15 @@ function todayGuidedAction() {
   if (breakActive) return { title: 'Break is running', sub: 'Return when ready.', button: 'End break', action: 'endBreak()' };
   if (awayActive) return { title: `Away: ${awayLabel || 'Away'}`, sub: 'Return when ready.', button: 'Back to work', action: 'toggleAway()' };
   if (running) return { title: 'Working now', sub: currentTask, task: currentTask, button: 'Switch', action: 'openSwitchPanel()' };
+  // A timed one-off priority that's actually due outranks a due-now routine — it was
+  // deliberately scheduled by the user for this moment, not just "expected around now".
+  const dateKey = planTodayKey();
+  const dueOneOff = dueTimedPlanItem(getPlanItems(dateKey), dateKey);
+  if (dueOneOff) return { title: `Next: ${dueOneOff.task}`, sub: `Planned for ${dueOneOff.when}.`, task: dueOneOff.task, planItemId: dueOneOff.id, button: 'Start next', action: 'startNextPlanItem()' };
   const routine = globalThis.getTodayRoutineAction?.('Now');
   if (routine) return { ...routine, action: 'startTodayRoutineAction()' };
-  const next = getNextPlanItem(planTodayKey());
-  if (next) return { title: `Next: ${next.task}`, sub: 'Your next priority.', task: next.task, button: 'Start next', action: 'startNextPlanItem()' };
+  const next = getNextPlanItem(dateKey);
+  if (next) return { title: `Next: ${next.task}`, sub: 'Your next priority.', task: next.task, planItemId: next.id, button: 'Start next', action: 'startNextPlanItem()' };
   const anytime = globalThis.getTodayRoutineAction?.('Anytime');
   if (anytime) return { ...anytime, action: 'startTodayRoutineAction()' };
   return { title: 'What would you like to work on?', sub: 'Start something useful. Planning is optional; untracked time can stay unknown.', button: 'Name work', action: "document.getElementById('hero-task-input').focus()" };
@@ -4924,7 +4942,7 @@ function focusTodayAction() {
   if (document.getElementById('up-next').classList.contains('choose-work')) { enterFocusMode({ task: document.getElementById('hero-task-input').value.trim(), autoStart: true }); return; }
   const state = todayGuidedAction();
   if (state.action === 'startTodayRoutineAction()' && state.focusLinked) { globalThis.startTodayRoutineAction(); return; }
-  if (state.task) { enterFocusMode({ task: state.task, autoStart: true }); return; }
+  if (state.task) { enterFocusMode({ task: state.task, planItemId: state.planItemId || null, autoStart: true }); return; }
   enterFocusMode();
 }
 
@@ -6135,7 +6153,7 @@ function confirmSwitch() {
   switchToTask(task);
 }
 
-function switchToTask(task) {
+function switchToTask(task, planItemId = null) {
   // Log current block before switching
   if (running && blockStartTime) {
     const tsEnd = Date.now();
@@ -6149,6 +6167,7 @@ function switchToTask(task) {
       activity: prevTask, energy: lastEnergy,
       onPlan: lastEnergy !== 'distraction', retro: false
     };
+    if (currentTaskPlanItemId) entry.planItemId = currentTaskPlanItemId;
     entries.unshift(entry);
     getActivityColor(prevTask);
     lastTaskForRepeat = prevTask;
@@ -6157,7 +6176,7 @@ function switchToTask(task) {
     showUndoToast(`Logged: ${prevTask} · ${fmtDur(dur)}`, lastEnergy);
   }
   document.getElementById('switch-panel').style.display = 'none';
-  _startTimer(task);
+  _startTimer(task, planItemId);
 }
 
 function quickRetroLog() {
@@ -6484,41 +6503,124 @@ globalThis.getPlanTomorrowAppContext = () => ({
   confirm: confirmPreparedDatePlan
 });
 
-/** Minutes actually tracked against a planned task — the honest signal a checkbox can't fake. */
-function planTrackedMin(task, dateKey) {
+/** Minutes actually tracked against a planned task. Prefers an exact planItemId match (survives
+ *  the task being renamed after a linked Start/Focus launch — see startPlanItem());
+ *  unlinked entries (no planItemId, e.g. predating this field, or started outside the plan flow)
+ *  still fall back to the legacy normalized-text match. An entry linked to a DIFFERENT plan item
+ *  never counts here even if its text happens to coincide. */
+function planTrackedMin(task, dateKey, planItemId = null) {
   const target = normalizePlanTask(task);
-  if (!target) return 0;
-  return getEntriesForDateWindow(dateKey)
-    .filter(e => !e.missed && !e.deleted && !e.away && !e.break && e.activity
-                 && normalizePlanTask(e.activity) === target)
-    .reduce((sum, e) => sum + entryDurationMinutes(e), 0);
+  const seen = new Set();
+  let total = 0;
+  getEntriesForDateWindow(dateKey).forEach(e => {
+    if (e.missed || e.deleted || e.away || e.break || !e.activity) return;
+    const matchesId = planItemId && e.planItemId === planItemId;
+    const matchesText = !e.planItemId && target && normalizePlanTask(e.activity) === target;
+    if (!matchesId && !matchesText) return;
+    if (seen.has(e.id)) return;
+    seen.add(e.id);
+    total += entryDurationMinutes(e);
+  });
+  return total;
 }
 
 function fmtPlanMin(m) {
   return m >= 60 ? (m / 60).toFixed(1) + 'h' : m + 'm';
 }
 
-function isPlanTaskActive(task) {
-  return running && normalizePlanTask(currentTask) === normalizePlanTask(task);
+/** Is this plan item the one currently running? Prefers the linked id (set when the running
+ *  block was started from this row) so a mid-run rename doesn't lose "in progress" status; falls
+ *  back to text match only when the running block carries no plan link at all. */
+function isPlanTaskActive(task, planItemId = null) {
+  if (!running) return false;
+  if (currentTaskPlanItemId) return planItemId ? currentTaskPlanItemId === planItemId : false;
+  return normalizePlanTask(currentTask) === normalizePlanTask(task);
 }
 
 function getPlanItemStatus(item, dateKey, trackedMin) {
-  if (isPlanTaskActive(item.task)) return { key: 'in-progress', label: 'In progress' };
+  if (isPlanTaskActive(item.task, item.id)) return { key: 'in-progress', label: 'In progress' };
   if (trackedMin > 0) return { key: 'logged', label: 'Logged' };
   return { key: 'not-started', label: 'Not started' };
 }
 
 function getActivePlanItem(dateKey) {
-  return getPlanItems(dateKey).find(item => isPlanTaskActive(item.task)) || null;
+  return getPlanItems(dateKey).find(item => isPlanTaskActive(item.task, item.id)) || null;
 }
 
+// Plan Linkage V1 — bounded "when" parsing. ONLY an unambiguous zero-padded 24h "HH:MM" (e.g.
+// "09:00", "13:30") is ever treated as a real time. Anything else — blank, "after lunch",
+// "morning", "later", "ASAP", "9am" — is left unparsed; callers fall back to stable order rather
+// than guess at a time. `when` itself stays free text; this never rewrites or migrates it.
+const PLAN_TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function parsePlanItemTime(when) {
+  const trimmed = typeof when === 'string' ? when.trim() : '';
+  return PLAN_TIME_RE.test(trimmed) ? trimmed : null;
+}
+
+/** Among not-done candidates, an item with zero tracked minutes outranks one that's already been
+ *  worked on — preserves the pre-linkage fallback's deliberate unworked-before-worked-on
+ *  preference (a due/next timed item must not get stuck on something already in progress just
+ *  because it hasn't been checked off yet). */
+function unworkedPlanItems(items, dateKey) {
+  return items.filter(item => planTrackedMin(item.task, dateKey, item.id) === 0);
+}
+function workedOnPlanItems(items, dateKey) {
+  return items.filter(item => planTrackedMin(item.task, dateKey, item.id) > 0);
+}
+
+/** The not-done one-off priority whose parseable `when` is already due (its wall-clock time, on
+ *  dateKey, is at or before right now) that should currently hold UP NEXT's "due" slot — or null
+ *  when nothing with a parseable time is due. Among due candidates, unworked outranks worked-on
+ *  (see unworkedPlanItems); within a tier, the earliest scheduled time wins, never array/insertion
+ *  order. This governs only the due-now-routine precedence decision in todayGuidedAction() — it is
+ *  deliberately stricter (due-gated) than getNextPlanItem()'s own "what's next" ordering below. */
+function dueTimedPlanItem(items, dateKey) {
+  const now = Date.now();
+  const due = items.filter(item => {
+    if (item.done) return false;
+    const hhmm = parsePlanItemTime(item.when);
+    return hhmm ? tzParseTime(dateKey, hhmm) <= now : false;
+  });
+  if (!due.length) return null;
+  const pool = unworkedPlanItems(due, dateKey);
+  const candidates = pool.length ? pool : due;
+  return candidates.reduce((best, item) => {
+    if (!best) return item;
+    return parsePlanItemTime(item.when) < parsePlanItemTime(best.when) ? item : best;
+  }, null);
+}
+
+/** Display-only row order for the plan strip: parseable-time items first (earliest first), then
+ *  every other item in its existing stable order. Never rewrites the persisted item array —
+ *  purely a rendering projection over it. Also reused (not duplicated) by getNextPlanItem() below
+ *  so the plan strip and "what's next" never disagree about relative time ordering. */
+function planDisplayOrder(items) {
+  const timed = [];
+  const rest = [];
+  items.forEach(item => {
+    const hhmm = parsePlanItemTime(item.when);
+    if (hhmm) timed.push({ item, hhmm }); else rest.push(item);
+  });
+  timed.sort((a, b) => a.hhmm.localeCompare(b.hhmm));
+  return [...timed.map(t => t.item), ...rest];
+}
+
+/** The single "what's next" priority — used by the plan strip's own Start-next affordance and by
+ *  todayGuidedAction()'s general fallback (after the due-timed/due-routine precedence above has
+ *  already been checked). Deliberately NOT due-gated: chronological intent among *unstarted*
+ *  priorities matters even before the earliest one is literally due yet (a 09:00 item must still
+ *  rank ahead of a 13:00 item at 08:00). Ranking: unworked before worked-on (never treats a
+ *  worked-on-but-not-done item as finished, but doesn't let it block a fresh priority either);
+ *  within each tier, timed items earliest-first via planDisplayOrder(), then everything else in
+ *  its existing stable order. */
 function getNextPlanItem(dateKey) {
   const items = getPlanItems(dateKey);
   const active = getActivePlanItem(dateKey);
   if (active) return active;
-  return items.find(item => !item.done && planTrackedMin(item.task, dateKey) === 0)
-      || items.find(item => !item.done)
-      || null;
+  const notDone = items.filter(item => !item.done);
+  const ranked = [...planDisplayOrder(unworkedPlanItems(notDone, dateKey)), ...planDisplayOrder(workedOnPlanItems(notDone, dateKey))];
+  return ranked[0] || null;
 }
 
 function renderTodayPlan() {
@@ -6550,8 +6652,8 @@ function renderTodayPlan() {
       ${readOnly ? '' : `<button class="btn sm ghost" onclick="document.getElementById('plan-strip').classList.toggle('editing')">Edit</button>`}
     </div>`;
 
-  const rows = items.map(it => {
-    const mins    = planTrackedMin(it.task, dateKey);
+  const rows = planDisplayOrder(items).map(it => {
+    const mins    = planTrackedMin(it.task, dateKey, it.id);
     const status  = getPlanItemStatus(it, dateKey, mins);
     const active  = status.key === 'in-progress';
     const statusPill = `<span class="plan-status ${status.key}">${status.label}</span>`;
@@ -6577,7 +6679,7 @@ function renderTodayPlan() {
     footer = items.length >= PLAN_MAX
       ? `<div class="plan-full">${PLAN_MAX} of ${PLAN_MAX} — finish or remove one to add another.</div>`
       : `<div class="plan-add">
-          <input id="plan-when" class="plan-input when" maxlength="40" placeholder="when (optional)">
+          <input id="plan-when" type="time" class="plan-input when" aria-label="when (optional)">
           <input id="plan-task" class="plan-input task" maxlength="80" placeholder="what will you do?"
                  onkeydown="if(event.key==='Enter')addPlanItem()">
           <button class="btn sm" onclick="addPlanItem()">Add</button>
@@ -6630,8 +6732,8 @@ function togglePlanDone(id) {
 async function startPlanItem(id) {
   const it = getPlanItems(planTodayKey()).find(x => x.id === id);
   if (!it) return;
-  if (running) switchToTask(it.task);
-  else await _startTimer(it.task);
+  if (running) switchToTask(it.task, it.id);
+  else await _startTimer(it.task, it.id);
   renderTodayPlan();
 }
 
@@ -8164,7 +8266,7 @@ function renderReviewPlanVsActual() {
     target: 'Target', minimum: 'Minimum', complete: 'Complete'
   };
   const itemRows = items.map(item => {
-    const minutes = planTrackedMin(item.task, _reviewDateKey);
+    const minutes = planTrackedMin(item.task, _reviewDateKey, item.id);
     const status = globalThis.PlanTomorrowModel
       ? globalThis.PlanTomorrowModel.classifyOneOffActual(item, { targetDate: _reviewDateKey, timezone: preparation?.timezone || settings.timezone, trackedMinutes: minutes, preparedAt: preparation?.firstPreparedAt || 0 })
       : (item.done ? 'done' : minutes > 0 ? 'worked-on' : 'not-done');
@@ -8177,8 +8279,11 @@ function renderReviewPlanVsActual() {
   }
   const rows = [...itemRows, ...routineRows];
   const plannedLabels = new Set([...items.map(item => item.task), ...routineRows.flatMap(row => [row.title, row.taskLabel])].filter(Boolean).map(normalizePlanTask));
+  const plannedItemIds = new Set(items.map(item => item.id));
   const unplanned = new Map();
-  getEntriesForDateWindow(_reviewDateKey).filter(entry => !entry.deleted && !entry.missed && !entry.break && !entry.away && !plannedLabels.has(normalizePlanTask(entry.activity))).forEach(entry => {
+  getEntriesForDateWindow(_reviewDateKey).filter(entry => !entry.deleted && !entry.missed && !entry.break && !entry.away
+      && !(entry.planItemId && plannedItemIds.has(entry.planItemId))
+      && !plannedLabels.has(normalizePlanTask(entry.activity))).forEach(entry => {
     const label = entry.activity || 'Unlabeled work';
     unplanned.set(label, (unplanned.get(label) || 0) + (entry.blockIntervalMin || 0));
   });

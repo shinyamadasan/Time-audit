@@ -27,8 +27,10 @@ let pomodoroPhaseStartedAt = null;
 let pomodoroWasPaused = false;
 let activeFocusLearningPlan = null;
 let activeFocusContext = '';
+let activeFocusPlanItemId = null; // Plan Linkage V1 — mirrors activeFocusLearningPlan's lifecycle
 let pendingFocusLearningPlan = null;
 let pendingFocusContext = '';
+let pendingFocusPlanItemId = null;
 let _pomodoroAutoStart = localStorage.getItem('ta3-pomo-auto') === '1';
 let _lastFocusSyncAt = 0;
 const FOCUS_SYNC_REFRESH_MS = 15000;
@@ -70,8 +72,10 @@ function getFocusLearningPlanMetadata() {
 function clearFocusLearningPlanContext() {
   activeFocusLearningPlan = null;
   activeFocusContext = '';
+  activeFocusPlanItemId = null;
   pendingFocusLearningPlan = null;
   pendingFocusContext = '';
+  pendingFocusPlanItemId = null;
   _hudFocusLinkType = 'none';
 }
 
@@ -131,6 +135,7 @@ function persistFocusSession() {
       task: currentTask,
       learningPlan: cloneFocusLearningPlanMetadata(activeFocusLearningPlan),
       context: activeFocusContext,
+      planItemId: activeFocusPlanItemId,
       hudFocusLinkType: _hudFocusLinkType,
       ownerDeviceId: timerOwnerDeviceId || null
     }));
@@ -188,6 +193,7 @@ function restoreFocusSession() {
   lastTaskForRepeat = currentTask || lastTaskForRepeat;
   activeFocusLearningPlan = cloneFocusLearningPlanMetadata(saved.learningPlan);
   activeFocusContext = String(saved.context || '').trim();
+  activeFocusPlanItemId = typeof saved.planItemId === 'string' && saved.planItemId ? saved.planItemId : null;
   _hudFocusLinkType = ['daily-routine', 'learning-plan', 'none'].includes(saved.hudFocusLinkType)
     ? saved.hudFocusLinkType : 'none';
   timerOwnerDeviceId = saved.ownerDeviceId || timerOwnerDeviceId;
@@ -596,8 +602,11 @@ function startPomodoro(options = {}) {
   }
   activeFocusLearningPlan = cloneFocusLearningPlanMetadata(options.learningPlan || pendingFocusLearningPlan);
   activeFocusContext = String(options.context || pendingFocusContext || focusContextText(activeFocusLearningPlan) || '').trim();
+  const launchPlanItemId = typeof options.planItemId === 'string' && options.planItemId ? options.planItemId : pendingFocusPlanItemId;
+  activeFocusPlanItemId = launchPlanItemId || null;
   pendingFocusLearningPlan = null;
   pendingFocusContext = '';
+  pendingFocusPlanItemId = null;
   const startedAt = Date.now();
   if (options.dailyRoutine && typeof globalThis.onDailyRoutineFocusStarted === 'function' &&
       globalThis.onDailyRoutineFocusStarted(options.dailyRoutine, startedAt) === false) return false;
@@ -655,6 +664,7 @@ function logFocusSession(tsStart, tsEnd = Date.now()) {
     activity: task, energy: 'deep',
     onPlan: true, retro: false
   };
+  if (activeFocusPlanItemId) entry.planItemId = activeFocusPlanItemId;
   entry.category = getBucket(entry);
   entry.originalLabel = entry.energy;
   getActivityColor(task);
@@ -972,6 +982,7 @@ function enterFocusMode(options = {}) {
         blockIntervalMin: dur, date: toDateKey(new Date(tsEnd)),
         activity: task, energy, onPlan: true, retro: false
       };
+      if (currentTaskPlanItemId) entry.planItemId = currentTaskPlanItemId;
       entry.category = getBucket(entry); entry.originalLabel = entry.energy || null;
       getActivityColor(task);
       entries.push(entry);
@@ -1005,6 +1016,7 @@ function enterFocusMode(options = {}) {
   clearFocusLearningPlanContext();
   pendingFocusLearningPlan = cloneFocusLearningPlanMetadata(launch.learningPlan);
   pendingFocusContext = String(launch.context || focusContextText(pendingFocusLearningPlan) || '').trim();
+  pendingFocusPlanItemId = typeof launch.planItemId === 'string' && launch.planItemId ? launch.planItemId : null;
   taskInput.value = launchTask;
   taskInput.style.display = 'block';
   if (!launch.autoStart) setTimeout(() => taskInput.focus(), 300);
@@ -1030,6 +1042,7 @@ function enterFocusMode(options = {}) {
   if (launch.autoStart) return startPomodoro({
     dailyRoutine: launch.dailyRoutine,
     task: launchTask,
+    planItemId: pendingFocusPlanItemId,
     learningPlan: pendingFocusLearningPlan,
     context: pendingFocusContext
   });

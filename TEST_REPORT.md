@@ -5,6 +5,106 @@
 
 ---
 
+## Plan Linkage + Up Next Ordering V1 — targeted fixes from independent review (same candidate) · 2026-09-10
+branch: `feat/plan-linkage-up-next-v1` (still uncommitted at fix time). Base unchanged, re-verified
+  `4e95098716ea3b7c45f6e29cf0653bfbc6a5d10a` (origin/main) before starting.
+scope: independent review verdict **FIX FIRST** — architecture accepted, 4 confirmed defects
+  fixed, 2 categories of new regression coverage added per the review's explicit ask. 3 files
+  touched: `index.html` (`getNextPlanItem()`/`dueTimedPlanItem()` now rank unworked candidates
+  ahead of worked-on ones and use `planDisplayOrder()`'s time ordering instead of raw array order;
+  new `unworkedPlanItems()`/`workedOnPlanItems()` helpers; `#plan-when` changed to
+  `type="time"`), `storage.js` (`persist()`/`load()` read/write `planItemId` in the `ta3-timer`
+  blob). New test file additions only — no schema/architecture change, no new files, no UI
+  redesign beyond the one input's type.
+suite: `npx playwright test tests/plan-linkage-up-next.spec.js` (27 cases incl. 9 new); full
+  `npm test`; `npm run lint`; full `npx playwright test`; targeted re-run of `tests/plan.spec.js
+  tests/review-reconciliation.spec.js tests/daily-routines-ui.spec.js
+  tests/guided-measurement-loop.spec.js tests/focus-reload-recovery.spec.js tests/smoke.spec.js`;
+  `node scripts/runtime-mirror.mjs --check` (after `--write`); `node --check` on touched files;
+  `git diff --check`.
+result:
+  - `tests/plan-linkage-up-next.spec.js`: **27/27** — original A–R plus new S–Z: before-first-due
+    ordering agreement between UP NEXT and the plan strip (S), worked-on-item stickiness fixed
+    (T), plain-timer reload preserves `planItemId` (U) with a pre-migration-blob compatibility
+    check (U2), Focus reload preserves `planItemId` (V), two switch-no-leak adversarial cases —
+    plan-to-plan (W) and plan-to-manual (X), the multiple-overdue-unworked tie-break pinned as
+    intentional (Y), and the `type="time"` input change with historical free-text display safety
+    (Z).
+  - Found and fixed a consequence of the `type="time"` change: 3 pre-existing
+    `tests/plan.spec.js` tests used free-text `when` values (`"first block"`, `"after lunch"`)
+    via the shared `addItem()` helper's `.fill()` on `#plan-when`, which a native time input can
+    no longer accept. Updated those 3 tests' `when` values to valid `HH:MM` (not their actual
+    point — item count/reload/done-state — so no test was weakened); historical free-text display
+    itself is separately covered by the new spec's test Z.
+  - `npm test`: PASS — 451/451, exit 0, after `node scripts/runtime-mirror.mjs --write` (2 files
+    drifted this round: `index.html`, `storage.js` — the only two touched by this fix pass).
+  - `npm run lint`: PASS — 0 errors. 33 warnings (31 prior + 2 new `no-undef` on
+    `currentTaskPlanItemId` referenced in `storage.js` — same expected cross-script-file class
+    already present for `APP_BUILD`/`updateTimerTaskLabel`/etc.; per the review's explicit
+    guidance, no lint cleanup was launched for this).
+  - Targeted regression re-run (`plan.spec.js` [with the 3 updated tests], `review-reconciliation
+    .spec.js`, `daily-routines-ui.spec.js`, `guided-measurement-loop.spec.js`,
+    `focus-reload-recovery.spec.js`, `smoke.spec.js`): **198/198**, 0 failures (clean this run —
+    including the smoke.spec.js test that flaked in the prior round's targeted run, and passed
+    clean both there in isolation and in that round's own full-suite run).
+  - `npx playwright test` (full): **428/428**, 0 failures — fully clean this run, no
+    non-reproduced or flaky failures observed.
+  - `node scripts/runtime-mirror.mjs --check`: OK after `--write` (`index.html`, `storage.js`
+    re-synced to `www/`).
+  - `node --check` on `focus-mode.js`, `storage.js`, `tests/plan-linkage-up-next.spec.js`,
+    `tests/plan.spec.js`: PASS. `git diff --check`: clean.
+state: fix pass complete; candidate ready for targeted re-review.
+
+## Plan Linkage + Up Next Ordering V1 (candidate) · 2026-09-10
+branch: `feat/plan-linkage-up-next-v1`. Base `4e95098716ea3b7c45f6e29cf0653bfbc6a5d10a`
+  (origin/main, verified via `git rev-parse origin/main` after `git fetch origin main` — the
+  Coarse Evidence Durability V1 commit that landed earlier this session). Fresh isolated worktree
+  (`Time audit app - plan-linkage-up-next-v1`); primary worktree (dirty
+  `docs/phase12-personal-intelligence-design`, uncommitted `README.md`) untouched; no other
+  worktree touched.
+scope: the two-item gap identified by the prior Plan-to-Actual daily-loop audit — id-preferred
+  plan→execution linkage (`planItemId`, text-fallback for unlinked/legacy entries) and a
+  `when`-aware UP NEXT comparator (bounded `HH:MM` parsing only) with a deliberate
+  timed-one-off-vs-due-routine precedence. No new UI, no structured duration, no Timeline change,
+  no new completion state. Touched: `index.html`, `focus-mode.js` (+ `www/` mirror of both); new
+  `tests/plan-linkage-up-next.spec.js`. See `CHANGELOG.md` for the full function-level list.
+suite: `npx playwright test tests/plan-linkage-up-next.spec.js` (new, 18 cases); full `npm test`;
+  `npm run lint`; full `npx playwright test`; targeted re-run of
+  `tests/plan.spec.js tests/review-reconciliation.spec.js tests/daily-routines-ui.spec.js
+  tests/guided-measurement-loop.spec.js tests/focus-reload-recovery.spec.js tests/smoke.spec.js`;
+  `node scripts/runtime-mirror.mjs --check` (after `--write`); `node --check` on `focus-mode.js`
+  and the new spec; `git diff --check`.
+result:
+  - `tests/plan-linkage-up-next.spec.js`: **18/18** — A–G (linkage: Start/Focus/rename-survival/
+    legacy-text-fallback/unplanned-never-double-counted/Done-independent-of-tracked-time/
+    removed-item-preserved), H–N (UP NEXT: out-of-order due times respected, unparseable/blank
+    `when` never guessed at, timed-one-off beats due-now routine, due-now routine wins absent a
+    due one-off, worked/done/not-done stay distinct, graceful with no plan/routines), O–R
+    (regressions: full plan strip, Review plan-vs-actual, ordinary unplanned Start carries no
+    fabricated id, a routine-linked Focus session never picks up a stray plan item id).
+  - `npm test`: PASS — 465 cases (full node chain incl. `runtime-mirror.test.js`), exit 0, after
+    `node scripts/runtime-mirror.mjs --write` (2 files drifted: `index.html`, `focus-mode.js`,
+    expected before the write).
+  - `npm run lint`: PASS — 0 errors. 31 warnings (29 pre-existing + 2 new `no-undef` on
+    `currentTaskPlanItemId` referenced in `focus-mode.js` — the same class of expected
+    cross-script-file warning ESLint already reports for `updateTimerTaskLabel`/
+    `cancelNativePing`/`_todayRenderKey`/etc.; these files share global scope via classic
+    `<script>` tags, not modules, so ESLint can't see the index.html-side declaration).
+  - Targeted regression re-run (`plan.spec.js`, `review-reconciliation.spec.js`,
+    `daily-routines-ui.spec.js`, `guided-measurement-loop.spec.js`,
+    `focus-reload-recovery.spec.js`, `smoke.spec.js`): 170/171 — the 1 failure
+    (`editing an auto-logged schedule can update the recurring template`, unrelated to any file
+    this pass touched) reproduced clean in the full-suite run below; not a regression.
+  - `npx playwright test` (full): **419/419**, 0 failures (incl. the above test, which passed
+    clean here — confirms it's a pre-existing parallel-run flake, same one seen and independently
+    reproduced during the Coarse Evidence Durability V1 pass earlier this session).
+  - `node scripts/runtime-mirror.mjs --check`: OK after `--write` (`index.html`, `focus-mode.js`
+    re-synced to `www/`).
+  - `node --check` on `focus-mode.js` and `tests/plan-linkage-up-next.spec.js`: PASS.
+    `index.html`'s inline script is validated transitively by the 419-test Playwright load, not
+    `node --check` (not a standalone module). `git diff --check`: clean.
+state: candidate uncommitted / unpushed for one independent review.
+
 ## Coarse Evidence Durability V1 — independent-review fix pass (same candidate) · 2026-09-10
 branch: `feat/coarse-evidence-durability-v1` (still uncommitted at fix time). Base unchanged,
   re-verified `02bc5d15e0651878b6ca4c4631ce440b649c9452` (origin/main) before starting.
