@@ -317,7 +317,6 @@
     <span class="today-health-metric deep" id="th-deep">0m deep</span>
     <button type="button" class="today-health-metric waste" id="th-waste" onclick="scrollToFirstEnergy('waste','distraction')">0m waste</button>
     <button type="button" class="today-health-metric wallet" id="th-wallet" onclick="openFocusWallet()">0 pts</button>
-    <button type="button" class="today-health-metric unlogged" id="th-unlogged" onclick="scrollToTimeline()">0m unlogged</button>
   </div>
 
   <!-- Gap recovery inbox -->
@@ -510,7 +509,7 @@
 
 <!-- ══ REFLECT ══ -->
 <div class="view" id="view-reflect">
-  <div class="page-header"><div class="page-title">Reflect</div></div>
+  <div class="page-header"><div class="page-title">Trends</div></div>
 
   <!-- Honest summary -->
   <div class="settings-section">
@@ -1039,7 +1038,7 @@
     <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Week
   </button>
 <button class="nav-btn" id="nav-reflect" onclick="showView('reflect');renderReflectView()">
-    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>Reflect
+    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>Trends
   </button>
   <button class="nav-btn" id="nav-life" onclick="showView('life')">
     <svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="4" cy="6" r="0.5"/></svg>Life
@@ -1741,64 +1740,6 @@ const COMMON_LOG_OPTIONS = [
   { label: 'Walk', activity: 'Walk', energy: 'exercise', minutes: 20, hint: 'last 20m' },
   { label: 'Commute', activity: 'Commute', energy: 'errands', minutes: 30, hint: 'last 30m' },
   { label: 'Exercise', activity: 'Exercise', energy: 'exercise', minutes: 60, hint: 'last 1h' },
-];
-const GAP_RECOVERY_OPTIONS = [
-  { label: 'Cooking', activity: 'Cooking', energy: 'recovery' },
-  { label: 'Eat', activity: 'Eat', energy: 'recovery' },
-  { label: 'Commute', activity: 'Commute', energy: 'errands' },
-  { label: 'Phone', activity: 'Phone', energy: 'waste' },
-  { label: 'Rest', activity: 'Rest', energy: 'recovery' },
-];
-const ROUTINE_PROMPTS = [
-  {
-    id: 'breakfast',
-    label: 'Breakfast check',
-    detail: 'If breakfast or cooking already happened, log it in one tap.',
-    start: '07:30',
-    end: '10:30',
-    match: ['Eat', 'Cooking'],
-    actions: [
-      { label: 'Eat', activity: 'Eat', energy: 'recovery', minutes: 20 },
-      { label: 'Cooking', activity: 'Cooking', energy: 'recovery', minutes: 30 }
-    ]
-  },
-  {
-    id: 'lunch',
-    label: 'Lunch check',
-    detail: 'Keep the middle of the day from becoming mystery time.',
-    start: '11:30',
-    end: '14:00',
-    match: ['Eat', 'Cooking'],
-    actions: [
-      { label: 'Eat', activity: 'Eat', energy: 'recovery', minutes: 30 },
-      { label: 'Cooking', activity: 'Cooking', energy: 'recovery', minutes: 30 }
-    ]
-  },
-  {
-    id: 'dinner',
-    label: 'Dinner check',
-    detail: 'Log the specific routine, not a generic chore bucket.',
-    start: '17:30',
-    end: '20:30',
-    match: ['Eat', 'Cooking', 'Dishes'],
-    actions: [
-      { label: 'Eat', activity: 'Eat', energy: 'recovery', minutes: 30 },
-      { label: 'Cooking', activity: 'Cooking', energy: 'recovery', minutes: 45 },
-      { label: 'Dishes', activity: 'Dishes', energy: 'recovery', minutes: 15 }
-    ]
-  },
-  {
-    id: 'evening',
-    label: 'Evening check',
-    detail: 'Tiny maintenance logs make tomorrow easier to read.',
-    start: '20:30',
-    end: '23:30',
-    match: ['Hygiene', 'Dishes'],
-    actions: [
-      { label: 'Hygiene', activity: 'Hygiene', energy: 'recovery', minutes: 15 },
-      { label: 'Dishes', activity: 'Dishes', energy: 'recovery', minutes: 15 }
-    ]
-  }
 ];
 let blockStartTime = null;
 let lastStateChange = null;
@@ -4859,10 +4800,8 @@ function renderCloseoutCta() {
   document.getElementById('closeout-title').textContent = summary.reviewed ? 'Day closed' : 'Close day';
   document.getElementById('closeout-sub').textContent = summary.reviewed
     ? `${savedAt ? 'Review saved ' + savedAt + '. ' : 'Review saved. '}Edit it anytime.`
-    : summary.unloggedMin >= 30 && !summary.unloggedOk
-      ? 'Fill or mark missing time, then pick tomorrow.'
     : summary.entryCount || summary.planCount
-      ? 'Review today, name the leak, pick tomorrow.'
+      ? 'Review today, then prepare tomorrow.'
       : 'No logs yet. Set tomorrow when you are ready.';
   document.getElementById('closeout-action').textContent = summary.reviewed ? 'Edit review' : 'Close day';
   document.getElementById('closeout-stats').innerHTML = closeoutSummaryParts(summary)
@@ -4873,13 +4812,10 @@ function renderCloseoutCta() {
 function computeTodayHealth(todayE, dateKey) {
   const realEntries = (todayE || []).filter(e => !e.deleted && !e.missed);
   const wasteMin = sumEnergyMinutes(realEntries, 'waste', dateKey) + sumEnergyMinutes(realEntries, 'distraction', dateKey);
-  const gapEnd = isViewingToday() ? undefined : dayEndTs(dateKey);
-  const unloggedMin = computeGaps(realEntries, gapEnd).reduce((sum, gap) => sum + (gap.gapMin || 0), 0);
   const wallet = isViewingToday() ? getCurrentFocusWallet() : null;
   return {
     deepMin: sumEnergyMinutes(realEntries, 'deep', dateKey),
     wasteMin,
-    unloggedMin,
     walletBalance: wallet ? wallet.balance : null
   };
 }
@@ -4917,17 +4853,15 @@ function renderTodayHealth(todayE) {
     walletEl.disabled = true;
     walletEl.title = '';
   }
-
-  const unloggedEl = document.getElementById('th-unlogged');
-  const hasReviewableGap = health.unloggedMin >= 30;
-  unloggedEl.style.display = hasReviewableGap ? '' : 'none';
-  unloggedEl.textContent = `${fmtDur(health.unloggedMin)} unlogged`;
-  unloggedEl.classList.toggle('warn', hasReviewableGap && health.unloggedMin >= 120);
-  unloggedEl.classList.toggle('actionable', hasReviewableGap);
-  unloggedEl.disabled = !hasReviewableGap;
-  unloggedEl.title = hasReviewableGap ? 'Jump to timeline gaps' : '';
+  // Phase 6I/J UX pass: the "Xh Ym unlogged" Today stat was removed — a passive debt figure
+  // on the main screen undercut removing the gap interruption. Raw gaps stay in Timeline and
+  // Review's Full analysis; whole-day reconciliation happens once, in Review.
 }
 
+// Diagnostic only as of Phase 6J: "is there an unacknowledged >=30m timeline gap on the
+// day in view right now?". No production UI consumes this any more (§14 removed the Today
+// interruption it used to drive) — it is retained for debugging and regression tests per
+// §16 ("do NOT remove raw gaps from internal reasoning / debugging").
 function getGapRecoveryCandidate(todayE) {
   // Review's acknowledgement is date-scoped, not a fabricated activity interval.
   if (!isViewingToday() || reviews[getViewingDateKey()]?.unloggedOk) return null;
@@ -4941,113 +4875,32 @@ function getGapRecoveryCandidate(todayE) {
   return { ...gap, ts: tsEnd, gapMin };
 }
 
+// Phase 6J: a generic timeline gap no longer interrupts Today (§14/§15 — "GAP NO LONGER
+// DEMANDS DAYTIME INTERRUPTION. Not: GAPS NO LONGER EXIST."). getGapRecoveryCandidate()
+// stays as a pure diagnostic (computeGaps() is unchanged and still feeds Review/Full
+// analysis); this card is intentionally never populated from it any more. Reconciling a
+// day now happens once, in Review's bounded "Anything important missing?" prompt.
 function renderGapRecoveryInbox(todayE) {
   const card = document.getElementById('gap-recovery');
   if (!card) return;
-  const gap = getGapRecoveryCandidate(todayE);
-  if (!gap) {
-    card.style.display = 'none';
-    card.innerHTML = '';
-    delete card.dataset.tsStart;
-    delete card.dataset.tsEnd;
-    renderNeedsYou();
-    return;
-  }
-
-  const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[ch]));
-  card.dataset.tsStart = String(gap.tsStart);
-  card.dataset.tsEnd = String(gap.ts);
-  card.style.display = 'block';
-  card.innerHTML = `<div class="gap-recovery-title">${esc(localTime(gap.tsStart))}–${esc(localTime(gap.ts))} is unaccounted for</div>
-    <button type="button" class="btn sm ghost" onclick="openGapRecoveryOther()">Fix</button>
-    <details><summary>Quick correction</summary><div class="gap-chip-row">${GAP_RECOVERY_OPTIONS.map((option, idx) => `<button type="button" class="gap-chip ${option.energy}" onclick="fillGapRecovery(${idx})">${esc(option.label)}</button>`).join('')}</div></details>
-    <button type="button" class="btn sm ghost" onclick="openReview()">Leave unknown in Review</button>`;
+  card.style.display = 'none';
+  card.innerHTML = '';
+  delete card.dataset.tsStart;
+  delete card.dataset.tsEnd;
   renderNeedsYou();
 }
 
-function routinePromptStorageKey(dateKey) {
-  return `ta3-routine-dismissed-${dateKey}`;
-}
-
-function getDismissedRoutinePrompts(dateKey) {
-  try {
-    const saved = JSON.parse(localStorage.getItem(routinePromptStorageKey(dateKey)) || '[]');
-    return Array.isArray(saved) ? saved : [];
-  } catch(e) {
-    return [];
-  }
-}
-
-function markRoutinePromptDismissed(promptId, dateKey = getViewingDateKey()) {
-  const dismissed = new Set(getDismissedRoutinePrompts(dateKey));
-  dismissed.add(promptId);
-  localStorage.setItem(routinePromptStorageKey(dateKey), JSON.stringify([...dismissed]));
-}
-
-function routinePromptWindow(prompt, dateKey) {
-  const tsStart = tzParseTime(dateKey, prompt.start);
-  let tsEnd = tzParseTime(dateKey, prompt.end);
-  if (tsEnd <= tsStart) tsEnd += 24 * 60 * 60 * 1000;
-  return { tsStart, tsEnd };
-}
-
-function routinePromptAlreadyLogged(prompt, todayE, range) {
-  const wanted = new Set((prompt.match || []).map(activityGroupKey));
-  const matchStart = range.tsStart - 60 * 60000;
-  return (todayE || []).some(e => {
-    if (!e || e.deleted || e.missed || !wanted.has(activityGroupKey(e.activity))) return false;
-    const start = Number(e.tsStart || e.ts || 0);
-    const end = Number(e.ts || start);
-    return end > matchStart && start < range.tsEnd;
-  });
-}
-
-function getRoutinePromptCandidate(todayE) {
-  if (!isViewingToday() || isInQuietHours(Date.now())) return null;
-  const dateKey = getViewingDateKey();
-  const dismissed = new Set(getDismissedRoutinePrompts(dateKey));
-  const now = Date.now();
-  for (let idx = 0; idx < ROUTINE_PROMPTS.length; idx++) {
-    const prompt = ROUTINE_PROMPTS[idx];
-    if (dismissed.has(prompt.id)) continue;
-    const range = routinePromptWindow(prompt, dateKey);
-    if (now < range.tsStart || now > range.tsEnd) continue;
-    if (routinePromptAlreadyLogged(prompt, todayE, range)) continue;
-    return { ...prompt, idx, ...range };
-  }
-  return null;
-}
-
-function renderRoutinePrompt(todayE) {
+// Phase 6I/J UX pass: the four hard-coded generic meal/chore check-ins (breakfast / lunch /
+// dinner / evening — the old ROUTINE_PROMPTS) were removed. They were system-maintenance
+// nags, not user-created routines. Ordinary life is now handled by passive evidence and the
+// one bounded Review reconciliation prompt, not by daytime check-ins. The "Daily basics"
+// quick-log grid (Sleep / Eat / Cooking / …) stays available for when the user chooses to
+// log something; explicit user routines and real routine errors are untouched.
+function renderRoutinePrompt() {
   const card = document.getElementById('routine-prompt');
   if (!card) return;
-  const prompt = getRoutinePromptCandidate(todayE);
-  if (!prompt) {
-    card.style.display = 'none';
-    card.innerHTML = '';
-    return;
-  }
-
-  const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[ch]));
-  const actions = prompt.actions.map((action, actionIdx) => `
-    <button type="button" class="routine-chip ${action.energy}" onclick="quickLogRoutinePrompt(${prompt.idx}, ${actionIdx})">${esc(action.label)} · ${fmtDur(action.minutes)}</button>
-  `).join('');
-  card.style.display = 'block';
-  card.innerHTML = `
-    <div class="routine-main">
-      <div>
-        <div class="routine-label">Routine prompt</div>
-        <div class="routine-title">${esc(prompt.label)}</div>
-        <div class="routine-detail">${esc(prompt.detail)}</div>
-      </div>
-      <button type="button" class="routine-dismiss" onclick="dismissRoutinePrompt(${prompt.idx})">Skip</button>
-    </div>
-    <div class="routine-actions">${actions}</div>
-  `;
+  card.style.display = 'none';
+  card.innerHTML = '';
 }
 
 function todayGuidedAction() {
@@ -5124,34 +4977,72 @@ function renderReviewCloseoutSummary() {
     </div>`;
 }
 
+// Phase 6I/J: one small, optional, whole-day reconciliation prompt — "anything important
+// missing?" — not gated on detected gap size (§9: a raw gap count does not require this,
+// and its absence does not make the prompt meaningless; ordinary life can be
+// underrepresented with zero detected gaps too).
+//
+// Day-to-day UX pass: the prompt is a calm secondary question, not an alarm. The ordinary
+// exit — "Looks about right" — is the one primary action; "Add broad activity" and
+// "Leave unknown" are equal secondary options; the precise "Log time" gap-jump is a
+// demoted text link (exact reconstruction is never the default whole-life behaviour).
+// Once acknowledged, this collapses to a single quiet line — a tiny "Add activity" /
+// "Change" — and stops asking for attention (§4/§8/§20) until explicitly changed (§21).
 function renderReviewUnloggedDecision() {
   const el = document.getElementById('rv-unlogged-decision');
   if (!el) return;
   const dateKey = _reviewDateKey || getViewingDateKey();
   const summary = computeCloseoutSummary(dateKey);
-  if (summary.unloggedMin < 30) {
-    el.style.display = 'none';
-    el.innerHTML = '';
+  const hasGap = summary.unloggedMin >= 30;
+
+  el.style.display = 'block';
+
+  if (_reviewReconciliation) {
+    const ok = _reviewReconciliation === 'reviewed_ok';
+    el.innerHTML = `<div class="rv-gap-check ok">
+        <div class="rv-gap-head">✓ ${ok ? 'Looks about right' : 'Left unknown'}</div>
+        <div class="rv-gap-actions">
+          <button type="button" class="rv-gap-link" onclick="openCoarseEvidenceEditor('${dateKey}')">Add activity</button>
+          <button type="button" class="rv-gap-link" onclick="resetReviewReconciliation()">Change</button>
+        </div>
+      </div>`;
     return;
   }
 
-  const ok = _reviewUnloggedOk;
-  el.style.display = 'block';
-  el.innerHTML = `<div class="rv-gap-check${ok ? ' ok' : ''}">
-      <div class="rv-gap-head">${ok ? 'Left unknown' : 'Needs you'}</div>
-      <div class="rv-gap-copy">
-        ${ok ? 'This date’s unlogged time will stay unknown when you save.' : 'Some time is unlogged. Add it if you remember, or leave it unknown.'}
-      </div>
+  el.innerHTML = `<div class="rv-gap-check">
+      <div class="rv-gap-head">Anything important missing?</div>
+      <div class="rv-gap-copy">Food, care, household, travel, people, or downtime — add it if it matters, or leave it unknown.</div>
       <div class="rv-gap-actions">
-        <button type="button" class="btn sm ghost" onclick="openReviewFirstGap()">Log time</button>
-        <button type="button" class="btn sm ${ok ? 'primary' : 'ghost'}" onclick="markReviewUnloggedIntentional()">${ok ? 'Unknown' : 'Leave unknown'}</button>
+        <button type="button" class="btn sm primary" onclick="markReviewReconciliationOk()">Looks about right</button>
+        <button type="button" class="btn sm ghost" onclick="openCoarseEvidenceEditor('${dateKey}')">Add broad activity</button>
+        <button type="button" class="btn sm ghost" onclick="markReviewUnloggedIntentional()">Leave unknown</button>
+        ${hasGap ? `<button type="button" class="rv-gap-link" onclick="openReviewFirstGap()">Log time</button>` : ''}
       </div>
     </div>`;
 }
 
+// "Leave unknown": there is uncertainty and the user chooses not to resolve it. Never
+// fabricates an activity/duration and never closes a timeline gap (§7). When a diagnostic
+// gap is actually present, this is also the existing detected-unlogged-time acknowledgment
+// (`unloggedOk`) — same user intent, one button, both truthful.
 function markReviewUnloggedIntentional() {
   _reviewUnloggedOk = true;
+  _reviewReconciliation = 'left_unknown';
   renderReviewCloseoutSummary();
+  renderReviewUnloggedDecision();
+}
+
+// "Looks about right": the day was reviewed and nothing more needs adding right now. Does
+// NOT claim all time is known, all gaps are resolved, or the day is complete (§6).
+function markReviewReconciliationOk() {
+  _reviewReconciliation = 'reviewed_ok';
+  renderReviewCloseoutSummary();
+  renderReviewUnloggedDecision();
+}
+
+// Explicit revisit only (§21) — adding coarse evidence later never forces this on its own.
+function resetReviewReconciliation() {
+  _reviewReconciliation = null;
   renderReviewUnloggedDecision();
 }
 
@@ -6854,84 +6745,6 @@ function logCommonActivity(activity, energy, minutes, extra = null) {
   return entry;
 }
 
-function quickLogRoutinePrompt(promptIdx, actionIdx) {
-  const prompt = ROUTINE_PROMPTS[promptIdx];
-  const action = prompt?.actions?.[actionIdx];
-  if (!prompt || !action) return null;
-  const entry = logCommonActivity(action.activity, action.energy, action.minutes, { routinePrompt: prompt.id });
-  if (entry) {
-    markRoutinePromptDismissed(prompt.id);
-    scheduleRenderToday();
-  }
-  return entry;
-}
-
-function dismissRoutinePrompt(promptIdx) {
-  const prompt = ROUTINE_PROMPTS[promptIdx];
-  if (!prompt) return;
-  markRoutinePromptDismissed(prompt.id);
-  renderRoutinePrompt(getViewingEntries());
-  showToast('Routine prompt skipped');
-}
-
-function currentGapRecoveryRange() {
-  const card = document.getElementById('gap-recovery');
-  const tsStart = Number(card?.dataset.tsStart || 0);
-  const tsEnd = Number(card?.dataset.tsEnd || 0);
-  if (!tsStart || !tsEnd || tsEnd <= tsStart) return null;
-  return { tsStart, tsEnd };
-}
-
-function fillGapRecovery(idx) {
-  const option = GAP_RECOVERY_OPTIONS[idx];
-  const range = currentGapRecoveryRange();
-  if (!option || !range) { showToast('No recoverable gap found'); return null; }
-  return logGapRecoveryActivity(option.activity, option.energy, range.tsStart, range.tsEnd);
-}
-
-function openGapRecoveryOther() {
-  const range = currentGapRecoveryRange();
-  if (!range) { showToast('No recoverable gap found'); return; }
-  openRetroLogPrefilled(range.tsStart, range.tsEnd);
-}
-
-function logGapRecoveryActivity(activity, energy, tsStart, tsEnd) {
-  if (!isViewingToday()) { showToast('Gap recovery is for today'); return null; }
-  const label = canonicalizeActivityInput(activity);
-  const durMin = Math.max(1, Math.round((tsEnd - tsStart) / 60000));
-  if (durMin < 1) { showToast('Gap is too short to log'); return null; }
-  if (durMin >= 240 && !confirm(`Log ${fmtDur(durMin)} as ${label}?`)) return null;
-  const entry = {
-    id: tsEnd,
-    ts: tsEnd,
-    tsStart,
-    updatedAt: Date.now(),
-    blockIntervalMin: durMin,
-    date: toDateKey(new Date(tsStart)),
-    activity: label,
-    energy,
-    onPlan: energy !== 'waste' && energy !== 'distraction',
-    retro: true,
-    quickLogged: true,
-    gapRecovered: true
-  };
-  entry.category = getBucket(entry);
-  entry.originalLabel = entry.energy || null;
-  getActivityColor(label);
-  learnWastePattern(label, energy);
-  validateEntry(entry);
-  entries.unshift(entry);
-  entries.sort((a, b) => b.ts - a.ts);
-  _lastLoggedEntryId = entry.id;
-  persist();
-  scheduleRenderToday();
-  syncEntries();
-  rememberCreatedUndo('gap recovery', [entry]);
-  showUndoToast(`Recovered · ${label} · ${fmtDur(durMin)}`, energy);
-  checkBudget(energy);
-  return entry;
-}
-
 function showContinueBanner() {}
 function hideContinueBanner() { clearInterval(continueBannerTimer); }
 function doContinueBlock() {}
@@ -8188,6 +8001,7 @@ let _reviewGapDetour = false; // bounded return from the Review gap editor; fiel
 let _reviewDateKey = null; // which date is currently open in the review modal
 let _reviewUnloggedOk = false;    // true when missing time was seen and intentionally left blank
 let _reviewFocusRating = null;    // Phase 11.8 optional subjective rating: 'focused' | 'mixed' | 'distracted'
+let _reviewReconciliation = null; // Phase 6I/J whole-day reconciliation acknowledgment: null | 'reviewed_ok' | 'left_unknown' — separate from unloggedOk (§18/19: distinct concept, not gap-size-gated)
 
 function renderReviewFeeling() {
   document.getElementById('rv-feeling').innerHTML = `<label>How did today feel? <span class="note">(optional)</span></label><div class="rv-feeling-options">${['focused', 'mixed', 'distracted'].map(value => `<button type="button" class="btn sm ${_reviewFocusRating === value ? 'primary' : 'ghost'}" value="${value}" aria-pressed="${_reviewFocusRating === value}" onclick="setReviewFocusRating('${value}')">${value[0].toUpperCase() + value.slice(1)}</button>`).join('')}</div>`;
@@ -8222,6 +8036,10 @@ function openReview(dateKey, fullAnalysis = false) {
   const r = reviews[_reviewDateKey] || {};
   _reviewUnloggedOk = !!r.unloggedOk;
   _reviewFocusRating = r.focusRating || null;
+  // Backward compat (§18): an old review saved before 6I has no `reconciliation` field.
+  // A saved unloggedOk:true already truthfully means "unlogged time was seen and left
+  // unknown" — infer left_unknown from it rather than re-nagging with a fresh prompt.
+  _reviewReconciliation = r.reconciliation || (r.unloggedOk ? 'left_unknown' : null);
 
   // Date label in modal header
   const dateLabel = document.getElementById('rv-date-label');
@@ -8393,6 +8211,7 @@ function saveReview(){
     avoid:document.getElementById('rv-avoid').value,
     tomorrow:tomorrowText,
     unloggedOk: summary.unloggedMin >= 30 ? _reviewUnloggedOk : false,
+    reconciliation: _reviewReconciliation || null,
     focusRating: _reviewFocusRating || null,
     _savedAt:Date.now()
   };

@@ -368,9 +368,85 @@ centralized "export everything" backup surface today (CSV covers only `entries`;
 Ledger snapshot covers only Ledger events), so there was no existing seam to extend without
 redesigning backup, which was out of scope. Both are documented limitations, not oversights.
 
-Still future: daily Review reconciliation (6I), a whole-day coverage model, replacing the
-generic Today gap prompt, combined exact+estimated allocation, Life Ledger projection,
+Still future (as of 6H): daily Review reconciliation, a whole-day coverage model, replacing
+the generic Today gap prompt, combined exact+estimated allocation, Life Ledger projection,
 cross-device sync, export/import, Wife/Shared, Personal Model/Advisor.
+
+**Implementation status (Phase 6I/J, branch `feat/review-reconciliation-v1`, uncommitted
+candidate):** implemented — the minimum end-of-day reconciliation flow, plus removal of the
+generic daytime Today gap interruption. No new coverage engine, no interval-allocation
+engine, no schema migration, no life taxonomy, no AI inference, no mandatory gap repair.
+
+Reconciliation: Review's existing `#rv-unlogged-decision` block was reworked into one small,
+optional, whole-day prompt — "Anything important missing?" (helper text: food, care,
+household time, travel, people, or downtime). It is no longer gated on a detected gap
+(`unloggedMin >= 30`); it shows on every open of an un-acknowledged day, because ordinary
+life can be underrepresented even when `computeGaps()` reports zero gaps, and a raw gap does
+not by itself require the user to add anything. Actions: **Add broad activity** (opens the
+6H `openCoarseEvidenceEditor(dateKey)` for Review's selected date — no duplicate storage,
+no fake placement); **Log time** (only when a >=30m diagnostic gap exists — the existing
+gap-jump to the retro editor, unchanged); **Leave unknown** ("there is uncertainty and I
+choose not to resolve it" — never fabricates an activity/duration, never closes a gap; when
+a real detected gap is present it also sets the existing `unloggedOk`, same user intent);
+**Looks about right** ("reviewed, nothing more to add right now" — does NOT claim all time
+known, all gaps resolved, 24h complete, or verified). Exact-activity addition for an
+arbitrary Review date was NOT built as a new subsystem (§5): `openRetroLog()` is anchored to
+"now" and cannot be safely retargeted to a past Review date without new architecture; the
+gap-scoped "Log time" path already covers exact entry against a specific detected gap, and
+Today's own retro editor covers today.
+
+Persistence: one narrow new review field, `reviews[dateKey].reconciliation` ∈
+{`undefined`/`null`, `'reviewed_ok'`, `'left_unknown'`}, saved through the existing durable
+Review path (`persist()` + `fbRoomRef.update({ reviews/<key> })`) — no second store, no
+score, no `complete`/`closed`/`reviewed` boolean. `unloggedOk` keeps its exact prior meaning
+and its `unloggedMin >= 30` save gate (§18 — old and new semantics differ materially, so a
+new field rather than reinterpretation). Backward compatibility: an old review with
+`unloggedOk: true` and no `reconciliation` field is read as `'left_unknown'` (a truthful
+inference — unlogged time was seen and left unknown — not a fabrication); old records are
+never rewritten. Reopening an acknowledged day shows a compact "Looks about right" /
+"Left unknown" summary, not the full prompt, until the user explicitly clicks **Revisit**;
+adding coarse evidence afterwards does not force reconfirmation (§21). "Looks about right"
+is review-workflow state only and is never fed to productivity/deep%/waste%/Wallet/
+attention/capability/streak analytics (§36).
+
+Today gap interruption removed (§14, ONLY after reconciliation was working): the generic
+"first timeline gap >= 30m → Needs You / fill gap" card is gone. `renderGapRecoveryInbox()`
+now only ever hides `#gap-recovery`; `GAP_RECOVERY_OPTIONS`, `fillGapRecovery`,
+`openGapRecoveryOther`, `logGapRecoveryActivity`, `currentGapRecoveryRange` were removed as
+orphaned by that change. `computeGaps()` / `getCloseoutGaps()` are unchanged and still feed
+Review's factual summary, Full analysis' "Unlogged intervals" list, and Today Health's quiet
+`unlogged` stat. `getGapRecoveryCandidate()` is retained as a pure diagnostic (§16 — raw
+gaps must remain available to internal reasoning / debugging / tests). Concrete Needs You
+signals (configured sleep reminder, daily-routine due/error, active-Focus reload recovery)
+are untouched (§15). The "Close day" CTA sub-copy "Fill or mark missing time, then pick
+tomorrow." was dropped — it carried the same gap-based pressure.
+
+Deliberately NOT done in 6I/J: whole-day coverage model / coverage %, combined
+exact+estimated allocation, coarse-evidence durability / cross-device sync (still local-only
+through 6I — **durability is still required before Wife/Shared or serious dogfood**), Life
+Ledger projection of coarse evidence, export/import, Wife/Shared, Personal Model/Advisor. No
+passive-source / energy-classification semantics were reopened (§26). Review's core stays
+simple — factual summary, optional feeling, optional one win, Save/Close, optional details,
+Full analysis, subordinate Plan Tomorrow — no Reality Score, judgment grade, gap worksheet,
+waste form, mandatory repair, or completion score was reintroduced.
+
+Day-to-day UX correction pass (same candidate): a REMOVE / QUIETEN pass, no semantic change.
+The reconciliation prompt was retoned off its amber-alarm styling to a calm neutral surface
+with one primary exit ("Looks about right"), "Add broad activity" / "Leave unknown" as equal
+secondary options and "Log time" as a demoted link; the acknowledged state collapsed to one
+quiet `✓` line. The `#th-unlogged` "Xh Ym unlogged" Today stat was removed (raw gaps stay in
+Timeline / Full analysis / Week view — this contract's "current gap totals MUST NOT become
+whole-day coverage" rule is better served by not showing a running debt figure at all). The
+four hard-coded generic meal/chore check-in prompts (`ROUTINE_PROMPTS`) were removed —
+ordinary life is handled by passive evidence and the one bounded Review reconciliation, not
+daytime check-ins; the passive Daily-basics quick-log grid and explicit user routines are
+untouched. "Close day" copy: "name the leak" → "then prepare tomorrow". Reconciliation
+acknowledgment is still review-workflow-only and still not fed to analytics.
+
+Still future (as of 6I/J): whole-day coverage model, combined exact+estimated allocation,
+coarse-evidence durability / sync, Life Ledger projection, export/import, Wife/Shared,
+Personal Model/Advisor. Gates before Wife/Shared or serious dogfood: (1) coarse-evidence
+durability, (2) onboarding rewrite, (3) Focus Wallet / streak pressure decision.
 
 ## Verification and UX limit
 

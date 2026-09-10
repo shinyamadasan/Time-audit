@@ -125,21 +125,21 @@ test('one known Start and intentional free-form work with three long priorities'
   expect(await page.evaluate(() => getPlanItems(planTodayKey()).every(p => !p.done))).toBe(true);
 });
 
-test('Needs You respects acknowledged unknown, configured sleep and empty state', async ({ page }) => {
+test('Needs You never nags for a generic gap; configured sleep and empty state still work (Phase 6J)', async ({ page }) => {
   await today(page);
   await page.evaluate(() => { settings.sleepSetupDone = false; entries = [{id:93,activity:'Earlier work',energy:'deep',date:planTodayKey(),tsStart:Date.now()-7200000,ts:Date.now()-3600000,blockIntervalMin:60}]; reviews[planTodayKey()] = {unloggedOk:true}; checkSleepReminder(); renderToday(); });
   await expect(page.locator('#needs-you')).toBeHidden();
   expect(await page.evaluate(() => getCloseoutGaps(planTodayKey()).length)).toBeGreaterThan(0);
   await page.evaluate(() => { delete reviews[planTodayKey()]; renderToday(); });
-  await expect(page.locator('#needs-you')).toBeVisible();
-  await expect(page.locator('#gap-recovery')).toContainText('unaccounted for');
+  // A generic gap alone, with no review acknowledgment, no longer opens a Needs You
+  // interruption (§14) — the raw gap is still a diagnostic fact (getCloseoutGaps).
+  await expect(page.locator('#needs-you')).toBeHidden();
+  await expect(page.locator('#gap-recovery')).toBeHidden();
+  expect(await page.evaluate(() => getCloseoutGaps(planTodayKey()).length)).toBeGreaterThan(0);
   await page.evaluate(() => { settings.sleepSetupDone = true; checkSleepReminder(); });
-  await expect(page.locator('#needs-you-count')).toHaveText('2 things');
-  await expect(page.locator('#sleep-needs-item')).toBeHidden();
-  await page.locator('#needs-you-more').click();
-  await expect(page.locator('#today-sleep-reminder')).toBeVisible();
-  await page.evaluate(() => { reviews[planTodayKey()] = {unloggedOk:true}; renderToday(); });
   await expect(page.locator('#needs-you-count')).toHaveText('1 thing');
+  await expect(page.locator('#needs-you-more')).toBeHidden();
+  await expect(page.locator('#today-sleep-reminder')).toBeVisible();
   await page.evaluate(() => { localStorage.setItem('ta3-sleep-snooze', String(Date.now()+3600000)); checkSleepReminder(); });
   await expect(page.locator('#needs-you')).toBeHidden();
   expect(await page.evaluate(() => entries.map(e=>e.id))).toEqual([93]);
@@ -266,7 +266,7 @@ test('sleep snooze and log immediately remove the configured Needs You action', 
 });
 
 
-test('action polish idle and missing-time affordances at phone and desktop widths', async ({page}) => {
+test('idle layout holds and a generic gap raises no Today interruption at phone and desktop widths', async ({page}) => {
   await fs.mkdir(path.join(APP_ROOT,'test-results','phase6d'),{recursive:true});
   for (const width of [390,1280]) {
     await page.setViewportSize({width,height:900});
@@ -275,19 +275,15 @@ test('action polish idle and missing-time affordances at phone and desktop width
     await expect(page.locator('#routine-compact')).not.toContainText('Deep work');
     await page.screenshot({path:path.join(APP_ROOT,'test-results','phase6d',`idle-${width}.png`),fullPage:true});
     await page.evaluate(() => {
+      // ~1h logged early, then a multi-hour generic gap to "now".
       entries=[{id:99,activity:'Earlier work',energy:'deep',date:planTodayKey(),tsStart:Date.now()-7200000,ts:Date.now()-3600000,blockIntervalMin:60}];
       renderToday();
     });
-    await expect(page.locator('#needs-you')).toBeVisible();
-    const fix=page.locator('#gap-recovery > button').first();
-    const quiet=page.locator('#gap-recovery > button').last();
-    expect(await fix.evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
-    expect(await quiet.evaluate(el=>getComputedStyle(el).textDecorationLine)).toBe('underline');
+    // Phase 6J: the generic gap is a diagnostic fact but never a Needs You interruption.
+    expect(await page.evaluate(() => getCloseoutGaps(planTodayKey()).length)).toBeGreaterThan(0);
+    await expect(page.locator('#needs-you')).toBeHidden();
+    await expect(page.locator('#gap-recovery')).toBeHidden();
     await page.screenshot({path:path.join(APP_ROOT,'test-results','phase6d',`needs-you-${width}.png`),fullPage:true});
-    await page.keyboard.press('Tab');
-    await fix.focus();
-    expect(await fix.evaluate(el=>getComputedStyle(el).outlineStyle)).toBe('solid');
-    await page.screenshot({path:path.join(APP_ROOT,'test-results','phase6d',`keyboard-focus-${width}.png`),fullPage:true});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
 });
