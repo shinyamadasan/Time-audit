@@ -103,6 +103,8 @@ export default [
         attentionSignalLines: 'readonly', renderReviewAttention: 'readonly',
         setReviewFocusRating: 'readonly',
         sumEntryMinutes: 'readonly', sumEnergyMinutes: 'readonly',
+        isPassiveObservationEntry: 'readonly', isScheduledAssumptionEntry: 'readonly',
+        isComputerSessionEntry: 'readonly', hasConfirmedEnergyClassification: 'readonly',
         persist: 'readonly', syncEntries: 'readonly',
         fmtDur: 'readonly', getActivityColor: 'readonly', resetTimer: 'readonly',
         _startHeartbeat: 'readonly', _stopHeartbeat: 'readonly',

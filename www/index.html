@@ -1651,6 +1651,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="storage.js?v=20260719-template-sync-doctor-2"></script>
+<script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
@@ -4041,7 +4042,9 @@ function _buildEntriesByDate(tz) {
   return map;
 }
 function computeStreak(){
-  // Deep work streak: consecutive days with ≥1 deep work block
+  // Deep work streak: consecutive days with ≥1 CONFIRMED deep work block.
+  // Scheduled/passive/PC-Time 'deep' entries are not confirmed behaviour and
+  // must not qualify a day on their own (mirrors computeDailySummary).
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = Date.now();
   const byDate = _buildEntriesByDate(tz);
@@ -4049,13 +4052,19 @@ function computeStreak(){
   for (let i = 0; i < 90; i++) {
     const k = getDateInTZ(now - i * 86400000, tz);
     const dayEntries = byDate.get(k) || [];
-    if (dayEntries.some(e => e.energy === 'deep')) s++;
+    const confirmedDayEntries = typeof hasConfirmedEnergyClassification === 'function'
+      ? dayEntries.filter(hasConfirmedEnergyClassification)
+      : dayEntries;
+    if (confirmedDayEntries.some(e => e.energy === 'deep')) s++;
     else if (i > 0) break; // allow today to have no deep yet without breaking streak
   }
   return s;
 }
 function computeCleanStreak(){
-  // Clean-day streak: consecutive days with zero distraction/waste entries
+  // Consecutive days with no waste/distraction ENTRY of any kind (passive
+  // included — this stays conservative: any waste marker ends the streak). It is
+  // "no waste was logged", not proof the day was distraction-free, so the UI
+  // labels it accordingly (absence of a record is not zero behaviour).
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = Date.now();
   const byDate = _buildEntriesByDate(tz);
@@ -4689,12 +4698,17 @@ function computeCloseoutSummary(dateKey) {
   const gaps = getCloseoutGaps(dateKey);
   const wallet = isToday ? getCurrentFocusWallet() : null;
   const review = reviews[dateKey] || null;
+  // Deep / waste in the close-out speak to actual behaviour — count only
+  // confirmed classifications, not passive observations or schedule assumptions.
+  const confirmedEntries = typeof hasConfirmedEnergyClassification === 'function'
+    ? realEntries.filter(hasConfirmedEnergyClassification)
+    : realEntries;
   return {
     entryCount: realEntries.length,
     planCount: planItems.length,
     planDone: planItems.filter(i => i.done || planTrackedMin(i.task, dateKey) > 0).length,
-    deepMin: sumEnergyMinutes(realEntries, 'deep', dateKey),
-    wasteMin: sumEnergyMinutes(realEntries, 'waste', dateKey) + sumEnergyMinutes(realEntries, 'distraction', dateKey),
+    deepMin: sumEnergyMinutes(confirmedEntries, 'deep', dateKey),
+    wasteMin: sumEnergyMinutes(confirmedEntries, 'waste', dateKey) + sumEnergyMinutes(confirmedEntries, 'distraction', dateKey),
     unloggedMin: gaps.reduce((sum, gap) => sum + (gap.gapMin || 0), 0),
     unloggedGapCount: gaps.length,
     firstUnloggedGap: gaps.find(gap => (gap.gapMin || 0) >= 30) || gaps[0] || null,
@@ -5729,7 +5743,7 @@ function renderSidePanel() {
       </div>
       <div style="background:var(--bg3);border-radius:10px;padding:10px;text-align:center">
         <div style="font-size:22px;font-weight:700;color:var(--text);font-family:var(--mono)">${cleanStreak}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">days clean</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">days, no waste logged</div>
       </div>
     </div>`;
 }
@@ -5748,7 +5762,13 @@ function renderToday() {
   const _viewKey = getViewingDateKey();
   const displayTodayE = squashTinyPCTimeFragments(todayE, _viewKey);
   const realEntries = displayTodayE.filter(e => !e.missed);
-  const deepCount = realEntries.filter(e => e.energy === 'deep').length;
+  // "Deep blocks today" speaks to confirmed behaviour — exclude passive
+  // observations, schedule assumptions and PC-Time context (mirrors
+  // computeDailySummary / computeStreak).
+  const confirmedRealEntries = typeof hasConfirmedEnergyClassification === 'function'
+    ? realEntries.filter(hasConfirmedEnergyClassification)
+    : realEntries;
+  const deepCount = confirmedRealEntries.filter(e => e.energy === 'deep').length;
   const _todayKey = getDateInTZ(Date.now(), _tz);
   if (_viewKey === _todayKey) _lastTodayDateKey = _todayKey;
   // tzParseTime gives noon on that date in the user's own timezone — safe for Intl display
@@ -5768,7 +5788,7 @@ function renderToday() {
   setStatVal('s-streak', deepStreak);
   const cleanStreak = computeCleanStreak();
   const streakSubEl = document.getElementById('s-streak-sub');
-  if (streakSubEl) streakSubEl.textContent = cleanStreak > 0 ? `days · ${cleanStreak}d clean` : 'days deep';
+  if (streakSubEl) streakSubEl.textContent = cleanStreak > 0 ? `days · ${cleanStreak}d no waste logged` : 'days deep';
 
   renderTodayPlan();
   renderFocusWallet();
@@ -7449,20 +7469,32 @@ function buildWeekShareSummary(days) {
   const displayDays = (days || []).map(d => ({ ...d, entries: squashTinyPCTimeFragments(d.entries, d.key) }));
   const weekE = displayDays.flatMap(d => d.entries).filter(e => !e.missed);
   const totalMins = sumEntryMinutes(weekE);
-  const deepMins = sumEnergyMinutes(weekE, 'deep');
-  const wasteMins = sumEntryMinutes(weekE, e => e.energy === 'waste' || e.energy === 'distraction');
+  // Deep/waste/category lines make behavioural claims — count only confirmed
+  // classifications, not passive observations, schedule assumptions or
+  // PC-Time context (mirrors computeDailySummary / computeStreak).
+  const confirmedWeekE = typeof hasConfirmedEnergyClassification === 'function'
+    ? weekE.filter(hasConfirmedEnergyClassification)
+    : weekE;
+  const deepMins = sumEnergyMinutes(confirmedWeekE, 'deep');
+  const wasteMins = sumEntryMinutes(confirmedWeekE, e => e.energy === 'waste' || e.energy === 'distraction');
   const goalMins = Math.max(0, Math.round((Number(settings.deepGoal) || 0) * 60));
   const deepPct = totalMins ? Math.round(deepMins / totalMins * 100) : 0;
   const activeDays = displayDays.filter(d => d.entries.length);
+  const confirmedDeepHrs = (dayEntries, key) => {
+    const confirmed = typeof hasConfirmedEnergyClassification === 'function'
+      ? dayEntries.filter(hasConfirmedEnergyClassification)
+      : dayEntries;
+    return computeDeepHrs(confirmed, key);
+  };
   const bestDay = activeDays.length
-    ? activeDays.reduce((a, b) => computeDeepHrs(b.entries, b.key) > computeDeepHrs(a.entries, a.key) ? b : a, activeDays[0])
+    ? activeDays.reduce((a, b) => confirmedDeepHrs(b.entries, b.key) > confirmedDeepHrs(a.entries, a.key) ? b : a, activeDays[0])
     : null;
   const energyOrder = ['deep', 'nine5', 'shallow', 'learning', 'exercise', 'social', 'errands', 'recovery', 'waste'];
   const categoryLines = energyOrder.map(type => ({
     label: type === 'deep' ? 'Deep work' : (eLabel[type] || type),
     mins: type === 'waste'
-      ? sumEntryMinutes(weekE, e => e.energy === 'waste' || e.energy === 'distraction')
-      : sumEnergyMinutes(weekE, type)
+      ? sumEntryMinutes(confirmedWeekE, e => e.energy === 'waste' || e.energy === 'distraction')
+      : sumEnergyMinutes(confirmedWeekE, type)
   })).filter(item => item.mins > 0);
   const topActivities = weekShareTopActivities(weekE, 5);
   const unloggedMins = weekShareUnloggedMinutes(displayDays);
@@ -7474,7 +7506,7 @@ function buildWeekShareSummary(days) {
     `Deep work: ${weekShareDuration(deepMins)} / ${weekShareDuration(goalMins)} (${deepPct}% of logged time)`,
     `Waste: ${weekShareDuration(wasteMins)}`,
     `Unlogged: ${weekShareDuration(unloggedMins)}`,
-    `Best day: ${bestDay ? `${bestDay.label} - ${computeDeepHrs(bestDay.entries, bestDay.key)}h deep` : 'No deep work yet'}`,
+    `Best day: ${bestDay ? `${bestDay.label} - ${confirmedDeepHrs(bestDay.entries, bestDay.key)}h deep` : 'No deep work yet'}`,
     '',
     'Where my time went:'
   ];
@@ -8217,7 +8249,7 @@ function openReflectionsHistory() {
       const statsHtml = s
         ? `<span style="font-family:var(--mono);font-size:11px;color:var(--deep)">${s.deepHrs}h deep</span>
            <span style="color:var(--border2);margin:0 4px">|</span>
-           <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${s.productivePct}% productive</span>`
+           <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${s.productivePct}% productive of ${fmtDur(s.totalMin)} recorded</span>`
         : '';
 
       if (!r) {
@@ -8606,7 +8638,17 @@ function formatSavedAt(ts) {
 // DAILY SUMMARY
 // ══════════════════════════════════════════════════════
 function computeDailySummary(dateKey) {
-  const dayEntries = getEntriesForDateWindow(dateKey).filter(e => !e.missed && !e.deleted);
+  // Phase 6G.2: the pulse card makes behavioural claims (deep %, waste %, split
+  // bar, score), so it summarises only entries whose energy is a confirmed
+  // classification. Passive site/app observations, schedule assumptions and
+  // "PC Time" context remain on the timeline but are not folded in here — this
+  // also removes the overlap inflation where a browser observation over a deep
+  // block pushed deep% + waste% past 100%. (Matches the Today energy bars, which
+  // already exclude browserUsage.)
+  const allDayEntries = getEntriesForDateWindow(dateKey).filter(e => !e.missed && !e.deleted);
+  const dayEntries = typeof hasConfirmedEnergyClassification === 'function'
+    ? allDayEntries.filter(hasConfirmedEnergyClassification)
+    : allDayEntries;
   if (!dayEntries.length) return null;
 
   const totalMin = sumEntryMinutes(dayEntries, null, dateKey);
@@ -8636,7 +8678,9 @@ function computeDailySummary(dateKey) {
   const wastePct      = pct(wasteMin);
   const productivePct = pct(productiveMin);
 
-  // Peak focus hour — hour with the most deep-work minutes
+  // Deep-work start hour — the hour in which the most deep-block minutes BEGAN
+  // (bucketed by start time, not allocated across hour boundaries). Labelled as
+  // "deep blocks start" in the UI, not "peak focus hour".
   const hourBuckets = {};
   dayEntries.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
     const hr = tzHour(e.tsStart);
@@ -8812,14 +8856,16 @@ function renderHonestSummary() {
       wasteLine = `${fmtM(ins.wasteMin)} lost to distractions — ${ins.worstDist} alone cost you ${fmtM(ins.worstDistMin)}.`;
     }
     parts.push(wasteLine);
+  } else if (ins.wasteMin > 0) {
+    parts.push(`${fmtM(ins.wasteMin)} of confirmed waste logged this week.`);
   } else {
-    parts.push(`Only ${ins.wasteMin > 0 ? fmtM(ins.wasteMin) : 'zero'} wasted — clean week.`);
+    parts.push(`No confirmed waste logged this week.`);
   }
 
-  // Best day + peak hour on one line
+  // Best day + deep-work start hour on one line
   const rhythm = [];
   if (ins.bestDay !== '—') rhythm.push(`Best day: ${ins.bestDay} (${fmtM(ins.bestDayMin)} deep)`);
-  if (ins.peakHourLabel !== '—') rhythm.push(`sharpest at ${ins.peakHourLabel}`);
+  if (ins.peakHourLabel !== '—') rhythm.push(`most deep blocks started around ${ins.peakHourLabel}`);
   if (rhythm.length) parts.push(rhythm.join(', ') + '.');
 
   el.innerHTML = `<p style="font-size:13.5px;line-height:1.75;color:var(--text)">${parts.join(' ')}</p>`;
@@ -9035,7 +9081,7 @@ function renderReflectView() {
         </div>
         <div class="reflect-stat">
           <div class="reflect-stat-val">${ins.peakHourLabel}</div>
-          <div class="reflect-stat-label">Peak focus hour</div>
+          <div class="reflect-stat-label">Deep blocks start</div>
           <div class="reflect-stat-sub">Best day: ${ins.bestDay}</div>
         </div>
       </div>`;
@@ -9098,12 +9144,13 @@ function renderDailyReflections() {
   el.innerHTML = days.map(({ key, date, r }) => {
     const s = computeDailySummary(key);
     const statsHtml = s
-      ? `<div style="display:flex;gap:10px;margin-bottom:10px">
+      ? `<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
            <span style="font-family:var(--mono);font-size:11px;color:var(--deep)">${s.deepHrs}h deep</span>
            <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">·</span>
            <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${s.productivePct}% productive</span>
            ${s.wastePct > 0 ? `<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">·</span>
            <span style="font-family:var(--mono);font-size:11px;color:var(--distraction)">${s.wastePct}% waste</span>` : ''}
+           <span style="font-family:var(--mono);font-size:11px;color:var(--muted2)">of ${fmtDur(s.totalMin)} recorded</span>
          </div>`
       : '';
 

@@ -10,23 +10,39 @@
 
 // ── Per-entry feedback flash (called after each log) ──
 
+// Phase 6G.2: the insight totals speak to actual behaviour ("deep work today",
+// "waste this week", percentages), so they count only entries whose energy is a
+// confirmed classification — a user assertion or a timer + chosen label. Passive
+// site/app observations, schedule assumptions and "PC Time" context still exist
+// as raw entries and still show on the timeline; they just don't get counted as
+// proven deep work or proven waste here.
+function _insightConfirmed(arr) {
+  if (typeof hasConfirmedEnergyClassification !== 'function') return arr || [];
+  return (arr || []).filter(hasConfirmedEnergyClassification);
+}
+
 function _insightMinutes(arr, predicate, dateKey=null) {
-  if (typeof sumEntryMinutes === 'function') return sumEntryMinutes(arr, predicate, dateKey);
-  return (arr || [])
+  const confirmed = _insightConfirmed(arr);
+  if (typeof sumEntryMinutes === 'function') return sumEntryMinutes(confirmed, predicate, dateKey);
+  return confirmed
     .filter(e => !predicate || predicate(e))
     .reduce((s, e) => s + (e.blockIntervalMin || settings.intervalMin || 30), 0);
 }
 
 function _insightEnergyMinutes(arr, energy, dateKey=null) {
-  if (typeof sumEnergyMinutes === 'function') return sumEnergyMinutes(arr, energy, dateKey);
-  return _insightMinutes(arr, e => e.energy === energy, dateKey);
+  const confirmed = _insightConfirmed(arr);
+  if (typeof sumEnergyMinutes === 'function') return sumEnergyMinutes(confirmed, energy, dateKey);
+  return _insightMinutes(confirmed, e => e.energy === energy, dateKey);
 }
 
 function analyzeBehavior(entry, todayE) {
   const tone = settings.coachTone || 'analyst';
   const T = (a, c, m) => ({ analyst: a, coach: c, mirror: m })[tone] || a;
 
-  const real = todayE;
+  // Aggregate only over confirmed classifications — the just-logged `entry` is a
+  // user assertion, but the day's context must not fold in passive observations
+  // or scheduled assumptions.
+  const real = _insightConfirmed(todayE);
   const deepEntries = real.filter(e => e.energy === 'deep');
   const distEntries = real.filter(e => e.energy === 'waste');
   const deepMin  = _insightEnergyMinutes(real, 'deep');
@@ -232,7 +248,9 @@ function dismissFeedbackFlash() {
 }
 
 function checkEscalation() {
-  const todayE = getTodayEntries();
+  // Punitive escalation must rest on confirmed waste the user actually asserted,
+  // not a passive site/app observation or a scheduled assumption.
+  const todayE = _insightConfirmed(getTodayEntries());
   const missedToday = todayE.filter(e => e.missed).length;
   let dStreak = 0;
   for (const e of todayE) {
@@ -290,8 +308,8 @@ function generateInsights(data) {
   // 3. Waste alert
   if (waste > 2 || pct(waste) >= 25) {
     insights.push(pct(waste) >= 40
-      ? `Waste was ${pct(waste)}% of your day (${fmt(waste)}). That's a significant leak.`
-      : `Waste was ${pct(waste)}% of your day (${fmt(waste)}) — above the 25% threshold. Worth examining.`);
+      ? `Waste was ${pct(waste)}% of tracked time (${fmt(waste)}). That's a significant leak.`
+      : `Waste was ${pct(waste)}% of tracked time (${fmt(waste)}) — above the 25% threshold. Worth examining.`);
   }
 
   // 4. Deep work reinforcement
@@ -319,7 +337,7 @@ function renderAwarenessSignal() {
 
   if (!todayE.length && hour < 10) { el.style.display = 'none'; return; }
 
-  const real     = todayE;
+  const real     = _insightConfirmed(todayE);
   const totalMin = _insightMinutes(real);
   const deepMin  = _insightEnergyMinutes(real, 'deep');
   const distMin  = _insightEnergyMinutes(real, 'waste');
@@ -328,7 +346,7 @@ function renderAwarenessSignal() {
   const distPct  = totalMin > 0 ? Math.round(distMin / totalMin * 100) : 0;
   const deepHrs  = (deepMin / 60).toFixed(1);
 
-  // Peak focus hour
+  // Deep-work start-hour distribution (buckets by the hour a block starts in).
   const hourBuckets = {};
   real.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
     const h = tzHour(e.tsStart);
@@ -359,9 +377,9 @@ function renderAwarenessSignal() {
 
   // ── No entries yet ──
   if (!real.length && hour >= 10) {
-    signals.push({ color: 'var(--muted)', severity: 'warn', label: 'Nothing logged',
-      text: T('No entries logged yet today.',
-              'Nothing logged. What are you actually doing right now?',
+    signals.push({ color: 'var(--muted)', severity: 'warn', label: 'Nothing classified',
+      text: T('No classified activity logged yet today.',
+              'Nothing classified logged. What are you actually doing right now?',
               "The timer doesn't lie. You haven't started.") });
   }
 
@@ -390,9 +408,9 @@ function renderAwarenessSignal() {
   if (minsSinceDeep !== null && minsSinceDeep > 90 && hour >= 10 && hour <= 17) {
     const gapStr = minsSinceDeep >= 120 ? `${Math.round(minsSinceDeep / 60)}h` : `${minsSinceDeep}m`;
     signals.push({ color: 'var(--admin)', severity: 'warn', label: `${gapStr} since last deep work`,
-      text: T(`No deep work for ${gapStr}. You're in reactive mode.`,
-              `${gapStr} without deep work. Reactive mode is a trap — break out.`,
-              `${gapStr} without doing anything that matters. What are you busy with?`) });
+      text: T(`No deep work logged for ${gapStr}.`,
+              `${gapStr} without a deep block logged. Worth a focused session.`,
+              `${gapStr} without deep work logged. What are you busy with?`) });
   }
 
   // ── No deep work at all, late in day ──
@@ -406,7 +424,7 @@ function renderAwarenessSignal() {
   // ── Deep work: strong day ──
   if (deepPct >= 50 && deepMin >= 90 && distStreak === 0) {
     signals.push({ color: 'var(--deep)', severity: 'good', label: 'Strong focus day',
-      text: T(`Deep work is ${deepPct}% of today — ${deepHrs}h. Above average.`,
+      text: T(`Deep work is ${deepPct}% of tracked time — ${deepHrs}h. Above average.`,
               `${deepPct}% deep, ${deepHrs}h in. This is the standard.`,
               `${deepPct}% deep. Rare. Don't let tomorrow undo it.`) });
   }
@@ -427,10 +445,10 @@ function renderAwarenessSignal() {
 
   // ── Peak focus hour (positive, only when day is going well) ──
   if (peakLabel && peakHourMin >= 45 && deepPct >= 40) {
-    signals.push({ color: 'var(--deep)', severity: 'good', label: `Peak hour: ${peakLabel}`,
-      text: T(`Your focus peaked at ${peakLabel} today — ${peakHourMin}m of deep work that hour.`,
-              `${peakLabel} is your zone. ${peakHourMin}m deep. Protect that window every day.`,
-              `${peakLabel} — ${peakHourMin}m deep. That's your real capacity. Stop wasting it.`) });
+    signals.push({ color: 'var(--deep)', severity: 'good', label: `Deep blocks start: ${peakLabel}`,
+      text: T(`Most deep blocks started around ${peakLabel} today — ${peakHourMin}m of deep work began then.`,
+              `${peakLabel} is when your deep blocks start. ${peakHourMin}m began then. Protect that window.`,
+              `${peakLabel} — ${peakHourMin}m of deep work started then. That's your window. Use it.`) });
   }
 
   // ── Recovery time exceeds deep work ──
@@ -445,7 +463,7 @@ function renderAwarenessSignal() {
   // ── End-of-day verdict ──
   if (hour >= 18 && totalMin > 0) {
     const verdict = deepPct >= 50
-      ? { severity: 'good', text: T(`Day done. ${deepHrs}h deep work — ${deepPct}% of your day. Strong.`,
+      ? { severity: 'good', text: T(`Day done. ${deepHrs}h deep work — ${deepPct}% of tracked time. Strong.`,
                                      `Day closed. ${deepHrs}h deep. This is the result of discipline.`,
                                      `${deepPct}% deep. You earned today.`) }
       : distPct >= 30
@@ -490,7 +508,7 @@ function getDailySummaryInsight(s) {
   const tone = settings.coachTone || 'analyst';
   const { deepPct, wastePct, productivePct, peakHourLabel, deepMin, focusScore } = s;
   const dh = (deepMin / 60).toFixed(1);
-  const ph = peakHourLabel ? ` Peak: ${peakHourLabel}.` : '';
+  const ph = peakHourLabel ? ` Most deep blocks started around ${peakHourLabel}.` : '';
 
   if (focusScore >= 80) {
     return {
@@ -508,9 +526,9 @@ function getDailySummaryInsight(s) {
   }
   if (wastePct >= 30) {
     return {
-      analyst: `${wastePct}% lost to waste. ${productivePct}% productive.${ph}`,
+      analyst: `${wastePct}% of tracked time was waste. ${productivePct}% productive.${ph}`,
       coach:   `${wastePct}% waste is eating your output. Protect your blocks.`,
-      mirror:  `${wastePct}% of today was wasted. You know what you chose over your work.`
+      mirror:  `${wastePct}% of your tracked time was waste. You know what you chose over your work.`
     }[tone];
   }
   return {
@@ -521,7 +539,9 @@ function getDailySummaryInsight(s) {
 }
 
 function buildDailySummaryHTML(s) {
-  if (!s) return `<div style="color:var(--muted);font-size:13px;padding:4px 0">No entries logged yet today.</div>`;
+  // `s` is null when nothing is logged, or when the only entries are passive
+  // observations / schedule assumptions (no confirmed classification to summarise).
+  if (!s) return `<div style="color:var(--muted);font-size:13px;padding:4px 0">Nothing classified logged yet today.</div>`;
 
   const scorePillClass = s.focusScore >= 70 ? '' : s.focusScore >= 40 ? ' mid' : ' low';
   const deepValClass   = s.deepPct >= 40 ? 'good' : s.deepPct >= 20 ? 'warn' : '';
@@ -530,9 +550,9 @@ function buildDailySummaryHTML(s) {
 
   const peakHtml = s.peakHourLabel
     ? `<div class="ds-peak">
-        <span style="font-size:11px;color:var(--muted)">Peak focus hour</span>
+        <span style="font-size:11px;color:var(--muted)">Deep blocks started most around</span>
         <span class="ds-peak-badge">${s.peakHourLabel}</span>
-        <span style="font-size:11px;color:var(--muted);font-family:var(--mono)">${s.peakHourMin}m deep in that hour</span>
+        <span style="font-size:11px;color:var(--muted);font-family:var(--mono)">${s.peakHourMin}m of deep blocks began then</span>
        </div>`
     : '';
 
@@ -624,18 +644,21 @@ function computeInsights(weekKey) {
   let topActivity = '—', topActivityMin = 0;
   Object.entries(actMap).forEach(([k, m]) => { if (m > topActivityMin) { topActivityMin = m; topActivity = k; } });
 
-  // Worst waste activity by time
+  // Worst waste activity by time — confirmed waste only (a foregrounded site is
+  // not confirmed waste by identity).
   const wasteMap = {};
-  we.filter(e => e.energy === 'waste' && e.activity).forEach(e => {
+  _insightConfirmed(we).filter(e => e.energy === 'waste' && e.activity).forEach(e => {
     const k = e.activity.split(' (Output:')[0];
     wasteMap[k] = (wasteMap[k] || 0) + (e.blockIntervalMin || 0);
   });
   let worstDist = '—', worstDistMin = 0;
   Object.entries(wasteMap).forEach(([k, m]) => { if (m > worstDistMin) { worstDistMin = m; worstDist = k; } });
 
-  // Peak focus hour
+  // Deep-work start-hour distribution — confirmed deep work only. Buckets by the
+  // hour a block STARTS in, so this is "when deep blocks began", not a
+  // minute-accurate per-hour focus measure (see the label in renderHonestSummary).
   const hourBuckets = {};
-  we.filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
+  _insightConfirmed(we).filter(e => e.energy === 'deep' && e.tsStart).forEach(e => {
     const hr = tzHour(e.tsStart);
     hourBuckets[hr] = (hourBuckets[hr] || 0) + (e.blockIntervalMin || 0);
   });

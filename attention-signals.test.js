@@ -143,17 +143,101 @@ test('no data: everything zeroed and no render lines', () => {
   }
 });
 
-// ── Case 8 — mixed manual + automatic data ───────────────────────────────
-test('manual and browser-extension entries derive together', () => {
+// ── Case 8 — passive browser observation is context, not confirmed drift ──
+// Phase 6G.2: a site being foregrounded does not establish that attention
+// lapsed. The passive observation is kept as a raw segment (source preserved)
+// but classified 'neutral' — it does not end the focus stretch, does not create
+// an attention break, and does not feed the likely-distraction number.
+test('a passive browser-extension observation does not become a confirmed distraction', () => {
   const s = deriveAttentionSignals([
     blk(0, 30, 'deep', 'Spec'),
     blk(30, 20, 'waste', 'YouTube', { source: 'browser-extension', browserUsage: true }),
     blk(50, 20, 'deep', 'Spec')
   ]);
+  assert.equal(s.attentionBreaks, 0);
+  assert.equal(s.recoveries, 0);
+  assert.equal(s.likelyDistractionMin, null);
+  assert.equal(s.coherentStretchCount, 1);
+  assert.equal(s.segments[1].source, 'browser-extension'); // raw fact preserved
+  assert.equal(s.segments[1].cls, 'neutral');
+});
+
+// Positive control: an equivalent block the USER asserted as waste still ends
+// the stretch and creates a break — explicit user evidence is unaffected.
+test('a user-asserted waste block between deep blocks is still a break + recovery', () => {
+  const s = deriveAttentionSignals([
+    blk(0, 30, 'deep', 'Spec'),
+    blk(30, 20, 'waste', 'YouTube'),
+    blk(50, 20, 'deep', 'Spec')
+  ]);
   assert.equal(s.attentionBreaks, 1);
   assert.equal(s.recoveries, 1);
   assert.equal(s.likelyDistractionMin, 20);
-  assert.equal(s.segments[1].source, 'browser-extension');
+});
+
+// A scheduled-template block is an assumption, not observed focus/drift.
+test('a scheduled-template entry is neutral, not focus or distraction', () => {
+  const focusRun = deriveAttentionSignals([
+    blk(0, 40, 'deep', 'Write', { scheduledAutoLog: true })
+  ]);
+  assert.equal(focusRun.coherentStretchCount, 0);
+  assert.equal(focusRun.segments[0].cls, 'neutral');
+});
+
+// ── PC-Time / Screen-Time computer-session parity (Phase 6G.2 fix) ──────
+// The ambient "PC Time" tracker auto-logs a block every minute with
+// `energy = lastEntry?.energy || 'deep'`. That proves a computer session was
+// open, not presence, work, or deep work — it must not become confirmed
+// focus, must not extend a coherent stretch, and must not by itself produce
+// a refocus/recovery claim. Mirrors evidence-interpretation.js's
+// isComputerSessionEntry() so attention-signals stays in parity with the
+// shared boundary used by Today/Review/Insights.
+test('an auto-logged PC Time deep entry is neutral, not confirmed focus', () => {
+  const s = deriveAttentionSignals([
+    blk(0, 30, 'deep', 'PC Time', { autoLogged: true })
+  ]);
+  assert.equal(s.coherentStretchCount, 0);
+  assert.equal(s.segments[0].cls, 'neutral');
+});
+
+test('a quick-logged Screen Time deep entry is neutral, not confirmed focus', () => {
+  const s = deriveAttentionSignals([
+    blk(0, 30, 'deep', 'Screen Time', { quickLogged: true })
+  ]);
+  assert.equal(s.coherentStretchCount, 0);
+  assert.equal(s.segments[0].cls, 'neutral');
+});
+
+test('PC Time auto-log does not extend a real coherent focus stretch', () => {
+  const s = deriveAttentionSignals([
+    blk(0, 30, 'deep', 'Write RFC'),                              // real manual/timer focus
+    blk(30, 30, 'deep', 'PC Time', { autoLogged: true })          // ambient PC-Time context
+  ]);
+  // The PC-Time block is neutral, not focus, so it cannot be folded into the
+  // stretch: the coherent stretch stays 30 min, not 60.
+  assert.equal(s.coherentStretchCount, 1);
+  assert.equal(s.longestStretchMin, 30);
+});
+
+test('PC Time alone does not manufacture a refocus/recovery claim', () => {
+  const s = deriveAttentionSignals([
+    blk(0, 20, 'deep', 'Report'),
+    blk(20, 20, 'waste', 'YouTube'),          // real break
+    blk(40, 30, 'deep', 'PC Time', { autoLogged: true }) // ambient context only, not a real return to focus
+  ]);
+  assert.equal(s.attentionBreaks, 1);
+  assert.equal(s.recoveries, 0); // no confirmed stretch follows the break
+});
+
+// Positive control: a genuine confirmed manual/timer deep entry named
+// "PC Time" activity but WITHOUT the auto/quick-log marker (i.e. not the
+// ambient tracker's own writes) still counts as real focus.
+test('positive control: a non-auto-logged deep entry still counts as confirmed focus', () => {
+  const s = deriveAttentionSignals([
+    blk(0, 30, 'deep', 'Write RFC')
+  ]);
+  assert.equal(s.coherentStretchCount, 1);
+  assert.equal(s.longestStretchMin, 30);
 });
 
 // ── Case 9 — Focus Mode session shape ───────────────────────────────────
@@ -273,6 +357,19 @@ test('render lines withhold unsupported metrics (progressive disclosure)', () =>
   assert.equal(byKey.distraction, '~25 min');
   assert.equal(byKey.recovery, '1');
   assert.equal(byKey.rating, 'Mixed');
+
+  // Phase 6G.2: the recovery line must not claim "drift" — an idle gap is
+  // unlogged time and a logged distraction is only a break in the record.
+  const recoveryLine = messyLines.find(l => l.key === 'recovery');
+  assert.equal(recoveryLine.label, 'Refocused after a break');
+  assert.ok(!/drift/i.test(recoveryLine.label));
+});
+
+// An idle-gap "recovery" also gets the neutral, non-drift label.
+test('idle-gap recovery line does not say "drift"', () => {
+  const s = deriveAttentionSignals([blk(0, 20, 'deep', 'A'), blk(50, 20, 'deep', 'A')]);
+  const line = attentionSignalLines(s).find(l => l.key === 'recovery');
+  assert.equal(line.label, 'Refocused after a break');
 });
 
 // ── Coherent-stretch display: span vs. actual focused minutes ────────

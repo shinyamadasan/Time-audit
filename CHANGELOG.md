@@ -1,5 +1,133 @@
 # ChronaSense — Changelog
 
+## Phase 6G.2 — Deterministic analytics truth fixes V1 (candidate — feat/analytics-truth-fixes-v1, uncommitted) — 2026-09-09
+
+Base `9db74858a8da9c6f44a2a51e9c6cc26619cb8302` (origin/main, verified). Isolated worktree;
+`main`, Meal and Workout source apps untouched. No commit/push/merge/deploy; no Firebase or
+Obsidian writes; no historical data touched.
+
+Scope: the follow-up to 6G.1 — where 6G.1 stopped ChronaSense from manufacturing a bad fact,
+6G.2 stops existing analytics from turning a real-but-partial fact into a stronger conclusion
+than the evidence supports. Today, Review, weekly Insights, attention signals and Focus Wallet
+now distinguish a confirmed classification (a user assertion, or a timer + chosen label) from a
+passive site/app default, a schedule assumption, or "PC Time" computer-session context — and
+stop counting the latter as confirmed deep work or confirmed waste. No new tracking burden, no
+coarse-life storage, no Review reconciliation, no generic Today-gap redesign.
+
+added:
+  - `evidence-interpretation.js` (new module) — the one shared, bounded predicate every touched
+    consumer needed: `hasConfirmedEnergyClassification(entry)`, built from
+    `isPassiveObservationEntry()`, `isScheduledAssumptionEntry()` and `isComputerSessionEntry()`.
+    Reads existing markers only (`browserUsage`, `phoneUsage`, `source`, `scheduledAutoLog`,
+    `captureMethod`, "PC Time"/"Screen time" + `autoLogged`/`quickLogged`) — no new schema, no
+    confidence score. Classic-script IIFE attaching to `globalThis`, mirroring
+    `focus-wallet.js`'s existing pattern. `evidence-interpretation.test.js` (predicate matrix).
+  - `tests/analytics-truth.spec.js` — 13 end-to-end Playwright cases (5 from the original
+    candidate + 8 added in the targeted independent-review fix pass below).
+
+changed:
+  - `index.html` `computeDailySummary()` — summarises only
+    `dayEntries.filter(hasConfirmedEnergyClassification)`; fixes the common overlap case where a
+    passive browser/phone observation layered over a confirmed work block pushed deep% + waste%
+    past 100%. `computeCloseoutSummary()` — Review "Day details" Deep/Waste minutes are
+    confirmed-only. `computeCleanStreak()` — unchanged detection, relabelled "days clean" →
+    "days, no waste logged". `renderHonestSummary()` — "clean week" → "No confirmed waste logged
+    this week" / "`N` of confirmed waste logged this week"; "sharpest at `X`" → "most deep blocks
+    started around `X`". Review-history rows now show "of `N` recorded" alongside the percentage.
+    "Peak focus hour" relabelled "Deep blocks start" everywhere it appears (Today pulse, weekly
+    Insights, Reflect stats) — the calculation (bucket by block start hour) is unchanged; only
+    the label now matches what it measures. **Targeted independent-review fix pass:**
+    `computeStreak()` (Today "Deep streak days" / `#s-streak`, also the Streaks widget and Week
+    view) and the `renderToday()` "Deep blocks today" (`#s-deep`) `deepCount` were both missed by
+    the original candidate and still counted scheduled/passive/PC-Time 'deep' entries as
+    confirmed — both now gate on `hasConfirmedEnergyClassification()`, mirroring
+    `computeDailySummary()`. `buildWeekShareSummary()` (the "Share week" export) had the same
+    unfiltered-energy pattern (flagged Low, deferred at first pass) — deep/waste minutes,
+    category lines and the "Best day" deep-hours figure now use the same confirmed-only filter;
+    "Logged" total, "Where my time went" activity breakdown and unlogged-gap minutes are
+    unchanged (those are presence/duration facts, not energy-classification claims).
+  - `insights.js` `_insightMinutes()`/`_insightEnergyMinutes()` — pre-filter to confirmed
+    entries, so `analyzeBehavior`, `renderAwarenessSignal`, `computeInsights`,
+    `checkEscalation()` (punitive focus-lock/penalty-mode escalation) and the weekly worst-waste
+    / deep-start-hour buckets all inherit the correction. Denominator copy "of today"/"of your
+    day" → "of tracked time" (`getDailySummaryInsight`, `renderAwarenessSignal`,
+    `generateInsights` — the last currently unwired, fixed for consistency). "Reactive mode"
+    phrasing tied only to elapsed time since the last deep block (not a logged distraction)
+    softened to factual "no deep work logged for `X`".
+  - `focus-wallet.js` `computeFocusWallet()` — deep-work points and waste costs now gate on
+    `hasConfirmedEnergyClassification()` (falls back to "confirmed" if the helper isn't loaded).
+    Sports-session scoring is unaffected.
+  - `attention-signals.js` `classifyEntry()` — a passive observation or scheduled-template entry
+    classifies `'neutral'`, never focus or distraction, from energy alone (markers inlined to
+    stay dependency-free). `attentionSignalLines()` — "Recovered from drift" → "Refocused after a
+    break" (an idle gap is unlogged time, not established drift; a logged distraction is only a
+    break in the record). `ATTENTION_SIGNALS_VERSION` 1 → 2. 3 new regression cases, 2 existing
+    label assertions updated; 1 existing case (`browser-extension` "waste" observation asserting
+    a confirmed attention break) rewritten to assert the corrected neutral behaviour, with a new
+    positive-control case alongside it proving a user-asserted waste block is unaffected.
+    **Targeted independent-review fix pass:** `isUnconfirmedEnergyEntry()`'s inlined predicate
+    reproduced the passive-observation and schedule-assumption markers but omitted the
+    computer-session ("PC Time" / "Screen Time" + `autoLogged`/`quickLogged`) marker the shared
+    `evidence-interpretation.js` helper carries — so a real auto-logged PC Time entry with
+    `energy: 'deep'` could still classify `'focus'` and feed a coherent stretch, a refocus/
+    recovery claim, or the attention interpretation layer. Added the same computer-session check
+    `isComputerSessionEntry()` uses. 5 new regression cases (PC Time and Screen Time auto/quick-
+    logged deep entries stay neutral; a PC-Time block does not extend an adjacent real focus
+    stretch; PC Time alone after a real break does not manufacture a recovery; positive control —
+    a non-auto-logged deep entry still counts as confirmed focus).
+  - `www/*` — byte-identical mirror of every changed/added file above (`runtime-mirror --check`
+    passes, 41-file closure).
+
+unchanged: raw entries, their durations, provenance markers and timeline rendering; scheduling
+functionality and plan-v-actual/intent use of scheduled entries; the PC-Time `|| 'deep'`
+fallback itself (still can't distinguish inherited real context from the pure fallback — both
+are excluded from confirmed metrics the same way, as documented rather than guessed);
+`chronasense-life-ledger-adapter.js`, `life-ledger-core.js`, `life-ledger-runtime.js`,
+`life-feed-model.js`, `life-character-sheet-model.js`, `capability-career-analytics.js`,
+`cross-domain-intelligence-model.js`, `life-ledger-transport.js`,
+`obsidian-life-ledger-renderer.js` — none consume the new helper. The generic ≥30-minute Today
+gap prompt, coverage/completeness language (audited — none existed to fix), Review
+reconciliation, coarse-life storage, Wife/Shared and Personal Model/Advisor are all untouched.
+
+historical: not repaired. Historical Focus entries potentially inflated by the pre-6G.1 defect
+remain unidentified and unmodified — this milestone changes how currently computed metrics
+interpret entries going forward, not which past entries were affected.
+
+tests: `evidence-interpretation.test.js` (predicate matrix). `attention-signals.test.js` 34
+cases (was 26): 3 new (original pass) + 5 new PC-Time/Screen-Time regressions (targeted fix
+pass) + 2 label updates + 1 rewritten. `test.js` 451/451 (+5 Focus Wallet gating cases from the
+original pass; unchanged by the targeted fix pass). `tests/analytics-truth.spec.js` 13/13 (5
+from the original pass + 8 from the targeted fix pass: 6 Today `#s-deep`/`#s-streak` DOM
+regressions covering scheduled/browser-passive/phone-passive/PC-Time/genuine-confirmed/mixed
+evidence, + 2 `buildWeekShareSummary()` regressions). Full `npm test` green (0 failures across
+every runner in the chain, 27 suites). `node scripts/runtime-mirror.mjs --check` OK (41 files,
+byte-identical). `npm run lint` 0 errors (29 pre-existing warnings, unchanged count — none in
+changed hunks). `git diff --check` clean. `node --check` on every touched/added executable JS
+file (`evidence-interpretation.js`, `attention-signals.js` + `www/` mirror,
+`evidence-interpretation.test.js`, `attention-signals.test.js`, `tests/analytics-truth.spec.js`,
+`test.js`).
+
+Playwright — corrected finding (this replaces the original candidate's flake claim, which named
+a `smoke.spec.js` failure that was not the actual reproducible evidence): the independent
+reviewer reported 363/365 with 2 reproducible failures in `daily-routines-ui.spec.js`. Targeted
+reproduction attempt in this fix pass: `tests/daily-routines-ui.spec.js` alone, 3 consecutive
+runs on the candidate — 14/14 passed every time. Full suite on the candidate, 2 consecutive runs
+— 373/373 passed both times (373 = 365 + 8 new cases added in this fix pass), 0 failures. For
+comparison, `tests/daily-routines-ui.spec.js` alone against a clean checkout of the exact base
+commit (`9db74858a8da9c6f44a2a51e9c6cc26619cb8302`, the existing registered `main` worktree, left
+otherwise untouched) — 3 consecutive runs, 14/14 passed every time; full suite once — 360/360
+passed (360 = 373 candidate total minus the 13 `tests/analytics-truth.spec.js` cases the base
+commit doesn't have). Total: 9 runs across candidate and base, 0 failures anywhere. The
+reviewer's 2 failures could not be reproduced on either side, so no daily-routines production or
+test file was touched — there is no reproduced regression to fix, and nothing here supports
+calling it a confirmed pre-existing defect either. Recorded as: not reproducible in 9/9 attempts,
+environment/timing-sensitive rather than a demonstrated candidate regression.
+
+status: uncommitted candidate, ready for targeted independent re-review after the FIX FIRST
+findings (PC-Time attention-signals parity, Today `#s-deep`/`#s-streak` confirmed-energy
+boundary, and this corrected Playwright finding). Not a queued task — direct user milestone,
+TASKS.md unchanged.
+
 ## Phase 6G.1 — Deterministic source truth fixes V1: expired Focus completion boundary (candidate — feat/source-truth-fixes-v1, uncommitted) — 2026-09-09
 
 Base `c47f1e5227c0a9993bf1c004b6939b7ce332cb71` (origin/main, verified). Isolated

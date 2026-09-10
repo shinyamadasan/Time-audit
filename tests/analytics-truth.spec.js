@@ -1,0 +1,267 @@
+// Phase 6G.2 — Deterministic Analytics Truth Fixes V1
+//
+// End-to-end checks that Today / Review / Insights / Focus Wallet interpret the
+// evidence they actually have: passive site/app observations, schedule
+// assumptions and "PC Time" context stay as raw entries but are not counted as
+// confirmed deep work or confirmed waste, and overlapping evidence no longer
+// pushes percentages past 100%.
+
+import { test, expect } from '@playwright/test';
+import fs from 'node:fs/promises';
+import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const APP_ROOT = path.resolve(ROOT, '..');
+let appServer = null;
+let appUrl = '';
+const NOW = Date.parse('2026-09-08T18:00:00Z');
+const DAY = '2026-09-08';
+
+const firebaseStub = `
+(() => {
+  if (window.firebase) return;
+  const snapshot = value => ({ val: () => value, ref: { remove: () => Promise.resolve() } });
+  const makeRef = () => ({
+    child() { return makeRef(); }, on(e, cb) { if (e === 'value') setTimeout(() => cb(snapshot(null)), 0); return cb; },
+    off() {}, once() { return Promise.resolve(snapshot(null)); }, update() { return Promise.resolve(); },
+    set() { return Promise.resolve(); }, remove() { return Promise.resolve(); },
+    transaction(fn) { return Promise.resolve({ committed: true, snapshot: snapshot(fn(null)) }); },
+    push() { const p = makeRef(); p.key = 'k'; return p; },
+    onDisconnect() { return { set: () => Promise.resolve(), remove: () => Promise.resolve(), cancel: () => Promise.resolve() }; }
+  });
+  const auth = () => ({ onAuthStateChanged(cb) { setTimeout(() => cb({ uid: 'u', displayName: 'U', email: 'u@example.test', photoURL: '' }), 0); return () => {}; }, signInWithPopup: () => Promise.resolve(), signOut: () => Promise.resolve() });
+  auth.GoogleAuthProvider = function () {}; auth.GoogleAuthProvider.credential = () => ({});
+  window.firebase = { apps: [], initializeApp(c) { const a = { config: c }; this.apps.push(a); return a; }, app() { return this.apps[0] || this.initializeApp({}); }, database() { return { ref: makeRef }; }, auth };
+})();`;
+
+test.beforeAll(async () => {
+  appServer = http.createServer(async (req, res) => {
+    try {
+      const url = new URL(req.url || '/', 'http://127.0.0.1');
+      const pathname = url.pathname === '/' ? '/index.html' : url.pathname;
+      const filePath = path.resolve(APP_ROOT, `.${decodeURIComponent(pathname)}`);
+      if (!filePath.startsWith(APP_ROOT)) { res.writeHead(403).end(); return; }
+      const body = await fs.readFile(filePath);
+      const ext = path.extname(filePath);
+      res.writeHead(200, { 'content-type': ext === '.html' ? 'text/html' : ext === '.js' ? 'application/javascript' : ext === '.css' ? 'text/css' : 'application/octet-stream' });
+      res.end(body);
+    } catch { res.writeHead(404).end(); }
+  });
+  await new Promise(resolve => appServer.listen(0, '127.0.0.1', resolve));
+  appUrl = `http://127.0.0.1:${appServer.address().port}/index.html`;
+});
+
+test.afterAll(async () => {
+  if (appServer) await new Promise(resolve => appServer.close(resolve));
+});
+
+async function openApp(page) {
+  await page.route('https://www.gstatic.com/firebasejs/**', route =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: firebaseStub }));
+  await page.addInitScript(({ now }) => {
+    const RealDate = Date;
+    window.Date = class MockDate extends RealDate { constructor(...a) { super(...(a.length ? a : [now])); } static now() { return now; } };
+    localStorage.clear(); sessionStorage.clear();
+    localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
+    localStorage.setItem('ta3-tz', 'Etc/UTC');
+    localStorage.setItem('ta3-device-id', 'device-test');
+    localStorage.setItem('ta3-settings', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries', '[]'); localStorage.setItem('ta3-focus-redemptions', '[]');
+    localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-plans', '{}');
+    localStorage.setItem('ta3-daily-routines-v1', JSON.stringify({ schemaVersion: 1, timezone: 'Etc/UTC', routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
+  }, { now: NOW });
+  await page.goto(appUrl);
+  await page.waitForFunction(() => typeof computeDailySummary === 'function' && typeof hasConfirmedEnergyClassification === 'function');
+}
+
+// A 60-min confirmed deep block, fully overlapped by a 60-min passive browser
+// "waste" observation, plus a scheduled-template "deep" block and a "PC Time"
+// context block — all on 2026-09-08.
+const MIXED_DAY = () => {
+  const base = Date.parse('2026-09-08T09:00:00Z');
+  const seeded = [
+    { id: 'deep1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'Write RFC', energy: 'deep', retro: true, originalLabel: 'deep' },
+    { id: 'br1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'YouTube', energy: 'waste', browserUsage: true, source: 'browser-extension', retro: true, quickLogged: true, originalLabel: 'waste' },
+    { id: 'sch1', tsStart: base + 10800000, ts: base + 14400000, blockIntervalMin: 60, date: '2026-09-08', activity: 'Morning writing', energy: 'deep', autoLogged: true, scheduledAutoLog: true, templateId: 't1', originalLabel: 'deep' },
+    { id: 'pc1', tsStart: base + 18000000, ts: base + 21600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'PC Time', energy: 'deep', autoLogged: true, quickLogged: true, originalLabel: 'deep' }
+  ];
+  seeded.forEach(e => { e.category = getBucket(e); });
+  entries.length = 0;
+  entries.push(...seeded);
+  persist();
+};
+
+test('Today pulse: passive + scheduled + PC-Time energy is not counted; overlap does not inflate', async ({ page }) => {
+  await openApp(page);
+  const s = await page.evaluate(({ day, seed }) => { (0, eval)('(' + seed + ')')(); return computeDailySummary(day); },
+    { day: DAY, seed: MIXED_DAY.toString() });
+
+  expect(s.totalMin).toBe(60);
+  expect(s.deepMin).toBe(60);
+  expect(s.wasteMin).toBe(0);
+  expect(s.deepPct).toBe(100);
+  expect(s.wastePct).toBe(0);
+  expect(s.deepPct + s.wastePct).toBeLessThanOrEqual(100);
+});
+
+test('Review close-out: deep / waste minutes are confirmed-only', async ({ page }) => {
+  await openApp(page);
+  const summary = await page.evaluate(({ day, seed }) => { (0, eval)('(' + seed + ')')(); return computeCloseoutSummary(day); },
+    { day: DAY, seed: MIXED_DAY.toString() });
+  expect(summary.deepMin).toBe(60);
+  expect(summary.wasteMin).toBe(0);
+});
+
+test('Focus Wallet: passive waste is not penalised, PC-Time / scheduled deep is not rewarded', async ({ page }) => {
+  await openApp(page);
+  const wallet = await page.evaluate(({ seed }) => { (0, eval)('(' + seed + ')')(); return getCurrentFocusWallet(); },
+    { seed: MIXED_DAY.toString() });
+  expect(wallet.earned).toBe(6); // only the one confirmed retro deep block: floor(60/5)*0.5 = 6
+  expect(wallet.autoCosts).toBe(0);
+});
+
+test('weekly honest summary says "No confirmed waste logged" when the only waste is passive', async ({ page }) => {
+  await openApp(page);
+  const text = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const seeded = [
+      { id: 'd', tsStart: base, ts: base + 5400000, blockIntervalMin: 90, date: '2026-09-08', activity: 'Write', energy: 'deep', retro: true, originalLabel: 'deep' },
+      { id: 'b', tsStart: base + 7200000, ts: base + 10800000, blockIntervalMin: 60, date: '2026-09-08', activity: 'YouTube', energy: 'waste', phoneUsage: true, retro: true, originalLabel: 'waste' }
+    ];
+    seeded.forEach(e => { e.category = getBucket(e); });
+    entries.length = 0;
+    entries.push(...seeded);
+    persist();
+    renderHonestSummary();
+    return document.getElementById('reflect-honest').textContent;
+  });
+  expect(text).toContain('No confirmed waste logged this week');
+  expect(text).not.toContain('clean week');
+});
+
+test('static markup no longer carries the retired "Recovered from drift" label', async ({ page }) => {
+  await openApp(page);
+  const html = await page.content();
+  expect(html).not.toContain('Recovered from drift');
+});
+
+// ── Today top-level stats (s-deep / s-streak) — Phase 6G.2 targeted fix ────
+// computeDailySummary()/computeCloseoutSummary() already applied the confirmed-
+// energy boundary; "Deep blocks today" (#s-deep) and "Deep streak days"
+// (#s-streak) did not. Assert the actual rendered Today DOM, seeding entries
+// on DAY (2026-09-08, which matches the mocked NOW) so today's render reflects
+// them directly.
+async function seedTodayAndRender(page, seeded) {
+  return page.evaluate((seededEntries) => {
+    seededEntries.forEach(e => { e.category = getBucket(e); });
+    entries.length = 0;
+    entries.push(...seededEntries);
+    persist();
+    _todayRenderKey = '__FORCE__';
+    renderToday();
+    return {
+      deep: document.getElementById('s-deep').textContent,
+      streak: document.getElementById('s-streak').textContent
+    };
+  }, seeded);
+}
+
+const baseTs = Date.parse('2026-09-08T09:00:00Z');
+
+test('Today s-deep/s-streak: a scheduled-template deep entry does not qualify either stat', async ({ page }) => {
+  await openApp(page);
+  const stats = await seedTodayAndRender(page, [
+    { id: 'sch1', tsStart: baseTs, ts: baseTs + 3600000, blockIntervalMin: 60, date: DAY, activity: 'Morning writing', energy: 'deep', autoLogged: true, scheduledAutoLog: true, templateId: 't1', originalLabel: 'deep' }
+  ]);
+  expect(stats.deep).toBe('0');
+  expect(stats.streak).toBe('0');
+});
+
+test('Today s-deep/s-streak: a browser-passive deep observation does not qualify either stat', async ({ page }) => {
+  await openApp(page);
+  const stats = await seedTodayAndRender(page, [
+    { id: 'br1', tsStart: baseTs, ts: baseTs + 3600000, blockIntervalMin: 60, date: DAY, activity: 'IDE', energy: 'deep', browserUsage: true, source: 'browser-extension', originalLabel: 'deep' }
+  ]);
+  expect(stats.deep).toBe('0');
+  expect(stats.streak).toBe('0');
+});
+
+test('Today s-deep/s-streak: an Android phone-usage passive deep observation does not qualify either stat', async ({ page }) => {
+  await openApp(page);
+  const stats = await seedTodayAndRender(page, [
+    { id: 'ph1', tsStart: baseTs, ts: baseTs + 3600000, blockIntervalMin: 60, date: DAY, activity: 'Coding app', energy: 'deep', phoneUsage: true, source: 'phone-usage', originalLabel: 'deep' }
+  ]);
+  expect(stats.deep).toBe('0');
+  expect(stats.streak).toBe('0');
+});
+
+test('Today s-deep/s-streak: an auto-logged PC Time deep block does not qualify either stat', async ({ page }) => {
+  await openApp(page);
+  const stats = await seedTodayAndRender(page, [
+    { id: 'pc1', tsStart: baseTs, ts: baseTs + 3600000, blockIntervalMin: 60, date: DAY, activity: 'PC Time', energy: 'deep', autoLogged: true, quickLogged: true, originalLabel: 'deep' }
+  ]);
+  expect(stats.deep).toBe('0');
+  expect(stats.streak).toBe('0');
+});
+
+test('Today s-deep/s-streak: a genuine confirmed manual/timer deep block still counts', async ({ page }) => {
+  await openApp(page);
+  const stats = await seedTodayAndRender(page, [
+    { id: 'deep1', tsStart: baseTs, ts: baseTs + 3600000, blockIntervalMin: 60, date: DAY, activity: 'Write RFC', energy: 'deep', retro: true, originalLabel: 'deep' }
+  ]);
+  expect(stats.deep).toBe('1');
+  expect(stats.streak).toBe('1');
+});
+
+test('Today s-deep/s-streak: mixed confirmed + unconfirmed evidence — only confirmed contributes', async ({ page }) => {
+  await openApp(page);
+  const stats = await seedTodayAndRender(page, [
+    { id: 'deep1', tsStart: baseTs, ts: baseTs + 3600000, blockIntervalMin: 60, date: DAY, activity: 'Write RFC', energy: 'deep', retro: true, originalLabel: 'deep' },
+    { id: 'sch1', tsStart: baseTs + 3600000, ts: baseTs + 7200000, blockIntervalMin: 60, date: DAY, activity: 'Morning writing', energy: 'deep', autoLogged: true, scheduledAutoLog: true, templateId: 't1', originalLabel: 'deep' },
+    { id: 'pc1', tsStart: baseTs + 7200000, ts: baseTs + 10800000, blockIntervalMin: 60, date: DAY, activity: 'PC Time', energy: 'deep', autoLogged: true, quickLogged: true, originalLabel: 'deep' }
+  ]);
+  // Only the one confirmed deep entry counts, regardless of the two unconfirmed ones.
+  expect(stats.deep).toBe('1');
+  expect(stats.streak).toBe('1');
+});
+
+// ── Week share (Low finding, Section 10) — same bounded filter, active copy ─
+// buildWeekShareSummary() feeds the user-visible "Share week" export and made
+// the same unfiltered-energy claim (PC-Time/scheduled/passive 'deep' counted
+// as real deep work). Fixed with the same hasConfirmedEnergyClassification()
+// filter already used by computeDailySummary/computeCloseoutSummary/computeStreak.
+test('Week share: PC-Time/scheduled deep entries are not counted as deep work', async ({ page }) => {
+  await openApp(page);
+  const summary = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const seeded = [
+      { id: 'pc1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'PC Time', energy: 'deep', autoLogged: true, quickLogged: true, originalLabel: 'deep' },
+      { id: 'sch1', tsStart: base + 3600000, ts: base + 7200000, blockIntervalMin: 60, date: '2026-09-08', activity: 'Morning writing', energy: 'deep', autoLogged: true, scheduledAutoLog: true, templateId: 't1', originalLabel: 'deep' }
+    ];
+    seeded.forEach(e => { e.category = getBucket(e); });
+    entries.length = 0;
+    entries.push(...seeded);
+    persist();
+    return getCurrentWeekShareSummary();
+  });
+  expect(summary.deepMins).toBe(0);
+  expect(summary.text).toContain('Deep work: 0m');
+});
+
+test('Week share: a genuine confirmed deep block is still counted as deep work', async ({ page }) => {
+  await openApp(page);
+  const summary = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const seeded = [
+      { id: 'deep1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'Write RFC', energy: 'deep', retro: true, originalLabel: 'deep' }
+    ];
+    seeded.forEach(e => { e.category = getBucket(e); });
+    entries.length = 0;
+    entries.push(...seeded);
+    persist();
+    return getCurrentWeekShareSummary();
+  });
+  expect(summary.deepMins).toBe(60);
+});

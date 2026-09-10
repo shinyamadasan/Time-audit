@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import './evidence-interpretation.js';
 import './focus-wallet.js';
 import {
   normalizeChronaSenseEntries,
@@ -1158,6 +1159,48 @@ test('negative debt carries forward, but prior surplus does not', () => {
   ], [], { intervalMin: 30 }, nextWeek);
   assert.equal(surplusWallet.carriedDebt, 0);
   assert.equal(surplusWallet.balance, 0);
+});
+
+// ── Focus Wallet: Phase 6G.2 — only confirmed classifications score ─────────
+test('passive browser "deep" observation earns no wallet points', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('b1', 0, 9, 60, 'GitHub', 'deep', { browserUsage: true, source: 'browser-extension' })
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.earned, 0);
+  assert.equal(wallet.balance, 0);
+});
+
+test('passive phone "waste" observation costs no wallet points', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('p1', 0, 9, 300, 'YouTube', 'waste', { phoneUsage: true })
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.autoCosts, 0);
+  assert.equal(wallet.balance, 0);
+});
+
+test('scheduled-template "deep" block earns no wallet points (schedule != actual)', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('t1', 0, 9, 60, 'Morning writing', 'deep', { scheduledAutoLog: true, autoLogged: true })
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.earned, 0);
+});
+
+test('"PC Time" context "deep" block earns no wallet points', () => {
+  const wallet = computeFocusWallet([
+    walletEntry('c1', 0, 9, 60, 'PC Time', 'deep', { autoLogged: true, quickLogged: true })
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(wallet.earned, 0);
+});
+
+test('positive control: a user-asserted deep block still earns, a manual waste block still costs', () => {
+  const earn = computeFocusWallet([
+    walletEntry('d1', 0, 9, 60, 'Build feature', 'deep', { retro: true })
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(earn.earned, 6);
+  const cost = computeFocusWallet([
+    walletEntry('w1', 0, 9, 300, 'Scroll', 'waste', { quickLogged: true })
+  ], [], { intervalMin: 30 }, FW_WEEK);
+  assert.equal(cost.autoCosts, 20);
 });
 
 // -- Learning Plan model ------------------------------------------------------
