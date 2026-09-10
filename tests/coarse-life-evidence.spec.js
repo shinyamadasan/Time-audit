@@ -159,8 +159,14 @@ test('remove deletes only the coarse assertion, never touches exact entries', as
 
   await page.locator('#rv-coarse-evidence').getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(page.locator('#rv-coarse-evidence')).not.toContainText('Cooking / eating');
+  // Durability V1: remove() tombstones (deleted:true) rather than erasing the row, so a
+  // durable remote copy converges to "deleted" instead of a stale echo resurrecting it —
+  // see coarse-life-evidence-repository.js. The observable contract is still "gone": no
+  // non-deleted record remains, and ordinary reads (list()/get()) never see it.
   const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1')).records));
-  expect(records.length).toBe(0);
+  expect(records.filter(r => !r.deleted).length).toBe(0);
+  expect(records.length).toBe(1);
+  expect(records[0].deleted).toBe(true);
   const entryCount = await page.evaluate(() => entries.filter(e => !e.deleted).length);
   expect(entryCount).toBe(1); // untouched
 });
@@ -289,8 +295,10 @@ test('a label containing quotes/HTML markers cannot inject script through Edit/R
   await page.locator('#rv-coarse-evidence').getByRole('button', { name: 'Remove', exact: true }).click();
   expect(await page.evaluate(() => window.__xssFired)).toBeUndefined();
   await expect(page.locator('#rv-coarse-evidence')).not.toContainText(dangerousLabel);
+  // Durability V1: remove() tombstones (deleted:true) rather than erasing the row — see the
+  // "remove deletes only the coarse assertion" test above for why. Still gone from ordinary reads.
   const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1')).records));
-  expect(records.length).toBe(0);
+  expect(records.filter(r => !r.deleted).length).toBe(0);
 });
 
 for (const [label, storedValue] of [

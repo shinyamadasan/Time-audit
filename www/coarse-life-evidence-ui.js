@@ -91,13 +91,15 @@ export function saveCoarseEvidenceEditor() {
   }
   if (estimatedMinutes > 1440) { errorEl.textContent = 'A single day can be at most 24h.'; return; }
 
+  const previousId = _editingId;
+  let saved;
   try {
-    repository().save({
+    saved = repository().save({
       date,
       timezone: resolveAccountingTimezone(),
       label,
       estimatedMinutes,
-      previousId: _editingId
+      previousId
     });
   } catch (err) {
     errorEl.textContent = err.message || 'Could not save that approximate activity.';
@@ -107,14 +109,32 @@ export function saveCoarseEvidenceEditor() {
   closeCoarseEvidenceEditor();
   if (typeof window.showToast === 'function') window.showToast(`Saved ~${fmtDur(estimatedMinutes)} · ${label.trim()}`);
   renderCoarseEvidenceList(_listDateKey || date);
+  pushToDurableSync(saved, previousId);
 }
 
 export function deleteCoarseEvidenceRecord(id, dateKey) {
   const record = repository().get(id);
-  repository().remove(id);
+  const removed = repository().remove(id);
   closeCoarseEvidenceEditor();
   if (record && typeof window.showToast === 'function') window.showToast(`Removed ${record.label}`);
   renderCoarseEvidenceList(dateKey);
+  if (removed && window.CoarseLifeEvidenceSync) {
+    const tombstone = repository().getRaw(id);
+    if (tombstone) window.CoarseLifeEvidenceSync.pushRecord(tombstone);
+  }
+}
+
+// Durability V1 — best-effort remote push after a local save. A rename/date-move also
+// tombstones the record's old identity locally (see repository.save()); that tombstone must
+// be pushed too, or a durable remote copy under the old id would never learn the rename and
+// could later resurrect the stale old-named record on another device.
+function pushToDurableSync(saved, previousId) {
+  if (!window.CoarseLifeEvidenceSync) return;
+  window.CoarseLifeEvidenceSync.pushRecord(saved);
+  if (previousId && previousId !== saved.id) {
+    const oldTombstone = repository().getRaw(previousId);
+    if (oldTombstone) window.CoarseLifeEvidenceSync.pushRecord(oldTombstone);
+  }
 }
 
 // Edit/Remove carry a record id derived from free-text (identity is date+label — see
@@ -191,6 +211,15 @@ function removeCoarseEvidenceRecord(id) {
   deleteCoarseEvidenceRecord(id, _listDateKey);
 }
 
+// Durability V1 — called by coarse-life-evidence-sync.js after a remote merge changes local
+// data, so an open Review reflects another device's edit without the user doing anything.
+// A no-op whenever the list isn't currently mounted (Review closed / never opened this
+// session) — there is nothing to refresh, and this must never itself open or focus Review.
+export function refreshCoarseEvidenceListIfMounted() {
+  const root = document.getElementById('rv-coarse-evidence');
+  if (root && _listDateKey) renderCoarseEvidenceList(_listDateKey);
+}
+
 if (typeof window !== 'undefined') {
   window.openCoarseEvidenceEditor = openCoarseEvidenceEditor;
   window.closeCoarseEvidenceEditor = closeCoarseEvidenceEditor;
@@ -200,4 +229,5 @@ if (typeof window !== 'undefined') {
   window.addCoarseEvidenceRecord = addCoarseEvidenceRecord;
   window.editCoarseEvidenceRecord = editCoarseEvidenceRecord;
   window.removeCoarseEvidenceRecord = removeCoarseEvidenceRecord;
+  window.refreshCoarseEvidenceListIfMounted = refreshCoarseEvidenceListIfMounted;
 }

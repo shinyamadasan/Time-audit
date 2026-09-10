@@ -36,6 +36,12 @@ const SYNC_EVENT_LOG_LIMIT = 6;
 const SYNC_RECONCILE_MS = 2 * 60 * 1000;
 let _syncEventLog = loadSyncEventLog();
 
+// Durability V1 — a tiny read-only accessor exposed for coarse-life-evidence-sync.js (an ES
+// module, so it cannot see this classic script's top-level `let fbRoomRef`). Mirrors the
+// existing globalThis-bridge pattern this app already uses in the other direction (a module
+// exposing itself via `globalThis.PlanTomorrowModel` for this classic script to read).
+globalThis.getChronaSenseRoomRef = () => fbRoomRef;
+
 // ── Shared constants ──
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
@@ -745,6 +751,7 @@ function initAutoSync() {
         );
         fbDb.ref('.info/connected').off();
       }
+      if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.detach();
       fbRoomRef = null; roomCode = '';
       updateSyncPill('offline', 'signed out');
       updateAuthUI(null);
@@ -806,6 +813,9 @@ function updateAuthUI(user) {
 function startSync() {
   if (!fbDb) return;
   fbRoomRef = fbDb.ref(`rooms/${roomCode}`);
+  // Durability V1 — attach the coarse-life-evidence remote listener/bootstrap alongside the
+  // rest of this room's sync. A no-op if that module hasn't loaded (defensive only).
+  if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.attach();
 
   fbDb.ref('.info/connected').on('value', snap => {
     const online = snap.val();
@@ -822,6 +832,10 @@ function startSync() {
       const ls = parseInt(localStorage.getItem('ta3-last-sync') || '0', 10);
       if (lv > ls) syncEntries();
       syncSettings();
+      // Durability V1 — retry any coarse-life-evidence push that failed while offline.
+      // pushAllLocal() diffs against the last remote snapshot it saw, so this is a no-op
+      // once everything is already converged.
+      if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.pushAllLocal();
     } else {
       stopSyncReconcileTicker();
       const pill = document.getElementById('sync-pill');
@@ -1604,6 +1618,7 @@ function teardownRoomListeners() {
   paths.forEach(p => fbDb.ref(`rooms/${roomCode}/${p}`).off());
   fbDb.ref('.info/connected').off();
   if (fbRoomRef) fbRoomRef.off();
+  if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.detach();
   if (_nudgesRef)     { _nudgesRef.off();     _nudgesRef     = null; }
   if (_partnerUidRef) { _partnerUidRef.off(); _partnerUidRef = null; }
   if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }

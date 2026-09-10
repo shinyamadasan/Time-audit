@@ -14,6 +14,11 @@
 export const COARSE_LIFE_EVIDENCE_KEY = 'ta3-coarse-life-evidence-v1';
 export const COARSE_LIFE_EVIDENCE_SCHEMA_VERSION = 1;
 
+// Durability V1 — the Firebase RTDB path this record type syncs to, one level under the
+// user's existing private room (`rooms/<roomCode>/coarseLifeEvidence/<id>`), independent of
+// `entries`/`reviews`/`plans`. Same room, same auth-scoped security rule; no rule change.
+export const COARSE_LIFE_EVIDENCE_REMOTE_PATH = 'coarseLifeEvidence';
+
 // Resolution/measurement/provenance vocabulary matches the canonical evidence contract
 // terms verbatim (Resolution table, Provenance table) rather than inventing new ones.
 export const COARSE_LIFE_EVIDENCE_RESOLUTION = 'duration_without_placement';
@@ -76,7 +81,43 @@ export function validateCoarseEvidenceRecord(record) {
   if ('tsStart' in record || 'tsEnd' in record || 'start' in record || 'end' in record) {
     throw new Error('Coarse evidence must not carry timeline placement fields.');
   }
+  // Durability V1 sync markers (optional; absent on an ordinary record). `deleted` is a
+  // tombstone — the record's prior fields are otherwise preserved so a stale remote copy
+  // never resurrects it (see resolveCoarseEvidenceSync). `undoRestoredAt` marks an explicit
+  // user "undo delete" action, the only thing allowed to override a tombstone. Reject
+  // malformed values here rather than let a corrupt remote payload through as valid (§17).
+  if ('deleted' in record && record.deleted !== true) {
+    throw new Error('Invalid coarse evidence deleted flag.');
+  }
+  if ('undoRestoredAt' in record && !Number.isFinite(record.undoRestoredAt)) {
+    throw new Error('Invalid coarse evidence undoRestoredAt.');
+  }
   return record;
+}
+
+/**
+ * Deterministic record-level conflict resolution for cross-device sync (Durability V1).
+ * Mirrors storage.js's proven `resolveEntrySync` rule for `entries[]`: last-write-wins by
+ * `updatedAt`, with one override — once a record is locally tombstoned (`deleted: true`), a
+ * remote value that is merely non-deleted can NEVER resurrect it, no matter its `updatedAt`,
+ * unless it carries an explicit `undoRestoredAt` marker newer than the local tombstone (a
+ * genuine user "undo delete", not a stale device echoing its outdated pre-delete copy). This
+ * is plain last-write-wins, not a general merge — a same-id divergent edit is decided purely
+ * by whichever side's `updatedAt` is greater.
+ */
+export function resolveCoarseEvidenceSync(local, remote, nowTs = Date.now()) {
+  if (!remote || !remote.id) return { action: 'skip' };
+  const remoteRecord = Number.isFinite(remote.updatedAt) ? remote : { ...remote, updatedAt: nowTs };
+  if (!local) {
+    return remoteRecord.deleted ? { action: 'skip' } : { action: 'add', record: remoteRecord };
+  }
+  const remoteV = remoteRecord.updatedAt;
+  const localV = local.updatedAt;
+  if (local.deleted && !remoteRecord.deleted) {
+    if (remoteRecord.undoRestoredAt && remoteV > localV) return { action: 'replace', record: remoteRecord };
+    return { action: 'keep-local' };
+  }
+  return remoteV > localV ? { action: 'replace', record: remoteRecord } : { action: 'keep-local' };
 }
 
 export function createCoarseEvidenceRecord({ date, timezone, label, estimatedMinutes, now = Date.now() }) {

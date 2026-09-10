@@ -14,7 +14,11 @@ Ledger schedule assumptions from current capability proof; source records remain
 contract's "duration without placement" positive evidence form as a small local-only store,
 independent of `entries[]`. Phase 6I/J (see below) adds the optional whole-day Review
 reconciliation prompt (`reviews[k].reconciliation`) and removes the generic Today timeline-gap
-interruption while keeping `computeGaps()` and every raw-gap diagnostic intact.
+interruption while keeping `computeGaps()` and every raw-gap diagnostic intact. Coarse Life
+Evidence Durability V1 (see below) makes that store durable across devices/browser-data loss via
+account-scoped Firebase sync, `coarse-life-evidence-sync.js` — the pre-dogfood durability gate is
+now satisfied; local-only remains true for Learning Plans, Daily Routines and
+Capability/Career.
 
 ## FILE OVERVIEW
 
@@ -1046,6 +1050,73 @@ documented in the contract), Firebase sync, CSV/Life Ledger export, the generic 
 prompt. Tests: `coarse-life-evidence.test.js` (model + repository, `node:test`),
 `tests/coarse-life-evidence.spec.js` (7 Playwright end-to-end cases). Runtime mirror updated
 via `scripts/runtime-mirror.mjs --write`.
+
+
+## Coarse Life Evidence Durability V1
+
+Closes the pre-dogfood durability gate 6H/6I/J left open: coarse life evidence was local-only
+(`ta3-coarse-life-evidence-v1`), so another browser/device never saw it and clearing browser
+storage destroyed it. This adds an account-scoped durable remote copy, reusing the SAME
+record-level `updatedAt`-last-write-wins + tombstone pattern `storage.js` already runs live for
+`entries`/`reviews`/`plans` (`resolveEntrySync`, `syncEntries()`, `saveReview()`) — not a new
+sync architecture. No sharing, no export/import, no new daily user action, no Life Ledger
+projection. Local storage stays the fast/offline cache and immediate source of truth.
+
+`coarse-life-evidence-model.js` adds `resolveCoarseEvidenceSync(local, remote, nowTs)` (pure) —
+the deterministic conflict rule: last-write-wins by `updatedAt`, except a local tombstone
+(`deleted: true`) can never be resurrected by a merely-newer non-deleted remote value unless
+that value carries an explicit `undoRestoredAt` marker newer than the tombstone (mirrors
+`resolveEntrySync`'s identical guard for `entries[]`). Also adds
+`COARSE_LIFE_EVIDENCE_REMOTE_PATH = 'coarseLifeEvidence'` and tolerates the optional
+`deleted`/`undoRestoredAt` sync markers in `validateCoarseEvidenceRecord()` (rejecting malformed
+values rather than silently accepting them).
+
+`coarse-life-evidence-repository.js`: `remove()` now tombstones (`deleted: true`, `updatedAt`
+bumped) instead of erasing the row — a physical delete would let a stale remote/device echo
+resurrect it once a remote copy exists. Ordinary reads (`list()`, `listForDate()`, `get()`)
+filter tombstones out — to the app, a removed activity still simply does not exist. `getRaw(id)`
+and `listAllRaw()` are sync-only accessors that see tombstones. `save()`'s rename/date-move
+collision guard now treats a tombstoned identity as free (a plain Add or a rename may land on
+it), and a rename tombstones the OLD identity's row instead of deleting it outright, so a
+durable remote copy of the old id learns the rename instead of orphaning it. New
+`mergeRemoteSnapshot(remoteRecordsById, nowTs)` merges a remote snapshot in record-by-record via
+`resolveCoarseEvidenceSync` — never a collection replace, so a local-only or remote-only record
+is never dropped; a malformed remote entry is rejected (not thrown) without touching valid local
+data.
+
+`coarse-life-evidence-sync.js` (new module) — `createCoarseEvidenceSyncBridge(deps)`, dependency
+injected and unit-testable against an in-memory fake Firebase room ref (no real network/project
+required). `attach()` subscribes to `rooms/<roomCode>/coarseLifeEvidence` (same private
+per-user room `entries`/`reviews` already use — `firebase.rules.json`'s existing
+`rooms/$roomId` wildcard rule already covers this child path; no rules change). On the first
+snapshot after `attach()`, it merges remote into local, then does one bootstrap
+`pushAllLocal()` — this is what makes a pre-durability install's existing local records durable
+automatically, no user action, no "export/import". After that, `save()`/`remove()` in
+`coarse-life-evidence-ui.js` push just the one changed record (and, on a rename, the
+old-identity tombstone too) immediately and best-effort (never blocks the UI, never throws on
+failure — offline just means "saved locally, syncs later," identical to `saveReview()`).
+`detach()` unsubscribes (wired to sign-out and `teardownRoomListeners()`).
+
+Wiring: `storage.js` exposes a one-line `globalThis.getChronaSenseRoomRef = () => fbRoomRef`
+accessor (this module is an ES module and cannot see that classic script's top-level `let
+fbRoomRef` otherwise — mirrors the existing reverse-direction bridge,
+`globalThis.PlanTomorrowModel`), and calls `CoarseLifeEvidenceSync.attach()`/`.detach()` at the
+same points it manages every other room listener (`startSync()`, sign-out,
+`teardownRoomListeners()`). `coarse-life-evidence-ui.js` exports
+`refreshCoarseEvidenceListIfMounted()`, called by the sync bridge's `onRemoteChange` so an open
+Review reflects another device's edit; it is a no-op whenever Review isn't open.
+
+Deliberately NOT built: sharing/Wife-Shared (separate private room path from any future shared
+state), export/import (redundant with real sync), Life Ledger projection, a sync-status widget,
+a "Sync now" action, or any change to Review/Today/Plan Tomorrow UI. Tests:
+`coarse-life-evidence.test.js` (extended — `resolveCoarseEvidenceSync`, tombstone/rekey
+semantics, `mergeRemoteSnapshot` bootstrap/union/idempotence/malformed-input cases, `node:test`),
+`coarse-life-evidence-sync.test.js` (new — bridge lifecycle, offline safety, a two-client chaos
+simulation covering concurrent creates/edits, and the key resurrection test: a client that goes
+offline before a delete and reconnects later must not resurrect it). `tests/coarse-life-evidence.spec.js`'s
+two `remove()` assertions updated for the tombstone contract (still asserts "gone" from every
+ordinary read; the raw envelope now retains one tombstoned row instead of zero). Runtime mirror
+updated via `scripts/runtime-mirror.mjs --write`.
 
 
 ## Review Reconciliation + Today Gap Replacement V1 (Phase 6I/J)

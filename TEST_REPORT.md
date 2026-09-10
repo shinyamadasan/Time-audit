@@ -5,6 +5,90 @@
 
 ---
 
+## Coarse Evidence Durability V1 — independent-review fix pass (same candidate) · 2026-09-10
+branch: `feat/coarse-evidence-durability-v1` (still uncommitted at fix time). Base unchanged,
+  re-verified `02bc5d15e0651878b6ca4c4631ce440b649c9452` (origin/main) before starting.
+scope: independent review (`code-review --level high`) surfaced 5 findings; the 4 real ones were
+  fixed, the 5th (code duplication between `resolveCoarseEvidenceSync` and `resolveEntrySync`)
+  left as a documented, deferred low-risk gap per user decision. 2 CONFIRMED-severity
+  cross-device data-divergence bugs, 2 lower-severity (redundant writes, no reconnect retry).
+  3 files touched: `coarse-life-evidence-repository.js` (`save()` stamps `undoRestoredAt` when
+  resurrecting a tombstoned identity), `coarse-life-evidence-sync.js` (`pushAllLocal()` diffs
+  against the last-seen remote snapshot instead of unconditional full rewrite; caches
+  `lastRemoteSnapshot`, reset on `detach()`), `storage.js` (`.info/connected` reconnect handler
+  now also calls `CoarseLifeEvidenceSync.pushAllLocal()`). No schema/architecture change, no new
+  files, no UI change.
+suite: `node --test coarse-life-evidence.test.js coarse-life-evidence-sync.test.js`; full
+  `npm test`; `npm run lint`; full `npx playwright test`; `node scripts/runtime-mirror.mjs
+  --check` (after `--write`); `node --check` on all touched/new files; `git diff --check`.
+result:
+  - `coarse-life-evidence.test.js` + `coarse-life-evidence-sync.test.js`: 53/53 (4 new: resurrection
+    stamps `undoRestoredAt`; an ordinary edit of a live record does not; a resurrection on one
+    device now converges on a device that already held the tombstone — previously stuck deleted
+    forever; `pushAllLocal()` issues zero writes on a reattach with no local changes, where it
+    previously rewrote every record unconditionally).
+  - `npm test`: PASS — 465 cases (451 + 14 in the runtime-mirror/adjacent chain — the 3-file
+    mirror drift the fix produced was caught by `www/ is a byte-identical mirror...` and resolved
+    via `node scripts/runtime-mirror.mjs --write`), exit 0.
+  - `npm run lint`: PASS — 0 errors, 29 pre-existing warnings, unchanged.
+  - `npx playwright test` (full): 400/401. The 1 failure (`editing an auto-logged schedule can
+    update the recurring template`, `tests/smoke.spec.js:882`) is unrelated to any file this pass
+    touched (recurring-template edit UI, not coarse evidence/sync/storage reconnect) — reproduced
+    3/3 passing in isolation (`--repeat-each=3`), consistent with a parallel-worker timing flake,
+    not a regression.
+  - `node scripts/runtime-mirror.mjs --check`: OK after `--write` (3 files re-synced to `www/`:
+    `coarse-life-evidence-repository.js`, `coarse-life-evidence-sync.js`, `storage.js`).
+  - `node --check` on all 6 touched/new files: PASS. `git diff --check`: clean.
+state: fix pass complete; candidate ready to commit and land to main pending final confirmation.
+
+## Coarse Evidence Durability V1 (candidate) · 2026-09-10
+branch: `feat/coarse-evidence-durability-v1`. Base `02bc5d15e0651878b6ca4c4631ce440b649c9452`
+  (origin/main, verified via `git rev-parse origin/main` after `git fetch origin main`). Fresh
+  isolated worktree (`Time audit app - coarse-evidence-durability-v1`); primary worktree (dirty
+  `docs/phase12-personal-intelligence-design`, uncommitted `README.md`) untouched; Meal/Workout
+  untouched; no other worktree touched.
+scope: closes the pre-dogfood coarse-evidence durability gate via account-scoped Firebase sync,
+  reusing the existing live `entries`/`reviews`/`plans` record-level `updatedAt`-LWW pattern
+  (no new sync architecture, no rules change, no sharing, no export/import, no new daily user
+  action). New `coarse-life-evidence-sync.js`. Changed: `coarse-life-evidence-model.js`
+  (`resolveCoarseEvidenceSync`, `COARSE_LIFE_EVIDENCE_REMOTE_PATH`, tolerate/validate
+  `deleted`/`undoRestoredAt`), `coarse-life-evidence-repository.js` (`remove()` tombstones
+  instead of erasing; `getRaw()`/`listAllRaw()`/`mergeRemoteSnapshot()`; rename/rekey collision
+  guard treats a tombstoned identity as free and tombstones the vacated old identity),
+  `coarse-life-evidence-ui.js` (pushes after save/remove; `refreshCoarseEvidenceListIfMounted()`),
+  `storage.js` (`globalThis.getChronaSenseRoomRef` accessor; attach/detach at the same lifecycle
+  points as every other room listener). Touched: `index.html` (+ `www/` mirror of all of the
+  above), `eslint.config.js`, `package.json`, `tests/coarse-life-evidence.spec.js` (two `remove()`
+  assertions updated for the tombstone contract), docs (`CHANGELOG.md`, `CODEMAP.md`,
+  `contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md`, this file). No Life Ledger, no Wife/Shared, no
+  onboarding, no Wallet change.
+suite: `coarse-life-evidence.test.js` (extended), new `coarse-life-evidence-sync.test.js`; full
+  `npm test`; `npm run lint`; full `npx playwright test`; `node scripts/runtime-mirror.mjs
+  --check`; `node --check` on touched/new JS; `git diff --check`.
+result:
+  - `coarse-life-evidence.test.js`: 43/43 (23 pre-existing + 20 new: `resolveCoarseEvidenceSync`
+    matrix, tombstone/rekey semantics, `mergeRemoteSnapshot` bootstrap/union/idempotence/
+    malformed-input/resurrection-protection cases).
+  - `coarse-life-evidence-sync.test.js` (new): 7/7 — offline no-op safety, attach() merge +
+    bootstrap push, idempotent re-delivery, malformed-snapshot safety, a two-client
+    create/edit/delete/reconnect chaos simulation (deletion never resurrects), and a rename
+    replicating as add-at-new-identity + tombstone-at-old-identity.
+  - `npm test`: PASS — 451 cases, exit 0 (full node chain through `runtime-mirror.test.js`),
+    after `node scripts/runtime-mirror.mjs --write` (initially failed on missing/drifted mirror
+    files, expected before the write).
+  - `npm run lint`: PASS — 0 errors (added `coarse-life-evidence-sync.js` to the ESM file list in
+    `eslint.config.js`, fixing one parse error), 29 pre-existing warnings, unchanged.
+  - `npx playwright test` (full): 401/401. `tests/coarse-life-evidence.spec.js` needed its two
+    `remove()`-envelope assertions updated (tombstone retains one row with `deleted:true`
+    instead of zero rows) — both now pass; all other specs required no change.
+  - `node scripts/runtime-mirror.mjs --check`: OK after `--write` (added
+    `coarse-life-evidence-sync.js`; updated `coarse-life-evidence-model/repository/ui.js`,
+    `index.html`, `storage.js`).
+  - `node --check` on all touched/new JS: PASS. `git diff --check`: clean (no whitespace issues).
+  - No production Firebase writes made or required by any test — sync tests run entirely against
+    an in-memory fake Firebase room ref (no real network, no real Firebase project).
+state: candidate uncommitted / unpushed for one independent review.
+
 ## Phase 6I/J — Day-to-day UX correction pass (same candidate) · 2026-09-10
 branch: `feat/review-reconciliation-v1`. Base still `2948e2e2e591e18d7f40bade92c531338b77885a`
   (re-verified: `git rev-parse origin/main` and `HEAD` both unchanged, nothing committed).

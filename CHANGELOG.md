@@ -1,5 +1,92 @@
 # ChronaSense — Changelog
 
+## Coarse Evidence Durability V1 — independent-review fix pass (same candidate) — 2026-09-10
+
+Three findings from an independent review, fixed before landing (no rebuild, same architecture):
+- `coarse-life-evidence-repository.js` `save()` now stamps `undoRestoredAt` when a save lands on
+  a tombstoned identity (plain Add or a rename/date-move onto a free identity) — without it, a
+  resurrection (delete then re-add) never propagated to a device that already held the tombstone,
+  since `resolveCoarseEvidenceSync`'s guard requires that marker. Mirrors the existing `entries[]`
+  precedent (`restoreUndoEntries()` in `index.html`).
+- `coarse-life-evidence-sync.js` `pushAllLocal()` now diffs against the last remote snapshot the
+  bridge observed instead of unconditionally rewriting every local record on every `attach()` —
+  fixes both a redundant-write-on-every-reload issue and a narrow window where a stale local
+  tombstone could be re-broadcast over a newer remote value on reattach.
+- `storage.js`'s existing `.info/connected` reconnect handler now also calls
+  `CoarseLifeEvidenceSync.pushAllLocal()` (a no-op once converged, per the diff above), so a push
+  that failed while offline is retried on reconnect instead of only on the next edit to that
+  record — matching the CHANGELOG's original "syncs later" claim.
+
+Not fixed (documented, deferred): `resolveCoarseEvidenceSync` remains a hand-duplicated copy of
+`storage.js`'s `resolveEntrySync` rather than a shared helper — low risk, tracked for a future
+consolidation pass, not required to close the durability gate.
+
+tests: 2 new regressions in `coarse-life-evidence-sync.test.js` (cross-device resurrection now
+converges instead of staying stuck deleted; reattach with no local changes issues zero redundant
+writes) + 2 new in `coarse-life-evidence.test.js` (`undoRestoredAt` stamped on resurrection, not
+stamped on an ordinary edit). Full `npm test` (465 cases), `npm run lint` (0 errors, 29
+pre-existing warnings), full `npx playwright test` (400/401; the one failure, an unrelated
+auto-logged-schedule smoke test, reproduced clean 3/3 in isolation — a pre-existing parallel-run
+flake, not a regression from this pass), `node scripts/runtime-mirror.mjs --check` (clean after
+`--write`).
+
+## Coarse Evidence Durability V1 (feat/coarse-evidence-durability-v1, uncommitted) — 2026-09-10
+
+Closes the pre-dogfood durability gate: coarse life evidence (Phase 6H) was local-only
+(`ta3-coarse-life-evidence-v1`), so another browser/device never saw it and clearing browser
+storage destroyed it. Adds an account-scoped durable remote copy — no sharing, no export/import,
+no new daily user action, no UI change to Today/Review/Plan Tomorrow. Reuses the identical
+record-level `updatedAt`-last-write-wins pattern `storage.js` already runs live for
+`entries`/`reviews`/`plans`; not a new sync architecture.
+
+added:
+  - `coarse-life-evidence-sync.js` — dependency-injected Firebase sync bridge
+    (`createCoarseEvidenceSyncBridge`). Subscribes to `rooms/<roomCode>/coarseLifeEvidence`
+    (same private per-user room every other collection syncs through — no `firebase.rules.json`
+    change). On first connect, merges remote into local, then bootstrap-pushes any local-only
+    records once (migrates a pre-durability install automatically, no user action). After that,
+    each save/remove pushes just that one changed record, best-effort and non-blocking.
+  - `coarse-life-evidence-sync.test.js` — bridge lifecycle, offline safety, and a two-client
+    chaos simulation (concurrent create/edit, and the key resurrection test: a client offline
+    during a delete must not resurrect it on reconnect).
+
+changed:
+  - `coarse-life-evidence-model.js`: new pure `resolveCoarseEvidenceSync(local, remote, nowTs)` —
+    the deterministic conflict rule (last-write-wins by `updatedAt`, with a tombstone-resurrection
+    guard requiring an explicit `undoRestoredAt` to override a local delete). New
+    `COARSE_LIFE_EVIDENCE_REMOTE_PATH` constant. `validateCoarseEvidenceRecord()` now tolerates
+    (and validates) the optional `deleted`/`undoRestoredAt` sync markers.
+  - `coarse-life-evidence-repository.js`: `remove()` now tombstones (`deleted: true`) instead of
+    erasing the row, so a stale remote/device echo cannot resurrect it — ordinary reads
+    (`list()`/`listForDate()`/`get()`) still treat it as gone. New sync-only `getRaw()` /
+    `listAllRaw()` (see tombstones) and `mergeRemoteSnapshot()` (record-level remote merge, never
+    a collection replace). The rename/date-move collision guard now treats a tombstoned identity
+    as free, and a rename tombstones the vacated old identity instead of deleting it outright, so
+    a durable remote copy of the old id also converges to "deleted."
+  - `coarse-life-evidence-ui.js`: pushes the saved/removed record (and, on a rename, the
+    old-identity tombstone) through the sync bridge after every local write; new
+    `refreshCoarseEvidenceListIfMounted()`, called by the sync bridge so an open Review reflects
+    another device's edit (no-op when Review isn't open).
+  - `storage.js`: exposes `globalThis.getChronaSenseRoomRef` (one-line accessor so the sync
+    module, an ES module, can read this classic script's `fbRoomRef`) and attaches/detaches the
+    sync bridge alongside every other room listener (`startSync()`, sign-out,
+    `teardownRoomListeners()`).
+  - `contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md`: durability implementation-status entry
+    added; gate (1) of the pre-Wife/Shared/dogfood list marked satisfied.
+  - `tests/coarse-life-evidence.spec.js`: the two `remove()` assertions updated for the tombstone
+    contract (still asserts "gone" from every ordinary read; the raw envelope now retains one
+    tombstoned row instead of zero).
+
+tests: `npm test` (451 cases incl. the two new/extended coarse-evidence suites), full
+`npx playwright test` (401 cases), `npm run lint` (0 errors), `node scripts/runtime-mirror.mjs
+--check` (clean after `--write`). No production Firebase writes made or required by any test —
+sync tests use an in-memory fake Firebase room ref.
+
+not built (deliberately out of scope): Wife/Shared, export/import, Life Ledger projection of
+coarse evidence, a sync-status widget, a "Sync now" action, onboarding rewrite, Focus Wallet /
+streak decision.
+
+
 ## Phase 6I/J — Day-to-day UX correction pass (same candidate — feat/review-reconciliation-v1, uncommitted) — 2026-09-10
 
 A REMOVE / HIDE / QUIETEN pass over the 6I/J candidate — no rebuild, no new persistence,
