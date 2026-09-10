@@ -1599,9 +1599,11 @@ function publishPublicStats() {
     ? sumEnergyMinutes(todayE, 'deep', todayKey)
     : todayE.filter(e => e.energy === 'deep').reduce((s, e) => s + (e.blockIntervalMin || settings.intervalMin || 30), 0);
   const deepHrsToday = +(deepMinsToday / 60).toFixed(1);
+  // Deep-work streak intentionally excluded (motivation-pressure-cleanup-v1): a
+  // consecutive-day streak is not a shared performance signal. Older payloads may
+  // still carry `streak`; renderPartnerCard() no longer reads it.
   fbDb.ref(`uid_${currentUser.uid}/public`).set({
     deepHrsToday,
-    streak: computeStreak(),
     name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Partner',
     avatar: settings.avatar || '👤',
     dateKey: toDateKey(new Date()),

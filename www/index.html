@@ -46,7 +46,6 @@
         style="display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:300;
                min-width:160px;background:var(--bg2);border:1px solid var(--border2);
                border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden">
-        <div class="hdr-menu-item" onclick="openFocusWallet();toggleHdrMenu()">Focus wallet</div>
         <div class="hdr-menu-item" onclick="toggleTodayDestination('accountability-details');toggleHdrMenu()">Accountability</div>
         <div class="hdr-menu-item" onclick="openReflectionsHistory();toggleHdrMenu()">Reflections</div>
         <div class="hdr-menu-item" onclick="openReview();toggleHdrMenu()">Review day</div>
@@ -316,7 +315,6 @@
     <span class="today-health-label" id="th-label">Today health</span>
     <span class="today-health-metric deep" id="th-deep">0m deep</span>
     <button type="button" class="today-health-metric waste" id="th-waste" onclick="scrollToFirstEnergy('waste','distraction')">0m waste</button>
-    <button type="button" class="today-health-metric wallet" id="th-wallet" onclick="openFocusWallet()">0 pts</button>
   </div>
 
   <!-- Gap recovery inbox -->
@@ -350,29 +348,6 @@
     </span>
     <span class="closeout-action" id="closeout-action">Close day</span>
   </button>
-
-  <!-- Focus wallet -->
-  <div id="focus-wallet-card" class="today-detail" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:14px;padding:12px;margin-bottom:12px">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px">
-      <div>
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700">Focus wallet</div>
-        <div style="display:flex;align-items:baseline;gap:6px;margin-top:2px">
-          <span id="fw-balance" style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--deep)">0</span>
-          <span style="font-size:12px;color:var(--muted)">pts this week</span>
-        </div>
-      </div>
-      <button class="btn sm primary" onclick="openFocusWallet()">Spend</button>
-    </div>
-    <details style="font-size:11px;color:var(--muted);margin-top:2px">
-      <summary style="cursor:pointer;color:var(--muted2);font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700">Details</summary>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:11px;margin-top:8px">
-        <div><span style="color:var(--muted)">earned</span><br><span id="fw-earned" style="font-family:var(--mono);color:var(--text)">0</span></div>
-        <div><span style="color:var(--muted)">spent/costs</span><br><span id="fw-spent" style="font-family:var(--mono);color:var(--text)">0</span></div>
-        <div><span style="color:var(--muted)">sports</span><br><span id="fw-sports" style="font-family:var(--mono);color:var(--text)">0/3 free</span></div>
-      </div>
-    </details>
-    <div id="fw-note" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4"></div>
-  </div>
 
   <!-- Accountability partner card -->
   <div id="partner-card" class="today-detail" style="display:none"></div>
@@ -859,7 +834,7 @@
     <div class="settings-title">Accountability Partner</div>
     <div id="partner-signin-prompt" style="display:none;font-size:12px;color:var(--muted);padding:4px 0">Sign in to connect an accountability partner.</div>
     <div id="partner-settings-body">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">Only your deep hours today and day streak are shared — no task names, no categories.</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">Only your deep hours today are shared — no task names, no categories.</div>
       <!-- No partner yet -->
       <div id="partner-no-pair">
         <div style="margin-bottom:14px">
@@ -1450,44 +1425,6 @@
   </div>
   <div style="margin-top:16px">
     <button class="btn ghost" style="width:100%" onclick="closeModal('break-overlay')">Cancel</button>
-  </div>
-</div></div>
-
-<!-- ══ FOCUS WALLET MODAL ══ -->
-<div class="overlay" id="focus-wallet-overlay" onclick="overlayClose(event,'focus-wallet-overlay')">
-<div class="modal">
-  <div class="modal-handle"></div>
-  <div class="modal-tag">FOCUS WALLET</div>
-  <div class="modal-title">Log reward</div>
-  <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:12px;margin-bottom:14px">
-    <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Available this week</div>
-    <div id="fw-modal-balance" style="font-family:var(--mono);font-size:26px;font-weight:700;color:var(--deep)">0 pts</div>
-    <div id="fw-modal-summary" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
-  </div>
-  <div style="font-size:11px;color:var(--muted);line-height:1.45;margin-bottom:10px">
-    Pick a default, tweak the time if needed, and log it. Sports are time entries first; wallet cost is automatic after 3 weekly sessions.
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-    <button class="btn" onclick="selectFocusRewardPreset('Movie',25,120,'recovery','movie')">Movie<br><span style="font-size:11px;color:var(--muted)">2h · 25 pts</span></button>
-    <button class="btn" onclick="selectFocusRewardPreset('Night out',60,180,'social','night-out')">Night out<br><span style="font-size:11px;color:var(--muted)">3h · 60 pts</span></button>
-    <button class="btn" onclick="selectFocusRewardPreset('Pickleball',0,90,'exercise','sports')">Pickleball<br><span style="font-size:11px;color:var(--muted)">90m · auto</span></button>
-    <button class="btn" onclick="selectFocusRewardPreset('Basketball',0,90,'exercise','sports')">Basketball<br><span style="font-size:11px;color:var(--muted)">90m · auto</span></button>
-    <button class="btn" onclick="selectFocusRewardPreset('Small treat',15,30,'recovery','treat')">Small treat<br><span style="font-size:11px;color:var(--muted)">30m · 15 pts</span></button>
-    <button class="btn" onclick="selectFocusRewardPreset('Reward',0,30,'recovery','custom')">Custom<br><span style="font-size:11px;color:var(--muted)">edit below</span></button>
-  </div>
-  <div class="field"><label>Activity</label><input type="text" id="fw-reward-label" placeholder="e.g. movie" oninput="renderFocusRewardPreview()"></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    <div class="field"><label>Duration (min)</label><input type="number" id="fw-reward-duration" min="1" max="720" step="5" oninput="renderFocusRewardPreview()"></div>
-    <div class="field"><label>Ended at</label><input type="time" id="fw-reward-end" oninput="renderFocusRewardPreview()"></div>
-  </div>
-  <div class="field"><label>Point cost</label><input type="number" id="fw-reward-points" min="0" step="1" oninput="renderFocusRewardPreview()"></div>
-  <input type="hidden" id="fw-reward-energy" value="recovery">
-  <input type="hidden" id="fw-reward-category" value="custom">
-  <div id="fw-debt-preview" style="font-size:12px;color:var(--muted);line-height:1.45;margin:-2px 0 12px"></div>
-  <div id="fw-recent-breakdown" style="font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:14px"></div>
-  <div style="display:flex;gap:8px">
-    <button class="btn ghost flex-1" onclick="closeModal('focus-wallet-overlay')">Cancel</button>
-    <button class="btn primary flex-1" onclick="logFocusReward()">Log reward</button>
   </div>
 </div></div>
 
@@ -2681,7 +2618,6 @@ function autoLogBlock(activity, energy, tsStart, tsEnd, planItemId = null) {
   persist(); scheduleRenderToday(); syncEntries();
   showToast(`Auto-logged: ${activity} · ${fmtDur(dur)}`);
   checkReviewPrompt();
-  checkEscalation();
 }
 
 // ══════════════════════════════════════════════════════
@@ -2903,7 +2839,6 @@ function _doQuickSave(activity, energy) {
   showUndoToast(`Logged · ${activity} · ${fmtDur(loggedDur)}`, energy);
   showLogFeedback(energy);
   checkReviewPrompt();
-  checkEscalation();
   checkBudget(energy);
 }
 
@@ -2942,8 +2877,13 @@ function fireBehavioralFeedback(entry, todayE) {
   renderFeedbackFlash(fb);
 }
 
-// analyzeBehavior, renderFeedbackFlash, dismissFeedbackFlash, checkEscalation — moved to insights.js
+// analyzeBehavior, renderFeedbackFlash, dismissFeedbackFlash — moved to insights.js
 
+// Focus Wallet is dormant: motivation-pressure-cleanup-v1 removed every user-facing
+// wallet surface (header menu, Today card, overlay, Review "Wallet" cell). The scoring
+// rules (focus-wallet.js) and focusRedemptions storage stay in place with no migration.
+// This bridge is retained only so the Phase 6G.2 "unknown/passive evidence is not
+// penalised" regression can still exercise computeFocusWallet directly.
 function getCurrentFocusWallet() {
   if (typeof computeFocusWallet !== 'function') return null;
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -2963,168 +2903,6 @@ function getCurrentFocusWallet() {
 function formatFocusPoints(points) {
   const n = Math.round(Number(points || 0) * 10) / 10;
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
-}
-
-function focusWalletEscape(value) {
-  return String(value || '').replace(/[&<>"']/g, ch => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[ch]));
-}
-
-function renderFocusWallet() {
-  const card = document.getElementById('focus-wallet-card');
-  if (!card) return;
-  const wallet = getCurrentFocusWallet();
-  if (!wallet) { card.style.display = 'none'; return; }
-
-  card.style.display = 'block';
-  const balanceEl = document.getElementById('fw-balance');
-  balanceEl.textContent = formatFocusPoints(wallet.balance);
-  balanceEl.style.color = wallet.balance < 0 ? 'var(--distraction)' : 'var(--deep)';
-  document.getElementById('fw-earned').textContent = formatFocusPoints(wallet.earned);
-  document.getElementById('fw-spent').textContent = formatFocusPoints(wallet.spent);
-  const sportsFree = Math.min(wallet.sportsSessions, 3);
-  const sportsExtra = Math.max(0, wallet.sportsSessions - 3);
-  document.getElementById('fw-sports').textContent = sportsExtra
-    ? `${wallet.sportsSessions} used, ${sportsExtra} paid`
-    : `${sportsFree}/3 free`;
-  document.getElementById('fw-note').textContent = wallet.balance < 0
-    ? `Focus debt: ${formatFocusPoints(Math.abs(wallet.balance))} pts. Log honestly, then earn it back.`
-    : wallet.balance > 0
-      ? 'Weekend fun comes from this balance. Deep work fills it; waste and extra sports drain it.'
-      : 'Log rewards honestly. If balance goes negative, it becomes focus debt.';
-
-  const modalBalance = document.getElementById('fw-modal-balance');
-  if (modalBalance) {
-    modalBalance.textContent = `${formatFocusPoints(wallet.balance)} pts`;
-    modalBalance.style.color = wallet.balance < 0 ? 'var(--distraction)' : 'var(--deep)';
-  }
-  const modalSummary = document.getElementById('fw-modal-summary');
-  if (modalSummary) {
-    const debt = wallet.carriedDebt < 0 ? ` · carried debt ${formatFocusPoints(wallet.carriedDebt)}` : '';
-    modalSummary.textContent = `Earned ${formatFocusPoints(wallet.earned)} · spent/costs ${formatFocusPoints(wallet.spent)}${debt} · week ${wallet.weekKey}`;
-  }
-  const recent = document.getElementById('fw-recent-breakdown');
-  if (recent) {
-    const rows = wallet.breakdown.slice(-5).reverse();
-    recent.innerHTML = rows.length
-      ? rows.map(row => `<div style="display:flex;justify-content:space-between;gap:10px"><span>${focusWalletEscape(row.label)}</span><span style="font-family:var(--mono);color:${row.points >= 0 ? 'var(--deep)' : 'var(--distraction)'}">${row.points > 0 ? '+' : ''}${formatFocusPoints(row.points)}</span></div>`).join('')
-      : 'No wallet activity yet this week.';
-  }
-  renderFocusRewardPreview();
-}
-
-function openFocusWallet() {
-  if (!document.getElementById('fw-reward-label')?.value) {
-    selectFocusRewardPreset('Movie', 25, 120, 'recovery', 'movie');
-  } else {
-    const endEl = document.getElementById('fw-reward-end');
-    if (endEl) endEl.value = tzHHMM(Date.now());
-  }
-  renderFocusWallet();
-  document.getElementById('focus-wallet-overlay').classList.add('open');
-}
-
-function selectFocusRewardPreset(label, points, durationMin, energy, category) {
-  document.getElementById('fw-reward-label').value = label || '';
-  document.getElementById('fw-reward-points').value = Number(points || 0);
-  document.getElementById('fw-reward-duration').value = Number(durationMin || 30);
-  document.getElementById('fw-reward-energy').value = energy || 'recovery';
-  document.getElementById('fw-reward-category').value = category || 'custom';
-  document.getElementById('fw-reward-end').value = tzHHMM(Date.now());
-  renderFocusRewardPreview();
-}
-
-function getFocusRewardEndTs() {
-  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const todayKey = getDateInTZ(Date.now(), tz);
-  const endVal = document.getElementById('fw-reward-end').value;
-  if (!endVal) return Date.now();
-  let tsEnd = tzParseTime(todayKey, endVal);
-  if (tsEnd > Date.now() + 60000) tsEnd -= 86400000;
-  return Math.min(tsEnd, Date.now());
-}
-
-function renderFocusRewardPreview() {
-  const preview = document.getElementById('fw-debt-preview');
-  if (!preview) return;
-  const wallet = getCurrentFocusWallet();
-  if (!wallet) return;
-  const cost = Number(document.getElementById('fw-reward-points')?.value || 0);
-  const duration = Number(document.getElementById('fw-reward-duration')?.value || 0);
-  const after = wallet.balance - Math.max(0, Number.isFinite(cost) ? cost : 0);
-  const durationText = duration > 0 ? `${formatFocusPoints(duration)} min` : 'set a duration';
-  preview.style.color = after < 0 ? 'var(--distraction)' : 'var(--muted)';
-  preview.textContent = after < 0
-    ? `This logs ${durationText} and leaves ${formatFocusPoints(Math.abs(after))} pts of focus debt.`
-    : `This logs ${durationText}. Balance after: ${formatFocusPoints(after)} pts.`;
-}
-
-function logFocusReward() {
-  const label = canonicalizeActivityInput(document.getElementById('fw-reward-label').value.trim());
-  if (!label) { showToast('Name the reward'); return false; }
-  const durationMin = Math.round(Number(document.getElementById('fw-reward-duration').value));
-  if (!Number.isFinite(durationMin) || durationMin < 1) { showToast('Enter a valid duration'); return false; }
-  const points = Math.max(0, Number(document.getElementById('fw-reward-points').value || 0));
-  if (!Number.isFinite(points)) { showToast('Enter a valid point cost'); return false; }
-
-  const energy = document.getElementById('fw-reward-energy').value || 'recovery';
-  const category = document.getElementById('fw-reward-category').value || 'custom';
-  const tsEnd = getFocusRewardEndTs();
-  const tsStart = tsEnd - durationMin * 60000;
-  const now = Date.now();
-  const entryId = now;
-  const dateKey = getDateInTZ(tsStart, settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
-  const entry = {
-    id: entryId,
-    ts: tsEnd,
-    tsStart,
-    blockIntervalMin: durationMin,
-    date: dateKey,
-    activity: label,
-    energy,
-    onPlan: energy !== 'waste' && energy !== 'distraction',
-    retro: true,
-    walletReward: true,
-    walletCategory: category,
-    walletPoints: points,
-    updatedAt: now
-  };
-  entry.category = getBucket(entry);
-  entry.originalLabel = entry.energy || null;
-  validateEntry(entry);
-  entries.push(entry);
-  getActivityColor(label);
-
-  let redemption = null;
-  if (points > 0) {
-    const weekKey = getWeekKey(new Date(dateKey + 'T12:00:00Z'));
-    redemption = {
-      id: `${now}_${Math.random().toString(36).slice(2, 8)}`,
-      weekKey,
-      entryId,
-      label,
-      category,
-      points,
-      happenedAt: tsEnd,
-      createdAt: now,
-      updatedAt: now
-    };
-    focusRedemptions.push(redemption);
-  }
-
-  entries.sort((a, b) => b.ts - a.ts);
-  _lastLoggedEntryId = entry.id;
-  persist();
-  scheduleRenderToday();
-  syncEntries();
-  if (redemption && typeof syncFocusRedemptions === 'function') syncFocusRedemptions();
-  closeModal('focus-wallet-overlay');
-  const wallet = getCurrentFocusWallet();
-  const debt = wallet && wallet.balance < 0 ? ` · ${formatFocusPoints(Math.abs(wallet.balance))} pts debt` : '';
-  rememberCreatedUndo('reward spend', [entry], redemption ? [redemption] : []);
-  showUndoToast(`Logged ${label} · ${fmtDur(durationMin)}${points ? ` · ${formatFocusPoints(points)} pts` : ''}${debt}`, energy);
-  return true;
 }
 
 // ══════════════════════════════════════════════════════
@@ -3713,7 +3491,6 @@ function saveEntry() {
   showUndoToast(`Logged · ${activity} · ${fmtDur(entry.blockIntervalMin)}`, selectedEnergy);
   showLogFeedback(entry.energy);
   checkReviewPrompt();
-  checkEscalation();
   checkBudget(entry.energy);
 
   // If mid-block switch: reset block start and open pre-commit for next task
@@ -3799,26 +3576,6 @@ function startSprint() {
   document.getElementById('interval-input').value=25; updateRing(); closeModal('log-overlay');
   if (!running) toggleTimer(); else syncTimerState();
   showToast('25-min sprint started');
-}
-
-// Called from checkEscalation() (insights.js) on a 5+ consecutive waste/missed streak.
-// Sets the recovery-block duration to 60 min without force-starting a timer: forcing a
-// start would require the user's current intention/task, which escalation can't supply,
-// and silently no-op-ing while claiming otherwise would be untruthful. If a block is
-// already running its duration is extended in place (same safe pattern as startSprint()'s
-// running branch); otherwise the 60-min duration is just queued for the next start.
-function triggerPenaltyMode() {
-  settings.intervalMin = 60;
-  document.getElementById('interval-input').value = 60;
-  if (running) {
-    totalSecs = 60 * 60;
-    remaining = totalSecs;
-    updateRing();
-    syncTimerState();
-    showToast('Penalty mode: current block extended to 60 min');
-  } else {
-    showToast('Penalty mode: next session set to 60 min');
-  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -4685,9 +4442,7 @@ function getCloseoutGaps(dateKey) {
 function computeCloseoutSummary(dateKey) {
   const realEntries = getEntriesForDateWindow(dateKey).filter(e => !e.missed && !e.deleted);
   const planItems = getPlanItems(dateKey);
-  const isToday = dateKey === getDateInTZ(Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
   const gaps = getCloseoutGaps(dateKey);
-  const wallet = isToday ? getCurrentFocusWallet() : null;
   const review = reviews[dateKey] || null;
   // Deep / waste in the close-out speak to actual behaviour — count only
   // confirmed classifications, not passive observations or schedule assumptions.
@@ -4704,7 +4459,6 @@ function computeCloseoutSummary(dateKey) {
     unloggedGapCount: gaps.length,
     firstUnloggedGap: gaps.find(gap => (gap.gapMin || 0) >= 30) || gaps[0] || null,
     unloggedOk: !!(review && review.unloggedOk),
-    walletBalance: wallet ? wallet.balance : null,
     reviewed: !!review
   };
 }
@@ -4717,7 +4471,6 @@ function closeoutSummaryParts(summary) {
   if (summary.unloggedMin > 0) {
     parts.push(summary.unloggedOk ? `${fmtDur(summary.unloggedMin)} blank ok` : `${fmtDur(summary.unloggedMin)} unlogged`);
   }
-  if (summary.walletBalance !== null) parts.push(`${formatFocusPoints(summary.walletBalance)} pts`);
   return parts;
 }
 
@@ -4826,11 +4579,9 @@ function renderCloseoutCta() {
 function computeTodayHealth(todayE, dateKey) {
   const realEntries = (todayE || []).filter(e => !e.deleted && !e.missed);
   const wasteMin = sumEnergyMinutes(realEntries, 'waste', dateKey) + sumEnergyMinutes(realEntries, 'distraction', dateKey);
-  const wallet = isViewingToday() ? getCurrentFocusWallet() : null;
   return {
     deepMin: sumEnergyMinutes(realEntries, 'deep', dateKey),
-    wasteMin,
-    walletBalance: wallet ? wallet.balance : null
+    wasteMin
   };
 }
 
@@ -4851,22 +4602,6 @@ function renderTodayHealth(todayE) {
   wasteEl.classList.toggle('actionable', health.wasteMin > 0);
   wasteEl.disabled = health.wasteMin <= 0;
   wasteEl.title = health.wasteMin > 0 ? 'Jump to waste entries' : '';
-
-  const walletEl = document.getElementById('th-wallet');
-  if (isToday && health.walletBalance !== null) {
-    walletEl.style.display = '';
-    walletEl.textContent = `${formatFocusPoints(health.walletBalance)} pts`;
-    walletEl.classList.toggle('negative', health.walletBalance < 0);
-    walletEl.classList.add('actionable');
-    walletEl.disabled = false;
-    walletEl.title = 'Open focus wallet';
-  } else {
-    walletEl.style.display = 'none';
-    walletEl.classList.remove('negative');
-    walletEl.classList.remove('actionable');
-    walletEl.disabled = true;
-    walletEl.title = '';
-  }
   // Phase 6I/J UX pass: the "Xh Ym unlogged" Today stat was removed — a passive debt figure
   // on the main screen undercut removing the gap interruption. Raw gaps stay in Timeline and
   // Review's Full analysis; whole-day reconciliation happens once, in Review.
@@ -4979,11 +4714,6 @@ function renderReviewCloseoutSummary() {
   el.style.display = 'block';
   const planLabel = summary.planCount ? `${summary.planDone}/${summary.planCount}` : 'none';
   const unloggedLabel = summary.unloggedOk || _reviewUnloggedOk ? 'Blank ok' : 'Unlogged';
-  const walletCell = summary.walletBalance === null ? '' : `
-      <div class="rv-closeout-cell">
-        <span>Wallet</span>
-        <strong>${formatFocusPoints(summary.walletBalance)} pts</strong>
-      </div>`;
   document.getElementById('rv-metric-details').innerHTML = `<div class="rv-closeout">
       <div class="rv-closeout-head">Day details</div>
       <div class="rv-closeout-grid">
@@ -4991,7 +4721,6 @@ function renderReviewCloseoutSummary() {
         <div class="rv-closeout-cell"><span>Deep</span><strong>${fmtDur(summary.deepMin)}</strong></div>
         <div class="rv-closeout-cell"><span>Waste</span><strong>${fmtDur(summary.wasteMin)}</strong></div>
         <div class="rv-closeout-cell"><span>${unloggedLabel}</span><strong>${fmtDur(summary.unloggedMin)}</strong></div>
-        ${walletCell}
       </div>
     </div>`;
 }
@@ -5737,7 +5466,6 @@ function renderToday() {
   if (streakSubEl) streakSubEl.textContent = cleanStreak > 0 ? `days · ${cleanStreak}d no waste logged` : 'days deep';
 
   renderTodayPlan();
-  renderFocusWallet();
   renderTodayHealth(displayTodayE);
   renderTodayActionStrip(displayTodayE);
   renderGapRecoveryInbox(displayTodayE);
@@ -7596,7 +7324,6 @@ function renderWeekOverview(days) {
       </div>
       <div style="display:flex;gap:6px;margin-top:10px;align-items:center">
         ${displayDays.map(d=>`<div class="streak-dot ${d.entries.length>=4?'on':'off'} ${d.isToday?'today-dot':''}" title="${d.label}: ${d.entries.length} entries" onclick="selectWeekDay('${d.key}')" style="cursor:pointer"></div>`).join('')}
-        <span style="font-size:11px;color:var(--muted);margin-left:4px">${computeStreak()} day streak</span>
       </div>
     </div>
 
@@ -9909,7 +9636,6 @@ function renderPartnerCard() {
   if (!partnerData || !partnerData.name) { card.style.display = 'none'; return; }
   const isToday = partnerData.dateKey === toDateKey(new Date());
   const deepHrs = (isToday && partnerData.deepHrsToday != null) ? partnerData.deepHrsToday : null;
-  const streak = partnerData.streak || 0;
   const lastNudge = settings._lastNudgeSent || 0;
   const canNudge = Date.now() - lastNudge > 20 * 60 * 60 * 1000; // 20h cooldown
   card.style.display = 'block';
@@ -9919,7 +9645,7 @@ function renderPartnerCard() {
       <div class="partner-name">${partnerData.name}</div>
       <div class="partner-stats">${
         deepHrs !== null ? `${deepHrs}h deep today` : 'No data yet today'
-      }${streak > 0 ? ` · 🔥 ${streak}d streak` : ''}</div>
+      }</div>
     </div>
     ${canNudge
       ? `<button class="btn sm ghost" onclick="sendNudge()" style="flex-shrink:0">💪 Nudge</button>`
