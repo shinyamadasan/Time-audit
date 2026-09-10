@@ -23,7 +23,15 @@
 // sustained distracting context, a long idle gap, or a sustained task change.
 // ══════════════════════════════════════════════════════
 
-export const ATTENTION_SIGNALS_VERSION = 1;
+// v2 (Phase 6G.2): a passive site/app observation or a schedule-assumption
+// entry is no longer classified as focus or distraction from its energy alone —
+// site/app identity does not establish purpose, and a scheduled block is an
+// assumption, not observed behavior. Such entries become "neutral" (present,
+// legitimate, but not evidence of focus or drift). Raw segments and their
+// `source` are still emitted. Idle-gap stretch ends are a gap in the *logged*
+// record, not established drift; the hedged wording below and the review
+// disclaimer carry that — no deeper redesign here.
+export const ATTENTION_SIGNALS_VERSION = 2;
 
 /**
  * Deterministic thresholds. Exact semantics:
@@ -108,8 +116,34 @@ function entryWindow(entry) {
   return { start, end };
 }
 
+// A passive device/site observation (browser-extension / phone-usage), a
+// schedule-assumption entry, or computer-session ("PC Time" / "Screen Time")
+// context: its `energy` is a default mapping / assumption, not a user- or
+// timer-asserted classification. Mirrors evidence-interpretation.js's three
+// predicates (kept inline so this module stays dependency-free).
+function isUnconfirmedEnergyEntry(entry) {
+  if (entry.browserUsage === true ||
+    entry.phoneUsage === true ||
+    entry.source === 'browser-extension' ||
+    entry.source === 'phone-usage' ||
+    entry.scheduledAutoLog === true ||
+    entry.captureMethod === 'scheduled_template') return true;
+  // Computer-session context: the ambient "PC Time" tracker auto-logs a block
+  // every minute with `energy = lastEntry?.energy || 'deep'`. That proves a
+  // computer session was open, not presence, work, or deep work.
+  if (!(entry.autoLogged === true || entry.quickLogged === true)) return false;
+  const base = String(entry.activity || '')
+    .split(' (Output:')[0]
+    .split(' · ')[0]
+    .trim()
+    .toLowerCase();
+  return base === 'pc time' || base === 'screen time';
+}
+
 function classifyEntry(entry, planKeySet) {
   const energy = String(entry.energy || '').toLowerCase();
+  // Passive/assumed entries are context, not evidence of focus or distraction.
+  if (isUnconfirmedEnergyEntry(entry)) return 'neutral';
   if (DISTRACTION_ENERGIES.has(energy)) return 'distraction';
   if (FOCUS_ENERGIES.has(energy)) return 'focus';
   if (planKeySet && planKeySet.size) {
@@ -365,7 +399,9 @@ export function attentionSignalLines(signals) {
   if (signals.attentionBreaks > 0) {
     let value = String(signals.recoveries);
     if (signals.medianRecoveryMin != null) value += ` · median ${signals.medianRecoveryMin} min`;
-    lines.push({ key: 'recovery', label: 'Recovered from drift', value });
+    // Not "recovered from drift": an idle gap is unlogged time, not established
+    // drift, and even a logged distraction only shows a break in the record.
+    lines.push({ key: 'recovery', label: 'Refocused after a break', value });
   }
 
   if (signals.selfRating) {

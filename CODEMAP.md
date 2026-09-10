@@ -50,6 +50,30 @@ Functions: `persist()`, `normalizeTemplates()`, `templateSyncStamp()`, `ensureTe
 Variables: `_renderTodayPending`, `_lastSyncErrorToastAt`, `_lastTimerSyncDetail`, `_syncDetailAgeTicker`, `_syncReconcileTicker`, `_syncReconcileInFlight`, `_syncEventLog`, `TIMER_SYNC_STAMP_KEY`, `AWAY_SYNC_STAMP_KEY`, `SYNC_EVENT_LOG_KEY`, `SYNC_EVENT_LOG_LIMIT`, `SYNC_RECONCILE_MS`
 Depends on: Firebase SDK globals, `focusRedemptions` global, `sumEnergyMinutes()`
 
+### evidence-interpretation.js
+Lines: external file (Phase 6G.2 — new interpretation-layer module)
+Purpose: The one shared, bounded decision every behavioural-claim consumer needs —
+"does this entry's `energy` reflect a confirmed classification (user assertion or
+timer + chosen label), or only a passive default / schedule assumption / computer-session
+default?" Reads existing markers only (`browserUsage`, `phoneUsage`, `source`,
+`scheduledAutoLog`, `captureMethod`, "PC Time"/"Screen time" + `autoLogged`/`quickLogged`);
+adds no schema, no confidence score, no new persisted field. See
+`contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md` "Deterministic Analytics Truth Fixes".
+Functions: `isPassiveObservationEntry(entry)`, `isScheduledAssumptionEntry(entry)`,
+`isComputerSessionEntry(entry)`, `hasConfirmedEnergyClassification(entry)`
+Variables: none
+Depends on: no app globals; classic IIFE attaches all four to `globalThis` (same pattern as
+`focus-wallet.js`)
+Tests: `evidence-interpretation.test.js`
+Consumers: `computeDailySummary()`, `computeCloseoutSummary()`, `computeStreak()` (`#s-streak` /
+Streaks widget / Week view), `renderToday()` `deepCount` (`#s-deep`), `buildWeekShareSummary()`
+(index.html); `insights.js` `_insightMinutes()`/`_insightEnergyMinutes()` (feeds
+`analyzeBehavior`, `renderAwarenessSignal`, `computeInsights`, `checkEscalation`); `focus-
+wallet.js` `computeFocusWallet()`. The `computeStreak()`/`deepCount`/`buildWeekShareSummary()`
+consumers were added in the targeted independent-review fix pass — the first Phase 6G.2 pass
+missed them. `attention-signals.js` inlines the same marker set instead of importing this (stays
+dependency-free) — see its Phase 6G.2 note below.
+
 ### insights.js
 Lines: external file
 Purpose: Per-entry feedback flash, escalation check, Awareness Signal ("Today's Signal"), daily
@@ -60,7 +84,10 @@ Functions: `analyzeBehavior()`, `renderFeedbackFlash()`, `dismissFeedbackFlash()
 Variables: (managed internally)
 Depends on: `entries` / `settings` / `reviews` globals, `storage.js` helpers, `sumEntryMinutes()`,
 `sumEnergyMinutes()`, `getEntriesForDateWindow()`, `getPlanItems()`, `deriveAttentionSignals()`,
-`attentionSignalLines()`
+`attentionSignalLines()`, `hasConfirmedEnergyClassification()`
+Source-truth (Phase 6G.2): totals/percentages count only entries where
+`hasConfirmedEnergyClassification()` is true — passive site/app observations, schedule
+assumptions and "PC Time" context are excluded from deep/waste claims, not deleted.
 
 ### attention-signals.js
 Lines: external file (Phase 11.8 — new computation module)
@@ -71,17 +98,30 @@ focus / neutral / distraction by their own energy label or Today Plan membership
 app/site/window, so related-tool switching stays one coherent stretch. No DOM, no `Date.now()`,
 no mutation, no network, no ML/AI. Thresholds + exact semantics in the module header.
 Functions: `deriveAttentionSignals(entries, options)`, `attentionSignalLines(signals)`
-Variables: `ATTENTION_SIGNALS_VERSION`, `ATTENTION_SIGNALS_CONFIG` (frozen defaults)
+Variables: `ATTENTION_SIGNALS_VERSION` (2 as of Phase 6G.2), `ATTENTION_SIGNALS_CONFIG` (frozen defaults)
 Depends on: no app globals; ESM exports + attaches `deriveAttentionSignals` /
 `attentionSignalLines` / `ATTENTION_SIGNALS_CONFIG` to `globalThis`
-Tests: `attention-signals.test.js` (26 synthetic-timeline cases)
+Tests: `attention-signals.test.js` (34 synthetic-timeline cases)
+Source-truth (Phase 6G.2): a passive observation (`browserUsage`/`phoneUsage`/`source`), a
+scheduled-template entry (`scheduledAutoLog`/`captureMethod`), or a computer-session "PC Time"/
+"Screen Time" block (`autoLogged`/`quickLogged` + that activity name) classifies as `'neutral'`,
+never focus or distraction, from energy alone — full parity with `evidence-interpretation.js`'s
+three predicates (markers inlined here to stay dependency-free; the PC-Time/Screen-Time check
+was added in the targeted independent-review fix pass, having been missed in the first Phase
+6G.2 pass). The recovery line reads "Refocused after a break", not "Recovered from drift" — an
+idle gap is unlogged time, not established drift.
 
 ### focus-wallet.js
 Lines: external file
 Purpose: Pure Focus Wallet scoring rules: compute weekly earned points, waste/sports costs, reward redemption spend, carried negative debt, and current balance.
 Functions: `getFocusWalletSettings()`, `getFocusWalletWeekKey()`, `getFocusWalletEntryDurationMin()`, `isFocusWalletSportsEntry()`, `computeFocusWallet()`
 Variables: `DEFAULT_FOCUS_WALLET_SETTINGS`
-Depends on: no app globals; attaches helpers to `globalThis`
+Depends on: no app globals; attaches helpers to `globalThis`; reads
+`hasConfirmedEnergyClassification()` from `globalThis` when present (falls back to
+"confirmed" if the helper isn't loaded)
+Source-truth (Phase 6G.2): deep-work points and waste costs are only computed for entries
+where `hasConfirmedEnergyClassification()` is true — passive observations, schedule
+assumptions and "PC Time" context neither earn nor cost points.
 
 ### focus-mode.js
 Lines: external file

@@ -231,6 +231,98 @@ attention-signals/Focus-Wallet interpretation of any pre-fix inflated entries, a
 schedule-v-actual, passive-device-purpose, PC-Time-purpose and unknown-as-drift semantics
 below.
 
+**Implementation status (Phase 6G.2, branch `feat/analytics-truth-fixes-v1`, uncommitted
+candidate):** implemented for Today, Review, weekly Insights, attention signals and Focus
+Wallet. One small shared helper, `evidence-interpretation.js`, answers the single bounded
+question every one of those consumers needed: does an entry's `energy` reflect a confirmed
+classification (user assertion, or timer + chosen label) or only a passive default / schedule
+assumption / "PC Time" computer-session default? It reads existing markers
+(`browserUsage`, `phoneUsage`, `source`, `scheduledAutoLog`, `captureMethod`, "PC Time"/
+"Screen time" + `autoLogged`/`quickLogged`) — no new schema, confidence score, or persisted
+field. `attention-signals.js` inlines the same marker set rather than importing the helper, to
+stay dependency-free as designed.
+
+Corrected against the deviation table above:
+- `browser-extension/background.js` / Android `syncPhoneUsage` row: default site/app energy no
+  longer counts as confirmed deep work or confirmed waste in `computeDailySummary`,
+  `computeCloseoutSummary`, the weekly `insights.js` totals, `deriveAttentionSignals`
+  classification, or `computeFocusWallet` scoring. The raw entry, its duration and its
+  `browserUsage`/`phoneUsage`/`source` markers are unchanged and still render on the timeline.
+  A user who reclassifies a passive entry through the retro editor produces a fresh entry
+  without those markers (`makeEntry()` never copies them), so an entry that still carries a
+  passive marker is provably un-reclassified — explicit user evidence wins wherever the
+  metadata can actually distinguish it, and only there.
+- `index.html:autoLogDueTemplates` row: the same consumers now exclude `scheduledAutoLog`
+  entries from confirmed-behavior totals. Scheduling, storage, provenance and
+  plan-v-actual/intent use are unchanged; only actual-behavior metrics are affected.
+- PC Time (`startPCTimeLive` → `autoLogBlock('PC Time', lastEntry?.energy || 'deep', ...)`):
+  the fallback itself is unchanged (stored fields still cannot distinguish real inherited
+  session context from the `|| 'deep'` fallback, so both are treated the same, as documented
+  here rather than guessed at). The interpretation layer now excludes any "PC Time"/"Screen
+  time" auto/quick-logged block from confirmed deep-work claims and Wallet points.
+- `insights.js` row: `_insightMinutes`/`_insightEnergyMinutes` now pre-filter to confirmed
+  entries, so `analyzeBehavior`, `renderAwarenessSignal`, `computeInsights`, `checkEscalation`
+  (punitive focus-lock escalation) and `renderHonestSummary` all inherit the correction.
+  Denominator copy that said "of today"/"of your day" now says "of tracked time"; "clean week"
+  is now "No confirmed waste logged this week" / "`N` of confirmed waste logged this week."
+- `attention-signals.js` row: a passive, scheduled, or computer-session ("PC Time"/"Screen
+  Time") segment classifies `'neutral'`, never focus or distraction, regardless of its
+  `energy` — it no longer ends a coherent stretch, feeds the likely-distraction number, or
+  manufactures a refocus/recovery claim. The first Phase 6G.2 pass covered the passive and
+  scheduled markers but missed the computer-session marker (a real auto-logged PC Time
+  `energy: 'deep'` entry could still read as confirmed focus); the targeted independent-review
+  fix pass closed that gap with the identical check `isComputerSessionEntry()` uses. Full
+  parity with `evidence-interpretation.js`'s three predicates is now confirmed
+  regression-tested. `attentionSignalLines()` no longer says "Recovered from drift"; it says
+  "Refocused after a break" (an idle gap is unlogged time, and even a user-logged distraction
+  only shows a break in the record — neither is established drift by this contract's rules).
+  `ATTENTION_SIGNALS_VERSION` bumped 1 → 2 for this classification change.
+- Today `#s-deep` ("Deep blocks today") / `#s-streak` ("Deep streak days") row (added in the
+  targeted independent-review fix pass): `renderToday()`'s `deepCount` and `computeStreak()`
+  counted raw `entry.energy === 'deep'` with no confirmed-energy boundary, unlike the adjacent
+  `computeDailySummary()`/`computeCloseoutSummary()` — so a scheduled, passive, or PC-Time
+  'deep' entry could inflate the two most prominent Today numbers even though the pulse card
+  right next to them already excluded it. Both now filter through
+  `hasConfirmedEnergyClassification()` before counting. `computeStreak()` is the one function
+  behind `#s-streak`, the Streaks widget, and the Week view day badge, so the fix is consistent
+  across all three.
+- `buildWeekShareSummary()` row (Low finding, addressed in the targeted independent-review fix
+  pass): the "Share week" export made the same unfiltered-energy claim ("Deep work: `X`
+  (`Y`% of logged time)", "Best day: … `Z`h deep", "Weekly deep work goal hit"). Deep/waste
+  minutes, per-category lines, and the "Best day" deep-hours figure now use the same
+  confirmed-only filter; the "Logged" total and "Where my time went" activity breakdown are
+  unchanged (presence/duration facts, not energy-classification claims).
+- `index.html:sumEntryMinutes`, `sumEnergyMinutes`; `focus-wallet.js` row: the common
+  overlap case — a passive browser/phone observation layered over a confirmed work block — no
+  longer double-counts, because the passive side is excluded from the energy sums entirely
+  (`computeDailySummary`/`computeCloseoutSummary` now summarise
+  `dayEntries.filter(hasConfirmedEnergyClassification)`). deep% + waste% can no longer exceed
+  100% from that cause. Two *confirmed* different-energy entries genuinely overlapping (a user
+  manual-entry error) is unchanged and still deferred — no general allocation engine was built.
+  Focus Wallet no longer earns or costs points for unconfirmed-energy entries.
+- "Sharpest hour" / "Peak focus hour" copy (`insights.js`, `index.html`): unchanged
+  calculation (an entry is still bucketed entirely by its start hour), relabelled to describe
+  exactly that — "Deep blocks start" / "most deep blocks started around `X`" / "`N`m of deep
+  blocks began then" — instead of implying a stronger per-hour measurement.
+- Coverage/completeness: audited, nothing found to correct. No "coverage score",
+  "fully tracked", or "all accounted for" claim exists in the current UI; the timeline-gap
+  system already speaks only in "unlogged"/"blank ok" language (Phase 6E Review
+  simplification), so §15 of this milestone's scope required no change here.
+- `computeCleanStreak` label: unchanged detection logic (any waste/distraction entry, passive
+  included, still ends the streak — conservative), relabelled "days clean" → "days, no waste
+  logged" so absence of a waste record is not read as proof of a clean day.
+
+Unaffected by design: `chronasense-life-ledger-adapter.js`, `life-ledger-core.js`,
+`life-ledger-runtime.js`, `life-feed-model.js`, `life-character-sheet-model.js`,
+`capability-career-analytics.js`, `cross-domain-intelligence-model.js`, CDI `explanation`
+output, `life-ledger-transport.js`, `obsidian-life-ledger-renderer.js` — none of these consume
+`evidence-interpretation.js` and none were touched. Their rows above stand as written. Review
+reconciliation, coarse-life storage, generic Today-gap removal, Wife/Shared, and Personal
+Model/Advisor were explicitly out of scope and not started. Historical Focus data affected by
+the pre-6G.1 restoration defect is still not identified, capped or repaired — this milestone
+only changed how *currently computed* metrics interpret entries going forward; it does not
+know which past entries were inflated and did not guess.
+
 ## Verification and UX limit
 
 Two production-path regression tests in `test.js` cover schedule exclusion through either
@@ -238,7 +330,27 @@ existing capture-method location, non-mutation, and preserved timer/retro/quick/
 capability evidence. The negative test failed before the guard. Existing adapter and
 semantic suites exercise unchanged paths; no artificial future-boundary tests are added.
 
-No new screens, prompts, fields, settings, labels, badges, scores, coverage, daily steps,
-Today/Review redesign or Focus fix. Existing capability counts/recommendations may change
-when they previously relied on a recognizable schedule assumption; this is the intended
-bounded semantic correction, not a claim of byte-identical analytics output.
+Phase 6G.2 adds: `evidence-interpretation.test.js` (predicate matrix incl. non-entry inputs);
+3 new `attention-signals.test.js` cases (passive observation stays neutral, a user-asserted
+positive control still creates a break/recovery, a scheduled entry stays neutral) plus a
+recovery-label update on the two existing recovery-line assertions, **plus 5 more added in the
+targeted independent-review fix pass** (auto-logged PC Time deep stays neutral, quick-logged
+Screen Time deep stays neutral, PC Time does not extend an adjacent real focus stretch, PC Time
+alone after a real break does not manufacture a recovery, a positive-control non-auto-logged
+deep entry still counts) — 34 cases total; 5 new `focus-wallet.js`
+gating tests in `test.js` (passive deep, passive waste, scheduled deep, PC-Time deep all score
+0; positive control still scores); `tests/analytics-truth.spec.js` — 5 Playwright cases in the
+first pass (Today-pulse overlap no longer exceeds 100%, Review close-out is confirmed-only,
+Wallet abstains on unconfirmed entries, the weekly summary uses the corrected wording, and the
+retired "Recovered from drift" string is gone from the served page), **plus 8 more added in the
+targeted independent-review fix pass** — 13 total: 6 asserting the actual rendered Today
+`#s-deep`/`#s-streak` DOM text across scheduled/browser-passive/phone-passive/PC-Time/genuine-
+confirmed/mixed evidence, and 2 on `buildWeekShareSummary()`.
+
+No new screens, prompts, fields, settings, badges, scores, coverage, daily steps, Today/Review
+redesign, Focus fix, or user-facing workflow step. Existing capability counts/recommendations
+may change when they previously relied on a recognizable schedule assumption (Phase 6G.1); this
+milestone's percentages, split-bar segments, Wallet balance, and "clean"/"peak hour" copy may
+also change when they previously relied on a passive observation, a schedule assumption, or PC
+Time context — this is the intended bounded semantic correction, not a claim of byte-identical
+analytics output.

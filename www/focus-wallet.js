@@ -102,6 +102,17 @@
     return Number.isFinite(weeklyGoalHrs) && weeklyGoalHrs > 0 ? Math.round((weeklyGoalHrs * 60) / 5) : 0;
   }
 
+  // Phase 6G.2: only a user-asserted / timer+label classification earns or
+  // costs points. Passive site/app observations, schedule assumptions and
+  // "PC Time" computer-session context describe time but do not confirm deep
+  // work or waste, so the Wallet abstains on them. Falls back to "confirmed"
+  // when the shared helper is not loaded (standalone use / older callers).
+  function energyClassificationConfirmed(entry) {
+    return typeof root.hasConfirmedEnergyClassification === 'function'
+      ? root.hasConfirmedEnergyClassification(entry)
+      : true;
+  }
+
   function addBreakdown(breakdown, type, label, points, meta) {
     if (!points) return;
     breakdown.push({ type, label, points: roundPoints(points), ...(meta || {}) });
@@ -145,7 +156,7 @@
       const durationMin = getFocusWalletEntryDurationMin(entry, fallbackMin);
       const dateKey = getEntryDateKey(entry, dateKeyForTs, fallbackMin);
 
-      if (entry.energy === 'deep') {
+      if (entry.energy === 'deep' && energyClassificationConfirmed(entry)) {
         const multiplier = entry.retro ? cfg.retroMultiplier : 1;
         const base = Math.floor(durationMin / cfg.deepPointMinutes) * cfg.deepPointsPerUnit * multiplier;
         state.earned += base;
@@ -158,7 +169,7 @@
         state.deepMinutesByDay[dateKey] = (state.deepMinutesByDay[dateKey] || 0) + durationMin;
       }
 
-      if (entry.energy === 'waste' || entry.energy === 'distraction') {
+      if ((entry.energy === 'waste' || entry.energy === 'distraction') && energyClassificationConfirmed(entry)) {
         const rawCost = Math.floor(durationMin / cfg.wastePenaltyMinutes) * cfg.wastePenaltyPoints;
         state.wasteCostByDay[dateKey] = (state.wasteCostByDay[dateKey] || 0) + rawCost;
       }
