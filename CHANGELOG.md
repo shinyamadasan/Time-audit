@@ -1,5 +1,45 @@
 # ChronaSense — Changelog
 
+## Onboarding Rewrite V1 (feat/onboarding-rewrite-v1, candidate, uncommitted) — 2026-09-10
+
+First-run onboarding still taught the pre-Plan-Tomorrow product: a 30-minute ping loop
+("ChronaSense pings you every 30 minutes and asks… what were you just doing?"), "log every
+block", a 9-category tour, phone/PC auto-tracking, `chronasense://` URL-scheme home-screen
+shortcuts, and a "set your timezone before you start" step. None of that is how the product
+works now (Plan Tomorrow → Today/Up Next → Start/Focus → evidence → Review).
+
+This is a copy + step-count rewrite of the existing `#ob-overlay` sheet — no new onboarding
+system, no navigation rebuild, no new persistence. Same overlay, same `ta3-onboarded` flag, same
+Skip/Next controls, same "? How to use" replay entry point in Settings.
+
+changed (`index.html`):
+  - The onboarding sheet goes from 6 steps to 4: **Welcome** (Plan a little / Do the work /
+    Review reality / Adjust tomorrow — "you don't need to track every minute"), **Plan what
+    matters** (Prepare tomorrow, up to three things, open day is fine, routines exist),
+    **Today shows what's next** (Up next = one clear action, Start vs Focus, "no need to time
+    every little thing — ChronaSense also picks up evidence from timers, routines, and device
+    activity"), **Review, then reset** (intention vs actual, "Unknown time is fine — it isn't a
+    failure", miss a day and nothing piles up).
+  - `OB_STEPS` 6 → 4; `.ob-dots` 6 → 4. `_renderObStep()`/`obNext()`/`closeOnboarding()` and the
+    first-run trigger are unchanged.
+  - Removed the categories, auto-tracking, URL-shortcut, and timezone-setup steps. The 30-minute
+    ping is not deleted as a feature — it is simply no longer taught as ChronaSense's identity.
+
+changed (`style.css`): removed the now-unused `.ob-cats` / `.ob-cat` / `.ob-cat-dot` /
+  `.ob-cat-name` / `.ob-cat-desc` rules (orphaned by dropping the categories step).
+
+changed (`www/index.html`, `www/style.css`): runtime-mirror re-sync only (`node
+scripts/runtime-mirror.mjs --write`).
+
+tests: new `tests/onboarding.spec.js` (8 cases) — first-run opens on the Plan→Do→Review welcome
+with no 30-minute-ping copy; the four steps teach Plan / Today+Up Next / Start-vs-Focus / Review;
+exactly 4 steps and 4 dots; the sheet asks for no input and no mandatory decision; click-through
+completes + persists `ta3-onboarded` + lands on a usable Today (free-text Start, no forced plan);
+Skip also completes; onboarding does not reappear on reload; "? How to use" replays from step 1.
+No production-code test needed changes; the one pre-existing onboarding assertion
+(`tests/install-interruption.spec.js`, "first-visit … never compete with install") still passes
+unchanged.
+
 ## Plan Linkage + Up Next Ordering V1 — targeted fixes from independent review (same candidate) — 2026-09-10
 
 An independent review verdict of **FIX FIRST** (architecture accepted, four confirmed defects)
