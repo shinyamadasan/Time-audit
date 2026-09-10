@@ -630,7 +630,8 @@ function persist() {
       taskStartTime,
       blockStartTime,
       timerUpdatedAt: currentTimerSyncStamp(),
-      ownerDeviceId: timerOwnerDeviceId || null
+      ownerDeviceId: timerOwnerDeviceId || null,
+      planItemId: currentTaskPlanItemId || null
     }));
   } else {
     localStorage.removeItem('ta3-timer');
@@ -708,6 +709,9 @@ function load() {
         blockStartTime = saved.blockStartTime || saved.timerStartedAt;
         if (saved.timerUpdatedAt) rememberTimerSyncStamp(saved.timerUpdatedAt);
         if (saved.ownerDeviceId) timerOwnerDeviceId = saved.ownerDeviceId;
+        // Plan Linkage V1 — a blob saved before this field existed, or an ordinary unplanned
+        // timer, restores with no linkage (the pre-existing default), never a stale/fabricated one.
+        currentTaskPlanItemId = (typeof saved.planItemId === 'string' && saved.planItemId) ? saved.planItemId : null;
       }
     }
   } catch(e) {}

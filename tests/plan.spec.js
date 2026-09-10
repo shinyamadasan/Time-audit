@@ -174,8 +174,8 @@ async function openTodayDetails(page) {
 test('an unprepared day allows optional priorities without a ceremony', async ({ page }) => {
   await openApp(page);
   await expect(page.locator('#morning-startup')).toHaveCount(0);
-  await addItem(page, 'Ship launch notes', 'first block');
-  expect(await page.evaluate(() => getPlanItems(planTodayKey()).map(i => ({ task: i.task, when: i.when })))).toEqual([{ task: 'Ship launch notes', when: 'first block' }]);
+  await addItem(page, 'Ship launch notes', '09:00');
+  expect(await page.evaluate(() => getPlanItems(planTodayKey()).map(i => ({ task: i.task, when: i.when })))).toEqual([{ task: 'Ship launch notes', when: '09:00' }]);
 });
 
 test('today action strip starts work when no target exists', async ({ page }) => {
@@ -252,8 +252,12 @@ test('today details report plan progress instead of daily goal', async ({ page }
 
 test('when-then trigger renders with the task', async ({ page }) => {
   await openApp(page);
-  await addItem(page, 'Write report', 'after lunch');
-  await expect(page.locator('.plan-item').first().locator('.plan-when')).toHaveText('after lunch →');
+  // Plan Linkage + Up Next Ordering V1 made #plan-when a native time picker (canonical HH:MM
+  // going forward — see the Plan Linkage + Up Next Ordering V1 spec for why); a historical
+  // free-text "after lunch →" display is covered separately by
+  // tests/plan-linkage-up-next.spec.js's "the plan-when input is a native time picker..." test.
+  await addItem(page, 'Write report', '09:00');
+  await expect(page.locator('.plan-item').first().locator('.plan-when')).toHaveText('09:00 →');
   await expect(page.locator('.plan-item').first().locator('.plan-task')).toContainText('Write report');
 });
 
@@ -334,7 +338,7 @@ test('start next launches the first unstarted plan item', async ({ page }) => {
 
 test('plan survives a reload and drives the daily target', async ({ page }) => {
   await openApp(page);
-  await addItem(page, 'Write report', 'after lunch');
+  await addItem(page, 'Write report', '09:00');
   await addItem(page, 'Gym');
   await page.locator('.plan-item').first().locator('.plan-check').click();
   await expect(page.locator('.plan-count')).toHaveText('1 of 2 done');
@@ -344,7 +348,7 @@ test('plan survives a reload and drives the daily target', async ({ page }) => {
 
   await expect(page.locator('.plan-item')).toHaveCount(2);
   await expect(page.locator('.plan-count')).toHaveText('1 of 2 done');
-  await expect(page.locator('.plan-item').first().locator('.plan-when')).toHaveText('after lunch →');
+  await expect(page.locator('.plan-item').first().locator('.plan-when')).toHaveText('09:00 →');
   // The plan IS the daily target — focus-mode's deep bar reads this.
   expect(await page.evaluate(() => dailyCommitment)).toBe(2);
 });
