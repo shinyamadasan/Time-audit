@@ -7,10 +7,12 @@ import {
   validateCoarseEvidenceRecord,
   createCoarseEvidenceRecord,
   getCoarseEvidenceForDate,
+  resolveCoarseEvidenceSync,
   COARSE_LIFE_EVIDENCE_RESOLUTION,
   COARSE_LIFE_EVIDENCE_MEASUREMENT,
   COARSE_LIFE_EVIDENCE_PROVENANCE,
-  COARSE_LIFE_EVIDENCE_KEY
+  COARSE_LIFE_EVIDENCE_KEY,
+  COARSE_LIFE_EVIDENCE_REMOTE_PATH
 } from './coarse-life-evidence-model.js';
 import { createCoarseEvidenceRepository } from './coarse-life-evidence-repository.js';
 
@@ -237,6 +239,221 @@ test('storage envelope with an unsupported format throws rather than silently di
   const storage = memory();
   storage.setItem(COARSE_LIFE_EVIDENCE_KEY, JSON.stringify({ schemaVersion: 99, records: {} }));
   assert.throws(() => createCoarseEvidenceRepository(storage).list());
+});
+
+// ── Durability V1: resolveCoarseEvidenceSync (pure conflict rule) ──────────
+
+test('resolveCoarseEvidenceSync: no local + non-deleted remote -> add', () => {
+  const remote = createCoarseEvidenceRecord({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 100 });
+  const result = resolveCoarseEvidenceSync(null, remote, 200);
+  assert.equal(result.action, 'add');
+  assert.equal(result.record.id, remote.id);
+});
+
+test('resolveCoarseEvidenceSync: no local + a deleted remote tombstone -> skip (never resurrects into a fresh local record)', () => {
+  const remote = { id: 'x', deleted: true, updatedAt: 100 };
+  assert.equal(resolveCoarseEvidenceSync(null, remote, 200).action, 'skip');
+});
+
+test('resolveCoarseEvidenceSync: remote strictly newer -> replace; remote older/equal -> keep-local', () => {
+  const local = createCoarseEvidenceRecord({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 100 });
+  const newerRemote = { ...local, estimatedMinutes: 90, updatedAt: 200 };
+  const olderRemote = { ...local, estimatedMinutes: 30, updatedAt: 50 };
+  const equalRemote = { ...local, estimatedMinutes: 30, updatedAt: 100 };
+  assert.equal(resolveCoarseEvidenceSync(local, newerRemote).action, 'replace');
+  assert.equal(resolveCoarseEvidenceSync(local, olderRemote).action, 'keep-local');
+  assert.equal(resolveCoarseEvidenceSync(local, equalRemote).action, 'keep-local');
+});
+
+test('resolveCoarseEvidenceSync: a local tombstone cannot be resurrected by a merely-newer non-deleted remote (stale-device-echo protection)', () => {
+  const local = { id: 'x', date: '2026-09-09', label: 'Cooking', deleted: true, updatedAt: 500 };
+  const staleDeviceEcho = { id: 'x', date: '2026-09-09', label: 'Cooking', estimatedMinutes: 60, updatedAt: 9999 }; // newer, but no undoRestoredAt
+  assert.equal(resolveCoarseEvidenceSync(local, staleDeviceEcho).action, 'keep-local');
+});
+
+test('resolveCoarseEvidenceSync: an explicit undoRestoredAt newer than the tombstone IS allowed to restore', () => {
+  const local = { id: 'x', date: '2026-09-09', label: 'Cooking', deleted: true, updatedAt: 500 };
+  const explicitUndo = { id: 'x', date: '2026-09-09', label: 'Cooking', estimatedMinutes: 60, updatedAt: 600, undoRestoredAt: 600 };
+  const result = resolveCoarseEvidenceSync(local, explicitUndo);
+  assert.equal(result.action, 'replace');
+  assert.equal(result.record.deleted, undefined);
+});
+
+test('resolveCoarseEvidenceSync: an undoRestoredAt that is not actually newer than the tombstone is still rejected', () => {
+  const local = { id: 'x', date: '2026-09-09', label: 'Cooking', deleted: true, updatedAt: 500 };
+  const oldUndo = { id: 'x', date: '2026-09-09', label: 'Cooking', estimatedMinutes: 60, updatedAt: 400, undoRestoredAt: 400 };
+  assert.equal(resolveCoarseEvidenceSync(local, oldUndo).action, 'keep-local');
+});
+
+test('resolveCoarseEvidenceSync: both sides deleted -> ordinary LWW applies (no special-casing)', () => {
+  const local = { id: 'x', deleted: true, updatedAt: 100 };
+  const remote = { id: 'x', deleted: true, updatedAt: 200 };
+  assert.equal(resolveCoarseEvidenceSync(local, remote).action, 'replace');
+});
+
+// ── Durability V1: repository tombstone semantics ───────────────────────────
+
+test('remove() tombstones rather than erasing: gone from list()/get(), still present via getRaw()', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const a = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
+  assert.equal(repo.remove(a.id, { now: 2 }), true);
+  assert.equal(repo.remove(a.id, { now: 3 }), false); // already gone, same observable contract as before
+  assert.equal(repo.get(a.id), null);
+  assert.equal(repo.listForDate('2026-09-09').records.length, 0);
+  const raw = repo.getRaw(a.id);
+  assert.equal(raw.deleted, true);
+  assert.equal(raw.updatedAt, 2);
+  assert.equal(repo.listAllRaw().length, 1); // tombstone is retained locally, not erased
+});
+
+test('a tombstoned identity is free: a plain Add resurrects it, and a rename can land on it', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const a = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
+  repo.remove(a.id, { now: 2 });
+  // Plain Add (no previousId) onto the now-tombstoned identity succeeds and un-deletes it.
+  const resurrected = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 45, now: 3 });
+  assert.equal(resurrected.id, a.id);
+  assert.equal(resurrected.deleted, undefined);
+  assert.equal(repo.listForDate('2026-09-09').records.length, 1);
+  // Resurrection is stamped with undoRestoredAt so a device that already holds the
+  // tombstone can distinguish this from a stale pre-delete echo (resolveCoarseEvidenceSync).
+  assert.equal(resurrected.undoRestoredAt, 3);
+
+  // A rename onto a different, tombstoned identity also succeeds (not a false collision).
+  const other = repo.save({ date: '2026-09-09', timezone: tz, label: 'Errands', estimatedMinutes: 20, now: 4 });
+  repo.remove(other.id, { now: 5 });
+  const renamedOnto = repo.save({ date: '2026-09-09', timezone: tz, label: 'Errands', estimatedMinutes: 30, now: 6, previousId: resurrected.id });
+  assert.equal(renamedOnto.id, other.id);
+  assert.equal(renamedOnto.deleted, undefined);
+  assert.equal(renamedOnto.undoRestoredAt, 6); // rename landing on a tombstoned identity is also a resurrection
+});
+
+test('a plain edit of an already-live record (no tombstone involved) never gets a stray undoRestoredAt', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const a = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
+  const edited = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 90, now: 2 });
+  assert.equal(edited.id, a.id);
+  assert.equal(edited.undoRestoredAt, undefined);
+});
+
+test('renaming/moving a record tombstones its old identity instead of erasing it (so a durable remote copy learns the rename)', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const first = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
+  const renamed = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking / eating', estimatedMinutes: 60, now: 2, previousId: first.id });
+  assert.notEqual(renamed.id, first.id);
+  assert.equal(repo.get(first.id), null); // ordinary reads still see it as gone
+  const oldRaw = repo.getRaw(first.id);
+  assert.equal(oldRaw.deleted, true); // but it is a tombstone, not erased
+  assert.equal(oldRaw.updatedAt, 2);
+  assert.equal(repo.listForDate('2026-09-09').records.length, 1);
+});
+
+test('rename collision guard still rejects landing on a genuinely live (non-deleted) existing identity', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const household = repo.save({ date: '2026-09-09', timezone: tz, label: 'Household', estimatedMinutes: 45, now: 1 });
+  const errands = repo.save({ date: '2026-09-09', timezone: tz, label: 'Errands', estimatedMinutes: 60, now: 2 });
+  assert.throws(
+    () => repo.save({ date: '2026-09-09', timezone: tz, label: 'Household', estimatedMinutes: 60, now: 3, previousId: errands.id }),
+    /already exists/
+  );
+  assert.deepEqual(repo.get(household.id), household);
+});
+
+// ── Durability V1: mergeRemoteSnapshot (bootstrap / union / idempotence / malformed) ──
+
+test('mergeRemoteSnapshot: local + empty remote -> merge itself makes no local change (pushAllLocal, not merge, is what durabilizes local-only data)', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
+  const result = repo.mergeRemoteSnapshot({}, 2);
+  assert.equal(result.changed, false);
+  assert.equal(repo.list().length, 1);
+});
+
+test('mergeRemoteSnapshot: empty local + remote present -> remote records become locally available', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const remote = createCoarseEvidenceRecord({ date: '2026-09-09', timezone: tz, label: 'Household', estimatedMinutes: 45, now: 1 });
+  const result = repo.mergeRemoteSnapshot({ [remote.id]: remote }, 2);
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.changedIds, [remote.id]);
+  assert.equal(repo.get(remote.id).estimatedMinutes, 45);
+});
+
+test('mergeRemoteSnapshot: different local/remote records -> union survives, neither side dropped', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const local = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
+  const remote = createCoarseEvidenceRecord({ date: '2026-09-09', timezone: tz, label: 'Household', estimatedMinutes: 45, now: 1 });
+  repo.mergeRemoteSnapshot({ [remote.id]: remote }, 2);
+  const day = repo.listForDate('2026-09-09');
+  assert.equal(day.records.length, 2);
+  assert.ok(day.records.some(r => r.id === local.id));
+  assert.ok(day.records.some(r => r.id === remote.id));
+});
+
+test('mergeRemoteSnapshot: same id/same content on both sides converges idempotently, no duplicate, no churn', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const local = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
+  const first = repo.mergeRemoteSnapshot({ [local.id]: local }, 2);
+  assert.equal(first.changed, false); // identical updatedAt -> keep-local, no write
+  const second = repo.mergeRemoteSnapshot({ [local.id]: local }, 3);
+  assert.equal(second.changed, false);
+  assert.equal(repo.list().length, 1);
+});
+
+test('mergeRemoteSnapshot: repeated sync of the same divergent state does not loop or re-apply after converging', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const local = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
+  const newerRemote = { ...local, estimatedMinutes: 90, updatedAt: 5 };
+  const first = repo.mergeRemoteSnapshot({ [local.id]: newerRemote }, 6);
+  assert.equal(first.changed, true);
+  assert.equal(repo.get(local.id).estimatedMinutes, 90);
+  // Re-delivering the exact same remote snapshot again (Firebase re-fires on reconnect) must not re-apply or duplicate.
+  const second = repo.mergeRemoteSnapshot({ [local.id]: newerRemote }, 7);
+  assert.equal(second.changed, false);
+  assert.equal(repo.list().length, 1);
+});
+
+test('mergeRemoteSnapshot: a same-id divergent edit resolves deterministically by updatedAt (documented LWW, not silent collection loss)', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const local = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 10 });
+  const olderRemote = { ...local, estimatedMinutes: 999, updatedAt: 5 };
+  repo.mergeRemoteSnapshot({ [local.id]: olderRemote }, 11);
+  assert.equal(repo.get(local.id).estimatedMinutes, 60); // local (newer) wins deterministically
+});
+
+test('mergeRemoteSnapshot: a deleted-locally record does not resurrect from a stale non-deleted remote copy (device offline during the delete)', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const a = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
+  repo.remove(a.id, { now: 2 });
+  const staleRemoteEcho = { ...a, updatedAt: 9999 }; // another device pushing its stale pre-delete copy
+  const result = repo.mergeRemoteSnapshot({ [a.id]: staleRemoteEcho }, 10000);
+  assert.equal(result.changed, false);
+  assert.equal(repo.get(a.id), null); // still gone
+});
+
+test('mergeRemoteSnapshot: malformed remote entries are rejected without crashing and without touching valid local data', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  const local = repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
+  const result = repo.mergeRemoteSnapshot({
+    'bad-1': { estimatedMinutes: -5 },                 // fails model validation
+    'bad-2': { id: 'mismatched-id', date: '2026-09-09', timezone: tz, label: 'X', estimatedMinutes: 10, resolution: COARSE_LIFE_EVIDENCE_RESOLUTION, measurement: COARSE_LIFE_EVIDENCE_MEASUREMENT, provenance: COARSE_LIFE_EVIDENCE_PROVENANCE, createdAt: 1, updatedAt: 1 }, // key/id mismatch
+    'bad-3': 'not-an-object',
+    'bad-4': null
+  }, 2);
+  assert.equal(result.changed, false);
+  assert.equal(repo.list().length, 1);
+  assert.equal(repo.get(local.id).estimatedMinutes, 60);
+});
+
+test('mergeRemoteSnapshot: a non-object snapshot (e.g. remote path briefly null) is a safe no-op, never a collection wipe', () => {
+  const repo = createCoarseEvidenceRepository(memory());
+  repo.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
+  assert.equal(repo.mergeRemoteSnapshot(null, 2).changed, false);
+  assert.equal(repo.mergeRemoteSnapshot(undefined, 2).changed, false);
+  assert.equal(repo.list().length, 1);
+});
+
+test('COARSE_LIFE_EVIDENCE_REMOTE_PATH is a stable, independent path segment (not entries/reviews/plans)', () => {
+  assert.equal(COARSE_LIFE_EVIDENCE_REMOTE_PATH, 'coarseLifeEvidence');
 });
 
 test('a positive control interval-shaped object is unaffected by this model (no cross-contamination)', () => {

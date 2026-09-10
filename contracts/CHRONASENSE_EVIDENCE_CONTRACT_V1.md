@@ -448,6 +448,57 @@ coarse-evidence durability / sync, Life Ledger projection, export/import, Wife/S
 Personal Model/Advisor. Gates before Wife/Shared or serious dogfood: (1) coarse-evidence
 durability, (2) onboarding rewrite, (3) Focus Wallet / streak pressure decision.
 
+**Implementation status (Coarse Evidence Durability V1, branch
+`feat/coarse-evidence-durability-v1`, uncommitted candidate):** implemented — closes gate (1)
+above. **DURABILITY GATE SATISFIED.** Coarse life evidence now has an account-scoped durable
+remote copy (Firebase Realtime Database, `rooms/<roomCode>/coarseLifeEvidence/<id>` — the same
+private per-user room `entries`/`reviews`/`plans` already sync through; no rules change, no new
+sharing surface). Local storage (`ta3-coarse-life-evidence-v1`) stays the fast/offline cache and
+immediate source of truth; nothing about capture, validation, identity, or the Review UI changed
+— this milestone is durability only.
+
+Reused, not reinvented: the identical record-level `updatedAt`-last-write-wins pattern
+`storage.js` already runs live for `entries`/`reviews`/`plans` (`resolveEntrySync()`,
+`syncEntries()`, `saveReview()`). `resolveCoarseEvidenceSync()` in
+`coarse-life-evidence-model.js` is the pure conflict rule; `coarse-life-evidence-sync.js` is the
+dependency-injected bridge that subscribes, merges record-by-record (never a collection
+replace), and pushes.
+
+Conflict rule (exact, not "conflict-free"): whichever side's `updatedAt` is greater wins —
+plain last-write-wins on the record's own client timestamp, the same clock-trust level
+`entries`/`reviews` already accept. One override: a local tombstone (`deleted: true`, previously
+only meaningful for `entries[]`, now also on coarse records) can never be resurrected by a
+merely-newer non-deleted remote value — only an explicit `undoRestoredAt` marker newer than the
+tombstone may restore it. This prevents the specific resurrection scenario a remote copy
+introduces that 6H's local-only delete never had to consider: a device that goes offline before
+a delete and reconnects later with a stale pre-delete copy must not un-delete it. Rekey
+(rename/date-move) preserves 6H's exact collision semantics — a tombstoned identity counts as
+free — and additionally tombstones the vacated old identity (rather than erasing it) so a
+durable remote copy of the old id also converges to "deleted" instead of orphaning.
+
+Bootstrap/migration: on the first remote snapshot after connecting, remote records are merged
+into local first, then every locally-known record (tombstones included) is pushed once — this
+is what makes an existing pre-durability install's local-only records durable automatically,
+with no export, no import, no settings toggle, no user action. Bootstrapping local-present/
+remote-empty does not wait for or require an existing remote node, and bootstrapping local-empty/
+remote-present needs no manual pull. Neither can drop the other side's unique records (record-
+level merge only, verified by dedicated tests, not asserted).
+
+Offline/UX: capture is unaffected (still ~20-30s, still local-first); a push after save/remove is
+best-effort and fire-and-forget — a network failure or being signed out never blocks, throws, or
+surfaces an error to the capture flow, matching `saveReview()`'s existing failure handling. No
+sync-status widget, no "N records waiting to sync" indicator, no "Sync now" action, and no change
+to Today/Review/Plan Tomorrow beyond an already-open Review silently refreshing if another device
+changes a record while it's open (`refreshCoarseEvidenceListIfMounted()` — a no-op whenever
+Review isn't currently open).
+
+Not built, and not required for this gate: Wife/Shared (a future shared feature would need its
+own separate state — this durable copy stays in the same private per-user room every other
+ChronaSense collection already uses, so durability does not force sharing), export/import
+(redundant once real sync exists), Life Ledger projection of coarse evidence, a general
+merge/CRDT framework (last-write-wins was sufficient and is the same trust level already accepted
+elsewhere in this app).
+
 ## Verification and UX limit
 
 Two production-path regression tests in `test.js` cover schedule exclusion through either
