@@ -112,7 +112,7 @@ export default [
         syncFocusOverlayFromRemote: 'readonly', clearSyncedFocusOverlay: 'readonly',
         pomodoroPhase: 'readonly',
         buildHeroSuggestions: 'readonly', buildSugItem: 'readonly',
-        triggerPenaltyMode: 'readonly', renderSettings: 'readonly',
+        renderSettings: 'readonly',
         showHeroState: 'readonly', confirm: 'readonly',
         syncCommitmentFromPlan: 'readonly',
         requestAnimationFrame: 'readonly',

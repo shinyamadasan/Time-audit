@@ -70,10 +70,14 @@ Extracted root modules:
   and Reflect history.
 - Focus mode: Pomodoro sessions, blocker overlay, break flow, deep-work progress, lo-fi music, and
   focus session logging.
-- Focus Wallet: weekly points, rewards, redemptions, waste/sports costs, and negative focus debt.
+- Focus Wallet: dormant. The scoring rules (`focus-wallet.js`) and `focusRedemptions` storage
+  remain, but every user-facing surface (header menu, Today card, reward overlay, Review "Wallet"
+  cell) was removed in `motivation-pressure-cleanup-v1`. No points, rewards, or "focus debt" are shown.
 - Away and break tracking: away labels, elapsed timer, break modal, and synced active state.
-- Week and Reflect views: energy split, top activities, unlogged hours, week comparison, streak
-  calendar, focus heatmap, daily reflections, and weekly review.
+- Week and Reflect views: energy split, top activities, unlogged hours, week comparison, focus
+  heatmap, daily reflections, and weekly review. (The deep-work streak was removed from the Week
+  view and the shared partner payload in `motivation-pressure-cleanup-v1`; the 60-day streak
+  calendar remains dead desktop-only UI.)
 - Day templates: recurring schedule blocks, selected-day editor, auto-log due templates, template
   suppression, and update offers from real entries.
 - Settings: timezone, ping interval, deep-work goal, review hour, hourly rate, presets, activity
@@ -103,8 +107,10 @@ remembers them. Claude interprets them.*
 
 - **ChronaSense owns:** time/activity capture, timer/pings, gap recovery, browser/Android
   activity capture, intentions / Today Plan, Focus Mode, the Awareness Signal card (today's
-  behavioral read), immediate accountability (Focus Wallet, streaks, escalation), and
-  daily/weekly time-awareness review. Everything in "Core Product Areas" above.
+  behavioral read), the calm daily/weekly time-awareness review, and the accountability-partner
+  pairing (shares deep hours only). Everything in "Core Product Areas" above. The pressure
+  mechanics that used to sit here — Focus Wallet / "focus debt", the deep-work streak, and
+  "penalty mode" / "focus lock" escalation — were retired in `motivation-pressure-cleanup-v1`.
 - **Life Ledger owns:** the append-first, cross-app factual event history
   (`life-ledger-core.js`, `life-ledger-runtime.js`, `life-ledger-transport.js`,
   `life-ledger-sync-*.js`). ChronaSense is one of three source apps that write into it
@@ -143,15 +149,22 @@ per the phase's own scope boundary.
   (original ids kept as aliases); `docs/DECISIONS.md` is now a pointer stub, retained only because
   `tools/Verify-Decisions.ps1` / `tools/Check-DocsConsistency.ps1` still read that path.
 
-## Motivation Layer (current inventory, Phase 11.5; Phase 11.7 outcomes noted inline)
+## Motivation Layer (current inventory; `motivation-pressure-cleanup-v1` outcomes noted inline)
+
+`motivation-pressure-cleanup-v1` (pre-dogfood, post-onboarding-rewrite) retired the pressure
+mechanics that contradicted the new onboarding contract (planning optional, Open Day valid,
+unknown allowed, missed days create no backlog). Removal was deletion-only: no data model,
+Firebase-rule, or `focusRedemptions` change; historical `entries` and wallet records are intact.
 
 | Mechanism | Behavior it targets | Disposition |
 |---|---|---|
-| Focus Wallet | Turns deep-work minutes into spendable "points," costs waste/sports time against balance; allows negative debt. Weekly-scoped, reward-redemption loop. | KEEP — unique job (the only mechanism with a spendable balance and rewards). |
+| Focus Wallet | Turned deep-work minutes into spendable "points," costs waste/sports time against balance, allowed negative "focus debt." | **USER SURFACE REMOVED (`motivation-pressure-cleanup-v1`).** Header-menu item, Today card, `#focus-wallet-overlay`, and the Review "Full analysis" Wallet cell are gone. `focus-wallet.js` scoring rules + `focusRedemptions` storage/sync stay **dormant** (no migration); `getCurrentFocusWallet()` is retained only for the Phase 6G.2 honesty regression. No replacement mechanic. |
 | Identity level (`computeIdentityScore()` / `getIdentityLevelWithEmoji()`) | Labelled the user by deep-work block count ("who you're becoming"), shown in a Today stat tile. | **REMOVED (Phase 11.7).** The tile had been `display:none` since 2026-07-10; its only input was today's deep-block count, identical to the `#s-deep` tile beside it. No unique behavioral value, no persisted data. Awareness Signal covers the honest deep/waste read. |
-| Streaks (`computeStreak()`, `computeCleanStreak()`, 60-day streak calendar) | Consecutive-day consistency pressure. | KEEP — distinct time axis (day-to-day) from Focus Wallet's within-week axis. |
-| Penalty / escalation (`checkEscalation()` → `triggerPenaltyMode()`) | The most forceful nudge: 5+ consecutive waste/missed entries set a 60-min recovery-block duration and lock the focus-mode exit delay to 60s. | FREEZE — functional as of Phase 11.6 (`triggerPenaltyMode()` restored, commit `f3887db`). Audited in Phase 11.7: surface is two `showToast()` calls, no dedicated UI or settings, so no "quieter" change was needed. Do not expand. |
-| Awareness Signal ("Today's Signal", `renderAwarenessSignal()`) | Real-time honest read of today (deep/waste %, peak focus hour, worst waste activity, time since last deep block). | KEEP — this is Goal #4 ("insight must change behaviour") made concrete; the natural home for any future minimal distraction metrics (see below). |
+| Deep-work streak (`computeStreak()`) | Consecutive-day "don't break the chain" pressure. | **REMOVED from every user-facing / shared surface (`motivation-pressure-cleanup-v1`).** No longer on the Week view, no longer in the `publishPublicStats` partner payload, no longer on the partner card. `computeStreak()` / `computeCleanStreak()` still back the dead, CSS-hidden desktop side panel and the `#s-streak` Today tile; those were left as-is (no live pressure). No replacement consistency signal was added — dogfood decides if one is needed. |
+| Penalty / escalation (`checkEscalation()` → `triggerPenaltyMode()`) | "The most forceful nudge": 5+ consecutive waste/missed entries silently set a 60-min block and a 60s exit delay + toasted "Penalty mode" / "Focus lock active". | **REMOVED (`motivation-pressure-cleanup-v1`).** Both functions and all three call sites deleted. The app no longer rewrites the user's own `exitDelay` / `intervalMin` or toasts a penalty after undesirable logging. Existing user-chosen values are untouched. |
+| Focus score ("Score N" 0–100 pill) | One-number daily grade on Reflect → "Today's summary". | **PILL REMOVED (`motivation-pressure-cleanup-v1`).** The factual split bar, metric tiles, and peak-hour line remain. `focusScore` is still computed and still selects the summary's insight tier (`getDailySummaryInsight`), but no grade is shown. "Brutal Mirror" coach tone is unchanged (opt-in, default `analyst`) — flagged for Wife/Shared V1 to force `analyst` on shared instances. |
+| Awareness Signal ("Today's Signal", `renderAwarenessSignal()`) | Real-time honest read of today (deep/waste %, peak focus hour, worst waste activity, time since last deep block). | KEEP — this is Goal #4 ("insight must change behaviour") made concrete. |
+| Focus screen progress | Pomodoro dots + "X / Y blocks" deep-progress bar + user-set weekly deep goal. | KEEP — factual, non-punitive, no points/streak/persistence-beyond-the-day. Not touched by the cleanup. |
 | Focus Mode | Pomodoro session + full-screen blocker + exit-delay friction. | KEEP — the only mechanism that *intervenes* in the moment rather than reporting after the fact. |
 
 ## Review Surfaces (current inventory, Phase 11.5)
@@ -164,8 +177,9 @@ per the phase's own scope boundary.
 
 Net finding: this inventory is already consolidated. Phase 11.7 re-verified all three surfaces
 against live code — daily review / weekly Reflect / missed-closeout each serve a distinct job —
-and left them unchanged (KEEP). The Phase 11.7 change in the motivation layer was removing
-identity level (see above); Awareness Signal, streaks, Focus Wallet, and Focus Mode are untouched.
+and left them unchanged (KEEP). Phase 11.7 removed identity level; `motivation-pressure-cleanup-v1`
+then retired the Focus Wallet surface, the deep-work streak, "penalty mode", and the 0–100 score
+pill (table above). Awareness Signal and Focus Mode remain untouched.
 
 ## Distraction Signals — Explicitly Scope-Limited (Phase 11.5; built and integrated as Phase 11.8)
 
@@ -190,13 +204,12 @@ daemon, blocker, Firebase subsystem, or Life Ledger coupling:
 
 ## Known Live Bugs (bounded)
 
-- **`triggerPenaltyMode()` was undefined in production — FIXED in Phase 11.6** (`f3887db`,
-  integrated to main). `insights.js:248` calls it from `checkEscalation()` on a 5+ consecutive
-  waste/missed streak; the function had only ever existed in the dead `ai_studio_code (1)*.html`
-  prototypes and as an ESLint `readonly` global, so every call threw a silent `ReferenceError`
-  (`exitDelay` was still set to 60s just before the throw, so that half worked). It is now defined
-  next to `startSprint()` in `index.html`. Penalty/escalation remains FREEZE — this was a
-  correctness fix, not an expansion. (Original audit: `planning/PROPOSALS.md` PROP-007.)
+- **`triggerPenaltyMode()` / `checkEscalation()` — REMOVED in `motivation-pressure-cleanup-v1`.**
+  Phase 11.6 (`f3887db`) had restored `triggerPenaltyMode()` (previously an undefined-in-production
+  `ReferenceError`); the whole penalty/escalation mechanic has since been deleted — both functions,
+  all three call sites, and the ESLint global — because silently rewriting the user's own
+  `exitDelay` / `intervalMin` and toasting "Penalty mode" contradicts the post-onboarding tone.
+  No known live bug remains here. (Original audit: `planning/PROPOSALS.md` PROP-007.)
 
 ## Fragile Areas
 

@@ -166,7 +166,7 @@ for (const energy of ['deep','waste','none']) {
     await today(page);
     await page.evaluate(energy => { entries = energy === 'none' ? [] : [{id:91,activity:'Work',energy,date:planTodayKey(),tsStart:Date.now()-4800000,ts:Date.now(),blockIntervalMin:80}]; renderToday(); }, energy);
     await expect(page.locator('#so-far-summary')).toHaveText(energy === 'none' ? 'No time recorded yet.' : energy === 'deep' ? '1h 20m deep · 0m waste' : '0m deep · 1h 20m waste');
-    for (const id of ['today-health','daily-summary','awareness-signal','focus-wallet-card','timeline-section','recent-entries-section']) await expect(page.locator(`#${id}`)).toBeHidden();
+    for (const id of ['today-health','daily-summary','awareness-signal','timeline-section','recent-entries-section']) await expect(page.locator(`#${id}`)).toBeHidden();
   });
 }
 

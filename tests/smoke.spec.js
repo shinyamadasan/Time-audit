@@ -481,37 +481,17 @@ test('delete hides the entry before storage and sync work runs', async ({ page }
   await page.evaluate(() => window.__restoreDeleteFns());
 });
 
-test('focus wallet spend can be undone without leaving point debt', async ({ page }) => {
-  const ts = minutesAgo(5);
-  const deepEntry = {
-    id: ts,
-    ts,
-    tsStart: ts - 60 * 60 * 1000,
-    updatedAt: ts,
-    blockIntervalMin: 60,
-    date: utcDateKey(ts),
-    activity: 'Deep work',
-    energy: 'deep',
-    category: 'deep_work',
-    originalLabel: 'deep',
-    onPlan: true,
-    retro: false
-  };
-  await openApp(page, { entries: [deepEntry] });
+test('the Focus Wallet user surface is gone (motivation-pressure-cleanup-v1)', async ({ page }) => {
+  await openApp(page);
 
-  await expect(page.locator('#th-wallet')).toHaveText('17 pts');
   await page.locator('#hdr-more-btn').click();
-  await page.locator('#hdr-menu').getByText('Focus wallet',{exact:true}).click();
-  await page.locator('#fw-reward-label').fill('Movie smoke');
-  await page.locator('#fw-reward-duration').fill('30');
-  await page.locator('#fw-reward-points').fill('10');
-  await page.getByRole('button', { name: 'Log reward' }).click();
-
-  await expect(page.locator('#th-wallet')).toHaveText('7 pts');
-  await clickToastUndo(page);
-  await expect(page.locator('#th-wallet')).toHaveText('17 pts');
-  await openTodayDetails(page);
-  await expect(page.locator('#recent-list')).not.toContainText('Movie smoke');
+  await expect(page.locator('#hdr-menu')).toBeVisible();
+  await expect(page.locator('#hdr-menu')).not.toContainText('Focus wallet');
+  await expect(page.locator('#focus-wallet-overlay')).toHaveCount(0);
+  await expect(page.locator('#focus-wallet-card')).toHaveCount(0);
+  await expect(page.locator('#th-wallet')).toHaveCount(0);
+  // Dormant scoring bridge still loads without error so the honesty regression can use it.
+  expect(await page.evaluate(() => typeof getCurrentFocusWallet === 'function')).toBe(true);
 });
 
 test('sync event text wraps on narrow screens without horizontal overflow', async ({ page }) => {
@@ -558,11 +538,10 @@ test('today defaults to clean mode and can reveal details', async ({ page }) => 
   await openApp(page, { entries: [deepEntry] });
 
   await expect(page.locator('#today-details-toggle')).toHaveCount(0);
-  for (const id of ['daily-basics','timeline-section','recent-entries-section','focus-wallet-card']) await expect(page.locator(`#${id}`)).toBeHidden();
+  for (const id of ['daily-basics','timeline-section','recent-entries-section']) await expect(page.locator(`#${id}`)).toBeHidden();
   await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Timeline',exact:true}).click();
   await expect(page.locator('#timeline-section')).toBeVisible();
   await expect(page.locator('.quick-retro-bar')).toBeHidden();
-  await expect(page.locator('#focus-wallet-card')).toBeHidden();
   await expect(page.locator('#recent-entries-section')).toBeHidden();
   await page.locator('#timeline-details > summary').click();
   await expect(page.locator('#timeline-section')).toBeHidden();
@@ -799,7 +778,7 @@ test('today health shows compact daily accounting', async ({ page }) => {
   await expect(page.locator('#today-health')).toContainText('Today health');
   await expect(page.locator('#th-deep')).toHaveText('1h deep');
   await expect(page.locator('#th-waste')).toHaveText('20m waste');
-  await expect(page.locator('#th-wallet')).toHaveText('15 pts');
+  await expect(page.locator('#th-wallet')).toHaveCount(0);
   // Phase 6I/J UX pass: the "Xh Ym unlogged" debt stat was removed from Today Health.
   await expect(page.locator('#th-unlogged')).toHaveCount(0);
 
@@ -815,7 +794,7 @@ test('today health shows compact daily accounting', async ({ page }) => {
 });
 
 test('today health carries no unlogged-time debt stat (Phase 6I/J UX pass)', async ({ page }) => {
-  // A big multi-hour gap: Today Health shows deep/waste/wallet only — never an "unlogged"
+  // A big multi-hour gap: Today Health shows deep/waste only — never an "unlogged"
   // figure. Raw gaps remain a Timeline / Full-analysis diagnostic.
   const nowTs = Date.UTC(2026, 6, 10, 18, 0, 0);
   const todayStart = Date.UTC(2026, 6, 10);
@@ -3185,10 +3164,12 @@ test('crossing-day entries are clipped instead of displayed as one 28h block', a
   await expect(page.locator('#timeline-blocks')).not.toContainText('28h');
 });
 
-test('a 5-waste-streak escalation does not throw and truthfully sets the recovery duration (PROP-007)', async ({ page }) => {
+test('5 leading waste/missed entries no longer trigger penalty mode / focus lock (PROP-007)', async ({ page }) => {
+  // motivation-pressure-cleanup-v1: the app must not silently rewrite the user's own
+  // exitDelay / intervalMin, or toast "penalty" / "focus lock", after a run of waste.
   const nowTs = Date.UTC(2026, 6, 15, 12, 0, 0);
   const dayStart = Date.UTC(2026, 6, 15, 9, 0, 0);
-  const wasteEntries = [4, 3, 2, 1, 0].map(i => {
+  const wasteEntries = [5, 4, 3, 2, 1, 0].map(i => {
     const tsStart = dayStart + i * 10 * 60 * 1000;
     const ts = tsStart + 10 * 60 * 1000;
     return {
@@ -3212,26 +3193,32 @@ test('a 5-waste-streak escalation does not throw and truthfully sets the recover
   page.on('pageerror', err => pageErrors.push(String(err)));
 
   const result = await page.evaluate(() => {
-    const before = { running, intervalInput: document.getElementById('interval-input').value };
-    checkEscalation();
+    const before = { exitDelay: settings.exitDelay, intervalMin: settings.intervalMin };
+    if (typeof checkReviewPrompt === 'function') checkReviewPrompt();
+    if (typeof checkBudget === 'function') checkBudget('waste');
+    renderToday();
     return {
+      hasCheckEscalation: typeof checkEscalation !== 'undefined',
+      hasTriggerPenaltyMode: typeof triggerPenaltyMode !== 'undefined',
       before,
       exitDelay: settings.exitDelay,
       intervalMin: settings.intervalMin,
       intervalInput: document.getElementById('interval-input').value,
-      running,
       toastText: document.getElementById('toast').textContent
     };
   });
 
   expect(pageErrors).toEqual([]);
-  expect(result.exitDelay).toBe(60);
-  expect(result.intervalMin).toBe(60);
-  expect(result.intervalInput).toBe('60');
-  // No timer was running before escalation, so triggerPenaltyMode() must not claim it
-  // force-started one — only that the next session's duration was set.
-  expect(result.before.running).toBe(false);
-  expect(result.toastText).toBe('Penalty mode: next session set to 60 min');
+  expect(result.hasCheckEscalation).toBe(false);
+  expect(result.hasTriggerPenaltyMode).toBe(false);
+  // User-chosen timer settings are left exactly as they were (defaults here).
+  expect(result.exitDelay).toBe(result.before.exitDelay);
+  expect(result.intervalMin).toBe(result.before.intervalMin);
+  expect(result.exitDelay).toBe(10);
+  expect(result.intervalMin).toBe(30);
+  expect(result.intervalInput).not.toBe('60');
+  expect(result.toastText).not.toContain('Penalty mode');
+  expect(result.toastText).not.toContain('Focus lock');
 });
 
 test('reopening the app with a running block preserves blockStartTime so it is not silently dropped (PROP-004)', async ({ page }) => {

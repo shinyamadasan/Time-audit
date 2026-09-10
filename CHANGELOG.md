@@ -1,5 +1,60 @@
 # ChronaSense — Changelog
 
+## Motivation Pressure Cleanup V1 (feat/motivation-pressure-cleanup-v1, candidate, uncommitted) — 2026-09-10
+
+`today-simplification-v1` already CSS-hid the wallet card, streak tile, "Today's pulse" score
+and Awareness Signal from the Today surface. But four pressure mechanics were still reachable
+through secondary doors (a menu, the Week tab, a toast, the Trends tab) and each contradicted the
+new onboarding contract — planning is optional, an open day is fine, unknown time is fine, a
+missed day creates no backlog. This milestone closes those doors. Deletion-only: no data model,
+no Firebase rule, no `focusRedemptions` migration; every time `entry` and wallet record is intact.
+
+**Focus Wallet — user surface removed.** Header "···" menu item, the dead `#focus-wallet-card`,
+the `#focus-wallet-overlay` reward sheet, and the "Wallet — N pts" cell in Review → Full analysis
+are gone, along with `renderFocusWallet` / `openFocusWallet` / `logFocusReward` / the reward
+presets and the wallet fields on `computeCloseoutSummary` / `computeTodayHealth` /
+`renderTodayHealth`. `focus-wallet.js` scoring rules and `focusRedemptions` storage/sync are
+untouched and dormant; `getCurrentFocusWallet()` / `formatFocusPoints()` are kept only so the
+Phase 6G.2 "unknown/passive evidence is not penalised" regression can still exercise the maths.
+No "focus debt", points, or reward loop is shown anywhere.
+
+**Deep-work streak — removed from every user-facing and shared surface.** The "N day streak"
+line on the Week view is gone; `publishPublicStats()` no longer writes `streak`; `renderPartnerCard()`
+no longer reads or shows "🔥 Nd streak"; the partner-settings copy now says only "deep hours today
+are shared". `computeStreak()` / `computeCleanStreak()` stay (they still back the CSS-dead desktop
+side panel and `#s-streak` Today tile — no live pressure, left per scope). No replacement
+consistency signal was added. The "💪 Nudge" partner action is unchanged — it was never
+streak-specific.
+
+**Penalty mode / focus lock — removed.** `checkEscalation()` (insights.js) and
+`triggerPenaltyMode()` (index.html) and all three entry-log call sites are deleted, plus the
+ESLint global. The app no longer silently sets `exitDelay = 60` / `intervalMin = 60` or toasts
+"Penalty mode" / "Focus lock active" after a run of waste/missed entries. User-chosen timer
+settings are never touched; no new defaults.
+
+**0–100 "Score N" pill — removed** from Reflect → "Today's summary" (`buildDailySummaryHTML`,
+`insights.js`) with its `.ds-score-pill*` CSS. The factual split bar, the deep/productive/waste
+metric tiles and the peak-hour line all remain. `focusScore` is still computed and still selects
+the summary's insight tier, but no grade is displayed. "Brutal Mirror" coach tone is unchanged
+(opt-in, default `analyst`) — flagged for Wife/Shared V1 to force `analyst` on shared instances.
+
+Kept, untouched: pomodoro dots, the Focus "X / Y blocks" progress bar, the user-set weekly deep
+goal, the calm 60-second Review, ordinary Start as a first-class mode, Plan linkage / Up Next
+ordering.
+
+changed: `index.html`, `insights.js`, `storage.js`, `style.css`, `eslint.config.js`,
+`www/{index.html,insights.js,storage.js,style.css}` (runtime-mirror re-sync), `APP_CONTEXT.md`
+(Motivation Layer inventory + Known Live Bugs rewritten to current truth).
+
+tests: `tests/smoke.spec.js` — the wallet-spend flow test is replaced by one asserting the wallet
+surface is gone (menu / overlay / card / `#th-wallet` absent, dormant bridge still loads); the
+PROP-007 escalation test is rewritten to assert 5 leading waste entries no longer change
+`exitDelay` / `intervalMin` and produce no penalty/lock toast; `#th-wallet` / `focus-wallet-card`
+assertions in two Today-health tests updated to `toHaveCount(0)`. `tests/today-simplification.spec.js`
+drops `focus-wallet-card` from a hidden-elements list. `tests/analytics-truth.spec.js` unchanged
+(still validates the dormant `computeFocusWallet` honesty boundary). Full run: `npm test` green,
+436/436 Playwright green, `runtime-mirror --check` clean, `npm run lint` 0 errors.
+
 ## Onboarding Rewrite V1 (feat/onboarding-rewrite-v1, candidate, uncommitted) — 2026-09-10
 
 First-run onboarding still taught the pre-Plan-Tomorrow product: a 30-minute ping loop

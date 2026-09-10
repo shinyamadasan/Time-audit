@@ -5,7 +5,7 @@
 //   settings, entries, _feedbackTimer
 //   getTodayEntries(), getEntriesForWeekKey(), toDateKey(),
 //   getWeekKey(), fmtDur(), getTodayEntries(),
-//   triggerPenaltyMode(), showToast(), persist()
+//   showToast(), persist()
 // ══════════════════════════════════════════════════════
 
 // ── Per-entry feedback flash (called after each log) ──
@@ -247,24 +247,10 @@ function dismissFeedbackFlash() {
   setTimeout(() => { el.style.display = 'none'; el.className = 'feedback-flash'; }, 360);
 }
 
-function checkEscalation() {
-  // Punitive escalation must rest on confirmed waste the user actually asserted,
-  // not a passive site/app observation or a scheduled assumption.
-  const todayE = _insightConfirmed(getTodayEntries());
-  const missedToday = todayE.filter(e => e.missed).length;
-  let dStreak = 0;
-  for (const e of todayE) {
-    if (e.energy === 'waste' || e.missed) dStreak++;
-    else break;
-  }
-  if (dStreak >= 5) {
-    settings.exitDelay = 60;
-    persist();
-    showToast('Focus lock active — exit delay set to 60s');
-  }
-  // Only trigger penalty after 5 in a row, not 2
-  if (dStreak >= 5) triggerPenaltyMode();
-}
+// Punitive escalation ("penalty mode" / "focus lock") removed in
+// motivation-pressure-cleanup-v1: the app no longer silently rewrites the user's
+// own exitDelay / intervalMin settings or toasts a "penalty" after a run of
+// waste/missed entries. A rough stretch is not a debt the app collects on.
 
 // ══════════════════════════════════════════════════════
 // INSIGHT GENERATION
@@ -543,7 +529,6 @@ function buildDailySummaryHTML(s) {
   // observations / schedule assumptions (no confirmed classification to summarise).
   if (!s) return `<div style="color:var(--muted);font-size:13px;padding:4px 0">Nothing classified logged yet today.</div>`;
 
-  const scorePillClass = s.focusScore >= 70 ? '' : s.focusScore >= 40 ? ' mid' : ' low';
   const deepValClass   = s.deepPct >= 40 ? 'good' : s.deepPct >= 20 ? 'warn' : '';
   const wasteValClass  = s.wastePct >= 30 ? 'bad' : s.wastePct >= 15 ? 'warn' : '';
   const prodValClass   = s.productivePct >= 70 ? 'good' : s.productivePct >= 50 ? 'warn' : '';
@@ -587,7 +572,6 @@ function buildDailySummaryHTML(s) {
   return `
     <div class="ds-header">
       <span class="ds-title">Today's pulse</span>
-      <span class="ds-score-pill${scorePillClass}">Score ${s.focusScore}</span>
     </div>
     <div class="ds-metrics">
       <div class="ds-metric">
