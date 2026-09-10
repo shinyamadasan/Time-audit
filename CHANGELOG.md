@@ -1,5 +1,121 @@
 # ChronaSense — Changelog
 
+## Phase 6H — Coarse life evidence V1 (candidate — feat/coarse-life-evidence-v1, uncommitted) — 2026-09-09
+
+Base `3c4678a7cd1688476b9b0b35849c25b7fd26d479` (origin/main, verified). Isolated worktree;
+`main`, Meal and Workout source apps untouched. No commit/push/merge/deploy; no Firebase or
+Obsidian writes; no historical data migrated.
+
+Scope: the first implementation of the Evidence Contract's "duration without placement"
+positive evidence form — a day-scoped ESTIMATED activity duration with no start/end time
+(e.g. "Cooking / eating — about 1h 20m today"). Adds the smallest truthful storage form, a
+deterministic replace-not-append identity model, and a reusable capture/edit UI mounted as
+one small optional access point inside Review. Does not build daily reconciliation, does not
+touch the generic Today gap prompt, does not touch the timeline/gap engine, and never
+contributes to deep/waste/streak/Wallet/attention analytics.
+
+added:
+  - `coarse-life-evidence-model.js` (new module) — pure model: `validDate()`, `normalizeLabel()`,
+    `coarseEvidenceId()` (deterministic identity = `date::normalized-label`),
+    `createCoarseEvidenceRecord()`, `validateCoarseEvidenceRecord()`, and the day read model
+    `getCoarseEvidenceForDate(records, date)` (§27 of the milestone spec — reusable by a later
+    Review reconciliation milestone without redesign). Record fields: `id`, `date`, `timezone`,
+    `label`, `estimatedMinutes`, `resolution: 'duration_without_placement'`,
+    `measurement: 'estimated'`, `provenance: 'user_assertion'`, `createdAt`, `updatedAt`. No
+    `tsStart`/`tsEnd`/`start`/`end` field is ever legal on this record — validated and enforced.
+  - `coarse-life-evidence-repository.js` (new module) — local-only versioned repository
+    (`ta3-coarse-life-evidence-v1`), following the same established local-storage-envelope
+    pattern as `daily-routines-repository.js` / `capability-career-repository.js` (Learning
+    Plans, Daily Routines and Capability/Career are all local-only in this app — not
+    Firebase-synced — so this is the precedented, not a new, persistence pattern).
+    Deterministic replace-not-append `save()`: saving the same (date, normalized label) identity
+    again — unchanged or with an edited duration — updates that one record; it never appends an
+    additive duplicate. `previousId` lets an edit that changes the label merge cleanly into the
+    new identity.
+  - `coarse-life-evidence-ui.js` (new module) — the reusable "what broad thing? / roughly how
+    long?" capture/edit modal (`#coarse-evidence-overlay`) plus a read-only list mounted inside
+    Review's existing optional-details section (`#rv-coarse-evidence`, rendered by
+    `renderCoarseEvidenceList()`, called from `openReview()`) — the one small, optional access
+    point the milestone spec allows there. Hours+minutes duration input, a free-text activity
+    field with a small suggested-label datalist (Food/cooking, Household, Care/pets, Errands,
+    Family/social, Entertainment, Travel, Recovery/downtime, Other), and an explicit date field
+    defaulting to the day Review is open on — never fabricated from `Date.now()`. Renders "~1h
+    20m · Approx." — never a timeline block. No new top-level nav tab, no mandatory daily card,
+    no recurring prompt.
+  - `coarse-life-evidence.test.js` — 16 `node:test` cases: model validation (malformed duration
+    incl. zero/negative/non-integer/>1440min, empty label, malformed date, placement-field
+    rejection), deterministic identity, the day read model, and repository persistence/edit/
+    delete/non-additive-dedup/storage-corruption behavior.
+  - `tests/coarse-life-evidence.spec.js` — 7 Playwright end-to-end cases: add with no start/end
+    time written, edit replaces (80→100 stays 100, not 180), reopen-unchanged does not
+    duplicate, remove touches only the coarse record, a same-category exact interval and a
+    coarse estimate render separately without being summed into one "actual" total, malformed
+    input is rejected without saving, and an evidence-only day never fabricates a timeline block
+    or enters `computeDailySummary()`'s deep/waste math.
+
+Deferred / not built this milestone (see contract implementation-status below for why):
+  - Life Ledger projection — no new Ledger event type or store change.
+  - Cross-device sync — local-only, matching the existing Learning Plans/Daily
+    Routines/Capability precedent; not wired into the CSV export or the Life Ledger snapshot
+    export (neither is a centralized "export everything" backup surface today).
+  - Daily Review reconciliation flow, the generic Today gap prompt, combined exact+estimated
+    allocation, Wife/Shared, Personal Model/Advisor — all explicitly out of scope for 6H.
+
+### Phase 6H — targeted independent-review fix pass (same candidate, still uncommitted) — 2026-09-09
+
+Independent review verdict was FIX FIRST on three implementation defects; storage
+architecture, record semantics, capture model, analytics/gap/timeline isolation, and Review
+scope all passed unchanged. This pass fixes only the three required findings — no redesign,
+no 6I, no sync/backup work.
+
+FIXED:
+  - **Destructive ID-collision on rename/date-edit** — `coarse-life-evidence-repository.js`
+    `save()`: when `previousId` is supplied and differs from the newly-computed identity, and
+    that identity already belongs to a different existing record, `save()` now throws a
+    descriptive error ("An activity named "X" already exists for `date`. Edit that activity
+    instead, or choose a different label.") instead of silently overwriting the other record.
+    The UI's existing `catch` in `saveCoarseEvidenceEditor()` already surfaced repository
+    errors into `#cle-error`, so this required no separate UI change to display. Normal update
+    semantics (same-id duration edits, rename/date-move onto a *free* identity, repeated
+    unchanged saves, case/whitespace-only same-identity edits) are unaffected — the guard only
+    fires when `previousId` names a genuinely different record than the target identity.
+  - **Inline-`onclick` id injection** — `coarse-life-evidence-ui.js`
+    `renderCoarseEvidenceList()`: the record `id` (derived from free-text label) is no longer
+    interpolated into an inline `onclick="...('${r.id}')"` JS-string context, where a label
+    containing a quote could break out and execute arbitrary script on click. Edit/Remove
+    buttons now carry the id in a `data-cle-id` HTML attribute (escaped the same way the
+    visible label already was) and a single delegated `root.onclick` handler
+    (`handleCoarseEvidenceListClick`) dispatches the click — assigned as a property, so
+    re-rendering the list never accumulates duplicate listeners.
+  - **Corrupted store could block Review from opening** — `renderCoarseEvidenceList()` now
+    wraps its `repository().listForDate(dateKey)` call in a `try`/`catch`; on failure it shows
+    "Approximate activities unavailable on this device." for just that widget instead of
+    letting the exception propagate up through `openReview()` and prevent the whole Review
+    modal from opening. The repository itself is unchanged and still throws on a corrupted
+    envelope (correct in isolation, unit-tested) — the fix is containment at the widget
+    boundary, not softer validation. The corrupted store is never auto-repaired or wiped.
+
+DEFERRED (reviewed, not required to land):
+  - Same-label "+ Add" silently updating an existing day's estimate — this is the documented,
+    intended one-estimate-per-identity behavior (see §13 of the milestone spec), not a defect;
+    the existing list already renders above the "+ Add" button so the duplicate is visible
+    before Save in the common case.
+  - "Approximate activities: ~X total" wording nuance around possible category overlap — minor
+    copy-polish, not touched.
+
+ROADMAP GATE (recorded, not implemented here): coarse-life-evidence durability — either
+cross-device sync or export/backup — **must** be addressed before Wife/Shared or serious
+dogfood use. Local-only storage remains acceptable through 6I.
+
+Tests: 6 new unit cases (`coarse-life-evidence.test.js`, now 22 total) covering the rejected
+rename/date-edit collisions, the still-working free-identity rename/move, the still-working
+same-identity case/whitespace edit, and normal update semantics unaffected by the guard. 5 new
+Playwright cases (`tests/coarse-life-evidence.spec.js`, now 12 total): the UI-level rename
+rejection with both records surviving, a label containing `'`/`"`/`<`/`>`/`&`/the exact
+`x');...//` breakout pattern proven inert through both Edit and Remove with the correct record
+still targeted, and three corrupted-store variants (invalid JSON, unsupported schemaVersion, a
+structurally invalid record) each proving Review still opens and stays usable.
+
 ## Phase 6G.2 — Deterministic analytics truth fixes V1 (candidate — feat/analytics-truth-fixes-v1, uncommitted) — 2026-09-09
 
 Base `9db74858a8da9c6f44a2a51e9c6cc26619cb8302` (origin/main, verified). Isolated worktree;

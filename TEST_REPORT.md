@@ -5,6 +5,93 @@
 
 ---
 
+## Phase 6H — coarse life evidence V1 (candidate) · 2026-09-09
+branch: `feat/coarse-life-evidence-v1`. Base `3c4678a7cd1688476b9b0b35849c25b7fd26d479`
+  (origin/main, verified). Isolated worktree; `main`, Meal and Workout untouched.
+scope: duration-without-placement storage + reusable capture/edit UI mounted inside Review's
+  optional details. 5 new files: `coarse-life-evidence-model.js`,
+  `coarse-life-evidence-repository.js`, `coarse-life-evidence-ui.js`,
+  `coarse-life-evidence.test.js`, `tests/coarse-life-evidence.spec.js`. Touched:
+  `index.html` (modal markup, `#rv-coarse-evidence` mount, module script include, one call in
+  `openReview()`), `package.json` (test script + lint file list), `eslint.config.js` (module
+  sourceType for the 3 new files), `www/` mirror. No Ledger, no sync, no export/import, no
+  Today/gap-engine, no Meal/Workout source changes.
+suite: `node --test coarse-life-evidence.test.js`; `npm test` (full chain); `npm run lint`;
+  `npx playwright test tests/coarse-life-evidence.spec.js` + full Playwright suite;
+  `node scripts/runtime-mirror.mjs --check`; `node --check` on every touched/new file;
+  `git diff --check`.
+result:
+  - `node --test coarse-life-evidence.test.js`: 16/16. Covers model validation (duration
+    zero/negative/non-integer/NaN/>1440min, empty label, malformed date, resolution/measurement/
+    provenance mismatch, placement-field rejection), deterministic (date, normalized-label)
+    identity, the day read model (`getCoarseEvidenceForDate`), and repository behavior: create/
+    reload persistence, edit-replaces-not-adds (60→90 stays 90), repeated-save idempotency
+    (incl. case/whitespace-only differences), independent records per distinct label/date,
+    label-rename merge onto the new identity with the stale row removed, delete-by-id, and a
+    corrupt storage envelope throwing rather than silently discarding data.
+  - `npm test`: PASS, 0 fail — new suite included in the chain; `test.js`'s own count unchanged
+    at 451/451 (this milestone did not touch any file `test.js` covers).
+  - `npm run lint`: 0 errors, 0 new warnings (one `no-unused-vars` on `catch (err)` was found and
+    fixed during this pass); pre-existing warnings elsewhere unchanged.
+  - `npx playwright test tests/coarse-life-evidence.spec.js`: 7/7 — add (no tsStart/tsEnd
+    written), edit-replaces (80→100, not 180), reopen-unchanged (no duplicate), remove (only the
+    coarse record, exact entries untouched), coarse + same-category exact interval shown
+    separately (no combined "2h" total), malformed input rejected without saving (empty label,
+    zero duration, >24h), evidence-only day (`computeDailySummary()` stays `null` — no
+    fabricated deep/waste claim, `entries` array stays empty — no fabricated timeline block).
+  - Full Playwright suite: 380/380, 0 failures (373 pre-existing + 7 new) — no regression.
+  - `node scripts/runtime-mirror.mjs --check`: OK after `--write` (3 new files added, `index.html`
+    resynced).
+  - `node --check`: clean on all 5 new/touched executable JS files.
+  - `git diff --check`: exit 0 (only benign CRLF-on-checkout warnings, no whitespace errors).
+
+## Phase 6H — targeted independent-review fix pass (same candidate) · 2026-09-09
+branch: `feat/coarse-life-evidence-v1` (still uncommitted). Base unchanged, re-verified
+  `3c4678a7cd1688476b9b0b35849c25b7fd26d479` (origin/main) before starting.
+scope: the three required FIX FIRST findings only — destructive rename/date-edit ID
+  collision, inline-`onclick` id injection, corrupted-store blocking Review from opening.
+  Storage architecture, record semantics, capture model, and all isolation properties
+  (analytics/gap/timeline/Ledger) were re-verified unchanged. 2 files touched:
+  `coarse-life-evidence-repository.js` (collision guard in `save()`),
+  `coarse-life-evidence-ui.js` (`data-cle-id` + delegated click handler replacing inline
+  `onclick`; try/catch containment in `renderCoarseEvidenceList()`). No schema change, no new
+  files, no 6I/sync/backup work.
+suite: `node --test coarse-life-evidence.test.js`; `npx playwright test
+  tests/coarse-life-evidence.spec.js`; `npm test` (full chain); `npm run lint`; full
+  Playwright suite; `node scripts/runtime-mirror.mjs --check` (after `--write`); `node --check`
+  on both touched files; `git diff --check`.
+result:
+  - `node --test coarse-life-evidence.test.js`: **22/22** (was 16, +6). New: A/B — rename and
+    date-edit onto an existing independent record are rejected, both original records verified
+    byte-identical (`deepEqual`) after the rejected save; C/D — rename/date-move onto a *free*
+    identity still succeeds; E — a case/whitespace-only label edit on the same record (
+    `previousId === nextId`) is not a false collision; one more test confirming ordinary
+    same-id duration edits and repeated unchanged saves are unaffected by the new guard.
+  - `npx playwright test tests/coarse-life-evidence.spec.js`: **12/12** (was 7, +5). New:
+    rename-onto-existing-label rejected in the live UI with both rows surviving with correct
+    values; a label containing `'`/`"`/`<`/`>`/`&` and the exact reviewer-reported
+    `x'); window.__xssFired = true; // <>&"'` breakout pattern — confirmed inert (global flag
+    never set) through both Edit (which reopens the *correct* record, proving the id
+    round-tripped through the `data-cle-id` attribute) and Remove; three corrupted-store
+    variants (invalid JSON, unsupported `schemaVersion`, a structurally invalid record) each
+    confirming Review still opens, `#rv-win` stays fillable, the widget shows "unavailable",
+    and the corrupted value is left byte-identical in storage (never auto-repaired/wiped).
+  - `npm test`: PASS, 0 fail — `test.js`'s own count still 451/451 (fix touched no file it
+    covers).
+  - `npm run lint`: 0 errors, 0 new warnings in the 2 touched files; pre-existing warnings
+    elsewhere unchanged.
+  - Full Playwright suite: **385/385**, 0 failures (373 pre-existing + 12 coarse-evidence) — no
+    regression from the fix.
+  - `node scripts/runtime-mirror.mjs --check`: OK after `--write` (2 files updated in `www/`,
+    no new/removed files).
+  - `node --check`: clean on both touched files.
+  - `git diff --check`: exit 0.
+  - Findings explicitly reviewed and left as-is per the fix brief (not defects): same-label
+    "+ Add" silently updating an existing estimate (documented intended behavior, §13 of the
+    milestone spec); "Approximate activities: ~X total" wording nuance around possible
+    category overlap (copy-polish, deferred). Durability (sync or export/backup) recorded as a
+    roadmap gate required before Wife/Shared or serious dogfood — not implemented in this pass.
+
 ## Phase 8 — recommendation-honesty fixes (post independent review) · 2026-09-02
 branch: `feat/cross-domain-intelligence-v1`. Pre-fix HEAD `5fb7dc280732c26cd7fb2ba81ca0a8de32708d9a`,
   base `4857dc4d2a63c4aac4660edf8940f63c6e7f6d16` (verified). Isolated worktree; original `main`,

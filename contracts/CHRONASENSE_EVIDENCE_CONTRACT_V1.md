@@ -44,8 +44,9 @@ A known count of zero source records is not proof of zero behavior.
 | Duration without placement | Stated duration within a declared date/window | Exact start/end or hourly placement |
 | Occurrence only | Something happened | Any duration without another duration source |
 
-Duration-without-placement is a semantic contract for a later milestone. No storage for
-coarse estimates is added. Do not use fallback timestamps, a schedule, a default duration,
+Duration-without-placement has a first storage/capture implementation as of Phase 6H
+(`feat/coarse-life-evidence-v1`, uncommitted candidate) — see "Implementation status
+(Phase 6H)" below. Do not use fallback timestamps, a schedule, a default duration,
 start=end placeholders, or arbitrary estimates to manufacture missing duration. Existing
 source equal-endpoint encodings can be preserved as compatibility data, but do not turn
 an occurrence into a measured zero-minute interval. Date precision alone supplies no duration.
@@ -322,6 +323,54 @@ Model/Advisor were explicitly out of scope and not started. Historical Focus dat
 the pre-6G.1 restoration defect is still not identified, capped or repaired — this milestone
 only changed how *currently computed* metrics interpret entries going forward; it does not
 know which past entries were inflated and did not guess.
+
+**Implementation status (Phase 6H, branch `feat/coarse-life-evidence-v1`, uncommitted
+candidate):** implemented — the minimum truthful storage/capture form for duration without
+placement. `coarse-life-evidence-model.js` defines the record shape (`id`, `date`, `timezone`,
+`label`, `estimatedMinutes`, `resolution: 'duration_without_placement'`,
+`measurement: 'estimated'`, `provenance: 'user_assertion'`, `createdAt`, `updatedAt`) and
+rejects any record carrying a `tsStart`/`tsEnd`/`start`/`end` field — this form structurally
+cannot smuggle in a fabricated placement. `coarse-life-evidence-repository.js` persists it
+locally (`ta3-coarse-life-evidence-v1`, the same local-storage-envelope pattern as
+`daily-routines-repository.js` / `capability-career-repository.js`) with a deterministic
+`(date, normalized label)` identity: saving the same identity again — unchanged, or with an
+edited duration — replaces that one record; it never appends an additive duplicate.
+`coarse-life-evidence-ui.js` is the reusable capture/edit modal, mounted as one small optional
+access point inside Review's existing optional-details section — not a new tab, not a
+mandatory card, not a recurring prompt.
+
+Ordinary interval entries (`entries[]`) were deliberately NOT reused: their schema means
+start/end, and this evidence form has neither. The two stores are independent — a coarse
+record and a same-category exact interval are surfaced separately (e.g. Review shows
+"`X`m recorded" from `entries` and "~`Y`m" from the coarse store) rather than summed into one
+"actual" total, since overlap compatibility between them is unknown (per the Overlap rule
+above). Nothing in this milestone reads or writes `entries`, the timeline/gap engine
+(`computeGaps`), `insights.js`, `attention-signals.js`, `focus-wallet.js`, or
+`evidence-interpretation.js` — a coarse record cannot manufacture a timeline block, close a
+gap, or acquire deep/waste/streak/Wallet/attention meaning.
+
+Life Ledger projection was deliberately deferred, not built. The generic validator in
+`life-ledger-core.js` already tolerates a date-precision, no-instant-fields, `duration: true`
+payload shape in principle (the same combination `meal_prepared`'s `temporalPrecision: 'date'`
+and `workout_completed`'s `duration: 'optional'` each demonstrate separately, just not
+together), so a future `PAYLOAD_RULES` entry is architecturally plausible without changing the
+generic validation engine. But actually wiring a new Ledger event type also means the Obsidian
+renderer's supported-type list, `life-feed-model.js`'s domain mapping, and any parity-fixture
+tests would all need deliberate extension — none of which this milestone's "smallest storage
+form" mandate covers. Per this contract's own rule ("do not mutate the canonical Ledger wire
+contract casually... a missing projection is better than a lying projection"), 6H ships no
+Ledger projection at all rather than a half-wired one. A future milestone can add it.
+
+Cross-device sync was deliberately deferred, matching the existing local-only precedent
+(Learning Plans, Daily Routines, Capability/Career are none of them Firebase-synced in this
+app either). Not wired into the CSV export or the Life Ledger snapshot export: neither is a
+centralized "export everything" backup surface today (CSV covers only `entries`; the Life
+Ledger snapshot covers only Ledger events), so there was no existing seam to extend without
+redesigning backup, which was out of scope. Both are documented limitations, not oversights.
+
+Still future: daily Review reconciliation (6I), a whole-day coverage model, replacing the
+generic Today gap prompt, combined exact+estimated allocation, Life Ledger projection,
+cross-device sync, export/import, Wife/Shared, Personal Model/Advisor.
 
 ## Verification and UX limit
 

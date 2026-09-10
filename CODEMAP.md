@@ -10,6 +10,9 @@ accounting day, gap versus unknown, resolution, provenance, measured versus esti
 question-specific fitness, quarantined semantics, current deviations and the next Focus
 truth fix. `capability-career-analytics.js:currentEvidenceScope()` excludes explicit
 Ledger schedule assumptions from current capability proof; source records remain intact.
+`coarse-life-evidence-model.js`/`-repository.js`/`-ui.js` (Phase 6H, see below) implement the
+contract's "duration without placement" positive evidence form as a small local-only store,
+independent of `entries[]`.
 
 ## FILE OVERVIEW
 
@@ -885,6 +888,7 @@ Depends on: `autoLogBlock()`, `entries`, `persist()`, Capacitor plugin globals
 | Month overview | Week View → `renderMonthOverview()` | ~5490 |
 | Sleep reminder / sleep entry logging | Sleep Tracking | 6083–6211 |
 | Yesterday's waste traps / day review modal | Day Review Modal | ~6090–6480 |
+| Approximate life activity (duration without placement) | Coarse Life Evidence V1 (Phase 6H) + `coarse-life-evidence-*.js` | EXTRACTED |
 | Daily preparation | Plan Tomorrow overlay (`plan-tomorrow-ui.js`) | EXTRACTED |
 | Plan-vs-actual in the review | `renderReviewPlanVsActual()` | Day Review Modal |
 | Plan chips inside the ping modal | Ping & Quick-Log → `renderQuickLogPlan()` | ~2160 |
@@ -1006,3 +1010,37 @@ relative to now, with its actual target date stated in the link.
 text. Date-wide `unloggedOk`, nullable `focusRating`, `_savedAt`, local persistence, Firebase
 review update, and dependent refresh contracts remain in place. Tests:
 `tests/review-simplification.spec.js` and affected plan/guided-loop/preparation suites.
+
+
+## Coarse Life Evidence V1 (Phase 6H)
+
+The first storage/capture implementation of the [Evidence Contract](contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md)'s
+"duration without placement" positive evidence form — a day-scoped ESTIMATED activity duration
+with no start/end time (e.g. "Cooking / eating — about 1h 20m today").
+
+`coarse-life-evidence-model.js` (pure, no storage/DOM) — record shape, deterministic
+`(date, normalized label)` identity via `coarseEvidenceId()`, validation
+(`validateCoarseEvidenceRecord()` rejects malformed duration, empty label, and any
+`tsStart`/`tsEnd`/`start`/`end` placement field), and the day read model
+`getCoarseEvidenceForDate(records, date)` (§27 of the milestone spec — the one function 6I's
+Review reconciliation is meant to reuse without redesigning storage).
+`coarse-life-evidence-repository.js` — local-only versioned repository
+(`ta3-coarse-life-evidence-v1`), following the same local-storage-envelope pattern as
+`daily-routines-repository.js` / `capability-career-repository.js`. `save()` is a
+deterministic replace-not-append upsert: the same identity saved again — unchanged, or with a
+different duration — updates that one record, never an additive duplicate; a label-changing
+edit (`previousId`) merges into the new identity and removes the stale row.
+`coarse-life-evidence-ui.js` (module script) — the reusable capture/edit modal
+(`#coarse-evidence-overlay`, hours+minutes input, free-text activity label with a small
+suggested-label datalist) and the read-only list mounted inside Review's existing
+`#rv-optional-details` (`#rv-coarse-evidence`, rendered by `renderCoarseEvidenceList()`, called
+from `openReview()`) — the one small, optional Review access point this milestone adds. Never
+renders a timeline block; shows "~`X` · Approx." separately from recorded intervals.
+
+Deliberately NOT touched: `entries[]`/ordinary interval storage, the timeline/gap engine
+(`computeGaps`), `insights.js`, `attention-signals.js`, `focus-wallet.js`,
+`evidence-interpretation.js`, Life Ledger (`life-ledger-core.js` et al. — projection deferred,
+documented in the contract), Firebase sync, CSV/Life Ledger export, the generic Today gap
+prompt. Tests: `coarse-life-evidence.test.js` (model + repository, `node:test`),
+`tests/coarse-life-evidence.spec.js` (7 Playwright end-to-end cases). Runtime mirror updated
+via `scripts/runtime-mirror.mjs --write`.

@@ -1492,6 +1492,40 @@
   </div>
 </div></div>
 
+<!-- ══ COARSE LIFE EVIDENCE MODAL (Phase 6H — duration without placement) ══ -->
+<div class="overlay" id="coarse-evidence-overlay" onclick="overlayClose(event,'coarse-evidence-overlay')">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-tag">APPROXIMATE ACTIVITY</div>
+  <div class="modal-title" id="cle-title">Add approximate activity</div>
+  <div class="field">
+    <label for="cle-label">Activity</label>
+    <input type="text" id="cle-label" list="cle-label-suggestions" placeholder="e.g. Cooking / eating" maxlength="60">
+    <datalist id="cle-label-suggestions">
+      <option value="Food / cooking">
+      <option value="Household">
+      <option value="Care / pets">
+      <option value="Errands">
+      <option value="Family / social">
+      <option value="Entertainment">
+      <option value="Travel">
+      <option value="Recovery / downtime">
+      <option value="Other">
+    </datalist>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div class="field"><label for="cle-hours">Hours</label><input type="number" id="cle-hours" min="0" max="24" placeholder="0"></div>
+    <div class="field"><label for="cle-minutes">Minutes</label><input type="number" id="cle-minutes" min="0" max="59" placeholder="0"></div>
+  </div>
+  <div class="field"><label for="cle-date">Date</label><input type="date" id="cle-date"></div>
+  <div style="font-size:11px;color:var(--muted);line-height:1.45;margin:-2px 0 12px">Roughly how much, not exactly when — no start/end time is recorded.</div>
+  <div id="cle-error" role="alert" style="font-size:12px;color:var(--distraction);margin-bottom:10px"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button class="btn ghost" onclick="closeCoarseEvidenceEditor()">Cancel</button>
+    <button class="btn primary" onclick="saveCoarseEvidenceEditor()">Save</button>
+  </div>
+</div></div>
+
 <!-- ══ REFLECTIONS HISTORY MODAL ══ -->
 <div class="review-overlay" id="reflections-history-overlay" onclick="overlayClose(event,'reflections-history-overlay')">
 <div class="review-modal" style="max-height:80vh;overflow-y:auto">
@@ -1527,6 +1561,7 @@
     <div class="field"><label for="rv-waste">One waste today (optional)</label><input type="text" id="rv-waste" placeholder="What cost you time?"></div>
     <div class="field"><label for="rv-avoid">How to avoid it next time (optional)</label><input type="text" id="rv-avoid" placeholder="e.g. Phone in another room..."></div>
     <div class="field" id="rv-legacy-tomorrow-field" hidden><label for="rv-legacy-tomorrow">Tomorrow (legacy reflection)</label><textarea id="rv-legacy-tomorrow" rows="2"></textarea></div>
+    <div class="field" id="rv-coarse-evidence"></div>
   </details>
   <details id="rv-full-analysis">
     <summary>Full analysis</summary>
@@ -1665,6 +1700,7 @@
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
 <script type="module" src="windows-hud-bridge.js?v=20260908-windows-ambient-focus-hud-v1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20260909-coarse-life-evidence-v1"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -8210,6 +8246,7 @@ function openReview(dateKey, fullAnalysis = false) {
   renderReviewTomorrowStatus();
   renderReviewFeeling();
   refreshReviewAnalysis();
+  if (typeof renderCoarseEvidenceList === 'function') renderCoarseEvidenceList(_reviewDateKey);
 
   document.getElementById('review-overlay').classList.add('open');
   document.querySelector('#review-overlay .review-modal').scrollTop = 0;
