@@ -658,65 +658,31 @@ test('today sleep basic logs overnight sleep as recovery', async ({ page }) => {
   });
 });
 
-test('today routine prompt logs the current meal window', async ({ page }) => {
+test('generic meal/chore check-in prompts are gone; Daily basics quick-log still works (Phase 6I/J UX pass)', async ({ page }) => {
+  // Noon on a plain day used to raise the hard-coded "Lunch check" maintenance prompt.
   const nowTs = Date.UTC(2026, 6, 10, 12, 15, 0);
   await openApp(page, { nowTs });
   await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
 
-  await expect(page.locator('#routine-prompt')).toBeVisible();
-  await expect(page.locator('#routine-prompt')).toContainText('Lunch check');
-  await page.locator('#routine-prompt').getByRole('button', { name: /Eat/ }).click();
+  await expect(page.locator('#routine-prompt')).toBeHidden();
+  await expect(page.locator('#routine-prompt')).toBeEmpty();
+  // Also at the old dinner window.
+  await page.evaluate(() => { renderRoutinePrompt(); });
+  await expect(page.locator('#routine-prompt')).toBeHidden();
 
+  // The passive Daily-basics quick-log grid is still there for when the user chooses to log.
+  await page.locator('#daily-basics').getByRole('button', { name: /Eat/ }).click();
   const saved = await page.evaluate(() => {
-    const entry = entries.find(e => e.routinePrompt === 'lunch' && e.activity === 'Eat');
-    const dismissed = JSON.parse(localStorage.getItem('ta3-routine-dismissed-2026-07-10') || '[]');
-    return entry && {
-      activity: entry.activity,
-      energy: entry.energy,
-      minutes: entry.blockIntervalMin,
-      category: entry.category,
-      commonLogged: entry.commonLogged,
-      routinePrompt: entry.routinePrompt,
-      dismissed
-    };
+    const entry = entries.find(e => e.activity === 'Eat');
+    return entry && { activity: entry.activity, energy: entry.energy, commonLogged: entry.commonLogged, routinePrompt: entry.routinePrompt };
   });
-  expect(saved).toEqual({
-    activity: 'Eat',
-    energy: 'recovery',
-    minutes: 30,
-    category: 'recovery',
-    commonLogged: true,
-    routinePrompt: 'lunch',
-    dismissed: ['lunch']
-  });
-  await expect(page.locator('#routine-prompt')).toBeHidden();
+  expect(saved).toMatchObject({ activity: 'Eat', energy: 'recovery', commonLogged: true });
+  expect(saved.routinePrompt).toBeUndefined();
 });
 
-test('today routine prompt stays quiet when the routine was already logged', async ({ page }) => {
-  const nowTs = Date.UTC(2026, 6, 10, 12, 45, 0);
-  const eatStart = Date.UTC(2026, 6, 10, 12, 0, 0);
-  const eatEnd = Date.UTC(2026, 6, 10, 12, 30, 0);
-  const entries = [{
-    id: eatEnd,
-    ts: eatEnd,
-    tsStart: eatStart,
-    updatedAt: eatEnd,
-    blockIntervalMin: 30,
-    date: utcDateKey(eatStart),
-    activity: 'Eat',
-    energy: 'recovery',
-    category: 'recovery',
-    originalLabel: 'recovery',
-    onPlan: false,
-    retro: true
-  }];
-  await openApp(page, { entries, nowTs });
-  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
-
-  await expect(page.locator('#routine-prompt')).toBeHidden();
-});
-
-test('today gap recovery fills a missing block from clean mode', async ({ page }) => {
+test('today no longer interrupts for a generic timeline gap (Phase 6J)', async ({ page }) => {
+  // Same gap shape the old "today gap recovery" UI used to nag about — Phase 6J removes
+  // the generic Today interruption; the diagnostic gap itself must still compute.
   const nowTs = Date.UTC(2026, 6, 10, 10, 45, 0);
   const deepStart = Date.UTC(2026, 6, 10, 9, 0, 0);
   const deepEnd = Date.UTC(2026, 6, 10, 10, 0, 0);
@@ -734,63 +700,14 @@ test('today gap recovery fills a missing block from clean mode', async ({ page }
     onPlan: true,
     retro: false
   }];
-  await openApp(page, { entries, nowTs, settings: { wakeTime: '09:00' } });
+  // sleepSetupDone:false isolates this to the gap question — the configured sleep reminder
+  // is a separate concrete Needs You signal that is deliberately untouched by Phase 6J.
+  await openApp(page, { entries, nowTs, settings: { wakeTime: '09:00', sleepSetupDone: false } });
 
-  await expect(page.locator('#gap-recovery')).toBeVisible();
-  await expect(page.locator('#gap-recovery')).toContainText('10:00 AM–10:45 AM');
-  await expect(page.locator('#needs-you')).toBeVisible();
-  await expect(page.locator('.quick-retro-bar')).toBeHidden();
-
-  await page.locator('#gap-recovery summary').click();
-  await page.locator('#gap-recovery').getByRole('button', { name: 'Cooking' }).click();
-
-  const saved = await page.evaluate(() => {
-    const entry = entries.find(e => e.gapRecovered && e.activity === 'Cooking');
-    return entry && {
-      activity: entry.activity,
-      energy: entry.energy,
-      minutes: entry.blockIntervalMin,
-      category: entry.category,
-      start: new Date(entry.tsStart).toISOString(),
-      end: new Date(entry.ts).toISOString()
-    };
-  });
-  expect(saved).toEqual({
-    activity: 'Cooking',
-    energy: 'recovery',
-    minutes: 45,
-    category: 'recovery',
-    start: '2026-07-10T10:00:00.000Z',
-    end: '2026-07-10T10:45:00.000Z'
-  });
   await expect(page.locator('#gap-recovery')).toBeHidden();
-});
-
-test('today gap recovery other opens prefilled retro log', async ({ page }) => {
-  const nowTs = Date.UTC(2026, 6, 10, 10, 45, 0);
-  const deepStart = Date.UTC(2026, 6, 10, 9, 0, 0);
-  const deepEnd = Date.UTC(2026, 6, 10, 10, 0, 0);
-  const entries = [{
-    id: deepEnd,
-    ts: deepEnd,
-    tsStart: deepStart,
-    updatedAt: deepEnd,
-    blockIntervalMin: 60,
-    date: utcDateKey(deepStart),
-    activity: 'Deep block',
-    energy: 'deep',
-    category: 'deep_work',
-    originalLabel: 'deep',
-    onPlan: true,
-    retro: false
-  }];
-  await openApp(page, { entries, nowTs, settings: { wakeTime: '09:00' } });
-
-  await page.locator('#gap-recovery').getByRole('button', { name: 'Fix',exact:true }).click();
-
-  await expect(page.locator('#retro-overlay')).toBeVisible();
-  await expect(page.locator('#retro-start')).toHaveValue('10:00');
-  await expect(page.locator('#retro-end')).toHaveValue('10:45');
+  await expect(page.locator('#needs-you')).toBeHidden();
+  expect(await page.evaluate(() => getGapRecoveryCandidate(getViewingEntries()) !== null)).toBe(true);
+  expect(await page.evaluate(() => getCloseoutGaps(planTodayKey()).length > 0)).toBe(true);
 });
 
 test('today long labels wrap on phone width without horizontal overflow', async ({ page }) => {
@@ -883,7 +800,8 @@ test('today health shows compact daily accounting', async ({ page }) => {
   await expect(page.locator('#th-deep')).toHaveText('1h deep');
   await expect(page.locator('#th-waste')).toHaveText('20m waste');
   await expect(page.locator('#th-wallet')).toHaveText('15 pts');
-  await expect(page.locator('#th-unlogged')).toContainText('unlogged');
+  // Phase 6I/J UX pass: the "Xh Ym unlogged" debt stat was removed from Today Health.
+  await expect(page.locator('#th-unlogged')).toHaveCount(0);
 
   await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Timeline',exact:true}).click();
   await expect(page.locator('#timeline-details')).toHaveAttribute('open');
@@ -896,29 +814,25 @@ test('today health shows compact daily accounting', async ({ page }) => {
   await expect(wasteRow).toHaveClass(/tl-row-focus/);
 });
 
-test('today health hides minor unlogged gaps', async ({ page }) => {
-  const nowTs = Date.UTC(2026, 6, 10, 10, 20, 0);
+test('today health carries no unlogged-time debt stat (Phase 6I/J UX pass)', async ({ page }) => {
+  // A big multi-hour gap: Today Health shows deep/waste/wallet only — never an "unlogged"
+  // figure. Raw gaps remain a Timeline / Full-analysis diagnostic.
+  const nowTs = Date.UTC(2026, 6, 10, 18, 0, 0);
   const todayStart = Date.UTC(2026, 6, 10);
-  const deepStart = todayStart + 10 * 60 * 60 * 1000;
-  const deepEnd = deepStart + 10 * 60 * 1000;
-  const entries = [{
-    id: deepEnd,
-    ts: deepEnd,
-    tsStart: deepStart,
-    updatedAt: deepEnd,
-    blockIntervalMin: 10,
-    date: utcDateKey(deepStart),
-    activity: 'Short focus',
-    energy: 'deep',
-    category: 'deep_work',
-    originalLabel: 'deep',
-    onPlan: true,
-    retro: false
-  }];
+  const deepStart = todayStart + 9 * 60 * 60 * 1000;
+  const deepEnd = deepStart + 60 * 60 * 1000;
+  const wasteEnd = deepEnd + 20 * 60 * 1000;
+  const entries = [
+    { id: deepEnd, ts: deepEnd, tsStart: deepStart, updatedAt: deepEnd, blockIntervalMin: 60, date: utcDateKey(deepStart), activity: 'Deep', energy: 'deep', category: 'deep_work', originalLabel: 'deep', onPlan: true, retro: false },
+    { id: wasteEnd, ts: wasteEnd, tsStart: deepEnd, updatedAt: wasteEnd, blockIntervalMin: 20, date: utcDateKey(deepEnd), activity: 'Scroll', energy: 'waste', category: 'waste', originalLabel: 'waste', onPlan: false, retro: true }
+  ];
   await openApp(page, { entries, nowTs });
 
-  await expect(page.locator('#th-deep')).toHaveText('10m deep');
-  await expect(page.locator('#th-unlogged')).toBeHidden();
+  await expect(page.locator('#th-deep')).toHaveText('1h deep');
+  await expect(page.locator('#th-unlogged')).toHaveCount(0);
+  await expect(page.locator('#today-health')).not.toContainText('unlogged');
+  // The gap itself is still computed and available.
+  expect(await page.evaluate(() => getCloseoutGaps(planTodayKey()).length > 0)).toBe(true);
 });
 
 test('weekly schedule auto-logs fixed blocks after they end', async ({ page }) => {

@@ -12,7 +12,9 @@ truth fix. `capability-career-analytics.js:currentEvidenceScope()` excludes expl
 Ledger schedule assumptions from current capability proof; source records remain intact.
 `coarse-life-evidence-model.js`/`-repository.js`/`-ui.js` (Phase 6H, see below) implement the
 contract's "duration without placement" positive evidence form as a small local-only store,
-independent of `entries[]`.
+independent of `entries[]`. Phase 6I/J (see below) adds the optional whole-day Review
+reconciliation prompt (`reviews[k].reconciliation`) and removes the generic Today timeline-gap
+interruption while keeping `computeGaps()` and every raw-gap diagnostic intact.
 
 ## FILE OVERVIEW
 
@@ -530,7 +532,7 @@ Depends on: —
 Lines: 1353–1423
 Purpose: All top-level mutable state and one-time constants shared across the entire app.
 Functions: —
-Variables: `APP_BUILD`, `currentTask`, `viewingDateKey`, `entries`, `settings`, `reviews`, `weeklyReviews`, `focusRedemptions`, `intention`, `running`, `ticker`, `pcTimeLiveTicker`, `totalSecs`, `remaining`, `distractionDebt`, `pingCount`, `sortKey`, `sortDir`, `selectedEnergy`, `selectedOnPlan`, `QUICK_ACTIVITY_OPTIONS`, `COMMON_LOG_OPTIONS`, `GAP_RECOVERY_OPTIONS`, `ROUTINE_PROMPTS`, `blockStartTime`, `lastStateChange`, `currentState`, `blockSegments`, `focusExitTimer`, `fbApp`, `fbDb`, `fbRoomRef`, `roomCode`, `fbTimerReceived`, `currentUser`, `timerStartedAt`, `snoozesUsedToday`, `snoozeTimer`, `quickLogBusy`, `switchingTask`, `dailyCommitment`, `lastTaskForRepeat`, `breakActive`, `breakEndsAt`, `breakTicker`, `breakStartTs`, `timerOwnerDeviceId`, `syncedFocusTimer`, `awayActive`, `awayStartTime`, `awayLabel`, `continueBannerTimer`, `continueBannerCountdown`, `recentChipTasks`, `taskStartTime`, `awayElapsedTicker`, `lastUndoAction`, `CIRCUM`
+Variables: `APP_BUILD`, `currentTask`, `viewingDateKey`, `entries`, `settings`, `reviews`, `weeklyReviews`, `focusRedemptions`, `intention`, `running`, `ticker`, `pcTimeLiveTicker`, `totalSecs`, `remaining`, `distractionDebt`, `pingCount`, `sortKey`, `sortDir`, `selectedEnergy`, `selectedOnPlan`, `QUICK_ACTIVITY_OPTIONS`, `COMMON_LOG_OPTIONS`, `blockStartTime`, `lastStateChange`, `currentState`, `blockSegments`, `focusExitTimer`, `fbApp`, `fbDb`, `fbRoomRef`, `roomCode`, `fbTimerReceived`, `currentUser`, `timerStartedAt`, `snoozesUsedToday`, `snoozeTimer`, `quickLogBusy`, `switchingTask`, `dailyCommitment`, `lastTaskForRepeat`, `breakActive`, `breakEndsAt`, `breakTicker`, `breakStartTs`, `timerOwnerDeviceId`, `syncedFocusTimer`, `awayActive`, `awayStartTime`, `awayLabel`, `continueBannerTimer`, `continueBannerCountdown`, `recentChipTasks`, `taskStartTime`, `awayElapsedTicker`, `lastUndoAction`, `CIRCUM`
 Depends on: —
 
 ## [Undo — Last Action]
@@ -660,7 +662,7 @@ Depends on: `entries`, `settings` (timezone)
 ## [Today View — Rendering]
 Lines: 3901–4945
 Purpose: Main `renderToday()` and all its sub-renders: day bar, status banner, Today Health strip, Focus Wallet card, timeline (blocks + gaps), stat cards, recent entries list, contextual-visibility rules, hero state machine, same-as-last CTA, awareness signal, side-panel refresh trigger, render performance checkpoints.
-Functions: `renderToday()`, `isTodayDetailsOpen()`, `setTodayDetailsOpen()`, `applyTodayDetailsMode()`, `toggleTodayDetails()`, `shouldRenderOnDateTick()`, `renderTodayOnDateChange()`, `getCloseoutGaps()`, `computeCloseoutSummary()`, `closeoutSummaryParts()`, `closeoutTimeValue()`, `closeoutTimeMinutes()`, `closeoutCutoffTs()`, `isCloseoutDue()`, `nextUnreviewedCloseoutDateKey()`, `openCloseoutReview()`, `missedCloseoutDateKey()`, `getMissedCloseout()`, `openMissedCloseoutReview()`, `renderMissedCloseoutCta()`, `renderCloseoutCta()`, `computeTodayHealth()`, `renderTodayHealth()`, `getGapRecoveryCandidate()`, `renderGapRecoveryInbox()`, `routinePromptStorageKey()`, `getDismissedRoutinePrompts()`, `markRoutinePromptDismissed()`, `routinePromptWindow()`, `routinePromptAlreadyLogged()`, `getRoutinePromptCandidate()`, `renderRoutinePrompt()`, `focusTodayPlanInput()`, `renderTodayActionStrip()`, `renderReviewCloseoutSummary()`, `renderReviewUnloggedDecision()`, `markReviewUnloggedIntentional()`, `openReviewFirstGap()`, `renderDayBar()`, `renderStatusBanner()`, `getActiveTimerOwnerSnapshot()`, `renderActiveDeviceBanner()`, `takeOverActiveTimer()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderDailyBasics()`, `quickLogCommon()`, `logCommonActivity()`, `quickLogRoutinePrompt()`, `dismissRoutinePrompt()`, `currentGapRecoveryRange()`, `fillGapRecovery()`, `openGapRecoveryOther()`, `logGapRecoveryActivity()`, `renderSidePanel()`, `renderLeftPanel()`
+Functions: `renderToday()`, `isTodayDetailsOpen()`, `setTodayDetailsOpen()`, `applyTodayDetailsMode()`, `toggleTodayDetails()`, `shouldRenderOnDateTick()`, `renderTodayOnDateChange()`, `getCloseoutGaps()`, `computeCloseoutSummary()`, `closeoutSummaryParts()`, `closeoutTimeValue()`, `closeoutTimeMinutes()`, `closeoutCutoffTs()`, `isCloseoutDue()`, `nextUnreviewedCloseoutDateKey()`, `openCloseoutReview()`, `missedCloseoutDateKey()`, `getMissedCloseout()`, `openMissedCloseoutReview()`, `renderMissedCloseoutCta()`, `renderCloseoutCta()`, `computeTodayHealth()`, `renderTodayHealth()`, `getGapRecoveryCandidate()`, `renderGapRecoveryInbox()`, `renderRoutinePrompt()` (Phase 6I/J UX pass: now a stub that hides `#routine-prompt`), `focusTodayPlanInput()`, `renderTodayActionStrip()`, `renderReviewCloseoutSummary()`, `renderReviewUnloggedDecision()`, `markReviewUnloggedIntentional()`, `markReviewReconciliationOk()`, `resetReviewReconciliation()`, `openReviewFirstGap()`, `renderDayBar()`, `renderStatusBanner()`, `getActiveTimerOwnerSnapshot()`, `renderActiveDeviceBanner()`, `takeOverActiveTimer()`, `applyContextualVisibility()`, `showHeroState()`, `getContextualPrompt()`, `updateHeroPrompt()`, `setStatVal()`, `renderRecentChips()`, `useChip()`, `renderDailyBasics()`, `quickLogCommon()`, `logCommonActivity()`, `renderSidePanel()`, `renderLeftPanel()`
 Variables: `_todayRenderKey`, `_lastTodayDateKey`, `_lastLoggedEntryId`
 Depends on: Timeline helpers, Statistics (including `sumEntryMinutes()` / `sumEnergyMinutes()`), Entry logging, Date picker, Focus Wallet, `persist()`
 
@@ -973,11 +975,11 @@ show two relevant compact rows and an expandable full list. `routineAction()` de
 eligible Now/Anytime actions from the existing model; `performRoutineAction()` is the shared
 identity-checked path for both Up Next and routine controls, independent of rendered cards.
 
-`renderNeedsYou()` combines one qualifying gap, configured sleep reminder, ambiguous routine
-evidence, and routine source/write errors. Empty attention is hidden. `getGapRecoveryCandidate()`
-respects the existing date-scoped Review `unloggedOk`; raw gap calculations are unchanged.
-Review save and sleep resolution refresh attention immediately. `renderTodayHealth()` also
-projects the existing deep/waste semantics into the quiet `so-far-summary`.
+`renderNeedsYou()` combines the configured sleep reminder, ambiguous routine evidence, and
+routine source/write errors. (As of Phase 6J the generic timeline-gap item is gone —
+`renderGapRecoveryInbox()` only hides `#gap-recovery`.) Empty attention is hidden. Review save
+and sleep resolution refresh attention immediately. `renderTodayHealth()` also projects the
+existing deep/waste semantics into the quiet `so-far-summary`.
 
 The legacy Details preference API remains, without revealing unrelated default surfaces.
 Primary navigation, timer/Focus internals, repositories, and measurement contracts are unchanged.
@@ -1044,3 +1046,53 @@ documented in the contract), Firebase sync, CSV/Life Ledger export, the generic 
 prompt. Tests: `coarse-life-evidence.test.js` (model + repository, `node:test`),
 `tests/coarse-life-evidence.spec.js` (7 Playwright end-to-end cases). Runtime mirror updated
 via `scripts/runtime-mirror.mjs --write`.
+
+
+## Review Reconciliation + Today Gap Replacement V1 (Phase 6I/J)
+
+`renderReviewUnloggedDecision()` (still on `#rv-unlogged-decision`, still called from
+`refreshReviewAnalysis()`) is the whole-day reconciliation prompt. It no longer hides when
+`unloggedMin < 30`: it renders "Anything important missing?" with helper text on a **calm
+neutral surface** (`.rv-gap-check`, retoned off the old amber alarm). One primary exit —
+**Looks about right** (`markReviewReconciliationOk()`, `.btn.primary`); **Add broad activity**
+(`openCoarseEvidenceEditor(dateKey)` — the 6H editor) and **Leave unknown**
+(`markReviewUnloggedIntentional()` — also sets legacy `_reviewUnloggedOk`) as equal ghost
+buttons; **Log time** (`openReviewFirstGap()`, only when a >=30m diagnostic gap exists) as a
+small demoted `.rv-gap-link` text link. Once `_reviewReconciliation` is set it collapses to
+one quiet line — `✓ Looks about right` / `✓ Left unknown` — with two small links,
+**Add activity** and **Change** (`resetReviewReconciliation()`); no box, no sentence, no
+primary button (§4 of the day-to-day UX pass).
+
+State: `_reviewReconciliation` (`null` | `'reviewed_ok'` | `'left_unknown'`), loaded in
+`openReview()` from `reviews[k].reconciliation`, falling back to `'left_unknown'` for a
+pre-6I record that only has `unloggedOk: true`. `saveReview()` persists
+`reconciliation: _reviewReconciliation || null` through the existing durable Review path;
+`unloggedOk` keeps its exact prior meaning and `unloggedMin >= 30` save gate. Reconciliation
+state is review-workflow only — never read by analytics.
+
+`renderGapRecoveryInbox()` now only hides `#gap-recovery` — the generic Today "first gap
+>= 30m → Needs You" interruption is removed (Phase 6J). `GAP_RECOVERY_OPTIONS`,
+`currentGapRecoveryRange()`, `fillGapRecovery()`, `openGapRecoveryOther()`,
+`logGapRecoveryActivity()` were removed as orphans. `getGapRecoveryCandidate()` stays as a
+pure diagnostic (no production UI consumer). `computeGaps()` / `getCloseoutGaps()` and every
+raw-gap surface (Review factual summary, Full analysis "Unlogged intervals", Week-view
+unlogged bar) are unchanged. `renderCloseoutCta()` dropped its "Fill or mark missing time"
+sub-copy branch. Concrete Needs You signals (sleep, routine due/error, Focus reload recovery)
+are untouched.
+
+**Day-to-day UX correction pass:** the `#th-unlogged` "Xh Ym unlogged" Today Health stat was
+removed (`computeTodayHealth` no longer computes `unloggedMin`; element + `.warn` CSS gone).
+The four generic meal/chore check-ins (`ROUTINE_PROMPTS` + `getRoutinePromptCandidate` /
+`routinePromptWindow` / `routinePromptAlreadyLogged` / `getDismissedRoutinePrompts` /
+`markRoutinePromptDismissed` / `routinePromptStorageKey` / `quickLogRoutinePrompt` /
+`dismissRoutinePrompt`) were deleted; `renderRoutinePrompt()` reduced to "hide
+`#routine-prompt`"; the `.routine-prompt`/`.routine-chip`/… CSS block removed. The passive
+**Daily basics** quick-log grid (`COMMON_LOG_OPTIONS` / `quickLogCommon` / `logCommonActivity`)
+and explicit user routines are untouched. `renderCloseoutCta()` copy: "name the leak" →
+"then prepare tomorrow". Nav tab + `#view-reflect` page title: "Reflect" → "Trends" (labels
+only; `showView('reflect')`, view id, function names unchanged).
+
+Tests: `tests/review-reconciliation.spec.js` (24 Playwright cases); updated
+`tests/smoke.spec.js`, `tests/today-simplification.spec.js`, `tests/plan.spec.js`,
+`tests/review-simplification.spec.js`. Runtime mirror updated via
+`scripts/runtime-mirror.mjs --write`.

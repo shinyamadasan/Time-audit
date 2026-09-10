@@ -151,6 +151,8 @@ for (const action of ['cancel gap', 'save gap', 'cancel plan', 'save plan']) {
     await page.locator('#rv-unlogged-decision').getByRole('button', { name: 'Leave unknown' }).click();
     const before = await page.evaluate(() => JSON.stringify(reviews));
     if (action.includes('gap')) {
+      // Acknowledged state is quiet (no Log time button); "Change" reopens the full prompt.
+      await page.locator('#rv-unlogged-decision').getByRole('button', { name: 'Change' }).click();
       await page.locator('#rv-unlogged-decision').getByRole('button', { name: 'Log time' }).click();
       if (action === 'save gap') {
         await page.locator('#retro-activity').fill('Remembered lunch');

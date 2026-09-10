@@ -5,6 +5,66 @@
 
 ---
 
+## Phase 6I/J — Day-to-day UX correction pass (same candidate) · 2026-09-10
+branch: `feat/review-reconciliation-v1`. Base still `2948e2e2e591e18d7f40bade92c531338b77885a`
+  (re-verified: `git rev-parse origin/main` and `HEAD` both unchanged, nothing committed).
+scope: REMOVE / HIDE / QUIETEN pass on the 6I/J candidate. Reconciliation prompt retoned
+  (neutral surface, one primary exit, demoted "Log time" link) and its acknowledged state
+  reduced to one quiet line; `#th-unlogged` Today debt stat removed; generic ROUTINE_PROMPTS
+  meal/chore check-ins removed; Close Day "name the leak" copy neutralised; "Reflect" nav tab
+  → "Trends". No new persistence, no new daily action, architecture unchanged. Touched:
+  `index.html`, `style.css` (+ `www/` mirror), `tests/review-reconciliation.spec.js`,
+  `tests/smoke.spec.js`, `tests/review-simplification.spec.js`, docs.
+suite: focused specs; `npm test`; `npm run lint`; `npx playwright test` (full);
+  `node scripts/runtime-mirror.mjs --check`; `node --check` on touched specs; `git diff --check`.
+result:
+  - focused: `tests/review-reconciliation.spec.js` 24/24; `tests/review-simplification.spec.js`
+    36/36; combined `smoke + today-simplification + plan + coarse-life-evidence + review-
+    reconciliation` run 143/143.
+  - `npm test`: PASS (full node chain, exit 0, reached `runtime-mirror.test.js`).
+  - `npm run lint`: PASS — 0 errors, 29 pre-existing warnings (unchanged; `index.html`/tests
+    not in the lint set).
+  - `npx playwright test` (full): see landing report AE — all pass after the test updates.
+  - `node scripts/runtime-mirror.mjs --check`: OK — www/ byte-identical (`--write` updated
+    `index.html` + `style.css`).
+  - `node --check` touched specs: PASS. `git diff --check`: clean.
+state: candidate still uncommitted / unpushed for one independent milestone review.
+
+## Phase 6I/J — Review reconciliation + Today gap replacement V1 (candidate) · 2026-09-10
+branch: `feat/review-reconciliation-v1`. Base `2948e2e2e591e18d7f40bade92c531338b77885a`
+  (origin/main, verified via `git rev-parse origin/main` after `git fetch origin --prune`).
+  Isolated worktree; primary worktree (dirty `README.md`) untouched; Meal/Workout untouched.
+scope: reworked Review's unlogged-decision block into an always-available (until acknowledged)
+  optional "Anything important missing?" reconciliation prompt with Add broad activity /
+  Log time / Leave unknown / Looks about right; then removed the generic Today "first gap
+  >= 30m → Needs You / fill gap" interruption. `computeGaps()` and every raw-gap diagnostic
+  preserved. Touched: `index.html` (+ `www/` mirror), `tests/smoke.spec.js`,
+  `tests/today-simplification.spec.js`, `tests/plan.spec.js`; new
+  `tests/review-reconciliation.spec.js`; docs (`CHANGELOG.md`, `CODEMAP.md`,
+  `contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md`, this file). No new production file. No
+  Ledger, sync, export/import, schema migration, coverage engine, allocation engine, Meal/
+  Workout change.
+suite: `npm test` (full node chain); `npm run lint`; `npx playwright test` (full suite) +
+  targeted `tests/review-reconciliation.spec.js`; `node scripts/runtime-mirror.mjs --check`;
+  `node --check` on touched/new `.spec.js`; `git diff --check`.
+result:
+  - `npm test`: PASS — full node chain completed through `scripts/runtime-mirror.test.js`
+    (last in the `&&` chain); no file in the chain was modified by this milestone.
+  - `npm run lint`: PASS — 0 errors, 29 pre-existing warnings (all in unmodified `.js` files;
+    `index.html` and `tests/**` are not in the lint set).
+  - `npx playwright test` (full): **397/397 pass** (2.9m, exit 0). An earlier full run
+    surfaced 1 failure (my own new smoke test asserted `#needs-you` hidden while the
+    configured sleep reminder was firing); fixed by `sleepSetupDone:false` in that test's
+    setup to isolate it to the gap question, then the full suite was re-run clean.
+  - `tests/review-reconciliation.spec.js`: 13/13 — see §38/§39 matrix in the landing report.
+  - `node scripts/runtime-mirror.mjs --check`: OK — www/ byte-identical (closure 44 files);
+    `--write` updated only `index.html`.
+  - `node --check`: PASS on `tests/review-reconciliation.spec.js`, `tests/smoke.spec.js`,
+    `tests/today-simplification.spec.js`, `tests/plan.spec.js`. (`index.html` JS validated
+    transitively by the 397-test Playwright load.)
+  - `git diff --check`: clean.
+state: candidate left uncommitted / unpushed for one independent milestone review.
+
 ## Phase 6H — coarse life evidence V1 (candidate) · 2026-09-09
 branch: `feat/coarse-life-evidence-v1`. Base `3c4678a7cd1688476b9b0b35849c25b7fd26d479`
   (origin/main, verified). Isolated worktree; `main`, Meal and Workout untouched.

@@ -591,7 +591,7 @@ test('close day CTA opens the review loop and marks today closed after save', as
   await expect(page.locator('#rv-metric-details')).toContainText('20m');
   await expect(page.locator('#rv-plan-vs-actual')).toBeHidden();
   await expect(page.locator('#rv-unlogged-decision')).toBeVisible();
-  await expect(page.locator('#rv-unlogged-decision')).toContainText('Needs you');
+  await expect(page.locator('#rv-unlogged-decision')).toContainText('Anything important missing?');
   await expect(page.locator('#rv-unlogged-decision').getByRole('button', { name: 'Log time' })).toBeVisible();
   await page.locator('#rv-unlogged-decision').getByRole('button', { name: 'Leave unknown' }).click();
   await expect(page.locator('#rv-unlogged-decision')).toContainText('Left unknown');

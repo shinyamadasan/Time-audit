@@ -1,5 +1,115 @@
 # ChronaSense — Changelog
 
+## Phase 6I/J — Day-to-day UX correction pass (same candidate — feat/review-reconciliation-v1, uncommitted) — 2026-09-10
+
+A REMOVE / HIDE / QUIETEN pass over the 6I/J candidate — no rebuild, no new persistence,
+no new daily action. Net default UI decreased. Technical architecture unchanged
+(`reviews[dateKey].reconciliation`, `unloggedOk` compat, `computeGaps`/`getCloseoutGaps`,
+selected-date ownership, Plan Tomorrow detour, generic Today gap removal all preserved).
+
+changed (`index.html` + `style.css`, mirrored to `www/`):
+  - **Reconciliation prompt retoned + re-ranked.** `.rv-gap-check` lost its amber-alarm
+    styling for a calm neutral surface. Un-acknowledged: one primary action —
+    **Looks about right** — with **Add broad activity** and **Leave unknown** as equal
+    secondary ghost buttons and **Log time** demoted to a small text link (`.rv-gap-link`,
+    shown only when a >=30m diagnostic gap exists). Acknowledged: the box is gone — a single
+    quiet `✓ Looks about right` / `✓ Left unknown` line with two small links, **Add activity**
+    and **Change** (was: a bordered box with a sentence and three buttons incl. Revisit/Log
+    time). Reconciliation stays available every daily Review (no auto-hide — there is no
+    truthful deterministic "whole day known" criterion; `computeGaps()==[]` ≠ complete) but
+    is now visually secondary.
+  - **`#th-unlogged` removed.** The "Xh Ym unlogged" debt figure is gone from Today Health
+    (`computeTodayHealth` no longer computes it; the element and its `.warn` CSS are
+    deleted). Raw gaps remain in Timeline, Review's Full analysis, and the Week view.
+  - **Generic meal/chore check-ins removed.** `ROUTINE_PROMPTS` (breakfast / lunch / dinner /
+    evening) and the whole prompt chain (`getRoutinePromptCandidate`, `routinePromptWindow`,
+    `routinePromptAlreadyLogged`, `getDismissedRoutinePrompts`, `markRoutinePromptDismissed`,
+    `routinePromptStorageKey`, `quickLogRoutinePrompt`, `dismissRoutinePrompt`) deleted;
+    `renderRoutinePrompt()` reduced to "hide `#routine-prompt`"; the `.routine-prompt` /
+    `.routine-chip` / … CSS block removed. The passive **Daily basics** quick-log grid and
+    all **explicit user routines** / routine errors are untouched.
+  - **Close Day copy neutralised**: "Review today, name the leak, pick tomorrow." →
+    "Review today, then prepare tomorrow."
+  - **"Reflect" nav tab renamed to "Trends"** (nav button text + `#view-reflect` page title
+    only — routing, view id, and function names unchanged).
+
+tests: `tests/review-reconciliation.spec.js` +6 UX-pass cases (button hierarchy, neutral
+  surface, quiet acknowledged state, no `#th-unlogged`, no meal/chore prompt, neutral Close
+  Day copy, "Trends" rename, concrete sleep signal preserved); the two `tests/smoke.spec.js`
+  routine-prompt tests replaced by one "generic meal/chore prompts gone; Daily basics still
+  works" test; the two `#th-unlogged` smoke tests reworked to assert the stat is absent;
+  `tests/review-simplification.spec.js` gap-detour tests now click **Change** before
+  **Log time** (acknowledged state has no Log time button).
+
+## Phase 6I/J — Review reconciliation + Today gap replacement V1 (candidate — feat/review-reconciliation-v1, uncommitted) — 2026-09-10
+
+Base `2948e2e2e591e18d7f40bade92c531338b77885a` (origin/main, verified). Isolated worktree;
+primary worktree (dirty `README.md` on `docs/phase12-personal-intelligence-design`) untouched;
+Meal and Workout source apps untouched. No commit/push/merge/deploy; no Firebase or Obsidian
+writes; no historical data migrated.
+
+Scope: the minimum end-of-day reconciliation flow that replaces generic daytime gap nagging
+without turning Review into a time-sheet. Reworks Review's existing unlogged-decision block
+into one small optional "Anything important missing?" prompt (not gated on gap size), then —
+only once that works — removes the generic Today "first gap >= 30m → Needs You / fill gap"
+interruption. `computeGaps()` and all raw-gap diagnostics are preserved.
+
+changed (`index.html`, mirrored to `www/`):
+  - `renderReviewUnloggedDecision()` — reworked from a gap-gated ("`unloggedMin < 30` → hide")
+    two-button block into the always-available (until acknowledged) whole-day reconciliation
+    prompt: header "Anything important missing?", helper "Food, care, household time, travel,
+    people, or downtime …", and up to four actions — **Log time** (only when a >=30m diagnostic
+    gap exists; unchanged gap-jump to the retro editor), **Add broad activity**
+    (`openCoarseEvidenceEditor(dateKey)` — the 6H editor, for Review's selected date),
+    **Leave unknown**, **Looks about right**. Once acknowledged, reopening shows a compact
+    "Looks about right" / "Left unknown" line with **Add broad activity** + **Revisit**, not
+    the full prompt.
+  - new state var `_reviewReconciliation` (`null` | `'reviewed_ok'` | `'left_unknown'`); loaded
+    in `openReview()` from `reviews[k].reconciliation`, with a backward-compat inference:
+    a pre-6I record with `unloggedOk: true` and no `reconciliation` field reads as
+    `'left_unknown'` (never rewritten).
+  - `markReviewUnloggedIntentional()` now also sets `_reviewReconciliation = 'left_unknown'`
+    (keeps setting `_reviewUnloggedOk = true` exactly as before). New `markReviewReconciliationOk()`
+    (`'reviewed_ok'`) and `resetReviewReconciliation()` (explicit Revisit only).
+  - `saveReview()` — persists `reconciliation: _reviewReconciliation || null` through the
+    existing durable Review path. `unloggedOk` unchanged (still `unloggedMin >= 30`-gated).
+  - `renderGapRecoveryInbox()` — reduced to "always hide `#gap-recovery`". The generic Today
+    gap interruption is gone.
+  - `renderCloseoutCta()` — dropped the "Fill or mark missing time, then pick tomorrow."
+    sub-copy branch (same gap-based pressure).
+
+removed (orphaned by the Today-gap-interruption removal):
+  - `GAP_RECOVERY_OPTIONS`, `currentGapRecoveryRange()`, `fillGapRecovery()`,
+    `openGapRecoveryOther()`, `logGapRecoveryActivity()`.
+
+retained deliberately:
+  - `getGapRecoveryCandidate()` — now a pure diagnostic (no production UI consumer), kept for
+    debugging and regression tests per Evidence Contract §16.
+  - `computeGaps()`, `getCloseoutGaps()`, Review's factual summary, Full analysis "Unlogged
+    intervals", Today Health's quiet `unlogged` stat — all unchanged.
+  - concrete Needs You signals (sleep reminder, routine due/error, Focus reload recovery).
+
+tests:
+  - new `tests/review-reconciliation.spec.js` (13 cases): prompt appears / is optional / Save
+    works untouched; "Looks about right" and "Leave unknown" persist and fabricate/close
+    nothing; reopen shows a calm summary without re-nagging; pre-6I `unloggedOk` record is not
+    re-nagged; "Add broad activity" opens the 6H editor prefilled to the review date and stores
+    it there; adding coarse evidence after acknowledgment keeps the acknowledgment;
+    after-midnight review owns the prior day; empty historical day reconciles with no
+    completeness claim; Today raises no Needs You for 35m / 5h / multiple gaps while the raw
+    gaps still compute and Full analysis still lists them; today's future time is not treated
+    as missing.
+  - updated: `tests/smoke.spec.js` (the two `today gap recovery …` tests replaced by one
+    "Today no longer interrupts for a generic timeline gap" test), `tests/today-simplification.spec.js`
+    ("Needs You respects acknowledged unknown …" and "action polish … missing-time affordances"
+    reworked to the no-nag behavior), `tests/plan.spec.js` (one copy assertion:
+    "Needs you" → "Anything important missing?").
+
+not done (out of scope / smaller truthful behavior chosen): whole-day coverage model /
+coverage %, combined exact+estimated allocation, coarse-evidence durability / cross-device
+sync, Life Ledger projection, export/import, Wife/Shared, Personal Model/Advisor. **Durability
+is still required before Wife/Shared or serious dogfood.**
+
 ## Phase 6H — Coarse life evidence V1 (candidate — feat/coarse-life-evidence-v1, uncommitted) — 2026-09-09
 
 Base `3c4678a7cd1688476b9b0b35849c25b7fd26d479` (origin/main, verified). Isolated worktree;
