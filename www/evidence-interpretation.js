@@ -84,8 +84,21 @@
       !isComputerSessionEntry(entry);
   }
 
+  // Time Truth V1: does this entry only prove "a device/tab/timer was left open,"
+  // not that the person was actually present? Passive device observation and the
+  // native PC-Time ticker share this limitation — neither has an idle/lock signal,
+  // so a long AFK/sleep gap can silently read as continuous coverage. Consumers
+  // that claim "this part of the day is accounted for" (gap-closing, unlogged-hours
+  // totals) should not treat these as solid coverage; consumers that just want a
+  // duration figure may still count them.
+  function isUnverifiedPresenceEntry(entry) {
+    if (!isEntryLike(entry)) return false;
+    return isPassiveObservationEntry(entry) || isComputerSessionEntry(entry);
+  }
+
   root.isPassiveObservationEntry = isPassiveObservationEntry;
   root.isScheduledAssumptionEntry = isScheduledAssumptionEntry;
   root.isComputerSessionEntry = isComputerSessionEntry;
   root.hasConfirmedEnergyClassification = hasConfirmedEnergyClassification;
+  root.isUnverifiedPresenceEntry = isUnverifiedPresenceEntry;
 })(typeof globalThis !== 'undefined' ? globalThis : window);

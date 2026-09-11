@@ -3,7 +3,7 @@
   "name": "Chronasense Tracker",
   "version": "1.0",
   "description": "Auto-tracks browser activity and logs it to Chronasense",
-  "permissions": ["tabs", "storage", "identity", "alarms", "notifications"],
+  "permissions": ["tabs", "storage", "identity", "alarms", "notifications", "idle"],
   "host_permissions": [
     "https://*.firebaseio.com/*",
     "https://securetoken.googleapis.com/*",

@@ -1,5 +1,67 @@
 # ChronaSense — Changelog
 
+## Time Truth V1 (feat/time-truth-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-11
+
+Cross-device timezone correctness. Canonical rule: `absolute instant + account timezone
+(settings.timezone) → ChronaSense dateKey`; device OS timezone is provenance only. A work
+PC on one OS timezone and a phone on another now produce the same day assignment for the
+same instant.
+
+Rediscovery found the core architecture (`getDateInTZ`/`toDateKey`, cross-midnight
+clipping in `sumEntryMinutes`/`clipEntryToDateForDisplay`, plan-`when` semantics via
+`tzParseTime`) was already correctly account-timezone-aware. Fixed the real gaps:
+- `storage.js`: `getWeekKey()` no longer uses device-local `Date` getters; added
+  `weekKeyOffsetFromToday()`/`currentWeekKey()` so Reflect/Weekly-Review week selection
+  resolves via the account timezone, not raw ±7-day device-local arithmetic.
+- `browser-extension/background.js`: `signIn()` awaits the account-timezone fetch before
+  tracking starts; `init()` re-fetches it on every service-worker wake. Added
+  `chrome.idle` (5-min threshold), a `lastHeartbeat` cap, and restart-gap detection —
+  idle/lock/an unobserved SW-restart gap now closes the session at the last confirmed-
+  active moment instead of bridging it forward as continuous browsing. New `idle`
+  manifest permission.
+- `index.html`: `startPCTimeLive()` no longer inherits `lastEntry?.energy || 'deep'` —
+  fixed `'shallow'`, never a confirmed-work claim. `computeGaps()`/`renderUnloggedHours()`
+  no longer treat unverified-presence entries (passive browser/phone observation or
+  PC-Time context) as solid gap-closing coverage. Passive/computer-session Timeline rows
+  carry a small label — reserved "OBSERVED" for genuine device/site telemetry
+  (`isPassiveObservationEntry`) and "TIMER" for the native PC-Time ticker
+  (`isComputerSessionEntry`, no idle/lock/activity signal at all), never conflating the
+  two (fix-first). A device-vs-account-timezone hint appears near the plan time input
+  when they differ. `clearTodayOnly()` now derives "today" via `getDateInTZ` instead of
+  the raw stored `e.date` field, matching `clearSelectedDay()` (fix-first — a destructive
+  action that could otherwise skip or wrongly delete entries with a stale stored date).
+- `evidence-interpretation.js`: new `isUnverifiedPresenceEntry()` (passive observation OR
+  computer-session context) for the gap-closing/unlogged-hours consumers above.
+- `chronasense-life-ledger-adapter.js`: native PC-Time/Screen-Time context is now tagged
+  `captureMethod: 'computer_session'`, distinguishable from a real manual `quick_log`.
+- `capability-career-analytics.js`: `currentEvidenceScope()` now excludes
+  `browser_usage`/`phone_usage`/`computer_session` Life Ledger captureMethods from
+  confirmed capability/career evidence, not just `scheduled_template`.
+
+No custom life-day boundary. No historical data rewritten. Firebase security rules,
+Shared Access architecture, and Wife/Shared untouched.
+
+New focused tests: `time-truth-timezone.test.js` (Phoenix/Manila same-instant-same-dateKey,
+plan-time, week-key, midnight-clip), `time-truth-pc-time.test.js` (energy-inheritance/
+default-deep removal, static source check), `browser-extension/time-truth-idle.test.js`
+(idle/heartbeat/restart-gap behavior, mocked `chrome.*`), plus extensions to
+`test.js`/`evidence-interpretation.test.js`/`tests/analytics-truth.spec.js` for the
+Ledger/Career exclusion and gap-closing changes.
+
+**Fix-first pass (2026-09-11, same day)**, after independent review returned FIX FIRST
+with two blocker-level findings, both fixed — no other part of the milestone was
+reopened: (1) the OBSERVED/TIMER label distinction above (`renderEntryRow()` in
+`index.html`, plus its nested PC-Time-sub-activity `pcRow` path); (2)
+`clearTodayOnly()`'s stale-`.date` bug above. 6 new focused Playwright tests added to
+`tests/analytics-truth.spec.js` covering both (TIMER vs OBSERVED for container/nested/
+plain rows and an unaffected manual entry; `clearTodayOnly` forward and reverse
+stale-date cases). Re-ran the full suite after the fix: `npm test` 681 assertions,
+Playwright 449 tests (443 + 6 new), `npm run lint` 0 errors, `check:www-parity` OK,
+`git diff --check` clean — all pass.
+
+Candidate remains uncommitted, unpushed, not deployed, pending targeted re-review of
+just the two fixes.
+
 ## Shared Access Hardening V1 (feat/shared-accountability-v1, candidate, uncommitted, NOT deployed) — 2026-09-10
 
 Prerequisite security milestone for a future Wife/Shared Accountability feature. That feature —

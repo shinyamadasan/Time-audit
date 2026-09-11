@@ -6,7 +6,22 @@ let authToken  = null;
 let uid        = null;
 let trackedSites = {};  // loaded from storage, merges defaults + custom
 let userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;  // fallback to device
+// True only once userTimezone has been set FROM the account's Firebase settings
+// (fetchUserTimezone succeeded) — as opposed to the device-OS fallback above or a
+// previously-cached value of unknown freshness. Time Truth V1: provenance only,
+// never used to silently accept a wrong-day assignment as if it were confirmed.
+let userTimezoneConfirmed = false;
 let lastSessionByDomain = {};  // domain → { startTs, endTs } for merge window
+
+// Time Truth V1 — idle/sleep guard. chrome.idle has no signal finer than this, and we
+// don't want to micromanage seconds of inactivity — 5 minutes is a conservative AFK/
+// lock/sleep threshold, not a productivity timer.
+const IDLE_THRESHOLD_SECONDS = 300;
+// The last moment chrome.idle confirmed (or a fresh sign-in/tab-focus implied) the
+// user was actually active. Session boundaries are capped here, never bridged past it —
+// an unobserved gap (idle, lock, sleep, a long-dead service worker) must not become
+// confirmed duration.
+let lastHeartbeat = Date.now();
 
 // ── Startup ──
 // Called on install/update AND on every service worker restart (MV3 workers are killed after inactivity)
@@ -15,18 +30,36 @@ chrome.runtime.onInstalled.addListener(init);
 init(); // also run immediately on every service worker start to restore uid/authToken
 
 async function init() {
-  const stored = await chrome.storage.local.get(['uid', 'authToken', 'customSites', 'removedSites', 'userTimezone', 'activeTab', 'lastSessionByDomain']);
+  const stored = await chrome.storage.local.get(['uid', 'authToken', 'customSites', 'removedSites', 'userTimezone', 'userTimezoneConfirmed', 'activeTab', 'lastSessionByDomain', 'lastHeartbeat']);
   uid          = stored.uid          || null;
   authToken    = stored.authToken    || null;
   userTimezone = stored.userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  userTimezoneConfirmed = !!stored.userTimezoneConfirmed;
+  lastHeartbeat = stored.lastHeartbeat || Date.now();
   loadTrackedSites(stored.customSites || {}, stored.removedSites || []);
   if (stored.lastSessionByDomain) lastSessionByDomain = stored.lastSessionByDomain;
 
-  // Restore active session so SW restarts don't create duplicate entries
-  if (stored.activeTab) activeTab = stored.activeTab;
+  try { chrome.idle.setDetectionInterval(IDLE_THRESHOLD_SECONDS); } catch (e) { /* idle API unavailable */ }
+
+  // Restore active session so SW restarts don't create duplicate entries — but first
+  // check whether the gap since our last confirmed-active heartbeat is itself larger
+  // than the idle threshold. A long-dead service worker, a suspended browser, or a
+  // sleeping computer all look identical from here: elapsed wall-clock time with no
+  // heartbeat to back it. Don't bridge that gap as continuous use — close the prior
+  // session out at the last confirmed-active moment instead.
+  if (stored.activeTab) {
+    activeTab = stored.activeTab;
+    if (Date.now() - lastHeartbeat > IDLE_THRESHOLD_SECONDS * 1000) {
+      closeSessionAtHeartbeat();
+    }
+  }
 
   if (uid) {
     chrome.alarms.create('flush', { periodInMinutes: 5 });
+    // Best-effort refresh so a timezone change made later in the web app eventually
+    // reaches the extension without requiring an explicit sign-out/sign-in. Cheap
+    // (one GET), fire-and-forget — never blocks startup or tracking.
+    if (authToken) fetchUserTimezone(uid, authToken);
     chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
       if (!tabs[0]) return;
       const currentDomain = getAnyDomain(tabs[0].url);
@@ -42,6 +75,27 @@ async function init() {
   }
 }
 
+function markHeartbeat() {
+  lastHeartbeat = Date.now();
+  chrome.storage.local.set({ lastHeartbeat });
+}
+
+// Closes out the current session at the last confirmed-active heartbeat rather than
+// at "now" — used whenever we discover the user went idle/locked/away without a clean
+// flush event (idle-state transition, periodic alarm finding idle, or a service-worker
+// restart after an unobserved gap). Never logs time past the heartbeat.
+function closeSessionAtHeartbeat() {
+  if (!activeTab) return;
+  const endTs = Math.max(activeTab.startedAt, lastHeartbeat);
+  const durationMs = endTs - activeTab.startedAt;
+  const tab = activeTab;
+  activeTab = null;
+  chrome.storage.local.remove('activeTab');
+  if (durationMs >= MIN_SESSION_MS && trackedSites[tab.domain]) {
+    logSession(tab.domain, tab.title, tab.sessionId, endTs, endTs - tab.sessionId);
+  }
+}
+
 // ── Tab listeners registered at top level so they survive service worker restarts ──
 chrome.tabs.onActivated.addListener(onTabActivated);
 chrome.tabs.onUpdated.addListener(onTabUpdated);
@@ -49,6 +103,25 @@ chrome.windows.onFocusChanged.addListener(onFocusChanged);
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'flush') flushAndRestart();
 });
+
+// System-level idle/lock/active signal — the one thing tab events can't tell us.
+// 'active' resumes tracking (and starts a fresh session if none is running); 'idle'
+// or 'locked' closes out the current session at the last confirmed-active moment so
+// the AFK/lock time itself is never counted.
+try {
+  chrome.idle.onStateChanged.addListener((state) => {
+    if (state === 'active') {
+      markHeartbeat();
+      if (!activeTab) {
+        chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+          if (tabs[0]) recordStart(tabs[0].url, tabs[0].title);
+        });
+      }
+    } else {
+      closeSessionAtHeartbeat();
+    }
+  });
+} catch (e) { /* idle API unavailable */ }
 
 function loadTrackedSites(customSites, removedSites) {
   trackedSites = {};
@@ -127,8 +200,12 @@ export async function signIn() {
     uid       = fbData.localId;
     authToken = fbData.idToken;
     await chrome.storage.local.set({ uid, authToken, email: userInfo.email, googleToken, fbRefreshToken: fbData.refreshToken });
-    // Fetch user's timezone from their Firebase settings
-    fetchUserTimezone(fbData.localId, fbData.idToken);
+    // Resolve the account timezone BEFORE tracking starts — Time Truth V1: a session
+    // logged before this resolves would otherwise date-key on the device OS fallback.
+    // Best-effort: if the fetch fails (offline, no timezone set yet), tracking still
+    // starts rather than blocking sign-in indefinitely; userTimezoneConfirmed stays
+    // false and init() will keep retrying on later service-worker wakes.
+    await fetchUserTimezone(fbData.localId, fbData.idToken);
     startTracking();
     return { uid, email: userInfo.email };
   } catch (e) {
@@ -209,6 +286,7 @@ function recordStart(url, title) {
   const now = Date.now();
   activeTab = { url, title, domain, startedAt: now, sessionId: now };
   chrome.storage.local.set({ activeTab });
+  markHeartbeat();
 }
 
 function flushActiveTab() {
@@ -227,8 +305,19 @@ function flushActiveTab() {
   }
 }
 
-function flushAndRestart() {
+// Periodic 5-minute alarm for a still-open session. Time Truth V1: before trusting
+// "now" as genuine continued use, reconfirm the user is actually active — this is the
+// one place a computer-sleep/long-AFK gap would otherwise silently bridge forward as
+// five more minutes of confirmed duration, repeated indefinitely.
+async function flushAndRestart() {
   if (!activeTab) return;
+  let state = 'active';
+  try { state = await chrome.idle.queryState(IDLE_THRESHOLD_SECONDS); } catch (e) { /* idle API unavailable — assume active */ }
+  if (state !== 'active') {
+    closeSessionAtHeartbeat();
+    return;
+  }
+  markHeartbeat();
   const now = Date.now();
   const durationMs = now - activeTab.startedAt;
   if (durationMs >= MIN_SESSION_MS && trackedSites[activeTab.domain]) {
@@ -308,7 +397,13 @@ async function logSession(domain, title, startTs, endTs, durationMs) {
     retro: true,
     browserUsage: true,
     quickLogged: true,
-    source: 'browser-extension'
+    source: 'browser-extension',
+    // Time Truth V1 provenance: was `date` derived from a timezone actually confirmed
+    // from the account's Firebase settings, or the device-OS/cached fallback? The web
+    // app's own reads never trust this stored `date` field for day-bucketing (they
+    // re-derive from tsStart/ts in the account timezone), so this cannot mis-assign a
+    // day — it's an honest confidence marker for anything that does read `date` raw.
+    tzConfirmed: userTimezoneConfirmed
   };
   entry.category = getBucket(entry);
   entry.originalLabel = entry.energy;
@@ -372,9 +467,13 @@ async function fetchUserTimezone(uidVal, token) {
     const tz   = await res.json();
     if (tz && typeof tz === 'string') {
       userTimezone = tz;
-      await chrome.storage.local.set({ userTimezone: tz });
+      userTimezoneConfirmed = true;
+      await chrome.storage.local.set({ userTimezone: tz, userTimezoneConfirmed: true });
       console.log('[Chronasense] timezone set to', tz);
     }
+    // No value at this path (e.g. manual room-code pairing, where the account's
+    // settings live outside rooms/uid_<uid>) — leave userTimezone/confirmed as they
+    // were rather than guessing; the caller already has a cached-or-device fallback.
   } catch (e) { console.warn('[Chronasense] could not fetch timezone', e); }
 }
 

@@ -265,3 +265,139 @@ test('Week share: a genuine confirmed deep block is still counted as deep work',
   });
   expect(summary.deepMins).toBe(60);
 });
+
+// ── Time Truth V1 — gap-closing must not trust unverified presence ──────────
+// computeGaps() previously treated ANY entry with tsStart+ts as solid coverage,
+// including passive browser/phone observation and the native PC-Time ticker —
+// neither has an idle/lock/sleep signal, so a period "covered" only by one of
+// these could falsely read as "fully accounted for" when the machine may have
+// been idle or asleep. Confirmed entries (manual/timer/retro) are unaffected.
+test('computeGaps: a span covered only by the PC-Time ticker still shows as an unlogged gap', async ({ page }) => {
+  await openApp(page);
+  const gaps = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const pcOnly = [
+      { id: 'pc1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'PC Time', energy: 'shallow', autoLogged: true, quickLogged: true }
+    ];
+    return computeGaps(pcOnly, base + 3600000);
+  });
+  expect(gaps.length).toBe(1);
+  expect(gaps[0].isGap).toBe(true);
+  expect(gaps[0].gapMin).toBe(60);
+});
+test('computeGaps: a span covered only by passive browser observation still shows as an unlogged gap', async ({ page }) => {
+  await openApp(page);
+  const gaps = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const browserOnly = [
+      { id: 'br1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'GitHub', energy: 'deep', browserUsage: true, source: 'browser-extension' }
+    ];
+    return computeGaps(browserOnly, base + 3600000);
+  });
+  expect(gaps.length).toBe(1);
+  expect(gaps[0].isGap).toBe(true);
+  expect(gaps[0].gapMin).toBe(60);
+});
+test('computeGaps: a genuine confirmed entry still closes the gap exactly as before (no regression)', async ({ page }) => {
+  await openApp(page);
+  const gaps = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const confirmed = [
+      { id: 'deep1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'Write RFC', energy: 'deep', retro: true }
+    ];
+    return computeGaps(confirmed, base + 3600000);
+  });
+  expect(gaps.length).toBe(0);
+});
+
+// ── Time Truth V1 fix-first — OBSERVED vs TIMER label truthfulness ──────────
+// Independent review: isUnverifiedPresenceEntry() unions passive observation
+// (genuine device/site telemetry) with computer-session context (the native
+// PC-Time ticker, which has no idle/lock/activity signal at all). Reusing the
+// single "OBSERVED" tag for both implied the ticker was witnessed the way real
+// telemetry is. OBSERVED is now reserved for isPassiveObservationEntry; the
+// native ticker gets TIMER instead.
+test('Timeline: native PC-Time / computer-session entry renders TIMER, not OBSERVED', async ({ page }) => {
+  await openApp(page);
+  const html = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const pc = { id: 'pc1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'PC Time', energy: 'shallow', autoLogged: true, quickLogged: true };
+    return renderTimelineCombined([pc]);
+  });
+  expect(html).toContain('TIMER');
+  expect(html).not.toContain('OBSERVED');
+});
+test('Timeline: passive browser-extension entry renders OBSERVED, not TIMER', async ({ page }) => {
+  await openApp(page);
+  const html = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const br = { id: 'br1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'GitHub', energy: 'deep', browserUsage: true, source: 'browser-extension' };
+    return renderTimelineCombined([br]);
+  });
+  expect(html).toContain('OBSERVED');
+  expect(html).not.toContain('TIMER');
+});
+test('Timeline: a nested PC-Time container shows TIMER for its own segment and OBSERVED for a nested browser sub-activity', async ({ page }) => {
+  await openApp(page);
+  const html = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const sub = { id: 'sub1', tsStart: base + 300000, ts: base + 600000, activity: 'GitHub', browserUsage: true, source: 'browser-extension', energy: 'deep' };
+    const container = {
+      id: 'pc1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08',
+      activity: 'PC Time', energy: 'shallow', autoLogged: true, quickLogged: true,
+      _subActivities: [sub]
+    };
+    return renderEntryRow(container);
+  });
+  expect(html).toContain('TIMER');
+  expect(html).toContain('OBSERVED');
+});
+test('Timeline: an ordinary confirmed manual entry gets neither TIMER nor OBSERVED', async ({ page }) => {
+  await openApp(page);
+  const html = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const manual = { id: 'm1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'Write RFC', energy: 'deep', retro: true };
+    return renderTimelineCombined([manual]);
+  });
+  expect(html).not.toContain('OBSERVED');
+  expect(html).not.toContain('TIMER');
+});
+
+// ── Time Truth V1 fix-first — clearTodayOnly() must use account-timezone-derived
+// "today", not the raw stored e.date field (which may have been written under a
+// different/fallback timezone). Mirrors the pattern clearSelectedDay() already uses.
+test('clearTodayOnly: an entry whose stale .date says today but whose timestamp is yesterday (account tz) is NOT deleted', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    // Account timezone is Etc/UTC (see openApp's seeded settings). "Today" is 2026-09-08.
+    // This entry's real UTC instant is 2026-09-07 (yesterday), but its stale stored
+    // .date field incorrectly claims today.
+    const yesterdayTs = Date.parse('2026-09-07T10:00:00Z');
+    entries.length = 0;
+    entries.push({
+      id: 'stale-today', tsStart: yesterdayTs, ts: yesterdayTs + 1800000, blockIntervalMin: 30,
+      date: '2026-09-08', activity: 'Stale date says today', energy: 'deep', retro: true
+    });
+    persist();
+    clearTodayOnly();
+    return { remaining: entries.length, survivorId: entries[0]?.id };
+  });
+  expect(result.remaining).toBe(1);
+  expect(result.survivorId).toBe('stale-today');
+});
+test('clearTodayOnly: an entry whose stale .date says yesterday but whose timestamp is today (account tz) IS deleted', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    // Real UTC instant is today (2026-09-08); stale stored .date incorrectly claims yesterday.
+    const todayTs = Date.parse('2026-09-08T10:00:00Z');
+    entries.length = 0;
+    entries.push({
+      id: 'stale-yesterday', tsStart: todayTs, ts: todayTs + 1800000, blockIntervalMin: 30,
+      date: '2026-09-07', activity: 'Stale date says yesterday', energy: 'deep', retro: true
+    });
+    persist();
+    clearTodayOnly();
+    return { remaining: entries.length };
+  });
+  expect(result.remaining).toBe(0);
+});
