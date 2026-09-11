@@ -450,3 +450,43 @@ Shared Access architecture, and Wife/Shared were not touched. See
 `time-truth-timezone.test.js`, `time-truth-pc-time.test.js`, and
 `browser-extension/time-truth-idle.test.js` for the new focused coverage. Branch
 `feat/time-truth-v1`, uncommitted, unpushed, pending independent review.
+
+## Timeline Truth Follow-up V1 (review candidate, 2026-09-11)
+
+Bounded follow-up fixing three dogfood truth/semantics gaps a production audit found
+exposed (not caused) by Time Truth V1 — all pre-dated it and are byte-unchanged in its
+own diff. `index.html` only.
+
+- **Today "So Far"**: `computeTodayHealth()` now filters through
+  `hasConfirmedEnergyClassification()` before summing deep/waste minutes, the same
+  evidence-boundary rule `computeCloseoutSummary()` already used — passive browser/phone
+  observation no longer inflates the Today stat cards.
+- **Gap label**: a Timeline gap row now reads "No confirmed activity" instead of
+  "Untracked" — `computeGaps()` deliberately excludes unverified-presence entries from
+  closing a gap, so a gap can legitimately span a period that still has visible OBSERVED
+  rows elsewhere; "Untracked" overstated absence of evidence. Gap math itself is
+  unchanged.
+- **Browser sub-activity nesting**: `assembleTodayTimeline()` now only lets a genuine
+  `isComputerSessionEntry()` container (native "PC Time"/"Screen Time") absorb an
+  overlapping browser observation as a nested sub-row. An ordinary manual task that
+  happens to time-overlap a browser observation no longer gets mislabeled "PC time ·
+  `<site>`".
+- **Provenance on edit**: `saveRetroEntry()`'s single-entry edit path now preserves an
+  existing entry's `autoLogged`/`quickLogged` markers (independent of the pre-existing
+  `scheduledAutoLog` case) when editing through the normal retro/edit UI — previously a
+  real auto-generated PC-Time entry silently lost its `TIMER` identity after a plain
+  label/time edit. This also covers the midnight-split branch (fix-first, per
+  independent review): when the edit retimes the block to cross midnight, BOTH the
+  pre- and post-midnight halves keep the provenance, not just the first one. Text
+  identity alone still never manufactures provenance: an ordinary manual entry named
+  "PC Time" stays a non-computer-session entry after editing, on either side of a
+  midnight split. The pre-existing `scheduledAutoLog` split path has a similar
+  firstPart-only asymmetry but is untouched — out of this follow-up's bounded scope,
+  documented as safe-to-defer.
+
+New focused coverage added to `tests/analytics-truth.spec.js`. No redesign of PC-Time
+duration accumulation, browser idle architecture, raw Logged totals, the Evidence
+Contract, account timezone architecture, room-code extension architecture, or Week
+analytics. Firebase rules, Shared Access, and the browser extension were not touched.
+Branch `feat/timeline-truth-followup-v1`, uncommitted, unpushed, pending independent
+review.

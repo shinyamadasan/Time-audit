@@ -1,5 +1,27 @@
 # ChronaSense — Changelog
 
+## Timeline Truth Follow-up V1 (feat/timeline-truth-followup-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-11
+
+Bounded fix for three dogfood truth/semantics gaps a production audit found exposed
+(not caused) by Time Truth V1. `index.html` only:
+- `computeTodayHealth()` (the Today "So Far" stat) now counts only
+  `hasConfirmedEnergyClassification()` entries — passive browser/phone observation no
+  longer inflates deep/waste minutes, matching the rule `computeCloseoutSummary()`
+  already applied.
+- Timeline gap rows now read "No confirmed activity" instead of "Untracked" — a gap
+  excludes unverified-presence entries from closing, so it can legitimately span a
+  period that still shows OBSERVED evidence. Gap math itself is unchanged.
+- `assembleTodayTimeline()` only nests a browser observation under a genuine
+  `isComputerSessionEntry()` container now, not any time-overlapping non-browser entry
+  — an ordinary manual task can no longer be mislabeled "PC time · `<site>`".
+- `saveRetroEntry()`'s single-entry edit path now preserves `autoLogged`/`quickLogged`
+  provenance on an existing auto-generated PC-Time entry through a normal edit, so it
+  doesn't silently lose its `TIMER` identity — including on both resulting entries when
+  the edit retimes the block to cross midnight (fix-first, per independent review: the
+  post-midnight part was still built with no provenance at all). An ordinary entry
+  merely named "PC Time" still never gains that provenance from text alone, on either
+  side of a midnight split.
+
 ## Time Truth V1 (feat/time-truth-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-11
 
 Cross-device timezone correctness. Canonical rule: `absolute instant + account timezone

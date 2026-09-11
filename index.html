@@ -3349,6 +3349,16 @@ function saveRetroEntry() {
               ts: tsEnd,
               blockIntervalMin: dur
             };
+          } else if (source.autoLogged === true || source.quickLogged === true) {
+            // Preserve computer-session provenance (e.g. native PC-Time) through a
+            // plain retro edit — without this, isComputerSessionEntry() silently
+            // stops recognizing the block and the TIMER tag disappears. Both split
+            // descendants come from the same source block, so both must keep it —
+            // not just the pre-midnight part.
+            firstPart.autoLogged = source.autoLogged;
+            firstPart.quickLogged = source.quickLogged;
+            secondPart.autoLogged = source.autoLogged;
+            secondPart.quickLogged = source.quickLogged;
           }
           entries[idx] = firstPart;
           entries.push(secondPart);
@@ -3359,6 +3369,12 @@ function saveRetroEntry() {
             replacement.autoLogged = source.autoLogged;
             replacement.scheduledAutoLog = source.scheduledAutoLog;
             replacement.templateId = source.templateId;
+          } else if (source.autoLogged === true || source.quickLogged === true) {
+            // Preserve computer-session provenance (e.g. native PC-Time) through a
+            // plain retro edit — without this, isComputerSessionEntry() silently
+            // stops recognizing the block and the TIMER tag disappears.
+            replacement.autoLogged = source.autoLogged;
+            replacement.quickLogged = source.quickLogged;
           }
           entries[idx] = replacement;
           entries[idx].updatedAt = Date.now();
@@ -4278,11 +4294,15 @@ function renderEntryRow(item) {
 
 function renderGapRow(item) {
   const endLabel = item.isCurrent ? 'now' : localTime(item.ts);
+  // computeGaps() deliberately excludes unverified-presence entries (passive
+  // browser/phone observation, the native PC-Time ticker) from closing a gap —
+  // so a gap can legitimately span a period that still has OBSERVED rows
+  // elsewhere in the timeline. "Untracked" overstated absence of evidence.
   return `<div class="tl-row tl-untracked-row">
     <div class="tl-time">${localTime(item.tsStart)}</div>
     <div class="tl-bar-col tl-bar-untracked"></div>
     <div class="tl-content">
-      <div class="tl-activity">Untracked<span class="tl-badge tl-badge-untracked">${fmtDur(item.gapMin)}</span></div>
+      <div class="tl-activity">No confirmed activity<span class="tl-badge tl-badge-untracked">${fmtDur(item.gapMin)}</span></div>
       <div class="tl-meta">${localTime(item.tsStart)} – ${endLabel}</div>
     </div>
     <button class="log-gap-btn" onclick="openRetroLogPrefilled(${item.tsStart},${Math.round(item.ts)})">Fill in</button>
@@ -4345,7 +4365,10 @@ function assembleTodayTimeline(todayE) {
       const dB = b.tsStart ? (b.ts - b.tsStart) : (b.blockIntervalMin || 0) * 60000;
       return dA - dB;
     });
-  containerEntries.forEach(container => {
+  // Only a genuine computer-session container ("PC Time" / "Screen Time") may
+  // absorb browser observations as nested sub-rows. Time overlap with an
+  // ordinary manual task must not manufacture a false "PC time · <site>" row.
+  containerEntries.filter(isComputerSessionEntry).forEach(container => {
     const cStart = container.tsStart || (container.ts - (container.blockIntervalMin || 0) * 60000);
     const cEnd   = container.ts;
     const subs = browserEntries.filter(b => {
@@ -4613,9 +4636,15 @@ function renderCloseoutCta() {
 
 function computeTodayHealth(todayE, dateKey) {
   const realEntries = (todayE || []).filter(e => !e.deleted && !e.missed);
-  const wasteMin = sumEnergyMinutes(realEntries, 'waste', dateKey) + sumEnergyMinutes(realEntries, 'distraction', dateKey);
+  // Deep / waste here speak to actual behaviour — count only confirmed
+  // classifications, not passive observations or schedule assumptions
+  // (same evidence-boundary rule as computeCloseoutSummary).
+  const confirmedEntries = typeof hasConfirmedEnergyClassification === 'function'
+    ? realEntries.filter(hasConfirmedEnergyClassification)
+    : realEntries;
+  const wasteMin = sumEnergyMinutes(confirmedEntries, 'waste', dateKey) + sumEnergyMinutes(confirmedEntries, 'distraction', dateKey);
   return {
-    deepMin: sumEnergyMinutes(realEntries, 'deep', dateKey),
+    deepMin: sumEnergyMinutes(confirmedEntries, 'deep', dateKey),
     wasteMin
   };
 }
