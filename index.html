@@ -854,6 +854,10 @@
           </div>
         </div>
       </div>
+      <!-- Pairing request awaiting a decision (Shared Access Hardening V1) -->
+      <div id="partner-pending" style="display:none">
+        <div id="partner-pending-body"></div>
+      </div>
       <!-- Partner connected -->
       <div id="partner-connected" style="display:none">
         <div style="display:flex;align-items:center;gap:12px;padding:10px 0 12px;border-bottom:1px solid var(--border);margin-bottom:12px">
@@ -9671,13 +9675,31 @@ function renderPartnerSettings() {
     document.getElementById('my-pair-code').textContent = savedCode;
     document.getElementById('copy-pair-code-btn').style.display = 'inline-flex';
   }
+  const noPair    = document.getElementById('partner-no-pair');
+  const pending   = document.getElementById('partner-pending');
+  const connected = document.getElementById('partner-connected');
+  // Shared Access Hardening V1 (F2) — a claimed code is a request, not a connection.
+  const claim    = (typeof _pendingPairClaim !== 'undefined') ? _pendingPairClaim : null;
+  const awaiting = (typeof _pairAwaitingAccept !== 'undefined') ? _pairAwaitingAccept : false;
+  const show = (el, on) => { if (el) el.style.display = on ? 'block' : 'none'; };
   if (partnerUid) {
-    document.getElementById('partner-no-pair').style.display = 'none';
-    document.getElementById('partner-connected').style.display = 'block';
+    show(noPair, false); show(pending, false); show(connected, true);
     document.getElementById('partner-settings-name').textContent = partnerData?.name || 'Partner';
+  } else if (claim) {
+    show(noPair, false); show(connected, false); show(pending, true);
+    document.getElementById('partner-pending-body').innerHTML =
+      `<div style="font-size:13px;line-height:1.5;margin-bottom:10px">Someone entered your pair code and is waiting to connect. Only accept if you know this is your partner.</div>
+       <div style="display:flex;gap:8px">
+         <button class="btn sm" onclick="acceptPairClaim()">Accept</button>
+         <button class="btn sm ghost" onclick="rejectPairClaim()">Reject</button>
+       </div>`;
+  } else if (awaiting) {
+    show(noPair, false); show(connected, false); show(pending, true);
+    document.getElementById('partner-pending-body').innerHTML =
+      `<div style="font-size:13px;line-height:1.5;margin-bottom:10px">Request sent. Waiting for your partner to approve the connection.</div>
+       <button class="btn sm ghost" onclick="cancelPairRequest()">Cancel request</button>`;
   } else {
-    document.getElementById('partner-no-pair').style.display = 'block';
-    document.getElementById('partner-connected').style.display = 'none';
+    show(noPair, true); show(pending, false); show(connected, false);
   }
 }
 
@@ -9685,12 +9707,16 @@ function generateMyPairCode() {
   if (!currentUser) { showToast('Sign in first'); return; }
   const existing = localStorage.getItem('ta3-pair-code');
   if (existing) { showToast('You already have a code — share it with your partner'); return; }
-  const code = Math.random().toString(36).slice(2,8).toUpperCase();
+  let code;
+  try { code = securePairCode(); }
+  catch (e) { showToast('Could not generate a secure code on this device'); return; }
   fbDb.ref(`pairs/${code}`).set({ creator: currentUser.uid, createdAt: Date.now() });
   fbDb.ref(`uid_${currentUser.uid}/pairCode`).set(code);
   localStorage.setItem('ta3-pair-code', code);
   document.getElementById('my-pair-code').textContent = code;
   document.getElementById('copy-pair-code-btn').style.display = 'inline-flex';
+  // Shared Access Hardening V1 — watch this code for an incoming join request.
+  if (typeof watchPairCode === 'function') watchPairCode();
   showToast('Code ready — share it with your partner');
 }
 
@@ -9705,34 +9731,52 @@ function connectPartner() {
   if (!currentUser) { showToast('Sign in first'); return; }
   const code = (document.getElementById('partner-code-input').value || '').trim().toUpperCase();
   if (code.length < 6) { showToast('Enter your partner\'s 6-character code'); return; }
-  fbDb.ref(`pairs/${code}`).once('value', snap => {
-    const pair = snap.val();
-    if (!pair) { showToast('Code not found — ask your partner to generate one'); return; }
-    if (pair.creator === currentUser.uid) { showToast('That\'s your own code — share it with a friend'); return; }
-    const partnerUid = pair.creator;
-    fbDb.ref(`pairs/${code}/partner`).set(currentUser.uid);
-    fbDb.ref(`uid_${currentUser.uid}/pairCode`).set(code);
-    fbDb.ref(`uid_${currentUser.uid}/partnerUid`).set(partnerUid);
-    fbDb.ref(`uid_${partnerUid}/partnerUid`).set(currentUser.uid);
-    localStorage.setItem('ta3-pair-code', code);
-    localStorage.setItem('ta3-partner-uid', partnerUid);
-    document.getElementById('partner-code-input').value = '';
-    initPartnerListener(partnerUid);
-    renderPartnerSettings();
-    showToast('Partner connected 🤝');
-  });
+  const myUid = currentUser.uid;
+  // Shared Access Hardening V1 — the pair record is not readable until we are a
+  // participant, so claim the open `partner` slot first, then read back the creator.
+  fbDb.ref(`pairs/${code}/partner`).set(myUid)
+    .then(() => fbDb.ref(`pairs/${code}`).once('value'))
+    .then(snap => {
+      const pair = snap.val();
+      if (!pair || !pair.creator) { showToast('Code not found — ask your partner to generate one'); return; }
+      if (pair.creator === myUid) {
+        fbDb.ref(`pairs/${code}/partner`).remove().catch(() => {});
+        showToast('That\'s your own code — share it with your partner');
+        return;
+      }
+      if (pair.partner !== myUid) { showToast('That code is already linked to someone else'); return; }
+      // F2 — claiming the slot is only a REQUEST. We write no `partnerUid` and show
+      // no "connected" state until the creator explicitly accepts (watchPairCode
+      // completes our side when `pairs/<code>/accepted` appears).
+      fbDb.ref(`uid_${myUid}/pairCode`).set(code);
+      localStorage.setItem('ta3-pair-code', code);
+      document.getElementById('partner-code-input').value = '';
+      if (typeof watchPairCode === 'function') watchPairCode();
+      renderPartnerSettings();
+      showToast('Request sent — waiting for your partner to approve');
+    })
+    .catch(() => showToast('Could not connect — check the code and try again'));
 }
 
 function removePair() {
   if (!confirm('Remove your accountability partner?')) return;
-  const partnerUid = localStorage.getItem('ta3-partner-uid');
+  const myUid = currentUser && currentUser.uid;
   const pairCode = localStorage.getItem('ta3-pair-code');
-  if (fbDb && currentUser) {
-    fbDb.ref(`uid_${currentUser.uid}/partnerUid`).remove();
-    fbDb.ref(`uid_${currentUser.uid}/pairCode`).remove();
-    if (pairCode) fbDb.ref(`pairs/${pairCode}`).remove();
-    if (partnerUid) fbDb.ref(`uid_${partnerUid}/partnerUid`).remove();
+  if (fbDb && myUid) {
+    // Shared Access Hardening V1 — clear only our OWN relationship fields; the
+    // partner's client drops its side when it sees the pair record change.
+    fbDb.ref(`uid_${myUid}/partnerUid`).remove();
+    fbDb.ref(`uid_${myUid}/pairCode`).remove();
+    if (pairCode) {
+      fbDb.ref(`pairs/${pairCode}`).once('value').then(snap => {
+        const pair = snap.val();
+        if (!pair) return;
+        if (pair.creator === myUid) fbDb.ref(`pairs/${pairCode}`).remove().catch(() => {});
+        else if (pair.partner === myUid) fbDb.ref(`pairs/${pairCode}/partner`).remove().catch(() => {});
+      }).catch(() => {});
+    }
   }
+  if (typeof teardownPartnerLink === 'function') teardownPartnerLink();
   localStorage.removeItem('ta3-partner-uid');
   localStorage.removeItem('ta3-pair-code');
   partnerData = null;

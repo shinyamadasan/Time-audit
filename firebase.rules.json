@@ -10,18 +10,22 @@
     },
     "pairs": {
       "$pairId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        ".read": "auth != null && (data.child('creator').val() === auth.uid || data.child('partner').val() === auth.uid)",
+        ".write": "auth != null && ((!data.exists() && newData.child('creator').val() === auth.uid && !newData.child('partner').exists()) || (data.child('creator').val() === auth.uid) || (data.child('creator').exists() && data.child('creator').val() !== auth.uid && newData.child('creator').val() === data.child('creator').val() && newData.child('accepted').val() === data.child('accepted').val() && newData.child('createdAt').val() === data.child('createdAt').val() && ((!data.child('partner').exists() && newData.child('partner').val() === auth.uid) || (data.child('partner').val() === auth.uid && !newData.child('partner').exists()))))"
       }
     },
     "$userNode": {
       "public": {
-        ".read": "auth != null",
+        ".read": "auth != null && ($userNode === ('uid_' + auth.uid) || (root.child($userNode).child('partnerUid').val() === auth.uid && root.child('uid_' + auth.uid).child('partnerUid').val() === $userNode.replace('uid_', '')))",
+        ".write": "auth != null && $userNode === ('uid_' + auth.uid)"
+      },
+      "shared": {
+        ".read": "auth != null && ($userNode === ('uid_' + auth.uid) || (root.child($userNode).child('partnerUid').val() === auth.uid && root.child('uid_' + auth.uid).child('partnerUid').val() === $userNode.replace('uid_', '')))",
         ".write": "auth != null && $userNode === ('uid_' + auth.uid)"
       },
       "partnerUid": {
         ".read": "auth != null && $userNode === ('uid_' + auth.uid)",
-        ".write": "auth != null"
+        ".write": "auth != null && $userNode === ('uid_' + auth.uid)"
       },
       "pairCode": {
         ".read": "auth != null && $userNode === ('uid_' + auth.uid)",
@@ -29,7 +33,7 @@
       },
       "nudges": {
         ".read": "auth != null && $userNode === ('uid_' + auth.uid)",
-        ".write": "auth != null"
+        ".write": "auth != null && root.child($userNode).child('partnerUid').val() === auth.uid"
       }
     }
   }

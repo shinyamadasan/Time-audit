@@ -108,7 +108,9 @@ remembers them. Claude interprets them.*
 - **ChronaSense owns:** time/activity capture, timer/pings, gap recovery, browser/Android
   activity capture, intentions / Today Plan, Focus Mode, the Awareness Signal card (today's
   behavioral read), the calm daily/weekly time-awareness review, and the accountability-partner
-  pairing (shares deep hours only). Everything in "Core Product Areas" above. The pressure
+  pairing (see "Shared / Accountability access" below — a linked partner sees deep hours only
+  today; a bounded `uid_<uid>/shared` node is reserved for planned-priority sharing but is not
+  built or deployed). Everything in "Core Product Areas" above. The pressure
   mechanics that used to sit here — Focus Wallet / "focus debt", the deep-work streak, and
   "penalty mode" / "focus lock" escalation — were retired in `motivation-pressure-cleanup-v1`.
 - **Life Ledger owns:** the append-first, cross-app factual event history
@@ -148,6 +150,51 @@ per the phase's own scope boundary.
   the single canonical log; D-002/D-003/D-004 were migrated into it verbatim as entries 23/24/25
   (original ids kept as aliases); `docs/DECISIONS.md` is now a pointer stub, retained only because
   `tools/Verify-Decisions.ps1` / `tools/Check-DocsConsistency.ps1` still read that path.
+
+## Shared / Accountability access (`shared-access-hardening-v1` — review candidate, NOT deployed)
+
+Prerequisite security milestone for the future Wife/Shared Accountability feature. The
+Wife/Shared *feature* (publishing planned-priority titles to a linked partner) is **still
+blocked** and is not started — it must not ship until these rules are deployed to production.
+
+- **Principle:** for any partner-visible state, the **owner writes** their own node and the
+  **reciprocally-linked partner reads** it; everyone else is denied. Read authorization keys
+  off the *owner's own* `partnerUid` (plus the viewer's), so an attacker cannot self-grant by
+  writing their own `partnerUid`.
+- **`firebase.rules.json` changes (candidate):**
+  - New `uid_<uid>/shared` node — owner-write, reciprocal-partner-read, else deny. No client
+    reads/writes it yet; it exists only so the boundary is in place before any payload does.
+  - `uid_<uid>/public` (legacy deep-hours payload) read **tightened** from any authed user to
+    owner + reciprocal partner. Payload and write rule unchanged; the partner card still works.
+  - `uid_<uid>/partnerUid` write **tightened** to owner-only (was any authed user — a pair-hijack
+    vector). `uid_<uid>/nudges` write tightened to the linked partner only (was any authed user).
+  - `pairs/<code>` read restricted to the two participants (was any authed user — a UID
+    directory); write rules make `partner` a one-shot claim and `creator` immutable.
+- **Pairing flow reworked** (`storage.js` `watchPairCode` / `acceptPairClaim` /
+  `rejectPairClaim` / `cancelPairRequest` / `clearPartnerLink`, `index.html` `connectPartner` /
+  `removePair` / `renderPartnerSettings` + a `#partner-pending` panel): each client writes only
+  its **own** `partnerUid`, coordinating through the shared `pairs/<code>` record. No client
+  writes the other user's relationship field.
+  - **F1 — `securePairCode()`:** pair codes come from `crypto.getRandomValues` (rejection
+    sampling, unbiased), never `Math.random()`. Format unchanged: 6× `[0-9A-Z]` (~2.18e9 ≈ 31
+    bits). Throws rather than falling back if no secure RNG exists.
+  - **F2 — explicit creator acceptance:** claiming `pairs/<code>/partner` is only a *request*.
+    The creator sees a pending "Accept / Reject" state and **nothing is written to
+    `uid_<creator>/partnerUid` until they click Accept**; the joiner shows "waiting for
+    approval" and writes its own `partnerUid` only after it sees `pairs/<code>/accepted`
+    (a non-authoritative handshake flag — the rules still gate on the two `partnerUid`s).
+    Reject burns the code and links no one. Pending state survives reload and never
+    auto-accepts. **Rule fix:** the non-creator `pairs/<code>` write clause now also pins
+    `accepted`/`createdAt` unchanged (a claimant could otherwise combine "claim partner" with
+    "set accepted:true" in one write, forging the flag without ever reaching `/shared` or
+    `/public`). Only the creator's own-node clause may set `accepted`. No client change.
+- **Proof:** `firebase-rules.test.js` (pure-JS `targaryen` over the real `firebase.rules.json`
+  — the Java-based Emulator Suite is unavailable here) + `tests/pair-accountability.spec.js`
+  (two-page client handshake: F1 RNG, no-auto-link, Accept convergence with each side writing
+  only its own `partnerUid`, reload-stays-pending).
+- **Deployment:** pending. Rules are a reviewed candidate only — no `firebase deploy` was run.
+  Independent review verdict on the model was PASS; F1/F2 were the two required fixes. Official
+  Firebase-emulator verification remains a separate hard gate before production deploy.
 
 ## Motivation Layer (current inventory; `motivation-pressure-cleanup-v1` outcomes noted inline)
 

@@ -1073,6 +1073,10 @@ function startSync() {
     }
   });
 
+  // Shared Access Hardening V1 — resume watching an outstanding pair code (the
+  // creator side waits here for a partner to join; both sides watch for teardown).
+  watchPairCode();
+
   startSyncDetailAgeTicker();
   updateSyncPill('connected', 'synced');
   Promise.all([syncEntries(), syncFocusRedemptions()]).then(results => {
@@ -1614,6 +1618,35 @@ function publishPublicStats() {
 let _partnerListener = null;
 let _nudgesRef      = null;
 let _partnerUidRef  = null;
+let _pairCodeRef    = null;
+let _pendingPairClaim   = null;  // creator side: uid of someone who claimed our code, awaiting our explicit Accept
+let _pairAwaitingAccept = false; // joiner side: we claimed a code and are waiting for the creator to accept
+
+const PAIR_CODE_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'; // 36 symbols; 6 chars ≈ 31 bits
+
+/**
+ * Shared Access Hardening V1 (F1) — pair codes are generated from the platform's
+ * cryptographically secure RNG (`crypto.getRandomValues`), never `Math.random()`.
+ * Rejection sampling keeps the 36-symbol alphabet unbiased. Format is unchanged:
+ * a 6-character [0-9A-Z] string (~2.18e9 keyspace). Throws if no secure RNG exists;
+ * the pairing code is not a keyspace we are willing to weaken with a fallback.
+ */
+function securePairCode() {
+  const rng = globalThis.crypto;
+  if (!rng || typeof rng.getRandomValues !== 'function') {
+    throw new Error('Secure RNG unavailable — cannot generate a pair code');
+  }
+  const n = PAIR_CODE_ALPHABET.length;
+  const ceiling = 256 - (256 % n); // 252 — discard bytes at/above this to avoid modulo bias
+  const buf = new Uint8Array(1);
+  let out = '';
+  while (out.length < 6) {
+    rng.getRandomValues(buf);
+    if (buf[0] >= ceiling) continue;
+    out += PAIR_CODE_ALPHABET[buf[0] % n];
+  }
+  return out;
+}
 
 /** Removes all active Firebase room listeners. Call before switching rooms or signing out. */
 function teardownRoomListeners() {
@@ -1627,6 +1660,7 @@ function teardownRoomListeners() {
   if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.detach();
   if (_nudgesRef)     { _nudgesRef.off();     _nudgesRef     = null; }
   if (_partnerUidRef) { _partnerUidRef.off(); _partnerUidRef = null; }
+  if (_pairCodeRef)   { _pairCodeRef.off();   _pairCodeRef   = null; }
   if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
 }
 
@@ -1638,6 +1672,144 @@ function initPartnerListener(partnerUid) {
     if (typeof renderPartnerCard === 'function') renderPartnerCard();
     if (typeof renderPartnerSettings === 'function') renderPartnerSettings();
   });
+}
+
+// ── Shared Access Hardening V1 (F2) ─────────────────────────────────────────
+// Neither client ever writes the OTHER user's `partnerUid` (the rules forbid it).
+// Both sides watch the shared `pairs/<code>` record and each writes only its own
+// `uid_<me>/partnerUid` — and ONLY after an explicit human step:
+//   • a joiner claiming `pairs/<code>/partner` does NOT connect anyone. It is a
+//     request. `_pairAwaitingAccept` is shown as "waiting for approval".
+//   • the code creator sees the claim as `_pendingPairClaim` and must click
+//     Accept (acceptPairClaim) before their own `partnerUid` is written. Reject
+//     (rejectPairClaim) burns the code and links no one.
+//   • `pairs/<code>/accepted` is the creator→joiner handshake signal ONLY. It is
+//     not an authorization input — the security rules gate everything on the two
+//     `partnerUid` values, which stay owner-written.
+function watchPairCode() {
+  const code = localStorage.getItem('ta3-pair-code');
+  if (!fbDb || !currentUser || !code) return;
+  if (_pairCodeRef) { _pairCodeRef.off(); _pairCodeRef = null; }
+  _pairCodeRef = fbDb.ref(`pairs/${code}`);
+  _pairCodeRef.on('value', snap => {
+    const pair = snap.val();
+    const myUid = currentUser.uid;
+    const localPartner = localStorage.getItem('ta3-partner-uid');
+
+    if (!pair || !pair.creator) {
+      // The pair record was deleted (creator rejected / disconnected).
+      localStorage.removeItem('ta3-pair-code');
+      if (_pairCodeRef) { _pairCodeRef.off(); _pairCodeRef = null; }
+      _pendingPairClaim = null;
+      _pairAwaitingAccept = false;
+      if (localPartner) clearPartnerLink();
+      else { renderPartnerCardSafe(); renderPartnerSettingsSafe(); }
+      return;
+    }
+
+    if (pair.creator === myUid) {
+      // ── creator side — NEVER auto-links ──
+      if (localPartner && localPartner === pair.partner) { _pendingPairClaim = null; return; } // already accepted
+      if (pair.partner && !pair.accepted) {
+        _pendingPairClaim = pair.partner;              // surface Accept / Reject; write nothing
+        renderPartnerCardSafe(); renderPartnerSettingsSafe();
+      } else if (!pair.partner) {
+        _pendingPairClaim = null;
+        if (localPartner) {
+          // An accepted partner released their slot — retire the code.
+          fbDb.ref(`pairs/${code}`).remove().catch(() => {});
+          localStorage.removeItem('ta3-pair-code');
+          if (_pairCodeRef) { _pairCodeRef.off(); _pairCodeRef = null; }
+          clearPartnerLink();
+        } else {
+          renderPartnerSettingsSafe();
+        }
+      }
+      return;
+    }
+
+    // ── joiner side ──
+    if (pair.partner !== myUid) return; // not our claim
+    if (pair.accepted && localPartner !== pair.creator) {
+      // Creator accepted — now, and only now, commit our own side.
+      _pairAwaitingAccept = false;
+      localStorage.setItem('ta3-partner-uid', pair.creator);
+      fbDb.ref(`uid_${myUid}/partnerUid`).set(pair.creator).catch(() => {});
+      initPartnerListener(pair.creator);
+      renderPartnerCardSafe(); renderPartnerSettingsSafe();
+    } else if (!pair.accepted) {
+      _pairAwaitingAccept = true;
+      renderPartnerSettingsSafe();
+    }
+  });
+}
+
+/** Creator accepts a pending claimant: writes only OUR OWN partnerUid + the handshake flag. */
+function acceptPairClaim() {
+  const code = localStorage.getItem('ta3-pair-code');
+  const claimant = _pendingPairClaim;
+  if (!fbDb || !currentUser || !code || !claimant) return;
+  const myUid = currentUser.uid;
+  fbDb.ref(`pairs/${code}`).once('value').then(snap => {
+    const pair = snap.val();
+    if (!pair || pair.creator !== myUid || pair.partner !== claimant) {
+      _pendingPairClaim = null;
+      renderPartnerSettingsSafe();
+      return;
+    }
+    fbDb.ref(`pairs/${code}/accepted`).set(true).catch(() => {});
+    fbDb.ref(`uid_${myUid}/partnerUid`).set(claimant).catch(() => {});
+    localStorage.setItem('ta3-partner-uid', claimant);
+    _pendingPairClaim = null;
+    initPartnerListener(claimant);
+    renderPartnerCardSafe(); renderPartnerSettingsSafe();
+    if (typeof showToast === 'function') showToast('Partner connected 🤝');
+  }).catch(() => {});
+}
+
+/** Creator rejects a pending claimant: burns the code, links no one. */
+function rejectPairClaim() {
+  const code = localStorage.getItem('ta3-pair-code');
+  _pendingPairClaim = null;
+  if (fbDb && currentUser && code) fbDb.ref(`pairs/${code}`).remove().catch(() => {});
+  localStorage.removeItem('ta3-pair-code');
+  if (_pairCodeRef) { _pairCodeRef.off(); _pairCodeRef = null; }
+  renderPartnerSettingsSafe();
+  if (typeof showToast === 'function') showToast('Request declined');
+}
+
+/** Joiner cancels an outstanding request before the creator has accepted. */
+function cancelPairRequest() {
+  const code = localStorage.getItem('ta3-pair-code');
+  _pairAwaitingAccept = false;
+  if (fbDb && currentUser && code) fbDb.ref(`pairs/${code}/partner`).remove().catch(() => {});
+  localStorage.removeItem('ta3-pair-code');
+  if (_pairCodeRef) { _pairCodeRef.off(); _pairCodeRef = null; }
+  renderPartnerSettingsSafe();
+  if (typeof showToast === 'function') showToast('Request cancelled');
+}
+
+function renderPartnerCardSafe()     { if (typeof renderPartnerCard === 'function') renderPartnerCard(); }
+function renderPartnerSettingsSafe() { if (typeof renderPartnerSettings === 'function') renderPartnerSettings(); }
+
+/** Clears only THIS user's side of a partner link (local state + own `partnerUid`). */
+function clearPartnerLink() {
+  if (fbDb && currentUser) fbDb.ref(`uid_${currentUser.uid}/partnerUid`).remove().catch(() => {});
+  localStorage.removeItem('ta3-partner-uid');
+  partnerData = null;
+  _pendingPairClaim = null;
+  _pairAwaitingAccept = false;
+  if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
+  renderPartnerCardSafe(); renderPartnerSettingsSafe();
+}
+
+/** Full local teardown of the partner/pair listeners — used by removePair(). */
+function teardownPartnerLink() {
+  if (_pairCodeRef)     { _pairCodeRef.off();     _pairCodeRef     = null; }
+  if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
+  partnerData = null;
+  _pendingPairClaim = null;
+  _pairAwaitingAccept = false;
 }
 
 function syncIntention(val) {
