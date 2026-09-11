@@ -2976,6 +2976,36 @@ test('scheduled Ledger evidence is excluded from current capability proof withou
     assert.equal(JSON.stringify({ profile, event }), before);
   }
 });
+// Time Truth V1 ────────────────────────────────────────────────────────────
+test('native PC-Time / Screen-Time context is tagged computer_session, not generic quick_log', () => {
+  const pcTime = adapterDraft({ activity: 'PC Time', autoLogged: true, quickLogged: true, energy: 'shallow' });
+  assert.equal(pcTime.payload.captureMethod, 'computer_session');
+  assert.equal(pcTime.provenance.captureMethod, 'computer_session');
+  const screenTime = adapterDraft({ activity: 'Screen Time', autoLogged: true, quickLogged: true, energy: 'shallow' });
+  assert.equal(screenTime.payload.captureMethod, 'computer_session');
+  // A real manual quick-log (no autoLogged, not named PC time/Screen time) is unaffected.
+  const manualQuickLog = adapterDraft({ activity: 'Client call', quickLogged: true, autoLogged: false });
+  assert.equal(manualQuickLog.payload.captureMethod, 'quick_log');
+});
+test('unverified-presence Ledger evidence (browser/phone/computer-session) is excluded from current capability proof', () => {
+  const cases = [
+    { label: 'browser_usage', entryOverrides: { source: 'browser-extension' } },
+    { label: 'phone_usage', entryOverrides: { phoneUsage: true } },
+    { label: 'computer_session', entryOverrides: { activity: 'PC Time', autoLogged: true, quickLogged: true } }
+  ];
+  for (const { label, entryOverrides } of cases) {
+    let profile = seededCapabilityProfile();
+    profile = addCcEvidence(profile, `e-${label}`, 'skill-js', 'execution', CC_TIME.recent, {
+      source: 'life-ledger', lifeLedgerEventId: `${label}-event`
+    });
+    const draft = adapterDraft(entryOverrides);
+    const event = { ...structuredClone(draft), eventId: `${label}-event` };
+    const analysis = analyzeCapabilityCareer(profile, { now: CC_TIME.now, lifeLedgerEvents: [event] });
+    assert.equal(analysis.currentEvidenceCount, 0, label);
+    assert.equal(analysis.dimensionTotals.execution, 0, label);
+    assert.equal(analysis.excludedEvidence[0].reason, 'life-ledger-unverified-presence', label);
+  }
+});
 
 test('user assertions and timer Ledger evidence still support explicit capability mappings', () => {
   for (const overrides of [{}, { retro: true }, { quickLogged: true }]) {

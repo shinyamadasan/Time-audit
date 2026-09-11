@@ -2571,8 +2571,15 @@ function startPCTimeLive() {
     }
     const now = Date.now();
     const tsStart = blockStartTime || (now - totalSecs * 1000);
-    const lastEntry = entries.find(e => !e.missed && !e.deleted && !e.break && !e.away && !e.browserUsage);
-    const energy = lastEntry?.energy || 'deep';
+    // Time Truth V1: this ticker only proves "the app's own timer, named 'PC time',
+    // is still running" — it has no idle/lock/activity signal, so it cannot confirm
+    // deep work, waste, or any other purpose. Previously it inherited whatever energy
+    // was last logged elsewhere (or defaulted to 'deep'), which let an unrelated
+    // confirmed entry quietly launder this unconfirmed one into "deep work." Use a
+    // fixed, non-claiming value instead — never inherited, never 'deep' by default.
+    // (isComputerSessionEntry() already excludes this from all confirmed analytics
+    // regardless of which energy value is stored here.)
+    const energy = 'shallow';
     autoLogBlock('PC Time', energy, tsStart, now);
   }, 60000);
 }
@@ -3941,9 +3948,15 @@ function computeGaps(todayEntries, dayNow) {
   // Work day hasn't started yet — nothing to show
   if (now < workStart) return [];
 
-  // Entries with known start+end, not missed placeholders
+  // Entries with known start+end, not missed placeholders. Unverified-presence
+  // entries (passive browser/phone observation, the native PC-Time ticker) are
+  // excluded here — Time Truth V1: none of them have an idle/lock/sleep signal, so
+  // they cannot prove continuous presence. Treating them as solid coverage would
+  // falsely claim a gap is "fully accounted for" when the machine may have been
+  // idle or asleep. They still exist and still count toward raw duration totals —
+  // this only affects whether they can close a gap.
   const covered = todayEntries
-    .filter(e => e.tsStart && e.ts && !e.missed)
+    .filter(e => e.tsStart && e.ts && !e.missed && !isUnverifiedPresenceEntry(e))
     .sort((a, b) => a.tsStart - b.tsStart);
 
   // Merge overlapping coverage segments
@@ -4158,6 +4171,20 @@ function renderEntryRow(item) {
   const label = item.missed ? 'Untracked' : (eLabel[item.energy] || item.energy);
   const displayActivity = item.missed ? 'Untracked' : activityDisplayLabel(item.activity);
   const activityKey = activityGroupKey(item.activity);
+  // Time Truth V1: mark passive/computer-session blocks as lower-authority so the
+  // user never reads "ChronaSense knows I worked N hours" from unverified presence.
+  // Fix-first (independent review): OBSERVED and TIMER are not interchangeable —
+  // OBSERVED is reserved for genuine device/site telemetry (isPassiveObservationEntry);
+  // the native PC-Time ticker (isComputerSessionEntry) has no idle/lock/activity
+  // signal at all, so it's labeled TIMER instead, never "observed."
+  const unverifiedTagLabel = item.missed ? null
+    : isComputerSessionEntry(item) ? 'TIMER'
+    : isPassiveObservationEntry(item) ? 'OBSERVED'
+    : null;
+  const unverifiedTag = tag => tag
+    ? `<span style="font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.03em;opacity:0.75;margin-left:4px">${tag}</span>`
+    : '';
+  const observedTag = unverifiedTag(unverifiedTagLabel);
   const actColor = item.missed ? null : getActivityColor(displayActivity);
   const barStyle = actColor ? `style="background:${actColor}"` : '';
   const badgeStyle = actColor ? `style="background:${actColor}22;color:${actColor};border-radius:4px"` : '';
@@ -4204,11 +4231,15 @@ function renderEntryRow(item) {
       const rClick    = subActivity
         ? `openEditEntry(${entryIdJsArg(subs.find(s => s.activity === subActivity && (s.tsStart||s.ts) === tStart)?.id || item.id)})`
         : editCall;
+      // A named sub-activity is a genuine browser observation (OBSERVED); an
+      // unnamed segment is still the PC-Time container itself — the running
+      // timer, not anything observed (TIMER).
+      const rTag = unverifiedTag(subActivity ? 'OBSERVED' : 'TIMER');
       return `<div class="tl-row" data-entry-id="${item.id}" data-activity-key="${attr(subActivity ? activityGroupKey(subActivity) : activityKey)}" data-energy="${energyClass}" onclick="${rClick}" style="cursor:pointer">
         <div class="tl-time">${localTime(tStart)}</div>
         <div class="tl-bar-col ${rClass}" ${rBarStyle}></div>
         <div class="tl-content">
-          <div class="tl-activity">${rLabel}<span class="tl-badge ${rColor ? '' : energyClass}" ${rColor ? `style="background:${rColor}22;color:${rColor};border-radius:4px"` : badgeStyle}>${label}</span></div>
+          <div class="tl-activity">${rLabel}<span class="tl-badge ${rColor ? '' : energyClass}" ${rColor ? `style="background:${rColor}22;color:${rColor};border-radius:4px"` : badgeStyle}>${label}</span>${rTag}</div>
           <div class="tl-meta">${localTime(tStart)} – ${localTime(tEnd)} · ${fmtDur(rDur)}</div>
         </div>
         <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
@@ -4238,7 +4269,7 @@ function renderEntryRow(item) {
     <div class="tl-time">${localTime(item.tsStart || item.ts)}</div>
     <div class="tl-bar-col ${actColor ? '' : energyClass}" ${barStyle}></div>
     <div class="tl-content">
-      <div class="tl-activity">${esc(displayActivity)}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span>${mergeTag}</div>
+      <div class="tl-activity">${esc(displayActivity)}<span class="tl-badge ${actColor ? '' : energyClass}" ${badgeStyle}>${label}</span>${mergeTag}${observedTag}</div>
       <div class="tl-meta">${timeLabel} · ${fmtDur(dur)}${projectPill}${contextPill}</div>
     </div>
     <span style="font-size:13px;color:var(--muted);padding:4px 6px;opacity:0.5;flex-shrink:0">✎</span>
@@ -4820,7 +4851,7 @@ function openReviewFirstGap() {
 //   PAST DAY          : daily summary only
 function applyContextualVisibility(todayE) {
   const isToday = isViewingToday();
-  const nowH = new Date().getHours();
+  const nowH = tzHour(Date.now()); // account timezone, not device-local (Time Truth V1)
   const viewKey = getViewingDateKey();
   const nonMissed = todayE.filter(e => !e.missed && !e.deleted);
   const entryCount = nonMissed.length;
@@ -6290,6 +6321,18 @@ function parsePlanItemTime(when) {
   return PLAN_TIME_RE.test(trimmed) ? trimmed : null;
 }
 
+/** Time Truth V1: a planned `when` is always interpreted in the account timezone
+ *  (settings.timezone), never the current device's. Most users' device timezone
+ *  matches their account timezone, so this stays silent then; it only speaks up
+ *  when they differ, since that's the one case someone could misread a plan time
+ *  as device-local. @returns {string} HTML, or '' when there's nothing to clarify */
+function planTimezoneHintHTML() {
+  const accountTz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (accountTz === deviceTz) return '';
+  return `<div class="plan-tz-hint" style="font-size:10px;color:var(--muted);margin-top:2px">Times use ${accountTz.split('/').pop().replace(/_/g,' ')} time (this device is on ${deviceTz.split('/').pop().replace(/_/g,' ')})</div>`;
+}
+
 /** Among not-done candidates, an item with zero tracked minutes outranks one that's already been
  *  worked on — preserves the pre-linkage fallback's deliberate unworked-before-worked-on
  *  preference (a due/next timed item must not get stuck on something already in progress just
@@ -6415,7 +6458,7 @@ function renderTodayPlan() {
           <input id="plan-task" class="plan-input task" maxlength="80" placeholder="what will you do?"
                  onkeydown="if(event.key==='Enter')addPlanItem()">
           <button class="btn sm" onclick="addPlanItem()">Add</button>
-        </div>`;
+        </div>${planTimezoneHintHTML()}`;
   }
 
   el.innerHTML = head + rows + `<div class="plan-editor">${footer}</div>`;
@@ -7034,7 +7077,10 @@ function renderUnloggedHours(el, days) {
     const availableMins = isToday
       ? Math.max(0, Math.round((now - dayStartTs) / 60000))
       : 24 * 60;
-    const loggedMins = sumEntryMinutes(d.entries, e => !e.deleted, d.key);
+    // Unverified-presence entries (passive browser/phone observation, PC-Time ticker)
+    // don't count toward "logged" here — this widget claims specific hours are
+    // accounted for, and unverified evidence can't back that claim (Time Truth V1).
+    const loggedMins = sumEntryMinutes(d.entries, e => !e.deleted && !isUnverifiedPresenceEntry(e), d.key);
     const unloggedMins = Math.max(0, availableMins - loggedMins);
     return { key: d.key, label: d.label, unloggedMins, availableMins, idx };
   });
@@ -7112,7 +7158,10 @@ function weekShareUnloggedMinutes(days) {
     try { dayStartTs = tzParseTime(d.key, '00:00'); }
     catch(e) { dayStartTs = new Date(d.key + 'T00:00:00').getTime(); }
     const availableMins = isToday ? Math.max(0, Math.round((now - dayStartTs) / 60000)) : 24 * 60;
-    const loggedMins = sumEntryMinutes(d.entries, e => !e.deleted, d.key);
+    // Unverified-presence entries (passive browser/phone observation, PC-Time ticker)
+    // don't count toward "logged" here — this widget claims specific hours are
+    // accounted for, and unverified evidence can't back that claim (Time Truth V1).
+    const loggedMins = sumEntryMinutes(d.entries, e => !e.deleted && !isUnverifiedPresenceEntry(e), d.key);
     return sum + Math.max(0, availableMins - loggedMins);
   }, 0);
 }
@@ -8512,9 +8561,8 @@ function renderStreakCalendar() {
 function renderHonestSummary() {
   const el = document.getElementById('reflect-honest');
   if (!el) return;
-  const now = new Date();
-  const thisWeekKey = getWeekKey(now);
-  const lastWeekKey = getWeekKey(new Date(now.getTime() - 7 * 86400000));
+  const thisWeekKey = weekKeyOffsetFromToday(0);
+  const lastWeekKey = weekKeyOffsetFromToday(-1);
   const ins = computeInsights(thisWeekKey);
   const last = computeInsights(lastWeekKey);
 
@@ -8651,9 +8699,8 @@ function renderFocusHeatmap() {
 function renderWeekComparison() {
   const el = document.getElementById('reflect-week-compare');
   if (!el) return;
-  const now = new Date();
-  const thisWeekKey = getWeekKey(now);
-  const lastWeekKey = getWeekKey(new Date(now.getTime() - 7 * 86400000));
+  const thisWeekKey = weekKeyOffsetFromToday(0);
+  const lastWeekKey = weekKeyOffsetFromToday(-1);
   const ins = computeInsights(thisWeekKey);
   const last = computeInsights(lastWeekKey);
 
@@ -8733,8 +8780,7 @@ function renderProjectBreakdown() {
 }
 
 function renderReflectView() {
-  const now = new Date();
-  const weekKey = getWeekKey(now);
+  const weekKey = weekKeyOffsetFromToday(0);
 
   // ── New sections ──
   renderHonestSummary();
@@ -8794,7 +8840,7 @@ function renderReflectView() {
   }
 
   // ── Pre-fill plan form (next week's key) ──
-  const nextWeekKey = getWeekKey(new Date(now.getTime() + 7 * 86400000));
+  const nextWeekKey = weekKeyOffsetFromToday(1);
   const wp = (weeklyReviews[nextWeekKey] || {}).plan || {};
   document.getElementById('wp-p1').value = wp.p1 || '';
   document.getElementById('wp-p2').value = wp.p2 || '';
@@ -8869,7 +8915,7 @@ function renderDailyReflections() {
 }
 
 function saveWeeklyReview() {
-  const weekKey = getWeekKey(new Date());
+  const weekKey = weekKeyOffsetFromToday(0);
   if (!weeklyReviews[weekKey]) weeklyReviews[weekKey] = {};
   weeklyReviews[weekKey].overall  = document.getElementById('wr-overall').value.trim();
   weeklyReviews[weekKey].drain    = document.getElementById('wr-drain').value.trim();
@@ -8888,8 +8934,7 @@ function saveWeeklyReview() {
 }
 
 function saveWeeklyPlan() {
-  const now = new Date();
-  const nextWeekKey = getWeekKey(new Date(now.getTime() + 7 * 86400000));
+  const nextWeekKey = weekKeyOffsetFromToday(1);
   if (!weeklyReviews[nextWeekKey]) weeklyReviews[nextWeekKey] = {};
   weeklyReviews[nextWeekKey].plan = {
     p1:       document.getElementById('wp-p1').value.trim(),
@@ -8912,12 +8957,11 @@ function saveWeeklyPlan() {
 function renderReflectHistory() {
   const histEl = document.getElementById('reflect-history');
   const weekSet = new Set();
-  const now = new Date();
-  for (let i = 0; i < 12; i++) weekSet.add(getWeekKey(new Date(now - i * 7 * 86400000)));
+  for (let i = 0; i < 12; i++) weekSet.add(weekKeyOffsetFromToday(-i));
   Object.keys(weeklyReviews).forEach(k => weekSet.add(k));
 
   const weeks = Array.from(weekSet).sort().reverse().slice(0, 12);
-  const currentWeek = getWeekKey(now);
+  const currentWeek = weekKeyOffsetFromToday(0);
 
   const cards = weeks.map(wk => {
     const wr = weeklyReviews[wk] || {};
@@ -10298,9 +10342,15 @@ function clearSelectedDay(){
 }
 
 function clearTodayOnly(){
-  const todayKey = toDateKey(new Date());
-  const todayIds = new Set(entries.filter(e=>e.date===todayKey).map(e=>'e_'+e.id));
-  entries = entries.filter(e=>e.date!==todayKey);
+  // Time Truth V1 fix-first: derive "today" from the absolute timestamp in the account
+  // timezone, same as clearSelectedDay() — never trust the raw stored e.date field,
+  // which may have been written under a different/fallback timezone (see getDateInTZ's
+  // own doc comment in storage.js).
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const isToday = e => getDateInTZ(e.tsStart || e.ts, tz) === todayKey;
+  const todayIds = new Set(entries.filter(isToday).map(e=>'e_'+e.id));
+  entries = entries.filter(e=>!isToday(e));
   persist();
   renderToday();
   // Remove only today's entries from Firebase

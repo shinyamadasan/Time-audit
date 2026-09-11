@@ -13,7 +13,8 @@ const {
   isPassiveObservationEntry,
   isScheduledAssumptionEntry,
   isComputerSessionEntry,
-  hasConfirmedEnergyClassification
+  hasConfirmedEnergyClassification,
+  isUnverifiedPresenceEntry
 } = globalThis;
 
 test('passive browser / phone observations are recognised', () => {
@@ -65,5 +66,25 @@ test('a user who reclassified a passive entry (flag dropped) is treated as confi
 test('non-entries are never confirmed', () => {
   for (const junk of [null, undefined, 0, '', 'x', []]) {
     assert.equal(hasConfirmedEnergyClassification(junk), false);
+  }
+});
+
+// Time Truth V1 — passive observation and computer-session context share a limitation
+// neither has an idle/lock signal, so neither can prove continuous presence. Consumers
+// that claim "this span is accounted for" (gap-closing, unlogged-hours totals) use this
+// combined predicate; duration totals may still count them (see index.html comments).
+test('isUnverifiedPresenceEntry: true for passive observation OR computer-session context, false otherwise', () => {
+  assert.equal(isUnverifiedPresenceEntry({ energy: 'waste', browserUsage: true }), true);
+  assert.equal(isUnverifiedPresenceEntry({ energy: 'waste', phoneUsage: true }), true);
+  assert.equal(isUnverifiedPresenceEntry({ activity: 'PC Time', energy: 'shallow', autoLogged: true, quickLogged: true }), true);
+  assert.equal(isUnverifiedPresenceEntry({ activity: 'Screen Time', energy: 'shallow', autoLogged: true }), true);
+  // Confirmed evidence stays confirmed.
+  assert.equal(isUnverifiedPresenceEntry({ energy: 'deep', activity: 'Write the RFC', retro: true }), false);
+  assert.equal(isUnverifiedPresenceEntry({ energy: 'deep', activity: 'Focus: RFC' }), false);
+  // A schedule assumption alone (no passive/computer-session marker) is a different
+  // uncertainty class and is intentionally NOT included here.
+  assert.equal(isUnverifiedPresenceEntry({ energy: 'deep', scheduledAutoLog: true }), false);
+  for (const junk of [null, undefined, 0, '', 'x', []]) {
+    assert.equal(isUnverifiedPresenceEntry(junk), false);
   }
 });

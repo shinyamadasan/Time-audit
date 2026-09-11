@@ -197,11 +197,29 @@ function categoryFor(entry) {
   return bucketForChronaSenseEntry(entry);
 }
 
+// Time Truth V1: the native "PC Time" ticker (index.html's autoLogBlock, `autoLogged:
+// true, quickLogged: true`) previously fell through to generic 'quick_log' here —
+// indistinguishable from a real manual quick-log. Inlined (not imported) to match the
+// dependency-free pattern attention-signals.js already uses for this same predicate;
+// this module is an ES module consumed in constrained contexts (tests, the app) that
+// don't all load evidence-interpretation.js first.
+function isComputerSessionContext(entry) {
+  if (entry.browserUsage === true) return false;
+  if (!(entry.autoLogged === true || entry.quickLogged === true)) return false;
+  const base = String(entry.activity || '')
+    .split(' (Output:')[0]
+    .split(' · ')[0]
+    .trim()
+    .toLowerCase();
+  return base === 'pc time' || base === 'screen time';
+}
+
 function captureMethodFor(entry) {
   if (entry.browserUsage || entry.source === 'browser-extension') return 'browser_usage';
   if (entry.phoneUsage) return 'phone_usage';
   if (entry.scheduledAutoLog) return 'scheduled_template';
   if (entry.walletReward) return 'reward_log';
+  if (isComputerSessionContext(entry)) return 'computer_session';
   if (entry.retro) return 'retro_log';
   if (entry.quickLogged) return 'quick_log';
   return 'timer';

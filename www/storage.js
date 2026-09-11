@@ -9,7 +9,7 @@
 //   ticker, taskStartTime, currentTask, breakActive, breakEndsAt,
 //   breakTicker, breakStartTs,
 //   renderToday(), renderWeek(), showToast(), showHeroState(), updateRing(),
-//   updateLiveCost(), doPing(), _updateBreakDisplay(), endBreak()
+//   updateLiveCost(), doPing(), _updateBreakDisplay(), endBreak(), _dateKeyPlusDays()
 // ══════════════════════════════════════════════════════
 
 // ── App config ──
@@ -254,12 +254,34 @@ function getWeekDays(offset=0) {
 }
 
 function getWeekKey(d) {
-  // Returns e.g. "2026-W15"
-  const jan4 = new Date(d.getFullYear(), 0, 4);
+  // Returns e.g. "2026-W15". Uses UTC getters, never device-local ones — callers
+  // are expected to pass a noon-UTC Date built from an account-timezone dateKey
+  // (see currentWeekKey()/getEntriesForWeekKey()), so device OS timezone can never
+  // shift which calendar day (and therefore which week) this resolves to.
+  const jan4 = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
   const startOfW1 = new Date(jan4);
-  startOfW1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+  startOfW1.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() + 6) % 7));
   const weekNum = Math.floor((d - startOfW1) / 604800000) + 1;
-  return `${d.getFullYear()}-W${String(weekNum).padStart(2,'0')}`;
+  return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2,'0')}`;
+}
+
+/** @returns {string} the ISO week key ("2026-W15") for "today" in the account timezone */
+function currentWeekKey() {
+  return weekKeyOffsetFromToday(0);
+}
+
+/**
+ * ISO week key for "today plus N weeks" (negative for past weeks), resolved in the
+ * account timezone. Never uses raw ±7-day arithmetic on a device-local `Date` — that
+ * silently re-adopts device-local day boundaries, the exact bug this helper replaces.
+ * @param {number} weeksOffset
+ * @returns {string}
+ */
+function weekKeyOffsetFromToday(weeksOffset) {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const shiftedKey = _dateKeyPlusDays(todayKey, weeksOffset * 7);
+  return getWeekKey(new Date(shiftedKey + 'T12:00:00Z'));
 }
 
 function getEntriesForWeekKey(weekKey) {

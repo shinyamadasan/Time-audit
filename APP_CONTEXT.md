@@ -379,3 +379,74 @@ For product/context work:
 ## Phase 6 — Daily Operating Loop V1 (review candidate, 2026-09-07)
 
 Today now derives reusable routines with exact, window, context, and anytime cues. Intentions never auto-log facts. Local routine state reuses existing Learning, Focus, and Ledger completion boundaries. Workout requires an explicit stable routine link and a unique fact with agreeing source/start date; otherwise use existing Manual completion. Learning binds only Next Step, never a completed fact; streaks require current scheduled occurrences. No live ingestion was added. [Model, limits, friction audit, and chaos evidence](docs/DAILY_OPERATING_LOOP_V1.md). Not merged or deployed.
+
+## Time Truth V1 (review candidate, 2026-09-11)
+
+**Canonical rule:** `absolute instant + account timezone → ChronaSense dateKey`. Device
+OS timezone is provenance only — it never decides Today, Timeline, Plan Tomorrow,
+Review, daily totals, gap reconciliation, passive-evidence dateKeys, or Life Ledger
+date assignment. A work PC on `America/Phoenix` and a phone on `Asia/Manila` must
+produce the same day assignment for the same instant, based on the account's
+`settings.timezone` (already-existing, IANA string, synced across devices via
+`localStorage['ta3-tz']` + `rooms/<roomCode>/settings.timezone`).
+
+Rediscovery found this architecture largely already correct: `storage.js`'s
+`getDateInTZ(ts, tz)`/`toDateKey(d)` were already the canonical, `settings.timezone`-
+aware dateKey derivation, consistently used by Today/Timeline/Review/Plan Tomorrow/
+phone-usage import, and `sumEntryMinutes()`/`clipEntryToDateForDisplay()` already
+correctly clip cross-midnight intervals at the account-timezone day boundary. Plan item
+`when` was already interpreted in the account timezone via `tzParseTime()`, never
+device-local. This milestone closed the real remaining gaps:
+
+- **`getWeekKey()`** used raw device-local `Date` getters — fixed to use UTC getters
+  plus a new `weekKeyOffsetFromToday(n)` helper that resolves "today" via the account
+  timezone first (`storage.js`). Reflect/Weekly-Review week selection now matches
+  Today/Timeline's account-timezone authority.
+- **Browser extension timezone bootstrap**: `signIn()` now `await`s
+  `fetchUserTimezone()` before `startTracking()` (previously fired-and-forgotten,
+  racing the first flush); `init()` now best-effort re-fetches on every service-worker
+  wake so a later timezone change in the web app eventually reaches the extension
+  without requiring re-sign-in. A `userTimezoneConfirmed` flag and per-entry
+  `tzConfirmed` marker distinguish "fetched from the account" from "device/cached
+  fallback" as honest provenance (`browser-extension/background.js`).
+- **Browser extension idle/sleep**: added `chrome.idle` (5-minute threshold — see
+  `IDLE_THRESHOLD_SECONDS`), a `lastHeartbeat` cap, and gap detection on
+  service-worker restart. Idle/locked state, an idle periodic-alarm check, and a long
+  unobserved gap all close the session at the last confirmed-active heartbeat instead
+  of bridging it forward as continuous browsing.
+- **Native "PC Time" ticker**: no longer inherits `lastEntry?.energy || 'deep'` — uses
+  a fixed `'shallow'` value, never claiming confirmed deep work or waste
+  (`startPCTimeLive()` in `index.html`). It was already excluded from confirmed
+  analytics (`isComputerSessionEntry()`); this milestone additionally excludes
+  unverified-presence entries (passive browser/phone observation OR PC-Time context —
+  see `isUnverifiedPresenceEntry()` in `evidence-interpretation.js`) from **gap-closing**
+  (`computeGaps()`) and the unlogged-hours widget (`renderUnloggedHours()`), so a period
+  covered only by unconfirmed evidence still reads as an honest gap rather than "fully
+  accounted for." Raw duration totals still count them, unchanged.
+- **Downstream containment**: `chronasense-life-ledger-adapter.js` now tags native
+  PC-Time/Screen-Time context as `captureMethod: 'computer_session'` (previously
+  indistinguishable from a real manual `quick_log`); `capability-career-analytics.js`'s
+  `currentEvidenceScope()` now excludes `browser_usage`/`phone_usage`/
+  `computer_session` captureMethods from confirmed capability/career evidence, not just
+  `scheduled_template`.
+- **Timeline presentation**: passive/computer-session rows carry a small label so an
+  uncertain block doesn't read as identical to a confirmed one — but the two are not
+  the same claim: genuine device/site telemetry (`isPassiveObservationEntry`) shows
+  "OBSERVED"; the native PC-Time ticker (`isComputerSessionEntry`, no idle/lock/
+  activity signal at all) shows "TIMER" instead, never "observed" (fix-first, per
+  independent review).
+- **`clearTodayOnly()`** now derives "today" from `getDateInTZ(e.tsStart || e.ts, tz)`,
+  the same account-timezone-safe pattern `clearSelectedDay()` already used, instead of
+  trusting the raw stored `e.date` field (fix-first, per independent review — a
+  destructive action that could otherwise skip or wrongly delete entries whose stored
+  `.date` disagreed with their true account-timezone day).
+- **Planning UX**: `planTimezoneHintHTML()` shows "Times use `<Zone>` time (this
+  device is on `<OtherZone>`)" near the plan-add input, only when device timezone
+  differs from the account timezone.
+
+No custom life-day boundary (still midnight in the account timezone). No historical
+data rewritten — new semantics apply prospectively only. Firebase security rules,
+Shared Access architecture, and Wife/Shared were not touched. See
+`time-truth-timezone.test.js`, `time-truth-pc-time.test.js`, and
+`browser-extension/time-truth-idle.test.js` for the new focused coverage. Branch
+`feat/time-truth-v1`, uncommitted, unpushed, pending independent review.

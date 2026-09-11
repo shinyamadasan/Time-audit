@@ -65,6 +65,15 @@ function lifeLedgerEventMap(options = {}) {
   return new Map(events.map(event => [event.eventId, event]));
 }
 
+// Time Truth V1: previously only 'scheduled_template' was excluded here, so a Life
+// Ledger event captured from passive browser/phone observation or the native PC-Time
+// ticker (captureMethod 'browser_usage' / 'phone_usage' / 'computer_session' — see
+// chronasense-life-ledger-adapter.js's captureMethodFor()) could still count as
+// confirmed capability/career evidence downstream, even though the main app's own
+// evidence-interpretation.js already treats all three the same way. This closes that
+// gap using the Ledger's existing captureMethod provenance, not a new score system.
+const UNCONFIRMED_LIFE_LEDGER_CAPTURE_METHODS = new Set(['browser_usage', 'phone_usage', 'computer_session']);
+
 function currentEvidenceScope(profile, now, options = {}) {
   const ledgerEvents = lifeLedgerEventMap(options);
   const current = [];
@@ -75,10 +84,11 @@ function currentEvidenceScope(profile, now, options = {}) {
     if (!Number.isFinite(observedMs) || observedMs > now) reason = 'future';
     if (!reason && evidence.source === 'life-ledger') {
       const event = ledgerEvents.get(evidence.lifeLedgerEventId);
+      const captureMethod = event?.payload?.captureMethod || event?.provenance?.captureMethod;
       if (!event) reason = 'life-ledger-unavailable';
       else if (event.tombstone?.active) reason = 'life-ledger-tombstoned';
-      else if (event.payload?.captureMethod === 'scheduled_template'
-        || event.provenance?.captureMethod === 'scheduled_template') reason = 'life-ledger-schedule-assumption';
+      else if (captureMethod === 'scheduled_template') reason = 'life-ledger-schedule-assumption';
+      else if (UNCONFIRMED_LIFE_LEDGER_CAPTURE_METHODS.has(captureMethod)) reason = 'life-ledger-unverified-presence';
     }
     if (reason) excluded.push({ evidence, reason });
     else current.push(evidence);
