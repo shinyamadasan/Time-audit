@@ -1,5 +1,76 @@
 # ChronaSense — Changelog
 
+## Shared Access Hardening V1 (feat/shared-accountability-v1, candidate, uncommitted, NOT deployed) — 2026-09-10
+
+Prerequisite security milestone for a future Wife/Shared Accountability feature. That feature —
+letting a linked partner see today's planned priority titles and progress — was correctly
+stopped at a privacy gate: the only shared read path (`uid_<uid>/public`) was readable by *any*
+authenticated user, `uid_<uid>/partnerUid` was writable by any authenticated user, and
+`pairs/<code>` exposed both partner UIDs to any authenticated user. Human-readable task titles
+could not have acceptable confidentiality on that model. This milestone fixes the authorization
+layer first; the Wife/Shared feature stays blocked and unbuilt until these rules are deployed.
+
+**Outcome:** for any partner-visible state the **owner writes** and the **reciprocally-linked
+partner reads** — everyone else is denied, and an attacker cannot self-grant access by writing
+their own `partnerUid`.
+
+**`firebase.rules.json` (reviewed candidate — no `firebase deploy` run):**
+- New `uid_<uid>/shared` node: owner-write, reciprocal-partner-read, else deny. Reserved for the
+  future feature; no client code reads or writes it yet.
+- `uid_<uid>/public` read tightened from `auth != null` to owner + reciprocal partner (write
+  rule and the deep-hours payload unchanged — the partner card still renders).
+- `uid_<uid>/partnerUid` write tightened to owner-only (was `auth != null`).
+- `uid_<uid>/nudges` write tightened to the linked partner only (was `auth != null`).
+- `pairs/<code>` read restricted to its two participants (was `auth != null` — a UID
+  directory); write rules make `partner` a one-shot claim and `creator`/`createdAt` immutable.
+
+**Pairing flow reworked so no client writes another user's relationship field.** The code
+creator and joiner coordinate through the shared `pairs/<code>` record and each writes only its
+own `uid_<me>/partnerUid`. `connectPartner()` claims the open `partner` slot first (the record
+is not readable until you are a participant); `removePair()` clears only its own side.
+Reciprocal linking, one-sided disconnect, and multi-device pickup all still work.
+
+**Targeted fixes from the first independent security review** (model PASSED; two bounded
+join-path defects to fix):
+- **F1 — cryptographic pair codes.** New `securePairCode()` (`storage.js`) generates the code
+  from `crypto.getRandomValues` with rejection sampling, never `Math.random()`. Format
+  unchanged: 6× `[0-9A-Z]` (~2.18e9 keyspace ≈ 31 bits). No secure RNG → throw, never a
+  silent fallback. No new dependency.
+- **F2 — explicit creator acceptance.** Claiming `pairs/<code>/partner` is now only a
+  *request*. `watchPairCode()` no longer auto-links the creator; it surfaces a pending
+  "Accept / Reject" panel (`#partner-pending`) and **writes nothing to
+  `uid_<creator>/partnerUid` until the creator clicks Accept** (`acceptPairClaim()`). The
+  joiner shows "waiting for approval" and writes its own `partnerUid` only after observing
+  `pairs/<code>/accepted` — a non-authoritative handshake flag the joiner cannot forge (rules
+  still gate on the two `partnerUid` values). Reject (`rejectPairClaim()`) burns the code and
+  links no one; Cancel (`cancelPairRequest()`) releases the joiner's claim. Pending state
+  survives reload and never auto-accepts on any path (initial listener, reload, reconnect).
+  This closes the "guessed/obtained code → automatic relationship" window from the review.
+  **Rule fix (second re-review):** the non-creator `pairs/<code>` write clause pinned
+  `creator` unchanged but not `accepted`/`createdAt`, so a claimant could send one combined
+  write that both claimed `partner` and set `accepted:true`, suppressing the creator's Accept
+  prompt (no `/shared`/`/public` access followed, but it broke the consent contract).
+  `firebase.rules.json` now pins `accepted` and `createdAt` unchanged on every non-creator
+  transition; only the creator's own-node write clause may still set `accepted`. No client
+  code changed. Correction to the prior claim that "the joiner cannot forge `accepted`" — true
+  for a single-field write, not for a combined one; this closes that gap.
+
+**Proof:**
+- `firebase-rules.test.js` — 13 tests / ~55 assertions via `targaryen` (pure-JS RTDB rules
+  interpreter; the Java Emulator Suite is unavailable here — no JDK, no Firebase CLI), incl.
+  F2: joiner cannot forge `accepted`, and a claim + `accepted` flag alone grants no read.
+- `tests/pair-accountability.spec.js` — two-page (Alice + Bob) client handshake over a shared
+  in-memory RTDB: F1 RNG (crypto-backed, `Math.random` poisoned, throws without crypto),
+  claim does not auto-link, Reject leaves zero `partnerUid` writes, Accept converges with each
+  side writing only its own `partnerUid`, pending state survives a creator reload.
+- `npm test` 662/662 · `npx playwright test` 440/440 · `runtime-mirror --check` OK ·
+  `npm run lint` 0 errors. Added `targaryen` devDependency + `test:firebase-rules`.
+
+**Not done / deferred:** no production Firebase write, no `firebase deploy`, no Wife/Shared
+feature code, no `/shared` payload, no schema migration. **Pair-code TTL** is explicitly
+deferred (the reviewer classified it safe-to-defer once F1 + F2 land). Official
+Firebase-emulator verification remains a separate hard gate before deployment.
+
 ## Motivation Pressure Cleanup V1 (feat/motivation-pressure-cleanup-v1, candidate, uncommitted) — 2026-09-10
 
 `today-simplification-v1` already CSS-hid the wallet card, streak tile, "Today's pulse" score
