@@ -401,3 +401,239 @@ test('clearTodayOnly: an entry whose stale .date says yesterday but whose timest
   });
   expect(result.remaining).toBe(0);
 });
+
+// ════════════════════════════════════════════════════════════════════════
+// Timeline Truth Follow-up V1 — three dogfood gaps exposed (not caused) by
+// Time Truth V1: (A) Today "So Far" summed raw energy instead of confirmed-
+// only, (B1) the gap label overstated "Untracked" when confirmed-only gap
+// math can still leave OBSERVED evidence visible, (B2) browser sub-activity
+// nesting was generic time-overlap instead of scoped to a real computer-
+// session container, (C) editing an existing auto-logged PC-Time entry
+// through the plain retro path silently dropped its provenance markers.
+// ════════════════════════════════════════════════════════════════════════
+
+// ── Fix A: computeTodayHealth (the "So Far" stat) is confirmed-evidence-only ──
+test('computeTodayHealth: passive browser-only entries do not count as deep/waste', async ({ page }) => {
+  await openApp(page);
+  const health = await page.evaluate(({ day }) => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const seeded = [
+      { id: 'fb1', tsStart: base, ts: base + 600000, blockIntervalMin: 10, date: day, activity: 'Facebook', energy: 'waste', browserUsage: true, source: 'browser-extension' },
+      { id: 'gm1', tsStart: base + 600000, ts: base + 660000, blockIntervalMin: 1, date: day, activity: 'Gmail', energy: 'shallow', browserUsage: true, source: 'browser-extension' },
+      { id: 'fb2', tsStart: base + 660000, ts: base + 960000, blockIntervalMin: 5, date: day, activity: 'Facebook', energy: 'waste', browserUsage: true, source: 'browser-extension' }
+    ];
+    seeded.forEach(e => { e.category = getBucket(e); });
+    entries.length = 0;
+    entries.push(...seeded);
+    persist();
+    return computeTodayHealth(entries, day);
+  }, { day: DAY });
+  expect(health.deepMin).toBe(0);
+  expect(health.wasteMin).toBe(0);
+});
+
+test('computeTodayHealth: a confirmed manual entry still counts alongside unconfirmed passive noise', async ({ page }) => {
+  await openApp(page);
+  const health = await page.evaluate(({ day }) => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const seeded = [
+      { id: 'fb1', tsStart: base, ts: base + 600000, blockIntervalMin: 10, date: day, activity: 'Facebook', energy: 'waste', browserUsage: true, source: 'browser-extension' },
+      { id: 'confirmed', tsStart: base + 600000, ts: base + 1020000, blockIntervalMin: 7, date: day, activity: 'Doomscrolling', energy: 'waste', retro: true }
+    ];
+    seeded.forEach(e => { e.category = getBucket(e); });
+    entries.length = 0;
+    entries.push(...seeded);
+    persist();
+    return computeTodayHealth(entries, day);
+  }, { day: DAY });
+  expect(health.deepMin).toBe(0);
+  expect(health.wasteMin).toBe(7);
+});
+
+// ── Fix B1: gap label says "No confirmed activity", not "Untracked" ──────────
+test('Timeline gap row reads "No confirmed activity", not "Untracked"', async ({ page }) => {
+  await openApp(page);
+  const html = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const gap = { tsStart: base, ts: base + 3600000, gapMin: 60, isGap: true };
+    return renderTimelineCombined([gap]);
+  });
+  expect(html).toContain('No confirmed activity');
+  expect(html).not.toContain('Untracked');
+});
+
+test('a gap that still has visible OBSERVED evidence nearby keeps both: the gap label and the observed row', async ({ page }) => {
+  await openApp(page);
+  const html = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    // computeGaps() excludes passive browser observation from closing a gap, so
+    // the gap and the observed row can legitimately coexist in the same window.
+    const browserOnly = [
+      { id: 'br1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'GitHub', energy: 'deep', browserUsage: true, source: 'browser-extension' }
+    ];
+    const gaps = computeGaps(browserOnly, base + 3600000);
+    const combined = [...browserOnly, ...gaps].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+    return renderTimelineCombined(combined);
+  });
+  expect(html).toContain('No confirmed activity');
+  expect(html).toContain('OBSERVED');
+  expect(html).not.toContain('Untracked');
+});
+
+// ── Fix B2: browser sub-activity nesting is scoped to real computer-session containers ──
+test('assembleTodayTimeline: a genuine PC-Time container nests an overlapping browser observation', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const container = { id: 'pc1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'PC Time', energy: 'shallow', autoLogged: true, quickLogged: true };
+    const sub = { id: 'sub1', tsStart: base + 300000, ts: base + 600000, blockIntervalMin: 5, date: '2026-09-08', activity: 'GitHub', browserUsage: true, source: 'browser-extension', energy: 'deep' };
+    entries.length = 0;
+    [container, sub].forEach(e => { e.category = getBucket(e); entries.push(e); });
+    persist();
+    const combined = assembleTodayTimeline(entries);
+    return { ids: combined.map(i => i.id), pcSubCount: (combined.find(i => i.id === 'pc1') || {})._subActivities?.length || 0 };
+  });
+  expect(result.pcSubCount).toBe(1);
+  expect(result.ids).not.toContain('sub1'); // absorbed as a nested sub-row, not a top-level item
+});
+
+test('assembleTodayTimeline: an ordinary manual task does NOT absorb an overlapping browser observation', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const manualTask = { id: 'task1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'Write RFC', energy: 'deep', retro: true };
+    const sub = { id: 'sub1', tsStart: base + 300000, ts: base + 600000, blockIntervalMin: 5, date: '2026-09-08', activity: 'GitHub', browserUsage: true, source: 'browser-extension', energy: 'deep' };
+    entries.length = 0;
+    [manualTask, sub].forEach(e => { e.category = getBucket(e); entries.push(e); });
+    persist();
+    const combined = assembleTodayTimeline(entries);
+    return { ids: combined.map(i => i.id), taskSubCount: (combined.find(i => i.id === 'task1') || {})._subActivities?.length || 0 };
+  });
+  expect(result.taskSubCount).toBe(0);
+  expect(result.ids).toContain('sub1'); // stays its own top-level row, never relabeled "PC time · <site>"
+});
+
+// ── Fix C: editing an existing auto-logged entry preserves computer-session provenance ──
+test('editing an existing auto-generated PC-Time entry through the normal edit path keeps it a computer-session entry', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const pcEntry = { id: 'pc1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'PC Time', energy: 'shallow', autoLogged: true, quickLogged: true };
+    pcEntry.category = getBucket(pcEntry);
+    entries.length = 0;
+    entries.push(pcEntry);
+    persist();
+
+    openEditEntry('pc1');
+    // Ordinary edit through the same production path: nudge the end time later.
+    document.getElementById('retro-start').value = '09:00';
+    document.getElementById('retro-end').value = '09:45';
+    saveRetroEntry();
+
+    const updated = entries.find(e => e.activity === 'PC Time');
+    return { isSession: isComputerSessionEntry(updated), autoLogged: updated.autoLogged, quickLogged: updated.quickLogged };
+  });
+  expect(result.isSession).toBe(true);
+  expect(result.autoLogged).toBe(true);
+  expect(result.quickLogged).toBe(true);
+});
+
+test('editing an ordinary manual entry named "PC Time" does not manufacture computer-session provenance', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const manualEntry = { id: 'manual-pc', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'PC Time', energy: 'shallow', retro: true };
+    manualEntry.category = getBucket(manualEntry);
+    entries.length = 0;
+    entries.push(manualEntry);
+    persist();
+
+    openEditEntry('manual-pc');
+    document.getElementById('retro-start').value = '09:00';
+    document.getElementById('retro-end').value = '09:45';
+    saveRetroEntry();
+
+    const updated = entries.find(e => e.activity === 'PC Time');
+    return { isSession: isComputerSessionEntry(updated), autoLogged: !!updated.autoLogged, quickLogged: !!updated.quickLogged };
+  });
+  expect(result.isSession).toBe(false);
+  expect(result.autoLogged).toBe(false);
+  expect(result.quickLogged).toBe(false);
+});
+
+// ── Fix First (independent review): the midnight-split branch of the same edit path ──
+// must preserve computer-session provenance on BOTH resulting entries, not just the
+// pre-midnight part. secondPart previously came out of makeEntry() with no autoLogged/
+// quickLogged at all, so the post-midnight half silently lost its TIMER identity.
+test('editing an existing auto-generated PC-Time entry across midnight preserves provenance on BOTH split parts', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const pcEntry = { id: 'pc1', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'PC Time', energy: 'shallow', autoLogged: true, quickLogged: true };
+    pcEntry.category = getBucket(pcEntry);
+    entries.length = 0;
+    entries.push(pcEntry);
+    persist();
+
+    openEditEntry('pc1');
+    // Normal production edit, retimed to cross midnight (23:30 -> 00:30 next day).
+    document.getElementById('retro-start').value = '23:30';
+    document.getElementById('retro-end').value = '00:30';
+    saveRetroEntry();
+
+    const pcParts = entries.filter(e => e.activity === 'PC Time').sort((a, b) => a.tsStart - b.tsStart);
+    return {
+      count: pcParts.length,
+      parts: pcParts.map(e => ({
+        date: e.date,
+        isSession: isComputerSessionEntry(e),
+        autoLogged: e.autoLogged,
+        quickLogged: e.quickLogged
+      }))
+    };
+  });
+  expect(result.count).toBe(2);
+  expect(result.parts[0].date).toBe('2026-09-08');
+  expect(result.parts[1].date).toBe('2026-09-09');
+  for (const part of result.parts) {
+    expect(part.isSession).toBe(true);
+    expect(part.autoLogged).toBe(true);
+    expect(part.quickLogged).toBe(true);
+  }
+});
+
+// Negative control: a manual entry merely named "PC Time" (no provenance markers)
+// edited across midnight must not gain autoLogged/quickLogged on either split part —
+// text identity alone must never manufacture provenance.
+test('editing a manual entry named "PC Time" across midnight does not manufacture provenance on either split part', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    const base = Date.parse('2026-09-08T09:00:00Z');
+    const manualEntry = { id: 'manual-pc', tsStart: base, ts: base + 3600000, blockIntervalMin: 60, date: '2026-09-08', activity: 'PC Time', energy: 'shallow', retro: true };
+    manualEntry.category = getBucket(manualEntry);
+    entries.length = 0;
+    entries.push(manualEntry);
+    persist();
+
+    openEditEntry('manual-pc');
+    document.getElementById('retro-start').value = '23:30';
+    document.getElementById('retro-end').value = '00:30';
+    saveRetroEntry();
+
+    const pcParts = entries.filter(e => e.activity === 'PC Time').sort((a, b) => a.tsStart - b.tsStart);
+    return {
+      count: pcParts.length,
+      parts: pcParts.map(e => ({
+        isSession: isComputerSessionEntry(e),
+        autoLogged: !!e.autoLogged,
+        quickLogged: !!e.quickLogged
+      }))
+    };
+  });
+  expect(result.count).toBe(2);
+  for (const part of result.parts) {
+    expect(part.isSession).toBe(false);
+    expect(part.autoLogged).toBe(false);
+    expect(part.quickLogged).toBe(false);
+  }
+});
