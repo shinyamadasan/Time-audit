@@ -241,3 +241,20 @@ test('validateSharedPayload rejects anything not schemaVersion 1 or missing requ
   // legacy /public-shaped object (from before this feature existed) must not parse as valid /shared
   assert.equal(validateSharedPayload({ deepHrsToday: 2, name: 'A', avatar: '👤', dateKey: '2026-09-11', updatedAt: 1 }), null);
 });
+
+test('validateSharedPayload accepts a missing `today.priorities` as zero priorities, never as invalid', () => {
+  // The Realtime Database has no concept of a persisted empty array — a node with zero
+  // children is indistinguishable from one that was never written, so a genuinely-published
+  // `priorities: []` reads back over the wire as `today.priorities === undefined`, not `[]`.
+  // Zero priorities is a valid, current, accountability-relevant state and must never be
+  // conflated with a broken/legacy payload.
+  const prunedEmpty = {
+    schemaVersion: 1,
+    publisher: { timezone: 'Asia/Manila', dateKey: '2026-09-12', updatedAt: 5, displayName: 'A' },
+    today: { dateKey: '2026-09-12' }, // priorities key absent — exactly what RTDB does to []
+    tomorrow: { dateKey: '2026-09-13', prepStatus: 'not-prepared' }
+  };
+  const clean = validateSharedPayload(prunedEmpty);
+  assert.notEqual(clean, null);
+  assert.deepEqual(clean.today, { dateKey: '2026-09-12', priorities: [] });
+});
