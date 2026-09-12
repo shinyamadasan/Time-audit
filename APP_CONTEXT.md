@@ -572,3 +572,53 @@ No Firebase rule change. No production data migration. No new tab, chat, shared
 calendar, or partner Timeline. No gamification (no streaks/points/percentages/rankings
 added to the shared surface). Branch `feat/wife-shared-v1`, uncommitted, unpushed, not
 deployed, pending independent review.
+
+## Scheduled Auto-Log Reliability V1 (review candidate, 2026-09-12)
+
+Bounded reliability + coverage-truth fix, `index.html` only, prompted by a confirmed
+incident: a 22:00→08:00 recurring "Scribe shift" template's occurrence existed
+(`tpllog_moyqhkhg_2026-09-11`) but didn't render until a hard refresh — the sweep
+(`autoLogDueTemplates()`) had no dedicated due-time check and only ever ran as a
+side effect of something else re-rendering Today. Device timezone precedence was
+confirmed correct for the incident and is **not** touched by this milestone.
+
+- **Due-check heartbeat**: a new `autoLogHeartbeatTick()` runs from the existing 60s
+  Today interval, unconditionally — not gated on `running`/`breakActive` like the
+  neighboring date-rollover check, since `autoLogDueTemplates()` already has its own
+  per-occurrence guard against a currently-running session overlapping that specific
+  slot. A due occurrence is now evaluated within a minute of its end time even with the
+  app merely left open and idle (no tab switch, no other entry mutation). No second
+  polling loop — this is the interval that already existed. When nothing is due it's a
+  cheap `settings.templates` scan (no mutation/persist/sync/render); when something is
+  created it force-renders Today/Timeline immediately.
+- **Cross-midnight coverage fix**: `templateSlotCovered` and `generateTemplateEntries`
+  used to check coverage via `getEntriesForDateWindow(dateKey)`, clipped to one
+  calendar day — for a 22:00→08:00 slot anchored on Day A, only the first 2 of 10
+  hours were ever visible to the check, so post-midnight evidence (e.g. a PC-Time
+  entry from 01:00-07:00) structurally couldn't reach the ≥50% coverage threshold from
+  that side. Both now check against the template's actual `[tsStart, tsEnd)` interval
+  via a new `getEntriesOverlappingRange()`, and share one `templateCoverageDuration()`
+  formula (previously two independently-drifting copies of the same math).
+- **Coverage-truth tightened**: `entryCoversTemplateSlot` previously counted *any*
+  non-deleted, non-missed entry toward a scheduled block's coverage, regardless of
+  activity or provenance — a passive browser-extension OBSERVED entry or an unrelated
+  generic "PC Time" block could silently suppress a real scheduled auto-log. Template
+  ≠ actual: `entry.browserUsage` and `isPcTimeEntry()` entries no longer count, ever,
+  no matter how much of the slot they cover. A live (non-deleted) entry now only
+  counts when it matches the template's canonical activity or `templateId` — no fuzzy
+  matching. The deterministic `tpllog_<templateId>_<dateKey>` occurrence ID remains the
+  primary idempotency guard, checked against the full entries list before any coverage
+  math runs, independent of provenance or deletion state.
+- **Tests**: 9 new cases in `tests/smoke.spec.js` against the real production
+  functions — same-day and cross-midnight due-check creation, a manual same-activity
+  entry suppressing a duplicate, OBSERVED and generic PC-Time overlap *not*
+  suppressing, deterministic-ID dedupe, a no-op heartbeat doing zero renders/writes,
+  and idempotent repeated heartbeat ticks. Full existing suite re-runs clean (473
+  Playwright specs, 453 `npm test` cases). `www/` runtime mirror re-synced.
+
+No timezone-precedence change (device-pinned `ta3-tz` vs. synced settings is a
+separate, deliberately deferred product decision). No browser-extension change. No
+Firebase rules change. No production data touched — the specific missed historical
+shift, if any, still needs a manual retro-log; this milestone only prevents future
+recurrences. Branch `feat/scheduled-autolog-reliability-v1`, uncommitted, unpushed, not
+deployed, pending independent review.
