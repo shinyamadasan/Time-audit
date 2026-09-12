@@ -135,7 +135,7 @@ export default [
     }
   },
   {
-    files: ['plan-tomorrow-model.js', 'plan-tomorrow-ui.js', 'shared-accountability-model.js'],
+    files: ['plan-tomorrow-model.js', 'plan-tomorrow-ui.js', 'shared-accountability-model.js', 'partner-view-model.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',

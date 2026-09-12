@@ -1,5 +1,58 @@
 # ChronaSense — Changelog
 
+## Partner View V1 (feat/partner-view-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-12
+
+Corrected product requirement: Wife/Shared Accountability V1's narrow 3-priority/prep-
+status allowlist is no longer the maximum allowed partner visibility. Two securely-
+linked partners now get reciprocal, read-only visibility into each other's whole
+user-facing **Today** — priorities, So Far, actual Timeline (with TIMER/OBSERVED/
+template-hint/gap distinctions preserved), and tomorrow's plan — so they can notice
+and help correct each other. The existing summary `#partner-card` stays as a quick-
+glance entry point; **Partner View** (`#partner-view-screen`, opened via a new "View
+day" button) is the new ceiling. **No Firebase rule changed** — the existing `/shared`
+owner-write/reciprocal-partner-read rule already covers any new descendant node.
+
+- New pure module `partner-view-model.js` (sibling to, and independent of, the
+  unmodified `shared-accountability-model.js`) owns the `/shared/partnerView`
+  allowlist: `today.{priorities, soFar:{deepMin,wasteMin}, timeline}` +
+  `tomorrow.{priorities}`. Timeline rows are `{kind: actual|observed|template|gap,
+  activity?, energy?, evidenceLabel?, tsStart?, tsEnd, autoLog?}` — a gap never
+  carries `energy`/`activity` (gap ≠ waste) and a template row never carries
+  `evidenceLabel` (hint ≠ actual/observed). Priorities capped at 3, Timeline capped
+  at 150 rows (documented bound).
+- `partnerView` is published as a sibling key on the exact SAME payload object and
+  SAME `.set()` write `publishSharedAccountability()` already performs for the
+  summary card — a change to one half can never wipe the other. Write-dedupe now
+  covers both halves, so a Timeline-only change (no priority/prep change) correctly
+  triggers exactly one bounded republish.
+- `index.html`: new `classifyPartnerViewTimelineItems`, `buildPartnerViewPriorityInputs`,
+  `buildPartnerViewProjectionForPublish` (additive) classify the SAME canonical Today
+  truth (`assembleTodayTimeline`, `computeTodayHealth`, `getPlanItemStatus`,
+  `generateTemplateEntries` — all untouched) into the allowlisted shape, always for
+  the publisher's actual current day regardless of what date the owner's own UI
+  happens to be browsing.
+- New `#partner-view-screen` (own module CSS `partner-view.css`): "Viewing `<name>`" /
+  "Read only" banner + "Back to my day", then priorities/So-Far/Timeline/Tomorrow from
+  the validated projection. No new top-level tab. Read-only is structural — the
+  screen's render functions never emit a single mutation `onclick`.
+- Unlink and sign-out both now also clear `partnerViewShared` and close
+  `#partner-view-screen` immediately.
+- Tests: `partner-view-model.test.js` (15 pure-allowlist/hostile-input/cap/dedupe/
+  validation cases) + `tests/partner-view.spec.js` (12 real two-page linked-partner
+  cases: open/read-only, no-plan, priority-status + So-Far parity, all four Timeline
+  kinds, scheduled-auto-log-as-actual, publisher-timezone authority, stale payload,
+  zero mutation controls, hostile/malformed node, unlink, a real sign-out transition,
+  write-dedupe/timer-tick/exactly-one-write, and the Timeline cap). One pre-existing
+  `tests/wife-shared-accountability.spec.js` allowlist assertion updated (not
+  loosened) to reflect the corrected requirement — the summary card's own narrow
+  allowlist is otherwise unchanged and still passes. `firebase-rules.test.js` and
+  `tests/pair-accountability.spec.js` re-run clean, unmodified. `www/` runtime mirror
+  re-synced (`npm run mirror:www`).
+
+No Week/Trends/Life/Learning/Career sharing, no chat/comments/notifications, no
+scoring or streak comparison, no browser-extension change, no auto-log architecture
+change. See `APP_CONTEXT.md` → "Partner View V1" for the full contract.
+
 ## Scheduled Auto-Log Reliability V1 (feat/scheduled-autolog-reliability-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-12
 
 Bounded reliability + coverage-truth fix for recurring `autoLog` templates, prompted by

@@ -622,3 +622,102 @@ Firebase rules change. No production data touched — the specific missed histor
 shift, if any, still needs a manual retro-log; this milestone only prevents future
 recurrences. Branch `feat/scheduled-autolog-reliability-v1`, uncommitted, unpushed, not
 deployed, pending independent review.
+
+## Partner View V1 (review candidate, 2026-09-12)
+
+**Corrected product requirement.** Wife/Shared Accountability V1's narrow allowlist
+("quick glance" — 3 priority titles/statuses + tomorrow prep status only) is **no
+longer the maximum allowed partner visibility**. The user clarified: two securely-
+linked partners want to see each other's *whole user-facing Today* — plan, actual
+Timeline, So Far, waste — to notice when the other failed to plan, or wasted time,
+and help correct each other. The existing `#partner-card` summary is now explicitly a
+**quick-glance entry point**, not the ceiling; **Partner View** is the ceiling.
+
+**Rule for what's eligible:** if the owner can see it as normal Today product
+information, it's eligible for Partner View. If it exists only to run the app
+(auth/tokens/pairing codes/device IDs/sync metadata/raw URLs), it is not — regardless
+of this milestone's broadened scope. No Firebase rule changed.
+
+- **Architecture — publisher-generated read model, not viewer-side reconstruction.**
+  The owner's own canonical Today calculations (`assembleTodayTimeline`,
+  `computeTodayHealth`, `getPlanItems`/`getPlanItemStatus`, `generateTemplateEntries`,
+  all pre-existing and untouched) are classified into a display-ready, allowlisted
+  shape and published; the partner only ever validates and renders that shape. The
+  partner's browser never reconstructs Today from raw partner entries/plans/settings,
+  so the two sides can never disagree about what the evidence means.
+- **New pure module `partner-view-model.js`** (sibling to, and independent of,
+  `shared-accountability-model.js`, which is **unmodified** by this milestone) owns
+  the `/shared/partnerView` allowlist:
+  ```
+  partnerView: {
+    today:    { dateKey, priorities: [{title, plannedTime?, done, statusLabel}],
+                soFar: {deepMin, wasteMin},
+                timeline: [{kind, activity?, energy?, evidenceLabel?, tsStart?, tsEnd, autoLog?}] },
+    tomorrow: { dateKey, priorities: [{title, plannedTime?, done, statusLabel}] }
+  }
+  ```
+  `kind` ∈ `actual | observed | template | gap` — mirrors the owner's own Timeline
+  distinctions exactly (gap carries no `energy`/`activity` at all — gap ≠ waste;
+  `evidenceLabel` ∈ `TIMER | OBSERVED`, never set on a `template` row — template hint
+  ≠ actual/observed). Priorities capped at 3 (mirrors `PLAN_MAX`); Timeline capped at
+  **150 rows** (documented bound — a pathological day is truncated, an ordinary one
+  never is). `buildPartnerViewProjection`/`validatePartnerViewProjection` are both
+  allowlist-constructed field by field, never by spreading an internal object —
+  proven against a maximal-hostile-input test in `partner-view-model.test.js`.
+- **One write, one schema, no wipe risk.** `partnerView` is published as a **sibling
+  key on the exact same payload object** `publishSharedAccountability()` already
+  builds and writes with a single `.set()` — a summary-only or partnerView-only
+  content change can never overwrite the other half of `/shared`. The write-dedupe
+  signature now covers both halves (`sharedPayloadSignature() + partnerViewSignature()`),
+  so a Timeline-only change (no priority/prep change) still triggers exactly one
+  bounded republish — the pre-milestone signature would have missed it.
+- **Classification lives in `index.html`** (`classifyPartnerViewTimelineItems`,
+  `buildPartnerViewPriorityInputs`, `buildPartnerViewProjectionForPublish` — new,
+  additive), reusing the SAME evidence-truth helpers Today already uses
+  (`isComputerSessionEntry`/`isPassiveObservationEntry` from `evidence-interpretation.js`,
+  `getPlanItemStatus`), including the PC-Time `_subActivities` expansion so a nested
+  browser observation still surfaces as its own OBSERVED row. Built for the publisher's
+  actual current day regardless of what date the owner's own UI happens to be browsing
+  (`viewingDateKey` is saved/forced/restored around the build) — Partner View is always
+  "today," never a Review/history page the owner happens to have open.
+- **Firebase rules unchanged and sufficient.** The deployed `/shared` rule
+  (`.read`/`.write` on the `shared` node itself, no nested per-child rule) already
+  covers any new descendant, `partnerView` included — reciprocal-partner-read,
+  owner-write, verified via `firebase-rules.test.js` (unmodified, still 14/14).
+- **UI**: `#partner-card` gains a **"View day"** button (the quick-glance card is
+  otherwise unchanged). Opens a new full-screen, read-only `#partner-view-screen`
+  (own module CSS, `partner-view.css`) — a banner reading `Viewing <name>` / `Read
+  only` + `Back to my day`, then Today's priorities, So Far, Timeline, and Tomorrow,
+  rendered from the validated projection only. **No new top-level tab.** Read-only is
+  enforced structurally — the render functions never emit a single mutation `onclick`
+  (no Start/Stop/Log/Done/edit/delete/reorder/Prepare-tomorrow control exists anywhere
+  in this screen's HTML), not CSS-disabled controls with a live handler underneath.
+  "Up Next" is **deliberately omitted from V1** — it depends on volatile live timer
+  state, and mirroring it would mean either per-second sync or a stale identity-only
+  stub; calmer to ship without it and revisit only if requested.
+- **Lifecycle**: unlink (`clearPartnerLink`/`teardownPartnerLink`) and sign-out (the
+  `onAuthStateChanged(null)` branch) both now clear `partnerViewShared` and close
+  `#partner-view-screen` immediately, in addition to the pre-existing summary-card
+  teardown — no stale partner Today can linger into a new session or a new partner.
+- **Tests**: `partner-view-model.test.js` (15 cases — allowlist/hostile-input,
+  gap-never-carries-energy, template-never-carries-evidenceLabel, cap enforcement,
+  signature dedupe, read-side validation) and `tests/partner-view.spec.js` (12 real
+  two-page linked-partner cases covering the full required list: open/read-only
+  banner + priority-status parity + So-Far parity + tomorrow detail, no-plan state,
+  actual/OBSERVED/gap/template-hint Timeline distinctions, scheduled-auto-log block
+  as ordinary actual evidence, publisher-timezone authority against a Phoenix-zoned
+  viewer, stale prior-day payload, zero mutation controls, hostile/malformed
+  `partnerView` node, unlink, a **real** second `onAuthStateChanged(null)` sign-out
+  transition, write-dedupe + timer-tick-no-write + exactly-one-write-on-real-change,
+  and the 150-row Timeline cap under a proven-oversized input). `tests/wife-shared-
+  accountability.spec.js`'s one allowlist assertion was updated (not loosened) to
+  reflect the corrected requirement — the summary card's own narrow allowlist and its
+  never-leaks-Deep/waste/streak/score/wallet check are otherwise unchanged and still
+  pass; 9/9 summary-card + pairing-handshake tests re-run clean as regression.
+
+No Week/Trends/Life/Learning/Career sharing. No chat, comments, or notifications. No
+scoring/streak-comparison/ranking added anywhere. No browser-extension change. No
+auto-log architecture change (only the minimal new publish-trigger integration point
+in `buildPartnerViewProjectionForPublish`, itself additive). Branch
+`feat/partner-view-v1`, uncommitted, unpushed, not deployed, pending independent
+review.

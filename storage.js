@@ -778,6 +778,12 @@ function initAutoSync() {
         fbDb.ref('.info/connected').off();
       }
       if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.detach();
+      // Partner View V1 — a signed-out session must never leave the previous
+      // account's partner data visible.
+      if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
+      if (_partnerSharedListener) { _partnerSharedListener.off(); _partnerSharedListener = null; }
+      partnerViewShared = null;
+      if (typeof closePartnerView === 'function') closePartnerView();
       fbRoomRef = null; roomCode = '';
       updateSyncPill('offline', 'signed out');
       updateAuthUI(null);
@@ -1651,6 +1657,7 @@ function publishPublicStats() {
 }
 
 let partnerShared = null; // Wife/Shared Accountability V1 — validated live projection from the partner's `/shared` node
+let partnerViewShared = null; // Partner View V1 — validated live projection from the partner's `/shared/partnerView` node
 let _lastSharedPayloadSignature = null; // write-dedupe: content-only signature of the last payload we actually wrote
 
 /**
@@ -1693,7 +1700,18 @@ function publishSharedAccountability() {
     tomorrowPrepStatus: prepStatus
   });
 
-  const signature = M.sharedPayloadSignature(payload);
+  // Partner View V1 — the deeper reciprocal Today projection, published as a
+  // sibling key on the SAME payload object in the SAME .set() below, so a
+  // summary-only or partnerView-only change can never wipe the other half of
+  // /shared. Built from the owner's canonical Today calculations (index.html);
+  // omitted entirely if that build isn't available yet (next trigger retries).
+  const PV = globalThis.PartnerViewModel;
+  const partnerView = (PV && typeof buildPartnerViewProjectionForPublish === 'function')
+    ? buildPartnerViewProjectionForPublish()
+    : null;
+  if (partnerView) payload.partnerView = partnerView;
+
+  const signature = M.sharedPayloadSignature(payload) + '|' + (PV ? PV.partnerViewSignature(partnerView) : '');
   if (signature === _lastSharedPayloadSignature) return; // no meaningful change — skip the write
   const previousSignature = _lastSharedPayloadSignature;
   _lastSharedPayloadSignature = signature;
@@ -1774,9 +1792,15 @@ function initPartnerSharedListener(partnerUid) {
   _partnerSharedListener = fbDb.ref(`uid_${partnerUid}/shared`);
   _partnerSharedListener.on('value', snap => {
     const M = globalThis.SharedAccountabilityModel;
+    const PV = globalThis.PartnerViewModel;
     const raw = snap.val();
     partnerShared = M ? M.validateSharedPayload(raw) : null;
+    // Partner View V1 — validated independently of the summary card, from the
+    // SAME raw node's `partnerView` sub-tree; never trusts it just because the
+    // summary half validated (re-checked here, defense in depth).
+    partnerViewShared = PV ? PV.validatePartnerViewProjection(raw && raw.partnerView) : null;
     if (typeof renderPartnerCard === 'function') renderPartnerCard();
+    if (typeof renderPartnerViewScreen === 'function') renderPartnerViewScreen();
   });
 }
 
@@ -1908,10 +1932,12 @@ function clearPartnerLink() {
   localStorage.removeItem('ta3-partner-uid');
   partnerData = null;
   partnerShared = null;
+  partnerViewShared = null;
   _pendingPairClaim = null;
   _pairAwaitingAccept = false;
   if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
   if (_partnerSharedListener) { _partnerSharedListener.off(); _partnerSharedListener = null; }
+  if (typeof closePartnerView === 'function') closePartnerView();
   renderPartnerCardSafe(); renderPartnerSettingsSafe();
 }
 
@@ -1922,8 +1948,10 @@ function teardownPartnerLink() {
   if (_partnerSharedListener) { _partnerSharedListener.off(); _partnerSharedListener = null; }
   partnerData = null;
   partnerShared = null;
+  partnerViewShared = null;
   _pendingPairClaim = null;
   _pairAwaitingAccept = false;
+  if (typeof closePartnerView === 'function') closePartnerView();
 }
 
 function syncIntention(val) {

@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="daily-routines.css?v=20260907">
 <link rel="stylesheet" href="plan-tomorrow.css?v=20260908-plan-tomorrow-v1">
 <link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
+<link rel="stylesheet" href="partner-view.css?v=20260912-partner-view-v1">
 </head>
 <body>
 <div id="desktop-layout">
@@ -351,6 +352,9 @@
 
   <!-- Accountability partner card -->
   <div id="partner-card" class="today-detail" style="display:none"></div>
+
+  <!-- Partner View V1 — full-screen, read-only projection of a linked partner's Today -->
+  <div id="partner-view-screen" class="partner-view-screen" hidden></div>
 
   <!-- Continue banner removed — auto-logging handles this now -->
   <div class="continue-banner" id="continue-banner" style="display:none">
@@ -1643,6 +1647,7 @@
 <script type="module" src="coarse-life-evidence-ui.js?v=20260909-coarse-life-evidence-v1"></script>
 <script type="module" src="coarse-life-evidence-sync.js?v=20260910-coarse-evidence-durability-v1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
+<script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -9088,6 +9093,103 @@ function generateTemplateEntries(dateKey) {
   return result;
 }
 
+// ── Partner View V1 — publisher-side projection ─────────────────────────────
+// Classifies the SAME canonical Timeline/So-Far/priority truth the owner's
+// own Today screen renders into a display-ready, allowlisted shape for the
+// PartnerViewModel builder (partner-view-model.js). Never a second Timeline
+// algorithm: every item here comes straight out of assembleTodayTimeline()/
+// computeTodayHealth()/getPlanItems() — this only classifies + allowlists.
+
+/** Mirrors renderEntryRow()'s own TIMER/OBSERVED/template-hint/gap decisions
+ *  exactly, including the PC-Time "_subActivities" expansion, so Partner View
+ *  can never show a different evidence story than the owner's own Today. */
+function classifyPartnerViewTimelineItems(combined) {
+  const out = [];
+  for (const item of combined) {
+    if (item.missed) continue; // "Fill in" placeholders are not evidence of anything
+    if (item.isGap) {
+      out.push({ kind: 'gap', tsStart: item.tsStart, tsEnd: item.ts });
+      continue;
+    }
+    if (item.template) {
+      out.push({ kind: 'template', activity: item.activity, energy: item.energy, tsStart: item.tsStart, tsEnd: item.ts, autoLog: !!item.autoLog });
+      continue;
+    }
+    if (item._subActivities?.length) {
+      const pcStart = item.tsStart || (item.ts - Math.round(item.blockIntervalMin || 0) * 60000);
+      const subs = [...item._subActivities].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
+      let cursor = pcStart;
+      for (const sub of subs) {
+        const subStart = sub.tsStart || sub.ts;
+        if (subStart - cursor >= 60000) out.push({ kind: 'actual', activity: item.activity, energy: item.energy, evidenceLabel: 'TIMER', tsStart: cursor, tsEnd: subStart });
+        out.push({ kind: 'observed', activity: sub.activity, energy: sub.energy, evidenceLabel: 'OBSERVED', tsStart: subStart, tsEnd: sub.ts });
+        cursor = sub.ts;
+      }
+      if (item.ts - cursor >= 60000) out.push({ kind: 'actual', activity: item.activity, energy: item.energy, evidenceLabel: 'TIMER', tsStart: cursor, tsEnd: item.ts });
+      continue;
+    }
+    const evidenceLabel = typeof isComputerSessionEntry === 'function' && isComputerSessionEntry(item) ? 'TIMER'
+      : typeof isPassiveObservationEntry === 'function' && isPassiveObservationEntry(item) ? 'OBSERVED'
+      : null;
+    out.push({
+      kind: evidenceLabel === 'OBSERVED' ? 'observed' : 'actual',
+      activity: item.activity, energy: item.energy, evidenceLabel,
+      tsStart: item.tsStart || null, tsEnd: item.ts
+    });
+  }
+  return out;
+}
+
+/** Same canonical status pipeline renderTodayPlan() uses for each row —
+ *  getPlanItemStatus() plus the separate `done` overlay — never a second
+ *  calculation of what "In progress"/"Done"/"Not started" means. */
+function buildPartnerViewPriorityInputs(dateKey) {
+  return getPlanItems(dateKey).map(it => {
+    const mins = typeof planTrackedMin === 'function' ? planTrackedMin(it.task, dateKey, it.id) : 0;
+    const status = getPlanItemStatus(it, dateKey, mins);
+    return { title: it.task, plannedTime: it.when || null, done: it.done === true, statusLabel: it.done ? 'Done' : status.label };
+  });
+}
+
+/** Builds the full `/shared/partnerView` projection for the CURRENT publisher
+ *  day, regardless of what date the owner's UI happens to be browsing right
+ *  now (Review/history) — Partner View V1 is always "today", never whatever
+ *  page is on screen. Returns null if the model module hasn't loaded yet. */
+function buildPartnerViewProjectionForPublish() {
+  const PV = globalThis.PartnerViewModel;
+  if (!PV) return null;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const PT = globalThis.PlanTomorrowModel;
+  const tomorrowKey = PT ? PT.planTomorrowTargetDate(Date.now(), tz) : todayKey;
+
+  // Timeline assembly reads the ambient `viewingDateKey` — force it to today
+  // for the duration of this build so a publish triggered while the owner is
+  // browsing a past day still describes their actual current day.
+  const savedViewingDateKey = viewingDateKey;
+  let combined, displayTodayE;
+  try {
+    viewingDateKey = todayKey;
+    const todayE = getEntriesForDateWindow(todayKey);
+    displayTodayE = squashTinyPCTimeFragments(todayE, todayKey);
+    combined = assembleTodayTimeline(displayTodayE);
+  } finally {
+    viewingDateKey = savedViewingDateKey;
+  }
+
+  // Same input renderTodayHealth() passes — computeTodayHealth() reads raw
+  // squashed entries, never the post-merge/clip Timeline display array.
+  const health = computeTodayHealth(displayTodayE, todayKey);
+  const timelineItems = classifyPartnerViewTimelineItems(combined);
+  const priorities = buildPartnerViewPriorityInputs(todayKey);
+  const tomorrowPriorities = buildPartnerViewPriorityInputs(tomorrowKey).map(p => ({ title: p.title, plannedTime: p.plannedTime }));
+
+  return PV.buildPartnerViewProjection({
+    dateKey: todayKey, priorities, soFar: health, timelineItems,
+    tomorrowDateKey: tomorrowKey, tomorrowPriorities
+  });
+}
+
 function findTemplateById(templateId) {
   return (settings.templates || []).find(tpl => String(tpl.id) === String(templateId));
 }
@@ -9756,6 +9858,10 @@ function renderPartnerCard() {
     ? `<button class="btn sm ghost" onclick="sendNudge()" style="flex-shrink:0">💪 Nudge</button>`
     : `<span style="font-size:10px;color:var(--muted);flex-shrink:0">Nudged ✓</span>`;
 
+  // Partner View V1 — the summary card stays a quick glance / entry point;
+  // "View day" is the door into the full reciprocal read-only Today projection.
+  const viewDayHtml = `<button class="btn sm ghost" onclick="openPartnerView()" style="flex-shrink:0">View day</button>`;
+
   const M = globalThis.SharedAccountabilityModel;
   const shared = M ? M.validateSharedPayload(partnerShared) : null;
   if (!shared) {
@@ -9765,6 +9871,7 @@ function renderPartnerCard() {
         <div class="partner-name">Partner</div>
         <div class="partner-stats">No current update</div>
       </div>
+      ${viewDayHtml}
       ${nudgeHtml}
     </div>`;
     return;
@@ -9796,7 +9903,144 @@ function renderPartnerCard() {
       ${bodyRows}
       ${freshnessHtml}
     </div>
+    ${viewDayHtml}
     ${nudgeHtml}
+  </div>`;
+}
+
+// ── Partner View V1 — full-screen, read-only Today projection ──────────────
+// Renders ONLY from the validated `/shared` (SharedAccountabilityModel) and
+// `/shared/partnerView` (PartnerViewModel) projections — never reads the
+// partner's raw entries/plans/settings, and never renders a single mutation
+// control (no onclick handler here ever calls a Start/Stop/Log/Done/edit
+// function — read-only is enforced by simply never emitting those controls,
+// not by disabling them with CSS).
+
+let _partnerViewOpen = false;
+
+function isPartnerViewOpen() { return _partnerViewOpen; }
+
+function openPartnerView() {
+  if (!localStorage.getItem('ta3-partner-uid')) return;
+  _partnerViewOpen = true;
+  const el = document.getElementById('partner-view-screen');
+  if (el) el.hidden = false;
+  renderPartnerViewScreen();
+}
+
+function closePartnerView() {
+  _partnerViewOpen = false;
+  const el = document.getElementById('partner-view-screen');
+  if (el) { el.hidden = true; el.innerHTML = ''; }
+}
+
+function pvFormatTimeRange(tsStart, tsEnd) {
+  return tsStart ? `${localTime(tsStart)} – ${localTime(tsEnd)}` : localTime(tsEnd);
+}
+
+function renderPartnerViewPriorityRow(item, showStatus) {
+  const esc = s => String(s || '').replace(/</g, '&lt;');
+  const when = item.plannedTime ? `${esc(item.plannedTime)} · ` : '';
+  const meta = showStatus ? `${when}${esc(item.statusLabel)}` : when;
+  return `<div class="pv-priority${item.done ? ' done' : ''}">
+    <div class="pv-priority-check">${item.done ? '✓' : ''}</div>
+    <div class="pv-priority-body">
+      <div class="pv-priority-title">${esc(item.title)}</div>
+      ${meta ? `<div class="pv-priority-meta">${meta}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderPartnerViewTimelineRow(item) {
+  const esc = s => String(s || '').replace(/</g, '&lt;');
+  const durMin = item.tsStart ? Math.round((item.tsEnd - item.tsStart) / 60000) : 0;
+  const timeRange = pvFormatTimeRange(item.tsStart, item.tsEnd);
+  if (item.kind === 'gap') {
+    return `<div class="pv-timeline-row">
+      <div class="pv-timeline-time">${localTime(item.tsStart || item.tsEnd)}</div>
+      <div class="pv-timeline-bar gap"></div>
+      <div class="pv-timeline-content">
+        <div class="pv-timeline-activity gap">No confirmed activity</div>
+        <div class="pv-timeline-meta">${timeRange}${durMin ? ' · ' + fmtDur(durMin) : ''}</div>
+      </div>
+    </div>`;
+  }
+  const label = eLabel[item.energy] || item.energy || '';
+  const barClass = item.kind === 'template' ? 'template' : (item.energy || '');
+  const evidenceTag = item.evidenceLabel ? `<span class="pv-evidence-tag">${esc(item.evidenceLabel)}</span>` : '';
+  const templateTag = item.kind === 'template'
+    ? ` · <span class="pv-template-tag">${item.autoLog ? 'will auto-log after end' : 'template hint'}</span>`
+    : '';
+  return `<div class="pv-timeline-row">
+    <div class="pv-timeline-time">${localTime(item.tsStart || item.tsEnd)}</div>
+    <div class="pv-timeline-bar ${esc(barClass)}"></div>
+    <div class="pv-timeline-content">
+      <div class="pv-timeline-activity">${esc(item.activity)}${label ? ' · ' + esc(label) : ''}${evidenceTag}</div>
+      <div class="pv-timeline-meta">${timeRange}${durMin ? ' · ' + fmtDur(durMin) : ''}${templateTag}</div>
+    </div>
+  </div>`;
+}
+
+function renderPartnerViewScreen() {
+  const el = document.getElementById('partner-view-screen');
+  if (!el || el.hidden) return;
+  const esc = s => String(s || '').replace(/</g, '&lt;');
+  const M = globalThis.SharedAccountabilityModel;
+  const shared = M ? M.validateSharedPayload(partnerShared) : null;
+  const pv = partnerViewShared; // already validated in initPartnerSharedListener — re-validating a second time here would just re-derive the identical result
+  const name = shared?.publisher?.displayName ? esc(shared.publisher.displayName) : 'Partner';
+
+  const banner = `<div class="pv-banner">
+      <div class="pv-banner-text">
+        <div class="pv-viewing">Viewing ${name}</div>
+        <div class="pv-readonly">Read only</div>
+      </div>
+      <button class="pv-back-btn" onclick="closePartnerView()">Back to my day</button>
+    </div>`;
+
+  // Stale/missing publisher timezone must fail closed to "no current update" —
+  // never render a prior day's Timeline as if it were today (isSharedTodayFresh
+  // already fails closed on an invalid timezone).
+  const fresh = shared && pv && M.isSharedTodayFresh(Date.now(), shared.publisher.timezone, pv.today.dateKey);
+  if (!fresh) {
+    el.innerHTML = banner + `<div class="pv-body"><div class="pv-stale">No current update</div></div>`;
+    return;
+  }
+
+  const priorityRows = pv.today.priorities.length
+    ? pv.today.priorities.map(p => renderPartnerViewPriorityRow(p, true)).join('')
+    : `<div class="pv-empty">No priorities planned today</div>`;
+  const timelineRows = pv.today.timeline.length
+    ? pv.today.timeline.map(renderPartnerViewTimelineRow).join('')
+    : `<div class="pv-empty">No time recorded yet</div>`;
+  const tomorrowRows = pv.tomorrow.priorities.length
+    ? pv.tomorrow.priorities.map(p => renderPartnerViewPriorityRow(p, false)).join('')
+    : `<div class="pv-empty">No plan for tomorrow yet</div>`;
+  const freshnessLine = esc(M.formatFreshness(Date.now(), shared.publisher.updatedAt));
+
+  el.innerHTML = banner + `<div class="pv-body">
+    <div class="pv-section">
+      <div class="pv-section-title">Today's priorities</div>
+      ${priorityRows}
+    </div>
+    <div class="pv-section">
+      <div class="pv-section-title">So far</div>
+      <div class="pv-sofar">
+        <div class="pv-sofar-stat"><div class="pv-sofar-val">${fmtDur(pv.today.soFar.deepMin)}</div><div class="pv-sofar-label">Deep</div></div>
+        <div class="pv-sofar-stat"><div class="pv-sofar-val">${fmtDur(pv.today.soFar.wasteMin)}</div><div class="pv-sofar-label">Waste</div></div>
+      </div>
+    </div>
+    <div class="pv-section">
+      <div class="pv-section-title">Timeline</div>
+      ${timelineRows}
+    </div>
+    <div class="pv-section">
+      <div class="pv-section-title">Tomorrow</div>
+      ${tomorrowRows}
+    </div>
+    <div class="pv-section">
+      <div class="pv-stale" style="text-align:left;padding:10px 12px">${freshnessLine}</div>
+    </div>
   </div>`;
 }
 
