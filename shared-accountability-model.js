@@ -136,8 +136,13 @@ export function validateSharedPayload(value) {
   if (!Number.isFinite(publisher.updatedAt)) return null;
 
   const today = value.today;
-  if (!today || typeof today !== 'object' || typeof today.dateKey !== 'string' || !Array.isArray(today.priorities)) return null;
-  const priorities = today.priorities
+  if (!today || typeof today !== 'object' || typeof today.dateKey !== 'string' || !today.dateKey) return null;
+  // Firebase RTDB has no concept of an empty array/object as a persisted value — a node
+  // with zero children is indistinguishable from one that was never written, so a
+  // genuinely-published `priorities: []` reads back here as `undefined`, not `[]`. Zero
+  // priorities is a valid, current, accountability-relevant state (not a broken payload),
+  // so a missing/pruned array must default to empty rather than invalidate the whole node.
+  const priorities = (Array.isArray(today.priorities) ? today.priorities : [])
     .slice(0, MAX_SHARED_PRIORITIES)
     .map(p => ({
       title: cleanText(p && p.title, 200),

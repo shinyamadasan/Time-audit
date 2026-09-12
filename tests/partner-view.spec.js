@@ -104,6 +104,29 @@ const PROXY_DB = `
   window.__installProxyDb = () => { fbDb = { ref }; };
 })();`;
 
+// Faithful-to-real-RTDB compaction: a Realtime Database node's "existence" is defined
+// purely by having at least one child (or being a primitive) — an empty array/object has
+// zero children, which the data model cannot distinguish from "never written," so it is
+// pruned entirely and reads back as null/undefined. A mock that instead preserves `[]`
+// exactly (as a plain JS object tree would) hides real production bugs like a validator
+// that requires `Array.isArray(x)` to treat a legitimately-empty list as valid.
+function rtdbCompact(v) {
+  if (v === null || v === undefined) return undefined;
+  if (Array.isArray(v)) {
+    if (v.length === 0) return undefined;
+    return v.map(rtdbCompact);
+  }
+  if (typeof v === 'object') {
+    const out = {};
+    for (const [k, val] of Object.entries(v)) {
+      const c = rtdbCompact(val);
+      if (c !== undefined) out[k] = c;
+    }
+    return Object.keys(out).length === 0 ? undefined : out;
+  }
+  return v;
+}
+
 function makeSharedDb() {
   let db = {};
   const writes = [];
@@ -112,8 +135,9 @@ function makeSharedDb() {
   const setAt = (p, v) => {
     const ks = parts(p); let o = db;
     for (let i = 0; i < ks.length - 1; i++) { if (o[ks[i]] == null || typeof o[ks[i]] !== 'object') o[ks[i]] = {}; o = o[ks[i]]; }
-    if (v === null || v === undefined) delete o[ks[ks.length - 1]];
-    else o[ks[ks.length - 1]] = v;
+    const compacted = rtdbCompact(v);
+    if (compacted === undefined) delete o[ks[ks.length - 1]];
+    else o[ks[ks.length - 1]] = compacted;
   };
   const pages = [];
   const deliver = async (changed) => {
@@ -259,6 +283,75 @@ test.describe('Partner View V1', () => {
 
     expect(screenText).toContain('No priorities planned today');
     expect(screenText).toContain('Errand'); // Timeline evidence is independent of whether a plan exists
+    expect(screenText).not.toContain('No current update'); // zero priorities is accountability info, not a broken payload
+    expect(screenText).toContain('Viewing ALICE'); // the shared publisher block itself must still validate
+
+    await ctxA.close(); await ctxB.close();
+  });
+
+  test('no priorities + real So Far minutes still renders So Far — zero priorities never suppresses the rest of the day', async ({ browser }) => {
+    const { shared, ctxA, ctxB, alice, bob } = await setupLinkedPair(browser);
+    const todayKey = await alice.evaluate(() => getDateInTZ(Date.now(), 'Asia/Manila'));
+    const now = await alice.evaluate(() => Date.now());
+
+    await setAliceStateAndPublish(alice, {
+      timezone: 'Asia/Manila', todayKey, items: [],
+      entries: [{ id: 'e1', ts: now, tsStart: now - 45 * 60000, activity: 'Deep work', energy: 'deep', blockIntervalMin: 45 }]
+    });
+    await settle(alice); await settle(bob);
+
+    const expectedHealth = await alice.evaluate(({ todayKey }) => computeTodayHealth(entries, todayKey), { todayKey });
+    expect(expectedHealth.deepMin).toBeGreaterThan(0); // sanity: the fixture actually produced non-zero So Far
+
+    await openBobPartnerView(bob);
+    const screenText = await bob.evaluate(() => document.getElementById('partner-view-screen').textContent);
+
+    expect(screenText).toContain('No priorities planned today');
+    expect(screenText).toMatch(new RegExp(String(expectedHealth.deepMin))); // So Far parity, same as the priorities-present case
+    expect(screenText).not.toContain('No current update');
+
+    await ctxA.close(); await ctxB.close();
+  });
+
+  test('a completely empty current day (no priorities, no timeline, zero So Far, tomorrow unprepared) is still a valid CURRENT projection, never "no current update"', async ({ browser }) => {
+    const { shared, ctxA, ctxB, alice, bob } = await setupLinkedPair(browser);
+    const todayKey = await alice.evaluate(() => getDateInTZ(Date.now(), 'Asia/Manila'));
+
+    await setAliceStateAndPublish(alice, { timezone: 'Asia/Manila', todayKey, items: [] }); // no entries, no tomorrow plan either
+    await settle(alice); await settle(bob);
+    await openBobPartnerView(bob);
+    const screenText = await bob.evaluate(() => document.getElementById('partner-view-screen').textContent);
+
+    expect(screenText).not.toContain('No current update');
+    expect(screenText).toContain('Viewing ALICE');
+    expect(screenText).toContain('No priorities planned today');
+    expect(screenText).toContain('No time recorded yet');
+    expect(screenText).toContain('No plan for tomorrow yet');
+
+    await ctxA.close(); await ctxB.close();
+  });
+
+  test('a zero-priority day publishes a live, readable projection on the very first sync — no later priority mutation required to unlock it', async ({ browser }) => {
+    const { shared, ctxA, ctxB, alice, bob } = await setupLinkedPair(browser);
+    const todayKey = await alice.evaluate(() => getDateInTZ(Date.now(), 'Asia/Manila'));
+    const now = await alice.evaluate(() => Date.now());
+
+    // A single publish call, exactly what a normal session-init/Today-evidence-sync
+    // trigger performs — never a delete-then-republish or add-a-priority-then-remove-it
+    // workaround.
+    await setAliceStateAndPublish(alice, {
+      timezone: 'Asia/Manila', todayKey, items: [],
+      entries: [{ id: 'e1', ts: now, tsStart: now - 10 * 60000, activity: 'Reading', energy: 'learning', blockIntervalMin: 10 }]
+    });
+    await settle(alice); await settle(bob);
+
+    const writeCount = shared.sharedWrites('alice').length;
+    expect(writeCount).toBeGreaterThan(0); // the zero-priority state itself produced a real write
+
+    await openBobPartnerView(bob);
+    const screenText = await bob.evaluate(() => document.getElementById('partner-view-screen').textContent);
+    expect(screenText).not.toContain('No current update');
+    expect(screenText).toContain('Reading');
 
     await ctxA.close(); await ctxB.close();
   });
@@ -521,11 +614,14 @@ test.describe('Partner View V1', () => {
     const { shared, ctxA, ctxB, alice, bob } = await setupLinkedPair(browser);
     const todayKey = await alice.evaluate(() => getDateInTZ(Date.now(), 'Asia/Manila'));
     const now = await alice.evaluate(() => Date.now());
-    // A pathological number of tiny back-to-back entries, spaced 10s apart (200 * 10s ≈
-    // 33 minutes total span) so the whole block safely stays within today regardless of
-    // what wall-clock time the suite happens to run at.
+    // A pathological number of back-to-back entries, each 60s long and spaced 65s apart
+    // (200 * 65s ≈ 3.6h total span, safely within today regardless of what wall-clock time
+    // the suite happens to run at). Each entry must round to a non-zero display duration —
+    // entries spaced too close together round to 0 minutes and are filtered out of the
+    // display Timeline entirely (assembleTodayTimeline's `dur > 0` clip), which would leave
+    // this test asserting a coincidentally-empty timeline instead of exercising the cap.
     const many = Array.from({ length: 200 }, (_, i) => ({
-      id: 'p' + i, ts: now - i * 10000, tsStart: now - (i + 1) * 10000,
+      id: 'p' + i, tsStart: now - (i + 1) * 65000, ts: now - (i + 1) * 65000 + 60000,
       activity: 'Task ' + i, energy: 'shallow', blockIntervalMin: 1
     }));
     await setAliceStateAndPublish(alice, { timezone: 'Asia/Manila', todayKey, items: [], entries: many });
@@ -535,6 +631,10 @@ test.describe('Partner View V1', () => {
     const rawTodayCount = await alice.evaluate(({ todayKey }) => getEntriesForDateWindow(todayKey).length, { todayKey });
     expect(rawTodayCount).toBeGreaterThan(150);
     const payload = shared.get('uid_alice/shared');
+    // A capped-but-nonzero Timeline is a real RTDB array (never pruned), but the allowlist
+    // is read defensively anyway — an empty result would otherwise be indistinguishable
+    // from "pruned away" and throw on `.length` here instead of failing the assertion below.
+    expect(payload.partnerView?.today?.timeline?.length ?? 0).toBeGreaterThan(0);
     expect(payload.partnerView.today.timeline.length).toBeLessThanOrEqual(150);
 
     await ctxA.close(); await ctxB.close();

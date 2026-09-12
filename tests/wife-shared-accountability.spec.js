@@ -107,6 +107,29 @@ const PROXY_DB = `
   window.__installProxyDb = () => { fbDb = { ref }; };
 })();`;
 
+// Faithful-to-real-RTDB compaction: a Realtime Database node's "existence" is defined
+// purely by having at least one child (or being a primitive) — an empty array/object has
+// zero children, which the data model cannot distinguish from "never written," so it is
+// pruned entirely and reads back as null/undefined. A mock that instead preserves `[]`
+// exactly (as a plain JS object tree would) hides real production bugs like a validator
+// that requires `Array.isArray(x)` to treat a legitimately-empty list as valid.
+function rtdbCompact(v) {
+  if (v === null || v === undefined) return undefined;
+  if (Array.isArray(v)) {
+    if (v.length === 0) return undefined;
+    return v.map(rtdbCompact);
+  }
+  if (typeof v === 'object') {
+    const out = {};
+    for (const [k, val] of Object.entries(v)) {
+      const c = rtdbCompact(val);
+      if (c !== undefined) out[k] = c;
+    }
+    return Object.keys(out).length === 0 ? undefined : out;
+  }
+  return v;
+}
+
 function makeSharedDb() {
   let db = {};
   const writes = [];
@@ -115,8 +138,9 @@ function makeSharedDb() {
   const setAt = (p, v) => {
     const ks = parts(p); let o = db;
     for (let i = 0; i < ks.length - 1; i++) { if (o[ks[i]] == null || typeof o[ks[i]] !== 'object') o[ks[i]] = {}; o = o[ks[i]]; }
-    if (v === null || v === undefined) delete o[ks[ks.length - 1]];
-    else o[ks[ks.length - 1]] = v;
+    const compacted = rtdbCompact(v);
+    if (compacted === undefined) delete o[ks[ks.length - 1]];
+    else o[ks[ks.length - 1]] = compacted;
   };
   const pages = [];
   const deliver = async (changed) => {
