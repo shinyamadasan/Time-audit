@@ -519,7 +519,7 @@ test('sync event text wraps on narrow screens without horizontal overflow', asyn
   expect(layout.metaWhiteSpace).toBe('normal');
 });
 
-test('today defaults to clean mode and can reveal details', async ({ page }) => {
+test('today defaults to clean mode for Log time, but Timeline stays visible without a reveal click', async ({ page }) => {
   const ts = minutesAgo(5);
   const deepEntry = {
     id: ts,
@@ -538,11 +538,11 @@ test('today defaults to clean mode and can reveal details', async ({ page }) => 
   await openApp(page, { entries: [deepEntry] });
 
   await expect(page.locator('#today-details-toggle')).toHaveCount(0);
-  for (const id of ['daily-basics','timeline-section','recent-entries-section']) await expect(page.locator(`#${id}`)).toBeHidden();
-  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Timeline',exact:true}).click();
+  // Today Persistent Sections V1 — Timeline requires zero clicks by default; Log time is unchanged.
+  for (const id of ['daily-basics','recent-entries-section']) await expect(page.locator(`#${id}`)).toBeHidden();
   await expect(page.locator('#timeline-section')).toBeVisible();
+  await expect(page.locator('#timeline-details')).toHaveAttribute('open');
   await expect(page.locator('.quick-retro-bar')).toBeHidden();
-  await expect(page.locator('#recent-entries-section')).toBeHidden();
   await page.locator('#timeline-details > summary').click();
   await expect(page.locator('#timeline-section')).toBeHidden();
   await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
