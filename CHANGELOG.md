@@ -1,5 +1,57 @@
 # ChronaSense — Changelog
 
+## Today Persistent Sections V1 (feat/today-persistent-sections, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-12
+
+Timeline and Accountability answer "what actually happened today" and "how is my
+accountability partner doing" — two of Today's three core questions — but both
+previously lived behind a reveal click: `#timeline-details`/`#accountability-details`
+were plain `<details class="today-destination">` with no `open` attribute, and a CSS
+rule (`.today-destination:not([open]){display:none}`) hid the whole element, header
+included, until something explicitly set `.open = true` (the "Timeline" nav button,
+or a now-removed "Accountability" `···`-menu item). A linked partner's Accountability
+card was invisible by default every session. This milestone makes both sections
+visible by default while keeping them independently collapsible and remembering each
+user's choice — presentation only, no change to what is tracked, rendered, or synced.
+
+- `style.css`: `#timeline-details,#accountability-details{display:block}` exempts
+  just these two sections from the blanket closed-`<details>` hide (Log time,
+  `#log-time-details`, is untouched — still reveal-on-click). A `.tds-summary` span
+  shows a compact factual label only while collapsed; a `.tds-chevron` flips ▾/▸.
+- `index.html`: both `<details>` default `open`; `initTodayPersistentSection()`
+  reads/writes independent localStorage flags (`ta3-timeline-open`,
+  `ta3-accountability-open`, first-run default true) and keeps `aria-expanded` on each
+  `<summary>` in sync via the native `toggle` event — no new reveal/hide logic, native
+  `<details>` disclosure semantics do the rest, including keyboard activation.
+- `renderPartnerCard()` now also hides the entire `#accountability-details` section
+  (not just the inner card) when no partner is linked, so there is no permanent empty
+  Accountability space — and sets the collapsed-state label (`· <name>` [`· Updated
+  Xm ago`]). The old "Accountability" `···`-menu item (whose only job was to reveal
+  this same, now-always-visible section) is removed; the "Timeline" nav button and
+  `scrollToTimeline()`/`scrollToFirstEnergy()` are unchanged and still force-expand +
+  scroll. The collapsed Timeline label reuses the exact, already-computed
+  `#timeline-summary` string (`Xh deep · N blocks`) — no new analytics.
+- Collapsing is presentation-only: neither section's own content rendering,
+  Timeline/evidence computation, Partner View, Nudge, or `/shared` publish/subscribe
+  wiring changed. A `<details>` element keeps rendering its children while closed, so
+  an Accountability update that lands while collapsed is not stale when re-expanded.
+- Tests: new `tests/today-persistent-sections.spec.js` (12 cases — default-open
+  Timeline/Accountability, independent collapse, cross-reload persistence per
+  section, no-partner hides the section entirely, View day / Nudge unaffected, a
+  collapsed-then-expanded Accountability shows the latest live payload rather than a
+  stale pre-collapse snapshot, `aria-expanded` + keyboard toggle, mobile tap
+  targets/no overflow). `tests/smoke.spec.js` and `tests/today-simplification.spec.js`
+  updated where they had asserted the old default-collapsed Timeline behavior (one
+  height-parity check now accounts for the one deterministic +40px persistent-header
+  row this milestone intentionally adds).
+- Verify: focused spec 12/12, `tests/smoke.spec.js` 76/76, `tests/today-simplification.spec.js`
+  18/18, `partner-view.spec.js` + `wife-shared-accountability.spec.js` +
+  `pair-accountability.spec.js` + `plan.spec.js` 52/52, full `npx playwright test`
+  500/500, `npm test` 452/453 (`firebase-rules.test.js` fails on missing `targaryen`
+  in this fresh worktree — environment/dependency gap, unrelated to this diff and
+  pre-existing), `npm run lint` 0 errors, `check:www-parity` clean, `git diff --check`
+  clean. No Firebase rule, browser extension, auto-log, Time/Timeline Truth, Partner
+  View projection/security, or Planning Streak code touched.
+
 ## Partner View V1 (feat/partner-view-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-12
 
 Corrected product requirement: Wife/Shared Accountability V1's narrow 3-priority/prep-

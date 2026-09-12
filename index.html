@@ -47,7 +47,6 @@
         style="display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:300;
                min-width:160px;background:var(--bg2);border:1px solid var(--border2);
                border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden">
-        <div class="hdr-menu-item" onclick="toggleTodayDestination('accountability-details');toggleHdrMenu()">Accountability</div>
         <div class="hdr-menu-item" onclick="openReflectionsHistory();toggleHdrMenu()">Reflections</div>
         <div class="hdr-menu-item" onclick="openReview();toggleHdrMenu()">Review day</div>
         <div class="hdr-menu-item" onclick="openPlanTomorrow();toggleHdrMenu()">Plan tomorrow</div>
@@ -143,8 +142,13 @@
   </nav>
   <button id="yesterday-review-link" class="btn sm ghost" onclick="openMissedCloseoutReview()" hidden>Yesterday's review available</button>
   <details id="log-time-details" class="today-destination"><summary>Log time</summary><button class="btn sm ghost" onclick="openRetroLog()">Past block</button><div id="log-time-content"></div></details>
-  <details id="timeline-details" class="today-destination"><summary>Timeline</summary><div id="timeline-content"></div></details>
-  <details id="accountability-details" class="today-destination"><summary>Accountability</summary></details>
+  <details id="timeline-details" class="today-destination" open>
+    <summary aria-expanded="true">Timeline<span class="tds-summary" id="timeline-collapsed-summary"></span><span class="tds-chevron" aria-hidden="true"></span></summary>
+    <div id="timeline-content"></div>
+  </details>
+  <details id="accountability-details" class="today-destination" open style="display:none">
+    <summary aria-expanded="true">Accountability<span class="tds-summary" id="accountability-collapsed-summary"></span><span class="tds-chevron" aria-hidden="true"></span></summary>
+  </details>
   <dialog id="routine-manager" class="daily-routine-dialog" aria-label="Manage routines">
     <h2>Manage routines</h2><div id="routine-manager-list"></div>
     <button type="button" class="btn sm" data-routine-action="add">Add routine</button>
@@ -4461,6 +4465,29 @@ function toggleTodayDestination(id) {
   destination.open = !destination.open;
   if (destination.open) destination.scrollIntoView({ block: 'start' });
 }
+
+// Today Persistent Sections V1 — Timeline and Accountability are visible by default
+// (no reveal click required); each remembers its own collapsed/expanded state, independent
+// of the other. Collapsing is presentation-only: it never touches rendering, timers, or data.
+function syncTodayDestinationAria(details) {
+  const summary = details && details.querySelector('summary');
+  if (summary) summary.setAttribute('aria-expanded', details.open ? 'true' : 'false');
+}
+function initTodayPersistentSection(id, storageKey, defaultOpen) {
+  const details = document.getElementById(id);
+  if (!details) return;
+  const saved = localStorage.getItem(storageKey);
+  details.open = saved === '1' ? true : saved === '0' ? false : defaultOpen;
+  syncTodayDestinationAria(details);
+  details.addEventListener('toggle', () => {
+    localStorage.setItem(storageKey, details.open ? '1' : '0');
+    syncTodayDestinationAria(details);
+  });
+}
+function initTodayPersistentSections() {
+  initTodayPersistentSection('timeline-details', 'ta3-timeline-open', true);
+  initTodayPersistentSection('accountability-details', 'ta3-accountability-open', true);
+}
 function chooseTodayWork() {
   document.getElementById('up-next').classList.add('choose-work');
   document.getElementById('hero-task-input').focus();
@@ -4476,6 +4503,7 @@ function renderNeedsYou() {
   document.getElementById('needs-you-more').hidden = candidates.length <= 1;
 }
 initializeTodaySurfaces();
+initTodayPersistentSections();
 
 function isTodayDetailsOpen() {
   return localStorage.getItem('ta3-today-details-open') === '1';
@@ -5605,8 +5633,12 @@ function renderToday() {
   // Timeline summary
   const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(displayTodayE)) : displayTodayE.length > 0;
   const visibleBlockCount = displayLoggedBlockCount(displayTodayE);
-  document.getElementById('timeline-summary').textContent =
-    workStarted ? `${computeDeepHrs(displayTodayE, _vk)}h deep · ${visibleBlockCount} blocks` : '';
+  const timelineSummaryText = workStarted ? `${computeDeepHrs(displayTodayE, _vk)}h deep · ${visibleBlockCount} blocks` : '';
+  document.getElementById('timeline-summary').textContent = timelineSummaryText;
+  // Today Persistent Sections V1 — collapsed-header label reuses this exact, already-computed
+  // string rather than deriving a new figure just for the collapsed state.
+  const timelineCollapsedSummary = document.getElementById('timeline-collapsed-summary');
+  if (timelineCollapsedSummary) timelineCollapsedSummary.textContent = timelineSummaryText ? ` · ${timelineSummaryText}` : '';
   perfStageStart = recordPerfStage('renderTodayHeader', perfStageStart);
 
   const listEl = document.getElementById('recent-list');
@@ -9847,9 +9879,18 @@ function selectAvatar(emoji) {
 function renderPartnerCard() {
   const card = document.getElementById('partner-card');
   if (!card) return;
+  // Today Persistent Sections V1 — the whole Accountability section (header included) only
+  // takes up space when a partner is actually linked; no permanent empty card otherwise.
+  const section = document.getElementById('accountability-details');
+  const collapsedSummary = document.getElementById('accountability-collapsed-summary');
   const partnerUid = localStorage.getItem('ta3-partner-uid');
-  if (!partnerUid) { card.style.display = 'none'; card.innerHTML = ''; return; }
+  if (!partnerUid) {
+    card.style.display = 'none'; card.innerHTML = '';
+    if (section) section.style.display = 'none';
+    return;
+  }
   card.style.display = 'block';
+  if (section) section.style.display = '';
 
   const esc = s => String(s).replace(/</g, '&lt;');
   const lastNudge = settings._lastNudgeSent || 0;
@@ -9874,6 +9915,7 @@ function renderPartnerCard() {
       ${viewDayHtml}
       ${nudgeHtml}
     </div>`;
+    if (collapsedSummary) collapsedSummary.textContent = ' · Partner';
     return;
   }
 
@@ -9906,6 +9948,7 @@ function renderPartnerCard() {
     ${viewDayHtml}
     ${nudgeHtml}
   </div>`;
+  if (collapsedSummary) collapsedSummary.textContent = fresh ? ` · ${name} · ${esc(M.formatFreshness(Date.now(), shared.publisher.updatedAt))}` : ` · ${name}`;
 }
 
 // ── Partner View V1 — full-screen, read-only Today projection ──────────────

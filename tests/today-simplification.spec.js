@@ -166,7 +166,10 @@ for (const energy of ['deep','waste','none']) {
     await today(page);
     await page.evaluate(energy => { entries = energy === 'none' ? [] : [{id:91,activity:'Work',energy,date:planTodayKey(),tsStart:Date.now()-4800000,ts:Date.now(),blockIntervalMin:80}]; renderToday(); }, energy);
     await expect(page.locator('#so-far-summary')).toHaveText(energy === 'none' ? 'No time recorded yet.' : energy === 'deep' ? '1h 20m deep · 0m waste' : '0m deep · 1h 20m waste');
-    for (const id of ['today-health','daily-summary','awareness-signal','timeline-section','recent-entries-section']) await expect(page.locator(`#${id}`)).toBeHidden();
+    for (const id of ['today-health','daily-summary','awareness-signal','recent-entries-section']) await expect(page.locator(`#${id}`)).toBeHidden();
+    // Today Persistent Sections V1 — Timeline is visible by default now, unlike the other
+    // detail surfaces this test otherwise checks stay hidden until explicitly revealed.
+    await expect(page.locator('#timeline-section')).toBeVisible();
   });
 }
 
@@ -198,6 +201,13 @@ test('rendered before/after phone and desktop hierarchy', async ({ page }) => {
       else await page.unrouteAll({behavior:'wait'});
       await today(page, {routines:routineState([routine({mode:'anytime'})]),plans:{'2026-09-08':{items:[planItem('p1','Finish HVAC workflow'),planItem('p2','Send handoff')]}}});
       await page.evaluate(() => { reviews[planTodayKey()]={unloggedOk:true}; localStorage.setItem('ta3-sleep-reminded',planTodayKey()); checkSleepReminder(); renderToday(); });
+      // Today Persistent Sections V1 intentionally defaults Timeline/Accountability open —
+      // collapse them for this measurement so the check keeps guarding against unrelated
+      // height bloat elsewhere on Today, not the deliberate default this milestone added.
+      await page.evaluate(() => {
+        const t = document.getElementById('timeline-details'); if (t) t.open = false;
+        const a = document.getElementById('accountability-details'); if (a) a.open = false;
+      });
       measurements[version]=await page.locator('#view-today').evaluate(el=>Math.round(el.getBoundingClientRect().height));
       await page.screenshot({path:path.join(APP_ROOT,'test-results','phase6d',`${version}-${width}.png`),fullPage:true,animations:'disabled'});
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -208,7 +218,11 @@ test('rendered before/after phone and desktop hierarchy', async ({ page }) => {
       }
     }
     console.log(`LAYOUT ${width}: ${JSON.stringify(measurements)}`);
-    expect(measurements.after).toBeLessThanOrEqual(measurements.before + 16);
+    // Today Persistent Sections V1 adds one deterministic +40px at both widths: the
+    // always-visible Timeline summary header (collapsed above, per its own min-height:40px
+    // rule) that no longer disappears entirely the way it did before this milestone. The
+    // original 16px slack still guards against any other, unrelated height growth.
+    expect(measurements.after).toBeLessThanOrEqual(measurements.before + 40 + 16);
   }
 });
 
@@ -234,7 +248,8 @@ test('many entries and long commitments stay bounded; active Focus keeps repair 
   for(const width of [390,1280]) {
     await page.setViewportSize({width,height:900});
     await expect(page.locator('#routine-compact .commitment-routine')).toHaveCount(2);
-    await expect(page.locator('#timeline-section')).toBeHidden();
+    // Today Persistent Sections V1 — Timeline is visible by default even under this stress load.
+    await expect(page.locator('#timeline-section')).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.screenshot({path:path.join(APP_ROOT,'test-results','phase6d',`long-commitments-${width}.png`),fullPage:true,animations:'disabled'});
   }

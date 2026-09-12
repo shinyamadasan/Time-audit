@@ -1605,6 +1605,14 @@ button, a, [role="button"],
 #so-far-summary{font-size:13px;color:var(--muted)}
 .today-secondary{display:flex;flex-wrap:wrap;gap:4px}
 .today-destination:not([open]){display:none}
+#timeline-details,#accountability-details{display:block}
+#timeline-details summary,#accountability-details summary{display:flex;align-items:center;gap:6px}
+#timeline-details .tds-summary,#accountability-details .tds-summary{color:var(--muted);font-size:11px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+#timeline-details[open] .tds-summary,#accountability-details[open] .tds-summary{display:none}
+#timeline-details .tds-chevron,#accountability-details .tds-chevron{margin-left:auto;flex-shrink:0;color:var(--muted);font-size:11px}
+#timeline-details .tds-chevron::after{content:'▾'}
+#timeline-details:not([open]) .tds-chevron::after,#accountability-details:not([open]) .tds-chevron::after{content:'▸'}
+#accountability-details .tds-chevron::after{content:'▾'}
 #view-today .btn.sm,#view-today .plan-check{min-height:40px}
 #view-today .plan-check{min-width:36px}
 #view-today .today-detail,#today-health,#active-device-banner,#sleep-pill-btn,#missed-closeout-card,#closeout-card,#yesterday-promise,#feedback-flash{display:none!important}
