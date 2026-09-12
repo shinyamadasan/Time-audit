@@ -1788,6 +1788,198 @@ test('weekly schedule auto-log respects a deleted day skip', async ({ page }) =>
   await expect(page.locator('#recent-list')).not.toContainText('Scribe shift');
 });
 
+// ── Scheduled auto-log reliability (cross-midnight coverage + due-check heartbeat) ──
+
+test('due-check heartbeat auto-logs a same-day block without a manual render', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 10, 1, 0); // Wed 10:01, block ended 10:00
+  await openApp(page, {
+    nowTs,
+    settings: {
+      templates: [{
+        id: 'sameday', activity: 'Scribe shift', energy: 'nine5',
+        days: [3], startTime: '08:00', endTime: '10:00', autoLog: true, enabled: true
+      }]
+    }
+  });
+
+  const created = await page.evaluate(() => autoLogHeartbeatTick() || entries.some(e => e.id === 'tpllog_sameday_2026-07-15'));
+  expect(created).toBeTruthy();
+  const entry = await page.evaluate(() => entries.find(e => e.id === 'tpllog_sameday_2026-07-15'));
+  expect(entry).toMatchObject({ activity: 'Scribe shift', energy: 'nine5', scheduledAutoLog: true });
+  await expect(page.locator('#recent-list')).toContainText('Scribe shift');
+});
+
+test('due-check heartbeat auto-logs a cross-midnight block that ended overnight', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 8, 1, 0); // Wed 08:01, the 22:00->08:00 shift just ended
+  await openApp(page, {
+    nowTs,
+    settings: {
+      templates: [{
+        id: 'scribe', activity: 'Scribe shift', energy: 'nine5',
+        days: [2], startTime: '22:00', endTime: '08:00', autoLog: true, enabled: true
+      }]
+    }
+  });
+
+  await page.evaluate(() => autoLogHeartbeatTick());
+  const entry = await page.evaluate(() => entries.find(e => e.id === 'tpllog_scribe_2026-07-14'));
+  expect(entry).toMatchObject({
+    activity: 'Scribe shift',
+    energy: 'nine5',
+    scheduledAutoLog: true,
+    tsStart: Date.UTC(2026, 6, 14, 22, 0, 0),
+    ts: Date.UTC(2026, 6, 15, 8, 0, 0)
+  });
+  await expect(page.locator('#recent-list')).toContainText('Scribe shift');
+});
+
+test('cross-midnight coverage sees a manual entry that lands entirely after midnight', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 8, 1, 0);
+  await openApp(page, {
+    nowTs,
+    entries: [{
+      // A manual/confirmed log of the same activity, entirely on the post-midnight
+      // side (01:00-07:00) — 6 of the shift's 10 hours, well over the 50% gate.
+      id: 'manual-1', ts: Date.UTC(2026, 6, 15, 7, 0, 0), tsStart: Date.UTC(2026, 6, 15, 1, 0, 0),
+      updatedAt: Date.UTC(2026, 6, 15, 7, 0, 0), blockIntervalMin: 360, date: '2026-07-15',
+      activity: 'Scribe shift', energy: 'nine5', category: 'nine5'
+    }],
+    settings: {
+      templates: [{
+        id: 'scribe', activity: 'Scribe shift', energy: 'nine5',
+        days: [2], startTime: '22:00', endTime: '08:00', autoLog: true, enabled: true
+      }]
+    }
+  });
+
+  const result = await page.evaluate(() => {
+    const before = entries.length;
+    autoLogHeartbeatTick();
+    return { changed: entries.length !== before, autoLogIds: entries.filter(e => e.id.startsWith('tpllog_')).length };
+  });
+  expect(result).toEqual({ changed: false, autoLogIds: 0 });
+});
+
+test('passive browser-extension evidence does not suppress the scheduled auto-log', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 8, 1, 0);
+  await openApp(page, {
+    nowTs,
+    entries: [{
+      // Fully covers the shift and even shares its activity label — but it is
+      // passive OBSERVED evidence, not proof the scheduled activity happened.
+      id: 'observed-1', ts: Date.UTC(2026, 6, 15, 8, 0, 0), tsStart: Date.UTC(2026, 6, 14, 22, 0, 0),
+      updatedAt: Date.UTC(2026, 6, 15, 8, 0, 0), blockIntervalMin: 600, date: '2026-07-14',
+      activity: 'Scribe shift', energy: 'nine5', category: 'nine5',
+      browserUsage: true, quickLogged: true, source: 'browser-extension'
+    }],
+    settings: {
+      templates: [{
+        id: 'scribe', activity: 'Scribe shift', energy: 'nine5',
+        days: [2], startTime: '22:00', endTime: '08:00', autoLog: true, enabled: true
+      }]
+    }
+  });
+
+  await page.evaluate(() => autoLogHeartbeatTick());
+  const created = await page.evaluate(() => !!entries.find(e => e.id === 'tpllog_scribe_2026-07-14'));
+  expect(created).toBe(true);
+});
+
+test('generic PC Time evidence does not suppress the scheduled auto-log', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 8, 1, 0);
+  await openApp(page, {
+    nowTs,
+    entries: [{
+      // A generic computer-session block fully covering the shift is not proof
+      // the specific scheduled activity took place.
+      id: 'pctime-1', ts: Date.UTC(2026, 6, 15, 8, 0, 0), tsStart: Date.UTC(2026, 6, 14, 22, 0, 0),
+      updatedAt: Date.UTC(2026, 6, 15, 8, 0, 0), blockIntervalMin: 600, date: '2026-07-14',
+      activity: 'PC Time', energy: 'shallow', category: 'shallow'
+    }],
+    settings: {
+      templates: [{
+        id: 'scribe', activity: 'Scribe shift', energy: 'nine5',
+        days: [2], startTime: '22:00', endTime: '08:00', autoLog: true, enabled: true
+      }]
+    }
+  });
+
+  await page.evaluate(() => autoLogHeartbeatTick());
+  const created = await page.evaluate(() => !!entries.find(e => e.id === 'tpllog_scribe_2026-07-14'));
+  expect(created).toBe(true);
+});
+
+test('deterministic occurrence ID blocks a duplicate even once due-check heartbeat runs', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 8, 1, 0);
+  await openApp(page, {
+    nowTs,
+    entries: [{
+      id: 'tpllog_scribe_2026-07-14', ts: Date.UTC(2026, 6, 15, 8, 0, 0), tsStart: Date.UTC(2026, 6, 14, 22, 0, 0),
+      updatedAt: Date.UTC(2026, 6, 15, 8, 0, 0), blockIntervalMin: 600, date: '2026-07-14',
+      activity: 'Scribe shift', energy: 'nine5', category: 'nine5',
+      autoLogged: true, scheduledAutoLog: true, templateId: 'scribe'
+    }],
+    settings: {
+      templates: [{
+        id: 'scribe', activity: 'Scribe shift', energy: 'nine5',
+        days: [2], startTime: '22:00', endTime: '08:00', autoLog: true, enabled: true
+      }]
+    }
+  });
+
+  const counts = await page.evaluate(() => {
+    autoLogHeartbeatTick();
+    return entries.filter(e => e.id === 'tpllog_scribe_2026-07-14').length;
+  });
+  expect(counts).toBe(1);
+});
+
+test('due-check heartbeat is a no-op when nothing is due yet', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 6, 0, 0); // shift is still in progress (ends 08:00)
+  await openApp(page, {
+    nowTs,
+    settings: {
+      templates: [{
+        id: 'scribe', activity: 'Scribe shift', energy: 'nine5',
+        days: [2], startTime: '22:00', endTime: '08:00', autoLog: true, enabled: true
+      }]
+    }
+  });
+
+  const result = await page.evaluate(() => {
+    let renderCalls = 0;
+    const originalRender = window.renderToday;
+    window.renderToday = (...args) => { renderCalls++; return originalRender(...args); };
+    const before = entries.length;
+    autoLogHeartbeatTick();
+    window.renderToday = originalRender;
+    return { renderCalls, entriesChanged: entries.length !== before };
+  });
+  expect(result).toEqual({ renderCalls: 0, entriesChanged: false });
+});
+
+test('repeated due-check heartbeats after due time stay idempotent', async ({ page }) => {
+  const nowTs = Date.UTC(2026, 6, 15, 8, 1, 0);
+  await openApp(page, {
+    nowTs,
+    settings: {
+      templates: [{
+        id: 'scribe', activity: 'Scribe shift', energy: 'nine5',
+        days: [2], startTime: '22:00', endTime: '08:00', autoLog: true, enabled: true
+      }]
+    }
+  });
+
+  const counts = await page.evaluate(() => {
+    autoLogHeartbeatTick(); // first minute tick after due — creates the entry
+    const afterFirst = entries.filter(e => e.id === 'tpllog_scribe_2026-07-14').length;
+    autoLogHeartbeatTick(); // next minute tick — must not create a second one
+    const afterSecond = entries.filter(e => e.id === 'tpllog_scribe_2026-07-14').length;
+    return { afterFirst, afterSecond };
+  });
+  expect(counts).toEqual({ afterFirst: 1, afterSecond: 1 });
+});
+
 test('week top activities merge activity labels that only differ by case', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 15, 18, 0, 0);
   const sleepAStart = Date.UTC(2026, 6, 13, 0, 0, 0);

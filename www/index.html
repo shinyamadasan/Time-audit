@@ -3675,6 +3675,18 @@ function getEntriesForDateWindow(dateKey, includeDeleted = false) {
   });
   return result;
 }
+// Entries overlapping an arbitrary [tsStart, tsEnd) window, e.g. a template's own
+// occurrence interval. Unlike getEntriesForDateWindow, this is NOT clipped to a single
+// calendar day — needed so a cross-midnight slot (e.g. 22:00-08:00) can see entries
+// that land entirely on the following day.
+function getEntriesOverlappingRange(tsStart, tsEnd, includeDeleted = false) {
+  return entries.filter(e => {
+    if (!e || (e.deleted && !includeDeleted)) return false;
+    const range = entryTimeRange(e);
+    if (!range) return false;
+    return range.start < tsEnd && range.end > tsStart;
+  });
+}
 function isViewingToday() {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   return getViewingDateKey() === getDateInTZ(Date.now(), tz);
@@ -9051,22 +9063,19 @@ function generateTemplateEntries(dateKey) {
   if (dateKey < cutoff) return [];
   const noon = tzParseTime(dateKey, '12:00');
   const dow = tzDow(noon);
-  const dayEntries = getEntriesForDateWindow(dateKey, true).filter(e => !e.missed);
   const result = [];
   for (const tpl of settings.templates) {
     if (!tpl.enabled) continue;
     if (!tpl.days.includes(dow)) continue;
     if (templateSkippedOnDate(tpl, dateKey)) continue;
     const { tsStart, tsEnd } = templateSlotRange(tpl, dateKey);
+    // Coverage is checked against the template's own full interval (not clipped to
+    // dateKey's calendar day) so a cross-midnight slot sees entries on either side.
     // Only hide the template when logged entries cover ≥50% of its duration.
     // A small incidental overlap (e.g. a browser-extension PC-time snippet) won't suppress it.
     const tplDur = tsEnd - tsStart;
-    const coveringEntries = dayEntries.filter(e => entryCoversTemplateSlot(e, tpl));
-    const covered = coveringEntries.reduce((acc, e) => {
-      const eS = Math.max(tsStart, e.tsStart || (e.ts - (e.blockIntervalMin || settings.intervalMin) * 60000));
-      const eE = Math.min(tsEnd, e.ts);
-      return acc + Math.max(0, eE - eS);
-    }, 0);
+    const rangeEntries = getEntriesOverlappingRange(tsStart, tsEnd, true).filter(e => !e.missed);
+    const covered = templateCoverageDuration(tpl, { tsStart, tsEnd }, rangeEntries);
     if (covered >= tplDur * 0.5) continue;
     result.push({
       id: `tpl_${tpl.id}_${dateKey}`,
@@ -9368,13 +9377,10 @@ function autoTemplateEntryId(tpl, dateKey) {
   return `tpllog_${safeId}_${dateKey}`;
 }
 
-function templateSlotCovered(tpl, dateKey, range) {
-  if (templateSkippedOnDate(tpl, dateKey)) return true;
-  const autoId = autoTemplateEntryId(tpl, dateKey);
-  const dayEntries = getEntriesForDateWindow(dateKey, true).filter(e => !e.missed);
-  if (dayEntries.some(e => String(e.id) === autoId)) return true;
-  const tplDur = range.tsEnd - range.tsStart;
-  const covered = dayEntries
+// Shared ≥50%-coverage duration math used by both templateSlotCovered (the auto-log
+// sweep's gate) and generateTemplateEntries (the UI hint) so the two can never diverge.
+function templateCoverageDuration(tpl, range, overlappingEntries) {
+  return overlappingEntries
     .filter(e => entryCoversTemplateSlot(e, tpl))
     .reduce((acc, e) => {
       const eStart = e.tsStart || (e.ts - (e.blockIntervalMin || settings.intervalMin) * 60000);
@@ -9383,6 +9389,20 @@ function templateSlotCovered(tpl, dateKey, range) {
       const clippedEnd = Math.min(range.tsEnd, eEnd);
       return acc + Math.max(0, clippedEnd - clippedStart);
     }, 0);
+}
+
+function templateSlotCovered(tpl, dateKey, range) {
+  if (templateSkippedOnDate(tpl, dateKey)) return true;
+  // Deterministic occurrence ID is the primary idempotency guard — checked against the
+  // full entries list (not the range/window filters below) so it holds regardless of
+  // whether the entry itself happens to overlap the recomputed range.
+  const autoId = autoTemplateEntryId(tpl, dateKey);
+  if (entries.some(e => !e.missed && String(e.id) === autoId)) return true;
+  // Coverage is checked against the template's own full interval, not a single
+  // calendar day, so a cross-midnight slot (e.g. 22:00-08:00) sees entries on both sides.
+  const rangeEntries = getEntriesOverlappingRange(range.tsStart, range.tsEnd, true).filter(e => !e.missed);
+  const tplDur = range.tsEnd - range.tsStart;
+  const covered = templateCoverageDuration(tpl, range, rangeEntries);
   return covered >= tplDur * 0.5;
 }
 
@@ -9447,10 +9467,16 @@ function autoLogDueTemplates({ notify = true } = {}) {
 
 function entryCoversTemplateSlot(entry, tpl) {
   if (!entry || entry.missed) return false;
-  if (!entry.deleted) return true;
+  // Template ≠ actual: passive OBSERVED evidence (browser extension) and generic
+  // computer-session time are not proof the specific scheduled activity happened,
+  // regardless of how much of the slot they overlap.
+  if (entry.browserUsage || isPcTimeEntry(entry)) return false;
   const entryActivity = String(normalizeActivity(String(entry.activity || '').trim()) || '').toLowerCase();
   const tplActivity = String(normalizeActivity(String(tpl.activity || '').trim()) || '').toLowerCase();
-  return entryActivity === tplActivity && entry.energy === tpl.energy;
+  const sameActivity = entryActivity === tplActivity;
+  const sameTemplate = tpl.id != null && String(entry.templateId || '') === String(tpl.id);
+  if (!entry.deleted) return sameActivity || sameTemplate;
+  return sameActivity && entry.energy === tpl.energy;
 }
 
 function scheduleTemplateDiffersFromEntry(tpl, entry) {
@@ -10996,7 +11022,22 @@ document.addEventListener('click', e => {
   }
 });
 // Full Today render is only needed on date rollover; lightweight status updates run above.
-setInterval(() => { if (!running && !breakActive) renderTodayOnDateChange(); }, 60000);
+// Due-template check runs unconditionally (not gated on running/breakActive) so a
+// scheduled auto-log fires promptly after its end time even if the app never
+// otherwise re-renders (e.g. left open and idle overnight). autoLogDueTemplates()
+// itself already guards against a currently-running session overlapping the slot,
+// so this can't fight that per-occurrence check. When nothing is due this does a
+// cheap settings.templates scan and no entries mutation, persist, sync, or render.
+function autoLogHeartbeatTick() {
+  if (autoLogDueTemplates({ notify: isViewingToday() })) {
+    _todayRenderKey = '__FORCE__';
+    renderToday();
+  }
+}
+setInterval(() => {
+  if (!running && !breakActive) renderTodayOnDateChange();
+  autoLogHeartbeatTick();
+}, 60000);
 
 // ══════════════════════════════════════════════════════
 // SERVICE WORKER — background ping notifications
