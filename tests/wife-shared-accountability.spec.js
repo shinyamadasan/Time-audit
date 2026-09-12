@@ -218,15 +218,28 @@ test.describe('Wife/Shared Accountability V1', () => {
 
     const payload = shared.get('uid_alice/shared');
     expect(payload).toBeTruthy();
-    expect(Object.keys(payload).sort()).toEqual(['publisher', 'schemaVersion', 'today', 'tomorrow']);
+    // Partner View V1 (corrected product requirement) publishes its deeper reciprocal
+    // Today projection as a sibling `partnerView` key on this SAME payload/write — the
+    // quick-glance summary allowlist below is otherwise unchanged.
+    expect(Object.keys(payload).sort()).toEqual(['partnerView', 'publisher', 'schemaVersion', 'today', 'tomorrow']);
     expect(Object.keys(payload.publisher).sort()).toEqual(['dateKey', 'displayName', 'timezone', 'updatedAt']);
     expect(Object.keys(payload.today).sort()).toEqual(['dateKey', 'priorities']);
     expect(Object.keys(payload.tomorrow).sort()).toEqual(['dateKey', 'prepStatus']);
     payload.today.priorities.forEach((p) => expect(Object.keys(p).sort()).toEqual(['status', 'title']));
 
+    // "deep"/"minute" are deliberately excluded from this full-payload check — Partner
+    // View V1 (partnerView.today.soFar) is now the one place Deep/Waste minutes are
+    // intentionally exposed. Everything else here must still never appear anywhere,
+    // including inside partnerView (no gamification, no technical/security internals).
     const serialized = JSON.stringify(payload).toLowerCase();
-    for (const bad of ['reddit', 'url', 'domain', 'review', 'device', 'deep', 'minute', 'streak', 'score', 'wallet']) {
+    for (const bad of ['reddit', 'url', 'domain', 'review', 'device', 'streak', 'score', 'wallet']) {
       expect(serialized.includes(bad)).toBe(false);
+    }
+    // The narrow summary card itself (publisher/today/tomorrow, excluding partnerView)
+    // still never leaks Deep/Waste minutes or any other behavioral figure — unchanged.
+    const summaryOnly = JSON.stringify({ publisher: payload.publisher, today: payload.today, tomorrow: payload.tomorrow }).toLowerCase();
+    for (const bad of ['deep', 'minute']) {
+      expect(summaryOnly.includes(bad)).toBe(false);
     }
 
     // Status semantics: linked actual + not done -> worked-on; explicit done -> done; minutes never imply done.
