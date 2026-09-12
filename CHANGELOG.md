@@ -1,5 +1,43 @@
 # ChronaSense — Changelog
 
+## Wife / Shared Accountability V1 (feat/wife-shared-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-11
+
+Smallest useful shared-accountability experience between two securely-linked users,
+built on the already-deployed `shared-access-hardening-v1` boundary. **No Firebase
+rule changed.** A partner sees only: today's planned priorities and each one's status
+(Planned / Worked on / Done), and whether tomorrow was prepared (Prepared / Open day /
+Not prepared yet) — never minutes, scores, streaks, review text, Timeline, browser/app
+activity, or tomorrow's task titles.
+
+- New `shared-accountability-model.js` — the pure, allowlist-only payload builder and
+  status/prep derivation (`buildSharedPayload`, `deriveTodayItemStatus`,
+  `deriveTomorrowPrepStatus`, `isSharedTodayFresh`, `validateSharedPayload`). Never
+  spreads an internal object; builds the payload field by field.
+- `storage.js`: `publishSharedAccountability()` (event-driven, content-deduped —
+  `sharedPayloadSignature()` excludes `updatedAt` so a timestamp alone cannot force a
+  repeat write) publishes to the hardened `uid_<uid>/shared` node on plan
+  add/edit/delete/done-toggle, a newly-synced actual entry, a timezone edit, a
+  cross-device plan sync, and the partner link becoming active. `initPartnerSharedListener()`
+  reads only the partner's own `/shared` projection, re-validated before render — never
+  the partner's entries/plans/settings/Timeline/review/Ledger.
+- `index.html`: `renderPartnerCard()` now reads the validated `/shared` payload instead
+  of the legacy `/public` node (which is left in place, untouched, for anything else
+  that may still use it). Read-only card — no partner-task edit/reorder/start/delete
+  control. Stale cross-timezone payloads show "No current update" instead of a prior
+  day's priorities. Unlink now clears `card.innerHTML` (previously only hid it via
+  `display:none`), so no stale partner content lingers in the DOM after disconnect.
+  Nudge, empty-state copy, and no-gamification posture are unchanged.
+- Tests: `shared-accountability-model.test.js` (privacy allowlist against a maximal
+  hostile input, status/tomorrow/staleness semantics, write-dedupe signature) and
+  `tests/wife-shared-accountability.spec.js` (real two-page linked-partner integration:
+  allowlist-only write, read-only card rendering, unlink clears the card, stale payload
+  never shown as current, 60 no-op publishes produce zero additional writes).
+  `firebase-rules.test.js` / `tests/pair-accountability.spec.js` re-run clean, unmodified.
+
+No new tab, chat, shared calendar, or partner Timeline. No gamification. No production
+data migration. See `APP_CONTEXT.md` → "Wife / Shared Accountability V1" for the full
+contract.
+
 ## Timeline Truth Follow-up V1 (feat/timeline-truth-followup-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-11
 
 Bounded fix for three dogfood truth/semantics gaps a production audit found exposed

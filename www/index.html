@@ -1642,6 +1642,7 @@
 <script type="module" src="windows-hud-bridge.js?v=20260908-windows-ambient-focus-hud-v1"></script>
 <script type="module" src="coarse-life-evidence-ui.js?v=20260909-coarse-life-evidence-v1"></script>
 <script type="module" src="coarse-life-evidence-sync.js?v=20260910-coarse-evidence-durability-v1"></script>
+<script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -6226,6 +6227,7 @@ function writeDatePlanLocal(dateKey, nextPlan) {
   }
   syncCommitmentFromPlan();
   renderTodayPlan();
+  if (typeof publishSharedAccountability === 'function') publishSharedAccountability();
   return nextPlan;
 }
 
@@ -7901,6 +7903,7 @@ function saveSettings(){
   persist();
   if (fbRoomRef) fbRoomRef.update({ settings });
   renderToday();
+  if (typeof publishSharedAccountability === 'function') publishSharedAccountability();
 }
 function addPreset(){settings.presets.push({label:'New activity',energy:'shallow'});persist();renderSettings();}
 function removePreset(i){settings.presets.splice(i,1);persist();renderSettings();}
@@ -9707,27 +9710,67 @@ function selectAvatar(emoji) {
 // ══════════════════════════════════════════════════════
 // ACCOUNTABILITY PARTNER
 // ══════════════════════════════════════════════════════
+// Wife/Shared Accountability V1 — this card reads ONLY the partner's hardened `/shared`
+// projection (via the validated `partnerShared`, kept current by initPartnerSharedListener
+// in storage.js). It never reads the legacy `/public` node (deepHrsToday etc.) — that data
+// source is retired for this card, though `/public` itself is left alone since nothing else
+// in this milestone required removing it. Read-only: there is no control here that can
+// mark, edit, reorder, start, or delete the partner's task.
 function renderPartnerCard() {
   const card = document.getElementById('partner-card');
   if (!card) return;
-  if (!partnerData || !partnerData.name) { card.style.display = 'none'; return; }
-  const isToday = partnerData.dateKey === toDateKey(new Date());
-  const deepHrs = (isToday && partnerData.deepHrsToday != null) ? partnerData.deepHrsToday : null;
+  const partnerUid = localStorage.getItem('ta3-partner-uid');
+  if (!partnerUid) { card.style.display = 'none'; card.innerHTML = ''; return; }
+  card.style.display = 'block';
+
+  const esc = s => String(s).replace(/</g, '&lt;');
   const lastNudge = settings._lastNudgeSent || 0;
   const canNudge = Date.now() - lastNudge > 20 * 60 * 60 * 1000; // 20h cooldown
-  card.style.display = 'block';
+  const nudgeHtml = canNudge
+    ? `<button class="btn sm ghost" onclick="sendNudge()" style="flex-shrink:0">💪 Nudge</button>`
+    : `<span style="font-size:10px;color:var(--muted);flex-shrink:0">Nudged ✓</span>`;
+
+  const M = globalThis.SharedAccountabilityModel;
+  const shared = M ? M.validateSharedPayload(partnerShared) : null;
+  if (!shared) {
+    card.innerHTML = `<div class="partner-card">
+      <div class="partner-avatar">👤</div>
+      <div class="partner-info">
+        <div class="partner-name">Partner</div>
+        <div class="partner-stats">No current update</div>
+      </div>
+      ${nudgeHtml}
+    </div>`;
+    return;
+  }
+
+  const fresh = M.isSharedTodayFresh(Date.now(), shared.publisher.timezone, shared.today.dateKey);
+  const name = shared.publisher.displayName ? esc(shared.publisher.displayName) : 'Partner';
+  const statusIcon = { planned: '○', 'worked-on': '◐', done: '✓' };
+  const statusLabel = { planned: 'Planned', 'worked-on': 'Worked on', done: 'Done' };
+  const prepLabel = { prepared: 'Prepared', 'open-day': 'Open day', 'not-prepared': 'Not prepared yet' };
+
+  let bodyRows;
+  if (!fresh) {
+    bodyRows = `<div class="partner-stats">No current update</div>`;
+  } else if (!shared.today.priorities.length) {
+    bodyRows = `<div class="partner-stats">No priorities shared today</div>
+      <div class="partner-stats">Tomorrow: ${esc(prepLabel[shared.tomorrow.prepStatus] || 'Not prepared yet')}</div>`;
+  } else {
+    bodyRows = shared.today.priorities.map(p =>
+      `<div class="partner-stats">${statusIcon[p.status] || '○'} ${esc(p.title)} — ${esc(statusLabel[p.status] || 'Planned')}</div>`
+    ).join('') + `<div class="partner-stats">Tomorrow: ${esc(prepLabel[shared.tomorrow.prepStatus] || 'Not prepared yet')}</div>`;
+  }
+  const freshnessHtml = `<div class="partner-stats">${esc(M.formatFreshness(Date.now(), shared.publisher.updatedAt))}</div>`;
+
   card.innerHTML = `<div class="partner-card">
-    <div class="partner-avatar">${partnerData.avatar || '👤'}</div>
+    <div class="partner-avatar">👤</div>
     <div class="partner-info">
-      <div class="partner-name">${partnerData.name}</div>
-      <div class="partner-stats">${
-        deepHrs !== null ? `${deepHrs}h deep today` : 'No data yet today'
-      }</div>
+      <div class="partner-name">${name}</div>
+      ${bodyRows}
+      ${freshnessHtml}
     </div>
-    ${canNudge
-      ? `<button class="btn sm ghost" onclick="sendNudge()" style="flex-shrink:0">💪 Nudge</button>`
-      : `<span style="font-size:10px;color:var(--muted);flex-shrink:0">Nudged ✓</span>`
-    }
+    ${nudgeHtml}
   </div>`;
 }
 

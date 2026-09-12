@@ -858,6 +858,7 @@ function startSync() {
       const ls = parseInt(localStorage.getItem('ta3-last-sync') || '0', 10);
       if (lv > ls) syncEntries();
       syncSettings();
+      publishSharedAccountability(); // app/auth session initializes — ensure a current payload exists
       // Durability V1 — retry any coarse-life-evidence push that failed while offline.
       // pushAllLocal() diffs against the last remote snapshot it saw, so this is a no-op
       // once everything is already converged.
@@ -923,6 +924,7 @@ function startSync() {
       persist();
       scheduleRenderToday();
       if (document.getElementById('view-week').classList.contains('active')) renderWeek();
+      publishSharedAccountability(); // a cross-device entry may newly link to today's plan
     } else {
       localStorage.setItem('ta3-last-sync', Date.now());
     }
@@ -937,6 +939,7 @@ function startSync() {
     if (applyRemoteSettings(snap.val())) {
       renderToday();
       renderSettings();
+      publishSharedAccountability(); // account timezone may have changed on another device
     }
   });
 
@@ -991,6 +994,7 @@ function startSync() {
       localStorage.setItem('ta3-plans', JSON.stringify(plans));
       if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
       renderToday();
+      publishSharedAccountability(); // cross-device plan change (add/edit/delete/done/prepare-tomorrow)
     }
   });
 
@@ -1079,17 +1083,25 @@ function startSync() {
     const remotePartnerUid = snap.val();
     const localPartnerUid = localStorage.getItem('ta3-partner-uid');
     if (remotePartnerUid) {
-      if (remotePartnerUid !== localPartnerUid) {
+      const justLinked = remotePartnerUid !== localPartnerUid;
+      if (justLinked) {
         localStorage.setItem('ta3-partner-uid', remotePartnerUid);
       }
       if (!_partnerListener) initPartnerListener(remotePartnerUid);
+      if (!_partnerSharedListener) initPartnerSharedListener(remotePartnerUid);
+      // Wife/Shared Accountability V1 — publish trigger: partner link becomes active.
+      // publishSharedAccountability() dedupes on content, so this is a no-op if we
+      // already have a current payload out.
+      publishSharedAccountability();
       if (typeof renderPartnerSettings === 'function') renderPartnerSettings();
     } else if (localPartnerUid) {
       // Partner was removed from the other side
       localStorage.removeItem('ta3-partner-uid');
       localStorage.removeItem('ta3-pair-code');
       partnerData = null;
+      partnerShared = null;
       if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
+      if (_partnerSharedListener) { _partnerSharedListener.off(); _partnerSharedListener = null; }
       if (typeof renderPartnerCard === 'function') renderPartnerCard();
       if (typeof renderPartnerSettings === 'function') renderPartnerSettings();
     }
@@ -1635,9 +1647,64 @@ function publishPublicStats() {
     dateKey: toDateKey(new Date()),
     updatedAt: Date.now()
   });
+  publishSharedAccountability();
+}
+
+let partnerShared = null; // Wife/Shared Accountability V1 — validated live projection from the partner's `/shared` node
+let _lastSharedPayloadSignature = null; // write-dedupe: content-only signature of the last payload we actually wrote
+
+/**
+ * Wife/Shared Accountability V1 — builds and (if changed) publishes the allowlisted
+ * `/shared` projection. Event-driven: called from discrete plan/entry/settings/link
+ * mutations, never from a timer tick. Gated on having a linked partner at all (data
+ * minimization) and deduped on content so re-renders and remote echoes of our own
+ * writes never cause a repeat write.
+ */
+function publishSharedAccountability() {
+  if (!fbDb || !currentUser) return;
+  if (!localStorage.getItem('ta3-partner-uid')) return; // no linked partner — nothing to publish
+  const M = globalThis.SharedAccountabilityModel;
+  if (!M) return; // model module not loaded yet; the next trigger will retry
+  const PT = globalThis.PlanTomorrowModel;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const todayKey = getDateInTZ(Date.now(), tz);
+  const tomorrowKey = PT ? PT.planTomorrowTargetDate(Date.now(), tz) : null;
+
+  const rawItems = typeof getPlanItems === 'function' ? getPlanItems(todayKey) : [];
+  const todayItems = rawItems.map(item => {
+    const minutes = typeof planTrackedMin === 'function' ? planTrackedMin(item.task, todayKey, item.id) : 0;
+    return { title: item.task, status: M.deriveTodayItemStatus(item, minutes) };
+  });
+
+  let prepStatus = 'not-prepared';
+  if (tomorrowKey && PT) {
+    const tomorrowPlan = plans[tomorrowKey];
+    const preparation = PT.normalizePreparation(tomorrowPlan && tomorrowPlan.preparation, tomorrowKey);
+    prepStatus = M.deriveTomorrowPrepStatus(preparation);
+  }
+
+  const payload = M.buildSharedPayload({
+    displayName: currentUser.displayName || currentUser.email?.split('@')[0] || null,
+    timezone: tz,
+    dateKey: todayKey,
+    updatedAt: Date.now(),
+    todayItems,
+    tomorrowDateKey: tomorrowKey || todayKey,
+    tomorrowPrepStatus: prepStatus
+  });
+
+  const signature = M.sharedPayloadSignature(payload);
+  if (signature === _lastSharedPayloadSignature) return; // no meaningful change — skip the write
+  const previousSignature = _lastSharedPayloadSignature;
+  _lastSharedPayloadSignature = signature;
+  fbDb.ref(`uid_${currentUser.uid}/shared`).set(payload).catch(err => {
+    _lastSharedPayloadSignature = previousSignature; // allow a retry on the next trigger
+    console.warn('Shared accountability publish failed', err);
+  });
 }
 
 let _partnerListener = null;
+let _partnerSharedListener = null;
 let _nudgesRef      = null;
 let _partnerUidRef  = null;
 let _pairCodeRef    = null;
@@ -1684,6 +1751,9 @@ function teardownRoomListeners() {
   if (_partnerUidRef) { _partnerUidRef.off(); _partnerUidRef = null; }
   if (_pairCodeRef)   { _pairCodeRef.off();   _pairCodeRef   = null; }
   if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
+  if (_partnerSharedListener) { _partnerSharedListener.off(); _partnerSharedListener = null; }
+  partnerShared = null;
+  _lastSharedPayloadSignature = null;
 }
 
 function initPartnerListener(partnerUid) {
@@ -1693,6 +1763,20 @@ function initPartnerListener(partnerUid) {
     partnerData = snap.val();
     if (typeof renderPartnerCard === 'function') renderPartnerCard();
     if (typeof renderPartnerSettings === 'function') renderPartnerSettings();
+  });
+}
+
+/** Wife/Shared Accountability V1 — the ONLY partner data this reads is the partner's
+ *  own hardened `/shared` projection (rules: owner-write + reciprocal-partner-read).
+ *  Never reads the partner's entries/plans/settings/Timeline/review/Ledger directly. */
+function initPartnerSharedListener(partnerUid) {
+  if (_partnerSharedListener) { _partnerSharedListener.off(); _partnerSharedListener = null; }
+  _partnerSharedListener = fbDb.ref(`uid_${partnerUid}/shared`);
+  _partnerSharedListener.on('value', snap => {
+    const M = globalThis.SharedAccountabilityModel;
+    const raw = snap.val();
+    partnerShared = M ? M.validateSharedPayload(raw) : null;
+    if (typeof renderPartnerCard === 'function') renderPartnerCard();
   });
 }
 
@@ -1758,6 +1842,8 @@ function watchPairCode() {
       localStorage.setItem('ta3-partner-uid', pair.creator);
       fbDb.ref(`uid_${myUid}/partnerUid`).set(pair.creator).catch(() => {});
       initPartnerListener(pair.creator);
+      initPartnerSharedListener(pair.creator);
+      publishSharedAccountability(); // partner link becomes active — ensure a current payload exists
       renderPartnerCardSafe(); renderPartnerSettingsSafe();
     } else if (!pair.accepted) {
       _pairAwaitingAccept = true;
@@ -1784,6 +1870,8 @@ function acceptPairClaim() {
     localStorage.setItem('ta3-partner-uid', claimant);
     _pendingPairClaim = null;
     initPartnerListener(claimant);
+    initPartnerSharedListener(claimant);
+    publishSharedAccountability(); // partner link becomes active — ensure a current payload exists
     renderPartnerCardSafe(); renderPartnerSettingsSafe();
     if (typeof showToast === 'function') showToast('Partner connected 🤝');
   }).catch(() => {});
@@ -1819,9 +1907,11 @@ function clearPartnerLink() {
   if (fbDb && currentUser) fbDb.ref(`uid_${currentUser.uid}/partnerUid`).remove().catch(() => {});
   localStorage.removeItem('ta3-partner-uid');
   partnerData = null;
+  partnerShared = null;
   _pendingPairClaim = null;
   _pairAwaitingAccept = false;
   if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
+  if (_partnerSharedListener) { _partnerSharedListener.off(); _partnerSharedListener = null; }
   renderPartnerCardSafe(); renderPartnerSettingsSafe();
 }
 
@@ -1829,7 +1919,9 @@ function clearPartnerLink() {
 function teardownPartnerLink() {
   if (_pairCodeRef)     { _pairCodeRef.off();     _pairCodeRef     = null; }
   if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
+  if (_partnerSharedListener) { _partnerSharedListener.off(); _partnerSharedListener = null; }
   partnerData = null;
+  partnerShared = null;
   _pendingPairClaim = null;
   _pairAwaitingAccept = false;
 }

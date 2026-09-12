@@ -151,11 +151,11 @@ per the phase's own scope boundary.
   (original ids kept as aliases); `docs/DECISIONS.md` is now a pointer stub, retained only because
   `tools/Verify-Decisions.ps1` / `tools/Check-DocsConsistency.ps1` still read that path.
 
-## Shared / Accountability access (`shared-access-hardening-v1` — review candidate, NOT deployed)
+## Shared / Accountability access (`shared-access-hardening-v1` — LANDED, deployed to production)
 
-Prerequisite security milestone for the future Wife/Shared Accountability feature. The
-Wife/Shared *feature* (publishing planned-priority titles to a linked partner) is **still
-blocked** and is not started — it must not ship until these rules are deployed to production.
+Prerequisite security milestone for the Wife/Shared Accountability feature. Landed to
+`main` and rolled out to production (rules deployed, client live) 2026-09-11. See
+"Wife / Shared Accountability V1" below for the feature this unblocked.
 
 - **Principle:** for any partner-visible state, the **owner writes** their own node and the
   **reciprocally-linked partner reads** it; everyone else is denied. Read authorization keys
@@ -192,9 +192,8 @@ blocked** and is not started — it must not ship until these rules are deployed
   — the Java-based Emulator Suite is unavailable here) + `tests/pair-accountability.spec.js`
   (two-page client handshake: F1 RNG, no-auto-link, Accept convergence with each side writing
   only its own `partnerUid`, reload-stays-pending).
-- **Deployment:** pending. Rules are a reviewed candidate only — no `firebase deploy` was run.
-  Independent review verdict on the model was PASS; F1/F2 were the two required fixes. Official
-  Firebase-emulator verification remains a separate hard gate before production deploy.
+- **Deployment:** LIVE. Independent review verdict on the model was PASS; F1/F2 were the two
+  required fixes. Rules are deployed to production; the client is live on GitHub Pages.
 
 ## Motivation Layer (current inventory; `motivation-pressure-cleanup-v1` outcomes noted inline)
 
@@ -490,3 +489,86 @@ Contract, account timezone architecture, room-code extension architecture, or We
 analytics. Firebase rules, Shared Access, and the browser extension were not touched.
 Branch `feat/timeline-truth-followup-v1`, uncommitted, unpushed, pending independent
 review.
+
+## Wife / Shared Accountability V1 (review candidate, 2026-09-11)
+
+The feature `shared-access-hardening-v1` unblocked (see above). Built on top of the
+deployed `/shared` security boundary — **no Firebase rule changed** by this milestone.
+
+**Product contract:** a securely-linked partner can see, for a linked account, *"what
+did they intend to do today, and how is it going — and did they prepare tomorrow"* —
+nothing more. No surveillance, no scoring, no comparison, no raw evidence.
+
+- **Shared payload (`uid_<uid>/shared`), allowlist-built field by field, never by
+  spreading an internal object** — `shared-accountability-model.js` (`buildSharedPayload`):
+  ```
+  {
+    schemaVersion: 1,
+    publisher: { displayName?, timezone, dateKey, updatedAt },
+    today:      { dateKey, priorities: [{ title, status }] },   // status: planned | worked-on | done
+    tomorrow:   { dateKey, prepStatus }                          // prepStatus: prepared | open-day | not-prepared
+  }
+  ```
+  Capped at 3 priorities (mirrors the app's own `PLAN_MAX`). Tomorrow carries **only**
+  the prep status — never task titles, times, or notes. Nothing else is ever present:
+  no minutes, no deep/waste/focus split, no streak/score/wallet, no review text, no
+  Timeline/browser/PC-Time/app data, no plan notes, no exact durations, no device IDs.
+- **Status semantics** (`deriveTodayItemStatus`) reuse the app's canonical plan→actual
+  linkage (`planTrackedMin(task, dateKey, item.id)` — ID-first, legacy exact-text
+  fallback only where the app already treats that fallback as safe): `done` only when
+  the plan item's own `done` flag is set; `worked-on` when not done but linked tracked
+  minutes exist; `planned` otherwise. **Minutes never imply Done** — a plan item worked
+  for hours but not explicitly checked off stays `worked-on`.
+- **Tomorrow prep semantics** (`deriveTomorrowPrepStatus`) read the existing
+  `PlanTomorrowModel` preparation record for tomorrow's account-timezone date:
+  `not-prepared` when no preparation record exists, `open-day` when
+  `preparation.intentionalBlank === true`, otherwise `prepared`. A day is never
+  inferred "prepared" merely because it happens to contain a task.
+- **Publisher timezone is authoritative** (Time Truth V1 semantics): `today`/`tomorrow`
+  dateKeys and freshness are computed from the *publisher's* `settings.timezone`, never
+  the viewer's device or account timezone. The read side (`isSharedTodayFresh`)
+  independently recomputes "what day is it for the publisher right now" from the
+  viewer's real clock + the publisher's declared timezone, and shows "No current
+  update" instead of yesterday's priorities when they disagree.
+- **Read side never reads partner entries/plans/settings/Timeline/review/Ledger** —
+  only the partner's own `uid_<partnerUid>/shared` projection
+  (`initPartnerSharedListener`), and the received value is re-validated
+  (`validateSharedPayload`) before render — a legacy/malformed node is stripped to the
+  allowlist rather than trusted. The legacy `uid_<uid>/public` node (`deepHrsToday` etc.,
+  written by `publishPublicStats()`) is **left in place, untouched** — nothing else
+  required removing it — but the partner card no longer reads it for anything.
+- **Publishing is event-driven, deduped on content** (`publishSharedAccountability()`
+  in `storage.js`): triggered by plan add/edit/delete/done-toggle
+  (`writeDatePlanLocal()`), a newly-synced actual entry (`publishPublicStats()`'s call
+  site, and the remote `entries` listener), a timezone edit (`saveSettings()`, and the
+  remote `settings` listener), a cross-device plan sync, and the partner link becoming
+  active (`acceptPairClaim()` / the joiner-accept branch of `watchPairCode()`). Never
+  wired to a timer tick. `sharedPayloadSignature()` excludes `updatedAt`, so identical
+  content is never rewritten — a timestamp alone cannot force a repeat write. Publishing
+  is gated on `localStorage['ta3-partner-uid']` existing at all (data minimization); the
+  rules are the hard boundary regardless.
+- **Unlink** (`removePair()` → `clearPartnerLink()` / `teardownPartnerLink()`) clears
+  `partnerShared`, tears down `_partnerSharedListener`, and `renderPartnerCard()` now
+  clears `card.innerHTML` (not just `display:none`) so no stale partner content lingers
+  in the DOM after disconnect.
+- **UI**: the existing Accountability `#partner-card` surface only — no new tab, no
+  dashboard, no comparison screen. Read-only (no partner-task edit/reorder/start/delete
+  control exists). Nudge is unchanged (existing 20h-cooldown generic ping). Empty states
+  are calm: "No current update" / "No priorities shared today" / "Not prepared yet" /
+  "Open day" — never "missed" / "behind" / "failed".
+- **Tests**: `shared-accountability-model.test.js` (pure allowlist builder — status
+  derivation, tomorrow derivation, publisher-timezone freshness math, a maximal-hostile-
+  input privacy allowlist test asserting the serialized payload never contains any of
+  `deep/waste/minute/focus/streak/score/wallet/review/url/domain/timeline/notes/device`,
+  read-side `validateSharedPayload` stripping) and
+  `tests/wife-shared-accountability.spec.js` (real two-page linked-partner client
+  integration: allowlist-only write from a maximal fake internal state, read-only
+  card rendering of all three statuses + tomorrow prep, unlink clears the partner card,
+  stale cross-timezone payload never shown as current, 60 no-op publish calls produce
+  zero additional writes). `firebase-rules.test.js` / `tests/pair-accountability.spec.js`
+  re-run clean as regression — unmodified.
+
+No Firebase rule change. No production data migration. No new tab, chat, shared
+calendar, or partner Timeline. No gamification (no streaks/points/percentages/rankings
+added to the shared surface). Branch `feat/wife-shared-v1`, uncommitted, unpushed, not
+deployed, pending independent review.
