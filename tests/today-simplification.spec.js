@@ -220,9 +220,12 @@ test('rendered before/after phone and desktop hierarchy', async ({ page }) => {
     console.log(`LAYOUT ${width}: ${JSON.stringify(measurements)}`);
     // Today Persistent Sections V1 adds one deterministic +40px at both widths: the
     // always-visible Timeline summary header (collapsed above, per its own min-height:40px
-    // rule) that no longer disappears entirely the way it did before this milestone. The
-    // original 16px slack still guards against any other, unrelated height growth.
-    expect(measurements.after).toBeLessThanOrEqual(measurements.before + 40 + 16);
+    // rule) that no longer disappears entirely the way it did before this milestone.
+    // Tomorrow View V1 adds a second deterministic +24px: the Today/Tomorrow toggle row
+    // next to the "Today's commitments" heading (a real button-height row, not a margin
+    // artifact — measured ~22px at 390 wide, comfortably under 24 at 1280 wide).
+    // The original 16px slack still guards against any other, unrelated height growth.
+    expect(measurements.after).toBeLessThanOrEqual(measurements.before + 40 + 24 + 16);
   }
 });
 

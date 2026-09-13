@@ -1,5 +1,37 @@
 # ChronaSense — Changelog
 
+## Tomorrow View V1 (feat/tomorrow-view-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-13
+
+Adds a read-only "Tomorrow" view next to Today's own commitments, so the plan
+Plan Tomorrow already prepares can be inspected without reopening the editor.
+
+- **Navigation**: a `Today` / `Tomorrow` pair of `aria-pressed` buttons next to
+  the existing "Today's commitments" heading. Selection is a device-local UI
+  preference (`localStorage['ta3-commitments-view']`), never plan truth —
+  switching, reloading, or leaving the tab open across a date rollover writes
+  nothing to `plans[dateKey]`.
+- **Single source of truth**: Tomorrow View owns no storage of its own. It
+  reads `plans[tomorrowKey]` through the same `getPlanTomorrowAppContext()`
+  Plan Tomorrow itself uses, derives the target date via the same
+  `PlanTomorrowModel.planTomorrowTargetDate()`, orders one-off items via the
+  same `planDisplayOrder()` Today's own plan strip uses (now also exposed on
+  `globalThis` for this reuse), and projects routines via the existing
+  `getPlanTomorrowRoutineSummary()` (`generateInstances`/`occursOn` under the
+  hood) — no new date arithmetic, ordering algorithm, or recurrence logic.
+- **Prepared vs draft truth**: a new pure `tomorrow-view-model.js`
+  (`deriveTomorrowViewState`) distinguishes four states from
+  `PlanTomorrowModel.normalizePreparation()`'s result plus live item/routine
+  counts: no plan at all, content exists but was never confirmed, confirmed
+  prepared, and explicit Open Day (`preparation.intentionalBlank === true`) —
+  Open Day is never inferred from a zero item count.
+- **Read-only surface**: no inline editing. A single "Plan tomorrow" / "Edit
+  tomorrow" action opens the existing Plan Tomorrow modal — no parallel editor.
+- Carried-forward items (Daily Reconciliation) appear as ordinary priorities,
+  exactly once, with no special visual treatment (none exists elsewhere in the
+  app to reuse).
+- New files: `tomorrow-view-model.js`, `tomorrow-view-model.test.js`,
+  `tomorrow-view-ui.js`, `tomorrow-view.css`, `tests/tomorrow-view.spec.js`.
+
 ## Daily Reconciliation V1 — review fixes (feat/daily-reconciliation-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-13
 
 Independent review of `ee1fd1a` returned **FIX FIRST** with two blockers. Both

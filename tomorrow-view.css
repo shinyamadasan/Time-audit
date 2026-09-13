@@ -1,0 +1,19 @@
+.tc-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.tc-head h2{margin:0}
+.tmr-daytabs{display:flex;gap:6px}
+.tmr-daytab[aria-pressed="true"]{border-color:var(--deep);color:var(--deep);background:var(--deep-dim2);font-weight:700}
+.tmr-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.tmr-kicker{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--deep);font-weight:700}
+.tmr-date{font-size:13px;color:var(--muted)}
+.tmr-status{font-size:11px;color:var(--muted);margin-bottom:10px}
+.tmr-status[data-tmr-status="unprepared-content"]{color:var(--distraction)}
+#tomorrow-view section{margin:0 0 14px}
+#tomorrow-view h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px}
+.tmr-row{display:flex;align-items:baseline;gap:10px;border:1px solid var(--border2);border-radius:var(--r);padding:9px 12px;margin-bottom:7px;background:var(--bg3)}
+.tmr-row-time{flex-shrink:0;min-width:64px;font-size:12px;color:var(--muted);font-weight:600}
+.tmr-row-title{font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.tmr-muted{font-size:12px;color:var(--muted);line-height:1.45}
+.tmr-empty{font-size:13px;color:var(--muted);line-height:1.5;margin:10px 0}
+.tmr-open-day{font-size:14px;font-weight:600;color:var(--deep);margin:10px 0}
+.tmr-footer{display:flex;justify-content:flex-end;margin-top:6px}
+@media(max-width:560px){.tmr-row{flex-wrap:wrap}.tmr-row-time{min-width:auto}}
