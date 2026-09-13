@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   addCalendarDays, buildPreparation, carriedItemId, classifyOneOffActual, classifyRoutineActual,
-  computeReadyNow, formatPlanItemTime, localPlanDate, mergeDatePlans, mergePreparations,
-  normalizePreparation, planningConsistency, planTomorrowTargetDate, reconciliationBucket,
-  summarizeActual, validPlanItemTime
+  clearPlanItemRange, computeReadyNow, durationBetween, formatPlanItemSchedule, formatPlanItemTime,
+  localPlanDate, mergeDatePlans, mergePreparations, normalizePreparation, planItemEndTime,
+  planItemScheduleLabel, planningConsistency, planTomorrowTargetDate, reconciliationBucket,
+  summarizeActual, validPlanItemDuration, validPlanItemTime
 } from './plan-tomorrow-model.js';
 
 const targetDate = '2026-09-09';
@@ -324,4 +325,124 @@ test('formatPlanItemTime renders canonical 24h storage as 12h display without mu
   assert.equal(formatPlanItemTime('23:05'), '11:05 PM');
   assert.equal(formatPlanItemTime('after lunch'), null);
   assert.equal(formatPlanItemTime(''), null);
+});
+
+test('validPlanItemDuration only accepts a positive integer minute count within a reasonable block size', () => {
+  assert.equal(validPlanItemDuration(90), true);
+  assert.equal(validPlanItemDuration(1), true);
+  assert.equal(validPlanItemDuration(720), true);
+  assert.equal(validPlanItemDuration(0), false); // zero-length duration is meaningless — same as "end equal to start"
+  assert.equal(validPlanItemDuration(-30), false); // negative — same as "end before start" in a start+duration model
+  assert.equal(validPlanItemDuration(721), false); // past the reasonable single-block maximum
+  assert.equal(validPlanItemDuration(100000), false); // absurd maximum (e.g. a stray timestamp)
+  assert.equal(validPlanItemDuration(90.5), false); // non-integer
+  assert.equal(validPlanItemDuration('90'), false); // malformed type
+  assert.equal(validPlanItemDuration(null), false);
+  assert.equal(validPlanItemDuration(undefined), false); // missing — a start-only item, not an error
+  assert.equal(validPlanItemDuration(NaN), false);
+});
+
+test('planItemEndTime derives the end clock time from start + duration, and rejects cross-midnight in V1', () => {
+  assert.equal(planItemEndTime('09:00', 90), '10:30');
+  assert.equal(planItemEndTime('23:30', 29), '23:59');
+  assert.equal(planItemEndTime('23:30', 30), null); // would land exactly on next-day midnight
+  assert.equal(planItemEndTime('23:00', 120), null); // 11 PM + 2h would cross into the next day
+  assert.equal(planItemEndTime('09:00', 0), null); // invalid duration
+  assert.equal(planItemEndTime('09:00', undefined), null); // start-only — no range, not an error
+  assert.equal(planItemEndTime('after lunch', 90), null); // malformed/legacy when
+  assert.equal(planItemEndTime('', 90), null);
+});
+
+test('durationBetween derives a length from an exact custom start+end pair, never fabricating next-day semantics', () => {
+  assert.equal(durationBetween('09:00', '10:30'), 90);
+  assert.equal(durationBetween('09:00', '09:00'), null); // end equal to start
+  assert.equal(durationBetween('10:30', '09:00'), null); // end before start
+  assert.equal(durationBetween('23:00', '01:00'), null); // would only work as a next-day wrap — rejected, not inferred
+  assert.equal(durationBetween('after lunch', '10:00'), null);
+  assert.equal(durationBetween('09:00', 'nonsense'), null);
+});
+
+test('formatPlanItemSchedule covers untimed, start-only, ranged, and every formatting edge case', () => {
+  assert.equal(formatPlanItemSchedule({ when: '' }), null); // untimed
+  assert.equal(formatPlanItemSchedule({}), null);
+  assert.equal(formatPlanItemSchedule({ when: '09:00' }), '9:00 AM'); // start only
+  assert.equal(formatPlanItemSchedule({ when: '09:00', durationMinutes: 90 }), '9:00–10:30 AM'); // morning range, compact
+  assert.equal(formatPlanItemSchedule({ when: '12:00' }), '12:00 PM'); // noon
+  assert.equal(formatPlanItemSchedule({ when: '00:00' }), '12:00 AM'); // midnight
+  assert.equal(formatPlanItemSchedule({ when: '14:00', durationMinutes: 30 }), '2:00–2:30 PM'); // afternoon range
+  assert.equal(formatPlanItemSchedule({ when: '11:30', durationMinutes: 90 }), '11:30 AM–1:00 PM'); // AM->PM keeps both periods
+  assert.equal(formatPlanItemSchedule({ when: '23:00', durationMinutes: 120 }), '11:00 PM'); // cross-midnight falls back to start-only
+  assert.equal(formatPlanItemSchedule({ when: 'after lunch', durationMinutes: 90 }), null); // legacy free-text when
+  assert.equal(formatPlanItemSchedule({ when: '09:00', durationMinutes: -5 }), '9:00 AM'); // malformed duration falls back safely
+  assert.equal(formatPlanItemSchedule({ when: '09:00', durationMinutes: '90' }), '9:00 AM'); // malformed type falls back safely
+  assert.doesNotThrow(() => formatPlanItemSchedule(null));
+  assert.doesNotThrow(() => formatPlanItemSchedule(undefined));
+});
+
+test('planItemScheduleLabel falls back to verbatim legacy free text, and is null only when there is truly nothing', () => {
+  assert.equal(planItemScheduleLabel({ when: '09:00', durationMinutes: 90 }), '9:00–10:30 AM');
+  assert.equal(planItemScheduleLabel({ when: 'after lunch' }), 'after lunch');
+  assert.equal(planItemScheduleLabel({ when: '' }), null);
+  assert.equal(planItemScheduleLabel({}), null);
+});
+
+test('clearPlanItemRange drops only durationMinutes, leaving when and every other field untouched', () => {
+  const item = { id: 'p1', task: 'Write report', when: '09:00', durationMinutes: 90, done: false };
+  const cleared = clearPlanItemRange(item);
+  assert.deepEqual(cleared, { id: 'p1', task: 'Write report', when: '09:00', done: false });
+  assert.equal('durationMinutes' in cleared, false);
+  assert.equal(item.durationMinutes, 90); // original object is untouched
+});
+
+// Plan Time Range V1 adds durationMinutes as an ordinary field on the same whole-item object that
+// chooseItem()/mergeDatePlans() already merge as a unit — no second merge engine, no field-level
+// merging. These races are exactly the ones named in the Time Range spec, run through the exact
+// same convergence helpers the pre-existing merge algebra tests above already use.
+test('merge race 1: device A changes start, device B changes range — later updatedAt wins the whole item, deterministically', () => {
+  const a = { items: [item({ when: '09:00', updatedAt: preparedAt + 5, updatedBy: 'device-a' })], updatedAt: preparedAt + 5, updatedBy: 'device-a' };
+  const b = { items: [item({ when: '', durationMinutes: 90, updatedAt: preparedAt + 10, updatedBy: 'device-b' })], updatedAt: preparedAt + 10, updatedBy: 'device-b' };
+  assertPairConverges(a, b);
+  const merged = mergeDatePlans(a, b, targetDate).items[0];
+  assert.equal(merged.updatedBy, 'device-b'); // later write wins entirely, including B's own `when`
+  assert.equal(merged.durationMinutes, 90);
+  assert.equal(merged.when, '');
+});
+
+test('merge race 2: device A removes range, device B renames the item — same whole-item LWW, no special case for either field', () => {
+  const a = { items: [item({ task: 'Write report', when: '09:00', durationMinutes: 90, updatedAt: preparedAt + 5, updatedBy: 'device-a' })], updatedAt: preparedAt + 5, updatedBy: 'device-a' };
+  const b = { items: [item({ task: 'Write final report', when: '09:00', updatedAt: preparedAt + 10, updatedBy: 'device-b' })], updatedAt: preparedAt + 10, updatedBy: 'device-b' };
+  assertPairConverges(a, b);
+  const merged = mergeDatePlans(a, b, targetDate).items[0];
+  assert.equal(merged.task, 'Write final report');
+  assert.equal('durationMinutes' in merged, false); // B's write (the later one) never had a range
+});
+
+test('merge race 3: device A removes all timing, device B edits range from a stale copy — later write still wins as a whole, no fabricated hybrid', () => {
+  const a = { items: [item({ when: '', updatedAt: preparedAt + 10, updatedBy: 'device-a' })], updatedAt: preparedAt + 10, updatedBy: 'device-a' };
+  const b = { items: [item({ when: '09:00', durationMinutes: 60, updatedAt: preparedAt + 5, updatedBy: 'device-b' })], updatedAt: preparedAt + 5, updatedBy: 'device-b' };
+  assertPairConverges(a, b);
+  const merged = mergeDatePlans(a, b, targetDate).items[0];
+  assert.equal(merged.updatedBy, 'device-a'); // A is later — its cleared state wins outright
+  assert.equal(merged.when, '');
+  assert.equal('durationMinutes' in merged, false);
+});
+
+test('merge race 4: equal-timestamp tie break stays deterministic and order-independent with a range field present', () => {
+  const a = { items: [item({ when: '09:00', durationMinutes: 90, updatedBy: 'device-a' })], updatedAt: preparedAt, updatedBy: 'device-a' };
+  const b = { items: [item({ when: '10:00', durationMinutes: 30, updatedBy: 'device-b' })], updatedAt: preparedAt, updatedBy: 'device-b' };
+  assertPairConverges(a, b);
+  const forward = mergeDatePlans(a, b, targetDate).items[0];
+  const reverse = mergeDatePlans(b, a, targetDate).items[0];
+  assert.deepEqual(forward, reverse); // reverse merge orientation picks the identical winner
+});
+
+test('a carried-forward item never inherits source-item range metadata — carry-forward only ever sets task/id/provenance', () => {
+  const sourceDate = '2026-09-09';
+  const carryId = carriedItemId(sourceDate, 'today-1');
+  // Mirrors exactly what plan-tomorrow-ui.js's toggleCarry() builds: a fresh object listing only
+  // id/task/when/done/doneAt/carriedFromId — never a spread of the source item — so stale
+  // duration/end metadata has no path onto the carried tomorrow item in the first place.
+  const carried = { id: carryId, task: 'Write follow-up', when: '', done: false, doneAt: null, carriedFromId: 'today-1' };
+  assert.equal('durationMinutes' in carried, false);
+  assert.equal(formatPlanItemSchedule(carried), null);
 });

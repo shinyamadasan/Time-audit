@@ -6532,7 +6532,11 @@ function renderTodayPlan() {
     const active  = status.key === 'in-progress';
     const statusPill = `<span class="plan-status ${status.key}">${status.label}</span>`;
     const tracked = `<span class="plan-tracked${mins > 0 ? ' on' : ''}">${fmtPlanMin(mins)} tracked</span>`;
-    const when    = it.when ? `<span class="plan-when">${esc(it.when)} →</span> ` : '';
+    // Falls back to the raw stored value when the plan model module hasn't finished loading yet
+    // (a real gap on the very first render pass) — matches what this always showed before range
+    // support existed, so an early render never goes blank while the module catches up.
+    const scheduleLabel = globalThis.PlanTomorrowModel ? globalThis.PlanTomorrowModel.planItemScheduleLabel(it) : (it.when || null);
+    const when    = scheduleLabel ? `<span class="plan-when">${esc(scheduleLabel)} →</span> ` : '';
     const check   = readOnly
       ? `<span class="plan-check ro">${it.done ? '✓' : ''}</span>`
       : `<button class="plan-check" onclick="togglePlanDone('${it.id}')" title="Mark done">${it.done ? '✓' : ''}</button>`;

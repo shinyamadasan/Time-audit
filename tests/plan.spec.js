@@ -256,8 +256,10 @@ test('when-then trigger renders with the task', async ({ page }) => {
   // going forward — see the Plan Linkage + Up Next Ordering V1 spec for why); a historical
   // free-text "after lunch →" display is covered separately by
   // tests/plan-linkage-up-next.spec.js's "the plan-when input is a native time picker..." test.
+  // Plan Time Range V1 renders a recognized canonical time through the shared schedule formatter
+  // ("9:00 AM"), not the raw 24h storage string — storage itself is still exactly "09:00".
   await addItem(page, 'Write report', '09:00');
-  await expect(page.locator('.plan-item').first().locator('.plan-when')).toHaveText('09:00 →');
+  await expect(page.locator('.plan-item').first().locator('.plan-when')).toHaveText('9:00 AM →');
   await expect(page.locator('.plan-item').first().locator('.plan-task')).toContainText('Write report');
 });
 
@@ -348,7 +350,7 @@ test('plan survives a reload and drives the daily target', async ({ page }) => {
 
   await expect(page.locator('.plan-item')).toHaveCount(2);
   await expect(page.locator('.plan-count')).toHaveText('1 of 2 done');
-  await expect(page.locator('.plan-item').first().locator('.plan-when')).toHaveText('09:00 →');
+  await expect(page.locator('.plan-item').first().locator('.plan-when')).toHaveText('9:00 AM →');
   // The plan IS the daily target — focus-mode's deep bar reads this.
   expect(await page.evaluate(() => dailyCommitment)).toBe(2);
 });
