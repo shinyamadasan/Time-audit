@@ -5,7 +5,7 @@ import {
   clearPlanItemRange, computeReadyNow, durationBetween, formatPlanItemSchedule, formatPlanItemTime,
   localPlanDate, mergeDatePlans, mergePreparations, normalizePreparation, planItemEndTime,
   planItemScheduleLabel, planningConsistency, planTomorrowTargetDate, reconciliationBucket,
-  summarizeActual, validPlanItemDuration, validPlanItemTime
+  summarizeActual, validPlanItemDuration, validPlanItemRange, validPlanItemTime
 } from './plan-tomorrow-model.js';
 
 const targetDate = '2026-09-09';
@@ -351,6 +351,22 @@ test('planItemEndTime derives the end clock time from start + duration, and reje
   assert.equal(planItemEndTime('09:00', undefined), null); // start-only — no range, not an error
   assert.equal(planItemEndTime('after lunch', 90), null); // malformed/legacy when
   assert.equal(planItemEndTime('', 90), null);
+});
+
+test('validPlanItemRange is the single write-time authority every scheduling mutation composes — FIX FIRST regression coverage', () => {
+  // Blocker 3 boundary: exactly 720 accepted, 721 rejected.
+  assert.equal(validPlanItemRange('06:00', 720), true);
+  assert.equal(validPlanItemRange('06:00', 721), false);
+  assert.equal(validPlanItemRange('06:00', 780), false); // 06:00 -> 19:00, the exact reported defect
+  // Blocker 1: a structurally valid quick-duration value (30-120) still fails once it crosses midnight.
+  assert.equal(validPlanItemRange('23:00', 120), false);
+  assert.equal(validPlanItemRange('23:00', 30), true);
+  assert.equal(validPlanItemRange('23:30', 30), false); // lands exactly on next-day midnight
+  // Malformed/missing halves never validate.
+  assert.equal(validPlanItemRange('09:00', 0), false);
+  assert.equal(validPlanItemRange('09:00', -5), false);
+  assert.equal(validPlanItemRange('09:00', undefined), false);
+  assert.equal(validPlanItemRange('after lunch', 90), false);
 });
 
 test('durationBetween derives a length from an exact custom start+end pair, never fabricating next-day semantics', () => {
