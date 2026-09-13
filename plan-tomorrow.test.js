@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  addCalendarDays, buildPreparation, classifyOneOffActual, classifyRoutineActual,
+  addCalendarDays, buildPreparation, carriedItemId, classifyOneOffActual, classifyRoutineActual,
   computeReadyNow, formatPlanItemTime, localPlanDate, mergeDatePlans, mergePreparations,
   normalizePreparation, planningConsistency, planTomorrowTargetDate, reconciliationBucket,
   summarizeActual, validPlanItemTime
@@ -140,6 +140,16 @@ test('reconciliation bucketing splits statuses into completed/unfinished/exclude
   assert.equal(reconciliationBucket('removed'), 'excluded');
 });
 
+test('carriedItemId is deterministic, date-scoped, and cannot collide with a createPlanItem id', () => {
+  assert.equal(carriedItemId('2026-09-08', 'one-1'), carriedItemId('2026-09-08', 'one-1'));
+  assert.notEqual(carriedItemId('2026-09-08', 'one-1'), carriedItemId('2026-09-09', 'one-1'));
+  assert.notEqual(carriedItemId('2026-09-08', 'one-1'), carriedItemId('2026-09-08', 'one-2'));
+  // createPlanItem ids are 'p' + base36 timestamp + random chars — never contain ':'.
+  assert.match(carriedItemId('2026-09-08', 'one-1'), /^carry:2026-09-08:one-1$/);
+  assert.throws(() => carriedItemId('not-a-date', 'one-1'));
+  assert.throws(() => carriedItemId('2026-09-08', ''));
+});
+
 test('app update accepts an already prepared plan unchanged', () => {
   const value = prep({ routineInstanceIds: ['b', 'a', 'a'], oneOffItemIds: [] });
   assert.deepEqual(normalizePreparation(value, targetDate).routineInstanceIds, ['a', 'b']);
@@ -246,6 +256,51 @@ test('merge algebra: legacy values without new provenance converge without migra
   const merged = assertTripleConverges([a, b, c]);
   assert.equal(merged.items.length, 2);
   assert.equal(Object.prototype.hasOwnProperty.call(merged.preparation, 'firstPreparedBy'), false);
+});
+
+test('deterministic carry: two devices independently carrying the same source item converge to one active item', () => {
+  const sourceItemId = 'today-1';
+  const carryId = carriedItemId('2026-09-08', sourceItemId);
+  const deviceA = { items: [item({ id: carryId, task: 'Write follow-up', when: '', carriedFromId: sourceItemId, updatedAt: preparedAt, updatedBy: 'device-a' })], updatedAt: preparedAt, updatedBy: 'device-a' };
+  const deviceB = { items: [item({ id: carryId, task: 'Write follow-up', when: '', carriedFromId: sourceItemId, updatedAt: preparedAt + 5, updatedBy: 'device-b' })], updatedAt: preparedAt + 5, updatedBy: 'device-b' };
+  assertPairConverges(deviceA, deviceB);
+  const merged = mergeDatePlans(deviceA, deviceB, targetDate);
+  assert.equal(merged.items.length, 1);
+  assert.equal(merged.items[0].id, carryId);
+  assert.equal(merged.items[0].carriedFromId, sourceItemId);
+  assert.equal(merged.items[0].deleted ?? false, false);
+  assert.equal(merged.items[0].updatedBy, 'device-b');
+});
+
+test('deterministic carry: a newer re-carry supersedes an older tombstone regardless of merge orientation', () => {
+  const sourceItemId = 'today-1';
+  const carryId = carriedItemId('2026-09-08', sourceItemId);
+  const tombstoned = { items: [item({ id: carryId, task: 'Write follow-up', deleted: true, carriedFromId: sourceItemId, updatedAt: preparedAt, updatedBy: 'device-a' })], updatedAt: preparedAt, updatedBy: 'device-a' };
+  const recarried = { items: [item({ id: carryId, task: 'Write follow-up', deleted: false, carriedFromId: sourceItemId, updatedAt: preparedAt + 1000, updatedBy: 'device-b' })], updatedAt: preparedAt + 1000, updatedBy: 'device-b' };
+  assertPairConverges(tombstoned, recarried);
+  const merged = mergeDatePlans(tombstoned, recarried, targetDate);
+  assert.equal(merged.items.length, 1);
+  assert.equal(merged.items[0].deleted ?? false, false);
+});
+
+test('deterministic carry: distinct source items on the same day never collide even with the same task title', () => {
+  const idA = carriedItemId('2026-09-08', 'today-a');
+  const idB = carriedItemId('2026-09-08', 'today-b');
+  assert.notEqual(idA, idB);
+  const a = { items: [item({ id: idA, task: 'Write follow-up', carriedFromId: 'today-a', updatedBy: 'device-a' })], updatedAt: preparedAt, updatedBy: 'device-a' };
+  const b = { items: [item({ id: idB, task: 'Write follow-up', carriedFromId: 'today-b', updatedBy: 'device-a' })], updatedAt: preparedAt, updatedBy: 'device-a' };
+  assertPairConverges(a, b);
+  const merged = mergeDatePlans(a, b, targetDate);
+  assert.equal(merged.items.length, 2);
+});
+
+test('deterministic carry: a manually created tomorrow item with the same title stays independent of a carried item', () => {
+  const carryId = carriedItemId('2026-09-08', 'today-1');
+  const manual = { items: [item({ id: 'manual-1', task: 'Write follow-up', carriedFromId: undefined, updatedBy: 'device-a' })], updatedAt: preparedAt, updatedBy: 'device-a' };
+  const carried = { items: [item({ id: carryId, task: 'Write follow-up', carriedFromId: 'today-1', updatedBy: 'device-a' })], updatedAt: preparedAt, updatedBy: 'device-a' };
+  const merged = mergeDatePlans(manual, carried, targetDate);
+  assert.equal(merged.items.length, 2);
+  assert.equal(merged.items.find(value => value.id === 'manual-1').carriedFromId, undefined);
 });
 
 test('validPlanItemTime only accepts zero-padded 24h HH:MM, never free text or partial values', () => {
