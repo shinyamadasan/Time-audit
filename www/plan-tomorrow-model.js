@@ -331,6 +331,20 @@ export function reconciliationBucket(oneOffStatus) {
   return 'completed';
 }
 
-const api = { validPlanDate, validPlanTimezone, validPlanItemTime, formatPlanItemTime, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual, reconciliationBucket };
+/** Deterministic id for the tomorrow item that carries a given today item forward. Colon-joined
+ *  so it can never collide with a `createPlanItem` id (those are `'p' + base36 timestamp + random
+ *  chars` — no colon, ever) regardless of source-item-id uniqueness. Includes the source date
+ *  (not just the source item id) because the same physical device/session could in principle be
+ *  reconciling two different "today"s across a long-open tab; date-scoping the id removes any
+ *  reliance on source ids being globally unique across dates. Deterministic across devices, so two
+ *  clients carrying the same source item independently write to the SAME tomorrow item id, and the
+ *  existing per-id mergeDatePlans/chooseItem convergence (highest updatedAt wins, ties broken
+ *  canonically) resolves them into one — no second merge engine required. */
+export function carriedItemId(sourceDate, sourceItemId) {
+  if (!validPlanDate(sourceDate) || typeof sourceItemId !== 'string' || !sourceItemId) throw new Error('A valid source date and source item id are required.');
+  return `carry:${sourceDate}:${sourceItemId}`;
+}
+
+const api = { validPlanDate, validPlanTimezone, validPlanItemTime, formatPlanItemTime, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual, reconciliationBucket, carriedItemId };
 globalThis.PlanTomorrowModel = api;
 globalThis.replayPendingPlanRemotes?.();

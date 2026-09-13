@@ -1,5 +1,66 @@
 # ChronaSense — Changelog
 
+## Daily Reconciliation V1 — review fixes (feat/daily-reconciliation-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-13
+
+Independent review of `ee1fd1a` returned **FIX FIRST** with two blockers. Both
+fixed on top of that commit (not amended, so the original reviewed candidate
+stays inspectable):
+
+1. **Cross-device carry was not deterministic.** `toggleCarry` created the
+   tomorrow item through `createItem`, which assigns a random id — two devices
+   independently carrying the same today item before syncing produced two
+   different ids, and `mergeDatePlans`'s per-id merge has no way to know they
+   represent the same relation, so both survived. Fixed by giving the carried
+   item a new pure `carriedItemId(sourceDate, sourceItemId)` in
+   `plan-tomorrow-model.js` — `carry:<sourceDate>:<sourceItemId>` — instead of
+   a random id. This can never collide with an organic `createPlanItem` id
+   (those are `'p' + base36 timestamp + random chars`, never containing `:`),
+   is stable across devices, and is date-scoped so it doesn't depend on source
+   ids being globally unique across dates. Two devices carrying the same
+   source item now both write to the *same* tomorrow item id, so the existing
+   `mergeDatePlans`/`chooseItem` per-id convergence (highest `updatedAt` wins,
+   ties broken canonically) collapses them into one — no second merge engine.
+   Re-carrying after an un-carry reuses the same id and simply stamps a fresh
+   `updatedAt`, so the existing "highest timestamp wins" rule already makes a
+   newer re-carry supersede an older tombstone with no special-casing needed.
+   Un-carry still tombstones (`deleted:true` via `stampItem`), exactly like
+   the pre-existing Remove control. `carriedItemFor`/`toggleCarry` now look up
+   by this deterministic id instead of scanning `draft.items` for a matching
+   `carriedFromId`.
+2. **A classification failure was indistinguishable from "nothing to
+   reconcile."** `buildReconciliation`'s catch block returned `rows: []`,
+   which the renderer treats identically to a legitimate empty day — silently
+   claiming "0 unfinished" when the truth was actually unknown. Fixed by
+   giving the result an explicit `failed` flag (`{ todayKey, rows, failed:
+   false }` normally, `{ todayKey, rows: [], failed: true }` on a caught
+   error). `reconciliationHtml()` now renders a neutral abstention ("Today's
+   priorities couldn't be reconciled right now. You can still plan tomorrow.")
+   with no reason boxes, no carry controls, and no counts when `failed` is
+   true, and still renders nothing at all for a genuine empty day — the two
+   states are now observably different. The failure is presentation-only:
+   nothing is persisted, Plan Tomorrow still opens and still confirms
+   normally, and no `plan.preparation` is created merely by the failure.
+- Tests: `plan-tomorrow.test.js` gains a `carriedItemId` unit test plus four
+  merge-algebra tests (two-device convergence, tombstone-superseded-by-newer-
+  re-carry, distinct-source-no-collision, manual-same-title-independence), all
+  exercising the real `mergeDatePlans`. `tests/daily-reconciliation.spec.js`
+  gains: a full carry/un-carry/re-carry/confirm/reopen lifecycle test; a real
+  two-browser-page convergence test (each page runs the actual production
+  carry/confirm UI code independently, then their real resulting plan objects
+  are merged both orientations and asserted equal); a classification-failure
+  abstention test (forced via the existing `getPlanTomorrowAppContext`
+  override seam — no production code changed for testability) proving the
+  failure copy renders, no controls/counts appear, and Plan Tomorrow remains
+  fully confirmable; and a genuine-empty-day contrast test. Full suite:
+  `npm test` runs clean through every suite before and after the pre-existing
+  `firebase-rules.test.js` gap (unchanged, unrelated); `npx playwright test`
+  525/525 passing (521 prior + 4 new).
+- Scope: no other change. The four optional findings from the original review
+  (Review's numeric summary vs. Daily Reconciliation's unfinished mapping,
+  whole-object LWW losing concurrent unrelated field edits, no model-level
+  240-char cap on the reason field, missing hostile-rendering/mobile/day-
+  boundary coverage) remain open, non-blocking technical debt — untouched.
+
 ## Daily Reconciliation V1 (feat/daily-reconciliation-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-13
 
 Closes the Plan → Do → observe → reconcile → prepare loop: opening Plan Tomorrow

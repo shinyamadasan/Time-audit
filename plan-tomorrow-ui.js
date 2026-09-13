@@ -1,4 +1,4 @@
-import { classifyOneOffActual, classifyRoutineActual, computeReadyNow, formatPlanItemTime, normalizePreparation, planningConsistency, planTomorrowTargetDate, reconciliationBucket, validPlanItemTime } from './plan-tomorrow-model.js';
+import { carriedItemId, classifyOneOffActual, classifyRoutineActual, computeReadyNow, formatPlanItemTime, normalizePreparation, planningConsistency, planTomorrowTargetDate, reconciliationBucket, validPlanItemTime } from './plan-tomorrow-model.js';
 import { generateInstances, matchCompletion, occursOn } from './daily-routines-model.js';
 import { createDailyRoutineRepository } from './daily-routines-repository.js';
 import { createLearningPlanRepository } from './learning-plan-repository.js';
@@ -47,11 +47,14 @@ function activeRoutines() {
  *  classifyOneOffActual authority the Review "Plan vs Actual" widget already uses, then bucketed
  *  into completed/unfinished. Deleted-after-prep items ('removed') are excluded — nothing to
  *  reconcile once an item is gone. Routines are out of scope: they already recur/skip on their
- *  own cadence, and "carry forward" has no analog for them. */
+ *  own cadence, and "carry forward" has no analog for them.
+ *
+ *  `failed: true` means classification could not be determined — kept distinct from a legitimate
+ *  empty `rows` (nothing to reconcile) so the renderer never shows "0 unfinished" as if it were a
+ *  fact when it's actually an abstention. Reconciliation is supplementary context for Plan
+ *  Tomorrow, never a precondition for it: either way `openPlanTomorrow` still opens. */
 function buildReconciliation(app) {
   const todayKey = app.todayKey;
-  // Reconciliation is supplementary context for the Plan Tomorrow flow, never a precondition for
-  // it — a classification failure here degrades to an empty section instead of blocking planning.
   try {
     const preparation = normalizePreparation(app.plan(todayKey)?.preparation, todayKey);
     const rows = app.rawItems(todayKey)
@@ -62,29 +65,42 @@ function buildReconciliation(app) {
         return { item, status, bucket: reconciliationBucket(status) };
       })
       .filter(row => row.bucket !== 'excluded');
-    return { todayKey, rows };
+    return { todayKey, rows, failed: false };
   } catch {
-    return { todayKey, rows: [] };
+    return { todayKey, rows: [], failed: true };
   }
 }
 
-/** The tomorrow-draft item (if any) already carrying this today item forward, keyed by the
- *  carriedFromId provenance field — lets the control reflect "already carried" and prevents
- *  clicking Carry twice from creating duplicate tomorrow items. */
+/** The tomorrow-draft item (if any) already carrying this today item forward — looked up by the
+ *  deterministic carriedItemId(todayKey, todayItemId), NOT by scanning for a matching
+ *  carriedFromId. Determinism is what makes carrying converge across devices: two clients that
+ *  independently carry the same source item before syncing both write to this exact same id, so
+ *  the existing per-id mergeDatePlans/chooseItem merge (highest updatedAt wins) collapses them
+ *  into one active item instead of two random-id survivors. */
 function carriedItemFor(todayItemId) {
-  return draft.items.find(item => item.carriedFromId === todayItemId && !item.deleted) || null;
+  const todayKey = draft.reconciliation?.todayKey;
+  if (!todayKey) return null;
+  const id = carriedItemId(todayKey, todayItemId);
+  const existing = draft.items.find(item => item.id === id);
+  return existing && !existing.deleted ? existing : null;
 }
 
 function toggleCarry(todayItemId) {
   const row = draft.reconciliation?.rows.find(r => r.item.id === todayItemId);
   if (!row) return;
-  const existing = carriedItemFor(todayItemId);
-  if (existing) {
-    draft.items = draft.items.map(item => item.id === existing.id ? context().stampItem({ ...item, deleted: true }) : item);
+  const todayKey = draft.reconciliation.todayKey;
+  const id = carriedItemId(todayKey, todayItemId);
+  const existing = draft.items.find(item => item.id === id);
+  if (existing && !existing.deleted) {
+    draft.items = draft.items.map(item => item.id === id ? context().stampItem({ ...item, deleted: true }) : item);
     return;
   }
   if (activeItems().length >= context().maxItems) throw new Error(`Reduce tomorrow's plan to ${context().maxItems} priorities before carrying this forward.`);
-  draft.items.push({ ...context().createItem(row.item.task, ''), carriedFromId: todayItemId });
+  // A fresh stamp (no updatedAt/updatedBy passed in) always gets the current Date.now(), which is
+  // later than any prior tombstone on this same id — so re-carrying correctly supersedes an
+  // earlier un-carry via the existing chooseItem "highest updatedAt wins" rule, no special case.
+  const carried = context().stampItem({ id, task: row.item.task, when: '', done: false, doneAt: null, carriedFromId: todayItemId });
+  draft.items = existing ? draft.items.map(item => item.id === id ? carried : item) : [...draft.items, carried];
   draft.intentionalBlank = false;
 }
 
@@ -183,7 +199,12 @@ function itemHtml() {
 
 function reconciliationHtml() {
   const reconciliation = draft.reconciliation;
-  if (!reconciliation || !reconciliation.rows.length) return '';
+  if (!reconciliation) return '';
+  // Failed classification must never render as "nothing to reconcile" — that would silently claim
+  // zero unfinished items when the truth is actually unknown. Show a neutral abstention instead,
+  // with no rows, no reason boxes, and no carry controls (there is nothing safe to act on).
+  if (reconciliation.failed) return '<section class="pt-reconcile"><p class="pt-muted" role="status">Today’s priorities couldn’t be reconciled right now. You can still plan tomorrow.</p></section>';
+  if (!reconciliation.rows.length) return '';
   const unfinished = reconciliation.rows.filter(row => row.bucket === 'unfinished');
   const completed = reconciliation.rows.filter(row => row.bucket === 'completed');
   const unfinishedHtml = unfinished.map(row => {
