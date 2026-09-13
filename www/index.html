@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="style.css?v=20260719-template-sync-doctor-2">
 <link rel="stylesheet" href="daily-routines.css?v=20260907">
 <link rel="stylesheet" href="plan-tomorrow.css?v=20260908-plan-tomorrow-v1">
+<link rel="stylesheet" href="tomorrow-view.css?v=20260913-tomorrow-view-v1">
 <link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
 <link rel="stylesheet" href="partner-view.css?v=20260912-partner-view-v1">
 </head>
@@ -115,13 +116,22 @@
     </div>
   </section>
   <section id="today-commitments" aria-label="Today's commitments">
-    <h2>Today's commitments</h2>
-    <div class="plan-strip" id="plan-strip"></div>
-    <section id="daily-routines" class="daily-routines" aria-label="Daily routines">
-      <div class="routine-heading"><h3>Routines <span id="routine-summary"></span></h3><button type="button" class="btn sm ghost" data-routine-action="manage">Manage routines</button></div>
-      <div id="routine-compact"></div>
-      <details id="routine-details"><summary>All routines</summary><div id="daily-routines-list"></div></details>
-    </section>
+    <div class="tc-head">
+      <h2>Today's commitments</h2>
+      <div class="tmr-daytabs" role="group" aria-label="Choose day to view">
+        <button type="button" id="tmr-tab-today" class="btn sm ghost tmr-daytab" aria-pressed="true">Today</button>
+        <button type="button" id="tmr-tab-tomorrow" class="btn sm ghost tmr-daytab" aria-pressed="false">Tomorrow</button>
+      </div>
+    </div>
+    <div id="today-commitments-today">
+      <div class="plan-strip" id="plan-strip"></div>
+      <section id="daily-routines" class="daily-routines" aria-label="Daily routines">
+        <div class="routine-heading"><h3>Routines <span id="routine-summary"></span></h3><button type="button" class="btn sm ghost" data-routine-action="manage">Manage routines</button></div>
+        <div id="routine-compact"></div>
+        <details id="routine-details"><summary>All routines</summary><div id="daily-routines-list"></div></details>
+      </section>
+    </div>
+    <div id="tomorrow-view" hidden role="region" aria-label="Tomorrow's plan"></div>
   </section>
   <section id="needs-you" hidden aria-label="Needs you">
     <h2>Needs you <span id="needs-you-count"></span></h2>
@@ -1640,6 +1650,7 @@
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
 <script type="module" src="daily-routines-ui.js?v=20260907"></script>
 <script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
+<script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-view-v1"></script>
 <script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
 <script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
@@ -6277,6 +6288,7 @@ function writeDatePlanLocal(dateKey, nextPlan) {
   syncCommitmentFromPlan();
   renderTodayPlan();
   if (typeof publishSharedAccountability === 'function') publishSharedAccountability();
+  if (typeof globalThis.refreshTomorrowView === 'function') globalThis.refreshTomorrowView();
   return nextPlan;
 }
 
@@ -6463,6 +6475,7 @@ function planDisplayOrder(items) {
   timed.sort((a, b) => a.hhmm.localeCompare(b.hhmm));
   return [...timed.map(t => t.item), ...rest];
 }
+globalThis.planDisplayOrder = planDisplayOrder;
 
 /** The single "what's next" priority — used by the plan strip's own Start-next affordance and by
  *  todayGuidedAction()'s general fallback (after the due-timed/due-routine precedence above has
@@ -11330,6 +11343,7 @@ function autoLogHeartbeatTick() {
 setInterval(() => {
   if (!running && !breakActive) renderTodayOnDateChange();
   autoLogHeartbeatTick();
+  if (typeof globalThis.refreshTomorrowView === 'function') globalThis.refreshTomorrowView();
 }, 60000);
 
 // ══════════════════════════════════════════════════════
