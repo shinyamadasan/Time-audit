@@ -137,6 +137,126 @@ test.describe('Quick scheduling', () => {
   });
 });
 
+// FIX FIRST — write-time range validation. Prior to this fix, invalid ranges could be stamped
+// into draft state (and then persisted) by quick-duration chips, a changed start left behind a
+// hidden duration, and custom-end had no upper bound. All three write paths now validate BEFORE
+// mutating draft.items, so a rejected attempt always leaves the last-known-good schedule intact.
+test.describe('Write-time range validation (FIX FIRST)', () => {
+  test('Blocker 1: quick length rejects a cross-midnight duration, preserving an existing valid range', async ({ page }) => {
+    await openPlanTomorrowWith(page, [planItem('p1', 'Deep work', { when: '23:00', durationMinutes: 30 })]);
+    await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('11:00–11:30 PM');
+    await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Deep work' }).click();
+    await expect(page.getByRole('button', { name: '30m', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: '2h', exact: true }).click();
+    await expect(page.locator('#plan-tomorrow-error')).toHaveText('That length would run past midnight. Choose a shorter length.');
+    // The rejected click never touched draft state: 30m is still selected, the custom end still
+    // reflects the prior valid end — nothing was silently changed or cleared.
+    await expect(page.getByRole('button', { name: '30m', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.pt-end-input')).toHaveValue('23:30');
+    // Keyboard-activate confirm (focus + Enter) rather than a mouse click: the still-open panel is
+    // about to collapse as a side effect of losing focus, and a coordinate-based click can race that
+    // layout shift. Enter on the already-focused button is immune to where it ends up on screen.
+    await page.locator('#plan-tomorrow-confirm').focus();
+    await page.keyboard.press('Enter');
+    const items = await storedItems(page);
+    expect(items[0].when).toBe('23:00');
+    expect(items[0].durationMinutes).toBe(30);
+  });
+
+  test('Blocker 1: quick length rejects a cross-midnight duration when there is no prior range, leaving the item start-only', async ({ page }) => {
+    await openPlanTomorrowWith(page, [planItem('p1', 'Late task', { when: '23:00' })]);
+    await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Late task' }).click();
+    await page.getByRole('button', { name: '2h', exact: true }).click();
+    await expect(page.locator('#plan-tomorrow-error')).toHaveText('That length would run past midnight. Choose a shorter length.');
+    await page.locator('#plan-tomorrow-confirm').focus();
+    await page.keyboard.press('Enter');
+    const items = await storedItems(page);
+    expect(items[0].when).toBe('23:00');
+    expect('durationMinutes' in items[0]).toBe(false);
+  });
+
+  test('Blocker 2: changing start via a quick-start chip preserves a still-valid existing duration', async ({ page }) => {
+    await openPlanTomorrowWith(page, [planItem('p1', 'Deep work', { when: '09:00', durationMinutes: 120 })]);
+    await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Deep work' }).click();
+    await page.getByRole('button', { name: '10 AM', exact: true }).click();
+    await expect(page.locator('.pt-end-input')).toHaveValue('12:00'); // still open — duration preserved
+    await page.locator('#plan-tomorrow-date').click(); // click away to collapse
+    await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('10:00 AM–12:00 PM');
+    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    const items = await storedItems(page);
+    expect(items[0].when).toBe('10:00');
+    expect(items[0].durationMinutes).toBe(120);
+  });
+
+  test('Blocker 2: changing start via the native input clears a now-invalid duration in the same mutation, and it never resurrects', async ({ page }) => {
+    await openPlanTomorrowWith(page, [planItem('p1', 'Deep work', { when: '09:00', durationMinutes: 120 })]);
+    await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('9:00–11:00 AM');
+    await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Deep work' }).click();
+    await page.locator('.pt-time-input').fill('23:00');
+    // The native start input closing the panel is existing precedent; the collapsed view must show
+    // start-only, never a hidden/garbage range, and no "Remove range" control since there is none.
+    await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('11:00 PM');
+    await expect(page.locator('.pt-oneoff').getByRole('button', { name: 'Remove range for Deep work' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    let items = await storedItems(page);
+    expect(items[0].when).toBe('23:00');
+    expect('durationMinutes' in items[0]).toBe(false);
+
+    // Reopen and change the start back to 09:00 — the old 120-minute duration must not resurrect.
+    await page.evaluate(() => openPlanTomorrow());
+    await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Deep work' }).click();
+    await page.locator('.pt-time-input').fill('09:00');
+    await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('9:00 AM');
+    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    items = await storedItems(page);
+    expect(items[0].when).toBe('09:00');
+    expect('durationMinutes' in items[0]).toBe(false);
+  });
+
+  test('Blocker 3: custom end enforces the 720-minute cap — 720 accepted, 721 and 780 rejected, prior valid range preserved', async ({ page }) => {
+    await openPlanTomorrowWith(page, [planItem('p1', 'Long block', { when: '06:00' })]);
+    await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Long block' }).click();
+    await page.locator('.pt-end-input').fill('18:00'); // exactly 720 minutes — accepted
+    await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('6:00 AM–6:00 PM');
+
+    await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Long block' }).click();
+    await page.locator('.pt-end-input').fill('18:01'); // 721 minutes — rejected
+    await expect(page.locator('#plan-tomorrow-error')).toHaveText('End time must be within 12 hours of the start.');
+    await page.locator('#plan-tomorrow-date').click(); // let the panel settle/collapse before confirming
+    await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('6:00 AM–6:00 PM');
+    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    let items = await storedItems(page);
+    expect(items[0].durationMinutes).toBe(720); // the rejected 721 attempt never overwrote the valid 720
+
+    await page.evaluate(() => openPlanTomorrow());
+    await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Long block' }).click();
+    await page.locator('.pt-end-input').fill('19:00'); // 780 minutes — the exact reported defect
+    await expect(page.locator('#plan-tomorrow-error')).toHaveText('End time must be within 12 hours of the start.');
+    await page.locator('#plan-tomorrow-date').click();
+    await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('6:00 AM–6:00 PM');
+    await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+    items = await storedItems(page);
+    expect(items[0].when).toBe('06:00');
+    expect(items[0].durationMinutes).toBe(720);
+  });
+
+  test('persistence safety: confirming immediately after a rejected scheduling attempt never persists invalid range state', async ({ page }) => {
+    await openPlanTomorrowWith(page, [planItem('p1', 'Deep work', { when: '23:00', durationMinutes: 30 })]);
+    await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Deep work' }).click();
+    await page.getByRole('button', { name: '2h', exact: true }).click(); // rejected: crosses midnight
+    await expect(page.locator('#plan-tomorrow-error')).toBeVisible();
+    // Keyboard-activate confirm immediately — this test's whole point is confirming right after a
+    // rejected attempt, without waiting for the panel to visually settle first.
+    await page.locator('#plan-tomorrow-confirm').focus();
+    await page.keyboard.press('Enter');
+    const items = await storedItems(page);
+    // Whatever persisted must itself be a valid range (or none) — never the rejected 120.
+    expect(items[0].when).toBe('23:00');
+    expect(items[0].durationMinutes).toBe(30);
+    expect(items[0].durationMinutes).not.toBe(120);
+  });
+});
+
 test.describe('Editing states', () => {
   test('untimed -> add start only leaves no range', async ({ page }) => {
     await openPlanTomorrowWith(page, [planItem('p1', 'Deep work')]);

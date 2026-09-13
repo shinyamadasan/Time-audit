@@ -63,6 +63,15 @@ export function durationBetween(startWhen, endWhen) {
   return diff > 0 ? diff : null;
 }
 
+/** The single authoritative "is this a storable range" check — true only when durationMinutes is
+ *  itself well-formed AND its end actually fits against `when` (same calendar day). Every write
+ *  path (quick-duration, start changes, custom end) composes this instead of checking
+ *  validPlanItemDuration/planItemEndTime separately, so there is exactly one place a scheduling
+ *  mutation can be judged valid — never two authorities that could disagree. */
+export function validPlanItemRange(when, durationMinutes) {
+  return validPlanItemDuration(durationMinutes) && planItemEndTime(when, durationMinutes) !== null;
+}
+
 /** The one authoritative range label — "9:00 AM" or "9:00–10:30 AM" — built entirely on top of
  *  formatPlanItemTime so every caller (Today, Plan Tomorrow, Tomorrow View) renders schedules
  *  identically. Compact when both ends share a period; keeps each side's own AM/PM once they
@@ -415,7 +424,7 @@ export function carriedItemId(sourceDate, sourceItemId) {
   return `carry:${sourceDate}:${sourceItemId}`;
 }
 
-const api = { validPlanDate, validPlanTimezone, validPlanItemTime, formatPlanItemTime, validPlanItemDuration, planItemEndTime, durationBetween, formatPlanItemSchedule, planItemScheduleLabel, clearPlanItemRange, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual, reconciliationBucket, carriedItemId };
+const api = { validPlanDate, validPlanTimezone, validPlanItemTime, formatPlanItemTime, validPlanItemDuration, planItemEndTime, durationBetween, validPlanItemRange, formatPlanItemSchedule, planItemScheduleLabel, clearPlanItemRange, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual, reconciliationBucket, carriedItemId };
 globalThis.PlanTomorrowModel = api;
 // Today's plan strip renders once, synchronously, before this module (deferred by type="module")
 // finishes loading — its preparation/streak/schedule-label fields all read PlanTomorrowModel, so

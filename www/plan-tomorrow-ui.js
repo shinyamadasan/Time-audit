@@ -1,4 +1,4 @@
-import { carriedItemId, classifyOneOffActual, classifyRoutineActual, clearPlanItemRange, computeReadyNow, durationBetween, formatPlanItemSchedule, normalizePreparation, planItemEndTime, planningConsistency, planTomorrowTargetDate, reconciliationBucket, validPlanItemTime } from './plan-tomorrow-model.js';
+import { carriedItemId, classifyOneOffActual, classifyRoutineActual, clearPlanItemRange, computeReadyNow, durationBetween, formatPlanItemSchedule, normalizePreparation, planItemEndTime, planningConsistency, planTomorrowTargetDate, reconciliationBucket, validPlanItemRange, validPlanItemTime } from './plan-tomorrow-model.js';
 import { generateInstances, matchCompletion, occursOn } from './daily-routines-model.js';
 import { createDailyRoutineRepository } from './daily-routines-repository.js';
 import { createLearningPlanRepository } from './learning-plan-repository.js';
@@ -177,6 +177,15 @@ const QUICK_DURATIONS = [
   { label: '1.5h', value: 90 },
   { label: '2h', value: 120 }
 ];
+
+/** Applies a new start to an item, dropping any existing duration the new start would make
+ *  invalid (e.g. 09:00+2h -> 23:00 would run past midnight) in the SAME mutation — never leaves a
+ *  hidden durationMinutes that could later resurrect a stale range. A duration that's still valid
+ *  against the new start (e.g. 09:00+2h -> 10:00) is left untouched. */
+function withNewStart(item, when) {
+  const next = { ...item, when };
+  return validPlanItemRange(when, item.durationMinutes) ? next : clearPlanItemRange(next);
+}
 
 function chipRowHtml({ id, labelId, options, current, action }) {
   const chips = options.map(opt => {
@@ -391,10 +400,15 @@ root?.addEventListener('click', async event => {
       draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem(clearPlanItemRange(item)) : item);
     }
     if (action === 'quick-start') {
-      draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, when: control.dataset.value }) : item);
+      draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem(withNewStart(item, control.dataset.value)) : item);
     }
     if (action === 'quick-duration') {
-      draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, durationMinutes: Number(control.dataset.value) }) : item);
+      // Validate BEFORE touching draft state: an invalid pick (e.g. 23:00 + 2h crossing midnight)
+      // must never overwrite the last-known-good duration, even transiently — see Blocker 1.
+      const value = Number(control.dataset.value);
+      const target = draft.items.find(item => item.id === control.dataset.id);
+      if (!target || !validPlanItemRange(target.when, value)) throw new Error('That length would run past midnight. Choose a shorter length.');
+      draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, durationMinutes: value }) : item);
       draft.schedulingId = null;
     }
     if (action === 'suggest') addItem(control.dataset.task);
@@ -413,7 +427,7 @@ root?.addEventListener('change', event => {
   const input = event.target.closest('.pt-time-input');
   if (!input || !draft) return;
   const id = input.dataset.ptTime;
-  draft.items = draft.items.map(item => item.id === id ? context().stampItem({ ...item, when: input.value }) : item);
+  draft.items = draft.items.map(item => item.id === id ? context().stampItem(withNewStart(item, input.value)) : item);
   draft.schedulingId = null;
   render();
 });
@@ -430,6 +444,7 @@ root?.addEventListener('change', event => {
   try {
     const duration = item ? durationBetween(item.when, input.value) : null;
     if (!duration) throw new Error('End time must be later than the start, on the same day.');
+    if (!validPlanItemRange(item.when, duration)) throw new Error('End time must be within 12 hours of the start.');
     draft.items = draft.items.map(i => i.id === id ? context().stampItem({ ...i, durationMinutes: duration }) : i);
     draft.schedulingId = null;
     render();
