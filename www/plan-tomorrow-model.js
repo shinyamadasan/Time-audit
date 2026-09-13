@@ -6,6 +6,25 @@ export function validPlanDate(value) {
     && new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;
 }
 
+const PLAN_ITEM_TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/** A one-off priority's optional `when` is only ever treated as a real, structured time when it
+ *  is exactly zero-padded 24h "HH:MM" — the same bound index.html's own PLAN_TIME_RE enforces for
+ *  due/order calculations. Anything else (blank, or historical free text like "after lunch") is
+ *  left alone; callers fall back to the plain, unparsed display. */
+export function validPlanItemTime(value) {
+  return typeof value === 'string' && PLAN_ITEM_TIME_RE.test(value);
+}
+
+/** 24h "HH:MM" -> "9:00 AM" for display only; storage always stays the canonical 24h string. */
+export function formatPlanItemTime(value) {
+  if (!validPlanItemTime(value)) return null;
+  const [hour, minute] = value.split(':').map(Number);
+  const period = hour < 12 ? 'AM' : 'PM';
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+}
+
 export function validPlanTimezone(value) {
   if (typeof value !== 'string' || !value.trim()) return false;
   try {
@@ -302,6 +321,6 @@ export function summarizeActual(rows) {
   return { planned: rows.length, active: active.length, completed, removed: rows.length - active.length };
 }
 
-const api = { validPlanDate, validPlanTimezone, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual };
+const api = { validPlanDate, validPlanTimezone, validPlanItemTime, formatPlanItemTime, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual };
 globalThis.PlanTomorrowModel = api;
 globalThis.replayPendingPlanRemotes?.();

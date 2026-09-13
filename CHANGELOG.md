@@ -1,5 +1,52 @@
 # ChronaSense — Changelog
 
+## Plan Tomorrow Quick Time V1 (feat/plan-tomorrow-quick-time, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-12
+
+Plan Tomorrow already had structured planned-time support end to end — one-off
+items carry a canonical `when` field (24h `HH:MM`, validated by a bounded regex),
+Today's ordering (`dueTimedPlanItem`/`getNextPlanItem`/`planDisplayOrder`) already
+ranks by it, and Today's own add-row already used a native `<input type="time">`.
+What was missing was any way to set, change, or clear that time for a priority
+*already in the list* from inside Plan Tomorrow itself — the only existing control
+was Plan Tomorrow's add-form free-text `when` box (kept exactly as-is; a regression
+test relies on it accepting non-time text like "after lunch"), and once an item
+existed its time was static, unclickable text with no edit/remove path short of
+delete-and-recreate.
+
+- `plan-tomorrow-model.js`: two small pure additions — `validPlanItemTime(value)`
+  (the same bounded zero-padded `HH:MM` check Today's own `PLAN_TIME_RE` already
+  enforces, re-derived here since index.html's copy isn't imported by this module)
+  and `formatPlanItemTime(value)` (`"09:00"` → `"9:00 AM"`, display-only — storage
+  never changes format). No new field, no new persistence path.
+- `plan-tomorrow-ui.js`: each one-off row now renders a small, secondary time
+  affordance under the task title — `+ Add time` when untimed, or the formatted
+  time plus `Change`/`Remove time` when set. Clicking any of these swaps that row's
+  control for a focused native `<input type="time">` (transient `draft.editingWhenId`
+  state, never persisted); a `change` event commits the new `when` onto the draft
+  item via the existing `stampItem()` path (same mutation shape as remove/rename),
+  and a `focusout` with no committed change just closes the picker, leaving the item
+  untimed/unchanged — no new write path, no extra Firebase node. A legacy free-text
+  `when` (from the old add-form, or synced from another device) still displays
+  verbatim; the row still offers `+ Add time` to convert it to a real time going
+  forward, but nothing auto-migrates it.
+- `plan-tomorrow.css`: new `.pt-oneoff-main`/`.pt-oneoff-time`/`.pt-time-link`/
+  `.pt-time-input` rules only — title stays primary, the time row is smaller/muted
+  underneath, wraps at phone width, no dense form.
+- Confirmation, reopen, rename, reorder, Open Day, Planning Streak, and multi-device
+  merge are all unaffected: the time lives on the same item object the existing
+  `confirmPreparedDatePlan`/`mergeDatePlans`/`chooseItem` machinery already carries
+  by id, so nothing about *how* items persist or merge changed — only how a time
+  gets in or out of the `when` field before that existing path runs.
+- Tests: `plan-tomorrow.test.js` gains unit coverage for
+  `validPlanItemTime`/`formatPlanItemTime`; `tests/plan-tomorrow-ui.spec.js` gains
+  14 cases (A–N) covering untimed display, add/change/remove time, reopen preload,
+  rename/reorder independence, duplicate-free re-confirmation, Planning Streak
+  non-interference, legacy free-text tolerance, click-away cancel, Today receiving
+  the time through the existing field, and phone-width layout. Full suite: `npm test`
+  673 passing (pre-existing `firebase-rules.test.js` failure is an environment gap —
+  missing `targaryen` dependency, unmodified file, unrelated to this branch) plus
+  `npx playwright test` 513/513 passing.
+
 ## Today Persistent Sections V1 (feat/today-persistent-sections, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-12
 
 Timeline and Accountability answer "what actually happened today" and "how is my
