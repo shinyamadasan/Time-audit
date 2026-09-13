@@ -17,3 +17,16 @@
 .tmr-open-day{font-size:14px;font-weight:600;color:var(--deep);margin:10px 0}
 .tmr-footer{display:flex;justify-content:flex-end;margin-top:6px}
 @media(max-width:560px){.tmr-row{flex-wrap:wrap}.tmr-row-time{min-width:auto}}
+
+/* Tomorrow Timeline Preview V1 — read-only projection, restrained relative to Today's Timeline:
+   no per-row actions, no bar/color coding, just time + title + honest source/status text. */
+#tomorrow-timeline-preview{margin-bottom:14px}
+#tomorrow-timeline-preview .tmr-head{margin-bottom:8px}
+.ttp-badge{font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--deep);background:var(--deep-dim2);border-radius:999px;padding:2px 9px}
+.ttp-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;border:1px solid var(--border2);border-radius:var(--r);padding:9px 12px;margin-bottom:7px;background:var(--bg3)}
+.ttp-time{flex-shrink:0;min-width:100px;font-size:12px;color:var(--muted);font-weight:600}
+.ttp-title{font-size:14px;line-height:1.35;overflow-wrap:anywhere;flex:1;min-width:0}
+.ttp-status{flex-shrink:0;font-size:11px;color:var(--deep);font-weight:600;white-space:nowrap}
+.ttp-unscheduled{margin-top:10px}
+.ttp-unscheduled h4{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px}
+@media(max-width:560px){.ttp-row{flex-wrap:wrap}.ttp-time{min-width:auto}}
