@@ -1,5 +1,6 @@
 import { normalizePreparation, planItemScheduleLabel, planTomorrowTargetDate } from './plan-tomorrow-model.js';
 import { deriveTomorrowViewState } from './tomorrow-view-model.js';
+import { deriveTomorrowTimelinePreview } from './tomorrow-timeline-model.js';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const TAB_STORAGE_KEY = 'ta3-commitments-view';
@@ -8,6 +9,20 @@ const todayPane = document.getElementById('today-commitments-today');
 const tomorrowPane = document.getElementById('tomorrow-view');
 const todayTab = document.getElementById('tmr-tab-today');
 const tomorrowTab = document.getElementById('tmr-tab-tomorrow');
+
+// Today-only actual/action surfaces that must not sit beneath Tomorrow's projected content —
+// each represents current-day tracked truth or an action on it (So far, Log time, the real
+// Timeline + its row actions, Entry actions), never something that could honestly be relabeled
+// "tomorrow". Hidden via the `hidden` IDL property (never inline display), which also removes
+// them from tab order and the accessibility tree automatically — no separate focus-trap handling
+// needed. `needs-you` is governed by index.html's own renderNeedsYou() (see its tab-aware check)
+// rather than forced here, since a MutationObserver can re-run it independently of this tab click.
+const soFarSection = document.getElementById('so-far');
+const logTimeNavButton = document.getElementById('today-nav-log-time');
+const logTimeDetails = document.getElementById('log-time-details');
+const timelineSection = document.getElementById('timeline-section');
+const timelineEntryActions = document.getElementById('timeline-entry-actions');
+const timelinePreview = document.getElementById('tomorrow-timeline-preview');
 
 function context() {
   if (typeof globalThis.getPlanTomorrowAppContext !== 'function') throw new Error('Tomorrow View is not available yet.');
@@ -72,6 +87,80 @@ function footerHtml(label) {
   return `<div class="tmr-footer"><button type="button" class="btn sm ghost" data-tmr-action="open">${escape(label)}</button></div>`;
 }
 
+/** Tomorrow's schedule Template occurrences, reduced from index.html's generateTemplateEntries()
+ *  (the exact same pure, date-parameterized helper Today's own Timeline calls for whichever date
+ *  it's viewing — never a second template-applicability derivation) into the plain "HH:MM" shape
+ *  tomorrow-timeline-model.js works with. tzHHMM/activityDisplayLabel are the app's own existing
+ *  account-timezone/display-name authorities — this never touches Intl or raw settings itself.
+ *  Templates have no timezone-mismatch concept of their own (unlike Daily Routines): they always
+ *  read the single account `settings.timezone`, so there is nothing analogous to
+ *  routineMismatch to guard against here. */
+function tomorrowTemplateEntries(targetDate) {
+  if (typeof globalThis.generateTemplateEntries !== 'function') return [];
+  const toHHMM = typeof globalThis.tzHHMM === 'function' ? globalThis.tzHHMM : null;
+  if (!toHHMM) return [];
+  const displayLabel = typeof globalThis.activityDisplayLabel === 'function' ? globalThis.activityDisplayLabel : value => value;
+  return globalThis.generateTemplateEntries(targetDate).map(entry => ({
+    templateId: entry.templateId,
+    date: entry.date,
+    activity: displayLabel(entry.activity),
+    autoLog: entry.autoLog,
+    startWhen: toHHMM(entry.tsStart),
+    endWhen: toHHMM(entry.ts)
+  }));
+}
+
+function ttpRowHtml(row) {
+  const timeLabel = row.scheduleLabel || '—';
+  return `<div class="ttp-row" data-ttp-source="${escape(row.sourceType)}">
+    <span class="ttp-time">${escape(timeLabel)}</span>
+    <span class="ttp-title">${escape(row.title)}</span>
+    <span class="ttp-status">${escape(row.statusLabel)}</span>
+  </div>`;
+}
+
+function ttpUnscheduledRowHtml(row) {
+  return `<div class="ttp-row ttp-row-unscheduled" data-ttp-source="${escape(row.sourceType)}">
+    <span class="ttp-title">${escape(row.title)}</span>
+    <span class="ttp-status">${escape(row.statusLabel)}</span>
+  </div>`;
+}
+
+/** Renders independently of Plan Tomorrow's own prepared/unprepared/Open-Day viewState: Daily
+ *  Routines and one-off priorities are gated the same way the pane above already gates them
+ *  (routineMismatch → priorities only; otherwise the caller's already-applicable rows), but
+ *  schedule Templates fire on their own recurrence regardless of whether tomorrow was ever
+ *  "prepared" or was explicitly marked an Open Day — exactly as they already do for Today, where
+ *  they are never part of the Plan Tomorrow confirmation at all. Showing them only when
+ *  viewState === 'prepared' would hide a real, already-scheduled future block; this call site
+ *  (inside render(), once, before the viewState branch) is what makes that renders every time,
+ *  on every branch, without duplicating the call. */
+function renderTimelinePreview({ targetDate, items, applicableRoutines, routineMismatch }) {
+  if (!timelinePreview) return;
+  let preview;
+  try {
+    preview = deriveTomorrowTimelinePreview({
+      priorityItems: items,
+      routineRows: routineMismatch ? [] : applicableRoutines,
+      templateEntries: tomorrowTemplateEntries(targetDate)
+    });
+  } catch {
+    timelinePreview.innerHTML = '<p class="tmr-muted" role="status">Tomorrow’s timeline can’t be shown right now.</p>';
+    return;
+  }
+  const { positioned, unscheduled } = preview;
+  const heading = `<div class="tmr-head"><div class="tmr-kicker">Tomorrow’s timeline</div><span class="ttp-badge">Planned</span></div>`;
+  if (!positioned.length && !unscheduled.length) {
+    timelinePreview.innerHTML = heading + '<p class="tmr-muted">Nothing scheduled yet.</p>';
+    return;
+  }
+  const positionedHtml = positioned.length ? positioned.map(ttpRowHtml).join('') : '<p class="tmr-muted">No scheduled times yet.</p>';
+  const unscheduledHtml = unscheduled.length
+    ? `<section class="ttp-unscheduled"><h4>Unscheduled</h4>${unscheduled.map(ttpUnscheduledRowHtml).join('')}</section>`
+    : '';
+  timelinePreview.innerHTML = heading + positionedHtml + unscheduledHtml;
+}
+
 function render() {
   if (!tomorrowPane) return;
   let data;
@@ -79,9 +168,11 @@ function render() {
     data = computeViewData();
   } catch {
     tomorrowPane.innerHTML = '<p class="tmr-muted" role="status">Tomorrow’s plan can’t be shown right now.</p>';
+    if (timelinePreview) timelinePreview.innerHTML = '<p class="tmr-muted" role="status">Tomorrow’s timeline can’t be shown right now.</p>';
     return;
   }
   const { targetDate, items, applicableRoutines, routineMismatch, viewState } = data;
+  renderTimelinePreview({ targetDate, items, applicableRoutines, routineMismatch });
 
   if (viewState === 'unprepared-empty') {
     tomorrowPane.innerHTML = headingHtml(targetDate)
@@ -113,6 +204,24 @@ function render() {
     + footerHtml('Edit tomorrow');
 }
 
+/** The Today/Tomorrow toggle now governs more than the commitments pane: everything below it that
+ *  represents current-day actual truth or an action on it must not keep showing while browsing a
+ *  projection of tomorrow. Each element here is hidden via the `hidden` IDL property, matching
+ *  todayPane/tomorrowPane above, never inline style — that also drops it from tab order and the
+ *  accessibility tree with no separate focus-management code. `#needs-you` is deliberately not
+ *  touched here; it is re-derived by calling index.html's own renderNeedsYou(), whose hidden
+ *  condition already accounts for this same tab (see index.html), so a MutationObserver-triggered
+ *  re-render elsewhere can never un-hide it out from under this tab switch. */
+function applyTodayOnlySurfaces(showTomorrow) {
+  if (soFarSection) soFarSection.hidden = showTomorrow;
+  if (logTimeNavButton) logTimeNavButton.hidden = showTomorrow;
+  if (logTimeDetails) logTimeDetails.hidden = showTomorrow;
+  if (timelineSection) timelineSection.hidden = showTomorrow;
+  if (timelineEntryActions) timelineEntryActions.hidden = showTomorrow;
+  if (timelinePreview) timelinePreview.hidden = !showTomorrow;
+  globalThis.renderNeedsYou?.();
+}
+
 function applyTab(tab) {
   if (!todayPane || !tomorrowPane || !todayTab || !tomorrowTab) return;
   const showTomorrow = tab === 'tomorrow';
@@ -120,6 +229,7 @@ function applyTab(tab) {
   tomorrowPane.hidden = !showTomorrow;
   todayTab.setAttribute('aria-pressed', String(!showTomorrow));
   tomorrowTab.setAttribute('aria-pressed', String(showTomorrow));
+  applyTodayOnlySurfaces(showTomorrow);
   if (showTomorrow) render();
 }
 

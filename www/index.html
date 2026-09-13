@@ -145,7 +145,7 @@
   </section>
   <section id="so-far" aria-label="So far"><h2>So far</h2><span id="so-far-summary">No time recorded yet.</span> <button class="btn sm ghost" onclick="openReview(undefined, true)">Details</button></section>
   <nav class="today-secondary" aria-label="Today actions">
-    <button class="btn sm ghost" onclick="toggleTodayDestination('log-time-details')">Log time</button>
+    <button id="today-nav-log-time" class="btn sm ghost" onclick="toggleTodayDestination('log-time-details')">Log time</button>
     <button class="btn sm ghost" onclick="scrollToTimeline()">Timeline</button>
     <button class="btn sm ghost" onclick="openReview()">Review</button>
     <button class="btn sm ghost" onclick="openPlanTomorrow()">Prepare tomorrow</button>
@@ -154,7 +154,9 @@
   <details id="log-time-details" class="today-destination"><summary>Log time</summary><button class="btn sm ghost" onclick="openRetroLog()">Past block</button><div id="log-time-content"></div></details>
   <details id="timeline-details" class="today-destination" open>
     <summary aria-expanded="true">Timeline<span class="tds-summary" id="timeline-collapsed-summary"></span><span class="tds-chevron" aria-hidden="true"></span></summary>
-    <div id="timeline-content"></div>
+    <div id="timeline-content">
+      <div id="tomorrow-timeline-preview" hidden role="region" aria-label="Tomorrow’s timeline preview"></div>
+    </div>
   </details>
   <details id="accountability-details" class="today-destination" open style="display:none">
     <summary aria-expanded="true">Accountability<span class="tds-summary" id="accountability-collapsed-summary"></span><span class="tds-chevron" aria-hidden="true"></span></summary>
@@ -1650,7 +1652,7 @@
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
 <script type="module" src="daily-routines-ui.js?v=20260907"></script>
 <script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
-<script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-view-v1"></script>
+<script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
 <script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
 <script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
@@ -4464,6 +4466,7 @@ function initializeTodaySurfaces() {
   const recent = document.getElementById('recent-entries-section');
   recent.classList.remove('today-detail');
   const corrections = document.createElement('details');
+  corrections.id = 'timeline-entry-actions';
   corrections.innerHTML = '<summary>Entry actions</summary>';
   corrections.append(recent); document.getElementById('timeline-content').append(corrections);
   const partner = document.getElementById('partner-card');
@@ -4509,7 +4512,14 @@ function renderNeedsYou() {
   sleep.hidden = document.getElementById('today-sleep-reminder').hidden;
   const candidates = [...document.getElementById('needs-you-items').children].filter(el => el.id === 'gap-recovery' ? el.style.display !== 'none' : el.id === 'daily-routines-error' ? !!el.textContent.trim() : !el.hidden);
   [...document.getElementById('needs-you-items').children].forEach(el => el.classList.toggle('needs-secondary', candidates.includes(el) && el !== candidates[0]));
-  region.hidden = !isViewingToday() || !candidates.length;
+  // Tomorrow Timeline Preview V1: Needs You is current-day-actual nudges (gap recovery, sleep
+  // reminder, routine attention) — it must not keep showing while the Today/Tomorrow toggle is on
+  // Tomorrow, even though isViewingToday() (which tracks date-browsing, not this separate toggle)
+  // stays true. Reading the same localStorage key tomorrow-view-ui.js writes keeps this the single
+  // place that decides Needs You's visibility, so a MutationObserver-triggered re-render can never
+  // un-hide it out from under the tab switch.
+  const tomorrowTabActive = localStorage.getItem('ta3-commitments-view') === 'tomorrow';
+  region.hidden = !isViewingToday() || tomorrowTabActive || !candidates.length;
   document.getElementById('needs-you-count').textContent = candidates.length === 1 ? '1 thing' : `${candidates.length} things`;
   document.getElementById('needs-you-more').hidden = candidates.length <= 1;
 }
