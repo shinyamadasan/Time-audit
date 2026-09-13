@@ -1,4 +1,4 @@
-import { classifyRoutineActual, computeReadyNow, normalizePreparation, planningConsistency, planTomorrowTargetDate } from './plan-tomorrow-model.js';
+import { classifyRoutineActual, computeReadyNow, formatPlanItemTime, normalizePreparation, planningConsistency, planTomorrowTargetDate, validPlanItemTime } from './plan-tomorrow-model.js';
 import { generateInstances, matchCompletion, occursOn } from './daily-routines-model.js';
 import { createDailyRoutineRepository } from './daily-routines-repository.js';
 import { createLearningPlanRepository } from './learning-plan-repository.js';
@@ -80,10 +80,34 @@ function routineHtml() {
   }).join('');
 }
 
+function timeControlHtml(item) {
+  const timed = validPlanItemTime(item.when);
+  if (draft.editingWhenId === item.id) {
+    return `<input type="time" class="pt-time-input" data-pt-time="${escape(item.id)}" aria-label="Set time for ${escape(item.task)}" value="${timed ? escape(item.when) : ''}">`;
+  }
+  if (timed) {
+    return `<span class="pt-time-value">${escape(formatPlanItemTime(item.when))}</span>
+      <button type="button" class="pt-time-link" data-pt-action="edit-time" data-id="${escape(item.id)}" aria-label="Change time for ${escape(item.task)}">Change</button>
+      <span aria-hidden="true"> · </span>
+      <button type="button" class="pt-time-link" data-pt-action="remove-time" data-id="${escape(item.id)}" aria-label="Remove time for ${escape(item.task)}">Remove time</button>`;
+  }
+  return `<button type="button" class="pt-time-link add" data-pt-action="edit-time" data-id="${escape(item.id)}" aria-label="Set time for ${escape(item.task)}">+ Add time</button>`;
+}
+
 function itemHtml() {
   const items = activeItems();
   const overCap = items.length > context().maxItems;
-  const rows = items.map(item => `<div class="pt-oneoff"><div>${item.when ? `<span class="plan-when">${escape(item.when)} →</span> ` : ''}${escape(item.task)}</div><button type="button" class="plan-remove" data-pt-action="remove" data-id="${escape(item.id)}" title="Remove">✕</button></div>`).join('');
+  const rows = items.map(item => {
+    const timed = validPlanItemTime(item.when);
+    const legacyWhen = !timed && item.when ? `<span class="plan-when">${escape(item.when)} →</span> ` : '';
+    return `<div class="pt-oneoff" data-pt-item="${escape(item.id)}">
+      <div class="pt-oneoff-main">
+        <div class="pt-oneoff-task">${legacyWhen}${escape(item.task)}</div>
+        <div class="pt-oneoff-time">${timeControlHtml(item)}</div>
+      </div>
+      <button type="button" class="plan-remove" data-pt-action="remove" data-id="${escape(item.id)}" title="Remove">✕</button>
+    </div>`;
+  }).join('');
   const add = items.length < context().maxItems ? `<form id="plan-tomorrow-add" class="pt-add"><input name="when" maxlength="40" placeholder="when (optional)"><input name="task" maxlength="80" placeholder="one priority"><button class="btn sm" type="submit">Add</button></form>` : '';
   const warning = overCap ? `<div class="pt-warning">${items.length} priorities arrived from synced devices. Nothing was deleted; reduce to ${context().maxItems} before confirming.</div>` : '';
   const suggestions = items.length < context().maxItems ? suggestionRows() : [];
@@ -119,6 +143,7 @@ function render() {
   body.innerHTML = draft.mode === 'rescue' ? renderRescue() : renderNormal();
   document.getElementById('plan-tomorrow-confirm').textContent = draft.mode === 'rescue' ? 'Use this plan' : 'Tomorrow is ready';
   error.textContent = '';
+  if (draft.editingWhenId) [...body.querySelectorAll('.pt-time-input')].find(input => input.dataset.ptTime === draft.editingWhenId)?.focus();
 }
 
 export function openPlanTomorrow({ returnToReview = false } = {}) {
@@ -134,7 +159,8 @@ export function openPlanTomorrow({ returnToReview = false } = {}) {
       items: app.rawItems(targetDate).map(item => ({ ...item })),
       routines: routinePlan(targetDate, app.timezone),
       mode: 'normal',
-      intentionalBlank: preparation?.intentionalBlank || false
+      intentionalBlank: preparation?.intentionalBlank || false,
+      editingWhenId: null
     };
     root.classList.add('open');
     render();
@@ -188,6 +214,11 @@ root?.addEventListener('click', async event => {
     if (action === 'close') { closePreparation(); return; }
     if (action === 'blank') { draft.intentionalBlank = !draft.intentionalBlank; render(); return; }
     if (action === 'remove') draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, deleted: true }) : item);
+    if (action === 'edit-time') draft.editingWhenId = control.dataset.id;
+    if (action === 'remove-time') {
+      draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, when: '' }) : item);
+      draft.editingWhenId = null;
+    }
     if (action === 'suggest') addItem(control.dataset.task);
     if (action === 'skip' || action === 'unskip') {
       routineRepository.setDateSkip(draft.routines.state.timezone, control.dataset.id, action === 'skip');
@@ -197,6 +228,22 @@ root?.addEventListener('click', async event => {
     if (action === 'confirm') { await confirmDraft(); return; }
     render();
   } catch (err) { error.textContent = err.message; }
+});
+
+root?.addEventListener('change', event => {
+  const input = event.target.closest('.pt-time-input');
+  if (!input || !draft) return;
+  const id = input.dataset.ptTime;
+  draft.items = draft.items.map(item => item.id === id ? context().stampItem({ ...item, when: input.value }) : item);
+  draft.editingWhenId = null;
+  render();
+});
+
+root?.addEventListener('focusout', event => {
+  const input = event.target.closest('.pt-time-input');
+  if (!input || !draft || draft.editingWhenId !== input.dataset.ptTime) return;
+  draft.editingWhenId = null;
+  render();
 });
 
 root?.addEventListener('submit', event => {

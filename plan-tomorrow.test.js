@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   addCalendarDays, buildPreparation, classifyOneOffActual, classifyRoutineActual,
-  computeReadyNow, localPlanDate, mergeDatePlans, mergePreparations,
-  normalizePreparation, planningConsistency, planTomorrowTargetDate, summarizeActual
+  computeReadyNow, formatPlanItemTime, localPlanDate, mergeDatePlans, mergePreparations,
+  normalizePreparation, planningConsistency, planTomorrowTargetDate, summarizeActual, validPlanItemTime
 } from './plan-tomorrow-model.js';
 
 const targetDate = '2026-09-09';
@@ -237,4 +237,27 @@ test('merge algebra: legacy values without new provenance converge without migra
   const merged = assertTripleConverges([a, b, c]);
   assert.equal(merged.items.length, 2);
   assert.equal(Object.prototype.hasOwnProperty.call(merged.preparation, 'firstPreparedBy'), false);
+});
+
+test('validPlanItemTime only accepts zero-padded 24h HH:MM, never free text or partial values', () => {
+  assert.equal(validPlanItemTime('09:00'), true);
+  assert.equal(validPlanItemTime('23:59'), true);
+  assert.equal(validPlanItemTime('00:00'), true);
+  assert.equal(validPlanItemTime(''), false);
+  assert.equal(validPlanItemTime('after lunch'), false);
+  assert.equal(validPlanItemTime('9:00'), false);
+  assert.equal(validPlanItemTime('24:00'), false);
+  assert.equal(validPlanItemTime('12:60'), false);
+  assert.equal(validPlanItemTime(null), false);
+  assert.equal(validPlanItemTime(undefined), false);
+});
+
+test('formatPlanItemTime renders canonical 24h storage as 12h display without mutating storage', () => {
+  assert.equal(formatPlanItemTime('09:00'), '9:00 AM');
+  assert.equal(formatPlanItemTime('00:00'), '12:00 AM');
+  assert.equal(formatPlanItemTime('12:00'), '12:00 PM');
+  assert.equal(formatPlanItemTime('13:30'), '1:30 PM');
+  assert.equal(formatPlanItemTime('23:05'), '11:05 PM');
+  assert.equal(formatPlanItemTime('after lunch'), null);
+  assert.equal(formatPlanItemTime(''), null);
 });

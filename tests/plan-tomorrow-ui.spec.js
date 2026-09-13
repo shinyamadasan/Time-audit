@@ -468,3 +468,146 @@ test('a date skip filters Today projection before grouping and remains reversibl
   await page.getByRole('button', { name: 'Restore today' }).click();
   await expect(page.locator('.daily-routine-card')).toHaveCount(1);
 });
+
+// ── Plan Tomorrow Quick Time V1 ─────────────────────────────────────────────
+
+test('A: an untimed priority shows a + Add time affordance, secondary to the task', async ({ page }) => {
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app')], updatedAt: NOW } } });
+  const row = page.locator('.pt-oneoff');
+  await expect(row.getByRole('button', { name: 'Set time for Finish app' })).toHaveText('+ Add time');
+  await expect(row.locator('.pt-time-value')).toHaveCount(0);
+});
+
+test('B: adding a time via the native picker shows the formatted 12h time immediately', async ({ page }) => {
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app')], updatedAt: NOW } } });
+  await page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' }).click();
+  const input = page.locator('.pt-time-input');
+  await expect(input).toHaveAttribute('type', 'time');
+  await expect(input).toBeFocused();
+  await input.fill('09:00');
+  await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('9:00 AM');
+});
+
+test('C/Z: confirming persists the chosen time through the existing Plan Tomorrow save path, no extra write path', async ({ page }) => {
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app'), planItem('p2', 'Untimed errand')], updatedAt: NOW } } });
+  await page.locator('.pt-oneoff', { hasText: 'Finish app' }).getByRole('button', { name: 'Set time for Finish app' }).click();
+  await page.locator('.pt-time-input').fill('09:00');
+  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+  const active = stored.items.filter(item => !item.deleted);
+  expect(active).toHaveLength(2);
+  expect(active.find(item => item.task === 'Finish app').when).toBe('09:00');
+  expect(active.find(item => item.task === 'Untimed errand').when).toBe('');
+});
+
+test('D: reopening Plan Tomorrow preloads the existing time, editable and removable', async ({ page }) => {
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app', { when: '09:00' })], updatedAt: NOW } } });
+  const row = page.locator('.pt-oneoff');
+  await expect(row.locator('.pt-time-value')).toHaveText('9:00 AM');
+  await row.getByRole('button', { name: 'Change time for Finish app' }).click();
+  await expect(page.locator('.pt-time-input')).toHaveValue('09:00');
+});
+
+test('E: changing an existing time keeps the same priority identity, only the time changes', async ({ page }) => {
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app', { when: '09:00' })], updatedAt: NOW } } });
+  await page.locator('.pt-oneoff').getByRole('button', { name: 'Change time for Finish app' }).click();
+  await page.locator('.pt-time-input').fill('10:30');
+  await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('10:30 AM');
+  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+  expect(stored.items).toHaveLength(1);
+  expect(stored.items[0].id).toBe('p1');
+  expect(stored.items[0].task).toBe('Finish app');
+  expect(stored.items[0].when).toBe('10:30');
+});
+
+test('F: removing time returns a priority to untimed without deleting it', async ({ page }) => {
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app', { when: '09:00' })], updatedAt: NOW } } });
+  await page.locator('.pt-oneoff').getByRole('button', { name: 'Remove time for Finish app' }).click();
+  await expect(page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' })).toHaveText('+ Add time');
+  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+  expect(stored.items).toHaveLength(1);
+  expect(stored.items[0].id).toBe('p1');
+  expect(stored.items[0].when).toBe('');
+});
+
+test('G/H: an externally renamed or reordered item keeps its own time, unaffected by other rows', async ({ page }) => {
+  const items = [
+    planItem('p1', 'Second slot', { when: '13:00' }),
+    planItem('p2', 'First slot', { when: '09:00' })
+  ];
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items, updatedAt: NOW } } });
+  // Rename p2 directly (no rename UI exists yet) and reopen — time must follow the id, not the text or position.
+  await page.evaluate(target => {
+    const nextItems = getPlanItemsRaw(target).map(item => item.id === 'p2' ? { ...item, task: 'First slot renamed' } : item);
+    writeDatePlanLocal(target, { ...plans[target], items: nextItems });
+  }, TARGET);
+  await page.locator('[data-pt-action="close"]').first().click();
+  await page.evaluate(() => openPlanTomorrow());
+  const rows = page.locator('.pt-oneoff');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.filter({ hasText: 'Second slot' }).locator('.pt-time-value')).toHaveText('1:00 PM');
+  await expect(rows.filter({ hasText: 'First slot renamed' }).locator('.pt-time-value')).toHaveText('9:00 AM');
+});
+
+test('I: confirming twice never creates a duplicate item', async ({ page }) => {
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app')], updatedAt: NOW } } });
+  await page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' }).click();
+  await page.locator('.pt-time-input').fill('09:00');
+  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.evaluate(() => openPlanTomorrow());
+  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+  expect(stored.items).toHaveLength(1);
+  expect(stored.items[0].when).toBe('09:00');
+});
+
+test('J: assigning a time does not by itself change planning streak/preparation semantics', async ({ page }) => {
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app')], updatedAt: NOW } } });
+  await page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' }).click();
+  await page.locator('.pt-time-input').fill('09:00');
+  // Adding a time alone (no confirm yet) must not write any preparation record.
+  expect(await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target].preparation, TARGET)).toBeUndefined();
+  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target].preparation, TARGET);
+  expect(preparation).toMatchObject({ lastPreparedMode: 'normal', intentionalBlank: false });
+});
+
+test('K: a legacy free-text when still displays verbatim and remains untimed for the new affordance', async ({ page }) => {
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Legacy freeform', { when: 'after lunch' })], updatedAt: NOW } } });
+  const row = page.locator('.pt-oneoff');
+  await expect(row).toContainText('after lunch →');
+  await expect(row.getByRole('button', { name: 'Set time for Legacy freeform' })).toHaveText('+ Add time');
+});
+
+test('L: clicking away from an open time picker without choosing a value leaves the priority untimed', async ({ page }) => {
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app')], updatedAt: NOW } } });
+  await page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' }).click();
+  await expect(page.locator('.pt-time-input')).toBeVisible();
+  await page.locator('#plan-tomorrow-date').click();
+  await expect(page.locator('.pt-time-input')).toHaveCount(0);
+  await expect(page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' })).toHaveText('+ Add time');
+});
+
+test('M: a time set through Plan Tomorrow appears on Today via the existing planned-time field once the target date is Today', async ({ page }) => {
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'Finish app')], updatedAt: NOW } } });
+  await page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' }).click();
+  await page.locator('.pt-time-input').fill('09:00');
+  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  // Same items array Today already reads — no copy/migration step exists or is needed.
+  const when = await page.evaluate(target => getPlanItems(target).find(item => item.task === 'Finish app').when, TARGET);
+  expect(when).toBe('09:00');
+});
+
+test('N: no horizontal overflow at phone width, and the time affordance stays reachable', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page, { routines: routineState([]), plans: { [TARGET]: { items: [planItem('p1', 'A fairly long priority title that could wrap on a narrow phone screen', { when: '09:00' })], updatedAt: NOW } } });
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
+  const row = page.locator('.pt-oneoff');
+  await expect(row.locator('.pt-time-value')).toHaveText('9:00 AM');
+  await row.getByRole('button', { name: 'Change time for A fairly long priority title that could wrap on a narrow phone screen' }).click();
+  await expect(page.locator('.pt-time-input')).toBeVisible();
+});
