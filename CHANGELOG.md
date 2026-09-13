@@ -1,5 +1,79 @@
 # ChronaSense — Changelog
 
+## Daily Reconciliation V1 (feat/daily-reconciliation-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-13
+
+Closes the Plan → Do → observe → reconcile → prepare loop: opening Plan Tomorrow
+now shows a compact reconciliation section for today's one-off priorities before
+tomorrow's own planning controls, reusing existing authorities end to end rather
+than inventing new completion/identity rules.
+
+- **Completion is derived, never guessed.** Each of today's active one-off items
+  is classified with the existing, already-tested `classifyOneOffActual` — the
+  same function the Review "Plan vs Actual" widget has used since Phase 6I/J —
+  fed the same `trackedMinutes`/`preparedAt` inputs (now exposed on
+  `getPlanTomorrowAppContext` as `trackedMinutes`/`todayKey`/`saveItems`). No new
+  inference from title text, ordering, or disappearance. A new pure
+  `reconciliationBucket(status)` in `plan-tomorrow-model.js` maps that existing
+  status vocabulary to what the section shows: `'removed'` (deleted after prep)
+  is excluded entirely — nothing to reconcile once an item is gone — `'done'`/
+  `'done-early'` are `'completed'`, and `'not-done'`/`'worked-on'` are
+  `'unfinished'` (tracked time alone is not completion). **Scope decision:**
+  routines are intentionally out of V1 — they already recur/skip on their own
+  cadence via `daily-routines-model.js`, and "carry forward" has no analog for a
+  recurring instance; only one-off priorities are reconciled.
+- **Completed priorities render as read-only context** — task text only, no
+  reason box, no carry control, no interaction to skip.
+- **Unfinished priorities get an optional free-text reason** (`item
+  .reconciliationReason`, ≤240 chars). No bounded taxonomy existed anywhere in
+  the codebase for a missed/slipped reason, so free text was used rather than
+  inventing categories the product has no other use for. The reason is written
+  straight through the existing `savePlanItems`/`stampItem` path — the same one
+  Today's own UI already uses for done/delete — and **never** through
+  `confirmPreparedDatePlan`. That keeps it fully outside `plan.preparation`:
+  recording or editing a reason cannot make tomorrow look "prepared" and cannot
+  move the Planning Streak, satisfying the requirement that opening/editing
+  reconciliation never substitutes for actually confirming tomorrow's plan.
+- **Carry forward is explicit, not automatic.** Clicking "Carry to tomorrow"
+  pushes a brand-new item into the draft via the same canonical
+  `createItem`/`stampItem` path manual add and Quick Time already use, tagged
+  with a new minimal provenance field, `carriedFromId` (→ today's item id).
+  This field is the smallest addition that's demonstrably required for
+  correctness: without it, reopening Plan Tomorrow after a carried item was
+  already confirmed into tomorrow's plan would have no way to detect "already
+  carried" and clicking Carry again would silently create a duplicate. No
+  dedup by title anywhere — two priorities named identically stay fully
+  independent, both before and after carrying. Clicking Carry again on an
+  already-carried item un-carries it using the exact same tombstone
+  (`deleted:true` via `stampItem`) pattern the existing Remove control uses,
+  never a splice. Today's item itself — `done`, `doneAt`, `deleted` — is never
+  touched by carrying; today's history cannot be rewritten to simplify
+  tomorrow.
+- **Non-blocking by design.** No reason, no carry, and an untouched
+  reconciliation section are all valid — `confirmDraft()`'s existing gate
+  (one priority, a kept routine, or Open Day) is completely unmodified.
+  Reconciliation is supplementary context, not a precondition.
+- `plan-tomorrow-ui.js`: `buildReconciliation` (defensively wrapped — a
+  classification failure degrades to an empty section rather than blocking
+  Plan Tomorrow from opening at all), `reconciliationHtml`, `carriedItemFor`,
+  `toggleCarry`, `saveReconciliationReason`. New reconciliation rows use their
+  own classes (`.pt-reconcile-row`/`.pt-reconcile-task`), not `.pt-oneoff` —
+  they are not part of tomorrow's actual one-off list and must not be counted
+  as such by anything (including existing tests) that already treats
+  `.pt-oneoff` as that count.
+- `plan-tomorrow.css`: new `.pt-reconcile-*` rules layered onto the same
+  tokens/row shape `.pt-routine`/`.pt-oneoff` already use, `.selected` reused
+  for the carried state — no new visual language.
+- Tests: `plan-tomorrow.test.js` gains coverage for `reconciliationBucket`;
+  new `tests/daily-reconciliation.spec.js` (8 cases) covers completed-vs-
+  unfinished rendering, exclusion of removed items and of an all-resolved day,
+  worked-on-without-done classification, reason persistence isolated from
+  `preparation`, carry-forward identity/provenance, duplicate-carry protection,
+  identical-title independence, and non-blocking confirmation. Full suite:
+  `npm test` runs clean through every suite before and after the pre-existing
+  `firebase-rules.test.js` gap (missing `targaryen` dependency, unmodified
+  file, unrelated to this branch — verified individually, 0 failures) plus
+  `npx playwright test` 521/521 passing (513 pre-existing + 8 new).
+
 ## Plan Tomorrow Quick Time V1 (feat/plan-tomorrow-quick-time, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-12
 
 Plan Tomorrow already had structured planned-time support end to end — one-off

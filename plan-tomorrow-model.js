@@ -321,6 +321,16 @@ export function summarizeActual(rows) {
   return { planned: rows.length, active: active.length, completed, removed: rows.length - active.length };
 }
 
-const api = { validPlanDate, validPlanTimezone, validPlanItemTime, formatPlanItemTime, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual };
+/** Daily Reconciliation's completed/unfinished split over a classifyOneOffActual status.
+ *  'removed' items are gone from the plan (deleted after prep) and are excluded entirely —
+ *  there is nothing left to reconcile. Everything else is either fully resolved ('done'/
+ *  'done-early') or still open ('not-done'/'worked-on': tracked time alone isn't completion). */
+export function reconciliationBucket(oneOffStatus) {
+  if (oneOffStatus === 'removed') return 'excluded';
+  if (oneOffStatus === 'not-done' || oneOffStatus === 'worked-on') return 'unfinished';
+  return 'completed';
+}
+
+const api = { validPlanDate, validPlanTimezone, validPlanItemTime, formatPlanItemTime, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual, reconciliationBucket };
 globalThis.PlanTomorrowModel = api;
 globalThis.replayPendingPlanRemotes?.();

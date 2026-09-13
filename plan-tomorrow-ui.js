@@ -1,4 +1,4 @@
-import { classifyRoutineActual, computeReadyNow, formatPlanItemTime, normalizePreparation, planningConsistency, planTomorrowTargetDate, validPlanItemTime } from './plan-tomorrow-model.js';
+import { classifyOneOffActual, classifyRoutineActual, computeReadyNow, formatPlanItemTime, normalizePreparation, planningConsistency, planTomorrowTargetDate, reconciliationBucket, validPlanItemTime } from './plan-tomorrow-model.js';
 import { generateInstances, matchCompletion, occursOn } from './daily-routines-model.js';
 import { createDailyRoutineRepository } from './daily-routines-repository.js';
 import { createLearningPlanRepository } from './learning-plan-repository.js';
@@ -41,6 +41,72 @@ function activeItems() {
 
 function activeRoutines() {
   return draft.routines.rows.filter(row => !row.skipped && row.actionable);
+}
+
+/** Today's one-off priorities relevant to Daily Reconciliation: classified via the same
+ *  classifyOneOffActual authority the Review "Plan vs Actual" widget already uses, then bucketed
+ *  into completed/unfinished. Deleted-after-prep items ('removed') are excluded — nothing to
+ *  reconcile once an item is gone. Routines are out of scope: they already recur/skip on their
+ *  own cadence, and "carry forward" has no analog for them. */
+function buildReconciliation(app) {
+  const todayKey = app.todayKey;
+  // Reconciliation is supplementary context for the Plan Tomorrow flow, never a precondition for
+  // it — a classification failure here degrades to an empty section instead of blocking planning.
+  try {
+    const preparation = normalizePreparation(app.plan(todayKey)?.preparation, todayKey);
+    const rows = app.rawItems(todayKey)
+      .filter(item => !item.deleted)
+      .map(item => {
+        const trackedMinutes = app.trackedMinutes(item.task, todayKey, item.id);
+        const status = classifyOneOffActual(item, { targetDate: todayKey, timezone: app.timezone, trackedMinutes, preparedAt: preparation?.firstPreparedAt || 0 });
+        return { item, status, bucket: reconciliationBucket(status) };
+      })
+      .filter(row => row.bucket !== 'excluded');
+    return { todayKey, rows };
+  } catch {
+    return { todayKey, rows: [] };
+  }
+}
+
+/** The tomorrow-draft item (if any) already carrying this today item forward, keyed by the
+ *  carriedFromId provenance field — lets the control reflect "already carried" and prevents
+ *  clicking Carry twice from creating duplicate tomorrow items. */
+function carriedItemFor(todayItemId) {
+  return draft.items.find(item => item.carriedFromId === todayItemId && !item.deleted) || null;
+}
+
+function toggleCarry(todayItemId) {
+  const row = draft.reconciliation?.rows.find(r => r.item.id === todayItemId);
+  if (!row) return;
+  const existing = carriedItemFor(todayItemId);
+  if (existing) {
+    draft.items = draft.items.map(item => item.id === existing.id ? context().stampItem({ ...item, deleted: true }) : item);
+    return;
+  }
+  if (activeItems().length >= context().maxItems) throw new Error(`Reduce tomorrow's plan to ${context().maxItems} priorities before carrying this forward.`);
+  draft.items.push({ ...context().createItem(row.item.task, ''), carriedFromId: todayItemId });
+  draft.intentionalBlank = false;
+}
+
+/** Reason-for-slipping is optional, free-text, and lives on TODAY's plan item — written straight
+ *  through the same savePlanItems path Today's own UI already uses for done/delete, never through
+ *  confirmPreparedDatePlan. That keeps it fully outside preparation/Planning-Streak semantics:
+ *  recording or editing a reason can never make tomorrow look "prepared". */
+function withReconciliationReason(item, reason) {
+  const next = { ...item };
+  if (reason) next.reconciliationReason = reason;
+  else delete next.reconciliationReason;
+  return next;
+}
+
+function saveReconciliationReason(todayItemId, reasonValue) {
+  const reason = reasonValue.trim();
+  const todayKey = draft.reconciliation.todayKey;
+  const updated = context().rawItems(todayKey).map(item =>
+    item.id === todayItemId ? context().stampItem(withReconciliationReason(item, reason)) : item);
+  context().saveItems(todayKey, updated);
+  draft.reconciliation.rows = draft.reconciliation.rows.map(row =>
+    row.item.id === todayItemId ? { ...row, item: withReconciliationReason(row.item, reason) } : row);
 }
 
 function formatTargetDate(date) {
@@ -115,6 +181,27 @@ function itemHtml() {
   return warning + (rows || '<p class="pt-muted">No one-off priorities yet.</p>') + add + chips;
 }
 
+function reconciliationHtml() {
+  const reconciliation = draft.reconciliation;
+  if (!reconciliation || !reconciliation.rows.length) return '';
+  const unfinished = reconciliation.rows.filter(row => row.bucket === 'unfinished');
+  const completed = reconciliation.rows.filter(row => row.bucket === 'completed');
+  const unfinishedHtml = unfinished.map(row => {
+    const carried = carriedItemFor(row.item.id);
+    return `<div class="pt-reconcile-row pt-reconcile-unfinished" data-pt-reconcile-item="${escape(row.item.id)}">
+      <div class="pt-reconcile-row-main">
+        <div class="pt-reconcile-task">${escape(row.item.task)}</div>
+        <textarea class="pt-reconcile-reason" data-pt-reason="${escape(row.item.id)}" maxlength="240" placeholder="Why did this slip? (optional)" aria-label="Why did &quot;${escape(row.item.task)}&quot; slip?">${escape(row.item.reconciliationReason || '')}</textarea>
+      </div>
+      <button type="button" class="btn sm ghost pt-reconcile-carry${carried ? ' selected' : ''}" data-pt-action="carry" data-id="${escape(row.item.id)}">${carried ? '✓ Carrying to tomorrow' : 'Carry to tomorrow'}</button>
+    </div>`;
+  }).join('');
+  const completedHtml = completed.map(row => `<div class="pt-reconcile-row pt-reconcile-done">
+      <div class="pt-reconcile-row-main"><div class="pt-reconcile-task"><span aria-hidden="true">✓ </span>${escape(row.item.task)}</div></div>
+    </div>`).join('');
+  return `<section class="pt-reconcile"><h3>Today <span>${unfinished.length} unfinished · ${completed.length} done</span></h3>${unfinishedHtml}${completedHtml}</section>`;
+}
+
 function renderNormal() {
   const actionable = activeRoutines().length + activeItems().filter(item => !item.done).length;
   return `<section><h3>Routines already included</h3>${routineHtml()}</section>
@@ -140,7 +227,7 @@ function render() {
   readiness.textContent = `${readyNow ? 'Ready now' : 'Not ready'} · ${consistency === 'ahead' ? 'prepared ahead' : consistency === 'late' ? 'prepared late' : consistency === 'unknown' ? 'preparation unknown' : 'not prepared'}`;
   readiness.dataset.ready = String(readyNow);
   document.querySelectorAll('[data-pt-mode]').forEach(button => button.classList.toggle('selected', button.dataset.ptMode === draft.mode));
-  body.innerHTML = draft.mode === 'rescue' ? renderRescue() : renderNormal();
+  body.innerHTML = reconciliationHtml() + (draft.mode === 'rescue' ? renderRescue() : renderNormal());
   document.getElementById('plan-tomorrow-confirm').textContent = draft.mode === 'rescue' ? 'Use this plan' : 'Tomorrow is ready';
   error.textContent = '';
   if (draft.editingWhenId) [...body.querySelectorAll('.pt-time-input')].find(input => input.dataset.ptTime === draft.editingWhenId)?.focus();
@@ -160,7 +247,8 @@ export function openPlanTomorrow({ returnToReview = false } = {}) {
       routines: routinePlan(targetDate, app.timezone),
       mode: 'normal',
       intentionalBlank: preparation?.intentionalBlank || false,
-      editingWhenId: null
+      editingWhenId: null,
+      reconciliation: buildReconciliation(app)
     };
     root.classList.add('open');
     render();
@@ -220,6 +308,7 @@ root?.addEventListener('click', async event => {
       draft.editingWhenId = null;
     }
     if (action === 'suggest') addItem(control.dataset.task);
+    if (action === 'carry') toggleCarry(control.dataset.id);
     if (action === 'skip' || action === 'unskip') {
       routineRepository.setDateSkip(draft.routines.state.timezone, control.dataset.id, action === 'skip');
       refreshRoutines();
@@ -237,6 +326,13 @@ root?.addEventListener('change', event => {
   draft.items = draft.items.map(item => item.id === id ? context().stampItem({ ...item, when: input.value }) : item);
   draft.editingWhenId = null;
   render();
+});
+
+root?.addEventListener('change', event => {
+  const textarea = event.target.closest('.pt-reconcile-reason');
+  if (!textarea || !draft?.reconciliation) return;
+  try { saveReconciliationReason(textarea.dataset.ptReason, textarea.value); }
+  catch (err) { error.textContent = err.message; }
 });
 
 root?.addEventListener('focusout', event => {

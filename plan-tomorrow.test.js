@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   addCalendarDays, buildPreparation, classifyOneOffActual, classifyRoutineActual,
   computeReadyNow, formatPlanItemTime, localPlanDate, mergeDatePlans, mergePreparations,
-  normalizePreparation, planningConsistency, planTomorrowTargetDate, summarizeActual, validPlanItemTime
+  normalizePreparation, planningConsistency, planTomorrowTargetDate, reconciliationBucket,
+  summarizeActual, validPlanItemTime
 } from './plan-tomorrow-model.js';
 
 const targetDate = '2026-09-09';
@@ -129,6 +130,14 @@ test('routine actual statuses and denominator stay neutral', () => {
   ];
   assert.deepEqual(rows.map(row => row.status), ['target', 'worked-on', 'not-done', 'removed']);
   assert.deepEqual(summarizeActual(rows), { planned: 4, active: 3, completed: 2, removed: 1 });
+});
+
+test('reconciliation bucketing splits statuses into completed/unfinished/excluded', () => {
+  assert.equal(reconciliationBucket('done'), 'completed');
+  assert.equal(reconciliationBucket('done-early'), 'completed');
+  assert.equal(reconciliationBucket('not-done'), 'unfinished');
+  assert.equal(reconciliationBucket('worked-on'), 'unfinished');
+  assert.equal(reconciliationBucket('removed'), 'excluded');
 });
 
 test('app update accepts an already prepared plan unchanged', () => {

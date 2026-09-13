@@ -6337,13 +6337,16 @@ globalThis.getPlanTomorrowAppContext = () => ({
   timezone: settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
   maxItems: PLAN_MAX,
   entries,
+  todayKey: planTodayKey(),
   plan: dateKey => plans[dateKey] || null,
   rawItems: getPlanItemsRaw,
   createItem: createPlanItem,
   stampItem: stampPlanItemMutation,
   normalizeTask: normalizePlanTask,
   suggestions: planTomorrowSuggestions,
-  confirm: confirmPreparedDatePlan
+  confirm: confirmPreparedDatePlan,
+  trackedMinutes: (task, dateKey, planItemId) => planTrackedMin(task, dateKey, planItemId),
+  saveItems: savePlanItems
 });
 
 /** Minutes actually tracked against a planned task. Prefers an exact planItemId match (survives
