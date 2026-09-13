@@ -1,4 +1,4 @@
-import { formatPlanItemTime, normalizePreparation, planTomorrowTargetDate, validPlanItemTime } from './plan-tomorrow-model.js';
+import { normalizePreparation, planItemScheduleLabel, planTomorrowTargetDate } from './plan-tomorrow-model.js';
 import { deriveTomorrowViewState } from './tomorrow-view-model.js';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -35,11 +35,6 @@ function scheduleLabel(routine) {
   if (routine.mode === 'exact') return routine.time;
   if (routine.mode === 'window') return `${routine.time}–${routine.endTime}`;
   return routine.mode === 'cue' ? `Cue: ${routine.cue}` : 'Anytime';
-}
-
-function itemTimeLabel(item) {
-  if (validPlanItemTime(item.when)) return formatPlanItemTime(item.when);
-  return item.when ? item.when : null;
 }
 
 function rowHtml(timeLabel, title) {
@@ -108,7 +103,7 @@ function render() {
       ? applicableRoutines.map(row => rowHtml(scheduleLabel(row.routine), row.routine.title)).join('')
       : '<p class="tmr-muted">No routines occur on this date.</p>');
   const itemsHtml = items.length
-    ? items.map(item => rowHtml(itemTimeLabel(item), item.task)).join('')
+    ? items.map(item => rowHtml(planItemScheduleLabel(item), item.task)).join('')
     : '<p class="tmr-muted">No one-off priorities yet.</p>';
 
   tomorrowPane.innerHTML = headingHtml(targetDate)

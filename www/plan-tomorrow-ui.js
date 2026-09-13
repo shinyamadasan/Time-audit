@@ -1,4 +1,4 @@
-import { carriedItemId, classifyOneOffActual, classifyRoutineActual, computeReadyNow, formatPlanItemTime, normalizePreparation, planningConsistency, planTomorrowTargetDate, reconciliationBucket, validPlanItemTime } from './plan-tomorrow-model.js';
+import { carriedItemId, classifyOneOffActual, classifyRoutineActual, clearPlanItemRange, computeReadyNow, durationBetween, formatPlanItemSchedule, normalizePreparation, planItemEndTime, planningConsistency, planTomorrowTargetDate, reconciliationBucket, validPlanItemTime } from './plan-tomorrow-model.js';
 import { generateInstances, matchCompletion, occursOn } from './daily-routines-model.js';
 import { createDailyRoutineRepository } from './daily-routines-repository.js';
 import { createLearningPlanRepository } from './learning-plan-repository.js';
@@ -162,18 +162,64 @@ function routineHtml() {
   }).join('');
 }
 
-function timeControlHtml(item) {
+// Faster Scheduling V1 — quick presets are UI convenience only; every choice (quick or custom)
+// converges on the exact same stored fields (`when`, `durationMinutes`) via context().stampItem.
+const QUICK_STARTS = [
+  { label: '8 AM', value: '08:00' },
+  { label: '9 AM', value: '09:00' },
+  { label: '10 AM', value: '10:00' },
+  { label: 'Noon', value: '12:00' },
+  { label: '2 PM', value: '14:00' }
+];
+const QUICK_DURATIONS = [
+  { label: '30m', value: 30 },
+  { label: '1h', value: 60 },
+  { label: '1.5h', value: 90 },
+  { label: '2h', value: 120 }
+];
+
+function chipRowHtml({ id, labelId, options, current, action }) {
+  const chips = options.map(opt => {
+    const selected = current === opt.value;
+    return `<button type="button" class="pt-chip${selected ? ' selected' : ''}" data-pt-action="${action}" data-id="${escape(id)}" data-value="${opt.value}" aria-pressed="${selected}">${escape(opt.label)}</button>`;
+  }).join('');
+  return `<div class="pt-chip-row" role="group" aria-labelledby="${labelId}">${chips}</div>`;
+}
+
+function schedulePanelHtml(item) {
   const timed = validPlanItemTime(item.when);
-  if (draft.editingWhenId === item.id) {
-    return `<input type="time" class="pt-time-input" data-pt-time="${escape(item.id)}" aria-label="Set time for ${escape(item.task)}" value="${timed ? escape(item.when) : ''}">`;
+  const startLabelId = `pt-start-label-${escape(item.id)}`;
+  const startRow = `<div class="pt-schedule-row">
+    <span class="pt-schedule-label" id="${startLabelId}">Start</span>
+    ${chipRowHtml({ id: item.id, labelId: startLabelId, options: QUICK_STARTS, current: item.when, action: 'quick-start' })}
+    <label class="pt-schedule-custom">Custom <input type="time" class="pt-time-input" data-pt-time="${escape(item.id)}" aria-label="Custom start time for ${escape(item.task)}" value="${timed ? escape(item.when) : ''}"></label>
+  </div>`;
+  if (!timed) return `<div class="pt-schedule-panel" data-pt-schedule-panel="${escape(item.id)}">${startRow}</div>`;
+  const lengthLabelId = `pt-length-label-${escape(item.id)}`;
+  const endValue = planItemEndTime(item.when, item.durationMinutes) || '';
+  const lengthRow = `<div class="pt-schedule-row">
+    <span class="pt-schedule-label" id="${lengthLabelId}">Length</span>
+    ${chipRowHtml({ id: item.id, labelId: lengthLabelId, options: QUICK_DURATIONS, current: item.durationMinutes, action: 'quick-duration' })}
+    <label class="pt-schedule-custom">Custom end <input type="time" class="pt-end-input" data-pt-end="${escape(item.id)}" aria-label="Custom end time for ${escape(item.task)}" value="${escape(endValue)}"></label>
+  </div>`;
+  return `<div class="pt-schedule-panel" data-pt-schedule-panel="${escape(item.id)}">${startRow}${lengthRow}</div>`;
+}
+
+function scheduleControlHtml(item) {
+  if (draft.schedulingId === item.id) return schedulePanelHtml(item);
+  const timed = validPlanItemTime(item.when);
+  if (!timed) {
+    return `<button type="button" class="pt-time-link add" data-pt-action="edit-schedule" data-id="${escape(item.id)}" aria-label="Set time for ${escape(item.task)}">+ Add time</button>`;
   }
-  if (timed) {
-    return `<span class="pt-time-value">${escape(formatPlanItemTime(item.when))}</span>
-      <button type="button" class="pt-time-link" data-pt-action="edit-time" data-id="${escape(item.id)}" aria-label="Change time for ${escape(item.task)}">Change</button>
+  const label = formatPlanItemSchedule(item);
+  const ranged = !!planItemEndTime(item.when, item.durationMinutes);
+  const rangeControl = ranged ? `<span aria-hidden="true"> · </span>
+      <button type="button" class="pt-time-link" data-pt-action="remove-range" data-id="${escape(item.id)}" aria-label="Remove range for ${escape(item.task)}">Remove range</button>` : '';
+  return `<span class="pt-time-value">${escape(label)}</span>
+      <button type="button" class="pt-time-link" data-pt-action="edit-schedule" data-id="${escape(item.id)}" aria-label="Change time for ${escape(item.task)}">Change</button>
+      ${rangeControl}
       <span aria-hidden="true"> · </span>
       <button type="button" class="pt-time-link" data-pt-action="remove-time" data-id="${escape(item.id)}" aria-label="Remove time for ${escape(item.task)}">Remove time</button>`;
-  }
-  return `<button type="button" class="pt-time-link add" data-pt-action="edit-time" data-id="${escape(item.id)}" aria-label="Set time for ${escape(item.task)}">+ Add time</button>`;
 }
 
 function itemHtml() {
@@ -185,7 +231,7 @@ function itemHtml() {
     return `<div class="pt-oneoff" data-pt-item="${escape(item.id)}">
       <div class="pt-oneoff-main">
         <div class="pt-oneoff-task">${legacyWhen}${escape(item.task)}</div>
-        <div class="pt-oneoff-time">${timeControlHtml(item)}</div>
+        <div class="pt-oneoff-time">${scheduleControlHtml(item)}</div>
       </div>
       <button type="button" class="plan-remove" data-pt-action="remove" data-id="${escape(item.id)}" title="Remove">✕</button>
     </div>`;
@@ -237,21 +283,34 @@ function renderRescue() {
   return `<div class="pt-rescue"><h3>Keep it minimal</h3><form id="plan-tomorrow-rescue-add" class="pt-add"><input name="task" maxlength="80" placeholder="one anytime priority"><button class="btn sm" type="submit">Add</button></form><span class="pt-or">or</span><button type="button" class="btn ghost pt-open-day${draft.intentionalBlank ? ' selected' : ''}" data-pt-action="blank">${draft.intentionalBlank ? '✓ ' : ''}Open day / no commitments</button></div>`;
 }
 
+// Set for the duration of body.innerHTML's own assignment below. Replacing markup that contains
+// the currently-focused element (e.g. a just-clicked quick-pick chip) synchronously fires a
+// focusout against that stale, about-to-be-removed node before the new markup is even inserted —
+// indistinguishable, by target or relatedTarget alone, from a genuine "focus left the panel"
+// click-away. The scheduling-panel focusout handler below checks this flag to ignore that
+// self-inflicted event rather than misreading its own re-render as the user clicking away.
+let rendering = false;
+
 function render() {
   if (!draft || !body) return;
-  document.getElementById('plan-tomorrow-date').textContent = formatTargetDate(draft.targetDate);
-  document.getElementById('plan-tomorrow-timezone').textContent = draft.timezone;
-  const storedPlan = context().plan(draft.targetDate);
-  const readyNow = computeReadyNow({ plan: storedPlan, targetDate: draft.targetDate, routines: draft.routines.rows });
-  const consistency = planningConsistency(storedPlan?.preparation, draft.targetDate);
-  const readiness = document.getElementById('plan-tomorrow-readiness');
-  readiness.textContent = `${readyNow ? 'Ready now' : 'Not ready'} · ${consistency === 'ahead' ? 'prepared ahead' : consistency === 'late' ? 'prepared late' : consistency === 'unknown' ? 'preparation unknown' : 'not prepared'}`;
-  readiness.dataset.ready = String(readyNow);
-  document.querySelectorAll('[data-pt-mode]').forEach(button => button.classList.toggle('selected', button.dataset.ptMode === draft.mode));
-  body.innerHTML = reconciliationHtml() + (draft.mode === 'rescue' ? renderRescue() : renderNormal());
-  document.getElementById('plan-tomorrow-confirm').textContent = draft.mode === 'rescue' ? 'Use this plan' : 'Tomorrow is ready';
-  error.textContent = '';
-  if (draft.editingWhenId) [...body.querySelectorAll('.pt-time-input')].find(input => input.dataset.ptTime === draft.editingWhenId)?.focus();
+  rendering = true;
+  try {
+    document.getElementById('plan-tomorrow-date').textContent = formatTargetDate(draft.targetDate);
+    document.getElementById('plan-tomorrow-timezone').textContent = draft.timezone;
+    const storedPlan = context().plan(draft.targetDate);
+    const readyNow = computeReadyNow({ plan: storedPlan, targetDate: draft.targetDate, routines: draft.routines.rows });
+    const consistency = planningConsistency(storedPlan?.preparation, draft.targetDate);
+    const readiness = document.getElementById('plan-tomorrow-readiness');
+    readiness.textContent = `${readyNow ? 'Ready now' : 'Not ready'} · ${consistency === 'ahead' ? 'prepared ahead' : consistency === 'late' ? 'prepared late' : consistency === 'unknown' ? 'preparation unknown' : 'not prepared'}`;
+    readiness.dataset.ready = String(readyNow);
+    document.querySelectorAll('[data-pt-mode]').forEach(button => button.classList.toggle('selected', button.dataset.ptMode === draft.mode));
+    body.innerHTML = reconciliationHtml() + (draft.mode === 'rescue' ? renderRescue() : renderNormal());
+    document.getElementById('plan-tomorrow-confirm').textContent = draft.mode === 'rescue' ? 'Use this plan' : 'Tomorrow is ready';
+    error.textContent = '';
+    if (draft.schedulingId) body.querySelector(`[data-pt-schedule-panel="${draft.schedulingId}"] .pt-time-input`)?.focus();
+  } finally {
+    rendering = false;
+  }
 }
 
 export function openPlanTomorrow({ returnToReview = false } = {}) {
@@ -268,7 +327,7 @@ export function openPlanTomorrow({ returnToReview = false } = {}) {
       routines: routinePlan(targetDate, app.timezone),
       mode: 'normal',
       intentionalBlank: preparation?.intentionalBlank || false,
-      editingWhenId: null,
+      schedulingId: null,
       reconciliation: buildReconciliation(app)
     };
     root.classList.add('open');
@@ -323,10 +382,20 @@ root?.addEventListener('click', async event => {
     if (action === 'close') { closePreparation(); return; }
     if (action === 'blank') { draft.intentionalBlank = !draft.intentionalBlank; render(); return; }
     if (action === 'remove') draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, deleted: true }) : item);
-    if (action === 'edit-time') draft.editingWhenId = control.dataset.id;
+    if (action === 'edit-schedule') draft.schedulingId = control.dataset.id;
     if (action === 'remove-time') {
-      draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, when: '' }) : item);
-      draft.editingWhenId = null;
+      draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem(clearPlanItemRange({ ...item, when: '' })) : item);
+      draft.schedulingId = null;
+    }
+    if (action === 'remove-range') {
+      draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem(clearPlanItemRange(item)) : item);
+    }
+    if (action === 'quick-start') {
+      draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, when: control.dataset.value }) : item);
+    }
+    if (action === 'quick-duration') {
+      draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, durationMinutes: Number(control.dataset.value) }) : item);
+      draft.schedulingId = null;
     }
     if (action === 'suggest') addItem(control.dataset.task);
     if (action === 'carry') toggleCarry(control.dataset.id);
@@ -345,8 +414,26 @@ root?.addEventListener('change', event => {
   if (!input || !draft) return;
   const id = input.dataset.ptTime;
   draft.items = draft.items.map(item => item.id === id ? context().stampItem({ ...item, when: input.value }) : item);
-  draft.editingWhenId = null;
+  draft.schedulingId = null;
   render();
+});
+
+// Custom end time is picked as an exact clock time (a second native time input, never a raw
+// minutes field) and converted to the stored durationMinutes here — the only place that
+// conversion happens, so quick-duration chips and this custom path always converge on the same
+// field. An empty value means "backed out without choosing" and is left alone, not an error.
+root?.addEventListener('change', event => {
+  const input = event.target.closest('.pt-end-input');
+  if (!input || !draft || !input.value) return;
+  const id = input.dataset.ptEnd;
+  const item = draft.items.find(i => i.id === id);
+  try {
+    const duration = item ? durationBetween(item.when, input.value) : null;
+    if (!duration) throw new Error('End time must be later than the start, on the same day.');
+    draft.items = draft.items.map(i => i.id === id ? context().stampItem({ ...i, durationMinutes: duration }) : i);
+    draft.schedulingId = null;
+    render();
+  } catch (err) { error.textContent = err.message; }
 });
 
 root?.addEventListener('change', event => {
@@ -356,10 +443,15 @@ root?.addEventListener('change', event => {
   catch (err) { error.textContent = err.message; }
 });
 
+// Focus moving to a sibling control inside the same scheduling panel (a quick-pick button, the
+// other native input) must not collapse it out from under an in-progress click; only focus
+// actually leaving the panel closes it, mirroring the prior single-input "click away" behavior.
 root?.addEventListener('focusout', event => {
-  const input = event.target.closest('.pt-time-input');
-  if (!input || !draft || draft.editingWhenId !== input.dataset.ptTime) return;
-  draft.editingWhenId = null;
+  if (rendering) return; // our own re-render detached the focused node — not a real click-away
+  const panel = event.target.closest('[data-pt-schedule-panel]');
+  if (!panel || !draft || draft.schedulingId !== panel.dataset.ptSchedulePanel) return;
+  if (event.relatedTarget && panel.contains(event.relatedTarget)) return;
+  draft.schedulingId = null;
   render();
 });
 

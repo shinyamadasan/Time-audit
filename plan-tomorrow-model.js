@@ -25,6 +25,76 @@ export function formatPlanItemTime(value) {
   return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
 }
 
+/** Plan Time Range V1: a one-off priority's optional length. `when` stays the sole canonical
+ *  start time (see PLAN_ITEM_TIME_RE above) — this only ever measures forward from it, in whole
+ *  minutes, bounded to something that still reads as a single continuous block (12h). Zero,
+ *  negative, non-integers, and absurd values (e.g. a stray millisecond timestamp) are all invalid;
+ *  there is no separate "end equal to start" or "end before start" case to guard because a length
+ *  can't express either — both collapse into this same bounds check. */
+export function validPlanItemDuration(value) {
+  return Number.isInteger(value) && value > 0 && value <= 720;
+}
+
+function timeToMinutes(value) {
+  const [hour, minute] = value.split(':').map(Number);
+  return hour * 60 + minute;
+}
+
+function minutesToTime(totalMinutes) {
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
+}
+
+/** The canonical 24h end time for a start + duration, or null when either half is missing/invalid
+ *  OR the block would run past midnight into the next calendar day. Cross-midnight ranges are
+ *  explicitly unsupported in V1: rather than fabricating a next-day interpretation, an item whose
+ *  computed end doesn't fit today is treated exactly like one with no range at all. */
+export function planItemEndTime(when, durationMinutes) {
+  if (!validPlanItemTime(when) || !validPlanItemDuration(durationMinutes)) return null;
+  const end = timeToMinutes(when) + durationMinutes;
+  return end < 24 * 60 ? minutesToTime(end) : null;
+}
+
+/** Derives the duration (minutes) implied by an exact custom start + end pair, for the "pick an
+ *  end time" editing path. An end at or before its start — same value, earlier, or a wrap past
+ *  midnight — is rejected outright (null), never reinterpreted as spanning into the next day. */
+export function durationBetween(startWhen, endWhen) {
+  if (!validPlanItemTime(startWhen) || !validPlanItemTime(endWhen)) return null;
+  const diff = timeToMinutes(endWhen) - timeToMinutes(startWhen);
+  return diff > 0 ? diff : null;
+}
+
+/** The one authoritative range label — "9:00 AM" or "9:00–10:30 AM" — built entirely on top of
+ *  formatPlanItemTime so every caller (Today, Plan Tomorrow, Tomorrow View) renders schedules
+ *  identically. Compact when both ends share a period; keeps each side's own AM/PM once they
+ *  differ. Returns null for anything untimed or malformed — never throws. */
+export function formatPlanItemSchedule(item) {
+  const startLabel = formatPlanItemTime(item && item.when);
+  if (!startLabel) return null;
+  const endWhen = planItemEndTime(item && item.when, item && item.durationMinutes);
+  if (!endWhen) return startLabel;
+  const endLabel = formatPlanItemTime(endWhen);
+  const [, startClock, startPeriod] = startLabel.match(/^(.*) (AM|PM)$/);
+  const [, endClock, endPeriod] = endLabel.match(/^(.*) (AM|PM)$/);
+  return startPeriod === endPeriod ? `${startClock}–${endClock} ${endPeriod}` : `${startLabel}–${endLabel}`;
+}
+
+/** Display label for any plan item, structured or legacy: a recognized start/range via
+ *  formatPlanItemSchedule, falling back to historical free text verbatim (never parsed, never
+ *  reformatted), or null when there's nothing to show. The single source read-only consumers
+ *  (Today, Tomorrow View) use so neither reimplements the legacy-text fallback separately. */
+export function planItemScheduleLabel(item) {
+  return formatPlanItemSchedule(item) || (item && typeof item.when === 'string' && item.when.trim() ? item.when : null);
+}
+
+/** Drops duration/end metadata but leaves `when` untouched — "Remove range" (keep the start).
+ *  "Remove time" (clear everything) composes this with also blanking `when` at the call site,
+ *  the same way it already blanks `when` alone today. */
+export function clearPlanItemRange(item) {
+  const next = { ...item };
+  delete next.durationMinutes;
+  return next;
+}
+
 export function validPlanTimezone(value) {
   if (typeof value !== 'string' || !value.trim()) return false;
   try {
@@ -345,6 +415,12 @@ export function carriedItemId(sourceDate, sourceItemId) {
   return `carry:${sourceDate}:${sourceItemId}`;
 }
 
-const api = { validPlanDate, validPlanTimezone, validPlanItemTime, formatPlanItemTime, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual, reconciliationBucket, carriedItemId };
+const api = { validPlanDate, validPlanTimezone, validPlanItemTime, formatPlanItemTime, validPlanItemDuration, planItemEndTime, durationBetween, formatPlanItemSchedule, planItemScheduleLabel, clearPlanItemRange, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual, reconciliationBucket, carriedItemId };
 globalThis.PlanTomorrowModel = api;
+// Today's plan strip renders once, synchronously, before this module (deferred by type="module")
+// finishes loading — its preparation/streak/schedule-label fields all read PlanTomorrowModel, so
+// that very first render always runs without it. Re-rendering once, right here, is what makes that
+// first pass a transient gap instead of a stuck one; a real inbound-remote replay (below) still
+// re-renders again on top of this when it actually changes something.
+globalThis.renderTodayPlan?.();
 globalThis.replayPendingPlanRemotes?.();
