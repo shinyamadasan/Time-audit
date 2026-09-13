@@ -6499,10 +6499,13 @@ function renderTodayPlan() {
   const esc  = s => String(s).replace(/</g, '&lt;');
   const attr = s => String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
   const preparation = globalThis.PlanTomorrowModel?.normalizePreparation(plans[dateKey]?.preparation, dateKey);
+  const streak = readOnly ? null : globalThis.PlanTomorrowModel?.planningStreak(plans, Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const streakText = streak ? `Planning streak · ${streak.current} day${streak.current === 1 ? '' : 's'}${streak.current === 0 && streak.best > 0 ? ` · Best ${streak.best}` : ''}` : '';
   const head = `<div class="plan-head">
       <div class="plan-head-text">
         <span class="plan-title">${readOnly ? 'Planned that day' : 'Priorities'}</span>
         <span class="plan-count">${items.length ? `${doneCount} of ${items.length} done` : preparation ? (preparation.intentionalBlank ? 'Open day prepared' : 'Day prepared') : 'Optional · up to 3'}</span>
+        ${streakText ? `<span class="plan-streak">${streakText}</span>` : ''}
       </div>
       ${readOnly ? '' : `<button class="btn sm ghost" onclick="document.getElementById('plan-strip').classList.toggle('editing')">Edit</button>`}
     </div>`;

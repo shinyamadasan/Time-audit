@@ -703,6 +703,7 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .plan-head-text{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
 .plan-title{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:700}
 .plan-count{font-size:11px;font-family:var(--mono);color:var(--muted2)}
+.plan-streak{font-size:11px;font-family:var(--mono);color:var(--muted2)}
 .plan-item{display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid var(--border)}
 .plan-item.in-progress{background:linear-gradient(90deg,var(--deep-dim2),transparent 55%);margin:0 -5px;padding-left:5px;padding-right:5px;border-radius:9px}
 .plan-item.done .plan-task{color:var(--muted2);text-decoration:line-through}

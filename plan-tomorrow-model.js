@@ -216,6 +216,60 @@ export function planningConsistency(value, targetDate) {
   return localPlanDate(preparation.firstPreparedAt, preparation.timezone) < preparation.targetDate ? 'ahead' : 'late';
 }
 
+function genuinePlanningHabit(preparationValue, targetDate) {
+  if (planningConsistency(preparationValue, targetDate) !== 'ahead') return false;
+  const preparation = normalizePreparation(preparationValue, targetDate);
+  return preparation.intentionalBlank === true || preparation.routineInstanceIds.length > 0 || preparation.oneOffItemIds.length > 0;
+}
+
+function planningHabitEarned(plansByDate, habitDate) {
+  const nextDate = addCalendarDays(habitDate, 1);
+  const plan = plansByDate && typeof plansByDate === 'object' ? plansByDate[nextDate] : null;
+  return genuinePlanningHabit(plan?.preparation, nextDate);
+}
+
+function longestTrueRun(flags) {
+  let longest = 0;
+  let run = 0;
+  for (const flag of flags) {
+    run = flag ? run + 1 : 0;
+    if (run > longest) longest = run;
+  }
+  return longest;
+}
+
+/**
+ * Derives the Planning Streak entirely from plans[date].preparation — no stored counter.
+ * A habit day P earns credit when the user confirmed P+1's plan (real or Open Day) ahead of
+ * P+1 itself. Today's own habit day is evaluated but never treated as a miss while still open;
+ * it either extends the streak (already prepared tomorrow) or is simply excluded from the count.
+ */
+export function planningStreak(plansByDate, nowMs, timezone) {
+  const today = localPlanDate(nowMs, timezone);
+  const todayEarned = planningHabitEarned(plansByDate, today);
+
+  const keys = plansByDate && typeof plansByDate === 'object' ? Object.keys(plansByDate).filter(validPlanDate) : [];
+  let earliestHabitDate = today;
+  for (const key of keys) {
+    const habitDate = addCalendarDays(key, -1);
+    if (habitDate < earliestHabitDate) earliestHabitDate = habitDate;
+  }
+
+  const yesterday = addCalendarDays(today, -1);
+  const finalizedFlags = [];
+  for (let date = earliestHabitDate; date <= yesterday; date = addCalendarDays(date, 1)) {
+    finalizedFlags.push(planningHabitEarned(plansByDate, date));
+  }
+
+  let backward = 0;
+  while (backward < finalizedFlags.length && finalizedFlags[finalizedFlags.length - 1 - backward]) backward++;
+
+  const current = backward + (todayEarned ? 1 : 0);
+  const best = Math.max(longestTrueRun(finalizedFlags), current);
+
+  return { current, best, todayEarned, todayStillOpen: !todayEarned };
+}
+
 export function computeReadyNow({ plan, targetDate, routines = [], localSaveSucceeded = true }) {
   const preparation = normalizePreparation(plan?.preparation, targetDate);
   if (!preparation || !localSaveSucceeded) return false;
@@ -248,6 +302,6 @@ export function summarizeActual(rows) {
   return { planned: rows.length, active: active.length, completed, removed: rows.length - active.length };
 }
 
-const api = { validPlanDate, validPlanTimezone, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual };
+const api = { validPlanDate, validPlanTimezone, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual };
 globalThis.PlanTomorrowModel = api;
 globalThis.replayPendingPlanRemotes?.();
