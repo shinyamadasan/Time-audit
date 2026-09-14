@@ -41,6 +41,43 @@
 // it yet (§11), because every read (`operationalDayContaining`,
 // `activeBoundaryRevision`) resolves strictly from the instant being asked
 // about, not from "whatever the latest revision is."
+//
+// ── Civil-time truth (post-review correction) ─────────────────────────────
+//
+// A local "date + HH:MM" is not always a clean bijection with UTC instants.
+// Around a DST-style offset change, a wall-clock reading can occur twice
+// (fall-back: the hour repeats — AMBIGUOUS) or not at all (spring-forward: the
+// hour is skipped — NONEXISTENT). `resolveLocalWallClock` is the one
+// authoritative low-level mechanism that tells the truth about which case
+// applies; every other function in this module that needs a civil-time ->
+// instant conversion goes through it. There is deliberately no second,
+// competing wall-clock conversion anywhere in this file.
+//
+// Two different, deliberately DISTINCT policies sit on top of that one
+// mechanism, because they answer different questions:
+//
+//   - Boundary recurrence (`resolveCivilBoundary`, used internally for every
+//     day-boundary computation) needs a deterministic daily anchor no matter
+//     what — a day must always have a start and an end. Its policy:
+//     ambiguous -> earlier occurrence; nonexistent -> advance by the DST gap
+//     to the first valid instant after it. This is "compatible" mode, the
+//     same style most civil calendaring systems use for recurring events,
+//     and it is now an explicit, tested contract rather than whatever an
+//     iterative offset-correction loop happened to converge to.
+//
+//   - A user-planned clock time (`resolveClockTimeInOperationalDay`,
+//     `resolvePlannedRangeInOperationalDay`) is a factual intention, not a
+//     recurrence rule. It must never be silently moved to a different time
+//     than the one requested. A nonexistent planned time fails explicitly.
+//     An ambiguous planned time exposes the ambiguity and requires the
+//     caller to supply an explicit `disambiguate: 'earlier' | 'later'` to
+//     proceed — it is never guessed. Foundation V1 has no UI caller yet, so
+//     failing safely is strictly preferable to guessing on its behalf.
+//
+// These two policies must stay distinct: collapsing them would either make
+// day boundaries occasionally undefined (unacceptable — every instant must
+// belong to exactly one operational day) or make planned times silently
+// drift (exactly the bug this correction exists to fix).
 
 export const OPERATIONAL_DAY_SCHEMA_VERSION = 1;
 export const LEGACY_CALENDAR_DAY_REVISION_ID = 'legacy-calendar-day-v0';
@@ -62,7 +99,16 @@ export function validBoundaryTime(value) {
   return typeof value === 'string' && TIME_RE.test(value);
 }
 
-/** @param {string} value @returns {boolean} true for an IANA zone Intl can resolve */
+/** @param {string} value @returns {boolean} true for an IANA zone Intl can resolve.
+ *  NOTE (deferred, non-blocking per review): this does not canonicalize
+ *  timezone aliases (e.g. "Asia/Calcutta" vs "Asia/Kolkata" name the same
+ *  civil rules but are distinct strings here, and therefore distinct
+ *  `operationalDayId()`s). Canonicalizing is a real design decision — it
+ *  changes identity round-trip semantics — and is deliberately left
+ *  unresolved rather than redesigned inside this bounded fix. Any phase that
+ *  wires this module into settings/storage must decide and document a
+ *  canonicalization policy (or explicitly accept alias-sensitive identity)
+ *  before real timezone strings from user input or Firebase reach here. */
 export function validOperationalDayTimezone(value) {
   if (typeof value !== 'string' || !value.trim() || value.includes(':')) return false;
   try { new Intl.DateTimeFormat('en-US', { timeZone: value }).format(0); return true; } catch { return false; }
@@ -82,7 +128,7 @@ export function validateBoundaryRevision(revision) {
       || (Number.isFinite(revision.effectiveFromInstant) && revision.effectiveFromInstant >= 0));
 }
 
-// ── self-contained date/time math (no ambient globals, no imports) ───────
+// ── self-contained date math (no ambient globals, no imports) ────────────
 
 function addCalendarDate(dateStr, amount) {
   const d = new Date(`${dateStr}T12:00:00Z`);
@@ -101,21 +147,79 @@ function formatHHMM(instantMs, timezone) {
   return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
 }
 
-/** Wall-clock "HH:MM" on `dateStr` in `timezone` -> UTC ms. Self-contained
- *  equivalent of storage.js's tzParseTime (iterative offset correction). */
-function wallClockToInstant(dateStr, hhmm, timezone) {
+// ── the one authoritative civil-time <-> instant mechanism ────────────────
+
+/** The timezone's offset from UTC, in minutes (east-of-Greenwich positive),
+ *  in effect at a given real instant. Instant -> local is always a well-
+ *  defined function (no ambiguity in this direction), so this alone is safe. */
+function tzOffsetMinutes(instantMs, timezone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(instantMs));
+  const get = type => parseInt(parts.find(p => p.type === type).value, 10);
+  const asUTC = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return (asUTC - instantMs) / 60000;
+}
+
+// Safely brackets any single real-world DST-style offset change: every IANA
+// zone's transitions are separated by far more than 52 hours, so sampling
+// the offset this far to either side of the naive guess reliably captures
+// "the offset before" and "the offset after" whatever transition (if any)
+// is near the requested civil date.
+const PROBE_WINDOW_MS = 26 * 3600000;
+
+/** The one authoritative mechanism for turning a civil (local) date + time in
+ *  a timezone into UTC instant(s). Tells the truth about all three real
+ *  cases instead of picking one silently:
+ *    - unique:      the ordinary case — exactly one instant.
+ *    - ambiguous:   the wall-clock reading occurs twice (fall-back repeat).
+ *    - nonexistent: the wall-clock reading is skipped entirely (spring-
+ *                   forward gap); `instantAfterGapMs` is the first real
+ *                   instant whose local reading is at/after the requested
+ *                   one, i.e. the same requested clock reading shifted
+ *                   forward by exactly `gapMinutes`.
+ *  @param {string} dateStr YYYY-MM-DD @param {string} hhmm HH:MM @param {string} timezone
+ *  @returns {{kind:'unique',instantMs:number}
+ *    | {kind:'ambiguous',earlierMs:number,laterMs:number}
+ *    | {kind:'nonexistent',gapMinutes:number,instantAfterGapMs:number}} */
+export function resolveLocalWallClock(dateStr, hhmm, timezone) {
   const [h, m] = hhmm.split(':').map(Number);
   const [y, mo, d] = dateStr.split('-').map(Number);
-  let ts = Date.UTC(y, mo - 1, d, h, m, 0);
-  for (let i = 0; i < 3; i++) {
-    const [oh, om] = formatHHMM(ts, timezone).split(':').map(Number);
-    const diff = ((h * 60 + m) - (oh * 60 + om)) * 60000;
-    if (diff === 0) break;
-    ts += diff;
+  const naiveUTC = Date.UTC(y, mo - 1, d, h, m, 0);
+  const offsetPrev = tzOffsetMinutes(naiveUTC - PROBE_WINDOW_MS, timezone);
+  const offsetNext = tzOffsetMinutes(naiveUTC + PROBE_WINDOW_MS, timezone);
+
+  if (offsetPrev === offsetNext) {
+    return { kind: 'unique', instantMs: naiveUTC - offsetPrev * 60000 };
   }
-  const landed = formatDateKey(ts, timezone);
-  if (landed !== dateStr) ts += (landed < dateStr ? 1 : -1) * 86400000;
-  return ts;
+
+  const instantA = naiveUTC - offsetPrev * 60000;
+  const instantB = naiveUTC - offsetNext * 60000;
+  const aVerifies = tzOffsetMinutes(instantA, timezone) === offsetPrev;
+  const bVerifies = tzOffsetMinutes(instantB, timezone) === offsetNext;
+
+  if (aVerifies && bVerifies) {
+    return { kind: 'ambiguous', earlierMs: Math.min(instantA, instantB), laterMs: Math.max(instantA, instantB) };
+  }
+  if (aVerifies) return { kind: 'unique', instantMs: instantA };
+  if (bVerifies) return { kind: 'unique', instantMs: instantB };
+
+  const gapMinutes = offsetNext - offsetPrev;
+  return { kind: 'nonexistent', gapMinutes, instantAfterGapMs: instantB + gapMinutes * 60000 };
+}
+
+/** The deterministic civil-time policy for RECURRING day boundaries (§7/§8):
+ *  ambiguous -> earlier occurrence; nonexistent -> advance by the DST gap to
+ *  the first valid instant after it. A day boundary must always exist, so
+ *  this never fails — it is a recurrence rule, not a factual intention.
+ *  @param {string} dateStr @param {string} hhmm @param {string} timezone @returns {number} UTC ms */
+export function resolveCivilBoundary(dateStr, hhmm, timezone) {
+  const resolved = resolveLocalWallClock(dateStr, hhmm, timezone);
+  if (resolved.kind === 'unique') return resolved.instantMs;
+  if (resolved.kind === 'ambiguous') return resolved.earlierMs;
+  return resolved.instantAfterGapMs;
 }
 
 // ── boundary revision history ─────────────────────────────────────────────
@@ -174,15 +278,16 @@ export function activeBoundaryRevision(revisions, instantMs) {
 }
 
 /** The next instant, at or after `afterMs`, at which `rule`'s own boundary
- *  clock time occurs. Used to schedule prospective activation (§8): pass the
- *  *candidate* new rule, not the currently active one — "my day starts at
- *  18:00" always means the next 18:00 from now, under the new rule's own
- *  clock, whether or not 18:00 has already passed today.
+ *  clock time occurs (recurrence policy — see resolveCivilBoundary). Used to
+ *  schedule prospective activation (§8): pass the *candidate* new rule, not
+ *  the currently active one — "my day starts at 18:00" always means the
+ *  next 18:00 from now, under the new rule's own clock, whether or not
+ *  18:00 has already passed today.
  *  @param {number} afterMs @param {{boundaryTime:string,timezone:string}} rule @returns {number} */
 export function nextBoundaryInstant(afterMs, rule) {
   const calDate = formatDateKey(afterMs, rule.timezone);
-  let boundaryInstant = wallClockToInstant(calDate, rule.boundaryTime, rule.timezone);
-  if (boundaryInstant < afterMs) boundaryInstant = wallClockToInstant(addCalendarDate(calDate, 1), rule.boundaryTime, rule.timezone);
+  let boundaryInstant = resolveCivilBoundary(calDate, rule.boundaryTime, rule.timezone);
+  if (boundaryInstant < afterMs) boundaryInstant = resolveCivilBoundary(addCalendarDate(calDate, 1), rule.boundaryTime, rule.timezone);
   return boundaryInstant;
 }
 
@@ -260,7 +365,7 @@ export function operationalDayContaining(instantMs, revisions) {
   if (!Number.isFinite(instantMs)) throw new Error('A valid instant (UTC ms) is required.');
   const revision = activeBoundaryRevision(revisions, instantMs);
   const calDate = formatDateKey(instantMs, revision.timezone);
-  const boundaryInstant = wallClockToInstant(calDate, revision.boundaryTime, revision.timezone);
+  const boundaryInstant = resolveCivilBoundary(calDate, revision.boundaryTime, revision.timezone);
   const boundaryStartDate = instantMs >= boundaryInstant ? calDate : addCalendarDate(calDate, -1);
   return makeRef(revision, boundaryStartDate);
 }
@@ -275,11 +380,23 @@ export function currentOperationalDay(nowMs, revisions) {
  *  is truncated at that takeover instant — a revision's authority can never
  *  extend past the point a newer revision superseded it, so this always
  *  agrees with what operationalDayContaining would resolve for any instant
- *  in range (§7, §11). @param {object} ref @param {object[]} revisions @returns {{startMs:number,endMs:number}} */
+ *  in range (§7, §11).
+ *
+ *  By construction this can only ever SHORTEN the operational day that is
+ *  interrupted by a new revision taking effect mid-day — it cannot lengthen
+ *  any day beyond its own revision's natural boundary-to-boundary span,
+ *  because proposeBoundaryRevision always activates a new revision exactly
+ *  on an occurrence of that revision's own boundary time (see
+ *  normalizeBoundaryRevisionHistory's alignment check), so the new revision's
+ *  own first day always runs its full natural length. A shortened transition
+ *  day is an explicit, tested, documented consequence of prospective
+ *  activation (§8) — a settings UI that lets a user change their boundary
+ *  mid-day must preview this, not hide it.
+ *  @param {object} ref @param {object[]} revisions @returns {{startMs:number,endMs:number}} */
 export function operationalDayInterval(ref, revisions) {
   const revision = findRevision(revisions, ref.boundaryRevisionId);
-  const startMs = wallClockToInstant(ref.boundaryStartDate, revision.boundaryTime, ref.timezone);
-  const naturalEndMs = wallClockToInstant(addCalendarDate(ref.boundaryStartDate, 1), revision.boundaryTime, ref.timezone);
+  const startMs = resolveCivilBoundary(ref.boundaryStartDate, revision.boundaryTime, ref.timezone);
+  const naturalEndMs = resolveCivilBoundary(addCalendarDate(ref.boundaryStartDate, 1), revision.boundaryTime, ref.timezone);
   const endMs = normalizeBoundaryRevisionHistory(revisions)
     .filter(r => r.effectiveFromInstant !== null && r.effectiveFromInstant > startMs && r.effectiveFromInstant < naturalEndMs)
     .reduce((min, r) => Math.min(min, r.effectiveFromInstant), naturalEndMs);
@@ -313,18 +430,141 @@ export function overlappingCalendarDates(ref, revisions) {
   return revision.boundaryTime === '00:00' ? [ref.boundaryStartDate] : [ref.boundaryStartDate, addCalendarDate(ref.boundaryStartDate, 1)];
 }
 
+// ── user-planned clock times: strict semantics, never silently moved ──────
+
 /** Resolves a wall-clock "HH:MM" into the actual instant it names *within*
  *  a given operational day (§12): clock times at/after the boundary land on
  *  boundaryStartDate itself; clock times before the boundary land on the
  *  following calendar date. The boundary time itself always resolves to
  *  this day's own start instant — it structurally cannot also mean "the end
  *  of this day," which is the same instant under `nextOperationalDay(ref)`.
- *  @param {object} ref @param {string} hhmm @param {object[]} revisions @returns {number} UTC ms */
-export function resolveClockTimeInOperationalDay(ref, hhmm, revisions) {
+ *
+ *  This is a PLANNED-time resolution: it never silently invents a different
+ *  instant than the one requested. A nonexistent clock reading (spring-
+ *  forward gap) fails explicitly rather than becoming some other time. An
+ *  ambiguous clock reading (fall-back repeat) is exposed as ambiguous unless
+ *  the caller passes an explicit `options.disambiguate` ('earlier' | 'later').
+ *  @param {object} ref @param {string} hhmm @param {object[]} revisions
+ *  @param {{disambiguate?:'earlier'|'later'}} [options]
+ *  @returns {{ok:true,instantMs:number}
+ *    | {ok:false,reason:'nonexistent',gapMinutes:number}
+ *    | {ok:false,reason:'ambiguous',earlierMs:number,laterMs:number}} */
+export function resolveClockTimeInOperationalDay(ref, hhmm, revisions, options = {}) {
   if (!validBoundaryTime(hhmm)) throw new Error('A valid 24h "HH:MM" clock time is required.');
   const revision = findRevision(revisions, ref.boundaryRevisionId);
   const [ch, cm] = hhmm.split(':').map(Number);
   const [bh, bm] = revision.boundaryTime.split(':').map(Number);
   const clockDate = (ch * 60 + cm) >= (bh * 60 + bm) ? ref.boundaryStartDate : addCalendarDate(ref.boundaryStartDate, 1);
-  return wallClockToInstant(clockDate, hhmm, ref.timezone);
+  return resolvePlannedClock(clockDate, hhmm, ref.timezone, options);
+}
+
+/** Shared strict-resolution core for a single planned clock reading. */
+function resolvePlannedClock(dateStr, hhmm, timezone, options = {}) {
+  const resolved = resolveLocalWallClock(dateStr, hhmm, timezone);
+  if (resolved.kind === 'unique') return { ok: true, instantMs: resolved.instantMs };
+  if (resolved.kind === 'nonexistent') return { ok: false, reason: 'nonexistent', gapMinutes: resolved.gapMinutes };
+  if (options.disambiguate === 'earlier') return { ok: true, instantMs: resolved.earlierMs };
+  if (options.disambiguate === 'later') return { ok: true, instantMs: resolved.laterMs };
+  return { ok: false, reason: 'ambiguous', earlierMs: resolved.earlierMs, laterMs: resolved.laterMs };
+}
+
+/** Resolves a planned occurrence range inside one operational day, so
+ *  callers (e.g. a future Plan Time Range feature) never have to reimplement
+ *  operational-day containment or civil-time resolution themselves.
+ *
+ *  Input is either `{ startClock, durationMinutes }` or
+ *  `{ startClock, endClock }` (project convention: a Plan Time Range either
+ *  gives a duration or an explicit end clock, never both). When an explicit
+ *  `endClock` is given, it is resolved relative to the START's own calendar
+ *  date using the same cross-midnight convention already used elsewhere in
+ *  this app for start/end clock pairs (e.g. daily-routines-model.js's
+ *  window-mode templates): an end reading earlier in the day than the start
+ *  names a time on the following calendar date. This is deliberately NOT
+ *  the operational-day boundary rule a second time — that rule only decides
+ *  which calendar date the START belongs to.
+ *
+ *  This function decides temporal containment only. It deliberately does
+ *  NOT enforce the product's separate 720-minute Plan Time Range duration
+ *  cap — that remains a later caller's policy constraint, layered on top of
+ *  (not inside) temporal truth.
+ *  @param {object} ref @param {{startClock:string,durationMinutes?:number,endClock?:string}} input
+ *  @param {object[]} revisions @param {{disambiguate?:'earlier'|'later'}} [options]
+ *  @returns {{ok:true,startMs:number,endMs:number}
+ *    | {ok:false,reason:'invalid-input'|'nonexistent'|'ambiguous'|'non-positive-duration'|'outside-operational-day', [key:string]:*}} */
+export function resolvePlannedRangeInOperationalDay(ref, input, revisions, options = {}) {
+  if (!input || typeof input !== 'object' || !validBoundaryTime(input.startClock)) return { ok: false, reason: 'invalid-input' };
+
+  const startResolved = resolveClockTimeInOperationalDay(ref, input.startClock, revisions, options);
+  if (!startResolved.ok) return { ok: false, at: 'start', ...startResolved };
+  const startMs = startResolved.instantMs;
+
+  let endMs;
+  const hasDuration = Number.isInteger(input.durationMinutes) && input.durationMinutes > 0;
+  const hasEndClock = validBoundaryTime(input.endClock);
+  if (hasDuration) {
+    endMs = startMs + input.durationMinutes * 60000;
+  } else if (hasEndClock) {
+    const startCalendarDate = formatDateKey(startMs, ref.timezone);
+    const [sh, sm] = input.startClock.split(':').map(Number);
+    const [eh, em] = input.endClock.split(':').map(Number);
+    const endCalendarDate = (eh * 60 + em) < (sh * 60 + sm) ? addCalendarDate(startCalendarDate, 1) : startCalendarDate;
+    const endResolved = resolvePlannedClock(endCalendarDate, input.endClock, ref.timezone, options);
+    if (!endResolved.ok) return { ok: false, at: 'end', ...endResolved };
+    endMs = endResolved.instantMs;
+  } else {
+    return { ok: false, reason: 'invalid-input' };
+  }
+
+  if (endMs <= startMs) return { ok: false, reason: 'non-positive-duration' };
+  const { endMs: dayEndMs } = operationalDayInterval(ref, revisions);
+  if (endMs > dayEndMs) return { ok: false, reason: 'outside-operational-day' };
+  return { ok: true, startMs, endMs };
+}
+
+// ── factual interval overlap / slicing (projections only) ─────────────────
+
+/** Overlap, in ms, between a factual [startMs, endMs) interval and one
+ *  specific operational day's own (possibly revision-truncated) interval.
+ *  0 for any disjoint, reversed, or zero-duration input — never throws on
+ *  those, since factual data can legitimately include an instantaneous
+ *  (zero-duration) event.
+ *  @param {number} startMs @param {number} endMs @param {object} ref @param {object[]} revisions @returns {number} */
+export function operationalDayOverlapMs(startMs, endMs, ref, revisions) {
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return 0;
+  const { startMs: dayStart, endMs: dayEnd } = operationalDayInterval(ref, revisions);
+  return Math.max(0, Math.min(endMs, dayEnd) - Math.max(startMs, dayStart));
+}
+
+const SLICE_ITERATION_GUARD = 100000;
+
+/** Slices a factual [startMs, endMs) interval across every operational day
+ *  it intersects. The stored factual event is never mutated by this — these
+ *  are projections only, derived on demand from one immutable source
+ *  interval, so future Timeline/analytics code never has to duplicate
+ *  operational-day intersection logic. Slices are returned in chronological
+ *  order and their `overlapMs` values always sum to exactly `endMs - startMs`.
+ *
+ *  Progress is guaranteed structurally: `operationalDayContaining(cursor)`
+ *  always returns a day whose own endMs is strictly greater than `cursor`
+ *  (the half-open-interval invariant already required of it), so each
+ *  iteration strictly advances the cursor. `SLICE_ITERATION_GUARD` is a
+ *  defense-in-depth cap against a hypothetical future bug in a malformed
+ *  revision history, not a limit expected to be reached in real use.
+ *  @param {number} startMs @param {number} endMs @param {object[]} revisions
+ *  @returns {{ref:object, overlapStartMs:number, overlapEndMs:number, overlapMs:number}[]} */
+export function sliceIntervalAcrossOperationalDays(startMs, endMs, revisions) {
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
+  const slices = [];
+  let cursor = startMs;
+  let guard = 0;
+  while (cursor < endMs) {
+    if (++guard > SLICE_ITERATION_GUARD) throw new Error('sliceIntervalAcrossOperationalDays exceeded its iteration guard — malformed revision history?');
+    const ref = operationalDayContaining(cursor, revisions);
+    const { endMs: dayEndMs } = operationalDayInterval(ref, revisions);
+    const sliceEndMs = Math.min(dayEndMs, endMs);
+    if (sliceEndMs <= cursor) throw new Error('sliceIntervalAcrossOperationalDays made no progress — malformed revision history?');
+    slices.push({ ref, overlapStartMs: cursor, overlapEndMs: sliceEndMs, overlapMs: sliceEndMs - cursor });
+    cursor = sliceEndMs;
+  }
+  return slices;
 }
