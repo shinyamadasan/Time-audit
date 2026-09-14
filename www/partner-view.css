@@ -7,7 +7,7 @@
   display:flex;flex-direction:column;overflow:hidden}
 .partner-view-screen[hidden]{display:none}
 
-/* Mobile Navigation + Planning Nudge V1 — .partner-view-screen is `position:fixed;inset:0`,
+/* Mobile Navigation V1 — .partner-view-screen is `position:fixed;inset:0`,
  * which sits outside `body`'s own `padding-top:var(--safe-top)` (a fixed element positioned
  * via `inset` ignores ancestor padding), so the banner must carry its own safe-area offset —
  * the same convention already used by .focus-exit-wrap/.install-banner in style.css. The
@@ -70,15 +70,3 @@
 .pv-evidence-tag{font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.03em;
   opacity:0.75;margin-left:4px}
 .pv-template-tag{color:var(--deep);font-weight:600}
-
-/* Planning Nudge V1 — contextual accountability action, only ever rendered when the
- * authoritative tomorrow-prep truth proves eligibility (never from item count). */
-.pv-reminder{margin-top:8px}
-.pv-reminder-btn{width:100%;box-sizing:border-box;min-height:40px;background:var(--bg2);
-  color:var(--deep);border:1px solid var(--deep-dim);border-radius:var(--r);
-  padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
-.pv-reminder-btn:hover:not(:disabled){background:var(--bg3)}
-.pv-reminder-btn:disabled{opacity:0.6;cursor:default}
-.pv-reminder-btn:focus-visible{outline:2px solid var(--deep);outline-offset:2px}
-.pv-reminder-sent{display:block;font-size:12px;color:var(--muted);padding:9px 2px}
-.pv-reminder-feedback{font-size:11px;color:var(--muted);margin-top:4px}
