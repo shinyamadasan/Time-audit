@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   deriveTodayItemStatus, deriveTomorrowPrepStatus, dateKeyInTimezone, isSharedTodayFresh,
-  formatFreshness, buildSharedPayload, sharedPayloadSignature, validateSharedPayload
+  derivePlanningReminderState, formatFreshness, buildSharedPayload, sharedPayloadSignature,
+  validateSharedPayload
 } from './shared-accountability-model.js';
 
 // ── STATUS TESTS (mandatory) ────────────────────────────────────────────────
@@ -257,4 +258,35 @@ test('validateSharedPayload accepts a missing `today.priorities` as zero priorit
   const clean = validateSharedPayload(prunedEmpty);
   assert.notEqual(clean, null);
   assert.deepEqual(clean.today, { dateKey: '2026-09-12', priorities: [] });
+});
+
+// ── derivePlanningReminderState (Partner View Mobile Nav + Planning Nudge V1) ──────────
+
+test('prepared tomorrow -> not-needed, regardless of freshness input shape', () => {
+  assert.equal(derivePlanningReminderState({ hasSharedData: true, fresh: true, prepStatus: 'prepared' }), 'not-needed');
+});
+
+test('explicit Open Day -> open-day, never eligible — intentional planning truth, not failure to plan', () => {
+  assert.equal(derivePlanningReminderState({ hasSharedData: true, fresh: true, prepStatus: 'open-day' }), 'open-day');
+});
+
+test('authoritatively unprepared + fresh -> eligible', () => {
+  assert.equal(derivePlanningReminderState({ hasSharedData: true, fresh: true, prepStatus: 'not-prepared' }), 'eligible');
+});
+
+test('no shared data at all (never connected / not linked) -> unknown, never eligible', () => {
+  assert.equal(derivePlanningReminderState({ hasSharedData: false, fresh: false, prepStatus: undefined }), 'unknown');
+  assert.equal(derivePlanningReminderState({ hasSharedData: false, fresh: true, prepStatus: 'not-prepared' }), 'unknown');
+  assert.equal(derivePlanningReminderState(), 'unknown');
+});
+
+test('present but stale (publisher day has moved on) -> stale, never upgraded to eligible', () => {
+  assert.equal(derivePlanningReminderState({ hasSharedData: true, fresh: false, prepStatus: 'not-prepared' }), 'stale');
+  // Even a stale 'prepared' payload must not be read as fresh unprepared truth.
+  assert.equal(derivePlanningReminderState({ hasSharedData: true, fresh: false, prepStatus: 'prepared' }), 'stale');
+});
+
+test('an unrecognized prepStatus value fails closed to unknown, never eligible', () => {
+  assert.equal(derivePlanningReminderState({ hasSharedData: true, fresh: true, prepStatus: 'bogus' }), 'unknown');
+  assert.equal(derivePlanningReminderState({ hasSharedData: true, fresh: true, prepStatus: undefined }), 'unknown');
 });

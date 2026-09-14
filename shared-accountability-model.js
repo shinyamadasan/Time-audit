@@ -58,6 +58,24 @@ export function isSharedTodayFresh(nowMs, publisherTimezone, sharedTodayDateKey)
   }
 }
 
+/**
+ * Partner View Mobile Navigation + Planning Nudge V1 — the single source of truth for
+ * whether "Remind to plan tomorrow" may appear. Takes only the same authoritative facts
+ * already published for the summary card (prepStatus + freshness) — never an item count,
+ * never rendered text. A prepared or Open Day tomorrow must never read as "unprepared"
+ * merely because it happens to have zero priorities, and a missing/stale payload must
+ * never be upgraded into "unprepared" either: the caller abstains (a non-'eligible'
+ * state) whenever the underlying facts are not current/trustworthy.
+ */
+export function derivePlanningReminderState({ hasSharedData, fresh, prepStatus } = {}) {
+  if (!hasSharedData) return 'unknown';
+  if (!fresh) return 'stale';
+  if (prepStatus === 'prepared') return 'not-needed';
+  if (prepStatus === 'open-day') return 'open-day';
+  if (prepStatus === 'not-prepared') return 'eligible';
+  return 'unknown';
+}
+
 /** Calm, coarse freshness copy — never second-by-second, never presence/"last seen". */
 export function formatFreshness(nowMs, updatedAt) {
   if (!Number.isFinite(updatedAt)) return '';
@@ -166,6 +184,7 @@ export function validateSharedPayload(value) {
 
 const api = {
   deriveTodayItemStatus, deriveTomorrowPrepStatus, dateKeyInTimezone, isSharedTodayFresh,
-  formatFreshness, buildSharedPayload, sharedPayloadSignature, validateSharedPayload
+  derivePlanningReminderState, formatFreshness, buildSharedPayload, sharedPayloadSignature,
+  validateSharedPayload
 };
 globalThis.SharedAccountabilityModel = api;

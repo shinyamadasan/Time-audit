@@ -474,9 +474,24 @@ test.describe('Partner View V1', () => {
   test('Partner View renders zero mutation controls — no start/stop/log/done/edit/delete affordances anywhere', async ({ browser }) => {
     const { shared, ctxA, ctxB, alice, bob } = await setupLinkedPair(browser);
     const todayKey = await alice.evaluate(() => getDateInTZ(Date.now(), 'Asia/Manila'));
+    const tomorrowKey = await alice.evaluate(() => globalThis.PlanTomorrowModel.planTomorrowTargetDate(Date.now(), 'Asia/Manila'));
     const now = await alice.evaluate(() => Date.now());
     const dow = await alice.evaluate(({ todayKey }) => tzDow(tzParseTime(todayKey, '12:00')), { todayKey });
 
+    // Tomorrow explicitly prepared — this test is about the OWNER's-day mutation surface, not
+    // about the Planning Nudge V1 reminder (covered separately), so the fixture keeps tomorrow
+    // prepared to isolate that concern: a reminder button is a legitimate (non-mutating) second
+    // control, but asserting it here would conflate two different things.
+    await alice.evaluate(({ tomorrowKey }) => {
+      writeDatePlanLocal(tomorrowKey, {
+        items: [],
+        preparation: globalThis.PlanTomorrowModel.buildPreparation(null, {
+          targetDate: tomorrowKey, timezone: 'Asia/Manila', now: Date.now(), mode: 'normal',
+          updatedBy: 'device-a', intentionalBlank: false, routineInstanceIds: [], oneOffItemIds: ['p1']
+        }),
+        updatedAt: Date.now(), updatedBy: 'device-a'
+      });
+    }, { tomorrowKey });
     await setAliceStateAndPublish(alice, {
       timezone: 'Asia/Manila', todayKey,
       items: [{ id: 'p1', task: 'A priority', done: false, when: '', updatedAt: now }],
@@ -485,7 +500,9 @@ test.describe('Partner View V1', () => {
     });
     await settle(alice); await settle(bob);
     await openBobPartnerView(bob);
+    const screenText = await bob.evaluate(() => document.getElementById('partner-view-screen').textContent);
     const screenHtml = await bob.evaluate(() => document.getElementById('partner-view-screen').innerHTML);
+    expect(screenText).not.toContain('Remind to plan tomorrow'); // prepared -> no reminder, sanity for the fixture itself
 
     // No onclick handler anywhere in Partner View calls a mutation function — read-only is
     // enforced by never emitting the control, not by disabling it with CSS/attributes.
