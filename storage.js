@@ -1079,7 +1079,13 @@ function startSync() {
   _nudgesRef.on('child_added', snap => {
     const nudge = snap.val();
     if (!nudge || !nudge.ts || Date.now() - nudge.ts > NUDGE_MAX_AGE_MS) { snap.ref.remove(); return; }
-    showToast(`💪 ${nudge.from || 'Your partner'} is cheering you on!`);
+    // Planning Nudge V1 — same transport/toast mechanism as the generic Nudge, distinguished
+    // only by an optional `type` field. showToast() sets textContent (never innerHTML), so
+    // interpolating the partner-controlled `from` name here is already XSS-safe.
+    const text = nudge.type === 'planning-reminder'
+      ? `📅 ${nudge.from || 'Your partner'} — Reminder to plan tomorrow`
+      : `💪 ${nudge.from || 'Your partner'} is cheering you on!`;
+    showToast(text);
     snap.ref.remove();
   });
 

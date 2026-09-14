@@ -9993,12 +9993,18 @@ function renderPartnerCard() {
 // not by disabling them with CSS).
 
 let _partnerViewOpen = false;
+// Planning Nudge V1 — in-flight/result state for the contextual "Remind to plan tomorrow"
+// action. Keyed by target dateKey so a date rollover while the screen is open (source
+// state retargeting to a new tomorrow) discards stale sent/failed feedback for the old
+// date rather than showing it indefinitely.
+let _planningReminderStatus = null; // { dateKey, state: 'sending'|'sent'|'failed' } | null
 
 function isPartnerViewOpen() { return _partnerViewOpen; }
 
 function openPartnerView() {
   if (!localStorage.getItem('ta3-partner-uid')) return;
   _partnerViewOpen = true;
+  _planningReminderStatus = null;
   const el = document.getElementById('partner-view-screen');
   if (el) el.hidden = false;
   renderPartnerViewScreen();
@@ -10093,6 +10099,7 @@ function renderPartnerViewScreen() {
     ? pv.tomorrow.priorities.map(p => renderPartnerViewPriorityRow(p, false)).join('')
     : `<div class="pv-empty">No plan for tomorrow yet</div>`;
   const freshnessLine = esc(M.formatFreshness(Date.now(), shared.publisher.updatedAt));
+  const reminderHtml = renderPlanningReminderBlock(M, shared, pv);
 
   el.innerHTML = banner + `<div class="pv-body">
     <div class="pv-section">
@@ -10113,11 +10120,90 @@ function renderPartnerViewScreen() {
     <div class="pv-section">
       <div class="pv-section-title">Tomorrow</div>
       ${tomorrowRows}
+      ${reminderHtml}
     </div>
     <div class="pv-section">
       <div class="pv-stale" style="text-align:left;padding:10px 12px">${freshnessLine}</div>
     </div>
   </div>`;
+}
+
+// Planning Nudge V1 — pure-ish markup builder for the contextual "Remind to plan
+// tomorrow" action. Eligibility comes ONLY from the authoritative `shared.tomorrow.prepStatus`
+// (SharedAccountabilityModel.derivePlanningReminderState) — never from `pv.tomorrow.priorities`
+// item count, so a prepared or Open Day tomorrow with zero priorities never shows a reminder.
+// `fresh`/`hasSharedData` are always true at the one call site (renderPartnerViewScreen already
+// returns early on stale/missing data before reaching here), but the helper stays general and is
+// exercised at all five states directly in shared-accountability-model.test.js.
+function renderPlanningReminderBlock(M, shared, pv) {
+  if (!M || typeof M.derivePlanningReminderState !== 'function' || !shared) return '';
+  const state = M.derivePlanningReminderState({
+    hasSharedData: true, fresh: true, prepStatus: shared.tomorrow.prepStatus
+  });
+  if (state !== 'eligible') return '';
+
+  // A date rollover while the screen was open retargets `pv.tomorrow.dateKey` — discard any
+  // stale sent/failed feedback that was for the previous target date.
+  if (_planningReminderStatus && _planningReminderStatus.dateKey !== pv.tomorrow.dateKey) {
+    _planningReminderStatus = null;
+  }
+  const status = _planningReminderStatus;
+  if (status && status.state === 'sending') {
+    return `<div class="pv-reminder" aria-live="polite"><button type="button" class="pv-reminder-btn" disabled aria-busy="true">Sending…</button></div>`;
+  }
+  if (status && status.state === 'sent') {
+    return `<div class="pv-reminder" aria-live="polite"><span class="pv-reminder-sent">Reminder sent ✓</span></div>`;
+  }
+  if (status && status.state === 'failed') {
+    return `<div class="pv-reminder" aria-live="polite">
+      <button type="button" class="pv-reminder-btn" onclick="sendPlanningReminder()">Remind to plan tomorrow</button>
+      <div class="pv-reminder-feedback">Couldn't send — try again</div>
+    </div>`;
+  }
+  const lastNudge = settings._lastNudgeSent || 0;
+  const inCooldown = Date.now() - lastNudge <= 20 * 60 * 60 * 1000; // same window as sendNudge()
+  if (inCooldown) {
+    return `<div class="pv-reminder" aria-live="polite"><span class="pv-reminder-sent">Already nudged recently</span></div>`;
+  }
+  return `<div class="pv-reminder" aria-live="polite"><button type="button" class="pv-reminder-btn" onclick="sendPlanningReminder()">Remind to plan tomorrow</button></div>`;
+}
+
+/**
+ * Planning Nudge V1 — sends a bounded, factual accountability reminder through the SAME
+ * `/nudges` transport as the generic Nudge button (no new Firebase path, no schema change:
+ * RTDB nudge children are already shape-free and the security rule only checks the linked-
+ * partner writer identity). Shares the exact same cooldown state (`settings._lastNudgeSent`)
+ * as sendNudge() so alternating between the two buttons cannot bypass the rate limit.
+ * Never touches the partner's plan/preparation/entries/routines/Timeline — this is a
+ * one-way accountability push, not a mutation of their planning truth.
+ */
+function sendPlanningReminder() {
+  const partnerUid = localStorage.getItem('ta3-partner-uid');
+  const pv = partnerViewShared;
+  if (!partnerUid || !fbDb || !currentUser || !pv) return;
+  if (_planningReminderStatus && _planningReminderStatus.state === 'sending') return; // in-flight guard — no duplicate writes from a double tap
+  const lastNudge = settings._lastNudgeSent || 0;
+  if (Date.now() - lastNudge <= 20 * 60 * 60 * 1000) return; // cooldown — shared with sendNudge()
+
+  const myName = currentUser.displayName || 'Your partner';
+  const targetDate = pv.tomorrow.dateKey;
+  _planningReminderStatus = { dateKey: targetDate, state: 'sending' };
+  renderPartnerViewScreen();
+
+  const ref = fbDb.ref(`uid_${partnerUid}/nudges`).push();
+  ref.set({ from: myName, ts: Date.now(), type: 'planning-reminder', message: 'Reminder to plan tomorrow', targetDate })
+    .then(() => {
+      settings._lastNudgeSent = Date.now();
+      persist();
+      _planningReminderStatus = { dateKey: targetDate, state: 'sent' };
+      renderPartnerCard();
+      renderPartnerViewScreen();
+    })
+    .catch(err => {
+      console.warn('Planning reminder send failed', err);
+      _planningReminderStatus = { dateKey: targetDate, state: 'failed' };
+      renderPartnerViewScreen();
+    });
 }
 
 function renderPartnerSettings() {
