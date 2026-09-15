@@ -100,18 +100,34 @@ export function validBoundaryTime(value) {
 }
 
 /** @param {string} value @returns {boolean} true for an IANA zone Intl can resolve.
- *  NOTE (deferred, non-blocking per review): this does not canonicalize
- *  timezone aliases (e.g. "Asia/Calcutta" vs "Asia/Kolkata" name the same
- *  civil rules but are distinct strings here, and therefore distinct
- *  `operationalDayId()`s). Canonicalizing is a real design decision — it
- *  changes identity round-trip semantics — and is deliberately left
- *  unresolved rather than redesigned inside this bounded fix. Any phase that
- *  wires this module into settings/storage must decide and document a
- *  canonicalization policy (or explicitly accept alias-sensitive identity)
- *  before real timezone strings from user input or Firebase reach here. */
+ *  Does not itself canonicalize aliases (e.g. "Asia/Calcutta" vs "Asia/Kolkata")
+ *  — see `canonicalizeOperationalDayTimezone` below, which is the one
+ *  authoritative rule a persistence phase must run any external timezone
+ *  string through before it reaches a stored revision or an
+ *  `operationalDayId()`. */
 export function validOperationalDayTimezone(value) {
   if (typeof value !== 'string' || !value.trim() || value.includes(':')) return false;
   try { new Intl.DateTimeFormat('en-US', { timeZone: value }).format(0); return true; } catch { return false; }
+}
+
+/** The one authoritative timezone canonicalization rule (§7 of the persistence phase that
+ *  first stores real timezone strings from settings/Firebase in this module's contract).
+ *  Resolves an IANA zone name/alias to its runtime's canonical form via
+ *  `Intl.DateTimeFormat`'s own `resolvedOptions().timeZone` (ECMA-402's CanonicalizeTimeZoneName
+ *  — the same IANA alias table every supported runtime already ships to answer
+ *  `validOperationalDayTimezone`, not a second hand-maintained table that would drift from it).
+ *  Deterministic and reproducible *within one runtime's tzdata version* — the only reproducibility
+ *  gap is IANA tzdata itself occasionally renaming a zone across years (e.g. Europe/Kiev ->
+ *  Europe/Kyiv), which is a pre-existing risk this module's timezone validity already depends on,
+ *  not one this function introduces. A persisted revision's `timezone` must always be the
+ *  canonicalized string, never the raw alias a caller happened to pass in, so two callers naming
+ *  the same civil rules by different alias strings converge on one `operationalDayId()` identity
+ *  instead of silently forking it.
+ *  @param {string} value @returns {string} canonical IANA zone name
+ *  @throws {Error} if `value` is not a timezone Intl can resolve */
+export function canonicalizeOperationalDayTimezone(value) {
+  if (!validOperationalDayTimezone(value)) throw new Error(`Not a resolvable IANA timezone: ${value}`);
+  return new Intl.DateTimeFormat('en-US', { timeZone: value }).resolvedOptions().timeZone;
 }
 
 function validRevisionId(value) {

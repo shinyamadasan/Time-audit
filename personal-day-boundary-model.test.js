@@ -10,6 +10,7 @@ import {
   nextOperationalDay, previousOperationalDay, overlappingCalendarDates, resolveClockTimeInOperationalDay,
   resolveLocalWallClock, resolveCivilBoundary, resolvePlannedRangeInOperationalDay,
   operationalDayOverlapMs, sliceIntervalAcrossOperationalDays,
+  canonicalizeOperationalDayTimezone,
 } from './personal-day-boundary-model.js';
 
 const MANILA = 'Asia/Manila';
@@ -583,4 +584,35 @@ test('legacy (00:00-boundary) operational-day dates match this app\'s existing a
     const revisions = [legacyBoundaryRevision(tz)];
     assert.equal(operationalDayContaining(iso(instant), revisions).boundaryStartDate, expectedDate, `${tz} ${instant}`);
   }
+});
+
+// ── canonicalizeOperationalDayTimezone (§7) ─────────────────────────────────
+
+test('canonicalizeOperationalDayTimezone resolves a known alias to its runtime-canonical IANA name', () => {
+  assert.equal(canonicalizeOperationalDayTimezone('US/Eastern'), 'America/New_York');
+  assert.equal(canonicalizeOperationalDayTimezone('America/New_York'), 'America/New_York');
+});
+
+test('canonicalizeOperationalDayTimezone is idempotent — canonicalizing an already-canonical name is a no-op', () => {
+  for (const tz of [MANILA, NY, 'UTC', 'Etc/UTC']) {
+    const once = canonicalizeOperationalDayTimezone(tz);
+    assert.equal(canonicalizeOperationalDayTimezone(once), once);
+  }
+});
+
+test('canonicalizeOperationalDayTimezone throws on a timezone Intl cannot resolve, matching validOperationalDayTimezone', () => {
+  assert.throws(() => canonicalizeOperationalDayTimezone('Not/AZone'));
+  assert.throws(() => canonicalizeOperationalDayTimezone(''));
+  assert.throws(() => canonicalizeOperationalDayTimezone(null));
+});
+
+test('two alias strings for the same civil rules canonicalize to the same operationalDayId identity', () => {
+  // The product-level reason this function exists: without it, "US/Eastern" and
+  // "America/New_York" from two different callers would silently fork day identity.
+  const revA = { id: 'r1', boundaryTime: '18:00', timezone: canonicalizeOperationalDayTimezone('US/Eastern'), effectiveFromInstant: null };
+  const revB = { id: 'r1', boundaryTime: '18:00', timezone: canonicalizeOperationalDayTimezone('America/New_York'), effectiveFromInstant: null };
+  assert.deepEqual(revA, revB);
+  const refA = operationalDayStartingOn('2026-09-14', revA);
+  const refB = operationalDayStartingOn('2026-09-14', revB);
+  assert.equal(operationalDayId(refA), operationalDayId(refB));
 });

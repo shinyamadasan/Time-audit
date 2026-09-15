@@ -135,14 +135,15 @@ export default [
     }
   },
   {
-    files: ['plan-tomorrow-model.js', 'plan-tomorrow-ui.js', 'shared-accountability-model.js', 'partner-view-model.js', 'tomorrow-view-model.js', 'tomorrow-view-ui.js', 'tomorrow-timeline-model.js', 'personal-day-boundary-model.js'],
+    files: ['plan-tomorrow-model.js', 'plan-tomorrow-ui.js', 'shared-accountability-model.js', 'partner-view-model.js', 'tomorrow-view-model.js', 'tomorrow-view-ui.js', 'tomorrow-timeline-model.js', 'personal-day-boundary-model.js', 'personal-day-boundary-repository.js', 'personal-day-boundary-sync.js', 'operational-plan-model.js', 'operational-plan-repository.js', 'operational-plan-sync.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: {
         globalThis: 'readonly', document: 'readonly', window: 'readonly',
         Date: 'readonly', Intl: 'readonly', Number: 'readonly', String: 'readonly',
-        Set: 'readonly', Map: 'readonly', JSON: 'readonly', FormData: 'readonly'
+        Set: 'readonly', Map: 'readonly', JSON: 'readonly', FormData: 'readonly',
+        btoa: 'readonly', atob: 'readonly'
       }
     }
   }
