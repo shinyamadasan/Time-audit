@@ -22,7 +22,7 @@ const seqIds = () => `id-${++seq}`;
 // update function runs — there is no lost-update race in the fake, exactly
 // as there should be none against the real server for one path.
 function fakeRoomRef(initial = {}) {
-  const root = { value: initial };
+  const root = { value: initial, pendingConcurrentWrites: {} }; // path -> mutator, consumed once
   const listeners = new Map(); // path -> Set<fn>
   function get(path) {
     return path.split('/').filter(Boolean).reduce((acc, seg) => (acc && typeof acc === 'object' ? acc[seg] : undefined), root.value);
@@ -51,12 +51,34 @@ function fakeRoomRef(initial = {}) {
       },
       off() { listeners.delete(path); },
       val: () => get(path) ?? null,
+      // Test-only hook modeling Firebase RTDB's documented transaction retry
+      // contract: "the update function may be called multiple times, and
+      // must be prepared to handle abandoned values." Schedules a REAL write
+      // (from another writer) to land at this path the moment this
+      // transaction has produced a first candidate result but before it
+      // commits — the fake then re-invokes the SAME updateFn against the now-
+      // current server value, exactly as production Firebase would, and
+      // commits only that retry's result. Consumed exactly once.
+      _scheduleConcurrentWriteBeforeCommit(mutateFn) {
+        root.pendingConcurrentWrites[path] = mutateFn;
+      },
       transaction(updateFn) {
-        const current = get(path) ?? null;
-        const next = updateFn(current);
-        if (next === undefined) return Promise.resolve({ committed: false, snapshot: { val: () => current } });
-        set(path, next);
-        return Promise.resolve({ committed: true, snapshot: { val: () => next } });
+        let current = get(path) ?? null;
+        let invocations = 0;
+        for (;;) {
+          invocations++;
+          const next = updateFn(current);
+          const pending = root.pendingConcurrentWrites[path];
+          if (pending) {
+            delete root.pendingConcurrentWrites[path];
+            set(path, pending(current)); // another writer's own real, committed write
+            current = get(path) ?? null; // the value this transaction must now be re-run against
+            continue; // Firebase re-invokes the SAME update function with the fresh value
+          }
+          if (next === undefined) return Promise.resolve({ committed: false, snapshot: { val: () => current }, invocations });
+          set(path, next);
+          return Promise.resolve({ committed: true, snapshot: { val: () => next }, invocations });
+        }
       },
       update(patch) {
         Object.entries(patch).forEach(([p, v]) => set(p, v));
@@ -91,6 +113,25 @@ function bootstrapFreshDevice(roomRef) {
   const fresh = makeBridge({ roomRef, storage: memory(), idGenerator: seqIds });
   fresh.bridge.attach();
   return fresh.repository.status();
+}
+
+/** Test-only: wraps a room ref so every `.transaction(updateFn)` call made
+ *  against `path` is intercepted purely to COUNT how many times the
+ *  production `updateFn` itself gets invoked — the counting wrapper adds no
+ *  behavior of its own; it delegates every call straight to the real fake's
+ *  `.transaction()` (which is what actually implements the retry loop) and
+ *  only taps the update function passed through. This proves genuine
+ *  multiple invocations of the SAME production callback pushRevision hands
+ *  to Firebase, without changing personal-day-boundary-sync.js at all. */
+function withInvocationCounter(baseRoomRef, path, counter) {
+  return {
+    ...baseRoomRef,
+    child(seg) {
+      const childRef = baseRoomRef.child(seg);
+      if (seg !== path) return childRef;
+      return { ...childRef, transaction: updateFn => childRef.transaction(value => { counter.count++; return updateFn(value); }) };
+    },
+  };
 }
 
 const anchor = { id: LEGACY_CALENDAR_DAY_REVISION_ID, boundaryTime: '00:00', timezone: MANILA, effectiveFromInstant: null };
@@ -495,4 +536,148 @@ test('stress: repeated same-proposal races under varied call order always conver
     assert.equal(custom[0].id, idA < idB ? idA : idB, `trial ${trial}: deterministic winner`);
     assert.equal(bootstrapFreshDevice(roomRef).revisions.length, 2, `trial ${trial}: fresh device bootstraps`);
   }
+});
+
+// ── FIX-FIRST gap 1: genuine transaction retry fidelity ────────────────────
+// Firebase RTDB's documented contract: "the update function may be called
+// multiple times, and must be prepared to handle abandoned values." The
+// previous version of this suite only ever invoked pushRevision's update
+// callback once per push — never proving correctness holds when the SAME
+// callback is re-run against a value that changed underneath it. These
+// tests use `_scheduleConcurrentWriteBeforeCommit` (a minimal, explicit
+// addition to the test-only fake room ref above) to force a real second
+// invocation of the exact production callback personal-day-boundary-sync.js
+// hands to `.transaction()`, and assert against the SECOND invocation's
+// decision, never the first's.
+
+test('retry fidelity: a concurrent unrelated revision landing mid-transaction is preserved, and the candidate still merges', async () => {
+  const roomRef = fakeRoomRef({ [DAY_BOUNDARY_REVISIONS_REMOTE_PATH]: { [anchor.id]: anchor } });
+  const invocationCounter = { count: 0 };
+  const countingRoomRef = withInvocationCounter(roomRef, DAY_BOUNDARY_REVISIONS_REMOTE_PATH, invocationCounter);
+  const { bridge } = makeBridge({ roomRef: countingRoomRef });
+
+  const candidate = { id: 'my-revision', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
+  const concurrentlyAddedByAnotherDevice = { id: 'concurrent-writer', boundaryTime: '20:00', timezone: MANILA, effectiveFromInstant: Date.parse('2026-09-20T12:00:00Z') }; // aligned to 20:00 Manila
+
+  // Invocation 1 sees ONLY the anchor (stale). Before this transaction
+  // commits, another device's own real write lands — invocation 2 must see
+  // that write and decide against it, not against the stale invocation-1 view.
+  roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH)
+    ._scheduleConcurrentWriteBeforeCommit(staleValue => ({ ...staleValue, [concurrentlyAddedByAnotherDevice.id]: concurrentlyAddedByAnotherDevice }));
+
+  const result = await bridge.pushRevision(candidate);
+
+  assert.equal(invocationCounter.count, 2, 'the production update callback must genuinely run twice');
+  assert.deepEqual(result, { committed: true, outcome: 'committed' });
+  const remote = assertRemoteValid(roomRef);
+  assert.equal(remote.length, 3, 'anchor + the concurrent revision + the candidate — nothing lost');
+  assert.ok(remote.some(r => r.id === concurrentlyAddedByAnotherDevice.id), 'the concurrent revision from invocation 2\'s fresh read is preserved');
+  assert.ok(remote.some(r => r.id === candidate.id), 'the candidate itself is still merged in');
+  assert.equal(bootstrapFreshDevice(roomRef).revisions.length, 3);
+});
+
+test('retry fidelity, adversarial: a fresh retry value introducing a semantic duplicate flips the decision from committed to deduplicated', async () => {
+  const roomRef = fakeRoomRef({ [DAY_BOUNDARY_REVISIONS_REMOTE_PATH]: { [anchor.id]: anchor } });
+  const invocationCounter = { count: 0 };
+  const countingRoomRef = withInvocationCounter(roomRef, DAY_BOUNDARY_REVISIONS_REMOTE_PATH, invocationCounter);
+  const { bridge } = makeBridge({ roomRef: countingRoomRef });
+
+  // Against the STALE (anchor-only) view, this candidate looks like a
+  // brand-new, uncontested fact — invocation 1 would decide 'committed'.
+  const candidate = { id: 'zzz-my-id', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
+  // The fresh retry value contains ANOTHER device's semantically-identical
+  // revision under a lexicographically SMALLER id — already canonical.
+  const canonical = { id: 'aaa-already-canonical', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
+  roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH)
+    ._scheduleConcurrentWriteBeforeCommit(staleValue => ({ ...staleValue, [canonical.id]: canonical }));
+
+  const result = await bridge.pushRevision(candidate);
+
+  assert.equal(invocationCounter.count, 2);
+  // The COMMITTED result reflects invocation 2's decision (deduplicated),
+  // never invocation 1's stale 'committed' guess.
+  assert.deepEqual(result, { committed: true, outcome: 'deduplicated' });
+  const remote = assertRemoteValid(roomRef);
+  assert.deepEqual(remote.map(r => r.id).sort(), [anchor.id, canonical.id].sort());
+  assert.ok(!remote.some(r => r.id === candidate.id), 'the stale invocation\'s own id was never written');
+  assert.equal(bootstrapFreshDevice(roomRef).revisions.length, 2);
+});
+
+test('retry fidelity, adversarial: a fresh retry value introducing a contradiction flips the decision from committed to conflict, never poisoning remote', async () => {
+  const roomRef = fakeRoomRef({ [DAY_BOUNDARY_REVISIONS_REMOTE_PATH]: { [anchor.id]: anchor } });
+  const invocationCounter = { count: 0 };
+  const countingRoomRef = withInvocationCounter(roomRef, DAY_BOUNDARY_REVISIONS_REMOTE_PATH, invocationCounter);
+  const { bridge } = makeBridge({ roomRef: countingRoomRef });
+
+  const candidate = { id: 'device-a', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
+  // Same absolute instant, genuinely different facts (America/New_York 06:00
+  // == Asia/Manila 18:00 at this exact instant) — a real contradiction.
+  const contradicting = { id: 'device-b', boundaryTime: '06:00', timezone: 'America/New_York', effectiveFromInstant: T_1800_MANILA };
+  roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH)
+    ._scheduleConcurrentWriteBeforeCommit(staleValue => ({ ...staleValue, [contradicting.id]: contradicting }));
+
+  const result = await bridge.pushRevision(candidate);
+
+  assert.equal(invocationCounter.count, 2);
+  assert.deepEqual(result, { committed: false, outcome: 'conflict' });
+  // Remote reflects exactly what the concurrent write (invocation 2's fresh
+  // read) committed — the rejected candidate never got written, and the
+  // stale invocation-1 "this looks committable" guess never took effect.
+  assert.deepEqual(remoteMap(roomRef), { [anchor.id]: anchor, [contradicting.id]: contradicting });
+  assertRemoteValid(roomRef);
+  assert.equal(bootstrapFreshDevice(roomRef).revisions.length, 2);
+});
+
+// ── FIX-FIRST gap 2: reconciliation through the real attach()/.on('value') listener ─
+// Proves the deduplication -> local-identity-reconciliation path works end to
+// end through the SAME registered listener a live app would use, never via a
+// manual handleRemoteSnapshot() call standing in for it.
+
+test('listener-driven reconciliation: attach()\'s own registered .on(\'value\') listener reconciles a losing local id after a later canonicalizing write', () => {
+  const roomRef = fakeRoomRef();
+  const now = T_1800_MANILA;
+
+  // Device B creates its own local proposal OFFLINE (no attach yet, so its
+  // propose() has no knowledge of any other device) and attaches FIRST,
+  // while remote is still empty — its own bootstrap push succeeds outright.
+  const deviceB = makeBridge({ roomRef, storage: memory(), idGenerator: () => 'zzz-losing' });
+  deviceB.repository.propose({ boundaryTime: '18:00', timezone: MANILA }, now);
+  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef });
+  const remoteChangesSeenByB = [];
+  const listeningBridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef, onRemoteChange: r => remoteChangesSeenByB.push(r) });
+  listeningBridgeB.attach(); // registers the REAL .on('value') listener and bootstrap-pushes B's own {anchor, zzz-losing}
+  assert.deepEqual(remoteMap(roomRef)[LEGACY_CALENDAR_DAY_REVISION_ID] ? Object.keys(remoteMap(roomRef)).sort() : [], [LEGACY_CALENDAR_DAY_REVISION_ID, 'zzz-losing'].sort());
+
+  // Device A independently proposes the identical fact under a
+  // lexicographically SMALLER id and pushes directly — its own transaction
+  // sees B's zzz-losing already remote, recognizes the semantic duplicate,
+  // and since A's id wins, CANONICALIZES: deletes zzz-losing, adds aaa-canonical.
+  const deviceA = makeBridge({ roomRef, storage: memory(), idGenerator: () => 'aaa-canonical' });
+  deviceA.repository.propose({ boundaryTime: '18:00', timezone: MANILA }, now);
+  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef });
+  return bridgeA.pushRevision(deviceA.repository.listAllRaw().find(r => r.effectiveFromInstant !== null)).then(async result => {
+    assert.equal(result.outcome, 'canonicalized');
+    assert.deepEqual(Object.keys(remoteMap(roomRef)).sort(), [LEGACY_CALENDAR_DAY_REVISION_ID, 'aaa-canonical'].sort());
+
+    // The assertion that matters: B never called handleRemoteSnapshot()
+    // itself here — A's canonicalizing write's own fire() reached B's
+    // listener (registered by attach() above) automatically, and THAT is
+    // what must have already reconciled B's local repository by this point.
+    assert.ok(remoteChangesSeenByB.length >= 1, 'B\'s registered listener observed the change');
+    const bStatus = deviceB.repository.status();
+    assert.equal(bStatus.revisions.length, 2);
+    assert.ok(bStatus.revisions.some(r => r.id === 'aaa-canonical'), 'B adopted the canonical id via its own live listener');
+    assert.ok(!bStatus.revisions.some(r => r.id === 'zzz-losing'), 'B\'s losing id is gone — no split brain');
+
+    // Additionally, B independently re-attempting to push its now-stale
+    // losing-id revision object gets the literal 'deduplicated' outcome
+    // string (the explicit result a caller — not just the listener path —
+    // would see for this exact situation).
+    const staleZzz = { id: 'zzz-losing', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: now };
+    const staleReplayResult = await bridgeB.pushRevision(staleZzz);
+    assert.deepEqual(staleReplayResult, { committed: true, outcome: 'deduplicated' });
+
+    assertRemoteValid(roomRef);
+    assert.equal(bootstrapFreshDevice(roomRef).revisions.length, 2);
+  });
 });
