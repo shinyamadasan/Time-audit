@@ -11,6 +11,7 @@ import {
   resolveLocalWallClock, resolveCivilBoundary, resolvePlannedRangeInOperationalDay,
   operationalDayOverlapMs, sliceIntervalAcrossOperationalDays,
   canonicalizeOperationalDayTimezone,
+  revisionsAreSemanticDuplicates, pickCanonicalRevisionId,
 } from './personal-day-boundary-model.js';
 
 const MANILA = 'Asia/Manila';
@@ -615,4 +616,24 @@ test('two alias strings for the same civil rules canonicalize to the same operat
   const refA = operationalDayStartingOn('2026-09-14', revA);
   const refB = operationalDayStartingOn('2026-09-14', revB);
   assert.equal(operationalDayId(refA), operationalDayId(refB));
+});
+
+// ── revisionsAreSemanticDuplicates / pickCanonicalRevisionId (persistence-atomicity contract) ─
+
+test('revisionsAreSemanticDuplicates ignores id, compares boundaryTime + timezone + effectiveFromInstant only', () => {
+  const t = Date.parse('2026-09-14T10:00:00Z');
+  const a = { id: 'a', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: t };
+  const bSameFactsDifferentId = { id: 'b', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: t };
+  assert.equal(revisionsAreSemanticDuplicates(a, bSameFactsDifferentId), true);
+  assert.equal(revisionsAreSemanticDuplicates(a, { ...a, boundaryTime: '16:00' }), false);
+  assert.equal(revisionsAreSemanticDuplicates(a, { ...a, timezone: NY }), false); // un-canonicalized alias difference is a real difference
+  assert.equal(revisionsAreSemanticDuplicates(a, { ...a, effectiveFromInstant: t + 1 }), false);
+  // Two anchors (both effectiveFromInstant: null) with matching facts are duplicates too.
+  assert.equal(revisionsAreSemanticDuplicates(legacyManila, { ...legacyManila, id: 'other-anchor-id' }), true);
+});
+
+test('pickCanonicalRevisionId is a deterministic, input-order-independent lexicographic minimum', () => {
+  assert.equal(pickCanonicalRevisionId('aaa', 'zzz'), 'aaa');
+  assert.equal(pickCanonicalRevisionId('zzz', 'aaa'), 'aaa'); // order of arguments does not change the winner
+  assert.equal(pickCanonicalRevisionId('same', 'same'), 'same');
 });

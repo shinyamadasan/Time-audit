@@ -147,6 +147,50 @@ test('mergeRemoteRevisions writes nothing (reports a conflict) when the union wo
   assert.deepEqual(r.status(), before); // nothing written
 });
 
+// ── concurrent-proposal semantic deduplication / identity reconciliation ────
+// (§3, §4, §5 of the boundary-sync atomicity contract)
+
+test('mergeRemoteRevisions adopts the remote canonical id and drops the local losing id when remote wins', () => {
+  const storage = memory();
+  const r = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds });
+  const t = Date.parse('2026-09-14T10:00:00Z');
+  // Local device independently proposed the same fact under a LARGER id.
+  r.mergeRemoteRevisions({ [LEGACY_CALENDAR_DAY_REVISION_ID]: { id: LEGACY_CALENDAR_DAY_REVISION_ID, boundaryTime: '00:00', timezone: MANILA, effectiveFromInstant: null }, 'zzz-local': { id: 'zzz-local', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: t } });
+  assert.equal(r.status().revisions.length, 2);
+  // Remote now (from another device) canonicalizes the SAME fact under a
+  // SMALLER id — the deterministic winner.
+  const result = r.mergeRemoteRevisions({ 'aaa-remote': { id: 'aaa-remote', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: t } });
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.changedIds, ['aaa-remote']);
+  assert.deepEqual(result.droppedIds, ['zzz-local']);
+  const ids = r.status().revisions.map(rv => rv.id).sort();
+  assert.deepEqual(ids, ['aaa-remote', LEGACY_CALENDAR_DAY_REVISION_ID].sort());
+});
+
+test('mergeRemoteRevisions ignores a remote losing-id duplicate when the local id already IS canonical', () => {
+  const storage = memory();
+  const r = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds });
+  const t = Date.parse('2026-09-14T10:00:00Z');
+  r.mergeRemoteRevisions({ [LEGACY_CALENDAR_DAY_REVISION_ID]: { id: LEGACY_CALENDAR_DAY_REVISION_ID, boundaryTime: '00:00', timezone: MANILA, effectiveFromInstant: null }, 'aaa-local': { id: 'aaa-local', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: t } });
+  const result = r.mergeRemoteRevisions({ 'zzz-remote': { id: 'zzz-remote', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: t } });
+  assert.equal(result.changed, false); // nothing to adopt — our own id already wins
+  assert.deepEqual(result.droppedIds, []);
+  const ids = r.status().revisions.map(rv => rv.id).sort();
+  assert.deepEqual(ids, ['aaa-local', LEGACY_CALENDAR_DAY_REVISION_ID].sort()); // zzz-remote never adopted
+});
+
+test('mergeRemoteRevisions still hard-rejects a genuine contradiction sharing an effective instant under different immutable facts (not deduplication)', () => {
+  const storage = memory();
+  const r = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds });
+  const t = Date.parse('2026-09-14T10:00:00Z'); // 18:00 Asia/Manila == 06:00 America/New_York
+  r.mergeRemoteRevisions({ [LEGACY_CALENDAR_DAY_REVISION_ID]: { id: LEGACY_CALENDAR_DAY_REVISION_ID, boundaryTime: '00:00', timezone: MANILA, effectiveFromInstant: null }, a: { id: 'a', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: t } });
+  const before = r.status();
+  const result = r.mergeRemoteRevisions({ b: { id: 'b', boundaryTime: '06:00', timezone: 'America/New_York', effectiveFromInstant: t } });
+  assert.equal(result.changed, false);
+  assert.ok(result.conflict);
+  assert.deepEqual(r.status(), before); // nothing written — a genuine contradiction, never a favorite picked
+});
+
 test('listAllRaw returns every persisted revision for sync push, empty for an absent user', () => {
   const r = repo();
   assert.deepEqual(r.listAllRaw(), []);

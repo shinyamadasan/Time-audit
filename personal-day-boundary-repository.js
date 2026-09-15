@@ -33,7 +33,9 @@ import {
   canonicalizeOperationalDayTimezone,
   legacyBoundaryRevision,
   normalizeBoundaryRevisionHistory,
+  pickCanonicalRevisionId,
   proposeBoundaryRevision,
+  revisionsAreSemanticDuplicates,
   validateBoundaryRevision,
 } from './personal-day-boundary-model.js';
 
@@ -168,23 +170,54 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
      *  authoritative revisions that happen to share an effectiveFromInstant),
      *  nothing is written and that is reported too, rather than one silently
      *  discarding the other.
+     *  A remote id that ISN'T locally present under that exact id may still be
+     *  a SEMANTIC duplicate of a local revision this device already has under
+     *  a different (independently-generated) id — two devices proposing the
+     *  same boundary/timezone at the same effective instant. That is
+     *  concurrent-proposal convergence (§3/§4/§5), not a conflict: the
+     *  deterministic canonical id (pickCanonicalRevisionId) decides which
+     *  identity survives. If remote's id wins, this device drops its own
+     *  losing-id revision (`droppedIds`) and adopts remote's — identity
+     *  reconciliation, so every device converges on the SAME id rather than
+     *  a permanent split brain. If this device's own local id already IS the
+     *  canonical one, the remote entry is ignored here; a future push
+     *  corrects remote to match (see personal-day-boundary-sync.js).
+     *  Two revisions that share an effectiveFromInstant WITHOUT being
+     *  semantic duplicates (different boundaryTime/timezone) remain a hard
+     *  conflict exactly as before — contradiction is never deduplication.
      *  @param {object} remoteRecordsById @param {number} [nowTs] unused, kept for
      *    call-shape symmetry with the coarse-life-evidence sync bridge.
-     *  @returns {{changed:boolean, changedIds:string[], rejectedIds:string[], conflict:string|null}} */
+     *  @returns {{changed:boolean, changedIds:string[], rejectedIds:string[], droppedIds:string[], conflict:string|null}} */
     mergeRemoteRevisions(remoteRecordsById) {
-      if (!isPlainObject(remoteRecordsById)) return { changed: false, changedIds: [], rejectedIds: [], conflict: null };
+      if (!isPlainObject(remoteRecordsById)) return { changed: false, changedIds: [], rejectedIds: [], droppedIds: [], conflict: null };
       const envelope = readEnvelope(storage, key);
       const localById = envelope ? { ...envelope.revisions } : {};
       const changedIds = [];
       const rejectedIds = [];
+      const droppedIds = [];
       const candidateById = { ...localById };
       Object.entries(remoteRecordsById).forEach(([id, remote]) => {
         if (!remote || typeof remote !== 'object' || remote.id !== id || !validateBoundaryRevision(remote)) { rejectedIds.push(id); return; }
         const local = localById[id];
-        if (!local) { candidateById[id] = remote; changedIds.push(id); return; }
-        if (JSON.stringify(local) !== JSON.stringify(remote)) rejectedIds.push(id); // §6: conflicting duplicate id — never silently pick one
+        if (local) {
+          if (JSON.stringify(local) !== JSON.stringify(remote)) rejectedIds.push(id); // §6: conflicting duplicate id — never silently pick one
+          return;
+        }
+        const semanticMatchId = Object.keys(candidateById).find(existingId => existingId !== id && revisionsAreSemanticDuplicates(candidateById[existingId], remote));
+        if (semanticMatchId) {
+          if (pickCanonicalRevisionId(semanticMatchId, id) === id) {
+            delete candidateById[semanticMatchId];
+            candidateById[id] = remote;
+            droppedIds.push(semanticMatchId);
+            changedIds.push(id);
+          }
+          // else: our existing local id is already canonical — ignore remote's losing id.
+          return;
+        }
+        candidateById[id] = remote;
+        changedIds.push(id);
       });
-      if (!changedIds.length) return { changed: false, changedIds, rejectedIds, conflict: null };
+      if (!changedIds.length) return { changed: false, changedIds, rejectedIds, droppedIds: [], conflict: null };
       let normalized;
       try {
         normalized = normalizeBoundaryRevisionHistory(Object.values(candidateById));
@@ -192,12 +225,12 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
         // The union itself is structurally inconsistent (e.g. a same-instant collision
         // between two independently-proposed revisions) — write nothing rather than
         // silently drop one side's fact.
-        return { changed: false, changedIds: [], rejectedIds, conflict: err.message };
+        return { changed: false, changedIds: [], rejectedIds, droppedIds: [], conflict: err.message };
       }
       const nextRevisions = {};
       normalized.forEach(r => { nextRevisions[r.id] = r; });
       writeEnvelope(storage, key, { schemaVersion: PERSONAL_DAY_BOUNDARY_SCHEMA_VERSION, revisions: nextRevisions });
-      return { changed: true, changedIds, rejectedIds, conflict: null };
+      return { changed: true, changedIds, rejectedIds, droppedIds, conflict: null };
     }
   };
 }
