@@ -144,6 +144,41 @@ export function validateBoundaryRevision(revision) {
       || (Number.isFinite(revision.effectiveFromInstant) && revision.effectiveFromInstant >= 0));
 }
 
+/** Two revisions are semantically equivalent for concurrent-proposal
+ *  deduplication (a persistence-layer concern; see personal-day-boundary-
+ *  repository.js/-sync.js) when every immutable fact that determines their
+ *  MEANING matches, regardless of `id` — a revision's id is an arbitrary,
+ *  independently-generated identity token, never itself a semantic fact.
+ *  A revision currently carries exactly three such facts: `boundaryTime`,
+ *  `timezone` (already canonicalized — see canonicalizeOperationalDayTimezone;
+ *  this function does not itself canonicalize, so two facts naming the same
+ *  civil rule via different un-canonicalized alias strings are correctly
+ *  treated as NOT equivalent here — that is a real difference in what was
+ *  actually persisted, not a false negative), and `effectiveFromInstant`.
+ *  Two revisions sharing an `effectiveFromInstant` but differing in
+ *  `boundaryTime` or `timezone` are a genuine CONTRADICTION, not a duplicate
+ *  — callers must reject that case, never merge or pick a favorite.
+ *  @param {object} a @param {object} b @returns {boolean} */
+export function revisionsAreSemanticDuplicates(a, b) {
+  return a.boundaryTime === b.boundaryTime && a.timezone === b.timezone && a.effectiveFromInstant === b.effectiveFromInstant;
+}
+
+/** The one deterministic, input-order-independent rule for choosing which of
+ *  two semantically-equivalent revisions' ids survives as canonical when two
+ *  devices independently proposed the same fact with different randomly-
+ *  generated ids (§5 of the persistence-atomicity contract). Plain
+ *  lexicographic minimum: depends only on the two id strings themselves, so
+ *  it produces the same winner regardless of which device's write reaches a
+ *  shared store first, which device's transaction retries first, or the
+ *  order either id was generated in. This is intentionally NOT "first
+ *  writer wins," "most recently updated," or any other order-dependent rule
+ *  — those would make the outcome depend on race timing, defeating the
+ *  point of a deterministic convergence rule.
+ *  @param {string} idA @param {string} idB @returns {string} idA or idB, whichever sorts first */
+export function pickCanonicalRevisionId(idA, idB) {
+  return idA <= idB ? idA : idB;
+}
+
 // ── self-contained date math (no ambient globals, no imports) ────────────
 
 function addCalendarDate(dateStr, amount) {
