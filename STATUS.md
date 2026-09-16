@@ -5,6 +5,81 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-16 — Documentation reconciliation (docs only, no runtime/code/test changes)
+
+**This entry supersedes the "Next task: Phase 12.0B ... NOT started" framing below.**
+Phase 12.0A (2026-09-06 entry below) was real, but it was **not** followed directly by
+Phase 12.0B. Instead, 47 further commits of independent, ungated feature-branch work
+landed on `main` between `a80c4a1` (Phase 12.0A housekeeping) and `14a2031` (current
+`origin/main`), none of it part of the Phase 12 Personal Intelligence design. `STATUS.md`,
+`CHANGELOG.md`, `planning/ROADMAP.md`, `APP_CONTEXT.md`, and `CODEMAP.md` had not been
+updated to reflect this and still read as if Phase 12.0A were the latest checkpoint.
+
+**Milestones integrated since Phase 12.0A** (verified against live `git log`, not
+inferred from branch names): Coarse Life Evidence V1 (`2948e2e`), Coarse Life Evidence
+Durability V1 (`4e95098`), Phase 6I/J Review Reconciliation (`02bc5d1`), Plan Linkage +
+Up Next Ordering V1 (`724f305`), Onboarding Rewrite V1 (`baa001b`), Motivation Pressure
+Cleanup V1 (`57ce9aa`), Shared Access Hardening V1 (`6d491e6`), Time Truth V1
+(`e86bc2b`), Timeline Truth Follow-up V1 (`c80134d`), Wife/Shared Accountability V1
+(`d8761e4`), Scheduled Auto-Log Reliability V1 (`6de1260`), Partner View V1 (`5096abe`),
+Today Persistent Sections V1 (`931c40c`), Plan Tomorrow Quick Time V1 (`3345c64`), Daily
+Reconciliation V1 (`ee1fd1a` + review-fix `3463126`), Tomorrow View V1 (`73eefb8`), Plan
+Time Range + Faster Scheduling V1 (`980129a` + `fc68b12`), Tomorrow Timeline Preview V1
+(`45fce6a`), Partner View mobile navigation V1 (`b0b3ab8` — the planning-reminder half
+was explicitly held, not shipped, see `da4e332`), Personal Day Boundary Foundation V1
+(`76f04ff` + `e045d50`), and Personal Day Boundary Persistence + Operational Plan
+Authority V1 (`6e624b5` + hardening `a1982ad`/`444f3eb`/`14a2031`). Full detail in
+`CHANGELOG.md`.
+
+**Roadmap sequence verified, not changed.** `docs/PHASE12_PERSONAL_INTELLIGENCE.md`
+(§18/§19) still specifies 12.0A → 12.0B → 12.1–12.4 (deterministic engine) → 12.5
+(Claude phrase-only layer), and nothing in the 47 intervening commits touches Phase 12
+code. **Phase 12.0B (Android runtime compatibility + offline cold start safety) is
+still the next Phase-12-specific step and is still NOT started.** A stale local-only
+branch `fix/phase12-0b-android-runtime` (worktree `chronasense-phase12-0b`, tip
+`a146565`) exists from far behind current `main`; it is an unfinished, unmerged
+reference implementation only — not suitable for direct integration. Future 12.0B work
+should be rebuilt against current `main`, not rebased off that branch.
+
+**Test accounting (independently rerun today, not copied from the prior recon
+hypothesis of "910/909/1"):** `npm test` exits 0. Aggregating every `node --test`
+invocation in the `test` script: 917 tests total, 916 passed, 1 skipped, 0 failed.
+Thirteen additional suites run via plain `node <file>.js` (not the `node --test`
+runner) contribute 453 further assertions, all passing (suite exits 0; `npm test`'s
+`&&`-chained script would abort non-zero on any failure). The lockfile-clean
+`npm ci` fails in a fresh worktree on an unrelated pre-existing peer-dependency
+conflict (`@codetrix-studio/capacitor-google-auth` wants `@capacitor/core@^6`, root
+has `^8`); `npm install --legacy-peer-deps` was used to verify tests only, and no
+`package.json`/lockfile change was made or committed.
+
+**Known non-blocking technical debt carried forward (not fixed here):**
+`personal-day-boundary-sync.js` initializes its transaction `outcome` variable
+outside the Firebase transaction callback. Deferred to the next intentional
+production-code change in that file, per explicit scope for this phase.
+
+**Documentation still not fully current — deliberately not expanded further here:**
+`CODEMAP.md` (module-by-module structural reference) has not been updated with
+entries for the newer modules (`tomorrow-view-*`, `partner-view-*`,
+`personal-day-boundary-*`, `operational-plan-*`, `shared-accountability-*`, etc.) —
+doing so at its existing per-module technical depth is a substantial task of its own,
+out of scope for this bounded reconciliation pass. `APP_CONTEXT.md`'s "Current Repo
+State As Of This Update" section (further down that file) is a frozen Phase 11.5
+snapshot (HEAD `1fe439a`, 2026-09-04) and was left as historical record rather than
+rewritten; a pointer note was added directing readers to this file for current state.
+
+**This session's scope:** documentation only. No `.js`/`.css`/`.html`, tests, Firebase
+config/rules, Android/Capacitor code, adapters, dependencies, or build tooling were
+modified. Nothing was merged to `main`, pushed, or deployed. Done on an isolated
+worktree/branch (`docs/current-state-reconciliation-v1`) from `origin/main`
+(`14a2031`) — the primary worktree's pre-existing uncommitted `README.md` change (on
+`docs/phase12-personal-intelligence-design`) was left completely untouched.
+
+**Next task:** independent review of this reconciliation pass, then resume Phase
+12.0B (Android runtime compatibility + offline cold start safety) as a fresh build
+against current `main` — NOT started by this session.
+
+---
+
 ## 2026-09-06 — Phase 12.0A (static root↔www parity + safe tooling) integrated
 
 **Phase 12.0A is built, independently reviewed (verdict: PASS), and integrated to

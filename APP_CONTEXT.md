@@ -336,6 +336,13 @@ stay as the live idea/backlog record. See `planning/ROADMAP.md` "Deferred (Phase
 
 ## Current Repo State As Of This Update
 
+**STALE SNAPSHOT (frozen at Phase 11.5, 2026-09-04).** This section is a point-in-time
+record and has not been updated since. For actual current state, read `STATUS.md`'s
+top entry instead -- as of 2026-09-16 it is far more current than this section
+(`main` has moved through Phase 12.0A plus ~47 further commits since the HEAD below).
+The rest of this file's product-boundary/subsystem/motivation-inventory content
+above is not time-sensitive in the same way and was left as-is.
+
 - Branch: `main`, HEAD `1fe439af9e47c74d1100eba6e6b551eda7d4001a`, tracking `origin/main`.
 - Working tree: exactly `M README.md` (a small, already-sensible "Start Here" pointer to this
   file and `CODEMAP.md`, uncommitted) + `?? APP_CONTEXT.md` (this file, uncommitted) — both

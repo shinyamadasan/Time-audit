@@ -1,6 +1,38 @@
 # ChronaSense — Changelog
 
-## Tomorrow View V1 (feat/tomorrow-view-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-13
+## Documentation reconciliation note — 2026-09-16
+
+The five entries below were never logged here even though they are integrated on
+`main` (verified via `git log`, `docs/current-state-reconciliation-v1` reconciliation
+pass). Kept brief — see the commit messages / `STATUS.md`'s top entry for full detail
+rather than expanding this into a narrative changelog entry per commit.
+
+- **Plan Time Range + Faster Scheduling V1** (integrated — `980129a`, review-fix
+  `fc68b12`) — 2026-09-13. Adds explicit start/end time ranges to plan items with
+  range-validity enforced at write time, not just display.
+- **Tomorrow Timeline Preview V1** (integrated — `45fce6a`) — 2026-09-13. Read-only
+  projected timeline view for tomorrow, alongside Today/Tomorrow coherence work.
+- **Partner View mobile navigation + planning nudge V1** (integrated — `b0b3ab8`;
+  planning-reminder "Leg B" explicitly held back, not shipped — `da4e332`) —
+  2026-09-13/14. Mobile nav for Partner View shipped; the planning-reminder nudge
+  was deliberately not built because calendar-tomorrow truth was judged
+  insufficient to support it. Do not rebuild the reminder without a fresh request.
+- **Personal Day Boundary Foundation V1** (integrated — `76f04ff`, adversarial
+  review-fix `e045d50`) — 2026-09-15. Establishes an operational-day boundary
+  (configurable day-start clock, e.g. 18:00) distinct from the legacy calendar
+  date, as its own identity/store, ahead of Persistence V1 below.
+- **Personal Day Boundary Persistence + Operational Plan Authority V1** (integrated
+  — `6e624b5`, plus two follow-up hardening commits `a1982ad` atomic whole-history
+  boundary-revision transactions and `444f3eb`/`14a2031` retry/reattach regression
+  coverage) — 2026-09-16. Makes the operational day boundary durable and gives the
+  operational plan store authority over the legacy calendar-keyed plan store for
+  non-legacy days. Persistence/authority only — no Today/Tomorrow UI adoption yet.
+  **Known non-blocking debt:** `personal-day-boundary-sync.js` initializes its
+  transaction `outcome` variable outside the Firebase transaction callback; not
+  fixed in this reconciliation, deferred to the next intentional change in that
+  file.
+
+## Tomorrow View V1 (integrated to main — 73eefb8) — 2026-09-13
 
 Adds a read-only "Tomorrow" view next to Today's own commitments, so the plan
 Plan Tomorrow already prepares can be inspected without reopening the editor.
@@ -32,7 +64,7 @@ Plan Tomorrow already prepares can be inspected without reopening the editor.
 - New files: `tomorrow-view-model.js`, `tomorrow-view-model.test.js`,
   `tomorrow-view-ui.js`, `tomorrow-view.css`, `tests/tomorrow-view.spec.js`.
 
-## Daily Reconciliation V1 — review fixes (feat/daily-reconciliation-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-13
+## Daily Reconciliation V1 — review fixes (integrated to main — 3463126) — 2026-09-13
 
 Independent review of `ee1fd1a` returned **FIX FIRST** with two blockers. Both
 fixed on top of that commit (not amended, so the original reviewed candidate
@@ -93,7 +125,7 @@ stays inspectable):
   240-char cap on the reason field, missing hostile-rendering/mobile/day-
   boundary coverage) remain open, non-blocking technical debt — untouched.
 
-## Daily Reconciliation V1 (feat/daily-reconciliation-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-13
+## Daily Reconciliation V1 (integrated to main — ee1fd1a) — 2026-09-13
 
 Closes the Plan → Do → observe → reconcile → prepare loop: opening Plan Tomorrow
 now shows a compact reconciliation section for today's one-off priorities before
@@ -167,7 +199,7 @@ than inventing new completion/identity rules.
   file, unrelated to this branch — verified individually, 0 failures) plus
   `npx playwright test` 521/521 passing (513 pre-existing + 8 new).
 
-## Plan Tomorrow Quick Time V1 (feat/plan-tomorrow-quick-time, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-12
+## Plan Tomorrow Quick Time V1 (integrated to main — 3345c64) — 2026-09-12
 
 Plan Tomorrow already had structured planned-time support end to end — one-off
 items carry a canonical `when` field (24h `HH:MM`, validated by a bounded regex),
@@ -214,7 +246,7 @@ delete-and-recreate.
   missing `targaryen` dependency, unmodified file, unrelated to this branch) plus
   `npx playwright test` 513/513 passing.
 
-## Today Persistent Sections V1 (feat/today-persistent-sections, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-12
+## Today Persistent Sections V1 (integrated to main — 931c40c) — 2026-09-12
 
 Timeline and Accountability answer "what actually happened today" and "how is my
 accountability partner doing" — two of Today's three core questions — but both
@@ -266,7 +298,7 @@ user's choice — presentation only, no change to what is tracked, rendered, or 
   clean. No Firebase rule, browser extension, auto-log, Time/Timeline Truth, Partner
   View projection/security, or Planning Streak code touched.
 
-## Partner View V1 (feat/partner-view-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-12
+## Partner View V1 (integrated to main — 5096abe) — 2026-09-12
 
 Corrected product requirement: Wife/Shared Accountability V1's narrow 3-priority/prep-
 status allowlist is no longer the maximum allowed partner visibility. Two securely-
@@ -319,7 +351,7 @@ No Week/Trends/Life/Learning/Career sharing, no chat/comments/notifications, no
 scoring or streak comparison, no browser-extension change, no auto-log architecture
 change. See `APP_CONTEXT.md` → "Partner View V1" for the full contract.
 
-## Scheduled Auto-Log Reliability V1 (feat/scheduled-autolog-reliability-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-12
+## Scheduled Auto-Log Reliability V1 (integrated to main — 6de1260) — 2026-09-12
 
 Bounded reliability + coverage-truth fix for recurring `autoLog` templates, prompted by
 a confirmed overnight incident: a 22:00→08:00 "Scribe shift" template's occurrence was
@@ -366,7 +398,7 @@ No timezone-precedence change, no browser-extension change, no Firebase rules ch
 no production data touched. See `APP_CONTEXT.md` → "Scheduled Auto-Log Reliability V1"
 for the full contract.
 
-## Wife / Shared Accountability V1 (feat/wife-shared-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-11
+## Wife / Shared Accountability V1 (integrated to main — d8761e4) — 2026-09-11
 
 Smallest useful shared-accountability experience between two securely-linked users,
 built on the already-deployed `shared-access-hardening-v1` boundary. **No Firebase
@@ -404,7 +436,7 @@ No new tab, chat, shared calendar, or partner Timeline. No gamification. No prod
 data migration. See `APP_CONTEXT.md` → "Wife / Shared Accountability V1" for the full
 contract.
 
-## Timeline Truth Follow-up V1 (feat/timeline-truth-followup-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-11
+## Timeline Truth Follow-up V1 (integrated to main — c80134d) — 2026-09-11
 
 Bounded fix for three dogfood truth/semantics gaps a production audit found exposed
 (not caused) by Time Truth V1. `index.html` only:
@@ -426,7 +458,7 @@ Bounded fix for three dogfood truth/semantics gaps a production audit found expo
   merely named "PC Time" still never gains that provenance from text alone, on either
   side of a midnight split.
 
-## Time Truth V1 (feat/time-truth-v1, candidate, uncommitted, unpushed, NOT deployed) — 2026-09-11
+## Time Truth V1 (integrated to main — e86bc2b) — 2026-09-11
 
 Cross-device timezone correctness. Canonical rule: `absolute instant + account timezone
 (settings.timezone) → ChronaSense dateKey`; device OS timezone is provenance only. A work
@@ -488,7 +520,7 @@ Playwright 449 tests (443 + 6 new), `npm run lint` 0 errors, `check:www-parity` 
 Candidate remains uncommitted, unpushed, not deployed, pending targeted re-review of
 just the two fixes.
 
-## Shared Access Hardening V1 (feat/shared-accountability-v1, candidate, uncommitted, NOT deployed) — 2026-09-10
+## Shared Access Hardening V1 (integrated to main — 6d491e6) — 2026-09-10
 
 Prerequisite security milestone for a future Wife/Shared Accountability feature. That feature —
 letting a linked partner see today's planned priority titles and progress — was correctly
@@ -559,7 +591,7 @@ feature code, no `/shared` payload, no schema migration. **Pair-code TTL** is ex
 deferred (the reviewer classified it safe-to-defer once F1 + F2 land). Official
 Firebase-emulator verification remains a separate hard gate before deployment.
 
-## Motivation Pressure Cleanup V1 (feat/motivation-pressure-cleanup-v1, candidate, uncommitted) — 2026-09-10
+## Motivation Pressure Cleanup V1 (integrated to main — 57ce9aa) — 2026-09-10
 
 `today-simplification-v1` already CSS-hid the wallet card, streak tile, "Today's pulse" score
 and Awareness Signal from the Today surface. But four pressure mechanics were still reachable
@@ -614,7 +646,7 @@ drops `focus-wallet-card` from a hidden-elements list. `tests/analytics-truth.sp
 (still validates the dormant `computeFocusWallet` honesty boundary). Full run: `npm test` green,
 436/436 Playwright green, `runtime-mirror --check` clean, `npm run lint` 0 errors.
 
-## Onboarding Rewrite V1 (feat/onboarding-rewrite-v1, candidate, uncommitted) — 2026-09-10
+## Onboarding Rewrite V1 (integrated to main — baa001b) — 2026-09-10
 
 First-run onboarding still taught the pre-Plan-Tomorrow product: a 30-minute ping loop
 ("ChronaSense pings you every 30 minutes and asks… what were you just doing?"), "log every
@@ -654,7 +686,7 @@ No production-code test needed changes; the one pre-existing onboarding assertio
 (`tests/install-interruption.spec.js`, "first-visit … never compete with install") still passes
 unchanged.
 
-## Plan Linkage + Up Next Ordering V1 — targeted fixes from independent review (same candidate) — 2026-09-10
+## Plan Linkage + Up Next Ordering V1 — targeted fixes from independent review (integrated to main — 724f305) — 2026-09-10
 
 An independent review verdict of **FIX FIRST** (architecture accepted, four confirmed defects)
 was addressed before landing:
@@ -700,7 +732,7 @@ historical free-text display itself stays covered by the new spec's own test. Fu
 before), full `npx playwright test` (428/428, 0 failures this run), `node
 scripts/runtime-mirror.mjs --check` (clean after `--write`).
 
-## Plan Linkage + Up Next Ordering V1 (feat/plan-linkage-up-next-v1, candidate, uncommitted) — 2026-09-10
+## Plan Linkage + Up Next Ordering V1 (integrated to main — 724f305) — 2026-09-10
 
 Closes the two real gaps a Plan-to-Actual daily-loop audit found in an otherwise-shipped
 feature: plan-to-actual matching was pure text equality (a rename between planning and starting
@@ -769,7 +801,7 @@ class of expected cross-script-file warning already present for `updateTimerTask
 `cancelNativePing`/etc. in this codebase), full `npx playwright test` (419/419), `node
 scripts/runtime-mirror.mjs --check` (clean after `--write`).
 
-## Coarse Evidence Durability V1 — independent-review fix pass (same candidate) — 2026-09-10
+## Coarse Evidence Durability V1 — independent-review fix pass (integrated to main — 4e95098) — 2026-09-10
 
 Three findings from an independent review, fixed before landing (no rebuild, same architecture):
 - `coarse-life-evidence-repository.js` `save()` now stamps `undoRestoredAt` when a save lands on
@@ -799,7 +831,7 @@ auto-logged-schedule smoke test, reproduced clean 3/3 in isolation — a pre-exi
 flake, not a regression from this pass), `node scripts/runtime-mirror.mjs --check` (clean after
 `--write`).
 
-## Coarse Evidence Durability V1 (feat/coarse-evidence-durability-v1, uncommitted) — 2026-09-10
+## Coarse Evidence Durability V1 (integrated to main — 4e95098) — 2026-09-10
 
 Closes the pre-dogfood durability gate: coarse life evidence (Phase 6H) was local-only
 (`ta3-coarse-life-evidence-v1`), so another browser/device never saw it and clearing browser
@@ -856,7 +888,7 @@ coarse evidence, a sync-status widget, a "Sync now" action, onboarding rewrite, 
 streak decision.
 
 
-## Phase 6I/J — Day-to-day UX correction pass (same candidate — feat/review-reconciliation-v1, uncommitted) — 2026-09-10
+## Phase 6I/J — Day-to-day UX correction pass (integrated to main — 02bc5d1) — 2026-09-10
 
 A REMOVE / HIDE / QUIETEN pass over the 6I/J candidate — no rebuild, no new persistence,
 no new daily action. Net default UI decreased. Technical architecture unchanged
@@ -897,7 +929,7 @@ tests: `tests/review-reconciliation.spec.js` +6 UX-pass cases (button hierarchy,
   `tests/review-simplification.spec.js` gap-detour tests now click **Change** before
   **Log time** (acknowledged state has no Log time button).
 
-## Phase 6I/J — Review reconciliation + Today gap replacement V1 (candidate — feat/review-reconciliation-v1, uncommitted) — 2026-09-10
+## Phase 6I/J — Review reconciliation + Today gap replacement V1 (integrated to main — 02bc5d1) — 2026-09-10
 
 Base `2948e2e2e591e18d7f40bade92c531338b77885a` (origin/main, verified). Isolated worktree;
 primary worktree (dirty `README.md` on `docs/phase12-personal-intelligence-design`) untouched;
@@ -966,7 +998,7 @@ coverage %, combined exact+estimated allocation, coarse-evidence durability / cr
 sync, Life Ledger projection, export/import, Wife/Shared, Personal Model/Advisor. **Durability
 is still required before Wife/Shared or serious dogfood.**
 
-## Phase 6H — Coarse life evidence V1 (candidate — feat/coarse-life-evidence-v1, uncommitted) — 2026-09-09
+## Phase 6H — Coarse life evidence V1 (integrated to main — 2948e2e) — 2026-09-09
 
 Base `3c4678a7cd1688476b9b0b35849c25b7fd26d479` (origin/main, verified). Isolated worktree;
 `main`, Meal and Workout source apps untouched. No commit/push/merge/deploy; no Firebase or
@@ -1082,7 +1114,7 @@ rejection with both records surviving, a label containing `'`/`"`/`<`/`>`/`&`/th
 still targeted, and three corrupted-store variants (invalid JSON, unsupported schemaVersion, a
 structurally invalid record) each proving Review still opens and stays usable.
 
-## Phase 6G.2 — Deterministic analytics truth fixes V1 (candidate — feat/analytics-truth-fixes-v1, uncommitted) — 2026-09-09
+## Phase 6G.2 — Deterministic analytics truth fixes V1 (integrated to main — 3c4678a) — 2026-09-09
 
 Base `9db74858a8da9c6f44a2a51e9c6cc26619cb8302` (origin/main, verified). Isolated worktree;
 `main`, Meal and Workout source apps untouched. No commit/push/merge/deploy; no Firebase or
@@ -1210,7 +1242,7 @@ findings (PC-Time attention-signals parity, Today `#s-deep`/`#s-streak` confirme
 boundary, and this corrected Playwright finding). Not a queued task — direct user milestone,
 TASKS.md unchanged.
 
-## Phase 6G.1 — Deterministic source truth fixes V1: expired Focus completion boundary (candidate — feat/source-truth-fixes-v1, uncommitted) — 2026-09-09
+## Phase 6G.1 — Deterministic source truth fixes V1: expired Focus completion boundary (integrated to main — 9db7485) — 2026-09-09
 
 Base `c47f1e5227c0a9993bf1c004b6939b7ce332cb71` (origin/main, verified). Isolated
 worktree; `main`, Meal and Workout source apps untouched. One production file changed
