@@ -679,5 +679,28 @@ test('listener-driven reconciliation: attach()\'s own registered .on(\'value\') 
 
     assertRemoteValid(roomRef);
     assert.equal(bootstrapFreshDevice(roomRef).revisions.length, 2);
+
+    // Explicit detach()/re-attach() + a repeated identical listener firing:
+    // reconciliation must not oscillate. Once dropped, 'zzz-losing' is not a
+    // key remote holds anymore, so nothing a listener re-observes can bring
+    // it back — proven directly, not just inferred from the merge algorithm.
+    listeningBridgeB.detach();
+    listeningBridgeB.attach(); // immediate re-fire on attach(), same remote state
+    let bStatusAfterReattach = deviceB.repository.status();
+    assert.equal(bStatusAfterReattach.revisions.length, 2);
+    assert.ok(!bStatusAfterReattach.revisions.some(r => r.id === 'zzz-losing'), 'reattach does not resurrect the losing id');
+    assert.ok(bStatusAfterReattach.revisions.some(r => r.id === 'aaa-canonical'));
+
+    // Firing the SAME snapshot again (simulating a redundant reconnect
+    // notification) repeatedly must also be a stable no-op, never an
+    // oscillation back to the losing id.
+    for (let i = 0; i < 3; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      listeningBridgeB.handleRemoteSnapshot(remoteMap(roomRef));
+    }
+    bStatusAfterReattach = deviceB.repository.status();
+    assert.equal(bStatusAfterReattach.revisions.length, 2);
+    assert.ok(bStatusAfterReattach.revisions.some(r => r.id === 'aaa-canonical'));
+    assert.ok(!bStatusAfterReattach.revisions.some(r => r.id === 'zzz-losing'));
   });
 });
