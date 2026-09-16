@@ -47,11 +47,30 @@ Current Objective.)_
   optional `reviews[].focusRating` self-rating (Focused / Mixed / Distracted). No new collector,
   tab, dashboard, score, daemon, blocker, Firebase subsystem, or Life Ledger coupling. Related
   work-tool switching is not treated as distraction.
-- Phase 12 -- Personal Intelligence v1 (design checkpoint fixed post independent review, 2026-09-06;
-  see `docs/PHASE12_PERSONAL_INTELLIGENCE.md`). Deterministic engine extending Cross-Domain
-  Intelligence (single ranker, no parallel engine); one primary next action or explicit
-  INSUFFICIENT_DATA; read-only advisory; Claude interpretation deferred to a later phrase-only
-  slice (12.5). NOT built.
+- Phase 12.0A -- static root<->www parity + safe tooling (integrated to main, `922297d`,
+  2026-09-06). See `docs/PHASE12_PERSONAL_INTELLIGENCE.md` and `CHANGELOG.md`.
+- **Independent feature-branch track, 2026-09-09 through 2026-09-16 (NOT part of Phase 12):**
+  47 further commits landed on `main` after Phase 12.0A, none touching Phase 12 code --
+  Coarse Life Evidence V1 + Durability V1, Phase 6I/J Review Reconciliation, Plan Linkage +
+  Up Next Ordering V1, Onboarding Rewrite V1, Motivation Pressure Cleanup V1, Shared Access
+  Hardening V1, Time Truth V1 + Timeline Truth Follow-up V1, Wife/Shared Accountability V1,
+  Scheduled Auto-Log Reliability V1, Partner View V1 + mobile navigation, Today Persistent
+  Sections V1, Plan Tomorrow Quick Time V1, Daily Reconciliation V1, Tomorrow View V1, Plan
+  Time Range V1, Tomorrow Timeline Preview V1, and Personal Day Boundary Foundation +
+  Persistence/Operational Plan Authority V1. Full detail and commit SHAs: `CHANGELOG.md` and
+  `STATUS.md`'s 2026-09-16 entry. This is the same kind of separate, ungated Phase-branch
+  track the "Current Objective" preamble above already describes for Phase 6-11.
+- Phase 12.0B -- Android runtime compatibility + offline cold start safety. **Still the next
+  Phase-12-specific step. NOT started.** A stale local-only branch
+  `fix/phase12-0b-android-runtime` (tip `a146565`, far behind current `main`) exists as an
+  unfinished, unmerged reference implementation only -- not suitable for direct integration;
+  rebuild against current `main` rather than rebasing it.
+- Phase 12.1-12.4 -- deterministic Personal Intelligence engine (extends Cross-Domain
+  Intelligence; one primary next action or explicit INSUFFICIENT_DATA; read-only advisory).
+  NOT built. Sequence confirmed still current against `docs/PHASE12_PERSONAL_INTELLIGENCE.md`
+  §18-19 as of 2026-09-16.
+- Phase 12.5 -- Claude phrase-only interpretation layer, after its own security precondition
+  (see `docs/PHASE12_PERSONAL_INTELLIGENCE.md` §12). NOT built.
 
 ---
 

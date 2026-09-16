@@ -1,6 +1,18 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+**Coverage note (2026-09-16):** this file documents structure through roughly Phase
+11.8/12.0A. It does NOT yet have entries for modules added by the feature-branch work
+that landed after Phase 12.0A (see `STATUS.md`'s 2026-09-16 entry and `CHANGELOG.md`
+for what shipped) — at minimum: `tomorrow-view-model.js`/`-ui.js`, `partner-view-*`,
+`personal-day-boundary-model.js`/`-repository.js`/`-sync.js`, `operational-plan-model.js`/
+`-repository.js`/`-sync.js`, `shared-accountability-model.js`, `plan-tomorrow-model.js`'s
+Daily Reconciliation additions, and related test files. Adding these at the same
+per-module technical depth as the entries below is a substantial task on its own and was
+out of scope for this documentation-reconciliation pass — flagging the gap here instead
+of silently leaving it undocumented. Do not assume a module is absent just because it
+has no entry below; check the file listing / `git log` / `CHANGELOG.md` first.
+
 ---
 
 ## Evidence semantics
