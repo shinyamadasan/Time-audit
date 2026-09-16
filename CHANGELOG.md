@@ -517,9 +517,6 @@ stale-date cases). Re-ran the full suite after the fix: `npm test` 681 assertion
 Playwright 449 tests (443 + 6 new), `npm run lint` 0 errors, `check:www-parity` OK,
 `git diff --check` clean — all pass.
 
-Candidate remains uncommitted, unpushed, not deployed, pending targeted re-review of
-just the two fixes.
-
 ## Shared Access Hardening V1 (integrated to main — 6d491e6) — 2026-09-10
 
 Prerequisite security milestone for a future Wife/Shared Accountability feature. That feature —
