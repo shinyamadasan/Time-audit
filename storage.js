@@ -778,6 +778,9 @@ function initAutoSync() {
         fbDb.ref('.info/connected').off();
       }
       if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.detach();
+      // Personal Day Boundary Live Wiring V1 — detaches the boundary listener and
+      // every per-day operational plan listener this device had open.
+      if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.detach();
       // Partner View V1 — a signed-out session must never leave the previous
       // account's partner data visible.
       if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
@@ -848,6 +851,11 @@ function startSync() {
   // Durability V1 — attach the coarse-life-evidence remote listener/bootstrap alongside the
   // rest of this room's sync. A no-op if that module hasn't loaded (defensive only).
   if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.attach();
+  // Personal Day Boundary Live Wiring V1 — attach the boundary revision listener and,
+  // only when a boundary is actually enabled, a per-day listener for the current and
+  // upcoming operational days. Never a whole-subtree listener over every operational
+  // day that has ever existed, and a complete no-op for a legacy account.
+  if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.attachLiveDays();
 
   fbDb.ref('.info/connected').on('value', snap => {
     const online = snap.val();
@@ -869,6 +877,10 @@ function startSync() {
       // pushAllLocal() diffs against the last remote snapshot it saw, so this is a no-op
       // once everything is already converged.
       if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.pushAllLocal();
+      // Personal Day Boundary Live Wiring V1 — retry any boundary revision or
+      // operational plan write made while offline. Both diff against what remote
+      // already holds, so this is a no-op once converged.
+      if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.pushAllLocal();
     } else {
       stopSyncReconcileTicker();
       const pill = document.getElementById('sync-pill');
@@ -1765,6 +1777,7 @@ function teardownRoomListeners() {
   fbDb.ref('.info/connected').off();
   if (fbRoomRef) fbRoomRef.off();
   if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.detach();
+  if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.detach();
   if (_nudgesRef)     { _nudgesRef.off();     _nudgesRef     = null; }
   if (_partnerUidRef) { _partnerUidRef.off(); _partnerUidRef = null; }
   if (_pairCodeRef)   { _pairCodeRef.off();   _pairCodeRef   = null; }

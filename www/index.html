@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="tomorrow-view.css?v=20260913-tomorrow-view-v1">
 <link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
 <link rel="stylesheet" href="partner-view.css?v=20260912-partner-view-v1">
+<link rel="stylesheet" href="operational-plan.css?v=20260917-personal-day-boundary-live-wiring-v1">
 </head>
 <body>
 <div id="desktop-layout">
@@ -115,6 +116,11 @@
       <button class="btn sm ghost" onclick="focusTodayAction()">Focus mode</button>
     </div>
   </section>
+  <!-- Personal Day Boundary Live Wiring V1 — rendered ONLY for an account that has
+       explicitly enabled a personal day boundary. It stays hidden and empty (and so
+       out of the layout, tab order and accessibility tree) for every legacy account,
+       which is what keeps Today byte-for-byte unchanged for them. -->
+  <section id="operational-plan-section" hidden aria-label="Personal day plan"></section>
   <section id="today-commitments" aria-label="Today's commitments">
     <div class="tc-head">
       <h2>Today's commitments</h2>
@@ -776,6 +782,16 @@
         </select>
       </div>
     </div>
+  </div>
+
+  <!-- Personal Day Boundary Live Wiring V1. Deliberately its OWN settings section,
+       not a row inside "Performance targets": it is an append-only revisioned
+       store of its own, never a field on the legacy `settings` object, and it is
+       never pushed through saveSettings(). The section body is rendered by
+       personal-day-boundary-ui.js. -->
+  <div class="settings-section">
+    <div class="settings-title">Personal day boundary</div>
+    <div id="personal-day-boundary-settings"></div>
   </div>
 
 
@@ -1665,6 +1681,9 @@
 <script type="module" src="coarse-life-evidence-sync.js?v=20260910-coarse-evidence-durability-v1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20260917-personal-day-boundary-live-wiring-v1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20260917-personal-day-boundary-live-wiring-v1"></script>
+<script type="module" src="operational-plan-ui.js?v=20260917-personal-day-boundary-live-wiring-v1"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -6371,6 +6390,25 @@ globalThis.getPlanTomorrowAppContext = () => ({
   saveItems: savePlanItems
 });
 
+/** Personal Day Boundary Live Wiring V1 — a SEPARATE accessor from
+ *  getPlanTomorrowAppContext above, deliberately not an extension of it: nothing this
+ *  milestone adds may change what the already-shipping legacy Plan Tomorrow / Tomorrow
+ *  View consumers read. It exposes only what the operational-day surface needs, and the
+ *  two legacy-plan functions here (getPlanItemsRaw / savePlanItems) are the app's own
+ *  existing authoritative plans[dateKey] path — so a personal day that is still
+ *  legacy-governed reads and writes exactly the code that already ships. */
+globalThis.getOperationalPlanAppContext = () => ({
+  timezone: settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+  maxItems: PLAN_MAX,
+  deviceId: syncedDeviceId,
+  createItem: createPlanItem,
+  stampItem: stampPlanItemMutation,
+  normalizeTask: normalizePlanTask,
+  rawItems: getPlanItemsRaw,
+  plan: dateKey => plans[dateKey] || null,
+  saveItems: savePlanItems
+});
+
 /** Minutes actually tracked against a planned task. Prefers an exact planItemId match (survives
  *  the task being renamed after a linked Start/Focus launch — see startPlanItem());
  *  unlinked entries (no planItemId, e.g. predating this field, or started outside the plan flow)
@@ -7901,6 +7939,10 @@ function renderSettings() {
   renderDayTemplatePanel();
   renderTemplateList();
   renderBudgets();
+  // Personal Day Boundary Live Wiring V1 — a pure read of the boundary store.
+  // Rendering never creates a revision, so opening Settings can never put a
+  // legacy account into operational mode.
+  if (typeof globalThis.renderPersonalDayBoundarySettings === 'function') globalThis.renderPersonalDayBoundarySettings();
 }
 
 function isInQuietHours(ts) {
@@ -11358,6 +11400,11 @@ setInterval(() => {
   if (!running && !breakActive) renderTodayOnDateChange();
   autoLogHeartbeatTick();
   if (typeof globalThis.refreshTomorrowView === 'function') globalThis.refreshTomorrowView();
+  // Personal Day Boundary Live Wiring V1 — a boundary crossing (e.g. 18:00) is a
+  // time event, not a user action, so the personal-day panes have to rotate on
+  // their own. A no-op for a legacy account (the surface renders nothing) and a
+  // pure read otherwise.
+  if (typeof globalThis.refreshOperationalPlanSurfaceIfMounted === 'function') globalThis.refreshOperationalPlanSurfaceIfMounted();
 }, 60000);
 
 // ══════════════════════════════════════════════════════
