@@ -96,6 +96,48 @@ test('validation does not reject what the legacy midnight-clamped validator woul
   assert.ok(result.endMs > result.startMs);
 });
 
+// ── start-only timed items (Live Wiring V1 defect fix) ──────────────────────
+//
+// `durationMinutes` and `endClock` are BOTH optional on a plan item — the
+// legacy store's ordinary "+ Add time, no length" shape. Forwarding that shape
+// to resolvePlannedRangeInOperationalDay (which requires exactly one of the
+// two) rejected it as 'invalid-input', so the operational store could not hold
+// the most common timed item the legacy store already holds.
+
+test('a start-only timed item (when, no duration, no endClock) is VALID and resolves its start inside the day', () => {
+  const revisions = eighteenHundredHistory();
+  const ref = operationalDayContaining(Date.parse('2026-09-14T12:00:00Z'), revisions); // Monday-18:00 day
+  const result = validateOperationalPlanItemRange(ref, { when: '22:00' }, revisions);
+  assert.equal(result.ok, true);
+  assert.equal(typeof result.startMs, 'number');
+  assert.equal(result.endMs, undefined, 'a start-only item has no end — none is invented for it');
+});
+
+test('a start-only timed item AFTER midnight is valid on an 18:00-boundary day (it is inside that day, not the next one)', () => {
+  const revisions = eighteenHundredHistory();
+  const ref = operationalDayContaining(Date.parse('2026-09-14T12:00:00Z'), revisions);
+  const result = validateOperationalPlanItemRange(ref, { when: '01:00' }, revisions);
+  assert.equal(result.ok, true);
+  assert.equal(result.startMs, Date.parse('2026-09-14T17:00:00Z'), '01:00 Manila on the FOLLOWING calendar date');
+});
+
+test('a start-only item whose `when` is not a canonical HH:MM is rejected, never silently stored as timed', () => {
+  const revisions = eighteenHundredHistory();
+  const ref = operationalDayContaining(Date.parse('2026-09-14T12:00:00Z'), revisions);
+  assert.deepEqual(validateOperationalPlanItemRange(ref, { when: 'after lunch' }, revisions), { ok: false, reason: 'invalid-input' });
+});
+
+test('a zero or negative duration on a timed item is still rejected, not treated as start-only', () => {
+  const revisions = eighteenHundredHistory();
+  const ref = operationalDayContaining(Date.parse('2026-09-14T12:00:00Z'), revisions);
+  // durationMinutes: 0 is not a positive duration, so this is a start-only item
+  // by the same rule the legacy validPlanItemDuration applies — its start is
+  // valid and no range is asserted.
+  const result = validateOperationalPlanItemRange(ref, { when: '22:00', durationMinutes: 0 }, revisions);
+  assert.equal(result.ok, true);
+  assert.equal(result.endMs, undefined);
+});
+
 // ── operational preparation (§14) ───────────────────────────────────────────
 
 test('normalizeOperationalPreparation requires targetOperationalDayId, not a calendar targetDate', () => {
