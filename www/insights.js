@@ -694,7 +694,14 @@ function renderReviewAttention(dateKey, selfRating) {
   const dayEntries = (typeof getEntriesForDateWindow === 'function'
     ? getEntriesForDateWindow(key)
     : []).filter(e => e && !e.missed && !e.deleted);
-  const planTasks = (typeof getPlanItems === 'function' ? getPlanItems(key) : [])
+  // The planned labels for a reviewed calendar date come from every
+  // authoritative personal day overlapping it (Decision B), not from
+  // plans[date] — which is empty for a date governed by a personal day. These
+  // are heuristic inputs (did tracked work match something planned?), so the
+  // union of labels is the right shape here; Review's own Plan vs Actual is
+  // what renders the days separately.
+  const planTasks = (typeof planTargetsForCalendarDate === 'function' ? planTargetsForCalendarDate(key) : [])
+    .flatMap(target => planItemsFor(target))
     .map(i => i && i.task)
     .filter(Boolean);
 

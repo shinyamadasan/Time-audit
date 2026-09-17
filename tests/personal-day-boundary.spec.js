@@ -156,7 +156,7 @@ test('enabling an 18:00 boundary at 08:00 states when it activates, then activat
 
 // ── the owner's graveyard workflow through the real UI ──────────────────────
 
-test('at 08:00 the owner can prepare the upcoming 18:00 personal day, and it is the current plan after an 18:00 reload', async ({ page }) => {
+test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ONE workflow, and it is the current plan after an 18:00 reload', async ({ page }) => {
   await openApp(page);
   await openSettings(page);
   await panel(page).locator('[data-pdb-input="enable"]').check();
@@ -166,36 +166,61 @@ test('at 08:00 the owner can prepare the upcoming 18:00 personal day, and it is 
   const stored = await boundaryStore(page);
 
   await page.evaluate(() => showView('today'));
+  // The personal-day section is now read-only status + recovery: it names the
+  // day, and offers no second editor.
   await expect(surface(page)).toBeVisible();
+  await expect(surface(page)).toContainText('Personal day');
+  await expect(surface(page).locator('form')).toHaveCount(0);
+  await expect(surface(page).locator('button')).toHaveCount(0);
+  await expect(surface(page)).toContainText('still your existing calendar day');
 
-  // The day already in progress at 08:00 is still legacy-governed — stated, not hidden.
-  const nextPane = surface(page).locator('[data-op-pane-root="upcoming"]');
-  await expect(surface(page).locator('[data-op-pane-root="current"]')).toContainText('still uses your existing calendar-day plan');
-  await expect(nextPane).not.toContainText('still uses your existing calendar-day plan');
+  // Prepare the upcoming personal day through the ordinary Prepare Tomorrow
+  // workflow — the only planning editor in the product.
+  await page.evaluate(() => openPlanTomorrow());
+  await expect(page.locator('#plan-tomorrow-overlay')).toHaveClass(/open/);
+  // It names the personal-day interval, not a calendar date.
+  await expect(page.locator('#plan-tomorrow-date')).toContainText('18:00');
+  await expect(page.locator('#plan-tomorrow-date')).toContainText('→');
 
-  // Prepare the upcoming personal day, including a post-midnight block that a
-  // calendar-day plan could not represent.
-  await nextPane.locator('input[name="task"]').fill('Night shift block');
-  await nextPane.locator('input[name="when"]').fill('22:00');
-  await nextPane.getByRole('button', { name: 'Add' }).click();
-  await expect(nextPane).toContainText('Night shift block');
-
-  await nextPane.locator('input[name="task"]').fill('Post-midnight review');
-  await nextPane.locator('input[name="when"]').fill('01:00');
-  await nextPane.getByRole('button', { name: 'Add' }).click();
-  await expect(nextPane).toContainText('Post-midnight review');
+  await page.locator('#plan-tomorrow-add input[name="task"]').fill('Night shift block');
+  await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
+  await page.locator('#plan-tomorrow-add input[name="task"]').fill('Post-midnight review');
+  await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
+  // A post-midnight time a calendar-day plan could not represent is ordinary here.
+  await page.locator('[data-pt-action="edit-schedule"]').last().click();
+  await page.locator('.pt-time-input').fill('01:00');
+  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
 
   // It went into the operational store, keyed by an operationalDayId (never a bare date),
-  // and the legacy plans[dateKey] store was not touched.
+  // with its preparation, and the legacy plans[dateKey] store was not touched.
   const operational = JSON.parse(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1')));
   const ids = Object.keys(operational.plans);
   expect(ids).toHaveLength(1);
   expect(ids[0]).toMatch(/^odv1:/);
+  expect(operational.plans[ids[0]].preparation.targetOperationalDayId).toBe(ids[0]);
+  expect(operational.plans[ids[0]].items.filter(i => !i.deleted).map(i => i.task).sort()).toEqual(['Night shift block', 'Post-midnight review']);
   expect(await page.evaluate(() => localStorage.getItem('ta3-plans'))).toBe('{}');
+
+  // Every prepared-state consumer agrees, right now, at 08:00.
+  expect(await page.evaluate(() => {
+    const upcoming = window.PlanAuthority.upcoming();
+    return {
+      prepared: window.PlanAuthority.preparedState(upcoming).prepared,
+      consistency: window.PlanAuthority.consistency(upcoming),
+      readyNow: window.PlanAuthority.readyNow(upcoming, []),
+      streak: window.PlanAuthority.streak().current,
+    };
+  })).toEqual({ prepared: true, consistency: 'ahead', readyNow: true, streak: 1 });
+  // Tomorrow View shows that same prepared plan, not "not prepared yet".
+  await page.locator('#tmr-tab-tomorrow').click();
+  await expect(page.locator('#tomorrow-view')).toContainText('Night shift block');
+  await expect(page.locator('#tomorrow-view')).toContainText('Prepared');
+  await page.locator('#tmr-tab-today').click();
 
   const operationalStore = await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1'));
 
-  // ── reload at 18:00: the prepared plan is now the CURRENT personal day's plan ──
+  // ── reload at 18:00: the prepared plan is now the CURRENT day's plan strip ──
   await page.addInitScript(({ boundaryStore, operationalStore, now }) => {
     const RealDate = Date;
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
@@ -203,14 +228,15 @@ test('at 08:00 the owner can prepare the upcoming 18:00 personal day, and it is 
     localStorage.setItem('ta3-operational-plans-v1', operationalStore);
   }, { boundaryStore: stored, operationalStore, now: Date.parse('2026-09-16T18:00:00+08:00') });
   await page.reload();
-  await page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object');
+  await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
 
-  const currentPane = surface(page).locator('[data-op-pane-root="current"]');
-  await expect(currentPane).toContainText('Night shift block');
-  await expect(currentPane).toContainText('Post-midnight review');
-  await expect(currentPane).not.toContainText('still uses your existing calendar-day plan');
-  // And the next personal day is a genuinely fresh, empty one.
-  await expect(surface(page).locator('[data-op-pane-root="upcoming"]')).toContainText('Nothing planned yet.');
+  await expect(page.locator('#plan-strip')).toContainText('Night shift block');
+  await expect(page.locator('#plan-strip')).toContainText('Post-midnight review');
+  // Same record, not a copy: still exactly one operational plan id, unchanged.
+  expect(Object.keys(JSON.parse(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1'))).plans)).toEqual(ids);
+  expect(await page.evaluate(() => localStorage.getItem('ta3-plans'))).toBe('{}');
+  // The next personal day is a genuinely fresh, empty one.
+  expect(await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.upcoming()))).toEqual([]);
 
   // ── 00:30 the following calendar day: midnight must NOT rotate it ──
   await page.addInitScript(({ now }) => {
@@ -218,8 +244,19 @@ test('at 08:00 the owner can prepare the upcoming 18:00 personal day, and it is 
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
   }, { now: Date.parse('2026-09-17T00:30:00+08:00') });
   await page.reload();
-  await page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object');
-  await expect(surface(page).locator('[data-op-pane-root="current"]')).toContainText('Night shift block');
+  await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
+  await expect(page.locator('#plan-strip')).toContainText('Night shift block');
+  expect(await page.evaluate(() => window.PlanAuthority.current().id)).toBe(ids[0]);
+
+  // ── 18:00 the next day: the next personal day begins ──
+  await page.addInitScript(({ now }) => {
+    const RealDate = Date;
+    window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
+  }, { now: Date.parse('2026-09-17T18:00:00+08:00') });
+  await page.reload();
+  await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
+  expect(await page.evaluate(() => window.PlanAuthority.current().id)).not.toBe(ids[0]);
+  await expect(page.locator('#plan-strip')).not.toContainText('Night shift block');
 });
 
 // ── long-lived session: the real 60s interval rolls listeners over 18:00 ────

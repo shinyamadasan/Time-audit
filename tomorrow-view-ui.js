@@ -1,4 +1,4 @@
-import { normalizePreparation, planItemScheduleLabel, planTomorrowTargetDate } from './plan-tomorrow-model.js';
+import { planItemScheduleLabel } from './plan-tomorrow-model.js';
 import { deriveTomorrowViewState } from './tomorrow-view-model.js';
 import { deriveTomorrowTimelinePreview } from './tomorrow-timeline-model.js';
 
@@ -56,19 +56,22 @@ function rowHtml(timeLabel, title) {
   return `<div class="tmr-row"><span class="tmr-row-time">${timeLabel ? escape(timeLabel) : '—'}</span><span class="tmr-row-title">${escape(title)}</span></div>`;
 }
 
-/** Reads today's already-authoritative sources for tomorrow's date — never a second Date+24h
- *  computation and never a locally-cached key (see planTomorrowTargetDate — same helper Plan
- *  Tomorrow itself uses, so the two can never disagree about which calendar day "tomorrow" is). */
+/** Tomorrow View inspects the UPCOMING AUTHORITATIVE DAY — the same target the
+ *  Prepare Tomorrow workflow edits, so the two can never describe different
+ *  plans. For a legacy account that is tomorrow's calendar date exactly as
+ *  before; for a boundary account at 08:00 it is the personal day starting at
+ *  the next boundary. */
 function computeViewData() {
   const app = context();
   const timezone = app.timezone;
-  const targetDate = planTomorrowTargetDate(Date.now(), timezone);
-  const plan = app.plan(targetDate);
-  const preparation = normalizePreparation(plan?.preparation, targetDate);
-  const activeItems = app.rawItems(targetDate).filter(item => !item.deleted);
+  const authority = globalThis.PlanAuthority;
+  if (!authority) throw new Error('Tomorrow View is not available yet.');
+  const target = authority.upcoming();
+  const preparation = authority.preparation(target);
+  const activeItems = authority.items(target);
   const orderedItems = typeof globalThis.planDisplayOrder === 'function' ? globalThis.planDisplayOrder(activeItems) : activeItems;
   const routineSummary = typeof globalThis.getPlanTomorrowRoutineSummary === 'function'
-    ? globalThis.getPlanTomorrowRoutineSummary(targetDate, timezone)
+    ? globalThis.getPlanTomorrowRoutineSummary(target, timezone)
     : { mismatch: false, rows: [] };
   const applicableRoutines = routineSummary.mismatch ? [] : routineSummary.rows.filter(row => !row.skipped && row.actionable);
   const viewState = deriveTomorrowViewState({
@@ -76,11 +79,20 @@ function computeViewData() {
     activeItemCount: orderedItems.length,
     applicableRoutineCount: applicableRoutines.length
   });
-  return { targetDate, items: orderedItems, applicableRoutines, routineMismatch: routineSummary.mismatch, viewState };
+  return { target, items: orderedItems, applicableRoutines, routineMismatch: routineSummary.mismatch, viewState };
 }
 
-function headingHtml(targetDate) {
-  return `<div class="tmr-head"><div class="tmr-kicker">Tomorrow</div><div class="tmr-date">${escape(formatHeadingDate(targetDate))}</div></div>`;
+function headingHtml(target) {
+  // A personal day is named by its real interval; a calendar day by its date.
+  const label = target.store === 'operational'
+    ? formatPersonalDayWindow(target)
+    : formatHeadingDate(target.dateKey);
+  return `<div class="tmr-head"><div class="tmr-kicker">${target.store === 'operational' ? 'Next personal day' : 'Tomorrow'}</div><div class="tmr-date">${escape(label)}</div></div>`;
+}
+
+function formatPersonalDayWindow(target) {
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: target.timezone, weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${fmt.format(new Date(target.startMs)).replace(',', '')} → ${fmt.format(new Date(target.endMs)).replace(',', '')}`;
 }
 
 function footerHtml(label) {
@@ -95,12 +107,16 @@ function footerHtml(label) {
  *  Templates have no timezone-mismatch concept of their own (unlike Daily Routines): they always
  *  read the single account `settings.timezone`, so there is nothing analogous to
  *  routineMismatch to guard against here. */
-function tomorrowTemplateEntries(targetDate) {
+function tomorrowTemplateEntries(target) {
   if (typeof globalThis.generateTemplateEntries !== 'function') return [];
+  const authority = globalThis.PlanAuthority;
   const toHHMM = typeof globalThis.tzHHMM === 'function' ? globalThis.tzHHMM : null;
   if (!toHHMM) return [];
   const displayLabel = typeof globalThis.activityDisplayLabel === 'function' ? globalThis.activityDisplayLabel : value => value;
-  return globalThis.generateTemplateEntries(targetDate).map(entry => ({
+  // Template identity stays calendar-based (its factual source identity); only
+  // the SELECTION is by instant, so a personal day shows the occurrences that
+  // actually fall inside it — including post-midnight ones.
+  return authority.templatesForTarget(target, date => globalThis.generateTemplateEntries(date)).map(entry => ({
     templateId: entry.templateId,
     date: entry.date,
     activity: displayLabel(entry.activity),
@@ -135,14 +151,14 @@ function ttpUnscheduledRowHtml(row) {
  *  viewState === 'prepared' would hide a real, already-scheduled future block; this call site
  *  (inside render(), once, before the viewState branch) is what makes that renders every time,
  *  on every branch, without duplicating the call. */
-function renderTimelinePreview({ targetDate, items, applicableRoutines, routineMismatch }) {
+function renderTimelinePreview({ target, items, applicableRoutines, routineMismatch }) {
   if (!timelinePreview) return;
   let preview;
   try {
     preview = deriveTomorrowTimelinePreview({
       priorityItems: items,
       routineRows: routineMismatch ? [] : applicableRoutines,
-      templateEntries: tomorrowTemplateEntries(targetDate)
+      templateEntries: tomorrowTemplateEntries(target)
     });
   } catch {
     timelinePreview.innerHTML = '<p class="tmr-muted" role="status">Tomorrow’s timeline can’t be shown right now.</p>';
@@ -171,17 +187,17 @@ function render() {
     if (timelinePreview) timelinePreview.innerHTML = '<p class="tmr-muted" role="status">Tomorrow’s timeline can’t be shown right now.</p>';
     return;
   }
-  const { targetDate, items, applicableRoutines, routineMismatch, viewState } = data;
-  renderTimelinePreview({ targetDate, items, applicableRoutines, routineMismatch });
+  const { target, items, applicableRoutines, routineMismatch, viewState } = data;
+  renderTimelinePreview({ target, items, applicableRoutines, routineMismatch });
 
   if (viewState === 'unprepared-empty') {
-    tomorrowPane.innerHTML = headingHtml(targetDate)
+    tomorrowPane.innerHTML = headingHtml(target)
       + '<p class="tmr-empty">Tomorrow hasn’t been prepared yet.</p>'
       + footerHtml('Plan tomorrow');
     return;
   }
   if (viewState === 'open-day') {
-    tomorrowPane.innerHTML = headingHtml(targetDate)
+    tomorrowPane.innerHTML = headingHtml(target)
       + '<p class="tmr-open-day">Tomorrow is an Open Day.</p>'
       + footerHtml('Edit tomorrow');
     return;
@@ -197,7 +213,7 @@ function render() {
     ? items.map(item => rowHtml(planItemScheduleLabel(item), item.task)).join('')
     : '<p class="tmr-muted">No one-off priorities yet.</p>';
 
-  tomorrowPane.innerHTML = headingHtml(targetDate)
+  tomorrowPane.innerHTML = headingHtml(target)
     + `<div class="tmr-status" data-tmr-status="${escape(viewState)}">${escape(statusLabel)}</div>`
     + `<section class="tmr-section"><h3>Routines</h3>${routinesHtml}</section>`
     + `<section class="tmr-section"><h3>Priorities</h3>${itemsHtml}</section>`

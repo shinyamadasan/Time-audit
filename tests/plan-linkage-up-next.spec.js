@@ -295,7 +295,7 @@ test('H: 09:00 and 13:00 priorities entered out of order — due selection respe
     plans: planFor([{ task: 'Afternoon sync', when: '13:00' }, { task: 'Morning review', when: '09:00' }]),
     nowTs
   });
-  const next = await page.evaluate(() => getNextPlanItem(planTodayKey()));
+  const next = await page.evaluate(() => getNextPlanItem(currentPlanTarget()));
   expect(next.task).toBe('Morning review');
   const state = await page.evaluate(() => todayGuidedAction());
   expect(state.task).toBe('Morning review');
@@ -307,16 +307,16 @@ test('I: an unparseable when is never treated as due — safe fallback, no guess
     plans: planFor([{ task: 'Write report', when: 'after lunch' }, { task: 'Gym', when: '' }]),
     nowTs
   });
-  const due = await page.evaluate(() => dueTimedPlanItem(getPlanItems(planTodayKey()), planTodayKey()));
+  const due = await page.evaluate(() => dueTimedPlanItem(planItemsFor(currentPlanTarget()), currentPlanTarget()));
   expect(due).toBeNull();
-  const next = await page.evaluate(() => getNextPlanItem(planTodayKey()));
+  const next = await page.evaluate(() => getNextPlanItem(currentPlanTarget()));
   expect(next.task).toBe('Write report'); // stable existing order, not a guess at "after lunch"
 });
 
 test('J: a blank when falls back to normal order, same as before', async ({ page }) => {
   const nowTs = nowAtUTC(10, 0);
   await openApp(page, { plans: planFor([{ task: 'Write report' }, { task: 'Gym' }]), nowTs });
-  const next = await page.evaluate(() => getNextPlanItem(planTodayKey()));
+  const next = await page.evaluate(() => getNextPlanItem(currentPlanTarget()));
   expect(next.task).toBe('Write report');
 });
 
@@ -420,7 +420,7 @@ test('S: at 08:00, before either planned time is due, UP NEXT and the plan strip
     plans: planFor([{ task: 'Aly & Pon', when: '13:00' }, { task: 'Client work', when: '09:00' }]),
     nowTs
   });
-  const next = await page.evaluate(() => getNextPlanItem(planTodayKey()));
+  const next = await page.evaluate(() => getNextPlanItem(currentPlanTarget()));
   expect(next.task).toBe('Client work');
   const state = await page.evaluate(() => todayGuidedAction());
   expect(state.task).toBe('Client work');
@@ -434,7 +434,7 @@ test('T: an already-worked-on-but-not-done morning item does not block a newly-d
   const entries = [deepEntry(90 * 60 * 1000, 60 * 60 * 1000, 'Client work', nowTs, { planItemId: workedId })]; // 30m tracked, not Done
   await openApp(page, { entries, plans, nowTs });
 
-  const next = await page.evaluate(() => getNextPlanItem(planTodayKey()));
+  const next = await page.evaluate(() => getNextPlanItem(currentPlanTarget()));
   expect(next.task).toBe('Aly & Pon');
   const state = await page.evaluate(() => todayGuidedAction());
   expect(state.task).toBe('Aly & Pon');
@@ -544,9 +544,9 @@ test('X: switching from a planned item to a manually typed task never leaks the 
 test('Y: with multiple overdue unworked items, the earliest scheduled time wins (documented V1 behavior, not urgency scoring)', async ({ page }) => {
   const nowTs = nowAtUTC(14, 0);
   await openApp(page, { plans: planFor([{ task: 'P1', when: '09:00' }, { task: 'P2', when: '13:00' }]), nowTs });
-  const next = await page.evaluate(() => getNextPlanItem(planTodayKey()));
+  const next = await page.evaluate(() => getNextPlanItem(currentPlanTarget()));
   expect(next.task).toBe('P1');
-  const due = await page.evaluate(() => dueTimedPlanItem(getPlanItems(planTodayKey()), planTodayKey()));
+  const due = await page.evaluate(() => dueTimedPlanItem(planItemsFor(currentPlanTarget()), currentPlanTarget()));
   expect(due.task).toBe('P1');
 });
 

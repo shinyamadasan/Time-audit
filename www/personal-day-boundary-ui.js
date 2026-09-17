@@ -129,7 +129,32 @@ function previewHtml(state) {
   }
   // Boundary changes are prospective and can shorten the transition day — say
   // so plainly rather than letting the user discover it afterwards.
-  return `<div class="setting-sub" role="status">This takes effect at <strong>${escape(preview.activationLabel)}</strong>. Your current personal day runs until then, and may be shorter than usual because of it. Nothing already recorded is regrouped.</div>`;
+  return `<div class="setting-sub" role="status">This takes effect at <strong>${escape(preview.activationLabel)}</strong>. Your current personal day runs until then, and may be shorter than usual because of it. Nothing already recorded is regrouped.</div>${orphanWarningHtml()}`;
+}
+
+/** The reachability warning. "Nothing is regrouped" is true of the DATA but is
+ *  not the whole truth about the PRODUCT: a change can move an already-prepared
+ *  future personal day out of current/upcoming, which is where the one planning
+ *  workflow can reach. When that would happen, name the affected day here,
+ *  before saving. The plan is never moved, copied, merged or deleted — it stays
+ *  exactly as prepared, and stays reachable under Prepared Plans. */
+function orphanWarningHtml() {
+  const authority = typeof window !== 'undefined' ? window.PlanAuthority : null;
+  if (!authority) return '';
+  let impact;
+  try {
+    impact = authority.boundaryChangeImpact({ boundaryTime: draft.boundaryTime, timezone: draft.timezone });
+  } catch {
+    return '';
+  }
+  if (!impact.ok || !impact.orphaned.length) return '';
+  const named = impact.orphaned.map(target => {
+    const fmt = new Intl.DateTimeFormat('en-US', { timeZone: target.timezone, weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+    return `${fmt.format(new Date(target.startMs)).replace(',', '')} → ${fmt.format(new Date(target.endMs)).replace(',', '')}`;
+  });
+  return `<div class="setting-sub" role="alert" data-pdb-orphan-warning style="color:var(--waste)">
+    You have already prepared the personal day ${escape(named.join(' and '))}. After this change it is no longer your current or next personal day, so it leaves the Today / Prepare tomorrow workflow. It is not deleted, moved or merged — it stays exactly as you prepared it, under <strong>Prepared plans</strong> on Today.
+  </div>`;
 }
 
 function saveButtonHtml(state) {
