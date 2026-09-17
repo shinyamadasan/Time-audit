@@ -21,3 +21,11 @@
 .op-add input[type="time"]{flex:0 0 auto;width:auto}
 .op-add input[type="text"]{flex:1;min-width:140px}
 @media(max-width:560px){.op-row{flex-wrap:wrap}.op-row-time{min-width:auto}}
+/* Single Plan Authority V1 — the section is read-only status + recovery now
+   (the second editor it used to host was removed), so these replace the pane
+   and add-form styles the editor needed. */
+.op-status-row{display:flex;align-items:baseline;gap:10px;padding:6px 0;border-bottom:1px solid var(--border2)}
+.op-status-row:last-of-type{border-bottom:none}
+.op-prepared-list{margin-top:14px;border-top:1px solid var(--border2);padding-top:12px}
+.op-prepared-list h3{margin:0 0 4px;font-size:13px}
+.op-prepared{margin:10px 0 0;padding:10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--bg3)}

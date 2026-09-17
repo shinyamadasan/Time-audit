@@ -64,8 +64,15 @@ import {
   planningStreak,
   validPlanDate,
   validPlanItemRange,
+  validPlanItemDuration,
   carriedItemId,
+  classifyOneOffActual,
 } from './plan-tomorrow-model.js';
+// Side-effect import: personal-day-boundary-live.js owns the
+// `window.PersonalDayBoundaryLive` singleton this module's own singleton composes,
+// so importing it here makes that construction order a module-graph guarantee
+// rather than a dependency on <script> tag order. Inert under `node --test`.
+import './personal-day-boundary-live.js';
 
 /** Carry-forward ids for operational days. Deliberately NOT the legacy
  *  `carry:<date>:<itemId>` shape (plan-tomorrow-model.js's carriedItemId, which
@@ -78,28 +85,34 @@ import {
  *  ('p' + base36) can never contain either. */
 export const OPERATIONAL_CARRY_ID_PREFIX = 'ocarry1';
 
-export function operationalCarriedItemId(sourceOperationalDayId, sourceItemId, destinationOperationalDayId) {
-  if (!parseOperationalDayId(sourceOperationalDayId) || !parseOperationalDayId(destinationOperationalDayId)) {
-    throw new Error('Valid source and destination operationalDayIds are required.');
+export function operationalCarriedItemId(sourceDayId, sourceItemId, destinationOperationalDayId) {
+  // The SOURCE is whatever that day's own authoritative identity is — an
+  // operationalDayId, or a calendar dateKey on the transition day, when an item
+  // is carried from the last legacy-governed day into the first personal one.
+  // Neither is coerced into the other; each is used verbatim.
+  const validSource = !!parseOperationalDayId(sourceDayId) || validPlanDate(sourceDayId);
+  if (!validSource || !parseOperationalDayId(destinationOperationalDayId)) {
+    throw new Error('A valid source day identity and destination operationalDayId are required.');
   }
   if (typeof sourceItemId !== 'string' || !sourceItemId || sourceItemId.includes('|')) throw new Error('A valid source item id is required.');
-  return `${OPERATIONAL_CARRY_ID_PREFIX}|${sourceOperationalDayId}|${sourceItemId}|${destinationOperationalDayId}`;
+  return `${OPERATIONAL_CARRY_ID_PREFIX}|${sourceDayId}|${sourceItemId}|${destinationOperationalDayId}`;
 }
 
-/** The carry id for any source/destination pair, legacy or operational. Legacy
- *  days keep the exact existing id so nothing already stored changes meaning. */
+/** The carry id for any source/destination pair. Legacy -> legacy keeps the
+ *  exact existing id, so nothing already stored changes meaning; anything
+ *  landing in a personal day gets the operational format, keyed by both days'
+ *  immutable identities and the source item. */
 export function carryItemIdFor(sourceTarget, sourceItemId, destinationTarget) {
-  if (sourceTarget.store === 'legacy' && destinationTarget.store === 'legacy') return carriedItemId(sourceTarget.dateKey, sourceItemId);
-  const source = sourceTarget.store === 'operational' ? sourceTarget.id : null;
-  const destination = destinationTarget.store === 'operational' ? destinationTarget.id : null;
-  if (!source || !destination) {
-    // A mixed pair (carrying across the legacy -> operational transition) has no
-    // shared identity space. Nothing in the product offers it today: carrying
-    // only ever happens from the current day into the upcoming one, and the
-    // transition day's carry is offered only once both sides are operational.
-    throw new Error('Carrying between a legacy and an operational day is not supported.');
+  if (destinationTarget.store === 'legacy') {
+    if (sourceTarget.store !== 'legacy') {
+      // Would require naming a personal day inside a calendar-day id. Cannot
+      // happen in the product (no disable path means no operational -> legacy
+      // succession), and is refused rather than fudged if it ever does.
+      throw new Error('Carrying from a personal day into a calendar day is not supported.');
+    }
+    return carriedItemId(sourceTarget.dateKey, sourceItemId);
   }
-  return operationalCarriedItemId(source, sourceItemId, destination);
+  return operationalCarriedItemId(sourceTarget.id, sourceItemId, destinationTarget.id);
 }
 
 /** 12:00 local on a calendar date, in that date's OWN subsystem timezone. */
@@ -335,7 +348,57 @@ export function createPlanAuthority(deps = {}) {
       if (item?.durationMinutes === undefined) return { ok: true };
       return validPlanItemRange(item.when, item.durationMinutes) ? { ok: true } : { ok: false, reason: 'invalid-range' };
     }
+    // The 720-minute Plan Time Range cap is a PRODUCT policy, not temporal
+    // truth, which is why the foundation's resolver deliberately leaves it to
+    // callers (see resolvePlannedRangeInOperationalDay). It applies to a
+    // personal day exactly as it applies to a calendar day.
+    if (item?.durationMinutes !== undefined && !validPlanItemDuration(item.durationMinutes)) return { ok: false, reason: 'invalid-range' };
     return validateOperationalPlanItemRange(target.ref, item, live.revisions());
+  }
+
+  /** The real instant a planned "HH:MM" names inside this target — what "is it
+   *  due yet?" and "where does this sit on a timeline?" actually need. Legacy
+   *  days go through the app's own existing wall-clock resolver (injected), so
+   *  due-time behavior for a never-enabled account is unchanged; operational
+   *  days go through the foundation's operational-day resolver, which is what
+   *  makes 01:00 on an 18:00 day resolve to the following calendar date.
+   *  Returns null when the reading is not a canonical HH:MM or cannot be
+   *  resolved (a DST gap) — callers already fall back to stable order. */
+  function itemStartInstant(target, hhmm) {
+    if (typeof hhmm !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hhmm)) return null;
+    if (target.store === 'legacy') {
+      if (typeof deps.legacyClockInstant !== 'function') return null;
+      const resolved = deps.legacyClockInstant(target.dateKey, hhmm);
+      return Number.isFinite(resolved) ? resolved : null;
+    }
+    const resolved = live.resolveClockTime(target, hhmm);
+    return resolved.ok ? resolved.instantMs : null;
+  }
+
+  /** Daily Reconciliation's per-item verdict, against the day that was
+   *  authoritative for it. Legacy days call the existing classifyOneOffActual()
+   *  unchanged. An operational day asks the same questions by INSTANT: "done
+   *  early" means completed before this personal day began, which is the same
+   *  sentence the calendar version expresses with dates. Historical days resolve
+   *  through their own governing revision (the target carries it), never through
+   *  whatever boundary happens to be active now. */
+  function classifyItemActual(target, item, { trackedMinutes = 0, preparedAt = 0, timezone } = {}) {
+    if (target.store === 'legacy') {
+      return classifyOneOffActual(item, { targetDate: target.dateKey, timezone: timezone || accountTimezone(), trackedMinutes, preparedAt });
+    }
+    if (item?.deleted && Number(item.updatedAt || 0) >= Number(preparedAt || 0)) return 'removed';
+    if (item?.done) {
+      return Number.isFinite(item.doneAt) && item.doneAt < target.startMs ? 'done-early' : 'done';
+    }
+    return trackedMinutes > 0 ? 'worked-on' : 'not-done';
+  }
+
+  /** The factual [start, end) window this plan is judged against. Legacy days
+   *  keep the calendar-day window the app already computes for entries; an
+   *  operational day is its own interval. */
+  function evidenceWindow(target) {
+    if (target.store === 'operational') return { startMs: target.startMs, endMs: target.endMs };
+    return calendarDayBounds(target.dateKey);
   }
 
   // ── Decision A mapping, as targets ────────────────────────────────────────
@@ -519,10 +582,52 @@ export function createPlanAuthority(deps = {}) {
     current, upcoming, containing, next, daysOverlappingCalendarDate,
     record, rawItems, items, saveItems,
     preparation, consistency, readyNow, preparedState, confirmPreparation,
-    validateItem,
+    validateItem, itemStartInstant, evidenceWindow, classifyItemActual,
     routineTarget, routinesForTarget, templatesForTarget,
     habitEarned, streak,
     preparedPlans, boundaryChangeImpact,
     legacyTarget,
   };
+}
+
+// ── live singleton (browser only) ───────────────────────────────────────────
+//
+// Same guard and same accessor style as personal-day-boundary-live.js: building
+// the default repositories touches localStorage, which does not exist under
+// plain `node --test`, and tests always build their own authority with
+// createPlanAuthority(fakeDeps).
+//
+// Every legacy function below is index.html's own existing plans[dateKey] path,
+// handed over rather than reimplemented — that is what keeps a never-enabled
+// account on exactly the code that already ships.
+
+function authorityAppContext() {
+  if (typeof globalThis.getOperationalPlanAppContext !== 'function') throw new Error('Plan authority app context is not available yet.');
+  return globalThis.getOperationalPlanAppContext();
+}
+
+if (typeof window !== 'undefined') {
+  window.PlanAuthority = createPlanAuthority({
+    live: window.PersonalDayBoundaryLive,
+    legacy: {
+      record: dateKey => authorityAppContext().plan(dateKey),
+      rawItems: dateKey => authorityAppContext().rawItems(dateKey),
+      saveItems: (dateKey, items) => authorityAppContext().saveItems(dateKey, items),
+      confirm: input => authorityAppContext().confirm(input),
+      allPlans: () => authorityAppContext().allPlans(),
+      earliestPlanDate: () => authorityAppContext().earliestPlanDate(),
+    },
+    accountTimezone: () => authorityAppContext().timezone,
+    calendarDayBounds: dateKey => authorityAppContext().calendarDayBounds(dateKey),
+    legacyClockInstant: (dateKey, hhmm) => authorityAppContext().clockInstant(dateKey, hhmm),
+  });
+
+  // The plan strip, Up Next and the commitments pane all render once,
+  // synchronously, before this deferred module finishes loading. An account with
+  // a boundary configured deliberately renders a neutral placeholder until now
+  // (index.html's currentPlanTarget returns null) rather than guessing at the
+  // calendar plan — so re-rendering here is what turns that into a brief gap
+  // instead of a stuck one.
+  globalThis.renderTodayPlan?.();
+  globalThis.refreshTomorrowView?.();
 }

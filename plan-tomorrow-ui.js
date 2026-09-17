@@ -1,4 +1,5 @@
-import { carriedItemId, classifyOneOffActual, classifyRoutineActual, clearPlanItemRange, computeReadyNow, durationBetween, formatPlanItemSchedule, normalizePreparation, planItemEndTime, planningConsistency, planTomorrowTargetDate, reconciliationBucket, validPlanItemRange, validPlanItemTime } from './plan-tomorrow-model.js';
+import { classifyRoutineActual, clearPlanItemRange, durationBetween, formatPlanItemSchedule, planItemEndTime, reconciliationBucket, validPlanItemRange, validPlanItemTime } from './plan-tomorrow-model.js';
+import { carryItemIdFor } from './plan-authority.js';
 import { generateInstances, matchCompletion, occursOn } from './daily-routines-model.js';
 import { createDailyRoutineRepository } from './daily-routines-repository.js';
 import { createLearningPlanRepository } from './learning-plan-repository.js';
@@ -23,16 +24,48 @@ function scheduleLabel(routine) {
   return routine.mode === 'cue' ? `Cue: ${routine.cue}` : 'Anytime';
 }
 
-function routinePlan(targetDate, timezone) {
+/** The routine instances that belong to a PLAN TARGET (Decision A).
+ *
+ *  Instance identity stays [routineId, calendarDate] — nothing is migrated. For
+ *  a legacy day this is exactly the old behavior: generate that date's
+ *  instances, use them all. For a personal day, instances are generated for each
+ *  calendar date the day touches and then filtered by ownership: a timed routine
+ *  belongs to the day containing its own start, an untimed one to the day
+ *  containing 12:00 on its date. A routine whose local clock reading is
+ *  ambiguous or nonexistent (DST) is never guessed into a day — it is reported
+ *  in `unplaceable` so the UI can say so. */
+function routinePlan(target, timezone) {
   const state = routineRepository.read(timezone);
-  if (state.timezone !== timezone) return { state, mismatch: true, rows: [] };
+  if (state.timezone !== timezone) return { state, mismatch: true, rows: [], unplaceable: [] };
   const learningPlans = createLearningPlanRepository().listPlans();
-  const rows = generateInstances(state.routines, targetDate, state.timezone).map(instance => {
+  const decorate = instance => {
     const learningPlan = instance.routine.source === 'learning' ? learningPlans.find(plan => plan.id === instance.routine.planId) : null;
     const likelyNext = learningPlan ? findNextLearningPlanStep(learningPlan) : null;
     return { ...instance, skipped: !!state.skips[instance.id], actionable: instance.routine.source !== 'learning' || !!likelyNext, likelyNext };
-  });
-  return { state, mismatch: false, rows };
+  };
+  if (target.store === 'legacy') {
+    return { state, mismatch: false, rows: generateInstances(state.routines, target.dateKey, state.timezone).map(decorate), unplaceable: [] };
+  }
+  const authority = globalThis.PlanAuthority;
+  const candidates = routineCandidateDates(target, state.timezone)
+    .flatMap(date => generateInstances(state.routines, date, state.timezone));
+  const { rows, unplaceable } = authority.routinesForTarget(target, candidates);
+  return { state, mismatch: false, rows: rows.map(decorate), unplaceable };
+}
+
+/** The calendar dates whose instances could possibly belong to this personal
+ *  day: the dates its interval touches, plus one either side, because an
+ *  untimed routine is anchored at noon of its own date (which can sit inside a
+ *  personal day that starts on the previous date) and a timed one can sit
+ *  anywhere in the interval. Ownership is then decided per instance, never by
+ *  this list. */
+function routineCandidateDates(target, timezone) {
+  const day = 86400000;
+  const dates = new Set();
+  for (let instant = target.startMs - day; instant <= target.endMs + day; instant += day) {
+    dates.add(new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date(instant)));
+  }
+  return [...dates].sort();
 }
 
 function activeItems() {
@@ -53,21 +86,24 @@ function activeRoutines() {
  *  empty `rows` (nothing to reconcile) so the renderer never shows "0 unfinished" as if it were a
  *  fact when it's actually an abstention. Reconciliation is supplementary context for Plan
  *  Tomorrow, never a precondition for it: either way `openPlanTomorrow` still opens. */
-function buildReconciliation(app) {
-  const todayKey = app.todayKey;
+function buildReconciliation() {
+  const authority = globalThis.PlanAuthority;
   try {
-    const preparation = normalizePreparation(app.plan(todayKey)?.preparation, todayKey);
-    const rows = app.rawItems(todayKey)
+    // Reconciles the CURRENT authoritative day — for a graveyard owner that is
+    // their personal day in progress, not the calendar date on the wall.
+    const current = authority.current();
+    const preparation = authority.preparation(current);
+    const rows = authority.rawItems(current)
       .filter(item => !item.deleted)
       .map(item => {
-        const trackedMinutes = app.trackedMinutes(item.task, todayKey, item.id);
-        const status = classifyOneOffActual(item, { targetDate: todayKey, timezone: app.timezone, trackedMinutes, preparedAt: preparation?.firstPreparedAt || 0 });
+        const trackedMinutes = context().trackedMinutes(current, item.task, item.id);
+        const status = authority.classifyItemActual(current, item, { trackedMinutes, preparedAt: preparation?.firstPreparedAt || 0, timezone: preparation?.timezone });
         return { item, status, bucket: reconciliationBucket(status) };
       })
       .filter(row => row.bucket !== 'excluded');
-    return { todayKey, rows, failed: false };
+    return { source: current, rows, failed: false };
   } catch {
-    return { todayKey, rows: [], failed: true };
+    return { source: null, rows: [], failed: true };
   }
 }
 
@@ -78,9 +114,9 @@ function buildReconciliation(app) {
  *  the existing per-id mergeDatePlans/chooseItem merge (highest updatedAt wins) collapses them
  *  into one active item instead of two random-id survivors. */
 function carriedItemFor(todayItemId) {
-  const todayKey = draft.reconciliation?.todayKey;
-  if (!todayKey) return null;
-  const id = carriedItemId(todayKey, todayItemId);
+  const source = draft.reconciliation?.source;
+  if (!source) return null;
+  const id = carryItemIdFor(source, todayItemId, draft.target);
   const existing = draft.items.find(item => item.id === id);
   return existing && !existing.deleted ? existing : null;
 }
@@ -88,8 +124,8 @@ function carriedItemFor(todayItemId) {
 function toggleCarry(todayItemId) {
   const row = draft.reconciliation?.rows.find(r => r.item.id === todayItemId);
   if (!row) return;
-  const todayKey = draft.reconciliation.todayKey;
-  const id = carriedItemId(todayKey, todayItemId);
+  const source = draft.reconciliation.source;
+  const id = carryItemIdFor(source, todayItemId, draft.target);
   const existing = draft.items.find(item => item.id === id);
   if (existing && !existing.deleted) {
     draft.items = draft.items.map(item => item.id === id ? context().stampItem({ ...item, deleted: true }) : item);
@@ -117,10 +153,11 @@ function withReconciliationReason(item, reason) {
 
 function saveReconciliationReason(todayItemId, reasonValue) {
   const reason = reasonValue.trim();
-  const todayKey = draft.reconciliation.todayKey;
-  const updated = context().rawItems(todayKey).map(item =>
+  const source = draft.reconciliation.source;
+  const authority = globalThis.PlanAuthority;
+  const updated = authority.rawItems(source).map(item =>
     item.id === todayItemId ? context().stampItem(withReconciliationReason(item, reason)) : item);
-  context().saveItems(todayKey, updated);
+  authority.saveItems(source, updated);
   draft.reconciliation.rows = draft.reconciliation.rows.map(row =>
     row.item.id === todayItemId ? { ...row, item: withReconciliationReason(row.item, reason) } : row);
 }
@@ -130,13 +167,32 @@ function formatTargetDate(date) {
   return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, day, 12)));
 }
 
+/** A legacy day is still named by its date. A personal day is named by the
+ *  interval it actually is — "Wed Sep 16 18:00 → Thu Sep 17 18:00" — because
+ *  calling it "Thursday" would be false for most of its hours. */
+function targetHeading(target) {
+  if (target.store === 'legacy') return formatTargetDate(target.dateKey);
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: target.timezone, weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${fmt.format(new Date(target.startMs)).replace(',', '')} → ${fmt.format(new Date(target.endMs)).replace(',', '')}`;
+}
+
+/** Range validation for the day being edited: a legacy day keeps the existing
+ *  midnight-clamped rule exactly; a personal day is checked against its own real
+ *  interval, so 23:00 → 01:00 is ordinary there and 21:00 on a day truncated at
+ *  20:00 is refused. */
+function itemRangeValid(item) {
+  const authority = globalThis.PlanAuthority;
+  if (!authority || !draft) return validPlanItemRange(item.when, item.durationMinutes);
+  return authority.validateItem(draft.target, item).ok;
+}
+
 function refreshRoutines() {
-  draft.routines = routinePlan(draft.targetDate, draft.timezone);
+  draft.routines = routinePlan(draft.target, draft.timezone);
 }
 
 function suggestionRows() {
   const selected = new Set(activeItems().map(item => context().normalizeTask(item.task)));
-  const suggestions = context().suggestions(draft.targetDate).slice();
+  const suggestions = context().suggestions(draft.target).slice();
   const seen = new Set();
   return suggestions.filter(item => {
     const key = context().normalizeTask(item.task);
@@ -148,8 +204,13 @@ function suggestionRows() {
 
 function routineHtml() {
   if (draft.routines.mismatch) return `<div class="pt-warning" role="status">Routines use ${escape(draft.routines.state.timezone)}; Today uses ${escape(draft.timezone)}. One-off planning is still available.</div>`;
-  if (!draft.routines.rows.length) return '<p class="pt-muted">No routines occur on this date.</p>';
-  return draft.routines.rows.map(row => {
+  // A routine whose own clock reading is ambiguous or does not exist (a DST
+  // change) is never filed into a day by guesswork — it is named here instead.
+  const unplaceable = (draft.routines.unplaceable || []).length
+    ? `<div class="pt-warning" role="status">${draft.routines.unplaceable.length} routine${draft.routines.unplaceable.length === 1 ? '' : 's'} can’t be placed in a personal day because of a clock change on ${escape(draft.routines.unplaceable.map(entry => entry.instance.date).join(', '))}. Plan them by hand.</div>`
+    : '';
+  if (!draft.routines.rows.length) return unplaceable + '<p class="pt-muted">No routines occur on this date.</p>';
+  return unplaceable + draft.routines.rows.map(row => {
     const routine = row.routine;
     const detail = [`Target ${routine.targetMinutes} min`];
     if (routine.minimumMinutes) detail.push(`Minimum ${routine.minimumMinutes} min`);
@@ -184,7 +245,7 @@ const QUICK_DURATIONS = [
  *  against the new start (e.g. 09:00+2h -> 10:00) is left untouched. */
 function withNewStart(item, when) {
   const next = { ...item, when };
-  return validPlanItemRange(when, item.durationMinutes) ? next : clearPlanItemRange(next);
+  return itemRangeValid(next) ? next : clearPlanItemRange(next);
 }
 
 function chipRowHtml({ id, labelId, options, current, action }) {
@@ -304,11 +365,11 @@ function render() {
   if (!draft || !body) return;
   rendering = true;
   try {
-    document.getElementById('plan-tomorrow-date').textContent = formatTargetDate(draft.targetDate);
-    document.getElementById('plan-tomorrow-timezone').textContent = draft.timezone;
-    const storedPlan = context().plan(draft.targetDate);
-    const readyNow = computeReadyNow({ plan: storedPlan, targetDate: draft.targetDate, routines: draft.routines.rows });
-    const consistency = planningConsistency(storedPlan?.preparation, draft.targetDate);
+    document.getElementById('plan-tomorrow-date').textContent = targetHeading(draft.target);
+    document.getElementById('plan-tomorrow-timezone').textContent = draft.target.store === 'operational' ? draft.target.timezone : draft.timezone;
+    const authority = globalThis.PlanAuthority;
+    const readyNow = authority.readyNow(draft.target, draft.routines.rows);
+    const consistency = authority.consistency(draft.target);
     const readiness = document.getElementById('plan-tomorrow-readiness');
     readiness.textContent = `${readyNow ? 'Ready now' : 'Not ready'} · ${consistency === 'ahead' ? 'prepared ahead' : consistency === 'late' ? 'prepared late' : consistency === 'unknown' ? 'preparation unknown' : 'not prepared'}`;
     readiness.dataset.ready = String(readyNow);
@@ -322,22 +383,27 @@ function render() {
   }
 }
 
+/** "Tomorrow" is the UPCOMING AUTHORITATIVE DAY. For a legacy account that is
+ *  tomorrow's calendar date exactly as before; for a graveyard owner at 08:00
+ *  with an 18:00 boundary it is the personal day that begins at 18:00 today —
+ *  which is why this no longer computes a date of its own. */
 export function openPlanTomorrow({ returnToReview = false } = {}) {
   try {
     const app = context();
-    const targetDate = planTomorrowTargetDate(Date.now(), app.timezone);
-    const plan = app.plan(targetDate);
-    const preparation = normalizePreparation(plan?.preparation, targetDate);
+    const authority = globalThis.PlanAuthority;
+    if (!authority) throw new Error('Planning is still loading.');
+    const target = authority.upcoming();
+    const preparation = authority.preparation(target);
     draft = {
-      targetDate,
+      target,
       returnToReview,
       timezone: app.timezone,
-      items: app.rawItems(targetDate).map(item => ({ ...item })),
-      routines: routinePlan(targetDate, app.timezone),
+      items: authority.rawItems(target).map(item => ({ ...item })),
+      routines: routinePlan(target, app.timezone),
       mode: 'normal',
       intentionalBlank: preparation?.intentionalBlank || false,
       schedulingId: null,
-      reconciliation: buildReconciliation(app)
+      reconciliation: buildReconciliation()
     };
     root.classList.add('open');
     render();
@@ -366,16 +432,15 @@ async function confirmDraft() {
   if (activeItems().length > context().maxItems) throw new Error(`Reduce the plan to ${context().maxItems} priorities before confirming.`);
   const intentionalBlank = routines.length + unfinishedItems.length === 0 && draft.intentionalBlank;
   if (!routines.length && !unfinishedItems.length && !intentionalBlank) throw new Error('Add one priority, keep a routine, or choose Open day.');
-  const result = context().confirm({
-    targetDate: draft.targetDate,
+  const authority = globalThis.PlanAuthority;
+  const result = authority.confirmPreparation(draft.target, {
     items: draft.items.map(item => ({ ...item })),
     mode: draft.mode,
     intentionalBlank,
     routineInstanceIds: draft.routines.rows.filter(row => row.actionable).map(row => row.id),
     actionableRoutineInstanceIds: routines.map(row => row.id)
   });
-  const savedPlan = context().plan(draft.targetDate);
-  if (!result.localSaved || !computeReadyNow({ plan: savedPlan, targetDate: draft.targetDate, routines })) throw new Error('Tomorrow could not be marked ready. Your draft is still open.');
+  if (!result.localSaved || !authority.readyNow(draft.target, routines)) throw new Error('Tomorrow could not be marked ready. Your draft is still open.');
   closePreparation();
   const cloudSynced = await Promise.resolve(result.syncPromise).catch(() => false);
   if (!cloudSynced) globalThis.showToast('Ready on this device');
@@ -407,7 +472,11 @@ root?.addEventListener('click', async event => {
       // must never overwrite the last-known-good duration, even transiently — see Blocker 1.
       const value = Number(control.dataset.value);
       const target = draft.items.find(item => item.id === control.dataset.id);
-      if (!target || !validPlanItemRange(target.when, value)) throw new Error('That length would run past midnight. Choose a shorter length.');
+      if (!target || !itemRangeValid({ ...target, durationMinutes: value })) {
+        throw new Error(draft.target.store === 'operational'
+          ? 'That length would run past the end of this personal day. Choose a shorter length.'
+          : 'That length would run past midnight. Choose a shorter length.');
+      }
       draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, durationMinutes: value }) : item);
       draft.schedulingId = null;
     }
@@ -444,7 +513,11 @@ root?.addEventListener('change', event => {
   try {
     const duration = item ? durationBetween(item.when, input.value) : null;
     if (!duration) throw new Error('End time must be later than the start, on the same day.');
-    if (!validPlanItemRange(item.when, duration)) throw new Error('End time must be within 12 hours of the start.');
+    if (!itemRangeValid({ ...item, durationMinutes: duration })) {
+      throw new Error(draft.target.store === 'operational'
+        ? 'End time must be within 12 hours of the start, inside this personal day.'
+        : 'End time must be within 12 hours of the start.');
+    }
     draft.items = draft.items.map(i => i.id === id ? context().stampItem({ ...i, durationMinutes: duration }) : i);
     draft.schedulingId = null;
     render();
@@ -482,23 +555,30 @@ root?.addEventListener('submit', event => {
   } catch (err) { error.textContent = err.message; }
 });
 
-export function getPlanTomorrowRoutineSummary(targetDate, timezone = context().timezone) {
-  return routinePlan(targetDate, timezone);
+export function getPlanTomorrowRoutineSummary(target, timezone = context().timezone) {
+  return routinePlan(target, timezone);
 }
 
-export function getPlanTomorrowRoutineActual(targetDate, preparation) {
-  const timezone = preparation.timezone;
-  const state = routineRepository.read(timezone);
+/** Each row's own calendar date comes from the instance id it was prepared
+ *  under ([routineId, date]), not from a single date passed in — that is what
+ *  lets a personal day's preparation, whose routines can span two calendar
+ *  dates, reconcile each one against the date it actually occurs on. For a
+ *  legacy preparation every id carries the same date, so this is identical to
+ *  the previous behavior. */
+export function getPlanTomorrowRoutineActual(preparation) {
+  const state = routineRepository.read(context().timezone);
+  const timezone = preparation.timezone || state.timezone;
   const entries = context().entries;
   const events = createLocalLifeLedgerStore().listEvents();
   const ids = new Set(preparation.routineInstanceIds);
   return preparation.routineInstanceIds.map(id => {
     let routineId;
-    try { [routineId] = JSON.parse(id); } catch { return { id, title: 'Unknown routine', status: 'removed' }; }
+    let instanceDate;
+    try { [routineId, instanceDate] = JSON.parse(id); } catch { return { id, title: 'Unknown routine', status: 'removed' }; }
     const routine = state.routines.find(item => item.id === routineId);
-    const occurs = !!routine && state.timezone === timezone && routine.enabled && occursOn(routine, targetDate);
+    const occurs = !!routine && state.timezone === timezone && routine.enabled && occursOn(routine, instanceDate);
     if (!occurs) return { id, title: routine?.title || 'Removed routine', status: 'removed' };
-    const instance = generateInstances([routine], targetDate, state.timezone)[0];
+    const instance = generateInstances([routine], instanceDate, state.timezone)[0];
     const completion = matchCompletion(instance, { ...state, events, entries }, Date.now());
     return { id, title: routine.title, taskLabel: state.links[id]?.stepTitle || routine.title, status: classifyRoutineActual({ occurs, skipped: !!state.skips[id], completion }) };
   }).filter(row => ids.has(row.id));

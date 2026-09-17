@@ -100,6 +100,11 @@ export default [
         getTodayEntries: 'readonly', getEntriesForWeekKey: 'readonly',
         getEntriesForDateWindow: 'readonly', getViewingDateKey: 'readonly',
         getPlanItems: 'readonly', deriveAttentionSignals: 'readonly',
+        // Single Plan Authority V1 — the target-based plan accessors index.html
+        // defines and storage.js / insights.js consume.
+        currentPlanTarget: 'readonly', upcomingPlanTarget: 'readonly',
+        planTargetsForCalendarDate: 'readonly', planItemsFor: 'readonly',
+        planTrackedMinFor: 'readonly',
         attentionSignalLines: 'readonly', renderReviewAttention: 'readonly',
         setReviewFocusRating: 'readonly',
         sumEntryMinutes: 'readonly', sumEnergyMinutes: 'readonly',

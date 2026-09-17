@@ -498,6 +498,25 @@ test('operational carry ids are deterministic, distinct from legacy ones, and ne
   assert.match(id, /odv1:/, 'built from operational identities, not a date');
 });
 
+test('on the transition day an item carries from the legacy day into the first personal day', () => {
+  const app = graveyardApp(); // 08:00: current is legacy-governed, upcoming is operational
+  const source = app.authority.current();
+  const destination = app.authority.upcoming();
+  assert.equal(source.store, 'legacy');
+  const id = carryItemIdFor(source, 'p-abc', destination);
+  assert.ok(id.startsWith('ocarry1|2026-09-16|p-abc|odv1:'), id);
+  assert.equal(id, carryItemIdFor(source, 'p-abc', destination), 'deterministic across devices');
+  assert.notEqual(id, carriedItemId(D, 'p-abc'), 'never mistaken for a legacy carry id');
+});
+
+test('carrying from a personal day into a calendar day is refused, not fudged', () => {
+  const app = graveyardApp();
+  app.setNow(manila(D, '19:00'));
+  const operational = app.authority.current();
+  assert.equal(operational.store, 'operational');
+  assert.throws(() => carryItemIdFor(operational, 'p-abc', app.authority.legacyTarget(D_NEXT)), /not supported/);
+});
+
 test('legacy carry ids are untouched for legacy days', () => {
   const app = makeApp();
   const source = app.authority.current();

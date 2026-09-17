@@ -864,17 +864,27 @@ test('neither new UI module writes through the legacy settings object', () => {
   }
 });
 
-test('the operational planning surface never touches a deferred legacy plan consumer', () => {
+// Single Plan Authority V1 removed the second editable planning surface this
+// file used to host. The personal-day section is now read-only status + the
+// Prepared Plans recovery list, and the ONE editable workflow is Today's own
+// priorities strip plus Prepare Tomorrow. These two tests pin that: if an
+// editor ever reappears here, there are two editable plans again.
+
+test('the personal-day section is read-only — it has no write path at all', () => {
   const source = readSource('operational-plan-ui.js');
-  for (const symbol of ['plan-tomorrow-model', 'daily-routines-model', 'daily-routines-repository', 'planTomorrowTargetDate', 'normalizePreparation', 'planningConsistency', 'confirmPreparedDatePlan', 'getPlanTomorrowAppContext']) {
-    assert.ok(!source.includes(symbol), `operational-plan-ui.js must not reach into ${symbol} — Planning Streak / Daily Reconciliation / routines are explicitly deferred`);
+  for (const symbol of ['writePlanItems', 'writePlanWithPreparation', 'saveItems', 'confirmPreparation', 'stampItem', 'createItem', 'deleted: true']) {
+    assert.ok(!source.includes(symbol), `operational-plan-ui.js must not be able to write plans (${symbol}) — the one editable workflow lives in Today / Prepare Tomorrow`);
+  }
+  for (const control of ['<form', 'data-op-action', '<button']) {
+    assert.ok(!source.includes(control), `operational-plan-ui.js must not offer an editing control (${control})`);
   }
 });
 
-test('the operational planning surface tombstones removals rather than splicing them', () => {
+test('the personal-day section resolves everything through the plan authority layer', () => {
   const source = readSource('operational-plan-ui.js');
-  assert.ok(source.includes('deleted: true'), 'a hard delete would be resurrected by the per-item remote merge');
-  assert.ok(!/\.splice\(/.test(source) && !/\.filter\(item => item\.id !== /.test(source));
+  assert.ok(source.includes('window.PlanAuthority'), 'it reads through the one authority layer');
+  assert.ok(!/\bplans\[/.test(source) && !source.includes('ta3-plans'), 'never the legacy plan store directly');
+  assert.ok(!source.includes('planRepository'), 'never the operational repository directly either');
 });
 
 test('the live wiring never reaches into plans[dateKey] itself — only through injected callbacks', () => {

@@ -107,7 +107,7 @@ for (const kind of ['priorities', 'routines', 'open', 'rescue']) {
     await today(page, { routines: routineState(kind === 'routines' ? [routine({ mode: 'anytime' })] : []) });
     await page.evaluate(kind => {
       const targetDate = planTodayKey();
-      const routineRows = getPlanTomorrowRoutineSummary(targetDate).rows;
+      const routineRows = getPlanTomorrowRoutineSummary(currentPlanTarget()).rows;
       confirmPreparedDatePlan({ targetDate, items: kind === 'priorities' ? [createPlanItem('Client build', '')] : [], mode: kind === 'rescue' ? 'rescue' : 'normal', intentionalBlank: ['open', 'rescue'].includes(kind), routineInstanceIds: routineRows.map(r => r.id), actionableRoutineInstanceIds: routineRows.map(r => r.id) });
       renderTodayPlan(); renderDailyRoutines();
     }, kind);
@@ -220,7 +220,7 @@ test('planned routine activity is not presented as unplanned work', async ({ pag
   await today(page, { routines: routineState([routine({ mode: 'anytime' })]) });
   await page.evaluate(() => {
     const targetDate = planTodayKey();
-    const rows = getPlanTomorrowRoutineSummary(targetDate).rows;
+    const rows = getPlanTomorrowRoutineSummary(currentPlanTarget()).rows;
     confirmPreparedDatePlan({ targetDate, items: [], mode: 'normal', intentionalBlank: false, routineInstanceIds: rows.map(r => r.id), actionableRoutineInstanceIds: rows.map(r => r.id) });
     entries.push({ id: 101, tsStart: Date.now() - 1800000, ts: Date.now(), date: targetDate, activity: 'Deep work', energy: 'deep', blockIntervalMin: 30 });
     openReview();

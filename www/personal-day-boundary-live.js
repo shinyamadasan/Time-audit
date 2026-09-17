@@ -42,6 +42,7 @@ import {
   nextOperationalDay,
   operationalDayContaining,
   previousOperationalDay,
+  resolveClockTimeInOperationalDay,
   operationalDayInterval,
   proposeBoundaryRevision,
   canonicalizeOperationalDayTimezone,
@@ -289,6 +290,14 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     throw new Error('A resolved plan day/target is required.');
   }
 
+  /** A planned clock reading resolved inside one operational day (the
+   *  foundation's strict planned-time policy: never silently moved, DST gaps
+   *  reported rather than guessed). */
+  function resolveClockTime(day, hhmm, history = revisions()) {
+    if (authorityOf(day).store !== 'operational') throw new Error('resolveClockTime is for operational days only.');
+    return resolveClockTimeInOperationalDay(day.ref, hhmm, history);
+  }
+
   function readPlanItems(day) {
     if (authorityOf(day).store === 'legacy') {
       if (!legacyPlans) throw new Error('Legacy plan access is not wired.');
@@ -399,6 +408,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     dayIsLegacy,
     readPlanItems,
     readRecord,
+    resolveClockTime,
     writePlanItems,
     writePlanWithPreparation,
     deviceId,

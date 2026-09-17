@@ -1948,7 +1948,16 @@ function entryMatchesPlanItem(entry, dateKey) {
   if (!entry || !dateKey || isPcTimeEntry(entry)) return false;
   const activity = normalizePlanTask(entry.activity);
   if (!activity) return false;
-  return getPlanItems(dateKey).some(item => normalizePlanTask(item.task) === activity);
+  // Which plan an entry could have been planned in is decided by WHEN it
+  // happened, not by the calendar date it is being displayed under — a 01:00
+  // block belongs to the personal day that was running at 01:00. A legacy
+  // account keeps the plain calendar lookup it has always used.
+  const range = entryTimeRange(entry);
+  const target = personalDayBoundaryConfigured()
+    ? (range ? planTargetContaining(range.start) : null)
+    : legacyPlanTarget(dateKey);
+  if (!target) return false;
+  return planItemsFor(target).some(item => normalizePlanTask(item.task) === activity);
 }
 
 function isScheduleOrPlanBlock(entry, dateKey) {
@@ -2788,7 +2797,7 @@ function quickSaveLast() {
 function renderQuickLogPlan() {
   const el = document.getElementById('ql-plan');
   if (!el) return;
-  const items = getPlanItems(planTodayKey()).filter(i => !i.done);
+  const items = planItemsFor(currentPlanTarget()).filter(i => !i.done);
   if (!items.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
   const esc = s => String(s).replace(/</g, '&lt;');
   el.style.display = 'block';
@@ -2800,7 +2809,7 @@ function renderQuickLogPlan() {
 
 function quickSaveFromPlan(id) {
   if (quickLogBusy) return;
-  const it = getPlanItems(planTodayKey()).find(x => x.id === id);
+  const it = planItemsFor(currentPlanTarget()).find(x => x.id === id);
   if (!it) return;
   const energy = inferPlanEnergy(it.task);
   if (energy) {
@@ -4585,7 +4594,12 @@ function getCloseoutGaps(dateKey) {
 
 function computeCloseoutSummary(dateKey) {
   const realEntries = getEntriesForDateWindow(dateKey).filter(e => !e.missed && !e.deleted);
-  const planItems = getPlanItems(dateKey);
+  // A calendar date can be covered by more than one authoritative personal day
+  // (Decision B). planCount/planDone are a STATISTIC over those days — the
+  // counting line in a review prompt — never a merged "plan for this date":
+  // Review's own Plan vs Actual renders each authoritative day as its own card.
+  const planTargets = planTargetsForCalendarDate(dateKey);
+  const planItems = planTargets.flatMap(target => planItemsFor(target).map(item => ({ item, target })));
   const gaps = getCloseoutGaps(dateKey);
   const review = reviews[dateKey] || null;
   // Deep / waste in the close-out speak to actual behaviour — count only
@@ -4596,7 +4610,7 @@ function computeCloseoutSummary(dateKey) {
   return {
     entryCount: realEntries.length,
     planCount: planItems.length,
-    planDone: planItems.filter(i => i.done || planTrackedMin(i.task, dateKey) > 0).length,
+    planDone: planItems.filter(({ item, target }) => item.done || planTrackedMinFor(target, item.task, item.id) > 0).length,
     deepMin: sumEnergyMinutes(confirmedEntries, 'deep', dateKey),
     wasteMin: sumEnergyMinutes(confirmedEntries, 'waste', dateKey) + sumEnergyMinutes(confirmedEntries, 'distraction', dateKey),
     unloggedMin: gaps.reduce((sum, gap) => sum + (gap.gapMin || 0), 0),
@@ -4811,12 +4825,12 @@ function todayGuidedAction() {
   if (running) return { title: 'Working now', sub: currentTask, task: currentTask, button: 'Switch', action: 'openSwitchPanel()' };
   // A timed one-off priority that's actually due outranks a due-now routine — it was
   // deliberately scheduled by the user for this moment, not just "expected around now".
-  const dateKey = planTodayKey();
-  const dueOneOff = dueTimedPlanItem(getPlanItems(dateKey), dateKey);
+  const target = currentPlanTarget();
+  const dueOneOff = dueTimedPlanItem(planItemsFor(target), target);
   if (dueOneOff) return { title: `Next: ${dueOneOff.task}`, sub: `Planned for ${dueOneOff.when}.`, task: dueOneOff.task, planItemId: dueOneOff.id, button: 'Start next', action: 'startNextPlanItem()' };
   const routine = globalThis.getTodayRoutineAction?.('Now');
   if (routine) return { ...routine, action: 'startTodayRoutineAction()' };
-  const next = getNextPlanItem(dateKey);
+  const next = getNextPlanItem(target);
   if (next) return { title: `Next: ${next.task}`, sub: 'Your next priority.', task: next.task, planItemId: next.id, button: 'Start next', action: 'startNextPlanItem()' };
   const anytime = globalThis.getTodayRoutineAction?.('Anytime');
   if (anytime) return { ...anytime, action: 'startTodayRoutineAction()' };
@@ -5104,10 +5118,11 @@ function getContextualPrompt(todayE) {
   const deepEntries = realEntries.filter(e => e.energy === 'deep');
   const deepMins = sumEnergyMinutes(realEntries, 'deep', todayKey);
   const deepHrs = deepMins / 60;
-  const planItems = getPlanItems(todayKey);
-  const activePlan = getActivePlanItem(todayKey);
-  const nextPlan = planItems.length ? getNextPlanItem(todayKey) : null;
-  const planDone = planItems.filter(i => i.done || planTrackedMin(i.task, todayKey) > 0).length;
+  const planTarget = currentPlanTarget();
+  const planItems = planItemsFor(planTarget);
+  const activePlan = getActivePlanItem(planTarget);
+  const nextPlan = planItems.length ? getNextPlanItem(planTarget) : null;
+  const planDone = planItems.filter(i => i.done || planTrackedMinFor(planTarget, i.task) > 0).length;
 
   const fmtH = h => h >= 1 ? `${h.toFixed(1)}h` : `${Math.round(h * 60)}m`;
 
@@ -5255,7 +5270,10 @@ function renderStatusBanner(todayE) {
   const banner = document.getElementById('status-banner');
   if (!banner) return;
   const todayKey = getViewingDateKey();
-  const planItems = getPlanItems(todayKey);
+  // This banner is current-day only (it hides itself below when browsing), so
+  // it speaks for the current authoritative personal day.
+  const planTarget = currentPlanTarget();
+  const planItems = planItemsFor(planTarget);
   const hasVisibleEntries = todayE.some(e => !e.missed && !e.deleted);
   if (!isViewingToday() || (!hasVisibleEntries && !planItems.length)) {
     banner.style.display = 'none';
@@ -5279,9 +5297,9 @@ function renderStatusBanner(todayE) {
   const hrsLeft = minsLeft / 60;
 
   const fmtH = h => h >= 1 ? `${h.toFixed(1)}h` : `${Math.round(h * 60)}m`;
-  const activePlan = getActivePlanItem(todayKey);
-  const nextPlan = planItems.length ? getNextPlanItem(todayKey) : null;
-  const planDone = planItems.filter(i => i.done || planTrackedMin(i.task, todayKey) > 0).length;
+  const activePlan = getActivePlanItem(planTarget);
+  const nextPlan = planItems.length ? getNextPlanItem(planTarget) : null;
+  const planDone = planItems.filter(i => i.done || planTrackedMinFor(planTarget, i.task) > 0).length;
 
   let bgColor, borderColor, pillBg, pillColor, statusText;
   if (!planItems.length) {
@@ -5406,8 +5424,9 @@ function renderLeftPanel() {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const todayKey = getDateInTZ(Date.now(), tz);
   const todayE = entries.filter(e => !e.deleted && !e.missed && getDateInTZ(e.tsStart || e.ts, tz) === todayKey);
-  const planItems = getPlanItems(todayKey);
-  const planDone = planItems.filter(i => i.done || planTrackedMin(i.task, todayKey) > 0).length;
+  const planTarget = currentPlanTarget();
+  const planItems = planItemsFor(planTarget);
+  const planDone = planItems.filter(i => i.done || planTrackedMinFor(planTarget, i.task) > 0).length;
 
   // Now / timer status
   const nowEl = document.getElementById('lp-now-content');
@@ -5463,11 +5482,12 @@ function renderSidePanel() {
   const spStatus = document.getElementById('sp-status-content');
   if (spStatus) {
     const esc = s => String(s || '').replace(/</g, '&lt;');
-    const planItems = getPlanItems(todayKey);
-    const planDone = planItems.filter(i => i.done || planTrackedMin(i.task, todayKey) > 0).length;
+    const planTarget = currentPlanTarget();
+    const planItems = planItemsFor(planTarget);
+    const planDone = planItems.filter(i => i.done || planTrackedMinFor(planTarget, i.task) > 0).length;
     const pct = planItems.length ? Math.min(100, Math.round(planDone / planItems.length * 100)) : 0;
-    const activePlan = getActivePlanItem(todayKey);
-    const nextPlan = planItems.length ? getNextPlanItem(todayKey) : null;
+    const activePlan = getActivePlanItem(planTarget);
+    const nextPlan = planItems.length ? getNextPlanItem(planTarget) : null;
     const status = activePlan ? `Working: ${activePlan.task}`
       : !planItems.length ? 'No plan yet'
       : planDone >= planItems.length ? 'Plan clear'
@@ -5630,7 +5650,8 @@ function renderToday() {
   const timelineTemplateKey = (settings.templates || [])
     .map(t => [t.id, t.enabled !== false, (t.days || []).join('-'), t.startTime, t.endTime, t.activity, t.energy, !!t.autoLog, (t.skipDates || []).join('/')].join(':'))
     .join(',');
-  const timelinePlanKey = getPlanItems(_viewKey).map(item => [item.id, item.task, item.done, item.updatedAt || ''].join(':')).join(',');
+  const timelinePlanKey = planTargetsForCalendarDate(_viewKey)
+    .flatMap(target => planItemsFor(target).map(item => [target.id, item.id, item.task, item.done, item.updatedAt || ''].join(':'))).join(',');
   const newRenderKey = _viewKey + '|' + timelineTemplateKey + '|' + timelinePlanKey + '|' + todayE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
   const entriesChanged = newRenderKey !== _todayRenderKey;
   if (entriesChanged) _todayRenderKey = newRenderKey;
@@ -6250,14 +6271,14 @@ function stampPlanItemMutation(item, updatedAt = Date.now()) {
 
 /** The plan IS the daily target — focus-mode's deep bar reads dailyCommitment. */
 function syncCommitmentFromPlan() {
-  dailyCommitment = getPlanItems(planTodayKey()).length;
+  dailyCommitment = planItemsFor(currentPlanTarget()).length;
 }
 
 /** `intention` is legacy single-string state that focus-mode still displays. Derive it from the
  *  next unfinished plan item so the focus overlay names the thing you actually meant to do.
  *  Never blanks an existing intention — an empty plan just leaves it alone. */
 function syncIntentionFromPlan() {
-  const next = getPlanItems(planTodayKey()).find(i => !i.done);
+  const next = planItemsFor(currentPlanTarget()).find(i => !i.done);
   if (!next || next.task === intention) return;
   intention = next.task;
   const el = document.getElementById('intention');
@@ -6356,8 +6377,8 @@ function confirmPreparedDatePlan({ targetDate, items, mode, intentionalBlank, ro
   return { localSaved: true, syncPromise };
 }
 
-function planTomorrowSuggestions(targetDate) {
-  const chosen = new Set(getPlanItems(targetDate).map(item => normalizePlanTask(item.task)));
+function planTomorrowSuggestions(target) {
+  const chosen = new Set(planItemsFor(target).map(item => normalizePlanTask(item.task)));
   const out = [];
   const push = (task, tag) => {
     const normalized = normalizePlanTask(task);
@@ -6365,9 +6386,11 @@ function planTomorrowSuggestions(targetDate) {
     out.push({ task, tag });
   };
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const todayKey = getDateInTZ(Date.now(), tz);
-  getPlanItems(todayKey).filter(item => !item.done).forEach(item => push(item.task, 'unfinished today'));
-  const weekKey = getWeekKey(new Date(tzParseTime(targetDate, '12:00')));
+  planItemsFor(currentPlanTarget()).filter(item => !item.done).forEach(item => push(item.task, 'unfinished today'));
+  // The week a target belongs to comes from the day it actually starts on —
+  // for a personal day that is its own start instant, not a bare date string.
+  const weekDateKey = target.store === 'legacy' ? target.dateKey : getDateInTZ(target.startMs, tz);
+  const weekKey = getWeekKey(new Date(tzParseTime(weekDateKey, '12:00')));
   const weeklyPlan = (weeklyReviews[weekKey] || {}).plan || {};
   [weeklyPlan.p1, weeklyPlan.p2, weeklyPlan.p3].forEach(item => { if (item && item.trim()) push(item.trim(), 'this week'); });
   (buildHeroSuggestions().recent || []).filter(isPlannableTask).slice(0, 4).forEach(item => push(item, 'recent'));
@@ -6386,7 +6409,11 @@ globalThis.getPlanTomorrowAppContext = () => ({
   normalizeTask: normalizePlanTask,
   suggestions: planTomorrowSuggestions,
   confirm: confirmPreparedDatePlan,
-  trackedMinutes: (task, dateKey, planItemId) => planTrackedMin(task, dateKey, planItemId),
+  // Target-based now: a plan's tracked minutes are measured inside the window
+  // that plan is actually judged by (a calendar day, or a personal day's own
+  // interval) — see planTrackedMinFor. Still the one seam Daily Reconciliation
+  // reads through.
+  trackedMinutes: (target, task, planItemId) => planTrackedMinFor(target, task, planItemId),
   saveItems: savePlanItems
 });
 
@@ -6406,8 +6433,144 @@ globalThis.getOperationalPlanAppContext = () => ({
   normalizeTask: normalizePlanTask,
   rawItems: getPlanItemsRaw,
   plan: dateKey => plans[dateKey] || null,
-  saveItems: savePlanItems
+  saveItems: savePlanItems,
+  // Single Plan Authority V1 — the legacy half of the authority layer. Every
+  // function here is the app's own existing plans[dateKey] path, so a
+  // legacy-governed day is served by byte-for-byte the code that already ships.
+  confirm: confirmPreparedDatePlan,
+  allPlans: () => plans,
+  earliestPlanDate: () => {
+    const keys = Object.keys(plans).filter(key => globalThis.PlanTomorrowModel?.validPlanDate(key)).sort();
+    return keys.length ? keys[0] : null;
+  },
+  // The calendar-day interval a history screen owns, and the wall-clock resolver
+  // a legacy due-time uses — the app's own, never re-derived inside the layer.
+  calendarDayBounds: dateKey => ({ startMs: tzParseTime(dateKey, '00:00'), endMs: tzParseTime(_dateKeyPlusDays(dateKey, 1), '00:00') }),
+  clockInstant: (dateKey, hhmm) => tzParseTime(dateKey, hhmm)
 });
+
+// ══════════════════════════════════════════════════════
+// PLAN AUTHORITY — every plan read/write in this file goes through a TARGET
+// ══════════════════════════════════════════════════════
+//
+// A bare calendar date stopped identifying a plan the moment Personal Day
+// Boundary shipped, so nothing below asks for "the plan for a date" any more.
+// Consumers ask for the CURRENT day, the UPCOMING day, the day containing an
+// INSTANT, or every day OVERLAPPING a calendar date (history), and the
+// authority layer decides which store answers.
+
+/** True when a boundary history exists in storage. Readable synchronously, long
+ *  before the module graph loads — which is exactly what lets the first paint
+ *  avoid guessing (see currentPlanTarget). */
+function personalDayBoundaryConfigured() {
+  try { return localStorage.getItem('ta3-day-boundary-revisions-v1') !== null; } catch { return false; }
+}
+
+/** The legacy-day target shape, for the pre-module first paint of an account
+ *  that has never enabled a boundary. Identical routing to what the authority
+ *  layer itself returns for such an account. */
+function legacyPlanTarget(dateKey) {
+  return { store: 'legacy', id: dateKey, dateKey, ref: null, startMs: null, endMs: null, timezone: settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone, boundaryTime: '00:00', legacy: true };
+}
+
+/** null means "not knowable yet" — the module graph has not loaded and this
+ *  account HAS a boundary configured. Callers render a neutral placeholder
+ *  instead of quietly showing the calendar plan, which could be a different
+ *  plan entirely. plan-authority.js re-renders once it is ready. */
+function currentPlanTarget() {
+  if (globalThis.PlanAuthority) return globalThis.PlanAuthority.current();
+  return personalDayBoundaryConfigured() ? null : legacyPlanTarget(planTodayKey());
+}
+
+function upcomingPlanTarget() {
+  if (globalThis.PlanAuthority) return globalThis.PlanAuthority.upcoming();
+  if (personalDayBoundaryConfigured()) return null;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return legacyPlanTarget(globalThis.PlanTomorrowModel ? globalThis.PlanTomorrowModel.planTomorrowTargetDate(Date.now(), tz) : _dateKeyPlusDays(planTodayKey(), 1));
+}
+
+/** The authoritative day containing a factual instant (an entry, a completion). */
+function planTargetContaining(instantMs) {
+  if (globalThis.PlanAuthority) return globalThis.PlanAuthority.containing(instantMs);
+  return personalDayBoundaryConfigured() ? null : legacyPlanTarget(getDateInTZ(instantMs, settings.timezone));
+}
+
+/** Decision B: every authoritative day overlapping a calendar date. One entry
+ *  for a legacy account; commonly two once a non-midnight boundary is active.
+ *  History screens render them as separate labeled cards — never merged. */
+function planTargetsForCalendarDate(dateKey) {
+  if (globalThis.PlanAuthority) {
+    try { return globalThis.PlanAuthority.daysOverlappingCalendarDate(dateKey); } catch { return []; }
+  }
+  return personalDayBoundaryConfigured() ? [] : [legacyPlanTarget(dateKey)];
+}
+
+/** Human label for a target: a plain date for a legacy day, the real personal-day
+ *  interval for an operational one. */
+function planTargetLabel(target) {
+  if (!target) return '';
+  if (target.store === 'legacy') return fmtDateKeyLong(target.dateKey);
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: target.timezone, weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${fmt.format(new Date(target.startMs)).replace(',', '')} → ${fmt.format(new Date(target.endMs)).replace(',', '')}`;
+}
+
+function fmtDateKeyLong(dateKey) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, day, 12)));
+}
+
+function planItemsFor(target) {
+  if (!target) return [];
+  if (globalThis.PlanAuthority) return globalThis.PlanAuthority.items(target);
+  return getPlanItems(target.dateKey);
+}
+
+function planRawItemsFor(target) {
+  if (!target) return [];
+  if (globalThis.PlanAuthority) return globalThis.PlanAuthority.rawItems(target);
+  return getPlanItemsRaw(target.dateKey);
+}
+
+function savePlanItemsFor(target, items) {
+  if (!target) throw new Error('Your plan is still loading.');
+  if (globalThis.PlanAuthority) return globalThis.PlanAuthority.saveItems(target, items);
+  return savePlanItems(target.dateKey, items);
+}
+
+/** Minutes tracked against a planned task, inside the window this plan is
+ *  actually judged by: a calendar day for a legacy target, the personal day's
+ *  own interval for an operational one (so a 01:00 block counts for the personal
+ *  day it was planned in, not the calendar date it happens to land on). */
+function planTrackedMinFor(target, task, planItemId = null) {
+  if (!target) return 0;
+  if (target.store === 'legacy') return planTrackedMin(task, target.dateKey, planItemId);
+  const wanted = normalizePlanTask(task);
+  const seen = new Set();
+  let total = 0;
+  getEntriesOverlappingRange(target.startMs, target.endMs).forEach(e => {
+    if (e.missed || e.deleted || e.away || e.break || !e.activity) return;
+    const matchesId = planItemId && e.planItemId === planItemId;
+    const matchesText = !e.planItemId && wanted && normalizePlanTask(e.activity) === wanted;
+    if (!matchesId && !matchesText) return;
+    if (seen.has(e.id)) return;
+    seen.add(e.id);
+    const range = entryTimeRange(e);
+    if (!range) return;
+    // Clipped to the personal day, so one actual instant is counted for exactly
+    // one authoritative day even when a block spans the boundary.
+    total += Math.max(0, Math.min(range.end, target.endMs) - Math.max(range.start, target.startMs)) / 60000;
+  });
+  return Math.round(total);
+}
+
+/** The instant a planned "HH:MM" names inside this target. */
+function planItemInstant(target, when) {
+  if (!target) return null;
+  const hhmm = parsePlanItemTime(when);
+  if (!hhmm) return null;
+  if (globalThis.PlanAuthority) return globalThis.PlanAuthority.itemStartInstant(target, hhmm);
+  return target.store === 'legacy' ? tzParseTime(target.dateKey, hhmm) : null;
+}
 
 /** Minutes actually tracked against a planned task. Prefers an exact planItemId match (survives
  *  the task being renamed after a linked Start/Focus launch — see startPlanItem());
@@ -6443,14 +6606,14 @@ function isPlanTaskActive(task, planItemId = null) {
   return normalizePlanTask(currentTask) === normalizePlanTask(task);
 }
 
-function getPlanItemStatus(item, dateKey, trackedMin) {
+function getPlanItemStatus(item, target, trackedMin) {
   if (isPlanTaskActive(item.task, item.id)) return { key: 'in-progress', label: 'In progress' };
   if (trackedMin > 0) return { key: 'logged', label: 'Logged' };
   return { key: 'not-started', label: 'Not started' };
 }
 
-function getActivePlanItem(dateKey) {
-  return getPlanItems(dateKey).find(item => isPlanTaskActive(item.task, item.id)) || null;
+function getActivePlanItem(target) {
+  return planItemsFor(target).find(item => isPlanTaskActive(item.task, item.id)) || null;
 }
 
 // Plan Linkage V1 — bounded "when" parsing. ONLY an unambiguous zero-padded 24h "HH:MM" (e.g.
@@ -6480,11 +6643,11 @@ function planTimezoneHintHTML() {
  *  worked on — preserves the pre-linkage fallback's deliberate unworked-before-worked-on
  *  preference (a due/next timed item must not get stuck on something already in progress just
  *  because it hasn't been checked off yet). */
-function unworkedPlanItems(items, dateKey) {
-  return items.filter(item => planTrackedMin(item.task, dateKey, item.id) === 0);
+function unworkedPlanItems(items, target) {
+  return items.filter(item => planTrackedMinFor(target, item.task, item.id) === 0);
 }
-function workedOnPlanItems(items, dateKey) {
-  return items.filter(item => planTrackedMin(item.task, dateKey, item.id) > 0);
+function workedOnPlanItems(items, target) {
+  return items.filter(item => planTrackedMinFor(target, item.task, item.id) > 0);
 }
 
 /** The not-done one-off priority whose parseable `when` is already due (its wall-clock time, on
@@ -6493,15 +6656,17 @@ function workedOnPlanItems(items, dateKey) {
  *  (see unworkedPlanItems); within a tier, the earliest scheduled time wins, never array/insertion
  *  order. This governs only the due-now-routine precedence decision in todayGuidedAction() — it is
  *  deliberately stricter (due-gated) than getNextPlanItem()'s own "what's next" ordering below. */
-function dueTimedPlanItem(items, dateKey) {
+function dueTimedPlanItem(items, target) {
   const now = Date.now();
   const due = items.filter(item => {
     if (item.done) return false;
-    const hhmm = parsePlanItemTime(item.when);
-    return hhmm ? tzParseTime(dateKey, hhmm) <= now : false;
+    // Resolved inside the authoritative day, so 01:00 on an 18:00 personal day
+    // is due after midnight — not "already past" at 08:00 the morning before.
+    const instant = planItemInstant(target, item.when);
+    return Number.isFinite(instant) ? instant <= now : false;
   });
   if (!due.length) return null;
-  const pool = unworkedPlanItems(due, dateKey);
+  const pool = unworkedPlanItems(due, target);
   const candidates = pool.length ? pool : due;
   return candidates.reduce((best, item) => {
     if (!best) return item;
@@ -6533,12 +6698,12 @@ globalThis.planDisplayOrder = planDisplayOrder;
  *  worked-on-but-not-done item as finished, but doesn't let it block a fresh priority either);
  *  within each tier, timed items earliest-first via planDisplayOrder(), then everything else in
  *  its existing stable order. */
-function getNextPlanItem(dateKey) {
-  const items = getPlanItems(dateKey);
-  const active = getActivePlanItem(dateKey);
+function getNextPlanItem(target) {
+  const items = planItemsFor(target);
+  const active = getActivePlanItem(target);
   if (active) return active;
   const notDone = items.filter(item => !item.done);
-  const ranked = [...planDisplayOrder(unworkedPlanItems(notDone, dateKey)), ...planDisplayOrder(workedOnPlanItems(notDone, dateKey))];
+  const ranked = [...planDisplayOrder(unworkedPlanItems(notDone, target)), ...planDisplayOrder(workedOnPlanItems(notDone, target))];
   return ranked[0] || null;
 }
 
@@ -6548,35 +6713,56 @@ function renderTodayPlan() {
   syncCommitmentFromPlan();
   syncIntentionFromPlan();
 
-  const dateKey  = getViewingDateKey();
   const readOnly = !isViewingToday();
-  const items    = getPlanItems(dateKey);
+  // Today edits the current authoritative personal day. Browsing history is a
+  // Decision B overlap projection: every authoritative day that overlaps the
+  // selected calendar date, each labeled by its own real interval, read-only —
+  // never merged into one invented "plan for that date".
+  const targets = readOnly
+    ? planTargetsForCalendarDate(getViewingDateKey())
+    : [currentPlanTarget()].filter(Boolean);
 
-  if (readOnly && !items.length) {
+  if (!readOnly && !targets.length) {
+    // A boundary is configured but the module graph has not loaded yet, so which
+    // plan is authoritative is not knowable. Say so instead of showing the
+    // calendar plan, which may be a different plan entirely.
+    el.style.display = 'block';
+    el.innerHTML = `<div class="plan-head"><div class="plan-head-text"><span class="plan-title">Priorities</span><span class="plan-count">Loading your personal day…</span></div></div>`;
+    renderTodayActionStrip(getViewingEntries());
+    return;
+  }
+
+  const sections = targets.map(target => ({ target, items: planItemsFor(target) }));
+  if (readOnly && !sections.some(section => section.items.length)) {
     el.style.display = 'none';
     renderTodayActionStrip(getViewingEntries());
     return;
   }
   el.style.display = 'block';
 
-  const doneCount = items.filter(i => i.done).length;
   const esc  = s => String(s).replace(/</g, '&lt;');
   const attr = s => String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
-  const preparation = globalThis.PlanTomorrowModel?.normalizePreparation(plans[dateKey]?.preparation, dateKey);
-  const streak = readOnly ? null : globalThis.PlanTomorrowModel?.planningStreak(plans, Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const streak = readOnly ? null : planningStreakForDisplay();
   const streakText = streak ? `Planning streak · ${streak.current} day${streak.current === 1 ? '' : 's'}${streak.current === 0 && streak.best > 0 ? ` · Best ${streak.best}` : ''}` : '';
+
+  const sectionHtml = ({ target, items }) => {
+  const doneCount = items.filter(i => i.done).length;
+  const preparation = globalThis.PlanAuthority ? globalThis.PlanAuthority.preparation(target) : globalThis.PlanTomorrowModel?.normalizePreparation(plans[target.dateKey]?.preparation, target.dateKey);
+  // A personal day is named by its real interval; a calendar day stays a date.
+  const dayLabel = readOnly && target.store === 'operational' ? `<span class="plan-day-window">${esc(planTargetLabel(target))}</span>` : '';
   const head = `<div class="plan-head">
       <div class="plan-head-text">
         <span class="plan-title">${readOnly ? 'Planned that day' : 'Priorities'}</span>
         <span class="plan-count">${items.length ? `${doneCount} of ${items.length} done` : preparation ? (preparation.intentionalBlank ? 'Open day prepared' : 'Day prepared') : 'Optional · up to 3'}</span>
+        ${dayLabel}
         ${streakText ? `<span class="plan-streak">${streakText}</span>` : ''}
       </div>
       ${readOnly ? '' : `<button class="btn sm ghost" onclick="document.getElementById('plan-strip').classList.toggle('editing')">Edit</button>`}
     </div>`;
 
   const rows = planDisplayOrder(items).map(it => {
-    const mins    = planTrackedMin(it.task, dateKey, it.id);
-    const status  = getPlanItemStatus(it, dateKey, mins);
+    const mins    = planTrackedMinFor(target, it.task, it.id);
+    const status  = getPlanItemStatus(it, target, mins);
     const active  = status.key === 'in-progress';
     const statusPill = `<span class="plan-status ${status.key}">${status.label}</span>`;
     const tracked = `<span class="plan-tracked${mins > 0 ? ' on' : ''}">${fmtPlanMin(mins)} tracked</span>`;
@@ -6612,15 +6798,30 @@ function renderTodayPlan() {
         </div>${planTimezoneHintHTML()}`;
   }
 
-  el.innerHTML = head + rows + `<div class="plan-editor">${footer}</div>`;
+    return head + rows + `<div class="plan-editor">${footer}</div>`;
+  };
+
+  el.innerHTML = sections.filter(section => !readOnly || section.items.length).map(sectionHtml).join('');
   renderTodayActionStrip(getViewingEntries());
+}
+
+/** The Planning Streak, always from the authoritative plan for each day. An
+ *  account that never enabled a boundary gets the existing calendar function
+ *  through the same call (see plan-authority.js), so its number cannot change. */
+function planningStreakForDisplay() {
+  if (globalThis.PlanAuthority) {
+    try { return globalThis.PlanAuthority.streak(); } catch { return null; }
+  }
+  if (personalDayBoundaryConfigured()) return null;
+  return globalThis.PlanTomorrowModel?.planningStreak(plans, Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone) || null;
 }
 
 function addPlanItem() {
   if (!isViewingToday()) return;
-  const dateKey = planTodayKey();
-  const raw     = getPlanItemsRaw(dateKey).slice();
-  if (getPlanItems(dateKey).length >= PLAN_MAX) {
+  const target = currentPlanTarget();
+  if (!target) { showToast('Your plan is still loading'); return; }
+  const raw     = planRawItemsFor(target).slice();
+  if (planItemsFor(target).length >= PLAN_MAX) {
     showToast(`${PLAN_MAX} is the cap — remove one first`);
     return;
   }
@@ -6629,34 +6830,41 @@ function addPlanItem() {
   const task   = (taskEl ? taskEl.value : '').trim();
   if (!task) { showToast('What will you do?'); if (taskEl) taskEl.focus(); return; }
 
-  raw.push(createPlanItem(task, (whenEl ? whenEl.value : '').trim()));
-  savePlanItems(dateKey, raw);
+  const item = createPlanItem(task, (whenEl ? whenEl.value : '').trim());
+  // Validated against whichever day this actually is: a calendar day keeps the
+  // midnight clamp, a personal day is checked against its own real interval.
+  const check = globalThis.PlanAuthority ? globalThis.PlanAuthority.validateItem(target, item) : { ok: true };
+  if (!check.ok) { showToast(check.reason === 'outside-operational-day' ? 'That time is outside this personal day' : 'That time is not valid for this day'); return; }
+  raw.push(item);
+  savePlanItemsFor(target, raw);
 }
 
 function removePlanItem(id) {
   if (!isViewingToday()) return;
-  const dateKey = planTodayKey();
-  const raw = getPlanItemsRaw(dateKey).map(i =>
+  const target = currentPlanTarget();
+  if (!target) return;
+  const raw = planRawItemsFor(target).map(i =>
     i.id === id ? stampPlanItemMutation({ ...i, deleted: true }) : i
   );
-  savePlanItems(dateKey, raw);
+  savePlanItemsFor(target, raw);
 }
 
 function togglePlanDone(id) {
   if (!isViewingToday()) return;
-  const dateKey = planTodayKey();
-  const raw = getPlanItemsRaw(dateKey).map(i => {
+  const target = currentPlanTarget();
+  if (!target) return;
+  const raw = planRawItemsFor(target).map(i => {
     if (i.id !== id) return i;
     const done = !i.done;
     const now = Date.now();
     return stampPlanItemMutation({ ...i, done, doneAt: done ? now : null }, now);
   });
-  savePlanItems(dateKey, raw);
+  savePlanItemsFor(target, raw);
 }
 
 // Mirrors useChip() — reuses the existing timer entry points rather than adding new ones.
 async function startPlanItem(id) {
-  const it = getPlanItems(planTodayKey()).find(x => x.id === id);
+  const it = planItemsFor(currentPlanTarget()).find(x => x.id === id);
   if (!it) return;
   if (running) switchToTask(it.task, it.id);
   else await _startTimer(it.task, it.id);
@@ -6665,7 +6873,7 @@ async function startPlanItem(id) {
 
 async function startNextPlanItem() {
   if (!isViewingToday()) return;
-  const next = getNextPlanItem(planTodayKey());
+  const next = getNextPlanItem(currentPlanTarget());
   if (!next) { showToast('Plan is already clear'); return; }
   if (isPlanTaskActive(next.task)) { showToast('Already working this plan item'); return; }
   await startPlanItem(next.id);
@@ -8188,46 +8396,87 @@ function prepareTomorrowFromReview() {
 
 /** Yesterday's promise, answered with data instead of memory. Neutral by design — an unfinished
  *  item is information, not a verdict. */
+/** The tracked entries a plan is judged against, and each one's minutes INSIDE
+ *  that plan's own window. A legacy day keeps the existing calendar-day window
+ *  verbatim; a personal day uses its own interval with every entry clipped to
+ *  it, so one actual instant is counted for exactly one authoritative day even
+ *  when a block runs across the boundary. */
+function reviewActualEntriesFor(target) {
+  if (target.store === 'legacy') {
+    return getEntriesForDateWindow(target.dateKey).map(entry => ({ entry, minutes: entry.blockIntervalMin || 0 }));
+  }
+  return getEntriesOverlappingRange(target.startMs, target.endMs).map(entry => {
+    const range = entryTimeRange(entry);
+    if (!range) return null;
+    const minutes = Math.max(0, Math.min(range.end, target.endMs) - Math.max(range.start, target.startMs)) / 60000;
+    return minutes > 0 ? { entry, minutes: Math.round(minutes) } : null;
+  }).filter(Boolean);
+}
+
 function renderReviewPlanVsActual() {
   const el = document.getElementById('rv-plan-vs-actual');
   if (!el) return;
-  const plan = plans[_reviewDateKey] || {};
-  const preparation = globalThis.PlanTomorrowModel?.normalizePreparation(plan.preparation, _reviewDateKey);
-  const rawItems = getPlanItemsRaw(_reviewDateKey);
-  const itemIds = preparation ? new Set(preparation.oneOffItemIds) : null;
-  const items = itemIds ? rawItems.filter(item => itemIds.has(item.id)) : rawItems.filter(item => !item.deleted);
   const esc = s => String(s).replace(/</g, '&lt;');
   const labels = {
     'done-early': 'Done early', done: 'Done', 'worked-on': 'Worked on', 'not-done': 'Not done', removed: 'Removed',
     target: 'Target', minimum: 'Minimum', complete: 'Complete'
   };
-  const itemRows = items.map(item => {
-    const minutes = planTrackedMin(item.task, _reviewDateKey, item.id);
-    const status = globalThis.PlanTomorrowModel
-      ? globalThis.PlanTomorrowModel.classifyOneOffActual(item, { targetDate: _reviewDateKey, timezone: preparation?.timezone || settings.timezone, trackedMinutes: minutes, preparedAt: preparation?.firstPreparedAt || 0 })
-      : (item.done ? 'done' : minutes > 0 ? 'worked-on' : 'not-done');
-    return { title: item.task, status, detail: minutes > 0 ? `${fmtPlanMin(minutes)} tracked with the same label` : '' };
+
+  // Decision B: a reviewed calendar date can be covered by more than one
+  // authoritative personal day. Each gets its OWN card, against its OWN plan and
+  // its OWN actuals — never one merged plan invented for the date.
+  const targets = planTargetsForCalendarDate(_reviewDateKey);
+
+  const cards = targets.map(target => {
+    const preparation = globalThis.PlanAuthority
+      ? globalThis.PlanAuthority.preparation(target)
+      : globalThis.PlanTomorrowModel?.normalizePreparation(plans[target.dateKey]?.preparation, target.dateKey);
+    const rawItems = planRawItemsFor(target);
+    const itemIds = preparation ? new Set(preparation.oneOffItemIds) : null;
+    const items = itemIds ? rawItems.filter(item => itemIds.has(item.id)) : rawItems.filter(item => !item.deleted);
+    const itemRows = items.map(item => {
+      const minutes = planTrackedMinFor(target, item.task, item.id);
+      const status = globalThis.PlanAuthority
+        ? globalThis.PlanAuthority.classifyItemActual(target, item, { trackedMinutes: minutes, preparedAt: preparation?.firstPreparedAt || 0, timezone: preparation?.timezone || settings.timezone })
+        : (item.done ? 'done' : minutes > 0 ? 'worked-on' : 'not-done');
+      return { title: item.task, status, detail: minutes > 0 ? `${fmtPlanMin(minutes)} tracked with the same label` : '' };
+    });
+    let routineRows = [];
+    if (preparation && typeof globalThis.getPlanTomorrowRoutineActual === 'function') {
+      try { routineRows = globalThis.getPlanTomorrowRoutineActual(preparation); }
+      catch (err) { routineRows = [{ title: `Routine actual unavailable: ${err.message}`, status: 'removed' }]; }
+    }
+    const rows = [...itemRows, ...routineRows];
+    const plannedLabels = new Set([...items.map(item => item.task), ...routineRows.flatMap(row => [row.title, row.taskLabel])].filter(Boolean).map(normalizePlanTask));
+    const plannedItemIds = new Set(items.map(item => item.id));
+    const unplanned = new Map();
+    reviewActualEntriesFor(target).filter(({ entry }) => !entry.deleted && !entry.missed && !entry.break && !entry.away
+        && !(entry.planItemId && plannedItemIds.has(entry.planItemId))
+        && !plannedLabels.has(normalizePlanTask(entry.activity))).forEach(({ entry, minutes }) => {
+      const label = entry.activity || 'Unlabeled work';
+      unplanned.set(label, (unplanned.get(label) || 0) + minutes);
+    });
+    return { target, rows, unplanned };
   });
-  let routineRows = [];
-  if (preparation && typeof globalThis.getPlanTomorrowRoutineActual === 'function') {
-    try { routineRows = globalThis.getPlanTomorrowRoutineActual(_reviewDateKey, preparation); }
-    catch (err) { routineRows = [{ title: `Routine actual unavailable: ${err.message}`, status: 'removed' }]; }
-  }
-  const rows = [...itemRows, ...routineRows];
-  const plannedLabels = new Set([...items.map(item => item.task), ...routineRows.flatMap(row => [row.title, row.taskLabel])].filter(Boolean).map(normalizePlanTask));
-  const plannedItemIds = new Set(items.map(item => item.id));
-  const unplanned = new Map();
-  getEntriesForDateWindow(_reviewDateKey).filter(entry => !entry.deleted && !entry.missed && !entry.break && !entry.away
-      && !(entry.planItemId && plannedItemIds.has(entry.planItemId))
-      && !plannedLabels.has(normalizePlanTask(entry.activity))).forEach(entry => {
-    const label = entry.activity || 'Unlabeled work';
-    unplanned.set(label, (unplanned.get(label) || 0) + (entry.blockIntervalMin || 0));
-  });
-  const unplannedHtml = unplanned.size ? `<div class="rv-pva"><div class="rv-pva-head">Unplanned tracked activity</div>${[...unplanned].map(([label, minutes]) => `<div class="rv-pva-row">${esc(label)} · ${fmtPlanMin(minutes)}</div>`).join('')}</div>` : '';
-  if (!rows.length && !unplanned.size) { el.style.display = 'none'; el.innerHTML = ''; return; }
-  const actual = globalThis.PlanTomorrowModel?.summarizeActual(rows) || { planned: rows.length, active: rows.length, completed: rows.filter(row => row.status !== 'not-done').length, removed: 0 };
+
+  if (!cards.some(card => card.rows.length || card.unplanned.size)) { el.style.display = 'none'; el.innerHTML = ''; return; }
+
+  // Only name the personal-day window when there is more than one authoritative
+  // day for this date, or when the window is not the calendar day itself —
+  // a legacy account's card is captioned exactly as it always was (not at all).
+  const needsWindowLabel = target => target.store === 'operational';
   el.style.display = 'block';
-  el.innerHTML = `<div class="rv-pva">
+  el.innerHTML = cards.map(({ target, rows, unplanned }) => {
+    if (!rows.length && !unplanned.size) return '';
+    const actual = globalThis.PlanTomorrowModel?.summarizeActual(rows) || { planned: rows.length, active: rows.length, completed: rows.filter(row => row.status !== 'not-done').length, removed: 0 };
+    const caption = needsWindowLabel(target)
+      ? `<div class="rv-pva-window">Personal day ${esc(planTargetLabel(target))} · actuals cover the whole personal day, not just this calendar date</div>`
+      : '';
+    const unplannedHtml = unplanned.size
+      ? `<div class="rv-pva"><div class="rv-pva-head">Unplanned tracked activity</div>${[...unplanned].map(([label, minutes]) => `<div class="rv-pva-row">${esc(label)} · ${fmtPlanMin(minutes)}</div>`).join('')}</div>`
+      : '';
+    return `<div class="rv-pva">
+      ${caption}
       <div class="rv-pva-head">Planned ${actual.planned} · active ${actual.active} · done/worked on ${actual.completed}${actual.removed ? ` · removed ${actual.removed}` : ''}</div>
       ${rows.map(row => {
         const positive = !['not-done', 'removed'].includes(row.status);
@@ -8238,6 +8487,7 @@ function renderReviewPlanVsActual() {
         </div>`;
       }).join('')}
     </div>` + unplannedHtml;
+  }).join('');
 }
 
 function saveReview(){
@@ -9250,10 +9500,10 @@ function classifyPartnerViewTimelineItems(combined) {
 /** Same canonical status pipeline renderTodayPlan() uses for each row —
  *  getPlanItemStatus() plus the separate `done` overlay — never a second
  *  calculation of what "In progress"/"Done"/"Not started" means. */
-function buildPartnerViewPriorityInputs(dateKey) {
-  return getPlanItems(dateKey).map(it => {
-    const mins = typeof planTrackedMin === 'function' ? planTrackedMin(it.task, dateKey, it.id) : 0;
-    const status = getPlanItemStatus(it, dateKey, mins);
+function buildPartnerViewPriorityInputs(target) {
+  return planItemsFor(target).map(it => {
+    const mins = planTrackedMinFor(target, it.task, it.id);
+    const status = getPlanItemStatus(it, target, mins);
     return { title: it.task, plannedTime: it.when || null, done: it.done === true, statusLabel: it.done ? 'Done' : status.label };
   });
 }
@@ -9288,8 +9538,14 @@ function buildPartnerViewProjectionForPublish() {
   // squashed entries, never the post-merge/clip Timeline display array.
   const health = computeTodayHealth(displayTodayE, todayKey);
   const timelineItems = classifyPartnerViewTimelineItems(combined);
-  const priorities = buildPartnerViewPriorityInputs(todayKey);
-  const tomorrowPriorities = buildPartnerViewPriorityInputs(tomorrowKey).map(p => ({ title: p.title, plannedTime: p.plannedTime }));
+  // Partner View's "today" and "tomorrow" are the CURRENT and UPCOMING
+  // authoritative personal days, never a calendar-date plan lookup (Decision B
+  // reserves date lookup for history). For a legacy account those are exactly
+  // today's and tomorrow's calendar plans, unchanged.
+  const currentTarget = currentPlanTarget();
+  const upcomingTarget = upcomingPlanTarget();
+  const priorities = buildPartnerViewPriorityInputs(currentTarget);
+  const tomorrowPriorities = buildPartnerViewPriorityInputs(upcomingTarget).map(p => ({ title: p.title, plannedTime: p.plannedTime }));
 
   return PV.buildPartnerViewProjection({
     dateKey: todayKey, priorities, soFar: health, timelineItems,

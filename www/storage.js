@@ -1689,17 +1689,24 @@ function publishSharedAccountability() {
   const todayKey = getDateInTZ(Date.now(), tz);
   const tomorrowKey = PT ? PT.planTomorrowTargetDate(Date.now(), tz) : null;
 
-  const rawItems = typeof getPlanItems === 'function' ? getPlanItems(todayKey) : [];
+  // Partner View's "today" and "tomorrow" are the CURRENT and UPCOMING
+  // authoritative personal days — never a calendar-date plan lookup. For an
+  // account that never enabled a boundary these resolve to today's and
+  // tomorrow's calendar plans, exactly as before.
+  const currentTarget = typeof currentPlanTarget === 'function' ? currentPlanTarget() : null;
+  const upcomingTarget = typeof upcomingPlanTarget === 'function' ? upcomingPlanTarget() : null;
+  const rawItems = currentTarget ? planItemsFor(currentTarget) : [];
   const todayItems = rawItems.map(item => {
-    const minutes = typeof planTrackedMin === 'function' ? planTrackedMin(item.task, todayKey, item.id) : 0;
+    const minutes = planTrackedMinFor(currentTarget, item.task, item.id);
     return { title: item.task, status: M.deriveTodayItemStatus(item, minutes) };
   });
 
   let prepStatus = 'not-prepared';
-  if (tomorrowKey && PT) {
-    const tomorrowPlan = plans[tomorrowKey];
-    const preparation = PT.normalizePreparation(tomorrowPlan && tomorrowPlan.preparation, tomorrowKey);
-    prepStatus = M.deriveTomorrowPrepStatus(preparation);
+  if (upcomingTarget && globalThis.PlanAuthority) {
+    prepStatus = M.deriveTomorrowPrepStatus(globalThis.PlanAuthority.preparation(upcomingTarget));
+  } else if (upcomingTarget && PT) {
+    const tomorrowPlan = plans[upcomingTarget.dateKey];
+    prepStatus = M.deriveTomorrowPrepStatus(PT.normalizePreparation(tomorrowPlan && tomorrowPlan.preparation, upcomingTarget.dateKey));
   }
 
   const payload = M.buildSharedPayload({
