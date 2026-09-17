@@ -222,6 +222,46 @@ test('at 08:00 the owner can prepare the upcoming 18:00 personal day, and it is 
   await expect(surface(page).locator('[data-op-pane-root="current"]')).toContainText('Night shift block');
 });
 
+// ── long-lived session: the real 60s interval rolls listeners over 18:00 ────
+
+test('a page left open across 18:00 re-subscribes to the new current/upcoming days with no reload', async ({ page }) => {
+  // 18:00 Manila was enabled the previous day, so both days around D 18:00 are operational.
+  const store = JSON.stringify({ schemaVersion: 1, revisions: {
+    'legacy-calendar-day-v0': { id: 'legacy-calendar-day-v0', boundaryTime: '00:00', timezone: TZ, effectiveFromInstant: null },
+    'r-1800': { id: 'r-1800', boundaryTime: '18:00', timezone: TZ, effectiveFromInstant: Date.parse('2026-09-15T18:00:00+08:00') },
+  } });
+  await page.clock.install({ time: Date.parse('2026-09-16T17:58:30+08:00') });
+  await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: firebaseStub }));
+  await page.addInitScript(({ timezone, store }) => {
+    if (sessionStorage.getItem('pdb-seeded')) return;
+    localStorage.clear();
+    sessionStorage.setItem('pdb-seeded', '1');
+    localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
+    localStorage.setItem('ta3-tz', timezone);
+    localStorage.setItem('ta3-device-id', 'device-pdb-test');
+    localStorage.setItem('ta3-settings', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries', '[]');
+    localStorage.setItem('ta3-plans', '{}');
+    localStorage.setItem('ta3-daily-routines-v1', JSON.stringify({ schemaVersion: 1, timezone, routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
+    localStorage.setItem('ta3-day-boundary-revisions-v1', store);
+  }, { timezone: TZ, store });
+  await page.goto(appUrl);
+  await page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object');
+
+  const wanted = () => page.evaluate(() => window.PersonalDayBoundaryLive.liveDayIds());
+  const attached = () => page.evaluate(() => window.PersonalDayBoundaryLive.attachedDayIds());
+  await page.evaluate(() => window.PersonalDayBoundaryLive.attachLiveDays());
+  const before = await attached();
+  expect(before).toHaveLength(2);
+
+  // Only the app's own setInterval runs from here: no reload, no write, no reconnect.
+  await page.clock.runFor('03:00');
+  const after = await attached();
+  expect(after).toEqual(await wanted());
+  expect(after[0]).toBe(before[1]);
+  expect(after).not.toContain(before[0]);
+});
+
 // ── boundary change through the real UI ─────────────────────────────────────
 
 test('changing 18:00 -> 20:00 at 21:00 states "tomorrow" and is reported as a pending change', async ({ page }) => {
