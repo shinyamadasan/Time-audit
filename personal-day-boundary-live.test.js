@@ -464,6 +464,33 @@ test('changing the boundary time never loses an already-written plan for a day w
   assert.deepEqual(device.planRepository.read(currentId).items.map(i => i.id), ['keep']);
 });
 
+test('a plan prepared for an upcoming day is RETAINED, not deleted, when a later boundary change makes that day never occur', () => {
+  // At 08:00 on D the user enables an 18:00 boundary and prepares the upcoming
+  // personal day (which would start 18:00 on D).
+  const device = makeDevice({ clock: manila(D, '08:00') });
+  device.live.proposeBoundary({ boundaryTime: '18:00', timezone: MANILA });
+  const morning = device.live.planningDays();
+  const preparedId = morning.upcoming.authority.operationalDayId;
+  device.live.writePlanItems(morning.upcoming, [{ id: 'prep', task: 'prepared ahead', when: '', done: false, updatedAt: 1, updatedBy: 'device-a' }], morning.revisions);
+
+  // At 09:00 the same day they change their mind to a 12:00 boundary, which
+  // activates at 12:00 TODAY — before the 18:00 day would ever have begun.
+  device.setNow(manila(D, '09:00'));
+  device.live.proposeBoundary({ boundaryTime: '12:00', timezone: MANILA });
+
+  const after = device.live.planningDays();
+  assert.equal(after.upcoming.startMs, manila(D, '12:00'), 'the upcoming day now begins at the new boundary');
+  assert.notEqual(after.upcoming.authority.operationalDayId, preparedId, 'the 18:00 day the user prepared will now never occur');
+
+  // HONEST LIMITATION, asserted rather than hidden: that prepared plan is not
+  // deleted — the record is still in the store, byte-intact — but it is no
+  // longer reachable through the Now/Next panes, because the personal day it
+  // belonged to no longer happens. Nothing is silently destroyed; nothing is
+  // silently resurrected into a different day either.
+  assert.deepEqual(device.planRepository.read(preparedId).items.map(i => i.id), ['prep'], 'the prepared record is retained, not deleted');
+  assert.deepEqual(device.live.readPlanItems(after.upcoming), [], 'and it is never silently carried into the new upcoming day');
+});
+
 test('every live plan read and write routes through resolvePlanAuthority — including a legacy-governed day belonging to a CUSTOM user', () => {
   const legacy = legacyPlanStore();
   const device = makeDevice({ legacy, clock: manila(D, '08:00') });
