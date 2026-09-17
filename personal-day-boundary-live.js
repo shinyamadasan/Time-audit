@@ -40,6 +40,8 @@ import {
   currentOperationalDay,
   isLegacyOperationalDay,
   nextOperationalDay,
+  operationalDayContaining,
+  previousOperationalDay,
   operationalDayInterval,
   proposeBoundaryRevision,
   canonicalizeOperationalDayTimezone,
@@ -217,6 +219,17 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     };
   }
 
+  /** The authoritative day containing one factual instant. The same resolution
+   *  planningDays() uses for "now", exposed for evidence/routine mapping where
+   *  the question is about some other instant entirely. */
+  function dayContaining(instantMs, history = revisions()) {
+    return describeDay(operationalDayContaining(instantMs, history), history);
+  }
+
+  function previousDay(ref, history = revisions()) {
+    return describeDay(previousOperationalDay(ref, history), history);
+  }
+
   /** The current personal day (the one containing `nowMs` — the "Today
    *  equivalent") and the upcoming one that begins at the next boundary (the
    *  "Tomorrow equivalent" the owner prepares in advance).
@@ -243,12 +256,45 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     return isLegacyOperationalDay(ref, history);
   }
 
-  function readPlanItems(day) {
-    if (day.authority.store === 'legacy') {
-      if (!legacyPlans) throw new Error('Legacy plan access is not wired.');
-      return legacyPlans.readItems(day.authority.dateKey);
+  /** The whole operational record (items + preparation) for an operational day.
+   *  Legacy days are never read here — their record is index.html's own
+   *  plans[dateKey], reached through the injected legacy accessors. */
+  function readRecord(day) {
+    if (authorityOf(day).store !== 'operational') throw new Error('readRecord is for operational days only.');
+    return planRepository.read(authorityOf(day).operationalDayId);
+  }
+
+  /** Items + preparation written as ONE confirmation, then pushed. Preparation
+   *  lives on the same record as the items it describes (never a parallel
+   *  store), and items are range-validated against this day's real interval
+   *  before anything is persisted. */
+  function writePlanWithPreparation(day, items, preparation, history) {
+    if (authorityOf(day).store !== 'operational') throw new Error('writePlanWithPreparation is for operational days only.');
+    const id = authorityOf(day).operationalDayId;
+    planRepository.write(id, items, { updatedBy: deviceId(), now: now(), ref: day.ref, revisions: history });
+    planRepository.writePreparation(id, preparation);
+    if (planSync) {
+      try { return Promise.resolve(planSync.syncDay(id)); } catch { /* offline — reconnect re-pushes via pushAllLocal() */ }
     }
-    const record = planRepository.read(day.authority.operationalDayId);
+    return Promise.resolve(false);
+  }
+
+  /** Accepts either this module's own describeDay() shape (`day.authority`) or
+   *  plan-authority.js's flattened target (`{ store, id }`) — the same decision,
+   *  already made by resolvePlanAuthority, spelled two ways. Never re-decides. */
+  function authorityOf(day) {
+    if (day?.authority) return day.authority;
+    if (day?.store === 'operational') return { store: 'operational', operationalDayId: day.id };
+    if (day?.store === 'legacy') return { store: 'legacy', dateKey: day.dateKey };
+    throw new Error('A resolved plan day/target is required.');
+  }
+
+  function readPlanItems(day) {
+    if (authorityOf(day).store === 'legacy') {
+      if (!legacyPlans) throw new Error('Legacy plan access is not wired.');
+      return legacyPlans.readItems(authorityOf(day).dateKey);
+    }
+    const record = planRepository.read(authorityOf(day).operationalDayId);
     return Array.isArray(record?.items) ? record.items : [];
   }
 
@@ -258,12 +304,12 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
    *  is range-validated against that operational day's real interval before
    *  anything is persisted. */
   function writePlanItems(day, items, history) {
-    if (day.authority.store === 'legacy') {
+    if (authorityOf(day).store === 'legacy') {
       if (!legacyPlans) throw new Error('Legacy plan access is not wired.');
-      legacyPlans.saveItems(day.authority.dateKey, items);
-      return { store: 'legacy', dateKey: day.authority.dateKey };
+      legacyPlans.saveItems(authorityOf(day).dateKey, items);
+      return { store: 'legacy', dateKey: authorityOf(day).dateKey };
     }
-    const id = day.authority.operationalDayId;
+    const id = authorityOf(day).operationalDayId;
     planRepository.write(id, items, { updatedBy: deviceId(), now: now(), ref: day.ref, revisions: history });
     if (planSync) {
       try { planSync.syncDay(id); } catch { /* offline — reconnect re-pushes via syncLiveDays() */ }
@@ -347,9 +393,15 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     previewProposal,
     proposeBoundary,
     planningDays,
+    describeDay,
+    dayContaining,
+    previousDay,
     dayIsLegacy,
     readPlanItems,
+    readRecord,
     writePlanItems,
+    writePlanWithPreparation,
+    deviceId,
     liveDayIds,
     attachLiveDays,
     refreshLiveDays,
