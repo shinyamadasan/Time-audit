@@ -163,6 +163,11 @@ export function createPlanAuthority(deps = {}) {
       return { startMs: start.instantMs, endMs: end.instantMs };
     };
 
+  // Called after an OPERATIONAL write (the legacy store runs its own equivalent
+  // from inside writeDatePlanLocal), so the app re-renders the surfaces that just
+  // changed instead of each caller remembering to.
+  const onWrite = typeof deps.onWrite === 'function' ? deps.onWrite : () => {};
+
   let cacheToken = 0;
   let streakCache = null;
 
@@ -255,9 +260,14 @@ export function createPlanAuthority(deps = {}) {
   }
 
   function saveItems(target, nextItems) {
-    if (target.store === 'legacy') legacy.saveItems(target.dateKey, nextItems);
-    else live.writePlanItems(target, nextItems, live.revisions());
+    if (target.store === 'legacy') {
+      legacy.saveItems(target.dateKey, nextItems);
+      invalidate();
+      return target;
+    }
+    live.writePlanItems(target, nextItems, live.revisions());
     invalidate();
+    onWrite();
     return target;
   }
 
@@ -335,6 +345,7 @@ export function createPlanAuthority(deps = {}) {
     });
     const syncPromise = live.writePlanWithPreparation(target, nextItems, built, live.revisions());
     invalidate();
+    onWrite();
     return { localSaved: true, syncPromise };
   }
 
@@ -620,6 +631,7 @@ if (typeof window !== 'undefined') {
     accountTimezone: () => authorityAppContext().timezone,
     calendarDayBounds: dateKey => authorityAppContext().calendarDayBounds(dateKey),
     legacyClockInstant: (dateKey, hhmm) => authorityAppContext().clockInstant(dateKey, hhmm),
+    onWrite: () => globalThis.refreshAuthoritativePlanSurfaces?.(),
   });
 
   // The plan strip, Up Next and the commitments pane all render once,
