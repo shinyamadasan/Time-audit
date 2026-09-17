@@ -160,8 +160,20 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
       return Promise.resolve({ committed: false, outcome: 'transport-failure' });
     }
 
-    let outcome = 'committed';
+    // Firebase's transaction update function may be invoked MANY times for one
+    // transaction() call (it re-runs against fresh server data whenever a
+    // concurrent write races it) and the caller is documented to have to
+    // "handle abandoned values". `outcome` therefore has to be RESET at the top
+    // of every invocation, before any branch logic runs: only the LAST
+    // invocation is the one whose returned value is actually committed (or
+    // aborted), so only its label may survive to the .then() below. Without
+    // this reset, an earlier, abandoned invocation that set e.g. 'idempotent' /
+    // 'deduplicated' / 'canonicalized' would leak its label onto a later
+    // invocation that legitimately reached the "genuinely new fact" branch,
+    // and the caller would be told the wrong thing about what was written.
+    let outcome = 'skipped';
     return collectionRef.transaction(remoteMap => {
+      outcome = 'committed'; // per-invocation reset — never inherited across retries
       const decoded = decodeRemoteHistory(remoteMap);
       if (!decoded.valid) { outcome = 'malformed-remote'; return undefined; }
       const remoteById = remoteMap || {};
@@ -209,6 +221,7 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
         outcome = 'conflict';
         return undefined;
       }
+      outcome = 'committed'; // explicit, never "whatever the initial value happened to still be"
       return withCandidate;
     }, undefined, false)
       .then(result => ({ committed: !!result?.committed, outcome }))
