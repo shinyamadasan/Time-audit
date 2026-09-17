@@ -6537,6 +6537,20 @@ function savePlanItemsFor(target, items) {
   return savePlanItems(target.dateKey, items);
 }
 
+/** Everything that must happen after an authoritative plan changes, whichever
+ *  store held it. The legacy path already runs this from inside
+ *  writeDatePlanLocal(); the operational path has no equivalent of its own, so
+ *  the authority layer calls this after an operational write and after an
+ *  inbound remote merge. Render-only — it never writes. */
+function refreshAuthoritativePlanSurfaces() {
+  syncCommitmentFromPlan();
+  renderTodayPlan();
+  if (typeof publishSharedAccountability === 'function') publishSharedAccountability();
+  if (typeof globalThis.refreshTomorrowView === 'function') globalThis.refreshTomorrowView();
+  if (typeof globalThis.refreshOperationalPlanSurfaceIfMounted === 'function') globalThis.refreshOperationalPlanSurfaceIfMounted();
+}
+globalThis.refreshAuthoritativePlanSurfaces = refreshAuthoritativePlanSurfaces;
+
 /** Minutes tracked against a planned task, inside the window this plan is
  *  actually judged by: a calendar day for a legacy target, the personal day's
  *  own interval for an operational one (so a 01:00 block counts for the personal

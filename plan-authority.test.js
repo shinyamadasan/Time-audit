@@ -12,7 +12,9 @@ import { createPersonalDayBoundaryLiveWiring } from './personal-day-boundary-liv
 import { createPersonalDayBoundaryRepository } from './personal-day-boundary-repository.js';
 import { createOperationalPlanRepository } from './operational-plan-repository.js';
 import { createOperationalPlanSyncBridge } from './operational-plan-sync.js';
+import { createPersonalDayBoundarySyncBridge } from './personal-day-boundary-sync.js';
 import { planningStreak, carriedItemId } from './plan-tomorrow-model.js';
+import { mergeOperationalPlanRecords } from './operational-plan-model.js';
 
 const MANILA = 'Asia/Manila';   // UTC+8, no DST
 const NEW_YORK = 'America/New_York'; // DST, for anomaly coverage
@@ -104,13 +106,15 @@ let seq = 0;
 /** One device: boundary + operational repositories, a legacy store, an injected
  *  clock, and the authority layer on top — the same composition index.html
  *  builds in the browser. */
-function makeApp({ clock = manila(D, '08:00'), legacy = legacyStore(), storage = memory(), planStorage = memory(), roomRef = null, accountTimezone = MANILA, deviceId = 'device-a' } = {}) {
+function makeApp({ clock = manila(D, '08:00'), legacy = legacyStore(), storage = memory(), planStorage = memory(), roomRef = null, accountTimezone = MANILA, deviceId = 'device-a', idPrefix = 'rev' } = {}) {
   const nowRef = { value: clock };
-  const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: () => `rev-${++seq}` });
+  const roomRefRef = { value: roomRef };
+  const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: () => `${idPrefix}-${++seq}` });
   const planRepository = createOperationalPlanRepository({ storage: planStorage });
-  const planSync = roomRef ? createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef: () => roomRef }) : null;
+  const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef: () => roomRefRef.value });
+  const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef: () => roomRefRef.value });
   const live = createPersonalDayBoundaryLiveWiring({
-    boundaryRepository, planRepository, planSync,
+    boundaryRepository, planRepository, planSync, boundarySync,
     legacyPlans: { readItems: k => legacy.rawItems(k), saveItems: (k, i) => legacy.saveItems(k, i) },
     now: () => nowRef.value,
     deviceId: () => deviceId,
@@ -121,7 +125,15 @@ function makeApp({ clock = manila(D, '08:00'), legacy = legacyStore(), storage =
     now: () => nowRef.value,
     accountTimezone: () => accountTimezone,
   });
-  return { authority, live, legacy, planRepository, boundaryRepository, setNow: v => { nowRef.value = v; }, now: () => nowRef.value };
+  return {
+    authority, live, legacy, planRepository, boundaryRepository, planSync, boundarySync,
+    setNow: v => { nowRef.value = v; },
+    now: () => nowRef.value,
+    // Offline / reconnect are modeled exactly as the app experiences them: the
+    // room ref is simply absent while offline, and appears on reconnect.
+    goOffline: () => { roomRefRef.value = null; },
+    goOnline: ref => { roomRefRef.value = ref; },
+  };
 }
 
 const item = (id, task, extra = {}) => ({ id, task, when: '', done: false, doneAt: null, updatedAt: 1000, updatedBy: 'device-a', ...extra });
@@ -517,6 +529,30 @@ test('carrying from a personal day into a calendar day is refused, not fudged', 
   assert.throws(() => carryItemIdFor(operational, 'p-abc', app.authority.legacyTarget(D_NEXT)), /not supported/);
 });
 
+test('carrying forward across personal days converges on ONE item across devices', () => {
+  const roomRef = fakeRoomRef();
+  const a = graveyardApp({ roomRef, deviceId: 'device-a', idPrefix: 'a' });
+  a.setNow(manila(D, '19:00'));
+  const source = a.authority.current();
+  const destination = a.authority.upcoming();
+  const unfinished = item('p-unfinished', 'Unfinished work');
+  a.authority.saveItems(source, [unfinished]);
+
+  // Two devices independently carry the same unfinished item forward.
+  const carryId = carryItemIdFor(source, unfinished.id, destination);
+  const carriedOnA = { ...item(carryId, 'Unfinished work', { carriedFromId: unfinished.id }), updatedAt: manila(D, '19:05'), updatedBy: 'device-a' };
+  const carriedOnB = { ...item(carryId, 'Unfinished work', { carriedFromId: unfinished.id }), updatedAt: manila(D, '19:06'), updatedBy: 'device-b' };
+  a.authority.saveItems(destination, [carriedOnA]);
+  const merged = mergeOperationalPlanRecords(
+    { items: [carriedOnA], updatedAt: manila(D, '19:05') },
+    { items: [carriedOnB], updatedAt: manila(D, '19:06') },
+    destination.id,
+  );
+  assert.equal(merged.items.length, 1, 'the deterministic id collapses both carries into one item');
+  assert.equal(merged.items[0].id, carryId);
+  assert.equal(a.authority.items(source).length, 1, 'and the source day keeps its own item, unmoved');
+});
+
 test('legacy carry ids are untouched for legacy days', () => {
   const app = makeApp();
   const source = app.authority.current();
@@ -525,7 +561,172 @@ test('legacy carry ids are untouched for legacy days', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 9. Authority-consistency matrix — every consumer question, one answer
+// 9. Boundary-adjustment chaos
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('18:00 -> 20:00 changed BEFORE the new boundary: today is truncated, the plan stays where it was prepared', () => {
+  const app = graveyardApp();
+  const upcoming = app.authority.upcoming();
+  app.authority.saveItems(upcoming, [item('n1', 'Night shift')]);
+
+  app.setNow(manila(D, '19:00')); // inside the 18:00 day, before 20:00
+  app.live.proposeBoundary({ boundaryTime: '20:00', timezone: MANILA });
+  const current = app.authority.current();
+  assert.equal(current.id, upcoming.id, 'the day in progress keeps its identity');
+  assert.equal(current.endMs, manila(D, '20:00'), 'and is truncated at the new boundary, not extended');
+  assert.deepEqual(app.authority.items(current).map(i => i.task), ['Night shift'], 'its plan is untouched');
+  assert.equal(app.authority.upcoming().startMs, manila(D, '20:00'));
+});
+
+test('18:00 -> 20:00 changed AFTER the new boundary passes activates the next day, and nothing is orphaned', () => {
+  const app = graveyardApp();
+  app.setNow(manila(D, '21:00'));
+  const before = app.authority.current();
+  app.live.proposeBoundary({ boundaryTime: '20:00', timezone: MANILA });
+  assert.equal(app.authority.current().id, before.id, 'the day in progress is not re-cut retroactively');
+  // 20:00 has already passed today, so the new rule activates at 20:00 TOMORROW.
+  // The day starting 18:00 tomorrow is therefore still governed by the 18:00
+  // revision and is simply truncated when the new one takes over.
+  const upcoming = app.authority.upcoming();
+  assert.equal(upcoming.startMs, manila(D_NEXT, '18:00'));
+  assert.equal(upcoming.endMs, manila(D_NEXT, '20:00'));
+  assert.equal(app.authority.next(upcoming).startMs, manila(D_NEXT, '20:00'), 'and the 20:00 rule owns everything after that');
+  assert.deepEqual(app.authority.preparedPlans(), []);
+});
+
+test('a timezone change appends a revision and never reinterprets earlier days', () => {
+  const app = graveyardApp();
+  app.setNow(manila(D, '19:00'));
+  const before = app.authority.current();
+  const beforeInterval = [before.startMs, before.endMs];
+  app.live.proposeBoundary({ boundaryTime: '18:00', timezone: NEW_YORK });
+  const after = app.authority.current();
+  assert.equal(after.id, before.id);
+  assert.deepEqual([after.startMs, after.endMs], [beforeInterval[0], after.endMs], 'the day it started in is unchanged');
+  assert.equal(after.timezone, MANILA, 'a past day keeps its own historical timezone');
+  assert.equal(app.authority.upcoming().timezone, NEW_YORK, 'only the upcoming day moves to the new zone');
+});
+
+test('time AND timezone changed together is a single new revision with both facts', () => {
+  const app = graveyardApp();
+  app.setNow(manila(D, '19:00'));
+  app.live.proposeBoundary({ boundaryTime: '06:00', timezone: NEW_YORK });
+  const upcoming = app.authority.upcoming();
+  assert.equal(upcoming.boundaryTime, '06:00');
+  assert.equal(upcoming.timezone, NEW_YORK);
+  assert.equal(app.boundaryRepository.status().revisions.length, 3, 'anchor + 18:00 + the combined change');
+});
+
+test('custom 00:00 is operational, never a return to legacy authority', () => {
+  const app = graveyardApp();
+  app.setNow(manila(D, '19:00'));
+  app.live.proposeBoundary({ boundaryTime: '00:00', timezone: MANILA });
+  app.setNow(manila(D_NEXT, '02:00'));
+  const current = app.authority.current();
+  assert.equal(current.store, 'operational');
+  assert.equal(current.startMs, manila(D_NEXT, '00:00'));
+});
+
+test('a historical personal day is reconciled under the revision that governed IT, not the current one', () => {
+  const app = graveyardApp();
+  app.setNow(manila(D, '19:00'));
+  const historical = app.authority.current();               // 18:00 D -> 18:00 D+1
+  const items = [
+    item('h1', 'Historical work', { done: true, doneAt: manila(D, '20:00') }),
+    item('h2', 'Still open'), // a plan of only-completed items is not confirmable
+  ];
+  app.authority.saveItems(historical, items);
+  app.authority.confirmPreparation(historical, { items, mode: 'normal', intentionalBlank: false, routineInstanceIds: [] });
+
+  // Days later the owner moves their boundary to 06:00.
+  app.setNow(manila(D_NEXT, '19:00'));
+  app.live.proposeBoundary({ boundaryTime: '06:00', timezone: MANILA });
+  app.setNow(Date.parse('2026-09-20T12:00:00+08:00'));
+
+  // Re-resolving that past instant still yields the SAME day, with the same
+  // interval and the same plan — history is not re-cut under the new rule.
+  const reresolved = app.authority.containing(manila(D, '20:00'));
+  assert.equal(reresolved.id, historical.id);
+  assert.deepEqual([reresolved.startMs, reresolved.endMs], [historical.startMs, historical.endMs]);
+  assert.equal(reresolved.boundaryTime, '18:00');
+  assert.deepEqual(app.authority.items(reresolved).map(i => i.task), ['Historical work', 'Still open']);
+  // And its reconciliation verdict is judged against ITS OWN start instant.
+  assert.equal(app.authority.classifyItemActual(reresolved, app.authority.rawItems(reresolved)[0], { trackedMinutes: 0, preparedAt: 0 }), 'done');
+  assert.equal(app.authority.classifyItemActual(reresolved, { ...items[0], doneAt: historical.startMs - 60000 }, { trackedMinutes: 0, preparedAt: 0 }), 'done-early');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. Offline, reconnect, multi-device, fresh device
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('offline through a rollover: the plan is written locally and pushed on reconnect', async () => {
+  const roomRef = fakeRoomRef();
+  const app = graveyardApp({ roomRef });
+  app.goOffline();
+  const upcoming = app.authority.upcoming();
+  const items = [item('n1', 'Night shift')];
+  app.authority.saveItems(upcoming, items);
+  app.authority.confirmPreparation(upcoming, { items, mode: 'normal', intentionalBlank: false, routineInstanceIds: [] });
+  assert.deepEqual(app.authority.items(upcoming).map(i => i.task), ['Night shift'], 'local write succeeds offline');
+
+  // The boundary rolls over while still offline.
+  app.setNow(manila(D, '18:30'));
+  app.live.tick();
+  assert.equal(app.authority.current().id, upcoming.id);
+
+  app.goOnline(roomRef);
+  app.live.pushAllLocal();
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  const remote = roomRef.child('operationalPlans').val();
+  assert.ok(remote && Object.keys(remote).length === 1, 'reconnect pushed the plan');
+});
+
+test('multi-device: two devices editing the same personal day converge per item', async () => {
+  const roomRef = fakeRoomRef();
+  const a = graveyardApp({ roomRef, deviceId: 'device-a', idPrefix: 'a' });
+  a.setNow(manila(D, '19:00'));
+  a.live.attachLiveDays();
+  const shared = a.authority.current();
+
+  // Device B starts empty and learns the boundary from the room, like a real
+  // second device would.
+  const b = makeApp({ roomRef, clock: manila(D, '19:00'), deviceId: 'device-b', idPrefix: 'b' });
+  b.live.attachLiveDays();
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  assert.equal(b.authority.enabled(), true, 'B learned the boundary from remote');
+
+  a.authority.saveItems(shared, [item('p-a', 'From A', { updatedAt: manila(D, '19:01'), updatedBy: 'device-a' })]);
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  const onB = b.authority.items(b.authority.current());
+  assert.deepEqual(onB.map(i => i.task), ['From A'], 'B sees A\'s item live');
+
+  b.authority.saveItems(b.authority.current(), [...onB, item('p-b', 'From B', { updatedAt: manila(D, '19:02'), updatedBy: 'device-b' })]);
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  assert.deepEqual(a.authority.items(shared).map(i => i.task).sort(), ['From A', 'From B'], 'and both survive on A — per-item merge, no clobber');
+});
+
+test('a fresh device reconstructs the same authority from remote alone', async () => {
+  const roomRef = fakeRoomRef();
+  const a = graveyardApp({ roomRef });
+  a.setNow(manila(D, '19:00'));
+  a.live.attachLiveDays();
+  const items = [item('n1', 'Night shift')];
+  a.authority.saveItems(a.authority.current(), items);
+  a.authority.confirmPreparation(a.authority.current(), { items, mode: 'normal', intentionalBlank: false, routineInstanceIds: [] });
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+
+  // Nothing local at all — a brand new device joining the same room.
+  const fresh = makeApp({ roomRef, clock: manila(D, '19:30'), deviceId: 'device-fresh', idPrefix: 'f' });
+  fresh.live.attachLiveDays();
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  assert.equal(fresh.authority.enabled(), true, 'it learns the boundary from remote');
+  assert.equal(fresh.authority.current().id, a.authority.current().id);
+  assert.deepEqual(fresh.authority.items(fresh.authority.current()).map(i => i.task), ['Night shift']);
+  assert.equal(fresh.authority.preparedState(fresh.authority.current()).prepared, true);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 11. Authority-consistency matrix — every consumer question, one answer
 // ═══════════════════════════════════════════════════════════════════════════
 
 test('every consumer-facing question resolves to the SAME authoritative plan identity', () => {

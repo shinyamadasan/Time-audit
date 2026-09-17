@@ -130,7 +130,12 @@ if (typeof window !== 'undefined') {
   window.OperationalPlanSync = createOperationalPlanSyncBridge({
     getRoomRef: () => (typeof globalThis.getChronaSenseRoomRef === 'function' ? globalThis.getChronaSenseRoomRef() : null),
     onRemoteChange: () => {
-      if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
+      // An inbound remote plan is an authoritative change like any other: drop
+      // the authority layer's derived caches, then re-render every surface that
+      // reads it (the plan strip, Up Next, Tomorrow, Partner View, this section).
+      if (window.PlanAuthority) window.PlanAuthority.invalidate();
+      if (typeof globalThis.refreshAuthoritativePlanSurfaces === 'function') globalThis.refreshAuthoritativePlanSurfaces();
+      else if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
     }
   });
 }
