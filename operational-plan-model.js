@@ -42,6 +42,7 @@
 import {
   isLegacyOperationalDay,
   operationalDayId,
+  operationalDayInterval,
   resolveClockTimeInOperationalDay,
   resolvePlannedRangeInOperationalDay,
   validBoundaryTime,
@@ -83,12 +84,21 @@ export function resolvePlanAuthority(ref, revisions) {
  *  @returns {{ok:true,startMs?:number,endMs?:number} | {ok:false, reason:string, [key:string]:*}} */
 export function validateOperationalPlanItemRange(ref, item, revisions, options = {}) {
   if (!item || typeof item.when !== 'string' || !item.when) return { ok: true }; // untimed item — nothing to validate
-  const hasDuration = Number.isInteger(item.durationMinutes) && item.durationMinutes > 0;
-  const hasEndClock = typeof item.endClock === 'string' && !!item.endClock;
-  if (!hasDuration && !hasEndClock) {
+  // Start-only means both range fields are genuinely ABSENT. A present-but-malformed
+  // value (0, negative, fractional, "30", null, "", "25:00") is not "no range" — it is
+  // an invalid range, and falls through to the ranged resolver below, which rejects it
+  // exactly as it did before start-only support existed.
+  if (item.durationMinutes === undefined && item.endClock === undefined) {
     if (!validBoundaryTime(item.when)) return { ok: false, reason: 'invalid-input' };
     const startResolved = resolveClockTimeInOperationalDay(ref, item.when, revisions, options);
-    return startResolved.ok ? { ok: true, startMs: startResolved.instantMs } : { ok: false, at: 'start', ...startResolved };
+    if (!startResolved.ok) return { ok: false, at: 'start', ...startResolved };
+    // resolveClockTimeInOperationalDay only picks the calendar date; it does not know the
+    // day may be revision-truncated (e.g. 18:00 -> 20:00 on a transition day). Apply the
+    // same half-open containment a ranged item gets, so 21:00 or 01:00 on that day is
+    // rejected rather than stored against a day it is not in.
+    const { startMs: dayStartMs, endMs: dayEndMs } = operationalDayInterval(ref, revisions);
+    if (startResolved.instantMs < dayStartMs || startResolved.instantMs >= dayEndMs) return { ok: false, reason: 'outside-operational-day' };
+    return { ok: true, startMs: startResolved.instantMs };
   }
   return resolvePlannedRangeInOperationalDay(ref, { startClock: item.when, durationMinutes: item.durationMinutes, endClock: item.endClock }, revisions, options);
 }

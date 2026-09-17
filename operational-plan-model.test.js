@@ -127,15 +127,66 @@ test('a start-only item whose `when` is not a canonical HH:MM is rejected, never
   assert.deepEqual(validateOperationalPlanItemRange(ref, { when: 'after lunch' }, revisions), { ok: false, reason: 'invalid-input' });
 });
 
-test('a zero or negative duration on a timed item is still rejected, not treated as start-only', () => {
+// A present-but-malformed range field is an invalid RANGE, not "no range". The
+// start-only branch applies only when both fields are genuinely absent; every
+// case below was 'invalid-input' before start-only support existed and must stay so.
+for (const [label, extra] of [
+  ['durationMinutes: 0', { durationMinutes: 0 }],
+  ['negative durationMinutes', { durationMinutes: -30 }],
+  ['fractional durationMinutes', { durationMinutes: 30.5 }],
+  ['string durationMinutes "30"', { durationMinutes: '30' }],
+  ['durationMinutes: null', { durationMinutes: null }],
+  ['empty endClock', { endClock: '' }],
+  ['malformed endClock', { endClock: '25:00' }],
+  ['non-clock endClock', { endClock: 'later' }],
+  ['endClock: null', { endClock: null }],
+]) {
+  test(`a timed item with a present-but-malformed range (${label}) is rejected, never treated as start-only`, () => {
+    const revisions = eighteenHundredHistory();
+    const ref = operationalDayContaining(Date.parse('2026-09-14T12:00:00Z'), revisions);
+    assert.deepEqual(validateOperationalPlanItemRange(ref, { when: '22:00', ...extra }, revisions), { ok: false, reason: 'invalid-input' });
+  });
+}
+
+test('an explicitly-undefined range field is absent (JSON cannot carry it), so the item is start-only', () => {
   const revisions = eighteenHundredHistory();
   const ref = operationalDayContaining(Date.parse('2026-09-14T12:00:00Z'), revisions);
-  // durationMinutes: 0 is not a positive duration, so this is a start-only item
-  // by the same rule the legacy validPlanItemDuration applies — its start is
-  // valid and no range is asserted.
-  const result = validateOperationalPlanItemRange(ref, { when: '22:00', durationMinutes: 0 }, revisions);
+  const result = validateOperationalPlanItemRange(ref, { when: '22:00', durationMinutes: undefined, endClock: undefined }, revisions);
   assert.equal(result.ok, true);
   assert.equal(result.endMs, undefined);
+});
+
+// ── start-only containment in a revision-truncated day ─────────────────────
+//
+// The Monday-18:00 day, cut short by a 20:00 revision proposed at 19:00 Monday,
+// runs 18:00 -> 20:00 only. resolveClockTimeInOperationalDay picks a calendar
+// date but knows nothing about truncation, so containment must be checked.
+
+function truncatedMondayHistory() {
+  const proposedAt = Date.parse('2026-09-14T11:00:00Z'); // Monday 19:00 Manila
+  return proposeBoundaryRevision(eighteenHundredHistory(), { id: 'r-2000', boundaryTime: '20:00', timezone: MANILA }, proposedAt).revisions;
+}
+
+test('truncated 18:00 -> 20:00 day: start-only 19:00 is valid', () => {
+  const revisions = truncatedMondayHistory();
+  const ref = operationalDayContaining(Date.parse('2026-09-14T10:30:00Z'), revisions); // Monday 18:30 Manila
+  assert.equal(ref.boundaryRevisionId, 'r-1800');
+  const result = validateOperationalPlanItemRange(ref, { when: '19:00' }, revisions);
+  assert.deepEqual(result, { ok: true, startMs: Date.parse('2026-09-14T11:00:00Z') });
+});
+
+for (const when of ['21:00', '01:00', '20:00', '17:59']) {
+  test(`truncated 18:00 -> 20:00 day: start-only ${when} is rejected as outside the operational day`, () => {
+    const revisions = truncatedMondayHistory();
+    const ref = operationalDayContaining(Date.parse('2026-09-14T10:30:00Z'), revisions);
+    assert.deepEqual(validateOperationalPlanItemRange(ref, { when }, revisions), { ok: false, reason: 'outside-operational-day' });
+  });
+}
+
+test('truncated 18:00 -> 20:00 day: a ranged item keeps the same outside-day failure form', () => {
+  const revisions = truncatedMondayHistory();
+  const ref = operationalDayContaining(Date.parse('2026-09-14T10:30:00Z'), revisions);
+  assert.deepEqual(validateOperationalPlanItemRange(ref, { when: '21:00', durationMinutes: 30 }, revisions), { ok: false, reason: 'outside-operational-day' });
 });
 
 // ── operational preparation (§14) ───────────────────────────────────────────
