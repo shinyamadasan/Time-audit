@@ -1,0 +1,528 @@
+// plan-authority.js
+//
+// The ONE access layer every user-facing planning consumer goes through, so no
+// screen ever chooses a plan store for itself (Single Plan Authority V1).
+//
+//    consumer -> Plan Authority -> authoritative store
+//
+// Storage stays dual for backward compatibility; user-visible authority does not.
+// Authority is decided ONLY by the governing boundary revision, via
+// resolvePlanAuthority() — never by which store happens to hold data, never by
+// "whichever is non-empty", never by record content. A legacy-governed day is
+// plans[dateKey]; an operational-governed day is the operational-plan store.
+//
+// ── what a "target" is ──────────────────────────────────────────────────────
+// Every function here speaks in plan TARGETS, never bare calendar dates:
+//
+//   { store: 'legacy'|'operational', id, dateKey?, operationalDayId?, ref,
+//     startMs, endMs, timezone, boundaryTime, legacy }
+//
+// `id` is the authoritative identity (a dateKey for legacy, an operationalDayId
+// for operational). Consumers pass targets around; they never reconstruct one
+// from a date string, because a bare date does not identify a plan once a
+// personal day boundary is active (Decision B).
+//
+// ── Decision A: routine ownership ───────────────────────────────────────────
+// Routine instance identity stays [routineId, calendarDate] — never migrated,
+// never given an operationalDayId. A routine is mapped to a personal day by an
+// INSTANT:
+//   - exact/window routines: their own start clock time on their own date;
+//   - anytime/cue routines:  12:00 local on their own date (the noon anchor).
+// Both are resolved in the timezone the ROUTINE SUBSYSTEM owns for that date
+// (daily-routines' state.timezone, carried on every generated instance), not in
+// the boundary revision's timezone — the source subsystem keeps its own date
+// semantics. The anchor instant then goes through the ordinary boundary
+// machinery, so a noon anchor landing exactly on a 12:00 boundary belongs to the
+// day that STARTS there (the existing half-open rule, no special case).
+// Civil-time anomalies are not guessed: an ambiguous or nonexistent local
+// reading fails explicitly and the routine is reported unplaceable.
+//
+// ── Decision B: a calendar date is a lookup key, not a plan identity ────────
+// For history screens, `daysOverlappingCalendarDate()` returns EVERY
+// authoritative day overlapping that calendar date's own interval. Callers
+// render them as separate, labeled, read-only cards. Nothing merges them into a
+// synthetic "plan for D", and nothing copies between stores.
+
+import {
+  operationalDayContaining,
+  nextOperationalDay,
+  resolveLocalWallClock,
+  proposeBoundaryRevision,
+  parseOperationalDayId,
+} from './personal-day-boundary-model.js';
+import {
+  validateOperationalPlanItemRange,
+  buildOperationalPreparation,
+  normalizeOperationalPreparation,
+} from './operational-plan-model.js';
+import {
+  addCalendarDays,
+  computeReadyNow,
+  localPlanDate,
+  normalizePreparation,
+  planningConsistency,
+  planningStreak,
+  validPlanDate,
+  validPlanItemRange,
+  carriedItemId,
+} from './plan-tomorrow-model.js';
+
+/** Carry-forward ids for operational days. Deliberately NOT the legacy
+ *  `carry:<date>:<itemId>` shape (plan-tomorrow-model.js's carriedItemId, which
+ *  only accepts a bare calendar date and must keep doing exactly that): an
+ *  operationalDayId is not a date and must never be coerced into one. Built from
+ *  immutable identities only — source day, source item, destination day — so two
+ *  devices carrying the same item to the same day independently mint the SAME id
+ *  and the existing per-item merge collapses them into one. '|' is the separator
+ *  because an operationalDayId itself contains ':'; a minted plan item id
+ *  ('p' + base36) can never contain either. */
+export const OPERATIONAL_CARRY_ID_PREFIX = 'ocarry1';
+
+export function operationalCarriedItemId(sourceOperationalDayId, sourceItemId, destinationOperationalDayId) {
+  if (!parseOperationalDayId(sourceOperationalDayId) || !parseOperationalDayId(destinationOperationalDayId)) {
+    throw new Error('Valid source and destination operationalDayIds are required.');
+  }
+  if (typeof sourceItemId !== 'string' || !sourceItemId || sourceItemId.includes('|')) throw new Error('A valid source item id is required.');
+  return `${OPERATIONAL_CARRY_ID_PREFIX}|${sourceOperationalDayId}|${sourceItemId}|${destinationOperationalDayId}`;
+}
+
+/** The carry id for any source/destination pair, legacy or operational. Legacy
+ *  days keep the exact existing id so nothing already stored changes meaning. */
+export function carryItemIdFor(sourceTarget, sourceItemId, destinationTarget) {
+  if (sourceTarget.store === 'legacy' && destinationTarget.store === 'legacy') return carriedItemId(sourceTarget.dateKey, sourceItemId);
+  const source = sourceTarget.store === 'operational' ? sourceTarget.id : null;
+  const destination = destinationTarget.store === 'operational' ? destinationTarget.id : null;
+  if (!source || !destination) {
+    // A mixed pair (carrying across the legacy -> operational transition) has no
+    // shared identity space. Nothing in the product offers it today: carrying
+    // only ever happens from the current day into the upcoming one, and the
+    // transition day's carry is offered only once both sides are operational.
+    throw new Error('Carrying between a legacy and an operational day is not supported.');
+  }
+  return operationalCarriedItemId(source, sourceItemId, destination);
+}
+
+/** 12:00 local on a calendar date, in that date's OWN subsystem timezone. */
+export function noonAnchorInstant(dateStr, timezone) {
+  return resolvePlannedInstant(dateStr, '12:00', timezone);
+}
+
+function resolvePlannedInstant(dateStr, hhmm, timezone) {
+  const resolved = resolveLocalWallClock(dateStr, hhmm, timezone);
+  if (resolved.kind === 'unique') return { ok: true, instantMs: resolved.instantMs };
+  // Never guessed. A repeated or skipped local reading is reported so the caller
+  // can say so instead of silently filing the routine under the wrong day.
+  if (resolved.kind === 'ambiguous') return { ok: false, reason: 'ambiguous', earlierMs: resolved.earlierMs, laterMs: resolved.laterMs };
+  return { ok: false, reason: 'nonexistent', gapMinutes: resolved.gapMinutes };
+}
+
+/** Decision A, as a pure function of a generated routine instance. `instance` is
+ *  daily-routines-model.js's own generateInstances() output: { date, timezone,
+ *  routine }. Returns the instant that decides which personal day owns it. */
+export function routineAnchorInstant(instance) {
+  const routine = instance?.routine;
+  if (!routine || !validPlanDate(instance.date) || typeof instance.timezone !== 'string') return { ok: false, reason: 'invalid-instance' };
+  const timed = (routine.mode === 'exact' || routine.mode === 'window') && typeof routine.time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(routine.time);
+  return timed
+    ? { ...resolvePlannedInstant(instance.date, routine.time, instance.timezone), anchor: 'start' }
+    : { ...noonAnchorInstant(instance.date, instance.timezone), anchor: 'noon' };
+}
+
+const OVERLAP_GUARD = 400;
+
+export function createPlanAuthority(deps = {}) {
+  const live = deps.live;
+  const legacy = deps.legacy;
+  if (!live || !legacy) throw new Error('Plan authority needs the boundary live wiring and the legacy plan store.');
+  const now = typeof deps.now === 'function' ? deps.now : () => Date.now();
+  const accountTimezone = typeof deps.accountTimezone === 'function' ? deps.accountTimezone : () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // The calendar-date interval a HISTORY SCREEN owns (index.html's own
+  // tzParseTime-based day bounds in production), injected rather than
+  // re-derived, so the projection can never disagree with the screen's own
+  // entry-window arithmetic (Decision B step 1).
+  const calendarDayBounds = typeof deps.calendarDayBounds === 'function'
+    ? deps.calendarDayBounds
+    : dateKey => {
+      const timezone = accountTimezone();
+      const start = resolvePlannedInstant(dateKey, '00:00', timezone);
+      const end = resolvePlannedInstant(addCalendarDays(dateKey, 1), '00:00', timezone);
+      if (!start.ok || !end.ok) throw new Error(`Calendar day ${dateKey} has no unambiguous local interval.`);
+      return { startMs: start.instantMs, endMs: end.instantMs };
+    };
+
+  let cacheToken = 0;
+  let streakCache = null;
+
+  /** Every write path and every inbound remote merge calls this; derived values
+   *  (currently the Planning Streak walk) are recomputed on the next read. */
+  function invalidate() {
+    cacheToken++;
+    streakCache = null;
+  }
+
+  function enabled() {
+    return live.enabled();
+  }
+
+  // ── targets ───────────────────────────────────────────────────────────────
+
+  function legacyTarget(dateKey) {
+    if (!validPlanDate(dateKey)) throw new Error(`A valid calendar date is required, got: ${dateKey}`);
+    return { store: 'legacy', id: dateKey, dateKey, ref: null, startMs: null, endMs: null, timezone: accountTimezone(), boundaryTime: '00:00', legacy: true };
+  }
+
+  function fromDay(day) {
+    return day.authority.store === 'legacy'
+      ? { ...legacyTarget(day.authority.dateKey), ref: day.ref, startMs: day.startMs, endMs: day.endMs, timezone: day.timezone, boundaryTime: day.boundaryTime }
+      : { store: 'operational', id: day.authority.operationalDayId, operationalDayId: day.authority.operationalDayId, ref: day.ref, startMs: day.startMs, endMs: day.endMs, timezone: day.timezone, boundaryTime: day.boundaryTime, legacy: false };
+  }
+
+  /** The authoritative day for RIGHT NOW. For an account that never enabled the
+   *  feature this is exactly the existing calendar "today" (same helper, same
+   *  account timezone) — no boundary math, no operational store, no listener. */
+  function current(nowMs = now()) {
+    if (!enabled()) return legacyTarget(localPlanDate(nowMs, accountTimezone()));
+    return fromDay(live.planningDays(nowMs).current);
+  }
+
+  /** The authoritative day the owner prepares in advance. Legacy: tomorrow's
+   *  calendar date, exactly as planTomorrowTargetDate() computes it. */
+  function upcoming(nowMs = now()) {
+    if (!enabled()) return legacyTarget(addCalendarDays(localPlanDate(nowMs, accountTimezone()), 1));
+    return fromDay(live.planningDays(nowMs).upcoming);
+  }
+
+  /** The authoritative day containing a factual instant (an entry, a routine
+   *  anchor, a completion). Never a date string — an instant is unambiguous. */
+  function containing(instantMs) {
+    if (!Number.isFinite(instantMs)) throw new Error('A valid instant is required.');
+    if (!enabled()) return legacyTarget(localPlanDate(instantMs, accountTimezone()));
+    return fromDay(live.dayContaining(instantMs));
+  }
+
+  function next(target) {
+    if (target.store === 'legacy' && !enabled()) return legacyTarget(addCalendarDays(target.dateKey, 1));
+    const history = live.revisions();
+    return fromDay(live.describeDay(nextOperationalDay(target.ref || operationalDayContaining(target.startMs, history), history), history));
+  }
+
+  /** Decision B. Every authoritative day overlapping calendar date D's own
+   *  interval, in order. One entry for a legacy/never-enabled account (the date
+   *  itself); commonly two once a non-midnight boundary is active. */
+  function daysOverlappingCalendarDate(dateKey) {
+    if (!enabled()) return [legacyTarget(dateKey)];
+    const { startMs, endMs } = calendarDayBounds(dateKey);
+    const history = live.revisions();
+    const out = [];
+    let ref = operationalDayContaining(startMs, history);
+    for (let guard = 0; guard <= OVERLAP_GUARD; guard++) {
+      const day = live.describeDay(ref, history);
+      if (day.startMs >= endMs) break;
+      out.push(fromDay(day));
+      if (day.endMs >= endMs) break;
+      ref = nextOperationalDay(ref, history);
+    }
+    if (!out.length) throw new Error(`No authoritative day overlaps ${dateKey}.`);
+    return out;
+  }
+
+  // ── authoritative plan access ─────────────────────────────────────────────
+
+  function record(target) {
+    return target.store === 'legacy' ? legacy.record(target.dateKey) : live.readRecord(target);
+  }
+
+  /** Raw items INCLUDING tombstones — the shape every editor mutates. */
+  function rawItems(target) {
+    return target.store === 'legacy' ? legacy.rawItems(target.dateKey) : (Array.isArray(record(target)?.items) ? record(target).items : []);
+  }
+
+  function items(target) {
+    return rawItems(target).filter(item => !item.deleted);
+  }
+
+  function saveItems(target, nextItems) {
+    if (target.store === 'legacy') legacy.saveItems(target.dateKey, nextItems);
+    else live.writePlanItems(target, nextItems, live.revisions());
+    invalidate();
+    return target;
+  }
+
+  // ── preparation / prepared state ──────────────────────────────────────────
+
+  function preparation(target) {
+    const value = record(target)?.preparation;
+    return target.store === 'legacy' ? normalizePreparation(value, target.dateKey) : normalizeOperationalPreparation(value, target.id);
+  }
+
+  /** 'ahead' | 'late' | 'unknown' | 'not-prepared'. The legacy branch is the
+   *  existing planningConsistency() verbatim. The operational rule is the same
+   *  statement expressed against the day's own start instant: prepared BEFORE
+   *  this personal day began. (For a legacy day those are the same sentence —
+   *  a calendar date's start is midnight.) */
+  function consistency(target) {
+    const value = record(target)?.preparation;
+    if (target.store === 'legacy') return planningConsistency(value, target.dateKey);
+    if (value === undefined || value === null) return 'not-prepared';
+    const prepared = normalizeOperationalPreparation(value, target.id);
+    if (!prepared) return 'unknown';
+    return prepared.firstPreparedAt < target.startMs ? 'ahead' : 'late';
+  }
+
+  /** The same "is there anything actionable here" question computeReadyNow()
+   *  answers for a legacy day, asked of whichever store is authoritative. */
+  function readyNow(target, routines = [], localSaveSucceeded = true) {
+    const plan = record(target);
+    if (target.store === 'legacy') return computeReadyNow({ plan, targetDate: target.dateKey, routines, localSaveSucceeded });
+    const prepared = normalizeOperationalPreparation(plan?.preparation, target.id);
+    if (!prepared || !localSaveSucceeded) return false;
+    const oneOffIds = new Set(prepared.oneOffItemIds);
+    const actionableOneOff = rawItems(target).some(item => oneOffIds.has(item.id) && !item.deleted && !item.done);
+    const plannedRoutines = new Set(prepared.routineInstanceIds);
+    const actionableRoutine = routines.some(row => plannedRoutines.has(row.id) && row.occurs !== false && !row.skipped && row.actionable !== false);
+    return actionableOneOff || actionableRoutine || prepared.intentionalBlank;
+  }
+
+  function preparedState(target, routines = []) {
+    const prepared = preparation(target);
+    return {
+      target,
+      preparation: prepared,
+      prepared: !!prepared,
+      consistency: consistency(target),
+      intentionalBlank: prepared?.intentionalBlank === true,
+      readyNow: readyNow(target, routines),
+    };
+  }
+
+  /** The one confirmation path. Legacy days go through index.html's existing
+   *  confirmPreparedDatePlan() untouched (same validation, same streak
+   *  semantics, same sync). Operational days build the parallel
+   *  operationalDayId-keyed preparation and persist it beside the same items. */
+  function confirmPreparation(target, input) {
+    const { items: nextItems, mode, intentionalBlank, routineInstanceIds, actionableRoutineInstanceIds = routineInstanceIds } = input;
+    if (target.store === 'legacy') {
+      const result = legacy.confirm({ targetDate: target.dateKey, items: nextItems, mode, intentionalBlank, routineInstanceIds, actionableRoutineInstanceIds });
+      invalidate();
+      return result;
+    }
+    if (!Array.isArray(routineInstanceIds) || !Array.isArray(actionableRoutineInstanceIds)) throw new Error('Routine preparation references are invalid.');
+    const active = (Array.isArray(nextItems) ? nextItems : []).filter(item => item && !item.deleted);
+    const hasAction = active.some(item => !item.done) || actionableRoutineInstanceIds.length > 0;
+    if (!hasAction && intentionalBlank !== true) throw new Error('Add one priority, keep a routine, or choose Open day.');
+    const nowMs = now();
+    const built = buildOperationalPreparation(record(target)?.preparation, {
+      targetOperationalDayId: target.id,
+      now: nowMs,
+      mode,
+      updatedBy: live.deviceId(),
+      intentionalBlank: !hasAction && intentionalBlank === true,
+      routineInstanceIds,
+      oneOffItemIds: active.map(item => item.id),
+    });
+    const syncPromise = live.writePlanWithPreparation(target, nextItems, built, live.revisions());
+    invalidate();
+    return { localSaved: true, syncPromise };
+  }
+
+  // ── item validation routing (an operational day is not midnight-clamped) ──
+
+  /** Legacy days keep the existing midnight-clamped rule EXACTLY; an operational
+   *  day is validated against its own real interval, so a 01:00 block on an
+   *  18:00 personal day is valid while 21:00 on a day truncated at 20:00 is not. */
+  function validateItem(target, item) {
+    if (target.store === 'legacy') {
+      if (item?.durationMinutes === undefined) return { ok: true };
+      return validPlanItemRange(item.when, item.durationMinutes) ? { ok: true } : { ok: false, reason: 'invalid-range' };
+    }
+    return validateOperationalPlanItemRange(target.ref, item, live.revisions());
+  }
+
+  // ── Decision A mapping, as targets ────────────────────────────────────────
+
+  /** Which personal day owns this routine instance. `{ ok:false }` when its own
+   *  local clock reading is ambiguous/nonexistent — never guessed. */
+  function routineTarget(instance) {
+    const anchor = routineAnchorInstant(instance);
+    if (!anchor.ok) return anchor;
+    return { ok: true, anchor: anchor.anchor, instantMs: anchor.instantMs, target: containing(anchor.instantMs) };
+  }
+
+  /** The routine instances (from the caller's own generateInstances output) that
+   *  belong to `target`. Legacy days keep the existing calendar rule: an
+   *  instance belongs to its own date, full stop. */
+  function routinesForTarget(target, instances) {
+    if (target.store === 'legacy') return { rows: instances.filter(instance => instance.date === target.dateKey), unplaceable: [] };
+    const rows = [];
+    const unplaceable = [];
+    instances.forEach(instance => {
+      const resolved = routineTarget(instance);
+      if (!resolved.ok) { unplaceable.push({ instance, reason: resolved.reason }); return; }
+      if (resolved.target.id === target.id) rows.push(instance);
+    });
+    return { rows, unplaceable };
+  }
+
+  /** Template occurrences (index.html's own generateTemplateEntries output, which
+   *  carries real tsStart/ts instants) that fall inside this target. Template
+   *  identity stays calendar-based — only the selection is by instant. */
+  function templatesForTarget(target, entriesByDate) {
+    if (target.store === 'legacy') return entriesByDate(target.dateKey);
+    const dates = new Set();
+    [target.startMs, target.endMs - 1].forEach(instant => dates.add(localPlanDate(instant, target.timezone)));
+    const seen = new Set();
+    const out = [];
+    [...dates].sort().forEach(date => entriesByDate(date).forEach(entry => {
+      const key = `${entry.templateId}:${entry.tsStart}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      if (entry.tsStart >= target.startMs && entry.tsStart < target.endMs) out.push(entry);
+    }));
+    return out;
+  }
+
+  // ── Planning Streak on authoritative access ───────────────────────────────
+
+  /** Did habit day `target` earn credit? The rule is unchanged in meaning: the
+   *  day AFTER it was genuinely prepared (real content or an explicit Open Day)
+   *  before that next day began. Only the plan lookup moved. */
+  function habitEarned(target) {
+    let following;
+    try { following = next(target); } catch { return false; }
+    if (consistency(following) !== 'ahead') return false;
+    const prepared = preparation(following);
+    return !!prepared && (prepared.intentionalBlank === true || prepared.routineInstanceIds.length > 0 || prepared.oneOffItemIds.length > 0);
+  }
+
+  function longestTrueRun(flags) {
+    let longest = 0;
+    let run = 0;
+    for (const flag of flags) {
+      run = flag ? run + 1 : 0;
+      if (run > longest) longest = run;
+    }
+    return longest;
+  }
+
+  /** For a never-enabled account this is the existing calendar streak, called
+   *  with the existing arguments — the same function, not a reimplementation.
+   *
+   *  Once a boundary is active the streak walks AUTHORITATIVE days backwards
+   *  from the current personal day. Days before the boundary took effect are
+   *  still legacy-governed and are still judged by the legacy plan, so a streak
+   *  carries across the transition instead of resetting. Each day is counted
+   *  once, from one store — never both. */
+  function streak(nowMs = now()) {
+    if (!enabled()) return planningStreak(legacy.allPlans(), nowMs, accountTimezone());
+    const key = `${cacheToken}:${nowMs - (nowMs % 60000)}`;
+    if (streakCache && streakCache.key === key) return streakCache.value;
+
+    const today = current(nowMs);
+    const todayEarned = habitEarned(today);
+    const finalizedFlags = [];
+    // A legacy habit day P is judged by P+1's plan, so the walk may go one day
+    // behind the earliest stored plan — exactly the earliestHabitDate the legacy
+    // planningStreak() derives. Beyond that there is nothing either store can
+    // speak for. The guard also caps how far an enabled account's `best` looks
+    // back; a never-enabled account still uses the unbounded legacy function.
+    const earliestPlanDate = legacy.earliestPlanDate();
+    const earliestHabitDate = earliestPlanDate ? addCalendarDays(earliestPlanDate, -1) : null;
+    let cursor = today;
+    for (let guard = 0; guard < OVERLAP_GUARD; guard++) {
+      let previous;
+      try { previous = fromDay(live.previousDay(cursor.ref, live.revisions())); } catch { break; }
+      if (previous.store === 'legacy' && (!earliestHabitDate || previous.dateKey < earliestHabitDate)) break;
+      finalizedFlags.unshift(habitEarned(previous));
+      cursor = previous;
+    }
+
+    let backward = 0;
+    while (backward < finalizedFlags.length && finalizedFlags[finalizedFlags.length - 1 - backward]) backward++;
+    const value = {
+      current: backward + (todayEarned ? 1 : 0),
+      best: Math.max(longestTrueRun(finalizedFlags), backward + (todayEarned ? 1 : 0)),
+      todayEarned,
+      todayStillOpen: !todayEarned,
+    };
+    streakCache = { key, value };
+    return value;
+  }
+
+  // ── Prepared Plans (recovery/discoverability, never a second editor) ──────
+
+  /** Operational plan records that hold real preparation but are not reachable
+   *  through the one planning workflow right now — typically a future day a
+   *  later boundary change moved out of current/upcoming. A projection over the
+   *  records that already exist: no new store, no copying, no relocation. */
+  function preparedPlans(nowMs = now()) {
+    if (!enabled()) return [];
+    const reachable = new Set([current(nowMs).id, upcoming(nowMs).id]);
+    const history = live.revisions();
+    const all = live.planRepository.listAllRaw();
+    const out = [];
+    Object.entries(all).forEach(([id, plan]) => {
+      if (reachable.has(id)) return;
+      const activeItems = (Array.isArray(plan?.items) ? plan.items : []).filter(item => item && !item.deleted);
+      const prepared = normalizeOperationalPreparation(plan?.preparation, id);
+      if (!activeItems.length && !prepared) return;
+      const ref = parseOperationalDayId(id);
+      let interval = null;
+      try { interval = ref ? live.describeDay(ref, history) : null; } catch { interval = null; }
+      out.push({
+        id,
+        items: activeItems,
+        preparation: prepared,
+        resolvable: !!interval,
+        startMs: interval?.startMs ?? null,
+        endMs: interval?.endMs ?? null,
+        timezone: ref?.timezone ?? null,
+        boundaryTime: interval?.boundaryTime ?? null,
+        past: interval ? interval.endMs <= nowMs : null,
+      });
+    });
+    return out.sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0));
+  }
+
+  /** What a boundary proposal would do to an ALREADY PREPARED day that is
+   *  reachable right now. Pure dry run: proposes against a copy of the history
+   *  through the model's own proposeBoundaryRevision and compares the reachable
+   *  set before and after. Nothing is persisted, moved, merged or deleted. */
+  function boundaryChangeImpact(candidate, nowMs = now()) {
+    if (!enabled()) return { ok: true, orphaned: [] };
+    let history;
+    let simulated;
+    try {
+      history = live.revisions();
+      simulated = proposeBoundaryRevision(history, { id: 'preview-impact', boundaryTime: candidate.boundaryTime, timezone: candidate.timezone }, nowMs).revisions;
+    } catch (err) {
+      return { ok: false, reason: err.message, orphaned: [] };
+    }
+    const describe = (ref, revisions) => fromDay(live.describeDay(ref, revisions));
+    const before = [current(nowMs), upcoming(nowMs)];
+    const afterCurrentRef = operationalDayContaining(nowMs, simulated);
+    const after = new Set([
+      describe(afterCurrentRef, simulated).id,
+      describe(nextOperationalDay(afterCurrentRef, simulated), simulated).id,
+    ]);
+    const orphaned = before
+      .filter(target => target.store === 'operational' && !after.has(target.id) && target.endMs > nowMs)
+      .filter(target => {
+        const plan = record(target);
+        const activeItems = (Array.isArray(plan?.items) ? plan.items : []).filter(item => item && !item.deleted);
+        return activeItems.length > 0 || !!preparation(target);
+      });
+    return { ok: true, orphaned };
+  }
+
+  return {
+    enabled, invalidate,
+    current, upcoming, containing, next, daysOverlappingCalendarDate,
+    record, rawItems, items, saveItems,
+    preparation, consistency, readyNow, preparedState, confirmPreparation,
+    validateItem,
+    routineTarget, routinesForTarget, templatesForTarget,
+    habitEarned, streak,
+    preparedPlans, boundaryChangeImpact,
+    legacyTarget,
+  };
+}
