@@ -704,3 +704,87 @@ test('listener-driven reconciliation: attach()\'s own registered .on(\'value\') 
     assert.ok(!bStatusAfterReattach.revisions.some(r => r.id === 'zzz-losing'));
   });
 });
+
+// ── Live Wiring V1, item 1: transaction-outcome hardening ────────────────────
+//
+// The three "retry fidelity" tests above all move from a STALE invocation that
+// would have decided 'committed' to a FRESH invocation that decides something
+// else — and those passed even before this fix, because every non-committed
+// branch assigns `outcome` explicitly. The un-covered direction is the mirror
+// image: an earlier, ABANDONED invocation assigns a label ('idempotent',
+// 'deduplicated', 'canonicalized'), and a later invocation reaches the
+// "genuinely new fact" branch, which used to rely on the OUTER
+// `let outcome = 'committed'` initial value still being untouched. Because the
+// variable lived in the shared closure rather than being re-initialized per
+// invocation, the stale label leaked out to the caller as the outcome of a
+// write that was actually a plain new commit.
+
+test('outcome hardening: a stale "deduplicated" invocation never leaks its label onto a later invocation that genuinely commits', async () => {
+  const semanticTwin = { id: 'aaa-remote-twin', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
+  const roomRef = fakeRoomRef({ [DAY_BOUNDARY_REVISIONS_REMOTE_PATH]: { [anchor.id]: anchor, [semanticTwin.id]: semanticTwin } });
+  const invocationCounter = { count: 0 };
+  const countingRoomRef = withInvocationCounter(roomRef, DAY_BOUNDARY_REVISIONS_REMOTE_PATH, invocationCounter);
+  const { bridge } = makeBridge({ roomRef: countingRoomRef });
+
+  // Invocation 1 sees the remote twin (same facts, lexicographically smaller
+  // id, therefore already canonical) and decides 'deduplicated'.
+  const candidate = { id: 'zzz-mine', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
+
+  // Before that no-op commit lands, another client writes a repaired/restored
+  // history at this path that no longer contains the twin at all (RTDB allows
+  // any room client to write the path; a restore-from-backup is the concrete
+  // case). Firebase re-invokes the SAME update function against that fresh
+  // value, where the candidate is now a genuinely new, uncontested fact.
+  roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH)
+    ._scheduleConcurrentWriteBeforeCommit(() => ({ [anchor.id]: anchor }));
+
+  const result = await bridge.pushRevision(candidate);
+
+  assert.equal(invocationCounter.count, 2, 'the production update callback must genuinely run twice');
+  // The LAST invocation's actual branch is "genuinely new fact, committed".
+  // Reporting 'deduplicated' here would tell the caller nothing was written
+  // while a real new revision had in fact just been committed.
+  assert.deepEqual(result, { committed: true, outcome: 'committed' });
+  const remote = assertRemoteValid(roomRef);
+  assert.deepEqual(remote.map(r => r.id).sort(), [anchor.id, candidate.id].sort());
+});
+
+test('outcome hardening: a stale "idempotent" invocation never leaks its label onto a later invocation that genuinely commits', async () => {
+  const candidate = { id: 'my-revision', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
+  const roomRef = fakeRoomRef({ [DAY_BOUNDARY_REVISIONS_REMOTE_PATH]: { [anchor.id]: anchor, [candidate.id]: candidate } });
+  const invocationCounter = { count: 0 };
+  const countingRoomRef = withInvocationCounter(roomRef, DAY_BOUNDARY_REVISIONS_REMOTE_PATH, invocationCounter);
+  const { bridge } = makeBridge({ roomRef: countingRoomRef });
+
+  // Invocation 1: remote already holds this exact id+facts -> 'idempotent'.
+  // Then another client replaces the path with a history that lost it.
+  roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH)
+    ._scheduleConcurrentWriteBeforeCommit(() => ({ [anchor.id]: anchor }));
+
+  const result = await bridge.pushRevision(candidate);
+
+  assert.equal(invocationCounter.count, 2);
+  assert.deepEqual(result, { committed: true, outcome: 'committed' });
+  assert.deepEqual(assertRemoteValid(roomRef).map(r => r.id).sort(), [anchor.id, candidate.id].sort());
+});
+
+test('outcome hardening: a stale "canonicalized" invocation never leaks its label onto a later invocation that genuinely commits', async () => {
+  const losingTwin = { id: 'zzz-remote-loser', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
+  const roomRef = fakeRoomRef({ [DAY_BOUNDARY_REVISIONS_REMOTE_PATH]: { [anchor.id]: anchor, [losingTwin.id]: losingTwin } });
+  const invocationCounter = { count: 0 };
+  const countingRoomRef = withInvocationCounter(roomRef, DAY_BOUNDARY_REVISIONS_REMOTE_PATH, invocationCounter);
+  const { bridge } = makeBridge({ roomRef: countingRoomRef });
+
+  // Invocation 1: semantic twin under a LARGER id -> this candidate wins ->
+  // 'canonicalized' (an identity swap). Then the twin disappears from remote
+  // entirely, so invocation 2 is a plain new-fact commit.
+  const candidate = { id: 'aaa-mine', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
+  roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH)
+    ._scheduleConcurrentWriteBeforeCommit(() => ({ [anchor.id]: anchor }));
+
+  const result = await bridge.pushRevision(candidate);
+
+  assert.equal(invocationCounter.count, 2);
+  assert.deepEqual(result, { committed: true, outcome: 'committed' });
+  assert.deepEqual(assertRemoteValid(roomRef).map(r => r.id).sort(), [anchor.id, candidate.id].sort());
+});
