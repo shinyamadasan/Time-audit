@@ -78,11 +78,15 @@ const routine = (id, extra) => ({
   time: null, endTime: null, cue: null, targetMinutes: 30, minimumMinutes: null, fallback: '', source: 'manual', ...extra
 });
 
-async function openApp(page, { now = SEVEN_PM, boundaryStore = null, plans = '{}', entries = '[]', routines = ROUTINES() } = {}) {
+async function openApp(page, { now = SEVEN_PM, boundaryStore = null, plans = '{}', entries = '[]', routines = ROUTINES(), useClock = false } = {}) {
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: firebaseStub }));
-  await page.addInitScript(({ timezone, now, boundaryStore, plans, entries, routines }) => {
-    const RealDate = Date;
-    window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
+  await page.addInitScript(({ timezone, now, boundaryStore, plans, entries, routines, useClock }) => {
+    // When page.clock owns time (a long-lived session test), Date must NOT be
+    // frozen — otherwise the clock advances while the app still reads one instant.
+    if (!useClock) {
+      const RealDate = Date;
+      window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
+    }
     localStorage.clear(); sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
     localStorage.setItem('ta3-tz', timezone);
@@ -94,7 +98,7 @@ async function openApp(page, { now = SEVEN_PM, boundaryStore = null, plans = '{}
     localStorage.setItem('ta3-plans', plans);
     localStorage.setItem('ta3-daily-routines-v1', routines);
     if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1', boundaryStore);
-  }, { timezone: TZ, now, boundaryStore, plans, entries, routines });
+  }, { timezone: TZ, now, boundaryStore, plans, entries, routines, useClock });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
   await expect(page.locator('#signin-overlay')).toBeHidden();
@@ -245,6 +249,34 @@ test('every planning consumer answers with the same authoritative plan for a gov
   await page.locator('#tmr-tab-tomorrow').click();
   await expect(page.locator('#tomorrow-view')).toContainText('Next personal day priority');
   await expect(page.locator('#tomorrow-view')).toContainText('Prepared');
+});
+
+// ── a long-lived session across the boundary ────────────────────────────────
+
+test('a page left open across 18:00 rotates the visible plan to the new personal day, with no reload', async ({ page }) => {
+  await page.clock.install({ time: Date.parse('2026-09-16T17:58:30+08:00') });
+  await openApp(page, { boundaryStore: BOUNDARY_STORE, useClock: true });
+
+  // Prepare the upcoming day, then just sit there while 18:00 passes.
+  await page.evaluate(() => {
+    const A = window.PlanAuthority;
+    A.saveItems(A.current(), [createPlanItem('Before the boundary', '')]);
+    A.saveItems(A.upcoming(), [createPlanItem('After the boundary', '')]);
+  });
+  await expect(page.locator('#plan-strip')).toContainText('Before the boundary');
+
+  const before = await page.evaluate(() => window.PlanAuthority.current().id);
+  await page.clock.runFor('03:00'); // only the app's own 60s interval runs
+
+  await expect(page.locator('#plan-strip')).toContainText('After the boundary');
+  await expect(page.locator('#plan-strip')).not.toContainText('Before the boundary');
+  const after = await page.evaluate(() => ({
+    current: window.PlanAuthority.current().id,
+    attached: window.PersonalDayBoundaryLive.attachedDayIds(),
+  }));
+  expect(after.current).not.toBe(before);
+  expect(after.attached).toContain(after.current);
+  expect(after.attached).not.toContain(before);
 });
 
 // ── Decision B: history shows the overlapping personal days, never a merge ──

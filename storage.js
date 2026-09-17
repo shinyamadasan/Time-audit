@@ -1687,7 +1687,6 @@ function publishSharedAccountability() {
   const PT = globalThis.PlanTomorrowModel;
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const todayKey = getDateInTZ(Date.now(), tz);
-  const tomorrowKey = PT ? PT.planTomorrowTargetDate(Date.now(), tz) : null;
 
   // Partner View's "today" and "tomorrow" are the CURRENT and UPCOMING
   // authoritative personal days — never a calendar-date plan lookup. For an
@@ -1715,7 +1714,11 @@ function publishSharedAccountability() {
     dateKey: todayKey,
     updatedAt: Date.now(),
     todayItems,
-    tomorrowDateKey: tomorrowKey || todayKey,
+    // A partner-facing LABEL, not plan identity: the calendar date the upcoming
+    // authoritative day starts on (identical to "tomorrow" for a legacy account).
+    tomorrowDateKey: upcomingTarget
+      ? (upcomingTarget.store === 'legacy' ? upcomingTarget.dateKey : getDateInTZ(upcomingTarget.startMs, tz))
+      : todayKey,
     tomorrowPrepStatus: prepStatus
   });
 

@@ -6551,6 +6551,20 @@ function refreshAuthoritativePlanSurfaces() {
 }
 globalThis.refreshAuthoritativePlanSurfaces = refreshAuthoritativePlanSurfaces;
 
+// A personal-day rollover (e.g. 18:00) changes which plan is authoritative
+// WITHOUT changing the calendar date, so renderTodayOnDateChange() cannot see
+// it. The 60s tick watches the authoritative day's identity instead and
+// re-renders only when it actually moves — no per-minute re-render churn.
+let _lastAuthoritativePlanDayId = null;
+function refreshOnPersonalDayRollover() {
+  let id = null;
+  try { id = currentPlanTarget()?.id ?? null; } catch { return; }
+  if (id === _lastAuthoritativePlanDayId) return;
+  const first = _lastAuthoritativePlanDayId === null;
+  _lastAuthoritativePlanDayId = id;
+  if (!first) refreshAuthoritativePlanSurfaces();
+}
+
 /** Minutes tracked against a planned task, inside the window this plan is
  *  actually judged by: a calendar day for a legacy target, the personal day's
  *  own interval for an operational one (so a 01:00 block counts for the personal
@@ -8399,8 +8413,15 @@ function openReflectionsHistory() {
 
 // Review links to the canonical preparation editor; reflection saves independently.
 function renderReviewTomorrowStatus() {
-  const targetDate = globalThis.PlanTomorrowModel?.planTomorrowTargetDate(Date.now(), settings.timezone);
-  document.getElementById('rv-tomorrow-status').innerHTML = `<button type="button" class="btn sm ghost" onclick="prepareTomorrowFromReview()">Prepare tomorrow${_reviewDateKey !== toDateKey(new Date()) && targetDate ? ` (${targetDate}, relative to today)` : ''} →</button>`;
+  // Names the UPCOMING AUTHORITATIVE day — a calendar date for a legacy
+  // account, the personal-day interval once a boundary is active — so this
+  // button can never promise a different day than the one it opens.
+  const upcoming = upcomingPlanTarget();
+  const browsingAnotherDay = _reviewDateKey !== toDateKey(new Date());
+  const label = upcoming && browsingAnotherDay
+    ? ` (${upcoming.store === 'legacy' ? upcoming.dateKey : planTargetLabel(upcoming)}, relative to today)`
+    : '';
+  document.getElementById('rv-tomorrow-status').innerHTML = `<button type="button" class="btn sm ghost" onclick="prepareTomorrowFromReview()">Prepare tomorrow${label} →</button>`;
 }
 
 function prepareTomorrowFromReview() {
@@ -9532,7 +9553,13 @@ function buildPartnerViewProjectionForPublish() {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const todayKey = getDateInTZ(Date.now(), tz);
   const PT = globalThis.PlanTomorrowModel;
-  const tomorrowKey = PT ? PT.planTomorrowTargetDate(Date.now(), tz) : todayKey;
+  // A partner-facing LABEL for the upcoming authoritative day, not plan
+  // identity: the calendar date it starts on (identical to "tomorrow" for a
+  // legacy account, since a calendar day starts on its own date).
+  const upcomingLabelTarget = upcomingPlanTarget();
+  const tomorrowKey = upcomingLabelTarget
+    ? (upcomingLabelTarget.store === 'legacy' ? upcomingLabelTarget.dateKey : getDateInTZ(upcomingLabelTarget.startMs, tz))
+    : (PT ? PT.planTomorrowTargetDate(Date.now(), tz) : todayKey);
 
   // Timeline assembly reads the ambient `viewingDateKey` — force it to today
   // for the duration of this build so a publish triggered while the owner is
@@ -11676,6 +11703,7 @@ setInterval(() => {
   // the attached current/upcoming days before re-rendering). A no-op for a legacy
   // account (no day is ever attached, the surface renders nothing).
   if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.tick();
+  refreshOnPersonalDayRollover();
 }, 60000);
 
 // ══════════════════════════════════════════════════════
