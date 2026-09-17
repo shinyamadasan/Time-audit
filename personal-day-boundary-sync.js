@@ -90,10 +90,12 @@
 //   - 'transport-failure' / 'skipped' — no room ref, or the SDK doesn't
 //                        support transactions. No writes attempted.
 //
-// This module does not wire itself into the live app
-// (`window.PersonalDayBoundarySync` is not created here) — that is a future
-// integration phase's job, matching how personal-day-boundary-model.js itself
-// shipped fully tested but unwired.
+// Live Wiring V1 now creates a `window.PersonalDayBoundarySync` singleton at
+// the bottom of this file, guarded by `typeof window !== 'undefined'` so plain
+// `node --test` never constructs it (constructing the default repository touches
+// localStorage). Tests always build their own bridge via
+// createPersonalDayBoundarySyncBridge(fakeDeps) against an in-memory room ref —
+// exactly the coarse-life-evidence-sync.js precedent.
 //
 // ── deferred, documented, not addressed here ────────────────────────────────
 // Cross-runtime timezone-alias convergence: canonicalizeOperationalDayTimezone
@@ -283,4 +285,24 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
   }
 
   return { attach, detach, pushRevision, pushAllLocal, handleRemoteSnapshot, repository };
+}
+
+// A ready-to-use singleton for the real app (index.html) only — constructing it touches
+// localStorage (via the default repository), which does not exist under plain `node --test`.
+// Mirrors coarse-life-evidence-sync.js's singleton exactly, including reading the live room ref
+// through storage.js's `globalThis.getChronaSenseRoomRef` accessor (this module is an ES module
+// and cannot see that classic script's top-level `fbRoomRef`).
+if (typeof window !== 'undefined') {
+  window.PersonalDayBoundarySync = createPersonalDayBoundarySyncBridge({
+    getRoomRef: () => (typeof globalThis.getChronaSenseRoomRef === 'function' ? globalThis.getChronaSenseRoomRef() : null),
+    onRemoteChange: () => {
+      // A remote boundary revision changed this device's history: the operational
+      // day identities in live use may have changed with it, so re-resolve which
+      // days should be listened to and repaint both surfaces.
+      if (typeof window.refreshPersonalDayBoundaryLive === 'function') window.refreshPersonalDayBoundaryLive();
+    },
+    onConflict: result => {
+      if (typeof window.reportPersonalDayBoundaryConflict === 'function') window.reportPersonalDayBoundaryConflict(result);
+    }
+  });
 }

@@ -13,8 +13,8 @@
 // room-scoped child, already covered by the existing wide-open `rooms/$roomId`
 // rule in firebase.rules.json (no rules change needed).
 //
-// Not wired into the live app (no `window.OperationalPlanSync` singleton here)
-// — a future integration phase's job, same as personal-day-boundary-sync.js.
+// Live Wiring V1 creates a `window.OperationalPlanSync` singleton at the bottom
+// of this file, guarded for the browser only — see that block.
 
 import { createOperationalPlanRepository } from './operational-plan-repository.js';
 import { mergeOperationalPlanRecords } from './operational-plan-model.js';
@@ -120,4 +120,17 @@ export function createOperationalPlanSyncBridge(deps = {}) {
   }
 
   return { syncDay, attachDay, detachDay, detachAll, handleRemoteDaySnapshot, repository };
+}
+
+// A ready-to-use singleton for the real app (index.html) only — constructing it touches
+// localStorage (via the default repository), which does not exist under plain `node --test`.
+// Same guard and same room-ref accessor as personal-day-boundary-sync.js /
+// coarse-life-evidence-sync.js. Tests build their own bridge with fake deps instead.
+if (typeof window !== 'undefined') {
+  window.OperationalPlanSync = createOperationalPlanSyncBridge({
+    getRoomRef: () => (typeof globalThis.getChronaSenseRoomRef === 'function' ? globalThis.getChronaSenseRoomRef() : null),
+    onRemoteChange: () => {
+      if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
+    }
+  });
 }
