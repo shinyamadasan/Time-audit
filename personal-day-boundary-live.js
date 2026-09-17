@@ -106,6 +106,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     ? deps.fallbackTimezone
     : () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Etc/UTC';
   const onChange = typeof deps.onChange === 'function' ? deps.onChange : () => {};
+  const onTick = typeof deps.onTick === 'function' ? deps.onTick : () => {};
 
   // Operational days this device currently has a live remote listener on. Only
   // the current + upcoming day are ever attached — never a firehose over every
@@ -306,6 +307,17 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     return wanted;
   }
 
+  /** Time-driven hook for index.html's 60s Today interval. A personal-day rollover
+   *  (e.g. 18:00) is a time event, not a user action, a remote write or a
+   *  reconnect — so without this, a long-lived session keeps listening to the day
+   *  that just ended and never attaches the newly relevant upcoming day. Listener
+   *  state is refreshed FIRST so the re-render that follows reads the same days the
+   *  listeners now cover. Never throws: an invalid history is surfaced by Settings. */
+  function tick(nowMs = now()) {
+    try { refreshLiveDays(nowMs); } catch { /* invalid history — surfaced by the Settings panel */ }
+    onTick();
+  }
+
   /** Reconnect hook: re-push anything this device holds that remote may be
    *  missing. Boundary revisions push as a set; plans push per live day. */
   function pushAllLocal(nowMs = now()) {
@@ -341,6 +353,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     liveDayIds,
     attachLiveDays,
     refreshLiveDays,
+    tick,
     pushAllLocal,
     detach,
     attachedDayIds: () => [...attachedDayIds],
@@ -378,6 +391,9 @@ if (typeof window !== 'undefined') {
     },
     onChange: () => {
       if (typeof window.renderPersonalDayBoundarySettings === 'function') window.renderPersonalDayBoundarySettings();
+      if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
+    },
+    onTick: () => {
       if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
     },
   });

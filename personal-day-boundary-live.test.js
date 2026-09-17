@@ -696,6 +696,85 @@ test('only the current + upcoming operational days are ever listened to, and a r
   assert.equal(roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH).listenerCount(), 0);
 });
 
+// A long-lived session only ever receives time via tick() (index.html's 60s
+// interval). These tests never call refreshLiveDays() directly, so they fail if
+// the time-driven path stops refreshing subscriptions.
+
+test('long-lived session: tick() across 17:59:59 -> 18:00:00 -> 18:00:01 swaps listeners without reload, write or reconnect', () => {
+  const roomRef = fakeRoomRef();
+  const device = makeDevice({ roomRef, clock: manila(D_PREV, '08:00') });
+  device.live.proposeBoundary({ boundaryTime: '18:00', timezone: MANILA });
+
+  device.setNow(manila(D, '17:59') + 59000);
+  device.live.attachLiveDays();
+  const before = device.live.attachedDayIds();
+
+  device.live.tick();
+  assert.deepEqual(device.live.attachedDayIds(), before, '17:59:59 is still the old day — nothing moves early');
+
+  device.setNow(manila(D, '18:00'));
+  device.live.tick();
+  const after = device.live.attachedDayIds();
+  assert.equal(after.length, 2);
+  assert.equal(after[0], before[1], 'the prepared upcoming day is now current — same identity, no copy');
+  assert.ok(!after.includes(before[0]), 'the day that just ended is detached');
+  const dayRef = id => roomRef.child(OPERATIONAL_PLANS_REMOTE_PATH).child(toFirebaseSafeKey(id));
+  assert.equal(dayRef(before[0]).listenerCount(), 0);
+  assert.equal(dayRef(after[1]).listenerCount(), 1, 'the newly relevant upcoming day is attached');
+
+  device.setNow(manila(D, '18:00') + 1000);
+  device.live.tick();
+  assert.deepEqual(device.live.attachedDayIds(), after, '18:00:01 is idempotent — no re-attach churn');
+  assert.equal(dayRef(after[1]).listenerCount(), 1);
+});
+
+test('long-lived session: after a tick-only rollover, another device\'s plan for the NEW upcoming day arrives live', async () => {
+  const roomRef = fakeRoomRef();
+  const a = makeDevice({ roomRef, clock: manila(D_PREV, '08:00'), deviceId: 'device-a', idPrefix: 'a' });
+  a.live.proposeBoundary({ boundaryTime: '18:00', timezone: MANILA });
+  a.setNow(manila(D, '17:30'));
+  a.live.attachLiveDays();
+
+  // 18:00 passes while device A just sits there; only the interval ticks.
+  a.setNow(manila(D, '18:30'));
+  a.live.tick();
+
+  // Device B shares the boundary history and prepares the day starting 18:00 D+1.
+  const b = makeDevice({ roomRef, storage: a.storage, clock: manila(D, '18:30'), deviceId: 'device-b', idPrefix: 'b' });
+  const days = b.live.planningDays();
+  const upcomingId = days.upcoming.authority.operationalDayId;
+  assert.equal(a.planRepository.read(upcomingId), null, 'nothing local on A yet');
+  b.live.writePlanItems(days.upcoming, [{ id: 'p-remote', task: 'Prepared on B', when: '22:00', done: false, doneAt: null, updatedAt: manila(D, '18:30'), updatedBy: 'device-b' }], days.revisions);
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+
+  const onA = a.planRepository.read(upcomingId);
+  assert.ok(onA, 'device A received the new upcoming day without reload/local write/reconnect');
+  assert.equal(onA.items[0].task, 'Prepared on B');
+});
+
+test('tick() refreshes listeners before onTick, and never throws on an invalid history', () => {
+  const calls = [];
+  const storage = memory({ 'ta3-day-boundary-revisions-v1': '{not json' });
+  const live = createPersonalDayBoundaryLiveWiring({
+    boundaryRepository: createPersonalDayBoundaryRepository({ storage }),
+    planRepository: createOperationalPlanRepository({ storage: memory() }),
+    planSync: { attachDay: () => calls.push('attach'), detachDay: () => calls.push('detach'), syncDay: () => {} },
+    now: () => manila(D, '18:00'),
+    fallbackTimezone: () => MANILA,
+    onTick: () => calls.push('onTick'),
+  });
+  assert.doesNotThrow(() => live.tick());
+  assert.deepEqual(calls, ['onTick'], 'invalid history attaches nothing, and the re-render still runs');
+});
+
+test('index.html\'s 60s interval drives the live tick (rollover is not left to render-only code)', () => {
+  const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const start = html.search(/setInterval\(\(\) => \{\r?\n\s*if \(!running && !breakActive\) renderTodayOnDateChange\(\);/);
+  assert.ok(start >= 0, 'found the 60s Today interval');
+  const body = html.slice(start, html.indexOf('}, 60000);', start));
+  assert.match(body, /PersonalDayBoundaryLive\.tick\(\)/);
+});
+
 test('a legacy account attaches no operational-plan listeners at all', () => {
   const roomRef = fakeRoomRef();
   const device = makeDevice({ roomRef, clock: manila(D, '08:00') });

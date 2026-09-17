@@ -11402,9 +11402,10 @@ setInterval(() => {
   if (typeof globalThis.refreshTomorrowView === 'function') globalThis.refreshTomorrowView();
   // Personal Day Boundary Live Wiring V1 — a boundary crossing (e.g. 18:00) is a
   // time event, not a user action, so the personal-day panes have to rotate on
-  // their own. A no-op for a legacy account (the surface renders nothing) and a
-  // pure read otherwise.
-  if (typeof globalThis.refreshOperationalPlanSurfaceIfMounted === 'function') globalThis.refreshOperationalPlanSurfaceIfMounted();
+  // their own — and the live remote listeners have to follow them (tick() refreshes
+  // the attached current/upcoming days before re-rendering). A no-op for a legacy
+  // account (no day is ever attached, the surface renders nothing).
+  if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.tick();
 }, 60000);
 
 // ══════════════════════════════════════════════════════
