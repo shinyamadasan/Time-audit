@@ -138,8 +138,16 @@ export function renderOperationalPlanSurface() {
     return;
   }
   root.hidden = false;
+  // The current day's own boundary is the honest label for the day in progress —
+  // but on a transition day (the boundary was enabled or changed after this day
+  // began) it is NOT the boundary the user just chose, which would look like the
+  // setting had not applied. Name the upcoming day's boundary too whenever the
+  // two differ, so the difference reads as prospective activation rather than a bug.
+  const boundaryLabel = days.current.boundaryTime === days.upcoming.boundaryTime
+    ? `Starts ${days.current.boundaryTime} · ${days.current.timezone}`
+    : `Starts ${days.current.boundaryTime} today · ${days.upcoming.boundaryTime} from the next personal day · ${days.upcoming.timezone}`;
   root.innerHTML = `
-    <div class="op-section-head"><h2>Personal day</h2><span class="op-muted">Starts ${escape(days.current.boundaryTime)} · ${escape(days.current.timezone)}</span></div>
+    <div class="op-section-head"><h2>Personal day</h2><span class="op-muted">${escape(boundaryLabel)}</span></div>
     ${paneHtml('current', 'Now', days.current, currentItems, context.maxItems)}
     ${paneHtml('upcoming', 'Next', days.upcoming, upcomingItems, context.maxItems)}
     ${lastError ? `<p class="op-error" role="alert">${escape(lastError)}</p>` : ''}
