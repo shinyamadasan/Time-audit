@@ -1694,7 +1694,13 @@ function publishSharedAccountability() {
   // tomorrow's calendar plans, exactly as before.
   const currentTarget = typeof currentPlanTarget === 'function' ? currentPlanTarget() : null;
   const upcomingTarget = typeof upcomingPlanTarget === 'function' ? upcomingPlanTarget() : null;
-  const rawItems = currentTarget ? planItemsFor(currentTarget) : [];
+  // Planning Continuity V1: PRIORITIES only. SharedAccountabilityModel applies a
+  // blind .slice(0, MAX_SHARED_PRIORITIES) privacy belt, so a mixed list would
+  // publish an arbitrary three. Secondary planned tasks and scheduled commitments
+  // are never shared in V1.
+  const rawItems = currentTarget && typeof planPriorityItemsFor === 'function'
+    ? planPriorityItemsFor(currentTarget)
+    : (currentTarget ? planItemsFor(currentTarget) : []);
   const todayItems = rawItems.map(item => {
     const minutes = planTrackedMinFor(currentTarget, item.task, item.id);
     return { title: item.task, status: M.deriveTodayItemStatus(item, minutes) };

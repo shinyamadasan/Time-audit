@@ -6257,9 +6257,29 @@ function getPlanItemsRaw(dateKey) {
   return normalizePlanItems(plans[dateKey] && plans[dateKey].items);
 }
 
-function createPlanItem(task, when = '') {
+/** Planning Continuity V1 — the effective kind of a plan item. Mirrors
+ *  PlanTomorrowModel.planItemKind exactly and exists only so the synchronous
+ *  first render (which happens before the deferred module graph loads) can still
+ *  tell a priority from a secondary task. Absent/unknown => 'priority', so every
+ *  item already persisted keeps its historical meaning with no migration. */
+function planItemKindOf(item) {
+  return item && item.kind === 'task' ? 'task' : 'priority';
+}
+
+/** The active TOP PRIORITIES of a target — the one list the 3-cap is measured
+ *  against and the one list preparation/readiness/streak are fed from. */
+function planPriorityItemsFor(target) {
+  return planItemsFor(target).filter(item => planItemKindOf(item) === 'priority');
+}
+
+/** The active secondary planned tasks of a target — deliberately uncapped. */
+function planSecondaryItemsFor(target) {
+  return planItemsFor(target).filter(item => planItemKindOf(item) === 'task');
+}
+
+function createPlanItem(task, when = '', kind = 'priority') {
   const now = Date.now();
-  return {
+  const item = {
     id: 'p' + now.toString(36) + Math.random().toString(36).slice(2, 6),
     task,
     when,
@@ -6268,6 +6288,10 @@ function createPlanItem(task, when = '') {
     updatedAt: now,
     updatedBy: syncedDeviceId
   };
+  // Only ever PERSIST the non-default kind, so a priority's stored shape stays
+  // byte-identical to what already ships and there is exactly one representation.
+  if (kind === 'task') item.kind = 'task';
+  return item;
 }
 
 function stampPlanItemMutation(item, updatedAt = Date.now()) {
@@ -6276,14 +6300,16 @@ function stampPlanItemMutation(item, updatedAt = Date.now()) {
 
 /** The plan IS the daily target — focus-mode's deep bar reads dailyCommitment. */
 function syncCommitmentFromPlan() {
-  dailyCommitment = planItemsFor(currentPlanTarget()).length;
+  // Priorities only: secondary planned tasks are plan capacity, not a deep-work
+  // target, so adding ten of them must not silently raise focus-mode's goal.
+  dailyCommitment = planPriorityItemsFor(currentPlanTarget()).length;
 }
 
 /** `intention` is legacy single-string state that focus-mode still displays. Derive it from the
  *  next unfinished plan item so the focus overlay names the thing you actually meant to do.
  *  Never blanks an existing intention — an empty plan just leaves it alone. */
 function syncIntentionFromPlan() {
-  const next = planItemsFor(currentPlanTarget()).find(i => !i.done);
+  const next = planPriorityItemsFor(currentPlanTarget()).find(i => !i.done);
   if (!next || next.task === intention) return;
   intention = next.task;
   const el = document.getElementById('intention');
@@ -6362,9 +6388,14 @@ function confirmPreparedDatePlan({ targetDate, items, mode, intentionalBlank, ro
     const syncPromise = typeof syncPlans === 'function' ? syncPlans(targetDate) : Promise.resolve(false);
     return { localSaved: true, syncPromise };
   }
+  // Planning Continuity V1: the cap and readiness are both measured on TOP
+  // PRIORITIES only. Secondary planned tasks are uncapped and never earn
+  // preparation credit. Identical for all existing data (every stored item is a
+  // priority), so no legacy plan's streak or prepared-state can change.
   const activeItems = normalizePlanItems(items).filter(item => !item.deleted);
-  if (activeItems.length > PLAN_MAX) throw new Error(`Reduce the plan to ${PLAN_MAX} priorities before confirming.`);
-  const hasAction = activeItems.some(item => !item.done) || actionableRoutineInstanceIds.length > 0;
+  const activePriorities = activeItems.filter(item => planItemKindOf(item) === 'priority');
+  if (activePriorities.length > PLAN_MAX) throw new Error(`Reduce the plan to ${PLAN_MAX} priorities before confirming.`);
+  const hasAction = activePriorities.some(item => !item.done) || actionableRoutineInstanceIds.length > 0;
   if (!hasAction && intentionalBlank !== true) throw new Error('Add one priority, keep a routine, or choose Open day.');
   const preparation = globalThis.PlanTomorrowModel.buildPreparation(current.preparation, {
     targetDate,
@@ -6374,7 +6405,7 @@ function confirmPreparedDatePlan({ targetDate, items, mode, intentionalBlank, ro
     updatedBy: syncedDeviceId,
     intentionalBlank: !hasAction && intentionalBlank === true,
     routineInstanceIds,
-    oneOffItemIds: activeItems.map(item => item.id)
+    oneOffItemIds: activePriorities.map(item => item.id)
   });
   const nextPlan = { ...current, items: normalizePlanItems(items), preparation, updatedAt: now, updatedBy: syncedDeviceId };
   writeDatePlanLocal(targetDate, nextPlan);
@@ -6409,7 +6440,7 @@ globalThis.getPlanTomorrowAppContext = () => ({
   todayKey: planTodayKey(),
   plan: dateKey => plans[dateKey] || null,
   rawItems: getPlanItemsRaw,
-  createItem: createPlanItem,
+  createItem: (task, when, kind) => createPlanItem(task, when, kind),
   stampItem: stampPlanItemMutation,
   normalizeTask: normalizePlanTask,
   suggestions: planTomorrowSuggestions,
@@ -6433,7 +6464,7 @@ globalThis.getOperationalPlanAppContext = () => ({
   timezone: settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
   maxItems: PLAN_MAX,
   deviceId: syncedDeviceId,
-  createItem: createPlanItem,
+  createItem: (task, when, kind) => createPlanItem(task, when, kind),
   stampItem: stampPlanItemMutation,
   normalizeTask: normalizePlanTask,
   rawItems: getPlanItemsRaw,
@@ -6779,21 +6810,26 @@ function renderTodayPlan() {
   const streakText = streak ? `Planning streak · ${streak.current} day${streak.current === 1 ? '' : 's'}${streak.current === 0 && streak.best > 0 ? ` · Best ${streak.best}` : ''}` : '';
 
   const sectionHtml = ({ target, items }) => {
-  const doneCount = items.filter(i => i.done).length;
+  // Planning Continuity V1: the header count, the 3-cap and the "Day prepared"
+  // state all speak about TOP PRIORITIES. Secondary planned tasks render in their
+  // own uncapped block below and never affect any of those.
+  const priorityRows = items.filter(i => planItemKindOf(i) === 'priority');
+  const secondaryRows = items.filter(i => planItemKindOf(i) === 'task');
+  const doneCount = priorityRows.filter(i => i.done).length;
   const preparation = globalThis.PlanAuthority ? globalThis.PlanAuthority.preparation(target) : globalThis.PlanTomorrowModel?.normalizePreparation(plans[target.dateKey]?.preparation, target.dateKey);
   // A personal day is named by its real interval; a calendar day stays a date.
   const dayLabel = readOnly && target.store === 'operational' ? `<span class="plan-day-window">${esc(planTargetLabel(target))}</span>` : '';
   const head = `<div class="plan-head">
       <div class="plan-head-text">
         <span class="plan-title">${readOnly ? 'Planned that day' : 'Priorities'}</span>
-        <span class="plan-count">${items.length ? `${doneCount} of ${items.length} done` : preparation ? (preparation.intentionalBlank ? 'Open day prepared' : 'Day prepared') : 'Optional · up to 3'}</span>
+        <span class="plan-count">${priorityRows.length ? `${doneCount} of ${priorityRows.length} done` : preparation ? (preparation.intentionalBlank ? 'Open day prepared' : 'Day prepared') : 'Optional · up to 3'}</span>
         ${dayLabel}
         ${streakText ? `<span class="plan-streak">${streakText}</span>` : ''}
       </div>
       ${readOnly ? '' : `<button class="btn sm ghost" onclick="document.getElementById('plan-strip').classList.toggle('editing')">Edit</button>`}
     </div>`;
 
-  const rows = planDisplayOrder(items).map(it => {
+  const renderRows = list => planDisplayOrder(list).map(it => {
     const mins    = planTrackedMinFor(target, it.task, it.id);
     const status  = getPlanItemStatus(it, target, mins);
     const active  = status.key === 'in-progress';
@@ -6819,10 +6855,12 @@ function renderTodayPlan() {
       </div>`;
   }).join('');
 
+  const rows = renderRows(priorityRows);
+
   let footer = '';
   if (!readOnly) {
-    footer = items.length >= PLAN_MAX
-      ? `<div class="plan-full">${PLAN_MAX} of ${PLAN_MAX} — finish or remove one to add another.</div>`
+    footer = priorityRows.length >= PLAN_MAX
+      ? `<div class="plan-full">${PLAN_MAX} of ${PLAN_MAX} priorities — finish or remove one, or add it below as another task.</div>`
       : `<div class="plan-add">
           <input id="plan-when" type="time" class="plan-input when" aria-label="when (optional)">
           <input id="plan-task" class="plan-input task" maxlength="80" placeholder="what will you do?"
@@ -6831,7 +6869,23 @@ function renderTodayPlan() {
         </div>${planTimezoneHintHTML()}`;
   }
 
-    return head + rows + `<div class="plan-editor">${footer}</div>`;
+  // Other planned tasks — uncapped. Hidden entirely when browsing history with
+  // none stored, so a legacy day's read-only card looks exactly as it always did.
+  let secondary = '';
+  if (secondaryRows.length || !readOnly) {
+    const secondaryAdd = readOnly ? '' : `<div class="plan-add">
+          <input id="plan-task-when" type="time" class="plan-input when" aria-label="when (optional)">
+          <input id="plan-task-task" class="plan-input task" maxlength="80" placeholder="another planned task"
+                 onkeydown="if(event.key==='Enter')addPlanTask()">
+          <button class="btn sm" onclick="addPlanTask()">Add</button>
+        </div>`;
+    secondary = `<div class="plan-secondary">
+        <div class="plan-subhead"><span class="plan-subtitle">Other planned tasks</span>${secondaryRows.length ? `<span class="plan-count">${secondaryRows.filter(i => i.done).length} of ${secondaryRows.length} done</span>` : '<span class="plan-count">No cap</span>'}</div>
+        ${renderRows(secondaryRows)}${secondaryAdd}
+      </div>`;
+  }
+
+    return head + rows + `<div class="plan-editor">${footer}</div>` + secondary;
   };
 
   el.innerHTML = sections.filter(section => !readOnly || section.items.length).map(sectionHtml).join('');
@@ -6854,8 +6908,8 @@ function addPlanItem() {
   const target = currentPlanTarget();
   if (!target) { showToast('Your plan is still loading'); return; }
   const raw     = planRawItemsFor(target).slice();
-  if (planItemsFor(target).length >= PLAN_MAX) {
-    showToast(`${PLAN_MAX} is the cap — remove one first`);
+  if (planPriorityItemsFor(target).length >= PLAN_MAX) {
+    showToast(`${PLAN_MAX} priorities is the cap — add it as another task instead`);
     return;
   }
   const taskEl = document.getElementById('plan-task');
@@ -6866,6 +6920,25 @@ function addPlanItem() {
   const item = createPlanItem(task, (whenEl ? whenEl.value : '').trim());
   // Validated against whichever day this actually is: a calendar day keeps the
   // midnight clamp, a personal day is checked against its own real interval.
+  const check = globalThis.PlanAuthority ? globalThis.PlanAuthority.validateItem(target, item) : { ok: true };
+  if (!check.ok) { showToast(check.reason === 'outside-operational-day' ? 'That time is outside this personal day' : 'That time is not valid for this day'); return; }
+  raw.push(item);
+  savePlanItemsFor(target, raw);
+}
+
+/** Adds a SECONDARY planned task. Deliberately has no cap: "3" is a
+ *  prioritization limit, not a planning limit. It never touches preparation, so
+ *  it can never make a day count as prepared or extend the Planning Streak. */
+function addPlanTask() {
+  if (!isViewingToday()) return;
+  const target = currentPlanTarget();
+  if (!target) { showToast('Your plan is still loading'); return; }
+  const raw = planRawItemsFor(target).slice();
+  const taskEl = document.getElementById('plan-task-task');
+  const whenEl = document.getElementById('plan-task-when');
+  const task = (taskEl ? taskEl.value : '').trim();
+  if (!task) { showToast('What else is planned?'); if (taskEl) taskEl.focus(); return; }
+  const item = createPlanItem(task, (whenEl ? whenEl.value : '').trim(), 'task');
   const check = globalThis.PlanAuthority ? globalThis.PlanAuthority.validateItem(target, item) : { ok: true };
   if (!check.ok) { showToast(check.reason === 'outside-operational-day' ? 'That time is outside this personal day' : 'That time is not valid for this day'); return; }
   raw.push(item);
@@ -8491,8 +8564,15 @@ function renderReviewPlanVsActual() {
       ? globalThis.PlanAuthority.preparation(target)
       : globalThis.PlanTomorrowModel?.normalizePreparation(plans[target.dateKey]?.preparation, target.dateKey);
     const rawItems = planRawItemsFor(target);
+    // preparation.oneOffItemIds carries the TOP PRIORITIES this day was prepared
+    // with. Secondary planned tasks are deliberately absent from it (they must not
+    // earn readiness), but they were still genuinely planned, so they are unioned
+    // back in here for reconciliation. Without this they would silently disappear
+    // from Plan vs Actual on any prepared day.
     const itemIds = preparation ? new Set(preparation.oneOffItemIds) : null;
-    const items = itemIds ? rawItems.filter(item => itemIds.has(item.id)) : rawItems.filter(item => !item.deleted);
+    const items = itemIds
+      ? rawItems.filter(item => itemIds.has(item.id) || (!item.deleted && planItemKindOf(item) === 'task'))
+      : rawItems.filter(item => !item.deleted);
     const itemRows = items.map(item => {
       const minutes = planTrackedMinFor(target, item.task, item.id);
       const status = globalThis.PlanAuthority
@@ -9559,8 +9639,14 @@ function classifyPartnerViewTimelineItems(combined) {
 /** Same canonical status pipeline renderTodayPlan() uses for each row —
  *  getPlanItemStatus() plus the separate `done` overlay — never a second
  *  calculation of what "In progress"/"Done"/"Not started" means. */
+/** Planning Continuity V1: PRIORITIES only. The partner has always been shown
+ *  the day's top priorities, and the model's own MAX_PRIORITIES belt does a blind
+ *  .slice(0, 3) — so feeding it a mixed priority/secondary list would publish an
+ *  arbitrary three of them. Secondary planned tasks and scheduled commitments are
+ *  deliberately never published in V1 (no widening of an existing privacy
+ *  boundary). */
 function buildPartnerViewPriorityInputs(target) {
-  return planItemsFor(target).map(it => {
+  return planPriorityItemsFor(target).map(it => {
     const mins = planTrackedMinFor(target, it.task, it.id);
     const status = getPlanItemStatus(it, target, mins);
     return { title: it.task, plannedTime: it.when || null, done: it.done === true, statusLabel: it.done ? 'Done' : status.label };

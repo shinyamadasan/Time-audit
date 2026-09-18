@@ -734,6 +734,12 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
   font-family:var(--head);font-size:12px;padding:7px 9px;min-width:0}
 .plan-input.when{flex:0 0 34%}
 .plan-input.task{flex:1}
+/* Planning Continuity V1 — "Other planned tasks": real plan capacity, visually
+   subordinate to the Top 3 so the prioritization limit still reads as the point. */
+.plan-secondary{margin-top:10px;padding-top:10px;border-top:1px dashed var(--bd)}
+.plan-subhead{display:flex;align-items:baseline;gap:8px;justify-content:space-between;margin-bottom:6px}
+.plan-subtitle{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+.plan-secondary .plan-item{opacity:.9}
 .plan-full{padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
 @media(max-width:520px){
   .morning-choices{grid-template-columns:1fr}

@@ -104,6 +104,7 @@ export default [
         // defines and storage.js / insights.js consume.
         currentPlanTarget: 'readonly', upcomingPlanTarget: 'readonly',
         planTargetsForCalendarDate: 'readonly', planItemsFor: 'readonly',
+        planPriorityItemsFor: 'readonly', planSecondaryItemsFor: 'readonly',
         planTrackedMinFor: 'readonly',
         attentionSignalLines: 'readonly', renderReviewAttention: 'readonly',
         setReviewFocusRating: 'readonly',
