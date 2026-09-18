@@ -67,6 +67,7 @@ import {
   validPlanItemDuration,
   carriedItemId,
   classifyOneOffActual,
+  activePriorityPlanItems,
 } from './plan-tomorrow-model.js';
 // Side-effect import: personal-day-boundary-live.js owns the
 // `window.PersonalDayBoundaryLive` singleton this module's own singleton composes,
@@ -166,6 +167,12 @@ export function createPlanAuthority(deps = {}) {
   // Called after an OPERATIONAL write (the legacy store runs its own equivalent
   // from inside writeDatePlanLocal), so the app re-renders the surfaces that just
   // changed instead of each caller remembering to.
+  // The Top Priority cap. A PRODUCT policy, not temporal truth — injected so
+  // index.html's PLAN_MAX stays the single place the number is declared, and
+  // enforced HERE as well as in the UI so no future planning surface can bypass
+  // it by calling the authority directly.
+  const priorityMax = Number.isInteger(deps.priorityMax) && deps.priorityMax > 0 ? deps.priorityMax : 3;
+
   const onWrite = typeof deps.onWrite === 'function' ? deps.onWrite : () => {};
 
   let cacheToken = 0;
@@ -340,8 +347,17 @@ export function createPlanAuthority(deps = {}) {
       return result;
     }
     if (!Array.isArray(routineInstanceIds) || !Array.isArray(actionableRoutineInstanceIds)) throw new Error('Routine preparation references are invalid.');
-    const active = (Array.isArray(nextItems) ? nextItems : []).filter(item => item && !item.deleted);
-    const hasAction = active.some(item => !item.done) || actionableRoutineInstanceIds.length > 0;
+    // Planning Continuity V1: readiness is measured on TOP PRIORITIES only.
+    // Secondary planned tasks (kind:'task') and scheduled commitments are real
+    // plan capacity but they are not statements of intent, so neither may make a
+    // day count as prepared. Narrowing what feeds oneOffItemIds here is what
+    // narrows readyNow() and the Planning Streak too — both read the STORED
+    // preparation, so neither needs its own rule and the two cannot drift apart.
+    // For every item already persisted this is identical: all of them are
+    // priorities, because the old 3-cap counted every item.
+    const activePriorities = activePriorityPlanItems(nextItems);
+    if (activePriorities.length > priorityMax) throw new Error(`Reduce the plan to ${priorityMax} priorities before confirming.`);
+    const hasAction = activePriorities.some(item => !item.done) || actionableRoutineInstanceIds.length > 0;
     if (!hasAction && intentionalBlank !== true) throw new Error('Add one priority, keep a routine, or choose Open day.');
     const nowMs = now();
     const built = buildOperationalPreparation(record(target)?.preparation, {
@@ -351,7 +367,7 @@ export function createPlanAuthority(deps = {}) {
       updatedBy: live.deviceId(),
       intentionalBlank: !hasAction && intentionalBlank === true,
       routineInstanceIds,
-      oneOffItemIds: active.map(item => item.id),
+      oneOffItemIds: activePriorities.map(item => item.id),
     });
     const syncPromise = live.writePlanWithPreparation(target, nextItems, built, live.revisions());
     invalidate();
@@ -653,6 +669,7 @@ export function createPlanAuthority(deps = {}) {
     habitEarned, streak,
     preparedPlans, boundaryChangeImpact,
     legacyTarget,
+    priorityMax: () => priorityMax,
   };
 }
 
@@ -683,6 +700,7 @@ if (typeof window !== 'undefined') {
       allPlans: () => authorityAppContext().allPlans(),
       earliestPlanDate: () => authorityAppContext().earliestPlanDate(),
     },
+    priorityMax: (() => { try { return authorityAppContext().maxItems; } catch { return 3; } })(),
     accountTimezone: () => authorityAppContext().timezone,
     calendarDayBounds: dateKey => authorityAppContext().calendarDayBounds(dateKey),
     legacyClockInstant: (dateKey, hhmm) => authorityAppContext().clockInstant(dateKey, hhmm),

@@ -1,4 +1,4 @@
-import { classifyRoutineActual, clearPlanItemRange, durationBetween, formatPlanItemSchedule, planItemEndTime, reconciliationBucket, validPlanItemRange, validPlanItemTime } from './plan-tomorrow-model.js';
+import { classifyRoutineActual, clearPlanItemRange, durationBetween, formatPlanItemSchedule, isPriorityPlanItem, isSecondaryPlanItem, planItemEndTime, reconciliationBucket, validPlanItemRange, validPlanItemTime } from './plan-tomorrow-model.js';
 import { carryItemIdFor } from './plan-authority.js';
 import { describeDayStart } from './personal-day-boundary-live.js';
 import { generateInstances, matchCompletion, occursOn } from './daily-routines-model.js';
@@ -73,6 +73,17 @@ function activeItems() {
   return draft.items.filter(item => !item.deleted);
 }
 
+/** Planning Continuity V1 — the 3-cap, the Open-Day affordance and preparation
+ *  are all measured on TOP PRIORITIES. Secondary planned tasks are uncapped and
+ *  never earn preparation credit, so they are counted separately everywhere. */
+function activePriorities() {
+  return activeItems().filter(isPriorityPlanItem);
+}
+
+function activeSecondary() {
+  return activeItems().filter(isSecondaryPlanItem);
+}
+
 function activeRoutines() {
   return draft.routines.rows.filter(row => !row.skipped && row.actionable);
 }
@@ -132,7 +143,7 @@ function toggleCarry(todayItemId) {
     draft.items = draft.items.map(item => item.id === id ? context().stampItem({ ...item, deleted: true }) : item);
     return;
   }
-  if (activeItems().length >= context().maxItems) throw new Error(`Reduce tomorrow's plan to ${context().maxItems} priorities before carrying this forward.`);
+  if (activePriorities().length >= context().maxItems) throw new Error(`Reduce tomorrow's plan to ${context().maxItems} priorities before carrying this forward.`);
   // A fresh stamp (no updatedAt/updatedBy passed in) always gets the current Date.now(), which is
   // later than any prior tombstone on this same id — so re-carrying correctly supersedes an
   // earlier un-carry via the existing chooseItem "highest updatedAt wins" rule, no special case.
@@ -294,7 +305,7 @@ function scheduleControlHtml(item) {
 }
 
 function itemHtml() {
-  const items = activeItems();
+  const items = activePriorities();
   const overCap = items.length > context().maxItems;
   const rows = items.map(item => {
     const timed = validPlanItemTime(item.when);
@@ -312,6 +323,26 @@ function itemHtml() {
   const suggestions = items.length < context().maxItems ? suggestionRows() : [];
   const chips = suggestions.length ? `<div class="pt-chips">${suggestions.map(item => `<button type="button" class="rv-plan-chip ${escape(item.tag)}" data-pt-action="suggest" data-task="${escape(item.task)}">${escape(item.task)}<span class="rv-chip-tag">${escape(item.tag)}</span></button>`).join('')}</div>` : '';
   return warning + (rows || '<p class="pt-muted">No one-off priorities yet.</p>') + add + chips;
+}
+
+/** Other planned tasks — real plan capacity with NO artificial cap. They never
+ *  count against the Top 3 and never earn preparation/readiness credit, so this
+ *  section has no counter against a maximum and no over-cap warning. */
+function secondaryHtml() {
+  const items = activeSecondary();
+  const rows = items.map(item => {
+    const timed = validPlanItemTime(item.when);
+    const legacyWhen = !timed && item.when ? `<span class="plan-when">${escape(item.when)} →</span> ` : '';
+    return `<div class="pt-oneoff pt-secondary" data-pt-item="${escape(item.id)}">
+      <div class="pt-oneoff-main">
+        <div class="pt-oneoff-task">${legacyWhen}${escape(item.task)}</div>
+        <div class="pt-oneoff-time">${scheduleControlHtml(item)}</div>
+      </div>
+      <button type="button" class="plan-remove" data-pt-action="remove" data-id="${escape(item.id)}" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+  const add = `<form id="plan-tomorrow-add-task" class="pt-add"><input name="when" maxlength="40" placeholder="when (optional)"><input name="task" maxlength="80" placeholder="another planned task"><button class="btn sm" type="submit">Add</button></form>`;
+  return (rows || '<p class="pt-muted">Nothing else planned.</p>') + add;
 }
 
 function reconciliationHtml() {
@@ -341,15 +372,18 @@ function reconciliationHtml() {
 }
 
 function renderNormal() {
-  const actionable = activeRoutines().length + activeItems().filter(item => !item.done).length;
+  // Only priorities and routines make a day actionable — adding secondary tasks
+  // must never remove the need to state an intention (or to choose Open day).
+  const actionable = activeRoutines().length + activePriorities().filter(item => !item.done).length;
   return `<section><h3>Routines already included</h3>${routineHtml()}</section>
-    <section><h3>One-off priorities <span>${activeItems().length}/${context().maxItems}</span></h3>${itemHtml()}</section>
+    <section><h3>Top priorities <span>${activePriorities().length}/${context().maxItems}</span></h3>${itemHtml()}</section>
+    <section><h3>Other planned tasks${activeSecondary().length ? ` <span>${activeSecondary().length}</span>` : ''}</h3>${secondaryHtml()}</section>
     ${actionable ? '' : `<button type="button" class="btn ghost pt-open-day${draft.intentionalBlank ? ' selected' : ''}" data-pt-action="blank">${draft.intentionalBlank ? '✓ ' : ''}Open day / no commitments</button>`}`;
 }
 
 function renderRescue() {
   const routines = activeRoutines().length;
-  const priorities = activeItems().filter(item => !item.done).length;
+  const priorities = activePriorities().filter(item => !item.done).length;
   if (routines + priorities) return `<div class="pt-rescue"><h3>${routines || 'No'} routine${routines === 1 ? '' : 's'} · ${priorities || 'no'} priorit${priorities === 1 ? 'y' : 'ies'}</h3><p>Use this plan as it is. No additional scheduling decisions needed.</p>${draft.routines.mismatch ? routineHtml() : ''}</div>`;
   return `<div class="pt-rescue"><h3>Keep it minimal</h3><form id="plan-tomorrow-rescue-add" class="pt-add"><input name="task" maxlength="80" placeholder="one anytime priority"><button class="btn sm" type="submit">Add</button></form><span class="pt-or">or</span><button type="button" class="btn ghost pt-open-day${draft.intentionalBlank ? ' selected' : ''}" data-pt-action="blank">${draft.intentionalBlank ? '✓ ' : ''}Open day / no commitments</button></div>`;
 }
@@ -429,16 +463,20 @@ function closePreparation() {
   }
 }
 
-function addItem(task, when = '') {
-  if (activeItems().length >= context().maxItems) throw new Error(`Reduce the plan to ${context().maxItems} priorities first.`);
-  draft.items.push(context().createItem(task, when));
-  draft.intentionalBlank = false;
+function addItem(task, when = '', kind = 'priority') {
+  if (kind === 'priority' && activePriorities().length >= context().maxItems) {
+    throw new Error(`${context().maxItems} priorities is the cap — add it under Other planned tasks instead.`);
+  }
+  draft.items.push(context().createItem(task, when, kind));
+  // A secondary task is not an intention, so it must not silently clear an
+  // explicit Open Day choice the way adding a priority does.
+  if (kind === 'priority') draft.intentionalBlank = false;
 }
 
 async function confirmDraft() {
-  const unfinishedItems = activeItems().filter(item => !item.done);
+  const unfinishedItems = activePriorities().filter(item => !item.done);
   const routines = activeRoutines();
-  if (activeItems().length > context().maxItems) throw new Error(`Reduce the plan to ${context().maxItems} priorities before confirming.`);
+  if (activePriorities().length > context().maxItems) throw new Error(`Reduce the plan to ${context().maxItems} priorities before confirming.`);
   const intentionalBlank = routines.length + unfinishedItems.length === 0 && draft.intentionalBlank;
   if (!routines.length && !unfinishedItems.length && !intentionalBlank) throw new Error('Add one priority, keep a routine, or choose Open day.');
   const authority = globalThis.PlanAuthority;
@@ -553,13 +591,14 @@ root?.addEventListener('focusout', event => {
 });
 
 root?.addEventListener('submit', event => {
-  if (!event.target.matches('#plan-tomorrow-add, #plan-tomorrow-rescue-add')) return;
+  if (!event.target.matches('#plan-tomorrow-add, #plan-tomorrow-rescue-add, #plan-tomorrow-add-task')) return;
   event.preventDefault();
+  const kind = event.target.id === 'plan-tomorrow-add-task' ? 'task' : 'priority';
   try {
     const data = new FormData(event.target);
     const task = String(data.get('task') || '').trim();
-    if (!task) throw new Error('Name the priority first.');
-    addItem(task, String(data.get('when') || '').trim());
+    if (!task) throw new Error(kind === 'task' ? 'Name the task first.' : 'Name the priority first.');
+    addItem(task, String(data.get('when') || '').trim(), kind);
     render();
   } catch (err) { error.textContent = err.message; }
 });

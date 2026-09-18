@@ -104,6 +104,76 @@ export function clearPlanItemRange(item) {
   return next;
 }
 
+// ── Planning Continuity V1: priority vs plan capacity ──────────────────────
+//
+// "3" is a PRIORITIZATION limit, not a PLANNING limit. A day may hold at most
+// three intentional Top Priorities plus any number of secondary planned tasks.
+// The distinction is carried by ONE optional additive field on the item:
+//
+//     kind?: 'priority' | 'task'        absent => 'priority'
+//
+// Absent-means-priority is what makes this backward compatible with zero
+// migration: every item already persisted (all of which were priorities, because
+// the 3-cap counted every item) keeps its exact stored bytes, its exact id and
+// its exact behaviour. Nothing is rewritten and nothing is reclassified.
+//
+// It is deliberately NOT array position. Both plan merges emit
+// `items.sort(by id)` (mergeDatePlans below, and mergeOperationalPlanRecords in
+// operational-plan-model.js), so order does not survive a sync and could never
+// carry priority semantics. Order-based inference is impossible here, not merely
+// discouraged.
+//
+// `kind` is only ever PERSISTED as 'task'. A priority leaves the field absent, so
+// a priority item's stored shape stays byte-identical to what ships today and
+// there is exactly one representation of "this is a priority".
+export const PLAN_ITEM_KINDS = new Set(['priority', 'task']);
+
+/** The effective kind of any plan item, legacy or new. Anything that is not the
+ *  literal string 'task' is a priority — an absent field, an unknown value or a
+ *  corrupted one all fall back to the historical meaning rather than inventing a
+ *  third category. */
+export function planItemKind(item) {
+  return item && item.kind === 'task' ? 'task' : 'priority';
+}
+
+export function isPriorityPlanItem(item) {
+  return planItemKind(item) === 'priority';
+}
+
+export function isSecondaryPlanItem(item) {
+  return planItemKind(item) === 'task';
+}
+
+/** Kind-only filters. They deliberately do NOT also drop tombstones or done
+ *  items: callers already decide which of those they mean (raw vs active), and
+ *  folding two questions into one filter is how the two would drift apart. */
+export function priorityPlanItems(items) {
+  return (Array.isArray(items) ? items : []).filter(isPriorityPlanItem);
+}
+
+export function secondaryPlanItems(items) {
+  return (Array.isArray(items) ? items : []).filter(isSecondaryPlanItem);
+}
+
+/** The active (non-tombstoned) priorities — the ONE list the 3-cap is measured
+ *  against, and the one list preparation/readiness/Planning Streak are fed from.
+ *  Secondary tasks and scheduled commitments are absent from it by construction,
+ *  which is what makes readiness un-inflatable by adding either. */
+export function activePriorityPlanItems(items) {
+  return priorityPlanItems(items).filter(item => item && !item.deleted);
+}
+
+/** Sets or clears `kind` canonically: 'task' is stored, 'priority' removes the
+ *  field. Every reclassification path goes through this, so a round trip
+ *  priority -> task -> priority returns to the original stored shape. */
+export function withPlanItemKind(item, kind) {
+  if (!PLAN_ITEM_KINDS.has(kind)) throw new Error(`Unknown plan item kind: ${kind}`);
+  const next = { ...item };
+  if (kind === 'task') next.kind = 'task';
+  else delete next.kind;
+  return next;
+}
+
 export function validPlanTimezone(value) {
   if (typeof value !== 'string' || !value.trim()) return false;
   try {
@@ -424,7 +494,7 @@ export function carriedItemId(sourceDate, sourceItemId) {
   return `carry:${sourceDate}:${sourceItemId}`;
 }
 
-const api = { validPlanDate, validPlanTimezone, validPlanItemTime, formatPlanItemTime, validPlanItemDuration, planItemEndTime, durationBetween, validPlanItemRange, formatPlanItemSchedule, planItemScheduleLabel, clearPlanItemRange, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual, reconciliationBucket, carriedItemId };
+const api = { validPlanDate, validPlanTimezone, PLAN_ITEM_KINDS, planItemKind, isPriorityPlanItem, isSecondaryPlanItem, priorityPlanItems, secondaryPlanItems, activePriorityPlanItems, withPlanItemKind, validPlanItemTime, formatPlanItemTime, validPlanItemDuration, planItemEndTime, durationBetween, validPlanItemRange, formatPlanItemSchedule, planItemScheduleLabel, clearPlanItemRange, localPlanDate, addCalendarDays, planTomorrowTargetDate, normalizePreparation, buildPreparation, mergePreparations, mergeDatePlans, planningConsistency, planningStreak, computeReadyNow, classifyOneOffActual, classifyRoutineActual, summarizeActual, reconciliationBucket, carriedItemId };
 globalThis.PlanTomorrowModel = api;
 // Today's plan strip renders once, synchronously, before this module (deferred by type="module")
 // finishes loading — its preparation/streak/schedule-label fields all read PlanTomorrowModel, so

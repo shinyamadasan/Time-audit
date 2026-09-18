@@ -51,7 +51,9 @@ function legacyStore(seed = {}) {
         firstPreparedAt: input.now || 1000, firstPreparedBy: 'legacy-device', firstPreparedMode: input.mode,
         lastPreparedAt: input.now || 1000, lastPreparedMode: input.mode, updatedBy: 'legacy-device',
         intentionalBlank: input.intentionalBlank === true,
-        routineInstanceIds: input.routineInstanceIds, oneOffItemIds: input.items.filter(i => !i.deleted).map(i => i.id),
+        // Mirrors index.html's confirmPreparedDatePlan: preparation carries the TOP
+        // PRIORITIES only (Planning Continuity V1). Identical for kind-less items.
+        routineInstanceIds: input.routineInstanceIds, oneOffItemIds: input.items.filter(i => !i.deleted && i.kind !== 'task').map(i => i.id),
       };
       plans[input.targetDate] = { ...(plans[input.targetDate] || {}), items: input.items, preparation, updatedAt: input.now || 1000 };
       return { localSaved: true, syncPromise: Promise.resolve(false) };
