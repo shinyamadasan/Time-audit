@@ -326,7 +326,7 @@ test.describe('Partner View V1', () => {
     expect(screenText).toContain('Viewing ALICE');
     expect(screenText).toContain('No priorities planned today');
     expect(screenText).toContain('No time recorded yet');
-    expect(screenText).toContain('No plan for tomorrow yet');
+    expect(screenText).toContain('No upcoming plan yet');
 
     await ctxA.close(); await ctxB.close();
   });
