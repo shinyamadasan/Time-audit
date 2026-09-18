@@ -491,6 +491,11 @@ if (typeof window !== 'undefined') {
       if (typeof window.renderPersonalDayBoundarySettings === 'function') window.renderPersonalDayBoundarySettings();
       if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
       if (typeof window.refreshPlanningTerminologyLabels === 'function') window.refreshPlanningTerminologyLabels();
+      // Partner View's "Tomorrow"/"Next personal day" terminology reads this
+      // device's own configured state at render time (see index.html) — reran
+      // here so an already-open Partner card/screen relabels immediately too.
+      if (typeof window.renderPartnerCard === 'function') window.renderPartnerCard();
+      if (typeof window.renderPartnerViewScreen === 'function') window.renderPartnerViewScreen();
     },
     onTick: () => {
       if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
@@ -504,5 +509,7 @@ if (typeof window !== 'undefined') {
     if (typeof window.renderPersonalDayBoundarySettings === 'function') window.renderPersonalDayBoundarySettings();
     if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
     if (typeof window.refreshPlanningTerminologyLabels === 'function') window.refreshPlanningTerminologyLabels();
+    if (typeof window.renderPartnerCard === 'function') window.renderPartnerCard();
+    if (typeof window.renderPartnerViewScreen === 'function') window.renderPartnerViewScreen();
   };
 }

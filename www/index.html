@@ -10320,17 +10320,23 @@ function renderPartnerCard() {
   const statusIcon = { planned: '○', 'worked-on': '◐', done: '✓' };
   const statusLabel = { planned: 'Planned', 'worked-on': 'Worked on', done: 'Done' };
   const prepLabel = { prepared: 'Prepared', 'open-day': 'Open day', 'not-prepared': 'Not prepared yet' };
+  // Terminology only — the shared payload carries no publisher boundary flag
+  // (adding one would be a Partner View data-selection/allowlist change, out
+  // of scope here), so this reads the SAME local, established predicate every
+  // other global/static Tomorrow-labeled surface in this app already uses:
+  // this device's own configured/enabled Personal Day Boundary state.
+  const tomorrowWord = personalDayBoundaryConfigured() ? 'Next personal day' : 'Tomorrow';
 
   let bodyRows;
   if (!fresh) {
     bodyRows = `<div class="partner-stats">No current update</div>`;
   } else if (!shared.today.priorities.length) {
     bodyRows = `<div class="partner-stats">No priorities shared today</div>
-      <div class="partner-stats">Tomorrow: ${esc(prepLabel[shared.tomorrow.prepStatus] || 'Not prepared yet')}</div>`;
+      <div class="partner-stats">${tomorrowWord}: ${esc(prepLabel[shared.tomorrow.prepStatus] || 'Not prepared yet')}</div>`;
   } else {
     bodyRows = shared.today.priorities.map(p =>
       `<div class="partner-stats">${statusIcon[p.status] || '○'} ${esc(p.title)} — ${esc(statusLabel[p.status] || 'Planned')}</div>`
-    ).join('') + `<div class="partner-stats">Tomorrow: ${esc(prepLabel[shared.tomorrow.prepStatus] || 'Not prepared yet')}</div>`;
+    ).join('') + `<div class="partner-stats">${tomorrowWord}: ${esc(prepLabel[shared.tomorrow.prepStatus] || 'Not prepared yet')}</div>`;
   }
   const freshnessHtml = `<div class="partner-stats">${esc(M.formatFreshness(Date.now(), shared.publisher.updatedAt))}</div>`;
 
@@ -10452,9 +10458,14 @@ function renderPartnerViewScreen() {
   const timelineRows = pv.today.timeline.length
     ? pv.today.timeline.map(renderPartnerViewTimelineRow).join('')
     : `<div class="pv-empty">No time recorded yet</div>`;
+  // Same terminology-only predicate as renderPartnerCard() above: the payload
+  // carries no publisher boundary flag, so this reads this device's own
+  // established configured/enabled state, not the partner's.
+  const usesPersonalDay = personalDayBoundaryConfigured();
+  const tomorrowSectionTitle = usesPersonalDay ? 'Next personal day' : 'Tomorrow';
   const tomorrowRows = pv.tomorrow.priorities.length
     ? pv.tomorrow.priorities.map(p => renderPartnerViewPriorityRow(p, false)).join('')
-    : `<div class="pv-empty">No plan for tomorrow yet</div>`;
+    : `<div class="pv-empty">${usesPersonalDay ? 'No plan for the next personal day yet' : 'No plan for tomorrow yet'}</div>`;
   const freshnessLine = esc(M.formatFreshness(Date.now(), shared.publisher.updatedAt));
 
   el.innerHTML = banner + `<div class="pv-body">
@@ -10474,7 +10485,7 @@ function renderPartnerViewScreen() {
       ${timelineRows}
     </div>
     <div class="pv-section">
-      <div class="pv-section-title">Tomorrow</div>
+      <div class="pv-section-title">${esc(tomorrowSectionTitle)}</div>
       ${tomorrowRows}
     </div>
     <div class="pv-section">
