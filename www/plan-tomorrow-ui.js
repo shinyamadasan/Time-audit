@@ -1,5 +1,6 @@
 import { classifyRoutineActual, clearPlanItemRange, durationBetween, formatPlanItemSchedule, planItemEndTime, reconciliationBucket, validPlanItemRange, validPlanItemTime } from './plan-tomorrow-model.js';
 import { carryItemIdFor } from './plan-authority.js';
+import { describeDayStart } from './personal-day-boundary-live.js';
 import { generateInstances, matchCompletion, occursOn } from './daily-routines-model.js';
 import { createDailyRoutineRepository } from './daily-routines-repository.js';
 import { createLearningPlanRepository } from './learning-plan-repository.js';
@@ -365,8 +366,16 @@ function render() {
   if (!draft || !body) return;
   rendering = true;
   try {
+    // A legacy/never-enabled account keeps the existing "Tomorrow" wording
+    // exactly; an account with an active personal day boundary is preparing
+    // the next AUTHORITATIVE day, which is only sometimes calendar tomorrow —
+    // "Plan next personal day" names what is actually being prepared.
+    const usesPersonalDay = draft.target.store === 'operational';
+    document.getElementById('plan-tomorrow-title').textContent = usesPersonalDay ? 'Plan next personal day' : 'Plan tomorrow';
     document.getElementById('plan-tomorrow-date').textContent = targetHeading(draft.target);
     document.getElementById('plan-tomorrow-timezone').textContent = draft.target.store === 'operational' ? draft.target.timezone : draft.timezone;
+    const startsEl = document.getElementById('plan-tomorrow-starts');
+    if (startsEl) startsEl.textContent = usesPersonalDay ? describeDayStart(draft.target.startMs, draft.target.boundaryTime, draft.target.timezone, Date.now()) : '';
     const authority = globalThis.PlanAuthority;
     const readyNow = authority.readyNow(draft.target, draft.routines.rows);
     const consistency = authority.consistency(draft.target);
@@ -375,7 +384,7 @@ function render() {
     readiness.dataset.ready = String(readyNow);
     document.querySelectorAll('[data-pt-mode]').forEach(button => button.classList.toggle('selected', button.dataset.ptMode === draft.mode));
     body.innerHTML = reconciliationHtml() + (draft.mode === 'rescue' ? renderRescue() : renderNormal());
-    document.getElementById('plan-tomorrow-confirm').textContent = draft.mode === 'rescue' ? 'Use this plan' : 'Tomorrow is ready';
+    document.getElementById('plan-tomorrow-confirm').textContent = draft.mode === 'rescue' ? 'Use this plan' : (usesPersonalDay ? 'Next personal day is ready' : 'Tomorrow is ready');
     error.textContent = '';
     if (draft.schedulingId) body.querySelector(`[data-pt-schedule-panel="${draft.schedulingId}"] .pt-time-input`)?.focus();
   } finally {

@@ -99,21 +99,27 @@ test('a legacy account sees the OFF state, no personal-day surface on Today, and
 
   await openSettings(page);
   await expect(panel(page)).toContainText('Off. Your day currently starts at midnight');
-  await expect(panel(page).locator('[data-pdb-input="enable"]')).not.toBeChecked();
-  // The time/timezone editor is not even rendered until the user opts in.
-  await expect(panel(page).locator('[data-pdb-input="time"]')).toHaveCount(0);
+  // There is no separate enable checkbox: the time/timezone editor and the
+  // single activation button are both visible from the start.
+  await expect(panel(page).locator('[data-pdb-input="enable"]')).toHaveCount(0);
+  await expect(panel(page).locator('[data-pdb-input="time"]')).toBeVisible();
+  await expect(panel(page).getByRole('button', { name: 'Turn on personal day boundary' })).toBeVisible();
 
   // Opening Settings (and Today, and the planning surface) wrote nothing.
   expect(await boundaryStore(page)).toBeNull();
   expect(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1'))).toBeNull();
 });
 
-test('ticking Enable still writes nothing until the explicit save', async ({ page }) => {
+test('the enable flow needs no separate checkbox: choosing a time/timezone and pressing the one button is enough', async ({ page }) => {
   await openApp(page);
   await openSettings(page);
-  await panel(page).locator('[data-pdb-input="enable"]').check();
-  await expect(panel(page).locator('[data-pdb-input="time"]')).toBeVisible();
+  // Just typing a start time writes nothing until the explicit save.
+  await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
   expect(await boundaryStore(page)).toBeNull();
+
+  await panel(page).locator('[data-pdb-input="timezone"]').selectOption(TZ);
+  await panel(page).getByRole('button', { name: 'Turn on personal day boundary' }).click();
+  expect(await boundaryStore(page)).not.toBeNull();
 });
 
 // ── first enable at 08:00 for 18:00 (spec §7 / §11) ─────────────────────────
@@ -122,7 +128,6 @@ test('enabling an 18:00 boundary at 08:00 states when it activates, then activat
   await openApp(page);
   await openSettings(page);
 
-  await panel(page).locator('[data-pdb-input="enable"]').check();
   await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
   await panel(page).locator('[data-pdb-input="timezone"]').selectOption(TZ);
 
@@ -159,7 +164,6 @@ test('enabling an 18:00 boundary at 08:00 states when it activates, then activat
 test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ONE workflow, and it is the current plan after an 18:00 reload', async ({ page }) => {
   await openApp(page);
   await openSettings(page);
-  await panel(page).locator('[data-pdb-input="enable"]').check();
   await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
   await panel(page).locator('[data-pdb-input="timezone"]').selectOption(TZ);
   await panel(page).getByRole('button', { name: 'Turn on personal day boundary' }).click();
@@ -181,6 +185,11 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
   // It names the personal-day interval, not a calendar date.
   await expect(page.locator('#plan-tomorrow-date')).toContainText('18:00');
   await expect(page.locator('#plan-tomorrow-date')).toContainText('→');
+  // A boundary account is preparing the next personal day, not "tomorrow" —
+  // the modal title and confirm action say so, and it states when that
+  // personal day actually starts.
+  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan next personal day');
+  await expect(page.locator('#plan-tomorrow-starts')).toContainText('Starts today at 18:00');
 
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Night shift block');
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
@@ -189,7 +198,7 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
   // A post-midnight time a calendar-day plan could not represent is ordinary here.
   await page.locator('[data-pt-action="edit-schedule"]').last().click();
   await page.locator('.pt-time-input').fill('01:00');
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Next personal day is ready' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
 
   // It went into the operational store, keyed by an operationalDayId (never a bare date),
@@ -301,11 +310,10 @@ test('a page left open across 18:00 re-subscribes to the new current/upcoming da
 
 // ── boundary change through the real UI ─────────────────────────────────────
 
-test('changing 18:00 -> 20:00 at 21:00 states "tomorrow" and is reported as a pending change', async ({ page }) => {
+test('changing 18:00 -> 20:00 at 21:00 states "tomorrow", is reported as Current vs Scheduled, and a repeat of the exact same change never submits a duplicate', async ({ page }) => {
   // Enable first, at 08:00.
   await openApp(page);
   await openSettings(page);
-  await panel(page).locator('[data-pdb-input="enable"]').check();
   await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
   await panel(page).locator('[data-pdb-input="timezone"]').selectOption(TZ);
   await panel(page).getByRole('button', { name: 'Turn on personal day boundary' }).click();
@@ -321,7 +329,7 @@ test('changing 18:00 -> 20:00 at 21:00 states "tomorrow" and is reported as a pe
   await page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object');
   await openSettings(page);
 
-  await expect(panel(page)).toContainText('Active: your personal day starts at');
+  await expect(panel(page)).toContainText('Current:');
   await panel(page).locator('[data-pdb-input="time"]').fill('20:00');
   await expect(panel(page)).toContainText('20:00 tomorrow');
 
@@ -331,7 +339,91 @@ test('changing 18:00 -> 20:00 at 21:00 states "tomorrow" and is reported as a pe
   const after = Object.values(JSON.parse(await boundaryStore(page)).revisions);
   expect(after).toHaveLength(3);
   expect(after.map(r => r.boundaryTime).sort()).toEqual(['00:00', '18:00', '20:00']);
-  // And the change is shown as pending, not as already active.
-  await expect(panel(page)).toContainText('Pending change:');
+  // And the change is shown as Current vs Scheduled, not as already active.
+  await expect(panel(page)).toContainText('Scheduled:');
   await expect(panel(page)).toContainText('20:00 tomorrow');
+
+  // Proposing the EXACT same pending change again must not resubmit it, and
+  // must never surface the model's raw uniqueness rejection: the Save button
+  // is disabled before a click can even reach that path.
+  await panel(page).locator('[data-pdb-input="time"]').fill('20:00');
+  await expect(panel(page)).toContainText('Change scheduled');
+  await expect(panel(page).getByRole('button', { name: 'Save personal day start' })).toBeDisabled();
+  await expect(panel(page)).not.toContainText('effective instants must be unique');
+  expect(Object.values(JSON.parse(await boundaryStore(page)).revisions)).toHaveLength(3);
+
+  // A genuinely different pending value is still freely savable.
+  await panel(page).locator('[data-pdb-input="time"]').fill('21:00');
+  await expect(panel(page).getByRole('button', { name: 'Save personal day start' })).toBeEnabled();
+  await panel(page).getByRole('button', { name: 'Save personal day start' }).click();
+  const final = Object.values(JSON.parse(await boundaryStore(page)).revisions);
+  expect(final).toHaveLength(4);
+  expect(final.map(r => r.boundaryTime).sort()).toEqual(['00:00', '18:00', '20:00', '21:00']);
+});
+
+// ── Plan Tomorrow terminology (Personal Day UX V1.1) ────────────────────────
+
+test('a legacy account keeps "Plan tomorrow" wording everywhere', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => toggleHdrMenu());
+  await expect(page.locator('#hdr-menu-plan-tomorrow')).toHaveText('Plan tomorrow');
+  await page.evaluate(() => openPlanTomorrow());
+  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan tomorrow');
+  await expect(page.locator('#plan-tomorrow-starts')).toBeEmpty();
+  await expect(page.getByRole('button', { name: 'Tomorrow is ready' })).toBeVisible();
+});
+
+test('a custom-boundary account sees "Plan next personal day" wording in the hamburger menu and the modal', async ({ page }) => {
+  await openApp(page);
+  await openSettings(page);
+  await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
+  await panel(page).locator('[data-pdb-input="timezone"]').selectOption(TZ);
+  await panel(page).getByRole('button', { name: 'Turn on personal day boundary' }).click();
+
+  await page.evaluate(() => showView('today'));
+  await page.evaluate(() => toggleHdrMenu());
+  await expect(page.locator('#hdr-menu-plan-tomorrow')).toHaveText('Plan next personal day');
+
+  await page.evaluate(() => openPlanTomorrow());
+  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan next personal day');
+  await expect(page.getByRole('button', { name: 'Next personal day is ready' })).toBeVisible();
+});
+
+// ── "Starts today/tomorrow at HH:MM" (Personal Day UX V1.1) ────────────────
+
+test('at 06:00 with an 18:00 boundary, the next personal day is reported as starting today', async ({ page }) => {
+  await openApp(page, { now: Date.parse('2026-09-15T22:00:00Z') }); // 06:00 Asia/Manila 2026-09-16
+  await openSettings(page);
+  await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
+  await panel(page).locator('[data-pdb-input="timezone"]').selectOption(TZ);
+  await panel(page).getByRole('button', { name: 'Turn on personal day boundary' }).click();
+
+  await page.evaluate(() => openPlanTomorrow());
+  await expect(page.locator('#plan-tomorrow-starts')).toHaveText('Starts today at 18:00');
+  await page.locator('[data-pt-action="close"]').first().click();
+
+  await page.evaluate(() => showView('today'));
+  await page.locator('#tmr-tab-tomorrow').click();
+  await expect(page.locator('.tmr-starts')).toHaveText('Starts today at 18:00');
+});
+
+test('after 18:00, the next personal day is reported as starting tomorrow', async ({ page }) => {
+  await openApp(page, { now: Date.parse('2026-09-16T00:00:00Z') }); // 08:00 Asia/Manila 2026-09-16
+  await openSettings(page);
+  await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
+  await panel(page).locator('[data-pdb-input="timezone"]').selectOption(TZ);
+  await panel(page).getByRole('button', { name: 'Turn on personal day boundary' }).click();
+  const stored = await boundaryStore(page);
+
+  // Reopen at 19:00 Asia/Manila 2026-09-16, after today's 18:00 boundary has passed.
+  await page.addInitScript(({ boundaryStore, now }) => {
+    const RealDate = Date;
+    window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
+    localStorage.setItem('ta3-day-boundary-revisions-v1', boundaryStore);
+  }, { boundaryStore: stored, now: Date.parse('2026-09-16T19:00:00+08:00') });
+  await page.reload();
+  await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
+
+  await page.evaluate(() => openPlanTomorrow());
+  await expect(page.locator('#plan-tomorrow-starts')).toHaveText('Starts tomorrow at 18:00');
 });

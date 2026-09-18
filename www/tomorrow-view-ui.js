@@ -1,6 +1,7 @@
 import { planItemScheduleLabel } from './plan-tomorrow-model.js';
 import { deriveTomorrowViewState } from './tomorrow-view-model.js';
 import { deriveTomorrowTimelinePreview } from './tomorrow-timeline-model.js';
+import { describeDayStart } from './personal-day-boundary-live.js';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const TAB_STORAGE_KEY = 'ta3-commitments-view';
@@ -87,7 +88,10 @@ function headingHtml(target) {
   const label = target.store === 'operational'
     ? formatPersonalDayWindow(target)
     : formatHeadingDate(target.dateKey);
-  return `<div class="tmr-head"><div class="tmr-kicker">${target.store === 'operational' ? 'Next personal day' : 'Tomorrow'}</div><div class="tmr-date">${escape(label)}</div></div>`;
+  const starts = target.store === 'operational'
+    ? `<div class="tmr-starts">${escape(describeDayStart(target.startMs, target.boundaryTime, target.timezone, Date.now()))}</div>`
+    : '';
+  return `<div class="tmr-head"><div class="tmr-kicker">${target.store === 'operational' ? 'Next personal day' : 'Tomorrow'}</div><div class="tmr-date">${escape(label)}</div>${starts}</div>`;
 }
 
 function formatPersonalDayWindow(target) {
@@ -191,9 +195,10 @@ function render() {
   renderTimelinePreview({ target, items, applicableRoutines, routineMismatch });
 
   if (viewState === 'unprepared-empty') {
+    const emptyLabel = target.store === 'operational' ? 'Your next personal day hasn’t been prepared yet.' : 'Tomorrow hasn’t been prepared yet.';
     tomorrowPane.innerHTML = headingHtml(target)
-      + '<p class="tmr-empty">Tomorrow hasn’t been prepared yet.</p>'
-      + footerHtml('Plan tomorrow');
+      + `<p class="tmr-empty">${escape(emptyLabel)}</p>`
+      + footerHtml(target.store === 'operational' ? 'Plan next personal day' : 'Plan tomorrow');
     return;
   }
   if (viewState === 'open-day') {

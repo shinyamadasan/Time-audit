@@ -223,7 +223,7 @@ test('every planning consumer answers with the same authoritative plan for a gov
   await page.evaluate(() => openPlanTomorrow());
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Next personal day priority');
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Next personal day is ready' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
 
   const prepared = await page.evaluate(() => {
@@ -311,7 +311,7 @@ test('a boundary change that orphans a prepared day warns by name, then keeps th
   await page.evaluate(() => openPlanTomorrow());
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Prepared night shift');
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
-  await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
+  await page.getByRole('button', { name: 'Next personal day is ready' }).click();
   const orphanId = await page.evaluate(() => window.PlanAuthority.upcoming().id);
 
   // Nothing is stray while it is still reachable.
