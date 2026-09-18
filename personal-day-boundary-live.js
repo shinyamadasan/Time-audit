@@ -44,6 +44,7 @@ import {
   previousOperationalDay,
   resolveClockTimeInOperationalDay,
   operationalDayInterval,
+  parseOperationalDayId,
   proposeBoundaryRevision,
   canonicalizeOperationalDayTimezone,
   validBoundaryTime,
@@ -365,16 +366,44 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
   // ── remote listener lifecycle (room join / reconnect / teardown) ───────────
 
   /** The operational day ids that should have a live listener right now: the
-   *  current and upcoming days, and only when each is operational-governed.
-   *  Returns [] for a legacy/absent user, so nothing is ever attached for an
-   *  account that never enabled the feature. */
+   *  current and upcoming days, plus every FUTURE day this device already holds a
+   *  plan record for. Returns [] for a legacy/absent user, so nothing is ever
+   *  attached for an account that never enabled the feature.
+   *
+   *  Planning Continuity V1 (G1). Before future-day planning existed, current +
+   *  upcoming was the whole reachable horizon. Now that a day three weeks out can
+   *  be prepared, a listener set fixed at those two would mean an edit made to that
+   *  day on another device stayed invisible until the day arrived — and the owner
+   *  would have no way to know their two devices disagreed.
+   *
+   *  The set is bounded by RECORDS THAT ACTUALLY EXIST, never by a date range: a
+   *  day is listened to because this device has a plan for it, so the count is
+   *  whatever the owner has actually prepared. Past days are excluded (their plan is
+   *  finalized history; the stale-recovery projection reads them from local storage
+   *  without needing a live listener), and an unresolvable ref is skipped rather
+   *  than throwing the whole listener refresh. */
   function liveDayIds(nowMs = now()) {
     if (!enabled()) return [];
     let days;
     try { days = planningDays(nowMs); } catch { return []; }
-    return [days.current, days.upcoming]
+    const ids = [days.current, days.upcoming]
       .filter(day => day.authority.store === 'operational')
       .map(day => day.authority.operationalDayId);
+    const seen = new Set(ids);
+    let history;
+    try { history = revisions(); } catch { return ids; }
+    const stored = typeof planRepository?.listAllRaw === 'function' ? planRepository.listAllRaw() : {};
+    for (const id of Object.keys(stored)) {
+      if (seen.has(id)) continue;
+      const ref = parseOperationalDayId(id);
+      if (!ref) continue;
+      try {
+        if (operationalDayInterval(ref, history).endMs <= nowMs) continue; // finalized past day
+      } catch { continue; } // unknown revision — not listenable, and not fatal
+      seen.add(id);
+      ids.push(id);
+    }
+    return ids;
   }
 
   function attachLiveDays(nowMs = now()) {
@@ -413,11 +442,24 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
    *  missing. Boundary revisions push as a set; plans push per live day. */
   function pushAllLocal(nowMs = now()) {
     if (boundarySync) { try { boundarySync.pushAllLocal(); } catch { /* offline */ } }
-    if (planSync) {
-      liveDayIds(nowMs).forEach(id => {
-        try { planSync.syncDay(id); } catch { /* offline */ }
-      });
+    if (!planSync) return;
+    // Planning Continuity V1 (G2). This used to push only liveDayIds(), which meant
+    // a plan written for a FUTURE day while offline was never re-pushed: by the time
+    // the device reconnected, that day was neither current nor upcoming, so nothing
+    // ever named it again and the write stayed local forever.
+    //
+    // The retry set is now every operational plan record this device holds, unioned
+    // with the live ids. Bounded by records that exist rather than by a date range,
+    // and idempotent — each syncDay() is a transaction that merges against remote, so
+    // re-pushing an already-converged day is a no-op.
+    const ids = new Set(liveDayIds(nowMs));
+    const stored = typeof planRepository?.listAllRaw === 'function' ? planRepository.listAllRaw() : {};
+    for (const id of Object.keys(stored)) {
+      if (parseOperationalDayId(id)) ids.add(id);
     }
+    ids.forEach(id => {
+      try { planSync.syncDay(id); } catch { /* offline — retried on the next reconnect */ }
+    });
   }
 
   function detach() {
