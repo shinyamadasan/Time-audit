@@ -144,6 +144,13 @@ export function routineAnchorInstant(instance) {
 
 const OVERLAP_GUARD = 400;
 
+/** How far ahead the future-day browser may address, in personal days (~2 years).
+ *  A structural safety bound on iteration, NOT a product horizon on what can be
+ *  planned or discovered: a day already prepared beyond it is still stored, still
+ *  synced and still listed by preparedPlans(). It exists so a malformed revision
+ *  history cannot make a walk run away. */
+const DAY_AHEAD_GUARD = 730;
+
 export function createPlanAuthority(deps = {}) {
   const live = deps.live;
   const legacy = deps.legacy;
@@ -248,6 +255,62 @@ export function createPlanAuthority(deps = {}) {
       ref = nextOperationalDay(ref, history);
     }
     if (!out.length) throw new Error(`No authoritative day overlaps ${dateKey}.`);
+    return out;
+  }
+
+  /** Planning Continuity V1 (G4) — the authoritative day `steps` personal days
+   *  after the current one. `upcoming()` is exactly dayAhead(1); this is the general
+   *  case the future-day browser walks.
+   *
+   *  Deliberately implemented by CHAINING next(), not by adding days to a date: a
+   *  personal day's length is not fixed (a revision taking effect mid-day truncates
+   *  it), so only the real interval chain gives the right answer across a boundary
+   *  change. No new store, no new identity — every step returns an ordinary target.
+   *
+   *  Bounded by DAY_AHEAD_GUARD so a malformed revision history cannot spin. */
+  function dayAhead(steps, nowMs = now()) {
+    if (!Number.isInteger(steps) || steps < 0) throw new Error('A non-negative whole number of days ahead is required.');
+    if (steps > DAY_AHEAD_GUARD) throw new Error(`Cannot address more than ${DAY_AHEAD_GUARD} personal days ahead.`);
+    let target = current(nowMs);
+    for (let i = 0; i < steps; i++) {
+      const step = next(target);
+      // A step that fails to move strictly forwards means a malformed history;
+      // stop rather than loop or silently return the same day twice.
+      if (target.store === 'operational' && step.store === 'operational' && !(step.startMs > target.startMs)) {
+        throw new Error('The boundary revision history does not move forwards.');
+      }
+      target = step;
+    }
+    return target;
+  }
+
+  /** The authoritative day containing a future calendar date's own noon anchor.
+   *  A convenience for "which personal day is Sep 30 mostly about?", used to seed
+   *  the browser from a date picker — NOT an identity. When a calendar date overlaps
+   *  two personal days, callers must use daysOverlappingCalendarDate() and show
+   *  both; this only picks a starting point. Reuses the same noon anchor Decision A
+   *  already defines. */
+  function dayForCalendarDate(dateKey) {
+    if (!validPlanDate(dateKey)) throw new Error(`A valid calendar date is required, got: ${dateKey}`);
+    if (!enabled()) return legacyTarget(dateKey);
+    const anchor = noonAnchorInstant(dateKey, accountTimezone());
+    if (!anchor.ok) throw new Error(`Calendar date ${dateKey} has no unambiguous local noon.`);
+    return containing(anchor.instantMs);
+  }
+
+  /** A window of consecutive authoritative days starting at the current one —
+   *  what the future-day browser lists. Pure projection over next(); creates
+   *  nothing and writes nothing. */
+  function upcomingDays(count, nowMs = now()) {
+    if (!Number.isInteger(count) || count < 1) throw new Error('A positive whole number of days is required.');
+    if (count > DAY_AHEAD_GUARD) throw new Error(`Cannot list more than ${DAY_AHEAD_GUARD} personal days.`);
+    const out = [current(nowMs)];
+    while (out.length < count) {
+      const previous = out[out.length - 1];
+      const step = next(previous);
+      if (previous.store === 'operational' && step.store === 'operational' && !(step.startMs > previous.startMs)) break;
+      out.push(step);
+    }
     return out;
   }
 
@@ -643,25 +706,50 @@ export function createPlanAuthority(deps = {}) {
       return { ok: false, reason: err.message, orphaned: [] };
     }
     const describe = (ref, revisions) => fromDay(live.describeDay(ref, revisions));
-    const before = [current(nowMs), upcoming(nowMs)];
+
+    // Planning Continuity V1 (G3). This used to compare only [current, upcoming].
+    // That was complete while those two were the whole reachable horizon — but once
+    // a day three weeks out can be prepared, a boundary change could silently strand
+    // it with no warning at all. The "before" set is now every operational day this
+    // device holds a record for whose interval has not yet ended, unioned with
+    // current/upcoming, so anything the change would strand is named BY NAME first.
+    //
+    // Bounded by stored records, not by a date range. Still a pure dry run: nothing
+    // is persisted, moved, merged or deleted.
+    const beforeById = new Map();
+    [current(nowMs), upcoming(nowMs)].forEach(target => beforeById.set(target.id, target));
+    const stored = typeof live.planRepository?.listAllRaw === 'function' ? live.planRepository.listAllRaw() : {};
+    for (const id of Object.keys(stored)) {
+      if (beforeById.has(id)) continue;
+      const ref = parseOperationalDayId(id);
+      if (!ref) continue;
+      let target;
+      try { target = fromDay(live.describeDay(ref, history)); } catch { continue; }
+      if (target.endMs <= nowMs) continue; // already finalized history — not strandable
+      beforeById.set(id, target);
+    }
+
+    // The set still reachable through the ONE planning workflow after the change.
     const afterCurrentRef = operationalDayContaining(nowMs, simulated);
     const after = new Set([
       describe(afterCurrentRef, simulated).id,
       describe(nextOperationalDay(afterCurrentRef, simulated), simulated).id,
     ]);
-    const orphaned = before
+    const orphaned = [...beforeById.values()]
       .filter(target => target.store === 'operational' && !after.has(target.id) && target.endMs > nowMs)
       .filter(target => {
         const plan = record(target);
         const activeItems = (Array.isArray(plan?.items) ? plan.items : []).filter(item => item && !item.deleted);
         return activeItems.length > 0 || !!preparation(target);
-      });
+      })
+      .sort((a, b) => a.startMs - b.startMs);
     return { ok: true, orphaned };
   }
 
   return {
     enabled, invalidate,
     current, upcoming, containing, next, daysOverlappingCalendarDate,
+    dayAhead, dayForCalendarDate, upcomingDays,
     record, rawItems, items, saveItems,
     preparation, consistency, readyNow, preparedState, confirmPreparation,
     validateItem, itemStartInstant, evidenceWindow, classifyItemActual,
