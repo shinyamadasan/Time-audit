@@ -5,6 +5,65 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-18 — Planning Continuity V1 (review candidate, NOT integrated)
+
+**Branch `feat/future-planning-capacity-v1`**, cut from `origin/main` `795ce08`, which was
+verified live along with the repo root, common git dir, a clean tree and no staged files. It
+lives in an isolated worktree, `Time audit app - future-planning-v1`. The primary worktree's
+uncommitted README change, which belongs to another branch, was not touched. The branch is
+pushed; nothing is merged or deployed. Full contract: `APP_CONTEXT.md` → "Planning Continuity V1".
+
+**Slices:**
+- S1 `ea6ffb8`: Top 3 priorities separated from planning capacity (`PlanItem.kind`; absent means
+  priority).
+- S2 `bc10532`: commitment model and repository that store the real instant, not a day.
+- S3 `37d1767`: commitment sync with no date horizon, under the existing owner-only rules.
+- S4 `aafcf04`: planning for any future personal day, plus the G1/G2/G3 sync and warning fixes.
+- S5 `41cabd4`: "Unfinished from previous days" recovery across both plan stores.
+- S6 `5d4d959` + `ec3b5fc`: the UI, plus a follow-up so existing test selectors stay
+  unambiguous.
+- S7: these docs.
+
+**Verification (candidate, project-local tooling):**
+- `npm ci --legacy-peer-deps` OK.
+- New unit suites 144/144: planning-capacity 17, commitments-model 43, commitments-sync 23,
+  future-day-planning 28, stale-plan-recovery 33.
+- Existing focused suites green: plan-authority 48, personal-day-boundary-live 41 / -sync 32 /
+  -model 46, operational-plan-sync 8 / -repository 12 / -model 34, plan-tomorrow 41,
+  planning-streak 21, partner-view-model 15, shared-accountability-model 25, tomorrow-view 7,
+  tomorrow-timeline 20.
+- Full `npm test` exits 0.
+- New `tests/planning-continuity.spec.js` 21/21. The Playwright specs that touch the plan strip
+  (plan, plan-linkage-up-next, single-plan-authority, planning-continuity) pass 80/80.
+- Lint: 0 errors, 38 warnings, the same count as at base. `check:www-parity` OK (69-file
+  closure). `git diff --check` clean.
+
+**Full Playwright: not one clean run. Reported as such, not as a pass.** Three full runs:
+- **Run 1: 9 failures, all caused by this branch** (a second "Add" button and a second
+  `.plan-count` in the plan strip). Fixed in the product in `ec3b5fc`, with no existing test
+  edited.
+- **Run 2: 629/630.** The failure was `learning-plan-ui.spec.js:2238` (element not found, a
+  timing issue). I could not reproduce it: candidate 5/5 alone and 234/234 across the whole file
+  ×3 with 4 workers; base `795ce08` 10/10. No learning-plan file is changed.
+- **Run 3: 629/630.** The failure was `smoke.spec.js:861` ("editing an auto-logged schedule…").
+  It **fails on base too**: base `795ce08` 7/10, candidate 8/10, same error. The base was checked
+  in a temporary detached worktree, since deleted and pruned.
+
+**Findings recorded along the way:**
+- Re-proposing the *same* boundary time is not a no-op. It adds a revision that re-identifies
+  later days, and the widened boundary-change warning now reports that.
+- Pre-existing, not fixed: `plan-tomorrow-model.validPlanDate('2026-13-01')` throws a RangeError
+  instead of returning false. No caller currently passes such a value. The new
+  `validCommitmentDate` guards against it.
+- index.html's `settings` and its item-stamping helper are not on `window`. New modules must read
+  them through `getOperationalPlanAppContext()`.
+
+**Next:** independent strict review of `feat/future-planning-capacity-v1`. Do not merge or
+deploy without that review, and do not start Phase 12.0B or the Boundary Turn Off work without
+a fresh request.
+
+---
+
 ## 2026-09-18 — Personal Day UX V1.1 + Partner View Provenance Fix (integrated)
 
 **Integrated to `main` at `0bf7a76`** by fast-forward from `edf4122` (4 commits: `0bb5ff6`,
