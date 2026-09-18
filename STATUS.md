@@ -5,6 +5,86 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-18 — Single Plan Authority + Personal Day Boundary V1 (integrated)
+
+**Integrated to `main` at `8914751`** by fast-forward from `9f5773e` (14 commits, no merge
+commit, no rebase, no force). The reviewed feature branch
+`feat/single-plan-authority-personal-day-v1` is pushed and preserved at the same SHA; the
+earlier `feat/personal-day-boundary-live-wiring-v1` is preserved unchanged at `677931f` for
+provenance. Independent strict review returned FIX FIRST on one defect (below), which was
+corrected in `8914751` and re-reviewed PASS.
+
+**What is now live.** The adjustable Personal Day Boundary ships: a user enables it once and
+can change the start time and its timezone afterwards, prospectively. The graveyard case works
+end to end — at 08:00 the owner prepares the personal day beginning at 18:00 that same calendar
+date, that exact plan becomes current at 18:00, calendar midnight does not rotate it, and the
+next personal day begins at the following 18:00. Custom `00:00` remains an operational boundary,
+not a return to legacy, and there is deliberately no Disable / Return-to-legacy affordance in V1.
+
+**One plan authority.** `plan-authority.js` is the single access layer every user-facing planning
+consumer resolves through. It speaks in authoritative-day targets rather than bare calendar
+dates, and authority always comes from `resolvePlanAuthority()` plus the governing boundary
+revision — never from which store happens to hold data. The second editable planning surface
+introduced during Live Wiring V1 is gone: Today's own priorities strip edits the current
+authoritative day and Prepare Tomorrow edits the upcoming one. Planning Streak, tomorrow-ready
+state, Daily Reconciliation, routine/template participation, Partner View, Review Plan vs Actual
+and calendar-date history all resolve through authoritative-day semantics. Two product rules
+were settled this milestone: a routine is owned by the personal day containing its own start
+instant, or — for untimed routines — a 12:00 noon anchor on its own calendar date resolved in
+the routine subsystem's own timezone; and a calendar date is a history lookup key, so a history
+screen shows every authoritative day overlapping it, read-only and labeled by its real interval,
+never merged into one invented plan.
+
+**Legacy accounts are unchanged.** An account that never enabled a boundary keeps calendar-day
+behavior, keeps `plans[dateKey]` as its authority, calls the existing `planningStreak()`
+function, and creates no boundary revision, no operational record and no listener merely by
+using the app.
+
+**Prepared Plans.** When a boundary change would push an already-prepared future personal day
+out of Now/Upcoming, the Settings panel names that day before the change is saved, and the plan
+stays discoverable under Prepared Plans on Today — never deleted, moved, copied or merged.
+
+**FIX FIRST defect corrected before integration.** The enabled-account Planning Streak `best`
+was capped at 400 authoritative days by a traversal guard, silently shortening real historical
+runs (measured 350 instead of 450 on a synthetic history). The walk now terminates on available
+history — the earliest instant either store can still speak for — plus a structural no-progress
+guard, so `best` is exact and bounded by data rather than by a constant.
+
+**Verification against the integrated ref** (fresh worktree at `8914751`, project-local
+tooling): `npm test` exits 0 — 1027 `node --test` checks pass with 1 opt-in control skip
+(requires `CROSS_REPO_COMPAT_CONTROL_PROOF=1`), plus 453/453 from the plain-`node` suites; full
+Playwright 600/600; focused suites plan-authority 48/48, personal-day-boundary 136/136,
+operational-plan 54/54; `npm run lint` 0 errors (38 pre-existing warnings);
+`npm run check:www-parity` OK; `git diff --check` clean. Install with
+`npm ci --legacy-peer-deps` — plain `npm ci` still fails on the pre-existing peer-dependency
+conflict.
+
+**GitHub Actions CI on `main` is red, unchanged by this work.** The same three
+`obsidian-life-ledger-writer` tests fail on the Linux runner before and after this integration
+(they assert denial of hardcoded Windows vault roots, which cannot resolve there): 453 tests,
+450 passed, 3 failed — identical on run `35128378788` (previous main commit) and `35294888075`
+(this one). Pages build and deployment succeeded automatically.
+
+**Known non-blocking technical debt carried forward (not fixed here):**
+- Exact enabled-account historical streak computation is O(days since the earliest stored
+  history) — roughly 3.4 ms per day locally, cached per minute and invalidated on writes and on
+  inbound remote merges. If real-device performance ever becomes a problem, deriving run lengths
+  from the prepared records directly (rather than walking every day) is the natural optimization;
+  exactness must not be traded back for a horizon.
+- `operational-plan-model.js` contains three pre-existing literal NUL delimiter bytes, which make
+  Git classify the file as binary in diffs. Edit it byte-safely.
+- Separately identified, not attributable to this feature: two wall-clock-sensitive Playwright
+  tests. `tests/partner-view.spec.js:613` fails when the real clock is within ~3.6 h after Manila
+  midnight, and `tests/plan.spec.js:224` fails in the first ~50 min after UTC midnight. Both were
+  reproduced failing on the pre-integration commits under the same conditions and pass outside
+  those windows.
+
+**Phase numbering unchanged.** This is independent-track work completed before Phase 12.0B.
+Phase 12.0B (Android runtime compatibility + offline cold start safety) is still the next
+Phase-12-specific step and is still NOT started.
+
+---
+
 ## 2026-09-16 — Documentation reconciliation (docs only, no runtime/code/test changes)
 
 **This entry supersedes the "Next task: Phase 12.0B ... NOT started" framing below.**
