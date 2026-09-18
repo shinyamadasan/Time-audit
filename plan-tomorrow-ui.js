@@ -405,7 +405,12 @@ function render() {
     // the next AUTHORITATIVE day, which is only sometimes calendar tomorrow —
     // "Plan next personal day" names what is actually being prepared.
     const usesPersonalDay = draft.target.store === 'operational';
-    document.getElementById('plan-tomorrow-title').textContent = usesPersonalDay ? 'Plan next personal day' : 'Plan tomorrow';
+    // Planning Continuity V1: when an ARBITRARY future day is being prepared, neither
+    // 'tomorrow' nor 'next personal day' is true — name the day itself so the owner can
+    // never be editing one day while the title claims another.
+    document.getElementById('plan-tomorrow-title').textContent = draft.explicitDay
+      ? `Plan ${draft.dayLabel}`
+      : (usesPersonalDay ? 'Plan next personal day' : 'Plan tomorrow');
     document.getElementById('plan-tomorrow-date').textContent = targetHeading(draft.target);
     document.getElementById('plan-tomorrow-timezone').textContent = draft.target.store === 'operational' ? draft.target.timezone : draft.timezone;
     const startsEl = document.getElementById('plan-tomorrow-starts');
@@ -430,15 +435,29 @@ function render() {
  *  tomorrow's calendar date exactly as before; for a graveyard owner at 08:00
  *  with an 18:00 boundary it is the personal day that begins at 18:00 today —
  *  which is why this no longer computes a date of its own. */
-export function openPlanTomorrow({ returnToReview = false } = {}) {
+/** Prepares a personal day. With no argument that is the UPCOMING day, exactly as
+ *  before. Planning Continuity V1 adds an explicit `target`, so an arbitrary FUTURE
+ *  personal day is prepared through this SAME workflow — deliberately reusing the one
+ *  preparation surface rather than adding a second editor, which is the defect Single
+ *  Plan Authority V1 exists to prevent. */
+/** The day being prepared, named by its real interval (index.html's own
+ *  planTargetLabel when available, which is what every other surface uses). */
+function planTargetDayLabel(target) {
+  if (typeof globalThis.planTargetLabel === 'function') return globalThis.planTargetLabel(target);
+  return target.store === 'legacy' ? target.dateKey : new Date(target.startMs).toISOString().slice(0, 10);
+}
+
+export function openPlanTomorrow({ returnToReview = false, target: explicitTarget = null } = {}) {
   try {
     const app = context();
     const authority = globalThis.PlanAuthority;
     if (!authority) throw new Error('Planning is still loading.');
-    const target = authority.upcoming();
+    const target = explicitTarget || authority.upcoming();
     const preparation = authority.preparation(target);
     draft = {
       target,
+      explicitDay: !!explicitTarget,
+      dayLabel: explicitTarget ? planTargetDayLabel(explicitTarget) : '',
       returnToReview,
       timezone: app.timezone,
       items: authority.rawItems(target).map(item => ({ ...item })),
@@ -446,7 +465,10 @@ export function openPlanTomorrow({ returnToReview = false } = {}) {
       mode: 'normal',
       intentionalBlank: preparation?.intentionalBlank || false,
       schedulingId: null,
-      reconciliation: buildReconciliation()
+      // Daily Reconciliation compares TODAY against the day being prepared next. For an
+      // arbitrary future day there is no such relationship, so it is omitted rather
+      // than shown against the wrong day.
+      reconciliation: explicitTarget ? null : buildReconciliation()
     };
     root.classList.add('open');
     render();
