@@ -5,6 +5,58 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-18 — Personal Day UX V1.1 + Partner View Provenance Fix (integrated)
+
+**Integrated to `main` at `0bf7a76`** by fast-forward from `edf4122` (4 commits: `0bb5ff6`,
+`66cc287`, `8d1781b`, `0bf7a76`; no merge commit, no rebase, no force). The reviewed feature
+branch `feat/personal-day-ux-cleanup-v1.1` is pushed and preserved at the same SHA.
+
+**What changed.** Terminology cleanup on top of the Single Plan Authority + Personal Day
+Boundary V1 work below: a custom-boundary account now reads "Plan next personal day" /
+"Prepare next personal day" / "Starts today at 18:00" immediately on enabling an upcoming
+boundary, before it has taken effect -- across the Plan Tomorrow modal, the hamburger menu,
+the Tomorrow tab, the Today quick action, the closeout card, and the review-flow action.
+Legacy accounts keep "Tomorrow" wording unchanged everywhere.
+
+**Partner View FIX FIRST correction.** Independent targeted review found that Partner View had
+been labeling the PUBLISHER's shared upcoming plan using the VIEWER's own local
+`personalDayBoundaryConfigured()` state -- truthful only when both accounts share the same
+boundary configuration, and mislabeling the publisher's actual plan in the other two of the
+four publisher/viewer combinations (publisher-custom/viewer-legacy and
+publisher-legacy/viewer-custom). The shared wire payload carries no publisher boundary flag,
+and no schema change was made to add one -- out of scope for this correction. Partner Card and
+the Partner View screen now use a fixed, provenance-neutral **"Upcoming plan"** label (empty
+state: "No upcoming plan yet") that never branches on any local/viewer signal, closing the
+mislabel for all four combinations. Two now-pointless render-trigger calls in
+`personal-day-boundary-live.js`, which existed only to keep the old viewer-dependent label in
+sync, were removed as part of the same correction. Re-reviewed PASS.
+
+**Verification against the integrated ref** (`0bf7a76`, project-local tooling): focused
+Playwright (`personal-day-boundary`, `partner-view`, `wife-shared-accountability`,
+`partner-view-mobile-navigation`, `single-plan-authority`, `tomorrow-view`,
+`plan-tomorrow-ui`) 90/90; `npm test` exits 0, 1027 checks across ~70 files, 0 failures; full
+Playwright suite 609/609 on a clean run (two earlier runs in the same session surfaced
+unrelated transient failures under 6-way parallel load in `daily-routines-ui`,
+`focus-reload-recovery`, `guided-measurement-loop`, `install-interruption`, and
+`smoke.spec.js` -- all reproduced as passing in isolation with a single worker, and GitHub
+Actions' own clean runner ran the identical suite green, so these are local worker-contention
+flakes, not regressions); `npm run lint` 0 errors (38 pre-existing warnings); `npm run
+check:www-parity` OK; `git diff --check` clean. Install with `npm ci --legacy-peer-deps`.
+
+**GitHub Actions CI on `main` is green for this push** -- run `35383941016`, head SHA
+`0bf7a76`, conclusion `success`, all steps passed (unit tests and smoke tests included). Pages
+build and deployment succeeded automatically as a consequence of the `main` push; no manual
+deploy, no Firebase write, and no Android build were performed as part of this integration.
+
+**Known non-blocking, reconfirmed during this integration (not fixed here, per scope):**
+`tests/partner-view.spec.js:613` remains wall-clock-sensitive (seeds ~3.6h backward from real
+`Date.now()`, undercounting near Asia/Manila midnight) -- observed both failing and passing
+across different runs in this session purely as a function of real clock time, and reproduced
+with an identical count against `origin/main` under equivalent clock conditions before
+integration. Same defect first documented at integration time in the entry below.
+
+---
+
 ## 2026-09-18 — Single Plan Authority + Personal Day Boundary V1 (integrated)
 
 **Integrated to `main` at `8914751`** by fast-forward from `9f5773e` (14 commits, no merge

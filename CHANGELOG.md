@@ -1,5 +1,24 @@
 # ChronaSense — Changelog
 
+## Personal Day UX V1.1 + Partner View Provenance Fix — 2026-09-18
+
+**Integrated — `0bf7a76`** (fast-forward from `edf4122`; feature branch
+`feat/personal-day-ux-cleanup-v1.1` preserved at the same SHA). Independent targeted review
+found one FIX FIRST defect, corrected, re-reviewed PASS.
+
+- **Custom-boundary terminology reads correctly the instant a boundary is enabled**, before it
+  has taken effect: "Plan next personal day" / "Prepare next personal day" / "Starts today at
+  18:00" across the Plan Tomorrow modal, hamburger menu, Tomorrow tab, Today quick action,
+  closeout card and review-flow action. Legacy accounts are unchanged.
+- **Partner View's shared-plan label is now provenance-neutral.** It previously described the
+  publisher's shared upcoming plan using the viewer's own local boundary configuration, which
+  could mislabel it whenever the two accounts' configurations differed. Partner Card and the
+  Partner View screen now always read **"Upcoming plan"** ("No upcoming plan yet" when empty)
+  regardless of either party's Personal Day Boundary state. No shared-payload schema change.
+
+Full detail, the four-combination mislabel analysis, and verification: `STATUS.md`'s
+2026-09-18 "Personal Day UX V1.1" entry (top).
+
 ## Single Plan Authority + Personal Day Boundary V1 — 2026-09-18
 
 **Integrated — `8914751`** (fast-forward from `9f5773e`; feature branch

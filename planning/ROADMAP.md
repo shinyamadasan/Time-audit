@@ -70,6 +70,15 @@ Current Objective.)_
   calendar-day accounts are unchanged. Prepared Plans keeps an already-prepared future day
   discoverable when a boundary change moves it out of Now/Upcoming. Full detail and debt:
   `CHANGELOG.md` and `STATUS.md`'s 2026-09-18 entry.
+- **Independent feature-branch track, 2026-09-18 (NOT part of Phase 12): Personal Day UX V1.1 +
+  Partner View Provenance Fix** -- integrated to `main` as `0bf7a76` (fast-forward from
+  `edf4122`). Terminology cleanup on the Single Plan Authority + Personal Day Boundary V1 work
+  above (custom-boundary wording now reads correctly the instant a boundary is enabled, before
+  it takes effect) plus a FIX FIRST correction: Partner View's publisher-upcoming-plan label was
+  reading the viewer's own local boundary state rather than anything about the publisher, which
+  could mislabel it when the two accounts' configurations differed; it is now a fixed,
+  provenance-neutral "Upcoming plan" label, with no shared-payload schema change. Full detail:
+  `CHANGELOG.md` and `STATUS.md`'s 2026-09-18 "Personal Day UX V1.1" entry.
 - Phase 12.0B -- Android runtime compatibility + offline cold start safety. **Still the next
   Phase-12-specific step. NOT started.** A stale local-only branch
   `fix/phase12-0b-android-runtime` (tip `a146565`, far behind current `main`) exists as an
