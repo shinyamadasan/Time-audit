@@ -781,6 +781,9 @@ function initAutoSync() {
       // Personal Day Boundary Live Wiring V1 — detaches the boundary listener and
       // every per-day operational plan listener this device had open.
       if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.detach();
+      // Planning Continuity V1 — a signed-out session must not keep receiving the
+      // previous account's commitments.
+      if (globalThis.CommitmentsSync) globalThis.CommitmentsSync.detach();
       // Partner View V1 — a signed-out session must never leave the previous
       // account's partner data visible.
       if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
@@ -856,6 +859,11 @@ function startSync() {
   // upcoming operational days. Never a whole-subtree listener over every operational
   // day that has ever existed, and a complete no-op for a legacy account.
   if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.attachLiveDays();
+  // Planning Continuity V1 — ONE whole-subtree listener over rooms/<room>/commitments.
+  // Deliberately not per-record: a commitment eight months out must converge as
+  // reliably as one tomorrow, and any per-record attach would need a date horizon
+  // to decide what to subscribe to.
+  if (globalThis.CommitmentsSync) globalThis.CommitmentsSync.attach();
 
   fbDb.ref('.info/connected').on('value', snap => {
     const online = snap.val();
@@ -881,6 +889,10 @@ function startSync() {
       // operational plan write made while offline. Both diff against what remote
       // already holds, so this is a no-op once converged.
       if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.pushAllLocal();
+      // Planning Continuity V1 — drain any commitment write made while offline. Keyed
+      // on the RECORD SET, never on a date range, so a future-dated offline write can
+      // never remain unsynced forever. A no-op once converged.
+      if (globalThis.CommitmentsSync) globalThis.CommitmentsSync.pushAllLocal();
     } else {
       stopSyncReconcileTicker();
       const pill = document.getElementById('sync-pill');
@@ -1794,6 +1806,7 @@ function teardownRoomListeners() {
   if (fbRoomRef) fbRoomRef.off();
   if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.detach();
   if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.detach();
+  if (globalThis.CommitmentsSync) globalThis.CommitmentsSync.detach();
   if (_nudgesRef)     { _nudgesRef.off();     _nudgesRef     = null; }
   if (_partnerUidRef) { _partnerUidRef.off(); _partnerUidRef = null; }
   if (_pairCodeRef)   { _pairCodeRef.off();   _pairCodeRef   = null; }
