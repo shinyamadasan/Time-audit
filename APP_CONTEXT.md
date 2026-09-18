@@ -728,3 +728,109 @@ auto-log architecture change (only the minimal new publish-trigger integration p
 in `buildPartnerViewProjectionForPublish`, itself additive). Branch
 `feat/partner-view-v1`, uncommitted, unpushed, not deployed, pending independent
 review.
+
+
+## Planning Continuity V1 (review candidate, 2026-09-18)
+
+Branch `feat/future-planning-capacity-v1` from `origin/main` `795ce08`. Pushed, not merged,
+not deployed. Also delivers PROP-012 (in-app appointment planning, parked 2026-07-20) in its
+narrow form: one-off commitments only. No recurrence, reminders or external calendar sync.
+
+**Rule: "3" is a PRIORITIZATION limit, not a PLANNING limit.** A personal day holds:
+- **Top Priorities**: at most 3, the "what makes today successful" items;
+- **Other planned tasks**: no cap;
+- **Scheduled commitments**: not plan items at all, so never counted toward the Top 3;
+- routines and templates: unchanged.
+
+**Plan item extension.** One optional field, `kind?: 'priority' | 'task'`, and absent means
+`'priority'`. Only `'task'` is ever written, so every stored item keeps its exact bytes and id,
+with no migration. Array order is never used, because both plan merges sort by id. Helpers live
+in `plan-tomorrow-model.js` (`planItemKind`, `activePriorityPlanItems`, `withPlanItemKind`). The
+cap is enforced in the UI and also in `plan-authority.confirmPreparation`. The number 3 is still
+declared once, as `PLAN_MAX` in index.html, and passed in as `priorityMax`.
+
+**Readiness and streak cannot be inflated.** `preparation.oneOffItemIds` now holds the Top
+Priorities only. `readyNow()` and the Planning Streak both read stored preparation, so both
+narrow automatically. For existing data nothing changes, because every stored item is a
+priority. `dailyCommitment` (the focus deep-work goal), the focus intention, and the priority
+lists published to Partner View and shared accountability all count priorities only. Review's
+Plan vs Actual adds secondary tasks back in, so they can still be reconciled. Consequence: a day
+with secondary tasks but no priority still needs a priority or "Open day" to count as prepared.
+
+**Scheduled commitments.** Files: `commitments-model.js` (pure), `commitments-repository.js`
+(storage key `ta3-commitments-v1`, keyed only by commitment id) and `commitments-sync.js`
+(`rooms/<room>/commitments/<id>`).
+- **Owns an instant, not a day.** Commitments are not stored as (operationalDayId, "HH:MM").
+  A boundary change creates new day ids, so storing that way would need a migration that could
+  move a real appointment. Each record stores its authored date, optional time, an explicit
+  timezone and the resolved `startMs`.
+- **Day is worked out when read.** `projectCommitment(record, PlanAuthority.containing)` finds
+  the personal day. One instant falls in exactly one half-open day, so a boundary change can move
+  the projection but never the appointment, and a commitment can never show in two days.
+- **Timezone is captured once.** It is never re-read from settings and never borrowed from the
+  boundary.
+- **Date-only commitments** use the Decision A noon anchor to pick their day. They are shown as a
+  date with no time; midnight is never used.
+- **DST.** A time that does not exist is refused. A time that happens twice is refused until the
+  owner picks one, and the pick is saved in `dstChoice`.
+- **Validation.** `normalizeCommitment` recomputes `startMs` from the civil fields, so a record
+  whose instant disagrees with its own date and time is rejected.
+- **Merging and deletion.** Records merge one at a time, newest `updatedAt` winning, with a fixed
+  tie-break. Deletion is a tombstone.
+- **Sync.** One listener covers the whole `commitments` subtree, with no date horizon. Writes
+  made offline are queued and pushed on reconnect. **No Firebase rules change:** `rooms/$roomId`
+  is already owner-only. Commitments are **not** published to Partner View in V1.
+
+**Arbitrary future personal days.** `PlanAuthority.dayAhead(n)`, `upcomingDays(n)` and
+`dayForCalendarDate(date)` work only through existing targets, by chaining `next()`. There is no
+new day store and no calendar-date identity. `DAY_AHEAD_GUARD` (730) is a safety stop on
+iteration, not a planning horizon. A calendar date that overlaps two personal days still returns
+both. Three durability gaps opened by planning weeks ahead are closed:
+- **G1:** `liveDayIds()` now covers future days this device holds a record for, so edits from
+  another device show up.
+- **G2:** `pushAllLocal()` retries every stored operational record. Before, an offline write to
+  a future day was never pushed.
+- **G3:** `boundaryChangeImpact()` scans every future stored day, so a change that strands a day
+  three weeks out names it first.
+
+Note: re-proposing the *same* boundary time is still a new revision and re-identifies later
+days. The G3 warning reports this honestly.
+
+**Unfinished from previous days.** `stale-plan-recovery-model.js` (pure) plus
+`PlanAuthority.staleUnfinished()`, which reads **both** plan stores. Days before the boundary
+change are legacy-governed, so reading only the operational store would lose those tasks. The
+cause of the original bug was five access paths, not item identity:
+- edits gated on `isViewingToday()`;
+- read-only history;
+- carry only offered from `current()`;
+- Prepared Plans operational-only with no actions;
+- date navigation capped at today.
+
+What counts as stale:
+- the task's day has ended;
+- it is not deleted, not done, not dismissed, and not already moved;
+- there is no lookback limit;
+- a day whose dates can't be resolved is still listed, marked as unresolvable.
+
+Actions: Move to today, Move & edit, Reschedule… (opens the day browser) and Not doing this.
+- **Moving** reuses the existing fixed carry id, so it happens once even across devices. The
+  original stays on its own day, planned and not done, and the copy records `carriedFromId`
+  plus `carriedFromDayId`.
+- **Rescheduling** tombstones the old copy first.
+- **No "Mark done" on this list**, because that would falsely record an old day as done.
+  Dismissing sets `dismissedAt` and can be undone.
+- Nothing is carried forward automatically.
+
+**UX.** `planning-continuity-ui.js` and `.css` mount `#planning-continuity-section` under Today
+with three blocks: Upcoming (with the commitment form), Plan another day (days listed by their
+real hours), and Unfinished from previous days. Preparing a future day reuses the one
+preparation surface: `openPlanTomorrow({ target })`. Its title names the actual day, and Daily
+Reconciliation is left out for it. Today's strip and Prepare Tomorrow each have a Top priorities
+block and an uncapped "Other planned tasks" block. The secondary block uses its own class names
+and a "Plan task" button, so existing selectors stay unambiguous.
+
+**Deferred / not built:** reminders and notifications; recurrence; external calendar sync;
+sharing commitments to Partner View; Personal Day Boundary Turn Off; showing commitments inside
+the *evidence* timeline (`assembleTodayTimeline`), since that would mix plans with evidence;
+reclassifying an existing item between priority and task in the UI (the model helper
+`withPlanItemKind` exists; there is no control yet).
