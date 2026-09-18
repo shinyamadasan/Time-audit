@@ -19,6 +19,7 @@
 <link rel="stylesheet" href="capability-career.css?v=20260831-capability-career-v1">
 <link rel="stylesheet" href="partner-view.css?v=20260912-partner-view-v1">
 <link rel="stylesheet" href="operational-plan.css?v=20260917-personal-day-boundary-live-wiring-v1">
+<link rel="stylesheet" href="planning-continuity.css?v=20260918-planning-continuity-v1">
 </head>
 <body>
 <div id="desktop-layout">
@@ -121,6 +122,7 @@
        out of the layout, tab order and accessibility tree) for every legacy account,
        which is what keeps Today byte-for-byte unchanged for them. -->
   <section id="operational-plan-section" hidden aria-label="Personal day plan"></section>
+  <section id="planning-continuity-section" hidden aria-label="Upcoming commitments and future planning"></section>
   <section id="today-commitments" aria-label="Today's commitments">
     <div class="tc-head">
       <h2>Today's commitments</h2>
@@ -1685,6 +1687,8 @@
 <script type="module" src="personal-day-boundary-live.js?v=20260917-personal-day-boundary-live-wiring-v1"></script>
 <script type="module" src="personal-day-boundary-ui.js?v=20260917-personal-day-boundary-live-wiring-v1"></script>
 <script type="module" src="operational-plan-ui.js?v=20260917-personal-day-boundary-live-wiring-v1"></script>
+<script type="module" src="commitments-sync.js?v=20260918-planning-continuity-v1"></script>
+<script type="module" src="planning-continuity-ui.js?v=20260918-planning-continuity-v1"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -6550,6 +6554,8 @@ function planTargetLabel(target) {
   return `${fmt.format(new Date(target.startMs)).replace(',', '')} → ${fmt.format(new Date(target.endMs)).replace(',', '')}`;
 }
 
+globalThis.planTargetLabel = planTargetLabel;
+
 function fmtDateKeyLong(dateKey) {
   const [year, month, day] = dateKey.split('-').map(Number);
   return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, day, 12)));
@@ -6584,6 +6590,9 @@ function refreshAuthoritativePlanSurfaces() {
   if (typeof publishSharedAccountability === 'function') publishSharedAccountability();
   if (typeof globalThis.refreshTomorrowView === 'function') globalThis.refreshTomorrowView();
   if (typeof globalThis.refreshOperationalPlanSurfaceIfMounted === 'function') globalThis.refreshOperationalPlanSurfaceIfMounted();
+  // Planning Continuity V1 — Upcoming / future-day browser / stale recovery all read
+  // authoritative plan state, so they refresh on the same signal as every other surface.
+  if (typeof globalThis.refreshCommitmentSurfaces === 'function') globalThis.refreshCommitmentSurfaces();
 }
 globalThis.refreshAuthoritativePlanSurfaces = refreshAuthoritativePlanSurfaces;
 
@@ -6929,6 +6938,14 @@ function addPlanItem() {
 /** Adds a SECONDARY planned task. Deliberately has no cap: "3" is a
  *  prioritization limit, not a planning limit. It never touches preparation, so
  *  it can never make a day count as prepared or extend the Planning Streak. */
+/** Opens Today's priorities strip in editing mode. Used by "Move &amp; edit" so a
+ *  recovered task lands in the ordinary editor rather than a second one. */
+function openTodayPlanEditor() {
+  const strip = document.getElementById('plan-strip');
+  if (strip) strip.classList.add('editing');
+}
+globalThis.openTodayPlanEditor = openTodayPlanEditor;
+
 function addPlanTask() {
   if (!isViewingToday()) return;
   const target = currentPlanTarget();

@@ -1,0 +1,90 @@
+/* planning-continuity.css
+   Planning Continuity V1 — Upcoming commitments, the future personal-day browser,
+   and "Unfinished from previous days".
+
+   Visually subordinate to Today's own priorities strip on purpose: these surfaces are
+   for preparing and recovering, not for the day in front of you. */
+
+#planning-continuity-section { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+#planning-continuity-section[hidden] { display: none; }
+
+.pc-block {
+  background: var(--bg2);
+  border: 1px solid var(--bd);
+  border-radius: var(--r);
+  padding: 12px 14px;
+}
+.pc-block-quiet { border-style: dashed; padding: 8px 14px; }
+
+.pc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.pc-head h3 { font-size: 13px; font-weight: 700; margin: 0; letter-spacing: .02em; }
+
+.pc-muted { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 4px 0; }
+.pc-hint { margin-top: 2px; }
+.pc-error { font-size: 12px; color: var(--waste, #f87171); line-height: 1.45; margin: 6px 0 0; }
+
+/* rows (a commitment, or a stale task) */
+.pc-row, .pc-day {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--bd);
+  flex-wrap: wrap;
+}
+.pc-row:first-of-type, .pc-day:first-of-type { border-top: none; }
+.pc-row-main { flex: 1 1 180px; min-width: 0; }
+.pc-row-title { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.pc-row-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.pc-note { font-size: 11px; color: var(--muted); margin-top: 3px; font-style: italic; }
+
+/* An appointment timezone that differs from the account's, or a "task" kind marker —
+   small, factual, never a badge that competes with the title. */
+.pc-zone {
+  font-size: 10px; color: var(--muted2, var(--muted));
+  border: 1px solid var(--bd); border-radius: 4px;
+  padding: 0 4px; margin-left: 6px; white-space: nowrap;
+}
+
+.pc-icon {
+  background: none; border: 1px solid var(--bd); color: var(--muted);
+  border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer;
+}
+.pc-icon:hover { color: var(--text); }
+.pc-icon.danger:hover { color: var(--waste, #f87171); border-color: var(--waste, #f87171); }
+
+.pc-more {
+  background: none; border: none; color: var(--deep, var(--text));
+  font-size: 12px; font-weight: 600; cursor: pointer; padding: 6px 0;
+}
+
+/* future personal-day browser */
+.pc-day.selected { background: var(--bg4, var(--bg3)); border-radius: 6px; }
+.pc-day-commitments { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pc-chip {
+  font-size: 10px; color: var(--muted);
+  background: var(--bg3); border-radius: 4px; padding: 2px 6px;
+}
+.pc-pager { display: flex; gap: 12px; justify-content: space-between; margin-top: 4px; }
+
+/* commitment form */
+.pc-form { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
+.pc-form input {
+  background: var(--bg3); border: 1px solid var(--bd); color: var(--text);
+  border-radius: 6px; padding: 8px 10px; font-size: 13px; font-family: inherit; width: 100%;
+}
+.pc-form-row { display: flex; gap: 8px; }
+.pc-form-row input { flex: 1 1 0; min-width: 0; }
+.pc-form-actions { display: flex; gap: 8px; }
+
+/* The DST disambiguation prompt. Deliberately prominent: the app is refusing to guess
+   which of two real instants the owner meant, and needs an answer. */
+.pc-dst {
+  border: 1px solid rgba(251, 191, 36, .35);
+  background: rgba(251, 191, 36, .08);
+  border-radius: var(--r); padding: 10px; display: flex; flex-direction: column; gap: 8px;
+}
+.pc-dst p { font-size: 12px; line-height: 1.45; margin: 0; }
+
+@media (max-width: 380px) {
+  .pc-form-row { flex-direction: column; }
+  .pc-row, .pc-day { gap: 6px; }
+}
