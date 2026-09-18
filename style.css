@@ -740,6 +740,8 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 .plan-subhead{display:flex;align-items:baseline;gap:8px;justify-content:space-between;margin-bottom:6px}
 .plan-subtitle{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.02em}
 .plan-secondary .plan-item{opacity:.9}
+.plan-subcount{font-size:11px;color:var(--muted)}
+.plan-task-add{display:flex;gap:6px;margin-top:6px}
 .plan-full{padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
 @media(max-width:520px){
   .morning-choices{grid-template-columns:1fr}

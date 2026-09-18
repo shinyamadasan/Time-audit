@@ -6882,14 +6882,17 @@ function renderTodayPlan() {
   // none stored, so a legacy day's read-only card looks exactly as it always did.
   let secondary = '';
   if (secondaryRows.length || !readOnly) {
-    const secondaryAdd = readOnly ? '' : `<div class="plan-add">
+    // Distinct class names and button label from the priority row on purpose: the Top 3
+    // add row (.plan-add / "Add") and count (.plan-count) keep exactly one meaning, and
+    // this add row sits behind the same Edit toggle (.plan-editor) as the priority one.
+    const secondaryAdd = readOnly ? '' : `<div class="plan-editor"><div class="plan-task-add">
           <input id="plan-task-when" type="time" class="plan-input when" aria-label="when (optional)">
           <input id="plan-task-task" class="plan-input task" maxlength="80" placeholder="another planned task"
                  onkeydown="if(event.key==='Enter')addPlanTask()">
-          <button class="btn sm" onclick="addPlanTask()">Add</button>
-        </div>`;
+          <button class="btn sm" onclick="addPlanTask()">Plan task</button>
+        </div></div>`;
     secondary = `<div class="plan-secondary">
-        <div class="plan-subhead"><span class="plan-subtitle">Other planned tasks</span>${secondaryRows.length ? `<span class="plan-count">${secondaryRows.filter(i => i.done).length} of ${secondaryRows.length} done</span>` : '<span class="plan-count">No cap</span>'}</div>
+        <div class="plan-subhead"><span class="plan-subtitle">Other planned tasks</span>${secondaryRows.length ? `<span class="plan-subcount">${secondaryRows.filter(i => i.done).length} of ${secondaryRows.length} done</span>` : '<span class="plan-subcount">No cap</span>'}</div>
         ${renderRows(secondaryRows)}${secondaryAdd}
       </div>`;
   }
