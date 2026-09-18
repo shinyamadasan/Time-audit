@@ -116,13 +116,13 @@ async function openStripEditor(page) {
 async function addPriority(page, task) {
   await openStripEditor(page);
   await page.locator('#plan-task').fill(task);
-  await strip(page).locator('.plan-editor').getByRole('button', { name: 'Add' }).click();
+  await strip(page).getByRole('button', { name: 'Add', exact: true }).click();
 }
 
 async function addSecondaryTask(page, task) {
   await openStripEditor(page);
   await page.locator('#plan-task-task').fill(task);
-  await strip(page).locator('.plan-secondary').getByRole('button', { name: 'Add' }).click();
+  await strip(page).locator('.plan-secondary').getByRole('button', { name: 'Plan task' }).click();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
