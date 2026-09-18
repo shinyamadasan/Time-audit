@@ -726,7 +726,157 @@ test('a fresh device reconstructs the same authority from remote alone', async (
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 11. Authority-consistency matrix — every consumer question, one answer
+// 11. Long histories — `best` is exact over available history, never capped
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// A real account's visible historical truth must not depend on how far back a
+// traversal happens to be willing to walk. These build genuine multi-hundred-day
+// histories in the same stores the app uses and assert exact numbers.
+
+const REV_ID = 'r-1800';
+const addDays = (dateStr, amount) => new Date(Date.parse(`${dateStr}T12:00:00Z`) + amount * 86400000).toISOString().slice(0, 10);
+const opDayId = dateStr => `odv1:${REV_ID}:${MANILA}:${dateStr}`;
+
+/** An 18:00 Manila boundary that became effective at 18:00 on `startDate`. */
+function boundaryHistoryStore(startDate) {
+  return JSON.stringify({ schemaVersion: 1, revisions: {
+    'legacy-calendar-day-v0': { id: 'legacy-calendar-day-v0', boundaryTime: '00:00', timezone: MANILA, effectiveFromInstant: null },
+    [REV_ID]: { id: REV_ID, boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: manila(startDate, '18:00') },
+  } });
+}
+
+/** A prepared operational day: one real priority, confirmed an hour before that
+ *  personal day began (so it is 'ahead'). */
+function preparedOperationalRecord(dateStr) {
+  const startMs = manila(dateStr, '18:00');
+  const preparedAt = startMs - 3600000;
+  return {
+    items: [item(`i-${dateStr}`, `Priority ${dateStr}`, { updatedAt: preparedAt })],
+    updatedAt: preparedAt,
+    preparation: {
+      schemaVersion: 1, targetOperationalDayId: opDayId(dateStr),
+      firstPreparedAt: preparedAt, firstPreparedBy: 'device-a', firstPreparedMode: 'normal',
+      lastPreparedAt: preparedAt, lastPreparedMode: 'normal', updatedBy: 'device-a',
+      intentionalBlank: false, routineInstanceIds: [], oneOffItemIds: [`i-${dateStr}`],
+    },
+  };
+}
+
+/** A prepared legacy calendar plan, confirmed the evening before its date. */
+function preparedLegacyPlan(dateStr) {
+  const preparedAt = manila(addDays(dateStr, -1), '20:00');
+  return {
+    items: [item(`L-${dateStr}`, `Legacy ${dateStr}`, { updatedAt: preparedAt })],
+    updatedAt: preparedAt,
+    preparation: {
+      schemaVersion: 1, targetDate: dateStr, timezone: MANILA,
+      firstPreparedAt: preparedAt, firstPreparedBy: 'device-a', firstPreparedMode: 'normal',
+      lastPreparedAt: preparedAt, lastPreparedMode: 'normal', updatedBy: 'device-a',
+      intentionalBlank: false, routineInstanceIds: [], oneOffItemIds: [`L-${dateStr}`],
+    },
+  };
+}
+
+/** Seeds an account whose 18:00 boundary started on `startDate`, with prepared
+ *  operational days for the given day offsets and prepared legacy plans for the
+ *  given calendar dates. Returns the app positioned at `nowMs`. */
+function makeLongHistoryApp({ startDate, preparedOffsets = [], legacyDates = [], nowMs }) {
+  const plans = {};
+  legacyDates.forEach(dateStr => { plans[dateStr] = preparedLegacyPlan(dateStr); });
+  const records = {};
+  preparedOffsets.forEach(offset => {
+    const dateStr = addDays(startDate, offset);
+    records[opDayId(dateStr)] = preparedOperationalRecord(dateStr);
+  });
+  return makeApp({
+    clock: nowMs,
+    legacy: legacyStore(plans),
+    storage: memory({ 'ta3-day-boundary-revisions-v1': boundaryHistoryStore(startDate) }),
+    planStorage: memory({ 'ta3-operational-plans-v1': JSON.stringify({ schemaVersion: 1, plans: records }) }),
+  });
+}
+
+const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
+test('a 450-day best streak deep in history is reported exactly, not truncated by a traversal cap', () => {
+  const startDate = '2025-01-01';
+  // Personal days 1..450 prepared => habit days 0..449 earned: a genuine 450-day
+  // run. Day 451 onwards is unprepared, so the run ended long before "today".
+  const app = makeLongHistoryApp({
+    startDate,
+    preparedOffsets: range(1, 450),
+    nowMs: manila(addDays(startDate, 500), '19:00'),
+  });
+
+  const streak = app.authority.streak();
+  assert.equal(streak.best, 450, 'best must be the real historical run, whatever its distance from today');
+  assert.equal(streak.current, 0, 'the run ended 50 days ago — nothing is current');
+  assert.equal(streak.todayEarned, false);
+});
+
+test('a long history does not inflate the current streak', () => {
+  const startDate = '2025-01-01';
+  const todayOffset = 500;
+  // The same 450-day historical run, plus TODAY's own habit earned (the upcoming
+  // personal day is prepared). Yesterday is still unprepared, so current is 1.
+  const app = makeLongHistoryApp({
+    startDate,
+    preparedOffsets: [...range(1, 450), todayOffset + 1],
+    nowMs: manila(addDays(startDate, todayOffset), '19:00'),
+  });
+
+  const streak = app.authority.streak();
+  assert.equal(streak.current, 1, 'only today earned — the ancient run must not leak into `current`');
+  assert.equal(streak.todayEarned, true);
+  assert.equal(streak.best, 450);
+});
+
+test('`best` does not depend on how far today is from the run — no fixed-day horizon', () => {
+  const startDate = '2025-01-01';
+  const answers = [250, 500, 900].map(todayOffset => makeLongHistoryApp({
+    startDate,
+    preparedOffsets: range(1, 200),
+    nowMs: manila(addDays(startDate, todayOffset), '19:00'),
+  }).authority.streak().best);
+  // A 200-day run seen from 50, 300 and 700 days later is still a 200-day run.
+  assert.deepEqual(answers, [200, 200, 200]);
+});
+
+test('a run spanning the legacy -> operational transition stays exact and is counted once per day', () => {
+  const transitionDate = '2025-06-10';
+  // 60 prepared legacy calendar days ending ON the transition date, then 360
+  // prepared personal days starting at 18:00 that same date.
+  //   - legacy habit days (transitionDate-60 .. transitionDate-1): 60
+  //   - the transition day itself (00:00 -> 18:00, legacy-governed), judged by
+  //     the first personal day: 1
+  //   - operational habit days (personal days 0 .. 358): 359
+  // => one continuous 420-day run, with every day credited exactly once.
+  const legacyDates = range(0, 59).map(offset => addDays(transitionDate, -59 + offset));
+  const app = makeLongHistoryApp({
+    startDate: transitionDate,
+    legacyDates,
+    preparedOffsets: range(0, 359),
+    nowMs: manila(addDays(transitionDate, 400), '19:00'),
+  });
+
+  const streak = app.authority.streak();
+  assert.equal(streak.best, 420, 'the run is continuous across the transition — not truncated, not double-counted');
+  assert.equal(streak.current, 0, 'preparation stopped 40 days ago');
+});
+
+test('days with no record are never treated as earned, and an empty history terminates immediately', () => {
+  const startDate = '2025-01-01';
+  const none = makeLongHistoryApp({ startDate, preparedOffsets: [], nowMs: manila(addDays(startDate, 300), '19:00') });
+  assert.deepEqual(none.authority.streak(), { current: 0, best: 0, todayEarned: false, todayStillOpen: true });
+
+  // A single prepared day in the distant past is worth exactly one habit day —
+  // the hundreds of empty days around it are not filled in as earned.
+  const one = makeLongHistoryApp({ startDate, preparedOffsets: [10], nowMs: manila(addDays(startDate, 300), '19:00') });
+  assert.equal(one.authority.streak().best, 1);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 12. Authority-consistency matrix — every consumer question, one answer
 // ═══════════════════════════════════════════════════════════════════════════
 
 test('every consumer-facing question resolves to the SAME authoritative plan identity', () => {

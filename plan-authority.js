@@ -273,9 +273,16 @@ export function createPlanAuthority(deps = {}) {
 
   // ── preparation / prepared state ──────────────────────────────────────────
 
-  function preparation(target) {
-    const value = record(target)?.preparation;
+  /** The normalized preparation for an ALREADY-READ stored value. Split out so a
+   *  caller that already holds the record (the streak walk, which snapshots both
+   *  stores once) never re-reads storage — without either path being able to
+   *  imply a different rule than the other. */
+  function preparationFrom(target, value) {
     return target.store === 'legacy' ? normalizePreparation(value, target.dateKey) : normalizeOperationalPreparation(value, target.id);
+  }
+
+  function preparation(target) {
+    return preparationFrom(target, record(target)?.preparation);
   }
 
   /** 'ahead' | 'late' | 'unknown' | 'not-prepared'. The legacy branch is the
@@ -283,13 +290,16 @@ export function createPlanAuthority(deps = {}) {
    *  statement expressed against the day's own start instant: prepared BEFORE
    *  this personal day began. (For a legacy day those are the same sentence —
    *  a calendar date's start is midnight.) */
-  function consistency(target) {
-    const value = record(target)?.preparation;
+  function consistencyFrom(target, value) {
     if (target.store === 'legacy') return planningConsistency(value, target.dateKey);
     if (value === undefined || value === null) return 'not-prepared';
     const prepared = normalizeOperationalPreparation(value, target.id);
     if (!prepared) return 'unknown';
     return prepared.firstPreparedAt < target.startMs ? 'ahead' : 'late';
+  }
+
+  function consistency(target) {
+    return consistencyFrom(target, record(target)?.preparation);
   }
 
   /** The same "is there anything actionable here" question computeReadyNow()
@@ -460,11 +470,20 @@ export function createPlanAuthority(deps = {}) {
   /** Did habit day `target` earn credit? The rule is unchanged in meaning: the
    *  day AFTER it was genuinely prepared (real content or an explicit Open Day)
    *  before that next day began. Only the plan lookup moved. */
-  function habitEarned(target) {
+  function habitEarned(target, lookup = record) {
     let following;
     try { following = next(target); } catch { return false; }
-    if (consistency(following) !== 'ahead') return false;
-    const prepared = preparation(following);
+    return earnsItsPredecessorCredit(following, lookup);
+  }
+
+  /** The same rule from the other side: does THIS day, by being prepared ahead
+   *  with real content, earn its predecessor a habit day? The streak walk always
+   *  already holds the following day, so asking it this way avoids re-deriving
+   *  that day once per day of history. */
+  function earnsItsPredecessorCredit(following, lookup = record) {
+    const value = lookup(following)?.preparation;
+    if (consistencyFrom(following, value) !== 'ahead') return false;
+    const prepared = preparationFrom(following, value);
     return !!prepared && (prepared.intentionalBlank === true || prepared.routineInstanceIds.length > 0 || prepared.oneOffItemIds.length > 0);
   }
 
@@ -478,6 +497,32 @@ export function createPlanAuthority(deps = {}) {
     return longest;
   }
 
+  /** The oldest instant either store can still speak for: the start of the
+   *  earliest stored legacy plan's day, or of the earliest stored operational
+   *  day, whichever is earlier. This is the streak walk's natural termination —
+   *  a day older than every record cannot be judged by anything, so walking past
+   *  it can only append `false` flags forever. `null` means no record exists at
+   *  all, so there is no finalized history to walk.
+   *
+   *  A habit day P is judged by P+1's plan, so the walk legitimately reaches ONE
+   *  day behind the earliest record — exactly the earliestHabitDate the legacy
+   *  planningStreak() derives — which falls out of comparing the day being READ
+   *  (the cursor), not the habit day being scored. */
+  function historyFloorMs(history) {
+    const candidates = [];
+    const earliestPlanDate = legacy.earliestPlanDate();
+    if (earliestPlanDate) {
+      try { candidates.push(calendarDayBounds(earliestPlanDate).startMs); } catch { /* unresolvable civil date — ignored */ }
+    }
+    const stored = typeof live.planRepository?.listAllRaw === 'function' ? live.planRepository.listAllRaw() : {};
+    for (const id of Object.keys(stored)) {
+      const ref = parseOperationalDayId(id);
+      if (!ref) continue;
+      try { candidates.push(live.describeDay(ref, history).startMs); } catch { /* revision unknown — ignored */ }
+    }
+    return candidates.length ? Math.min(...candidates) : null;
+  }
+
   /** For a never-enabled account this is the existing calendar streak, called
    *  with the existing arguments — the same function, not a reimplementation.
    *
@@ -485,28 +530,38 @@ export function createPlanAuthority(deps = {}) {
    *  from the current personal day. Days before the boundary took effect are
    *  still legacy-governed and are still judged by the legacy plan, so a streak
    *  carries across the transition instead of resetting. Each day is counted
-   *  once, from one store — never both. */
+   *  once, from one store — never both.
+   *
+   *  The walk is EXACT over available history: it ends when it runs out of
+   *  records to read (historyFloorMs), not at a fixed number of days. An
+   *  arbitrary cap here would silently shorten a real `best` streak — visible
+   *  historical truth must not depend on a safety constant. The only other exit
+   *  is a structural one: a step that fails to move strictly backwards (a
+   *  malformed revision history) stops the walk instead of spinning, so the loop
+   *  is bounded by the data even though it has no day limit.
+   *
+   *  Both stores are snapshotted once and read through `lookup`, so a long
+   *  history costs one read per store rather than one per day. */
   function streak(nowMs = now()) {
     if (!enabled()) return planningStreak(legacy.allPlans(), nowMs, accountTimezone());
     const key = `${cacheToken}:${nowMs - (nowMs % 60000)}`;
     if (streakCache && streakCache.key === key) return streakCache.value;
 
+    const history = live.revisions();
+    const operationalRecords = typeof live.planRepository?.listAllRaw === 'function' ? live.planRepository.listAllRaw() : {};
+    const lookup = target => (target.store === 'legacy' ? legacy.record(target.dateKey) : operationalRecords[target.id] || null);
+
     const today = current(nowMs);
-    const todayEarned = habitEarned(today);
+    const todayEarned = habitEarned(today, lookup);
     const finalizedFlags = [];
-    // A legacy habit day P is judged by P+1's plan, so the walk may go one day
-    // behind the earliest stored plan — exactly the earliestHabitDate the legacy
-    // planningStreak() derives. Beyond that there is nothing either store can
-    // speak for. The guard also caps how far an enabled account's `best` looks
-    // back; a never-enabled account still uses the unbounded legacy function.
-    const earliestPlanDate = legacy.earliestPlanDate();
-    const earliestHabitDate = earliestPlanDate ? addCalendarDays(earliestPlanDate, -1) : null;
+    const floorMs = historyFloorMs(history);
     let cursor = today;
-    for (let guard = 0; guard < OVERLAP_GUARD; guard++) {
+    while (floorMs !== null && Number.isFinite(cursor.startMs) && cursor.startMs >= floorMs) {
       let previous;
-      try { previous = fromDay(live.previousDay(cursor.ref, live.revisions())); } catch { break; }
-      if (previous.store === 'legacy' && (!earliestHabitDate || previous.dateKey < earliestHabitDate)) break;
-      finalizedFlags.unshift(habitEarned(previous));
+      try { previous = fromDay(live.previousDay(cursor.ref, history)); } catch { break; }
+      if (!Number.isFinite(previous.startMs) || previous.startMs >= cursor.startMs) break; // no progress: malformed history
+      // `cursor` is exactly the day that decides `previous`'s habit credit.
+      finalizedFlags.unshift(earnsItsPredecessorCredit(cursor, lookup));
       cursor = previous;
     }
 
