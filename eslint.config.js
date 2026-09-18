@@ -141,7 +141,7 @@ export default [
     }
   },
   {
-    files: ['plan-tomorrow-model.js', 'plan-tomorrow-ui.js', 'shared-accountability-model.js', 'partner-view-model.js', 'tomorrow-view-model.js', 'tomorrow-view-ui.js', 'tomorrow-timeline-model.js', 'personal-day-boundary-model.js', 'personal-day-boundary-repository.js', 'personal-day-boundary-sync.js', 'operational-plan-model.js', 'operational-plan-repository.js', 'operational-plan-sync.js', 'personal-day-boundary-live.js', 'personal-day-boundary-ui.js', 'operational-plan-ui.js', 'plan-authority.js', 'commitments-model.js', 'commitments-repository.js'],
+    files: ['plan-tomorrow-model.js', 'plan-tomorrow-ui.js', 'shared-accountability-model.js', 'partner-view-model.js', 'tomorrow-view-model.js', 'tomorrow-view-ui.js', 'tomorrow-timeline-model.js', 'personal-day-boundary-model.js', 'personal-day-boundary-repository.js', 'personal-day-boundary-sync.js', 'operational-plan-model.js', 'operational-plan-repository.js', 'operational-plan-sync.js', 'personal-day-boundary-live.js', 'personal-day-boundary-ui.js', 'operational-plan-ui.js', 'plan-authority.js', 'commitments-model.js', 'commitments-repository.js', 'commitments-sync.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
