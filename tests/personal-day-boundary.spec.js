@@ -528,3 +528,84 @@ test('a same-clock-time proposal in a DIFFERENT timezone is never classified as 
   await expect(panel(page)).not.toContainText('Change scheduled');
   await expect(panel(page).getByRole('button', { name: 'Save personal day start' })).toBeEnabled();
 });
+
+// ── Partner View terminology (final correction) ─────────────────────────────
+//
+// The shared wire payload (shared-accountability-model.js / partner-view-model.js)
+// carries no publisher boundary flag — adding one would be a Partner View
+// data-selection/allowlist change, explicitly out of scope. So "Tomorrow" vs
+// "Next personal day" in Partner View is a LOCAL, viewing-device label, using
+// the exact same personalDayBoundaryConfigured() predicate already established
+// for every other global/static Tomorrow-labeled surface in this app (the
+// Today quick action, the hamburger menu item, the closeout card). It is never
+// about the partner's own configuration, which this device cannot know.
+
+async function seedAndOpenPartnerView(page, { todayDateKey, timezone }) {
+  await page.evaluate(() => localStorage.setItem('ta3-partner-uid', 'partner-1'));
+  await page.evaluate(({ todayDateKey, timezone }) => {
+    partnerShared = {
+      schemaVersion: 1,
+      publisher: { timezone, dateKey: todayDateKey, updatedAt: Date.now(), displayName: 'Partner' },
+      today: { dateKey: todayDateKey, priorities: [] },
+      tomorrow: { dateKey: todayDateKey, prepStatus: 'not-prepared' }
+    };
+    partnerViewShared = {
+      today: { dateKey: todayDateKey, priorities: [], soFar: { deepMin: 0, wasteMin: 0 }, timeline: [] },
+      tomorrow: { dateKey: todayDateKey, priorities: [] }
+    };
+    renderPartnerCard();
+    openPartnerView();
+  }, { todayDateKey, timezone });
+}
+
+test('at 06:00 with a fresh, not-yet-effective 18:00 boundary, Partner View already reads "Next personal day"', async ({ page }) => {
+  await openApp(page, { now: Date.parse('2026-09-15T22:00:00Z') }); // 06:00 Asia/Manila 2026-09-16
+  await openSettings(page);
+  await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
+  await panel(page).locator('[data-pdb-input="timezone"]').selectOption(TZ);
+  await panel(page).getByRole('button', { name: 'Turn on personal day boundary' }).click();
+  await page.evaluate(() => showView('today'));
+
+  await seedAndOpenPartnerView(page, { todayDateKey: '2026-09-16', timezone: TZ });
+  await expect(page.locator('#partner-card')).toContainText('Next personal day:');
+  await expect(page.locator('#partner-card')).not.toContainText('Tomorrow:');
+  const screenText = await page.locator('#partner-view-screen').textContent();
+  expect(screenText).toContain('Next personal day');
+  expect(screenText).toContain('No plan for the next personal day yet');
+  expect(screenText).not.toContain('No plan for tomorrow yet');
+});
+
+test('an established 18:00 boundary where the next personal day genuinely starts on the following calendar date still reads "Next personal day" in Partner View', async ({ page }) => {
+  await openApp(page, { now: Date.parse('2026-09-16T00:00:00Z') }); // 08:00 Asia/Manila 2026-09-16
+  await openSettings(page);
+  await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
+  await panel(page).locator('[data-pdb-input="timezone"]').selectOption(TZ);
+  await panel(page).getByRole('button', { name: 'Turn on personal day boundary' }).click();
+  const stored = await boundaryStore(page);
+
+  // Reopen at 19:00 Asia/Manila 2026-09-16, after today's 18:00 boundary has
+  // passed — the next personal day now genuinely starts tomorrow (09-17).
+  await page.addInitScript(({ boundaryStore, now }) => {
+    const RealDate = Date;
+    window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
+    localStorage.setItem('ta3-day-boundary-revisions-v1', boundaryStore);
+  }, { boundaryStore: stored, now: Date.parse('2026-09-16T19:00:00+08:00') });
+  await page.reload();
+  await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
+
+  await seedAndOpenPartnerView(page, { todayDateKey: '2026-09-16', timezone: TZ });
+  const screenText = await page.locator('#partner-view-screen').textContent();
+  expect(screenText).toContain('Next personal day');
+  expect(screenText).not.toContain('No plan for tomorrow yet');
+  await expect(page.locator('#partner-card')).toContainText('Next personal day:');
+});
+
+test('a legacy account keeps "Tomorrow" wording in Partner View', async ({ page }) => {
+  await openApp(page);
+  await seedAndOpenPartnerView(page, { todayDateKey: '2026-09-16', timezone: TZ });
+  await expect(page.locator('#partner-card')).toContainText('Tomorrow:');
+  await expect(page.locator('#partner-card')).not.toContainText('Next personal day');
+  const screenText = await page.locator('#partner-view-screen').textContent();
+  expect(screenText).toContain('No plan for tomorrow yet');
+  expect(screenText).not.toContain('Next personal day');
+});
