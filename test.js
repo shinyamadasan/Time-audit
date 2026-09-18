@@ -5400,13 +5400,15 @@ asyncTest('writer denies the production OneDrive vault root for this slice', asy
   await assert.rejects(() => resolveObsidianLifeLedgerPath('C:\\Users\\Admin\\OneDrive\\2nd Brain', 'Life Ledger/Daily/2026-08-30.md'), error => error.code === 'denied_vault_root');
 });
 asyncTest('writer denies child vaults under the production OneDrive root', async () => {
-  await assert.rejects(() => resolveObsidianLifeLedgerPath('C:\\Users\\Admin\\OneDrive\\2nd Brain\\SubVault', 'Life Ledger/Daily/2026-08-30.md'), error => error.code === 'denied_vault_root');
+  // The extra segment is joined with '/' (not '\\') so the containment check that path.relative
+  // performs against this literal Windows vault root resolves correctly on POSIX test runners too.
+  await assert.rejects(() => resolveObsidianLifeLedgerPath('C:\\Users\\Admin\\OneDrive\\2nd Brain/SubVault', 'Life Ledger/Daily/2026-08-30.md'), error => error.code === 'denied_vault_root');
 });
 asyncTest('writer denies aliases that resolve beneath the production OneDrive root', async () => {
   const aliasRoot = 'C:\\SafeAliasVault';
   const { adapter } = createMockObsidianFs({
     dirs: [aliasRoot],
-    realpaths: { [aliasRoot]: 'C:\\Users\\Admin\\OneDrive\\2nd Brain\\SubVault' }
+    realpaths: { [aliasRoot]: 'C:\\Users\\Admin\\OneDrive\\2nd Brain/SubVault' }
   });
   await assert.rejects(() => resolveObsidianLifeLedgerPath(aliasRoot, 'Life Ledger/Daily/2026-08-30.md', { fs: adapter }), error => error.code === 'denied_vault_root');
 });
@@ -5414,7 +5416,7 @@ asyncTest('writer denies the stale Desktop vault root for this slice', async () 
   await assert.rejects(() => resolveObsidianLifeLedgerPath('C:\\Users\\Admin\\Desktop\\2nd Brain', 'Life Ledger/Daily/2026-08-30.md'), error => error.code === 'denied_vault_root');
 });
 asyncTest('writer denies child vaults under the stale Desktop root', async () => {
-  await assert.rejects(() => resolveObsidianLifeLedgerPath('C:\\Users\\Admin\\Desktop\\2nd Brain\\Anything', 'Life Ledger/Daily/2026-08-30.md'), error => error.code === 'denied_vault_root');
+  await assert.rejects(() => resolveObsidianLifeLedgerPath('C:\\Users\\Admin\\Desktop\\2nd Brain/Anything', 'Life Ledger/Daily/2026-08-30.md'), error => error.code === 'denied_vault_root');
 });
 asyncTest('writer allows the OneDrive prefix-lookalike backup vault', async () => {
   const root = 'C:\\Users\\Admin\\OneDrive\\2nd Brain Backup';
