@@ -51,6 +51,13 @@ import {
   parseOperationalDayId,
 } from './personal-day-boundary-model.js';
 import {
+  collectStaleUnfinished,
+  buildMovedItem,
+  buildDismissedItem,
+  buildUndismissedItem,
+  findMoveDestination,
+} from './stale-plan-recovery-model.js';
+import {
   validateOperationalPlanItemRange,
   buildOperationalPreparation,
   normalizeOperationalPreparation,
@@ -691,6 +698,167 @@ export function createPlanAuthority(deps = {}) {
     return out.sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0));
   }
 
+  // ── Unfinished from previous days (recovery, both stores) ─────────────────
+
+  /** Every day this device can still speak for, as {target, record} pairs — the
+   *  input the recovery projection needs. BOTH stores, because days that began
+   *  before the boundary revision took effect are legacy-governed and hold their
+   *  items in plans[dateKey]; an operational-only scan would leave every
+   *  pre-boundary stale task permanently unreachable.
+   *
+   *  Walks stored RECORDS, not a date range, so there is no lookback limit on what
+   *  is discoverable. Same full-store walk preparedPlans()/historyFloorMs() already
+   *  perform, so this is no new cost class. */
+  function recoverableDays() {
+    const out = [];
+    const legacyPlans = legacy.allPlans() || {};
+    for (const dateKey of Object.keys(legacyPlans)) {
+      if (!validPlanDate(dateKey)) continue;
+      let target;
+      try {
+        const bounds = calendarDayBounds(dateKey);
+        target = { ...legacyTarget(dateKey), startMs: bounds.startMs, endMs: bounds.endMs };
+      } catch {
+        // An unresolvable civil date is still REPORTED by the projection rather
+        // than silently dropped.
+        target = legacyTarget(dateKey);
+      }
+      out.push({ target, record: legacyPlans[dateKey] });
+    }
+    if (enabled()) {
+      const history = live.revisions();
+      const stored = typeof live.planRepository?.listAllRaw === 'function' ? live.planRepository.listAllRaw() : {};
+      for (const id of Object.keys(stored)) {
+        const ref = parseOperationalDayId(id);
+        if (!ref) continue;
+        let target;
+        try {
+          target = fromDay(live.describeDay(ref, history));
+        } catch {
+          // Unknown revision: kept, with no interval, so it is reported as
+          // unresolvable instead of disappearing.
+          target = { store: 'operational', id, operationalDayId: id, ref, startMs: null, endMs: null, timezone: ref.timezone, boundaryTime: null, legacy: false };
+        }
+        out.push({ target, record: stored[id] });
+      }
+    }
+    return out;
+  }
+
+  /** id -> record across BOTH stores, for already-moved detection. Keyed exactly as
+   *  targets are (a dateKey for legacy, an operationalDayId for operational), which
+   *  is what carriedFromDayId records. */
+  function allDayRecords() {
+    const map = {};
+    recoverableDays().forEach(({ target, record }) => { map[target.id] = record; });
+    return map;
+  }
+
+  /** Unfinished from previous days: unfinished, undeleted, undismissed, not already
+   *  moved, on a day that has ENDED. No lookback cap on discovery. */
+  function staleUnfinished(nowMs = now()) {
+    const days = recoverableDays();
+    return collectStaleUnfinished({ nowMs, days, dayRecords: allDayRecords() });
+  }
+
+  /** Where a stale item was moved to, or null — so a surface can render
+   *  "Moved to ..." instead of offering a second move. */
+  function staleMoveDestination(sourceItemId, sourceDayId) {
+    return findMoveDestination(sourceItemId, sourceDayId, allDayRecords());
+  }
+
+  /** Resolves a stored day id (either store) back to a target. */
+  function targetById(dayId) {
+    if (validPlanDate(dayId)) {
+      try {
+        const bounds = calendarDayBounds(dayId);
+        return { ...legacyTarget(dayId), startMs: bounds.startMs, endMs: bounds.endMs };
+      } catch { return legacyTarget(dayId); }
+    }
+    const ref = parseOperationalDayId(dayId);
+    if (!ref || !enabled()) return null;
+    try { return fromDay(live.describeDay(ref, live.revisions())); } catch { return null; }
+  }
+
+  /** Moves an unfinished task from an ENDED day onto `destination`.
+   *
+   *  The original is left exactly as it is: still planned, still not done, on its own
+   *  day. That is not an oversight — it is the historical truth, and it is the
+   *  provenance the destination copy points back at via carriedFromId /
+   *  carriedFromDayId. Nothing about the historical day is rewritten.
+   *
+   *  Exactly one destination copy can exist, because its id is the DETERMINISTIC
+   *  carry id: two devices moving the same task to the same day mint the same id and
+   *  the existing per-item merge collapses them into one. Re-moving to the same day
+   *  is therefore idempotent, and moving at all is refused once a destination exists. */
+  function moveStaleItem({ sourceTarget, itemId, destination, stamp, nowMs = now() }) {
+    if (typeof stamp !== 'function') throw new Error('An item stamping function is required.');
+    if (!sourceTarget || !destination) throw new Error('A source day and a destination day are required.');
+    const sourceItem = rawItems(sourceTarget).find(candidate => candidate.id === itemId);
+    if (!sourceItem) throw new Error('That task is no longer on its original day.');
+    if (sourceItem.deleted) throw new Error('That task was removed.');
+    if (sourceItem.done) throw new Error('That task is already done.');
+    if (Number.isFinite(sourceTarget.endMs) && sourceTarget.endMs > nowMs) {
+      // Moving out of a day that is still running would leave TWO simultaneously
+      // active copies. That case is the existing carry-forward flow, not this one.
+      throw new Error('That day has not ended yet.');
+    }
+    const existing = staleMoveDestination(itemId, sourceTarget.id);
+    if (existing) {
+      if (existing.dayId === destination.id) return { moved: false, alreadyAt: existing };
+      throw new Error('That task has already been moved. Change where it is scheduled instead.');
+    }
+    const carryId = carryItemIdFor(sourceTarget, itemId, destination);
+    const moved = buildMovedItem({ carryId, sourceItem, sourceDayId: sourceTarget.id, stamp });
+    const check = validateItem(destination, moved);
+    if (!check.ok) throw new Error('That task cannot be scheduled on that day.');
+    const destinationItems = rawItems(destination);
+    const already = destinationItems.find(candidate => candidate.id === carryId);
+    saveItems(destination, already
+      ? destinationItems.map(candidate => (candidate.id === carryId ? moved : candidate))
+      : [...destinationItems, moved]);
+    return { moved: true, destination, item: moved, carryId };
+  }
+
+  /** Re-targets an already-moved task: tombstones the copy on the old destination,
+   *  then writes one on the new. Never leaves two active copies. A hard removal is
+   *  not used because it would be resurrected by the per-item merge. */
+  function rescheduleStaleItem({ sourceTarget, itemId, destination, stamp, nowMs = now() }) {
+    const existing = staleMoveDestination(itemId, sourceTarget.id);
+    if (!existing) return moveStaleItem({ sourceTarget, itemId, destination, stamp, nowMs });
+    if (existing.dayId === destination.id) return { moved: false, alreadyAt: existing };
+    const oldTarget = targetById(existing.dayId);
+    if (!oldTarget) throw new Error('The day this task was moved to cannot be resolved right now.');
+    saveItems(oldTarget, rawItems(oldTarget).map(candidate => (
+      candidate.id === existing.itemId ? stamp({ ...candidate, deleted: true }) : candidate
+    )));
+    return moveStaleItem({ sourceTarget, itemId, destination, stamp, nowMs });
+  }
+
+  /** Not doing this. Records abandonment on the ORIGINAL item without claiming
+   *  completion — which is why this surface has no Mark-done action: stamping
+   *  doneAt=now on a three-day-old item would make that historical day read as done
+   *  when it was not. */
+  function dismissStaleItem({ sourceTarget, itemId, stamp, nowMs = now() }) {
+    const items = rawItems(sourceTarget);
+    const sourceItem = items.find(candidate => candidate.id === itemId);
+    if (!sourceItem) throw new Error('That task is no longer on its original day.');
+    saveItems(sourceTarget, items.map(candidate => (
+      candidate.id === itemId ? buildDismissedItem(sourceItem, { nowMs, stamp }) : candidate
+    )));
+    return { dismissed: true };
+  }
+
+  function undismissStaleItem({ sourceTarget, itemId, stamp }) {
+    const items = rawItems(sourceTarget);
+    const sourceItem = items.find(candidate => candidate.id === itemId);
+    if (!sourceItem) throw new Error('That task is no longer on its original day.');
+    saveItems(sourceTarget, items.map(candidate => (
+      candidate.id === itemId ? buildUndismissedItem(sourceItem, { stamp }) : candidate
+    )));
+    return { dismissed: false };
+  }
+
   /** What a boundary proposal would do to an ALREADY PREPARED day that is
    *  reachable right now. Pure dry run: proposes against a copy of the history
    *  through the model's own proposeBoundaryRevision and compares the reachable
@@ -756,6 +924,8 @@ export function createPlanAuthority(deps = {}) {
     routineTarget, routinesForTarget, templatesForTarget,
     habitEarned, streak,
     preparedPlans, boundaryChangeImpact,
+    staleUnfinished, staleMoveDestination, moveStaleItem, rescheduleStaleItem,
+    dismissStaleItem, undismissStaleItem, targetById, recoverableDays,
     legacyTarget,
     priorityMax: () => priorityMax,
   };
