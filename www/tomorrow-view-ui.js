@@ -10,6 +10,7 @@ const todayPane = document.getElementById('today-commitments-today');
 const tomorrowPane = document.getElementById('tomorrow-view');
 const todayTab = document.getElementById('tmr-tab-today');
 const tomorrowTab = document.getElementById('tmr-tab-tomorrow');
+const todayPrepareBtn = document.getElementById('today-prepare-tomorrow');
 
 // Today-only actual/action surfaces that must not sit beneath Tomorrow's projected content —
 // each represents current-day tracked truth or an action on it (So far, Log time, the real
@@ -202,9 +203,10 @@ function render() {
     return;
   }
   if (viewState === 'open-day') {
+    const openDayLabel = target.store === 'operational' ? 'Next personal day is an Open Day.' : 'Tomorrow is an Open Day.';
     tomorrowPane.innerHTML = headingHtml(target)
-      + '<p class="tmr-open-day">Tomorrow is an Open Day.</p>'
-      + footerHtml('Edit tomorrow');
+      + `<p class="tmr-open-day">${escape(openDayLabel)}</p>`
+      + footerHtml(target.store === 'operational' ? 'Edit next personal day' : 'Edit tomorrow');
     return;
   }
 
@@ -222,7 +224,7 @@ function render() {
     + `<div class="tmr-status" data-tmr-status="${escape(viewState)}">${escape(statusLabel)}</div>`
     + `<section class="tmr-section"><h3>Routines</h3>${routinesHtml}</section>`
     + `<section class="tmr-section"><h3>Priorities</h3>${itemsHtml}</section>`
-    + footerHtml('Edit tomorrow');
+    + footerHtml(target.store === 'operational' ? 'Edit next personal day' : 'Edit tomorrow');
 }
 
 /** The Today/Tomorrow toggle now governs more than the commitments pane: everything below it that
@@ -267,7 +269,22 @@ tomorrowPane?.addEventListener('click', event => {
   globalThis.openPlanTomorrow?.();
 });
 
+/** These two are GLOBAL, static action labels — always visible on Today, never
+ *  tied to a specific resolved plan target the way headingHtml()/footerHtml()
+ *  above are. Per the same "enable is immediate, effective-later" rule those
+ *  target-based labels already honor, this reads the same synchronous
+ *  personalDayBoundaryConfigured() check index.html's own first-paint routing
+ *  already relies on (see currentPlanTarget/upcomingPlanTarget in index.html)
+ *  rather than gating on the currently-governing revision — so a first 18:00
+ *  enable reads as "next personal day" immediately, before 18:00 ever arrives. */
+function refreshPlanningTerminologyLabels() {
+  const usesPersonalDay = typeof globalThis.personalDayBoundaryConfigured === 'function' && globalThis.personalDayBoundaryConfigured();
+  if (tomorrowTab) tomorrowTab.textContent = usesPersonalDay ? 'Next personal day' : 'Tomorrow';
+  if (todayPrepareBtn) todayPrepareBtn.textContent = usesPersonalDay ? 'Prepare next personal day' : 'Prepare tomorrow';
+}
+
 applyTab(currentTab());
+refreshPlanningTerminologyLabels();
 
 /** Called from writeDatePlanLocal() (any plan write) and from the existing 60s Today tick
  *  (calendar-day rollover). Both are unconditional no-ops unless Tomorrow is the visible tab —
@@ -276,3 +293,9 @@ applyTab(currentTab());
 globalThis.refreshTomorrowView = () => {
   if (currentTab() === 'tomorrow') render();
 };
+
+// Exposed so personal-day-boundary-live.js's onChange hook (the same one that
+// already re-renders the Settings panel and the Prepared Plans surface on
+// every enable/change) can keep these two static labels in sync too, with no
+// second boundary-change listener.
+globalThis.refreshPlanningTerminologyLabels = refreshPlanningTerminologyLabels;

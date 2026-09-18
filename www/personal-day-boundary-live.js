@@ -490,6 +490,7 @@ if (typeof window !== 'undefined') {
     onChange: () => {
       if (typeof window.renderPersonalDayBoundarySettings === 'function') window.renderPersonalDayBoundarySettings();
       if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
+      if (typeof window.refreshPlanningTerminologyLabels === 'function') window.refreshPlanningTerminologyLabels();
     },
     onTick: () => {
       if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
@@ -502,5 +503,6 @@ if (typeof window !== 'undefined') {
     try { window.PersonalDayBoundaryLive.refreshLiveDays(); } catch { /* invalid history — surfaced by the Settings panel */ }
     if (typeof window.renderPersonalDayBoundarySettings === 'function') window.renderPersonalDayBoundarySettings();
     if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
+    if (typeof window.refreshPlanningTerminologyLabels === 'function') window.refreshPlanningTerminologyLabels();
   };
 }

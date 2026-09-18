@@ -154,7 +154,7 @@
     <button id="today-nav-log-time" class="btn sm ghost" onclick="toggleTodayDestination('log-time-details')">Log time</button>
     <button class="btn sm ghost" onclick="scrollToTimeline()">Timeline</button>
     <button class="btn sm ghost" onclick="openReview()">Review</button>
-    <button class="btn sm ghost" onclick="openPlanTomorrow()">Prepare tomorrow</button>
+    <button class="btn sm ghost" id="today-prepare-tomorrow" onclick="openPlanTomorrow()">Prepare tomorrow</button>
   </nav>
   <button id="yesterday-review-link" class="btn sm ghost" onclick="openMissedCloseoutReview()" hidden>Yesterday's review available</button>
   <details id="log-time-details" class="today-destination"><summary>Log time</summary><button class="btn sm ghost" onclick="openRetroLog()">Past block</button><div id="log-time-content"></div></details>
@@ -4724,11 +4724,15 @@ function renderCloseoutCta() {
   card.classList.toggle('closed', summary.reviewed);
   const savedAt = summary.reviewed ? formatSavedAt(reviews[dateKey]._savedAt) : '';
   document.getElementById('closeout-title').textContent = summary.reviewed ? 'Day closed' : 'Close day';
+  // Same terminology-audit fix as the Tomorrow tab / Today quick action: the
+  // synchronous "is a boundary configured at all" check, not the currently
+  // governing revision, so a first enable reads correctly before it takes effect.
+  const usesPersonalDayClose = personalDayBoundaryConfigured();
   document.getElementById('closeout-sub').textContent = summary.reviewed
     ? `${savedAt ? 'Review saved ' + savedAt + '. ' : 'Review saved. '}Edit it anytime.`
     : summary.entryCount || summary.planCount
-      ? 'Review today, then prepare tomorrow.'
-      : 'No logs yet. Set tomorrow when you are ready.';
+      ? (usesPersonalDayClose ? 'Review today, then prepare your next personal day.' : 'Review today, then prepare tomorrow.')
+      : (usesPersonalDayClose ? 'No logs yet. Set your next personal day when you are ready.' : 'No logs yet. Set tomorrow when you are ready.');
   document.getElementById('closeout-action').textContent = summary.reviewed ? 'Edit review' : 'Close day';
   document.getElementById('closeout-stats').innerHTML = closeoutSummaryParts(summary)
     .map(part => `<span>${part}</span>`)
@@ -8434,7 +8438,14 @@ function renderReviewTomorrowStatus() {
   const label = upcoming && browsingAnotherDay
     ? ` (${upcoming.store === 'legacy' ? upcoming.dateKey : planTargetLabel(upcoming)}, relative to today)`
     : '';
-  document.getElementById('rv-tomorrow-status').innerHTML = `<button type="button" class="btn sm ghost" onclick="prepareTomorrowFromReview()">Prepare tomorrow${label} →</button>`;
+  // Prefer the resolved target's own authority when one exists; fall back to
+  // the same synchronous "is a boundary configured at all" check first paint
+  // already relies on (see currentPlanTarget/upcomingPlanTarget above) for the
+  // narrow window before the Plan Authority module has finished loading, so an
+  // enabled-but-not-yet-effective boundary is never mis-read as legacy here.
+  const usesPersonalDay = upcoming ? upcoming.store === 'operational' : personalDayBoundaryConfigured();
+  const verb = usesPersonalDay ? 'Prepare next personal day' : 'Prepare tomorrow';
+  document.getElementById('rv-tomorrow-status').innerHTML = `<button type="button" class="btn sm ghost" onclick="prepareTomorrowFromReview()">${verb}${label} →</button>`;
 }
 
 function prepareTomorrowFromReview() {

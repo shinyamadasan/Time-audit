@@ -391,7 +391,7 @@ test('a custom-boundary account sees "Plan next personal day" wording in the ham
 
 // ── "Starts today/tomorrow at HH:MM" (Personal Day UX V1.1) ────────────────
 
-test('at 06:00 with an 18:00 boundary, the next personal day is reported as starting today', async ({ page }) => {
+test('at 06:00 with an 18:00 boundary, the action already reads Plan next personal day and the next personal day is reported as starting today', async ({ page }) => {
   await openApp(page, { now: Date.parse('2026-09-15T22:00:00Z') }); // 06:00 Asia/Manila 2026-09-16
   await openSettings(page);
   await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
@@ -399,10 +399,18 @@ test('at 06:00 with an 18:00 boundary, the next personal day is reported as star
   await panel(page).getByRole('button', { name: 'Turn on personal day boundary' }).click();
 
   await page.evaluate(() => openPlanTomorrow());
+  // The revision exists but has not taken effect yet (18:00 has not happened
+  // today) — the action still reads "next personal day" immediately, never
+  // gated on the currently governing revision being custom.
+  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan next personal day');
   await expect(page.locator('#plan-tomorrow-starts')).toHaveText('Starts today at 18:00');
   await page.locator('[data-pt-action="close"]').first().click();
 
   await page.evaluate(() => showView('today'));
+  await expect(page.locator('#today-prepare-tomorrow')).toHaveText('Prepare next personal day');
+  await page.evaluate(() => toggleHdrMenu());
+  await expect(page.locator('#hdr-menu-plan-tomorrow')).toHaveText('Plan next personal day');
+  await page.evaluate(() => toggleHdrMenu());
   await page.locator('#tmr-tab-tomorrow').click();
   await expect(page.locator('.tmr-starts')).toHaveText('Starts today at 18:00');
 });
@@ -426,4 +434,97 @@ test('after 18:00, the next personal day is reported as starting tomorrow', asyn
 
   await page.evaluate(() => openPlanTomorrow());
   await expect(page.locator('#plan-tomorrow-starts')).toHaveText('Starts tomorrow at 18:00');
+});
+
+// ── FIX FIRST correction: remaining Tomorrow surfaces (Personal Day UX V1.1) ─
+
+async function markTomorrowOpenDay(page) {
+  await page.evaluate(() => openPlanTomorrow());
+  await page.getByRole('button', { name: 'Rescue / minimum' }).click();
+  await page.locator('#plan-tomorrow-overlay').getByRole('button', { name: 'Open day / no commitments' }).click();
+  await page.getByRole('button', { name: 'Use this plan' }).click();
+  await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
+}
+
+test('a legacy account keeps "Tomorrow" wording on the tab, the Today quick action, the review-flow action, and the open-day/prepared footers', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => showView('today'));
+  await expect(page.locator('#tmr-tab-tomorrow')).toHaveText('Tomorrow');
+  await expect(page.locator('#today-prepare-tomorrow')).toHaveText('Prepare tomorrow');
+
+  await page.evaluate(() => openReview());
+  await expect(page.locator('#rv-tomorrow-status')).toContainText('Prepare tomorrow →');
+  await page.evaluate(() => closeModal('review-overlay'));
+
+  await markTomorrowOpenDay(page);
+  await page.locator('#tmr-tab-tomorrow').click();
+  await expect(page.locator('.tmr-open-day')).toHaveText('Tomorrow is an Open Day.');
+  await expect(page.locator('[data-tmr-action="open"]')).toHaveText('Edit tomorrow');
+});
+
+test('a custom-boundary account reads "next personal day" on the tab, the Today quick action, the review-flow action, and the open-day/prepared footers', async ({ page }) => {
+  await openApp(page);
+  await openSettings(page);
+  await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
+  await panel(page).locator('[data-pdb-input="timezone"]').selectOption(TZ);
+  await panel(page).getByRole('button', { name: 'Turn on personal day boundary' }).click();
+  await page.evaluate(() => showView('today'));
+
+  await expect(page.locator('#tmr-tab-tomorrow')).toHaveText('Next personal day');
+  await expect(page.locator('#today-prepare-tomorrow')).toHaveText('Prepare next personal day');
+
+  await page.evaluate(() => openReview());
+  await expect(page.locator('#rv-tomorrow-status')).toContainText('Prepare next personal day →');
+  await page.evaluate(() => closeModal('review-overlay'));
+
+  await markTomorrowOpenDay(page);
+  await page.locator('#tmr-tab-tomorrow').click();
+  await expect(page.locator('.tmr-open-day')).toHaveText('Next personal day is an Open Day.');
+  await expect(page.locator('[data-tmr-action="open"]')).toHaveText('Edit next personal day');
+
+  // Prepared (non-open-day) footer also reads "Edit next personal day".
+  await page.locator('[data-tmr-action="open"]').click();
+  await expect(page.locator('#plan-tomorrow-overlay')).toHaveClass(/open/);
+  await page.getByRole('button', { name: 'Rescue / minimum' }).click();
+  await page.locator('#plan-tomorrow-rescue-add input[name="task"]').fill('Night shift priority');
+  await page.locator('#plan-tomorrow-rescue-add').getByRole('button', { name: 'Add' }).click();
+  await page.getByRole('button', { name: 'Use this plan' }).click();
+  await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
+  await page.locator('#tmr-tab-tomorrow').click();
+  await expect(page.locator('[data-tmr-action="open"]')).toHaveText('Edit next personal day');
+});
+
+// ── optional: same clock time, different timezone is NOT the same pending proposal ──
+
+test('a same-clock-time proposal in a DIFFERENT timezone is never classified as the identical pending change', async ({ page }) => {
+  // Enable 18:00 Manila at 08:00, then reload at 21:00 (after 20:00 has passed
+  // today) and propose 20:00 Manila — exactly the earlier duplicate-guard
+  // scenario, so there is a REAL pending revision (20:00 Asia/Manila,
+  // effective tomorrow) to test the timezone-sensitivity of the guard against.
+  await openApp(page);
+  await openSettings(page);
+  await panel(page).locator('[data-pdb-input="time"]').fill('18:00');
+  await panel(page).locator('[data-pdb-input="timezone"]').selectOption(TZ);
+  await panel(page).getByRole('button', { name: 'Turn on personal day boundary' }).click();
+  const stored = await boundaryStore(page);
+
+  await page.addInitScript(({ boundaryStore, now }) => {
+    const RealDate = Date;
+    window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
+    localStorage.setItem('ta3-day-boundary-revisions-v1', boundaryStore);
+  }, { boundaryStore: stored, now: Date.parse('2026-09-16T21:00:00+08:00') });
+  await page.reload();
+  await page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object');
+  await openSettings(page);
+
+  await panel(page).locator('[data-pdb-input="time"]').fill('20:00');
+  await panel(page).getByRole('button', { name: 'Save personal day start' }).click();
+  await expect(panel(page)).toContainText('Scheduled:'); // a real 20:00 Asia/Manila pending revision now exists
+
+  // Same 20:00 CLOCK READING, but a different timezone — must be treated as a
+  // genuinely different proposal, never "already scheduled".
+  await panel(page).locator('[data-pdb-input="time"]').fill('20:00');
+  await panel(page).locator('[data-pdb-input="timezone"]').selectOption('America/New_York');
+  await expect(panel(page)).not.toContainText('Change scheduled');
+  await expect(panel(page).getByRole('button', { name: 'Save personal day start' })).toBeEnabled();
 });

@@ -162,7 +162,7 @@ function orphanWarningHtml() {
     return `${fmt.format(new Date(target.startMs)).replace(',', '')} → ${fmt.format(new Date(target.endMs)).replace(',', '')}`;
   });
   return `<div class="setting-sub" role="alert" data-pdb-orphan-warning style="color:var(--waste)">
-    You have already prepared the personal day ${escape(named.join(' and '))}. After this change it is no longer your current or next personal day, so it leaves the Today / Prepare tomorrow workflow. It is not deleted, moved or merged — it stays exactly as you prepared it, under <strong>Prepared plans</strong> on Today.
+    You have already prepared the personal day ${escape(named.join(' and '))}. After this change it is no longer your current or next personal day, so it leaves the Today / Prepare next personal day workflow. It is not deleted, moved or merged — it stays exactly as you prepared it, under <strong>Prepared plans</strong> on Today.
   </div>`;
 }
 
