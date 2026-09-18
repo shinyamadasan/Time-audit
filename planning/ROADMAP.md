@@ -60,6 +60,16 @@ Current Objective.)_
   Persistence/Operational Plan Authority V1. Full detail and commit SHAs: `CHANGELOG.md` and
   `STATUS.md`'s 2026-09-16 entry. This is the same kind of separate, ungated Phase-branch
   track the "Current Objective" preamble above already describes for Phase 6-11.
+- **Independent feature-branch track, 2026-09-18 (NOT part of Phase 12): Single Plan Authority +
+  Personal Day Boundary V1** -- integrated to `main` as `8914751` (fast-forward). Makes the
+  adjustable Personal Day Boundary live (graveyard 08:00 planning -> 18:00 activation, no
+  midnight rotation, custom `00:00` still operational, no Disable affordance) and routes every
+  user-facing planning consumer -- Planning Streak, tomorrow-ready state, Daily Reconciliation,
+  routines/templates, Partner View, Review and calendar-date history -- through one Plan
+  Authority layer, replacing the two competing planning editors with one workflow. Legacy
+  calendar-day accounts are unchanged. Prepared Plans keeps an already-prepared future day
+  discoverable when a boundary change moves it out of Now/Upcoming. Full detail and debt:
+  `CHANGELOG.md` and `STATUS.md`'s 2026-09-18 entry.
 - Phase 12.0B -- Android runtime compatibility + offline cold start safety. **Still the next
   Phase-12-specific step. NOT started.** A stale local-only branch
   `fix/phase12-0b-android-runtime` (tip `a146565`, far behind current `main`) exists as an

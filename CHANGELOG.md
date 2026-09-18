@@ -1,5 +1,50 @@
 # ChronaSense — Changelog
 
+## Single Plan Authority + Personal Day Boundary V1 — 2026-09-18
+
+**Integrated — `8914751`** (fast-forward from `9f5773e`; feature branch
+`feat/single-plan-authority-personal-day-v1` preserved at the same SHA, and the earlier
+`feat/personal-day-boundary-live-wiring-v1` preserved at `677931f`). Strict independent review,
+one bounded FIX FIRST correction, targeted re-review, PASS.
+
+Makes the adjustable Personal Day Boundary live and gives the app a single plan authority.
+
+- **Personal Day Boundary is usable.** Enable once, then adjust the start time and its timezone
+  afterwards; changes are prospective and are stated before saving. Graveyard case: at 08:00 the
+  owner prepares the personal day that begins at 18:00 that same calendar date; that exact plan
+  becomes current at 18:00; calendar midnight does not rotate it; the next personal day begins at
+  the following 18:00. Custom `00:00` stays operational rather than legacy, and V1 deliberately
+  offers no Disable / Return-to-legacy control.
+- **One authority, one editable workflow.** New `plan-authority.js` is the single layer every
+  planning consumer resolves through, in authoritative-day targets rather than bare dates;
+  authority comes from `resolvePlanAuthority()` and the governing boundary revision, never from
+  which store holds data. The second editable planning surface from Live Wiring V1 was removed —
+  Today's priorities strip edits the current authoritative day, Prepare Tomorrow edits the
+  upcoming one, and the personal-day section is read-only status plus Prepared Plans.
+- **Consumers on authoritative-day semantics.** Planning Streak, tomorrow-ready state, Daily
+  Reconciliation, routines/templates, Partner View, Review Plan vs Actual, Review attention
+  signals and calendar-date history browsing. Routine ownership: by the instance's own start
+  instant, or a 12:00 noon anchor on its own date for untimed routines, resolved in the routine
+  subsystem's timezone; routine instance identity stays `[routineId, calendarDate]`. A calendar
+  date is a history lookup key: history shows every overlapping authoritative day, read-only and
+  labeled, never merged.
+- **Legacy accounts unchanged.** Calendar-day behavior, `plans[dateKey]` authority and the
+  existing `planningStreak()` function are preserved; nothing in the new machinery is created by
+  merely using the app.
+- **Prepared Plans.** A boundary change that would push an already-prepared future personal day
+  out of Now/Upcoming warns by name first, and the plan remains discoverable under Prepared Plans
+  — never deleted, moved, copied or merged.
+- **Bounded fixes carried in this milestone.** Start-only operational plan items must have
+  genuinely absent range fields and must resolve inside a revision-truncated day; the 60s tick
+  refreshes live day listeners and rotates the visible plan at a rollover; and the FIX FIRST
+  correction made the enabled-account Planning Streak `best` exact over available history instead
+  of capping it at 400 authoritative days.
+
+Non-blocking debt recorded in `STATUS.md`'s 2026-09-18 entry: streak traversal cost on very long
+histories, three pre-existing literal NUL bytes in `operational-plan-model.js`, and two
+separately-identified wall-clock-sensitive Playwright tests. CI on `main` remains red for the
+same three pre-existing `obsidian-life-ledger-writer` failures, unchanged by this work.
+
 ## Documentation reconciliation note — 2026-09-16
 
 The five entries below were never logged here even though they are integrated on
