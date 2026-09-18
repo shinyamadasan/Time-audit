@@ -5,6 +5,7 @@
 .tmr-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap}
 .tmr-kicker{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--deep);font-weight:700}
 .tmr-date{font-size:13px;color:var(--muted)}
+.tmr-starts{font-size:11px;color:var(--muted);width:100%}
 .tmr-status{font-size:11px;color:var(--muted);margin-bottom:10px}
 .tmr-status[data-tmr-status="unprepared-content"]{color:var(--distraction)}
 #tomorrow-view section{margin:0 0 14px}

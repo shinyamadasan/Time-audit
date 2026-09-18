@@ -97,6 +97,20 @@ export function describeActivationInstant(effectiveFromInstant, boundaryTime, ti
   return `${boundaryTime} on ${formatCalendarDate(effectiveDate)}`;
 }
 
+/** "Starts today at 18:00" / "Starts tomorrow at 18:00" / "Starts on Friday,
+ *  September 18 at 18:00" for a personal day's own start instant — the same
+ *  today/tomorrow/named-date classification describeActivationInstant uses,
+ *  worded for "when does the NEXT personal day begin" rather than "when does
+ *  a boundary CHANGE take effect". Never a second derivation of the instant
+ *  itself, which always comes from Plan Authority / the live wiring. */
+export function describeDayStart(startMs, boundaryTime, timezone, nowMs) {
+  const nowDate = calendarDate(nowMs, timezone);
+  const startDate = calendarDate(startMs, timezone);
+  if (startDate === nowDate) return `Starts today at ${boundaryTime}`;
+  if (startDate === nextCalendarDate(nowDate)) return `Starts tomorrow at ${boundaryTime}`;
+  return `Starts ${formatCalendarDate(startDate)} at ${boundaryTime}`;
+}
+
 export function createPersonalDayBoundaryLiveWiring(deps = {}) {
   const boundaryRepository = deps.boundaryRepository || createPersonalDayBoundaryRepository();
   const planRepository = deps.planRepository || createOperationalPlanRepository();
@@ -165,6 +179,27 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     } catch (err) {
       return { ok: false, reason: 'invalid-history', error: err.message };
     }
+    const pendingRevision = history.filter(r => r.effectiveFromInstant !== null && r.effectiveFromInstant > nowMs)
+      .sort((a, b) => a.effectiveFromInstant - b.effectiveFromInstant)[0] || null;
+    // A candidate that matches an ALREADY-PENDING revision exactly (same
+    // boundaryTime + timezone) would resolve to the SAME effectiveFromInstant
+    // and be rejected by the model's own uniqueness rule the moment it is
+    // even dry-run proposed below. Checked and returned FIRST, before that
+    // dry run ever runs, so the UI can say "already scheduled" instead of
+    // ever seeing that rejection surface as a raw error.
+    if (pendingRevision && pendingRevision.boundaryTime === candidate.boundaryTime && pendingRevision.timezone === timezone) {
+      const activationLabel = describeActivationInstant(pendingRevision.effectiveFromInstant, pendingRevision.boundaryTime, pendingRevision.timezone, nowMs);
+      return {
+        ok: true,
+        boundaryTime: candidate.boundaryTime,
+        timezone,
+        effectiveFromInstant: pendingRevision.effectiveFromInstant,
+        activationLabel,
+        unchanged: false,
+        alreadyPending: true,
+        pendingActivationLabel: activationLabel,
+      };
+    }
     let proposed;
     try {
       proposed = proposeBoundaryRevision(history, { id: PREVIEW_REVISION_ID, boundaryTime: candidate.boundaryTime, timezone }, nowMs);
@@ -172,7 +207,6 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
       return { ok: false, reason: 'rejected', error: err.message };
     }
     const active = activeBoundaryRevision(history, nowMs);
-    const pending = history.filter(r => r.effectiveFromInstant !== null && r.effectiveFromInstant > nowMs).length > 0;
     const effectiveFromInstant = proposed.revision.effectiveFromInstant;
     return {
       ok: true,
@@ -182,8 +216,10 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
       activationLabel: describeActivationInstant(effectiveFromInstant, candidate.boundaryTime, timezone, nowMs),
       // "Nothing would change" is a UI convenience only — the repository stays
       // free of this policy, and a user who insists is never blocked by it.
-      unchanged: !pending && status().status === 'custom'
-        && active.boundaryTime === candidate.boundaryTime && active.timezone === timezone
+      unchanged: !pendingRevision && status().status === 'custom'
+        && active.boundaryTime === candidate.boundaryTime && active.timezone === timezone,
+      alreadyPending: false,
+      pendingActivationLabel: null,
     };
   }
 

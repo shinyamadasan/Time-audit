@@ -79,12 +79,21 @@ function seedDraft(state) {
     // timezone is what is shown, and the two settings are never resynchronized.
     boundaryTime: source ? source.boundaryTime : '18:00',
     timezone: source ? source.timezone : defaultTimezone(),
-    enableChecked: state.status === 'custom',
     dirty: false,
     message: '',
     error: '',
   };
   return draft;
+}
+
+/** "00:00" / "12:00" read as "midnight" / "noon" everywhere this settings
+ *  panel states a boundary's current or scheduled clock time; every other
+ *  time is shown exactly as stored (the same 24-hour reading the time input
+ *  itself uses — never a second, inconsistent format). */
+function formatBoundaryClock(boundaryTime) {
+  if (boundaryTime === '00:00') return 'midnight';
+  if (boundaryTime === '12:00') return 'noon';
+  return boundaryTime;
 }
 
 function timezoneOptions(selected) {
@@ -101,10 +110,10 @@ function statusHtml(state, nowMs) {
   if (state.status !== 'custom') {
     return '<div class="setting-sub">Off. Your day currently starts at midnight, exactly as it always has.</div>';
   }
-  const activeLine = `Active: your personal day starts at <strong>${escape(state.active.boundaryTime)}</strong> (${escape(state.active.timezone)}).`;
-  if (!state.pending) return `<div class="setting-sub" role="status">${activeLine}</div>`;
-  const pendingLabel = liveDescribeActivation(state.pending, nowMs);
-  return `<div class="setting-sub" role="status">${activeLine}<br>Pending change: <strong>${escape(state.pending.boundaryTime)}</strong> (${escape(state.pending.timezone)}) starts at ${escape(pendingLabel)}.</div>`;
+  const currentLine = `Current: <strong>${escape(formatBoundaryClock(state.active.boundaryTime))}</strong> (${escape(state.active.timezone)}).`;
+  if (!state.pending) return `<div class="setting-sub" role="status">${currentLine}</div>`;
+  const activationLabel = liveDescribeActivation(state.pending, nowMs);
+  return `<div class="setting-sub" role="status">${currentLine}<br>Scheduled: <strong>${escape(formatBoundaryClock(state.pending.boundaryTime))}</strong> (${escape(state.pending.timezone)}) starting ${escape(activationLabel)}.</div>`;
 }
 
 /** Formats an ALREADY-COMPUTED effectiveFromInstant. The instant itself always
@@ -114,9 +123,6 @@ function liveDescribeActivation(revision, nowMs) {
 }
 
 function previewHtml(state) {
-  if (state.status !== 'custom' && !draft.enableChecked) {
-    return '<div class="setting-sub">Turn this on to choose when your personal day starts.</div>';
-  }
   const preview = live().previewProposal({ boundaryTime: draft.boundaryTime, timezone: draft.timezone });
   if (!preview.ok) {
     const why = preview.reason === 'invalid-time' ? 'Choose a valid start time.'
@@ -126,6 +132,9 @@ function previewHtml(state) {
   }
   if (preview.unchanged) {
     return '<div class="setting-sub" role="status">This is already your personal day start. Choose a different time or timezone to change it.</div>';
+  }
+  if (preview.alreadyPending) {
+    return `<div class="setting-sub" role="status">Change scheduled. This already starts at <strong>${escape(preview.pendingActivationLabel)}</strong>.</div>`;
   }
   // Boundary changes are prospective and can shorten the transition day — say
   // so plainly rather than letting the user discover it afterwards.
@@ -158,10 +167,9 @@ function orphanWarningHtml() {
 }
 
 function saveButtonHtml(state) {
-  if (state.status !== 'custom' && !draft.enableChecked) return '';
   const label = state.status === 'custom' ? 'Save personal day start' : 'Turn on personal day boundary';
   const preview = live().previewProposal({ boundaryTime: draft.boundaryTime, timezone: draft.timezone });
-  const disabled = !preview.ok || preview.unchanged ? ' disabled' : '';
+  const disabled = !preview.ok || preview.unchanged || preview.alreadyPending ? ' disabled' : '';
   return `<div class="setting-row" style="border-bottom:none"><button type="button" class="btn sm" data-pdb-action="save"${disabled}>${escape(label)}</button></div>`;
 }
 
@@ -184,18 +192,19 @@ export function renderPersonalDayBoundarySettings() {
   // OFF is only offered to an account that has never activated a custom
   // revision. Once one exists, the feature is described as active and
   // adjustable — there is deliberately no control that claims to undo it.
+  // Either way the time/timezone editor below is always visible: there is no
+  // separate "enable" checkbox gating it, only the explicit save/activation
+  // button — one decision, not two.
   const enableRow = activated
     ? `<div class="setting-row">
         <div><div class="setting-label">Personal day boundary</div><div class="setting-sub">Active and adjustable. Your day starts at the time you choose instead of midnight.</div></div>
         <div class="setting-control"><span class="setting-sub" data-pdb-state="active">On</span></div>
       </div>`
     : `<div class="setting-row">
-        <div><div class="setting-label">Enable personal day boundary</div><div class="setting-sub">Start your day at a time you choose (e.g. 18:00 for a graveyard shift) instead of midnight.</div></div>
-        <div class="setting-control"><input type="checkbox" data-pdb-input="enable"${draft.enableChecked ? ' checked' : ''} aria-label="Enable personal day boundary"></div>
+        <div><div class="setting-label">Personal day boundary</div><div class="setting-sub">Start your day at a time you choose (e.g. 18:00 for a graveyard shift) instead of midnight.</div></div>
       </div>`;
 
-  const editable = activated || draft.enableChecked;
-  const editorRows = editable ? `
+  const editorRows = `
     <div class="setting-row">
       <div><div class="setting-label">Personal day starts</div><div class="setting-sub">The clock time each personal day begins. Changing it later is always allowed.</div></div>
       <div class="setting-control"><input type="time" data-pdb-input="time" value="${escape(draft.boundaryTime)}" style="${CONTROL_STYLE}" aria-label="Personal day start time"></div>
@@ -203,7 +212,7 @@ export function renderPersonalDayBoundarySettings() {
     <div class="setting-row">
       <div><div class="setting-label">Personal day timezone</div><div class="setting-sub">Stored on the boundary itself. Separate from Work day timezone — changing one never changes the other.</div></div>
       <div class="setting-control"><select data-pdb-input="timezone" style="${CONTROL_STYLE}">${timezoneOptions(draft.timezone)}</select></div>
-    </div>` : '';
+    </div>`;
 
   root.innerHTML = `
     ${enableRow}
@@ -224,7 +233,6 @@ function onInput(event) {
   draft.dirty = true;
   draft.message = '';
   draft.error = '';
-  if (kind === 'enable') draft.enableChecked = control.checked;
   if (kind === 'time' && control.value) draft.boundaryTime = control.value;
   if (kind === 'timezone') draft.timezone = control.value;
   renderPersonalDayBoundarySettings();
@@ -240,7 +248,14 @@ function onClick(event) {
     draft.error = '';
   } catch (err) {
     draft.dirty = true;
-    draft.error = err.message;
+    // The UI already refuses to submit an exact duplicate of a pending
+    // revision (see previewProposal's alreadyPending / saveButtonHtml's
+    // disabled state) — this is a defensive fallback for the model's raw
+    // uniqueness rejection, never the primary guard, so it never needs to
+    // parse or rely on the model's internal wording beyond this one match.
+    draft.error = err.message === 'Boundary revision effective instants must be unique.'
+      ? 'Change scheduled. This exact change is already pending.'
+      : err.message;
   }
   // Re-seed from persisted truth on the next render (dirty is false on success).
   renderPersonalDayBoundarySettings();

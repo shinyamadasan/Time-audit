@@ -51,7 +51,7 @@
                border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden">
         <div class="hdr-menu-item" onclick="openReflectionsHistory();toggleHdrMenu()">Reflections</div>
         <div class="hdr-menu-item" onclick="openReview();toggleHdrMenu()">Review day</div>
-        <div class="hdr-menu-item" onclick="openPlanTomorrow();toggleHdrMenu()">Plan tomorrow</div>
+        <div class="hdr-menu-item" id="hdr-menu-plan-tomorrow" onclick="openPlanTomorrow();toggleHdrMenu()">Plan tomorrow</div>
         <div class="hdr-menu-item" onclick="showView('settings');toggleHdrMenu()">Settings</div>
       </div>
     </div>
@@ -1557,6 +1557,7 @@
       <div class="pt-kicker">Preparation, not execution</div>
       <div class="pt-title" id="plan-tomorrow-title">Plan tomorrow</div>
       <div class="pt-date"><span id="plan-tomorrow-date"></span> · <span id="plan-tomorrow-timezone"></span></div>
+      <div class="pt-sub" id="plan-tomorrow-starts"></div>
       <div class="pt-readiness" id="plan-tomorrow-readiness"></div>
     </div>
     <button type="button" class="btn sm ghost" data-pt-action="close">Close</button>
@@ -7020,6 +7021,18 @@ function doSwitchFromBanner() {}
 function toggleHdrMenu() {
   const menu = document.getElementById('hdr-menu');
   const isOpen = menu.style.display !== 'none';
+  if (!isOpen) {
+    // Re-labeled right before the menu becomes visible rather than kept in
+    // sync continuously: Plan Authority may not be ready at page load, and
+    // there is no "disable" path, so a boundary can only go OFF -> ON once —
+    // reading it lazily here is exactly as current as a push-based update.
+    const planTomorrowItem = document.getElementById('hdr-menu-plan-tomorrow');
+    if (planTomorrowItem) {
+      let usesPersonalDay = false;
+      try { usesPersonalDay = !!(window.PlanAuthority && window.PlanAuthority.enabled()); } catch { /* not ready yet — legacy wording */ }
+      planTomorrowItem.textContent = usesPersonalDay ? 'Plan next personal day' : 'Plan tomorrow';
+    }
+  }
   menu.style.display = isOpen ? 'none' : 'block';
 }
 // Close hdr menu on outside click
