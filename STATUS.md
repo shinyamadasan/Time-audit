@@ -5,6 +5,54 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-19 — Planning Continuity V1: My Day timeline correction (review candidate, NOT integrated)
+
+Same branch, `feat/future-planning-capacity-v1`. This is a bounded owner correction on top of
+`8e4277e`. Nothing is merged or deployed; `main` is still `795ce08`.
+
+**Defect.** With an 18:00 Asia/Manila boundary, the status block showed My Day as Fri 18:00 →
+Sat 18:00, but Today's timeline showed calendar Saturday 00:00–24:00. It dropped Friday
+evening's schedule and entries, and showed Saturday evening's, which belongs to the next My Day.
+
+**Root cause.** `renderToday` built the timeline only from calendar-date inputs, all keyed by
+`getViewingDateKey()`: entries, schedule blocks, gaps and coverage. It never consulted Plan
+Authority. Its cache key was also the calendar date, so the 18:00 rollover never rebuilt it.
+
+**Fix (`cd4c1ae`).** When viewing today with an active boundary, the timeline rows are built
+from `PlanAuthority.current()`'s `[startMs, endMs)`:
+- entries are clipped to that window;
+- schedule blocks come from `PlanAuthority.templatesForTarget` (selected by start instant,
+  de-duplicated);
+- the cache key includes the day's id;
+- the label reads "My Day · …".
+
+There is no "after 6 PM" logic, and no timestamps are shifted. It also fixes a rollover gap
+that existed before this phase: the 60-second watcher took its baseline from its first tick,
+so a page opened just before 18:00 never rotated. The baseline is now recorded at render time.
+
+**Unchanged on purpose:**
+- legacy accounts;
+- browsing history;
+- So far, deep counts, closeout and reviews (calendar evidence);
+- Planning Streak and readiness (audited: already on My Day ids; midnight does not roll them,
+  18:00 does).
+
+**Open owner decision:** the Routines checklist is still calendar-day. Its completions are
+keyed `[routineId, calendarDate]` and its actions key on that date, so I did not change it
+without a decision.
+
+**Verification at `cd4c1ae`:**
+- `npm test` exits 0 (53 suites, 0 failures). `my-day-window.test.js` passes 14/14.
+- `tests/my-day-timeline.spec.js` passes 10/10.
+- A focused 11-spec Playwright set passes 155/155.
+- Full Playwright, run 1: 652/653. The failure was `smoke.spec.js:861` (`#retro-activity` empty,
+  the known flake). It is equally flaky on the base under the same repeat counts: base `795ce08`
+  passed 9/10 and 27/30; candidate passed 7/10 and 28/30.
+- Full Playwright, run 2: **653/653 clean.**
+- Lint: 0 errors, 38 warnings (the base count). www parity OK. `git diff --check` clean.
+
+---
+
 ## 2026-09-19 — Planning Continuity V1 FIX FIRST corrections (review candidate, NOT integrated)
 
 Strict review of `7e3e491` returned FIX FIRST. The corrections are on the same branch,
