@@ -842,6 +842,28 @@ Actions: Move to today, Move & edit, Reschedule… (opens the day browser) and N
   the UI has **no** undo control in V1.
 - Nothing is carried forward automatically.
 
+**My Day (Today timeline).** With a Personal Day boundary active, "My Day" is the
+authoritative planning window from Plan Authority: half-open `[startMs, endMs)` in the
+account's own timezone. For 18:00 Asia/Manila that is Fri Sep 18 6:00 PM → Sat Sep 19 6:00 PM.
+Real timestamps are never shifted; the boundary only changes grouping, and no second timezone
+system exists.
+- **Today's timeline rows** cover My Day when viewing today. The entries are clipped to the
+  window, and schedule blocks come from `PlanAuthority.templatesForTarget`, which selects each
+  occurrence by its start instant, so a block crossing midnight shows once. The exact start is
+  included and the exact end belongs to the next My Day.
+- **Label:** "My Day · Fri Sep 18, 6:00 PM → Sat Sep 19, 6:00 PM". The status heading is also
+  "My Day".
+- **Rollover:** midnight does not rotate the timeline; the boundary does, including within a
+  session.
+- **Planning Streak and readiness** already key on My Day identity. They were audited, not
+  rewritten.
+- **Deliberately still calendar-day:**
+  - legacy accounts (unchanged "Today's timeline");
+  - browsing a past date (factual history);
+  - So far, deep-block counts, closeout and reviews (evidence);
+  - the **Routines checklist**, whose completion identity is `[routineId, calendarDate]`.
+    Moving the checklist to My Day is an open owner decision.
+
 **UX.** `planning-continuity-ui.js` and `.css` mount `#planning-continuity-section` under Today
 with three blocks: Upcoming (with the commitment form), Plan another day (days listed by their
 real hours), and Unfinished from previous days. Preparing a future day reuses the one
