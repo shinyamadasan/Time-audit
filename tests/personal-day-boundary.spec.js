@@ -173,7 +173,8 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
   // The personal-day section is now read-only status + recovery: it names the
   // day, and offers no second editor.
   await expect(surface(page)).toBeVisible();
-  await expect(surface(page)).toContainText('Personal day');
+  // Owner-facing heading renamed to My Day (Planning Continuity V1 My Day correction).
+  await expect(surface(page)).toContainText('My Day');
   await expect(surface(page).locator('form')).toHaveCount(0);
   await expect(surface(page).locator('button')).toHaveCount(0);
   await expect(surface(page)).toContainText('still your existing calendar day');

@@ -101,9 +101,10 @@ function dayWindowLabel(target) {
   if (target.store === 'legacy') return formatCalendarDate(target.dateKey);
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: target.timezone, weekday: 'short', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: false,
+    hour: 'numeric', minute: '2-digit',
   });
-  return `${fmt.format(new Date(target.startMs)).replace(',', '')} → ${fmt.format(new Date(target.endMs)).replace(',', '')}`;
+  const label = ms => fmt.format(new Date(ms)).replace(/^([A-Za-z]{3}), /, '$1 ');
+  return `${label(target.startMs)} → ${label(target.endMs)}`;
 }
 
 function formatCalendarDate(dateKey) {

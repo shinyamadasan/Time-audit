@@ -40,12 +40,13 @@ function section() {
   return typeof document !== 'undefined' ? document.getElementById(SECTION_ID) : null;
 }
 
-/** Display-only: "Wed Sep 16 18:00" for an instant, in the day's own zone. */
+/** Display-only instant label for a My Day window. */
 function formatBoundaryInstant(instantMs, timezone) {
+  // "Fri Sep 18, 6:00 PM" — the owner-facing My Day format, in the day's own zone.
   return new Intl.DateTimeFormat('en-US', {
     timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  }).format(new Date(instantMs)).replace(',', '');
+    hour: 'numeric', minute: '2-digit',
+  }).format(new Date(instantMs)).replace(/^(\w{3}), /, '$1 ');
 }
 
 function windowLabel(startMs, endMs, timezone) {
@@ -62,7 +63,7 @@ function statusHtml(current, upcoming) {
   const upcomingLabel = upcoming.store === 'legacy'
     ? 'tomorrow’s calendar day'
     : windowLabel(upcoming.startMs, upcoming.endMs, upcoming.timezone);
-  return `<div class="op-section-head"><h2>Personal day</h2><span class="op-muted">Starts ${escape(upcoming.boundaryTime)} · ${escape(upcoming.timezone)}</span></div>
+  return `<div class="op-section-head"><h2>My Day</h2><span class="op-muted">Starts ${escape(upcoming.boundaryTime)} · ${escape(upcoming.timezone)}</span></div>
     ${legacyNote}
     <div class="op-status-row"><span class="op-kicker">Now</span><span class="op-window">${escape(currentLabel)}</span></div>
     <div class="op-status-row"><span class="op-kicker">Next</span><span class="op-window">${escape(upcomingLabel)}</span></div>
