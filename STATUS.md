@@ -5,6 +5,36 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-19 — Post-integration follow-up: gated the extra Today rebuild
+
+**On `main` at `8d20975`** (product code; one line in `plan-authority.js` plus its `www/` mirror).
+Planning Continuity V1 + My Day itself is integrated at `e838321` — see the entry below.
+
+The My Day work added a second full `renderToday()` when `plan-authority.js` finishes loading, so
+the timeline could be rebuilt against the authoritative interval. That rebuild is now gated on
+`PlanAuthority.enabled()`: an account with no boundary already had the correct calendar timeline
+from the first render, so the second one was pure startup cost on the most common path.
+
+**Why it was made.** CI on `main` passed at `e838321` and then failed twice at `b712643`, whose
+product tree is byte-identical (docs-only diff), with a changing failure set: `pair-accountability`
+F2 plus `today-persistent-sections` E on attempt 1, only `pair-accountability` F2 on attempt 2 —
+both timeouts. Base `795ce08` re-ran green on the same runner. Locally both specs pass 96/96 and
+32/32 and the full suite has been clean repeatedly. No causal link was found for the
+persistent-sections failure (`applyTodayDetailsMode` only removes a body class and cannot re-open
+a section), so this is NOT claimed as the fix for it; it is a real reduction in per-load work that
+also narrows the surface under suspicion.
+
+**Verified:** `npm test` exits 0; 67/67 across `my-day-timeline`, `planning-continuity`,
+`personal-day-boundary`, `single-plan-authority`, `today-persistent-sections` and
+`pair-accountability`; lint 0 errors / 38 pre-existing warnings; `www/` parity clean.
+**CI on `main` HEAD `8d20975`: run 35433882487 SUCCESS; Pages 35433881976 SUCCESS.**
+
+Residual: `smoke.spec.js:861` and these two specs remain occasional CI-load flakes; use the
+base/candidate rerun discipline (an old run can be re-run to sample the base) before attributing
+any of them to a change.
+
+---
+
 ## 2026-09-19 — Planning Continuity V1 + My Day (INTEGRATED)
 
 **Integrated to `main` at `e838321`** by pure fast-forward from `795ce08` — 13 reviewed commits,
