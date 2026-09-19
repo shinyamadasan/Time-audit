@@ -1018,6 +1018,9 @@ if (typeof window !== 'undefined') {
   globalThis.renderTodayPlan?.();
   globalThis.refreshTomorrowView?.();
   // The My Day timeline also reads the authoritative interval, and its first render
-  // happened before this module existed (it fell back to the calendar day).
-  globalThis.renderToday?.();
+  // happened before this module existed (it fell back to the calendar day). Only an
+  // account with an ACTIVE boundary needs that rebuild: without one, the calendar
+  // timeline the first render already produced is correct, so a second full renderToday()
+  // would be pure startup cost on the most common path.
+  try { if (window.PlanAuthority.enabled()) globalThis.renderToday?.(); } catch { /* boundary state unreadable — the next ordinary render covers it */ }
 }
