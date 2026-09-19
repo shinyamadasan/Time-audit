@@ -746,8 +746,16 @@ narrow form: one-off commitments only. No recurrence, reminders or external cale
 `'priority'`. Only `'task'` is ever written, so every stored item keeps its exact bytes and id,
 with no migration. Array order is never used, because both plan merges sort by id. Helpers live
 in `plan-tomorrow-model.js` (`planItemKind`, `activePriorityPlanItems`, `withPlanItemKind`). The
-cap is enforced in the UI and also in `plan-authority.confirmPreparation`. The number 3 is still
-declared once, as `PLAN_MAX` in index.html, and passed in as `priorityMax`.
+cap is enforced in the UI, in `plan-authority.confirmPreparation`, in `setItemKind` (promotion)
+and in stale-task moves (see below). The number 3 is still declared once, as `PLAN_MAX` in
+index.html, and passed in as `priorityMax`.
+
+**Make task / Make priority.** `PlanAuthority.setItemKind` reclassifies one item through the
+ordinary save path. Only `kind` changes; id, text, time, duration, done state and tracked-entry
+linkage are kept. Promotion into a full Top 3 is refused with a message, never swapped. Buttons
+are on Today's strip (edit mode) and in the Prepare Tomorrow draft. Readiness reads each
+prepared item's current kind, so a demoted priority stops keeping the day ready; the stored
+preparation itself is not rewritten.
 
 **Readiness and streak cannot be inflated.** `preparation.oneOffItemIds` now holds the Top
 Priorities only. `readyNow()` and the Planning Streak both read stored preparation, so both
@@ -778,8 +786,15 @@ with secondary tasks but no priority still needs a priority or "Open day" to cou
 - **Merging and deletion.** Records merge one at a time, newest `updatedAt` winning, with a fixed
   tie-break. Deletion is a tombstone.
 - **Sync.** One listener covers the whole `commitments` subtree, with no date horizon. Writes
-  made offline are queued and pushed on reconnect. **No Firebase rules change:** `rooms/$roomId`
-  is already owner-only. Commitments are **not** published to Partner View in V1.
+  made offline are queued and pushed on reconnect by storage.js's own `.info/connected` handler.
+  The production bridge reads the room through `getChronaSenseRoomRef()`; index.html's
+  `fbRoomRef` is a top-level `let` and is never on `window` (the FIX FIRST B1 defect). This is
+  proven by a browser test against the real signed-in path (`tests/commitments-sync-wiring.spec.js`).
+  **No Firebase rules change:** `rooms/$roomId` is already owner-only. Commitments are **not**
+  published to Partner View in V1.
+- **Editing optional fields.** In an update, a missing duration/note means "unchanged" and an
+  explicit `null` means "clear". The form sends `null` for a blank field. Its duration input
+  takes 5-minute steps from 5 to 720; the model accepts any whole minute from 1 to 720.
 
 **Arbitrary future personal days.** `PlanAuthority.dayAhead(n)`, `upcomingDays(n)` and
 `dayForCalendarDate(date)` work only through existing targets, by chaining `next()`. There is no
@@ -816,9 +831,15 @@ Actions: Move to today, Move & edit, Reschedule… (opens the day browser) and N
 - **Moving** reuses the existing fixed carry id, so it happens once even across devices. The
   original stays on its own day, planned and not done, and the copy records `carriedFromId`
   plus `carriedFromDayId`.
-- **Rescheduling** tombstones the old copy first.
+- **Top 3 applies to moves.** A stale priority moved into a day whose Top 3 is full lands as an
+  Other planned task, and the surface says "Moved to Other planned tasks because your Top 3 is
+  already full." A stale task always stays a task.
+- **Reschedule…** in the UI applies to tasks that have not been moved yet. The model also
+  supports re-targeting an already-moved task (`rescheduleStaleItem`, which removes the old copy
+  first), but the UI has **no** control for that: a moved task leaves this list.
 - **No "Mark done" on this list**, because that would falsely record an old day as done.
-  Dismissing sets `dismissedAt` and can be undone.
+  "Not doing this" sets `dismissedAt`. The model can undo a dismissal (`undismissStaleItem`), but
+  the UI has **no** undo control in V1.
 - Nothing is carried forward automatically.
 
 **UX.** `planning-continuity-ui.js` and `.css` mount `#planning-continuity-section` under Today
@@ -832,5 +853,11 @@ and a "Plan task" button, so existing selectors stay unambiguous.
 **Deferred / not built:** reminders and notifications; recurrence; external calendar sync;
 sharing commitments to Partner View; Personal Day Boundary Turn Off; showing commitments inside
 the *evidence* timeline (`assembleTodayTimeline`), since that would mix plans with evidence;
-reclassifying an existing item between priority and task in the UI (the model helper
-`withPlanItemKind` exists; there is no control yet).
+a UI to undo a dismissal or to re-target an already-moved stale task (both are model-only);
+a jump-to-date control; item-specific accessible labels on stale-row buttons.
+
+**Known limits (recorded from strict review, not fixed):**
+- A far-future day that exists only on another device is not listened to here until that day
+  becomes current/upcoming or this device writes to it.
+- Two devices moving the same stale task offline to *different* destinations can each create a
+  copy. Moves to the *same* destination converge to one.
