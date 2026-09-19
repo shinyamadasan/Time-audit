@@ -340,7 +340,7 @@ test('the browser lists personal days by their real interval and prepares an arb
   await expect(browser).toContainText('Today');
   await expect(browser).toContainText('Next');
   // Every listed day names the hours it covers, never a bare calendar date alone.
-  await expect(browser).toContainText('18:00');
+  await expect(browser).toContainText('6:00 PM');
 
   const days = browser.locator('.pc-day');
   await expect(days).toHaveCount(14);

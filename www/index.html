@@ -1991,18 +1991,23 @@ function isCoverageContextBlock(entry, dateKey = null, range = null) {
     (durationMin >= 60 && isLegacyJobCoverageBlock(entry));
 }
 
+/** `dateKey` is one calendar date for the calendar-day timeline, or — for the My Day
+ *  timeline, which spans two calendar dates — a function from an entry's range to the
+ *  calendar date that entry starts on, so schedule-template matching still checks each
+ *  entry against its own date. */
 function annotateCoverageContextForDisplay(entriesArr, dateKey = null) {
   const arr = Array.isArray(entriesArr) ? entriesArr : [];
+  const keyFor = typeof dateKey === 'function' ? dateKey : () => dateKey;
   const ranged = arr
     .map(entry => ({ entry, range: entryTimeRange(entry) }))
     .filter(item => item.range && !item.entry.deleted && !item.entry.missed);
   const coverage = ranged
-    .filter(item => isCoverageContextBlock(item.entry, dateKey, item.range))
+    .filter(item => isCoverageContextBlock(item.entry, keyFor(item.range), item.range))
     .sort((a, b) => (b.range.end - b.range.start) - (a.range.end - a.range.start));
 
   return arr.map(entry => {
     const range = entryTimeRange(entry);
-    if (!range || isCoverageContextBlock(entry, dateKey, range)) return entry;
+    if (!range || isCoverageContextBlock(entry, keyFor(range), range)) return entry;
     const context = coverage.find(item =>
         item.entry !== entry &&
         item.range.start <= range.start &&
@@ -3716,6 +3721,48 @@ function clipEntryToDateForDisplay(entry, dateKey, includeDeleted = false, bound
     _clippedToDate: dateKey
   };
 }
+/** Entries clipped to an arbitrary half-open [startMs, endMs) window — the My Day
+ *  counterpart of getEntriesForDateWindow. Timestamps are never shifted: a block that
+ *  crosses the window edge is displayed from the edge, exactly as the calendar view
+ *  clips a block at midnight. An entry with no time range belongs to the window when
+ *  its own instant does. */
+function getEntriesForWindow(startMs, endMs, includeDeleted = false) {
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const bounds = { tz, dayStart: startMs, dayEnd: endMs };
+  const result = [];
+  entries.forEach(e => {
+    if (!e || (e.deleted && !includeDeleted)) return;
+    if (!entryTimeRange(e)) {
+      if (Number.isFinite(e.ts) && e.ts >= startMs && e.ts < endMs) result.push(e);
+      return;
+    }
+    const clipped = clipEntryToDateForDisplay(e, getDateInTZ(startMs, tz), includeDeleted, bounds);
+    if (clipped) result.push(clipped);
+  });
+  return result;
+}
+
+/** The authoritative My Day the Today timeline should show, or null when the
+ *  calendar-day timeline still applies. Only the CURRENT day, viewed as today, on an
+ *  account with an active Personal Day boundary: browsing history stays the factual
+ *  calendar view, and a legacy account keeps exactly its midnight behaviour. The
+ *  interval comes from Plan Authority — nothing here decides "after 6 PM" itself. */
+function currentMyDayTimelineTarget() {
+  if (!isViewingToday() || !globalThis.PlanAuthority) return null;
+  try {
+    const target = globalThis.PlanAuthority.current();
+    return target && target.store === 'operational' && Number.isFinite(target.startMs) && Number.isFinite(target.endMs) ? target : null;
+  } catch { return null; }
+}
+
+/** "Fri Sep 18, 6:00 PM → Sat Sep 19, 6:00 PM" in the day's own timezone. */
+function myDayIntervalLabel(target) {
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: target.timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const label = ms => fmt.format(new Date(ms)).replace(/^(\w{3}), /, '$1 ');
+  return `${label(target.startMs)} → ${label(target.endMs)}`;
+}
+globalThis.myDayIntervalLabel = myDayIntervalLabel;
+
 function getEntriesForDateWindow(dateKey, includeDeleted = false) {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const bounds = {
@@ -4421,7 +4468,7 @@ function buildEntryRowHTML(e) {
 // Sorts, clips, merges, and gaps today's entries into the combined array for renderTimelineCombined.
 // Handles nested browser sub-activities (pcSubMap) and attaches them to their container entries.
 /** @param {Array} todayE entries for the viewed day @returns {Array} combined display items (entries + gaps) */
-function assembleTodayTimeline(todayE) {
+function assembleTodayTimeline(todayE, myDay = null) {
   const sorted = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
   const browserEntries   = sorted.filter(e => e.browserUsage);
   const nestedBrowserIds = new Set();
@@ -4449,7 +4496,10 @@ function assembleTodayTimeline(todayE) {
       subs.forEach(s => { pcSubMap.get(container.id).push(s); nestedBrowserIds.add(s.id); });
     }
   });
-  const sortedForDisplay = annotateCoverageContextForDisplay(sorted.filter(e => !nestedBrowserIds.has(e.id)), getViewingDateKey())
+  // My Day spans two calendar dates, so each entry is matched against its OWN date.
+  const tlTz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const coverageKey = myDay ? (range => getDateInTZ(range.start, tlTz)) : getViewingDateKey();
+  const sortedForDisplay = annotateCoverageContextForDisplay(sorted.filter(e => !nestedBrowserIds.has(e.id)), coverageKey)
     .sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
   const clipped = clipOverlapsForDisplay(sortedForDisplay).filter(e => {
     const dur = e.tsStart ? Math.round((e.ts - e.tsStart) / 60000) : (e.blockIntervalMin || 1);
@@ -4458,7 +4508,13 @@ function assembleTodayTimeline(todayE) {
   const mergedDisplay = mergeConsecutiveForDisplay(clipped);
   const _dayNow = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
   const gaps    = computeGaps(todayE.filter(e => !nestedBrowserIds.has(e.id)), _dayNow);
-  const templateEntries = generateTemplateEntries(getViewingDateKey());
+  // My Day: schedule occurrences come from Plan Authority's own projection, which
+  // selects by each occurrence's START instant inside [startMs, endMs) and de-duplicates
+  // by template id + start, so a block crossing midnight appears exactly once and one
+  // starting at exactly the end boundary belongs to the next My Day.
+  const templateEntries = myDay
+    ? globalThis.PlanAuthority.templatesForTarget(myDay, dateKey => generateTemplateEntries(dateKey))
+    : generateTemplateEntries(getViewingDateKey());
   const combined = [...mergedDisplay, ...gaps, ...templateEntries].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
   combined.forEach(item => {
     if (!item.isGap && pcSubMap.has(item.id)) item._subActivities = pcSubMap.get(item.id);
@@ -5661,14 +5717,29 @@ function renderToday() {
     .join(',');
   const timelinePlanKey = planTargetsForCalendarDate(_viewKey)
     .flatMap(target => planItemsFor(target).map(item => [target.id, item.id, item.task, item.done, item.updatedAt || ''].join(':'))).join(',');
-  const newRenderKey = _viewKey + '|' + timelineTemplateKey + '|' + timelinePlanKey + '|' + todayE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
+  // My Day timeline. With a Personal Day boundary active, the timeline's ROWS cover the
+  // authoritative My Day interval [startMs, endMs) from Plan Authority instead of the
+  // calendar date — e.g. Fri 18:00 → Sat 18:00 for an 18:00 boundary. Timestamps are
+  // untouched; only which rows are grouped here changes. The So Far / deep-block stats
+  // above stay calendar-day evidence by design, and browsing history (not today) keeps
+  // the factual calendar view. Legacy accounts get null here and are unchanged.
+  const myDay = currentMyDayTimelineTarget();
+  // Declared further down this script; guarded because renderToday can run before that
+  // line has executed (a TDZ ReferenceError is simply skipped).
+  try { notePersonalDayRendered(); } catch { /* not initialised yet */ }
+  const timelineE = myDay ? getEntriesForWindow(myDay.startMs, myDay.endMs) : todayE;
+  const displayTimelineE = myDay ? squashTinyPCTimeFragments(timelineE, null) : displayTodayE;
+  // The My Day id is part of the key, so the 18:00 rollover (which does not change the
+  // calendar date) still rebuilds the rows, and midnight (which does not change My Day)
+  // leaves them as they are.
+  const newRenderKey = _viewKey + '|' + (myDay ? myDay.id : '') + '|' + timelineTemplateKey + '|' + timelinePlanKey + '|' + timelineE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
   const entriesChanged = newRenderKey !== _todayRenderKey;
   if (entriesChanged) _todayRenderKey = newRenderKey;
 
   const tlEl = document.getElementById('timeline-blocks');
 
   if (entriesChanged) {
-    const combined = assembleTodayTimeline(displayTodayE);
+    const combined = assembleTodayTimeline(displayTimelineE, myDay);
     if (!combined.length) {
       tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
     } else {
@@ -5697,13 +5768,13 @@ function renderToday() {
   const _tlLabel = _diffDays === 0 ? "Today's timeline"
     : _diffDays === 1 ? "Yesterday's timeline"
     : new Intl.DateTimeFormat('en-US',{timeZone:_tz,weekday:'long',month:'short',day:'numeric'}).format(new Date(_vk + 'T12:00:00')) + "'s timeline";
-  document.getElementById('timeline-date-label').textContent = _tlLabel;
+  document.getElementById('timeline-date-label').textContent = myDay ? `My Day · ${myDayIntervalLabel(myDay)}` : _tlLabel;
   document.getElementById('timeline-nav-next').style.display = isViewingToday() ? 'none' : '';
 
-  // Timeline summary
-  const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(displayTodayE)) : displayTodayE.length > 0;
-  const visibleBlockCount = displayLoggedBlockCount(displayTodayE);
-  const timelineSummaryText = workStarted ? `${computeDeepHrs(displayTodayE, _vk)}h deep · ${visibleBlockCount} blocks` : '';
+  // Timeline summary — describes the rows actually shown (My Day rows when active).
+  const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(displayTimelineE)) : displayTimelineE.length > 0;
+  const visibleBlockCount = displayLoggedBlockCount(displayTimelineE);
+  const timelineSummaryText = workStarted ? `${computeDeepHrs(displayTimelineE, myDay ? null : _vk)}h deep · ${visibleBlockCount} blocks` : '';
   document.getElementById('timeline-summary').textContent = timelineSummaryText;
   // Today Persistent Sections V1 — collapsed-header label reuses this exact, already-computed
   // string rather than deriving a new figure just for the collapsed state.
@@ -6601,13 +6672,28 @@ globalThis.refreshAuthoritativePlanSurfaces = refreshAuthoritativePlanSurfaces;
 // it. The 60s tick watches the authoritative day's identity instead and
 // re-renders only when it actually moves — no per-minute re-render churn.
 let _lastAuthoritativePlanDayId = null;
+/** Records the authoritative day the screen was just RENDERED for. Without this the
+ *  watcher only learned its baseline on its first 60s tick, so a page opened at 17:59
+ *  whose first tick landed after 18:00 took the NEW day as its baseline and never
+ *  rotated (plan surfaces and the My Day timeline stayed on the old day). */
+function notePersonalDayRendered() {
+  try {
+    const id = currentPlanTarget()?.id ?? null;
+    if (id !== null) _lastAuthoritativePlanDayId = id;
+  } catch { /* authority not ready yet */ }
+}
 function refreshOnPersonalDayRollover() {
   let id = null;
   try { id = currentPlanTarget()?.id ?? null; } catch { return; }
   if (id === _lastAuthoritativePlanDayId) return;
   const first = _lastAuthoritativePlanDayId === null;
   _lastAuthoritativePlanDayId = id;
-  if (!first) refreshAuthoritativePlanSurfaces();
+  if (!first) {
+    refreshAuthoritativePlanSurfaces();
+    // The My Day timeline rolls with the authoritative day too (its render key carries
+    // the day id), so rebuild it now rather than at the next calendar-date change.
+    renderToday();
+  }
 }
 
 /** Minutes tracked against a planned task, inside the window this plan is

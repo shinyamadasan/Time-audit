@@ -1017,4 +1017,7 @@ if (typeof window !== 'undefined') {
   // instead of a stuck one.
   globalThis.renderTodayPlan?.();
   globalThis.refreshTomorrowView?.();
+  // The My Day timeline also reads the authoritative interval, and its first render
+  // happened before this module existed (it fell back to the calendar day).
+  globalThis.renderToday?.();
 }
