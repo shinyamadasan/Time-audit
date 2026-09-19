@@ -5,6 +5,55 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-19 — Planning Continuity V1 FIX FIRST corrections (review candidate, NOT integrated)
+
+Strict review of `7e3e491` returned FIX FIRST. The corrections are on the same branch,
+`feat/future-planning-capacity-v1`. Nothing is merged or deployed; `main` is still `795ce08`.
+
+**This entry corrects the 2026-09-18 entry below.** That entry claimed commitment sync
+(including the offline reconnect push) worked. **In production it did not:** the bridge read
+`globalThis.fbRoomRef`, which is never on `window`, so no commitment ever synced. The unit
+suite could not catch it because it builds the bridge with fake dependencies. Fixed in B1.
+
+- **B1 (`2949759`, critical):** commitment sync now reads the room through
+  `getChronaSenseRoomRef()`. It also attaches itself if the room was joined before the module
+  loaded. New `tests/commitments-sync-wiring.spec.js` (6 tests) runs against the real signed-in
+  path with a recording Firebase stub and checks: the room is resolved, a listener is registered
+  on `rooms/<room>/commitments`, a transaction runs at `.../commitments/<id>`, remote updates are
+  applied, and an offline write is pushed by storage.js's own reconnect handler. **Against
+  `7e3e491` all 6 fail; with the fix all 6 pass.**
+- **B2 (`13ebeb8`):** moving a stale task now respects the Top 3. A priority moved into a full
+  Top 3 becomes an Other planned task, with the notice "Moved to Other planned tasks because your
+  Top 3 is already full." Recovery-action errors are now visible; they previously went to a
+  message line that only shows inside the commitment form.
+- **B3 (`13ebeb8`):** "Make task" / "Make priority" via `PlanAuthority.setItemKind`, on Today's
+  strip and in Prepare Tomorrow. The id and all other fields are kept. Promoting into a full
+  Top 3 is refused. Readiness now follows each prepared item's current kind.
+- **B4 (`13ebeb8`):** the duration input now allows 5 to 720 in 5-minute steps (it used to
+  reject 15/30/45/60/90). A blank duration or note is sent as `null`, so it is cleared instead
+  of silently kept.
+
+**Docs:** APP_CONTEXT.md now:
+- makes no claim of a UI to undo a dismissal or to reschedule an already-moved task (both exist
+  only in the model);
+- states that the Top 3 applies to stale moves and to promotion;
+- records two limits from the review: a far-future day that exists only on another device, and
+  simultaneous offline moves to different destinations.
+
+**Verification at `13ebeb8`:**
+- `npm test` exits 0 (52 suites, 0 failures). Focused suites green: commitments-model 43,
+  commitments-sync 23, planning-capacity 17, stale-plan-recovery 33, plan-authority 48,
+  planning-streak 21, shared-accountability 25, partner-view 15, planning-continuity-fixes 22,
+  future-day-planning 28.
+- Planning browser specs: 34/34 (planning-continuity 21, planning-continuity-fixes 7,
+  commitments-sync-wiring 6).
+- **Full Playwright: 643/643 in one clean run.** `smoke.spec.js:861` did not recur.
+- Lint: 0 errors, 38 warnings (same as base). www parity OK. `git diff --check` clean.
+
+**Next:** targeted re-review. Do not merge or deploy before it.
+
+---
+
 ## 2026-09-18 — Planning Continuity V1 (review candidate, NOT integrated)
 
 **Branch `feat/future-planning-capacity-v1`**, cut from `origin/main` `795ce08`, which was
