@@ -334,18 +334,47 @@ export function createPlanAuthority(deps = {}) {
     return { ok: true, anchor: 'time', instantMs: instant.instantMs, target: containing(instant.instantMs) };
   }
 
-  /** Inverse of dayForScheduledDate(). A displayed civil date is valid only when
-   *  feeding it back through the scheduling contract returns this exact target. */
+  /** Finds the civil date which pairs `hhmm` with an instant inside `target`.
+   *  The target is primary: search its overlapping local dates and accept
+   *  exactly one instant in the half-open interval. */
+  function civilDateForTimeInTarget(target, hhmm) {
+    if (!target?.id) return { ok: false, reason: 'invalid-target' };
+    if (typeof hhmm !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hhmm)) return { ok: false, reason: 'invalid-time' };
+    const { startMs, endMs } = targetInterval(target);
+    const timezone = target.timezone || accountTimezone();
+    const first = localPlanDate(startMs, timezone);
+    const last = localPlanDate(endMs - 1, timezone);
+    const dates = [];
+    for (let dateKey = first; dateKey <= last; dateKey = addCalendarDays(dateKey, 1)) dates.push(dateKey);
+    const matches = [];
+    let nonexistent = null;
+    for (const dateKey of dates) {
+      const resolved = resolvePlannedInstant(dateKey, hhmm, timezone);
+      if (resolved.ok) {
+        if (resolved.instantMs >= startMs && resolved.instantMs < endMs) matches.push({ dateKey, instantMs: resolved.instantMs });
+      } else if (resolved.reason === 'ambiguous') {
+        for (const instantMs of [resolved.earlierMs, resolved.laterMs]) {
+          if (instantMs >= startMs && instantMs < endMs) matches.push({ dateKey, instantMs });
+        }
+      } else if (resolved.reason === 'nonexistent') nonexistent = resolved;
+    }
+    const unique = [...new Map(matches.map(match => [match.instantMs, match])).values()]
+      .sort((a, b) => a.instantMs - b.instantMs || a.dateKey.localeCompare(b.dateKey));
+    if (unique.length === 1) return { ok: true, anchor: 'target-time', ...unique[0], target };
+    if (unique.length > 1) return { ok: false, reason: 'ambiguous', matches: unique };
+    if (nonexistent) return nonexistent;
+    return { ok: false, reason: 'outside-target' };
+  }
+
+  /** Optional inverse of dayForScheduledDate(). Some truncated My Days contain
+   *  no local noon, so no date-only civil date can represent them. `null` is an
+   *  explicit presentation result; the authoritative target remains usable. */
   function scheduledDateForTarget(target, when = '') {
     if (!target?.id) throw new Error('An authoritative target is required.');
     if (target.store === 'legacy' && !enabled()) return target.dateKey;
     if (when) {
-      const instantMs = itemStartInstant(target, when);
-      if (!Number.isFinite(instantMs)) throw new Error('That task time cannot be resolved in this My Day.');
-      const dateKey = localPlanDate(instantMs, accountTimezone());
-      const resolved = dayForScheduledDate(dateKey, when);
-      if (resolved.ok && resolved.target.id === target.id) return dateKey;
-      throw new Error('That task date does not resolve back to its My Day.');
+      const resolved = civilDateForTimeInTarget(target, when);
+      return resolved.ok ? resolved.dateKey : null;
     }
     const bounds = targetInterval(target);
     const first = localPlanDate(bounds.startMs, accountTimezone());
@@ -358,8 +387,7 @@ export function createPlanAuthority(deps = {}) {
       const resolved = dayForScheduledDate(dateKey, '');
       return resolved.ok && resolved.target.id === target.id;
     }).sort();
-    if (matches.length !== 1) throw new Error(`My Day ${target.id} has no unique date-only scheduling date.`);
-    return matches[0];
+    return matches.length === 1 ? matches[0] : null;
   }
 
   /** A window of consecutive authoritative days starting at the current one —
@@ -1121,7 +1149,7 @@ export function createPlanAuthority(deps = {}) {
   return {
     enabled, invalidate,
     current, upcoming, containing, next, previous, daysOverlappingCalendarDate,
-    dayAhead, dayForCalendarDate, dayForScheduledDate, scheduledDateForTarget, upcomingDays,
+    dayAhead, dayForCalendarDate, dayForScheduledDate, scheduledDateForTarget, civilDateForTimeInTarget, upcomingDays,
     record, rawItems, items, saveItems, addItem, assertDirectSchedulingTarget,
     preparation, consistency, readyNow, preparedState, confirmPreparation,
     validateItem, itemStartInstant, evidenceWindow, classifyItemActual,

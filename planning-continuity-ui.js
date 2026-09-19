@@ -42,7 +42,7 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': 
 const state = {
   expanded: { upcoming: false, stale: false },
   detail: null,
-  itemForm: null,      // { type:'task'|'commitment', dayId?, itemId? }
+  itemForm: null,      // task: { type, dayId?, anchorDayId, itemId?, dateTouched }
   browseOpen: false,
   browseFrom: 0,
   formOpen: false,
@@ -203,49 +203,50 @@ function localDateKey(instantMs = Date.now(), timezone = accountTimezone()) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-function addCalendarDate(dateKey, days) {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day + days, 12)).toISOString().slice(0, 10);
+function taskDateHint(target, when = '') {
+  const layer = authority();
+  if (!target) return localDateKey();
+  const scheduled = layer?.scheduledDateForTarget(target, when);
+  // A truncated My Day may have no date-only/noon inverse. Its start date is a
+  // presentation hint only; the untouched form remains anchored to the target.
+  return scheduled || (Number.isFinite(target.startMs)
+    ? localDateKey(target.startMs, target.timezone || accountTimezone())
+    : target.dateKey || localDateKey());
 }
 
-function quickTaskDates() {
+function quickTaskTargets() {
   const layer = authority();
-  if (layer?.enabled()) {
-    const current = layer.current();
-    const next = layer.next(current);
-    return {
-      today: layer.scheduledDateForTarget(current),
-      tomorrow: layer.scheduledDateForTarget(next),
-    };
-  }
-  const today = localDateKey();
-  return { today, tomorrow: addCalendarDate(today, 1) };
+  const today = layer?.current();
+  const tomorrow = today ? layer.next(today) : null;
+  return {
+    today: { target: today, date: taskDateHint(today) },
+    tomorrow: { target: tomorrow, date: taskDateHint(tomorrow) },
+  };
 }
 
 function taskFormValue() {
   const layer = authority();
-  const edit = state.itemForm?.itemId && layer ? {
-    target: layer.targetById(state.itemForm.dayId),
-  } : null;
-  const item = edit?.target ? layer.items(edit.target).find(candidate => candidate.id === state.itemForm.itemId) : null;
-  let date = quickTaskDates().today;
-  if (item && edit.target) {
-    date = layer.scheduledDateForTarget(edit.target, item.when || '');
-  }
-  return { target: edit?.target || null, item, date };
+  const quick = quickTaskTargets();
+  const sourceTarget = state.itemForm?.itemId && layer ? layer.targetById(state.itemForm.dayId) : null;
+  const item = sourceTarget ? layer.items(sourceTarget).find(candidate => candidate.id === state.itemForm.itemId) : null;
+  const anchorTarget = (state.itemForm?.anchorDayId && layer?.targetById(state.itemForm.anchorDayId))
+    || sourceTarget || quick.today.target;
+  const date = item && anchorTarget?.id === sourceTarget?.id
+    ? taskDateHint(sourceTarget, item.when || '')
+    : taskDateHint(anchorTarget);
+  return { sourceTarget, anchorTarget, item, date, quick };
 }
 
 function taskFormHtml() {
-  const { item, date } = taskFormValue();
-  const { today, tomorrow } = quickTaskDates();
+  const { item, date, quick } = taskFormValue();
   const kind = item?.kind === 'task' ? 'task' : 'priority';
   return `<form class="pc-form pc-item-form" id="pc-task-form">
     <div class="pc-head"><h3>${item ? 'Edit planned task' : 'Add to My Day'}</h3><button type="button" class="pc-icon" data-pc-action="close-item-form" aria-label="Close add task">✕</button></div>
     ${item ? '' : `<div class="pc-entry-types" role="group" aria-label="What to add"><button type="button" class="btn sm primary" aria-pressed="true">Task</button><button type="button" class="btn sm ghost" data-pc-action="add-commitment" aria-pressed="false">Commitment</button></div>`}
     <label>What do you want to do?<input name="title" maxlength="200" value="${escape(item?.task || '')}" required autofocus></label>
     <fieldset class="pc-when"><legend>When?</legend><div class="pc-quick-dates">
-      <button type="button" class="btn sm ghost" data-pc-action="set-date" data-date="${today}">Today</button>
-      <button type="button" class="btn sm ghost" data-pc-action="set-date" data-date="${tomorrow}">Tomorrow</button>
+      <button type="button" class="btn sm ghost" data-pc-action="set-date" data-day="${escape(quick.today.target?.id || '')}" data-date="${escape(quick.today.date)}">Today</button>
+      <button type="button" class="btn sm ghost" data-pc-action="set-date" data-day="${escape(quick.tomorrow.target?.id || '')}" data-date="${escape(quick.tomorrow.date)}">Tomorrow</button>
     </div><input name="date" type="date" value="${escape(date)}" required aria-label="Task date"></fieldset>
     <label>Time <input name="time" type="time" value="${escape(item?.when || '')}" aria-label="Task time, optional"><span class="pc-muted">Leave blank for Anytime.</span></label>
     <label>Type <select name="kind"><option value="priority"${kind === 'priority' ? ' selected' : ''}>Top Priority</option><option value="task"${kind === 'task' ? ' selected' : ''}>Other task</option></select></label>
@@ -265,21 +266,23 @@ function submitTaskForm(form) {
   const kind = data.get('kind') === 'task' ? 'task' : 'priority';
   if (!title) { state.formError = 'Name the task first.'; return; }
   const editing = taskFormValue();
-  // Clearing a clock time is an in-place move back to Anytime for the SAME My
-  // Day. The date shown for the former timestamp is presentation, not a command
-  // to re-file the now-untimed task through noon ownership.
-  const resolved = editing.item?.when && !time && date === editing.date
-    ? { ok: true, anchor: 'same-day', target: editing.target }
-    : layer.dayForScheduledDate(date, time);
+  // Untouched dates preserve the selected authoritative My Day. A typed time is
+  // interpreted inside that target; only a user-edited civil date uses the
+  // date/noon scheduling contract and may relocate the item.
+  const resolved = state.itemForm?.dateTouched
+    ? layer.dayForScheduledDate(date, time)
+    : time ? layer.civilDateForTimeInTarget(editing.anchorTarget, time)
+      : { ok: true, anchor: 'target', target: editing.anchorTarget };
   if (!resolved.ok) {
     state.formError = resolved.reason === 'ambiguous' ? 'That time happens twice on this date. Choose a different time.'
-      : resolved.reason === 'nonexistent' ? 'That time does not exist on this date. Choose a different time.' : 'Choose a valid date.';
+      : resolved.reason === 'nonexistent' ? 'That time does not exist on this date. Choose a different time.'
+        : resolved.reason === 'outside-target' ? 'That time is outside this My Day. Pick a date to schedule it on another day.'
+          : 'Choose a valid date.';
     return;
   }
   try {
     if (state.itemForm?.itemId) {
-      const sourceTarget = layer.targetById(state.itemForm.dayId);
-      layer.updateItem({ sourceTarget, itemId: state.itemForm.itemId, destination: resolved.target, changes: { task: title, when: time, kind }, stamp: stamp });
+      layer.updateItem({ sourceTarget: editing.sourceTarget, itemId: state.itemForm.itemId, destination: resolved.target, changes: { task: title, when: time, kind }, stamp: stamp });
     } else {
       const item = context.createItem(title, time, kind);
       layer.addItem({ destination: resolved.target, item });
@@ -533,7 +536,7 @@ function staleAction(action, itemId, dayId) {
       const destination = layer.current();
       const result = layer.moveStaleItem({ sourceTarget, itemId, destination, stamp });
       setNotice(noticeFor(result));
-      if (action === 'move-edit') state.itemForm = { type: 'task', dayId: destination.id, itemId: result.item.id };
+      if (action === 'move-edit') state.itemForm = { type: 'task', dayId: destination.id, anchorDayId: destination.id, itemId: result.item.id, dateTouched: false };
     }
   } catch (err) {
     setNotice(err.message, 'error');
@@ -603,7 +606,11 @@ function onClick(event) {
   const id = control.dataset.id;
   event.preventDefault();
   switch (action) {
-    case 'open-item-form': state.itemForm = { type: 'task' }; state.formOpen = false; state.formError = ''; render(); break;
+    case 'open-item-form': {
+      const current = authority()?.current();
+      state.itemForm = { type: 'task', anchorDayId: current?.id, dateTouched: false };
+      state.formOpen = false; state.formError = ''; render(); break;
+    }
     case 'add-commitment': state.itemForm = { type: 'commitment' }; state.formOpen = true; state.formError = ''; state.formPending = null; render(); break;
     case 'close-item-form': case 'close-form': state.itemForm = null; state.formOpen = false; state.formError = ''; state.formPending = null; render(); break;
     case 'open-form': state.itemForm = { type: 'commitment' }; state.formOpen = true; state.formError = ''; state.formPending = null; render(); break;
@@ -615,7 +622,15 @@ function onClick(event) {
     case 'collapse-upcoming': state.expanded.upcoming = false; render(); break;
     case 'expand-stale': state.expanded.stale = true; render(); break;
     case 'collapse-stale': state.expanded.stale = false; render(); break;
-    case 'set-date': { const input = section()?.querySelector('#pc-task-form [name="date"]'); if (input) input.value = control.dataset.date; break; }
+    case 'set-date': {
+      const input = section()?.querySelector('#pc-task-form [name="date"]');
+      if (input) input.value = control.dataset.date;
+      if (state.itemForm?.type === 'task') {
+        state.itemForm.anchorDayId = control.dataset.day;
+        state.itemForm.dateTouched = false;
+      }
+      break;
+    }
     case 'open-browse': state.detail = 'browse'; render(); break;
     case 'close-browse': state.detail = null; state.browseOpen = false; state.pendingMove = null; render(); break;
     case 'browse-forward': state.browseFrom += BROWSE_DAYS; render(); break;
@@ -647,6 +662,25 @@ function onSubmit(event) {
   render();
 }
 
+function onInput(event) {
+  const input = event.target;
+  if (!state.itemForm || state.itemForm.type !== 'task' || !input.closest?.('#pc-task-form')) return;
+  if (input.name === 'date') {
+    state.itemForm.dateTouched = true;
+    return;
+  }
+  if (input.name !== 'time' || state.itemForm.dateTouched) return;
+  const editing = taskFormValue();
+  const dateInput = section()?.querySelector('#pc-task-form [name="date"]');
+  if (!dateInput) return;
+  if (!input.value) {
+    dateInput.value = taskDateHint(editing.anchorTarget);
+    return;
+  }
+  const resolved = authority()?.civilDateForTimeInTarget(editing.anchorTarget, input.value);
+  if (resolved?.ok) dateInput.value = resolved.dateKey;
+}
+
 /** Called after any inbound remote commitment merge, and by index.html's own
  *  plan-surface refresh, so these lists never drift from stored truth. */
 export function refreshPlanningContinuityIfMounted() {
@@ -660,7 +694,7 @@ if (typeof window !== 'undefined') {
     refresh: refreshPlanningContinuityIfMounted,
     commitmentsForTarget: target => commitmentsForTarget(allCommitments(), target),
     editTask(dayId, itemId) {
-      state.itemForm = { type: 'task', dayId, itemId };
+      state.itemForm = { type: 'task', dayId, anchorDayId: dayId, itemId, dateTouched: false };
       state.formOpen = false;
       state.formError = '';
       render();
@@ -680,6 +714,7 @@ if (typeof window !== 'undefined') {
   const root = section();
   if (root) {
     root.addEventListener('click', onClick);
+    root.addEventListener('input', onInput);
     root.addEventListener('submit', onSubmit);
   }
   staleSection()?.addEventListener('click', onClick);
