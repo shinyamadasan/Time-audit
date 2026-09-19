@@ -167,10 +167,23 @@ export function createCommitmentsSyncBridge(deps = {}) {
 // default repository touches localStorage, which does not exist under plain
 // `node --test`. Same guard and same room-ref accessor as
 // operational-plan-sync.js. Tests build their own bridge with fake deps.
+//
+// The room ref comes from storage.js's getChronaSenseRoomRef() accessor, exactly as
+// every sibling bridge gets it. It must NOT be read as globalThis.fbRoomRef: index.html
+// declares fbRoomRef with a top-level `let`, which is never a window property, so that
+// read is always undefined and the bridge would silently never sync.
 if (typeof window !== 'undefined') {
-  window.CommitmentsSync = createCommitmentsSyncBridge({
+  const bridge = createCommitmentsSyncBridge({
     repository: window.CommitmentsRepository,
-    getRoomRef: () => (typeof globalThis.fbRoomRef !== 'undefined' ? globalThis.fbRoomRef : null),
+    getRoomRef: () => (typeof globalThis.getChronaSenseRoomRef === 'function' ? globalThis.getChronaSenseRoomRef() : null),
     onRemoteChange: () => globalThis.refreshCommitmentSurfaces?.(),
   });
+  window.CommitmentsSync = bridge;
+  // storage.js attaches this bridge when the room is joined. This module is deferred,
+  // so if the room was ALREADY joined before it finished loading, that call found no
+  // bridge — attach and drain now instead. Both calls are idempotent.
+  if (typeof globalThis.getChronaSenseRoomRef === 'function' && globalThis.getChronaSenseRoomRef()) {
+    bridge.attach();
+    bridge.pushAllLocal();
+  }
 }
