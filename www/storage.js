@@ -1022,6 +1022,7 @@ function startSync() {
     });
     if (changed) {
       localStorage.setItem('ta3-plans', JSON.stringify(plans));
+      globalThis.PlanAuthority?.invalidate();
       if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
       renderToday();
       publishSharedAccountability(); // cross-device plan change (add/edit/delete/done/prepare-tomorrow)
@@ -2024,6 +2025,7 @@ function replayPendingPlanRemotes() {
 
   if (changed) {
     localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    globalThis.PlanAuthority?.invalidate();
     if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
     renderToday();
   }

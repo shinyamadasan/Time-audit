@@ -13,7 +13,7 @@ import { createPersonalDayBoundaryRepository } from './personal-day-boundary-rep
 import { createOperationalPlanRepository } from './operational-plan-repository.js';
 import { createOperationalPlanSyncBridge } from './operational-plan-sync.js';
 import { createPersonalDayBoundarySyncBridge } from './personal-day-boundary-sync.js';
-import { planningStreak, carriedItemId } from './plan-tomorrow-model.js';
+import { planningStreak, carriedItemId, localPlanDate, mergeDatePlans } from './plan-tomorrow-model.js';
 import { mergeOperationalPlanRecords } from './operational-plan-model.js';
 
 const MANILA = 'Asia/Manila';   // UTC+8, no DST
@@ -190,6 +190,82 @@ test('item-centric date scheduling uses noon for untimed tasks and the exact ent
   assert.equal(timed.instantMs, manila('2026-09-23', '21:00'));
 });
 
+for (const boundaryTime of ['00:00', '04:00', '12:00', '17:00', '18:00']) {
+  test(`${boundaryTime} scheduling dates are the exact inverse for Today, Tomorrow, defaults, untimed edits, and timed items`, () => {
+    const app = boundaryApp(boundaryTime);
+    const current = app.authority.current();
+    const next = app.authority.next(current);
+    const boundaryHour = Number(boundaryTime.slice(0, 2));
+    const after = `${String((boundaryHour + 1) % 24).padStart(2, '0')}:00`;
+    const before = `${String((boundaryHour + 23) % 24).padStart(2, '0')}:00`;
+
+    for (const target of [current, next]) {
+      const dateOnly = app.authority.scheduledDateForTarget(target);
+      assert.equal(app.authority.dayForScheduledDate(dateOnly).target.id, target.id, 'date-only inverse returns the same target');
+      const expectedDate = boundaryHour <= 12
+        ? localPlanDate(target.startMs, MANILA)
+        : localPlanDate(target.endMs - 1, MANILA);
+      assert.equal(dateOnly, expectedDate, 'Today/Tomorrow and an untimed edit use the noon-owned civil date');
+      for (const when of [after, before]) {
+        const date = app.authority.scheduledDateForTarget(target, when);
+        const resolved = app.authority.dayForScheduledDate(date, when);
+        assert.equal(resolved.ok, true);
+        assert.equal(resolved.target.id, target.id, `${when} resolves back to the same My Day`);
+      }
+    }
+
+    assert.notEqual(app.authority.scheduledDateForTarget(current), app.authority.scheduledDateForTarget(next), 'Tomorrow advances exactly one scheduling date');
+  });
+}
+
+test('ordinary Add refuses yesterday and weeks ago by authoritative interval end', () => {
+  const app = makeApp({ clock: manila(D, '08:00') });
+  const yesterday = app.authority.legacyTarget(D_PREV);
+  const weeksAgo = app.authority.legacyTarget('2026-08-20');
+  assert.throws(() => app.authority.addItem({ destination: yesterday, item: item('past-1', 'Yesterday') }), /Past My Days are history/);
+  assert.throws(() => app.authority.addItem({ destination: weeksAgo, item: item('past-2', 'Weeks ago') }), /Past My Days are history/);
+  assert.equal(app.legacy.record(D_PREV), null);
+  assert.equal(app.legacy.record('2026-08-20'), null);
+});
+
+test('editing a current or future item into an ended day is refused without changing its source', () => {
+  const app = makeApp({ clock: manila(D, '08:00') });
+  const current = app.authority.current();
+  const future = app.authority.next(current);
+  const past = app.authority.legacyTarget(D_PREV);
+  app.authority.saveItems(current, [item('current-id', 'Current')]);
+  app.authority.saveItems(future, [item('future-id', 'Future')]);
+  const stamp = value => ({ ...value, updatedAt: 2000, updatedBy: 'device-a' });
+  assert.throws(() => app.authority.updateItem({ sourceTarget: current, itemId: 'current-id', destination: past, changes: { task: 'Moved' }, stamp }), /Past My Days are history/);
+  assert.throws(() => app.authority.updateItem({ sourceTarget: future, itemId: 'future-id', destination: past, changes: { task: 'Moved' }, stamp }), /Past My Days are history/);
+  assert.deepEqual(app.authority.items(current).map(value => value.task), ['Current']);
+  assert.deepEqual(app.authority.items(future).map(value => value.task), ['Future']);
+  assert.equal(app.legacy.record(D_PREV), null);
+});
+
+test('clearing time clears all range-only metadata in legacy and operational stores without changing id', () => {
+  const legacyApp = makeApp({ clock: manila(D, '08:00') });
+  const legacyTarget = legacyApp.authority.current();
+  legacyApp.authority.saveItems(legacyTarget, [item('legacy-range', 'Legacy range', { when: '09:00', durationMinutes: 60, endClock: '10:00' })]);
+  legacyApp.authority.updateItem({ sourceTarget: legacyTarget, itemId: 'legacy-range', changes: { when: '' }, stamp: value => ({ ...value, updatedAt: 2000, updatedBy: 'device-a' }) });
+  const legacyItem = legacyApp.authority.items(legacyTarget)[0];
+  assert.equal(legacyItem.id, 'legacy-range');
+  assert.equal(legacyItem.when, '');
+  assert.equal('durationMinutes' in legacyItem, false);
+  assert.equal('endClock' in legacyItem, false);
+
+  const operationalApp = graveyardApp();
+  operationalApp.setNow(manila(D, '19:00'));
+  const operationalTarget = operationalApp.authority.current();
+  operationalApp.authority.saveItems(operationalTarget, [item('operational-range', 'Operational range', { when: '23:00', durationMinutes: 120, endClock: '01:00' })]);
+  operationalApp.authority.updateItem({ sourceTarget: operationalTarget, itemId: 'operational-range', changes: { when: '' }, stamp: value => ({ ...value, updatedAt: 2000, updatedBy: 'device-a' }) });
+  const operationalItem = operationalApp.authority.items(operationalTarget)[0];
+  assert.equal(operationalItem.id, 'operational-range');
+  assert.equal(operationalItem.when, '');
+  assert.equal('durationMinutes' in operationalItem, false);
+  assert.equal('endClock' in operationalItem, false);
+});
+
 test('previous and next move one authoritative My Day across the 18:00 boundary', () => {
   const app = graveyardApp();
   app.setNow(manila(D, '19:00'));
@@ -222,6 +298,116 @@ test('editing date/time/kind preserves the same item id and leaves one active co
   assert.equal(app.authority.rawItems(source).find(value => value.id === 'stable-id').deleted, true);
 });
 
+for (const moveKind of ['legacy -> legacy', 'legacy -> operational', 'operational -> operational', 'operational -> legacy']) {
+  test(`${moveKind} direct relocation keeps the immutable id in exactly one active location`, () => {
+    let app;
+    let source;
+    let destination;
+    if (moveKind === 'legacy -> legacy') {
+      app = makeApp({ clock: manila(D, '08:00') });
+      source = app.authority.current();
+      destination = app.authority.next(source);
+    } else {
+      app = graveyardApp();
+      if (moveKind === 'legacy -> operational') {
+        source = app.authority.current();
+        destination = app.authority.upcoming();
+      } else if (moveKind === 'operational -> legacy') {
+        source = app.authority.upcoming();
+        destination = app.authority.current();
+      } else {
+        app.setNow(manila(D, '19:00'));
+        source = app.authority.current();
+        destination = app.authority.next(source);
+      }
+    }
+    app.authority.saveItems(source, [item('same-id', 'Move me')]);
+    app.authority.updateItem({
+      sourceTarget: source,
+      itemId: 'same-id',
+      destination,
+      changes: { task: 'Moved once' },
+      stamp: value => ({ ...value, updatedAt: 2000, updatedBy: 'device-a' }),
+    });
+    assert.equal(app.authority.items(source).filter(value => value.id === 'same-id').length, 0);
+    assert.deepEqual(app.authority.items(destination).filter(value => value.id === 'same-id').map(value => value.task), ['Moved once']);
+  });
+}
+
+for (const moveKind of ['legacy -> operational', 'operational -> operational', 'operational -> legacy']) {
+  test(`${moveKind} relocation defeats a later-timestamp stale source edit in both merge orders`, () => {
+    const app = graveyardApp();
+    let source;
+    let destination;
+    if (moveKind === 'legacy -> operational') {
+      source = app.authority.current();
+      destination = app.authority.upcoming();
+    } else if (moveKind === 'operational -> legacy') {
+      source = app.authority.upcoming();
+      destination = app.authority.current();
+    } else {
+      app.setNow(manila(D, '19:00'));
+      source = app.authority.current();
+      destination = app.authority.next(source);
+    }
+    const original = item('race-id', 'Original');
+    app.authority.saveItems(source, [original]);
+    app.authority.updateItem({
+      sourceTarget: source,
+      itemId: original.id,
+      destination,
+      changes: { task: 'Canonical destination' },
+      stamp: value => ({ ...value, updatedAt: 2000, updatedBy: 'device-a' }),
+    });
+    const tombstone = app.authority.rawItems(source).find(value => value.id === original.id);
+    const staleEdit = { ...original, task: 'Offline stale edit', updatedAt: 999999, updatedBy: 'device-offline' };
+    const movedRecord = { items: [tombstone], updatedAt: 2000, updatedBy: 'device-a' };
+    const staleRecord = { items: [staleEdit], updatedAt: 999999, updatedBy: 'device-offline' };
+    const merge = source.store === 'legacy'
+      ? (a, b) => mergeDatePlans(a, b, source.dateKey)
+      : (a, b) => mergeOperationalPlanRecords(a, b, source.id);
+    const forward = merge(movedRecord, staleRecord);
+    const reverse = merge(staleRecord, movedRecord);
+    assert.deepEqual(forward, reverse);
+    assert.equal(forward.items[0].deleted, true);
+    assert.equal(forward.items[0].relocationRevision.toDayId, destination.id);
+    app.authority.saveItems(source, forward.items);
+    assert.equal(app.authority.items(source).length, 0);
+    assert.deepEqual(app.authority.items(destination).map(value => value.task), ['Canonical destination']);
+  });
+}
+
+test('concurrent explicit relocations choose one canonical destination, and a later explicit move supersedes both', () => {
+  const app = graveyardApp();
+  app.setNow(manila(D, '19:00'));
+  const source = app.authority.current();
+  const destinationA = app.authority.next(source);
+  const destinationB = app.authority.next(destinationA);
+  const original = item('concurrent-id', 'Concurrent move');
+  const revisionA = { schemaVersion: 1, sequence: 1, fromDayId: source.id, toDayId: destinationA.id, updatedBy: 'device-a', updatedAt: 2000 };
+  const revisionB = { schemaVersion: 1, sequence: 1, fromDayId: source.id, toDayId: destinationB.id, updatedBy: 'device-z', updatedAt: 1500 };
+  const candidateA = { ...original, task: 'Destination A', updatedAt: 2000, updatedBy: 'device-a', relocationRevision: revisionA };
+  const candidateB = { ...original, task: 'Destination B', updatedAt: 1500, updatedBy: 'device-z', relocationRevision: revisionB };
+  app.authority.saveItems(destinationA, [candidateA]);
+  app.authority.saveItems(destinationB, [candidateB]);
+  app.authority.saveItems(source, [{ ...original, deleted: true, movedToDayId: destinationB.id, updatedAt: 1500, updatedBy: 'device-z', relocationRevision: revisionB }]);
+
+  assert.equal(app.authority.items(destinationA).length, 0, 'the deterministic equal-sequence loser is not active');
+  assert.deepEqual(app.authority.items(destinationB).map(value => value.task), ['Destination B']);
+
+  app.authority.updateItem({
+    sourceTarget: destinationB,
+    itemId: original.id,
+    destination: source,
+    changes: { task: 'Explicitly moved back' },
+    stamp: value => ({ ...value, updatedAt: 3000, updatedBy: 'device-z' }),
+  });
+  assert.deepEqual(app.authority.items(source).map(value => value.task), ['Explicitly moved back']);
+  assert.equal(app.authority.items(destinationA).length, 0);
+  assert.equal(app.authority.items(destinationB).length, 0);
+  assert.equal(app.authority.items(source)[0].relocationRevision.sequence, 2);
+});
+
 test('editing an Other Task into a fourth priority is refused without changing it', () => {
   const app = graveyardApp();
   app.setNow(manila(D, '19:00'));
@@ -243,6 +429,14 @@ test('editing an Other Task into a fourth priority is refused without changing i
 function graveyardApp(options = {}) {
   const app = makeApp({ clock: manila(D, '08:00'), ...options });
   app.live.proposeBoundary({ boundaryTime: '18:00', timezone: MANILA });
+  return app;
+}
+
+function boundaryApp(boundaryTime) {
+  const app = makeApp({ clock: manila(D_PREV, '01:00') });
+  app.live.proposeBoundary({ boundaryTime, timezone: MANILA });
+  const hour = Number(boundaryTime.slice(0, 2));
+  app.setNow(manila(D, `${String((hour + 1) % 24).padStart(2, '0')}:00`));
   return app;
 }
 

@@ -33,6 +33,11 @@ const BOUNDARY_STORE = JSON.stringify({ schemaVersion: 1, revisions: {
   'r-1800': { id: 'r-1800', boundaryTime: '18:00', timezone: TZ, effectiveFromInstant: Date.parse('2026-09-01T18:00:00+08:00') },
 } });
 
+const boundaryStoreFor = boundaryTime => JSON.stringify({ schemaVersion: 1, revisions: {
+  'legacy-calendar-day-v0': { id: 'legacy-calendar-day-v0', boundaryTime: '00:00', timezone: TZ, effectiveFromInstant: null },
+  [`r-${boundaryTime.replace(':', '')}`]: { id: `r-${boundaryTime.replace(':', '')}`, boundaryTime, timezone: TZ, effectiveFromInstant: Date.parse(`2026-09-01T${boundaryTime}:00+08:00`) },
+} });
+
 const firebaseStub = `
 (() => {
   if (window.firebase) return;
@@ -216,6 +221,99 @@ test('timing edits move the same task between Anytime and the clock timeline', a
   await expect(page.locator('#timeline-blocks')).not.toContainText('Move me through time');
   expect(await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0].id)).toBe(originalId);
 });
+
+for (const boundaryTime of ['04:00', '12:00']) {
+  test(`${boundaryTime} Today/Tomorrow/default Add dates resolve to consecutive authoritative My Days`, async ({ page }) => {
+    await openApp(page, { boundaryStore: boundaryStoreFor(boundaryTime) });
+    const form = await openTaskForm(page);
+    const date = form.locator('input[name="date"]');
+    await expect(date).toHaveValue('2026-09-18');
+    await form.getByRole('button', { name: 'Tomorrow' }).click();
+    await expect(date).toHaveValue('2026-09-19');
+    await form.getByRole('button', { name: 'Today' }).click();
+    await form.locator('input[name="title"]').fill(`Morning boundary ${boundaryTime}`);
+    await form.getByRole('button', { name: 'Add', exact: true }).click();
+    const result = await page.evaluate(() => {
+      const current = window.PlanAuthority.current();
+      const next = window.PlanAuthority.next(current);
+      return {
+        current: window.PlanAuthority.items(current).map(item => item.task),
+        next: window.PlanAuthority.items(next).map(item => item.task),
+      };
+    });
+    expect(result.current).toEqual([`Morning boundary ${boundaryTime}`]);
+    expect(result.next).toEqual([]);
+  });
+}
+
+test('direct Add refuses yesterday and weeks ago without mutating historical plans', async ({ page }) => {
+  await openApp(page);
+  const form = await openTaskForm(page);
+  await form.locator('input[name="title"]').fill('Must not enter history');
+  for (const date of ['2026-09-18', '2026-08-20']) {
+    await form.locator('input[name="date"]').fill(date);
+    await form.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(form.locator('.pc-error')).toContainText('Past My Days are history');
+  }
+  expect(await page.evaluate(() => window.PlanAuthority.recoverableDays().flatMap(row => window.PlanAuthority.items(row.target)).length)).toBe(0);
+});
+
+test('editing a current task backward is refused and leaves the source unchanged', async ({ page }) => {
+  await openApp(page);
+  await addPriority(page, 'Stay current');
+  const before = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0]);
+  await page.getByRole('button', { name: 'Edit planned task Stay current' }).click();
+  const form = page.locator('#pc-task-form');
+  await form.locator('input[name="date"]').fill('2026-09-18');
+  await form.getByRole('button', { name: 'Save' }).click();
+  await expect(form.locator('.pc-error')).toContainText('Past My Days are history');
+  const after = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0]);
+  expect(after).toEqual(before);
+});
+
+test('editing a future task into history is refused and leaves the future source unchanged', async ({ page }) => {
+  await openApp(page);
+  let form = await openTaskForm(page);
+  await form.locator('input[name="title"]').fill('Stay future');
+  await form.locator('input[name="date"]').fill('2026-09-25');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+  const before = await page.evaluate(() => {
+    const target = window.PlanAuthority.dayForScheduledDate('2026-09-25').target;
+    const item = window.PlanAuthority.items(target)[0];
+    PlanningContinuityUI.editTask(target.id, item.id);
+    return { targetId: target.id, item };
+  });
+  form = page.locator('#pc-task-form');
+  await form.locator('input[name="date"]').fill('2026-09-18');
+  await form.getByRole('button', { name: 'Save' }).click();
+  await expect(form.locator('.pc-error')).toContainText('Past My Days are history');
+  const after = await page.evaluate(targetId => window.PlanAuthority.items(window.PlanAuthority.targetById(targetId))[0], before.targetId);
+  expect(after).toEqual(before.item);
+});
+
+for (const store of ['legacy', 'operational']) {
+  test(`clearing task time clears range metadata and returns one same-id row to Anytime in the ${store} store`, async ({ page }) => {
+    await openApp(page, { boundaryStore: store === 'legacy' ? null : BOUNDARY_STORE });
+    const originalId = await page.evaluate(() => {
+      const target = window.PlanAuthority.current();
+      const item = { ...createPlanItem('Clear ranged time', '22:00'), durationMinutes: 60, endClock: '23:00' };
+      window.PlanAuthority.saveItems(target, [item]);
+      refreshAuthoritativePlanSurfaces();
+      return item.id;
+    });
+    await page.getByRole('button', { name: 'Edit planned task Clear ranged time' }).click();
+    const form = page.locator('#pc-task-form');
+    await form.locator('input[name="time"]').fill('');
+    await form.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('#timeline-anytime')).toContainText('Clear ranged time');
+    const stored = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current()).filter(item => item.task === 'Clear ranged time'));
+    expect(stored).toHaveLength(1);
+    expect(stored[0].id).toBe(originalId);
+    expect(stored[0].when).toBe('');
+    expect(stored[0]).not.toHaveProperty('durationMinutes');
+    expect(stored[0]).not.toHaveProperty('endClock');
+  });
+}
 
 test('task checkbox and promotion preserve identity without fabricating evidence', async ({ page }) => {
   await openApp(page);

@@ -39,6 +39,7 @@
 // routineInstanceIds, oneOffItemIds) but keyed by `targetOperationalDayId` —
 // structurally parallel, never confusable with the legacy field (§14).
 
+import { comparePlanItemRelocations } from './plan-item-relocation.js';
 import {
   isLegacyOperationalDay,
   operationalDayId,
@@ -220,6 +221,8 @@ function itemMutationKey(value) {
   return `${writer(value?.updatedBy) || ''} ${canonical(value)}`;
 }
 function chooseItem(local, remote) {
+  const relocationOrder = comparePlanItemRelocations(local, remote);
+  if (relocationOrder !== 0) return relocationOrder > 0 ? local : remote;
   const localAt = mergeTimestamp(local?.updatedAt);
   const remoteAt = mergeTimestamp(remote?.updatedAt);
   if (localAt !== remoteAt) return remoteAt > localAt ? remote : local;

@@ -244,6 +244,29 @@ test('mergeOperationalPlanRecords does per-item LWW-by-id merge, same algorithm 
   assert.equal(merged.items[0].task, 'remote version'); // newer updatedAt wins
 });
 
+test('operational merge keeps relocation authority over a later-timestamp stale source edit in both orders', () => {
+  const opId = 'odv1:r-1800:Asia/Manila:2026-09-14';
+  const destination = 'odv1:r-1800:Asia/Manila:2026-09-15';
+  const relocationRevision = { schemaVersion: 1, sequence: 1, fromDayId: opId, toDayId: destination, updatedBy: 'device-a', updatedAt: 100 };
+  const moved = { items: [{ id: 'p1', task: 'moved', deleted: true, movedToDayId: destination, relocationRevision, updatedAt: 100, updatedBy: 'device-a' }] };
+  const stale = { items: [{ id: 'p1', task: 'offline stale edit', updatedAt: 999, updatedBy: 'device-z' }] };
+  const forward = mergeOperationalPlanRecords(moved, stale, opId);
+  const reverse = mergeOperationalPlanRecords(stale, moved, opId);
+  assert.deepEqual(forward, reverse);
+  assert.equal(forward.items[0].deleted, true);
+  assert.deepEqual(forward.items[0].relocationRevision, relocationRevision);
+});
+
+test('equal-sequence operational relocation contradictions converge independent of clock and arrival order', () => {
+  const opId = 'odv1:r-1800:Asia/Manila:2026-09-14';
+  const a = { items: [{ id: 'p1', deleted: true, updatedAt: 900, updatedBy: 'device-a', relocationRevision: { schemaVersion: 1, sequence: 2, fromDayId: opId, toDayId: 'day-a', updatedBy: 'device-a', updatedAt: 900 } }] };
+  const z = { items: [{ id: 'p1', deleted: true, updatedAt: 100, updatedBy: 'device-z', relocationRevision: { schemaVersion: 1, sequence: 2, fromDayId: opId, toDayId: 'day-z', updatedBy: 'device-z', updatedAt: 100 } }] };
+  const forward = mergeOperationalPlanRecords(a, z, opId);
+  const reverse = mergeOperationalPlanRecords(z, a, opId);
+  assert.deepEqual(forward, reverse);
+  assert.equal(forward.items[0].relocationRevision.toDayId, 'day-z');
+});
+
 test('mergeOperationalPlanRecords preserves cross-midnight item fields untouched (durationMinutes past midnight)', () => {
   const opId = 'odv1:r-1800:Asia/Manila:2026-09-14';
   const local = { items: [{ id: 'p1', task: 'late shift', when: '23:00', durationMinutes: 120, updatedAt: 100, updatedBy: 'a' }], updatedAt: 100 };

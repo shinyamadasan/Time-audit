@@ -147,12 +147,12 @@
     <div id="needs-you-items">
       <div class="gap-recovery" id="gap-recovery" style="display:none" aria-live="polite"></div>
       <div id="sleep-needs-item" hidden><span>Your configured sleep reminder is due.</span> <button class="btn sm ghost" id="today-sleep-reminder" onclick="openSleepReminder()" hidden>Log sleep</button></div>
-      <div id="routine-needs-item" hidden><span id="routine-needs-copy"></span> <button class="btn sm ghost" onclick="document.getElementById('routine-details').open=true;document.getElementById('routine-details').scrollIntoView({block:'start'})">Inspect routines</button></div>
+      <div id="routine-needs-item" hidden><span id="routine-needs-copy"></span> <button class="btn sm ghost" onclick="inspectRoutineDetails()">Inspect routines</button></div>
       <p id="daily-routines-error" class="routine-error" role="alert"></p>
     </div>
     <button id="needs-you-more" class="btn sm ghost" onclick="this.parentElement.classList.toggle('expanded');this.setAttribute('aria-expanded',this.parentElement.classList.contains('expanded'))" aria-expanded="false" hidden>Show all</button>
   </section>
-  <section id="so-far" aria-label="So far"><span id="so-far-summary">No time recorded yet.</span> <button class="btn sm ghost" onclick="openReview(undefined, true)">Details</button></section>
+  <section id="so-far" aria-label="Calendar today so far"><span id="so-far-summary">Calendar today · No time recorded yet.</span> <button class="btn sm ghost" onclick="openReview(undefined, true)">Details</button></section>
   <button id="yesterday-review-link" class="btn sm ghost" onclick="openMissedCloseoutReview()" hidden>Yesterday's review is ready · Review</button>
   <details id="log-time-details" class="today-destination"><summary>Log time</summary><button class="btn sm ghost" onclick="openRetroLog()">Past block</button><div id="log-time-content"></div></details>
   <details id="timeline-details" class="today-destination" open>
@@ -4718,6 +4718,14 @@ function openRoutineDayDialog() {
   globalThis.renderDailyRoutines?.();
   dialog.showModal();
 }
+function inspectRoutineDetails() {
+  openRoutineDayDialog();
+  const details = document.getElementById('routine-details');
+  if (!details) return;
+  details.open = true;
+  details.scrollIntoView({ block: 'start' });
+  details.querySelector('summary')?.focus();
+}
 function chooseTodayWork() {
   document.getElementById('up-next').classList.add('choose-work');
   document.getElementById('hero-task-input').focus();
@@ -4947,7 +4955,7 @@ function renderTodayHealth(todayE) {
 
   const dateKey = getViewingDateKey();
   const health = computeTodayHealth(todayE, dateKey);
-  document.getElementById('so-far-summary').textContent = (todayE || []).some(e => !e.deleted && !e.missed) ? `${fmtDur(health.deepMin)} deep · ${fmtDur(health.wasteMin)} waste` : 'No time recorded yet.';
+  document.getElementById('so-far-summary').textContent = (todayE || []).some(e => !e.deleted && !e.missed) ? `Calendar today · ${fmtDur(health.deepMin)} deep · ${fmtDur(health.wasteMin)} waste` : 'Calendar today · No time recorded yet.';
   const isToday = isViewingToday();
   document.getElementById('th-label').textContent = isToday ? 'Today health' : 'Day health';
   document.getElementById('th-deep').textContent = `${fmtDur(health.deepMin)} deep`;

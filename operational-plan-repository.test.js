@@ -123,6 +123,18 @@ test('mergeRemote merges per-item, not whole-record replace, and returns changed
   assert.equal(r.read(id).items[0].task, 'remote wins');
 });
 
+test('mergeRemote cannot resurrect a relocated item from an ordinary stale source edit', () => {
+  const { ref, revisions, id } = mondayOperationalDay();
+  const destination = id.replace('2026-09-14', '2026-09-15');
+  const r = repo();
+  const relocationRevision = { schemaVersion: 1, sequence: 1, fromDayId: id, toDayId: destination, updatedBy: 'device-a', updatedAt: 100 };
+  r.write(id, [{ id: 'p1', task: 'moved', deleted: true, movedToDayId: destination, relocationRevision, updatedAt: 100, updatedBy: 'device-a' }], { updatedBy: 'device-a', ref, revisions });
+  r.mergeRemote(id, { items: [{ id: 'p1', task: 'offline stale edit', updatedAt: 999, updatedBy: 'device-z' }], updatedAt: 999, updatedBy: 'device-z' });
+  const stored = r.read(id).items[0];
+  assert.equal(stored.deleted, true);
+  assert.deepEqual(stored.relocationRevision, relocationRevision);
+});
+
 // ── malformed storage fails loudly ─────────────────────────────────────
 
 test('a corrupted storage key throws rather than silently returning an empty store', () => {
