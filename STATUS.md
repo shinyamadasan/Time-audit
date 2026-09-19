@@ -5,6 +5,38 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-19 — My Day UX Simplification V1 (review candidate, NOT integrated)
+
+Branch `feat/my-day-ux-simplification-v1`, created in an isolated worktree from verified
+`origin/main` `f99f5d06b24506e8fa781e692dccc99fcba32667`. The protected primary worktree and its intentional
+uncommitted six-line README change were not touched.
+
+The primary My Day page is consolidated around `UP NEXT` and one timeline. Existing authoritative
+plan items and commitments are projected into typed rows; untimed tasks occupy a bounded Anytime
+lane and timed tasks occupy their actual clock position alongside, but never merged with,
+schedule/template and actual-evidence rows. Universal Add supports direct Today/Tomorrow/date
+scheduling. Timeline edits retain item identity and resolve moves through `PlanAuthority`.
+
+Redundant normal-page surfaces are gone: standalone My Day summary, Today/Next switcher, large
+Upcoming card, separate Top Priorities and Other Tasks, permanent Day Actions, standalone
+Routines, Entry Actions heading, and Accountability heading. Stale recovery, So Far, and combined
+partner/streak UI are compact. Full recovery, future browsing, partner detail, review, and routine
+completion/management remain reachable through contextual or secondary surfaces.
+
+No truth-model redesign: evidence remains evidence, a task checkbox creates no elapsed-time log,
+routines and So Far retain calendar-day semantics, and Personal Day authority, commitment truth,
+planning readiness/streak, partner sharing, and Firebase schemas are unchanged. No deploy or
+production write was performed. See `TEST_REPORT.md` for verification.
+
+**Verified:** focused unit baseline 211/211 and candidate 218/218; focused Playwright 59/59 plus
+41/41 retained-domain regressions; `npm test` exit 0; full Playwright **661/661**; lint 0 errors /
+38 pre-existing warnings; 69-file `www/` parity clean; `git diff --check` clean. One initial full
+run failure was a wall-clock-sensitive test fixture that could cross Manila midnight; anchoring
+its synthetic 3.6-hour dataset at local noon passed in isolation and in the clean full rerun. No
+product failure was waived and no base/candidate flake reproduction was needed.
+
+---
+
 ## 2026-09-19 — Post-integration follow-up: gated the extra Today rebuild
 
 **On `main` at `8d20975`** (product code; one line in `plan-authority.js` plus its `www/` mirror).

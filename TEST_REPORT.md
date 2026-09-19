@@ -5,6 +5,36 @@
 
 ---
 
+## My Day UX Simplification V1 (review candidate) · 2026-09-19
+
+branch: `feat/my-day-ux-simplification-v1`; verified base
+`f99f5d06b24506e8fa781e692dccc99fcba32667`; isolated feature worktree; protected primary README
+unchanged.
+
+scope: single primary My Day hierarchy; typed plan/commitment timeline projection; bounded Anytime
+lane; identity-preserving task completion/edit/reschedule; item-centric universal Add; direct
+calendar jump; compact stale recovery, So Far, and combined partner/streak; routines retained in a
+secondary dialog. Canonical plan, commitment, routine, evidence, boundary, sync, and sharing
+semantics unchanged.
+
+result:
+
+- Focused unit baseline: **211/211**; candidate: **218/218**.
+- Focused Playwright for the new My Day/planning/commitment/boundary flows: **59/59**. Retained
+  routines, persistence, and secondary planner regressions: **41/41**.
+- `npm test`: PASS (all suites, exit 0).
+- Full `npx playwright test`: **661/661**, 0 failures, 4.9 minutes.
+- `npm run lint`: PASS, 0 errors / 38 pre-existing warnings. `npm run check:www-parity`: PASS,
+  69-file runtime closure byte-identical. `git diff --check`: clean.
+- One wall-clock-sensitive partner cap fixture failed during the first full candidate run because
+  its claimed "always within today" 3.6-hour dataset crossed Asia/Manila midnight. No product
+  assertion failed. The fixture was anchored at local noon and its isolated test passed **1/1**;
+  the final full-suite rerun passed 661/661. This deterministic test correction did not classify
+  or waive a candidate-only failure, so no base/candidate flake reproduction was required.
+
+state: candidate implementation and verification complete; commit and remote status are reported
+in the final builder handoff.
+
 ## Plan Linkage + Up Next Ordering V1 — targeted fixes from independent review (same candidate) · 2026-09-10
 branch: `feat/plan-linkage-up-next-v1` (still uncommitted at fix time). Base unchanged, re-verified
   `4e95098716ea3b7c45f6e29cf0653bfbc6a5d10a` (origin/main) before starting.
