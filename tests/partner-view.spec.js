@@ -613,7 +613,9 @@ test.describe('Partner View V1', () => {
   test('caps the published Timeline at a bounded size without distorting an ordinary day', async ({ browser }) => {
     const { shared, ctxA, ctxB, alice, bob } = await setupLinkedPair(browser);
     const todayKey = await alice.evaluate(() => getDateInTZ(Date.now(), 'Asia/Manila'));
-    const now = await alice.evaluate(() => Date.now());
+    // Anchor at local noon so the 3.6-hour fixture cannot straddle midnight when
+    // the suite happens to run shortly after the Manila day begins.
+    const now = Date.parse(`${todayKey}T12:00:00+08:00`);
     // A pathological number of back-to-back entries, each 60s long and spaced 65s apart
     // (200 * 65s ≈ 3.6h total span, safely within today regardless of what wall-clock time
     // the suite happens to run at). Each entry must round to a non-zero display duration —

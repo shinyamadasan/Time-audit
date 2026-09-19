@@ -132,6 +132,7 @@ async function openApp(page, { entries = [], plans = {}, reviews = {}, settings 
   }, { entries, plans, reviews, settings: baseSettings(settings), nowTs });
   await page.goto(APP_URL);
   await page.waitForFunction(() => typeof window.renderTodayPlan === 'function' && typeof window.openPlanTomorrow === 'function');
+  await page.evaluate(() => { document.getElementById('today-commitments').hidden = false; });
   await expect(page.locator('#signin-overlay')).toBeHidden();
 }
 
@@ -168,7 +169,7 @@ async function addItem(page, task, when = '') {
 }
 
 async function openTodayDetails(page) {
-  await page.evaluate(() => { document.getElementById('timeline-details').open = true; document.querySelector('#timeline-content > details').open = true; });
+  await page.evaluate(() => { document.getElementById('timeline-details').open = true; });
 }
 
 test('an unprepared day allows optional priorities without a ceremony', async ({ page }) => {
@@ -583,13 +584,13 @@ test('close day CTA opens the review loop and marks today closed after save', as
     nowTs
   });
 
-  await expect(page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Review',exact:true})).toBeVisible();
+  await expect(page.getByRole('navigation',{name:'Today actions'})).toHaveCount(0);
   await expect(page.locator('#closeout-title')).toHaveText('Close day');
   await expect(page.locator('#closeout-stats')).toContainText('1/2 plan');
   await expect(page.locator('#closeout-stats')).toContainText('45m deep');
   await expect(page.locator('#closeout-stats')).toContainText('20m waste');
 
-  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Review',exact:true}).click();
+  await page.evaluate(() => openReview());
   await expect(page.locator('#review-overlay')).toHaveClass(/open/);
   await expect(page.locator('#rv-closeout-summary')).toBeVisible();
   await expect(page.locator('#rv-closeout-summary')).toContainText('recorded');

@@ -101,6 +101,7 @@ async function openApp(page, { now = SEVEN_PM, boundaryStore = null, plans = '{}
   }, { timezone: TZ, now, boundaryStore, plans, entries, routines, useClock });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
+  await page.evaluate(() => { document.getElementById('today-commitments').hidden = false; });
   await expect(page.locator('#signin-overlay')).toBeHidden();
 }
 

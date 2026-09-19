@@ -103,26 +103,33 @@ async function openApp(page, { now = NOW, boundaryStore = BOUNDARY_STORE, plans 
   await expect(page.locator('#signin-overlay')).toBeHidden();
 }
 
-const strip = page => page.locator('#plan-strip');
+const strip = page => page.locator('#timeline-anytime');
 const continuity = page => page.locator('#planning-continuity-section');
+const unfinished = page => page.locator('#unfinished-recovery-section');
 
-async function openStripEditor(page) {
-  const cls = (await strip(page).getAttribute('class')) || '';
-  if (!cls.includes('editing')) {
-    await strip(page).getByRole('button', { name: 'Edit', exact: true }).click();
-  }
+async function openTaskForm(page) {
+  const form = page.locator('#pc-task-form');
+  if (!await form.isVisible()) await continuity(page).getByRole('button', { name: /Add/ }).first().click();
+  return form;
 }
 
 async function addPriority(page, task) {
-  await openStripEditor(page);
-  await page.locator('#plan-task').fill(task);
-  await strip(page).getByRole('button', { name: 'Add', exact: true }).click();
+  const form = await openTaskForm(page);
+  await form.locator('input[name="title"]').fill(task);
+  await form.locator('select[name="kind"]').selectOption('priority');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
 }
 
 async function addSecondaryTask(page, task) {
-  await openStripEditor(page);
-  await page.locator('#plan-task-task').fill(task);
-  await strip(page).locator('.plan-secondary').getByRole('button', { name: 'Plan task' }).click();
+  const form = await openTaskForm(page);
+  await form.locator('input[name="title"]').fill(task);
+  await form.locator('select[name="kind"]').selectOption('task');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+}
+
+async function openStaleRecovery(page) {
+  await unfinished(page).getByRole('button', { name: /Unfinished/ }).click();
+  return unfinished(page).locator('.pc-block', { hasText: 'Unfinished ·' }).last();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -134,17 +141,18 @@ test('3 priorities fill the cap, a 4th is refused with an explicit message, and 
 
   for (const task of ['First', 'Second', 'Third']) await addPriority(page, task);
   await expect(strip(page)).toContainText('First');
-  await expect(strip(page)).toContainText('3 of 3 priorities');
 
   // The 4th priority is REFUSED, and says what to do instead — never silently dropped.
-  await openStripEditor(page);
-  await expect(page.locator('#plan-task')).toHaveCount(0);
-  await expect(strip(page)).toContainText('add it below as another task');
+  const fourth = await openTaskForm(page);
+  await fourth.locator('input[name="title"]').fill('Fourth');
+  await fourth.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(fourth).toContainText('Top 3 is already full');
+  await fourth.getByRole('button', { name: 'Cancel' }).click();
 
   // Secondary tasks are uncapped: ten of them all land.
   for (let n = 1; n <= 10; n++) await addSecondaryTask(page, `Task ${n}`);
-  const secondary = strip(page).locator('.plan-secondary .plan-item');
-  await expect(secondary).toHaveCount(10);
+  await strip(page).getByRole('button', { name: /Show 9 more/ }).click();
+  await expect(strip(page).locator('[data-plan-item-id]')).toHaveCount(13);
   await expect(strip(page)).toContainText('Task 10');
 
   // The priorities count is still 3 — secondary tasks never consumed the cap.
@@ -172,6 +180,100 @@ test('ten secondary tasks do not make the day prepared or move the Planning Stre
   expect(after.streak).toEqual(before);
   expect(after.prepared).toBe(false);
   expect(after.ready).toBe(false);
+});
+
+test('Top Priorities and Other Tasks render once in the bounded Anytime lane', async ({ page }) => {
+  await openApp(page);
+  await addPriority(page, 'Priority in timeline');
+  await addSecondaryTask(page, 'Other task in timeline');
+  await expect(page.locator('#timeline-anytime')).toContainText('Priority in timeline');
+  await expect(page.locator('#timeline-anytime')).toContainText('Other task in timeline');
+  await expect(page.locator('#today-commitments')).toBeHidden();
+  await expect(page.locator('#operational-plan-section')).toBeHidden();
+  await expect(page.locator('#planning-continuity-section')).not.toContainText('Upcoming');
+  await expect(page.locator('#planning-continuity-section')).not.toContainText('Plan another day');
+  await expect(page.locator('#timeline-entry-actions')).toHaveCount(0);
+  await expect(page.getByText('Accountability', { exact: true })).toHaveCount(0);
+});
+
+test('timing edits move the same task between Anytime and the clock timeline', async ({ page }) => {
+  await openApp(page);
+  await addPriority(page, 'Move me through time');
+  const originalId = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0].id);
+  await page.getByRole('button', { name: 'Edit planned task Move me through time' }).click();
+  let form = page.locator('#pc-task-form');
+  await form.locator('input[name="time"]').fill('10:00');
+  await form.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#timeline-blocks')).toContainText('Move me through time');
+  await expect(page.locator('#timeline-anytime')).not.toContainText('Move me through time');
+  expect(await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0].id)).toBe(originalId);
+
+  await page.getByRole('button', { name: 'Edit planned task Move me through time' }).click();
+  form = page.locator('#pc-task-form');
+  await form.locator('input[name="time"]').fill('');
+  await form.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#timeline-anytime')).toContainText('Move me through time');
+  await expect(page.locator('#timeline-blocks')).not.toContainText('Move me through time');
+  expect(await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0].id)).toBe(originalId);
+});
+
+test('task checkbox and promotion preserve identity without fabricating evidence', async ({ page }) => {
+  await openApp(page);
+  await addSecondaryTask(page, 'Identity stays put');
+  const original = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0].id);
+  await page.getByRole('button', { name: 'Mark done: Identity stays put' }).click();
+  const checked = await page.evaluate(() => ({
+    item: window.PlanAuthority.items(window.PlanAuthority.current())[0],
+    entries: JSON.parse(localStorage.getItem('ta3-entries')),
+  }));
+  expect(checked.item.id).toBe(original);
+  expect(checked.item.done).toBe(true);
+  expect(checked.entries).toEqual([]);
+
+  await page.getByRole('button', { name: 'Edit planned task Identity stays put' }).click();
+  const form = page.locator('#pc-task-form');
+  await form.locator('select[name="kind"]').selectOption('priority');
+  await form.getByRole('button', { name: 'Save' }).click();
+  const promoted = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0]);
+  expect(promoted.id).toBe(original);
+  expect(promoted.kind).toBeUndefined();
+});
+
+test('direct date scheduling jumps one week ahead without repeated paging', async ({ page }) => {
+  await openApp(page);
+  const form = await openTaskForm(page);
+  await form.locator('input[name="title"]').fill('One week ahead');
+  await form.locator('input[name="date"]').fill('2026-09-25');
+  await form.locator('select[name="kind"]').selectOption('task');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.locator('#timeline-anytime')).not.toContainText('One week ahead');
+
+  await page.locator('#my-day-calendar').evaluate(input => {
+    input.value = '2026-09-25';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(page.locator('#timeline-date-label')).toContainText('My Day');
+  await expect(page.locator('#timeline-anytime')).toContainText('One week ahead');
+  const count = await page.evaluate(() => window.PlanAuthority.recoverableDays().reduce((sum, row) => sum + window.PlanAuthority.items(row.target).filter(item => item.task === 'One week ahead').length, 0));
+  expect(count).toBe(1);
+});
+
+test('same-time planned, commitment, template, and actual rows all survive in stable order', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const target = window.PlanAuthority.current();
+    const task = createPlanItem('Same-time planned', '10:00');
+    window.PlanAuthority.saveItems(target, [task]);
+    window.CommitmentsRepository.create({ title: 'Same-time commitment', date: '2026-09-19', time: '10:00', precision: 'timed', timezone: 'Asia/Manila', updatedBy: 'device-pc-test' });
+    settings.templates.push({ id: 'same-template', activity: 'Same-time template', energy: 'recovery', days: [6], startTime: '10:00', endTime: '10:30', enabled: true, autoLog: false, skipDates: [] });
+    entries = [{ id: 'same-actual', activity: 'Same-time actual', energy: 'deep', date: '2026-09-19', tsStart: Date.parse('2026-09-19T10:00:00+08:00'), ts: Date.parse('2026-09-19T10:30:00+08:00'), blockIntervalMin: 30 }];
+    refreshAuthoritativePlanSurfaces();
+  });
+  const text = await page.locator('#timeline-blocks').innerText();
+  const labels = ['Same-time planned', 'Same-time commitment', 'Same-time template', 'Same-time actual'];
+  const positions = labels.map(label => text.indexOf(label));
+  expect(positions.every(position => position >= 0)).toBe(true);
+  expect([...positions].sort((a, b) => a - b)).toEqual(positions);
 });
 
 test('Prepare Tomorrow shows Top priorities and Other planned tasks as separate sections', async ({ page }) => {
@@ -203,7 +305,8 @@ test('Prepare Tomorrow shows Top priorities and Other planned tasks as separate 
 // ═══════════════════════════════════════════════════════════════════════
 
 async function addCommitment(page, { title, date, time = '', duration = '', note = '', timezone = null }) {
-  await continuity(page).getByRole('button', { name: 'Add commitment' }).click();
+  await continuity(page).getByRole('button', { name: /Add/ }).first().click();
+  await page.getByRole('button', { name: 'Commitment', exact: true }).click();
   const form = page.locator('#pc-commitment-form');
   await form.locator('input[name="title"]').fill(title);
   await form.locator('input[name="date"]').fill(date);
@@ -212,6 +315,7 @@ async function addCommitment(page, { title, date, time = '', duration = '', note
   if (note) await form.locator('input[name="note"]').fill(note);
   if (timezone) await form.locator('input[name="timezone"]').fill(timezone);
   await form.getByRole('button', { name: /^(Add|Save)$/ }).click();
+  if (!await form.isVisible()) await page.evaluate(() => openPlanningDetails('commitments'));
 }
 
 test('the dentist is entered by real date and time, and lands on the personal day that contains it', async ({ page }) => {
@@ -238,7 +342,7 @@ test('a commitment appears on its own day in the future-day browser, not on the 
   await openApp(page);
   // Two days out from the current personal day (Sep 18 18:00) is Sep 20 18:00.
   await addCommitment(page, { title: 'Evening call', date: '2026-09-20', time: '21:30' });
-  await continuity(page).getByRole('button', { name: 'Plan another day…' }).click();
+  await page.evaluate(() => openPlanningDetails('browse'));
 
   const dayIds = await page.evaluate(() => {
     const records = Object.values(window.CommitmentsRepository.listAllRaw());
@@ -316,6 +420,7 @@ test('commitments survive a reload and never consume a priority slot', async ({ 
 
   await page.reload();
   await page.waitForFunction(() => typeof window.PlanAuthority === 'object' && typeof window.CommitmentsRepository === 'object');
+  await page.evaluate(() => openPlanningDetails('commitments'));
   await expect(continuity(page)).toContainText('Dentist');
 
   const state = await page.evaluate(() => {
@@ -335,8 +440,8 @@ test('commitments survive a reload and never consume a priority slot', async ({ 
 
 test('the browser lists personal days by their real interval and prepares an arbitrary one', async ({ page }) => {
   await openApp(page);
-  await continuity(page).getByRole('button', { name: 'Plan another day…' }).click();
-  const browser = continuity(page).locator('.pc-block', { hasText: 'Plan another day' });
+  await page.evaluate(() => openPlanningDetails('browse'));
+  const browser = continuity(page).locator('.pc-block', { hasText: 'Browse future My Days' });
   await expect(browser).toContainText('Today');
   await expect(browser).toContainText('Next');
   // Every listed day names the hours it covers, never a bare calendar date alone.
@@ -419,10 +524,45 @@ function staleOperationalPlans(daysAgo, task = 'Slipped task', extra = {}) {
   } } });
 }
 
+function manyStaleOperationalPlans(count) {
+  const parsed = JSON.parse(staleOperationalPlans(4));
+  const record = Object.values(parsed.plans)[0];
+  record.items = Array.from({ length: count }, (_, index) => ({
+    id: `pstale-${index}`,
+    task: `Stale task ${index + 1}`,
+    when: '', done: false, doneAt: null, updatedAt: 1000 + index, updatedBy: 'device-pc-test',
+  }));
+  return JSON.stringify(parsed);
+}
+
+test('30 stale tasks occupy one compact main-page indicator until opened', async ({ page }) => {
+  await openApp(page, { operationalPlans: manyStaleOperationalPlans(30) });
+  const trigger = unfinished(page).getByRole('button', { name: 'Unfinished · 30' });
+  await expect(trigger).toBeVisible();
+  await expect(unfinished(page)).not.toContainText('Stale task 1');
+  const compactHeight = await unfinished(page).evaluate(element => element.getBoundingClientRect().height);
+  expect(compactHeight).toBeLessThan(140);
+  await trigger.click();
+  await expect(unfinished(page)).toContainText('Stale task 30');
+});
+
+test('long task titles keep usable controls at mobile width', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await openApp(page);
+  await addPriority(page, 'A very long planned task title that must wrap without pushing the checkbox and edit action beyond the narrow mobile viewport');
+  const row = page.locator('#timeline-anytime [data-plan-item-id]').first();
+  await expect(row).toBeVisible();
+  const box = await row.boundingBox();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(360);
+  await expect(row.getByRole('button', { name: /Mark done/ })).toBeVisible();
+  await expect(row.getByRole('button', { name: /Edit planned task/ })).toBeVisible();
+});
+
 test('an unfinished task from 3 days ago is discoverable and moves to today exactly once', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(4) });
 
-  const recovery = continuity(page).locator('.pc-block', { hasText: 'Unfinished from previous days' });
+  const recovery = await openStaleRecovery(page);
   await expect(recovery).toContainText('Slipped task');
   await expect(recovery).toContainText('3 days ago');
 
@@ -451,21 +591,21 @@ test('an unfinished task from 3 days ago is discoverable and moves to today exac
 
 test('an unfinished task from weeks ago is still discoverable', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(30, 'Ancient task') });
-  const recovery = continuity(page).locator('.pc-block', { hasText: 'Unfinished from previous days' });
+  const recovery = await openStaleRecovery(page);
   await expect(recovery).toContainText('Ancient task');
   await expect(recovery).toContainText('weeks ago');
 });
 
 test('a completed historical task never appears as unfinished', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(3, 'Finished task', { done: true, doneAt: 1500 }) });
-  await expect(continuity(page)).not.toContainText('Unfinished from previous days');
+  await expect(unfinished(page)).not.toContainText('Unfinished ·');
 });
 
 test('a dismissed stale task stops resurfacing and is not marked done', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(3) });
-  const recovery = continuity(page).locator('.pc-block', { hasText: 'Unfinished from previous days' });
+  const recovery = await openStaleRecovery(page);
   await recovery.getByRole('button', { name: 'Not doing this' }).click();
-  await expect(continuity(page)).not.toContainText('Unfinished from previous days');
+  await expect(unfinished(page)).not.toContainText('Unfinished ·');
 
   const original = await page.evaluate(() => {
     const today = window.PlanAuthority.current();
@@ -478,11 +618,11 @@ test('a dismissed stale task stops resurfacing and is not marked done', async ({
 
 test('a stale task can be rescheduled onto an arbitrary future personal day', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(3) });
-  const recovery = continuity(page).locator('.pc-block', { hasText: 'Unfinished from previous days' });
+  const recovery = await openStaleRecovery(page);
   await recovery.getByRole('button', { name: 'Reschedule…' }).click();
 
   // The browser opens so the owner can pick a destination rather than it being guessed.
-  const browser = continuity(page).locator('.pc-block', { hasText: 'Plan another day' });
+  const browser = continuity(page).locator('.pc-block', { hasText: 'Browse future My Days' });
   await expect(browser).toBeVisible();
   const targetDayId = await page.evaluate(() => window.PlanAuthority.dayAhead(4).id);
   await browser.locator(`.pc-day[data-pc-day="${targetDayId}"]`).getByRole('button', { name: 'Prepare' }).click();
@@ -499,14 +639,14 @@ test('a stale task can be rescheduled onto an arbitrary future personal day', as
 
 test('a reload preserves a recovered task and does not re-offer it', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(3) });
-  const recovery = continuity(page).locator('.pc-block', { hasText: 'Unfinished from previous days' });
+  const recovery = await openStaleRecovery(page);
   await recovery.getByRole('button', { name: 'Move to today' }).click();
   await expect(strip(page)).toContainText('Slipped task');
 
   await page.reload();
   await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
   await expect(strip(page)).toContainText('Slipped task');
-  await expect(continuity(page)).not.toContainText('Unfinished from previous days');
+  await expect(unfinished(page)).not.toContainText('Unfinished ·');
 });
 
 test('a LEGACY stale task is discoverable and moves into the current personal day', async ({ page }) => {
@@ -516,7 +656,7 @@ test('a LEGACY stale task is discoverable and moves into the current personal da
   ], updatedAt: 1000 } });
   await openApp(page, { plans });
 
-  const recovery = continuity(page).locator('.pc-block', { hasText: 'Unfinished from previous days' });
+  const recovery = await openStaleRecovery(page);
   await expect(recovery).toContainText('Legacy slipped');
   await recovery.getByRole('button', { name: 'Move to today' }).click();
   await expect(strip(page)).toContainText('Legacy slipped');
@@ -549,7 +689,7 @@ test('a never-enabled account keeps calendar behaviour, and the new surfaces sti
 
   // The 3-cap and the uncapped tasks block behave the same on a calendar day.
   for (const task of ['A', 'B', 'C']) await addPriority(page, task);
-  await expect(strip(page)).toContainText('3 of 3 priorities');
+  await expect(strip(page)).toContainText('C');
   await addSecondaryTask(page, 'Extra task');
   await expect(strip(page)).toContainText('Extra task');
 

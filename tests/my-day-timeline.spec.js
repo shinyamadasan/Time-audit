@@ -154,9 +154,9 @@ test('Sat 14:44, 18:00 boundary: the timeline is Fri 18:00 → Sat 18:00, not th
   expect(positions.every(p => p >= 0)).toBe(true);
   expect([...positions].sort((a, b) => a - b)).toEqual(positions);
 
-  // The Personal-day status block uses the same interval and the My Day name.
-  await expect(page.locator('#operational-plan-section')).toContainText('My Day');
-  await expect(page.locator('#operational-plan-section')).toContainText('Fri Sep 18, 6:00 PM → Sat Sep 19, 6:00 PM');
+  // The timeline header is now the one visible owner of the interval; the old
+  // standalone My Day summary stays absent.
+  await expect(page.locator('#operational-plan-section')).toBeHidden();
 });
 
 test('the stored timestamps are untouched — only grouping changed', async ({ page }) => {
@@ -182,6 +182,16 @@ test('midnight does not roll the My Day timeline', async ({ page }) => {
   await expect(timeline(page)).toContainText('Friday dinner');
   await expect(timeline(page)).toContainText('Friday evening study');
   await expect(timeline(page)).toContainText('Midnight notes');
+});
+
+test('timeline arrows move one authoritative My Day and return without changing the clock', async ({ page }) => {
+  await openApp(page, { now: at('2026-09-19', '14:44') });
+  const label = page.locator('#timeline-date-label');
+  const original = await label.textContent();
+  await page.getByRole('button', { name: 'Next My Day' }).click();
+  await expect(label).toHaveText('My Day · Sat Sep 19, 6:00 PM → Sun Sep 20, 6:00 PM');
+  await page.getByRole('button', { name: 'Previous My Day' }).click();
+  await expect(label).toHaveText(original);
 });
 
 test('an in-session 18:00 rollover rebuilds the timeline without a calendar-date change', async ({ page }) => {

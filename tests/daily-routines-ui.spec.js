@@ -170,7 +170,7 @@ async function openApp(page, { learningPlanRaw = null, dailyPlans = {}, lifeLedg
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.renderLearningPlans === 'function');
   await expect(page.locator('#signin-overlay')).toBeHidden();
-  await page.evaluate(() => { document.getElementById('routine-details').open = true; });
+  await page.evaluate(() => { openRoutineDayDialog(); document.getElementById('routine-details').open = true; });
 }
 
 
@@ -198,7 +198,7 @@ test('empty state creates no routines; manual minimum, reload, correction and on
   const id=await card(page).getAttribute('data-instance-id');
   await card(page).getByRole('button',{name:'Minimum done',exact:true}).click();
   await expect(card(page)).toContainText('Minimum complete');
-  await page.reload(); await page.evaluate(() => { document.getElementById('routine-details').open = true; });
+  await page.reload(); await page.evaluate(() => { openRoutineDayDialog(); document.getElementById('routine-details').open = true; });
   await expect(card(page)).toContainText('Minimum complete');
   expect(await card(page).getAttribute('data-instance-id')).toBe(id);
   expect(await page.evaluate(()=>localStorage.getItem('ta3-life-ledger-v1'))).toBeNull();
@@ -235,12 +235,13 @@ test('Focus start and abandoned partial session do not complete; full session an
   await expect(card(page)).not.toContainText('Target complete');
   await page.evaluate(()=>{focusStartTime=Date.now()-6*60000;confirmExitFocus();});
   await expect(page.locator('#daily-routines')).toContainText('0 / 1');
+  await page.evaluate(() => openRoutineDayDialog());
   await card(page).getByRole('button',{name:'Start Focus',exact:true}).click();
   const finishAt=await page.evaluate(()=>focusStartTime+15*60000);
   await page.clock.setFixedTime(new Date(finishAt));
   await page.evaluate(()=>{endWorkSession();confirmExitFocus();});
   await expect(card(page)).toContainText('Target complete');
-  await page.reload(); await page.evaluate(() => { document.getElementById('routine-details').open = true; });
+  await page.reload(); await page.evaluate(() => { openRoutineDayDialog(); document.getElementById('routine-details').open = true; });
   await expect(card(page)).toContainText('Target complete');
 });
 test('Learning uses real next step; existing completion flows mark today done without a second scheduler action',async({page})=>{
@@ -253,7 +254,7 @@ test('Learning uses real next step; existing completion flows mark today done wi
   await page.evaluate(()=>showView('today'));
   await expect(card(page)).toContainText('Target complete');
   await expect(card(page)).toContainText('Step A');
-  await page.reload(); await page.evaluate(() => { document.getElementById('routine-details').open = true; });
+  await page.reload(); await page.evaluate(() => { openRoutineDayDialog(); document.getElementById('routine-details').open = true; });
   await expect(card(page)).toHaveCount(1);
   await expect(card(page)).toContainText('Target complete');
 });
@@ -267,6 +268,7 @@ test('phone and compact landscape remain usable; form fits and inputs avoid zoom
   await page.locator('#routine-manager').getByRole('button',{name:'Edit',exact:true}).click();
     expect(await page.locator('[name=title]').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
     await page.locator('#daily-routine-cancel').click();
+    await page.evaluate(() => { document.getElementById('routine-manager').close(); openRoutineDayDialog(); });
   }
   await page.screenshot({path:'test-results/daily-routines-landscape.png',fullPage:true});
 });
@@ -284,11 +286,11 @@ test('23:59 to 00:01 reload creates one new intention, never yesterday’s overd
   await openApp(page); await addRoutine(page);
   const yesterday=await card(page).getAttribute('data-instance-id');
   await page.clock.setFixedTime(new Date('2026-09-09T00:01:00Z'));
-  await page.reload(); await page.evaluate(() => { document.getElementById('routine-details').open = true; });
+  await page.reload(); await page.evaluate(() => { openRoutineDayDialog(); document.getElementById('routine-details').open = true; });
   await expect(card(page)).toHaveCount(1);
   expect(await card(page).getAttribute('data-instance-id')).not.toBe(yesterday);
   await expect(card(page)).toHaveAttribute('data-instance-id', /2026-09-09/);
-  await page.reload(); await page.evaluate(() => { document.getElementById('routine-details').open = true; });
+  await page.reload(); await page.evaluate(() => { openRoutineDayDialog(); document.getElementById('routine-details').open = true; });
   await expect(card(page)).toHaveCount(1);
 });
 test('real Workout fact completes automatically, duplicate stays one completion',async({page})=>{
@@ -305,7 +307,7 @@ test('real Workout fact completes automatically, duplicate stays one completion'
   });
   await expect(card(page)).toContainText('Target complete');
   await expect(page.locator('#daily-routines')).toContainText('1 / 1');
-  await page.reload(); await page.evaluate(() => { document.getElementById('routine-details').open = true; });await expect(card(page)).toHaveCount(1);await expect(card(page)).toContainText('Target complete');
+  await page.reload(); await page.evaluate(() => { openRoutineDayDialog(); document.getElementById('routine-details').open = true; });await expect(card(page)).toHaveCount(1);await expect(card(page)).toContainText('Target complete');
 });
 test('review Learning: out-of-order B before first bind cannot replace next unfinished A',async({page})=>{
   await openApp(page,{learningPlanRaw:JSON.stringify({schemaVersion:1,plans:[seededLearningPlan()]})});
@@ -321,7 +323,7 @@ test('review Learning: out-of-order B before first bind cannot replace next unfi
   await addRoutine(page,{title:'Learning',source:'learning'});
   await expect(card(page)).toContainText('Step A');
   await expect(page.locator('#daily-routines')).toContainText('0 / 1');
-  await page.reload(); await page.evaluate(() => { document.getElementById('routine-details').open = true; });
+  await page.reload(); await page.evaluate(() => { openRoutineDayDialog(); document.getElementById('routine-details').open = true; });
   await expect(card(page)).toContainText('Step A');
   await expect(page.locator('#daily-routines')).toContainText('0 / 1');
 });
@@ -330,7 +332,7 @@ test('scheduled Focus linkage survives reload and existing same-device timer tak
   await openApp(page);await addRoutine(page,{title:'Deep Work',source:'focus'});
   await card(page).getByRole('button',{name:'Start Focus',exact:true}).click();
   const startedAt=await page.evaluate(()=>focusStartTime);
-  await page.reload(); await page.evaluate(() => { document.getElementById('routine-details').open = true; });
+  await page.reload(); await page.evaluate(() => { openRoutineDayDialog(); document.getElementById('routine-details').open = true; });
   await page.evaluate(startedAt=>{
     // Synthetic restored timer uses the existing takeover mechanism, without Firebase.
     syncedFocusTimer={running:true,focusPhase:'work',intervalSecs:900,startedAt,task:'Deep Work',ownerDeviceId:syncedDeviceId};
@@ -391,7 +393,7 @@ test('review Learning: pinned A survives advancement, duplicate B facts, reopen 
   await expect(card(page)).toHaveCount(1);await expect(card(page)).toContainText('Step A');
   await toggleLearningFact(page,'step-a',true);
   await expect(page.locator('#daily-routines')).toContainText('0 / 1');
-  await page.reload(); await page.evaluate(() => { document.getElementById('routine-details').open = true; });await expect(card(page)).toContainText('Step A');
+  await page.reload(); await page.evaluate(() => { openRoutineDayDialog(); document.getElementById('routine-details').open = true; });await expect(card(page)).toContainText('Step A');
   await expect(page.locator('#daily-routines')).toContainText('0 / 1');
 });
 test('review Learning: no unfinished step means no daily binding, despite completion facts',async({page})=>{

@@ -7,6 +7,8 @@
 
 #planning-continuity-section { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
 #planning-continuity-section[hidden] { display: none; }
+.pc-command-row { display: flex; justify-content: flex-start; }
+.pc-command-row .btn { min-height: 42px; padding-inline: 18px; }
 
 .pc-block {
   background: var(--bg2);
@@ -71,6 +73,56 @@
 .pc-form input {
   background: var(--bg3); border: 1px solid var(--bd); color: var(--text);
   border-radius: 6px; padding: 8px 10px; font-size: 13px; font-family: inherit; width: 100%;
+}
+.pc-form label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+.pc-form select {
+  background: var(--bg3); border: 1px solid var(--bd); color: var(--text);
+  border-radius: 6px; padding: 8px 10px; min-height: 42px; font: inherit;
+}
+.pc-item-form { background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r); padding: 14px; }
+.pc-entry-types,.pc-quick-dates { display: flex; gap: 6px; flex-wrap: wrap; }
+.pc-when { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+.pc-when legend { font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+.pc-stale-compact { padding: 0; overflow: hidden; }
+#unfinished-recovery-section { margin: 14px 0 10px; }
+#unfinished-recovery-section[hidden] { display: none; }
+.pc-stale-trigger { width: 100%; min-height: 46px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; background: none; border: 0; color: var(--text); font: 600 13px var(--ui); cursor: pointer; }
+
+/* My Day owns the visible timeline identity; the old destination wrapper label is redundant. */
+#timeline-details > summary { display: none !important; }
+#timeline-details { margin-top: 14px; }
+.my-day-calendar-button { min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; color: var(--muted); border-radius: 8px; cursor: pointer; }
+.my-day-calendar-button:hover { background: var(--bg3); color: var(--text); }
+.my-day-calendar-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+#timeline-anytime { margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.anytime-head { display: flex; justify-content: space-between; color: var(--muted); font: 700 10px var(--mono); letter-spacing: .1em; padding: 4px 0 6px; }
+.anytime-row { display: flex; align-items: center; gap: 8px; min-height: 44px; border-top: 1px solid var(--border); }
+.anytime-title { min-width: 0; flex: 1; overflow-wrap: anywhere; font-size: 13px; }
+.anytime-type { color: var(--muted); font-size: 10px; }
+.anytime-marker { color: var(--muted); width: 28px; text-align: center; }
+.anytime-star { color: var(--deep); flex-shrink: 0; }
+.anytime-row.done .anytime-title,.tl-plan-row.done .tl-activity { text-decoration: line-through; color: var(--muted); }
+.tl-plan-check,.tl-icon-action { width: 42px; height: 42px; flex: 0 0 42px; border: 0; background: none; color: var(--muted); border-radius: 8px; cursor: pointer; }
+.tl-plan-check { border: 1px solid var(--border2); color: var(--deep); font-weight: 700; }
+.tl-plan-check:disabled { cursor: default; opacity: .65; }
+.tl-icon-action:hover,.tl-plan-check:hover:not(:disabled) { background: var(--bg3); color: var(--text); }
+.tl-plan-row .tl-bar-plan { background: var(--deep); width: 3px; }
+.tl-commitment-row .tl-bar-commitment { width: 3px; background: repeating-linear-gradient(to bottom,var(--text) 0 4px,transparent 4px 7px); }
+.tl-plan-row .tl-activity,.tl-commitment-row .tl-activity { overflow-wrap: anywhere; }
+.partner-card-compact { padding-block: 9px; }
+.partner-card-compact .btn { min-height: 40px; }
+#so-far { display: flex; align-items: center; gap: 6px; justify-content: flex-start; }
+#so-far[hidden],body.tomorrow-secondary-open #needs-you { display: none; }
+.timeline-section .section-label button { min-width: 42px; min-height: 42px; }
+
+@media (max-width: 520px) {
+  .timeline-section { padding-inline: 10px; }
+  .timeline-section .section-label { align-items: flex-start; gap: 6px; }
+  #timeline-date-label { white-space: normal; line-height: 1.35; }
+  .anytime-type { display: none; }
+  .partner-card-compact { align-items: flex-start; flex-wrap: wrap; }
+  .partner-card-compact .partner-info { flex-basis: calc(100% - 8px); }
 }
 .pc-form-row { display: flex; gap: 8px; }
 .pc-form-row input { flex: 1 1 0; min-width: 0; }

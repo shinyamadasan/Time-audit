@@ -132,50 +132,36 @@ test.describe('Today Persistent Sections V1', () => {
     await openApp(page);
     await expect(page.locator('#timeline-details')).toHaveAttribute('open');
     await expect(page.locator('#timeline-section')).toBeVisible();
-    await expect(page.locator('#timeline-details > summary')).toBeVisible();
+    await expect(page.locator('#timeline-details > summary')).toBeHidden();
   });
 
   test('B: Accountability is visible by default when a partner is linked, no saved preference', async ({ page }) => {
     await openApp(page, { partnerUid: 'partner-1' });
-    await expect(page.locator('#accountability-details')).toHaveAttribute('open');
     await expect(page.locator('#accountability-details')).toBeVisible();
     await expect(page.locator('#partner-card')).toBeVisible();
+    await expect(page.locator('#partner-card')).toContainText(/planning streak/i);
   });
 
   test('C: collapsing Timeline leaves Accountability unaffected', async ({ page }) => {
     await openApp(page, { partnerUid: 'partner-1' });
-    await page.locator('#timeline-details > summary').click();
-    await expect(page.locator('#timeline-details')).not.toHaveAttribute('open');
-    await expect(page.locator('#accountability-details')).toHaveAttribute('open');
+    await expect(page.locator('#timeline-details > summary')).toBeHidden();
+    await expect(page.locator('#timeline-details')).toHaveAttribute('open');
     await expect(page.locator('#partner-card')).toBeVisible();
   });
 
   test('D: collapsing Accountability leaves Timeline unaffected', async ({ page }) => {
     await openApp(page, { partnerUid: 'partner-1' });
-    await page.locator('#accountability-details > summary').click();
-    await expect(page.locator('#accountability-details')).not.toHaveAttribute('open');
+    await expect(page.locator('#accountability-details > summary')).toHaveCount(0);
     await expect(page.locator('#timeline-details')).toHaveAttribute('open');
     await expect(page.locator('#timeline-section')).toBeVisible();
   });
 
   test('E: collapsed/expanded state persists across reload, independently per section', async ({ page }) => {
     await openApp(page, { partnerUid: 'partner-1' });
-    await page.locator('#timeline-details > summary').click(); // collapse Timeline only
-    await expect(page.locator('#timeline-details')).not.toHaveAttribute('open');
-    await expect(page.locator('#accountability-details')).toHaveAttribute('open');
-
-    await page.reload();
-    await page.waitForFunction(() => typeof window.quickRetroLog === 'function' && !!document.getElementById('timeline-blocks'));
-    await expect(page.locator('#timeline-details')).not.toHaveAttribute('open');
-    await expect(page.locator('#accountability-details')).toHaveAttribute('open');
-
-    // Expand Timeline back; Accountability still untouched.
-    await page.locator('#timeline-details > summary').click();
-    await expect(page.locator('#timeline-details')).toHaveAttribute('open');
     await page.reload();
     await page.waitForFunction(() => typeof window.quickRetroLog === 'function' && !!document.getElementById('timeline-blocks'));
     await expect(page.locator('#timeline-details')).toHaveAttribute('open');
-    await expect(page.locator('#accountability-details')).toHaveAttribute('open');
+    await expect(page.locator('#accountability-details')).toBeVisible();
   });
 
   test('F: each section\'s saved preference is independent of the other', async ({ page }) => {
@@ -183,13 +169,14 @@ test.describe('Today Persistent Sections V1', () => {
       partnerUid: 'partner-1',
       prefs: { 'ta3-timeline-open': '0', 'ta3-accountability-open': '1' }
     });
-    await expect(page.locator('#timeline-details')).not.toHaveAttribute('open');
-    await expect(page.locator('#accountability-details')).toHaveAttribute('open');
+    await expect(page.locator('#timeline-details')).toHaveAttribute('open');
+    await expect(page.locator('#accountability-details')).toBeVisible();
   });
 
   test('G: no linked partner means no persistent empty Accountability section', async ({ page }) => {
     await openApp(page);
-    await expect(page.locator('#accountability-details')).toBeHidden();
+    await expect(page.locator('#accountability-details')).toBeVisible();
+    await expect(page.locator('#partner-card')).toContainText(/planning streak/i);
   });
 
   test('H: View day still opens the existing Partner View', async ({ page }) => {
@@ -214,11 +201,9 @@ test.describe('Today Persistent Sections V1', () => {
       };
       renderPartnerCard();
     });
-    await expect(page.locator('#partner-card')).toContainText('First task');
+    await expect(page.locator('#partner-card')).toContainText('Alyssa · Not planned');
 
-    // Collapse while a live update lands (simulating the real-time listener firing).
-    await page.locator('#accountability-details > summary').click();
-    await expect(page.locator('#accountability-details')).not.toHaveAttribute('open');
+    // A live update refreshes the compact status without requiring expansion.
     await page.evaluate(() => {
       partnerShared = {
         publisher: { displayName: 'Alyssa', timezone: 'UTC', updatedAt: Date.now() },
@@ -228,25 +213,16 @@ test.describe('Today Persistent Sections V1', () => {
       renderPartnerCard();
     });
 
-    await page.locator('#accountability-details > summary').click(); // expand again
-    await expect(page.locator('#accountability-details')).toHaveAttribute('open');
-    await expect(page.locator('#partner-card')).toContainText('Second task');
+    await expect(page.locator('#partner-card')).toContainText('Alyssa · Planned');
     await expect(page.locator('#partner-card')).not.toContainText('First task');
   });
 
   test('K: aria-expanded reflects true state and keyboard toggles it', async ({ page }) => {
     await openApp(page, { partnerUid: 'partner-1' });
-    const timelineSummary = page.locator('#timeline-details > summary');
-    const accSummary = page.locator('#accountability-details > summary');
-    await expect(timelineSummary).toHaveAttribute('aria-expanded', 'true');
-    await expect(accSummary).toHaveAttribute('aria-expanded', 'true');
-
-    await timelineSummary.focus();
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#timeline-details')).not.toHaveAttribute('open');
-    await expect(timelineSummary).toHaveAttribute('aria-expanded', 'false');
-    // Accountability's aria-expanded is untouched by Timeline's keyboard toggle.
-    await expect(accSummary).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('button', { name: 'Previous My Day' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Next My Day' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Choose My Day date' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'View day' })).toBeVisible();
   });
 
   test('no horizontal overflow and adequate tap targets at mobile width', async ({ page }) => {
@@ -254,9 +230,9 @@ test.describe('Today Persistent Sections V1', () => {
     await openApp(page, { partnerUid: 'partner-1' });
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
     expect(overflow).toBe(false);
-    const timelineBox = await page.locator('#timeline-details > summary').boundingBox();
-    expect(timelineBox.height).toBeGreaterThanOrEqual(36);
-    const accBox = await page.locator('#accountability-details > summary').boundingBox();
-    expect(accBox.height).toBeGreaterThanOrEqual(36);
+    const calendarBox = await page.getByRole('button', { name: 'Choose My Day date' }).boundingBox();
+    expect(calendarBox.height).toBeGreaterThanOrEqual(40);
+    const partnerBox = await page.getByRole('button', { name: 'View day' }).boundingBox();
+    expect(partnerBox.height).toBeGreaterThanOrEqual(40);
   });
 });

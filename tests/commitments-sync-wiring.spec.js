@@ -166,12 +166,14 @@ test('adding a commitment through the UI form reaches Firebase through the real 
   await openSignedIn(page);
   await page.evaluate(() => window.__fbTest.setConnected(true));
   const section = page.locator('#planning-continuity-section');
-  await section.getByRole('button', { name: 'Add commitment' }).click();
+  await section.getByRole('button', { name: '＋ Add' }).click();
+  await section.getByRole('button', { name: 'Commitment' }).click();
   const form = page.locator('#pc-commitment-form');
   await form.locator('input[name="title"]').fill('Dentist');
   await form.locator('input[name="date"]').fill('2026-09-30');
   await form.locator('input[name="time"]').fill('09:30');
   await form.getByRole('button', { name: 'Add' }).click();
+  await page.evaluate(() => openPlanningDetails('commitments'));
   await expect(section).toContainText('Dentist');
   const id = await page.evaluate(() => Object.keys(window.CommitmentsRepository.listAllRaw())[0]);
   await expect.poll(() => page.evaluate(() => window.__fbTest.log.transactions)).toContain(`${ROOM}/commitments/${id}`);
@@ -185,6 +187,7 @@ test('a remote update delivered on the listener is merged and shown', async ({ p
   await page.evaluate(rec => window.__fbTest.remoteWrite('rooms/uid_wiring-user/commitments/cshared1', rec),
     commitmentRecord('cshared1', '15:00', 9000));
   await expect.poll(() => page.evaluate(() => window.CommitmentsRepository.read('cshared1').time)).toBe('15:00');
+  await page.evaluate(() => openPlanningDetails('commitments'));
   await expect(page.locator('#planning-continuity-section')).toContainText('3:00 PM');
 
   // A brand-new remote commitment also arrives.

@@ -78,6 +78,10 @@ async function openApp(page, { plans = {}, routines = routineState([]), entries 
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof openPlanTomorrow === 'function' && typeof getPlanTomorrowAppContext === 'function');
   await expect(page.locator('#signin-overlay')).toBeHidden();
+  // The permanent switcher is removed from the normal My Day page. This suite
+  // unhides the retained secondary preview surface to regression-test its
+  // read-only projection directly.
+  await page.evaluate(() => { document.getElementById('today-commitments').hidden = false; });
 }
 
 function storageSnapshot(page) {
@@ -95,14 +99,14 @@ test.describe('Today/Tomorrow coherence', () => {
     await expect(page.locator('#timeline-section')).toBeVisible();
     await expect(page.locator('#tomorrow-timeline-preview')).toBeHidden();
     await expect(page.locator('#so-far')).toBeVisible();
-    await expect(page.locator('#today-nav-log-time')).toBeVisible();
+    await expect(page.locator('#today-nav-log-time')).toHaveCount(0);
 
     await page.locator('#tmr-tab-tomorrow').click();
     await expect(page.locator('#timeline-section')).toBeHidden();
     await expect(page.locator('#timeline-entry-actions')).toBeHidden();
     await expect(page.locator('#tomorrow-timeline-preview')).toBeVisible();
     await expect(page.locator('#so-far')).toBeHidden();
-    await expect(page.locator('#today-nav-log-time')).toBeHidden();
+    await expect(page.locator('#today-nav-log-time')).toHaveCount(0);
     await expect(page.locator('#log-time-details')).toBeHidden();
     await expect(page.locator('.ttp-row')).toContainText('Buy eyedrops');
 
@@ -110,7 +114,7 @@ test.describe('Today/Tomorrow coherence', () => {
     await expect(page.locator('#timeline-section')).toBeVisible();
     await expect(page.locator('#tomorrow-timeline-preview')).toBeHidden();
     await expect(page.locator('#so-far')).toBeVisible();
-    await expect(page.locator('#today-nav-log-time')).toBeVisible();
+    await expect(page.locator('#today-nav-log-time')).toHaveCount(0);
   });
 
   test('needs-you stays hidden on Tomorrow even when a Today nudge would otherwise show it', async ({ page }) => {
@@ -298,6 +302,7 @@ test.describe('Rollover', () => {
       },
       commitmentsView: 'tomorrow'
     });
+    await page.locator('#tmr-tab-tomorrow').click();
     await expect(page.locator('#tomorrow-timeline-preview')).toContainText('Wednesday priority');
     await page.evaluate(() => {
       const RealDate = Date;

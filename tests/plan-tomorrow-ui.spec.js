@@ -463,6 +463,7 @@ test('a date skip filters Today projection before grouping and remains reversibl
   await page.locator('[data-pt-action="close"]').first().click();
   await expect(page.locator('.daily-routine-card')).toHaveCount(0);
   await expect(page.locator('.routine-skipped')).toContainText('Skipped today (1)');
+  await page.evaluate(() => openRoutineDayDialog());
   await page.locator('#routine-details > summary').click();
   await page.locator('.routine-skipped summary').click();
   await page.getByRole('button', { name: 'Restore today' }).click();
