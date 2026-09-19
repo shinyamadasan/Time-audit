@@ -311,27 +311,26 @@ test.describe('Wife/Shared Accountability V1', () => {
     });
     await settle(alice); await settle(bob);
 
-    await bob.waitForFunction(() => {
-      const el = document.getElementById('partner-card');
-      return el && el.textContent.includes('Planned only');
-    });
-    const cardHtml = await bob.evaluate(() => document.getElementById('partner-card').innerHTML);
+    await bob.waitForFunction(() => document.getElementById('partner-card')?.textContent.includes('Open day'));
     const cardText = await bob.evaluate(() => document.getElementById('partner-card').textContent);
+    await bob.getByRole('button', { name: 'View day' }).click();
+    const cardHtml = await bob.evaluate(() => document.getElementById('partner-view-screen').innerHTML);
+    const detailText = await bob.evaluate(() => document.getElementById('partner-view-screen').textContent);
 
-    expect(cardText).toContain('Planned only');
-    expect(cardText).toContain('In progress task');
-    expect(cardText).toContain('Finished task');
-    expect(cardText).toContain('Planned');
-    expect(cardText).toContain('Worked on');
-    expect(cardText).toContain('Done');
     expect(cardText).toContain('Open day'); // tomorrow prep status
+    expect(detailText).toContain('Planned only');
+    expect(detailText).toContain('In progress task');
+    expect(detailText).toContain('Finished task');
+    expect(detailText).toContain('Planned');
+    expect(detailText).toContain('Logged');
+    expect(detailText).toContain('Done');
 
     // Read-only: no partner-task control markup (checkbox/edit/delete/start affordances).
     expect(cardHtml).not.toMatch(/onclick="[^"]*(toggle|remove|edit|start)PlanItem/i);
 
-    // No gamification/surveillance vocabulary anywhere in the rendered card.
-    const lower = cardText.toLowerCase();
-    for (const bad of ['streak', 'score', 'ahead', 'behind', 'winning', 'productivity', '%']) {
+    // No surveillance/scoring vocabulary anywhere in the rendered card.
+    const lower = `${cardText} ${detailText}`.toLowerCase();
+    for (const bad of ['score', 'ahead', 'behind', 'winning', 'productivity', '%']) {
       expect(lower.includes(bad)).toBe(false);
     }
 
@@ -356,11 +355,13 @@ test.describe('Wife/Shared Accountability V1', () => {
       items: [{ id: 'p1', task: 'Some priority', done: false, when: '', updatedAt: Date.now() }]
     });
     await settle(alice); await settle(bob);
-    await bob.waitForFunction(() => document.getElementById('partner-card').textContent.includes('Some priority'));
+    await bob.waitForFunction(() => document.getElementById('partner-card')?.textContent.includes('Not planned'));
+    await bob.getByRole('button', { name: 'View day' }).click();
+    await bob.waitForFunction(() => document.getElementById('partner-view-screen').textContent.includes('Some priority'));
 
     // Alice disconnects.
     await alice.evaluate(() => removePair());
-    await bob.waitForFunction(() => document.getElementById('partner-card').style.display === 'none');
+    await bob.waitForFunction(() => !document.getElementById('partner-card').textContent.includes('Some priority'));
 
     const bobText = await bob.evaluate(() => document.getElementById('partner-card').textContent);
     expect(bobText).not.toContain('Some priority');

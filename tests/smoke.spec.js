@@ -141,7 +141,11 @@ async function clickToastUndo(page) {
 }
 
 async function openTodayDetails(page) {
-  await page.evaluate(() => { document.getElementById('timeline-details').open = true; document.querySelector('#timeline-content > details').open = true; document.getElementById('log-time-details').open = true; });
+  await page.evaluate(() => {
+    document.getElementById('timeline-details').open = true;
+    document.getElementById('log-time-details').open = true;
+    document.getElementById('recent-entries-section').hidden = false;
+  });
 }
 
 test('focus overlay exit logs and renders the active session', async ({ page }) => {
@@ -543,9 +547,8 @@ test('today defaults to clean mode for Log time, but Timeline stays visible with
   await expect(page.locator('#timeline-section')).toBeVisible();
   await expect(page.locator('#timeline-details')).toHaveAttribute('open');
   await expect(page.locator('.quick-retro-bar')).toBeHidden();
-  await page.locator('#timeline-details > summary').click();
-  await expect(page.locator('#timeline-section')).toBeHidden();
-  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
+  await expect(page.locator('#timeline-details > summary')).toBeHidden();
+  await openTodayDetails(page);
   await expect(page.locator('#daily-basics')).toBeVisible();
   await expect(page.locator('.quick-retro-bar')).toBeVisible();
 });
@@ -581,7 +584,7 @@ test('today stat row renders without the removed identity tile (Phase 11.7)', as
 test('today daily basics logs common mandatory activity from clean mode', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 10, 12, 0, 0);
   await openApp(page, { nowTs });
-  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
+  await openTodayDetails(page);
 
   await expect(page.locator('#daily-basics')).toBeVisible();
   await expect(page.locator('#daily-basics')).not.toContainText('Chores');
@@ -614,7 +617,7 @@ test('today daily basics logs common mandatory activity from clean mode', async 
 test('today sleep basic logs overnight sleep as recovery', async ({ page }) => {
   const nowTs = Date.UTC(2026, 6, 10, 12, 0, 0);
   await openApp(page, { nowTs });
-  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
+  await openTodayDetails(page);
 
   await page.locator('#daily-basics').getByRole('button', { name: /Sleep/ }).click();
 
@@ -641,7 +644,7 @@ test('generic meal/chore check-in prompts are gone; Daily basics quick-log still
   // Noon on a plain day used to raise the hard-coded "Lunch check" maintenance prompt.
   const nowTs = Date.UTC(2026, 6, 10, 12, 15, 0);
   await openApp(page, { nowTs });
-  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
+  await openTodayDetails(page);
 
   await expect(page.locator('#routine-prompt')).toBeHidden();
   await expect(page.locator('#routine-prompt')).toBeEmpty();
@@ -782,9 +785,10 @@ test('today health shows compact daily accounting', async ({ page }) => {
   // Phase 6I/J UX pass: the "Xh Ym unlogged" debt stat was removed from Today Health.
   await expect(page.locator('#th-unlogged')).toHaveCount(0);
 
-  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Timeline',exact:true}).click();
+  await openTodayDetails(page);
   await expect(page.locator('#timeline-details')).toHaveAttribute('open');
   await expect(page.locator('#timeline-section')).toBeVisible();
+  await page.locator('#timeline-blocks').scrollIntoViewIfNeeded();
   await expect(page.locator('#timeline-blocks')).toBeInViewport({ ratio: 0.1 });
 
   await page.evaluate(() => scrollToFirstEnergy('waste','distraction'));

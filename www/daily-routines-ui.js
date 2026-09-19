@@ -147,7 +147,7 @@ form.addEventListener('submit', event => {
       if (index < 0) state.routines.push(routine); else state.routines[index] = routine;
       if (previous && (previous.source !== routine.source || previous.planId !== routine.planId)) delete state.links[instanceId(routine.id, localContext(Date.now(), state.timezone).date)];
     });
-    dialog.close(); renderDailyRoutines();
+    dialog.close(); renderDailyRoutines(); globalThis.openRoutineDayDialog?.();
   } catch (err) { form.querySelector('[data-form-error]').textContent = err.message; }
 });
 document.getElementById('daily-routine-cancel').addEventListener('click', () => dialog.close());
@@ -160,6 +160,7 @@ document.addEventListener('click', event => {
     if (action === 'manage') {
       view = readView();
       document.getElementById('routine-manager-list').innerHTML = view.state.routines.map(r => `<p>${escape(r.title)} · ${r.enabled ? scheduleLabel(r) : 'Disabled'} ${button('edit', r.id, 'Edit')}</p>`).join('');
+      document.getElementById('routine-day-dialog')?.close();
       document.getElementById('routine-manager').showModal();
       return;
     }
@@ -186,6 +187,7 @@ function performRoutineAction(action, id, clickedId) {
     }
     const started = globalThis.enterFocusMode({ task: learningPlan?.stepTitle || r.title, context: learningPlan?.planTitle || r.title, learningPlan, dailyRoutine: r.source === 'focus' ? { instanceId: item.id, timezone: item.timezone } : null, workMinutes: r.targetMinutes, autoStart: true });
     if (started === false) throw new Error('Focus is already running. Nothing new was started.');
+    document.getElementById('routine-day-dialog')?.close();
   }
 }
 // Persist the source session identity before starting; a same-device takeover can reuse it.

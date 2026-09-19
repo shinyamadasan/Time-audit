@@ -125,6 +125,7 @@ test('due routine wins, skip preserves intent and exposes the priority', async (
   await today(page, { routines: routineState([routine({ time: '00:00', fallback: 'Later today' })]) });
   await page.evaluate(() => { savePlanItems(planTodayKey(), [createPlanItem('Client build', '')]); renderDailyRoutines(); });
   await expect(page.locator('#today-action-title')).toHaveText('Deep work');
+  await page.evaluate(() => openRoutineDayDialog());
   await page.locator('#routine-details > summary').click();
   await page.getByRole('button', { name: 'Skip today', exact: true }).click();
   await expect(page.locator('#today-action-title')).toHaveText('Client build');

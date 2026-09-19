@@ -91,6 +91,7 @@ async function openApp(page, { now = NOW, boundaryStore = BOUNDARY_STORE, plans 
   }, { timezone: TZ, now, boundaryStore, plans, operationalPlans, commitments, routines: ROUTINES });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.PlanAuthority === 'object' && typeof window.CommitmentsRepository === 'object');
+  await page.evaluate(() => { document.getElementById('today-commitments').hidden = false; });
   await expect(page.locator('#signin-overlay')).toBeHidden();
 }
 
@@ -118,7 +119,8 @@ async function addSecondaryTask(page, task) {
 
 
 async function addCommitment(page, { title, date, time = '', duration = '', note = '', timezone = null }) {
-  await continuity(page).getByRole('button', { name: 'Add commitment' }).click();
+  await continuity(page).getByRole('button', { name: '＋ Add' }).click();
+  await continuity(page).getByRole('button', { name: 'Commitment' }).click();
   const form = page.locator('#pc-commitment-form');
   await form.locator('input[name="title"]').fill(title);
   await form.locator('input[name="date"]').fill(date);
@@ -127,6 +129,7 @@ async function addCommitment(page, { title, date, time = '', duration = '', note
   if (note) await form.locator('input[name="note"]').fill(note);
   if (timezone) await form.locator('input[name="timezone"]').fill(timezone);
   await form.getByRole('button', { name: /^(Add|Save)$/ }).click();
+  await page.evaluate(() => openPlanningDetails('commitments'));
 }
 
 /** A stored operational plan for the personal day that began `daysAgo` days before
@@ -150,7 +153,8 @@ test('B2: moving a stale priority into a full Top 3 lands it under Other planned
   await openApp(page, { operationalPlans: staleOperationalPlans(4) });
   for (const task of ['First', 'Second', 'Third']) await addPriority(page, task);
 
-  const recovery = continuity(page).locator('.pc-block', { hasText: 'Unfinished from previous days' });
+  const recovery = page.locator('#unfinished-recovery-section');
+  await recovery.getByRole('button', { name: /Unfinished/ }).click();
   await recovery.getByRole('button', { name: 'Move to today' }).click();
 
   await expect(continuity(page)).toContainText('Moved to Other planned tasks because your Top 3 is already full.');
@@ -173,7 +177,8 @@ test('B2: moving a stale priority into a full Top 3 lands it under Other planned
 test('B2: with room in the Top 3 the moved priority stays a priority and no notice is shown', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(4) });
   await addPriority(page, 'Only one');
-  const recovery = continuity(page).locator('.pc-block', { hasText: 'Unfinished from previous days' });
+  const recovery = page.locator('#unfinished-recovery-section');
+  await recovery.getByRole('button', { name: /Unfinished/ }).click();
   await recovery.getByRole('button', { name: 'Move to today' }).click();
   await expect(strip(page)).toContainText('Slipped task');
   await expect(continuity(page)).not.toContainText('Top 3 is already full');
@@ -253,7 +258,8 @@ test('B3: Prepare Tomorrow offers Make task / Make priority on the draft and enf
 
 test('B4: common five-minute durations are valid in the form; out-of-range values are not', async ({ page }) => {
   await openApp(page);
-  await continuity(page).getByRole('button', { name: 'Add commitment' }).click();
+  await continuity(page).getByRole('button', { name: '＋ Add' }).click();
+  await continuity(page).getByRole('button', { name: 'Commitment' }).click();
   const input = page.locator('#pc-commitment-form input[name="durationMinutes"]');
   for (const value of ['5', '15', '30', '45', '60', '90', '720']) {
     await input.fill(value);
@@ -269,6 +275,7 @@ test('B4: common five-minute durations are valid in the form; out-of-range value
   await form.locator('input[name="date"]').fill('2026-09-30');
   await form.locator('input[name="time"]').fill('09:30');
   await form.getByRole('button', { name: 'Add' }).click();
+  await page.evaluate(() => openPlanningDetails('commitments'));
   await expect(continuity(page)).toContainText('9:30–10:15 AM');
 });
 

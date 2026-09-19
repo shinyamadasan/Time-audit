@@ -41,6 +41,8 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': 
 
 const state = {
   expanded: { upcoming: false, stale: false },
+  detail: null,
+  itemForm: null,      // { type:'task'|'commitment', dayId?, itemId? }
   browseOpen: false,
   browseFrom: 0,
   formOpen: false,
@@ -70,6 +72,10 @@ function sync() {
 
 function section() {
   return typeof document !== 'undefined' ? document.getElementById(SECTION_ID) : null;
+}
+
+function staleSection() {
+  return typeof document !== 'undefined' ? document.getElementById('unfinished-recovery-section') : null;
 }
 
 /** index.html's own app context — the SAME accessor plan-authority.js composes. Used
@@ -150,7 +156,6 @@ function upcomingHtml(nowMs) {
       <h3>Upcoming</h3>
       <button type="button" class="btn sm" data-pc-action="open-form">Add commitment</button>
     </div>
-    ${state.formOpen ? commitmentFormHtml() : ''}
     ${rows || '<p class="pc-muted">No scheduled commitments ahead.</p>'}
     ${more}
   </section>`;
@@ -174,7 +179,7 @@ function commitmentFormHtml() {
   return `<form class="pc-form" id="pc-commitment-form">
     <input name="title" maxlength="200" placeholder="what is it?" value="${escape(editing?.title || '')}" required>
     <div class="pc-form-row">
-      <input name="date" type="date" value="${escape(editing?.date || '')}" required aria-label="date">
+      <input name="date" type="date" value="${escape(editing?.date || localDateKey())}" required aria-label="date">
       <input name="time" type="time" value="${escape(editing?.time || '')}" aria-label="time (optional)">
     </div>
     <div class="pc-form-row">
@@ -190,6 +195,107 @@ function commitmentFormHtml() {
       <button type="button" class="btn sm ghost" data-pc-action="close-form">Cancel</button>
     </div>
   </form>`;
+}
+
+function localDateKey(instantMs = Date.now(), timezone = accountTimezone()) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(new Date(instantMs)).reduce((out, part) => (out[part.type] = part.value, out), {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function addCalendarDate(dateKey, days) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days, 12)).toISOString().slice(0, 10);
+}
+
+function quickTaskDates() {
+  const layer = authority();
+  if (layer?.enabled()) {
+    const current = layer.current();
+    const next = layer.next(current);
+    return {
+      today: localDateKey(current.endMs - 1, current.timezone),
+      tomorrow: localDateKey(next.endMs - 1, next.timezone),
+    };
+  }
+  const today = localDateKey();
+  return { today, tomorrow: addCalendarDate(today, 1) };
+}
+
+function taskFormValue() {
+  const layer = authority();
+  const edit = state.itemForm?.itemId && layer ? {
+    target: layer.targetById(state.itemForm.dayId),
+  } : null;
+  const item = edit?.target ? layer.items(edit.target).find(candidate => candidate.id === state.itemForm.itemId) : null;
+  let date = quickTaskDates().today;
+  if (item && edit.target) {
+    const instant = item.when ? layer.itemStartInstant(edit.target, item.when) : null;
+    date = Number.isFinite(instant)
+      ? localDateKey(instant, edit.target.timezone)
+      : edit.target.store === 'legacy' ? edit.target.dateKey : localDateKey(edit.target.endMs - 1, edit.target.timezone);
+  }
+  return { target: edit?.target || null, item, date };
+}
+
+function taskFormHtml() {
+  const { item, date } = taskFormValue();
+  const { today, tomorrow } = quickTaskDates();
+  const kind = item?.kind === 'task' ? 'task' : 'priority';
+  return `<form class="pc-form pc-item-form" id="pc-task-form">
+    <div class="pc-head"><h3>${item ? 'Edit planned task' : 'Add to My Day'}</h3><button type="button" class="pc-icon" data-pc-action="close-item-form" aria-label="Close add task">✕</button></div>
+    ${item ? '' : `<div class="pc-entry-types" role="group" aria-label="What to add"><button type="button" class="btn sm primary" aria-pressed="true">Task</button><button type="button" class="btn sm ghost" data-pc-action="add-commitment" aria-pressed="false">Commitment</button></div>`}
+    <label>What do you want to do?<input name="title" maxlength="200" value="${escape(item?.task || '')}" required autofocus></label>
+    <fieldset class="pc-when"><legend>When?</legend><div class="pc-quick-dates">
+      <button type="button" class="btn sm ghost" data-pc-action="set-date" data-date="${today}">Today</button>
+      <button type="button" class="btn sm ghost" data-pc-action="set-date" data-date="${tomorrow}">Tomorrow</button>
+    </div><input name="date" type="date" value="${escape(date)}" required aria-label="Task date"></fieldset>
+    <label>Time <input name="time" type="time" value="${escape(item?.when || '')}" aria-label="Task time, optional"><span class="pc-muted">Leave blank for Anytime.</span></label>
+    <label>Type <select name="kind"><option value="priority"${kind === 'priority' ? ' selected' : ''}>Top Priority</option><option value="task"${kind === 'task' ? ' selected' : ''}>Other task</option></select></label>
+    ${state.formError ? `<p class="pc-error" role="alert">${escape(state.formError)}</p>` : ''}
+    <div class="pc-form-actions"><button type="submit" class="btn sm primary">${item ? 'Save' : 'Add'}</button><button type="button" class="btn sm ghost" data-pc-action="close-item-form">Cancel</button></div>
+  </form>`;
+}
+
+function submitTaskForm(form) {
+  const layer = authority();
+  const context = appContext();
+  if (!layer || !context) { state.formError = 'Your plan is still loading.'; return; }
+  const data = new FormData(form);
+  const title = String(data.get('title') || '').trim();
+  const date = String(data.get('date') || '');
+  const time = String(data.get('time') || '');
+  const kind = data.get('kind') === 'task' ? 'task' : 'priority';
+  if (!title) { state.formError = 'Name the task first.'; return; }
+  const editing = taskFormValue();
+  // Clearing a clock time is an in-place move back to Anytime for the SAME My
+  // Day. The date shown for the former timestamp is presentation, not a command
+  // to re-file the now-untimed task through noon ownership.
+  const resolved = editing.item?.when && !time && date === editing.date
+    ? { ok: true, anchor: 'same-day', target: editing.target }
+    : layer.dayForScheduledDate(date, time);
+  if (!resolved.ok) {
+    state.formError = resolved.reason === 'ambiguous' ? 'That time happens twice on this date. Choose a different time.'
+      : resolved.reason === 'nonexistent' ? 'That time does not exist on this date. Choose a different time.' : 'Choose a valid date.';
+    return;
+  }
+  try {
+    if (state.itemForm?.itemId) {
+      const sourceTarget = layer.targetById(state.itemForm.dayId);
+      layer.updateItem({ sourceTarget, itemId: state.itemForm.itemId, destination: resolved.target, changes: { task: title, when: time, kind }, stamp: stamp });
+    } else {
+      const item = context.createItem(title, time, kind);
+      const check = layer.validateItem(resolved.target, item);
+      if (!check.ok) throw new Error('That time is not valid for this My Day.');
+      if (kind === 'priority' && layer.items(resolved.target).filter(candidate => candidate.kind !== 'task').length >= layer.priorityMax()) {
+        throw new Error(`Your Top ${layer.priorityMax()} is already full. Add it as another task instead.`);
+      }
+      layer.saveItems(resolved.target, [...layer.rawItems(resolved.target), item]);
+    }
+    state.itemForm = null;
+    state.formError = '';
+    globalThis.refreshAuthoritativePlanSurfaces?.();
+  } catch (err) { state.formError = err.message; }
 }
 
 function readForm(form) {
@@ -258,6 +364,7 @@ function resolveAmbiguous(choice) {
 
 function afterCommitmentWrite(id) {
   state.formOpen = false;
+  state.itemForm = null;
   state.formError = '';
   state.formPending = null;
   try { sync()?.syncCommitment(id); } catch { /* offline — pushAllLocal retries on reconnect */ }
@@ -282,7 +389,7 @@ function browseHtml(nowMs) {
   try {
     days = layer.upcomingDays(state.browseFrom + BROWSE_DAYS, nowMs).slice(state.browseFrom);
   } catch (err) {
-    return `<section class="pc-block"><h3>Plan another day</h3><p class="pc-muted" role="alert">${escape(err.message)}</p></section>`;
+    return `<section class="pc-block"><h3>Browse future My Days</h3><p class="pc-muted" role="alert">${escape(err.message)}</p></section>`;
   }
   const commitments = allCommitments();
   const rows = days.map((target, index) => {
@@ -311,7 +418,7 @@ function browseHtml(nowMs) {
   </div>`;
   return `<section class="pc-block">
     <div class="pc-head">
-      <h3>Plan another day</h3>
+      <h3>Browse future My Days</h3>
       <button type="button" class="btn sm ghost" data-pc-action="close-browse">Hide</button>
     </div>
     <p class="pc-muted">Each row is one personal day, labelled by the hours it actually covers.</p>
@@ -374,11 +481,21 @@ function staleHtml(nowMs) {
     ? `<p class="pc-muted">${unresolvable.reduce((n, day) => n + day.items.length, 0)} task(s) belong to a personal day whose interval can’t be resolved right now. They are kept exactly as they are.</p>`
     : '';
   return `<section class="pc-block">
-    <div class="pc-head"><h3>Unfinished from previous days</h3></div>
+    <div class="pc-head"><h3>Unfinished · ${items.length + unresolvable.reduce((n, day) => n + day.items.length, 0)}</h3><button type="button" class="btn sm ghost" data-pc-action="collapse-stale">Close</button></div>
     ${rows}
     ${more}
     ${stranded}
   </section>`;
+}
+
+function staleCompactHtml(nowMs) {
+  const layer = authority();
+  if (!layer) return '';
+  const projection = layer.staleUnfinished(nowMs);
+  const count = projection.items.length + projection.unresolvable.reduce((sum, day) => sum + day.items.length, 0);
+  if (!count) return '';
+  if (state.expanded.stale) return staleHtml(nowMs);
+  return `<section class="pc-block pc-stale-compact"><button type="button" class="pc-stale-trigger" data-pc-action="expand-stale" aria-expanded="false"><span>Unfinished · ${count}</span><span aria-hidden="true">›</span></button></section>`;
 }
 
 /** The app's own item stamping (updatedAt + updatedBy), through the app context, so a
@@ -415,6 +532,7 @@ function staleAction(action, itemId, dayId) {
       // Reschedule means "choose a day": open the browser and let the owner pick,
       // rather than guessing a destination for them.
       state.browseOpen = true;
+      state.detail = 'browse';
       state.pendingMove = { itemId, dayId };
       setNotice('');
       render();
@@ -423,9 +541,7 @@ function staleAction(action, itemId, dayId) {
       const destination = layer.current();
       const result = layer.moveStaleItem({ sourceTarget, itemId, destination, stamp });
       setNotice(noticeFor(result));
-      if (action === 'move-edit' && typeof globalThis.openTodayPlanEditor === 'function') {
-        globalThis.openTodayPlanEditor();
-      }
+      if (action === 'move-edit') state.itemForm = { type: 'task', dayId: destination.id, itemId: result.item.id };
     }
   } catch (err) {
     setNotice(err.message, 'error');
@@ -467,21 +583,25 @@ export function render() {
     const notice = state.notice
       ? `<p class="pc-notice${state.notice.tone === 'error' ? ' pc-error' : ''}" role="status">${escape(state.notice.text)}</p>`
       : '';
-    html = notice + upcomingHtml(nowMs)
-      + (state.browseOpen ? browseHtml(nowMs) : browseToggleHtml())
-      + staleHtml(nowMs);
+    const editor = state.itemForm
+      ? (state.itemForm.type === 'commitment' ? commitmentFormHtml() : taskFormHtml())
+      : '';
+    const detail = state.detail === 'browse' ? browseHtml(nowMs)
+      : state.detail === 'commitments' ? upcomingHtml(nowMs) : '';
+    html = notice
+      + '<div class="pc-command-row"><button type="button" class="btn primary" data-pc-action="open-item-form">＋ Add</button></div>'
+      + editor + detail;
   } catch (err) {
     html = `<section class="pc-block"><p class="pc-muted" role="alert">Planning surfaces are unavailable right now. (${escape(err.message)})</p></section>`;
   }
   root.hidden = false;
   root.innerHTML = html;
-}
-
-function browseToggleHtml() {
-  const pending = state.pendingMove ? '<span class="pc-muted"> — pick a day for the task you are moving</span>' : '';
-  return `<section class="pc-block pc-block-quiet">
-    <button type="button" class="pc-more" data-pc-action="open-browse">Plan another day…</button>${pending}
-  </section>`;
+  const recovery = staleSection();
+  if (recovery) {
+    const recoveryHtml = staleCompactHtml(nowMs);
+    recovery.hidden = !recoveryHtml;
+    recovery.innerHTML = recoveryHtml;
+  }
 }
 
 function onClick(event) {
@@ -491,9 +611,11 @@ function onClick(event) {
   const id = control.dataset.id;
   event.preventDefault();
   switch (action) {
-    case 'open-form': state.formOpen = true; state.formError = ''; state.formPending = null; render(); break;
-    case 'close-form': state.formOpen = false; state.formError = ''; state.formPending = null; render(); break;
-    case 'edit-commitment': state.formOpen = id; state.formError = ''; state.formPending = null; render(); break;
+    case 'open-item-form': state.itemForm = { type: 'task' }; state.formOpen = false; state.formError = ''; render(); break;
+    case 'add-commitment': state.itemForm = { type: 'commitment' }; state.formOpen = true; state.formError = ''; state.formPending = null; render(); break;
+    case 'close-item-form': case 'close-form': state.itemForm = null; state.formOpen = false; state.formError = ''; state.formPending = null; render(); break;
+    case 'open-form': state.itemForm = { type: 'commitment' }; state.formOpen = true; state.formError = ''; state.formPending = null; render(); break;
+    case 'edit-commitment': state.itemForm = { type: 'commitment' }; state.formOpen = id; state.formError = ''; state.formPending = null; render(); break;
     case 'delete-commitment': deleteCommitment(id); break;
     case 'dst-earlier': resolveAmbiguous('earlier'); break;
     case 'dst-later': resolveAmbiguous('later'); break;
@@ -501,8 +623,9 @@ function onClick(event) {
     case 'collapse-upcoming': state.expanded.upcoming = false; render(); break;
     case 'expand-stale': state.expanded.stale = true; render(); break;
     case 'collapse-stale': state.expanded.stale = false; render(); break;
-    case 'open-browse': state.browseOpen = true; render(); break;
-    case 'close-browse': state.browseOpen = false; state.pendingMove = null; render(); break;
+    case 'set-date': { const input = section()?.querySelector('#pc-task-form [name="date"]'); if (input) input.value = control.dataset.date; break; }
+    case 'open-browse': state.detail = 'browse'; render(); break;
+    case 'close-browse': state.detail = null; state.browseOpen = false; state.pendingMove = null; render(); break;
     case 'browse-forward': state.browseFrom += BROWSE_DAYS; render(); break;
     case 'browse-back': state.browseFrom = Math.max(0, state.browseFrom - BROWSE_DAYS); render(); break;
     case 'prepare-day':
@@ -518,6 +641,13 @@ function onClick(event) {
 }
 
 function onSubmit(event) {
+  const taskForm = event.target.closest('#pc-task-form');
+  if (taskForm) {
+    event.preventDefault();
+    submitTaskForm(taskForm);
+    render();
+    return;
+  }
   const form = event.target.closest('#pc-commitment-form');
   if (!form) return;
   event.preventDefault();
@@ -533,14 +663,36 @@ export function refreshPlanningContinuityIfMounted() {
 }
 
 if (typeof window !== 'undefined') {
-  window.PlanningContinuityUI = { render, refresh: refreshPlanningContinuityIfMounted };
+  window.PlanningContinuityUI = {
+    render,
+    refresh: refreshPlanningContinuityIfMounted,
+    commitmentsForTarget: target => commitmentsForTarget(allCommitments(), target),
+    editTask(dayId, itemId) {
+      state.itemForm = { type: 'task', dayId, itemId };
+      state.formOpen = false;
+      state.formError = '';
+      render();
+      section()?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    },
+    editCommitment(id) {
+      state.itemForm = { type: 'commitment' };
+      state.formOpen = id;
+      state.formError = '';
+      render();
+      section()?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    },
+    openDetails(detail) { state.detail = detail; render(); section()?.scrollIntoView({ block: 'start', behavior: 'smooth' }); },
+  };
   window.refreshCommitmentSurfaces = refreshPlanningContinuityIfMounted;
+  window.openPlanningDetails = detail => window.PlanningContinuityUI.openDetails(detail);
   const root = section();
   if (root) {
     root.addEventListener('click', onClick);
     root.addEventListener('submit', onSubmit);
   }
+  staleSection()?.addEventListener('click', onClick);
   render();
+  globalThis.refreshMyDayTimeline?.();
 }
 
 // Exported for tests that exercise the pure label/selection helpers without a DOM.

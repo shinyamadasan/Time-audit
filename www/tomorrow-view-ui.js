@@ -31,8 +31,13 @@ function context() {
   return globalThis.getPlanTomorrowAppContext();
 }
 
+let activeTab = 'today';
+
 function currentTab() {
-  return localStorage.getItem(TAB_STORAGE_KEY) === 'tomorrow' ? 'tomorrow' : 'today';
+  // My Day UX Simplification removes the permanent Today/Next switcher. Future
+  // planning remains reachable through + Add/date scheduling and the secondary
+  // future-day browser, so a stale saved tab must not hide the primary timeline.
+  return activeTab;
 }
 
 /** Mirrors plan-tomorrow-ui.js's own formatTargetDate() exactly — same Intl call, same reason
@@ -236,6 +241,7 @@ function render() {
  *  condition already accounts for this same tab (see index.html), so a MutationObserver-triggered
  *  re-render elsewhere can never un-hide it out from under this tab switch. */
 function applyTodayOnlySurfaces(showTomorrow) {
+  document.body.classList.toggle('tomorrow-secondary-open', showTomorrow);
   if (soFarSection) soFarSection.hidden = showTomorrow;
   if (logTimeNavButton) logTimeNavButton.hidden = showTomorrow;
   if (logTimeDetails) logTimeDetails.hidden = showTomorrow;
@@ -257,6 +263,7 @@ function applyTab(tab) {
 }
 
 function setTab(tab) {
+  activeTab = tab;
   localStorage.setItem(TAB_STORAGE_KEY, tab);
   applyTab(tab);
 }

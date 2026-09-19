@@ -53,23 +53,6 @@ function windowLabel(startMs, endMs, timezone) {
   return `${formatBoundaryInstant(startMs, timezone)} → ${formatBoundaryInstant(endMs, timezone)}`;
 }
 
-function statusHtml(current, upcoming) {
-  const legacyNote = current.store === 'legacy'
-    ? '<div class="op-note">This day began before your personal day boundary took effect, so it is still your existing calendar day. Nothing was regrouped.</div>'
-    : '';
-  const currentLabel = current.store === 'legacy'
-    ? 'today’s calendar day'
-    : windowLabel(current.startMs, current.endMs, current.timezone);
-  const upcomingLabel = upcoming.store === 'legacy'
-    ? 'tomorrow’s calendar day'
-    : windowLabel(upcoming.startMs, upcoming.endMs, upcoming.timezone);
-  return `<div class="op-section-head"><h2>My Day</h2><span class="op-muted">Starts ${escape(upcoming.boundaryTime)} · ${escape(upcoming.timezone)}</span></div>
-    ${legacyNote}
-    <div class="op-status-row"><span class="op-kicker">Now</span><span class="op-window">${escape(currentLabel)}</span></div>
-    <div class="op-status-row"><span class="op-kicker">Next</span><span class="op-window">${escape(upcomingLabel)}</span></div>
-    <p class="op-muted op-footnote">Your priorities below are this personal day. “Prepare tomorrow” plans the next one.</p>`;
-}
-
 function preparedPlanHtml(plan) {
   const when = plan.resolvable ? windowLabel(plan.startMs, plan.endMs, plan.timezone) : 'Interval unavailable';
   const items = plan.items.length
@@ -102,20 +85,19 @@ export function renderOperationalPlanSurface() {
     root.innerHTML = '';
     return;
   }
-  let current;
-  let upcoming;
   let prepared = [];
   try {
-    current = layer.current();
-    upcoming = layer.upcoming();
     prepared = layer.preparedPlans();
   } catch (err) {
     root.hidden = false;
     root.innerHTML = `<p class="op-muted" role="alert">Your personal day can’t be shown right now. (${escape(err.message)})</p>`;
     return;
   }
-  root.hidden = false;
-  root.innerHTML = statusHtml(current, upcoming) + preparedPlansHtml(prepared);
+  // The timeline header is the one visible owner of the current My Day interval.
+  // This surface remains only for the exceptional orphaned prepared-plan recovery
+  // list; the former Now/Next summary duplicated the same authoritative interval.
+  root.hidden = !prepared.length;
+  root.innerHTML = preparedPlansHtml(prepared);
 }
 
 /** Called by operational-plan-sync.js after a remote merge, by the Settings

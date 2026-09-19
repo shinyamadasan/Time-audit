@@ -78,6 +78,7 @@ async function openApp(page, { now = EIGHT_AM, boundaryStore = null, plans = '{}
   }, { timezone: TZ, now, boundaryStore, plans });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object' && typeof window.renderPersonalDayBoundarySettings === 'function');
+  await page.evaluate(() => { document.getElementById('today-commitments').hidden = false; });
   await expect(page.locator('#signin-overlay')).toBeHidden();
 }
 
@@ -170,14 +171,9 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
   const stored = await boundaryStore(page);
 
   await page.evaluate(() => showView('today'));
-  // The personal-day section is now read-only status + recovery: it names the
-  // day, and offers no second editor.
-  await expect(surface(page)).toBeVisible();
-  // Owner-facing heading renamed to My Day (Planning Continuity V1 My Day correction).
-  await expect(surface(page)).toContainText('My Day');
-  await expect(surface(page).locator('form')).toHaveCount(0);
-  await expect(surface(page).locator('button')).toHaveCount(0);
-  await expect(surface(page)).toContainText('still your existing calendar day');
+  // The standalone status surface is gone; the timeline owns visible My Day identity.
+  await expect(surface(page)).toBeHidden();
+  await expect(page.locator('#timeline-date-label')).toBeVisible();
 
   // Prepare the upcoming personal day through the ordinary Prepare Tomorrow
   // workflow — the only planning editor in the product.
@@ -367,7 +363,7 @@ test('changing 18:00 -> 20:00 at 21:00 states "tomorrow", is reported as Current
 test('a legacy account keeps "Plan tomorrow" wording everywhere', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => toggleHdrMenu());
-  await expect(page.locator('#hdr-menu-plan-tomorrow')).toHaveText('Plan tomorrow');
+  await expect(page.locator('#hdr-menu-plan-tomorrow')).toHaveText('Browse future My Days');
   await page.evaluate(() => openPlanTomorrow());
   await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan tomorrow');
   await expect(page.locator('#plan-tomorrow-starts')).toBeEmpty();
@@ -383,7 +379,7 @@ test('a custom-boundary account sees "Plan next personal day" wording in the ham
 
   await page.evaluate(() => showView('today'));
   await page.evaluate(() => toggleHdrMenu());
-  await expect(page.locator('#hdr-menu-plan-tomorrow')).toHaveText('Plan next personal day');
+  await expect(page.locator('#hdr-menu-plan-tomorrow')).toHaveText('Browse future My Days');
 
   await page.evaluate(() => openPlanTomorrow());
   await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan next personal day');
@@ -408,9 +404,9 @@ test('at 06:00 with an 18:00 boundary, the action already reads Plan next person
   await page.locator('[data-pt-action="close"]').first().click();
 
   await page.evaluate(() => showView('today'));
-  await expect(page.locator('#today-prepare-tomorrow')).toHaveText('Prepare next personal day');
+  await expect(page.locator('#today-prepare-tomorrow')).toHaveCount(0);
   await page.evaluate(() => toggleHdrMenu());
-  await expect(page.locator('#hdr-menu-plan-tomorrow')).toHaveText('Plan next personal day');
+  await expect(page.locator('#hdr-menu-plan-tomorrow')).toHaveText('Browse future My Days');
   await page.evaluate(() => toggleHdrMenu());
   await page.locator('#tmr-tab-tomorrow').click();
   await expect(page.locator('.tmr-starts')).toHaveText('Starts today at 18:00');
@@ -451,7 +447,7 @@ test('a legacy account keeps "Tomorrow" wording on the tab, the Today quick acti
   await openApp(page);
   await page.evaluate(() => showView('today'));
   await expect(page.locator('#tmr-tab-tomorrow')).toHaveText('Tomorrow');
-  await expect(page.locator('#today-prepare-tomorrow')).toHaveText('Prepare tomorrow');
+  await expect(page.locator('#today-prepare-tomorrow')).toHaveCount(0);
 
   await page.evaluate(() => openReview());
   await expect(page.locator('#rv-tomorrow-status')).toContainText('Prepare tomorrow →');
@@ -472,7 +468,7 @@ test('a custom-boundary account reads "next personal day" on the tab, the Today 
   await page.evaluate(() => showView('today'));
 
   await expect(page.locator('#tmr-tab-tomorrow')).toHaveText('Next personal day');
-  await expect(page.locator('#today-prepare-tomorrow')).toHaveText('Prepare next personal day');
+  await expect(page.locator('#today-prepare-tomorrow')).toHaveCount(0);
 
   await page.evaluate(() => openReview());
   await expect(page.locator('#rv-tomorrow-status')).toContainText('Prepare next personal day →');
@@ -566,7 +562,7 @@ async function seedAndOpenPartnerView(page, { todayDateKey, timezone }) {
 test('a legacy-viewer device reads the neutral "Upcoming plan" label for a representative Partner payload', async ({ page }) => {
   await openApp(page);
   await seedAndOpenPartnerView(page, { todayDateKey: '2026-09-16', timezone: TZ });
-  await expect(page.locator('#partner-card')).toContainText('Upcoming plan:');
+  await expect(page.locator('#partner-card')).toContainText('Partner · Not planned');
   await expect(page.locator('#partner-card')).not.toContainText('Tomorrow:');
   await expect(page.locator('#partner-card')).not.toContainText('Next personal day');
   const screenText = await page.locator('#partner-view-screen').textContent();
@@ -587,7 +583,7 @@ test('a custom-boundary-viewer device reads the EXACT SAME neutral "Upcoming pla
   // Same seeded payload, same dateKey/timezone, as the legacy-viewer case above —
   // only this device's own boundary configuration differs.
   await seedAndOpenPartnerView(page, { todayDateKey: '2026-09-16', timezone: TZ });
-  await expect(page.locator('#partner-card')).toContainText('Upcoming plan:');
+  await expect(page.locator('#partner-card')).toContainText('Partner · Not planned');
   await expect(page.locator('#partner-card')).not.toContainText('Tomorrow:');
   await expect(page.locator('#partner-card')).not.toContainText('Next personal day');
   const screenText = await page.locator('#partner-view-screen').textContent();
@@ -599,5 +595,5 @@ test('a custom-boundary-viewer device reads the EXACT SAME neutral "Upcoming pla
   // The OWNER's own single-device surfaces are unaffected by this fix and
   // still correctly reflect this device's own custom boundary.
   await expect(page.locator('#tmr-tab-tomorrow')).toHaveText('Next personal day');
-  await expect(page.locator('#today-prepare-tomorrow')).toHaveText('Prepare next personal day');
+  await expect(page.locator('#today-prepare-tomorrow')).toHaveCount(0);
 });

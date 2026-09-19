@@ -107,6 +107,7 @@ test('Workout awaits source evidence; compact list stays bounded', async ({ page
   await today(page, { routines: routineState(Array.from({length: 12}, (_, i) => routine({id: `r${i}`, title: `Workout ${i}`, source: 'workout', mode: 'anytime', workoutRoutineId: `w${i}`}))) });
   await expect(page.locator('#routine-compact .commitment-routine')).toHaveCount(2);
   await expect(page.locator('#hero-task-input')).toBeVisible();
+  await page.evaluate(() => openRoutineDayDialog());
   await page.locator('#routine-details > summary').click();
   await expect(page.locator('#daily-routines-list [data-routine-action="done"]')).toHaveCount(0);
   await expect(page.locator('#daily-routines-list')).toContainText('matching workout is imported');
@@ -176,14 +177,11 @@ for (const energy of ['deep','waste','none']) {
 test('intentional Log time and Timeline retain shortcuts and corrections', async ({page}) => {
   await today(page);
   await page.evaluate(() => { entries=[{id:92,activity:'Previous work',energy:'deep',date:planTodayKey(),tsStart:Date.now()-3600000,ts:Date.now(),blockIntervalMin:60}]; renderToday(); });
-  await page.getByRole('navigation', {name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
+  await page.evaluate(() => { const details = document.getElementById('log-time-details'); details.hidden = false; details.open = true; });
   for (const name of ['Sleep','Eat','Cooking','Dishes','Hygiene','Walk','Commute','Exercise']) await expect(page.locator('#daily-basics')).toContainText(name);
   await expect(page.locator('#same-as-last-btn')).toBeVisible();
-  await page.getByRole('navigation', {name:'Today actions'}).getByRole('button',{name:'Timeline',exact:true}).click();
   await expect(page.locator('#timeline-blocks')).toBeVisible();
-  await page.locator('#timeline-content > details > summary').click();
-  await expect(page.locator('#recent-list')).toBeVisible();
-  await page.locator('#recent-list button').filter({hasText:'✎'}).first().click();
+  await page.locator('#timeline-blocks .tl-row[data-entry-id]').first().click();
   await expect(page.locator('#retro-overlay')).toBeVisible();
 });
 
@@ -234,7 +232,7 @@ test('repeat logging stays intentional and separate from Away', async ({page}) =
   await today(page);
   await page.evaluate(() => { entries=[{id:94,activity:'Client build',energy:'deep',date:planTodayKey(),tsStart:Date.now()-7200000,ts:Date.now()-3600000,blockIntervalMin:60}]; renderToday(); });
   await expect(page.locator('#same-as-last-btn')).toBeHidden();
-  await page.getByRole('navigation',{name:'Today actions'}).getByRole('button',{name:'Log time',exact:true}).click();
+  await page.evaluate(() => { const details = document.getElementById('log-time-details'); details.hidden = false; details.open = true; });
   await page.locator('#same-as-last-btn').click();
   expect(await page.evaluate(() => ({running,awayActive,currentTask}))).toEqual({running:true,awayActive:false,currentTask:'Client build'});
   expect(await page.evaluate(() => entries.length)).toBeGreaterThan(1);

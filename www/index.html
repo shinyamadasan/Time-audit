@@ -34,10 +34,10 @@
              id="today-date" onclick="toggleDatePicker()" title="Browse other days">—</div>
         <span onclick="toggleDatePicker()" style="font-size:12px;color:var(--muted);cursor:pointer;user-select:none;line-height:1;padding-top:2px">▾</span>
       </div>
-      <button id="back-to-today-btn" onclick="setViewDate(null)"
+      <button id="back-to-today-btn" onclick="returnTimelineToCurrent()"
         style="display:none;padding:2px 8px;background:var(--deep);color:#fff;border:none;
                border-radius:999px;font-size:10px;font-weight:700;cursor:pointer;font-family:var(--head)">
-        ← Today
+        ← My Day
       </button>
     </div>
     <div style="display:flex;gap:6px;align-items:center;position:relative">
@@ -52,7 +52,8 @@
                border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden">
         <div class="hdr-menu-item" onclick="openReflectionsHistory();toggleHdrMenu()">Reflections</div>
         <div class="hdr-menu-item" onclick="openReview();toggleHdrMenu()">Review day</div>
-        <div class="hdr-menu-item" id="hdr-menu-plan-tomorrow" onclick="openPlanTomorrow();toggleHdrMenu()">Plan tomorrow</div>
+        <div class="hdr-menu-item" id="hdr-menu-plan-tomorrow" onclick="openPlanningDetails('browse');toggleHdrMenu()">Browse future My Days</div>
+        <div class="hdr-menu-item" onclick="openRoutineDayDialog();toggleHdrMenu()">Routines</div>
         <div class="hdr-menu-item" onclick="showView('settings');toggleHdrMenu()">Settings</div>
       </div>
     </div>
@@ -123,7 +124,7 @@
        which is what keeps Today byte-for-byte unchanged for them. -->
   <section id="operational-plan-section" hidden aria-label="Personal day plan"></section>
   <section id="planning-continuity-section" hidden aria-label="Upcoming commitments and future planning"></section>
-  <section id="today-commitments" aria-label="Today's commitments">
+  <section id="today-commitments" aria-label="Today's commitments" hidden>
     <div class="tc-head">
       <h2>Today's commitments</h2>
       <div class="tmr-daytabs" role="group" aria-label="Choose day to view">
@@ -151,14 +152,8 @@
     </div>
     <button id="needs-you-more" class="btn sm ghost" onclick="this.parentElement.classList.toggle('expanded');this.setAttribute('aria-expanded',this.parentElement.classList.contains('expanded'))" aria-expanded="false" hidden>Show all</button>
   </section>
-  <section id="so-far" aria-label="So far"><h2>So far</h2><span id="so-far-summary">No time recorded yet.</span> <button class="btn sm ghost" onclick="openReview(undefined, true)">Details</button></section>
-  <nav class="today-secondary" aria-label="Today actions">
-    <button id="today-nav-log-time" class="btn sm ghost" onclick="toggleTodayDestination('log-time-details')">Log time</button>
-    <button class="btn sm ghost" onclick="scrollToTimeline()">Timeline</button>
-    <button class="btn sm ghost" onclick="openReview()">Review</button>
-    <button class="btn sm ghost" id="today-prepare-tomorrow" onclick="openPlanTomorrow()">Prepare tomorrow</button>
-  </nav>
-  <button id="yesterday-review-link" class="btn sm ghost" onclick="openMissedCloseoutReview()" hidden>Yesterday's review available</button>
+  <section id="so-far" aria-label="So far"><span id="so-far-summary">No time recorded yet.</span> <button class="btn sm ghost" onclick="openReview(undefined, true)">Details</button></section>
+  <button id="yesterday-review-link" class="btn sm ghost" onclick="openMissedCloseoutReview()" hidden>Yesterday's review is ready · Review</button>
   <details id="log-time-details" class="today-destination"><summary>Log time</summary><button class="btn sm ghost" onclick="openRetroLog()">Past block</button><div id="log-time-content"></div></details>
   <details id="timeline-details" class="today-destination" open>
     <summary aria-expanded="true">Timeline<span class="tds-summary" id="timeline-collapsed-summary"></span><span class="tds-chevron" aria-hidden="true"></span></summary>
@@ -166,9 +161,12 @@
       <div id="tomorrow-timeline-preview" hidden role="region" aria-label="Tomorrow’s timeline preview"></div>
     </div>
   </details>
-  <details id="accountability-details" class="today-destination" open style="display:none">
-    <summary aria-expanded="true">Accountability<span class="tds-summary" id="accountability-collapsed-summary"></span><span class="tds-chevron" aria-hidden="true"></span></summary>
-  </details>
+  <section id="unfinished-recovery-section" hidden aria-label="Unfinished tasks"></section>
+  <div id="accountability-details" class="accountability-compact" style="display:none"></div>
+  <dialog id="routine-day-dialog" class="daily-routine-dialog" aria-label="Today's routines">
+    <div class="routine-heading"><h2>Routines</h2><button type="button" class="btn sm ghost" onclick="document.getElementById('routine-day-dialog').close()">Close</button></div>
+    <div id="routine-day-dialog-content"></div>
+  </dialog>
   <dialog id="routine-manager" class="daily-routine-dialog" aria-label="Manage routines">
     <h2>Manage routines</h2><div id="routine-manager-list"></div>
     <button type="button" class="btn sm" data-routine-action="add">Add routine</button>
@@ -442,14 +440,17 @@
   <div class="timeline-section today-detail" id="timeline-section">
     <div class="section-label">
       <div style="display:flex;align-items:center;gap:8px">
-        <button onclick="navigateDateBy(-1)" title="Previous day"
+        <button onclick="navigateTimelineDay(-1)" title="Previous My Day" aria-label="Previous My Day"
           style="background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 2px;line-height:1;font-family:var(--head)">‹</button>
         <span id="timeline-date-label">Today's timeline</span>
-        <button id="timeline-nav-next" onclick="navigateDateBy(1)" title="Next day"
-          style="background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 2px;line-height:1;font-family:var(--head);display:none">›</button>
+        <button id="timeline-nav-next" onclick="navigateTimelineDay(1)" title="Next My Day" aria-label="Next My Day"
+          style="background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 2px;line-height:1;font-family:var(--head)">›</button>
+        <button type="button" class="my-day-calendar-button" onclick="openMyDayCalendar()" aria-label="Choose My Day date" title="Choose date">▦</button>
+        <input id="my-day-calendar" class="my-day-calendar-input" type="date" aria-label="Choose My Day date" onchange="jumpTimelineToDate(this.value)">
       </div>
       <span id="timeline-summary" style="font-family:var(--mono)"></span>
     </div>
+    <div id="timeline-anytime" hidden></div>
     <div id="timeline-blocks"></div>
   </div>
 
@@ -1049,7 +1050,7 @@
 <!-- ══ NAV ══ -->
 <nav class="nav">
   <button class="nav-btn active" id="nav-today" onclick="showView('today')">
-    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>Today
+    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>My Day
   </button>
   <button class="nav-btn" id="nav-week" onclick="showView('week')">
     <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Week
@@ -1704,6 +1705,7 @@ let currentTask = '';
 // just falls back to text matching, same as any entry that predates this field.
 let currentTaskPlanItemId = null;
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
+let viewingMyDayId = null; // null = current authoritative My Day
 let entries = [];
 let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22, reviewTime:'22:00', sleepTime:'23:00', wakeTime:'07:00', sleepReminderMin:30, sleepSetupDone:false, templates:[] };
 let reviews = {};
@@ -3748,11 +3750,20 @@ function getEntriesForWindow(startMs, endMs, includeDeleted = false) {
  *  calendar view, and a legacy account keeps exactly its midnight behaviour. The
  *  interval comes from Plan Authority — nothing here decides "after 6 PM" itself. */
 function currentMyDayTimelineTarget() {
-  if (!isViewingToday() || !globalThis.PlanAuthority) return null;
+  if (!globalThis.PlanAuthority || !globalThis.PlanAuthority.enabled()) return null;
+  if (viewingDateKey && !viewingMyDayId) return null;
   try {
-    const target = globalThis.PlanAuthority.current();
-    return target && target.store === 'operational' && Number.isFinite(target.startMs) && Number.isFinite(target.endMs) ? target : null;
+    const target = viewingMyDayId
+      ? globalThis.PlanAuthority.targetById(viewingMyDayId)
+      : globalThis.PlanAuthority.current();
+    return target && Number.isFinite(target.startMs) && Number.isFinite(target.endMs) ? target : null;
   } catch { return null; }
+}
+
+function isViewingCurrentTimelineDay() {
+  if (!globalThis.PlanAuthority || !globalThis.PlanAuthority.enabled()) return isViewingToday();
+  try { return currentMyDayTimelineTarget()?.id === globalThis.PlanAuthority.current().id; }
+  catch { return false; }
 }
 
 /** "Fri Sep 18, 6:00 PM → Sat Sep 19, 6:00 PM" in the day's own timezone. */
@@ -3796,6 +3807,7 @@ function isViewingToday() {
 // dayEndTs — moved to storage.js
 function setViewDate(dateKey) {
   viewingDateKey = dateKey;
+  viewingMyDayId = null;
   _todayRenderKey = '__FORCE__'; // sentinel: forces re-render even for empty days
   renderToday();
   document.getElementById('date-picker-dropdown').style.display = 'none';
@@ -3804,10 +3816,49 @@ function navigateDateBy(delta) {
   const cur = getViewingDateKey();
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const nextKey = _dateKeyPlusDays(cur, delta);
-  // Don't navigate past today
   const todayKey = getDateInTZ(Date.now(), tz);
-  if (nextKey > todayKey) return;
   setViewDate(nextKey === todayKey ? null : nextKey);
+}
+function navigateTimelineDay(delta) {
+  if (!globalThis.PlanAuthority || !globalThis.PlanAuthority.enabled()) {
+    navigateDateBy(delta);
+    return;
+  }
+  try {
+    const current = globalThis.PlanAuthority.current();
+    const shown = currentMyDayTimelineTarget() || current;
+    const target = delta < 0 ? globalThis.PlanAuthority.previous(shown) : globalThis.PlanAuthority.next(shown);
+    viewingMyDayId = target.id === current.id ? null : target.id;
+    viewingDateKey = null;
+    _todayRenderKey = '__FORCE__';
+    renderToday();
+  } catch (err) { showToast(err.message); }
+}
+function jumpTimelineToDate(dateKey) {
+  if (!dateKey) return;
+  if (!globalThis.PlanAuthority || !globalThis.PlanAuthority.enabled()) {
+    const todayKey = getDateInTZ(Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+    setViewDate(dateKey === todayKey ? null : dateKey);
+    return;
+  }
+  try {
+    const current = globalThis.PlanAuthority.current();
+    const target = globalThis.PlanAuthority.dayForCalendarDate(dateKey);
+    viewingMyDayId = target.id === current.id ? null : target.id;
+    viewingDateKey = null;
+    _todayRenderKey = '__FORCE__';
+    renderToday();
+  } catch (err) { showToast(err.message); }
+}
+function openMyDayCalendar() {
+  const input = document.getElementById('my-day-calendar');
+  if (!input) return;
+  input.value = getViewingDateKey();
+  if (typeof input.showPicker === 'function') input.showPicker(); else input.click();
+}
+function returnTimelineToCurrent() {
+  viewingMyDayId = null;
+  setViewDate(null);
 }
 function toggleDatePicker() {
   const dd = document.getElementById('date-picker-dropdown');
@@ -4425,9 +4476,74 @@ function renderGapRow(item) {
 }
 
 let tlExpandedBuckets = new Set();
+let timelineAnytimeExpanded = false;
+
+function timelineRowEscape(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+
+function renderPlannedTimelineRow(row, editable) {
+  const title = timelineRowEscape(row.title);
+  if (row.sourceType === 'commitment') {
+    const end = Number.isFinite(row.endMs) ? `–${localTime(row.endMs)}` : '';
+    return `<div class="tl-row tl-commitment-row" data-commitment-id="${timelineRowEscape(row.commitmentId)}">
+      <div class="tl-time">${localTime(row.startMs)}</div><div class="tl-bar-col tl-bar-commitment"></div>
+      <div class="tl-content"><div class="tl-activity">◆ ${title}</div><div class="tl-meta">Commitment · ${localTime(row.startMs)}${end}</div></div>
+      ${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editCommitment('${timelineRowEscape(row.commitmentId)}')" aria-label="Edit commitment ${title}">✎</button>` : ''}
+    </div>`;
+  }
+  const star = row.planKind === 'priority' ? '<span aria-label="Top Priority">★</span> ' : '';
+  return `<div class="tl-row tl-plan-row${row.done ? ' done' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}">
+    <div class="tl-time">${localTime(row.startMs)}</div><div class="tl-bar-col tl-bar-plan"></div>
+    <button class="tl-plan-check" onclick="toggleTimelinePlanDone('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${editable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>
+    <div class="tl-content"><div class="tl-activity">${star}${title}</div><div class="tl-meta">Planned ${row.planKind === 'priority' ? 'priority' : 'task'} · no time logged by this check</div></div>
+    ${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}
+  </div>`;
+}
+
+function renderAnytimeLane(rows, editable) {
+  const root = document.getElementById('timeline-anytime');
+  if (!root) return;
+  if (!rows.length) { root.hidden = true; root.innerHTML = ''; return; }
+  const shown = timelineAnytimeExpanded ? rows : rows.slice(0, 4);
+  const rowHtml = shown.map(row => {
+    const title = timelineRowEscape(row.title);
+    if (row.sourceType === 'commitment') return `<div class="anytime-row"><span class="anytime-marker" aria-hidden="true">◆</span><div class="anytime-title">${title}</div><span class="anytime-type">Commitment · date only</span>${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editCommitment('${timelineRowEscape(row.commitmentId)}')" aria-label="Edit commitment ${title}">✎</button>` : ''}</div>`;
+    const star = row.planKind === 'priority' ? '<span class="anytime-star" aria-label="Top Priority">★</span>' : '';
+    return `<div class="anytime-row${row.done ? ' done' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}"><button class="tl-plan-check" onclick="toggleTimelinePlanDone('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${editable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>${star}<div class="anytime-title">${title}</div>${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}</div>`;
+  }).join('');
+  const more = rows.length > 4 ? `<button class="pc-more" onclick="toggleTimelineAnytime()">${timelineAnytimeExpanded ? 'Show less' : `Show ${rows.length - 4} more`}</button>` : '';
+  root.hidden = false;
+  root.innerHTML = `<div class="anytime-head"><span>ANYTIME</span><span>${rows.length}</span></div>${rowHtml}${more}`;
+}
+
+function toggleTimelineAnytime() {
+  timelineAnytimeExpanded = !timelineAnytimeExpanded;
+  _todayRenderKey = '__FORCE__';
+  renderToday();
+}
+
+function toggleTimelinePlanDone(dayId, itemId) {
+  if (!globalThis.PlanAuthority) return;
+  const target = globalThis.PlanAuthority.targetById(dayId);
+  if (!target || !isTimelineTargetEditable(target)) return;
+  const item = globalThis.PlanAuthority.items(target).find(candidate => candidate.id === itemId);
+  if (!item) return;
+  const done = !item.done;
+  globalThis.PlanAuthority.updateItem({ sourceTarget: target, itemId, changes: { done, doneAt: done ? Date.now() : null }, stamp: stampPlanItemMutation });
+  _todayRenderKey = '__FORCE__';
+  renderToday();
+}
+
+function isTimelineTargetEditable(target) {
+  if (!target) return false;
+  if (Number.isFinite(target.endMs)) return target.endMs > Date.now();
+  const today = getDateInTZ(Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+  return target.dateKey >= today;
+}
 
 function renderTimelineCombined(combined) {
-  return combined.map(item => item.isGap ? renderGapRow(item) : renderEntryRow(item)).join('');
+  return combined.map(item => item._timelinePlanned ? renderPlannedTimelineRow(item, item._editable) : item.isGap ? renderGapRow(item) : renderEntryRow(item)).join('');
 }
 
 /** @param {Object} e entry @returns {string} HTML for a recent-list row */
@@ -4468,7 +4584,7 @@ function buildEntryRowHTML(e) {
 // Sorts, clips, merges, and gaps today's entries into the combined array for renderTimelineCombined.
 // Handles nested browser sub-activities (pcSubMap) and attaches them to their container entries.
 /** @param {Array} todayE entries for the viewed day @returns {Array} combined display items (entries + gaps) */
-function assembleTodayTimeline(todayE, myDay = null) {
+function assembleTodayTimeline(todayE, myDay = null, { includeGaps = true } = {}) {
   const sorted = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
   const browserEntries   = sorted.filter(e => e.browserUsage);
   const nestedBrowserIds = new Set();
@@ -4507,7 +4623,7 @@ function assembleTodayTimeline(todayE, myDay = null) {
   });
   const mergedDisplay = mergeConsecutiveForDisplay(clipped);
   const _dayNow = isViewingToday() ? undefined : dayEndTs(getViewingDateKey());
-  const gaps    = computeGaps(todayE.filter(e => !nestedBrowserIds.has(e.id)), _dayNow);
+  const gaps = includeGaps ? computeGaps(todayE.filter(e => !nestedBrowserIds.has(e.id)), _dayNow) : [];
   // My Day: schedule occurrences come from Plan Authority's own projection, which
   // selects by each occurrence's START instant inside [startMs, endMs) and de-duplicates
   // by template id + start, so a block crossing midnight appears exactly once and one
@@ -4554,12 +4670,17 @@ function initializeTodaySurfaces() {
   document.getElementById('timeline-content').append(timeline);
   const recent = document.getElementById('recent-entries-section');
   recent.classList.remove('today-detail');
-  const corrections = document.createElement('details');
-  corrections.id = 'timeline-entry-actions';
-  corrections.innerHTML = '<summary>Entry actions</summary>';
-  corrections.append(recent); document.getElementById('timeline-content').append(corrections);
+  // Every factual timeline row already owns its edit action. Keep the legacy
+  // recent-list DOM for existing render code, but remove its duplicate dashboard
+  // wrapper from the main page.
+  recent.hidden = true;
+  const routineSection = document.getElementById('daily-routines');
+  document.getElementById('routine-day-dialog-content').append(routineSection);
+  routineSection.hidden = false;
   const partner = document.getElementById('partner-card');
   partner.classList.remove('today-detail'); document.getElementById('accountability-details').append(partner);
+  const accountability = document.getElementById('accountability-details');
+  accountability.parentElement.insertBefore(document.getElementById('so-far'), accountability);
   new MutationObserver(renderNeedsYou).observe(document.getElementById('today-sleep-reminder'), { attributes: true, attributeFilter: ['hidden'] });
   new MutationObserver(renderNeedsYou).observe(document.getElementById('daily-routines-error'), { childList: true, subtree: true, characterData: true });
 }
@@ -4588,8 +4709,14 @@ function initTodayPersistentSection(id, storageKey, defaultOpen) {
   });
 }
 function initTodayPersistentSections() {
-  initTodayPersistentSection('timeline-details', 'ta3-timeline-open', true);
-  initTodayPersistentSection('accountability-details', 'ta3-accountability-open', true);
+  const timeline = document.getElementById('timeline-details');
+  if (timeline) { timeline.open = true; syncTodayDestinationAria(timeline); }
+}
+function openRoutineDayDialog() {
+  const dialog = document.getElementById('routine-day-dialog');
+  if (!dialog) return;
+  globalThis.renderDailyRoutines?.();
+  dialog.showModal();
 }
 function chooseTodayWork() {
   document.getElementById('up-next').classList.add('choose-work');
@@ -4607,7 +4734,7 @@ function renderNeedsYou() {
   // stays true. Reading the same localStorage key tomorrow-view-ui.js writes keeps this the single
   // place that decides Needs You's visibility, so a MutationObserver-triggered re-render can never
   // un-hide it out from under the tab switch.
-  const tomorrowTabActive = localStorage.getItem('ta3-commitments-view') === 'tomorrow';
+  const tomorrowTabActive = false;
   region.hidden = !isViewingToday() || tomorrowTabActive || !candidates.length;
   document.getElementById('needs-you-count').textContent = candidates.length === 1 ? '1 thing' : `${candidates.length} things`;
   document.getElementById('needs-you-more').hidden = candidates.length <= 1;
@@ -5666,10 +5793,12 @@ function renderToday() {
   if (typeof globalThis.renderDailyRoutines === 'function') globalThis.renderDailyRoutines();
   let perfStageStart = perfNow();
   resetRetroBar();
-  autoLogDueTemplates({ notify: isViewingToday() });
+  autoLogDueTemplates({ notify: isViewingCurrentTimelineDay() });
   const todayE = getViewingEntries();
   const _tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const _viewKey = getViewingDateKey();
+  const myDay = currentMyDayTimelineTarget();
+  const viewingCurrentTimeline = isViewingCurrentTimelineDay();
   const displayTodayE = squashTinyPCTimeFragments(todayE, _viewKey);
   const realEntries = displayTodayE.filter(e => !e.missed);
   // "Deep blocks today" speaks to confirmed behaviour — exclude passive
@@ -5685,10 +5814,11 @@ function renderToday() {
   document.getElementById('today-date').textContent = new Intl.DateTimeFormat('en-US', {
     timeZone: _tz, weekday: 'long', month: 'long', day: 'numeric'
   }).format(tzParseTime(_viewKey, '12:00'));
-  document.getElementById('up-next').hidden = !isViewingToday();
+  document.getElementById('up-next').hidden = !viewingCurrentTimeline;
   // Show/hide "back to today" button
   const backBtn = document.getElementById('back-to-today-btn');
-  if (backBtn) backBtn.style.display = isViewingToday() ? 'none' : 'inline-flex';
+  if (backBtn) backBtn.style.display = viewingCurrentTimeline ? 'none' : 'inline-flex';
+  document.getElementById('so-far').hidden = !viewingCurrentTimeline;
   document.getElementById('intention').value = intention;
   applyTodayDetailsMode();
 
@@ -5715,15 +5845,19 @@ function renderToday() {
   const timelineTemplateKey = (settings.templates || [])
     .map(t => [t.id, t.enabled !== false, (t.days || []).join('-'), t.startTime, t.endTime, t.activity, t.energy, !!t.autoLog, (t.skipDates || []).join('/')].join(':'))
     .join(',');
-  const timelinePlanKey = planTargetsForCalendarDate(_viewKey)
-    .flatMap(target => planItemsFor(target).map(item => [target.id, item.id, item.task, item.done, item.updatedAt || ''].join(':'))).join(',');
+  const timelineTarget = myDay || (globalThis.PlanAuthority
+    ? (viewingDateKey && globalThis.PlanAuthority.enabled() ? null : globalThis.PlanAuthority.dayForCalendarDate(_viewKey))
+    : personalDayBoundaryConfigured() ? null : legacyPlanTarget(_viewKey));
+  const timelineItems = timelineTarget ? planItemsFor(timelineTarget) : [];
+  const timelineCommitments = timelineTarget ? (globalThis.PlanningContinuityUI?.commitmentsForTarget?.(timelineTarget) || []) : [];
+  const timelinePlanKey = timelineItems.map(item => [timelineTarget.id, item.id, item.task, item.kind || 'priority', item.when || '', item.done, item.updatedAt || ''].join(':')).join(',')
+    + '|' + timelineCommitments.map(item => [item.id, item.title, item.startMs, item.updatedAt || ''].join(':')).join(',');
   // My Day timeline. With a Personal Day boundary active, the timeline's ROWS cover the
   // authoritative My Day interval [startMs, endMs) from Plan Authority instead of the
   // calendar date — e.g. Fri 18:00 → Sat 18:00 for an 18:00 boundary. Timestamps are
   // untouched; only which rows are grouped here changes. The So Far / deep-block stats
   // above stay calendar-day evidence by design, and browsing history (not today) keeps
   // the factual calendar view. Legacy accounts get null here and are unchanged.
-  const myDay = currentMyDayTimelineTarget();
   // Declared further down this script; guarded because renderToday can run before that
   // line has executed (a TDZ ReferenceError is simply skipped).
   try { notePersonalDayRendered(); } catch { /* not initialised yet */ }
@@ -5732,16 +5866,28 @@ function renderToday() {
   // The My Day id is part of the key, so the 18:00 rollover (which does not change the
   // calendar date) still rebuilds the rows, and midnight (which does not change My Day)
   // leaves them as they are.
-  const newRenderKey = _viewKey + '|' + (myDay ? myDay.id : '') + '|' + timelineTemplateKey + '|' + timelinePlanKey + '|' + timelineE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
+  const newRenderKey = _viewKey + '|' + (timelineTarget?.id || 'history') + '|' + timelineTemplateKey + '|' + timelinePlanKey + '|' + timelineE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
   const entriesChanged = newRenderKey !== _todayRenderKey;
   if (entriesChanged) _todayRenderKey = newRenderKey;
 
   const tlEl = document.getElementById('timeline-blocks');
 
   if (entriesChanged) {
-    const combined = assembleTodayTimeline(displayTimelineE, myDay);
-    if (!combined.length) {
-      tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No entries yet today — start the timer to begin tracking.</div>';
+    const projection = globalThis.TomorrowTimelineModel?.deriveMyDayPlannedRows({
+      target: timelineTarget,
+      planItems: timelineItems,
+      commitments: timelineCommitments,
+      itemStartInstant: (target, when) => globalThis.PlanAuthority?.itemStartInstant(target, when) ?? null,
+    }) || { anytime: [], positioned: [] };
+    const editable = isTimelineTargetEditable(timelineTarget);
+    renderAnytimeLane(projection.anytime, editable);
+    const base = assembleTodayTimeline(displayTimelineE, myDay, { includeGaps: viewingCurrentTimeline });
+    const sourceOrder = item => item._timelinePlanned ? (item.sourceType === 'planned-task' ? 0 : 1) : item.template ? 2 : item.isGap ? 4 : 3;
+    const rowId = item => String(item.id || item.templateId || '');
+    const plannedRows = projection.positioned.map(row => ({ ...row, tsStart: row.startMs, ts: row.endMs || row.startMs, _timelinePlanned: true, _editable: editable }));
+    const combined = [...base, ...plannedRows].sort((a, b) => ((a.tsStart || a.ts) - (b.tsStart || b.ts)) || (sourceOrder(a) - sourceOrder(b)) || rowId(a).localeCompare(rowId(b)));
+    if (!combined.length && !projection.anytime.length) {
+      tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">Nothing planned or recorded for this My Day.</div>';
     } else {
       tlEl.innerHTML = renderTimelineCombined(combined);
       // Animate the most recently logged entry
@@ -5769,7 +5915,7 @@ function renderToday() {
     : _diffDays === 1 ? "Yesterday's timeline"
     : new Intl.DateTimeFormat('en-US',{timeZone:_tz,weekday:'long',month:'short',day:'numeric'}).format(new Date(_vk + 'T12:00:00')) + "'s timeline";
   document.getElementById('timeline-date-label').textContent = myDay ? `My Day · ${myDayIntervalLabel(myDay)}` : _tlLabel;
-  document.getElementById('timeline-nav-next').style.display = isViewingToday() ? 'none' : '';
+  document.getElementById('timeline-nav-next').style.display = '';
 
   // Timeline summary — describes the rows actually shown (My Day rows when active).
   const workStarted = isViewingToday() ? (Date.now() > getWorkDayStartTs(displayTimelineE)) : displayTimelineE.length > 0;
@@ -5791,6 +5937,7 @@ function renderToday() {
       perfStageStart = recordPerfStage('renderTodayRecentList', perfStageStart);
       renderRecentChips();
       renderAwarenessSignal();
+      renderPartnerCard();
       recordPerfStage('renderTodayBottomUi', perfStageStart);
       return;
     }
@@ -6664,8 +6811,14 @@ function refreshAuthoritativePlanSurfaces() {
   // Planning Continuity V1 — Upcoming / future-day browser / stale recovery all read
   // authoritative plan state, so they refresh on the same signal as every other surface.
   if (typeof globalThis.refreshCommitmentSurfaces === 'function') globalThis.refreshCommitmentSurfaces();
+  refreshMyDayTimeline();
 }
 globalThis.refreshAuthoritativePlanSurfaces = refreshAuthoritativePlanSurfaces;
+function refreshMyDayTimeline() {
+  _todayRenderKey = '__FORCE__';
+  renderToday();
+}
+globalThis.refreshMyDayTimeline = refreshMyDayTimeline;
 
 // A personal-day rollover (e.g. 18:00) changes which plan is authoritative
 // WITHOUT changing the calendar date, so renderTodayOnDateChange() cannot see
@@ -7220,18 +7373,6 @@ function doSwitchFromBanner() {}
 function toggleHdrMenu() {
   const menu = document.getElementById('hdr-menu');
   const isOpen = menu.style.display !== 'none';
-  if (!isOpen) {
-    // Re-labeled right before the menu becomes visible rather than kept in
-    // sync continuously: Plan Authority may not be ready at page load, and
-    // there is no "disable" path, so a boundary can only go OFF -> ON once —
-    // reading it lazily here is exactly as current as a push-based update.
-    const planTomorrowItem = document.getElementById('hdr-menu-plan-tomorrow');
-    if (planTomorrowItem) {
-      let usesPersonalDay = false;
-      try { usesPersonalDay = !!(window.PlanAuthority && window.PlanAuthority.enabled()); } catch { /* not ready yet — legacy wording */ }
-      planTomorrowItem.textContent = usesPersonalDay ? 'Plan next personal day' : 'Plan tomorrow';
-    }
-  }
   menu.style.display = isOpen ? 'none' : 'block';
 }
 // Close hdr menu on outside click
@@ -10483,14 +10624,14 @@ function selectAvatar(emoji) {
 function renderPartnerCard() {
   const card = document.getElementById('partner-card');
   if (!card) return;
-  // Today Persistent Sections V1 — the whole Accountability section (header included) only
-  // takes up space when a partner is actually linked; no permanent empty card otherwise.
   const section = document.getElementById('accountability-details');
-  const collapsedSummary = document.getElementById('accountability-collapsed-summary');
   const partnerUid = localStorage.getItem('ta3-partner-uid');
+  const streak = planningStreakForDisplay();
+  const streakText = streak ? `🔥 ${streak.current}-day planning streak` : 'Planning streak unavailable';
   if (!partnerUid) {
-    card.style.display = 'none'; card.innerHTML = '';
-    if (section) section.style.display = 'none';
+    card.style.display = 'block';
+    if (section) section.style.display = '';
+    card.innerHTML = `<div class="partner-card partner-card-compact"><div class="partner-info"><div class="partner-name">${streakText}</div></div></div>`;
     return;
   }
   card.style.display = 'block';
@@ -10503,64 +10644,34 @@ function renderPartnerCard() {
     ? `<button class="btn sm ghost" onclick="sendNudge()" style="flex-shrink:0">💪 Nudge</button>`
     : `<span style="font-size:10px;color:var(--muted);flex-shrink:0">Nudged ✓</span>`;
 
-  // Partner View V1 — the summary card stays a quick glance / entry point;
-  // "View day" is the door into the full reciprocal read-only Today projection.
   const viewDayHtml = `<button class="btn sm ghost" onclick="openPartnerView()" style="flex-shrink:0">View day</button>`;
 
   const M = globalThis.SharedAccountabilityModel;
   const shared = M ? M.validateSharedPayload(partnerShared) : null;
   if (!shared) {
-    card.innerHTML = `<div class="partner-card">
-      <div class="partner-avatar">👤</div>
+    card.innerHTML = `<div class="partner-card partner-card-compact">
       <div class="partner-info">
-        <div class="partner-name">Partner</div>
-        <div class="partner-stats">No current update</div>
+        <div class="partner-name">${streakText}</div>
+        <div class="partner-stats">Partner · No current update</div>
       </div>
       ${viewDayHtml}
       ${nudgeHtml}
     </div>`;
-    if (collapsedSummary) collapsedSummary.textContent = ' · Partner';
     return;
   }
 
   const fresh = M.isSharedTodayFresh(Date.now(), shared.publisher.timezone, shared.today.dateKey);
   const name = shared.publisher.displayName ? esc(shared.publisher.displayName) : 'Partner';
-  const statusIcon = { planned: '○', 'worked-on': '◐', done: '✓' };
-  const statusLabel = { planned: 'Planned', 'worked-on': 'Worked on', done: 'Done' };
-  const prepLabel = { prepared: 'Prepared', 'open-day': 'Open day', 'not-prepared': 'Not prepared yet' };
-  // Provenance-neutral by design: the shared payload carries no publisher
-  // boundary flag (adding one would be a Partner View data-selection/allowlist
-  // change, out of scope here), and this device's OWN Personal Day Boundary
-  // state says nothing about the publisher's. A viewer-derived "Tomorrow" /
-  // "Next personal day" label can mislabel the publisher's actual plan
-  // whenever the two configurations differ, so this never branches on
-  // personalDayBoundaryConfigured() or any other local/viewer signal.
-  const tomorrowWord = 'Upcoming plan';
-
-  let bodyRows;
-  if (!fresh) {
-    bodyRows = `<div class="partner-stats">No current update</div>`;
-  } else if (!shared.today.priorities.length) {
-    bodyRows = `<div class="partner-stats">No priorities shared today</div>
-      <div class="partner-stats">${tomorrowWord}: ${esc(prepLabel[shared.tomorrow.prepStatus] || 'Not prepared yet')}</div>`;
-  } else {
-    bodyRows = shared.today.priorities.map(p =>
-      `<div class="partner-stats">${statusIcon[p.status] || '○'} ${esc(p.title)} — ${esc(statusLabel[p.status] || 'Planned')}</div>`
-    ).join('') + `<div class="partner-stats">${tomorrowWord}: ${esc(prepLabel[shared.tomorrow.prepStatus] || 'Not prepared yet')}</div>`;
-  }
-  const freshnessHtml = `<div class="partner-stats">${esc(M.formatFreshness(Date.now(), shared.publisher.updatedAt))}</div>`;
-
-  card.innerHTML = `<div class="partner-card">
-    <div class="partner-avatar">👤</div>
+  const prepLabel = { prepared: 'Planned', 'open-day': 'Open day', 'not-prepared': 'Not planned' };
+  const status = fresh ? (prepLabel[shared.tomorrow.prepStatus] || 'Not planned') : 'No current update';
+  card.innerHTML = `<div class="partner-card partner-card-compact">
     <div class="partner-info">
-      <div class="partner-name">${name}</div>
-      ${bodyRows}
-      ${freshnessHtml}
+      <div class="partner-name">${streakText}</div>
+      <div class="partner-stats">${name} · ${status}</div>
     </div>
     ${viewDayHtml}
     ${nudgeHtml}
   </div>`;
-  if (collapsedSummary) collapsedSummary.textContent = fresh ? ` · ${name} · ${esc(M.formatFreshness(Date.now(), shared.publisher.updatedAt))}` : ` · ${name}`;
 }
 
 // ── Partner View V1 — full-screen, read-only Today projection ──────────────

@@ -74,6 +74,7 @@ async function openApp(page, { plans = {}, entries = [], routines = routineState
   }, { plans, entries, routines, now: NOW, deviceId });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof openPlanTomorrow === 'function' && typeof getPlanTomorrowAppContext === 'function');
+  await page.evaluate(() => { document.getElementById('today-commitments').hidden = false; });
   await expect(page.locator('#signin-overlay')).toBeHidden();
 }
 

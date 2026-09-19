@@ -75,6 +75,7 @@ async function openApp(page, { plans = {}, routines = routineState([]), entries 
   }, { plans, routines, entries, now: NOW, deviceId, commitmentsView });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof openPlanTomorrow === 'function' && typeof getPlanTomorrowAppContext === 'function');
+  await page.evaluate(() => { document.getElementById('today-commitments').hidden = false; });
   await expect(page.locator('#signin-overlay')).toBeHidden();
 }
 
@@ -104,12 +105,12 @@ test.describe('Navigation', () => {
     await expect(page.locator('#plan-strip')).toContainText('Existing today task');
   });
 
-  test('an already-persisted Tomorrow preference is honored on load, read-only', async ({ page }) => {
+  test('an already-persisted Tomorrow preference cannot hide the primary My Day on load', async ({ page }) => {
     await openApp(page, { plans: { [TODAY]: { items: [planItem('t1', 'kept')] } }, commitmentsView: 'tomorrow' });
     const before = await page.evaluate(() => localStorage.getItem('ta3-plans'));
-    await expect(page.locator('#tomorrow-view')).toBeVisible();
-    await expect(page.locator('#today-commitments-today')).toBeHidden();
-    await expect(page.locator('#tmr-tab-tomorrow')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#tomorrow-view')).toBeHidden();
+    await expect(page.locator('#today-commitments-today')).toBeVisible();
+    await expect(page.locator('#tmr-tab-today')).toHaveAttribute('aria-pressed', 'true');
     const after = await page.evaluate(() => localStorage.getItem('ta3-plans'));
     expect(after).toBe(before);
   });
