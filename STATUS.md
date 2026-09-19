@@ -5,6 +5,25 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-19 — My Day UX Simplification V1 FIX FIRST corrections (review candidate, NOT integrated)
+
+Continued on `feat/my-day-ux-simplification-v1` from reviewed candidate `049bf8e`. The successful
+My Day hierarchy and timeline projection are unchanged. The correction pass fixes arbitrary
+boundary scheduling-date inversion, refuses direct Add/Edit into ended authoritative intervals,
+and adds deterministic cross-store relocation revisions so ordinary stale source edits cannot
+resurrect a second active location. Equal-sequence conflicting moves use stable writer/day facts;
+a later explicit move increments the sequence and can supersede the earlier move.
+
+Clearing task time now clears range-only metadata in both stores while preserving identity.
+Inspect routines opens and focuses the existing secondary dialog. So Far is visibly labelled
+`Calendar today` and remains calendar-day evidence. The protected primary README was not touched;
+nothing was merged, deployed, or written to production Firebase. Verification: focused Node
+**274/274**; corrected focused Playwright **54/54** after one synthetic-fixture race; full
+`npm test` PASS; full Playwright **669/669**; lint 0 errors / 38 pre-existing warnings. Parity and
+diff checks pass (70-file runtime closure; clean diff check), as recorded in `TEST_REPORT.md`.
+
+---
+
 ## 2026-09-19 — My Day UX Simplification V1 (review candidate, NOT integrated)
 
 Branch `feat/my-day-ux-simplification-v1`, created in an isolated worktree from verified

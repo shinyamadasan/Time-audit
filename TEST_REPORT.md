@@ -5,6 +5,41 @@
 
 ---
 
+## My Day UX Simplification V1 — FIX FIRST corrections · 2026-09-19
+
+branch: `feat/my-day-ux-simplification-v1`; reviewed starting SHA
+`049bf8e19bf61ce0f22538d1a88b022d521aa65b`; expected and verified `origin/main`
+`f99f5d06b24506e8fa781e692dccc99fcba32667`; authoritative common Git dir remained the primary
+repository `.git`; protected primary README unchanged.
+
+scope: arbitrary-boundary scheduling-date inversion; ended-day direct Add/Edit guard;
+deterministic relocation authority across legacy/operational plan stores; range metadata clearing;
+Needs You routine-dialog navigation; visible `Calendar today` evidence scope. The existing My Day
+hierarchy, timeline projection, stable item ids, evidence separation, stale-recovery provenance,
+and local-noon partner fixture correction were preserved.
+
+result:
+
+- Consolidated focused Node suite: **274/274** across Plan Authority, legacy/operational merge,
+  operational repository/sync, boundary-live, planning capacity, stale recovery, and My Day
+  timeline/window models. This includes 00:00/04:00/12:00/17:00/18:00 inverses, both merge
+  orders, four cross-store move directions, concurrent explicit moves, and both range stores.
+- Focused Playwright: initial broad run **100/101**; the only failure was a test-fixture race in
+  which the live routine renderer recomputed and hid a synthetic Needs You row before Playwright's
+  delayed click. Activation and click were moved into the same browser task; the corrected
+  planning/Today rerun passed **54/54**. The full suite subsequently exercised every focused spec.
+- `npm test`: PASS, exit 0.
+- Full `npx playwright test`: **669/669**, 0 failures, 5.4 minutes.
+- `npm run lint`: PASS, 0 errors / the same 38 pre-existing warnings.
+- `npm run check:www-parity`: PASS; all **70** runtime-closure files are byte-identical, including
+  the new relocation module and every changed production asset.
+- `git diff --check`: clean.
+
+No product failure was waived, no base/candidate flake reproduction was required, and no merge,
+deployment, or production Firebase write was performed.
+
+---
+
 ## My Day UX Simplification V1 (review candidate) · 2026-09-19
 
 branch: `feat/my-day-ux-simplification-v1`; verified base

@@ -13,14 +13,21 @@
   rows from timed rows, and supplies deterministic same-time ordering before the existing
   actual/template/gap rows are composed.
 - `plan-authority.js`: `previous()`, calendar-date ownership, and identity-preserving
-  `updateItem()` support timeline navigation and edit/reschedule. Date-only ownership uses the
-  approved local-noon rule; a specific time resolves by its actual timestamp. Priority-cap checks
-  stay authoritative.
+  `updateItem()` support timeline navigation and edit/reschedule.
+  `scheduledDateForTarget()` inverts the approved local-noon/date-time ownership contract for any
+  valid boundary; `addItem()` and direct edits reject ended targets by interval end. Priority-cap
+  checks stay authoritative.
+- `plan-item-relocation.js`: pure relocation-revision normalization, deterministic comparison,
+  next-sequence construction, and canonical active-location projection across both plan stores.
+  Legacy and operational merge functions consult the same comparator, so ordinary stale source
+  edits cannot erase a known move and later explicit moves remain possible.
 - `planning-continuity-ui.js` / `.css`: universal Add, item-centric date/time/kind editing,
   typed planned-row controls, bounded Anytime expansion, compact stale recovery, responsive
   layout, and accessible touch targets. Full stale and future-day tools remain secondary.
-- `daily-routines-ui.js`: routine checklist/configuration opens in the secondary routines dialog;
-  routine ids and calendar-day completion semantics are unchanged.
+- `daily-routines-ui.js` / `index.html`: routine checklist/configuration opens in the secondary
+  routines dialog; the Needs You action opens that dialog and focuses its expanded details.
+  Routine ids and calendar-day completion semantics are unchanged. So Far is visibly labelled
+  `Calendar today`; it remains calendar-day evidence.
 - `operational-plan-ui.js`: the former standalone My Day summary renders only the exceptional
   orphan-preparation recovery state, not the normal page.
 - `tomorrow-view-ui.js`: the retained secondary planner defaults to Today internally and cannot

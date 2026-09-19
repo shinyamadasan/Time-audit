@@ -114,6 +114,18 @@ remain reachable from the secondary routines dialog. Full future-day browsing al
 available from the menu. No planning, commitment, evidence, routine, partner-sharing, or Firebase
 schema was replaced.
 
+The FIX FIRST correction keeps that hierarchy and makes its mutation contracts explicit.
+`PlanAuthority.scheduledDateForTarget()` is the inverse of existing date-only local-noon and timed
+ownership, so direct scheduling works at any valid My Day boundary rather than deriving a date
+from the interval end. Direct Add/Edit reject any target whose authoritative interval has ended;
+Unfinished recovery remains the only path for historical work. Cross-day edits retain the item id
+and carry a monotonic relocation revision on both destination and source tombstone. A relocation
+outranks an ordinary stale edit, equal-sequence moves use a stable writer/day tie-break, and a
+later explicit move increments the sequence; authority projects at most one active location across
+legacy and operational records. Clearing time also clears `durationMinutes` and `endClock`.
+So Far is visibly labelled `Calendar today` (its evidence scope did not change), and Inspect
+routines opens the existing dialog, expands the relevant details, and focuses its summary.
+
 ## Product Boundary (established Phase 11.5)
 
 Between Phase 6 and Phase 11 this repo grew four "Life OS" surfaces (Learning Plans,

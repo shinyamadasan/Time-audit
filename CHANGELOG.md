@@ -7,6 +7,29 @@
 My Day is now one calm daily command center: `UP NEXT`, universal `+ Add`, one authoritative
 plan-plus-evidence timeline, then compact recovery/accountability information.
 
+### FIX FIRST corrections
+
+- Direct Today/Tomorrow/default/edit dates now come from one Plan Authority inverse: a date-only
+  value's local-noon anchor, or a timed value's exact civil date/time, must resolve back to the
+  same authoritative target. This is covered at 00:00, 04:00, 12:00, 17:00, and 18:00 boundaries.
+- Universal Add and ordinary row Edit reject targets whose authoritative interval has ended.
+  They do not clamp or rewrite history; provenance-preserving Unfinished recovery remains the
+  sanctioned path from an ended day.
+- Cross-day direct edits preserve the immutable item id and add a relocation revision to the live
+  destination and source tombstone. Relocation authority wins over ordinary stale edits in both
+  legacy and operational merges; equal-sequence conflicting destinations resolve by stable
+  writer/from/to facts, while a later explicit move increments the sequence. Plan Authority
+  therefore exposes at most one canonical active location across both stores without deleting
+  historical records or adding another plan store.
+- Clearing time removes `durationMinutes` and `endClock`, keeps the same id, and returns one item
+  to Anytime in either store. Inspect routines now opens the existing routines dialog, expands
+  its details, and focuses the summary. So Far now visibly says `Calendar today`; its factual
+  calendar-day evidence semantics are unchanged.
+
+Verification: focused Node **274/274**; corrected focused Playwright **54/54**; `npm test` PASS;
+full Playwright **669/669**; lint 0 errors / 38 pre-existing warnings; 70-file runtime parity and
+diff checks clean. See `TEST_REPORT.md` for the single synthetic test-fixture race.
+
 - Top Priorities and Other Tasks are projected into the timeline without copying or migrating
   canonical plan data. Untimed items live in a bounded `ANYTIME` lane; timed items appear at their
   exact time. Planned tasks, commitments, template/routine hints, and actual activity have typed,
