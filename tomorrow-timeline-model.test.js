@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePriorityRow, normalizeRoutineRow, normalizeTemplateRow, deriveTomorrowTimelinePreview } from './tomorrow-timeline-model.js';
+import { normalizePriorityRow, normalizeRoutineRow, normalizeTemplateRow, deriveTomorrowTimelinePreview, deriveMyDayPlannedRows } from './tomorrow-timeline-model.js';
 
 const priority = (overrides = {}) => ({ id: 'p1', task: 'Buy eyedrops', when: '', done: false, ...overrides });
 const routineRow = (overrides = {}) => ({
@@ -162,4 +162,45 @@ test('deriveTomorrowTimelinePreview: hostile title text passes through untouched
   const hostile = '<img src=x onerror=alert(1)>';
   const result = deriveTomorrowTimelinePreview({ priorityItems: [priority({ id: 'p1', task: hostile, when: '09:00' })] });
   assert.equal(result.positioned[0].title, hostile);
+});
+
+test('deriveMyDayPlannedRows keeps priorities and Other Tasks in a bounded Anytime projection', () => {
+  const target = { id: 'day-1' };
+  const result = deriveMyDayPlannedRows({
+    target,
+    planItems: [
+      { id: 'other', task: 'Other task', kind: 'task', when: '', done: false },
+      { id: 'priority', task: 'Priority', when: '', done: false },
+    ],
+    itemStartInstant: () => null,
+  });
+  assert.deepEqual(result.anytime.map(row => [row.itemId, row.planKind]), [
+    ['priority', 'priority'],
+    ['other', 'task'],
+  ]);
+  assert.deepEqual(result.positioned, []);
+});
+
+test('deriveMyDayPlannedRows positions timed tasks and keeps same-time source order stable', () => {
+  const target = { id: 'day-1' };
+  const atTen = Date.parse('2026-09-19T22:00:00+08:00');
+  const result = deriveMyDayPlannedRows({
+    target,
+    planItems: [{ id: 'plan', task: 'Send proposal', when: '22:00', done: false }],
+    commitments: [{ id: 'meeting', title: 'Client call', precision: 'timed', startMs: atTen, deleted: false }],
+    itemStartInstant: () => atTen,
+  });
+  assert.deepEqual(result.positioned.map(row => row.sourceType), ['planned-task', 'commitment']);
+  assert.equal(result.positioned[0].itemId, 'plan');
+});
+
+test('deriveMyDayPlannedRows keeps date-only commitments untimed and distinct from tasks', () => {
+  const result = deriveMyDayPlannedRows({
+    target: { id: 'day-1' },
+    commitments: [{ id: 'date-only', title: 'Renew license', precision: 'date', startMs: 123, deleted: false }],
+    itemStartInstant: () => null,
+  });
+  assert.equal(result.anytime.length, 1);
+  assert.equal(result.anytime[0].sourceType, 'commitment');
+  assert.equal(result.anytime[0].startMs, null);
 });

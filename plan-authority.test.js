@@ -177,6 +177,65 @@ test('a never-enabled account sees exactly one authoritative day for a calendar 
   assert.deepEqual([days[0].store, days[0].id], ['legacy', D]);
 });
 
+test('item-centric date scheduling uses noon for untimed tasks and the exact entered time for timed tasks', () => {
+  const app = graveyardApp();
+  const untimed = app.authority.dayForScheduledDate('2026-09-23', '');
+  const timed = app.authority.dayForScheduledDate('2026-09-23', '21:00');
+  assert.equal(untimed.ok, true);
+  assert.equal(timed.ok, true);
+  assert.equal(untimed.anchor, 'noon');
+  assert.equal(timed.anchor, 'time');
+  assert.equal(untimed.target.startMs, manila('2026-09-22', '18:00'));
+  assert.equal(timed.target.startMs, manila('2026-09-23', '18:00'));
+  assert.equal(timed.instantMs, manila('2026-09-23', '21:00'));
+});
+
+test('previous and next move one authoritative My Day across the 18:00 boundary', () => {
+  const app = graveyardApp();
+  app.setNow(manila(D, '19:00'));
+  const current = app.authority.current();
+  const previous = app.authority.previous(current);
+  const next = app.authority.next(current);
+  assert.equal(previous.endMs, current.startMs);
+  assert.equal(next.startMs, current.endMs);
+});
+
+test('editing date/time/kind preserves the same item id and leaves one active copy', () => {
+  const app = graveyardApp();
+  app.setNow(manila(D, '19:00'));
+  const source = app.authority.current();
+  const destination = app.authority.dayForScheduledDate('2026-09-23', '21:00').target;
+  app.authority.saveItems(source, [item('stable-id', 'Draft proposal')]);
+  const result = app.authority.updateItem({
+    sourceTarget: source,
+    itemId: 'stable-id',
+    destination,
+    changes: { task: 'Send proposal', when: '21:00', kind: 'task' },
+    stamp: value => ({ ...value, updatedAt: 2000, updatedBy: 'device-a' }),
+  });
+  assert.equal(result.moved, true);
+  assert.equal(result.item.id, 'stable-id');
+  assert.deepEqual(app.authority.items(source), []);
+  assert.deepEqual(app.authority.items(destination).map(value => [value.id, value.task, value.when, value.kind]), [
+    ['stable-id', 'Send proposal', '21:00', 'task'],
+  ]);
+  assert.equal(app.authority.rawItems(source).find(value => value.id === 'stable-id').deleted, true);
+});
+
+test('editing an Other Task into a fourth priority is refused without changing it', () => {
+  const app = graveyardApp();
+  app.setNow(manila(D, '19:00'));
+  const target = app.authority.current();
+  app.authority.saveItems(target, [item('p1', 'One'), item('p2', 'Two'), item('p3', 'Three'), item('task-4', 'Four', { kind: 'task' })]);
+  assert.throws(() => app.authority.updateItem({
+    sourceTarget: target,
+    itemId: 'task-4',
+    changes: { kind: 'priority' },
+    stamp: value => ({ ...value, updatedAt: 2000, updatedBy: 'device-a' }),
+  }), /Top 3 is already full/);
+  assert.equal(app.authority.items(target).find(value => value.id === 'task-4').kind, 'task');
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 2. Authority routing — never by store contents
 // ═══════════════════════════════════════════════════════════════════════════
