@@ -730,10 +730,10 @@ in `buildPartnerViewProjectionForPublish`, itself additive). Branch
 review.
 
 
-## Planning Continuity V1 (review candidate, 2026-09-18)
+## Planning Continuity V1 + My Day (INTEGRATED to main @ e838321, 2026-09-19)
 
-Branch `feat/future-planning-capacity-v1` from `origin/main` `795ce08`. Pushed, not merged,
-not deployed. Also delivers PROP-012 (in-app appointment planning, parked 2026-07-20) in its
+Integrated to `main` at `e838321` by pure fast-forward from `795ce08`; branch
+`feat/future-planning-capacity-v1` preserved at the same SHA. Also delivers PROP-012 (in-app appointment planning, parked 2026-07-20) in its
 narrow form: one-off commitments only. No recurrence, reminders or external calendar sync.
 
 **Rule: "3" is a PRIORITIZATION limit, not a PLANNING limit.** A personal day holds:
