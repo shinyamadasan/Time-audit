@@ -209,6 +209,11 @@ export function buildCommitment(input = {}) {
  *  whatever civil fields result — so editing the date/time/zone of an appointment
  *  is an ordinary authored change, while a boundary change (which touches none of
  *  these) can never reach startMs at all.
+ *
+ *  Patch contract for optional fields (durationMinutes, note): a key that is
+ *  UNDEFINED or absent means "leave unchanged"; an explicit NULL means "clear it".
+ *  Never decided by truthiness, so 0 or an empty string can never be mistaken for
+ *  either.
  *  @returns {{ok:true, record:object} | {ok:false, reason:string, ...}} */
 export function updateCommitment(current, patch = {}) {
   const base = normalizeCommitment(current);

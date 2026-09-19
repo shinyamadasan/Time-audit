@@ -1598,7 +1598,9 @@ button, a, [role="button"],
 #view-today h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin:0 0 10px;color:var(--muted)}
 #today-commitments .plan-strip,#today-commitments .daily-routines{padding:0;border:0;background:none;margin:0 0 10px}
 #today-commitments .plan-head{margin-bottom:4px}
-#plan-strip:not(.editing) .plan-editor,#plan-strip:not(.editing) .plan-remove,#plan-strip:not(.editing) .plan-start{display:none}
+#plan-strip:not(.editing) .plan-editor,#plan-strip:not(.editing) .plan-remove,#plan-strip:not(.editing) .plan-start,#plan-strip:not(.editing) .plan-kind{display:none}
+.plan-kind{background:none;border:1px solid var(--bd);color:var(--muted);border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer;white-space:nowrap}
+.plan-kind:hover{color:var(--text)}
 #today-commitments .plan-task{overflow-wrap:anywhere;white-space:normal}
 #today-commitments .plan-item{padding:6px 0}
 #today-commitments .plan-meta{font-size:10px}

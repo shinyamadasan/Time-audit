@@ -442,7 +442,9 @@ export function computeReadyNow({ plan, targetDate, routines = [], localSaveSucc
   const preparation = normalizePreparation(plan?.preparation, targetDate);
   if (!preparation || !localSaveSucceeded) return false;
   const oneOffIds = new Set(preparation.oneOffItemIds);
-  const actionableOneOff = planItems(plan.items).some(item => oneOffIds.has(item.id) && !item.deleted && !item.done);
+  // An item demoted to a secondary task after preparation no longer makes the day
+  // actionable (Planning Continuity V1). Identical for kind-less items: all are priorities.
+  const actionableOneOff = planItems(plan.items).some(item => oneOffIds.has(item.id) && isPriorityPlanItem(item) && !item.deleted && !item.done);
   const plannedRoutines = new Set(preparation.routineInstanceIds);
   const actionableRoutine = routines.some(item => plannedRoutines.has(item.id) && item.occurs !== false && !item.skipped && item.actionable !== false);
   return actionableOneOff || actionableRoutine || preparation.intentionalBlank;

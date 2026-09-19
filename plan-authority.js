@@ -75,6 +75,8 @@ import {
   carriedItemId,
   classifyOneOffActual,
   activePriorityPlanItems,
+  planItemKind,
+  withPlanItemKind,
 } from './plan-tomorrow-model.js';
 // Side-effect import: personal-day-boundary-live.js owns the
 // `window.PersonalDayBoundaryLive` singleton this module's own singleton composes,
@@ -387,7 +389,9 @@ export function createPlanAuthority(deps = {}) {
     const prepared = normalizeOperationalPreparation(plan?.preparation, target.id);
     if (!prepared || !localSaveSucceeded) return false;
     const oneOffIds = new Set(prepared.oneOffItemIds);
-    const actionableOneOff = rawItems(target).some(item => oneOffIds.has(item.id) && !item.deleted && !item.done);
+    // Same current-kind rule as computeReadyNow: a prepared priority later demoted to a
+    // task no longer keeps the day ready.
+    const actionableOneOff = rawItems(target).some(item => oneOffIds.has(item.id) && planItemKind(item) === 'priority' && !item.deleted && !item.done);
     const plannedRoutines = new Set(prepared.routineInstanceIds);
     const actionableRoutine = routines.some(row => plannedRoutines.has(row.id) && row.occurs !== false && !row.skipped && row.actionable !== false);
     return actionableOneOff || actionableRoutine || prepared.intentionalBlank;
@@ -809,15 +813,54 @@ export function createPlanAuthority(deps = {}) {
       throw new Error('That task has already been moved. Change where it is scheduled instead.');
     }
     const carryId = carryItemIdFor(sourceTarget, itemId, destination);
-    const moved = buildMovedItem({ carryId, sourceItem, sourceDayId: sourceTarget.id, stamp });
+    const destinationItems = rawItems(destination);
+    let moved = buildMovedItem({ carryId, sourceItem, sourceDayId: sourceTarget.id, stamp });
+    // The Top 3 holds on the destination too. A stale PRIORITY moved into a day whose
+    // Top 3 is already full lands as an Other planned task instead: recovery is never
+    // blocked by the cap, and the cap is never exceeded by recovery. A stale task stays
+    // a task. The item being replaced (a tombstoned earlier copy with this same carry
+    // id) does not count toward the cap.
+    const destinationPriorities = activePriorityPlanItems(destinationItems.filter(candidate => candidate.id !== carryId));
+    const demoted = planItemKind(moved) === 'priority' && destinationPriorities.length >= priorityMax;
+    if (demoted) moved = withPlanItemKind(moved, 'task');
     const check = validateItem(destination, moved);
     if (!check.ok) throw new Error('That task cannot be scheduled on that day.');
-    const destinationItems = rawItems(destination);
     const already = destinationItems.find(candidate => candidate.id === carryId);
     saveItems(destination, already
       ? destinationItems.map(candidate => (candidate.id === carryId ? moved : candidate))
       : [...destinationItems, moved]);
-    return { moved: true, destination, item: moved, carryId };
+    return { moved: true, destination, item: moved, carryId, demoted };
+  }
+
+  /** Reclassifies ONE item between Top Priority and Other planned task — "Make task" /
+   *  "Make priority". Goes through the ordinary saveItems() path with the caller's own
+   *  stamp, so it syncs, merges and invalidates exactly like any other edit.
+   *
+   *  Only `kind` changes. The id, task text, when/end/duration, done state and every
+   *  linkage field (carriedFromId, planItemId links from tracked entries, which point at
+   *  this same id) are preserved, because withPlanItemKind copies the item verbatim.
+   *
+   *  Promotion is refused — never silently swapped or reordered — when the Top 3 is
+   *  already full. A tombstoned item cannot be reclassified. Preparation is not
+   *  rewritten: it is a confirmation made at a moment in time; readyNow() reads each
+   *  prepared item's CURRENT kind, so a demoted priority simply stops counting. */
+  function setItemKind({ target, itemId, kind, stamp }) {
+    if (typeof stamp !== 'function') throw new Error('An item stamping function is required.');
+    if (kind !== 'priority' && kind !== 'task') throw new Error(`Unknown plan item kind: ${kind}`);
+    const items = rawItems(target);
+    const current = items.find(candidate => candidate.id === itemId);
+    if (!current) throw new Error('That item is no longer in this plan.');
+    if (current.deleted) throw new Error('That item was removed.');
+    if (planItemKind(current) === kind) return { changed: false, item: current };
+    if (kind === 'priority') {
+      const others = activePriorityPlanItems(items.filter(candidate => candidate.id !== itemId));
+      if (others.length >= priorityMax) {
+        throw new Error(`Your Top ${priorityMax} is already full. Finish, remove or demote one first.`);
+      }
+    }
+    const next = stamp(withPlanItemKind(current, kind));
+    saveItems(target, items.map(candidate => (candidate.id === itemId ? next : candidate)));
+    return { changed: true, item: next };
   }
 
   /** Re-targets an already-moved task: tombstones the copy on the old destination,
@@ -924,6 +967,7 @@ export function createPlanAuthority(deps = {}) {
     routineTarget, routinesForTarget, templatesForTarget,
     habitEarned, streak,
     preparedPlans, boundaryChangeImpact,
+    setItemKind,
     staleUnfinished, staleMoveDestination, moveStaleItem, rescheduleStaleItem,
     dismissStaleItem, undismissStaleItem, targetById, recoverableDays,
     legacyTarget,
