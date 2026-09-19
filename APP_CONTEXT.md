@@ -1,6 +1,6 @@
 # ChronaSense App Context
 
-Last updated: 2026-09-19 (My Day UX Simplification V1 review candidate)
+Last updated: 2026-09-19 (My Day UX Simplification V1 final form-semantics correction)
 
 This is the current high-signal context for ChronaSense. Use this when starting a new thread,
 onboarding a contributor, or recovering from stale chat context.
@@ -114,10 +114,13 @@ remain reachable from the secondary routines dialog. Full future-day browsing al
 available from the menu. No planning, commitment, evidence, routine, partner-sharing, or Firebase
 schema was replaced.
 
-The FIX FIRST correction keeps that hierarchy and makes its mutation contracts explicit.
-`PlanAuthority.scheduledDateForTarget()` is the inverse of existing date-only local-noon and timed
-ownership, so direct scheduling works at any valid My Day boundary rather than deriving a date
-from the interval end. Direct Add/Edit reject any target whose authoritative interval has ended;
+The FIX FIRST corrections keep that hierarchy and make its mutation contracts explicit.
+`PlanAuthority.scheduledDateForTarget()` is an optional presentation inverse: a truncated My Day
+may have no local-noon date, in which case it returns no date instead of making the form unusable.
+Untouched Add/Edit forms remain anchored to their authoritative My Day. Entering a time searches
+the local civil dates overlapping that target and accepts exactly one instant inside its half-open
+interval; changing the date explicitly uses the existing date/time or date-only noon contract and
+may relocate the item. Direct Add/Edit reject any target whose authoritative interval has ended;
 Unfinished recovery remains the only path for historical work. Cross-day edits retain the item id
 and carry a monotonic relocation revision on both destination and source tombstone. A relocation
 outranks an ordinary stale edit, equal-sequence moves use a stable writer/day tie-break, and a

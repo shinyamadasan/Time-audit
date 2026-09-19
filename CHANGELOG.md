@@ -9,9 +9,16 @@ plan-plus-evidence timeline, then compact recovery/accountability information.
 
 ### FIX FIRST corrections
 
-- Direct Today/Tomorrow/default/edit dates now come from one Plan Authority inverse: a date-only
-  value's local-noon anchor, or a timed value's exact civil date/time, must resolve back to the
-  same authoritative target. This is covered at 00:00, 04:00, 12:00, 17:00, and 18:00 boundaries.
+- Final form date/time correction: a truncated current My Day with no local-noon inverse no longer
+  crashes Add/Edit. An untouched form preserves its authoritative target; entering a clock time
+  selects the unique matching instant inside that target, with start included, end excluded, and
+  DST ambiguity refused. Changing the civil date explicitly retains the existing exact-time or
+  date-only noon rescheduling semantics. Today and Tomorrow select authoritative targets, and the
+  date field is only a scheduling command after the owner changes it.
+
+- For ordinary non-truncated days, displayed Today/Tomorrow/default/edit dates remain Plan
+  Authority-derived hints and round-trip through the local-noon or exact date/time ownership
+  contract. Coverage spans 00:00, 04:00, 12:00, 17:00, and 18:00 boundaries.
 - Universal Add and ordinary row Edit reject targets whose authoritative interval has ended.
   They do not clamp or rewrite history; provenance-preserving Unfinished recovery remains the
   sanctioned path from an ended day.
@@ -26,9 +33,10 @@ plan-plus-evidence timeline, then compact recovery/accountability information.
   its details, and focuses the summary. So Far now visibly says `Calendar today`; its factual
   calendar-day evidence semantics are unchanged.
 
-Verification: focused Node **274/274**; corrected focused Playwright **54/54**; `npm test` PASS;
-full Playwright **669/669**; lint 0 errors / 38 pre-existing warnings; 70-file runtime parity and
-diff checks clean. See `TEST_REPORT.md` for the single synthetic test-fixture race.
+Verification after the final form correction: Plan Authority **72/72**; focused new Playwright
+**6/6** and full planning-continuity Playwright **41/41**; `npm test` PASS; full Playwright
+**675/675**; lint 0 errors / 38 pre-existing warnings; 70-file runtime parity and diff checks
+clean. Earlier correction-run details remain in `TEST_REPORT.md`.
 
 - Top Priorities and Other Tasks are projected into the timeline without copying or migrating
   canonical plan data. Untimed items live in a bounded `ANYTIME` lane; timed items appear at their

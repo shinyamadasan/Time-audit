@@ -5,6 +5,26 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-19 — My Day form date/time semantics final correction (review candidate, NOT integrated)
+
+Continued on `feat/my-day-ux-simplification-v1` from reviewed/pushed tip
+`cbe28990c892bf8460a7fdf9070ddc02a4c1e54a`. A truncated current My Day can now open and use
+Add/Edit even when no date-only local-noon inverse exists. Untouched forms preserve their selected
+authoritative target; clock entry resolves uniquely inside that target's half-open interval, while
+an owner-edited civil date retains the existing explicit rescheduling contract. Today/Tomorrow
+select targets rather than silently issuing date relocations, and repeated-hour DST ambiguity is
+never guessed.
+
+Focused model and browser regressions cover 04:00 and 18:00 overnight dates, inclusive start and
+exclusive end, the 18:00→20:00 truncated case (untimed add, title/kind edit, 19:00, 09:00 refusal,
+clear time), explicit same-id date relocation, historical refusal, and DST ambiguity. Verification:
+Plan Authority **72/72**; new focused Playwright **6/6**; planning-continuity Playwright **41/41**;
+`npm test` PASS; full Playwright **675/675**; lint 0 errors / 38 pre-existing warnings; 70-file
+runtime parity and clean diff checks. Nothing was merged, deployed, written to production Firebase,
+or built/deployed to Android. The protected primary README remains untouched.
+
+---
+
 ## 2026-09-19 — My Day UX Simplification V1 FIX FIRST corrections (review candidate, NOT integrated)
 
 Continued on `feat/my-day-ux-simplification-v1` from reviewed candidate `049bf8e`. The successful

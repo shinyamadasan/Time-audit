@@ -5,6 +5,38 @@
 
 ---
 
+## My Day UX Simplification V1 — final form date/time semantics · 2026-09-19
+
+branch: `feat/my-day-ux-simplification-v1`; reviewed starting SHA
+`cbe28990c892bf8460a7fdf9070ddc02a4c1e54a`; expected and verified `origin/main`
+`f99f5d06b24506e8fa781e692dccc99fcba32667`; authoritative common Git dir remained the primary
+repository `.git`; protected primary README unchanged.
+
+scope: non-throwing form date hints for truncated My Days; explicit target-preserving versus
+civil-date scheduling modes; target-local clock resolution over every overlapping civil date;
+half-open interval and DST-ambiguity handling; retained explicit date/noon relocation and
+historical guards. No relocation, routine, evidence, So Far, or general hierarchy redesign.
+
+result:
+
+- Focused new Plan Authority subset: **4/4**; full Plan Authority: **72/72**. Coverage includes
+  04:00/18:00 21:00 and 02:00 mapping, start inclusion, end exclusion, truncated 18:00→20:00
+  behavior, title/kind/time edits, clear time, outside-target refusal, and repeated DST ambiguity.
+- Focused new Playwright: **6/6**; full `tests/planning-continuity.spec.js`: **41/41**. The truncated
+  UI journey proves no panel crash, untimed Add, title/kind Edit, 19:00 acceptance, 09:00 refusal,
+  and clear-time behavior. The other cases pin 04:00/18:00 overnight dates and explicit same-id
+  civil-date relocation; retained tests cover historical refusal and legacy behavior.
+- `npm test`: PASS, exit 0.
+- Full `npx playwright test`: **675/675**, 0 failures, 5.0 minutes.
+- `npm run lint`: PASS, 0 errors / the same 38 pre-existing warnings.
+- `npm run check:www-parity`: PASS; all **70** runtime-closure files are byte-identical.
+- `node --check` on both changed production modules and `git diff --check`: clean.
+
+No product failure was waived. No merge, deployment, production Firebase write, or Android
+build/deploy was performed.
+
+---
+
 ## My Day UX Simplification V1 — FIX FIRST corrections · 2026-09-19
 
 branch: `feat/my-day-ux-simplification-v1`; reviewed starting SHA
