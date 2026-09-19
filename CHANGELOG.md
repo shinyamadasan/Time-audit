@@ -1,5 +1,69 @@
 # ChronaSense — Changelog
 
+## Planning Continuity V1 + My Day — 2026-09-19
+
+**Integrated — `e838321`** (pure fast-forward from `795ce08`; 13 reviewed commits, no merge
+commit, no squash, no rebase; feature branch `feat/future-planning-capacity-v1` preserved at the
+same SHA). Strict independent review returned FIX FIRST, four blockers were corrected, and a
+targeted re-review PASSED.
+
+Planning stops being capped at three items, appointments become real scheduled facts, and the
+day you plan in is the day you actually live.
+
+- **"3" limits priorities, not planning.** A day holds at most three Top Priorities plus any
+  number of Other planned tasks. The distinction is one optional item field, `kind`, where
+  absent means priority — so every item already stored keeps its exact bytes, id and behaviour,
+  with no migration. Priority order is never inferred from list position. Items can be moved
+  between the two with "Make task" / "Make priority", keeping their id, time, done state and
+  tracked-time links; promoting into a full Top 3 is refused rather than silently swapping.
+- **Readiness cannot be inflated.** Preparation records the Top Priorities only, so secondary
+  tasks and commitments cannot make a day count as prepared, extend the Planning Streak, raise
+  the focus deep-work goal, or reach Partner View. Identical results for all existing data.
+- **Scheduled commitments.** A commitment ("Dentist — Sep 30, 9:30 AM") owns its real instant
+  plus the date, optional time and explicit timezone it was written in. The personal day
+  containing it is worked out when read, so changing the boundary can move which day shows it
+  but never moves the appointment, and it can never appear in two days. Leaving the time blank
+  makes it date-only, shown as a date with no invented time. A clock time that does not exist
+  is refused; one that happens twice asks which was meant and records the answer. Optional
+  duration and note can be set and cleared. Commitments sync per record under the existing
+  owner-only room path, with no Firebase rules change and no date horizon, and an offline write
+  is pushed on reconnect.
+- **Plan any future day.** Future personal days are addressable and preparable through the one
+  existing preparation workflow, with days listed by the real hours they cover. A calendar date
+  that overlaps two personal days offers both; no calendar-date plan identity is created. Three
+  durability gaps that only mattered once days weeks ahead can be prepared are closed: those
+  days now get remote listener coverage, offline writes to them are re-pushed on reconnect, and
+  a boundary change that would strand one names it first.
+- **Unfinished from previous days.** Unfinished tasks from yesterday, three days ago or weeks
+  ago stay discoverable across both plan stores and can be moved to today, rescheduled to a
+  future day, or dismissed. Moving keeps the original on its own day as history, creates exactly
+  one copy even across devices, and lands as an Other planned task when the Top 3 is already
+  full. There is deliberately no "mark done" here, because that would record an old day as done
+  when it was not, and nothing is ever carried forward automatically.
+- **My Day, 6 PM to 6 PM.** With an 18:00 Asia/Manila boundary, My Day is
+  `[Fri 6:00 PM, Sat 6:00 PM)` and Today's timeline now shows exactly that: the previous
+  evening's schedule and entries, the overnight and morning hours, and nothing from the next
+  My Day. The exact end belongs to the next day. Timestamps stay ordinary Philippine time —
+  only the grouping changes, and no second timezone system exists. The timeline rolls at the
+  boundary, including mid-session, and not at midnight. Planning Streak and readiness were
+  audited and already followed My Day; they were not rewritten. Accounts with no boundary keep
+  plain calendar days, and browsing a past date stays factual calendar history.
+
+Verification against the integrated ref (`e838321`, project-local tooling): `npm test` exits 0
+across 53 suites; focused Playwright (`my-day-timeline`, `planning-continuity`,
+`planning-continuity-fixes`, `commitments-sync-wiring`, `personal-day-boundary`) 59/59; full
+Playwright **653/653 clean**; lint 0 errors with the same 38 pre-existing warnings; `www/`
+parity clean; `git diff --check` clean.
+
+Deliberately **not** included, and still not built: reminders or notifications, a recurrence
+engine, external calendar sync, sharing commitments with a partner, a Personal Day Boundary
+"turn off", commitments inside the evidence timeline, and a UI for undoing a dismissal or
+re-targeting an already-moved task (both exist only in the model). The Routines checklist on
+Today is still calendar-day, because routine completions are keyed to a calendar date; moving it
+to My Day is an open owner decision. "So far", deep-block counts, closeout and reviews remain
+calendar-day evidence by design. Full detail and known limits: `APP_CONTEXT.md`'s "Planning
+Continuity V1" section and `STATUS.md`'s 2026-09-19 entries.
+
 ## Personal Day UX V1.1 + Partner View Provenance Fix — 2026-09-18
 
 **Integrated — `0bf7a76`** (fast-forward from `edf4122`; feature branch

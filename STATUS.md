@@ -5,6 +5,46 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-19 — Planning Continuity V1 + My Day (INTEGRATED)
+
+**Integrated to `main` at `e838321`** by pure fast-forward from `795ce08` — 13 reviewed commits,
+no merge commit, no squash, no rebase, no force. The reviewed tree is byte-identical on main
+(same tree object as the candidate), and `e838321` is an ancestor of `origin/main`. The feature
+branch `feat/future-planning-capacity-v1` is preserved at the same SHA.
+
+Review history: strict independent review → FIX FIRST (4 blockers) → bounded corrections
+(`2949759`, `13ebeb8`) → targeted re-review PASS → owner My Day correction (`cd4c1ae`).
+
+**Integration was done in a throwaway worktree** (`Time audit app - integrate-main`), since the
+primary worktree is on `docs/phase12-personal-intelligence-design` with its own uncommitted
+6-line README change. That change was not touched: README is the same blob (`2803bec`) in both
+`795ce08` and `e838321`, so the fast-forward could not affect it, and the protected working copy
+still hashes to `653dbd2`.
+
+**Verified on the integrated tree, before pushing:**
+- `npm ci --legacy-peer-deps` OK; `npm test` exits 0 (53 suites, 0 failures).
+- Focused Playwright 59/59: `my-day-timeline`, `planning-continuity`,
+  `planning-continuity-fixes`, `commitments-sync-wiring`, `personal-day-boundary`.
+- Full Playwright **653/653, clean**. `smoke.spec.js:861` did not recur, so no base/candidate
+  reproduction was needed this time.
+- Lint 0 errors / 38 pre-existing warnings; `www/` parity clean; `git diff --check` clean.
+
+**Deferred, and still not built:** reminders/notifications, recurrence, external calendar sync,
+partner commitment sharing, Personal Day Boundary turn-off, commitments in the evidence
+timeline, and UI for undismiss or for re-targeting an already-moved stale task (model-only).
+
+**Open owner decision:** the Today Routines checklist is still calendar-day. Its completions are
+keyed `[routineId, calendarDate]`, its actions key on that date, and its streak counts calendar
+days — so it was not converted to My Day without a decision.
+
+**Known limits carried forward:** a far-future day that exists only on another device is not
+listened to until it becomes relevant or this device writes to it; two devices moving the same
+stale task offline to *different* destinations can each create a copy (same-destination moves
+converge to one); `smoke.spec.js:861` remains a pre-existing flake (base `795ce08` 27/30 vs
+candidate 28/30 under equal repeats).
+
+---
+
 ## 2026-09-19 — Planning Continuity V1: My Day timeline correction (review candidate, NOT integrated)
 
 Same branch, `feat/future-planning-capacity-v1`. This is a bounded owner correction on top of
