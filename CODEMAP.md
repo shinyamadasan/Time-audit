@@ -14,14 +14,17 @@
   actual/template/gap rows are composed.
 - `plan-authority.js`: `previous()`, calendar-date ownership, and identity-preserving
   `updateItem()` support timeline navigation and edit/reschedule.
-  `scheduledDateForTarget()` inverts the approved local-noon/date-time ownership contract for any
-  valid boundary; `addItem()` and direct edits reject ended targets by interval end. Priority-cap
-  checks stay authoritative.
+  `scheduledDateForTarget()` is a non-throwing optional date hint, while
+  `civilDateForTimeInTarget()` resolves an entered clock time inside a selected target's half-open
+  interval without guessing DST ambiguity. Explicit date edits retain the approved local-noon or
+  exact date/time ownership contract; `addItem()` and direct edits reject ended targets by interval
+  end. Priority-cap checks stay authoritative.
 - `plan-item-relocation.js`: pure relocation-revision normalization, deterministic comparison,
   next-sequence construction, and canonical active-location projection across both plan stores.
   Legacy and operational merge functions consult the same comparator, so ordinary stale source
   edits cannot erase a known move and later explicit moves remain possible.
-- `planning-continuity-ui.js` / `.css`: universal Add, item-centric date/time/kind editing,
+- `planning-continuity-ui.js` / `.css`: universal Add, target-anchored versus explicitly dated
+  item-centric date/time/kind editing,
   typed planned-row controls, bounded Anytime expansion, compact stale recovery, responsive
   layout, and accessible touch targets. Full stale and future-day tools remain secondary.
 - `daily-routines-ui.js` / `index.html`: routine checklist/configuration opens in the secondary
