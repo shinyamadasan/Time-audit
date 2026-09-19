@@ -21,6 +21,7 @@
 
 .pc-muted { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 4px 0; }
 .pc-hint { margin-top: 2px; }
+.pc-notice { font-size: 12px; line-height: 1.45; margin: 0; padding: 8px 12px; border: 1px solid var(--bd); border-radius: var(--r); background: var(--bg2); }
 .pc-error { font-size: 12px; color: var(--waste, #f87171); line-height: 1.45; margin: 6px 0 0; }
 
 /* rows (a commitment, or a stale task) */

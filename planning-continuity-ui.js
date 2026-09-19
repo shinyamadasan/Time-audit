@@ -47,6 +47,7 @@ const state = {
   formError: '',
   formPending: null,   // a DST-ambiguous submission awaiting an explicit choice
   selectedDayId: null,
+  notice: null,        // { text, tone } — the recovery actions' one status line
 };
 
 function authority() {
@@ -177,7 +178,7 @@ function commitmentFormHtml() {
     </div>
     <div class="pc-form-row">
       <input name="timezone" maxlength="64" value="${escape(zone)}" aria-label="timezone">
-      <input name="durationMinutes" type="number" min="1" max="720" step="5" placeholder="mins (optional)" value="${escape(editing?.durationMinutes ?? '')}" aria-label="duration in minutes (optional)">
+      <input name="durationMinutes" type="number" min="5" max="720" step="5" placeholder="mins (optional)" value="${escape(editing?.durationMinutes ?? '')}" aria-label="duration in minutes (optional)">
     </div>
     <input name="note" maxlength="240" placeholder="note (optional)" value="${escape(editing?.note || '')}">
     <p class="pc-muted pc-hint">Leave the time blank for a date-only commitment.</p>
@@ -202,8 +203,11 @@ function readForm(form) {
     precision: time ? 'timed' : 'date',
     timezone: raw('timezone') || accountTimezone(),
     updatedBy: deviceId(),
-    durationMinutes: duration ? Number(duration) : undefined,
-    note: raw('note') || undefined,
+    // null means CLEAR, which is distinct from undefined (leave unchanged) in
+    // updateCommitment. The form always shows every field, so a blank field is an
+    // explicit clear; sending undefined here silently kept the old duration/note.
+    durationMinutes: duration ? Number(duration) : null,
+    note: raw('note') || null,
   };
 }
 
@@ -383,31 +387,47 @@ function stamp(value) {
   return ctx && typeof ctx.stampItem === 'function' ? ctx.stampItem(value) : { ...value, updatedAt: Date.now() };
 }
 
+/** The copy shown when a recovered PRIORITY had to land as an Other planned task. */
+export const MOVED_AS_TASK_NOTICE = 'Moved to Other planned tasks because your Top 3 is already full.';
+
+/** One section-level status line for the recovery actions. (Previously their errors
+ *  went to state.formError, which only renders inside the commitment form, so they
+ *  were invisible whenever the form was closed.) */
+function setNotice(text, tone = 'info') {
+  state.notice = text ? { text, tone } : null;
+}
+
+function noticeFor(result) {
+  return result && result.demoted ? MOVED_AS_TASK_NOTICE : '';
+}
+
 function staleAction(action, itemId, dayId) {
   const layer = authority();
   if (!layer) return;
   const sourceTarget = layer.targetById(dayId);
-  if (!sourceTarget) { state.formError = 'That day cannot be resolved right now.'; render(); return; }
+  if (!sourceTarget) { setNotice('That day cannot be resolved right now.', 'error'); render(); return; }
   try {
     if (action === 'dismiss') {
       layer.dismissStaleItem({ sourceTarget, itemId, stamp });
+      setNotice('');
     } else if (action === 'reschedule') {
       // Reschedule means "choose a day": open the browser and let the owner pick,
       // rather than guessing a destination for them.
       state.browseOpen = true;
       state.pendingMove = { itemId, dayId };
+      setNotice('');
       render();
       return;
     } else {
       const destination = layer.current();
-      layer.moveStaleItem({ sourceTarget, itemId, destination, stamp });
+      const result = layer.moveStaleItem({ sourceTarget, itemId, destination, stamp });
+      setNotice(noticeFor(result));
       if (action === 'move-edit' && typeof globalThis.openTodayPlanEditor === 'function') {
         globalThis.openTodayPlanEditor();
       }
     }
-    state.formError = '';
   } catch (err) {
-    state.formError = err.message;
+    setNotice(err.message, 'error');
   }
   globalThis.refreshAuthoritativePlanSurfaces?.();
   render();
@@ -420,13 +440,13 @@ function completePendingMove(dayId) {
   if (!layer || !pending) return false;
   const sourceTarget = layer.targetById(pending.dayId);
   const destination = layer.targetById(dayId);
-  if (!sourceTarget || !destination) { state.formError = 'That day cannot be resolved right now.'; render(); return true; }
+  if (!sourceTarget || !destination) { setNotice('That day cannot be resolved right now.', 'error'); render(); return true; }
   try {
-    layer.rescheduleStaleItem({ sourceTarget, itemId: pending.itemId, destination, stamp });
-    state.formError = '';
+    const result = layer.rescheduleStaleItem({ sourceTarget, itemId: pending.itemId, destination, stamp });
+    setNotice(noticeFor(result));
     state.pendingMove = null;
   } catch (err) {
-    state.formError = err.message;
+    setNotice(err.message, 'error');
   }
   globalThis.refreshAuthoritativePlanSurfaces?.();
   render();
@@ -443,7 +463,10 @@ export function render() {
   const nowMs = Date.now();
   let html = '';
   try {
-    html = upcomingHtml(nowMs)
+    const notice = state.notice
+      ? `<p class="pc-notice${state.notice.tone === 'error' ? ' pc-error' : ''}" role="status">${escape(state.notice.text)}</p>`
+      : '';
+    html = notice + upcomingHtml(nowMs)
       + (state.browseOpen ? browseHtml(nowMs) : browseToggleHtml())
       + staleHtml(nowMs);
   } catch (err) {

@@ -1,4 +1,4 @@
-import { classifyRoutineActual, clearPlanItemRange, durationBetween, formatPlanItemSchedule, isPriorityPlanItem, isSecondaryPlanItem, planItemEndTime, reconciliationBucket, validPlanItemRange, validPlanItemTime } from './plan-tomorrow-model.js';
+import { classifyRoutineActual, clearPlanItemRange, durationBetween, formatPlanItemSchedule, isPriorityPlanItem, isSecondaryPlanItem, planItemEndTime, withPlanItemKind, reconciliationBucket, validPlanItemRange, validPlanItemTime } from './plan-tomorrow-model.js';
 import { carryItemIdFor } from './plan-authority.js';
 import { describeDayStart } from './personal-day-boundary-live.js';
 import { generateInstances, matchCompletion, occursOn } from './daily-routines-model.js';
@@ -315,6 +315,7 @@ function itemHtml() {
         <div class="pt-oneoff-task">${legacyWhen}${escape(item.task)}</div>
         <div class="pt-oneoff-time">${scheduleControlHtml(item)}</div>
       </div>
+      <button type="button" class="pt-kind" data-pt-action="kind" data-kind="task" data-id="${escape(item.id)}">Make task</button>
       <button type="button" class="plan-remove" data-pt-action="remove" data-id="${escape(item.id)}" title="Remove">✕</button>
     </div>`;
   }).join('');
@@ -338,6 +339,7 @@ function secondaryHtml() {
         <div class="pt-oneoff-task">${legacyWhen}${escape(item.task)}</div>
         <div class="pt-oneoff-time">${scheduleControlHtml(item)}</div>
       </div>
+      <button type="button" class="pt-kind" data-pt-action="kind" data-kind="priority" data-id="${escape(item.id)}">Make priority</button>
       <button type="button" class="plan-remove" data-pt-action="remove" data-id="${escape(item.id)}" title="Remove">✕</button>
     </div>`;
   }).join('');
@@ -485,6 +487,18 @@ function closePreparation() {
   }
 }
 
+/** "Make task" / "Make priority" inside the preparation draft. Only kind changes; the
+ *  id and every other field are kept. Promotion into a full Top 3 is refused, never a
+ *  silent swap. */
+function setDraftItemKind(itemId, kind) {
+  const current = draft.items.find(item => item.id === itemId && !item.deleted);
+  if (!current) throw new Error('That item is no longer in this plan.');
+  if (kind === 'priority' && activePriorities().filter(item => item.id !== itemId).length >= context().maxItems) {
+    throw new Error('Your Top ' + context().maxItems + ' is already full. Remove or demote one first.');
+  }
+  draft.items = draft.items.map(item => (item.id === itemId ? context().stampItem(withPlanItemKind(item, kind)) : item));
+}
+
 function addItem(task, when = '', kind = 'priority') {
   if (kind === 'priority' && activePriorities().length >= context().maxItems) {
     throw new Error(`${context().maxItems} priorities is the cap — add it under Other planned tasks instead.`);
@@ -524,6 +538,7 @@ root?.addEventListener('click', async event => {
     const action = control.dataset.ptAction;
     if (action === 'close') { closePreparation(); return; }
     if (action === 'blank') { draft.intentionalBlank = !draft.intentionalBlank; render(); return; }
+    if (action === 'kind') setDraftItemKind(control.dataset.id, control.dataset.kind);
     if (action === 'remove') draft.items = draft.items.map(item => item.id === control.dataset.id ? context().stampItem({ ...item, deleted: true }) : item);
     if (action === 'edit-schedule') draft.schedulingId = control.dataset.id;
     if (action === 'remove-time') {

@@ -6854,6 +6854,7 @@ function renderTodayPlan() {
       : `<button class="plan-check" onclick="togglePlanDone('${it.id}')" title="Mark done">${it.done ? '✓' : ''}</button>`;
     const actions = readOnly ? '' : `
         <button class="plan-start" onclick="startPlanItem('${it.id}')" title="${active ? 'Already tracking' : 'Start this'}" ${active ? 'disabled' : ''}>${active ? '●' : '▸'}</button>
+        <button class="plan-kind" onclick="setPlanItemKind('${it.id}', '${planItemKindOf(it) === 'task' ? 'priority' : 'task'}')">${planItemKindOf(it) === 'task' ? 'Make priority' : 'Make task'}</button>
         <button class="plan-remove" onclick="removePlanItem('${it.id}')" title="Remove">✕</button>`;
     return `<div class="plan-item ${status.key}${it.done ? ' done' : ''}">
         ${check}
@@ -6973,6 +6974,21 @@ function removePlanItem(id) {
     i.id === id ? stampPlanItemMutation({ ...i, deleted: true }) : i
   );
   savePlanItemsFor(target, raw);
+}
+
+/** "Make task" / "Make priority" on the current day. Routed through
+ *  PlanAuthority.setItemKind — the same saveItems path every plan edit uses — so the
+ *  id, text, time, done state and tracked-entry linkage are all preserved, and a
+ *  promotion into a full Top 3 is refused with a message instead of swapping anything. */
+function setPlanItemKind(id, kind) {
+  if (!isViewingToday()) return;
+  const target = currentPlanTarget();
+  if (!target || !globalThis.PlanAuthority) return;
+  try {
+    globalThis.PlanAuthority.setItemKind({ target, itemId: id, kind, stamp: stampPlanItemMutation });
+  } catch (err) {
+    showToast(err.message);
+  }
 }
 
 function togglePlanDone(id) {
