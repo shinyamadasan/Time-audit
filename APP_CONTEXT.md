@@ -1,6 +1,6 @@
 # ChronaSense App Context
 
-Last updated: 2026-09-04 (Phase 11.5 — Context Reconciliation)
+Last updated: 2026-09-19 (My Day UX Simplification V1 review candidate)
 
 This is the current high-signal context for ChronaSense. Use this when starting a new thread,
 onboarding a contributor, or recovering from stale chat context.
@@ -78,6 +78,7 @@ Extracted root modules:
   heatmap, daily reflections, and weekly review. (The deep-work streak was removed from the Week
   view and the shared partner payload in `motivation-pressure-cleanup-v1`; the 60-day streak
   calendar remains dead desktop-only UI.)
+
 - Day templates: recurring schedule blocks, selected-day editor, auto-log due templates, template
   suppression, and update offers from real entries.
 - Settings: timezone, ping interval, deep-work goal, review hour, hourly rate, presets, activity
@@ -86,6 +87,32 @@ Extracted root modules:
   when above the minimum duration.
 - Browser extension: tracks active tab sessions for supported sites and writes to Firebase under
   the signed-in user's account.
+
+## My Day UX Simplification V1
+
+The `feat/my-day-ux-simplification-v1` review candidate consolidates the normal My Day page into
+one planning surface. `UP NEXT` stays first, a universal `+ Add` dispatches to the existing plan
+or commitment stores, and the always-visible timeline owns the authoritative My Day interval,
+previous/next navigation, and direct calendar jump. The previous standalone My Day summary,
+Today/Next switcher, large Upcoming card, separate Top Priorities and Other Tasks blocks, permanent
+day-action row, main-page routines checklist, `Entry actions`, and `Accountability` heading are
+not part of the normal hierarchy anymore.
+
+`tomorrow-timeline-model.js` now projects existing plan items and commitments into typed display
+rows alongside the existing schedule/template and actual-entry projection. Untimed plan items
+remain visible in a bounded `ANYTIME` lane; timed plan items are placed at their real time. A
+planned row's checkbox changes only the authoritative plan item's `done` state. Editing title,
+kind, date, or time keeps the same item id, resolves destination ownership through
+`PlanAuthority`, and enforces the existing maximum of three priorities. Planned intent never
+becomes evidence, and no completion fabricates elapsed time.
+
+Secondary information is deliberately compact: stale recovery is a counted disclosure that
+opens the unchanged recovery actions, So Far remains calendar-day evidence below the timeline,
+and partner status plus Planning Streak share one small accountability card. Routine completion
+semantics are still calendar-day based and unchanged; the checklist and management workflow
+remain reachable from the secondary routines dialog. Full future-day browsing also remains
+available from the menu. No planning, commitment, evidence, routine, partner-sharing, or Firebase
+schema was replaced.
 
 ## Product Boundary (established Phase 11.5)
 

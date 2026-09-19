@@ -1,17 +1,43 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
-**Coverage note (2026-09-16):** this file documents structure through roughly Phase
-11.8/12.0A. It does NOT yet have entries for modules added by the feature-branch work
-that landed after Phase 12.0A (see `STATUS.md`'s 2026-09-16 entry and `CHANGELOG.md`
-for what shipped) — at minimum: `tomorrow-view-model.js`/`-ui.js`, `partner-view-*`,
-`personal-day-boundary-model.js`/`-repository.js`/`-sync.js`, `operational-plan-model.js`/
-`-repository.js`/`-sync.js`, `shared-accountability-model.js`, `plan-tomorrow-model.js`'s
-Daily Reconciliation additions, and related test files. Adding these at the same
-per-module technical depth as the entries below is a substantial task on its own and was
-out of scope for this documentation-reconciliation pass — flagging the gap here instead
-of silently leaving it undocumented. Do not assume a module is absent just because it
-has no entry below; check the file listing / `git log` / `CHANGELOG.md` first.
+## My Day UX Simplification V1 (2026-09-19 review candidate)
+
+- `index.html`: the My Day view's visible order is quiet date header, `UP NEXT`, universal
+  `+ Add`, one always-open timeline, compact unfinished recovery, compact partner/streak, then
+  calendar-day So Far. The timeline header owns the authoritative interval plus previous/next and
+  calendar navigation. Redundant legacy planning containers remain hidden only where their
+  internal rendering is still needed for compatibility; they are not parallel user-facing truth.
+- `tomorrow-timeline-model.js`: `deriveMyDayPlannedRows()` is the pure typed projection for plan
+  items and commitments. It preserves canonical ids/source type, separates untimed `ANYTIME`
+  rows from timed rows, and supplies deterministic same-time ordering before the existing
+  actual/template/gap rows are composed.
+- `plan-authority.js`: `previous()`, calendar-date ownership, and identity-preserving
+  `updateItem()` support timeline navigation and edit/reschedule. Date-only ownership uses the
+  approved local-noon rule; a specific time resolves by its actual timestamp. Priority-cap checks
+  stay authoritative.
+- `planning-continuity-ui.js` / `.css`: universal Add, item-centric date/time/kind editing,
+  typed planned-row controls, bounded Anytime expansion, compact stale recovery, responsive
+  layout, and accessible touch targets. Full stale and future-day tools remain secondary.
+- `daily-routines-ui.js`: routine checklist/configuration opens in the secondary routines dialog;
+  routine ids and calendar-day completion semantics are unchanged.
+- `operational-plan-ui.js`: the former standalone My Day summary renders only the exceptional
+  orphan-preparation recovery state, not the normal page.
+- `tomorrow-view-ui.js`: the retained secondary planner defaults to Today internally and cannot
+  restore the removed Today/Next switcher on the primary My Day page.
+- `www/`: runtime mirror of all changed production assets; keep exact parity with root files.
+- Tests: pure projection/authority coverage is in `tomorrow-timeline-model.test.js` and
+  `plan-authority.test.js`; end-to-end user journeys and chaos cases are principally in
+  `tests/planning-continuity.spec.js`, with retained-domain regressions across My Day, planning,
+  commitments, routines, partner/accountability, persistence, evidence, and boundary specs.
+
+**Coverage note (updated 2026-09-19):** the My Day modules changed by this candidate are
+summarized above. The older per-module catalog below still documents structure only through
+roughly Phase 11.8/12.0A and does not fully catalog every module added later — including detailed
+entries for `partner-view-*`, Personal Day repositories/sync, operational-plan repositories/sync,
+`shared-accountability-model.js`, and Daily Reconciliation additions. Do not assume a module is
+absent because it has no detailed entry below; check the file listing, `git log`, and
+`CHANGELOG.md` first.
 
 ---
 

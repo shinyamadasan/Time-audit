@@ -1,5 +1,39 @@
 # ChronaSense — Changelog
 
+## My Day UX Simplification V1 — 2026-09-19
+
+**Review candidate — `feat/my-day-ux-simplification-v1`** (not integrated or deployed).
+
+My Day is now one calm daily command center: `UP NEXT`, universal `+ Add`, one authoritative
+plan-plus-evidence timeline, then compact recovery/accountability information.
+
+- Top Priorities and Other Tasks are projected into the timeline without copying or migrating
+  canonical plan data. Untimed items live in a bounded `ANYTIME` lane; timed items appear at their
+  exact time. Planned tasks, commitments, template/routine hints, and actual activity have typed,
+  non-color-only treatments and stable same-time ordering.
+- Timeline checkboxes update plan completion only; they never create evidence. The row editor can
+  change text, priority/task kind, date, and time while retaining the same id. The existing Top 3
+  cap is enforced. Clearing a time returns the same item to Anytime.
+- The universal Add flow creates tasks for Today, Tomorrow, or a directly picked date and can add
+  commitments through the existing commitment path. Calendar-date ownership is resolved through
+  `PlanAuthority`: date-only tasks use existing local-noon semantics and timed tasks use their
+  entered instant. Full future-day browsing remains available as a secondary menu action.
+- The timeline header is the sole visible My Day identity, with authoritative interval,
+  previous/next controls, and direct calendar jump. The standalone summary, Today/Next switcher,
+  large Upcoming card, separate Top Priorities/Other Tasks blocks, permanent Day Actions,
+  standalone routines block, Entry Actions heading, and Accountability heading were removed from
+  the normal page hierarchy.
+- Unfinished recovery is collapsed to a counted line until opened. So Far remains unchanged
+  calendar-day evidence near the bottom. Planning Streak and partner status share one compact
+  card; partner detail and actionable Nudge remain reachable.
+- Routine identity and calendar-day completion semantics, actual/history evidence semantics,
+  Personal Day boundaries, planning readiness/streak rules, Firebase sync, commitment truth, and
+  partner payloads are unchanged. Routine completion/configuration stays reachable in a secondary
+  dialog.
+
+Verification results are recorded in `TEST_REPORT.md`; the candidate is not merged and nothing
+was deployed.
+
 ## Planning Continuity V1 + My Day — 2026-09-19
 
 **Integrated — `e838321`** (pure fast-forward from `795ce08`; 13 reviewed commits, no merge
