@@ -218,6 +218,56 @@ for (const boundaryTime of ['00:00', '04:00', '12:00', '17:00', '18:00']) {
   });
 }
 
+for (const boundaryTime of ['04:00', '18:00']) {
+  test(`${boundaryTime} target-preserving clock entry searches the civil dates overlapping one My Day`, () => {
+    const app = boundaryApp(boundaryTime);
+    const target = app.authority.current();
+    for (const [when, dateKey] of [['21:00', D], ['02:00', D_NEXT]]) {
+      const resolved = app.authority.civilDateForTimeInTarget(target, when);
+      assert.equal(resolved.ok, true);
+      assert.equal(resolved.target.id, target.id);
+      assert.equal(resolved.dateKey, dateKey);
+      assert.equal(resolved.instantMs, manila(dateKey, when));
+    }
+    assert.equal(app.authority.civilDateForTimeInTarget(target, boundaryTime).instantMs, target.startMs, 'start is included');
+  });
+}
+
+test('a truncated My Day remains editable when it has no date-only noon inverse', () => {
+  const app = graveyardApp();
+  app.setNow(manila(D, '19:00'));
+  app.live.proposeBoundary({ boundaryTime: '20:00', timezone: MANILA });
+  const target = app.authority.current();
+  assert.deepEqual([target.startMs, target.endMs], [manila(D, '18:00'), manila(D, '20:00')]);
+  assert.equal(app.authority.scheduledDateForTarget(target), null);
+  assert.equal(app.authority.civilDateForTimeInTarget(target, '18:00').instantMs, target.startMs, 'start is included');
+  assert.equal(app.authority.civilDateForTimeInTarget(target, '19:00').dateKey, D);
+  assert.equal(app.authority.civilDateForTimeInTarget(target, '20:00').reason, 'outside-target', 'end is excluded');
+  assert.equal(app.authority.civilDateForTimeInTarget(target, '09:00').reason, 'outside-target');
+
+  app.authority.addItem({ destination: target, item: item('truncated-id', 'Untimed') });
+  const stamp = value => ({ ...value, updatedAt: (value.updatedAt || 0) + 1, updatedBy: 'device-a' });
+  app.authority.updateItem({ sourceTarget: target, itemId: 'truncated-id', changes: { task: 'Renamed', kind: 'task' }, stamp });
+  app.authority.updateItem({ sourceTarget: target, itemId: 'truncated-id', changes: { when: '19:00' }, stamp });
+  assert.equal(app.authority.items(target)[0].when, '19:00');
+  assert.throws(() => app.authority.updateItem({ sourceTarget: target, itemId: 'truncated-id', changes: { when: '09:00' }, stamp }), /outside this personal day/);
+  app.authority.updateItem({ sourceTarget: target, itemId: 'truncated-id', changes: { when: '' }, stamp });
+  assert.deepEqual({ task: app.authority.items(target)[0].task, kind: app.authority.items(target)[0].kind, when: app.authority.items(target)[0].when }, { task: 'Renamed', kind: 'task', when: '' });
+});
+
+test('target-local clock resolution refuses a repeated DST instant instead of guessing', () => {
+  const app = makeApp({ accountTimezone: NEW_YORK });
+  const target = {
+    id: 'fall-back-day', store: 'operational', timezone: NEW_YORK,
+    startMs: Date.parse('2026-11-01T00:00:00-04:00'),
+    endMs: Date.parse('2026-11-02T00:00:00-05:00'),
+  };
+  const resolved = app.authority.civilDateForTimeInTarget(target, '01:30');
+  assert.equal(resolved.ok, false);
+  assert.equal(resolved.reason, 'ambiguous');
+  assert.equal(resolved.matches.length, 2);
+});
+
 test('ordinary Add refuses yesterday and weeks ago by authoritative interval end', () => {
   const app = makeApp({ clock: manila(D, '08:00') });
   const yesterday = app.authority.legacyTarget(D_PREV);

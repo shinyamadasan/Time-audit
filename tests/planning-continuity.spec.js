@@ -33,6 +33,12 @@ const BOUNDARY_STORE = JSON.stringify({ schemaVersion: 1, revisions: {
   'r-1800': { id: 'r-1800', boundaryTime: '18:00', timezone: TZ, effectiveFromInstant: Date.parse('2026-09-01T18:00:00+08:00') },
 } });
 
+const TRUNCATED_BOUNDARY_STORE = JSON.stringify({ schemaVersion: 1, revisions: {
+  'legacy-calendar-day-v0': { id: 'legacy-calendar-day-v0', boundaryTime: '00:00', timezone: TZ, effectiveFromInstant: null },
+  'r-1800': { id: 'r-1800', boundaryTime: '18:00', timezone: TZ, effectiveFromInstant: Date.parse('2026-09-01T18:00:00+08:00') },
+  'r-2000': { id: 'r-2000', boundaryTime: '20:00', timezone: TZ, effectiveFromInstant: Date.parse('2026-09-18T20:00:00+08:00') },
+} });
+
 const boundaryStoreFor = boundaryTime => JSON.stringify({ schemaVersion: 1, revisions: {
   'legacy-calendar-day-v0': { id: 'legacy-calendar-day-v0', boundaryTime: '00:00', timezone: TZ, effectiveFromInstant: null },
   [`r-${boundaryTime.replace(':', '')}`]: { id: `r-${boundaryTime.replace(':', '')}`, boundaryTime, timezone: TZ, effectiveFromInstant: Date.parse(`2026-09-01T${boundaryTime}:00+08:00`) },
@@ -245,6 +251,78 @@ for (const boundaryTime of ['04:00', '12:00']) {
     expect(result.next).toEqual([]);
   });
 }
+
+for (const boundaryTime of ['04:00', '18:00']) {
+  for (const [time, expectedDate] of [['21:00', '2026-09-18'], ['02:00', '2026-09-19']]) {
+    test(`${boundaryTime} target-preserving ${time} entry stays in Today and displays ${expectedDate}`, async ({ page }) => {
+      await openApp(page, { boundaryStore: boundaryStoreFor(boundaryTime) });
+      const form = await openTaskForm(page);
+      await form.locator('input[name="title"]').fill(`${boundaryTime} at ${time}`);
+      await form.locator('input[name="time"]').fill(time);
+      await expect(form.locator('input[name="date"]')).toHaveValue(expectedDate);
+      await form.getByRole('button', { name: 'Add', exact: true }).click();
+      const result = await page.evaluate(task => {
+        const target = window.PlanAuthority.current();
+        const planned = window.PlanAuthority.items(target).find(item => item.task === task);
+        return { count: planned ? 1 : 0, instantMs: planned ? window.PlanAuthority.itemStartInstant(target, planned.when) : null };
+      }, `${boundaryTime} at ${time}`);
+      expect(result).toEqual({ count: 1, instantMs: Date.parse(`${expectedDate}T${time}:00+08:00`) });
+    });
+  }
+}
+
+test('a truncated 18:00 to 20:00 My Day supports add, edit, valid time, refusal, and clear-time flows', async ({ page }) => {
+  await openApp(page, { boundaryStore: TRUNCATED_BOUNDARY_STORE });
+  await expect(continuity(page)).not.toContainText('Planning surfaces are unavailable');
+  let form = await openTaskForm(page);
+  await expect(form.locator('input[name="date"]')).toHaveValue('2026-09-18');
+  await form.locator('input[name="title"]').fill('Truncated task');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Edit planned task Truncated task' }).click();
+  form = page.locator('#pc-task-form');
+  await form.locator('input[name="title"]').fill('Truncated renamed');
+  await form.locator('select[name="kind"]').selectOption('task');
+  await form.getByRole('button', { name: 'Save' }).click();
+
+  await page.getByRole('button', { name: 'Edit planned task Truncated renamed' }).click();
+  form = page.locator('#pc-task-form');
+  await form.locator('input[name="time"]').fill('19:00');
+  await form.getByRole('button', { name: 'Save' }).click();
+
+  await page.getByRole('button', { name: 'Edit planned task Truncated renamed' }).click();
+  form = page.locator('#pc-task-form');
+  await form.locator('input[name="time"]').fill('09:00');
+  await form.getByRole('button', { name: 'Save' }).click();
+  await expect(form.locator('.pc-error')).toContainText('outside this My Day');
+  expect(await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0].when)).toBe('19:00');
+
+  await form.locator('input[name="time"]').fill('');
+  await form.getByRole('button', { name: 'Save' }).click();
+  const finalItem = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0]);
+  expect({ task: finalItem.task, kind: finalItem.kind, when: finalItem.when }).toEqual({ task: 'Truncated renamed', kind: 'task', when: '' });
+});
+
+test('editing the civil date explicitly relocates the same untimed task id', async ({ page }) => {
+  await openApp(page);
+  await addSecondaryTask(page, 'Explicit reschedule');
+  const original = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current())[0]);
+  await page.getByRole('button', { name: 'Edit planned task Explicit reschedule' }).click();
+  const form = page.locator('#pc-task-form');
+  await form.locator('input[name="date"]').fill('2026-09-25');
+  await form.getByRole('button', { name: 'Save' }).click();
+  const result = await page.evaluate(() => {
+    const current = window.PlanAuthority.current();
+    const destination = window.PlanAuthority.dayForScheduledDate('2026-09-25', '').target;
+    return {
+      sourceCount: window.PlanAuthority.items(current).filter(item => item.task === 'Explicit reschedule').length,
+      destination: window.PlanAuthority.items(destination).find(item => item.task === 'Explicit reschedule'),
+    };
+  });
+  expect(result.sourceCount).toBe(0);
+  expect(result.destination.id).toBe(original.id);
+  expect(result.destination.when).toBe('');
+});
 
 test('direct Add refuses yesterday and weeks ago without mutating historical plans', async ({ page }) => {
   await openApp(page);
