@@ -153,5 +153,45 @@ export function deriveTomorrowTimelinePreview({ priorityItems = [], routineRows 
   return { positioned, unscheduled };
 }
 
-const api = { normalizePriorityRow, normalizeRoutineRow, normalizeTemplateRow, deriveTomorrowTimelinePreview };
+/** Planned rows for the existing Today/My Day timeline. This is a display
+ *  projection only: task and commitment records remain in their own canonical
+ *  stores, and no row is an evidence entry. */
+export function deriveMyDayPlannedRows({ target, planItems = [], commitments = [], itemStartInstant } = {}) {
+  if (!target || typeof itemStartInstant !== 'function') return { anytime: [], positioned: [] };
+  const planned = planItems.filter(item => item && !item.deleted).map(item => {
+    const startMs = validPlanItemTime(item.when) ? itemStartInstant(target, item.when) : null;
+    return {
+      id: `plan:${target.id}:${item.id}`,
+      sourceType: 'planned-task',
+      dayId: target.id,
+      itemId: item.id,
+      title: item.task,
+      planKind: item.kind === 'task' ? 'task' : 'priority',
+      done: item.done === true,
+      startMs: Number.isFinite(startMs) ? startMs : null,
+      when: validPlanItemTime(item.when) ? item.when : '',
+    };
+  });
+  const scheduled = commitments.filter(record => record && !record.deleted).map(record => ({
+    id: `commitment:${record.id}`,
+    sourceType: 'commitment',
+    commitmentId: record.id,
+    title: record.title,
+    startMs: record.precision === 'timed' && Number.isFinite(record.startMs) ? record.startMs : null,
+    endMs: record.precision === 'timed' && Number.isFinite(record.durationMinutes)
+      ? record.startMs + record.durationMinutes * 60000
+      : null,
+  }));
+  const rows = [...planned, ...scheduled];
+  const sourceOrder = { 'planned-task': 0, commitment: 1 };
+  const positioned = rows.filter(row => Number.isFinite(row.startMs)).sort((a, b) =>
+    (a.startMs - b.startMs) || (sourceOrder[a.sourceType] - sourceOrder[b.sourceType]) || compareStrings(a.id, b.id));
+  const anytime = rows.filter(row => !Number.isFinite(row.startMs)).sort((a, b) => {
+    const rank = row => row.sourceType === 'planned-task' ? (row.planKind === 'priority' ? 0 : 1) : 2;
+    return (rank(a) - rank(b)) || compareStrings(a.id, b.id);
+  });
+  return { anytime, positioned };
+}
+
+const api = { normalizePriorityRow, normalizeRoutineRow, normalizeTemplateRow, deriveTomorrowTimelinePreview, deriveMyDayPlannedRows };
 globalThis.TomorrowTimelineModel = api;

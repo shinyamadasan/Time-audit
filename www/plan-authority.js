@@ -247,6 +247,15 @@ export function createPlanAuthority(deps = {}) {
     return fromDay(live.describeDay(nextOperationalDay(target.ref || operationalDayContaining(target.startMs, history), history), history));
   }
 
+  /** The authoritative day immediately before `target`. Personal-day ids are
+   *  never treated as calendar dates; the preceding half-open interval is the
+   *  one containing the instant immediately before this day starts. */
+  function previous(target) {
+    if (target.store === 'legacy' && !enabled()) return legacyTarget(addCalendarDays(target.dateKey, -1));
+    if (!Number.isFinite(target.startMs)) throw new Error(`Cannot find the day before ${target.id}.`);
+    return containing(target.startMs - 1);
+  }
+
   /** Decision B. Every authoritative day overlapping calendar date D's own
    *  interval, in order. One entry for a legacy/never-enabled account (the date
    *  itself); commonly two once a non-midnight boundary is active. */
@@ -305,6 +314,16 @@ export function createPlanAuthority(deps = {}) {
     const anchor = noonAnchorInstant(dateKey, accountTimezone());
     if (!anchor.ok) throw new Error(`Calendar date ${dateKey} has no unambiguous local noon.`);
     return containing(anchor.instantMs);
+  }
+
+  /** Item-centric scheduling. Untimed tasks use the approved noon ownership
+   *  rule; timed tasks use the exact civil timestamp the owner entered. */
+  function dayForScheduledDate(dateKey, when = '') {
+    if (!validPlanDate(dateKey)) return { ok: false, reason: 'invalid-date' };
+    if (!when) return { ok: true, anchor: 'noon', target: dayForCalendarDate(dateKey) };
+    const instant = resolvePlannedInstant(dateKey, when, accountTimezone());
+    if (!instant.ok) return instant;
+    return { ok: true, anchor: 'time', instantMs: instant.instantMs, target: containing(instant.instantMs) };
   }
 
   /** A window of consecutive authoritative days starting at the current one —
@@ -863,6 +882,46 @@ export function createPlanAuthority(deps = {}) {
     return { changed: true, item: next };
   }
 
+  /** Edits one canonical plan item and optionally moves it to another
+   *  authoritative day. The id is preserved. A cross-day move writes the live
+   *  item at the destination and a tombstone at the source so sync cannot
+   *  resurrect a second active copy. */
+  function updateItem({ sourceTarget, itemId, destination = sourceTarget, changes = {}, stamp }) {
+    if (!sourceTarget || !destination) throw new Error('A source and destination day are required.');
+    if (typeof stamp !== 'function') throw new Error('An item stamping function is required.');
+    const sourceItems = rawItems(sourceTarget);
+    const current = sourceItems.find(item => item.id === itemId && !item.deleted);
+    if (!current) throw new Error('That planned task no longer exists.');
+
+    const title = Object.prototype.hasOwnProperty.call(changes, 'task') ? String(changes.task || '').trim() : current.task;
+    if (!title) throw new Error('Name the task first.');
+    const kind = Object.prototype.hasOwnProperty.call(changes, 'kind') ? changes.kind : planItemKind(current);
+    if (kind !== 'priority' && kind !== 'task') throw new Error(`Unknown plan item kind: ${kind}`);
+    let nextItem = withPlanItemKind({ ...current, ...changes, id: current.id, task: title, deleted: false }, kind);
+
+    const destinationItems = sourceTarget.id === destination.id ? sourceItems : rawItems(destination);
+    if (kind === 'priority') {
+      const otherPriorities = destinationItems.filter(item => item.id !== itemId && !item.deleted && planItemKind(item) === 'priority');
+      if (otherPriorities.length >= priorityMax) throw new Error(`Your Top ${priorityMax} is already full. Finish, remove or demote one first.`);
+    }
+    const validation = validateItem(destination, nextItem);
+    if (!validation.ok) throw new Error(validation.reason === 'outside-operational-day' ? 'That time is outside this personal day.' : 'That time is not valid for this day.');
+    nextItem = stamp(nextItem);
+
+    if (sourceTarget.id === destination.id) {
+      saveItems(sourceTarget, sourceItems.map(item => item.id === itemId ? nextItem : item));
+      return { moved: false, item: nextItem, destination };
+    }
+
+    const destinationNext = destinationItems.some(item => item.id === itemId)
+      ? destinationItems.map(item => item.id === itemId ? nextItem : item)
+      : [...destinationItems, nextItem];
+    saveItems(destination, destinationNext);
+    const tombstone = stamp({ ...current, deleted: true, movedToDayId: destination.id });
+    saveItems(sourceTarget, sourceItems.map(item => item.id === itemId ? tombstone : item));
+    return { moved: true, item: nextItem, destination };
+  }
+
   /** Re-targets an already-moved task: tombstones the copy on the old destination,
    *  then writes one on the new. Never leaves two active copies. A hard removal is
    *  not used because it would be resurrected by the per-item merge. */
@@ -959,15 +1018,15 @@ export function createPlanAuthority(deps = {}) {
 
   return {
     enabled, invalidate,
-    current, upcoming, containing, next, daysOverlappingCalendarDate,
-    dayAhead, dayForCalendarDate, upcomingDays,
+    current, upcoming, containing, next, previous, daysOverlappingCalendarDate,
+    dayAhead, dayForCalendarDate, dayForScheduledDate, upcomingDays,
     record, rawItems, items, saveItems,
     preparation, consistency, readyNow, preparedState, confirmPreparation,
     validateItem, itemStartInstant, evidenceWindow, classifyItemActual,
     routineTarget, routinesForTarget, templatesForTarget,
     habitEarned, streak,
     preparedPlans, boundaryChangeImpact,
-    setItemKind,
+    setItemKind, updateItem,
     staleUnfinished, staleMoveDestination, moveStaleItem, rescheduleStaleItem,
     dismissStaleItem, undismissStaleItem, targetById, recoverableDays,
     legacyTarget,
