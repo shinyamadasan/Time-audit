@@ -530,6 +530,7 @@ if (typeof window !== 'undefined') {
       saveItems: (dateKey, items) => liveAppContext().saveItems(dateKey, items),
     },
     onChange: () => {
+      window.PlanAuthority?.invalidate();
       if (typeof window.renderPersonalDayBoundarySettings === 'function') window.renderPersonalDayBoundarySettings();
       if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
       if (typeof window.refreshPlanningTerminologyLabels === 'function') window.refreshPlanningTerminologyLabels();
@@ -543,6 +544,7 @@ if (typeof window !== 'undefined') {
   // the set of operational days in live use may have moved with it.
   window.refreshPersonalDayBoundaryLive = () => {
     try { window.PersonalDayBoundaryLive.refreshLiveDays(); } catch { /* invalid history — surfaced by the Settings panel */ }
+    window.PlanAuthority?.invalidate();
     if (typeof window.renderPersonalDayBoundarySettings === 'function') window.renderPersonalDayBoundarySettings();
     if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
     if (typeof window.refreshPlanningTerminologyLabels === 'function') window.refreshPlanningTerminologyLabels();

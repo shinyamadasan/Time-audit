@@ -214,8 +214,8 @@ function quickTaskDates() {
     const current = layer.current();
     const next = layer.next(current);
     return {
-      today: localDateKey(current.endMs - 1, current.timezone),
-      tomorrow: localDateKey(next.endMs - 1, next.timezone),
+      today: layer.scheduledDateForTarget(current),
+      tomorrow: layer.scheduledDateForTarget(next),
     };
   }
   const today = localDateKey();
@@ -230,10 +230,7 @@ function taskFormValue() {
   const item = edit?.target ? layer.items(edit.target).find(candidate => candidate.id === state.itemForm.itemId) : null;
   let date = quickTaskDates().today;
   if (item && edit.target) {
-    const instant = item.when ? layer.itemStartInstant(edit.target, item.when) : null;
-    date = Number.isFinite(instant)
-      ? localDateKey(instant, edit.target.timezone)
-      : edit.target.store === 'legacy' ? edit.target.dateKey : localDateKey(edit.target.endMs - 1, edit.target.timezone);
+    date = layer.scheduledDateForTarget(edit.target, item.when || '');
   }
   return { target: edit?.target || null, item, date };
 }
@@ -285,12 +282,7 @@ function submitTaskForm(form) {
       layer.updateItem({ sourceTarget, itemId: state.itemForm.itemId, destination: resolved.target, changes: { task: title, when: time, kind }, stamp: stamp });
     } else {
       const item = context.createItem(title, time, kind);
-      const check = layer.validateItem(resolved.target, item);
-      if (!check.ok) throw new Error('That time is not valid for this My Day.');
-      if (kind === 'priority' && layer.items(resolved.target).filter(candidate => candidate.kind !== 'task').length >= layer.priorityMax()) {
-        throw new Error(`Your Top ${layer.priorityMax()} is already full. Add it as another task instead.`);
-      }
-      layer.saveItems(resolved.target, [...layer.rawItems(resolved.target), item]);
+      layer.addItem({ destination: resolved.target, item });
     }
     state.itemForm = null;
     state.formError = '';

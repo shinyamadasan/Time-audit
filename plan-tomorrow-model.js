@@ -1,3 +1,5 @@
+import { comparePlanItemRelocations } from './plan-item-relocation.js';
+
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MODES = new Set(['normal', 'rescue']);
 
@@ -101,6 +103,7 @@ export function planItemScheduleLabel(item) {
 export function clearPlanItemRange(item) {
   const next = { ...item };
   delete next.durationMinutes;
+  delete next.endClock;
   return next;
 }
 
@@ -340,6 +343,8 @@ function itemMutationKey(value) {
 }
 
 function chooseItem(local, remote) {
+  const relocationOrder = comparePlanItemRelocations(local, remote);
+  if (relocationOrder !== 0) return relocationOrder > 0 ? local : remote;
   const localAt = mergeTimestamp(local?.updatedAt);
   const remoteAt = mergeTimestamp(remote?.updatedAt);
   if (localAt !== remoteAt) return remoteAt > localAt ? remote : local;

@@ -111,6 +111,25 @@ test('two devices syncDay-ing the SAME operational day concurrently converge by 
   assert.equal(repoB.read(id).items.length, 2);
 });
 
+test('sync convergence rejects a stale source resurrection regardless of push order', async () => {
+  for (const order of ['stale-first', 'move-first']) {
+    const roomRef = fakeRoomRef();
+    const { ref, revisions, id } = mondayOperationalDay();
+    const destination = id.replace('2026-09-14', '2026-09-15');
+    const relocationRevision = { schemaVersion: 1, sequence: 1, fromDayId: id, toDayId: destination, updatedBy: 'device-a', updatedAt: 100 };
+    const movedRepo = createOperationalPlanRepository({ storage: memory() });
+    movedRepo.write(id, [{ id: 'p1', task: 'moved', deleted: true, movedToDayId: destination, relocationRevision, updatedAt: 100, updatedBy: 'device-a' }], { updatedBy: 'device-a', ref, revisions });
+    const staleRepo = createOperationalPlanRepository({ storage: memory() });
+    staleRepo.write(id, [{ id: 'p1', task: 'offline stale edit', updatedAt: 999, updatedBy: 'device-z' }], { updatedBy: 'device-z', ref, revisions });
+    const movedBridge = createOperationalPlanSyncBridge({ repository: movedRepo, getRoomRef: () => roomRef });
+    const staleBridge = createOperationalPlanSyncBridge({ repository: staleRepo, getRoomRef: () => roomRef });
+    for (const bridge of order === 'stale-first' ? [staleBridge, movedBridge] : [movedBridge, staleBridge]) await bridge.syncDay(id);
+    const remote = roomRef.child(OPERATIONAL_PLANS_REMOTE_PATH).child(toFirebaseSafeKey(id)).val();
+    assert.equal(remote.items[0].deleted, true, order);
+    assert.deepEqual(remote.items[0].relocationRevision, relocationRevision, order);
+  }
+});
+
 // ── attachDay / detachDay (per-day listeners) ─────────────────────────────
 
 test('attachDay merges an existing remote record into local storage on first snapshot', () => {

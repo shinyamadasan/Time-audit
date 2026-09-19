@@ -166,13 +166,26 @@ for (const energy of ['deep','waste','none']) {
   test(`So Far ${energy} uses facts without interpretation`, async ({ page }) => {
     await today(page);
     await page.evaluate(energy => { entries = energy === 'none' ? [] : [{id:91,activity:'Work',energy,date:planTodayKey(),tsStart:Date.now()-4800000,ts:Date.now(),blockIntervalMin:80}]; renderToday(); }, energy);
-    await expect(page.locator('#so-far-summary')).toHaveText(energy === 'none' ? 'No time recorded yet.' : energy === 'deep' ? '1h 20m deep · 0m waste' : '0m deep · 1h 20m waste');
+    await expect(page.locator('#so-far-summary')).toHaveText(energy === 'none' ? 'Calendar today · No time recorded yet.' : energy === 'deep' ? 'Calendar today · 1h 20m deep · 0m waste' : 'Calendar today · 0m deep · 1h 20m waste');
     for (const id of ['today-health','daily-summary','awareness-signal','recent-entries-section']) await expect(page.locator(`#${id}`)).toBeHidden();
     // Today Persistent Sections V1 — Timeline is visible by default now, unlike the other
     // detail surfaces this test otherwise checks stay hidden until explicitly revealed.
     await expect(page.locator('#timeline-section')).toBeVisible();
   });
 }
+
+test('Needs You Inspect routines opens the routine dialog at its details', async ({ page }) => {
+  await today(page, { routines: routineState([routine({ mode: 'anytime' })]) });
+  await page.evaluate(() => {
+    document.getElementById('routine-needs-item').hidden = false;
+    document.getElementById('routine-needs-copy').textContent = '1 routine with ambiguous evidence.';
+    renderNeedsYou();
+    document.querySelector('#routine-needs-item button').click();
+  });
+  await expect(page.locator('#routine-day-dialog')).toBeVisible();
+  await expect(page.locator('#routine-details')).toHaveAttribute('open', '');
+  await expect(page.locator('#routine-details > summary')).toBeFocused();
+});
 
 test('intentional Log time and Timeline retain shortcuts and corrections', async ({page}) => {
   await today(page);

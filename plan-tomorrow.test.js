@@ -402,12 +402,33 @@ test('planItemScheduleLabel falls back to verbatim legacy free text, and is null
   assert.equal(planItemScheduleLabel({}), null);
 });
 
-test('clearPlanItemRange drops only durationMinutes, leaving when and every other field untouched', () => {
-  const item = { id: 'p1', task: 'Write report', when: '09:00', durationMinutes: 90, done: false };
+test('clearPlanItemRange drops duration and explicit-end metadata, leaving when and unrelated fields untouched', () => {
+  const item = { id: 'p1', task: 'Write report', when: '09:00', durationMinutes: 90, endClock: '10:30', done: false };
   const cleared = clearPlanItemRange(item);
   assert.deepEqual(cleared, { id: 'p1', task: 'Write report', when: '09:00', done: false });
   assert.equal('durationMinutes' in cleared, false);
+  assert.equal('endClock' in cleared, false);
   assert.equal(item.durationMinutes, 90); // original object is untouched
+});
+
+test('a relocation tombstone defeats a later-timestamp ordinary stale edit in either legacy merge order', () => {
+  const relocationRevision = { schemaVersion: 1, sequence: 1, fromDayId: targetDate, toDayId: '2026-09-20', updatedBy: 'device-a', updatedAt: 100 };
+  const moved = { items: [item({ deleted: true, movedToDayId: '2026-09-20', relocationRevision, updatedAt: 100, updatedBy: 'device-a' })], updatedAt: 100, updatedBy: 'device-a' };
+  const stale = { items: [item({ task: 'offline stale edit', updatedAt: 999, updatedBy: 'device-z' })], updatedAt: 999, updatedBy: 'device-z' };
+  const forward = mergeDatePlans(moved, stale, targetDate);
+  const reverse = mergeDatePlans(stale, moved, targetDate);
+  assert.deepEqual(forward, reverse);
+  assert.equal(forward.items[0].deleted, true);
+  assert.deepEqual(forward.items[0].relocationRevision, relocationRevision);
+});
+
+test('equal-sequence contradictory legacy relocations resolve by deterministic authority, not time or arrival order', () => {
+  const moveA = { items: [item({ deleted: true, relocationRevision: { schemaVersion: 1, sequence: 2, fromDayId: targetDate, toDayId: '2026-09-20', updatedBy: 'device-a', updatedAt: 900 }, updatedAt: 900, updatedBy: 'device-a' })] };
+  const moveZ = { items: [item({ deleted: true, relocationRevision: { schemaVersion: 1, sequence: 2, fromDayId: targetDate, toDayId: '2026-09-21', updatedBy: 'device-z', updatedAt: 100 }, updatedAt: 100, updatedBy: 'device-z' })] };
+  const forward = mergeDatePlans(moveA, moveZ, targetDate);
+  const reverse = mergeDatePlans(moveZ, moveA, targetDate);
+  assert.deepEqual(forward, reverse);
+  assert.equal(forward.items[0].relocationRevision.toDayId, '2026-09-21');
 });
 
 // Plan Time Range V1 adds durationMinutes as an ordinary field on the same whole-item object that
