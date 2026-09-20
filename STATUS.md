@@ -5,6 +5,27 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-19 — My Day UX Simplification V1 — integrated
+
+`main` was fast-forwarded from `f99f5d06b24506e8fa781e692dccc99fcba32667` to reviewed candidate
+`af78fc5a7ee4a0566935b6bd44beb1ca4b65d0d0` in an isolated integration worktree. No reviewed
+commit was rewritten, and the feature branch remains preserved.
+
+My Day is now the simplified daily command center: universal `+ Add`, direct future scheduling,
+and planned tasks/commitments projected into one timeline with compact stale recovery. My Day
+remains the authoritative planning target while factual timestamps stay local truth. Only an
+explicit date selection invokes civil-date scheduling; refused task submits reset consistently,
+and truncated My Days remain usable. Cross-day moves preserve stable identity and one canonical
+location. So Far remains calendar-day evidence, and routines remain secondary with calendar-day
+completion semantics. Unrelated deferred debt is not claimed as resolved.
+
+Integrated verification: `npm test` PASS; required focused Playwright **85/85** (including
+planning-continuity **46/46**); full Playwright **680/680**; lint 0 errors / 38 existing warnings;
+70-file runtime parity and diff checks clean. Nothing was manually deployed, written to production
+Firebase, or built/deployed to Android. The protected primary README remained byte-identical.
+
+---
+
 ## 2026-09-19 — My Day refused-submit form-state correction (review candidate, NOT integrated)
 
 Continued on `feat/my-day-ux-simplification-v1` from reviewed/pushed tip
