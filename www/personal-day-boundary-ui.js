@@ -108,6 +108,11 @@ function statusHtml(state, nowMs) {
     return `<div class="setting-sub" role="alert" style="color:var(--waste)">Your personal day boundary history could not be read, so it is not being applied. Nothing was changed or deleted. (${escape(state.error || 'unknown error')})</div>`;
   }
   if (state.status !== 'custom') {
+    // An empty local cache is only "off" once the account has answered. Until then the
+    // true state is unknown, and saying "Off" would be a guess that can be wrong.
+    if (state.sync === 'pending') {
+      return '<div class="setting-sub" role="status" data-pdb-state="checking">Checking your synced personal day setting…</div>';
+    }
     return '<div class="setting-sub">Off. Your day currently starts at midnight, exactly as it always has.</div>';
   }
   const currentLine = `Current: <strong>${escape(formatBoundaryClock(state.active.boundaryTime))}</strong> (${escape(state.active.timezone)}).`;
@@ -124,6 +129,9 @@ function liveDescribeActivation(revision, nowMs) {
 
 function previewHtml(state) {
   const preview = live().previewProposal({ boundaryTime: draft.boundaryTime, timezone: draft.timezone });
+  if (!preview.ok && preview.reason === 'sync-pending') {
+    return '<div class="setting-sub" role="status">This can be changed once your synced setting has loaded.</div>';
+  }
   if (!preview.ok) {
     const why = preview.reason === 'invalid-time' ? 'Choose a valid start time.'
       : preview.reason === 'invalid-timezone' ? 'Choose a valid timezone.'

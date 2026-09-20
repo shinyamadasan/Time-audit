@@ -12,7 +12,7 @@ import { createPersonalDayBoundaryLiveWiring } from './personal-day-boundary-liv
 import { createPersonalDayBoundaryRepository } from './personal-day-boundary-repository.js';
 import { createOperationalPlanRepository } from './operational-plan-repository.js';
 import { createOperationalPlanSyncBridge } from './operational-plan-sync.js';
-import { createPersonalDayBoundarySyncBridge } from './personal-day-boundary-sync.js';
+import { createPersonalDayBoundarySyncBridge, DAY_BOUNDARY_REVISIONS_REMOTE_PATH } from './personal-day-boundary-sync.js';
 import { planningStreak, carriedItemId, localPlanDate, mergeDatePlans } from './plan-tomorrow-model.js';
 import { mergeOperationalPlanRecords } from './operational-plan-model.js';
 
@@ -115,6 +115,11 @@ function makeApp({ clock = manila(D, '08:00'), legacy = legacyStore(), storage =
   const planRepository = createOperationalPlanRepository({ storage: planStorage });
   const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef: () => roomRefRef.value });
   const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef: () => roomRefRef.value });
+  // A device that is in a room has heard the account's answer before its owner acts (the app
+  // attaches on room join). Acting on a joined-but-unheard device is refused by design — it could
+  // mint a legacy anchor that competes with the account's real one — so model the join: the
+  // device heard whatever the account held at that moment.
+  if (roomRef) boundarySync.handleRemoteSnapshot(roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH).val());
   const live = createPersonalDayBoundaryLiveWiring({
     boundaryRepository, planRepository, planSync, boundarySync,
     legacyPlans: { readItems: k => legacy.rawItems(k), saveItems: (k, i) => legacy.saveItems(k, i) },

@@ -142,10 +142,25 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
   const getRoomRef = typeof deps.getRoomRef === 'function' ? deps.getRoomRef : () => null;
   const onRemoteChange = typeof deps.onRemoteChange === 'function' ? deps.onRemoteChange : () => {};
   const onConflict = typeof deps.onConflict === 'function' ? deps.onConflict : () => {};
+  const onHydrated = typeof deps.onHydrated === 'function' ? deps.onHydrated : () => {};
 
   let listenerRef = null;
   let bootstrapped = false;
+  let hydrated = false;
   let lastRemoteSnapshot = {};
+
+  // Whether this device has heard the account's authoritative answer yet.
+  //   'local-only' — no room ref (signed out / not joined): there is nothing to wait for.
+  //   'pending'    — a room exists but its first snapshot has not arrived: the account's
+  //                  true configuration is UNKNOWN. An empty local cache means "not yet
+  //                  known" here, never "the account has no personal day".
+  //   'synced'     — the first snapshot arrived this session, so an empty local history is
+  //                  now authoritatively "off".
+  // Reset by detach() (sign-out / room switch): hydration belongs to one room.
+  function syncState() {
+    if (hydrated) return 'synced';
+    return getRoomRef() ? 'pending' : 'local-only';
+  }
 
   // One revision, one atomic transaction on the WHOLE collection (never the
   // per-id child) — see the module header for the full outcome taxonomy.
@@ -260,9 +275,14 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
   // device's own losing-id proposal.
   function handleRemoteSnapshot(val) {
     lastRemoteSnapshot = val || {};
+    const firstSnapshot = !hydrated;
+    hydrated = true; // before any callback, so a repaint triggered below already reads 'synced'
     const result = repository.mergeRemoteRevisions(lastRemoteSnapshot);
     if (result.changed) onRemoteChange(result);
     if (result.conflict || result.rejectedIds.length) onConflict(result);
+    // Announced once, even when nothing changed: an authoritatively-empty account must
+    // still leave the neutral "checking" state.
+    if (firstSnapshot) onHydrated();
     if (!bootstrapped) {
       bootstrapped = true;
       pushAllLocal(lastRemoteSnapshot);
@@ -281,10 +301,11 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
     if (listenerRef) listenerRef.off();
     listenerRef = null;
     bootstrapped = false;
+    hydrated = false;
     lastRemoteSnapshot = {};
   }
 
-  return { attach, detach, pushRevision, pushAllLocal, handleRemoteSnapshot, repository };
+  return { attach, detach, pushRevision, pushAllLocal, handleRemoteSnapshot, syncState, repository };
 }
 
 // A ready-to-use singleton for the real app (index.html) only — constructing it touches
@@ -303,6 +324,11 @@ if (typeof window !== 'undefined') {
     },
     onConflict: result => {
       if (typeof window.reportPersonalDayBoundaryConflict === 'function') window.reportPersonalDayBoundaryConflict(result);
+    },
+    // First authoritative snapshot: Settings leaves its neutral "checking" state even when
+    // the account turned out to have nothing (no revision changed, so onRemoteChange is silent).
+    onHydrated: () => {
+      if (typeof window.renderPersonalDayBoundarySettings === 'function') window.renderPersonalDayBoundarySettings();
     }
   });
 }

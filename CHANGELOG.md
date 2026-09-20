@@ -1,5 +1,35 @@
 # ChronaSense — Changelog
 
+## Personal Day Cross-Device Sync V1 — 2026-09-20
+
+**Built on `fix/personal-day-cross-device-sync-v1`, branched from `main` @ `b9e2de8`** (not merged, not deployed).
+
+Reported: the same account showed Personal Day configured on the PC and off/default on mobile.
+The synced store (`rooms/<uid>/dayBoundaryRevisions`) and its merge semantics were already correct
+and are unchanged; the defects were in how a device joins and reflects it.
+
+- **Startup race fixed.** `storage.js` attaches the boundary sync from `onAuthStateChanged` only
+  `if (globalThis.PersonalDayBoundaryLive)`, and that singleton comes from deferred ES modules. A
+  device where auth resolved first never subscribed and stayed on the default for the whole
+  session. `personal-day-boundary-live.js` now attaches and drains itself if the room is already
+  joined when it loads (the same fix `commitments-sync.js` already had); both orderings are
+  idempotent.
+- **Arrival now recomputes everything.** An inbound revision used to repaint Settings only. It now
+  runs `refreshAuthoritativePlanSurfaces()` (Today plan, Tomorrow, My Day timeline, commitments),
+  exactly like an inbound remote plan.
+- **Unknown is no longer "Off".** The sync bridge reports `local-only | pending | synced`. Until the
+  account's first snapshot arrives, an empty local cache shows "Checking your synced personal day
+  setting…" and Save is blocked (a first save on an unheard device would mint a legacy anchor that
+  competes with the account's real one). A device holding a cached revision is unaffected and works
+  offline.
+- No new revision semantics: legacy/default vs custom 00:00, prospective activation, revision-owned
+  timezone and historical ownership are untouched, and a stale device still cannot overwrite a
+  newer revision.
+- Tests: `personal-day-boundary-cross-device.test.js` (two-device convergence, scenarios A–J) and
+  `tests/personal-day-cross-device.spec.js` (real-app startup race, neutral state, PC → fresh mobile).
+  `future-day-planning`, `personal-day-boundary-live` and `plan-authority` test factories now model
+  "a device in a room has heard the account before its owner acts".
+
 ## My Day UX Simplification V1 — 2026-09-19
 
 **Integrated on `main` — implementation through `af78fc5`** (not deployed).

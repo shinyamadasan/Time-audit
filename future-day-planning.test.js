@@ -106,7 +106,7 @@ function makeApp({ clock = manila(D, '10:00'), room = null, deviceId = 'device-a
   });
   const authority = createPlanAuthority({ live, legacy, now: () => nowRef.value, accountTimezone: () => MANILA });
   return {
-    authority, live, legacy, planRepository, planSync, boundaryRepository, storage, planStorage,
+    authority, live, legacy, planRepository, planSync, boundarySync, boundaryRepository, storage, planStorage,
     setNow: v => { nowRef.value = v; },
     goOffline: () => { roomRef.value = null; },
     goOnline: ref => { roomRef.value = ref; },
@@ -114,6 +114,11 @@ function makeApp({ clock = manila(D, '10:00'), room = null, deviceId = 'device-a
 }
 
 function enable(app, boundaryTime = '18:00') {
+  // A device that is in a room has already heard the account's answer before the owner can act
+  // (the app attaches on room join). Enabling on a joined-but-unheard device is refused by design
+  // — it could mint a legacy anchor that competes with the account's real one — so model the
+  // real ordering: the account answered, and it has no boundary yet.
+  app.boundarySync.handleRemoteSnapshot({});
   app.live.proposeBoundary({ boundaryTime, timezone: MANILA });
   return app;
 }
