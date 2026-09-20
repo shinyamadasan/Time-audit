@@ -5,6 +5,32 @@
 
 ---
 
+## My Day UX Simplification V1 — refused-submit form state · 2026-09-19
+
+branch: `feat/my-day-ux-simplification-v1`; reviewed starting SHA
+`bd21c67848eeb18e7db3374b78f30ea6f42832d6`; expected and verified `origin/main`
+`f99f5d06b24506e8fa781e692dccc99fcba32667`; protected primary README unchanged.
+
+scope: align the internal task-form scheduling mode with the canonical item/anchor date hint after
+every refused submission. Success behavior, commitment forms, plan authority, and storage schemas
+are unchanged.
+
+result:
+
+- Focused new Playwright: **5/5**. Coverage proves Top-3 refusal/retry at 21:00 and 02:00,
+  explicit future-date refusal, same-id Edit refusal, and historical-date refusal.
+- Full `tests/planning-continuity.spec.js`: **46/46**.
+- `npm test`: PASS, exit 0, including Plan Authority **72/72**.
+- Full `npx playwright test`: **680/680**, 0 failures, 6.0 minutes.
+- `npm run lint`: PASS, 0 errors / the same 38 pre-existing warnings.
+- `npm run check:www-parity`: PASS; all **70** runtime-closure files are byte-identical.
+- `node --check planning-continuity-ui.js` and `git diff --check`: clean.
+
+No product failure was waived. No merge, deployment, production Firebase write, or Android
+build/deploy was performed.
+
+---
+
 ## My Day UX Simplification V1 — final form date/time semantics · 2026-09-19
 
 branch: `feat/my-day-ux-simplification-v1`; reviewed starting SHA
