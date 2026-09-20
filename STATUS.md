@@ -5,6 +5,22 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-19 — My Day refused-submit form-state correction (review candidate, NOT integrated)
+
+Continued on `feat/my-day-ux-simplification-v1` from reviewed/pushed tip
+`bd21c67848eeb18e7db3374b78f30ea6f42832d6`. Every refused task-form submission now resets the
+date scheduling mode to the canonical item/anchor state shown by the re-rendered form. A retry
+therefore cannot silently retain an explicit-date move after the visible date hint has reset.
+
+Focused browser coverage proves Top-3 refusal/retry at 21:00 and 02:00, future-date refusal,
+same-id Edit refusal, and historical-date refusal. Verification: focused Playwright **5/5**;
+planning-continuity Playwright **46/46**; `npm test` PASS; full Playwright **680/680**; lint 0
+errors / 38 pre-existing warnings; 70-file runtime parity, syntax, and diff checks clean. Nothing
+was merged, deployed, written to production Firebase, or built/deployed to Android. The protected
+primary README remains untouched.
+
+---
+
 ## 2026-09-19 — My Day form date/time semantics final correction (review candidate, NOT integrated)
 
 Continued on `feat/my-day-ux-simplification-v1` from reviewed/pushed tip
