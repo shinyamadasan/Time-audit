@@ -100,12 +100,18 @@ const seqIds = prefix => () => `${prefix}-${++seq}`;
 /** One device: its own local storage, its own repositories/bridges, its own
  *  injected clock. `roomRef` is shared between devices in multi-device tests;
  *  pass `null` to model a device that is offline / not in a room. */
-function makeDevice({ roomRef = null, storage = memory(), planStorage = memory(), idPrefix = 'rev', clock, legacy = legacyPlanStore(), deviceId = 'device-a' } = {}) {
+function makeDevice({ roomRef = null, storage = memory(), planStorage = memory(), idPrefix = 'rev', clock, legacy = legacyPlanStore(), deviceId = 'device-a', heard = true } = {}) {
   const getRoomRef = () => roomRef;
   const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds(idPrefix) });
   const planRepository = createOperationalPlanRepository({ storage: planStorage });
   const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef });
   const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef });
+  // A device that is in a room has heard the account's answer before its owner acts (the app
+  // attaches on room join). Acting on a joined-but-unheard device is refused by design — it could
+  // mint a legacy anchor that competes with the account's real one — so model the join: the
+  // device heard whatever the account held at that moment. `heard: false` is the pre-attach
+  // instant itself (a fresh device that knows nothing yet).
+  if (roomRef && heard) boundarySync.handleRemoteSnapshot(roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH).val());
   const nowRef = { value: clock ?? manila(D, '08:00') };
   const live = createPersonalDayBoundaryLiveWiring({
     boundaryRepository, planRepository, boundarySync, planSync,
@@ -567,8 +573,9 @@ test('fresh device reconstructs the full boundary history and the live plan from
   await Promise.resolve();
 
   // A brand-new device: empty local storage, same room.
-  const fresh = makeDevice({ roomRef, idPrefix: 'fresh', deviceId: 'device-b', clock: manila(D, '09:00') });
+  const fresh = makeDevice({ roomRef, idPrefix: 'fresh', deviceId: 'device-b', clock: manila(D, '09:00'), heard: false });
   assert.equal(fresh.live.status().status, 'absent', 'before attaching it knows nothing');
+  assert.equal(fresh.live.boundaryState().sync, 'pending', 'and it knows that it does not know yet');
   fresh.live.attachLiveDays();
 
   const freshStatus = fresh.live.status();

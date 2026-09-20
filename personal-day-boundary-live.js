@@ -148,17 +148,36 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     return boundaryRepository.read(fallbackTimezone());
   }
 
+  /** 'local-only' | 'pending' | 'synced' — whether the account's authoritative
+   *  configuration has been heard yet (see personal-day-boundary-sync.js). With no
+   *  sync bridge there is no account to wait for. */
+  function syncState() {
+    return boundarySync && typeof boundarySync.syncState === 'function' ? boundarySync.syncState() : 'local-only';
+  }
+
+  /** An empty local history is only "the account has no personal day" once the
+   *  account has answered. Until then it is UNKNOWN, and acting on it — showing
+   *  "Off", or creating a first revision (which would mint a competing legacy
+   *  anchor against whatever the account really holds) — would be a guess. A
+   *  device holding a cached revision is not in this state: it has a valid
+   *  history to work from, and appending a uniquely-identified revision to it is
+   *  safe whatever the account says. */
+  function awaitingAccountAnswer() {
+    return status().status === 'absent' && syncState() === 'pending';
+  }
+
   /** What the Settings UI needs to state the truth: the revision governing
    *  `nowMs` right now, plus any already-created revision that has not taken
    *  effect yet (a pending change the user must not be surprised by). */
   function boundaryState(nowMs = now()) {
     const current = status();
-    if (current.status !== 'custom') return { status: current.status, active: null, pending: null, error: current.error || null };
+    const sync = syncState();
+    if (current.status !== 'custom') return { status: current.status, active: null, pending: null, error: current.error || null, sync };
     const history = current.revisions;
     const active = activeBoundaryRevision(history, nowMs);
     const pending = history.filter(r => r.effectiveFromInstant !== null && r.effectiveFromInstant > nowMs)
       .sort((a, b) => a.effectiveFromInstant - b.effectiveFromInstant)[0] || null;
-    return { status: 'custom', active, pending, error: null };
+    return { status: 'custom', active, pending, error: null, sync };
   }
 
   /** Dry-run of proposeBoundary: computes the SAME effectiveFromInstant the
@@ -174,6 +193,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     } catch {
       return { ok: false, reason: 'invalid-timezone' };
     }
+    if (awaitingAccountAnswer()) return { ok: false, reason: 'sync-pending' };
     let history;
     try {
       history = revisions();
@@ -232,6 +252,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
   function proposeBoundary(candidate, nowMs = now()) {
     if (!candidate || !validBoundaryTime(candidate.boundaryTime)) throw new Error('Choose a valid personal day start time (HH:MM).');
     if (!validOperationalDayTimezone(candidate.timezone)) throw new Error('Choose a valid personal day timezone.');
+    if (awaitingAccountAnswer()) throw new Error('Your synced personal day setting is still loading. Try again in a moment.');
     const result = boundaryRepository.propose({ boundaryTime: candidate.boundaryTime, timezone: candidate.timezone }, nowMs);
     if (boundarySync) {
       try { boundarySync.pushAllLocal(); } catch { /* offline / no room — pushAllLocal retries on reconnect */ }
@@ -476,6 +497,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     status,
     enabled,
     revisions,
+    syncState,
     boundaryState,
     previewProposal,
     proposeBoundary,
@@ -546,7 +568,24 @@ if (typeof window !== 'undefined') {
     try { window.PersonalDayBoundaryLive.refreshLiveDays(); } catch { /* invalid history — surfaced by the Settings panel */ }
     window.PlanAuthority?.invalidate();
     if (typeof window.renderPersonalDayBoundarySettings === 'function') window.renderPersonalDayBoundarySettings();
-    if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
+    // Every plan surface AND the My Day timeline derive from the boundary history, so an
+    // arriving revision must recompute them all — the same signal an inbound remote plan
+    // uses (operational-plan-sync.js). Repainting Settings alone left Today on the boundary
+    // this device had BEFORE it heard from the account.
+    if (typeof globalThis.refreshAuthoritativePlanSurfaces === 'function') globalThis.refreshAuthoritativePlanSurfaces();
+    else if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
     if (typeof window.refreshPlanningTerminologyLabels === 'function') window.refreshPlanningTerminologyLabels();
   };
+
+  // storage.js joins the account room from onAuthStateChanged and attaches this wiring then —
+  // but only `if (globalThis.PersonalDayBoundaryLive)`. This module graph is deferred, so on a
+  // device where auth resolves first (a cold mobile load) that call found nothing and is never
+  // repeated: the device never subscribed to dayBoundaryRevisions and stayed on the default for
+  // the whole session. If the room is ALREADY joined, attach and drain now. Both calls are
+  // idempotent, so the other ordering (module first, room second) is unaffected. This is the
+  // same fix commitments-sync.js already carries.
+  if (typeof globalThis.getChronaSenseRoomRef === 'function' && globalThis.getChronaSenseRoomRef()) {
+    window.PersonalDayBoundaryLive.attachLiveDays();
+    window.PersonalDayBoundaryLive.pushAllLocal();
+  }
 }
