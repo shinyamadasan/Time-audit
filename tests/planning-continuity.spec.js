@@ -138,6 +138,17 @@ async function addSecondaryTask(page, task) {
   await form.getByRole('button', { name: 'Add', exact: true }).click();
 }
 
+async function seedThreePriorities(page, date = null) {
+  return page.evaluate(selectedDate => {
+    const target = selectedDate
+      ? window.PlanAuthority.dayForScheduledDate(selectedDate, '').target
+      : window.PlanAuthority.current();
+    window.PlanAuthority.saveItems(target, ['Seed one', 'Seed two', 'Seed three'].map(title => createPlanItem(title, '')));
+    refreshAuthoritativePlanSurfaces();
+    return target.id;
+  }, date);
+}
+
 async function openStaleRecovery(page) {
   await unfinished(page).getByRole('button', { name: /Unfinished/ }).click();
   return unfinished(page).locator('.pc-block', { hasText: 'Unfinished ·' }).last();
@@ -322,6 +333,114 @@ test('editing the civil date explicitly relocates the same untimed task id', asy
   expect(result.sourceCount).toBe(0);
   expect(result.destination.id).toBe(original.id);
   expect(result.destination.when).toBe('');
+});
+
+for (const time of ['21:00', '02:00']) {
+  test(`refused fourth priority resets to target mode before a ${time} Other Task retry`, async ({ page }) => {
+    await openApp(page);
+    await seedThreePriorities(page);
+    let form = await openTaskForm(page);
+    const date = form.locator('input[name="date"]');
+    await date.fill('2026-09-20');
+    await date.fill('2026-09-19');
+    await form.locator('input[name="title"]').fill(`Refused then ${time}`);
+    await form.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(form.locator('.pc-error')).toContainText('Top 3 is already full');
+    await expect(date).toHaveValue('2026-09-19');
+
+    form = page.locator('#pc-task-form');
+    await form.locator('input[name="title"]').fill(`Retry ${time}`);
+    await form.locator('select[name="kind"]').selectOption('task');
+    await form.locator('input[name="time"]').fill(time);
+    await expect(form.locator('input[name="date"]')).toHaveValue(time === '21:00' ? '2026-09-18' : '2026-09-19');
+    await form.getByRole('button', { name: 'Add', exact: true }).click();
+
+    const result = await page.evaluate(title => {
+      const current = window.PlanAuthority.current();
+      const next = window.PlanAuthority.next(current);
+      return {
+        current: window.PlanAuthority.items(current).filter(item => item.task === title).map(item => item.when),
+        next: window.PlanAuthority.items(next).filter(item => item.task === title).length,
+      };
+    }, `Retry ${time}`);
+    expect(result).toEqual({ current: [time], next: 0 });
+  });
+}
+
+test('a refused explicit future-date Add visibly and internally resets to the current anchor', async ({ page }) => {
+  await openApp(page);
+  await seedThreePriorities(page, '2026-09-25');
+  let form = await openTaskForm(page);
+  await form.locator('input[name="date"]').fill('2026-09-25');
+  await form.locator('input[name="title"]').fill('Future refusal');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(form.locator('.pc-error')).toContainText('Top 3 is already full');
+  await expect(form.locator('input[name="date"]')).toHaveValue('2026-09-19');
+
+  form = page.locator('#pc-task-form');
+  await form.locator('input[name="title"]').fill('Future retry anchored');
+  await form.locator('select[name="kind"]').selectOption('task');
+  await form.locator('input[name="time"]').fill('21:00');
+  await expect(form.locator('input[name="date"]')).toHaveValue('2026-09-18');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+  const result = await page.evaluate(() => {
+    const current = window.PlanAuthority.current();
+    const future = window.PlanAuthority.dayForScheduledDate('2026-09-25', '').target;
+    return {
+      current: window.PlanAuthority.items(current).filter(item => item.task === 'Future retry anchored').length,
+      future: window.PlanAuthority.items(future).filter(item => item.task === 'Future retry anchored').length,
+    };
+  });
+  expect(result).toEqual({ current: 1, future: 0 });
+});
+
+test('a refused explicit future-date Edit resets to the source anchor before retry', async ({ page }) => {
+  await openApp(page);
+  await seedThreePriorities(page, '2026-09-25');
+  await addSecondaryTask(page, 'Edit refusal source');
+  const originalId = await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current()).find(item => item.task === 'Edit refusal source').id);
+  await page.getByRole('button', { name: 'Edit planned task Edit refusal source' }).click();
+  let form = page.locator('#pc-task-form');
+  await form.locator('input[name="date"]').fill('2026-09-25');
+  await form.locator('select[name="kind"]').selectOption('priority');
+  await form.getByRole('button', { name: 'Save' }).click();
+  await expect(form.locator('.pc-error')).toContainText('Top 3 is already full');
+  await expect(form.locator('input[name="date"]')).toHaveValue('2026-09-19');
+
+  form = page.locator('#pc-task-form');
+  await form.locator('input[name="title"]').fill('Edit retry anchored');
+  await form.locator('input[name="time"]').fill('21:00');
+  await expect(form.locator('input[name="date"]')).toHaveValue('2026-09-18');
+  await form.getByRole('button', { name: 'Save' }).click();
+  const result = await page.evaluate(id => {
+    const current = window.PlanAuthority.current();
+    const future = window.PlanAuthority.dayForScheduledDate('2026-09-25', '').target;
+    const currentItem = window.PlanAuthority.items(current).find(item => item.id === id);
+    return {
+      current: currentItem && { task: currentItem.task, when: currentItem.when, kind: currentItem.kind },
+      future: window.PlanAuthority.items(future).filter(item => item.id === id).length,
+    };
+  }, originalId);
+  expect(result).toEqual({ current: { task: 'Edit retry anchored', when: '21:00', kind: 'task' }, future: 0 });
+});
+
+test('a historical-date refusal also resets the retry to target-preserving mode', async ({ page }) => {
+  await openApp(page);
+  let form = await openTaskForm(page);
+  await form.locator('input[name="date"]').fill('2026-09-18');
+  await form.locator('input[name="title"]').fill('Historical refusal');
+  await form.locator('select[name="kind"]').selectOption('task');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(form.locator('.pc-error')).toContainText('Past My Days are history');
+  await expect(form.locator('input[name="date"]')).toHaveValue('2026-09-19');
+
+  form = page.locator('#pc-task-form');
+  await form.locator('input[name="title"]').fill('Historical retry anchored');
+  await form.locator('select[name="kind"]').selectOption('task');
+  await form.locator('input[name="time"]').fill('21:00');
+  await expect(form.locator('input[name="date"]')).toHaveValue('2026-09-18');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+  expect(await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.current()).filter(item => item.task === 'Historical retry anchored').length)).toBe(1);
 });
 
 test('direct Add refuses yesterday and weeks ago without mutating historical plans', async ({ page }) => {

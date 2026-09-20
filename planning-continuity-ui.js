@@ -255,16 +255,24 @@ function taskFormHtml() {
   </form>`;
 }
 
+/** Task-form failures re-render from canonical item/anchor state, so the
+ *  scheduling mode must reset with the visible date hint. Keeping
+ *  dateTouched=true here would make the hint act like an explicit reschedule. */
+function refuseTaskForm(message) {
+  state.formError = message;
+  if (state.itemForm?.type === 'task') state.itemForm.dateTouched = false;
+}
+
 function submitTaskForm(form) {
   const layer = authority();
   const context = appContext();
-  if (!layer || !context) { state.formError = 'Your plan is still loading.'; return; }
+  if (!layer || !context) { refuseTaskForm('Your plan is still loading.'); return; }
   const data = new FormData(form);
   const title = String(data.get('title') || '').trim();
   const date = String(data.get('date') || '');
   const time = String(data.get('time') || '');
   const kind = data.get('kind') === 'task' ? 'task' : 'priority';
-  if (!title) { state.formError = 'Name the task first.'; return; }
+  if (!title) { refuseTaskForm('Name the task first.'); return; }
   const editing = taskFormValue();
   // Untouched dates preserve the selected authoritative My Day. A typed time is
   // interpreted inside that target; only a user-edited civil date uses the
@@ -274,10 +282,10 @@ function submitTaskForm(form) {
     : time ? layer.civilDateForTimeInTarget(editing.anchorTarget, time)
       : { ok: true, anchor: 'target', target: editing.anchorTarget };
   if (!resolved.ok) {
-    state.formError = resolved.reason === 'ambiguous' ? 'That time happens twice on this date. Choose a different time.'
+    refuseTaskForm(resolved.reason === 'ambiguous' ? 'That time happens twice on this date. Choose a different time.'
       : resolved.reason === 'nonexistent' ? 'That time does not exist on this date. Choose a different time.'
         : resolved.reason === 'outside-target' ? 'That time is outside this My Day. Pick a date to schedule it on another day.'
-          : 'Choose a valid date.';
+          : 'Choose a valid date.');
     return;
   }
   try {
@@ -290,7 +298,7 @@ function submitTaskForm(form) {
     state.itemForm = null;
     state.formError = '';
     globalThis.refreshAuthoritativePlanSurfaces?.();
-  } catch (err) { state.formError = err.message; }
+  } catch (err) { refuseTaskForm(err.message); }
 }
 
 function readForm(form) {
