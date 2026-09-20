@@ -5,6 +5,30 @@
 
 ---
 
+## My Day UX Simplification V1 — integrated verification · 2026-09-19
+
+integration: pure fast-forward of local `main` from
+`f99f5d06b24506e8fa781e692dccc99fcba32667` to reviewed implementation
+`af78fc5a7ee4a0566935b6bd44beb1ca4b65d0d0` in an isolated worktree. The reviewed candidate
+remains an ancestor; the feature branch remains preserved; protected primary README unchanged.
+
+result:
+
+- `npm test`: PASS, exit 0, including Plan Authority **72/72**.
+- Required focused Playwright: **85/85** across `planning-continuity` (**46/46**), My Day
+  timeline, planning-continuity fixes, commitment-sync wiring, and personal-day boundary.
+  No separately named relocation browser spec exists; relocation coverage is in planning-continuity.
+- Full `npx playwright test`: **680/680**, 0 failures, 6.8 minutes.
+- No failure reproduction or known-flake classification was needed.
+- `npm run lint`: PASS, 0 errors / the same 38 existing warnings.
+- `npm run check:www-parity`: PASS; all **70** runtime-closure files byte-identical.
+- `git diff --check`: clean.
+
+No Firebase production write, Android build/deploy, manual Pages deployment, or other external
+production action was performed.
+
+---
+
 ## My Day UX Simplification V1 — refused-submit form state · 2026-09-19
 
 branch: `feat/my-day-ux-simplification-v1`; reviewed starting SHA

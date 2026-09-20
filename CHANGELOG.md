@@ -2,7 +2,7 @@
 
 ## My Day UX Simplification V1 — 2026-09-19
 
-**Review candidate — `feat/my-day-ux-simplification-v1`** (not integrated or deployed).
+**Integrated on `main` — implementation through `af78fc5`** (not deployed).
 
 My Day is now one calm daily command center: `UP NEXT`, universal `+ Add`, one authoritative
 plan-plus-evidence timeline, then compact recovery/accountability information.
@@ -15,6 +15,9 @@ plan-plus-evidence timeline, then compact recovery/accountability information.
   DST ambiguity refused. Changing the civil date explicitly retains the existing exact-time or
   date-only noon rescheduling semantics. Today and Tomorrow select authoritative targets, and the
   date field is only a scheduling command after the owner changes it.
+
+- Every refused task Add/Edit synchronizes the visible anchored date hint with target-preserving
+  form state. A retry cannot silently retain an earlier explicit-date scheduling command.
 
 - For ordinary non-truncated days, displayed Today/Tomorrow/default/edit dates remain Plan
   Authority-derived hints and round-trip through the local-noon or exact date/time ownership
@@ -33,10 +36,10 @@ plan-plus-evidence timeline, then compact recovery/accountability information.
   its details, and focuses the summary. So Far now visibly says `Calendar today`; its factual
   calendar-day evidence semantics are unchanged.
 
-Verification after the final form correction: Plan Authority **72/72**; focused new Playwright
-**6/6** and full planning-continuity Playwright **41/41**; `npm test` PASS; full Playwright
-**675/675**; lint 0 errors / 38 pre-existing warnings; 70-file runtime parity and diff checks
-clean. Earlier correction-run details remain in `TEST_REPORT.md`.
+Integrated verification: Plan Authority **72/72**; required focused Playwright **85/85**, including
+full planning-continuity **46/46**; `npm test` PASS; full Playwright **680/680**; lint 0 errors /
+38 existing warnings; 70-file runtime parity and diff checks clean. Earlier correction-run details
+remain in `TEST_REPORT.md`.
 
 - Top Priorities and Other Tasks are projected into the timeline without copying or migrating
   canonical plan data. Untimed items live in a bounded `ANYTIME` lane; timed items appear at their
