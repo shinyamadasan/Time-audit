@@ -5,6 +5,44 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-21 — Personal Day Cross-Device Sync — integrated
+
+`main` was fast-forwarded from `b9e2de89e4ca07084fa7335b7b10270ce10a60a0` to reviewed candidate
+`f128a164647f08e0233db0fdfacae1582211cb62` in an isolated integration worktree (strict review FIX
+FIRST -> targeted re-review PASS). No reviewed commit was rewritten and the feature branch
+`fix/personal-day-cross-device-sync-v1` remains preserved.
+
+Behavior now on `main`:
+
+- Personal Day configuration hydrates across devices of the same account.
+- Startup attach ordering is safe (auth-before-module and module-before-auth both attach).
+- A remote boundary arrival recomputes the authoritative My Day surfaces, not just Settings.
+- A fresh device no longer falsely shows "Off" while the account has not yet been heard from.
+- The Personal Day cache is account-scoped (`ta3-day-boundary-revisions-v1:<room>`).
+- A foreign account's boundary revisions cannot be uploaded into another account's room.
+- The old unowned legacy cache is quarantined (never adopted, read or pushed), not guessed into
+  an owner; an account's scoped cache is populated from its own snapshot.
+- Same-account offline use remains supported once the scoped cache has hydrated.
+- Cloud schema and revision semantics are unchanged.
+
+Not claimed: the installed Android phone is NOT fixed (its bundle has not been rebuilt/`cap sync`ed);
+operational plans are NOT account-isolated; the app's local stores are NOT all cross-account safe.
+
+**Next / HIGH-PRIORITY DEBT: the operational-plan store leaks across accounts (reproduced by the
+reviewer).** Separate deferred debt: other unscoped local stores (entries, legacy plans,
+commitments); CoarseLifeEvidenceSync startup attach race; `personal-day-boundary-live.js` double
+module evaluation; Firebase listener error surfacing; cache-bust mixed-module window; Node/GitHub
+Action deprecation notices.
+
+Integrated verification: `npm test` exit 0 (1277 tests / 1276 pass / 1 known opt-in skip); focused
+Node (repository 17, sync 32, live 41, cross-device 13, account-scope 23, plan-authority 72,
+future-day-planning 28) all pass; focused Playwright **96/96**; full Playwright **692/692**; lint
+0 errors / 38 existing warnings; 70-file runtime parity and diff checks clean. Nothing was written
+to production Firebase, deployed to Firebase rules, built/deployed to Android, or manually deployed
+to Pages. The protected primary README stayed byte-identical.
+
+---
+
 ## 2026-09-19 — My Day UX Simplification V1 — integrated
 
 `main` was fast-forwarded from `f99f5d06b24506e8fa781e692dccc99fcba32667` to reviewed candidate

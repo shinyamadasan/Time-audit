@@ -2,7 +2,7 @@
 
 ## Personal Day Cross-Device Sync V1 — 2026-09-20
 
-**Built on `fix/personal-day-cross-device-sync-v1`, branched from `main` @ `b9e2de8`** (not merged, not deployed).
+**Integrated on `main` — implementation through `f128a16`** (pure fast-forward from `b9e2de8`; feature branch preserved). Reached the web/PWA client only through the automatic GitHub Pages deploy from `main`; **the installed Android (Capacitor) app has not been rebuilt** and is not claimed fixed.
 
 Reported: the same account showed Personal Day configured on the PC and off/default on mobile.
 The synced store (`rooms/<uid>/dayBoundaryRevisions`) and its merge semantics were already correct
@@ -35,8 +35,8 @@ and are unchanged; the defects were in how a device joins and reflects it.
 An independent review found that account A's local boundary cache survived sign-out and was
 uploaded into account B's room — into an empty room, and into a room that already held B's own
 18:00 history (where A's later-effective 20:00 silently changed B's effective Personal Day). Fixed
-in the same milestone; **not deployed, not merged, and the real phone is not claimed fixed until it
-is deployed/rebuilt and checked.**
+in the same milestone. **The installed Android phone is not claimed fixed** until its `www` bundle is
+rebuilt/`cap sync`ed and checked on the device.
 
 - **The boundary cache is account-scoped.** It is stored per joined room —
   `ta3-day-boundary-revisions-v1:<room>` (`uid_<uid>`) — so a cache can only be read, merged into or
@@ -67,10 +67,14 @@ is deployed/rebuilt and checked.**
   no-reload/direct switch, late old-room callback, wrong-room push, legacy cache, offline, custom
   00:00, pending vs empty) and account-switch specs in `tests/personal-day-cross-device.spec.js`.
   Existing factories/fixtures now carry an account identity and seed the scoped slot.
-- Known, deliberately untouched (debt): other per-device stores (entries, legacy plans, operational
-  plans, commitments) are still not account-scoped; `CoarseLifeEvidenceSync` has the same one-shot
+- **HIGH-PRIORITY DEFERRED DEBT — operational plans are NOT account-isolated.** The reviewer reproduced
+  the same cross-account leak in the operational-plan store. Only the Personal Day boundary cache is
+  account-scoped; this milestone does not make the app's local stores cross-account safe.
+- Other deferred debt (deliberately untouched): other per-device stores (entries, legacy plans,
+  commitments) are also unscoped; `CoarseLifeEvidenceSync` has the same one-shot
   attach race; `personal-day-boundary-live.js` is imported with and without `?v=` (evaluates twice,
-  idempotent); a Firebase listener error has no UI.
+  idempotent); a Firebase listener error has no UI; a cache-bust mixed-module window (new modules
+  against a stale cached module) can exist briefly after a deploy; Node/GitHub Action deprecation notices.
 
 ## My Day UX Simplification V1 — 2026-09-19
 
