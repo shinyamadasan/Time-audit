@@ -112,6 +112,14 @@
 // Cloud revisions are unchanged: no owner field is added to them, and the room
 // path is still the only authority.
 //
+// ── unknown is never "off" (web-runtime correction) ─────────────────────────
+//
+// An empty local cache means "the account has no personal day" ONLY after the account has
+// answered AND its answer was usable. Two more states are therefore reported, so a UI never has to
+// guess: 'error' (the room listener was cancelled/denied before any snapshot arrived) and
+// remoteStatus().unapplied (a snapshot arrived holding revisions that could not be applied — an
+// unmergeable history — so the account is NOT known to be off).
+//
 // Live Wiring V1 now creates a `window.PersonalDayBoundarySync` singleton at
 // the bottom of this file, guarded by `typeof window !== 'undefined'` so plain
 // `node --test` never constructs it (constructing the default repository touches
@@ -170,6 +178,8 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
   const onHydrated = typeof deps.onHydrated === 'function' ? deps.onHydrated : () => {};
   // The active cache just changed hands (a room was bound) in a way derived state can see: recompute.
   const onContextChange = typeof deps.onContextChange === 'function' ? deps.onContextChange : () => {};
+  // The room listener failed (cancelled / permission denied): repaint so "checking" does not linger.
+  const onSyncFault = typeof deps.onSyncFault === 'function' ? deps.onSyncFault : () => {};
 
   let listenerRef = null;
   let listenerRoomId = null;
@@ -177,6 +187,9 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
   let bootstrapped = false;
   let hydratedRoomId = null;
   let lastRemoteSnapshot = {};
+  // A listener failure for a room that has not hydrated, and what the last snapshot did to the cache.
+  let listenerFault = null; // { roomId, code }
+  let lastApply = null; // { roomId, remoteCount, rejectedCount, conflict }
   // Whether the surfaces derived from the boundary may currently reflect a non-empty cache.
   let derivedFromCache = false;
 
@@ -204,7 +217,37 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
     const roomId = activeRoomId();
     if (!roomId) return 'pending';
     if (hydratedRoomId === roomId) return 'synced';
+    if (listenerFault && listenerFault.roomId === roomId) return 'error';
     return getRoomRef() ? 'pending' : 'local-only';
+  }
+
+  /** What the account's last snapshot did here. `unapplied` = it held revisions but the local cache
+   *  is still empty, i.e. they were rejected or the history was unmergeable: the account is NOT
+   *  known to be "off". Counts only — never revision contents. */
+  function remoteStatus() {
+    const roomId = activeRoomId();
+    if (!roomId || !lastApply || lastApply.roomId !== roomId) return { unapplied: false, remoteCount: 0, rejectedCount: 0, conflict: false };
+    const empty = repository.status().status === 'absent';
+    return { unapplied: lastApply.remoteCount > 0 && empty, remoteCount: lastApply.remoteCount, rejectedCount: lastApply.rejectedCount, conflict: !!lastApply.conflict };
+  }
+
+  /** Safe, content-free snapshot of this bridge for a diagnostic view. */
+  function diagnostics() {
+    const roomId = activeRoomId();
+    const remote = remoteStatus();
+    return {
+      roomKnown: !!roomId,
+      listenerBound: !!listenerRef && listenerRoomId === roomId,
+      hydrated: !!roomId && hydratedRoomId === roomId,
+      syncState: syncState(),
+      listenerError: !!(listenerFault && listenerFault.roomId === roomId),
+      listenerErrorCode: listenerFault && listenerFault.roomId === roomId ? listenerFault.code : null,
+      remoteRevisionCount: remote.remoteCount,
+      remoteRejectedCount: remote.rejectedCount,
+      remoteConflict: remote.conflict,
+      remoteUnapplied: remote.unapplied,
+      cacheOwnerMatchesRoom: !!roomId && cacheOwner() === roomId,
+    };
   }
 
   /** A room was just bound. Derived state (PlanAuthority, Settings, Today/My Day) only needs
@@ -353,7 +396,9 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
     lastRemoteSnapshot = val || {};
     const firstSnapshot = hydratedRoomId !== roomId;
     hydratedRoomId = roomId; // before any callback, so a repaint triggered below already reads 'synced'
+    listenerFault = null; // an answer arrived
     const result = repository.mergeRemoteRevisions(lastRemoteSnapshot);
+    lastApply = { roomId, remoteCount: Object.keys(lastRemoteSnapshot).length, rejectedCount: result.rejectedIds.length, conflict: result.conflict };
     if (result.changed) onRemoteChange(result);
     if (result.conflict || result.rejectedIds.length) onConflict(result);
     // Announced once, even when nothing changed: an authoritatively-empty account must
@@ -382,6 +427,13 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
     listenerRef.on('value', snap => {
       if (token !== listenerToken) return; // a listener that was detached or superseded
       handleRemoteSnapshot(snap.val(), roomId);
+    }, err => {
+      // Firebase cancels the listener (e.g. permission denied). Without this the device sat at
+      // "checking" forever; with it the failure is a distinct, honest state. A late error from a
+      // listener that was already replaced is ignored.
+      if (token !== listenerToken || hydratedRoomId === roomId) return;
+      listenerFault = { roomId, code: String((err && (err.code || err.message)) || 'error').slice(0, 60) };
+      onSyncFault();
     });
     announceContext();
   }
@@ -394,9 +446,11 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
     bootstrapped = false;
     hydratedRoomId = null;
     lastRemoteSnapshot = {};
+    listenerFault = null;
+    lastApply = null;
   }
 
-  return { attach, detach, pushRevision, pushAllLocal, handleRemoteSnapshot, syncState, repository };
+  return { attach, detach, pushRevision, pushAllLocal, handleRemoteSnapshot, syncState, remoteStatus, diagnostics, repository };
 }
 
 // A ready-to-use singleton for the real app (index.html) only — constructing it touches
@@ -412,6 +466,9 @@ if (typeof window !== 'undefined') {
     // live days and repaint every surface that derives from the boundary.
     onContextChange: () => {
       if (typeof window.refreshPersonalDayBoundaryLive === 'function') window.refreshPersonalDayBoundaryLive();
+    },
+    onSyncFault: () => {
+      if (typeof window.renderPersonalDayBoundarySettings === 'function') window.renderPersonalDayBoundarySettings();
     },
     onRemoteChange: () => {
       // A remote boundary revision changed this device's history: the operational
