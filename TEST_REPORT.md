@@ -5,6 +5,33 @@
 
 ---
 
+## Personal Day Cross-Device Sync — integrated verification · 2026-09-21
+
+integration: pure fast-forward of local `main` from `b9e2de89e4ca07084fa7335b7b10270ce10a60a0` to
+reviewed candidate `f128a164647f08e0233db0fdfacae1582211cb62` (3 commits: `da39ff4`, `2794d4f`,
+`f128a16`) in an isolated worktree. The candidate remains an ancestor; the feature branch remains
+preserved; protected primary README unchanged.
+
+result:
+
+- `npm test`: PASS, exit 0 — 1277 tests / 1276 pass / 0 fail / 1 known opt-in skip
+  (`scripts/cross-repo-compat-check.test.js` control proof, needs `CROSS_REPO_COMPAT_CONTROL_PROOF=1`).
+- Focused Node: repository **17/17**, sync **32/32**, live **41/41**, cross-device **13/13**,
+  account-scope **23/23**, plan-authority **72/72**, future-day-planning **28/28**.
+- Focused Playwright: **96/96** (personal-day-cross-device, personal-day-boundary, my-day-timeline,
+  single-plan-authority, planning-continuity, planning-continuity-fixes).
+- Full `npx playwright test`: **692/692**, 0 failures, 5.7 minutes.
+- Known pre-existing intermittents (reproduced on `b9e2de8` during candidate review, not seen in this
+  run): `smoke.spec.js:1622`, `planning-continuity.spec.js:458`, `wife-shared-accountability.spec.js:340`.
+- `npm run lint`: PASS, 0 errors / the same 38 existing warnings.
+- `npm run check:www-parity`: PASS; all **70** runtime-closure files byte-identical.
+- `git diff --check`: clean.
+
+No Firebase production write, Firebase rules deployment, Android build/deploy, or manual Pages
+deployment was performed.
+
+---
+
 ## My Day UX Simplification V1 — integrated verification · 2026-09-19
 
 integration: pure fast-forward of local `main` from
