@@ -30,6 +30,48 @@ and are unchanged; the defects were in how a device joins and reflects it.
   `future-day-planning`, `personal-day-boundary-live` and `plan-authority` test factories now model
   "a device in a room has heard the account before its owner acts".
 
+### Account-scope correction (review: FIX FIRST)
+
+An independent review found that account A's local boundary cache survived sign-out and was
+uploaded into account B's room — into an empty room, and into a room that already held B's own
+18:00 history (where A's later-effective 20:00 silently changed B's effective Personal Day). Fixed
+in the same milestone; **not deployed, not merged, and the real phone is not claimed fixed until it
+is deployed/rebuilt and checked.**
+
+- **The boundary cache is account-scoped.** It is stored per joined room —
+  `ta3-day-boundary-revisions-v1:<room>` (`uid_<uid>`) — so a cache can only be read, merged into or
+  pushed as *its own* account's. Signing out or switching account makes the previous slot inactive
+  (it is kept for that account's next, possibly offline, launch); an account with no trusted cache
+  is **pending** until its own snapshot arrives, and the previous account's boundary never shows.
+- **Cross-account local revisions cannot be uploaded.** `pushRevision`/`pushAllLocal` refuse
+  (`owner-mismatch`, zero writes) unless the active cache owner equals the room being pushed to, and
+  a transaction re-run after a room switch aborts. Remote snapshots merge only into the joined
+  room's own cache; a late callback from a room the device left is dropped.
+- **Direct account switch.** `attach()` used to be a no-op while any listener existed, so a switch
+  A → B with no sign-out never subscribed B. It now re-binds to the joined room and drops the old
+  listener and hydration state. Sign-out/bind recompute PlanAuthority, Settings and the plan
+  surfaces so nothing stays painted from the previous account.
+- **Legacy unowned cache is not trusted.** Existing installs hold `ta3-day-boundary-revisions-v1`
+  with no owner, and the app persists nothing (a `uid_<uid>` room is never stored) that could prove
+  whose it is. It is therefore never adopted, read, merged or pushed; it is left in place untouched.
+  An account's scoped cache is populated from that account's authoritative snapshot. Consequence:
+  the first launch after upgrading needs one online sync before an account's boundary is available
+  offline (until then it shows "Checking…", not "Off").
+- **First paint.** `index.html`'s pre-module probe no longer reads the unowned key: with a room
+  joined only its slot answers; with the room not yet known, any locally held slot keeps first paint
+  neutral instead of guessing. This ends when the room joins or the module graph loads.
+- **Unchanged:** the cloud revision schema and authority (`rooms/<uid>/dayBoundaryRevisions`, no
+  owner field added), revision semantics, and same-account offline support (an account's own slot
+  still provides its boundary offline).
+- Tests: `personal-day-boundary-account-scope.test.js` (A→empty B, A→B with own history, A→B→A,
+  no-reload/direct switch, late old-room callback, wrong-room push, legacy cache, offline, custom
+  00:00, pending vs empty) and account-switch specs in `tests/personal-day-cross-device.spec.js`.
+  Existing factories/fixtures now carry an account identity and seed the scoped slot.
+- Known, deliberately untouched (debt): other per-device stores (entries, legacy plans, operational
+  plans, commitments) are still not account-scoped; `CoarseLifeEvidenceSync` has the same one-shot
+  attach race; `personal-day-boundary-live.js` is imported with and without `?v=` (evaluates twice,
+  idempotent); a Firebase listener error has no UI.
+
 ## My Day UX Simplification V1 — 2026-09-19
 
 **Integrated on `main` — implementation through `af78fc5`** (not deployed).
