@@ -89,9 +89,12 @@ function fakeRoomRef(initial = {}) {
   return makeRef('');
 }
 
+// Every device here belongs to the same account: its cache slot is that room's, and it pushes to that room.
+const TEST_ROOM = 'uid_test-room';
+
 function makeBridge({ roomRef = fakeRoomRef(), storage = memory(), idGenerator = seqIds, onRemoteChange, onConflict } = {}) {
-  const repository = createPersonalDayBoundaryRepository({ storage, idGenerator });
-  const bridge = createPersonalDayBoundarySyncBridge({ repository, getRoomRef: () => roomRef, onRemoteChange, onConflict });
+  const repository = createPersonalDayBoundaryRepository({ storage, idGenerator, getOwner: () => TEST_ROOM });
+  const bridge = createPersonalDayBoundarySyncBridge({ repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM, onRemoteChange, onConflict });
   return { bridge, repository, roomRef };
 }
 
@@ -212,8 +215,8 @@ test('two devices proposing different revisions offline both survive once both a
   deviceA.repository.propose({ boundaryTime: '18:00', timezone: MANILA }, Date.parse('2026-09-14T00:30:00Z'));
   deviceB.repository.propose({ boundaryTime: '16:00', timezone: MANILA }, Date.parse('2026-09-20T00:30:00Z'));
   const sharedRoomRef = roomRef;
-  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => sharedRoomRef });
-  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => sharedRoomRef });
+  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => sharedRoomRef, getRoomId: () => TEST_ROOM });
+  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => sharedRoomRef, getRoomId: () => TEST_ROOM });
   bridgeA.attach();
   bridgeB.attach();
   bridgeA.handleRemoteSnapshot(sharedRoomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH).val());
@@ -228,7 +231,7 @@ test('onConflict fires when a remote revision conflicts with a local one, and lo
   const { bridge, repository } = makeBridge({ roomRef });
   const { revision: local } = repository.propose({ boundaryTime: '18:00', timezone: MANILA }, Date.parse('2026-09-14T00:30:00Z'));
   const conflicts = [];
-  const bridgeWithHandler = createPersonalDayBoundarySyncBridge({ repository, getRoomRef: () => roomRef, onConflict: r => conflicts.push(r) });
+  const bridgeWithHandler = createPersonalDayBoundarySyncBridge({ repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM, onConflict: r => conflicts.push(r) });
   bridgeWithHandler.handleRemoteSnapshot({ [local.id]: { ...local, boundaryTime: '17:00' } });
   assert.equal(conflicts.length, 1);
   assert.equal(repository.status().revisions.find(r => r.id === local.id).boundaryTime, '18:00');
@@ -265,8 +268,8 @@ function proposeIdenticalOnTwoFreshDevices() {
 
 test('same proposal, same instant, two fresh devices, A pushes first: converges to ONE canonical revision', async () => {
   const { roomRef, deviceA, deviceB } = proposeIdenticalOnTwoFreshDevices();
-  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef });
-  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef });
+  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
+  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
 
   await bridgeA.pushAllLocal({}); // A's anchor + A's 18:00 revision land first
   await bridgeB.pushAllLocal(remoteMap(roomRef)); // B observes A's state, then attempts its own
@@ -286,8 +289,8 @@ test('same proposal, same instant, two fresh devices, A pushes first: converges 
 
 test('same proposal, same instant, two fresh devices, B pushes first (REVERSED order): same canonical winner', async () => {
   const { roomRef, deviceA, deviceB } = proposeIdenticalOnTwoFreshDevices();
-  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef });
-  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef });
+  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
+  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
 
   await bridgeB.pushAllLocal({}); // B commits first this time
   await bridgeA.pushAllLocal(remoteMap(roomRef)); // A's push must WIN and re-canonicalize to its own (smaller) id
@@ -306,8 +309,8 @@ test('same proposal, same instant, two fresh devices, B pushes first (REVERSED o
 
 test('same proposal, same instant, TRULY interleaved concurrent pushRevision calls (Promise.all): still converges', async () => {
   const { roomRef, deviceA, deviceB } = proposeIdenticalOnTwoFreshDevices();
-  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef });
-  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef });
+  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
+  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
   const [customA] = deviceA.repository.listAllRaw().filter(r => r.effectiveFromInstant !== null);
   const [customB] = deviceB.repository.listAllRaw().filter(r => r.effectiveFromInstant !== null);
 
@@ -381,8 +384,8 @@ test('two fresh devices both initialize an identical anchor: idempotent, exactly
   const deviceB = makeBridge({ roomRef, storage: memory() });
   const anchorA = deviceA.repository.read(MANILA)[0]; // ephemeral synthesis, not yet persisted
   const anchorB = deviceB.repository.read(MANILA)[0];
-  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef });
-  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef });
+  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
+  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
   assert.deepEqual(await bridgeA.pushRevision(anchorA), { committed: true, outcome: 'committed' });
   assert.deepEqual(await bridgeB.pushRevision(anchorB), { committed: true, outcome: 'idempotent' });
   const remote = assertRemoteValid(roomRef);
@@ -464,7 +467,7 @@ test('stale reconnect: device B (anchor+R1 only) proposing R3 preserves A\'s R1 
   let idCounter = 0;
   const deviceA = makeBridge({ roomRef, storage: memory(), idGenerator: () => `r${++idCounter}` });
   deviceA.repository.propose({ boundaryTime: '18:00', timezone: MANILA }, Date.parse('2026-09-14T00:30:00Z')); // -> r1
-  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef });
+  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
   await bridgeA.pushAllLocal({});
   const { revision: r2 } = deviceA.repository.propose({ boundaryTime: '16:00', timezone: MANILA }, Date.parse('2026-09-21T00:30:00Z')); // -> r2
   await bridgeA.pushRevision(r2);
@@ -476,7 +479,7 @@ test('stale reconnect: device B (anchor+R1 only) proposing R3 preserves A\'s R1 
   assert.equal(deviceB.repository.status().revisions.length, 2); // anchor + R1 only, offline view
 
   // B reconnects to the REAL shared remote (which now also has R2) and proposes R3.
-  const bridgeBOnline = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef });
+  const bridgeBOnline = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
   bridgeBOnline.handleRemoteSnapshot(remoteMap(roomRef)); // reconnect merges in R2 first
   assert.equal(deviceB.repository.status().revisions.length, 3);
   const { revision: r3 } = deviceB.repository.propose({ boundaryTime: '20:00', timezone: MANILA }, Date.parse('2026-10-01T00:30:00Z'));
@@ -521,8 +524,8 @@ test('stress: repeated same-proposal races under varied call order always conver
     const deviceB = makeBridge({ roomRef, storage: memory(), idGenerator: () => idB });
     deviceA.repository.propose({ boundaryTime: '18:00', timezone: MANILA }, now);
     deviceB.repository.propose({ boundaryTime: '18:00', timezone: MANILA }, now);
-    const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef });
-    const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef });
+    const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
+    const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
     const order = trial % 2 === 0
       ? [() => bridgeA.pushAllLocal({}), () => bridgeB.pushAllLocal(remoteMap(roomRef))]
       : [() => bridgeB.pushAllLocal({}), () => bridgeA.pushAllLocal(remoteMap(roomRef))];
@@ -642,9 +645,9 @@ test('listener-driven reconciliation: attach()\'s own registered .on(\'value\') 
   // while remote is still empty — its own bootstrap push succeeds outright.
   const deviceB = makeBridge({ roomRef, storage: memory(), idGenerator: () => 'zzz-losing' });
   deviceB.repository.propose({ boundaryTime: '18:00', timezone: MANILA }, now);
-  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef });
+  const bridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
   const remoteChangesSeenByB = [];
-  const listeningBridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef, onRemoteChange: r => remoteChangesSeenByB.push(r) });
+  const listeningBridgeB = createPersonalDayBoundarySyncBridge({ repository: deviceB.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM, onRemoteChange: r => remoteChangesSeenByB.push(r) });
   listeningBridgeB.attach(); // registers the REAL .on('value') listener and bootstrap-pushes B's own {anchor, zzz-losing}
   assert.deepEqual(remoteMap(roomRef)[LEGACY_CALENDAR_DAY_REVISION_ID] ? Object.keys(remoteMap(roomRef)).sort() : [], [LEGACY_CALENDAR_DAY_REVISION_ID, 'zzz-losing'].sort());
 
@@ -654,7 +657,7 @@ test('listener-driven reconciliation: attach()\'s own registered .on(\'value\') 
   // and since A's id wins, CANONICALIZES: deletes zzz-losing, adds aaa-canonical.
   const deviceA = makeBridge({ roomRef, storage: memory(), idGenerator: () => 'aaa-canonical' });
   deviceA.repository.propose({ boundaryTime: '18:00', timezone: MANILA }, now);
-  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef });
+  const bridgeA = createPersonalDayBoundarySyncBridge({ repository: deviceA.repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
   return bridgeA.pushRevision(deviceA.repository.listAllRaw().find(r => r.effectiveFromInstant !== null)).then(async result => {
     assert.equal(result.outcome, 'canonicalized');
     assert.deepEqual(Object.keys(remoteMap(roomRef)).sort(), [LEGACY_CALENDAR_DAY_REVISION_ID, 'aaa-canonical'].sort());

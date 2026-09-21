@@ -97,7 +97,7 @@ async function openApp(page, { now = SEVEN_PM, boundaryStore = null, plans = '{}
     localStorage.setItem('ta3-reviews', '{}');
     localStorage.setItem('ta3-plans', plans);
     localStorage.setItem('ta3-daily-routines-v1', routines);
-    if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1', boundaryStore);
+    if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_spa-user', boundaryStore);
   }, { timezone: TZ, now, boundaryStore, plans, entries, routines, useClock });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
@@ -133,7 +133,7 @@ test('a never-enabled account plans, prepares and reviews with no operational re
   const state = await page.evaluate(() => ({
     plans: JSON.parse(localStorage.getItem('ta3-plans')),
     operational: localStorage.getItem('ta3-operational-plans-v1'),
-    boundary: localStorage.getItem('ta3-day-boundary-revisions-v1'),
+    boundary: localStorage.getItem('ta3-day-boundary-revisions-v1:uid_spa-user'),
     attached: window.PersonalDayBoundaryLive.attachedDayIds(),
     enabled: window.PlanAuthority.enabled(),
     surfaceHidden: document.getElementById('operational-plan-section').hidden,

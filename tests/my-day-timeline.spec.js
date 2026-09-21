@@ -110,7 +110,7 @@ async function openApp(page, { now, boundary = '18:00' }) {
     localStorage.setItem('ta3-settings', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates }));
     localStorage.setItem('ta3-entries', JSON.stringify(entries));
     localStorage.setItem('ta3-plans', '{}'); localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-focus-redemptions', '[]');
-    if (boundary) localStorage.setItem('ta3-day-boundary-revisions-v1', boundary);
+    if (boundary) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_myday-user', boundary);
   }, { timezone: TZ, now, boundary: boundary ? boundaryStore(boundary) : null, templates: TEMPLATES, entries: ENTRIES });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.PlanAuthority === 'object');

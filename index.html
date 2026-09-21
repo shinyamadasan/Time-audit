@@ -1665,7 +1665,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="storage.js?v=20260719-template-sync-doctor-2"></script>
+<script src="storage.js?v=20260921-personal-day-account-scope-v1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
@@ -1685,7 +1685,7 @@
 <script type="module" src="coarse-life-evidence-sync.js?v=20260910-coarse-evidence-durability-v1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20260919-personal-day-cross-device-sync-v1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20260921-personal-day-account-scope-v1"></script>
 <script type="module" src="personal-day-boundary-ui.js?v=20260919-personal-day-cross-device-sync-v1"></script>
 <script type="module" src="operational-plan-ui.js?v=20260917-personal-day-boundary-live-wiring-v1"></script>
 <script type="module" src="commitments-sync.js?v=20260918-planning-continuity-v1"></script>
@@ -6725,11 +6725,28 @@ globalThis.getOperationalPlanAppContext = () => ({
 // INSTANT, or every day OVERLAPPING a calendar date (history), and the
 // authority layer decides which store answers.
 
-/** True when a boundary history exists in storage. Readable synchronously, long
- *  before the module graph loads — which is exactly what lets the first paint
- *  avoid guessing (see currentPlanTarget). */
+/** True when a boundary history MAY exist for the account in use. Readable synchronously,
+ *  long before the module graph loads — which is exactly what lets the first paint
+ *  avoid guessing (see currentPlanTarget).
+ *
+ *  The boundary cache is stored per account (`ta3-day-boundary-revisions-v1:<room>`), so
+ *  once the room is joined only ITS slot answers. Before the room is known, nothing on this
+ *  device can be attributed to the person opening the app — any slot, including the old
+ *  unowned `ta3-day-boundary-revisions-v1`, may be another account's — so a device holding
+ *  any of them stays neutral (null targets) instead of guessing. That ends when the room
+ *  joins or the module graph loads and PlanAuthority takes over; it is never a steady state. */
 function personalDayBoundaryConfigured() {
-  try { return localStorage.getItem('ta3-day-boundary-revisions-v1') !== null; } catch { return false; }
+  try {
+    const base = 'ta3-day-boundary-revisions-v1';
+    let room = '';
+    try { room = globalThis.getChronaSenseRoomCode ? globalThis.getChronaSenseRoomCode() : ''; } catch { room = ''; }
+    if (room) return localStorage.getItem(base + ':' + room) !== null;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key === base || (key && key.startsWith(base + ':'))) return true;
+    }
+    return false;
+  } catch { return false; }
 }
 
 /** The legacy-day target shape, for the pre-module first paint of an account

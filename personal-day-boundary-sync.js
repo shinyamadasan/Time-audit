@@ -89,6 +89,28 @@
 //                        one yet — see pushRevision below) before committing.
 //   - 'transport-failure' / 'skipped' — no room ref, or the SDK doesn't
 //                        support transactions. No writes attempted.
+//   - 'owner-mismatch' — the local cache does not belong to the room being pushed
+//                        to (see "account scope" below). Refused, zero writes.
+//
+// ── account scope (account-scope correction) ────────────────────────────────
+//
+// The local cache belongs to ONE account (personal-day-boundary-repository.js
+// keeps a slot per room). This bridge is the only thing that moves revisions
+// between that cache and a room, so it enforces the pairing itself rather than
+// trusting its callers' ordering:
+//   - PUSH: pushRevision / pushAllLocal refuse unless the repository's active
+//     cache owner equals the room being pushed to (`getRoomId()`), and re-check
+//     inside the transaction so a room switch mid-retry aborts with zero writes.
+//     A-cache -> B-room is impossible even if a caller runs in the wrong order.
+//   - PULL: a snapshot is merged only when it came from the room that is joined
+//     RIGHT NOW and whose cache is active. A late callback from an old room is
+//     dropped, never merged into the new account's cache.
+//   - ATTACH: the listener is bound to the room it was attached for. Attaching
+//     for a different room (a direct account switch, with no sign-out between)
+//     drops the old listener and hydration state first — previously attach() was
+//     a no-op while any listener existed, so the second account never subscribed.
+// Cloud revisions are unchanged: no owner field is added to them, and the room
+// path is still the only authority.
 //
 // Live Wiring V1 now creates a `window.PersonalDayBoundarySync` singleton at
 // the bottom of this file, guarded by `typeof window !== 'undefined'` so plain
@@ -109,7 +131,7 @@
 // shared canonical timezone table or a settings-integration decision, neither
 // of which this bounded fix introduces.
 
-import { createPersonalDayBoundaryRepository } from './personal-day-boundary-repository.js';
+import { appRoomOwner, createPersonalDayBoundaryRepository } from './personal-day-boundary-repository.js';
 import {
   normalizeBoundaryRevisionHistory,
   pickCanonicalRevisionId,
@@ -140,14 +162,33 @@ function decodeRemoteHistory(remoteMap) {
 export function createPersonalDayBoundarySyncBridge(deps = {}) {
   const repository = deps.repository || createPersonalDayBoundaryRepository();
   const getRoomRef = typeof deps.getRoomRef === 'function' ? deps.getRoomRef : () => null;
+  // The joined room's identity, independent of whether its ref is reachable right now
+  // (offline the ref may be absent while the account — and its cache — is still known).
+  const getRoomId = typeof deps.getRoomId === 'function' ? deps.getRoomId : () => null;
   const onRemoteChange = typeof deps.onRemoteChange === 'function' ? deps.onRemoteChange : () => {};
   const onConflict = typeof deps.onConflict === 'function' ? deps.onConflict : () => {};
   const onHydrated = typeof deps.onHydrated === 'function' ? deps.onHydrated : () => {};
+  // The active cache just changed hands (a room was bound) in a way derived state can see: recompute.
+  const onContextChange = typeof deps.onContextChange === 'function' ? deps.onContextChange : () => {};
 
   let listenerRef = null;
+  let listenerRoomId = null;
+  let listenerToken = 0;
   let bootstrapped = false;
-  let hydrated = false;
+  let hydratedRoomId = null;
   let lastRemoteSnapshot = {};
+  // Whether the surfaces derived from the boundary may currently reflect a non-empty cache.
+  let derivedFromCache = false;
+
+  function activeRoomId() {
+    const roomId = getRoomId();
+    return typeof roomId === 'string' && roomId ? roomId : null;
+  }
+
+  /** Whose cache is active in the repository (null for a plain/unscoped repository). */
+  function cacheOwner() {
+    return typeof repository.ownerRoomId === 'function' ? repository.ownerRoomId() : null;
+  }
 
   // Whether this device has heard the account's authoritative answer yet.
   //   'local-only' — no room ref (signed out / not joined): there is nothing to wait for.
@@ -156,10 +197,35 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
   //                  known" here, never "the account has no personal day".
   //   'synced'     — the first snapshot arrived this session, so an empty local history is
   //                  now authoritatively "off".
-  // Reset by detach() (sign-out / room switch): hydration belongs to one room.
+  // Hydration belongs to one room: it is reset by detach() and never carries across a switch.
+  // With no room identity at all (signed out, or auth has not answered) the account is
+  // unknown, which is 'pending' — an empty cache must not read as "off" then either.
   function syncState() {
-    if (hydrated) return 'synced';
+    const roomId = activeRoomId();
+    if (!roomId) return 'pending';
+    if (hydratedRoomId === roomId) return 'synced';
     return getRoomRef() ? 'pending' : 'local-only';
+  }
+
+  /** A room was just bound. Derived state (PlanAuthority, Settings, Today/My Day) only needs
+   *  recomputing if it can differ: a cache is now active, or one was before. An account that never
+   *  enabled the boundary, following another that never did, changes nothing — and must not be
+   *  made to repaint (or re-publish) just because a room was joined. */
+  function announceContext() {
+    const hasCache = repository.status().status !== 'absent';
+    if (hasCache || derivedFromCache) onContextChange();
+    derivedFromCache = hasCache;
+  }
+
+  /** The room a push may go to right now: the ref must exist, the room identity must be
+   *  known, and the ACTIVE cache must be that room's. Anything else is refused — the
+   *  cache is never re-attributed to fit the room. */
+  function pushTarget() {
+    const roomRef = getRoomRef();
+    if (!roomRef) return { skipped: true };
+    const roomId = activeRoomId();
+    if (!roomId || cacheOwner() !== roomId) return { refused: true };
+    return { roomRef, roomId };
   }
 
   // One revision, one atomic transaction on the WHOLE collection (never the
@@ -167,8 +233,10 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
   // @returns {Promise<{committed:boolean, outcome:string}>}
   function pushRevision(revision) {
     if (!revision || !revision.id) return Promise.resolve({ committed: false, outcome: 'skipped' });
-    const roomRef = getRoomRef();
-    if (!roomRef) return Promise.resolve({ committed: false, outcome: 'skipped' });
+    const target = pushTarget();
+    if (target.skipped) return Promise.resolve({ committed: false, outcome: 'skipped' });
+    if (target.refused) return Promise.resolve({ committed: false, outcome: 'owner-mismatch' });
+    const { roomRef, roomId } = target;
     let collectionRef;
     try {
       collectionRef = roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH);
@@ -191,6 +259,9 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
     let outcome = 'skipped';
     return collectionRef.transaction(remoteMap => {
       outcome = 'committed'; // per-invocation reset — never inherited across retries
+      // The transaction can be re-run later, against fresh server data. If the account changed
+      // in between, the cache this validation reads is no longer this room's: abort, write nothing.
+      if (activeRoomId() !== roomId || cacheOwner() !== roomId) { outcome = 'owner-mismatch'; return undefined; }
       const decoded = decodeRemoteHistory(remoteMap);
       if (!decoded.valid) { outcome = 'malformed-remote'; return undefined; }
       const remoteById = remoteMap || {};
@@ -253,8 +324,9 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
   // against this device's full local context regardless of order), but
   // reduces transient inconsistency for any concurrent observer.
   function pushAllLocal(remoteSnapshot = lastRemoteSnapshot) {
-    const roomRef = getRoomRef();
-    if (!roomRef) return Promise.resolve({ committed: false, results: [] });
+    const target = pushTarget();
+    if (target.skipped) return Promise.resolve({ committed: false, results: [] });
+    if (target.refused) return Promise.resolve({ committed: false, results: [], outcome: 'owner-mismatch' });
     const remote = remoteSnapshot || {};
     const missing = repository.listAllRaw()
       .filter(revision => {
@@ -273,10 +345,14 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
   // collection replace. mergeRemoteRevisions now also performs identity
   // reconciliation (droppedIds) when a remote canonical id supersedes this
   // device's own losing-id proposal.
-  function handleRemoteSnapshot(val) {
+  // `roomId` is the room the snapshot CAME FROM (captured when its listener was attached). It is
+  // applied only if that is still the joined room and its cache is the active one: a late callback
+  // from a room the device has left must never touch the new account's cache.
+  function handleRemoteSnapshot(val, roomId = activeRoomId()) {
+    if (!roomId || roomId !== activeRoomId() || cacheOwner() !== roomId) return false;
     lastRemoteSnapshot = val || {};
-    const firstSnapshot = !hydrated;
-    hydrated = true; // before any callback, so a repaint triggered below already reads 'synced'
+    const firstSnapshot = hydratedRoomId !== roomId;
+    hydratedRoomId = roomId; // before any callback, so a repaint triggered below already reads 'synced'
     const result = repository.mergeRemoteRevisions(lastRemoteSnapshot);
     if (result.changed) onRemoteChange(result);
     if (result.conflict || result.rejectedIds.length) onConflict(result);
@@ -287,21 +363,36 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
       bootstrapped = true;
       pushAllLocal(lastRemoteSnapshot);
     }
+    return true;
   }
 
+  // Binds the listener to the room that is joined now. Idempotent for the SAME room; for a
+  // different one (a direct account switch) the old listener and hydration are dropped first.
+  // With the room's identity unknown nothing is subscribed: whose cache a snapshot would
+  // populate could not be said.
   function attach() {
-    if (listenerRef) return;
     const roomRef = getRoomRef();
-    if (!roomRef) return;
+    const roomId = activeRoomId();
+    if (!roomRef || !roomId) return;
+    if (listenerRef && listenerRoomId === roomId) return;
+    if (listenerRef) detach();
+    listenerRoomId = roomId;
+    const token = ++listenerToken;
     listenerRef = roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH);
-    listenerRef.on('value', snap => handleRemoteSnapshot(snap.val()));
+    listenerRef.on('value', snap => {
+      if (token !== listenerToken) return; // a listener that was detached or superseded
+      handleRemoteSnapshot(snap.val(), roomId);
+    });
+    announceContext();
   }
 
   function detach() {
     if (listenerRef) listenerRef.off();
     listenerRef = null;
+    listenerRoomId = null;
+    listenerToken++; // callbacks of the listener just dropped are ignored from here on
     bootstrapped = false;
-    hydrated = false;
+    hydratedRoomId = null;
     lastRemoteSnapshot = {};
   }
 
@@ -316,6 +407,12 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
 if (typeof window !== 'undefined') {
   window.PersonalDayBoundarySync = createPersonalDayBoundarySyncBridge({
     getRoomRef: () => (typeof globalThis.getChronaSenseRoomRef === 'function' ? globalThis.getChronaSenseRoomRef() : null),
+    getRoomId: appRoomOwner,
+    // A room was bound, so a different account's cache may now be the active one: re-resolve the
+    // live days and repaint every surface that derives from the boundary.
+    onContextChange: () => {
+      if (typeof window.refreshPersonalDayBoundaryLive === 'function') window.refreshPersonalDayBoundaryLive();
+    },
     onRemoteChange: () => {
       // A remote boundary revision changed this device's history: the operational
       // day identities in live use may have changed with it, so re-resolve which

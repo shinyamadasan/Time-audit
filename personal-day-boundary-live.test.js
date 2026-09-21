@@ -96,15 +96,19 @@ function legacyPlanStore(seed = {}) {
 
 let seq = 0;
 const seqIds = prefix => () => `${prefix}-${++seq}`;
+const TEST_ROOM = 'uid_test-room';
+// This device's cache slot: the boundary cache is stored per account (see personal-day-boundary-repository.js).
+const TEST_SLOT = `ta3-day-boundary-revisions-v1:${TEST_ROOM}`;
 
 /** One device: its own local storage, its own repositories/bridges, its own
  *  injected clock. `roomRef` is shared between devices in multi-device tests;
  *  pass `null` to model a device that is offline / not in a room. */
 function makeDevice({ roomRef = null, storage = memory(), planStorage = memory(), idPrefix = 'rev', clock, legacy = legacyPlanStore(), deviceId = 'device-a', heard = true } = {}) {
   const getRoomRef = () => roomRef;
-  const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds(idPrefix) });
+  // The account is known even when its room ref is not reachable (offline): its cache slot is the room's.
+  const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds(idPrefix), getOwner: () => TEST_ROOM });
   const planRepository = createOperationalPlanRepository({ storage: planStorage });
-  const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef });
+  const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef, getRoomId: () => TEST_ROOM });
   const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef });
   // A device that is in a room has heard the account's answer before its owner acts (the app
   // attaches on room join). Acting on a joined-but-unheard device is refused by design — it could
@@ -144,7 +148,7 @@ test('legacy user opens the upgraded app: nothing is persisted, nothing is attac
   device.live.attachLiveDays();
 
   // Not one byte written to the boundary store.
-  assert.equal(device.storage.getItem('ta3-day-boundary-revisions-v1'), null, 'merely opening the app must never persist a revision');
+  assert.equal(device.storage.getItem(TEST_SLOT), null, 'merely opening the app must never persist a revision');
   assert.equal(device.planStorage.getItem('ta3-operational-plans-v1'), null, 'no operational plan store is created either');
 
   // Both days are legacy-governed and route to plans[dateKey].
@@ -172,11 +176,11 @@ test('legacy plan behavior is unchanged: reads and writes for a never-enabled ac
   assert.deepEqual(legacy.writes, [D_NEXT], 'exactly one legacy write, at the legacy calendar dateKey');
   assert.deepEqual(legacy.plans[D_NEXT].items.map(i => i.id), ['p1', 'p2']);
   assert.equal(device.planStorage.getItem('ta3-operational-plans-v1'), null, 'the operational store is never touched for a legacy day');
-  assert.equal(device.storage.getItem('ta3-day-boundary-revisions-v1'), null, 'planning never creates a boundary revision');
+  assert.equal(device.storage.getItem(TEST_SLOT), null, 'planning never creates a boundary revision');
 });
 
 test('an invalid persisted boundary history fails closed — never silently reinterpreted as legacy', () => {
-  const storage = memory({ 'ta3-day-boundary-revisions-v1': '{"schemaVersion":1,"revisions":{"x":{"id":"x","boundaryTime":"99:99","timezone":"Asia/Manila","effectiveFromInstant":null}}}' });
+  const storage = memory({ [TEST_SLOT]: '{"schemaVersion":1,"revisions":{"x":{"id":"x","boundaryTime":"99:99","timezone":"Asia/Manila","effectiveFromInstant":null}}}' });
   const device = makeDevice({ storage });
   assert.equal(device.live.status().status, 'invalid');
   assert.equal(device.live.enabled(), false, 'invalid is not "custom"');
@@ -203,7 +207,7 @@ for (const testCase of firstEnableCases) {
     assert.equal(preview.ok, true);
     assert.equal(preview.effectiveFromInstant, testCase.expect);
     assert.equal(preview.activationLabel, testCase.copy);
-    assert.equal(device.storage.getItem('ta3-day-boundary-revisions-v1'), null, 'a preview never persists anything');
+    assert.equal(device.storage.getItem(TEST_SLOT), null, 'a preview never persists anything');
 
     const { revision } = device.live.proposeBoundary({ boundaryTime: testCase.time, timezone: MANILA });
     assert.equal(revision.effectiveFromInstant, testCase.expect, 'the committed revision matches the preview exactly');
@@ -228,7 +232,7 @@ test('explicit opt-in is the ONLY thing that creates a custom revision', () => {
     device.live.previewProposal({ boundaryTime: '18:00', timezone: MANILA });
     device.live.refreshLiveDays();
   }
-  assert.equal(device.storage.getItem('ta3-day-boundary-revisions-v1'), null);
+  assert.equal(device.storage.getItem(TEST_SLOT), null);
   device.live.proposeBoundary({ boundaryTime: '18:00', timezone: MANILA });
   assert.equal(device.live.status().status, 'custom');
 });
@@ -826,7 +830,7 @@ test('the boundary repository has no write path other than propose()', () => {
   const device = makeDevice();
   assert.deepEqual(
     Object.keys(device.boundaryRepository).sort(),
-    ['key', 'listAllRaw', 'mergeRemoteRevisions', 'propose', 'read', 'status'],
+    ['key', 'listAllRaw', 'mergeRemoteRevisions', 'ownerRoomId', 'propose', 'read', 'status'],
     'an unexpected method on the boundary repository is a contract change that needs review'
   );
 });

@@ -74,7 +74,7 @@ async function openApp(page, { now = EIGHT_AM, boundaryStore = null, plans = '{}
     localStorage.setItem('ta3-reviews', '{}');
     localStorage.setItem('ta3-plans', plans);
     localStorage.setItem('ta3-daily-routines-v1', JSON.stringify({ schemaVersion: 1, timezone, routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
-    if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1', boundaryStore);
+    if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pdb-user', boundaryStore);
   }, { timezone: TZ, now, boundaryStore, plans });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object' && typeof window.renderPersonalDayBoundarySettings === 'function');
@@ -83,7 +83,7 @@ async function openApp(page, { now = EIGHT_AM, boundaryStore = null, plans = '{}
 }
 
 const openSettings = page => page.evaluate(() => showView('settings'));
-const boundaryStore = page => page.evaluate(() => localStorage.getItem('ta3-day-boundary-revisions-v1'));
+const boundaryStore = page => page.evaluate(() => localStorage.getItem('ta3-day-boundary-revisions-v1:uid_pdb-user'));
 const panel = page => page.locator('#personal-day-boundary-settings');
 const surface = page => page.locator('#operational-plan-section');
 
@@ -230,7 +230,7 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
   await page.addInitScript(({ boundaryStore, operationalStore, now }) => {
     const RealDate = Date;
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
-    localStorage.setItem('ta3-day-boundary-revisions-v1', boundaryStore);
+    localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pdb-user', boundaryStore);
     localStorage.setItem('ta3-operational-plans-v1', operationalStore);
   }, { boundaryStore: stored, operationalStore, now: Date.parse('2026-09-16T18:00:00+08:00') });
   await page.reload();
@@ -286,7 +286,7 @@ test('a page left open across 18:00 re-subscribes to the new current/upcoming da
     localStorage.setItem('ta3-entries', '[]');
     localStorage.setItem('ta3-plans', '{}');
     localStorage.setItem('ta3-daily-routines-v1', JSON.stringify({ schemaVersion: 1, timezone, routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
-    localStorage.setItem('ta3-day-boundary-revisions-v1', store);
+    localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pdb-user', store);
   }, { timezone: TZ, store });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object');
@@ -320,7 +320,7 @@ test('changing 18:00 -> 20:00 at 21:00 states "tomorrow", is reported as Current
   await page.addInitScript(({ boundaryStore, now }) => {
     const RealDate = Date;
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
-    localStorage.setItem('ta3-day-boundary-revisions-v1', boundaryStore);
+    localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pdb-user', boundaryStore);
   }, { boundaryStore: stored, now: Date.parse('2026-09-16T21:00:00+08:00') });
   await page.reload();
   await page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object');
@@ -424,7 +424,7 @@ test('after 18:00, the next personal day is reported as starting tomorrow', asyn
   await page.addInitScript(({ boundaryStore, now }) => {
     const RealDate = Date;
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
-    localStorage.setItem('ta3-day-boundary-revisions-v1', boundaryStore);
+    localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pdb-user', boundaryStore);
   }, { boundaryStore: stored, now: Date.parse('2026-09-16T19:00:00+08:00') });
   await page.reload();
   await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
@@ -508,7 +508,7 @@ test('a same-clock-time proposal in a DIFFERENT timezone is never classified as 
   await page.addInitScript(({ boundaryStore, now }) => {
     const RealDate = Date;
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
-    localStorage.setItem('ta3-day-boundary-revisions-v1', boundaryStore);
+    localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pdb-user', boundaryStore);
   }, { boundaryStore: stored, now: Date.parse('2026-09-16T21:00:00+08:00') });
   await page.reload();
   await page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object');
