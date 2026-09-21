@@ -148,22 +148,38 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     return boundaryRepository.read(fallbackTimezone());
   }
 
-  /** 'local-only' | 'pending' | 'synced' — whether the account's authoritative
+  /** 'local-only' | 'pending' | 'error' | 'synced' — whether the account's authoritative
    *  configuration has been heard yet (see personal-day-boundary-sync.js). With no
    *  sync bridge there is no account to wait for. */
   function syncState() {
     return boundarySync && typeof boundarySync.syncState === 'function' ? boundarySync.syncState() : 'local-only';
   }
 
-  /** An empty local history is only "the account has no personal day" once the
-   *  account has answered. Until then it is UNKNOWN, and acting on it — showing
-   *  "Off", or creating a first revision (which would mint a competing legacy
-   *  anchor against whatever the account really holds) — would be a guess. A
-   *  device holding a cached revision is not in this state: it has a valid
-   *  history to work from, and appending a uniquely-identified revision to it is
-   *  safe whatever the account says. */
-  function awaitingAccountAnswer() {
-    return status().status === 'absent' && syncState() === 'pending';
+  /** What the account's snapshot did here; `unapplied` = it held revisions this device could not apply. */
+  function remoteStatus() {
+    return boundarySync && typeof boundarySync.remoteStatus === 'function'
+      ? boundarySync.remoteStatus()
+      : { unapplied: false, remoteCount: 0, rejectedCount: 0, conflict: false };
+  }
+
+  /** An empty local history is only "the account has no personal day" once the account has
+   *  answered AND its answer was usable. Until then it is UNKNOWN, and acting on it — showing "Off",
+   *  or creating a first revision (which would mint a competing legacy anchor against whatever the
+   *  account really holds) — would be a guess. A device holding a cached revision is not in this
+   *  state: it has a valid history to work from, and appending a uniquely-identified revision to it
+   *  is safe whatever the account says.
+   *
+   *  Returns why the empty history cannot be read as "off": the account has not answered
+   *  ('sync-pending'), its listener failed ('sync-error'), or it answered with revisions this device
+   *  could not apply ('sync-unapplied'). Null when the empty history is genuinely "off" (or a cache
+   *  exists). */
+  function accountAnswerBlock() {
+    if (status().status !== 'absent') return null;
+    const sync = syncState();
+    if (sync === 'pending') return 'sync-pending';
+    if (sync === 'error') return 'sync-error';
+    if (remoteStatus().unapplied) return 'sync-unapplied';
+    return null;
   }
 
   /** What the Settings UI needs to state the truth: the revision governing
@@ -172,12 +188,13 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
   function boundaryState(nowMs = now()) {
     const current = status();
     const sync = syncState();
-    if (current.status !== 'custom') return { status: current.status, active: null, pending: null, error: current.error || null, sync };
+    const remote = remoteStatus();
+    if (current.status !== 'custom') return { status: current.status, active: null, pending: null, error: current.error || null, sync, remote };
     const history = current.revisions;
     const active = activeBoundaryRevision(history, nowMs);
     const pending = history.filter(r => r.effectiveFromInstant !== null && r.effectiveFromInstant > nowMs)
       .sort((a, b) => a.effectiveFromInstant - b.effectiveFromInstant)[0] || null;
-    return { status: 'custom', active, pending, error: null, sync };
+    return { status: 'custom', active, pending, error: null, sync, remote };
   }
 
   /** Dry-run of proposeBoundary: computes the SAME effectiveFromInstant the
@@ -193,7 +210,8 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     } catch {
       return { ok: false, reason: 'invalid-timezone' };
     }
-    if (awaitingAccountAnswer()) return { ok: false, reason: 'sync-pending' };
+    const blocked = accountAnswerBlock();
+    if (blocked) return { ok: false, reason: blocked };
     let history;
     try {
       history = revisions();
@@ -252,7 +270,9 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
   function proposeBoundary(candidate, nowMs = now()) {
     if (!candidate || !validBoundaryTime(candidate.boundaryTime)) throw new Error('Choose a valid personal day start time (HH:MM).');
     if (!validOperationalDayTimezone(candidate.timezone)) throw new Error('Choose a valid personal day timezone.');
-    if (awaitingAccountAnswer()) throw new Error('Your synced personal day setting is still loading. Try again in a moment.');
+    const blocked = accountAnswerBlock();
+    if (blocked === 'sync-pending') throw new Error('Your synced personal day setting is still loading. Try again in a moment.');
+    if (blocked) throw new Error('Your synced personal day setting could not be loaded or applied on this device, so it cannot be changed from here yet.');
     const result = boundaryRepository.propose({ boundaryTime: candidate.boundaryTime, timezone: candidate.timezone }, nowMs);
     if (boundarySync) {
       try { boundarySync.pushAllLocal(); } catch { /* offline / no room — pushAllLocal retries on reconnect */ }
@@ -498,6 +518,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     enabled,
     revisions,
     syncState,
+    remoteStatus,
     boundaryState,
     previewProposal,
     proposeBoundary,

@@ -113,6 +113,13 @@ function statusHtml(state, nowMs) {
     if (state.sync === 'pending') {
       return '<div class="setting-sub" role="status" data-pdb-state="checking">Checking your synced personal day setting…</div>';
     }
+    // Neither is "off": the account's setting is unknown here. Say so instead of guessing.
+    if (state.sync === 'error') {
+      return '<div class="setting-sub" role="alert" data-pdb-state="load-failed" style="color:var(--waste)">Could not load your synced personal day setting. Your day starts at midnight on this device until it loads. Nothing was changed.</div>';
+    }
+    if (state.remote && state.remote.unapplied) {
+      return '<div class="setting-sub" role="alert" data-pdb-state="unapplied" style="color:var(--waste)">Your synced personal day setting was received but could not be applied on this device (its history is conflicting or invalid). Your day starts at midnight here until that is resolved. Nothing was changed or deleted.</div>';
+    }
     return '<div class="setting-sub">Off. Your day currently starts at midnight, exactly as it always has.</div>';
   }
   const currentLine = `Current: <strong>${escape(formatBoundaryClock(state.active.boundaryTime))}</strong> (${escape(state.active.timezone)}).`;
@@ -131,6 +138,9 @@ function previewHtml(state) {
   const preview = live().previewProposal({ boundaryTime: draft.boundaryTime, timezone: draft.timezone });
   if (!preview.ok && preview.reason === 'sync-pending') {
     return '<div class="setting-sub" role="status">This can be changed once your synced setting has loaded.</div>';
+  }
+  if (!preview.ok && (preview.reason === 'sync-error' || preview.reason === 'sync-unapplied')) {
+    return '<div class="setting-sub" role="status">This can be changed once your synced setting can be loaded and applied.</div>';
   }
   if (!preview.ok) {
     const why = preview.reason === 'invalid-time' ? 'Choose a valid start time.'

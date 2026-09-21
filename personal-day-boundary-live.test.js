@@ -670,7 +670,12 @@ test('malformed remote boundary history stays fail-closed: nothing is overwritte
   const roomRef = fakeRoomRef({
     [DAY_BOUNDARY_REVISIONS_REMOTE_PATH]: { broken: { id: 'not-broken', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: manila(D, '18:00') } }
   });
-  const device = makeDevice({ roomRef, clock: manila(D, '08:00') });
+  // The malformed history arrives AFTER this device already holds valid local truth: it first heard the
+  // account answer "empty", saved, and only then meets the malformed remote. (A device that has heard
+  // ONLY a malformed remote and has nothing local is a different state — the account is unknown, not
+  // off — and is covered by the unapplied-remote tests.)
+  const device = makeDevice({ roomRef, clock: manila(D, '08:00'), heard: false });
+  device.boundarySync.handleRemoteSnapshot({});
   device.live.proposeBoundary({ boundaryTime: '18:00', timezone: MANILA });
   const localBefore = JSON.stringify(device.live.status().revisions);
   device.live.attachLiveDays();

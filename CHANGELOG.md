@@ -1,5 +1,42 @@
 # ChronaSense — Changelog
 
+## Personal Day Web Runtime Correction — 2026-09-21
+
+**Review candidate — `fix/personal-day-web-sync-runtime-v1`** (from `main` @ `75b0f65`; not deployed).
+
+Reported: after the cross-device sync fix was deployed, the mobile **web/PWA** (not the Capacitor app)
+still showed Personal Day Off while the desktop was on. Against the deployed Pages build (files
+byte-identical to `main`) with a stubbed Firebase, clean loads on desktop and every mobile emulation
+converged, with late auth and a slow first snapshot too — so viewport / UA / bootstrap order was ruled
+out. Two real deployed-runtime defects were reproduced instead:
+
+- **Mixed module generations.** Entry scripts carried `?v=`, but the modules they import
+  (`personal-day-boundary-sync/repository`, and `live` via `ui`/`plan-authority`/`plan-tomorrow-ui`/
+  `tomorrow-view-ui`) were bare URLs that browsers cache independently of `index.html`. Reproduced:
+  previous-generation code (a resident/stale PWA) = permanent Off; new `storage.js` + old `live.js` =
+  permanent Off; old `storage.js` + new modules = room identity never known; **old `repository.js` + new
+  `sync.js` = a link error that stops PlanAuthority loading at all**. `index.html` now carries a single
+  release token and an import map that pins the whole 10-module Personal Day / plan group to it, so one
+  page load runs one generation of the group (and one instance of each module — this also ends the
+  `live.js` double evaluation). Change the token in the map, the `pdb-release` meta and the
+  storage/live/ui/operational-plan-ui tags together; a test enforces it.
+- **Unknown rendered as Off.** A snapshot holding revisions the device could not apply (e.g. a history
+  with no anchor) on an empty-cache device showed "Off" with no message, and a cancelled/denied room
+  listener would sit at "Checking…" forever (no Firebase error callback). Now: the listener has an error
+  callback (`syncState() === 'error'`), the bridge reports `remoteStatus().unapplied`, the Settings panel
+  says "Could not load…" / "…could not be applied on this device…", and Save is blocked in both states
+  (a first save would mint a competing anchor). Genuinely empty accounts are still Off.
+- **Diagnostics for a real device.** Opening the app with `?pdbdiag=1` shows a read-only view (lazy
+  module, web only): auth/room/listener/snapshot/sync state, cache counts, effective boundary, PlanAuthority,
+  UI state, the running vs deployed release, and which module URLs actually loaded (versioned? from cache?).
+  Identity appears only as short SHA-256 fingerprints; no uid, token, email or revision content.
+
+Unchanged: cloud schema/authority, revision semantics, account scoping and its guards, the quarantine of
+the unowned legacy cache. **Not established:** which of these (or a stale resident PWA, or a different
+account/project) the owner's phone actually hit — that needs the diagnostics screenshot. A stale resident
+PWA that is never reloaded still runs its old code; the diagnostics view shows "release match: NO (stale)".
+Operational-plan cross-account isolation remains open high-priority debt.
+
 ## Personal Day Cross-Device Sync V1 — 2026-09-20
 
 **Integrated on `main` — implementation through `f128a16`** (pure fast-forward from `b9e2de8`; feature branch preserved). Reached the web/PWA client only through the automatic GitHub Pages deploy from `main`; **the installed Android (Capacitor) app has not been rebuilt** and is not claimed fixed.
