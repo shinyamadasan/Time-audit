@@ -20,6 +20,27 @@
 //
 // ── absent vs. legacy vs. custom vs. invalid (contract §3, §18) ────────────
 //
+// ── account scoping (Cross-Device Sync V1, account-scope correction) ───────
+//
+// The cache is a copy of ONE account's authoritative history
+// (rooms/<room>/dayBoundaryRevisions), so it is stored per room: the slot for the
+// joined room `uid_A` is `ta3-day-boundary-revisions-v1:uid_A`. Ownership is
+// therefore structural — there is no way to read, merge into, or push "the cache"
+// without naming whose it is, and account A's slot is never visible while account
+// B is joined. Signing out leaves A's slot in place (offline use on A's next launch)
+// but it stops being the ACTIVE cache the moment no room, or a different room, is
+// joined.
+//
+// The pre-scoping key, `ta3-day-boundary-revisions-v1` (no suffix), carries no owner.
+// Nothing this app persists proves whose it is (a uid room code is never stored),
+// so it is never adopted: a scoped repository does not read it, merge into it, or
+// push it. It is left untouched in place, and an account's scoped cache is
+// populated from that account's authoritative snapshot.
+//
+// A repository built without `getOwner` over an INJECTED storage is "plain": one
+// unowned slot at `key`, for tests of the revision semantics themselves. One built
+// over the real localStorage is always scoped to the app's joined room.
+//
 // A user who has never touched this feature has NOTHING in storage — read()
 // synthesizes an ephemeral legacyBoundaryRevision() purely in memory so callers
 // always get a valid, non-empty history to hand the foundation model, but that
@@ -41,6 +62,23 @@ import {
 
 export const PERSONAL_DAY_BOUNDARY_STORAGE_KEY = 'ta3-day-boundary-revisions-v1';
 export const PERSONAL_DAY_BOUNDARY_SCHEMA_VERSION = 1;
+
+/** The storage slot holding ONE room's cache: `<key>:<roomId>`. */
+export function boundaryCacheKeyForRoom(roomId, key = PERSONAL_DAY_BOUNDARY_STORAGE_KEY) {
+  return `${key}:${roomId}`;
+}
+
+/** The room the app has joined (storage.js's roomCode), or null when none is joined —
+ *  signed out, or auth has not answered yet. Never throws: storage.js is a classic
+ *  script and may still be parsing when a module asks. */
+export function appRoomOwner() {
+  try {
+    const roomId = typeof globalThis.getChronaSenseRoomCode === 'function' ? globalThis.getChronaSenseRoomCode() : null;
+    return typeof roomId === 'string' && roomId ? roomId : null;
+  } catch {
+    return null;
+  }
+}
 
 function isPlainObject(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -89,11 +127,32 @@ function writeEnvelope(storage, key, envelope) {
 
 export function createPersonalDayBoundaryRepository(deps = {}) {
   const storage = deps.storage || defaultStorage();
-  const key = deps.key || PERSONAL_DAY_BOUNDARY_STORAGE_KEY;
+  const baseKey = deps.key || PERSONAL_DAY_BOUNDARY_STORAGE_KEY;
   const idGenerator = deps.idGenerator || defaultIdGenerator;
+  // Scoped when told who the owner is, or when running over the real localStorage.
+  const getOwner = typeof deps.getOwner === 'function' ? deps.getOwner : (deps.storage ? null : appRoomOwner);
+
+  /** Whose cache is active right now, or null (plain repository, or no room joined). */
+  function ownerRoomId() {
+    if (!getOwner) return null;
+    const owner = getOwner();
+    return typeof owner === 'string' && owner ? owner : null;
+  }
+
+  /** The active storage slot, or null when there is NO active cache: a scoped
+   *  repository with no room joined has no account to hold a cache for. */
+  function activeKey() {
+    if (!getOwner) return baseKey;
+    const owner = ownerRoomId();
+    return owner ? boundaryCacheKeyForRoom(owner, baseKey) : null;
+  }
 
   return {
-    key,
+    key: baseKey,
+
+    /** The room whose cache is active, or null. The sync bridge refuses to push unless
+     *  this equals the room it is pushing to. */
+    ownerRoomId,
 
     /** {status: 'absent'|'custom'|'invalid', revisions?, error?}
      *  'absent'  — nothing persisted; pure legacy user (§3).
@@ -102,6 +161,8 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
      *  'invalid' — something is persisted but fails validation; never silently
      *              treated as absent or as legacy (§18). */
     status() {
+      const key = activeKey();
+      if (key === null) return { status: 'absent' };
       let envelope;
       try {
         envelope = readEnvelope(storage, key);
@@ -120,7 +181,8 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
      *  @param {string} timezone used only to seed the ephemeral anchor when absent
      *  @returns {object[]} BoundaryRevision[] */
     read(timezone) {
-      const envelope = readEnvelope(storage, key);
+      const key = activeKey();
+      const envelope = key === null ? null : readEnvelope(storage, key);
       if (!envelope) return [legacyBoundaryRevision(canonicalizeOperationalDayTimezone(timezone))];
       return normalizeBoundaryRevisionHistory(Object.values(envelope.revisions));
     },
@@ -139,6 +201,8 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
       if (!candidate || typeof candidate.boundaryTime !== 'string' || typeof candidate.timezone !== 'string') {
         throw new Error('A candidate boundary revision (boundaryTime, timezone) is required.');
       }
+      const key = activeKey();
+      if (key === null) throw new Error('No account is active, so there is no personal day cache to change.');
       const canonicalTimezone = canonicalizeOperationalDayTimezone(candidate.timezone);
       const envelope = readEnvelope(storage, key);
       const existing = envelope ? Object.values(envelope.revisions) : [legacyBoundaryRevision(canonicalTimezone)];
@@ -151,6 +215,8 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
 
     /** Sync-only: every locally known revision, for pushing a durable remote copy. */
     listAllRaw() {
+      const key = activeKey();
+      if (key === null) return [];
       const envelope = readEnvelope(storage, key);
       return envelope ? Object.values(envelope.revisions) : [];
     },
@@ -189,7 +255,8 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
      *    call-shape symmetry with the coarse-life-evidence sync bridge.
      *  @returns {{changed:boolean, changedIds:string[], rejectedIds:string[], droppedIds:string[], conflict:string|null}} */
     mergeRemoteRevisions(remoteRecordsById) {
-      if (!isPlainObject(remoteRecordsById)) return { changed: false, changedIds: [], rejectedIds: [], droppedIds: [], conflict: null };
+      const key = activeKey();
+      if (key === null || !isPlainObject(remoteRecordsById)) return { changed: false, changedIds: [], rejectedIds: [], droppedIds: [], conflict: null };
       const envelope = readEnvelope(storage, key);
       const localById = envelope ? { ...envelope.revisions } : {};
       const changedIds = [];

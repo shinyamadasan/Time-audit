@@ -105,7 +105,7 @@ async function openApp(page, { now = NOW, boundaryStore = BOUNDARY_STORE, plans 
     localStorage.setItem('ta3-reviews', '{}');
     localStorage.setItem('ta3-plans', plans);
     localStorage.setItem('ta3-daily-routines-v1', routines);
-    if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1', boundaryStore);
+    if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pc-user', boundaryStore);
     if (operationalPlans) localStorage.setItem('ta3-operational-plans-v1', operationalPlans);
     if (commitments) localStorage.setItem('ta3-commitments-v1', commitments);
   }, { timezone: TZ, now, boundaryStore, plans, operationalPlans, commitments, routines: ROUTINES });
@@ -975,7 +975,7 @@ test('a never-enabled account keeps calendar behaviour, and the new surfaces sti
     store: window.PlanAuthority.current().store,
     enabled: window.PlanAuthority.enabled(),
     operational: localStorage.getItem('ta3-operational-plans-v1'),
-    revisions: localStorage.getItem('ta3-day-boundary-revisions-v1'),
+    revisions: localStorage.getItem('ta3-day-boundary-revisions-v1:uid_pc-user'),
   }));
   expect(legacy.store).toBe('legacy');
   expect(legacy.enabled).toBe(false);

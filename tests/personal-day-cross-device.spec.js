@@ -49,7 +49,7 @@ function accountHistory() {
 const firebaseStub = `
 (() => {
   if (window.firebase) return;
-  const log = { transactions: [], listeners: [] };
+  const log = { transactions: [], listeners: [], late: {} };
   const tree = {};
   const held = new Set();
   const pending = new Map();
@@ -70,6 +70,7 @@ const firebaseStub = `
     on(ev, cb) {
       if (ev !== 'value') return cb;
       log.listeners.push(refPath);
+      (log.late[refPath] = log.late[refPath] || []).push(cb); // kept even after off(): an in-flight event can still arrive
       if (!listeners.has(refPath)) listeners.set(refPath, []);
       listeners.get(refPath).push(cb);
       const deliver = () => cb(snapshot(refPath === '.info/connected' ? false : get(refPath)));
@@ -101,8 +102,14 @@ const firebaseStub = `
     hold(p) { held.add(p); },
     release(p) { held.delete(p); const d = pending.get(p); pending.delete(p); if (d) d(); },
     remoteWrite(p, v) { put(p, v); fire(p); },
+    // Delivers to every callback EVER registered at p, including ones already off()'d — a late event from a room the device left.
+    fireLate(p, v) { (log.late[p] || []).forEach(cb => cb(snapshot(v))); },
   };
-  const auth = () => ({ onAuthStateChanged(cb) { setTimeout(() => cb({ uid: '${UID}', displayName: 'Cross Device', email: 'cd@example.test', photoURL: '' }), 0); return () => {}; }, signInWithPopup() { return Promise.resolve(); }, signInWithCredential() { return Promise.resolve(); }, signOut() { return Promise.resolve(); } });
+  const authCallbacks = [];
+  const authUser = uid => ({ uid, displayName: 'Cross Device', email: 'cd@example.test', photoURL: '' });
+  // A user (or null = sign-out) as firebase.auth().onAuthStateChanged would deliver it.
+  window.__fbTest.auth = { emit: uid => authCallbacks.forEach(cb => cb(uid ? authUser(uid) : null)) };
+  const auth = () => ({ onAuthStateChanged(cb) { authCallbacks.push(cb); setTimeout(() => cb(authUser('${UID}')), 0); return () => {}; }, signInWithPopup() { return Promise.resolve(); }, signInWithCredential() { return Promise.resolve(); }, signOut() { return Promise.resolve(); } });
   auth.GoogleAuthProvider = function GoogleAuthProvider() {}; auth.GoogleAuthProvider.credential = () => ({});
   window.firebase = { apps: [], initializeApp(c) { const a = { config: c }; this.apps.push(a); return a; }, app() { return this.apps[0] || this.initializeApp({}); }, database() { return { ref: makeRef }; }, auth };
 })();`;
@@ -132,10 +139,10 @@ test.afterAll(async () => {
  *  `cache` seeds this device's localStorage boundary cache, `held` keeps the first
  *  boundary snapshot pending, `gateModule` delays the deferred boundary module so
  *  auth/room-join provably resolves first. Resolves once the room is joined. */
-async function openDevice(page, { now = T_1900, remote = null, cache = null, held = false, gateModule = null, deviceId = 'device-x' } = {}) {
+async function openDevice(page, { now = T_1900, remote = null, cache = null, legacyCache = null, held = false, gateModule = null, deviceId = 'device-x' } = {}) {
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: firebaseStub }));
   if (gateModule) await page.route('**/personal-day-boundary-live.js*', async route => { await gateModule.promise; await route.continue(); });
-  await page.addInitScript(({ timezone, now, remote, cache, held, revisionsPath, deviceId }) => {
+  await page.addInitScript(({ timezone, now, remote, cache, legacyCache, held, revisionsPath, deviceId }) => {
     const RealDate = Date;
     window.Date = class MockDate extends RealDate { constructor(...a) { super(...(a.length ? a : [now])); } static now() { return now; } };
     if (localStorage.getItem('xd-seeded') !== '1') {
@@ -148,10 +155,13 @@ async function openDevice(page, { now = T_1900, remote = null, cache = null, hel
       localStorage.setItem('ta3-entries', '[]'); localStorage.setItem('ta3-plans', '{}'); localStorage.setItem('ta3-reviews', '{}');
       localStorage.setItem('ta3-focus-redemptions', '[]');
       localStorage.setItem('ta3-daily-routines-v1', JSON.stringify({ schemaVersion: 1, timezone, routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
-      if (cache) localStorage.setItem('ta3-day-boundary-revisions-v1', cache);
+      // The cache is stored per account (this device's account is `uid_cross-device-user`)...
+      if (cache) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_cross-device-user', cache);
+      // ...and `legacyCache` is the pre-scoping key, which carries no owner.
+      if (legacyCache) localStorage.setItem('ta3-day-boundary-revisions-v1', legacyCache);
     }
     window.__fbSeed = { remote, held, path: revisionsPath };
-  }, { timezone: TZ, now, remote, cache, held, revisionsPath: REVISIONS_PATH, deviceId });
+  }, { timezone: TZ, now, remote, cache, legacyCache, held, revisionsPath: REVISIONS_PATH, deviceId });
   await page.goto(appUrl, { waitUntil: 'commit' });
   // storage.js assigns getChronaSenseRoomRef before the `let fbRoomRef` it closes over has been
   // evaluated, so polling while the classic scripts are still running throws a ReferenceError.
@@ -163,7 +173,7 @@ async function openDevice(page, { now = T_1900, remote = null, cache = null, hel
 
 const settingsPanel = page => page.locator('#personal-day-boundary-settings');
 const openSettings = page => page.evaluate(() => showView('settings'));
-const boundaryStore = page => page.evaluate(() => localStorage.getItem('ta3-day-boundary-revisions-v1'));
+const boundaryStore = page => page.evaluate(() => localStorage.getItem('ta3-day-boundary-revisions-v1:uid_cross-device-user'));
 const moduleReady = page => page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object' && typeof window.PlanAuthority === 'object' && typeof window.renderPersonalDayBoundarySettings === 'function');
 
 // ── 1. the startup race ─────────────────────────────────────────────────────
@@ -284,4 +294,158 @@ test('a mobile whose cache is an OLDER boundary converges to the newer account r
   await expect(settingsPanel(page)).toContainText('Current: 18:00');
   // The cloud history is untouched by the stale device.
   expect(await page.evaluate(p => window.__fbTest.get(p), REVISIONS_PATH)).toEqual(cloud);
+});
+
+// ── 4. account scope: A's cache must never become B's ───────────────────────
+//
+// Independent review of this branch reproduced: A's local 20:00 survived sign-out and was uploaded
+// into B's room — an empty one, and one that already held B's own 18:00 history. The boundary cache
+// is now per account; these run the real app (real storage.js auth/sign-out order, real deferred
+// modules, real localStorage) against the recording stub, driving sign-out / sign-in / direct switch.
+
+const A_SLOT = 'ta3-day-boundary-revisions-v1:uid_cross-device-user';
+const B_SLOT = 'ta3-day-boundary-revisions-v1:uid_acct-b';
+const LEGACY_SLOT = 'ta3-day-boundary-revisions-v1';
+const B_PATH = 'rooms/uid_acct-b/dayBoundaryRevisions';
+const T_2100 = Date.parse('2026-09-16T21:00:00+08:00');
+
+/** A valid account history: the legacy anchor plus one revision proposed at 08:00. */
+function history(boundaryTime, id) {
+  const anchor = legacyBoundaryRevision(TZ);
+  const { revision } = proposeBoundaryRevision([anchor], { id, boundaryTime, timezone: TZ }, T_0800);
+  return { [anchor.id]: anchor, [revision.id]: revision };
+}
+
+const emitAuth = (page, uid) => page.evaluate(u => window.__fbTest.auth.emit(u), uid);
+const transactionsOn = (page, fragment) => page.evaluate(f => window.__fbTest.log.transactions.filter(p => p.includes(f)), fragment);
+const slot = (page, key) => page.evaluate(k => localStorage.getItem(k), key);
+const cloud = (page, path) => page.evaluate(p => window.__fbTest.get(p), path);
+const listening = (page, path) => page.evaluate(p => window.__fbTest.log.listeners.includes(p), path);
+
+/** Opens as account A (20:00 in its cloud AND in this device's cache), with B's room prepared. */
+async function openAsAccountA(page, { bRemote = null } = {}) {
+  const aHistory = history('20:00', 'a-20-00');
+  await openDevice(page, { now: T_2100, remote: aHistory, cache: JSON.stringify({ schemaVersion: 1, revisions: aHistory }) });
+  await moduleReady(page);
+  if (bRemote) await page.evaluate(([p, v]) => window.__fbTest.seed(p, v), [B_PATH, bRemote]);
+  await openSettings(page);
+  await expect(settingsPanel(page)).toContainText('Current: 20:00');
+  return { aHistory };
+}
+
+test('A cached 20:00 -> sign out -> empty B: A is never uploaded, B shows Off (not 20:00), A returns to 20:00', async ({ page }) => {
+  const { aHistory } = await openAsAccountA(page);
+  const aCache = await slot(page, A_SLOT);
+  expect(aCache).not.toBeNull();
+
+  // Sit on Today, showing A's 20:00 My Day, and DO NOT navigate afterwards: a recompute must repaint it by itself.
+  await page.evaluate(() => showView('today'));
+  await expect(page.locator('#timeline-date-label')).toContainText('My Day');
+  await emitAuth(page, null); // sign-out
+  await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline"); // A's personal day is gone from the surface, not left painted
+  expect(await page.evaluate(() => window.PlanAuthority.enabled())).toBe(false);
+  await emitAuth(page, 'acct-b');
+  await expect.poll(() => listening(page, B_PATH)).toBe(true);
+
+  await openSettings(page);
+  await expect(settingsPanel(page)).toContainText('Off. Your day currently starts at midnight');
+  await expect(settingsPanel(page)).not.toContainText('20:00');
+  expect(await cloud(page, B_PATH)).toBeNull();                   // B's room is still empty
+  expect(await transactionsOn(page, 'acct-b')).toEqual([]);        // not one write attempted against it
+  expect(await slot(page, B_SLOT)).toBeNull();
+  expect(await slot(page, A_SLOT)).toBe(aCache);                   // A's cache preserved for A's next launch
+  expect(await page.evaluate(() => window.PlanAuthority.enabled())).toBe(false);
+
+  await emitAuth(page, 'cross-device-user');                       // A -> B -> A
+  await openSettings(page);
+  await expect(settingsPanel(page)).toContainText('Current: 20:00');
+  expect(await cloud(page, REVISIONS_PATH)).toEqual(aHistory);     // A's cloud untouched, nothing minted
+  expect(await cloud(page, B_PATH)).toBeNull();
+});
+
+test('A cached 20:00 -> B with its OWN 18:00 history: B stays 18:00 and its cloud gains zero A revisions', async ({ page }) => {
+  const bHistory = history('18:00', 'b-18-00');
+  await openAsAccountA(page, { bRemote: bHistory });
+
+  await emitAuth(page, null);
+  await emitAuth(page, 'acct-b');
+  await expect.poll(() => listening(page, B_PATH)).toBe(true);
+  await openSettings(page);
+  await expect(settingsPanel(page)).toContainText('Current: 18:00');
+  await expect(settingsPanel(page)).not.toContainText('20:00');
+
+  expect(await cloud(page, B_PATH)).toEqual(bHistory);             // byte-equivalent: no A revision joined it
+  expect(await transactionsOn(page, 'acct-b')).toEqual([]);
+  const bCache = JSON.parse(await slot(page, B_SLOT));
+  expect(Object.keys(bCache.revisions).sort()).toEqual(Object.keys(bHistory).sort()); // B's cache is exactly B's history
+  expect(Object.keys(bCache.revisions)).not.toContain('a-20-00');
+  const current = await page.evaluate(() => window.PlanAuthority.current());
+  expect(current.startMs).toBe(Date.parse('2026-09-16T18:00:00+08:00')); // B's My Day, derived from B alone
+});
+
+test('a DIRECT account switch A -> B inside one session (no sign-out, no reload): B subscribes, hydrates and recomputes; a late A event cannot touch B', async ({ page }) => {
+  const bHistory = history('18:00', 'b-18-00');
+  await openAsAccountA(page, { bRemote: bHistory });
+
+  await emitAuth(page, 'acct-b'); // Firebase delivers the new user with no null in between
+  await expect.poll(() => listening(page, B_PATH)).toBe(true);  // previously attach() was a no-op: B never subscribed
+  await openSettings(page);
+  await expect(settingsPanel(page)).toContainText('Current: 18:00');
+
+  const bCacheBefore = await slot(page, B_SLOT);
+  // An in-flight event from A's room arrives now, with a newer A revision.
+  const aLater = { ...history('20:00', 'a-20-00'), ...history('22:00', 'a-22-00') };
+  await page.evaluate(([p, v]) => window.__fbTest.fireLate(p, v), [REVISIONS_PATH, aLater]);
+
+  await expect(settingsPanel(page)).toContainText('Current: 18:00');
+  expect(await slot(page, B_SLOT)).toBe(bCacheBefore);
+  expect(await cloud(page, B_PATH)).toEqual(bHistory);
+  expect(await transactionsOn(page, 'acct-b')).toEqual([]);
+});
+
+// ── 5. legacy, unowned cache ────────────────────────────────────────────────
+
+test('an UNOWNED legacy cache (pre-scoping key) is never uploaded to the signed-in account, and the account\'s own snapshot becomes its cache', async ({ page }) => {
+  const legacy = JSON.stringify({ schemaVersion: 1, revisions: history('20:00', 'legacy-20-00') });
+  const own = history('18:00', 'own-18-00');
+  await openDevice(page, { now: T_2100, remote: own, legacyCache: legacy });
+  await moduleReady(page);
+  await openSettings(page);
+
+  await expect(settingsPanel(page)).toContainText('Current: 18:00');
+  await expect(settingsPanel(page)).not.toContainText('20:00');
+  expect(await cloud(page, REVISIONS_PATH)).toEqual(own);          // the account's cloud is exactly what it was
+  expect(await transactionsOn(page, 'dayBoundaryRevisions')).toEqual([]);
+  expect(await slot(page, LEGACY_SLOT)).toBe(legacy);              // preserved, untouched, inert
+  const cached = JSON.parse(await slot(page, A_SLOT));
+  expect(Object.keys(cached.revisions).sort()).toEqual(Object.keys(own).sort());
+});
+
+test('an UNOWNED legacy cache + an authoritatively EMPTY account: the account stays empty and Off', async ({ page }) => {
+  const legacy = JSON.stringify({ schemaVersion: 1, revisions: history('20:00', 'legacy-20-00') });
+  await openDevice(page, { now: T_2100, remote: null, legacyCache: legacy });
+  await moduleReady(page);
+  await openSettings(page);
+
+  await expect(settingsPanel(page)).toContainText('Off. Your day currently starts at midnight');
+  expect(await cloud(page, REVISIONS_PATH)).toBeNull();
+  expect(await transactionsOn(page, 'dayBoundaryRevisions')).toEqual([]);
+  expect(await slot(page, LEGACY_SLOT)).toBe(legacy);
+});
+
+// ── 6. first paint ──────────────────────────────────────────────────────────
+
+test('first-paint probe: with a room joined only ITS slot answers; with no room known, any local slot keeps it neutral', async ({ page }) => {
+  const legacy = JSON.stringify({ schemaVersion: 1, revisions: history('20:00', 'legacy-20-00') });
+  await openDevice(page, { now: T_2100, remote: null, legacyCache: legacy });
+  await moduleReady(page);
+
+  // Room joined (account has no scoped cache); the unowned legacy key does NOT make it "configured".
+  expect(await page.evaluate(() => personalDayBoundaryConfigured())).toBe(false);
+
+  // Room unknown: a slot exists on this device that may be another account's -> neutral, never a guess.
+  await emitAuth(page, null);
+  expect(await page.evaluate(() => personalDayBoundaryConfigured())).toBe(true);
+  await page.evaluate(() => localStorage.removeItem('ta3-day-boundary-revisions-v1'));
+  expect(await page.evaluate(() => personalDayBoundaryConfigured())).toBe(false); // nothing on the device: default, not a permanent placeholder
 });

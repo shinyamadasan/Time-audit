@@ -21,6 +21,8 @@ import { createOperationalPlanRepository } from './operational-plan-repository.j
 import { normalizeBoundaryRevisionHistory } from './personal-day-boundary-model.js';
 
 const MANILA = 'Asia/Manila';
+// The device's cache slot for the account under test (see personal-day-boundary-repository.js).
+const SLOT = 'ta3-day-boundary-revisions-v1:uid_test-room';
 const manila = (dateStr, hhmm) => Date.parse(`${dateStr}T${hhmm}:00+08:00`);
 const D = '2026-09-16';
 const T_0800 = manila(D, '08:00'); // before an 18:00 boundary proposed "now" activates
@@ -72,6 +74,9 @@ function fakeRoomRef(initial = {}) {
   return makeRef('');
 }
 
+// One account. Its cache slot is this room's; offline hides the room REF, never the account.
+const ROOM = 'uid_test-room';
+
 let seq = 0;
 const seqIds = prefix => () => `${prefix}-${++seq}`;
 
@@ -80,10 +85,11 @@ const seqIds = prefix => () => `${prefix}-${++seq}`;
 function makeDevice({ roomRef, storage = memory(), idPrefix = 'dev', clock = T_0800, online = true, timezone = MANILA } = {}) {
   const state = { online, now: clock };
   const events = { remoteChanges: [], hydrations: 0, conflicts: [] };
-  const repository = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds(idPrefix) });
+  const repository = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds(idPrefix), getOwner: () => ROOM });
   const boundarySync = createPersonalDayBoundarySyncBridge({
     repository,
     getRoomRef: () => (state.online ? roomRef : null),
+    getRoomId: () => ROOM,
     onRemoteChange: result => events.remoteChanges.push(result),
     onHydrated: () => { events.hydrations++; },
     onConflict: result => events.conflicts.push(result),
@@ -151,7 +157,7 @@ test('B: cloud has 18:00; a mobile whose cache is legacy/default OR an older bou
   first.boundarySync.attach();
   first.live.proposeBoundary({ boundaryTime: '20:00', timezone: MANILA }, manila('2026-09-10', '08:00'));
   await first.boundarySync.pushAllLocal();
-  const staleStorage = memory({ 'ta3-day-boundary-revisions-v1': first.storage.getItem('ta3-day-boundary-revisions-v1') });
+  const staleStorage = memory({ [SLOT]: first.storage.getItem(SLOT) });
 
   first.live.proposeBoundary({ boundaryTime: '18:00', timezone: MANILA }, T_0800);
   await first.boundarySync.pushAllLocal();
@@ -181,11 +187,11 @@ test('C: a mobile that synced 18:00 and launches OFFLINE uses its cached 18:00, 
   await pcSaves(roomRef);
   const mobile = makeDevice({ roomRef, idPrefix: 'mobile', clock: T_1900 });
   mobile.live.attachLiveDays(); // synced once, cache now holds 18:00
-  const cached = mobile.storage.getItem('ta3-day-boundary-revisions-v1');
+  const cached = mobile.storage.getItem(SLOT);
   assert.ok(cached, 'the synced revision was cached locally');
 
   // Relaunch with no network: same storage, no room ref.
-  const relaunch = makeDevice({ roomRef, storage: memory({ 'ta3-day-boundary-revisions-v1': cached }), idPrefix: 'mobile2', clock: T_1900, online: false });
+  const relaunch = makeDevice({ roomRef, storage: memory({ [SLOT]: cached }), idPrefix: 'mobile2', clock: T_1900, online: false });
   relaunch.live.attachLiveDays();
   assert.equal(relaunch.live.status().status, 'custom');
   assert.equal(relaunch.live.boundaryState(T_1900).active.boundaryTime, '18:00');
@@ -228,7 +234,7 @@ test('E: a device reconnecting with an OLDER cache cannot overwrite the newer re
   await a.boundarySync.pushAllLocal();
 
   // B caches A's state at this point, then goes offline.
-  const b = makeDevice({ roomRef, storage: memory({ 'ta3-day-boundary-revisions-v1': a.storage.getItem('ta3-day-boundary-revisions-v1') }), idPrefix: 'b', clock: T_1900, online: false });
+  const b = makeDevice({ roomRef, storage: memory({ [SLOT]: a.storage.getItem(SLOT) }), idPrefix: 'b', clock: T_1900, online: false });
 
   // A moves to 18:00 while B is away.
   a.live.proposeBoundary({ boundaryTime: '18:00', timezone: MANILA }, T_0800);
@@ -303,7 +309,7 @@ test('F: a custom 00:00 revision remains CUSTOM on both devices; a device that n
   untouched.live.attachLiveDays();
   assert.equal(untouched.live.status().status, 'absent');
   assert.equal(untouched.live.planningDays(t).current.authority.store, 'legacy');
-  assert.equal(untouched.storage.getItem('ta3-day-boundary-revisions-v1'), null);
+  assert.equal(untouched.storage.getItem(SLOT), null);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -384,7 +390,7 @@ test('I2: a device that cannot yet tell whether the account has a boundary refus
   assert.equal(preview.ok, false);
   assert.equal(preview.reason, 'sync-pending');
   assert.throws(() => mobile.live.proposeBoundary({ boundaryTime: '18:00', timezone: MANILA }), /still loading|syncing/i);
-  assert.equal(mobile.storage.getItem('ta3-day-boundary-revisions-v1'), null, 'nothing was written');
+  assert.equal(mobile.storage.getItem(SLOT), null, 'nothing was written');
 
   // Once the account has been heard from, the same action is allowed.
   mobile.live.attachLiveDays();
@@ -395,9 +401,9 @@ test('I3: a device holding a cached revision may still change it while sync is p
   const roomRef = fakeRoomRef();
   const seeded = makeDevice({ roomRef: null, idPrefix: 'seed', online: false });
   seeded.live.proposeBoundary({ boundaryTime: '20:00', timezone: MANILA }, manila('2026-09-10', '08:00'));
-  const cache = seeded.storage.getItem('ta3-day-boundary-revisions-v1');
+  const cache = seeded.storage.getItem(SLOT);
 
-  const device = makeDevice({ roomRef, storage: memory({ 'ta3-day-boundary-revisions-v1': cache }), idPrefix: 'dev' });
+  const device = makeDevice({ roomRef, storage: memory({ [SLOT]: cache }), idPrefix: 'dev' });
   assert.equal(device.live.boundaryState().sync, 'pending');
   assert.equal(device.live.boundaryState().status, 'custom');
   assert.equal(device.live.previewProposal({ boundaryTime: '18:00', timezone: MANILA }).ok, true);

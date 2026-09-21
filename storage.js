@@ -41,6 +41,10 @@ let _syncEventLog = loadSyncEventLog();
 // existing globalThis-bridge pattern this app already uses in the other direction (a module
 // exposing itself via `globalThis.PlanTomorrowModel` for this classic script to read).
 globalThis.getChronaSenseRoomRef = () => fbRoomRef;
+// The joined room's identity (`uid_<uid>`), or '' when none is joined. The Personal Day Boundary cache
+// is stored per room, so its modules need to know WHOSE cache is active — independent of whether the
+// room's ref is reachable. May throw while this script is still parsing; callers guard it.
+globalThis.getChronaSenseRoomCode = () => roomCode;
 
 // ── Shared constants ──
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -791,6 +795,9 @@ function initAutoSync() {
       partnerViewShared = null;
       if (typeof closePartnerView === 'function') closePartnerView();
       fbRoomRef = null; roomCode = '';
+      // The previous account's Personal Day cache is no longer the active one: recompute everything
+      // that derives from it (PlanAuthority, Settings, Today/My Day) so none of it lingers.
+      if (typeof globalThis.refreshPersonalDayBoundaryLive === 'function') globalThis.refreshPersonalDayBoundaryLive();
       updateSyncPill('offline', 'signed out');
       updateAuthUI(null);
       document.getElementById('signin-overlay').style.display = 'flex';

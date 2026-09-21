@@ -95,10 +95,10 @@ let seq = 0;
 function makeApp({ clock = manila(D, '10:00'), room = null, deviceId = 'device-a', storage = memory(), planStorage = memory(), legacy = legacyStore() } = {}) {
   const nowRef = { value: clock };
   const roomRef = { value: room };
-  const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: () => `rev-${++seq}` });
+  const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: () => `rev-${++seq}`, getOwner: () => 'uid_test-room' });
   const planRepository = createOperationalPlanRepository({ storage: planStorage });
   const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef: () => roomRef.value });
-  const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef: () => roomRef.value });
+  const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef: () => roomRef.value, getRoomId: () => 'uid_test-room' });
   const live = createPersonalDayBoundaryLiveWiring({
     boundaryRepository, planRepository, planSync, boundarySync,
     legacyPlans: { readItems: k => legacy.rawItems(k), saveItems: (k, i) => legacy.saveItems(k, i) },

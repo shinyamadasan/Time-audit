@@ -111,10 +111,10 @@ let seq = 0;
 function makeApp({ clock = manila(D, '08:00'), legacy = legacyStore(), storage = memory(), planStorage = memory(), roomRef = null, accountTimezone = MANILA, deviceId = 'device-a', idPrefix = 'rev' } = {}) {
   const nowRef = { value: clock };
   const roomRefRef = { value: roomRef };
-  const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: () => `${idPrefix}-${++seq}` });
+  const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: () => `${idPrefix}-${++seq}`, getOwner: () => 'uid_test-room' });
   const planRepository = createOperationalPlanRepository({ storage: planStorage });
   const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef: () => roomRefRef.value });
-  const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef: () => roomRefRef.value });
+  const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef: () => roomRefRef.value, getRoomId: () => 'uid_test-room' });
   // A device that is in a room has heard the account's answer before its owner acts (the app
   // attaches on room join). Acting on a joined-but-unheard device is refused by design — it could
   // mint a legacy anchor that competes with the account's real one — so model the join: the
@@ -1101,7 +1101,7 @@ function makeLongHistoryApp({ startDate, preparedOffsets = [], legacyDates = [],
   return makeApp({
     clock: nowMs,
     legacy: legacyStore(plans),
-    storage: memory({ 'ta3-day-boundary-revisions-v1': boundaryHistoryStore(startDate) }),
+    storage: memory({ 'ta3-day-boundary-revisions-v1:uid_test-room': boundaryHistoryStore(startDate) }),
     planStorage: memory({ 'ta3-operational-plans-v1': JSON.stringify({ schemaVersion: 1, plans: records }) }),
   });
 }
