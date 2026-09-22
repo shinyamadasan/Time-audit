@@ -1,8 +1,36 @@
 # ChronaSense — Changelog
 
-## Personal Day Web Runtime Correction — 2026-09-21
+## Personal Day Web Sync Runtime Hardening — integrated 2026-09-22
 
-**Review candidate — `fix/personal-day-web-sync-runtime-v1`** (from `main` @ `75b0f65`; not deployed).
+**Integrated on `main` — implementation @ `e5ec3a7`** (pure fast-forward from `75b0f65`; feature branch
+`fix/personal-day-web-sync-runtime-v1` preserved). Independent strict review passed 2026-09-21; reached
+the web/PWA client through the automatic GitHub Pages deploy from `main`. CI green at `e5ec3a7`.
+
+**Proven** by this integration:
+- The mixed-generation Personal Day module graph (reproduced independently, see below) is real.
+- Fresh/reloaded clients now run one coherent release generation of the whole group.
+- `live.js`'s duplicate evaluation is removed for the pinned graph (one instance, one singleton).
+- A Firebase listener failure now has an explicit `error` state instead of hanging at "Checking…".
+- An unappliable remote history no longer renders as "Off".
+- `?pdbdiag=1` diagnostics is deployed and read-only (verified against the live Pages URL with all
+  outbound Firebase traffic blocked: the panel renders, nothing is written to `localStorage` /
+  `sessionStorage`, and no production Firebase endpoint was contacted).
+
+**Still unproven:** which of these conditions (or a stale resident PWA, or a different account/project)
+caused the owner's actual phone symptom — no real phone has been verified yet. This is the next
+evidence gate; see the owner diagnostic step below.
+
+Also still true:
+- A resident, already-open PWA is not fixed by this deploy until it is fully closed and reopened; the
+  diagnostics view shows `release match: NO (stale)` in that case.
+- Unsupported (no import-map) browsers do not receive the generation-consistency protection — the repo
+  states no formal browser-support policy, so this is a real, undocumented-elsewhere gap, not a claim.
+- Operational-plan cross-account leakage remains separate, open, high-priority debt — untouched by this
+  integration (only its module versioning changed, not its account-scoping behavior).
+
+Do not claim "mobile sync fixed." That claim waits on the owner's two diagnostic screenshots (below).
+
+---
 
 Reported: after the cross-device sync fix was deployed, the mobile **web/PWA** (not the Capacitor app)
 still showed Personal Day Off while the desktop was on. Against the deployed Pages build (files
