@@ -1,5 +1,54 @@
 # ChronaSense — Changelog
 
+## Personal Day Boundary Wire Format V1 — 2026-09-22
+
+**Built on `fix/personal-day-boundary-wire-format-v1`, branched from `main` @ `dc05287`** (not merged,
+not deployed). Extracted from the independently-reviewed `fix/personal-day-legacy-recovery-v1`
+(preserved unchanged @ `b351220`) — this branch ships ONLY the wire-format correction; Legacy
+Recovery V1 (the confirmation card, `analyzeRecovery`, legacy-cache reads) is a separate,
+still-under-review candidate and is not part of this branch.
+
+**PROVEN:** Firebase RTDB deletes any object field whose value is a literal `null`. The Personal Day
+anchor revision is the only place this app ever persists `effectiveFromInstant: null`, so every
+account's very first anchor push was silently corrupted the moment it round-tripped through real
+Firebase, and every later read (including the pushing device's own) then failed
+`validateBoundaryRevision` and was rejected — exactly the signature a real device reported (one
+revision received, one rejected, no conflict, permanently unapplied).
+
+**FIXED:** `personal-day-boundary-sync.js` now encodes the anchor's `null` as a wire-safe string
+sentinel before every write, and decodes both the sentinel and the old, already-corrupted
+(field-entirely-absent) shape back to `null` on every read, before any validation. The decoder
+requires PROOF the object is anchor-shaped (the reserved anchor id + boundaryTime `'00:00'` + a real
+timezone — the exact, only shape this codebase's one anchor factory has ever produced) before
+treating a missing/sentinel field as semantic null; a revision merely missing the field for some
+other, unrelated reason is left alone and correctly rejected. `personal-day-boundary-repository.js`
+never persists an anchor alone as `'custom'` (an anchor-only remote fact is retained, not discarded,
+for a later merge to complete against) — closing a gap the decode fix would otherwise open (silently
+enabling the boundary at `00:00` nobody chose). `remoteStatus()` reports this as `incomplete`,
+distinct from a genuine `unapplied` rejection/conflict.
+
+**NOT FIXED:** any specific owner's historical custom boundary revision that is still missing from
+their account's scoped/cloud history — this branch corrects the wire format and the semantics going
+forward; it does not recover anything.
+
+**NOT TRUSTED:** the old, pre-account-scoping unowned local cache remains exactly as before —
+unowned, quarantined, never read for this fix's purposes, never adopted, never pushed.
+
+**NOT INCLUDED:** Legacy Recovery V1 (the confirmation card, `analyzeRecovery`, `recover()`,
+recoverable diagnostics). A source-level test in this branch asserts no recovery module, symbol, or
+copy exists anywhere in the runtime.
+
+Also unchanged / still open: phone authentication remains a separate concern from this fix; the
+operational-plan cross-account leakage noted in a prior review remains open.
+
+Tests: `personal-day-boundary-wire-encoding.test.js` (the reproduction against a fake that actually
+simulates Firebase's null-pruning, plus the 6 decoder-hardening cases required by review: old pruned
+anchor accepted, new sentinel accepted, an ordinary finite revision left alone, a malformed non-anchor
+missing the field rejected, malformed anchor fields rejected, unknown extra fields preserved).
+Existing sync/live/account-scope/cross-device test helpers updated to decode wire data, matching real
+callers. The shared Personal Day / plan module release token was bumped (no new module added to the
+group); www/ re-mirrored.
+
 ## Personal Day Web Sync Runtime Hardening — integrated 2026-09-22
 
 **Integrated on `main` — implementation @ `e5ec3a7`** (pure fast-forward from `75b0f65`; feature branch

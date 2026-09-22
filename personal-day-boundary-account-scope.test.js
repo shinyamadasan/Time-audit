@@ -21,7 +21,7 @@ import { readFileSync } from 'node:fs';
 
 import { createPersonalDayBoundaryLiveWiring } from './personal-day-boundary-live.js';
 import { boundaryCacheKeyForRoom, createPersonalDayBoundaryRepository, PERSONAL_DAY_BOUNDARY_STORAGE_KEY } from './personal-day-boundary-repository.js';
-import { createPersonalDayBoundarySyncBridge, DAY_BOUNDARY_REVISIONS_REMOTE_PATH } from './personal-day-boundary-sync.js';
+import { createPersonalDayBoundarySyncBridge, DAY_BOUNDARY_REVISIONS_REMOTE_PATH, decodeWireMap } from './personal-day-boundary-sync.js';
 import { createOperationalPlanRepository } from './operational-plan-repository.js';
 import { legacyBoundaryRevision, proposeBoundaryRevision } from './personal-day-boundary-model.js';
 
@@ -210,7 +210,9 @@ test('A cached 20:00 -> B with its own 18:00 history: B stays 18:00, B\'s cloud 
   const { rooms, device } = await accountAOnDevice();
   // The legacy anchor's id is deterministic and shared by every account, so it is not an A-owned
   // fact; A's custom revision is.
-  const aCustomIds = Object.values(rooms[ROOM_A].cloud()).filter(r => r.effectiveFromInstant !== null).map(r => r.id);
+  // Decoded: the wire-safe anchor encoding means the RAW cloud value no longer reads a pushed
+  // anchor's effectiveFromInstant as a literal `null`.
+  const aCustomIds = Object.values(decodeWireMap(rooms[ROOM_A].cloud())).filter(r => r.effectiveFromInstant !== null).map(r => r.id);
   assert.equal(aCustomIds.length, 1);
   const bCloudBefore = rooms[ROOM_B].cloudJson();
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPersonalDayBoundarySyncBridge, DAY_BOUNDARY_REVISIONS_REMOTE_PATH } from './personal-day-boundary-sync.js';
+import { createPersonalDayBoundarySyncBridge, DAY_BOUNDARY_REVISIONS_REMOTE_PATH, decodeWireMap } from './personal-day-boundary-sync.js';
 import { createPersonalDayBoundaryRepository } from './personal-day-boundary-repository.js';
 import { LEGACY_CALENDAR_DAY_REVISION_ID, normalizeBoundaryRevisionHistory } from './personal-day-boundary-model.js';
 
@@ -104,8 +104,12 @@ function remoteMap(roomRef) {
 
 /** §23: the central acceptance check after every concurrency scenario — the
  *  REMOTE store itself, not just local clients, must be a valid history. */
+/** Decoded (Personal Day Boundary Wire Format V1): the RAW wire shape a pushed anchor now takes (the
+ *  null-pruning-proof sentinel) is never itself a `normalizeBoundaryRevisionHistory`-valid shape —
+ *  decoding is the same step every real caller (decodeRemoteHistory / handleRemoteSnapshot) applies
+ *  before ever validating remote data. */
 function assertRemoteValid(roomRef, message) {
-  const remote = remoteMap(roomRef);
+  const remote = decodeWireMap(remoteMap(roomRef));
   assert.doesNotThrow(() => normalizeBoundaryRevisionHistory(Object.values(remote)), message);
   return normalizeBoundaryRevisionHistory(Object.values(remote));
 }
@@ -238,13 +242,16 @@ test('onConflict fires when a remote revision conflicts with a local one, and lo
 });
 
 test('detach() stops listening and resets bootstrap/snapshot state', () => {
-  const roomRef = fakeRoomRef({ [DAY_BOUNDARY_REVISIONS_REMOTE_PATH]: { [anchor.id]: anchor } });
+  // Seeded with a real revision alongside the anchor — an anchor ALONE is never persisted as
+  // 'custom' (repository guard; see personal-day-boundary-repository.js).
+  const r1 = { id: 'r1', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
+  const roomRef = fakeRoomRef({ [DAY_BOUNDARY_REVISIONS_REMOTE_PATH]: { [anchor.id]: anchor, r1 } });
   const { bridge, repository } = makeBridge({ roomRef });
   bridge.attach();
   assert.equal(repository.status().status, 'custom');
   bridge.detach();
   roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH).update({ ghost: { id: 'ghost', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: 999 } });
-  assert.equal(repository.status().revisions.length, 1); // unchanged — no listener was firing
+  assert.equal(repository.status().revisions.length, 2); // unchanged — no listener was firing
 });
 
 // ── THE former blocker, reproduced and fixed (§9, §21) ─────────────────────
@@ -399,9 +406,15 @@ test('a malformed/conflicting anchor at the reserved id fails safely without cor
   const conflictingAnchor = { ...anchor, timezone: 'America/New_York' }; // same reserved id, different fact
   const bridgeB = makeBridge({ roomRef }).bridge;
   assert.deepEqual(await bridgeB.pushRevision(conflictingAnchor), { committed: false, outcome: 'conflict' });
-  assert.deepEqual(remoteMap(roomRef), { [anchor.id]: anchor });
+  // Decoded: the anchor bridgeA actually wrote is the wire-safe (sentinel/pruned-null-proof)
+  // shape, not the literal `null` object it was pushed as — semantically identical.
+  assert.deepEqual(decodeWireMap(remoteMap(roomRef)), { [anchor.id]: anchor });
   assertRemoteValid(roomRef);
-  assert.equal(bootstrapFreshDevice(roomRef).revisions.length, 1);
+  // The anchor ALONE is not a useful configuration to adopt (repository guard): a fresh device
+  // bootstrapping from a remote that holds nothing but the anchor stays 'absent' (legacy), exactly
+  // as the model's own contract already says an anchor with no later revision means — never
+  // 'custom' with a bare 00:00 boundary the account never actually chose.
+  assert.deepEqual(bootstrapFreshDevice(roomRef), { status: 'absent' });
 });
 
 // ── whole-history transaction behavior matrix (§8) ─────────────────────────
