@@ -238,3 +238,47 @@ test('the diagnostics module is read-only: it never writes storage or Firebase a
   assert.doesNotMatch(source, /localStorage\.(setItem|removeItem|clear)|sessionStorage|indexedDB|\.ref\(|\.database\(|\.transaction\(|\.set\(|\.update\(|signOut|getIdToken|accessToken|apiKey|\.uid\b|displayName|email/i);
   assert.match(source, /SHA-256/);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. this is the WIRE-FORMAT-ONLY candidate — no recovery action/module exists
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Personal Day Legacy Recovery V1 (personal-day-boundary-recovery.js, analyzeRecovery(),
+// recover(), the "Previous personal day setting found on this device" confirmation card) is a
+// SEPARATE, independently-reviewed candidate (fix/personal-day-legacy-recovery-v1) and is
+// deliberately not part of this branch. This is a hard, source-level guarantee, not just an
+// omission by convention — the old unowned legacy cache key stays unowned, quarantined, never
+// adopted and never pushed, exactly as it was before this branch existed.
+
+test('no recovery module file exists in this candidate', () => {
+  assert.equal(existsSync(path.join(HERE, 'personal-day-boundary-recovery.js')), false);
+  assert.equal(existsSync(path.join(HERE, 'www', 'personal-day-boundary-recovery.js')), false);
+});
+
+test('no runtime source file (the whole Personal Day / plan / UI surface) references any recovery symbol, action, or copy', () => {
+  const FORBIDDEN = [
+    /PersonalDayBoundaryRecovery/,
+    /analyzeRecovery/,
+    /createPersonalDayBoundaryRecovery/,
+    /\brecover\s*\(/,
+    /data-pdb-recovery/,
+    /data-pdb-action=["']recover["']/,
+    /Previous personal day setting found/i,
+    /\brecovery\.status\(\)/,
+  ];
+  const candidates = [...GROUP, 'personal-day-boundary-diagnostics.js', 'index.html'];
+  const offenders = [];
+  for (const file of candidates) {
+    if (!existsSync(path.join(HERE, file))) continue;
+    const source = read(file);
+    for (const pattern of FORBIDDEN) {
+      if (pattern.test(source)) offenders.push(`${file} matches ${pattern}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
+
+test('the import map and the pinned group carry no recovery entry', () => {
+  assert.equal('./personal-day-boundary-recovery.js' in importMap, false);
+  assert.ok(!GROUP.includes('personal-day-boundary-recovery.js'));
+});

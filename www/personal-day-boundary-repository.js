@@ -253,7 +253,7 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
      *  conflict exactly as before — contradiction is never deduplication.
      *  @param {object} remoteRecordsById @param {number} [nowTs] unused, kept for
      *    call-shape symmetry with the coarse-life-evidence sync bridge.
-     *  @returns {{changed:boolean, changedIds:string[], rejectedIds:string[], droppedIds:string[], conflict:string|null}} */
+     *  @returns {{changed:boolean, changedIds:string[], rejectedIds:string[], droppedIds:string[], conflict:string|null, incomplete?:boolean}} */
     mergeRemoteRevisions(remoteRecordsById) {
       const key = activeKey();
       if (key === null || !isPlainObject(remoteRecordsById)) return { changed: false, changedIds: [], rejectedIds: [], droppedIds: [], conflict: null };
@@ -293,6 +293,22 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
         // between two independently-proposed revisions) — write nothing rather than
         // silently drop one side's fact.
         return { changed: false, changedIds: [], rejectedIds, droppedIds: [], conflict: err.message };
+      }
+      // The anchor ALONE is not a useful configuration to persist (Personal Day Boundary Wire
+      // Format V1's strict-review conclusion: anchor-only never means "custom boundary enabled").
+      // propose() never writes an anchor without a real revision alongside it in the very same
+      // local write (§4 above), so a merge landing here with nothing BUT the anchor can only mean
+      // the account's remote history is genuinely incomplete — e.g. a historical push interrupted
+      // before its real revision ever reached the room. Silently persisting it would flip this
+      // device from legacy to "custom, 00:00" for a boundary the owner never chose. Report nothing
+      // changed; a real revision arriving later completes the history on a subsequent merge. The
+      // remote fact itself is not discarded — it stays in the account's cloud history, untouched,
+      // for that later merge to complete against; this repository simply does not adopt it alone.
+      // `incomplete: true` distinguishes this from an actual rejection/conflict — nothing here was
+      // invalid, so a caller must never describe the account's history as "conflicting or invalid"
+      // for this specific reason (see personal-day-boundary-sync.js's remoteStatus()).
+      if (!normalized.some(r => r.effectiveFromInstant !== null)) {
+        return { changed: false, changedIds: [], rejectedIds, droppedIds: [], conflict: null, incomplete: true };
       }
       const nextRevisions = {};
       normalized.forEach(r => { nextRevisions[r.id] = r; });

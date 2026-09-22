@@ -97,6 +97,7 @@ export async function collectDiagnostics() {
     ['remote revisions received', bridge ? String(bridge.remoteRevisionCount) : 'n/a'],
     ['remote rejected / conflict', bridge ? `${bridge.remoteRejectedCount} / ${bridge.remoteConflict ? 'yes' : 'no'}` : 'n/a'],
     ['remote unapplied', bridge ? String(bridge.remoteUnapplied) : 'n/a'],
+    ['remote incomplete (anchor-only)', bridge ? String(bridge.remoteIncomplete) : 'n/a'],
     ['cache owner matches room', bridge ? String(bridge.cacheOwnerMatchesRoom) : 'n/a'],
     ['this account cache revisions', room ? countRevisions(boundaryCacheKeyForRoom(room)) : 'no room'],
     ['other accounts cache slots', String(otherSlots)],

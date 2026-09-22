@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 
 import { createPersonalDayBoundaryLiveWiring, describeActivationInstant } from './personal-day-boundary-live.js';
 import { createPersonalDayBoundaryRepository } from './personal-day-boundary-repository.js';
-import { createPersonalDayBoundarySyncBridge, DAY_BOUNDARY_REVISIONS_REMOTE_PATH } from './personal-day-boundary-sync.js';
+import { createPersonalDayBoundarySyncBridge, DAY_BOUNDARY_REVISIONS_REMOTE_PATH, decodeWireMap } from './personal-day-boundary-sync.js';
 import { createOperationalPlanRepository } from './operational-plan-repository.js';
 import { createOperationalPlanSyncBridge, OPERATIONAL_PLANS_REMOTE_PATH, toFirebaseSafeKey } from './operational-plan-sync.js';
 import { LEGACY_CALENDAR_DAY_REVISION_ID, isLegacyOperationalDay, operationalDayId } from './personal-day-boundary-model.js';
@@ -127,7 +127,10 @@ function makeDevice({ roomRef = null, storage = memory(), planStorage = memory()
   return { live, boundaryRepository, planRepository, boundarySync, planSync, legacy, storage, planStorage, nowRef, setNow: v => { nowRef.value = v; } };
 }
 
-const remoteRevisions = roomRef => roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH).val() || {};
+// Decoded: the wire-safe anchor encoding means a freshly-pushed anchor's RAW value no longer reads
+// `effectiveFromInstant: null` on the wire — decoding is the same step every real caller
+// (decodeRemoteHistory / handleRemoteSnapshot) applies before reading it.
+const remoteRevisions = roomRef => decodeWireMap(roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH).val() || {});
 const remotePlan = (roomRef, id) => roomRef.child(OPERATIONAL_PLANS_REMOTE_PATH).child(toFirebaseSafeKey(id)).val();
 
 // ═══════════════════════════════════════════════════════════════════════════

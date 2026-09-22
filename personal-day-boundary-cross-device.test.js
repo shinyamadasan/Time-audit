@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 
 import { createPersonalDayBoundaryLiveWiring } from './personal-day-boundary-live.js';
 import { createPersonalDayBoundaryRepository } from './personal-day-boundary-repository.js';
-import { createPersonalDayBoundarySyncBridge, DAY_BOUNDARY_REVISIONS_REMOTE_PATH } from './personal-day-boundary-sync.js';
+import { createPersonalDayBoundarySyncBridge, DAY_BOUNDARY_REVISIONS_REMOTE_PATH, decodeWireMap } from './personal-day-boundary-sync.js';
 import { createOperationalPlanRepository } from './operational-plan-repository.js';
 import { normalizeBoundaryRevisionHistory } from './personal-day-boundary-model.js';
 
@@ -112,7 +112,10 @@ function makeDevice({ roomRef, storage = memory(), idPrefix = 'dev', clock = T_0
   };
 }
 
-const remote = roomRef => roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH).val() || {};
+// Decoded: the wire-safe anchor encoding means a freshly-pushed anchor's RAW value no longer reads
+// `effectiveFromInstant: null` on the wire — decoding is the same step every real caller
+// (decodeRemoteHistory / handleRemoteSnapshot) applies before reading it.
+const remote = roomRef => decodeWireMap(roomRef.child(DAY_BOUNDARY_REVISIONS_REMOTE_PATH).val() || {});
 const remoteCustom = roomRef => Object.values(remote(roomRef)).filter(r => r.effectiveFromInstant !== null);
 
 /** The PC enables 18:00 at 08:00 and (online) pushes it. */
