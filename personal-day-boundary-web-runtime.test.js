@@ -240,37 +240,32 @@ test('the diagnostics module is read-only: it never writes storage or Firebase a
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 3. this is the WIRE-FORMAT-ONLY candidate — no recovery action/module exists
+// 3. Legacy Recovery V2 IS part of this candidate — it must never claim provenance
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Personal Day Legacy Recovery V1 (personal-day-boundary-recovery.js, analyzeRecovery(),
-// recover(), the "Previous personal day setting found on this device" confirmation card) is a
-// SEPARATE, independently-reviewed candidate (fix/personal-day-legacy-recovery-v1) and is
-// deliberately not part of this branch. This is a hard, source-level guarantee, not just an
-// omission by convention — the old unowned legacy cache key stays unowned, quarantined, never
-// adopted and never pushed, exactly as it was before this branch existed.
+// Unlike the wire-format-only candidate, this branch DOES ship Legacy Recovery — but on a
+// provenance-aware model: structural compatibility is never treated as proof of ownership. The
+// human owner's explicit attestation is the only provenance gate. This is a hard, source-level
+// guarantee against language regressing back to implying the software has verified ownership.
 
-test('no recovery module file exists in this candidate', () => {
-  assert.equal(existsSync(path.join(HERE, 'personal-day-boundary-recovery.js')), false);
-  assert.equal(existsSync(path.join(HERE, 'www', 'personal-day-boundary-recovery.js')), false);
-});
-
-test('no runtime source file (the whole Personal Day / plan / UI surface) references any recovery symbol, action, or copy', () => {
+test('no source or copy claims ownership/provenance was verified by the software itself', () => {
   const FORBIDDEN = [
-    /PersonalDayBoundaryRecovery/,
-    /analyzeRecovery/,
-    /createPersonalDayBoundaryRecovery/,
-    /\brecover\s*\(/,
-    /data-pdb-recovery/,
-    /data-pdb-action=["']recover["']/,
-    /Previous personal day setting found/i,
-    /\brecovery\.status\(\)/,
+    /provenSafe/,
+    /ownershipVerified/,
+    /\bsafe owner match\b/i,
+    /\bownership verified\b/i,
+    /belongs to you\b/i,
+    /\byour old setting\b/i,
+    /\bverified\b.{0,20}\bsafe\b/i,
   ];
-  const candidates = [...GROUP, 'personal-day-boundary-diagnostics.js', 'index.html'];
+  const candidates = [...GROUP, 'personal-day-boundary-recovery.js', 'personal-day-boundary-diagnostics.js', 'personal-day-boundary-ui.js', 'index.html'];
   const offenders = [];
   for (const file of candidates) {
     if (!existsSync(path.join(HERE, file))) continue;
-    const source = read(file);
+    // Code/copy only: comments are stripped first, so a comment correctly NAMING a forbidden phrase
+    // to explain why it is avoided (this file's own header, or personal-day-boundary-recovery.js's
+    // own documentation of what it must never say) is not itself flagged as saying it.
+    const source = read(file).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/<!--[\s\S]*?-->/g, '');
     for (const pattern of FORBIDDEN) {
       if (pattern.test(source)) offenders.push(`${file} matches ${pattern}`);
     }
@@ -278,7 +273,8 @@ test('no runtime source file (the whole Personal Day / plan / UI surface) refere
   assert.deepEqual(offenders, []);
 });
 
-test('the import map and the pinned group carry no recovery entry', () => {
-  assert.equal('./personal-day-boundary-recovery.js' in importMap, false);
-  assert.ok(!GROUP.includes('personal-day-boundary-recovery.js'));
+test('the import map and the pinned group carry the recovery entry, pinned to the same release token as everything else', () => {
+  assert.ok('./personal-day-boundary-recovery.js' in importMap);
+  assert.ok(GROUP.includes('personal-day-boundary-recovery.js'));
+  assert.equal(importMap['./personal-day-boundary-recovery.js'], `./personal-day-boundary-recovery.js?v=${release}`);
 });
