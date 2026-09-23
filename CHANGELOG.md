@@ -1,5 +1,35 @@
 # ChronaSense — Changelog
 
+## Personal Day Boundary Wire Fix — integrated 2026-09-22
+
+**Integrated to `main` @ `7a3ac02` by fast-forward** (from `origin/main` @ `dc05287`, unmoved since
+review), pushed. Deployment is automatic on push to `main` (GitHub Pages); see the deploy record for
+this push's run.
+
+- **PROVEN:** Firebase RTDB null pruning broke the old anchor wire representation — every account's
+  first Personal Day anchor push was silently corrupted the moment it round-tripped through real
+  Firebase.
+- **FIXED:** semantic null anchors now round-trip safely through the wire representation
+  (`personal-day-boundary-sync.js`'s wire-safe sentinel encode/decode).
+- **BACKWARDS COMPATIBLE:** old, already-corrupted (pre-fix, field-entirely-absent) anchors remain
+  readable, through the narrow, anchor-shape-proving predicate — never a generic "any revision
+  missing this field is probably the anchor" guess.
+- **NOT FIXED:** the owner's historical missing custom boundary revision. This fix corrects the wire
+  format and semantics going forward; it does not recover anything.
+- **NOT TRUSTED:** the old, unowned local cache. It remains exactly as it was — unowned, quarantined,
+  never read, never adopted, never pushed by anything in this integration.
+- **NOT INCLUDED:** Legacy Recovery V1 (the confirmation card, `analyzeRecovery`, `recover()`,
+  recoverable diagnostics). It remains a separate, still-under-review candidate on
+  `fix/personal-day-legacy-recovery-v1` (preserved, untouched, unmerged).
+
+Still open: phone/mobile web authentication state; the operational-plan cross-account leakage noted
+in a prior review. Do not read this integration as the owner's Personal Day being already recovered.
+
+Verification before push: `npm test` 1301/1300/0 (1 known pre-existing skip), full Playwright
+701/701 clean, lint 0 errors/38 warnings (baseline), `check:www-parity` OK (70 files), `git diff
+--check` clean — all reproduced in a clean, isolated integration worktree on the fast-forwarded tree,
+not just on the feature branch in isolation.
+
 ## Personal Day Boundary Wire Format V1 — 2026-09-22
 
 **Built on `fix/personal-day-boundary-wire-format-v1`, branched from `main` @ `dc05287`** (not merged,
