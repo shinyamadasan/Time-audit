@@ -573,7 +573,15 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
     lastApply = null;
   }
 
-  return { attach, detach, pushRevision, pushAllLocal, handleRemoteSnapshot, syncState, remoteStatus, diagnostics, repository };
+  /** A safe, read-only copy of the last DECODED remote snapshot this bridge has observed — full
+   *  revision objects (never redacted; unlike diagnostics(), which is counts-only), for
+   *  personal-day-boundary-recovery.js to reason about compatibility without re-subscribing or
+   *  re-deriving the wire encoding itself. Empty before any snapshot has arrived. */
+  function remoteRevisionsSnapshot() {
+    return { ...lastRemoteSnapshot };
+  }
+
+  return { attach, detach, pushRevision, pushAllLocal, handleRemoteSnapshot, syncState, remoteStatus, diagnostics, remoteRevisionsSnapshot, repository };
 }
 
 // A ready-to-use singleton for the real app (index.html) only — constructing it touches

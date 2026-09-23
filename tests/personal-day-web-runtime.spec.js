@@ -35,7 +35,7 @@ const T_2100 = Date.parse('2026-09-16T21:00:00+08:00');
 
 /** The release token every group module must be requested with. */
 let RELEASE = '';
-const GROUP_FILES = ['personal-day-boundary-model', 'personal-day-boundary-repository', 'personal-day-boundary-sync', 'personal-day-boundary-live', 'operational-plan-model', 'operational-plan-repository', 'operational-plan-sync', 'plan-authority'];
+const GROUP_FILES = ['personal-day-boundary-model', 'personal-day-boundary-repository', 'personal-day-boundary-sync', 'personal-day-boundary-live', 'personal-day-boundary-recovery', 'operational-plan-model', 'operational-plan-repository', 'operational-plan-sync', 'plan-authority'];
 
 function accountHistory() {
   const anchor = legacyBoundaryRevision(TZ);
@@ -126,7 +126,7 @@ async function openDevice(page, { remote = null, failPaths = [], legacyCache = n
 
 const settingsPanel = page => page.locator('#personal-day-boundary-settings');
 const openSettings = page => page.evaluate(() => showView('settings'));
-const moduleReady = page => page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object' && typeof window.PlanAuthority === 'object' && typeof window.renderPersonalDayBoundarySettings === 'function');
+const moduleReady = page => page.waitForFunction(() => typeof window.PersonalDayBoundaryLive === 'object' && typeof window.PlanAuthority === 'object' && typeof window.PersonalDayBoundaryRecovery === 'object' && typeof window.renderPersonalDayBoundarySettings === 'function');
 
 test('MOBILE web: a fresh device converges on the account\'s 18:00 (viewport / UA / touch do not change bootstrap)', async ({ page }) => {
   expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
@@ -219,9 +219,15 @@ test('the unowned legacy cache alone never turns the boundary on for the account
   await moduleReady(page);
   await openSettings(page);
   await expect(settingsPanel(page)).toContainText('Off. Your day currently starts at midnight');
+  // Legacy Recovery V2: an authoritatively empty account + a device with a complete legacy cache is
+  // a technically compatible candidate — but it is only ever OFFERED, with the ownership disclaimer,
+  // never auto-adopted (Settings still plainly says "Off." above).
+  await expect(settingsPanel(page).locator('[data-pdb-recovery="offer"]')).toContainText('Old personal day setting found on this device');
+  await expect(settingsPanel(page).locator('[data-pdb-recovery="offer"]')).toContainText('ChronaSense cannot verify that it belongs to the account you are currently signed in to');
   const diag = page.locator('#pdb-diagnostics');
   await expect(diag).toContainText('old unowned cache revisions: 2', { timeout: 8000 });
   await expect(diag).toContainText('this account cache revisions: none');
+  await expect(diag).toContainText('remote compatibility: true');
 });
 
 test('diagnostics view (?pdbdiag=1): one screenshot shows the whole chain, with no identity, token or revision content', async ({ page }) => {

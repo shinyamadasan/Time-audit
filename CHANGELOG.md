@@ -1,5 +1,51 @@
 # ChronaSense — Changelog
 
+## Personal Day Legacy Recovery V2 — 2026-09-23
+
+**Built on `fix/personal-day-legacy-recovery-v2`, branched fresh from `main` @ `6c10d0c`** (the
+integrated wire-format fix) — not the superseded `fix/personal-day-legacy-recovery-v1` (preserved,
+unchanged @ `b351220`, historical only). Not merged, not deployed.
+
+**Product decision: recovery via human owner attestation, not inferred provenance.** The prior
+design reasoned "the account's cloud history is a structural subset of the device's old legacy
+cache, therefore recovery is provably safe" — but the legacy cache is UNOWNED (nothing this app
+persists proves which account created it), so content compatibility can never be ownership proof.
+This version separates the two questions:
+
+- **Compatibility** (`analyzeRecoveryCompatibility` — renamed from `analyzeRecovery`; the result
+  field is `compatible`, never `recoverable`/`provenSafe`/`safe`) answers only "would appending the
+  missing revision(s) be structurally safe" — deterministic, append-only, no contradiction. A
+  same-timezone different account, or an authoritatively empty account, can be a compatible
+  candidate purely by coincidence, and the software says so honestly rather than implying ownership.
+- **Provenance** is gated entirely on an explicit, session-local owner attestation (a checkbox: "I
+  confirm this setting is mine and should be attached to the account I'm currently signed in to").
+  It is false by default, never inferred from a click, never persisted as account data, and is
+  re-validated live against the CURRENT room and the CURRENT compatible set every time it matters —
+  so it is silently invalidated by an account switch, a change in what would actually be appended,
+  or a reload, with no separate event wiring needed.
+- The confirmation card now reads "**Old personal day setting found on this device**" (not
+  "Previous personal day setting found") and states plainly that the device's cache "did not record
+  which account owned it" and that ChronaSense "cannot verify that it belongs to the account you are
+  currently signed in to." The action stays disabled until attested.
+- `recover()` refuses outright, zero writes, unless a current, current-room-scoped attestation is
+  present — re-checked inside the function itself, never trusted from whatever the UI last
+  rendered. The append-only algorithm (existing `pushRevision`, read-back, no delete/rewrite) is
+  unchanged.
+- Diagnostics (`?pdbdiag=1`) reports `legacy history present`, `legacy history validates`, `remote
+  compatibility`, and a constant `attestation required: yes` reminder — never "ownership verified"
+  or "safe owner match", which software cannot know.
+
+No regression to the wire-format fix (the narrow, anchor-shape-proving decoder; wire sentinel;
+anchor-only incomplete semantics; account-scoping guards; module-generation consistency) or to any
+existing account-scope regression coverage.
+
+Tests: `personal-day-boundary-recovery.test.js` (21 cases: cross-account compatibility without
+writes, attestation gating, room-switch and remote-change invalidation, reload resets, partial-push
+"uncertain", append-only, legacy-cache quarantine) and `tests/personal-day-legacy-recovery.spec.js`
+(the real confirmation UI: disabled until attested, unchecking withdraws it, a reload requires
+re-attesting, no ownership language anywhere). Shared release token bumped;
+`personal-day-boundary-recovery.js` added back to the import map; www/ re-mirrored.
+
 ## Personal Day Boundary Wire Fix — integrated 2026-09-22
 
 **Integrated to `main` @ `7a3ac02` by fast-forward** (from `origin/main` @ `dc05287`, unmoved since

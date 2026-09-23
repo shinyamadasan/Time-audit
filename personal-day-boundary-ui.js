@@ -21,6 +21,12 @@
 //    the user presses the explicit save button.
 
 import { describeActivationInstant } from './personal-day-boundary-live.js';
+// Side-effect import: personal-day-boundary-recovery.js owns the `window.PersonalDayBoundaryRecovery`
+// singleton this file reads. Importing it here (after personal-day-boundary-live.js above, which
+// itself side-effect-imports personal-day-boundary-sync.js) makes the whole chain a module-graph
+// guarantee — window.PersonalDayBoundaryLive and window.PersonalDayBoundarySync already exist by
+// the time recovery.js's own singleton block constructs itself.
+import './personal-day-boundary-recovery.js';
 
 const CONTAINER_ID = 'personal-day-boundary-settings';
 
@@ -184,6 +190,56 @@ function orphanWarningHtml() {
   </div>`;
 }
 
+/** The ONE recovery wiring instance, mirroring live()'s own singleton discipline. */
+function recovery() {
+  return typeof window !== 'undefined' ? window.PersonalDayBoundaryRecovery : null;
+}
+
+/** Purely local UI state for the recovery card — never persisted. `checked` mirrors the checkbox's
+ *  own DOM state so a re-render doesn't uncheck it out from under the owner mid-decision, but the
+ *  ACTUAL attestation gate is always recovery.isAttested() (re-validated against the live room and
+ *  compatible set every render) — this local flag alone never authorizes anything. */
+let recoveryUiState = { checked: false, busy: false, message: '', error: '' };
+
+/** The Legacy Recovery V2 confirmation card — shown only when recovery.status() itself has already
+ *  determined the candidate is a technically COMPATIBLE one (every structural condition in
+ *  personal-day-boundary-recovery.js's header), never offered speculatively. Compatibility is never
+ *  described as proof of ownership: the copy states plainly that this device's old cache does not
+ *  record who created it, and the action stays disabled until the owner explicitly attests it is
+ *  theirs. Nothing here is persisted by rendering; the append only happens on the explicit,
+ *  attested button click below. */
+function recoveryHtml() {
+  const module = recovery();
+  if (!module) return '';
+  let analysis;
+  try { analysis = module.status(); } catch { analysis = { compatible: false }; }
+  // A completed recovery makes `compatible` false on THIS very render (the missing revision just
+  // landed) — the result message must still show even though the "offer" card itself is gone now.
+  const resultRows = `
+    ${recoveryUiState.message ? `<div class="setting-row" style="border-bottom:none"><div class="setting-sub" role="status">${escape(recoveryUiState.message)}</div></div>` : ''}
+    ${recoveryUiState.error ? `<div class="setting-row" style="border-bottom:none"><div class="setting-sub" role="alert" style="color:var(--waste)">${escape(recoveryUiState.error)}</div></div>` : ''}`;
+  if (!analysis.compatible) return resultRows;
+  const active = analysis.previewActive;
+  const boundaryLine = active
+    ? `<div class="setting-sub">Boundary: <strong>${escape(formatBoundaryClock(active.boundaryTime))}</strong><br>Timezone: <strong>${escape(active.timezone)}</strong></div>`
+    : '';
+  const attested = module.isAttested();
+  const checkboxLabel = active
+    ? `I confirm this ${escape(formatBoundaryClock(active.boundaryTime))} personal day setting is mine and should be attached to the account I'm currently signed in to.`
+    : `I confirm this personal day setting is mine and should be attached to the account I'm currently signed in to.`;
+  return `<div class="setting-row" style="flex-direction:column;align-items:stretch;gap:6px" role="status" data-pdb-recovery="offer">
+    <div class="setting-label">Old personal day setting found on this device</div>
+    ${boundaryLine}
+    <div class="setting-sub" role="alert" style="color:var(--waste)">This setting comes from an older local cache that did not record which account owned it. ChronaSense cannot verify that it belongs to the account you are currently signed in to.</div>
+    <label class="setting-sub" style="display:flex;align-items:flex-start;gap:6px;cursor:pointer">
+      <input type="checkbox" data-pdb-attest${recoveryUiState.checked ? ' checked' : ''}${recoveryUiState.busy ? ' disabled' : ''} style="margin-top:2px">
+      <span>${escape(checkboxLabel)}</span>
+    </label>
+    <div><button type="button" class="btn sm" data-pdb-action="recover"${(!attested || recoveryUiState.busy) ? ' disabled' : ''}>${recoveryUiState.busy ? 'Recovering…' : 'Recover this setting'}</button></div>
+    <div class="setting-sub">This will append the missing historical Personal Day revision(s) to the current account. Existing cloud history will not be deleted or rewritten.</div>
+  </div>${resultRows}`;
+}
+
 function saveButtonHtml(state) {
   const label = state.status === 'custom' ? 'Save personal day start' : 'Turn on personal day boundary';
   const preview = live().previewProposal({ boundaryTime: draft.boundaryTime, timezone: draft.timezone });
@@ -235,6 +291,7 @@ export function renderPersonalDayBoundarySettings() {
   root.innerHTML = `
     ${enableRow}
     <div class="setting-row"><div style="flex:1">${statusHtml(state, nowMs)}</div></div>
+    ${recoveryHtml()}
     ${editorRows}
     <div class="setting-row"><div style="flex:1">${previewHtml(state)}</div></div>
     ${saveButtonHtml(state)}
@@ -244,6 +301,19 @@ export function renderPersonalDayBoundarySettings() {
 }
 
 function onInput(event) {
+  const attestBox = event.target.closest('[data-pdb-attest]');
+  if (attestBox) {
+    const module = recovery();
+    recoveryUiState = { ...recoveryUiState, checked: attestBox.checked, message: '', error: '' };
+    if (module) {
+      // The explicit owner action — never inferred from the Recover button click itself. Unchecking
+      // withdraws it immediately; re-checking re-attests fresh against whatever is CURRENTLY
+      // compatible (never a stale prior attestation silently reinstated).
+      if (attestBox.checked) module.attest(); else module.clearAttestation();
+    }
+    renderPersonalDayBoundarySettings();
+    return;
+  }
   const control = event.target.closest('[data-pdb-input]');
   if (!control) return;
   const kind = control.dataset.pdbInput;
@@ -256,9 +326,8 @@ function onInput(event) {
   renderPersonalDayBoundarySettings();
 }
 
-function onClick(event) {
-  const control = event.target.closest('[data-pdb-action="save"]');
-  if (!control || !draft || !live()) return;
+function onSaveClick() {
+  if (!draft || !live()) return;
   try {
     const result = live().proposeBoundary({ boundaryTime: draft.boundaryTime, timezone: draft.timezone });
     draft.dirty = false;
@@ -278,6 +347,38 @@ function onClick(event) {
   // Re-seed from persisted truth on the next render (dirty is false on success).
   renderPersonalDayBoundarySettings();
   if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
+}
+
+/** Requires recovery.isAttested() to already be true — re-checked live by the module itself inside
+ *  recover(), never trusted from whatever this UI last rendered. The checkbox click is the owner's
+ *  explicit provenance attestation; THIS click is only the action, gated on that attestation still
+ *  holding at the moment of the click (the button is disabled otherwise, but recover() re-verifies
+ *  regardless, since a stale render could theoretically still be on screen). */
+function onRecoverClick() {
+  const module = recovery();
+  if (!module || recoveryUiState.busy) return;
+  recoveryUiState = { ...recoveryUiState, busy: true, message: '', error: '' };
+  renderPersonalDayBoundarySettings();
+  module.recover().then(result => {
+    if (result.outcome === 'recovered') {
+      recoveryUiState = { checked: false, busy: false, message: 'Recovered. The historical personal day revision(s) have been added to your account.', error: '' };
+    } else if (result.outcome === 'not-attested') {
+      // The room or the compatible set changed between rendering and clicking — never silently
+      // retried; the owner must attest again against whatever is true now.
+      recoveryUiState = { checked: false, busy: false, message: '', error: 'This could not be confirmed for your current account. Please review and confirm again if it still applies.' };
+    } else if (result.outcome === 'not-eligible') {
+      recoveryUiState = { checked: false, busy: false, message: '', error: '' };
+    } else {
+      recoveryUiState = { checked: false, busy: false, message: '', error: 'Recovery could not be confirmed. Nothing was changed — you can try again.' };
+    }
+    renderPersonalDayBoundarySettings();
+    if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
+  });
+}
+
+function onClick(event) {
+  if (event.target.closest('[data-pdb-action="save"]')) { onSaveClick(); return; }
+  if (event.target.closest('[data-pdb-action="recover"]')) { onRecoverClick(); }
 }
 
 if (typeof window !== 'undefined') {

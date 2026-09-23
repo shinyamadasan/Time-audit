@@ -54,10 +54,17 @@ function loadedModules() {
 export async function collectDiagnostics() {
   const live = window.PersonalDayBoundaryLive || null;
   const sync = window.PersonalDayBoundarySync || null;
+  const recovery = window.PersonalDayBoundaryRecovery || null;
   const room = appRoomOwner();
   const bridge = sync && typeof sync.diagnostics === 'function' ? sync.diagnostics() : null;
   let boundary = null;
   try { boundary = live ? live.boundaryState() : null; } catch { boundary = null; }
+  // Legacy Recovery V2 — categorized counts/booleans ONLY, exactly like every other row here. Never
+  // "ownership verified" or "safe owner match": software cannot know that, and never claims to —
+  // "attestation required" is a constant reminder of the gate, never a report on whether the owner
+  // has actually attested (that is UI state, not a diagnosable fact worth surfacing here).
+  let recoveryAnalysis = null;
+  try { recoveryAnalysis = recovery ? recovery.status() : null; } catch { recoveryAnalysis = null; }
   const running = document.querySelector('meta[name="pdb-release"]')?.content || 'none';
   let deployed = 'unknown';
   try {
@@ -102,6 +109,12 @@ export async function collectDiagnostics() {
     ['this account cache revisions', room ? countRevisions(boundaryCacheKeyForRoom(room)) : 'no room'],
     ['other accounts cache slots', String(otherSlots)],
     ['old unowned cache revisions', countRevisions(PERSONAL_DAY_BOUNDARY_STORAGE_KEY)],
+    // Legacy Recovery V2 — compatibility facts only (counts/booleans/a reason label). Never a
+    // provenance claim: no "ownership verified", no "safe owner match".
+    ['legacy history present', recoveryAnalysis?.legacy ? String(recoveryAnalysis.legacy.totalCount > 0) : 'n/a'],
+    ['legacy history validates', recoveryAnalysis?.legacy ? String(recoveryAnalysis.legacy.valid) : 'n/a'],
+    ['remote compatibility', recoveryAnalysis ? String(recoveryAnalysis.compatible) : 'n/a'],
+    ['attestation required', recoveryAnalysis?.compatible ? 'yes' : 'n/a'],
     ['effective boundary', boundary && boundary.active ? boundary.active.boundaryTime : (boundary ? `none (${boundary.status})` : 'n/a')],
     ['plan authority enabled', window.PlanAuthority ? String(window.PlanAuthority.enabled()) : 'not loaded'],
     ['settings UI state', uiState],
