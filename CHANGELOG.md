@@ -1,5 +1,39 @@
 # ChronaSense — Changelog
 
+## Personal Day Legacy Recovery V2 — integrated 2026-09-23
+
+**Integrated to `main` @ `eb560c5` by fast-forward** (from `origin/main` @ `6c10d0c`, unmoved since
+review), pushed. Deployment is automatic on push to `main` (GitHub Pages); see the deploy record for
+this push's run.
+
+- **Structural compatibility is not ownership proof.** `analyzeRecoveryCompatibility` decides only
+  whether appending a device's old, unowned legacy cache would be structurally safe — deterministic,
+  append-only, no contradiction. It never claims, and cannot know, whose account the cache belongs to.
+- **The legacy cache remains unowned.** Nothing this app persists proves who created it; it is read,
+  never adopted automatically, never deleted, never rewritten.
+- **Explicit owner attestation is the provenance gate.** A checkbox — "I confirm this setting is
+  mine and should be attached to the account I'm currently signed in to" — is the only thing that
+  authorizes a write. False by default, never inferred from the Recover click itself.
+- **Attestation is session-local and invalidates on reload, account switch, or a change in what
+  would actually be appended.** It is never persisted as account data, and is re-checked fresh
+  (current room + current compatible set) every time `recover()` runs.
+- **No automatic recovery.** Verified directly: the only call sites of `attest()`/`recover()` in the
+  whole runtime are the checkbox's own change handler and the Recover button's own click handler —
+  nothing in module initialization, hydration, rendering, diagnostics, the auth callback, or the
+  sync callback ever calls either.
+- **Deployment itself performs zero recovery writes.** Loading the app, signing in, and syncing
+  never call `recover()` — a production recovery still requires the owner's explicit checkbox check
+  and Recover click, on their own device, after reviewing the boundary/timezone shown and the
+  ownership disclaimer.
+
+Still open, unrelated to this work: phone/mobile web authentication state; the operational-plan
+cross-account leakage noted in a prior review.
+
+Verification before push: `npm test` 1321/1320/0 (1 known pre-existing skip), full Playwright
+707/707 clean, lint 0 errors/38 warnings (baseline), `check:www-parity` OK (71 files), `git diff
+--check` clean — all reproduced in a clean, isolated integration worktree on the fast-forwarded
+tree, not just on the feature branch in isolation.
+
 ## Personal Day Legacy Recovery V2 — 2026-09-23
 
 **Built on `fix/personal-day-legacy-recovery-v2`, branched fresh from `main` @ `6c10d0c`** (the
