@@ -206,6 +206,28 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
   assert.match(html, new RegExp(`import\\('\\./personal-day-boundary-diagnostics\\.js\\?v=${release}'\\)`));
 });
 
+// Every token the pinned group has shipped under. A browser that cached a module at one of those URLs
+// must never be served CHANGED code at the same URL, so a new generation never reuses one and leaves
+// nothing behind on one. Limitation: this cannot detect on its own that a group module changed (that
+// needs git history, which would make the test brittle) — whoever changes a group module or storage.js
+// bumps CURRENT_RELEASE and appends the old token here, and this test makes that step explicit.
+const CURRENT_RELEASE = '20260924-operational-plan-account-isolation-v1';
+const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2'];
+
+test('the release is a NEW generation: never a previously shipped token, and no URL is left on an old one', () => {
+  assert.equal(release, CURRENT_RELEASE);
+  assert.ok(!PREVIOUS_RELEASES.includes(release));
+  for (const old of PREVIOUS_RELEASES) assert.ok(!html.includes(old), `index.html still references ${old}`);
+  // Operational Plan Account Isolation V1 changed these; each must resolve to a URL no old browser cache holds.
+  for (const file of ['operational-plan-repository.js', 'operational-plan-sync.js', 'personal-day-boundary-live.js', 'plan-authority.js']) {
+    assert.equal(importMap[`./${file}`], `./${file}?v=${CURRENT_RELEASE}`);
+  }
+  // The live wiring is both an entry tag and an import target: both must be the ONE same URL (one instance).
+  const liveTags = [...html.matchAll(/src="personal-day-boundary-live\.js\?v=([^"]+)"/g)];
+  assert.equal(liveTags.length, 1);
+  assert.equal(`./personal-day-boundary-live.js?v=${liveTags[0][1]}`, importMap['./personal-day-boundary-live.js']);
+});
+
 test('every import of a group module, from any runtime module, is covered by the map — none can resolve to an unversioned URL', () => {
   const runtime = [...html.matchAll(/<script[^>]*type="module"[^>]*src="([^"?]+)/g)].map(m => m[1]);
   const seen = new Set();
