@@ -1,5 +1,37 @@
 # ChronaSense — Changelog
 
+## Operational Plan Account Isolation V1 — candidate, not integrated
+
+**Candidate on `fix/operational-plan-account-isolation-v1`** (from `origin/main` @ `1e7967a`).
+Not pushed, merged or deployed. Release token bumped to `20260924-operational-plan-account-isolation-v1`
+(was `20260923-pdb-legacy-recovery-v2`) so every changed module in the pinned Personal Day / plan graph
+is served at a new URL: one page load, one module generation.
+
+**PROVEN / FIXED:**
+- The operational-plan cache was one unscoped localStorage key (`ta3-operational-plans-v1`). On a direct
+  account switch (A -> B, no sign-out, no reload) the reconnect push sent every record in it into the
+  joined room: Account A's plan data was written into Account B's Firebase room, even when B had never
+  enabled a Personal Day boundary. Reproduced before the fix.
+- Operational plans are now stored in room-scoped local slots (`ta3-operational-plans-v1:<room>`), owned
+  by the same room identity the Personal Day cache uses. No room joined = no active cache.
+- Push, transaction retry, post-commit merge, hydration, listener and PlanAuthority derived-cache paths
+  all enforce room ownership (joined room == cache owner == target room); a mismatch writes nothing.
+- Stale cross-room listener callbacks (after a switch, or after sign-out's detach) are rejected.
+
+**LEGACY POLICY:** the old unscoped `ta3-operational-plans-v1` is unowned and quarantined: it is not read,
+adopted, uploaded or deleted. No legacy recovery is included; plans that exist only there (e.g. written
+offline and never synced) stay invisible until a separate, provenance-based recovery phase, if wanted.
+
+**OPEN ADJACENT DEBT — cross-account leakage is NOT solved app-wide:**
+- PROVEN vulnerable (reproduced with the same direct-switch order): commitments, coarse life evidence.
+- LIKELY vulnerable (code path only, not executed): entries, settings, legacy plans (`plans[dateKey]`).
+- UNKNOWN / not yet audited: routines/templates, learning plan, career/capability.
+- ALREADY SCOPED: Personal Day boundary; operational plans after this candidate.
+
+**Non-blocking performance debt:** hydration fills a fresh slot with the room's full operational-plan
+history, and reconnect re-pushes every stored record (idempotent merges, but one transaction each), so
+reconnect cost grows with history.
+
 ## Personal Day Recovery Compatibility Fix — integrated 2026-09-23
 
 **Integrated to `main` @ `3a7788a` by fast-forward** (from `origin/main` @ `6f0080e`, unmoved since
