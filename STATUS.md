@@ -5,20 +5,28 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
-## 2026-09-24 — Cross-Store Account Isolation V1 (review candidate, NOT integrated)
+## 2026-09-24 — Cross-Store Account Isolation V1 FIX FIRST corrections (review candidate, NOT integrated)
 
-Candidate on `fix/cross-store-account-isolation-v1` from `origin/main` @ `cfe8800`. Not pushed, merged
-or deployed. Commitments and coarse life evidence are now account-scoped (`<key>:<room>`), with
-owner-guarded push/listener paths. The unscoped legacy keys are quarantined. Release token
-`20260924-cross-store-account-isolation-v1`. The CoarseLifeEvidenceSync startup attach race listed
-below is fixed by this candidate. Details in CHANGELOG.md.
+Candidate on `fix/cross-store-account-isolation-v1`, from `origin/main` @ `cfe8800`. Not pushed, merged
+or deployed. Strict review of the first candidate `1edc639` returned FIX FIRST. The repository and sync
+isolation passed; the blocker was the coarse-evidence editor. Its "close on rebind" only hid it, so a
+keyboard Save after a direct A -> B switch wrote A's record into B's slot and B's room. Fixed in
+coarse-life-evidence-ui.js: editor sessions and list actions are bound to the account room they were
+opened for, stale saves fail closed, and rebind/close clears the fields and moves focus out. Release
+token `20260924-cross-store-account-isolation-fix1`. Details in CHANGELOG.md.
 
-**App-wide isolation is NOT complete.** PROVEN still vulnerable (real-browser direct switch): entries,
-settings/templates, legacy plans. Not synced (device-local): learning plan, career/capability, daily
-routines. Not audited: reviews, weekly reviews, focus redemptions, intention, timer/away state.
+Earlier phase: Operational Plan Account Isolation V1 is **integrated** on `main` @ `cfe8800`. The
+CHANGELOG heading that still called it a candidate has been corrected.
 
-**Next:** strict independent review of this candidate. The entries/settings/legacy-plans isolation is a
-separate phase, only on a fresh request.
+**App-wide account isolation is NOT complete.** "Not remotely synced" is not the same as "account isolated":
+- Remote cross-room leak PROVEN: entries, settings/templates, legacy plans.
+- Local cross-account visibility PROVEN, not remotely synced: learning plan, career/capability,
+  daily routines.
+- Local cross-account visibility PROVEN, remote write path UNKNOWN: reviews, weekly reviews.
+- UNKNOWN: focus redemptions, intention, timer/away state.
+
+**Next:** targeted re-review of the FIX FIRST corrections. Isolating the stores above is a separate
+phase, only on a fresh request.
 
 ---
 
