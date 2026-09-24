@@ -114,6 +114,10 @@ export async function collectDiagnostics() {
     ['legacy history present', recoveryAnalysis?.legacy ? String(recoveryAnalysis.legacy.totalCount > 0) : 'n/a'],
     ['legacy history validates', recoveryAnalysis?.legacy ? String(recoveryAnalysis.legacy.valid) : 'n/a'],
     ['remote compatibility', recoveryAnalysis ? String(recoveryAnalysis.compatible) : 'n/a'],
+    // A safe enum label only (e.g. 'remote-not-compatible-with-legacy', 'no-legacy-data',
+    // 'account-already-configured') — never a revision id, count breakdown, or payload. Lets the
+    // first FAILING compatibility predicate be read off a screenshot instead of re-derived blind.
+    ['remote compatibility reason', recoveryAnalysis ? String(recoveryAnalysis.reason) : 'n/a'],
     ['attestation required', recoveryAnalysis?.compatible ? 'yes' : 'n/a'],
     ['effective boundary', boundary && boundary.active ? boundary.active.boundaryTime : (boundary ? `none (${boundary.status})` : 'n/a')],
     ['plan authority enabled', window.PlanAuthority ? String(window.PlanAuthority.enabled()) : 'not loaded'],

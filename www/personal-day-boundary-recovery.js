@@ -89,7 +89,13 @@ export function classifyRevisions(revisions) {
  *  clock time) without that meaning anything about who made either record. */
 function representedIn(needle, haystack) {
   const exact = haystack.find(r => r.id === needle.id);
-  if (exact) return JSON.stringify(exact) === JSON.stringify(needle);
+  // Field-by-field, order-independent — a real Firebase round-trip can decode an object whose key
+  // order differs from a same-content object read out of localStorage (RTDB reconstructs `.val()`
+  // in its own child-key order, never necessarily the order the fields were originally written in),
+  // so a byte-level JSON.stringify comparison here would misjudge two identical revisions as
+  // different. revisionsAreSemanticDuplicates already ignores key order and doesn't need `id`
+  // repeated in the comparison, since `exact` was found by matching `id` already.
+  if (exact) return revisionsAreSemanticDuplicates(exact, needle);
   return haystack.some(r => revisionsAreSemanticDuplicates(r, needle));
 }
 
@@ -286,7 +292,9 @@ export function createPersonalDayBoundaryRecovery(deps = {}) {
       return ref.once('value').then(snap => {
         const raw = typeof snap?.val === 'function' ? snap.val() : null;
         const decoded = decodeWireMap(raw || {});
-        const stillMissing = missing.filter(r => !(decoded[r.id] && JSON.stringify(decoded[r.id]) === JSON.stringify(r)));
+        // Same order-independence requirement as representedIn() above, and the same reason: this
+        // compares a freshly-decoded post-push Firebase read-back against a locally-held revision.
+        const stillMissing = missing.filter(r => !(decoded[r.id] && revisionsAreSemanticDuplicates(decoded[r.id], r)));
         // Idempotent — applies the (now more complete) history to the scoped cache and fires the
         // same recompute chain any ordinary remote arrival does. Never a bespoke merge path.
         boundarySync.handleRemoteSnapshot(raw || {});
