@@ -1,5 +1,49 @@
 # ChronaSense — Changelog
 
+## Personal Day Recovery Compatibility Fix — integrated 2026-09-23
+
+**Integrated to `main` @ `3a7788a` by fast-forward** (from `origin/main` @ `6f0080e`, unmoved since
+review), pushed. Deployment is automatic on push to `main` (GitHub Pages); see the deploy record for
+this push's run.
+
+A real account's diagnostics showed `remote compatibility: false` even though every
+individually-checked precondition (legacy present/valid, remote not rejected/conflicting) held.
+
+**PROVEN:** `representedIn()`'s exact-id-match branch compared revisions with
+`JSON.stringify(exact) === JSON.stringify(needle)` — a byte-level comparison that is sensitive to
+JS object property order. A real Firebase RTDB `.val()` round-trip does not guarantee it preserves
+the property order a revision was originally written in, while a legacy anchor read from
+localStorage keeps its original construction order — so two semantically identical anchors could
+serialize differently and be misjudged as incompatible. `recover()`'s own post-push read-back
+confirmation had the identical defect and would have mis-reported a genuinely successful recovery
+as failed/uncertain.
+
+**FIXED:** both sites now reuse the model's own `revisionsAreSemanticDuplicates()` — already
+field-by-field, already order-independent, already the established equivalence contract for this
+schema (which has no fields beyond id/boundaryTime/timezone/effectiveFromInstant to begin with).
+Verified with synthetic-only fixtures that the fix is exactly order-independent and not more
+lenient: a different timezone, boundary time, or effective instant under the same id is still
+correctly reported incompatible; only property order stopped mattering.
+
+**UNCONFIRMED:** whether property order was in fact the specific cause of the real account's
+`compatible: false` — that can only be confirmed once the owner reopens `?pdbdiag=1` on the
+affected device and the new `remote compatibility reason` diagnostics row is read. Do not treat the
+owner's account as fixed until that is observed.
+
+**Remaining, deliberately out of scope:** `personal-day-boundary-sync.js` still has two other
+`JSON.stringify`-based revision comparisons (`pushRevision`'s `existingSameId` idempotency check,
+`pushAllLocal`'s diff check) carrying the same latent property-order risk. Real, reachable, but not
+implicated by the reported symptom — left as open follow-up debt, not fixed here, to keep this
+change to the smallest possible correction.
+
+No production Firebase write, recovery click, or attestation occurred as part of this fix or its
+integration.
+
+Verification before push: `npm test` 453/453, full Playwright 707/707 (1 confirmed pre-existing
+flake — passed clean in isolation, no overlap with the 4 files this change touched), lint 0
+errors/38 warnings (baseline), `check:www-parity` OK (71 files), `git diff --check` clean — all
+reproduced in a clean, isolated integration worktree on the fast-forwarded tree.
+
 ## Personal Day Legacy Recovery V2 — integrated 2026-09-23
 
 **Integrated to `main` @ `eb560c5` by fast-forward** (from `origin/main` @ `6c10d0c`, unmoved since
