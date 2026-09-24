@@ -108,7 +108,7 @@ test('a legacy account sees the OFF state, no personal-day surface on Today, and
 
   // Opening Settings (and Today, and the planning surface) wrote nothing.
   expect(await boundaryStore(page)).toBeNull();
-  expect(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1:uid_pdb-user'))).toBeNull();
 });
 
 test('the enable flow needs no separate checkbox: choosing a time/timezone and pressing the one button is enough', async ({ page }) => {
@@ -200,7 +200,7 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
 
   // It went into the operational store, keyed by an operationalDayId (never a bare date),
   // with its preparation, and the legacy plans[dateKey] store was not touched.
-  const operational = JSON.parse(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1')));
+  const operational = JSON.parse(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1:uid_pdb-user')));
   const ids = Object.keys(operational.plans);
   expect(ids).toHaveLength(1);
   expect(ids[0]).toMatch(/^odv1:/);
@@ -224,14 +224,14 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
   await expect(page.locator('#tomorrow-view')).toContainText('Prepared');
   await page.locator('#tmr-tab-today').click();
 
-  const operationalStore = await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1'));
+  const operationalStore = await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1:uid_pdb-user'));
 
   // ── reload at 18:00: the prepared plan is now the CURRENT day's plan strip ──
   await page.addInitScript(({ boundaryStore, operationalStore, now }) => {
     const RealDate = Date;
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
     localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pdb-user', boundaryStore);
-    localStorage.setItem('ta3-operational-plans-v1', operationalStore);
+    localStorage.setItem('ta3-operational-plans-v1:uid_pdb-user', operationalStore);
   }, { boundaryStore: stored, operationalStore, now: Date.parse('2026-09-16T18:00:00+08:00') });
   await page.reload();
   await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
@@ -239,7 +239,7 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
   await expect(page.locator('#plan-strip')).toContainText('Night shift block');
   await expect(page.locator('#plan-strip')).toContainText('Post-midnight review');
   // Same record, not a copy: still exactly one operational plan id, unchanged.
-  expect(Object.keys(JSON.parse(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1'))).plans)).toEqual(ids);
+  expect(Object.keys(JSON.parse(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1:uid_pdb-user'))).plans)).toEqual(ids);
   expect(await page.evaluate(() => localStorage.getItem('ta3-plans'))).toBe('{}');
   // The next personal day is a genuinely fresh, empty one.
   expect(await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.upcoming()))).toEqual([]);

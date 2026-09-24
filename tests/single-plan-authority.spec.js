@@ -132,7 +132,7 @@ test('a never-enabled account plans, prepares and reviews with no operational re
   // Everything landed in the legacy store, and the new machinery stayed asleep.
   const state = await page.evaluate(() => ({
     plans: JSON.parse(localStorage.getItem('ta3-plans')),
-    operational: localStorage.getItem('ta3-operational-plans-v1'),
+    operational: localStorage.getItem('ta3-operational-plans-v1:uid_spa-user'),
     boundary: localStorage.getItem('ta3-day-boundary-revisions-v1:uid_spa-user'),
     attached: window.PersonalDayBoundaryLive.attachedDayIds(),
     enabled: window.PlanAuthority.enabled(),
@@ -195,7 +195,7 @@ test('every planning consumer answers with the same authoritative plan for a gov
       routineOwners: routineRows.map(r => JSON.parse(r.id)[0]).sort(),
       upcomingId: upcoming.id,
       legacyStoreUntouched: JSON.parse(localStorage.getItem('ta3-plans'))['2026-09-16'].items.map(i => i.task),
-      operationalIds: Object.keys(JSON.parse(localStorage.getItem('ta3-operational-plans-v1')).plans),
+      operationalIds: Object.keys(JSON.parse(localStorage.getItem('ta3-operational-plans-v1:uid_spa-user')).plans),
     };
   });
 
@@ -230,7 +230,7 @@ test('every planning consumer answers with the same authoritative plan for a gov
   const prepared = await page.evaluate(() => {
     const A = window.PlanAuthority;
     const upcoming = A.upcoming();
-    const record = JSON.parse(localStorage.getItem('ta3-operational-plans-v1')).plans[upcoming.id];
+    const record = JSON.parse(localStorage.getItem('ta3-operational-plans-v1:uid_spa-user')).plans[upcoming.id];
     return {
       upcomingId: upcoming.id,
       preparationTarget: record.preparation.targetOperationalDayId,

@@ -209,6 +209,14 @@ export function createPlanAuthority(deps = {}) {
     relocationCache = null;
   }
 
+  /** Derived caches belong to the account whose operational cache they were built
+   *  from: a switch changes this key, so nothing derived for A is ever served under B. */
+  function cacheKey() {
+    let owner = '';
+    try { owner = live.planRepository?.ownerRoomId?.() || ''; } catch { owner = ''; }
+    return `${cacheToken}|${owner}`;
+  }
+
   function enabled() {
     return live.enabled();
   }
@@ -418,9 +426,10 @@ export function createPlanAuthority(deps = {}) {
   }
 
   function relocationIndex() {
-    if (relocationCache?.token === cacheToken) return relocationCache.value;
+    const token = cacheKey();
+    if (relocationCache?.token === token) return relocationCache.value;
     const value = canonicalPlanItemRelocations(allDayRecords());
-    relocationCache = { token: cacheToken, value };
+    relocationCache = { token, value };
     return value;
   }
 
@@ -737,7 +746,7 @@ export function createPlanAuthority(deps = {}) {
    *  history costs one read per store rather than one per day. */
   function streak(nowMs = now()) {
     if (!enabled()) return planningStreak(legacy.allPlans(), nowMs, accountTimezone());
-    const key = `${cacheToken}:${nowMs - (nowMs % 60000)}`;
+    const key = `${cacheKey()}:${nowMs - (nowMs % 60000)}`;
     if (streakCache && streakCache.key === key) return streakCache.value;
 
     const history = live.revisions();

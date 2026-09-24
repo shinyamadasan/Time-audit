@@ -450,6 +450,11 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
   function attachLiveDays(nowMs = now()) {
     if (boundarySync) { try { boundarySync.attach(); } catch { /* no room ref yet */ } }
     refreshLiveDays(nowMs);
+    // Fills the joined room's scoped plan cache from that room's own cloud copy (once per
+    // binding), so past and far-future records are not missing locally on a fresh slot.
+    if (planSync && typeof planSync.hydrateAll === 'function') {
+      try { planSync.hydrateAll(); } catch { /* no room ref yet */ }
+    }
   }
 
   /** Attaches listeners for the days that should be live now and detaches any
@@ -461,7 +466,9 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     attachedDayIds.filter(id => !wanted.includes(id)).forEach(id => {
       try { planSync.detachDay(id); } catch { /* already gone */ }
     });
-    wanted.filter(id => !attachedDayIds.includes(id)).forEach(id => {
+    // Every wanted id, not only newly wanted ones: attachDay is idempotent for the same room
+    // and rebinds a listener still bound to a previous account's room (a direct switch).
+    wanted.forEach(id => {
       try { planSync.attachDay(id); } catch { /* no room ref yet */ }
     });
     attachedDayIds = wanted;
@@ -508,6 +515,8 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
       attachedDayIds.forEach(id => {
         try { planSync.detachDay(id); } catch { /* already gone */ }
       });
+      // Also drops any listener not tracked here and invalidates in-flight hydration.
+      if (typeof planSync.detachAll === 'function') { try { planSync.detachAll(); } catch { /* already gone */ } }
     }
     attachedDayIds = [];
     if (boundarySync) { try { boundarySync.detach(); } catch { /* nothing attached */ } }

@@ -17,11 +17,37 @@
 // returns null. It never falls back to the legacy plans[dateKey] record, and
 // it never copies one in on read. There is no method on this repository that
 // reads plans[dateKey] at all — the absence of such a method IS the guarantee.
+//
+// ── account scoping (Operational Plan Cross-Account Isolation V1) ───────────
+//
+// The cache is a copy of ONE account's authoritative plans
+// (rooms/<room>/operationalPlans), so it is stored per room exactly like the
+// Personal Day Boundary cache: the slot for the joined room `uid_A` is
+// `ta3-operational-plans-v1:uid_A`. The room identity is the same canonical
+// source that cache uses (personal-day-boundary-repository.js's appRoomOwner) —
+// not a second identity system. With no room joined there is NO active cache:
+// reads are empty and writes throw.
+//
+// The pre-scoping key, `ta3-operational-plans-v1` (no suffix), carries no owner.
+// Previously it was pushed into whichever room happened to be joined — including
+// a different account's. Nothing this app persists proves whose it is, so it is
+// quarantined: a scoped repository never reads it, merges into it, pushes it or
+// deletes it. It is left in place untouched.
+//
+// A repository built without `getOwner` over an INJECTED storage is "plain": one
+// unowned slot at `key`, for tests of the plan semantics themselves. One built
+// over the real localStorage is always scoped to the app's joined room.
 
 import { validateOperationalPlanItemRange, mergeOperationalPlanRecords, OPERATIONAL_PLAN_SCHEMA_VERSION } from './operational-plan-model.js';
 import { parseOperationalDayId } from './personal-day-boundary-model.js';
+import { appRoomOwner } from './personal-day-boundary-repository.js';
 
 export const OPERATIONAL_PLAN_STORAGE_KEY = 'ta3-operational-plans-v1';
+
+/** The storage slot holding ONE room's cache: `<key>:<roomId>`. */
+export function operationalPlanCacheKeyForRoom(roomId, key = OPERATIONAL_PLAN_STORAGE_KEY) {
+  return `${key}:${roomId}`;
+}
 
 function isPlainObject(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -62,20 +88,50 @@ function writeEnvelope(storage, key, envelope) {
 
 export function createOperationalPlanRepository(deps = {}) {
   const storage = deps.storage || defaultStorage();
-  const key = deps.key || OPERATIONAL_PLAN_STORAGE_KEY;
+  const baseKey = deps.key || OPERATIONAL_PLAN_STORAGE_KEY;
+  // Scoped when told who the owner is, or when running over the real localStorage.
+  const getOwner = typeof deps.getOwner === 'function' ? deps.getOwner : (deps.storage ? null : appRoomOwner);
+
+  /** Whose cache is active right now, or null (plain repository, or no room joined). */
+  function ownerRoomId() {
+    if (!getOwner) return null;
+    const owner = getOwner();
+    return typeof owner === 'string' && owner ? owner : null;
+  }
+
+  /** The active storage slot, or null when there is NO active cache. */
+  function activeKey() {
+    if (!getOwner) return baseKey;
+    const owner = ownerRoomId();
+    return owner ? operationalPlanCacheKeyForRoom(owner, baseKey) : null;
+  }
+
+  function requireActiveKey() {
+    const key = activeKey();
+    if (key === null) throw new Error('No account is active, so there is no operational plan cache to change.');
+    return key;
+  }
 
   return {
-    key,
+    key: baseKey,
+
+    /** The room whose cache is active, or null. The sync bridge refuses to push or
+     *  merge unless this equals the room it is talking to. */
+    ownerRoomId,
 
     /** No implicit fallback, no implicit migration (§13): unknown id -> null. */
     read(operationalDayIdValue) {
       if (!parseOperationalDayId(operationalDayIdValue)) throw new Error('A valid operationalDayId is required.');
+      const key = activeKey();
+      if (key === null) return null;
       const envelope = readEnvelope(storage, key);
       return envelope.plans[operationalDayIdValue] || null;
     },
 
     /** Sync-only: every locally known operational plan, for pushing a durable remote copy. */
     listAllRaw() {
+      const key = activeKey();
+      if (key === null) return {};
       return { ...readEnvelope(storage, key).plans };
     },
 
@@ -98,6 +154,7 @@ export function createOperationalPlanRepository(deps = {}) {
         const result = validateOperationalPlanItemRange(ref, item, revisions);
         if (!result.ok) throw new Error(`Plan item "${item.id || item.task || '(untitled)'}" has an invalid range for this operational day: ${result.reason}`);
       });
+      const key = requireActiveKey();
       const envelope = readEnvelope(storage, key);
       const current = envelope.plans[operationalDayIdValue] || {};
       const nextPlan = { ...current, items: normalizedItems, updatedAt: now, updatedBy };
@@ -114,6 +171,7 @@ export function createOperationalPlanRepository(deps = {}) {
      *  already-built result alongside the current items. */
     writePreparation(operationalDayIdValue, preparation) {
       if (!parseOperationalDayId(operationalDayIdValue)) throw new Error('A valid operationalDayId is required.');
+      const key = requireActiveKey();
       const envelope = readEnvelope(storage, key);
       const current = envelope.plans[operationalDayIdValue] || { items: [], updatedAt: 0 };
       const nextPlan = { ...current, preparation };
@@ -130,6 +188,8 @@ export function createOperationalPlanRepository(deps = {}) {
      *  trusts mergeDatePlans without re-validating item shape either. */
     mergeRemote(operationalDayIdValue, remoteRecord) {
       if (!parseOperationalDayId(operationalDayIdValue)) throw new Error('A valid operationalDayId is required.');
+      const key = activeKey();
+      if (key === null) return { changed: false, record: null };
       const envelope = readEnvelope(storage, key);
       const local = envelope.plans[operationalDayIdValue] || null;
       const merged = mergeOperationalPlanRecords(local, remoteRecord, operationalDayIdValue);

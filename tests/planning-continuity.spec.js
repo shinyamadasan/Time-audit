@@ -106,7 +106,7 @@ async function openApp(page, { now = NOW, boundaryStore = BOUNDARY_STORE, plans 
     localStorage.setItem('ta3-plans', plans);
     localStorage.setItem('ta3-daily-routines-v1', routines);
     if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pc-user', boundaryStore);
-    if (operationalPlans) localStorage.setItem('ta3-operational-plans-v1', operationalPlans);
+    if (operationalPlans) localStorage.setItem('ta3-operational-plans-v1:uid_pc-user', operationalPlans);
     if (commitments) localStorage.setItem('ta3-commitments-v1', commitments);
   }, { timezone: TZ, now, boundaryStore, plans, operationalPlans, commitments, routines: ROUTINES });
   await page.goto(appUrl);
@@ -974,7 +974,7 @@ test('a never-enabled account keeps calendar behaviour, and the new surfaces sti
   const legacy = await page.evaluate(() => ({
     store: window.PlanAuthority.current().store,
     enabled: window.PlanAuthority.enabled(),
-    operational: localStorage.getItem('ta3-operational-plans-v1'),
+    operational: localStorage.getItem('ta3-operational-plans-v1:uid_pc-user'),
     revisions: localStorage.getItem('ta3-day-boundary-revisions-v1:uid_pc-user'),
   }));
   expect(legacy.store).toBe('legacy');
@@ -998,5 +998,5 @@ test('a never-enabled account keeps calendar behaviour, and the new surfaces sti
   expect(owned).toEqual({ store: 'legacy', dateKey: '2026-09-30' });
 
   // Still no operational record was created by any of it.
-  expect(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1:uid_pc-user'))).toBeNull();
 });
