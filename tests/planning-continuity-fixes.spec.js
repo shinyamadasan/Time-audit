@@ -86,7 +86,7 @@ async function openApp(page, { now = NOW, boundaryStore = BOUNDARY_STORE, plans 
     localStorage.setItem('ta3-plans', plans);
     localStorage.setItem('ta3-daily-routines-v1', routines);
     if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pc-user', boundaryStore);
-    if (operationalPlans) localStorage.setItem('ta3-operational-plans-v1', operationalPlans);
+    if (operationalPlans) localStorage.setItem('ta3-operational-plans-v1:uid_pc-user', operationalPlans);
     if (commitments) localStorage.setItem('ta3-commitments-v1', commitments);
   }, { timezone: TZ, now, boundaryStore, plans, operationalPlans, commitments, routines: ROUTINES });
   await page.goto(appUrl);

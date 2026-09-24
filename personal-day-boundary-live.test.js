@@ -107,9 +107,9 @@ function makeDevice({ roomRef = null, storage = memory(), planStorage = memory()
   const getRoomRef = () => roomRef;
   // The account is known even when its room ref is not reachable (offline): its cache slot is the room's.
   const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds(idPrefix), getOwner: () => TEST_ROOM });
-  const planRepository = createOperationalPlanRepository({ storage: planStorage });
+  const planRepository = createOperationalPlanRepository({ storage: planStorage, getOwner: () => TEST_ROOM });
   const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef, getRoomId: () => TEST_ROOM });
-  const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef });
+  const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef, getRoomId: () => TEST_ROOM });
   // A device that is in a room has heard the account's answer before its owner acts (the app
   // attaches on room join). Acting on a joined-but-unheard device is refused by design — it could
   // mint a legacy anchor that competes with the account's real one — so model the join: the

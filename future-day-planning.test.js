@@ -96,8 +96,8 @@ function makeApp({ clock = manila(D, '10:00'), room = null, deviceId = 'device-a
   const nowRef = { value: clock };
   const roomRef = { value: room };
   const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: () => `rev-${++seq}`, getOwner: () => 'uid_test-room' });
-  const planRepository = createOperationalPlanRepository({ storage: planStorage });
-  const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef: () => roomRef.value });
+  const planRepository = createOperationalPlanRepository({ storage: planStorage, getOwner: () => 'uid_test-room' });
+  const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef: () => roomRef.value, getRoomId: () => 'uid_test-room' });
   const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef: () => roomRef.value, getRoomId: () => 'uid_test-room' });
   const live = createPersonalDayBoundaryLiveWiring({
     boundaryRepository, planRepository, planSync, boundarySync,
@@ -199,8 +199,9 @@ test('preparing a future day writes to the ordinary operational store — no sec
   assert.ok(target.id.endsWith(':Asia/Manila:2026-10-09'));
   assert.equal(app.authority.items(target).length, 1);
   assert.equal(app.authority.preparedState(target).prepared, true);
-  // Only the one storage key the operational store already uses.
-  assert.equal(app.planStorage.getItem('ta3-operational-plans-v1') !== null, true);
+  // Only the one storage key the operational store already uses — this account's slot of it.
+  assert.equal(app.planStorage.getItem('ta3-operational-plans-v1:uid_test-room') !== null, true);
+  assert.equal(app.planStorage.getItem('ta3-operational-plans-v1'), null, 'the unscoped key is never written');
 });
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -112,8 +112,8 @@ function makeApp({ clock = manila(D, '08:00'), legacy = legacyStore(), storage =
   const nowRef = { value: clock };
   const roomRefRef = { value: roomRef };
   const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: () => `${idPrefix}-${++seq}`, getOwner: () => 'uid_test-room' });
-  const planRepository = createOperationalPlanRepository({ storage: planStorage });
-  const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef: () => roomRefRef.value });
+  const planRepository = createOperationalPlanRepository({ storage: planStorage, getOwner: () => 'uid_test-room' });
+  const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef: () => roomRefRef.value, getRoomId: () => 'uid_test-room' });
   const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef: () => roomRefRef.value, getRoomId: () => 'uid_test-room' });
   // A device that is in a room has heard the account's answer before its owner acts (the app
   // attaches on room join). Acting on a joined-but-unheard device is refused by design — it could
@@ -162,7 +162,8 @@ test('a never-enabled account resolves plain calendar days and touches no operat
   assert.equal(current.legacy, true);
   app.authority.saveItems(current, [item('p1', 'Write')]);
   assert.deepEqual(app.legacy.rawItems(D).map(i => i.task), ['Write']);
-  assert.equal(planStorage.getItem('ta3-operational-plans-v1'), null, 'no operational record is created by using the app');
+  assert.equal(planStorage.getItem('ta3-operational-plans-v1:uid_test-room'), null, 'no operational record is created by using the app');
+  assert.equal(planStorage.getItem('ta3-operational-plans-v1'), null);
   assert.equal(app.boundaryRepository.status().status, 'absent', 'no boundary revision is created either');
 });
 
@@ -1102,7 +1103,7 @@ function makeLongHistoryApp({ startDate, preparedOffsets = [], legacyDates = [],
     clock: nowMs,
     legacy: legacyStore(plans),
     storage: memory({ 'ta3-day-boundary-revisions-v1:uid_test-room': boundaryHistoryStore(startDate) }),
-    planStorage: memory({ 'ta3-operational-plans-v1': JSON.stringify({ schemaVersion: 1, plans: records }) }),
+    planStorage: memory({ 'ta3-operational-plans-v1:uid_test-room': JSON.stringify({ schemaVersion: 1, plans: records }) }),
   });
 }
 
