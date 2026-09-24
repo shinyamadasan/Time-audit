@@ -10,6 +10,7 @@
 // recurring prompt. The same editor is meant to be reusable by a later Review
 // reconciliation flow without redesign.
 import { createCoarseEvidenceRepository } from './coarse-life-evidence-repository.js';
+import { appRoomOwner } from './personal-day-boundary-repository.js';
 
 let _repository = null;
 function repository() {
@@ -48,12 +49,37 @@ function fmtDur(min) {
 let _editingId = null;
 let _listDateKey = null; // date the mounted list should refresh for after save/delete
 
+// ── account ownership (Cross-Store Account Isolation V1) ─────────────────────
+//
+// The editor and the mounted list act on ONE account's cache. After a direct account switch
+// (A -> B, no reload) a closed editor used to keep A's record in its inputs, with focus still
+// inside it: keyboard Save then wrote A's record into B's slot and B's room, because by then it
+// was a genuine B write as far as the repository and bridge could tell. So each editor session
+// and each rendered list is bound to the room that was joined when it was opened/rendered (the
+// canonical appRoomOwner(), not a second identity), and nothing it does persists unless that
+// room is still the joined one. Closing the editor (Cancel, save, or an account rebind — the sync
+// bridge calls closeCoarseEvidenceEditor() then) also clears every field and moves focus out.
+const EDITOR_FIELD_IDS = ['cle-label', 'cle-hours', 'cle-minutes', 'cle-date'];
+let _editorOwner = null; // room the open editor session belongs to; null = no live session
+let _listOwner = null;   // room the mounted list was rendered for
+
+/** A session may persist only while the room it was opened under is still the joined room.
+ *  No owner (nothing joined when it opened, or a closed/invalidated session) never matches. */
+export function editorSessionMayWrite(sessionOwner, currentOwner) {
+  return typeof sessionOwner === 'string' && sessionOwner !== '' && sessionOwner === currentOwner;
+}
+
+function currentOwner() {
+  return appRoomOwner();
+}
+
 /** Opens the add/edit modal. Pass `recordId` to edit an existing record. */
 export function openCoarseEvidenceEditor(dateKey, recordId = null) {
   const overlay = document.getElementById('coarse-evidence-overlay');
   if (!overlay) return;
   _listDateKey = dateKey;
   _editingId = recordId || null;
+  _editorOwner = currentOwner();
   const record = recordId ? repository().get(recordId) : null;
 
   document.getElementById('cle-title').textContent = record ? 'Edit approximate activity' : 'Add approximate activity';
@@ -68,15 +94,45 @@ export function openCoarseEvidenceEditor(dateKey, recordId = null) {
   document.getElementById('cle-label').focus();
 }
 
+/** Closes the editor AND ends its session: no record identity, no field values, no focus left
+ *  inside it. A closed overlay is only visually hidden (it stays in the DOM, keyboard-reachable),
+ *  so hiding alone is never relied on. */
 export function closeCoarseEvidenceEditor() {
   const overlay = document.getElementById('coarse-evidence-overlay');
-  if (overlay) overlay.classList.remove('open');
+  if (overlay) {
+    overlay.classList.remove('open');
+    if (overlay.contains(document.activeElement) && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+  }
   _editingId = null;
+  _editorOwner = null;
+  EDITOR_FIELD_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const title = document.getElementById('cle-title');
+  if (title) title.textContent = 'Add approximate activity';
+  const errorEl = document.getElementById('cle-error');
+  if (errorEl) errorEl.textContent = '';
 }
 
 export function saveCoarseEvidenceEditor() {
   const errorEl = document.getElementById('cle-error');
   errorEl.textContent = '';
+  // Fails closed BEFORE reading any field: a session opened under another account (or one already
+  // closed) never persists, whatever its inputs still hold.
+  const owner = currentOwner();
+  if (!owner) {
+    errorEl.textContent = 'Sign in to save approximate activities — no account is active on this device.';
+    return;
+  }
+  if (!editorSessionMayWrite(_editorOwner, owner)) {
+    const stale = _editorOwner !== null;
+    closeCoarseEvidenceEditor();
+    if (stale && typeof window.showToast === 'function') window.showToast('The account changed — nothing was saved.');
+    return;
+  }
   const label = document.getElementById('cle-label').value;
   const date = document.getElementById('cle-date').value;
   const hours = parseInt(document.getElementById('cle-hours').value, 10) || 0;
@@ -158,6 +214,7 @@ export function renderCoarseEvidenceList(dateKey) {
   const root = document.getElementById('rv-coarse-evidence');
   if (!root) return;
   _listDateKey = dateKey;
+  _listOwner = currentOwner();
 
   let records = [];
   let totalEstimatedMinutes = 0;
@@ -204,10 +261,14 @@ export function renderCoarseEvidenceList(dateKey) {
 function addCoarseEvidenceRecord() {
   openCoarseEvidenceEditor(_listDateKey);
 }
+// List actions carry a record id rendered for _listOwner's account: acted on only while that
+// account is still the joined one (a stale list is re-rendered instead).
 function editCoarseEvidenceRecord(id) {
+  if (!editorSessionMayWrite(_listOwner, currentOwner())) { refreshCoarseEvidenceListIfMounted(); return; }
   openCoarseEvidenceEditor(_listDateKey, id);
 }
 function removeCoarseEvidenceRecord(id) {
+  if (!editorSessionMayWrite(_listOwner, currentOwner())) { refreshCoarseEvidenceListIfMounted(); return; }
   deleteCoarseEvidenceRecord(id, _listDateKey);
 }
 

@@ -3,10 +3,12 @@
 ## Cross-Store Account Isolation V1 — candidate, not integrated
 
 **Candidate on `fix/cross-store-account-isolation-v1`** (from `origin/main` @ `cfe8800`). Not pushed,
-merged or deployed. Release token bumped to `20260924-cross-store-account-isolation-v1` (was
-`20260924-operational-plan-account-isolation-v1`). The four changed modules joined the pinned import-map
-group, and the `commitments-sync.js` / `coarse-life-evidence-sync.js` entry tags carry the same token, so
-one page load runs one module generation. `www/` was re-mirrored.
+merged or deployed. First reviewed at `1edc639` (strict review: FIX FIRST, see below). Release token is
+now `20260924-cross-store-account-isolation-fix1` (the `1edc639` candidate used
+`20260924-cross-store-account-isolation-v1`, now retired; before that `20260924-operational-plan-account-isolation-v1`).
+The four changed repository/sync modules and `coarse-life-evidence-ui.js` are in the pinned import-map
+group, and the `commitments-sync.js`, `coarse-life-evidence-sync.js` and `coarse-life-evidence-ui.js` entry
+tags carry the same token, so one page load runs one module generation. `www/` was re-mirrored.
 
 **Stores fixed (PROVEN, then fixed):**
 - **Commitments** (`ta3-commitments-v1`). Reproduced before the fix, both in a unit harness following
@@ -32,8 +34,9 @@ one page load runs one module generation. `www/` was re-mirrored.
   are single `update()` calls: no transaction or retry callback exists, and nothing is merged back.
 - Each listener carries its room and a token. `attach()` under a different room detaches and rebinds.
   Stale, old-room and post-sign-out callbacks are dropped, and bridges announce a rebind so surfaces
-  re-render. The coarse-evidence editor is closed on rebind, because it could hold the previous
-  account's record pre-filled.
+  re-render.
+- The coarse-evidence editor is bound to the account it was opened under (see the FIX FIRST section:
+  closing it alone did NOT protect against a cross-account save).
 - Commitment offline intents are queued per owner room: B's reconnect neither drains A's queue nor
   loses it.
 - The coarse-evidence bridge now attaches itself if the room was already joined before the deferred
@@ -49,9 +52,13 @@ come back for their real owner from that owner's room. Records that exist only i
 synced) stay invisible. No recovery UI is included; a provenance-based recovery would be a separate
 phase if wanted.
 
-**Adjacent stores — audited only, NOT fixed. App-wide account isolation is NOT complete:**
-- **PROVEN vulnerable** (executed in a real browser against `origin/main` code; storage.js is identical on
-  this candidate):
+**Adjacent stores — audited only, NOT fixed. App-wide account isolation is NOT complete.**
+Each store is classified on two separate questions: REMOTE (can account A's data be written into
+account B's Firebase room?) and LOCAL (does account B's session on the same device see account A's
+data?). "Not remotely synced" does NOT mean "account isolated".
+
+- **REMOTE CROSS-ROOM LEAK — PROVEN** (executed in a real browser against `origin/main` code; storage.js
+  is identical on this candidate). These are also LOCALLY VISIBLE across accounts:
   - **Entries.** `startSync()` ends with an unconditional `syncEntries()`, so a direct switch wrote A's
     entry to `rooms/uid_B/entries/e_<id>`. A's entries also show as B's (merged with B's).
   - **Settings, including templates.** `syncSettings()` on connect wrote A's settings to
@@ -59,23 +66,57 @@ phase if wanted.
     (`settings.templates` and `rooms/uid_B/templates`).
   - **Legacy plans** (`plans[dateKey]`). B's remote plans merge into the unscoped local store. An ordinary
     B plan edit (`savePlanItems`) then pushed A's task into `rooms/uid_B/plans/<date>`.
-- **NOT SYNCED / device-local:** learning plan, career/capability and daily routines have no Firebase
-  path, so there is no cross-room write. They are still unscoped local data visible to any account on
-  the same device.
-- **UNKNOWN (not audited here):** reviews, weekly reviews, focus redemptions, intention, timer/break/away
-  state (all unscoped storage.js globals; A's reviews were observed visible under B, but no write into B
-  was reproduced).
-- **ALREADY SCOPED:** Personal Day boundary, operational plans, commitments, coarse life evidence.
+- **LOCAL CROSS-ACCOUNT VISIBILITY — PROVEN; NOT REMOTELY SYNCED:** learning plan
+  (`ta3-learning-plans-v1`), career/capability (`ta3-capability-career-v1`) and daily routines
+  (`ta3-daily-routines-v1`). Each is one unscoped device-wide key with no owner or room concept, and
+  none has a Firebase path, so there is no cross-room write. But every account signed in on the device
+  sees (and can edit) the same data. The strict reviewer reproduced this, and the code has no account
+  scoping at all.
+- **LOCAL CROSS-ACCOUNT VISIBILITY — PROVEN; REMOTE WRITE PATH — UNKNOWN:** **reviews** (`ta3-reviews`,
+  storage.js global `reviews`) and **weekly reviews** (`ta3-weekly-reviews`, global `weeklyReviews`).
+  Both were reproduced in a real browser: after a direct A -> B switch, B's session held A's review and
+  A's weekly review. The switch itself wrote neither into B's room (the only B write observed there was
+  `settings`). Whether a later B save of the same day or week can carry A's data into B's room was not
+  tested.
+- **UNKNOWN (not audited):** focus redemptions, intention, timer/break/away state. These are unscoped
+  storage.js globals; neither question was answered for them.
+- **ALREADY SCOPED (both questions):** Personal Day boundary, operational plans, commitments, coarse life
+  evidence.
 
-**Residuals:** a DST-ambiguity choice pending in the commitment form across an account switch would be
-saved to the new account when confirmed (user-typed input; the form otherwise re-renders blank and edits
-resolve `not-found`). `pushAllLocal` still drains only the queue when it is non-empty (pre-existing
-same-account semantics, unchanged).
+**FIX FIRST (strict review of `1edc639`) — coarse-evidence editor owner binding:**
+- Reproduced in a real browser against `1edc639`: account A opened Edit on a persisted record, then
+  switched directly to B. The rebind "close" only removed the `open` class. The overlay stayed in the
+  DOM (hidden by opacity only), the inputs still held A's record, and focus stayed inside it. Tab to
+  Save, then Enter, ran `saveCoarseEvidenceEditor` -> `repository.save`. The first write was A's record
+  into the local slot `ta3-coarse-life-evidence-v1:uid_B`, then `pushRecord` wrote
+  `rooms/uid_B/coarseLifeEvidence/<A id>`. The bridge guards could not catch it: by then it really was a
+  B-cache write.
+- What now holds (coarse-life-evidence-ui.js only; the repositories and sync bridges are unchanged):
+  - Each editor session is bound to the room that was joined when it opened (the canonical
+    `appRoomOwner()`).
+  - Save refuses before reading any field unless that room is still the joined room. A closed or
+    invalidated session never saves.
+  - Closing the editor (Cancel, a save, or the account-rebind close the sync bridge already triggers)
+    ends the session. It clears the record identity, every field value, the edit/add title and the
+    error, and moves focus out of the hidden overlay.
+  - The Review list's Edit and Remove actions are bound to the room the list was rendered for. This
+    matters because ids are `date::label`: without it, a stale A row's Remove would delete B's own
+    record with the same id.
+  - A save while signed out keeps the existing "Sign in" message and writes nothing.
+- Add mode: unsaved A-side input is cleared on rebind and cannot be saved under B.
 
-## Operational Plan Account Isolation V1 — candidate, not integrated
+**Residuals:** if a DST-ambiguity choice is pending in the commitment form when the account switches,
+confirming it saves to the new account. This is unsaved text the user typed, not persisted A data;
+otherwise the form re-renders blank and edits resolve to `not-found`. planning-continuity-ui.js has no
+account-rebind hook that could clear it without new UI plumbing, so it stays as documented debt.
+`pushAllLocal` still drains only the queue when the queue is non-empty (pre-existing same-account
+behaviour, unchanged).
 
-**Candidate on `fix/operational-plan-account-isolation-v1`** (from `origin/main` @ `1e7967a`).
-Not pushed, merged or deployed. Release token bumped to `20260924-operational-plan-account-isolation-v1`
+## Operational Plan Account Isolation V1 — integrated 2026-09-24
+
+**Integrated to `main` @ `cfe8800295df2a3ec83ffc6a595c926eccc2a24b`** (fast-forward from `1e7967a`; built on
+`fix/operational-plan-account-isolation-v1`). *Corrected 2026-09-24: this entry was first written while
+it was still a candidate.* Release token bumped to `20260924-operational-plan-account-isolation-v1`
 (was `20260923-pdb-legacy-recovery-v2`) so every changed module in the pinned Personal Day / plan graph
 is served at a new URL: one page load, one module generation.
 

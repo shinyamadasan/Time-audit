@@ -255,3 +255,108 @@ test('one page load runs one generation: each bridge and its repository are a si
     expect(scripts.filter(n => n.startsWith(file))).toEqual([`${file}?v=${release}`]);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// the coarse-evidence EDITOR across a direct switch (FIX FIRST: before the fix a closed editor kept
+// A's record in its inputs with focus inside it, and keyboard Save wrote it into B's slot and room)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const EDITOR_FIELDS = ['cle-label', 'cle-hours', 'cle-minutes', 'cle-date'];
+const editorState = page => page.evaluate(fields => {
+  const overlay = document.getElementById('coarse-evidence-overlay');
+  return {
+    open: overlay.classList.contains('open'),
+    fields: fields.map(id => document.getElementById(id).value),
+    focusInside: overlay.contains(document.activeElement),
+  };
+}, EDITOR_FIELDS);
+const evidenceIn = (page, room) => page.evaluate(room => ({
+  local: Object.values((JSON.parse(localStorage.getItem(`ta3-coarse-life-evidence-v1:${room}`) || '{"records":{}}')).records).map(r => r.label).sort(),
+  remote: Object.values(window.__fbTest.get(`rooms/${room}/coarseLifeEvidence`) || {}).map(r => r.label).sort(),
+}), room);
+
+async function openReviewList(page) {
+  await page.evaluate(() => openReview('2026-09-23'));
+  await page.locator('#rv-optional-details').evaluate(el => { el.open = true; });
+}
+
+async function switchToB(page) {
+  await page.evaluate(() => window.__fbTest.signInAs('account-b'));
+  await page.waitForFunction(() => globalThis.getChronaSenseRoomCode() === 'uid_account-b');
+  await page.waitForTimeout(300); // the bridges' rebind notifications run after the switch
+}
+
+/** Every way a stale editor could still be submitted: Enter on its (hidden) Save button, the same
+ *  after refilling the inputs as if stale DOM had survived, and the captured global save handler. */
+async function attemptStaleSaves(page, refill) {
+  await page.locator('#coarse-evidence-overlay .btn.primary').focus();
+  await page.keyboard.press('Enter');
+  await page.evaluate(values => values.forEach(([id, v]) => { document.getElementById(id).value = v; }), refill);
+  await page.locator('#coarse-evidence-overlay .btn.primary').focus();
+  await page.keyboard.press('Enter');
+  await page.evaluate(values => { values.forEach(([id, v]) => { document.getElementById(id).value = v; }); window.__staleSave(); }, refill);
+  await page.waitForTimeout(200);
+}
+
+test('EDIT an existing A record, direct switch to B: editor closed and cleared, focus out, every stale save fails closed', async ({ page }) => {
+  await openAsAccountA(page);
+  await page.evaluate(async () => {
+    const r = window.CoarseLifeEvidenceSync.repository.save({ date: '2026-09-23', timezone: 'Asia/Manila', label: 'A-private therapy', estimatedMinutes: 75 });
+    await window.CoarseLifeEvidenceSync.pushRecord(r);
+  });
+  await openReviewList(page);
+  await page.locator('#rv-coarse-evidence').getByRole('button', { name: 'Edit', exact: true }).click();
+  expect(await editorState(page)).toEqual({ open: true, fields: ['A-private therapy', '1', '15', '2026-09-23'], focusInside: true });
+  await page.evaluate(() => { window.__staleSave = window.saveCoarseEvidenceEditor; });
+
+  await switchToB(page);
+  expect(await editorState(page)).toEqual({ open: false, fields: ['', '', '', ''], focusInside: false });
+  expect(await page.locator('#cle-title').textContent()).toBe('Add approximate activity');
+
+  // The reviewer's path: keyboard from wherever focus now is cannot reach a populated editor, and even
+  // with A's values forced back into the inputs, neither Enter on Save nor the captured handler saves.
+  await attemptStaleSaves(page, [['cle-label', 'A-private therapy'], ['cle-hours', '1'], ['cle-minutes', '15'], ['cle-date', '2026-09-23']]);
+  expect(await evidenceIn(page, 'uid_account-b')).toEqual({ local: [], remote: [] });
+  expect(await page.evaluate(() => window.CoarseLifeEvidenceSync.repository.list().map(r => r.label))).toEqual([]);
+  expect(await page.evaluate(() => window.__fbTest.log.writes.filter(w => w.path.startsWith('rooms/uid_account-b/coarseLifeEvidence')))).toEqual([]);
+  expect((await evidenceIn(page, 'uid_account-a')).local).toEqual(['A-private therapy']);
+});
+
+test('ADD mode with unsaved A-side values, direct switch to B: fields reset and the stale Add session cannot save', async ({ page }) => {
+  await openAsAccountA(page);
+  await openReviewList(page);
+  await page.locator('#rv-coarse-evidence').getByRole('button', { name: '+ Add approximate activity' }).click();
+  await page.fill('#cle-label', 'A-unsaved note');
+  await page.fill('#cle-hours', '2');
+  expect((await editorState(page)).fields.slice(0, 2)).toEqual(['A-unsaved note', '2']);
+  await page.evaluate(() => { window.__staleSave = window.saveCoarseEvidenceEditor; });
+
+  await switchToB(page);
+  expect(await editorState(page)).toEqual({ open: false, fields: ['', '', '', ''], focusInside: false });
+  await attemptStaleSaves(page, [['cle-label', 'A-unsaved note'], ['cle-hours', '2'], ['cle-minutes', '0'], ['cle-date', '2026-09-23']]);
+  expect(await evidenceIn(page, 'uid_account-b')).toEqual({ local: [], remote: [] });
+  expect(await evidenceIn(page, 'uid_account-a')).toEqual({ local: [], remote: [] });
+});
+
+test('after the switch, a NEW B editor session saves legitimate B data — into B only', async ({ page }) => {
+  await openAsAccountA(page);
+  await page.evaluate(async () => {
+    const r = window.CoarseLifeEvidenceSync.repository.save({ date: '2026-09-23', timezone: 'Asia/Manila', label: 'A-private therapy', estimatedMinutes: 75 });
+    await window.CoarseLifeEvidenceSync.pushRecord(r);
+  });
+  await openReviewList(page);
+  await page.locator('#rv-coarse-evidence').getByRole('button', { name: 'Edit', exact: true }).click();
+  await switchToB(page);
+
+  await openReviewList(page);
+  await expect(page.locator('#rv-coarse-evidence')).not.toContainText('A-private therapy');
+  await page.locator('#rv-coarse-evidence').getByRole('button', { name: '+ Add approximate activity' }).click();
+  expect((await editorState(page)).open).toBe(true);
+  await page.fill('#cle-label', 'B-own walk');
+  await page.fill('#cle-minutes', '30');
+  await page.locator('#coarse-evidence-overlay').getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#rv-coarse-evidence')).toContainText('B-own walk');
+
+  await expect.poll(() => evidenceIn(page, 'uid_account-b')).toEqual({ local: ['B-own walk'], remote: ['B-own walk'] });
+  expect(await evidenceIn(page, 'uid_account-a')).toEqual({ local: ['A-private therapy'], remote: ['A-private therapy'] });
+});
