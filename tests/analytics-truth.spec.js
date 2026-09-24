@@ -65,11 +65,11 @@ async function openApp(page) {
     window.Date = class MockDate extends RealDate { constructor(...a) { super(...(a.length ? a : [now])); } static now() { return now; } };
     localStorage.clear(); sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', 'Etc/UTC');
+    localStorage.setItem('ta3-tz:uid_u', 'Etc/UTC');
     localStorage.setItem('ta3-device-id', 'device-test');
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries', '[]'); localStorage.setItem('ta3-focus-redemptions', '[]');
-    localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-plans', '{}');
+    localStorage.setItem('ta3-settings:uid_u', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries:uid_u', '[]'); localStorage.setItem('ta3-focus-redemptions', '[]');
+    localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-plans:uid_u', '{}');
     localStorage.setItem('ta3-daily-routines-v1', JSON.stringify({ schemaVersion: 1, timezone: 'Etc/UTC', routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
   }, { now: NOW });
   await page.goto(appUrl);

@@ -65,11 +65,11 @@ async function openApp(page, { plans = {}, routines = routineState([]), entries 
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
     localStorage.clear(); sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', 'Etc/UTC');
+    localStorage.setItem('ta3-tz:uid_plan-user', 'Etc/UTC');
     localStorage.setItem('ta3-device-id', deviceId);
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries', JSON.stringify(entries)); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}');
-    localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries:uid_plan-user', JSON.stringify(entries)); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}');
+    localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
     localStorage.setItem('ta3-daily-routines-v1', JSON.stringify(routines));
     if (commitmentsView) localStorage.setItem('ta3-commitments-view', commitmentsView);
   }, { plans, routines, entries, now: NOW, deviceId, commitmentsView });
@@ -87,7 +87,7 @@ test.describe('Navigation', () => {
     await expect(page.locator('#tmr-tab-today')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('#tmr-tab-tomorrow')).toHaveAttribute('aria-pressed', 'false');
 
-    const before = await page.evaluate(() => localStorage.getItem('ta3-plans'));
+    const before = await page.evaluate(() => localStorage.getItem('ta3-plans:uid_plan-user'));
     await page.locator('#tmr-tab-tomorrow').click();
     await expect(page.locator('#tomorrow-view')).toBeVisible();
     await expect(page.locator('#today-commitments-today')).toBeHidden();
@@ -100,18 +100,18 @@ test.describe('Navigation', () => {
     await page.locator('#tmr-tab-tomorrow').click();
     await page.locator('#tmr-tab-today').click();
 
-    const after = await page.evaluate(() => localStorage.getItem('ta3-plans'));
+    const after = await page.evaluate(() => localStorage.getItem('ta3-plans:uid_plan-user'));
     expect(after).toBe(before);
     await expect(page.locator('#plan-strip')).toContainText('Existing today task');
   });
 
   test('an already-persisted Tomorrow preference cannot hide the primary My Day on load', async ({ page }) => {
     await openApp(page, { plans: { [TODAY]: { items: [planItem('t1', 'kept')] } }, commitmentsView: 'tomorrow' });
-    const before = await page.evaluate(() => localStorage.getItem('ta3-plans'));
+    const before = await page.evaluate(() => localStorage.getItem('ta3-plans:uid_plan-user'));
     await expect(page.locator('#tomorrow-view')).toBeHidden();
     await expect(page.locator('#today-commitments-today')).toBeVisible();
     await expect(page.locator('#tmr-tab-today')).toHaveAttribute('aria-pressed', 'true');
-    const after = await page.evaluate(() => localStorage.getItem('ta3-plans'));
+    const after = await page.evaluate(() => localStorage.getItem('ta3-plans:uid_plan-user'));
     expect(after).toBe(before);
   });
 
@@ -237,7 +237,7 @@ test.describe('Read-only guarantee', () => {
       plans: { [TARGET]: { items: [planItem('p1', 'Untouched')], updatedAt: NOW } },
       routines: routineState([routine()])
     });
-    const snapshot = () => page.evaluate(() => ({ plans: localStorage.getItem('ta3-plans'), routines: localStorage.getItem('ta3-daily-routines-v1') }));
+    const snapshot = () => page.evaluate(() => ({ plans: localStorage.getItem('ta3-plans:uid_plan-user'), routines: localStorage.getItem('ta3-daily-routines-v1') }));
     const before = await snapshot();
     for (let i = 0; i < 3; i++) {
       await page.locator('#tmr-tab-tomorrow').click();

@@ -99,10 +99,10 @@ async function openApp(page, { entries = [], plans = {}, settings = {}, partnerU
       localStorage.setItem('ta3-tps-test-seeded', '1');
       localStorage.setItem('ta3-onboarded', '1');
       sessionStorage.setItem('ta3-session-started', '1');
-      localStorage.setItem('ta3-tz', settings.timezone || 'UTC');
-      localStorage.setItem('ta3-settings', JSON.stringify(settings));
-      localStorage.setItem('ta3-entries', JSON.stringify(entries));
-      localStorage.setItem('ta3-plans', JSON.stringify(plans));
+      localStorage.setItem('ta3-tz:uid_smoke-user', settings.timezone || 'UTC');
+      localStorage.setItem('ta3-settings:uid_smoke-user', JSON.stringify(settings));
+      localStorage.setItem('ta3-entries:uid_smoke-user', JSON.stringify(entries));
+      localStorage.setItem('ta3-plans:uid_smoke-user', JSON.stringify(plans));
       if (partnerUid) localStorage.setItem('ta3-partner-uid', partnerUid);
       for (const [k, v] of Object.entries(prefs)) localStorage.setItem(k, v);
     }

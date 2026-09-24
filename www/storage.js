@@ -46,6 +46,116 @@ globalThis.getChronaSenseRoomRef = () => fbRoomRef;
 // room's ref is reachable. May throw while this script is still parsing; callers guard it.
 globalThis.getChronaSenseRoomCode = () => roomCode;
 
+// ── Account-scoped local state (Remaining Remote Cross-Account Isolation V1) ──
+// `entries`, `settings` (templates and the timezone pin included) and the legacy `plans` are
+// local copies of ONE account's rooms/<room>/{entries,settings,templates,plans}. They used to
+// live in one unowned slot per device, so a direct A -> B switch pushed A's entries, settings
+// and plan tasks into B's room. Like the Personal Day / operational-plan / commitments caches,
+// they are now stored per room — `ta3-entries:uid_A` — with the owner taken from this file's
+// roomCode (the source appRoomOwner() reads), never a second identity system. The metadata
+// that decides whether local entries are pushed (`ta3-lv` local version, `ta3-last-sync`) is
+// scoped with them, so A's markers can neither cause nor suppress a push for B.
+//
+// With no room joined there is NO active slot: memory holds an empty/default state and
+// nothing is persisted for these stores. The pre-scoping keys (`ta3-entries`, `ta3-settings`,
+// `ta3-plans`, `ta3-tz`, `ta3-lv`, `ta3-last-sync`, no suffix) carry no owner and are
+// quarantined: never read, merged, pushed, rewritten or deleted. What an account already
+// holds in its own room hydrates back into its scoped slot through the normal listeners.
+let _localStateOwner = null;  // the room whose entries/settings/plans are in memory, or null
+let _settingsDefaults = null; // pristine settings, captured at first load() — the base for every bind
+let _fbRoomRefRoom = '';      // the room fbRoomRef points at
+let _syncGeneration = 0;      // bumped on every bind/startSync; older listeners and callbacks go inert
+
+/** The storage slot for one room's copy of `base`, or null when no room owns local state. */
+function accountLocalKey(base, room = _localStateOwner) {
+  return room ? `${base}:${room}` : null;
+}
+
+/** Writes the active account's slot. Refused (false) when no account owns local state. */
+function setAccountLocal(base, value) {
+  const key = _localStateOwner && _localStateOwner === roomCode ? accountLocalKey(base) : null;
+  if (!key) return false;
+  localStorage.setItem(key, value);
+  return true;
+}
+
+/** fbRoomRef, but only while it points at the joined room AND the local state in memory is
+ *  that room's. Every push of entries/settings/templates/plans goes through this. A Firebase
+ *  Reference's own `key` is its room, so a ref re-pointed elsewhere is refused too. */
+function ownedRoomRef() {
+  const room = roomCode;
+  if (!fbRoomRef || !room || _fbRoomRefRoom !== room || _localStateOwner !== room) return null;
+  if (fbRoomRef.key != null && fbRoomRef.key !== room) return null;
+  return fbRoomRef;
+}
+
+/** Loads `room`'s entries, settings and legacy plans into memory (room null -> empty/default,
+ *  nothing persisted) and drops every in-memory cache that belongs to the previous owner. */
+function bindAccountLocalState(room) {
+  _localStateOwner = room || null;
+  _syncGeneration++;
+  const read = base => {
+    const key = accountLocalKey(base);
+    return key ? localStorage.getItem(key) : null;
+  };
+  try { const raw = JSON.parse(read('ta3-entries') || '[]'); entries = Array.isArray(raw) ? raw : Object.values(raw).filter(e=>e&&e.id); } catch(e){ entries=[]; }
+  // Migrate: stamp updatedAt on any entry that's missing it (older entries)
+  entries.forEach(e => { if (!e.updatedAt) e.updatedAt = e.ts || Date.now(); });
+  // Migrate: clear stale away:true on user-logged entries (old code preserved away flag on edits)
+  entries.forEach(e => { if (e.away && e.activity && e.retro) delete e.away; });
+  // Migrate: rename old energy values to 9-category system
+  entries.forEach(e => {
+    if      (e.energy === 'distraction') e.energy = 'waste';
+    else if (e.energy === 'break')       e.energy = 'recovery';
+    else if (e.energy === 'admin')       e.energy = 'nine5';
+    else if (e.energy === 'away')        e.energy = AWAY_BUCKETS[e.activity] || 'recovery';
+  });
+  // Migrate: stamp category + originalLabel on any entry that's missing them
+  entries.forEach(e => {
+    if (!e.category)      e.category      = getBucket(e);
+    if (!e.originalLabel) e.originalLabel = e.energy || null;
+  });
+  // Always sort by actual start time, newest first
+  entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
+  // Validate schema — warns to console for any malformed entries without crashing
+  entries.forEach(e => { if (!e.missed && !e.deleted) validateEntry(e); });
+  settings = JSON.parse(JSON.stringify(_settingsDefaults));
+  try { const s = JSON.parse(read('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
+  ensureTemplateSyncStamp();
+  // Dedicated timezone key wins over everything (Firebase can't overwrite it)
+  const savedTz = read('ta3-tz');
+  if (savedTz) {
+    settings.timezone = savedTz;
+  } else {
+    // First load with new system — auto-detect from browser and lock it in
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    settings.timezone = browserTz;
+    if (_localStateOwner) localStorage.setItem(accountLocalKey('ta3-tz'), browserTz);
+  }
+  if (!settings.presets?.length) settings.presets = DEFAULT_PRESETS;
+  try { plans = JSON.parse(read('ta3-plans') || '{}'); } catch { plans={}; }
+  if (!plans || typeof plans !== 'object' || Array.isArray(plans)) plans = {};
+  // Previous owner's in-memory caches: a deferred remote plan candidate, and an undo snapshot
+  // that would otherwise restore/tombstone that account's entries into this one.
+  pendingPlanRemoteByDate.clear();
+  if (typeof lastUndoAction !== 'undefined') lastUndoAction = null;
+}
+
+/** A live account change (sign-in as another account, sign-out): rebind, then recompute
+ *  everything on screen that derives from the three stores. */
+function rebindAccountLocalState() {
+  bindAccountLocalState(roomCode || null);
+  globalThis.PlanAuthority?.invalidate();
+  if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
+  if (typeof _todayRenderKey !== 'undefined') _todayRenderKey = '__FORCE__';
+  const intervalInput = document.getElementById('interval-input');
+  if (intervalInput) intervalInput.value = settings.intervalMin;
+  if (!running) { totalSecs = settings.intervalMin * 60; remaining = totalSecs; }
+  [renderToday, typeof renderWeek === 'function' && document.getElementById('view-week')?.classList.contains('active') && renderWeek,
+   typeof renderSettings === 'function' && renderSettings, globalThis.refreshTomorrowView]
+    .forEach(fn => { if (typeof fn === 'function') { try { fn(); } catch (err) { console.warn('Account rebind render failed', err); } } });
+}
+
 // ── Shared constants ──
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
@@ -529,12 +639,16 @@ function ensureTemplateSyncStamp() {
 }
 
 function syncSettings() {
-  if (!fbRoomRef || !fbDb || !roomCode) return;
+  const room = roomCode;
+  const ref = ownedRoomRef();
+  if (!ref || !fbDb) return;
   ensureTemplateSyncStamp();
-  fbDb.ref(`rooms/${roomCode}/settings`).once('value').then(snap => {
+  fbDb.ref(`rooms/${room}/settings`).once('value').then(snap => {
+    // The read answered for `room`: if another account's state is in memory now, stop.
+    if (ownedRoomRef() !== ref) return;
     const remoteRaw = snap.val();
     if (!remoteRaw) {
-      fbRoomRef.update({ settings });
+      ref.update({ settings });
       return;
     }
     const remote = { ...remoteRaw, templates: normalizeTemplates(remoteRaw.templates) };
@@ -544,13 +658,13 @@ function syncSettings() {
     const remoteTemplateStamp = templateSyncStamp(remote);
 
     if (localSavedAt > remoteSavedAt) {
-      fbRoomRef.update({
+      ref.update({
         settings,
         templates: settings.templates,
         templatesSavedAt: localTemplateStamp
       });
     } else if (localTemplateStamp > remoteTemplateStamp) {
-      fbRoomRef.update({
+      ref.update({
         'settings/templates': settings.templates,
         'settings/_templatesSavedAt': localTemplateStamp,
         'templates': settings.templates,
@@ -560,12 +674,19 @@ function syncSettings() {
   }).catch(() => {});
 }
 
+/** Pushes the in-memory settings object to the joined room — only when they are that room's. */
+function pushSettings() {
+  const ref = ownedRoomRef();
+  if (ref) ref.update({ settings });
+}
+
 function syncTemplates() {
-  if (!fbRoomRef) return Promise.resolve(false);
+  const ref = ownedRoomRef();
+  if (!ref) return Promise.resolve(false);
   ensureTemplateSyncStamp();
   const stamp = templateSyncStamp(settings) || Date.now();
   settings._templatesSavedAt = stamp;
-  return fbRoomRef.update({
+  return ref.update({
     'settings/templates': settings.templates,
     'settings/_templatesSavedAt': stamp,
     'settings/_savedAt': settings._savedAt || stamp,
@@ -585,7 +706,7 @@ function applyRemoteTemplates(remoteTemplates, remoteStamp = 0) {
   if (localTemplates.length && localStamp > incomingStamp) return false;
   settings.templates = incoming;
   settings._templatesSavedAt = incomingStamp || Number(settings._templatesSavedAt || 0) || Date.now();
-  localStorage.setItem('ta3-settings', JSON.stringify(settings));
+  setAccountLocal('ta3-settings', JSON.stringify(settings));
   return true;
 }
 
@@ -625,8 +746,8 @@ function applyRemoteSettings(remoteSettings) {
   }
 
   if (changed) {
-    localStorage.setItem('ta3-settings', JSON.stringify(settings));
-    if (val.timezone) localStorage.setItem('ta3-tz', val.timezone);
+    setAccountLocal('ta3-settings', JSON.stringify(settings));
+    if (val.timezone) setAccountLocal('ta3-tz', val.timezone);
   }
   if (pushLocalTemplates) syncSettings();
   return changed;
@@ -637,15 +758,16 @@ function persist() {
   ensureTemplateSyncStamp();
   // Always store entries in strict chronological order (newest first)
   entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
-  localStorage.setItem('ta3-entries', JSON.stringify(entries));
-  localStorage.setItem('ta3-settings', JSON.stringify(settings));
+  // Entries, settings and plans go to the owning account's slot only (none when signed out).
+  setAccountLocal('ta3-entries', JSON.stringify(entries));
+  setAccountLocal('ta3-settings', JSON.stringify(settings));
   localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
   localStorage.setItem('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
   localStorage.setItem('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
-  localStorage.setItem('ta3-plans', JSON.stringify(plans));
+  setAccountLocal('ta3-plans', JSON.stringify(plans));
   localStorage.setItem('ta3-intention', intention);
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
-  localStorage.setItem('ta3-lv', Date.now()); // local version — used to detect unsynced changes
+  setAccountLocal('ta3-lv', Date.now()); // local version — used to detect unsynced changes
   if (running && timerStartedAt) {
     localStorage.setItem('ta3-timer', JSON.stringify({
       timerStartedAt,
@@ -665,47 +787,15 @@ function persist() {
 }
 
 function load() {
-  try { const raw = JSON.parse(localStorage.getItem('ta3-entries') || '[]'); entries = Array.isArray(raw) ? raw : Object.values(raw).filter(e=>e&&e.id); } catch(e){ entries=[]; }
-  // Migrate: stamp updatedAt on any entry that's missing it (older entries)
-  entries.forEach(e => { if (!e.updatedAt) e.updatedAt = e.ts || Date.now(); });
-  // Migrate: clear stale away:true on user-logged entries (old code preserved away flag on edits)
-  entries.forEach(e => { if (e.away && e.activity && e.retro) delete e.away; });
-  // Migrate: rename old energy values to 9-category system
-  entries.forEach(e => {
-    if      (e.energy === 'distraction') e.energy = 'waste';
-    else if (e.energy === 'break')       e.energy = 'recovery';
-    else if (e.energy === 'admin')       e.energy = 'nine5';
-    else if (e.energy === 'away')        e.energy = AWAY_BUCKETS[e.activity] || 'recovery';
-  });
-  // Migrate: stamp category + originalLabel on any entry that's missing them
-  entries.forEach(e => {
-    if (!e.category)      e.category      = getBucket(e);
-    if (!e.originalLabel) e.originalLabel = e.energy || null;
-  });
-  // Always sort by actual start time, newest first
-  entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
-  // Validate schema — warns to console for any malformed entries without crashing
-  entries.forEach(e => { if (!e.missed && !e.deleted) validateEntry(e); });
-  try { const s = JSON.parse(localStorage.getItem('ta3-settings')); if(s) settings={...settings,...s}; } catch(e){}
-  ensureTemplateSyncStamp();
-  // Dedicated timezone key wins over everything (Firebase can't overwrite it)
-  const savedTz = localStorage.getItem('ta3-tz');
-  if (savedTz) {
-    settings.timezone = savedTz;
-  } else {
-    // First load with new system — auto-detect from browser and lock it in
-    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    settings.timezone = browserTz;
-    localStorage.setItem('ta3-tz', browserTz);
-  }
+  if (!_settingsDefaults) _settingsDefaults = JSON.parse(JSON.stringify(settings));
+  // At boot no room is joined yet, so this binds the empty/default state; the auth callback
+  // binds the signed-in account's slots before anything is synced.
+  bindAccountLocalState(roomCode || null);
   try { reviews = JSON.parse(localStorage.getItem('ta3-reviews') || '{}'); } catch(e){ reviews={}; }
   try { weeklyReviews = JSON.parse(localStorage.getItem('ta3-weekly-reviews') || '{}'); } catch(e){ weeklyReviews={}; }
   try { focusRedemptions = JSON.parse(localStorage.getItem('ta3-focus-redemptions') || '[]'); } catch { focusRedemptions=[]; }
   if (!Array.isArray(focusRedemptions)) focusRedemptions = [];
-  try { plans = JSON.parse(localStorage.getItem('ta3-plans') || '{}'); } catch { plans={}; }
-  if (!plans || typeof plans !== 'object' || Array.isArray(plans)) plans = {};
   intention = localStorage.getItem('ta3-intention') || '';
-  if (!settings.presets?.length) settings.presets = DEFAULT_PRESETS;
   // Pre-fill intention from yesterday's "tomorrow" field if today's is empty
   if (!intention) {
     const yesterday = toDateKey(new Date(Date.now() - 86400000));
@@ -767,8 +857,14 @@ function initAutoSync() {
   firebase.auth().onAuthStateChanged(user => {
     if (user) {
       currentUser = user;
+      const nextRoom = 'uid_' + user.uid;
+      // A direct switch (another account, no sign-out between): the previous room's listeners
+      // must stop delivering into what is about to become the new account's state.
+      if (roomCode && roomCode !== nextRoom) teardownRoomListeners();
       // Use UID as room — same account on any device = same room = auto-sync
-      roomCode = 'uid_' + user.uid;
+      roomCode = nextRoom;
+      // Load THIS account's entries/settings/plans before startSync() can push or merge anything.
+      if (_localStateOwner !== roomCode) rebindAccountLocalState();
       document.getElementById('signin-overlay').style.display = 'none';
       updateAuthUI(user);
       startSync();
@@ -795,6 +891,9 @@ function initAutoSync() {
       partnerViewShared = null;
       if (typeof closePartnerView === 'function') closePartnerView();
       fbRoomRef = null; roomCode = '';
+      // No account owns local state now: drop the previous account's entries/settings/plans
+      // from memory (its slots stay stored) and make every older listener/callback inert.
+      rebindAccountLocalState();
       // The previous account's Personal Day cache is no longer the active one: recompute everything
       // that derives from it (PlanAuthority, Settings, Today/My Day) so none of it lingers.
       if (typeof globalThis.refreshPersonalDayBoundaryLive === 'function') globalThis.refreshPersonalDayBoundaryLive();
@@ -858,6 +957,12 @@ function updateAuthUI(user) {
 function startSync() {
   if (!fbDb) return;
   fbRoomRef = fbDb.ref(`rooms/${roomCode}`);
+  _fbRoomRefRoom = roomCode;
+  // Everything below is bound to THIS room and THIS local owner. A callback that fires after a
+  // switch, sign-out or a later startSync() is stale and must not touch the current state.
+  const syncRoom = roomCode;
+  const syncGen = ++_syncGeneration;
+  const isCurrentSync = () => syncGen === _syncGeneration && syncRoom === roomCode && syncRoom === _localStateOwner;
   // Durability V1 — attach the coarse-life-evidence remote listener/bootstrap alongside the
   // rest of this room's sync. A no-op if that module hasn't loaded (defensive only).
   if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.attach();
@@ -873,6 +978,7 @@ function startSync() {
   if (globalThis.CommitmentsSync) globalThis.CommitmentsSync.attach();
 
   fbDb.ref('.info/connected').on('value', snap => {
+    if (!isCurrentSync()) return;
     const online = snap.val();
     if (online) {
       updateSyncPill('connected', 'synced');
@@ -883,8 +989,8 @@ function startSync() {
       });
       syncLocalActiveTimerState();
       // Push any local changes that happened while offline
-      const lv = parseInt(localStorage.getItem('ta3-lv') || '0', 10);
-      const ls = parseInt(localStorage.getItem('ta3-last-sync') || '0', 10);
+      const lv = parseInt(localStorage.getItem(accountLocalKey('ta3-lv', syncRoom)) || '0', 10);
+      const ls = parseInt(localStorage.getItem(accountLocalKey('ta3-last-sync', syncRoom)) || '0', 10);
       if (lv > ls) syncEntries();
       syncSettings();
       publishSharedAccountability(); // app/auth session initializes — ensure a current payload exists
@@ -934,6 +1040,7 @@ function startSync() {
   });
 
   fbDb.ref(`rooms/${roomCode}/entries`).on('value', snap => {
+    if (!isCurrentSync()) return;
     const data = snap.val();
     if (!data) return;
     const remoteEntries = Object.values(data);
@@ -957,13 +1064,13 @@ function startSync() {
     });
     if (changed) {
       entries.sort((a,b) => b.ts - a.ts);
-      localStorage.setItem('ta3-last-sync', Date.now());
+      setAccountLocal('ta3-last-sync', Date.now());
       persist();
       scheduleRenderToday();
       if (document.getElementById('view-week').classList.contains('active')) renderWeek();
       publishSharedAccountability(); // a cross-device entry may newly link to today's plan
     } else {
-      localStorage.setItem('ta3-last-sync', Date.now());
+      setAccountLocal('ta3-last-sync', Date.now());
     }
   });
 
@@ -973,6 +1080,7 @@ function startSync() {
   });
 
   fbDb.ref(`rooms/${roomCode}/settings`).on('value', snap => {
+    if (!isCurrentSync()) return;
     if (applyRemoteSettings(snap.val())) {
       renderToday();
       renderSettings();
@@ -981,7 +1089,9 @@ function startSync() {
   });
 
   fbDb.ref(`rooms/${roomCode}/templates`).on('value', snap => {
-    fbDb.ref(`rooms/${roomCode}/templatesSavedAt`).once('value').then(stampSnap => {
+    if (!isCurrentSync()) return;
+    fbDb.ref(`rooms/${syncRoom}/templatesSavedAt`).once('value').then(stampSnap => {
+      if (!isCurrentSync()) return;
       const changed = applyRemoteTemplates(snap.val(), stampSnap.val());
       if (changed) {
         _todayRenderKey = '__FORCE__';
@@ -1007,6 +1117,7 @@ function startSync() {
   // Plan conflicts are resolved only by the canonical model. If it is not ready yet,
   // preserve the local date plan and defer the remote candidate for canonical replay.
   fbDb.ref(`rooms/${roomCode}/plans`).on('value', snap => {
+    if (!isCurrentSync()) return;
     const val = snap.val();
     if (!val) return;
     let changed = false;
@@ -1028,7 +1139,7 @@ function startSync() {
       plans[date] = merged;
     });
     if (changed) {
-      localStorage.setItem('ta3-plans', JSON.stringify(plans));
+      setAccountLocal('ta3-plans', JSON.stringify(plans));
       globalThis.PlanAuthority?.invalidate();
       if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
       renderToday();
@@ -1152,14 +1263,15 @@ function startSync() {
   startSyncDetailAgeTicker();
   updateSyncPill('connected', 'synced');
   Promise.all([syncEntries(), syncFocusRedemptions()]).then(results => {
-    if (!results.some(Boolean)) return;
-    localStorage.setItem('ta3-last-sync', Date.now());
+    if (!results.some(Boolean) || !isCurrentSync()) return;
+    setAccountLocal('ta3-last-sync', Date.now());
     showToast('Synced ✓');
   });
 }
 
 async function forceSyncNow() {
-  if (!fbRoomRef) {
+  const ref = ownedRoomRef();
+  if (!ref) {
     showToast('Sign in to sync first');
     return false;
   }
@@ -1168,18 +1280,21 @@ async function forceSyncNow() {
   updateSyncPill('syncing', 'syncing...');
   try {
     const [timerSnap, awaySnap, settingsSnap, templatesSnap, templateStampSnap] = await Promise.all([
-      fbRoomRef.child('timer').once('value'),
-      fbRoomRef.child('awayState').once('value'),
-      fbRoomRef.child('settings').once('value'),
-      fbRoomRef.child('templates').once('value'),
-      fbRoomRef.child('templatesSavedAt').once('value')
+      ref.child('timer').once('value'),
+      ref.child('awayState').once('value'),
+      ref.child('settings').once('value'),
+      ref.child('templates').once('value'),
+      ref.child('templatesSavedAt').once('value')
     ]);
+    // These snapshots are the initiating account's: never apply them to another's state.
+    if (ownedRoomRef() !== ref) return false;
     const timerChanged = applyRemoteTimerState(timerSnap.val());
     const awayChanged = applyRemoteAwayState(awaySnap.val());
     const settingsChanged = applyRemoteSettings(settingsSnap.val());
     const templatesChanged = applyRemoteTemplates(templatesSnap.val(), templateStampSnap.val());
     await Promise.all([syncEntries(), syncFocusRedemptions(), syncSettings(), syncTemplates()]);
-    localStorage.setItem('ta3-last-sync', Date.now());
+    if (ownedRoomRef() !== ref) return false;
+    setAccountLocal('ta3-last-sync', Date.now());
     if (timerChanged || awayChanged || settingsChanged || templatesChanged) {
       persist();
       scheduleRenderToday();
@@ -1200,14 +1315,17 @@ async function forceSyncNow() {
 async function reconcileRemoteActiveState() {
   if (!fbRoomRef || _syncReconcileInFlight) return false;
   _syncReconcileInFlight = true;
+  const ref = fbRoomRef;
   try {
     const [timerSnap, awaySnap] = await Promise.all([
-      fbRoomRef.child('timer').once('value'),
-      fbRoomRef.child('awayState').once('value')
+      ref.child('timer').once('value'),
+      ref.child('awayState').once('value')
     ]);
+    // Read for the initiating room: after a switch it must not stamp the new account's last-sync marker.
+    if (fbRoomRef !== ref) return false;
     const timerChanged = applyRemoteTimerState(timerSnap.val());
     const awayChanged = applyRemoteAwayState(awaySnap.val());
-    localStorage.setItem('ta3-last-sync', Date.now());
+    setAccountLocal('ta3-last-sync', Date.now());
     if (timerChanged || awayChanged) {
       persist();
       scheduleRenderToday();
@@ -1647,10 +1765,12 @@ function notifySyncWriteFailed(err) {
 }
 
 function syncEntries() {
-  if (!fbRoomRef) return Promise.resolve(false);
+  // Only the joined room's own entries, into that room — checked right before the write.
+  const ref = ownedRoomRef();
+  if (!ref) return Promise.resolve(false);
   const updates = {};
   entries.forEach(e => { updates[`entries/e_${e.id}`] = e; });
-  return fbRoomRef.update(updates)
+  return ref.update(updates)
     .then(() => { publishPublicStats(); return true; })
     .catch(err => { notifySyncWriteFailed(err); return false; });
 }
@@ -2031,7 +2151,7 @@ function replayPendingPlanRemotes() {
   });
 
   if (changed) {
-    localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    setAccountLocal('ta3-plans', JSON.stringify(plans));
     globalThis.PlanAuthority?.invalidate();
     if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
     renderToday();
@@ -2043,7 +2163,8 @@ function replayPendingPlanRemotes() {
 globalThis.replayPendingPlanRemotes = replayPendingPlanRemotes;
 
 function syncPlans(dateKey) {
-  if (!fbRoomRef || !dateKey || !plans[dateKey]) return Promise.resolve(false);
+  const ref = ownedRoomRef();
+  if (!ref || !dateKey || !plans[dateKey]) return Promise.resolve(false);
   const model = globalThis.PlanTomorrowModel;
   if (!model) {
     notifySyncWriteFailed(new Error('Plan sync is waiting for the Plan Tomorrow merge model.'));
@@ -2052,20 +2173,24 @@ function syncPlans(dateKey) {
   const candidate = JSON.parse(JSON.stringify(plans[dateKey]));
   let dateRef;
   try {
-    dateRef = fbRoomRef.child('plans').child(dateKey);
+    dateRef = ref.child('plans').child(dateKey);
     if (typeof dateRef.transaction !== 'function') throw new Error('Firebase plan transactions are unavailable.');
   } catch (err) {
     notifySyncWriteFailed(err);
     return Promise.resolve(false);
   }
-  return dateRef.transaction(remote => model.mergeDatePlans(remote, candidate, dateKey), undefined, false)
+  // Firebase may re-run the update on every retry: each run re-checks that the account which
+  // captured `candidate` is still the one whose state is in memory, and aborts otherwise.
+  return dateRef.transaction(remote => (ownedRoomRef() === ref ? model.mergeDatePlans(remote, candidate, dateKey) : undefined), undefined, false)
     .then(result => {
       if (!result?.committed || !result.snapshot) return false;
+      // Committed for the initiating account; never written into another account's local plans.
+      if (ownedRoomRef() !== ref) return false;
       const committed = model.mergeDatePlans(null, result.snapshot.val(), dateKey);
       if (typeof globalThis.writeDatePlanLocal === 'function') globalThis.writeDatePlanLocal(dateKey, committed);
       else {
         plans[dateKey] = committed;
-        localStorage.setItem('ta3-plans', JSON.stringify(plans));
+        setAccountLocal('ta3-plans', JSON.stringify(plans));
       }
       return true;
     })
@@ -2080,6 +2205,7 @@ function disconnectSync() {
     fbDb.ref(`rooms/${roomCode}/devices/${syncedDeviceId}`).remove();
   }
   fbRoomRef = null; roomCode = '';
+  rebindAccountLocalState();
   // Generate a fresh private room so this device is isolated
   const newRoom = 'USER-' + Math.random().toString(36).slice(2,8).toUpperCase();
   localStorage.setItem('ta3-room', newRoom);
@@ -2166,6 +2292,7 @@ function joinRoom() {
     } catch(e) { showToast('Firebase init failed'); return; }
   }
   roomCode = code;
+  rebindAccountLocalState();
   localStorage.setItem('ta3-room', code);
   localStorage.setItem('ta3-room-code', code);
   input.value = '';
@@ -2189,6 +2316,7 @@ function tryAutoConnect() {
     }
     fbDb = firebase.database();
     roomCode = savedRoom;
+    rebindAccountLocalState();
     startSync();
   } catch(e) {
     updateSyncPill('offline','offline');

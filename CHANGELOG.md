@@ -1,6 +1,99 @@
 # ChronaSense — Changelog
 
-## Cross-Store Account Isolation V1 — candidate, not integrated
+## Remaining Remote Cross-Account Isolation V1 — candidate, not integrated
+
+**Candidate on `fix/remaining-remote-account-isolation-v1`** (from `origin/main` @ `c346388`). Not pushed,
+merged or deployed. Release token `20260924-remaining-remote-account-isolation-v1` (retires
+`20260924-cross-store-account-isolation-fix1`): storage.js changed, and its entry tag moves to the same
+generation as the whole pinned import-map group, so one page load runs one module generation. `www/` was
+re-mirrored.
+
+**Reproduced before the fix** (real browser, real storage.js lifecycle, room-partitioned Firebase fake,
+unmodified `origin/main` code). On a direct A -> B switch (no sign-out, no reload):
+- **Entries.** `onAuthStateChanged(B)` set `roomCode = uid_B` and called `startSync()` while memory still
+  held A's entries (loaded from the unowned `ta3-entries`). First wrong write: `startSync()`'s final
+  unconditional `syncEntries()` -> `update rooms/uid_B/entries/e_<A id>`. B's Today showed A's entry.
+  Derived stats from A's entries were also published to `uid_B/public`.
+- **Settings/templates.** Empty B: `.info/connected` -> `syncSettings()` saw no remote settings and wrote
+  A's whole settings object (A's deepGoal, templates, timezone, A's activity names in `activityColors`)
+  to `rooms/uid_B/settings`. B with its own older settings: A's newer `_savedAt` made `syncSettings()`
+  OVERWRITE `rooms/uid_B/settings`, `rooms/uid_B/templates` and `templatesSavedAt`.
+- **Legacy plans.** B's plans listener merged B's remote plans into the single unscoped `plans`
+  (A + B, persisted to `ta3-plans`). An ordinary B edit (`addPlanItem` -> `savePlanItems` -> `syncPlans`)
+  then transacted A's task into `rooms/uid_B/plans/<date>`.
+- **Also found:** the in-memory undo snapshot survived the switch (Undo restored A's entry into B's room);
+  the device-wide timezone pin `ta3-tz` was overwritten by B's hydration and would then be read as A's
+  on the way back (A would show, and later push, B's timezone).
+
+**What changed:**
+- `entries`, `settings` (templates included) and legacy `plans` are stored per room:
+  `ta3-entries:<room>`, `ta3-settings:<room>`, `ta3-plans:<room>`. The sync metadata that decides pushes
+  is scoped with them: `ta3-lv:<room>` (local version) and `ta3-last-sync:<room>`. The owner comes from
+  storage.js `roomCode`, the same source `appRoomOwner()` reads. No new identity system.
+- The timezone pin is per account (`ta3-tz:<room>`). Its precedence is unchanged: within an account the
+  pin still wins at load, and newer remote settings still overwrite it. Only its ownership changed.
+  Time Truth V1 already defines it as the *account* timezone. The Life surfaces that resolve the
+  timezone from `window.settings` first now get a read-only view of the active account's settings,
+  so they never fall back to the unowned key.
+- A direct switch tears down the previous room's listeners (the existing `teardownRoomListeners()`,
+  documented as "call before switching rooms") and rebinds memory to the new account's slots BEFORE
+  `startSync()` can push or merge anything. The rebind also drops the previous owner's deferred remote
+  plan candidates and undo snapshot. Sign-out rebinds to "no account": memory is empty or default and
+  nothing is persisted for these stores (plan saves are refused).
+- Every push of these stores (`syncEntries`, `syncSettings`, `syncTemplates`, `syncPlans`, the settings
+  saves and the entry-clearing actions in index.html) goes through `ownedRoomRef()`. It requires joined
+  room == owner of the state in memory == the room the ref points at, including the Firebase ref's own
+  `key`.
+- Async continuations are bound to the account that started them:
+  - The settings read, `forceSyncNow` and `reconcileRemoteActiveState` check ownership after their awaits.
+  - The legacy-plan transaction re-checks inside every run, including Firebase retries, and aborts when
+    ownership changed. It never writes a committed result into another account's local plans.
+  - Listener callbacks for entries, settings, templates, plans and the reconnect hook carry a sync
+    generation. They go inert after a switch, sign-out or a later `startSync()`.
+- Semantics unchanged: entry conflict resolution (`resolveEntrySync`, tombstones as `deleted` flags),
+  the legacy plan merge model, and settings/template stamp precedence. Legacy plans still have no
+  reconnect replay of their own: the next same-date save transacts the whole local plan, as before.
+  Operational plans / Personal Day / commitments / coarse evidence modules are untouched.
+
+**Unowned pre-scoping data — QUARANTINE:** the unscoped `ta3-entries`, `ta3-settings`, `ta3-plans`,
+`ta3-tz`, `ta3-lv` and `ta3-last-sync` keys carry no owner. They are never read, adopted, merged,
+uploaded, rewritten or deleted. Records already in an account's own room hydrate back into that
+account's scoped slot through the normal listeners. Anything that existed ONLY in the old local key
+(never synced) is hidden. That includes a device-pinned timezone that differed from the account's synced
+timezone. No recovery UI in this phase.
+
+**Tests:** new `tests/remaining-remote-account-isolation.spec.js` (20 cases, real browser). It covers:
+- A -> empty B, and A -> B with B history for all three stores;
+- an ordinary B plan edit, and B settings/template edits;
+- A -> B -> A, and direct wrong-room pushes;
+- stale settings reads (two variants), plan-transaction retry and listener delivery; stale undo;
+- sync-metadata ownership, offline switch with and without a B cache, and sign-out;
+- same-account reconnect, same-id tombstones, unowned-key quarantine and cloud re-hydration;
+- device-local keys, reload as another account, and operational-plan caches.
+
+It fails 19/20 against `origin/main` code (some only because the scoped slots do not exist there; the leak cases fail on the leak itself) and passes 20/20 on the candidate. Mutation checks: removing the switch rebind, the ref-key check, the transaction re-check, the settings-read re-check, the undo reset, the entries/settings/plans listener guards, the scoped lv read or the sign-out rebind each makes it fail. Removing only the teardown-on-switch or only the reconnect-hook guard does not, because each is covered by the other layer. The post-commit plan check is only reachable if the in-transaction re-check also fails.
+Existing specs that seeded the unscoped keys now seed the signed-in test account's scoped slots. Harnesses
+that faked "signed in" with only `currentUser`, or swapped in a capture `fbRoomRef`, now join/bind the
+room the way `onAuthStateChanged`/`startSync` do.
+
+**Classification after this phase. App-wide account isolation is still NOT complete.**
+- **REMOTE CROSS-ROOM LEAK — FIXED in this phase:** entries, settings/templates, legacy plans.
+- **LOCAL CROSS-ACCOUNT VISIBILITY — PROVEN (unchanged):** learning plan, career/capability, daily
+  routines, reviews, weekly reviews.
+- **REMOTE WRITE PATH UNKNOWN (unchanged):** reviews, weekly reviews.
+- **UNKNOWN (unchanged):** focus redemptions, intention, timer/away state. (Code reading: `startSync()`
+  still ends with `syncFocusRedemptions()`, which pushes every local redemption into the joined room.
+  That is a likely remote path, not fixed or classified as proven here.)
+- **ALREADY SCOPED:** Personal Day boundary, operational plans, commitments, coarse life evidence, and
+  now entries, settings/templates, legacy plans.
+
+Remote cross-room leakage is closed for the synced stores proven so far; device-local cross-account
+visibility remains.
+
+## Cross-Store Account Isolation V1 — integrated on `main` @ `c346388`
+
+(Heading corrected: this section was written while it was a candidate. It was fast-forwarded to `main`
+at `c346388` on 2026-09-24. The text below describes the candidate as reviewed.)
 
 **Candidate on `fix/cross-store-account-isolation-v1`** (from `origin/main` @ `cfe8800`). Not pushed,
 merged or deployed. First reviewed at `1edc639` (strict review: FIX FIRST, see below). Release token is

@@ -5,6 +5,30 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-24 — Remaining Remote Cross-Account Isolation V1 (review candidate, NOT integrated)
+
+Candidate on `fix/remaining-remote-account-isolation-v1`, from `origin/main` @ `c346388`. Cross-Store
+Account Isolation V1 is **integrated** on `main` at that commit. Not pushed, merged or deployed.
+
+Entries, settings/templates and legacy plans are now stored per account room (`ta3-entries:<room>`,
+`ta3-settings:<room>`, `ta3-plans:<room>`). The sync metadata (`ta3-lv`, `ta3-last-sync`) and the
+account timezone pin (`ta3-tz`) are scoped with them. A direct account switch tears down the previous
+room and rebinds before sync. Every push is owner-guarded, and stale async work is bound to the account
+that started it. The unowned pre-scoping keys are quarantined. Release token
+`20260924-remaining-remote-account-isolation-v1`. Details in CHANGELOG.md.
+
+**App-wide account isolation is still NOT complete:**
+- Remote cross-room leak FIXED in this phase: entries, settings/templates, legacy plans.
+- Local cross-account visibility PROVEN: learning plan, career/capability, daily routines, reviews,
+  weekly reviews.
+- Remote write path UNKNOWN: reviews, weekly reviews.
+- UNKNOWN: focus redemptions, intention, timer/away state.
+
+**Next:** strict independent review of this candidate. The local-visibility stores are a separate phase,
+only on a fresh request.
+
+---
+
 ## 2026-09-24 — Cross-Store Account Isolation V1 FIX FIRST corrections (review candidate, NOT integrated)
 
 Candidate on `fix/cross-store-account-isolation-v1`, from `origin/main` @ `cfe8800`. Not pushed, merged

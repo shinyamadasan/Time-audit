@@ -246,11 +246,11 @@ async function openApp(page, { capabilityRaw = null, lifeLedgerRaw = null } = {}
     sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1');
     sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', 'UTC');
-    localStorage.setItem('ta3-settings', JSON.stringify(settings));
-    localStorage.setItem('ta3-entries', '[]');
+    localStorage.setItem('ta3-tz:uid_career-user', 'UTC');
+    localStorage.setItem('ta3-settings:uid_career-user', JSON.stringify(settings));
+    localStorage.setItem('ta3-entries:uid_career-user', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
-    localStorage.setItem('ta3-plans', '{}');
+    localStorage.setItem('ta3-plans:uid_career-user', '{}');
     localStorage.setItem('ta3-reviews', '{}');
     if (capabilityRaw !== null) localStorage.setItem('ta3-capability-career-v1', capabilityRaw);
     if (lifeLedgerRaw !== null) localStorage.setItem('ta3-life-ledger-v1', lifeLedgerRaw);

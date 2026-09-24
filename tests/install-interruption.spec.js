@@ -62,7 +62,7 @@ async function openApp(page, { firstVisit = false, signedOut = false } = {}) {
     localStorage.setItem('install-test-seeded', '1');
     if (!firstVisit) localStorage.setItem('ta3-onboarded', '1');
     sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone: 'Etc/UTC', sleepSetupDone: true, intervalMin: 30, presets: [], templates: [] }));
+    localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify({ timezone: 'Etc/UTC', sleepSetupDone: true, intervalMin: 30, presets: [], templates: [] }));
   }, { firstVisit, signedOut });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof enterFocusMode === 'function' && typeof window.__authChanged === 'function');

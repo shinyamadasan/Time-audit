@@ -62,11 +62,11 @@ async function openApp(page, { plans = {}, entries = [], deviceId = 'device-test
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
     localStorage.clear(); sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', 'Etc/UTC');
+    localStorage.setItem('ta3-tz:uid_plan-user', 'Etc/UTC');
     localStorage.setItem('ta3-device-id', deviceId);
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries', JSON.stringify(entries)); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}');
-    localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries:uid_plan-user', JSON.stringify(entries)); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}');
+    localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
     localStorage.setItem('ta3-daily-routines-v1', JSON.stringify({ schemaVersion: 1, timezone: 'Etc/UTC', routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
   }, { plans, entries, now: NOW, deviceId });
   await page.goto(appUrl);
@@ -127,7 +127,7 @@ test('recording a reason persists on today\'s item without touching preparation 
   const reason = page.locator('[data-pt-reconcile-item="open-1"] .pt-reconcile-reason');
   await reason.fill('Got pulled into an incident call');
   await reason.blur();
-  const todayPlan = await page.evaluate(key => JSON.parse(localStorage.getItem('ta3-plans'))[key], TODAY);
+  const todayPlan = await page.evaluate(key => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[key], TODAY);
   expect(todayPlan.items.find(i => i.id === 'open-1').reconciliationReason).toBe('Got pulled into an incident call');
   expect(todayPlan.preparation).toBeUndefined();
   // Reconciliation must never itself mark tomorrow "prepared".
@@ -141,7 +141,7 @@ test('carry forward adds a brand-new, independently identified tomorrow item and
   await expect(page.locator('.pt-oneoff .pt-oneoff-task', { hasText: 'Write follow-up' })).toHaveCount(1); // shows up in tomorrow's actual list too
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
-  const plans = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans')));
+  const plans = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user')));
   const tomorrowItems = plans[TARGET].items.filter(i => !i.deleted);
   expect(tomorrowItems).toHaveLength(1);
   expect(tomorrowItems[0].task).toBe('Write follow-up');
@@ -171,7 +171,7 @@ test('two priorities with identical titles remain independent after carry-forwar
   });
   await page.locator('[data-pt-reconcile-item="open-1"]').getByRole('button', { name: 'Carry to tomorrow' }).click();
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
-  const plans = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans')));
+  const plans = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user')));
   const tomorrowItems = plans[TARGET].items.filter(i => !i.deleted);
   expect(tomorrowItems.map(i => i.task)).toEqual(['Write follow-up', 'Write follow-up']);
   expect(new Set(tomorrowItems.map(i => i.id)).size).toBe(2);
@@ -204,7 +204,7 @@ test('carry / un-carry / re-carry survives confirm and reopen with no duplicate 
   await expect(carryButton()).toHaveText('✓ Carrying to tomorrow'); // recognized via deterministic id, not session state
   await expect(page.locator('.pt-oneoff')).toHaveCount(1);
 
-  const plans = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans')));
+  const plans = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user')));
   const tomorrowActive = plans[TARGET].items.filter(i => !i.deleted);
   expect(tomorrowActive).toHaveLength(1);
   expect(tomorrowActive[0].id).toBe('carry:2026-09-08:open-1');
@@ -229,8 +229,8 @@ test('two independent devices carrying the same source item converge to one acti
     await pageA.getByRole('button', { name: 'Tomorrow is ready' }).click();
     await pageB.getByRole('button', { name: 'Tomorrow is ready' }).click();
 
-    const candidateA = await pageA.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
-    const candidateB = await pageB.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+    const candidateA = await pageA.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
+    const candidateB = await pageB.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
     // Real production output from two real client sessions — merged with the real merge function.
     const mergedForward = await pageA.evaluate(({ a, b, target }) => globalThis.PlanTomorrowModel.mergeDatePlans(a, b, target), { a: candidateA, b: candidateB, target: TARGET });
     const mergedBackward = await pageA.evaluate(({ a, b, target }) => globalThis.PlanTomorrowModel.mergeDatePlans(a, b, target), { a: candidateB, b: candidateA, target: TARGET });
@@ -260,7 +260,7 @@ test('classification failure renders a neutral abstention, never a fabricated em
   await expect(section).not.toContainText('done');
 
   // The failure must not itself write anything — no plan.preparation exists purely from opening.
-  const beforeConfirm = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans')));
+  const beforeConfirm = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user')));
   expect(beforeConfirm[TARGET]).toBeUndefined();
 
   // Plan Tomorrow itself remains fully usable and confirmable despite the reconciliation failure.
@@ -268,7 +268,7 @@ test('classification failure renders a neutral abstention, never a fabricated em
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
-  const plan = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+  const plan = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   expect(plan.items.filter(i => !i.deleted).map(i => i.task)).toEqual(['Ship the fix']);
   expect(plan.preparation).toBeTruthy(); // confirming tomorrow still earns preparation, entirely unaffected by the failure
 });

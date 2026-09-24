@@ -105,15 +105,15 @@ async function openApp(page, { timezone = 'Etc/UTC', routines = [], plans = {}, 
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
     localStorage.clear(); sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', timezone);
+    localStorage.setItem('ta3-tz:uid_plan-user', timezone);
     localStorage.setItem('ta3-device-id', deviceId);
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries', '[]'); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries:uid_plan-user', '[]'); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
     localStorage.setItem('ta3-daily-routines-v1', JSON.stringify(routines));
     if (learningPlans) localStorage.setItem('ta3-learning-plans-v1', JSON.stringify(learningPlans));
     if (failPlanWrite) {
       const set = Storage.prototype.setItem;
-      Storage.prototype.setItem = function(key, value) { if (key === 'ta3-plans') throw new Error('Plan quota exceeded'); return set.call(this, key, value); };
+      Storage.prototype.setItem = function(key, value) { if (key === 'ta3-plans:uid_plan-user') throw new Error('Plan quota exceeded'); return set.call(this, key, value); };
     }
   }, { timezone, routines, plans, learningPlans, now: NOW, failPlanWrite, deviceId });
   await page.goto(appUrl);
@@ -133,7 +133,7 @@ test('normal plan includes live routine details, adds one-off, and persists Read
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
   await expect(page.locator('#toast')).not.toHaveClass(/show/);
-  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   expect(stored.items.filter(item => !item.deleted).map(item => item.task)).toEqual(['Ship report']);
   expect(stored.items[0].updatedBy).toBe('device-test');
   expect(stored.preparation).toMatchObject({ schemaVersion: 1, targetDate: TARGET, timezone: 'Etc/UTC', firstPreparedBy: 'device-test', firstPreparedMode: 'normal', lastPreparedMode: 'normal', intentionalBlank: false });
@@ -146,7 +146,7 @@ test('rescue uses existing content without asking new scheduling questions', asy
   await expect(page.locator('.pt-rescue')).toContainText('1 routine · 1 priority');
   await expect(page.locator('.pt-rescue input')).toHaveCount(0);
   await page.getByRole('button', { name: 'Use this plan' }).click();
-  const mode = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target].preparation.lastPreparedMode, TARGET);
+  const mode = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation.lastPreparedMode, TARGET);
   expect(mode).toBe('rescue');
 });
 
@@ -156,7 +156,7 @@ test('empty rescue supports one anytime priority or an explicit intentional blan
   await expect(page.locator('#plan-tomorrow-rescue-add input')).toHaveCount(1);
   await page.locator('#plan-tomorrow-overlay').getByRole('button', { name: 'Open day / no commitments' }).click();
   await page.getByRole('button', { name: 'Use this plan' }).click();
-  const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target].preparation, TARGET);
+  const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET);
   expect(preparation.intentionalBlank).toBe(true);
   expect(preparation.oneOffItemIds).toEqual([]);
 });
@@ -168,7 +168,7 @@ test('routine timezone mismatch warns and leaves one-off planning available', as
   await page.locator('#plan-tomorrow-add input[name="task"]').fill('Local priority');
   await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
-  const refs = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target].preparation.routineInstanceIds, TARGET);
+  const refs = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation.routineInstanceIds, TARGET);
   expect(refs).toEqual([]);
 });
 
@@ -203,7 +203,7 @@ test('concurrent over-cap items are shown and must be reduced, never deleted sil
   await expect(page.locator('.pt-warning')).toContainText('Nothing was deleted');
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
   await expect(page.locator('#plan-tomorrow-error')).toContainText('Reduce the plan to 3');
-  expect(await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target].items.length, TARGET)).toBe(4);
+  expect(await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].items.length, TARGET)).toBe(4);
 });
 
 test('local plan write failure keeps the dialog and draft open without Ready metadata', async ({ page }) => {
@@ -221,16 +221,16 @@ test('offline confirmation persists locally and reports Ready on this device', a
   await page.evaluate(() => { fbRoomRef = null; });
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
   await expect(page.locator('#toast')).toContainText('Ready on this device');
-  expect(await page.evaluate(target => !!JSON.parse(localStorage.getItem('ta3-plans'))[target].preparation, TARGET)).toBe(true);
+  expect(await page.evaluate(target => !!JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET)).toBe(true);
 });
 
 test('cloud acknowledgement failure keeps locally prepared state', async ({ page }) => {
   await openApp(page, { routines: routineState([routine()]) });
-  await page.evaluate(() => { fbRoomRef = { child() { return this; }, transaction() { return Promise.reject(new Error('offline')); } }; });
+  await page.evaluate(() => { fbRoomRef = { child() { return this; }, transaction() { return Promise.reject(new Error('offline')); } }; _fbRoomRefRoom = roomCode; });
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
   await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
   await expect(page.locator('#toast')).toContainText('Ready on this device');
-  await expect.poll(() => page.evaluate(target => !!JSON.parse(localStorage.getItem('ta3-plans'))[target].preparation, TARGET)).toBe(true);
+  await expect.poll(() => page.evaluate(target => !!JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET)).toBe(true);
 });
 
 test('model-unavailable inbound conflicts defer both equal-timestamp orientations and replay canonically', async ({ browser }) => {
@@ -246,14 +246,14 @@ test('model-unavailable inbound conflicts defer both equal-timestamp orientation
       globalThis.PlanTomorrowModel = null;
       globalThis.__firebasePlanWriteCount = 0;
       globalThis.__emitFirebaseValue('rooms/uid_plan-user/plans', { [targetDate]: remotePlan });
-      const fallback = JSON.parse(localStorage.getItem('ta3-plans'))[targetDate];
+      const fallback = JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[targetDate];
       const deferred = globalThis.replayPendingPlanRemotes();
       const syncResult = await syncPlans(targetDate);
       const writesWhileUnavailable = globalThis.__firebasePlanWriteCount;
       const expected = model.mergeDatePlans(localPlan, remotePlan, targetDate);
       globalThis.PlanTomorrowModel = model;
       const replay = globalThis.replayPendingPlanRemotes();
-      const canonical = JSON.parse(localStorage.getItem('ta3-plans'))[targetDate];
+      const canonical = JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[targetDate];
       const replayAgain = globalThis.replayPendingPlanRemotes();
       return { fallback, deferred, syncResult, writesWhileUnavailable, expected, replay, canonical, replayAgain };
     }, { targetDate: TARGET, localPlan, remotePlan });
@@ -318,7 +318,7 @@ test('model-unavailable inbound fallback safely preserves no-local and preparati
     globalThis.PlanTomorrowModel = null;
     globalThis.__firebasePlanWriteCount = 0;
     globalThis.__emitFirebaseValue('rooms/uid_plan-user/plans', remotePlans);
-    const fallback = JSON.parse(localStorage.getItem('ta3-plans'));
+    const fallback = JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'));
     const deferred = globalThis.replayPendingPlanRemotes();
     const syncResult = await syncPlans(dates.remotePrepDate);
     const writesWhileUnavailable = globalThis.__firebasePlanWriteCount;
@@ -328,7 +328,7 @@ test('model-unavailable inbound fallback safely preserves no-local and preparati
     });
     globalThis.PlanTomorrowModel = model;
     const replay = globalThis.replayPendingPlanRemotes();
-    const canonical = JSON.parse(localStorage.getItem('ta3-plans'));
+    const canonical = JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'));
     const replayAgain = globalThis.replayPendingPlanRemotes();
     return { fallback, deferred, syncResult, writesWhileUnavailable, expected, replay, canonical, replayAgain };
   }, { dates: { noLocalDate, remotePrepDate, localPrepDate, contestedPrepDate }, localPlans, remotePlans });
@@ -408,7 +408,7 @@ test('two real clients converge through transaction retry and inbound synchroniz
     await Promise.all([pageA, pageB].map(page => page.evaluate(({ targetDate, value }) => {
       globalThis.__emitFirebaseValue('rooms/uid_plan-user/plans', { [targetDate]: value });
     }, { targetDate: TARGET, value: remote.value })));
-    const readClient = page => page.evaluate(targetDate => ({ memory: plans[targetDate], stored: JSON.parse(localStorage.getItem('ta3-plans'))[targetDate] }), TARGET);
+    const readClient = page => page.evaluate(targetDate => ({ memory: plans[targetDate], stored: JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[targetDate] }), TARGET);
     await expect.poll(async () => (await readClient(pageA)).stored).toEqual(canonicalRemote);
     await expect.poll(async () => (await readClient(pageB)).stored).toEqual(canonicalRemote);
     expect((await readClient(pageA)).memory).toEqual(canonicalRemote);
@@ -494,7 +494,7 @@ test('C/Z: confirming persists the chosen time through the existing Plan Tomorro
   await page.locator('.pt-oneoff', { hasText: 'Finish app' }).getByRole('button', { name: 'Set time for Finish app' }).click();
   await page.locator('.pt-time-input').fill('09:00');
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
-  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   const active = stored.items.filter(item => !item.deleted);
   expect(active).toHaveLength(2);
   expect(active.find(item => item.task === 'Finish app').when).toBe('09:00');
@@ -515,7 +515,7 @@ test('E: changing an existing time keeps the same priority identity, only the ti
   await page.locator('.pt-time-input').fill('10:30');
   await expect(page.locator('.pt-oneoff .pt-time-value')).toHaveText('10:30 AM');
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
-  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   expect(stored.items).toHaveLength(1);
   expect(stored.items[0].id).toBe('p1');
   expect(stored.items[0].task).toBe('Finish app');
@@ -527,7 +527,7 @@ test('F: removing time returns a priority to untimed without deleting it', async
   await page.locator('.pt-oneoff').getByRole('button', { name: 'Remove time for Finish app' }).click();
   await expect(page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' })).toHaveText('+ Add time');
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
-  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   expect(stored.items).toHaveLength(1);
   expect(stored.items[0].id).toBe('p1');
   expect(stored.items[0].when).toBe('');
@@ -559,7 +559,7 @@ test('I: confirming twice never creates a duplicate item', async ({ page }) => {
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
   await page.evaluate(() => openPlanTomorrow());
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
-  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   expect(stored.items).toHaveLength(1);
   expect(stored.items[0].when).toBe('09:00');
 });
@@ -569,9 +569,9 @@ test('J: assigning a time does not by itself change planning streak/preparation 
   await page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Finish app' }).click();
   await page.locator('.pt-time-input').fill('09:00');
   // Adding a time alone (no confirm yet) must not write any preparation record.
-  expect(await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target].preparation, TARGET)).toBeUndefined();
+  expect(await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET)).toBeUndefined();
   await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
-  const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target].preparation, TARGET);
+  const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET);
   expect(preparation).toMatchObject({ lastPreparedMode: 'normal', intentionalBlank: false });
 });
 

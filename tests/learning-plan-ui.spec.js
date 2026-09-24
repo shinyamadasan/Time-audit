@@ -301,11 +301,11 @@ async function openApp(page, { learningPlanRaw = null, dailyPlans = {}, lifeLedg
     sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1');
     sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', 'UTC');
-    localStorage.setItem('ta3-settings', JSON.stringify(settings));
-    localStorage.setItem('ta3-entries', '[]');
+    localStorage.setItem('ta3-tz:uid_learning-user', 'UTC');
+    localStorage.setItem('ta3-settings:uid_learning-user', JSON.stringify(settings));
+    localStorage.setItem('ta3-entries:uid_learning-user', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
-    localStorage.setItem('ta3-plans', JSON.stringify(dailyPlans));
+    localStorage.setItem('ta3-plans:uid_learning-user', JSON.stringify(dailyPlans));
     localStorage.setItem('ta3-reviews', '{}');
     if (learningPlanRaw !== null) localStorage.setItem('ta3-learning-plans-v1', learningPlanRaw);
     if (lifeLedgerRaw !== null) localStorage.setItem('ta3-life-ledger-v1', lifeLedgerRaw);
@@ -351,7 +351,7 @@ async function captureSyncWrites(page) {
     };
     fbRoomRef = ref;
     fbDb = { ref: () => ref };
-    roomCode = 'SYNC-TEST';
+    _fbRoomRefRoom = roomCode; // the capture ref stands in for the signed-in room's ref
     currentUser = null;
   });
 }
@@ -1001,7 +1001,7 @@ test('Start Focus starts existing Focus with exact Next Action IDs and readable 
 
   const state = await page.evaluate(() => ({
     metadata: getFocusLearningPlanMetadata(),
-    entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]'),
+    entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]'),
     timer: JSON.parse(localStorage.getItem('ta3-timer') || 'null')
   }));
   expect(state.metadata).toEqual({
@@ -1032,7 +1032,7 @@ test('generic Focus work completion logs normally without showing a Learning Pla
       outcomePrompts: document.querySelectorAll('.learning-plan-focus-outcome').length,
       phase: pomodoroPhase,
       label: document.getElementById('focus-phase-label').textContent,
-      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+      entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]')
     };
   });
 
@@ -1220,7 +1220,7 @@ test('Focus Life Ledger failure keeps the time entry and retries without duplica
 
   await expect(page.locator('#learning-plan-error')).toContainText('Life Ledger history is pending');
   await expect(page.locator('.learning-plan-focus-outcome-warning')).toContainText('Focus history pending');
-  const savedWhileBlocked = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-entries') || '[]'));
+  const savedWhileBlocked = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]'));
   expect(savedWhileBlocked).toHaveLength(1);
   expect(await lifeLedgerEnvelope(page)).toBeNull();
 
@@ -1312,7 +1312,7 @@ test('later generic Focus gets no stale Learning Plan outcome decision', async (
     endWorkSession();
     return {
       outcomePrompts: document.querySelectorAll('.learning-plan-focus-outcome').length,
-      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+      entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]')
     };
   });
 
@@ -1377,7 +1377,7 @@ test('Learning Plan outcome keeps provenance out of entries, timer sync, and Fir
   await finishLearningPlanFocusWork(page);
 
   const state = await page.evaluate(() => ({
-    entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]'),
+    entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]'),
     timer: JSON.parse(localStorage.getItem('ta3-timer') || 'null'),
     payloads: window.__syncPayloads,
     dispatchedEvents: window.__dispatchedEvents,
@@ -1431,7 +1431,7 @@ test('Learning Plan provenance clears before skipped break starts the next Pomod
       afterSkipMetadata: getFocusLearningPlanMetadata(),
       task: getFocusTaskLabel(),
       sub: document.getElementById('focus-phase-sub').textContent,
-      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+      entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]')
     };
   });
 
@@ -1460,7 +1460,7 @@ test('Learning Plan provenance clears before completed break auto-starts the nex
       metadata: getFocusLearningPlanMetadata(),
       task: getFocusTaskLabel(),
       sub: document.getElementById('focus-phase-sub').textContent,
-      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+      entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]')
     };
   });
 
@@ -1487,7 +1487,7 @@ test('later generic Focus cannot inherit Learning Plan provenance', async ({ pag
       started,
       metadata: getFocusLearningPlanMetadata(),
       task: getFocusTaskLabel(),
-      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+      entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]')
     };
   });
 
@@ -1509,7 +1509,7 @@ test('Learning Plan Focus does not show the generic Life Ledger clarification to
     confirmExitFocus();
     return {
       toastText: document.getElementById('toast').textContent,
-      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+      entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]')
     };
   });
 
@@ -1563,7 +1563,7 @@ test('Learning Plan Focus does not persist provenance in synced timer or entry p
     focusStartTime = Date.now() - 7 * 60 * 1000;
     confirmExitFocus();
     return {
-      entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]'),
+      entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]'),
       payloads: window.__syncPayloads
     };
   });
@@ -1624,7 +1624,7 @@ test('Start Focus control remains usable after exiting an uncompleted Learning P
     focusStartTime,
     metadata: getFocusLearningPlanMetadata(),
     running: isFocusSessionRunning(),
-    entries: JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+    entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]')
   }));
   expect(state.focusStartTime).toBeGreaterThan(firstStart);
   expect(state.metadata?.stepId).toBe('step-a');
@@ -2225,14 +2225,14 @@ test('existing daily plan storage is unaffected by Learning Plan edits', async (
     }
   };
   await openApp(page, { dailyPlans });
-  const before = await page.evaluate(() => localStorage.getItem('ta3-plans'));
+  const before = await page.evaluate(() => localStorage.getItem('ta3-plans:uid_learning-user'));
   await openLearningPlans(page);
   await createPlanThroughUi(page);
   await addPhaseThroughUi(page);
   await addLessonThroughUi(page);
   await addStepThroughUi(page);
 
-  expect(await page.evaluate(() => localStorage.getItem('ta3-plans'))).toBe(before);
+  expect(await page.evaluate(() => localStorage.getItem('ta3-plans:uid_learning-user'))).toBe(before);
 });
 
 test('long Learning Plan titles remain usable without mobile horizontal overflow', async ({ page }) => {

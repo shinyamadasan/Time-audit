@@ -212,10 +212,13 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // nothing behind on one. Limitation: this cannot detect on its own that a group module changed (that
 // needs git history, which would make the test brittle) — whoever changes a group module or storage.js
 // bumps CURRENT_RELEASE and appends the old token here, and this test makes that step explicit.
-const CURRENT_RELEASE = '20260924-cross-store-account-isolation-fix1';
+// Remaining Remote Cross-Account Isolation V1 changed storage.js (account-scoped entries/settings/plans),
+// so the whole group moves to a new generation with it: an old cached storage.js beside new modules (or
+// the reverse) must never be one page load.
+const CURRENT_RELEASE = '20260924-remaining-remote-account-isolation-v1';
 // '20260924-cross-store-account-isolation-v1' was never deployed (review candidate only), but it was
 // published on the candidate branch, so it is retired like a shipped token.
-const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1'];
+const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1'];
 
 test('the release is a NEW generation: never a previously shipped token, and no URL is left on an old one', () => {
   assert.equal(release, CURRENT_RELEASE);

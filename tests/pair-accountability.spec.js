@@ -124,6 +124,8 @@ async function boot(page, uid, { clearStorage = true } = {}) {
     window.__uid = u;
     window.confirm = () => true; // removePair() guards on confirm()
     currentUser = { uid: u, displayName: u.toUpperCase(), email: u + '@example.test' };
+    // A signed-in session always has a room (storage.js onAuthStateChanged): own local state as it.
+    roomCode = 'uid_' + u; rebindAccountLocalState();
     const ov = document.getElementById('signin-overlay'); if (ov) ov.style.display = 'none';
   }, uid);
 }

@@ -77,13 +77,13 @@ async function openApp(page, { now = NOW, boundaryStore = BOUNDARY_STORE, plans 
     localStorage.clear(); sessionStorage.clear();
     localStorage.setItem('pc-seeded', '1');
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', timezone);
+    localStorage.setItem('ta3-tz:uid_pc-user', timezone);
     localStorage.setItem('ta3-device-id', 'device-pc-test');
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries', '[]');
+    localStorage.setItem('ta3-settings:uid_pc-user', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries:uid_pc-user', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
     localStorage.setItem('ta3-reviews', '{}');
-    localStorage.setItem('ta3-plans', plans);
+    localStorage.setItem('ta3-plans:uid_pc-user', plans);
     localStorage.setItem('ta3-daily-routines-v1', routines);
     if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pc-user', boundaryStore);
     if (operationalPlans) localStorage.setItem('ta3-operational-plans-v1:uid_pc-user', operationalPlans);

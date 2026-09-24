@@ -122,11 +122,11 @@ async function openApp(page, { entries = [], plans = {}, reviews = {}, settings 
     sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1');
     sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', settings.timezone || 'UTC');
-    localStorage.setItem('ta3-settings', JSON.stringify(settings));
-    localStorage.setItem('ta3-entries', JSON.stringify(entries));
+    localStorage.setItem('ta3-tz:uid_plan-user', settings.timezone || 'UTC');
+    localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify(settings));
+    localStorage.setItem('ta3-entries:uid_plan-user', JSON.stringify(entries));
     localStorage.setItem('ta3-focus-redemptions', '[]');
-    localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
     localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
     localStorage.setItem('ta3-test-seeded', '1');
   }, { entries, plans, reviews, settings: baseSettings(settings), nowTs });
@@ -363,7 +363,7 @@ test('removed items are tombstoned so sync cannot resurrect them', async ({ page
   await page.locator('.plan-item').first().locator('.plan-remove').click();
   await expect(page.locator('.plan-item')).toHaveCount(1);
 
-  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans')));
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user')));
   const items = stored[Object.keys(stored)[0]].items;
   expect(items).toHaveLength(2);                       // still on disk...
   expect(items.find(i => i.task === 'Write report').deleted).toBe(true);   // ...as a tombstone

@@ -89,13 +89,13 @@ async function openApp(page, { now = SEVEN_PM, boundaryStore = null, plans = '{}
     }
     localStorage.clear(); sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', timezone);
+    localStorage.setItem('ta3-tz:uid_spa-user', timezone);
     localStorage.setItem('ta3-device-id', 'device-spa-test');
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries', entries);
+    localStorage.setItem('ta3-settings:uid_spa-user', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries:uid_spa-user', entries);
     localStorage.setItem('ta3-focus-redemptions', '[]');
     localStorage.setItem('ta3-reviews', '{}');
-    localStorage.setItem('ta3-plans', plans);
+    localStorage.setItem('ta3-plans:uid_spa-user', plans);
     localStorage.setItem('ta3-daily-routines-v1', routines);
     if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_spa-user', boundaryStore);
   }, { timezone: TZ, now, boundaryStore, plans, entries, routines, useClock });
@@ -131,7 +131,7 @@ test('a never-enabled account plans, prepares and reviews with no operational re
 
   // Everything landed in the legacy store, and the new machinery stayed asleep.
   const state = await page.evaluate(() => ({
-    plans: JSON.parse(localStorage.getItem('ta3-plans')),
+    plans: JSON.parse(localStorage.getItem('ta3-plans:uid_spa-user')),
     operational: localStorage.getItem('ta3-operational-plans-v1:uid_spa-user'),
     boundary: localStorage.getItem('ta3-day-boundary-revisions-v1:uid_spa-user'),
     attached: window.PersonalDayBoundaryLive.attachedDayIds(),
@@ -194,7 +194,7 @@ test('every planning consumer answers with the same authoritative plan for a gov
       // (noon anchor), a 07:00 one on the next date does too (it is inside the interval).
       routineOwners: routineRows.map(r => JSON.parse(r.id)[0]).sort(),
       upcomingId: upcoming.id,
-      legacyStoreUntouched: JSON.parse(localStorage.getItem('ta3-plans'))['2026-09-16'].items.map(i => i.task),
+      legacyStoreUntouched: JSON.parse(localStorage.getItem('ta3-plans:uid_spa-user'))['2026-09-16'].items.map(i => i.task),
       operationalIds: Object.keys(JSON.parse(localStorage.getItem('ta3-operational-plans-v1:uid_spa-user')).plans),
     };
   });
@@ -237,7 +237,7 @@ test('every planning consumer answers with the same authoritative plan for a gov
       consistency: A.consistency(upcoming),
       readyNow: A.readyNow(upcoming, []),
       streak: A.streak(),
-      legacyTomorrowUntouched: JSON.parse(localStorage.getItem('ta3-plans'))['2026-09-17'] || null,
+      legacyTomorrowUntouched: JSON.parse(localStorage.getItem('ta3-plans:uid_spa-user'))['2026-09-17'] || null,
     };
   });
   expect(prepared.preparationTarget).toBe(prepared.upcomingId);
