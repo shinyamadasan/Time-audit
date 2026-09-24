@@ -108,6 +108,29 @@ test('the anchor-only + legacy-complete case is a compatible candidate — never
   assert.ok(!('safe' in result) && !('provenSafe' in result));
 });
 
+test('a remote anchor decoded with a different (but semantically identical) property order is still the same fact -- real Firebase round-trips do not preserve field-write order', () => {
+  // Root cause of a real production false-negative: personal-day-boundary-sync.js's
+  // decodeWireRevision() rehydrates a wire anchor via `{ ...raw, effectiveFromInstant: null }`,
+  // which preserves whatever property order the raw object already had -- and a real Firebase RTDB
+  // `.val()` reconstructs an object's properties in ITS OWN key order, not necessarily the order
+  // they were originally written in. So a remote-decoded anchor can hold the exact same four facts
+  // as the device's legacy anchor, just declared in a different order, purely as a serialization
+  // artifact -- never a real difference in what either side actually means.
+  const reorderedAnchor = {
+    boundaryTime: anchor.boundaryTime,
+    effectiveFromInstant: anchor.effectiveFromInstant,
+    id: anchor.id,
+    timezone: anchor.timezone,
+  };
+  assert.notEqual(
+    Object.keys(reorderedAnchor).join(','), Object.keys(anchor).join(','),
+    'the fixture must actually differ in property order for this test to mean anything',
+  );
+  const result = analyzeRecoveryCompatibility({ remoteRevisions: [reorderedAnchor], legacyRevisions: [anchor, custom18], scopedHasApplicableHistory: false });
+  assert.equal(result.compatible, true, `property order alone must never make an identical fact look incompatible (got reason: ${result.reason})`);
+  assert.deepEqual(result.missing, [custom18]);
+});
+
 test('remote holds a fact legacy has never heard of -> not compatible', () => {
   const result = analyzeRecoveryCompatibility({ remoteRevisions: [anchor, customAt('x', '20:00', '2026-09-20', '20:00')], legacyRevisions: [anchor, custom18], scopedHasApplicableHistory: false });
   assert.equal(result.compatible, false);
@@ -467,6 +490,56 @@ test('17: the SAME legacy cache can be read (never mutated) by two different acc
   const recoveryB = createPersonalDayBoundaryRecovery({ live: accountB.live, boundarySync: accountB.boundarySync, getRoomId: () => ROOM_B, legacyRepository: createPersonalDayBoundaryRepository({ storage: legacyStorage }), getRoomRef: () => roomRefB });
   assert.equal(recoveryB.status().compatible, true, 'B independently sees the same legacy cache as a candidate — reading it never consumes or alters it');
   assert.equal(legacyStorage.getItem(PERSONAL_DAY_BOUNDARY_STORAGE_KEY), legacyBefore, 'still untouched after a SECOND account read it too');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 18. recover()'s own read-back must also be order-independent (same root cause as the analysis above)
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('18: recover() still reports "recovered" even when its post-push read-back decodes the pushed revision with reordered properties', async () => {
+  const roomRef = fakeRoomRef({ [DAY_BOUNDARY_REVISIONS_REMOTE_PATH]: { [anchor.id]: anchor } });
+  const account = makeAccountDevice({ roomRef, roomId: ROOM_A });
+  account.boundarySync.attach();
+
+  // Reorders every entry's OWN properties in the value seen only by recover()'s read-back
+  // (`ref.once('value')`) -- the actual write, via boundarySync.pushRevision(), still goes through
+  // the real, unwrapped roomRef untouched, exactly like a real device pushing to real Firebase and
+  // then reading its own write back with the fields resequenced by the SDK.
+  const reorderingRoomRef = {
+    ...roomRef,
+    child(seg) {
+      const real = roomRef.child(seg);
+      if (seg !== DAY_BOUNDARY_REVISIONS_REMOTE_PATH) return real;
+      return {
+        ...real,
+        once: (...args) => real.once(...args).then(snap => ({
+          val: () => {
+            const raw = snap.val();
+            if (!raw || typeof raw !== 'object') return raw;
+            const reordered = {};
+            Object.keys(raw).forEach(id => {
+              const entry = raw[id];
+              reordered[id] = entry && typeof entry === 'object'
+                ? Object.fromEntries(Object.keys(entry).sort().reverse().map(k => [k, entry[k]]))
+                : entry;
+            });
+            return reordered;
+          },
+        })),
+      };
+    },
+  };
+  const recovery = createPersonalDayBoundaryRecovery({
+    live: account.live,
+    boundarySync: account.boundarySync, // pushRevision writes through the real roomRef, unaffected
+    getRoomId: () => ROOM_A,
+    legacyRepository: createPersonalDayBoundaryRepository({ storage: legacyStorageWith([anchor, custom18]) }),
+    getRoomRef: () => reorderingRoomRef, // only recover()'s own read-back sees reordered properties
+  });
+
+  recovery.attest();
+  const result = await recovery.recover();
+  assert.equal(result.outcome, 'recovered', 'a reordered-but-identical read-back must never be reported as a failed/uncertain recovery');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
