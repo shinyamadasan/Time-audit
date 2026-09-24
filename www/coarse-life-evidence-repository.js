@@ -8,6 +8,26 @@
 // milestone does not add cross-device sync.
 //
 // Envelope shape: { schemaVersion, records: { [id]: CoarseEvidenceRecord } }.
+//
+// ── account scoping (Cross-Store Account Isolation V1) ──────────────────────
+//
+// Since Durability V1 this cache is a copy of ONE account's evidence
+// (rooms/<room>/coarseLifeEvidence), so it is stored per room exactly like the
+// commitment, operational-plan and Personal Day Boundary caches: the slot for the
+// joined room `uid_A` is `ta3-coarse-life-evidence-v1:uid_A`. The owner comes from
+// the same canonical source (personal-day-boundary-repository.js's appRoomOwner).
+// With no room joined there is NO active cache: reads are empty, save() throws,
+// remove() removes nothing and a remote merge changes nothing.
+//
+// The pre-scoping key, `ta3-coarse-life-evidence-v1` (no suffix), carries no
+// owner. It used to be pushed into whichever room was joined — including a
+// different account's after a direct switch. Nothing this app persists proves whose
+// it is, so it is quarantined: a scoped repository never reads it, merges into it,
+// pushes it or deletes it. It is left in place untouched.
+//
+// A repository built over an INJECTED storage without `getOwner` is "plain": one
+// unowned slot at `key`, for tests of the evidence semantics themselves. One built
+// over the real localStorage is always scoped to the app's joined room.
 
 import {
   COARSE_LIFE_EVIDENCE_KEY,
@@ -21,6 +41,12 @@ import {
   getCoarseEvidenceForDate,
   resolveCoarseEvidenceSync
 } from './coarse-life-evidence-model.js';
+import { appRoomOwner } from './personal-day-boundary-repository.js';
+
+/** The storage slot holding ONE room's cache: `<key>:<roomId>`. */
+export function coarseEvidenceCacheKeyForRoom(roomId, key = COARSE_LIFE_EVIDENCE_KEY) {
+  return `${key}:${roomId}`;
+}
 
 function isPlainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -57,16 +83,44 @@ function writeEnvelope(storage, key, envelope) {
   storage.setItem(key, JSON.stringify(envelope));
 }
 
-export function createCoarseEvidenceRepository(storage = defaultStorage(), key = COARSE_LIFE_EVIDENCE_KEY) {
+export function createCoarseEvidenceRepository(injectedStorage, baseKey = COARSE_LIFE_EVIDENCE_KEY, options = {}) {
+  const storage = injectedStorage || defaultStorage();
+  // Scoped when told who the owner is, or when running over the real localStorage.
+  const getOwner = typeof options.getOwner === 'function' ? options.getOwner : (injectedStorage ? null : appRoomOwner);
+
+  /** Whose cache is active right now, or null (plain repository, or no room joined). */
+  function ownerRoomId() {
+    if (!getOwner) return null;
+    const owner = getOwner();
+    return typeof owner === 'string' && owner ? owner : null;
+  }
+
+  /** The active storage slot, or null when there is NO active cache. */
+  function activeKey() {
+    if (!getOwner) return baseKey;
+    const owner = ownerRoomId();
+    return owner ? coarseEvidenceCacheKeyForRoom(owner, baseKey) : null;
+  }
+
+  /** Records in the active slot; none when there is no active cache. */
+  function activeRecords() {
+    const key = activeKey();
+    return key === null ? {} : readEnvelope(storage, key).records;
+  }
+
   return {
-    key,
+    key: baseKey,
+
+    /** The room whose cache is active, or null. The sync bridge refuses to push or
+     *  merge unless this equals the room it is talking to. */
+    ownerRoomId,
 
     // Ordinary reads never see a tombstoned (deleted) record — to the app, a removed
     // activity simply does not exist. The tombstone itself is kept locally (never physically
     // erased) purely so a stale remote/device echo of the pre-delete value cannot resurrect
     // it once durability sync is involved — see resolveCoarseEvidenceSync / mergeRemoteSnapshot.
     list() {
-      return Object.values(readEnvelope(storage, key).records).filter(r => !r.deleted);
+      return Object.values(activeRecords()).filter(r => !r.deleted);
     },
 
     listForDate(date) {
@@ -74,20 +128,20 @@ export function createCoarseEvidenceRepository(storage = defaultStorage(), key =
     },
 
     get(id) {
-      const record = readEnvelope(storage, key).records[id];
+      const record = activeRecords()[id];
       return (record && !record.deleted) ? record : null;
     },
 
     // Sync-only: every locally known record, tombstones included. Used to push the full
     // local state (deletions included) to a durable remote copy.
     listAllRaw() {
-      return Object.values(readEnvelope(storage, key).records);
+      return Object.values(activeRecords());
     },
 
     // Sync-only: reads a record regardless of tombstone state, e.g. so a caller can push a
     // just-created tombstone to the remote copy after remove() returns.
     getRaw(id) {
-      return readEnvelope(storage, key).records[id] || null;
+      return activeRecords()[id] || null;
     },
 
     // Deterministic replace-not-append upsert. Identity is (date, normalized label):
@@ -102,6 +156,8 @@ export function createCoarseEvidenceRepository(storage = defaultStorage(), key =
     // Only a plain "Add" (no previousId) is allowed to land on an existing identity;
     // that is the intended, documented same-identity replace behavior.
     save({ date, timezone, label, estimatedMinutes, previousId = null, now = Date.now() }) {
+      const key = activeKey();
+      if (key === null) throw new Error('Sign in to save approximate activities — no account is active on this device.');
       const envelope = readEnvelope(storage, key);
       const cleanLabel = normalizeLabel(label);
       const nextId = coarseEvidenceId(date, cleanLabel);
@@ -150,6 +206,8 @@ export function createCoarseEvidenceRepository(storage = defaultStorage(), key =
     // instead of a stale device/remote echo resurrecting it later. Returns false if the id
     // is unknown or already tombstoned — "already gone" either way, matching prior behavior.
     remove(id, { now = Date.now() } = {}) {
+      const key = activeKey();
+      if (key === null) return false;
       const envelope = readEnvelope(storage, key);
       const existing = envelope.records[id];
       if (!existing || existing.deleted) return false;
@@ -170,6 +228,8 @@ export function createCoarseEvidenceRepository(storage = defaultStorage(), key =
       if (!remoteRecordsById || typeof remoteRecordsById !== 'object' || Array.isArray(remoteRecordsById)) {
         return { changed: false, changedIds: [] };
       }
+      const key = activeKey();
+      if (key === null) return { changed: false, changedIds: [] };
       const envelope = readEnvelope(storage, key);
       const nextRecords = { ...envelope.records };
       const changedIds = [];

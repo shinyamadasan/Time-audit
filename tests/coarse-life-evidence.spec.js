@@ -101,7 +101,7 @@ test('add an approximate activity — no start/end time is ever written, shown s
   await expect(page.locator('#rv-coarse-evidence')).toContainText('~1h 20m');
   await expect(page.locator('#rv-coarse-evidence')).toContainText('Approximate activities: ~1h 20m');
 
-  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1')));
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1:uid_cle-user')));
   const records = Object.values(stored.records);
   expect(records.length).toBe(1);
   const record = records[0];
@@ -130,7 +130,7 @@ test('editing replaces rather than adds: 80 -> 100 shows 100, not 180', async ({
 
   await expect(page.locator('#rv-coarse-evidence')).toContainText('~1h 40m');
   await expect(page.locator('#rv-coarse-evidence')).not.toContainText('180');
-  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1')).records));
+  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1:uid_cle-user')).records));
   expect(records.length).toBe(1);
   expect(records[0].estimatedMinutes).toBe(100);
 });
@@ -144,7 +144,7 @@ test('reopening and saving unchanged does not duplicate', async ({ page }) => {
   await saveCoarseEditor(page);
   await page.locator('#rv-coarse-evidence').getByRole('button', { name: 'Edit', exact: true }).click();
   await saveCoarseEditor(page); // unchanged
-  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1')).records));
+  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1:uid_cle-user')).records));
   expect(records.length).toBe(1);
 });
 
@@ -163,7 +163,7 @@ test('remove deletes only the coarse assertion, never touches exact entries', as
   // durable remote copy converges to "deleted" instead of a stale echo resurrecting it —
   // see coarse-life-evidence-repository.js. The observable contract is still "gone": no
   // non-deleted record remains, and ordinary reads (list()/get()) never see it.
-  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1')).records));
+  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1:uid_cle-user')).records));
   expect(records.filter(r => !r.deleted).length).toBe(0);
   expect(records.length).toBe(1);
   expect(records[0].deleted).toBe(true);
@@ -210,7 +210,7 @@ test('an existing plain-text label is accepted; empty label and nonsense duratio
   await saveCoarseEditor(page);
   await expect(page.locator('#cle-error')).toContainText('24h');
 
-  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1') || '{"records":{}}').records));
+  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1:uid_cle-user') || '{"records":{}}').records));
   expect(records.length).toBe(0);
 });
 
@@ -264,7 +264,7 @@ test('renaming a record onto an existing independent label is rejected in the UI
   await expect(page.locator('#rv-coarse-evidence')).toContainText('Errands');
   await expect(page.locator('#rv-coarse-evidence')).toContainText('~45m');
   await expect(page.locator('#rv-coarse-evidence')).toContainText('~1h');
-  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1')).records));
+  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1:uid_cle-user')).records));
   expect(records.length).toBe(2);
 });
 
@@ -297,7 +297,7 @@ test('a label containing quotes/HTML markers cannot inject script through Edit/R
   await expect(page.locator('#rv-coarse-evidence')).not.toContainText(dangerousLabel);
   // Durability V1: remove() tombstones (deleted:true) rather than erasing the row — see the
   // "remove deletes only the coarse assertion" test above for why. Still gone from ordinary reads.
-  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1')).records));
+  const records = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1:uid_cle-user')).records));
   expect(records.filter(r => !r.deleted).length).toBe(0);
 });
 
@@ -308,7 +308,7 @@ for (const [label, storedValue] of [
 ]) {
   test(`a corrupted coarse-evidence store (${label}) degrades only the widget — Review still opens and stays usable`, async ({ page }) => {
     await openApp(page);
-    await page.evaluate(value => localStorage.setItem('ta3-coarse-life-evidence-v1', value), storedValue);
+    await page.evaluate(value => localStorage.setItem('ta3-coarse-life-evidence-v1:uid_cle-user', value), storedValue);
     await openReviewFor(page, DATE);
 
     await expect(page.locator('#review-overlay')).toHaveClass(/open/);
@@ -317,7 +317,7 @@ for (const [label, storedValue] of [
     await page.fill('#rv-win', 'Still usable');
     await expect(page.locator('#rv-win')).toHaveValue('Still usable');
     // The corrupted store is left exactly as-is — never auto-repaired or wiped.
-    const raw = await page.evaluate(() => localStorage.getItem('ta3-coarse-life-evidence-v1'));
+    const raw = await page.evaluate(() => localStorage.getItem('ta3-coarse-life-evidence-v1:uid_cle-user'));
     expect(raw).toBe(storedValue);
   });
 }

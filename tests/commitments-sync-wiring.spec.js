@@ -124,7 +124,7 @@ async function openSignedIn(page, { commitments = null } = {}) {
     localStorage.setItem('ta3-settings', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
     localStorage.setItem('ta3-entries', '[]'); localStorage.setItem('ta3-plans', '{}'); localStorage.setItem('ta3-reviews', '{}');
     localStorage.setItem('ta3-focus-redemptions', '[]');
-    if (commitments) localStorage.setItem('ta3-commitments-v1', commitments);
+    if (commitments) localStorage.setItem('ta3-commitments-v1:uid_wiring-user', commitments);
   }, { timezone: TZ, now: NOW, commitments });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.CommitmentsSync === 'object' && !!window.__fbTest);

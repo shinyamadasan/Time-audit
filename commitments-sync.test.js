@@ -69,15 +69,21 @@ function fakeRoomRef(initial = {}) {
   return { ref: makeRef(''), raw: root, get };
 }
 
+/** The one account every device in this suite is signed in to. Cross-Store Account Isolation V1:
+ *  the repository's cache and the bridge's joined room must both name it, or nothing is pushed or
+ *  merged — account-switch behaviour is covered by cross-store-account-isolation.test.js. */
+const TEST_ROOM = 'uid_commitments-sync-test';
+
 /** One device: its own storage + repository + bridge, pointed at a shared room. */
 function makeDevice({ room = null, deviceId = 'device-a', clock = T0, storage = memory() } = {}) {
   const roomRef = { value: room };
   const nowRef = { value: clock };
-  const repository = createCommitmentsRepository({ storage, now: () => nowRef.value, deviceId: () => deviceId });
+  const repository = createCommitmentsRepository({ storage, now: () => nowRef.value, deviceId: () => deviceId, getOwner: () => TEST_ROOM });
   const changes = [];
   const bridge = createCommitmentsSyncBridge({
     repository,
     getRoomRef: () => roomRef.value,
+    getRoomId: () => TEST_ROOM,
     onRemoteChange: (id, record) => changes.push({ id, record }),
   });
   return {
