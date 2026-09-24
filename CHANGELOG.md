@@ -1,5 +1,77 @@
 # ChronaSense — Changelog
 
+## Cross-Store Account Isolation V1 — candidate, not integrated
+
+**Candidate on `fix/cross-store-account-isolation-v1`** (from `origin/main` @ `cfe8800`). Not pushed,
+merged or deployed. Release token bumped to `20260924-cross-store-account-isolation-v1` (was
+`20260924-operational-plan-account-isolation-v1`). The four changed modules joined the pinned import-map
+group, and the `commitments-sync.js` / `coarse-life-evidence-sync.js` entry tags carry the same token, so
+one page load runs one module generation. `www/` was re-mirrored.
+
+**Stores fixed (PROVEN, then fixed):**
+- **Commitments** (`ta3-commitments-v1`). Reproduced before the fix, both in a unit harness following
+  storage.js's order and in a real browser against unmodified `origin/main`. On a direct A -> B switch
+  (no sign-out, no reload) the first wrong write was a transaction at `rooms/uid_B/commitments/<A id>`
+  (commitments-sync.js `syncCommitment` <- `pushAllLocal` <- storage.js `.info/connected`). The subtree
+  listener stayed bound to A's room, and A's commitments (and A's My Day rows) read as B's current state.
+- **Coarse life evidence** (`ta3-coarse-life-evidence-v1`). Reproduced the same two ways. The first wrong
+  write was `update rooms/uid_B/coarseLifeEvidence/<A id>` from `pushAllLocal`, diffing A's cache against
+  A's stale snapshot, so every A record A's remote lacked went to B. A's records also read as B's, a
+  UI edit under B wrote them into B, and A's other devices kept merging into the shared cache under B.
+
+**What changed:**
+- Both caches are stored per room (`<key>:<room>`). The owner comes from the existing canonical
+  `appRoomOwner()` (storage.js `roomCode`), not from a new identity store. With no room there is no
+  active cache: reads are empty, commitment writes return `{ok:false, reason:'no-account'}`, evidence
+  `save()` throws (the UI already shows the message), and `remove()` / merges change nothing.
+- Every push requires joined room == cache owner == target room, or it writes nothing. For commitments
+  this is re-checked inside the transaction (including a Firebase retry) and before merging a committed
+  result back. For evidence, `pushRecord` also requires the record to be exactly what the active cache
+  holds, and `pushAllLocal` diffs only against a snapshot from that same room (before the first
+  snapshot it waits for the bootstrap push instead of clobbering a newer remote value). Evidence pushes
+  are single `update()` calls: no transaction or retry callback exists, and nothing is merged back.
+- Each listener carries its room and a token. `attach()` under a different room detaches and rebinds.
+  Stale, old-room and post-sign-out callbacks are dropped, and bridges announce a rebind so surfaces
+  re-render. The coarse-evidence editor is closed on rebind, because it could hold the previous
+  account's record pre-filled.
+- Commitment offline intents are queued per owner room: B's reconnect neither drains A's queue nor
+  loses it.
+- The coarse-evidence bridge now attaches itself if the room was already joined before the deferred
+  module loaded (the same fix commitments-sync.js and personal-day-boundary-live.js already carry).
+  This was pre-existing debt, but scoping made it necessary: the scoped slot is filled from the room's
+  own copy by that listener.
+- storage.js is unchanged.
+
+**Legacy quarantine policy (both stores):** the unscoped `ta3-commitments-v1` and
+`ta3-coarse-life-evidence-v1` keys are unowned. They are never read as current, adopted, merged into,
+uploaded or deleted, and they stay byte-identical on the device. Records that were synced before still
+come back for their real owner from that owner's room. Records that exist only in the legacy key (never
+synced) stay invisible. No recovery UI is included; a provenance-based recovery would be a separate
+phase if wanted.
+
+**Adjacent stores — audited only, NOT fixed. App-wide account isolation is NOT complete:**
+- **PROVEN vulnerable** (executed in a real browser against `origin/main` code; storage.js is identical on
+  this candidate):
+  - **Entries.** `startSync()` ends with an unconditional `syncEntries()`, so a direct switch wrote A's
+    entry to `rooms/uid_B/entries/e_<id>`. A's entries also show as B's (merged with B's).
+  - **Settings, including templates.** `syncSettings()` on connect wrote A's settings to
+    `rooms/uid_B/settings`. When B had its own settings, A's templates overwrote B's
+    (`settings.templates` and `rooms/uid_B/templates`).
+  - **Legacy plans** (`plans[dateKey]`). B's remote plans merge into the unscoped local store. An ordinary
+    B plan edit (`savePlanItems`) then pushed A's task into `rooms/uid_B/plans/<date>`.
+- **NOT SYNCED / device-local:** learning plan, career/capability and daily routines have no Firebase
+  path, so there is no cross-room write. They are still unscoped local data visible to any account on
+  the same device.
+- **UNKNOWN (not audited here):** reviews, weekly reviews, focus redemptions, intention, timer/break/away
+  state (all unscoped storage.js globals; A's reviews were observed visible under B, but no write into B
+  was reproduced).
+- **ALREADY SCOPED:** Personal Day boundary, operational plans, commitments, coarse life evidence.
+
+**Residuals:** a DST-ambiguity choice pending in the commitment form across an account switch would be
+saved to the new account when confirmed (user-typed input; the form otherwise re-renders blank and edits
+resolve `not-found`). `pushAllLocal` still drains only the queue when it is non-empty (pre-existing
+same-account semantics, unchanged).
+
 ## Operational Plan Account Isolation V1 — candidate, not integrated
 
 **Candidate on `fix/operational-plan-account-isolation-v1`** (from `origin/main` @ `1e7967a`).

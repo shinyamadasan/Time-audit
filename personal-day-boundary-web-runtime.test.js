@@ -192,13 +192,14 @@ test('the import map precedes every module script, and pins EVERY group module t
     assert.equal(target, `${key}?v=${release}`, `${key} must map to itself with the release token`);
     assert.ok(existsSync(path.join(HERE, key)), `${key} must exist`);
   }
-  for (const required of ['personal-day-boundary-model', 'personal-day-boundary-repository', 'personal-day-boundary-sync', 'personal-day-boundary-live', 'operational-plan-model', 'operational-plan-repository', 'operational-plan-sync', 'plan-authority']) {
+  for (const required of ['personal-day-boundary-model', 'personal-day-boundary-repository', 'personal-day-boundary-sync', 'personal-day-boundary-live', 'operational-plan-model', 'operational-plan-repository', 'operational-plan-sync', 'plan-authority',
+    'commitments-repository', 'commitments-sync', 'coarse-life-evidence-repository', 'coarse-life-evidence-sync']) {
     assert.ok(GROUP.includes(`${required}.js`), `${required}.js must be in the pinned group`);
   }
 });
 
 test('every entry tag for the group, and storage.js, carries the SAME release token as the map and the meta', () => {
-  for (const file of ['personal-day-boundary-live.js', 'personal-day-boundary-ui.js', 'operational-plan-ui.js', 'storage.js']) {
+  for (const file of ['personal-day-boundary-live.js', 'personal-day-boundary-ui.js', 'operational-plan-ui.js', 'storage.js', 'commitments-sync.js', 'coarse-life-evidence-sync.js']) {
     const tag = new RegExp(`src="${file.replace('.', '\\.')}\\?v=([^"]+)"`).exec(html);
     assert.ok(tag, `${file} has a versioned tag`);
     assert.equal(tag[1], release, `${file} must carry the release token`);
@@ -211,8 +212,8 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // nothing behind on one. Limitation: this cannot detect on its own that a group module changed (that
 // needs git history, which would make the test brittle) — whoever changes a group module or storage.js
 // bumps CURRENT_RELEASE and appends the old token here, and this test makes that step explicit.
-const CURRENT_RELEASE = '20260924-operational-plan-account-isolation-v1';
-const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2'];
+const CURRENT_RELEASE = '20260924-cross-store-account-isolation-v1';
+const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1'];
 
 test('the release is a NEW generation: never a previously shipped token, and no URL is left on an old one', () => {
   assert.equal(release, CURRENT_RELEASE);
@@ -221,6 +222,18 @@ test('the release is a NEW generation: never a previously shipped token, and no 
   // Operational Plan Account Isolation V1 changed these; each must resolve to a URL no old browser cache holds.
   for (const file of ['operational-plan-repository.js', 'operational-plan-sync.js', 'personal-day-boundary-live.js', 'plan-authority.js']) {
     assert.equal(importMap[`./${file}`], `./${file}?v=${CURRENT_RELEASE}`);
+  }
+  // Cross-Store Account Isolation V1 changed these (room-scoped caches + owner-guarded bridges). A page
+  // that loaded a new scoped repository beside an old unscoped sync bridge (or the reverse) would re-open
+  // the leak, so they are pinned to the one release like everything else.
+  for (const file of ['commitments-repository.js', 'commitments-sync.js', 'coarse-life-evidence-repository.js', 'coarse-life-evidence-sync.js']) {
+    assert.equal(importMap[`./${file}`], `./${file}?v=${CURRENT_RELEASE}`);
+  }
+  // Both sync bridges are entry tags AND import targets: each must be the ONE same URL (one instance, one singleton).
+  for (const file of ['commitments-sync.js', 'coarse-life-evidence-sync.js']) {
+    const tags = [...html.matchAll(new RegExp(`src="${file.replace('.', '\\.')}\\?v=([^"]+)"`, 'g'))];
+    assert.equal(tags.length, 1, `${file} has exactly one entry tag`);
+    assert.equal(`./${file}?v=${tags[0][1]}`, importMap[`./${file}`]);
   }
   // The live wiring is both an entry tag and an import target: both must be the ONE same URL (one instance).
   const liveTags = [...html.matchAll(/src="personal-day-boundary-live\.js\?v=([^"]+)"/g)];
@@ -237,18 +250,19 @@ test('every import of a group module, from any runtime module, is covered by the
     seen.add(file);
     for (const spec of importsOf(file)) {
       const target = spec.replace('./', '');
-      if (/\.js$/.test(target) && GROUP.includes(target) === false && /(personal-day-boundary|operational-plan|plan-authority)/.test(target)) uncovered.push(`${file} -> ${target}`);
+      if (/\.js$/.test(target) && GROUP.includes(target) === false && /(personal-day-boundary|operational-plan|plan-authority|commitments-(repository|sync)|coarse-life-evidence-(repository|sync))/.test(target)) uncovered.push(`${file} -> ${target}`);
       crawl(target);
     }
   };
   runtime.forEach(crawl);
   assert.deepEqual(uncovered, [], 'a bare import of a Personal Day / plan module that the map does not pin would re-open the mixed-generation window');
   assert.ok(seen.has('personal-day-boundary-sync.js') && seen.has('personal-day-boundary-repository.js') && seen.has('plan-authority.js'), 'the crawl really reached the group');
+  assert.ok(seen.has('commitments-repository.js') && seen.has('coarse-life-evidence-repository.js'), 'the crawl reached both scoped repositories');
 });
 
 test('no runtime module imports a group module with its own ?v= (that would create a second instance of it)', () => {
   const offenders = [];
-  for (const file of new Set([...GROUP, 'planning-continuity-ui.js', 'plan-tomorrow-ui.js', 'tomorrow-view-ui.js', 'commitments-model.js', 'operational-plan-ui.js'])) {
+  for (const file of new Set([...GROUP, 'planning-continuity-ui.js', 'plan-tomorrow-ui.js', 'tomorrow-view-ui.js', 'commitments-model.js', 'operational-plan-ui.js', 'coarse-life-evidence-ui.js', 'coarse-life-evidence-model.js'])) {
     if (existsSync(path.join(HERE, file)) && /from\s*['"]\.\/[^'"]*\?v=/.test(read(file))) offenders.push(file);
   }
   assert.deepEqual(offenders, []);

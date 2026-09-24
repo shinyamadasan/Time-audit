@@ -6,6 +6,11 @@ import { COARSE_LIFE_EVIDENCE_REMOTE_PATH } from './coarse-life-evidence-model.j
 
 const memory = () => { const map = new Map(); return { getItem: k => map.get(k) ?? null, setItem: (k, v) => map.set(k, v) }; };
 const tz = 'America/Phoenix';
+// The one account every client in this suite is signed in to. Cross-Store Account Isolation V1:
+// the repository's cache and the bridge's joined room must both name it, or nothing is pushed or
+// merged — account-switch behaviour is covered by cross-store-account-isolation.test.js.
+const TEST_ROOM = 'uid_coarse-sync-test';
+const owned = () => ({ getOwner: () => TEST_ROOM });
 
 // A minimal in-memory fake of the Firebase compat RTDB surface this bridge actually uses:
 // roomRef.child(path).on('value', cb) / .off(), and roomRef.update(pathMap) -> Promise.
@@ -44,7 +49,7 @@ function createFakeRoomBackend() {
 }
 
 function makeClient({ backend, clockStart = 1 }) {
-  const repository = createCoarseEvidenceRepository(memory());
+  const repository = createCoarseEvidenceRepository(memory(), undefined, owned());
   const roomRef = backend.createRoomRef();
   let clock = clockStart;
   const tick = () => ++clock;
@@ -52,6 +57,7 @@ function makeClient({ backend, clockStart = 1 }) {
   const bridge = createCoarseEvidenceSyncBridge({
     repository,
     getRoomRef: () => roomRef,
+    getRoomId: () => TEST_ROOM,
     now: () => clock,
     onRemoteChange: () => { changeCount++; }
   });
@@ -71,11 +77,13 @@ test('attach()/pushRecord()/pushAllLocal() are safe no-ops when there is no room
 });
 
 test('a rejected update() (network failure) resolves false instead of throwing (best-effort push)', async () => {
-  const repository = createCoarseEvidenceRepository(memory());
-  const roomRef = { child: () => ({ on() {}, off() {} }), update: () => Promise.reject(new Error('offline')) };
-  const bridge = createCoarseEvidenceSyncBridge({ repository, getRoomRef: () => roomRef });
+  const repository = createCoarseEvidenceRepository(memory(), undefined, owned());
+  let updateCalls = 0;
+  const roomRef = { child: () => ({ on() {}, off() {} }), update: () => { updateCalls++; return Promise.reject(new Error('offline')); } };
+  const bridge = createCoarseEvidenceSyncBridge({ repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
   const record = repository.save({ date: '2026-09-09', timezone: tz, label: 'Cooking', estimatedMinutes: 60, now: 1 });
   assert.equal(await bridge.pushRecord(record), false);
+  assert.equal(updateCalls, 1, 'the push really reached the (failing) transport');
 });
 
 // ── Single-client attach lifecycle ──────────────────────────────────────────

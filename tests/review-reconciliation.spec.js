@@ -70,7 +70,7 @@ async function openApp(page, { timezone = 'Etc/UTC', entries = [], reviews = {},
     localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
     localStorage.setItem('ta3-plans', '{}');
     localStorage.setItem('ta3-daily-routines-v1', JSON.stringify({ schemaVersion: 1, timezone, routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
-    if (coarse) localStorage.setItem('ta3-coarse-life-evidence-v1', JSON.stringify(coarse));
+    if (coarse) localStorage.setItem('ta3-coarse-life-evidence-v1:uid_rr-user', JSON.stringify(coarse));
   }, { timezone, entries, reviews, coarse, now, suppressSleep });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof openReview === 'function' && typeof renderCoarseEvidenceList === 'function');
@@ -123,7 +123,7 @@ test('Looks about right persists as a review acknowledgment and does not fabrica
     review: JSON.parse(localStorage.getItem('ta3-reviews'))[k],
     gaps: JSON.stringify(getCloseoutGaps(k)),
     entryCount: entries.length,
-    coarse: localStorage.getItem('ta3-coarse-life-evidence-v1')
+    coarse: localStorage.getItem('ta3-coarse-life-evidence-v1:uid_rr-user')
   }), DATE);
   expect(state.review.reconciliation).toBe('reviewed_ok');
   expect(state.review.unloggedOk).toBe(false); // not a detected-gap acknowledgment
@@ -198,7 +198,7 @@ test('Add broad activity opens the 6H editor prefilled to the review date and st
   await expect(page.locator('#coarse-evidence-overlay')).not.toHaveClass(/open/);
   await expect(page.locator('#review-overlay')).toHaveClass(/open/); // returned to Review
 
-  const record = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1')).records)[0]);
+  const record = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('ta3-coarse-life-evidence-v1:uid_rr-user')).records)[0]);
   expect(record.date).toBe(DATE);
   expect(record.estimatedMinutes).toBe(45);
   expect(record).not.toHaveProperty('tsStart');

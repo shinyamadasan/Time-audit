@@ -5,6 +5,23 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-24 — Cross-Store Account Isolation V1 (review candidate, NOT integrated)
+
+Candidate on `fix/cross-store-account-isolation-v1` from `origin/main` @ `cfe8800`. Not pushed, merged
+or deployed. Commitments and coarse life evidence are now account-scoped (`<key>:<room>`), with
+owner-guarded push/listener paths. The unscoped legacy keys are quarantined. Release token
+`20260924-cross-store-account-isolation-v1`. The CoarseLifeEvidenceSync startup attach race listed
+below is fixed by this candidate. Details in CHANGELOG.md.
+
+**App-wide isolation is NOT complete.** PROVEN still vulnerable (real-browser direct switch): entries,
+settings/templates, legacy plans. Not synced (device-local): learning plan, career/capability, daily
+routines. Not audited: reviews, weekly reviews, focus redemptions, intention, timer/away state.
+
+**Next:** strict independent review of this candidate. The entries/settings/legacy-plans isolation is a
+separate phase, only on a fresh request.
+
+---
+
 ## 2026-09-21 — Personal Day Cross-Device Sync — integrated
 
 `main` was fast-forwarded from `b9e2de89e4ca07084fa7335b7b10270ce10a60a0` to reviewed candidate
