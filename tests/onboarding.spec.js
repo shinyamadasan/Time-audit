@@ -59,7 +59,7 @@ async function openFirstRun(page) {
     if (localStorage.getItem('ob-test-seeded')) return; // survive page.reload()
     localStorage.clear();
     localStorage.setItem('ob-test-seeded', '1');
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone: 'Etc/UTC', sleepSetupDone: true, intervalMin: 30, presets: [], templates: [] }));
+    localStorage.setItem('ta3-settings:uid_ob-user', JSON.stringify({ timezone: 'Etc/UTC', sleepSetupDone: true, intervalMin: 30, presets: [], templates: [] }));
   });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof openOnboarding === 'function');

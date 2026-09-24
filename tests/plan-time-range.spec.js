@@ -65,11 +65,11 @@ async function openApp(page, { plans = {}, entries = [], routines = routineState
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
     localStorage.clear(); sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', 'Etc/UTC');
+    localStorage.setItem('ta3-tz:uid_plan-user', 'Etc/UTC');
     localStorage.setItem('ta3-device-id', deviceId);
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries', JSON.stringify(entries)); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}');
-    localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries:uid_plan-user', JSON.stringify(entries)); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}');
+    localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
     localStorage.setItem('ta3-daily-routines-v1', JSON.stringify(routines));
   }, { plans, entries, routines, now: NOW, deviceId });
   await page.goto(appUrl);
@@ -85,7 +85,7 @@ async function openPlanTomorrowWith(page, items) {
 }
 
 async function storedItems(page) {
-  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+  const stored = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
   return stored.items.filter(item => !item.deleted);
 }
 
@@ -405,7 +405,7 @@ test.describe('Persistence and identity', () => {
 test.describe('Planning Streak and Open Day regression', () => {
   test('every schedule action alone writes no preparation; only confirm does', async ({ page }) => {
     await openPlanTomorrowWith(page, [planItem('p1', 'Deep work')]);
-    const noPrep = async () => expect(await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target]?.preparation, TARGET)).toBeUndefined();
+    const noPrep = async () => expect(await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target]?.preparation, TARGET)).toBeUndefined();
     await page.locator('.pt-oneoff').getByRole('button', { name: 'Set time for Deep work' }).click();
     await noPrep();
     await page.getByRole('button', { name: '9 AM', exact: true }).click();
@@ -420,7 +420,7 @@ test.describe('Planning Streak and Open Day regression', () => {
     await page.locator('.pt-oneoff').getByRole('button', { name: 'Remove time for Deep work' }).click();
     await noPrep();
     await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
-    const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target].preparation, TARGET);
+    const preparation = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target].preparation, TARGET);
     expect(preparation).toMatchObject({ lastPreparedMode: 'normal', intentionalBlank: false });
   });
 });
@@ -463,10 +463,10 @@ test.describe('Tomorrow View integration', () => {
     await expect(rows.filter({ hasText: 'Ranged one' }).locator('.tmr-row-time')).toHaveText('11:30 AM–1:00 PM');
     // Malformed duration (-5) fails safely to start-only display, never a crash or garbage range.
     await expect(rows.filter({ hasText: 'Malformed range' }).locator('.tmr-row-time')).toHaveText('2:00 PM');
-    const before = await page.evaluate(target => localStorage.getItem('ta3-plans'), TARGET);
+    const before = await page.evaluate(target => localStorage.getItem('ta3-plans:uid_plan-user'), TARGET);
     await page.locator('[data-tmr-action="open"]').click();
     await expect(page.locator('#plan-tomorrow-overlay')).toHaveClass(/open/);
-    const after = await page.evaluate(() => localStorage.getItem('ta3-plans'));
+    const after = await page.evaluate(() => localStorage.getItem('ta3-plans:uid_plan-user'));
     expect(after).toBe(before); // opening for edit never itself wrote anything
   });
 });
@@ -477,7 +477,7 @@ test.describe('Daily Reconciliation integration', () => {
     await page.evaluate(() => openPlanTomorrow());
     await page.locator('[data-pt-reconcile-item="open-1"] [data-pt-action="carry"]').click();
     await page.getByRole('button', { name: 'Tomorrow is ready' }).click();
-    const tomorrow = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans'))[target], TARGET);
+    const tomorrow = await page.evaluate(target => JSON.parse(localStorage.getItem('ta3-plans:uid_plan-user'))[target], TARGET);
     const carried = tomorrow.items.find(item => !item.deleted);
     expect(carried.task).toBe('Write follow-up');
     expect(carried.when).toBe('');

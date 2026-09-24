@@ -87,7 +87,7 @@ export default [
         taskStartTime: 'writable', currentTask: 'writable', breakActive: 'writable',
         breakEndsAt: 'writable', breakTicker: 'writable', breakStartTs: 'writable',
         partnerData: 'writable', syncedDeviceId: 'writable', connectedDevices: 'writable',
-        viewingDateKey: 'writable',
+        viewingDateKey: 'writable', lastUndoAction: 'writable', _todayRenderKey: 'writable',
         // Functions defined in index.html, called from .js files
         renderToday: 'readonly', renderWeek: 'readonly', showToast: 'readonly',
         updateRing: 'readonly', updateLiveCost: 'readonly', doPing: 'readonly',

@@ -137,11 +137,11 @@ async function openApp(page, { entries = [], plans = {}, reviews = {}, settings 
     sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1');
     sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', settings.timezone || 'UTC');
-    localStorage.setItem('ta3-settings', JSON.stringify(settings));
-    localStorage.setItem('ta3-entries', JSON.stringify(entries));
+    localStorage.setItem('ta3-tz:uid_plan-user', settings.timezone || 'UTC');
+    localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify(settings));
+    localStorage.setItem('ta3-entries:uid_plan-user', JSON.stringify(entries));
     localStorage.setItem('ta3-focus-redemptions', '[]');
-    localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
     localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
     if (routines) localStorage.setItem('ta3-daily-routines-v1', JSON.stringify(routines));
     localStorage.setItem('ta3-test-seeded', '1');

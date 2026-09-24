@@ -144,11 +144,11 @@ async function openApp(page, { lifeLedgerRaw = null } = {}) {
     sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1');
     sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', 'UTC');
-    localStorage.setItem('ta3-settings', JSON.stringify(settings));
-    localStorage.setItem('ta3-entries', '[]');
+    localStorage.setItem('ta3-tz:uid_life-user', 'UTC');
+    localStorage.setItem('ta3-settings:uid_life-user', JSON.stringify(settings));
+    localStorage.setItem('ta3-entries:uid_life-user', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
-    localStorage.setItem('ta3-plans', '{}');
+    localStorage.setItem('ta3-plans:uid_life-user', '{}');
     localStorage.setItem('ta3-reviews', '{}');
     if (lifeLedgerRaw !== null) localStorage.setItem(key, lifeLedgerRaw);
     localStorage.setItem('ta3-life-feed-test-seeded', '1');

@@ -116,11 +116,11 @@ async function openApp(page, { entries = [], focusRedemptions = [], plans = {}, 
     sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1');
     sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', settings.timezone || 'UTC');
-    localStorage.setItem('ta3-settings', JSON.stringify(settings));
-    localStorage.setItem('ta3-entries', JSON.stringify(entries));
+    localStorage.setItem('ta3-tz:uid_smoke-user', settings.timezone || 'UTC');
+    localStorage.setItem('ta3-settings:uid_smoke-user', JSON.stringify(settings));
+    localStorage.setItem('ta3-entries:uid_smoke-user', JSON.stringify(entries));
     localStorage.setItem('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
-    localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    localStorage.setItem('ta3-plans:uid_smoke-user', JSON.stringify(plans));
   }, {
     entries,
     focusRedemptions,
@@ -160,7 +160,7 @@ test('focus overlay exit logs and renders the active session', async ({ page }) 
     focusStartTime = Date.now() - 7 * 60 * 1000;
     exitFocusConfirm();
 
-    const saved = JSON.parse(localStorage.getItem('ta3-entries') || '[]')
+    const saved = JSON.parse(localStorage.getItem('ta3-entries:uid_smoke-user') || '[]')
       .filter(e => e.activity === 'Focus exit save');
     return {
       savedCount: saved.length,
@@ -269,6 +269,7 @@ test('focus work publishes active timer sync and exit publishes stopped state', 
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     enterFocusMode();
     document.getElementById('focus-task-input').value = 'Synced focus block';
     startPomodoro();
@@ -314,6 +315,7 @@ test('focus started before sync connects publishes when sync becomes available',
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
 
     const pushed = syncLocalActiveTimerState();
     const timer = window.__timerUpdates.at(-1)?.timer;
@@ -345,6 +347,7 @@ test('active local focus owner rejects remote timer takeover and republishes foc
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     enterFocusMode();
     document.getElementById('focus-task-input').value = 'Owner focus block';
     startPomodoro();
@@ -1422,13 +1425,13 @@ test('settings sync preserves and pushes newer local recurring templates', async
       templates: {}
     };
     const updates = [];
-    roomCode = 'sync-test';
     fbRoomRef = {
       update(payload) {
         updates.push(payload);
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     fbDb = {
       ref(path) {
         return {
@@ -1533,6 +1536,7 @@ test('recurring template mutations publish template sync paths', async ({ page }
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     document.getElementById('tpl-activity').value = 'Scribe shift';
     document.getElementById('tpl-energy').value = 'nine5';
     document.getElementById('tpl-start').value = '22:00';
@@ -1604,6 +1608,7 @@ test('sync now uploads local recurring templates when remote is empty', async ({
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     const ok = await forceSyncNow();
     return { ok, updates };
   });
@@ -2547,6 +2552,7 @@ test('background sync reconciliation pulls a missed remote away snapshot', async
         };
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     return reconcileRemoteActiveState();
   }, { eatStartTs: eatStart, cookingStartTs: cookingStart });
 
@@ -2565,7 +2571,7 @@ test('background sync reconciliation pulls a missed remote away snapshot', async
     awayActive,
     awayLabel,
     awayStartTime,
-    lastSync: Number(localStorage.getItem('ta3-last-sync') || 0)
+    lastSync: Number(localStorage.getItem('ta3-last-sync:uid_smoke-user') || 0)
   }));
   expect(state).toMatchObject({
     running: false,
@@ -2727,6 +2733,7 @@ test('focus overlay mirrors a remote PC focus session without taking ownership',
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     applyRemoteTimerState({
       running: true,
       mode: 'focus',
@@ -2838,6 +2845,7 @@ test('remote owner banner can intentionally take over a synced focus timer', asy
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     applyRemoteTimerState({
       running: true,
       mode: 'focus',
@@ -2898,6 +2906,7 @@ test('local focus owner accepts explicit takeover from another device', async ({
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     enterFocusMode();
     document.getElementById('focus-task-input').value = 'Relinquish focus';
     startPomodoro();
@@ -3024,6 +3033,7 @@ test('sync now pulls the latest remote timer snapshot', async ({ page }) => {
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     return forceSyncNow();
   }, remoteStart);
 
@@ -3085,6 +3095,7 @@ test('sync now pulls newer remote recurring templates', async ({ page }) => {
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     const result = await forceSyncNow();
     showView('settings');
     document.getElementById('day-template-select').value = '1';
@@ -3157,6 +3168,7 @@ test('template sync doctor reports local and remote recurring blocks', async ({ 
         };
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     roomCode = 'doctor-room';
     currentUser = { uid: 'doctor-user' };
     await runTemplateSyncDoctor();
@@ -3244,6 +3256,7 @@ test('local timer reset publishes stopped state for other devices', async ({ pag
         return Promise.resolve();
       }
     };
+    _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     running = true;
     totalSecs = 1800;
     remaining = 1000;
@@ -3432,7 +3445,7 @@ test('reopening the app with a running block preserves blockStartTime so it is n
     sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1');
     sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', 'UTC');
+    localStorage.setItem('ta3-tz:uid_smoke-user', 'UTC');
   });
   await page.reload();
   await page.waitForFunction(() => typeof window.quickRetroLog === 'function' && !!document.getElementById('timeline-blocks'));

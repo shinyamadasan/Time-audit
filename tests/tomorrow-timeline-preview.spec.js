@@ -67,11 +67,11 @@ async function openApp(page, { plans = {}, routines = routineState([]), entries 
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
     localStorage.clear(); sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', 'Etc/UTC');
+    localStorage.setItem('ta3-tz:uid_plan-user', 'Etc/UTC');
     localStorage.setItem('ta3-device-id', deviceId);
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates }));
-    localStorage.setItem('ta3-entries', JSON.stringify(entries)); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}');
-    localStorage.setItem('ta3-plans', JSON.stringify(plans));
+    localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates }));
+    localStorage.setItem('ta3-entries:uid_plan-user', JSON.stringify(entries)); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}');
+    localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
     localStorage.setItem('ta3-daily-routines-v1', JSON.stringify(routines));
     if (commitmentsView) localStorage.setItem('ta3-commitments-view', commitmentsView);
   }, { plans, routines, entries, templates, now: NOW, deviceId, commitmentsView });
@@ -86,10 +86,10 @@ async function openApp(page, { plans = {}, routines = routineState([]), entries 
 
 function storageSnapshot(page) {
   return page.evaluate(() => ({
-    plans: localStorage.getItem('ta3-plans'),
+    plans: localStorage.getItem('ta3-plans:uid_plan-user'),
     routines: localStorage.getItem('ta3-daily-routines-v1'),
-    entries: localStorage.getItem('ta3-entries'),
-    settings: localStorage.getItem('ta3-settings')
+    entries: localStorage.getItem('ta3-entries:uid_plan-user'),
+    settings: localStorage.getItem('ta3-settings:uid_plan-user')
   }));
 }
 

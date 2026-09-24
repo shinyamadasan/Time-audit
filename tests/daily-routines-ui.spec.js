@@ -156,11 +156,11 @@ async function openApp(page, { learningPlanRaw = null, dailyPlans = {}, lifeLedg
     sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1');
     sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', 'UTC');
-    localStorage.setItem('ta3-settings', JSON.stringify(settings));
-    localStorage.setItem('ta3-entries', '[]');
+    localStorage.setItem('ta3-tz:uid_learning-user', 'UTC');
+    localStorage.setItem('ta3-settings:uid_learning-user', JSON.stringify(settings));
+    localStorage.setItem('ta3-entries:uid_learning-user', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
-    localStorage.setItem('ta3-plans', JSON.stringify(dailyPlans));
+    localStorage.setItem('ta3-plans:uid_learning-user', JSON.stringify(dailyPlans));
     localStorage.setItem('ta3-reviews', '{}');
     if (learningPlanRaw !== null) localStorage.setItem('ta3-learning-plans-v1', learningPlanRaw);
     if (lifeLedgerRaw !== null) localStorage.setItem('ta3-life-ledger-v1', lifeLedgerRaw);

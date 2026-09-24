@@ -66,13 +66,13 @@ async function openApp(page, { now = EIGHT_AM, boundaryStore = null, plans = '{}
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } };
     localStorage.clear(); sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', timezone);
+    localStorage.setItem('ta3-tz:uid_pdb-user', timezone);
     localStorage.setItem('ta3-device-id', 'device-pdb-test');
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries', '[]');
+    localStorage.setItem('ta3-settings:uid_pdb-user', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries:uid_pdb-user', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
     localStorage.setItem('ta3-reviews', '{}');
-    localStorage.setItem('ta3-plans', plans);
+    localStorage.setItem('ta3-plans:uid_pdb-user', plans);
     localStorage.setItem('ta3-daily-routines-v1', JSON.stringify({ schemaVersion: 1, timezone, routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
     if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pdb-user', boundaryStore);
   }, { timezone: TZ, now, boundaryStore, plans });
@@ -206,7 +206,7 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
   expect(ids[0]).toMatch(/^odv1:/);
   expect(operational.plans[ids[0]].preparation.targetOperationalDayId).toBe(ids[0]);
   expect(operational.plans[ids[0]].items.filter(i => !i.deleted).map(i => i.task).sort()).toEqual(['Night shift block', 'Post-midnight review']);
-  expect(await page.evaluate(() => localStorage.getItem('ta3-plans'))).toBe('{}');
+  expect(await page.evaluate(() => localStorage.getItem('ta3-plans:uid_pdb-user'))).toBe('{}');
 
   // Every prepared-state consumer agrees, right now, at 08:00.
   expect(await page.evaluate(() => {
@@ -240,7 +240,7 @@ test('at 08:00 the owner prepares the upcoming 18:00 personal day through the ON
   await expect(page.locator('#plan-strip')).toContainText('Post-midnight review');
   // Same record, not a copy: still exactly one operational plan id, unchanged.
   expect(Object.keys(JSON.parse(await page.evaluate(() => localStorage.getItem('ta3-operational-plans-v1:uid_pdb-user'))).plans)).toEqual(ids);
-  expect(await page.evaluate(() => localStorage.getItem('ta3-plans'))).toBe('{}');
+  expect(await page.evaluate(() => localStorage.getItem('ta3-plans:uid_pdb-user'))).toBe('{}');
   // The next personal day is a genuinely fresh, empty one.
   expect(await page.evaluate(() => window.PlanAuthority.items(window.PlanAuthority.upcoming()))).toEqual([]);
 
@@ -280,11 +280,11 @@ test('a page left open across 18:00 re-subscribes to the new current/upcoming da
     localStorage.clear();
     sessionStorage.setItem('pdb-seeded', '1');
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', timezone);
+    localStorage.setItem('ta3-tz:uid_pdb-user', timezone);
     localStorage.setItem('ta3-device-id', 'device-pdb-test');
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries', '[]');
-    localStorage.setItem('ta3-plans', '{}');
+    localStorage.setItem('ta3-settings:uid_pdb-user', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries:uid_pdb-user', '[]');
+    localStorage.setItem('ta3-plans:uid_pdb-user', '{}');
     localStorage.setItem('ta3-daily-routines-v1', JSON.stringify({ schemaVersion: 1, timezone, routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
     localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pdb-user', store);
   }, { timezone: TZ, store });

@@ -97,13 +97,13 @@ async function openApp(page, { now = NOW, boundaryStore = BOUNDARY_STORE, plans 
     localStorage.clear(); sessionStorage.clear();
     localStorage.setItem('pc-seeded', '1');
     localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', timezone);
+    localStorage.setItem('ta3-tz:uid_pc-user', timezone);
     localStorage.setItem('ta3-device-id', 'device-pc-test');
-    localStorage.setItem('ta3-settings', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries', '[]');
+    localStorage.setItem('ta3-settings:uid_pc-user', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries:uid_pc-user', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
     localStorage.setItem('ta3-reviews', '{}');
-    localStorage.setItem('ta3-plans', plans);
+    localStorage.setItem('ta3-plans:uid_pc-user', plans);
     localStorage.setItem('ta3-daily-routines-v1', routines);
     if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_pc-user', boundaryStore);
     if (operationalPlans) localStorage.setItem('ta3-operational-plans-v1:uid_pc-user', operationalPlans);
@@ -519,7 +519,7 @@ test('task checkbox and promotion preserve identity without fabricating evidence
   await page.getByRole('button', { name: 'Mark done: Identity stays put' }).click();
   const checked = await page.evaluate(() => ({
     item: window.PlanAuthority.items(window.PlanAuthority.current())[0],
-    entries: JSON.parse(localStorage.getItem('ta3-entries')),
+    entries: JSON.parse(localStorage.getItem('ta3-entries:uid_pc-user')),
   }));
   expect(checked.item.id).toBe(original);
   expect(checked.item.done).toBe(true);
@@ -958,7 +958,7 @@ test('a LEGACY stale task is discoverable and moves into the current personal da
 
   const state = await page.evaluate(() => ({
     today: window.PlanAuthority.items(window.PlanAuthority.current()).map(i => ({ task: i.task, from: i.carriedFromId })),
-    legacyUntouched: JSON.parse(localStorage.getItem('ta3-plans'))['2026-08-25'].items.map(i => ({ id: i.id, done: i.done })),
+    legacyUntouched: JSON.parse(localStorage.getItem('ta3-plans:uid_pc-user'))['2026-08-25'].items.map(i => ({ id: i.id, done: i.done })),
   }));
   expect(state.today).toEqual([{ task: 'Legacy slipped', from: 'plegacy' }]);
   expect(state.legacyUntouched).toEqual([{ id: 'plegacy', done: false }]);

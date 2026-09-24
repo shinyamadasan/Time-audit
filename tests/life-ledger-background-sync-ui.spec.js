@@ -78,11 +78,11 @@ async function openApp(page) {
     sessionStorage.clear();
     localStorage.setItem('ta3-onboarded', '1');
     sessionStorage.setItem('ta3-session-started', '1');
-    localStorage.setItem('ta3-tz', 'UTC');
-    localStorage.setItem('ta3-settings', JSON.stringify(settings));
-    localStorage.setItem('ta3-entries', '[]');
+    localStorage.setItem('ta3-tz:uid_u', 'UTC');
+    localStorage.setItem('ta3-settings:uid_u', JSON.stringify(settings));
+    localStorage.setItem('ta3-entries:uid_u', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
-    localStorage.setItem('ta3-plans', '{}');
+    localStorage.setItem('ta3-plans:uid_u', '{}');
     localStorage.setItem('ta3-reviews', '{}');
   }, { settings: baseSettings() });
   await page.goto(appUrl);
