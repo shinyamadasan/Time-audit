@@ -1,5 +1,105 @@
 # ChronaSense — Changelog
 
+## Focus Redemption Account Isolation V1 — candidate, not integrated
+
+**Candidate on `fix/focus-redemption-account-isolation-v1`** (from `origin/main` @ `cb71298`, the
+Remaining Remote Cross-Account Isolation V1 commit — the branch this candidate was built on carries the
+full history above). Not pushed, merged or deployed. Release token
+`20260924-focus-redemption-account-isolation-v1` (retires `20260924-remaining-remote-account-isolation-v1`):
+storage.js changed again, and its entry tag moves to the same generation as the whole pinned import-map
+group. `www/` was re-mirrored.
+
+**Corrects the previous phase's classification.** The prior entry above classified focus redemptions as
+"UNKNOWN," describing `syncFocusRedemptions()` as only "a likely remote path, not fixed or classified as
+proven here." That is now classified precisely:
+**REMOTE CROSS-ROOM LEAK — PROVEN, and FIXED in this phase.**
+
+**Reproduced before the fix** (real browser, real storage.js lifecycle, room-partitioned Firebase fake,
+`fix/remaining-remote-account-isolation-v1` @ `cb71298` code, before this candidate's changes). Unlike
+entries/settings/legacy plans, focus redemptions were never scoped by the prior phase — the single
+unscoped `ta3-focus-redemptions` local key was the ONLY unowned store `syncFocusRedemptions()` still read.
+On a direct A -> B switch (no sign-out, no reload):
+- A creates a redemption; it persists to the unscoped `ta3-focus-redemptions` and syncs to
+  `rooms/uid_A/focusRedemptions/r_<id>`. `onAuthStateChanged(B)` sets `roomCode = uid_B` and calls
+  `startSync()` while memory still held A's redemptions (loaded from the unowned key). First wrong write:
+  `startSync()`'s final `syncFocusRedemptions()`, which checked only `if (!fbRoomRef)` — never which
+  account's redemptions were in memory — pushed A's redemption to `rooms/uid_B/focusRedemptions/r_<A id>`.
+  A's redemption was then also visible/usable as B's (the in-memory `focusRedemptions` array was never
+  rebound on the switch).
+- The remote `focusRedemptions` listener attached in `startSync()` had no sync-generation guard either: a
+  late delivery from A's room, arriving after B became current, could still merge into the (unrebound)
+  `focusRedemptions` array and re-persist it to the unscoped key.
+- 10 of the 12 new adversarial cases below fail against this pre-fix code (confirmed by temporarily
+  reverting storage.js to `cb71298` and re-running the new spec); the 2 that pass on both are the
+  same-account-reconnect and legitimate-B-redemption cases, which were never broken.
+
+**What changed (storage.js only, mirrored to `www/`):**
+- `focusRedemptions` joins the account-scoped local-state group entries/settings/plans already use:
+  `ta3-focus-redemptions:<room>`, loaded and cleared by the same `bindAccountLocalState()` /
+  `rebindAccountLocalState()` a direct switch and sign-out already run for the other three stores — no
+  second identity system, no new rebind path.
+- `syncFocusRedemptions()` now goes through `ownedRoomRef()` (the same primitive `syncEntries()` uses),
+  checked immediately before the write, exactly like the other three stores.
+- The remote `focusRedemptions` listener in `startSync()` now checks `isCurrentSync()` before applying a
+  delivery, the same generation guard the entries/settings/templates/plans listeners already carry.
+- `persist()`/`load()` route `ta3-focus-redemptions` through `setAccountLocal()` / the scoped read inside
+  `bindAccountLocalState()`, instead of an unconditional device-wide key.
+- Semantics unchanged: redemption tombstones (`deleted: true` via `tombstoneUndoRedemptions`), the
+  merge-by-`updatedAt` rule in the remote listener, and Focus Wallet's dormant read of `focusRedemptions`
+  (unchanged since Motivation Pressure Cleanup V1 — the wallet UI itself stays removed). No creation UI is
+  currently wired to this store (dormant, per that phase); the fix is exercised the same way the app
+  itself would call `persist()` / `syncFocusRedemptions()` on a real redemption record.
+
+**Unowned pre-scoping data — QUARANTINE:** the bare `ta3-focus-redemptions` key carries no owner. It is
+never read, adopted, merged, uploaded, rewritten or deleted. A redemption already in an account's own
+room hydrates back into that account's scoped slot through the normal listener. Anything that existed
+ONLY in the old bare key (never synced) is hidden. No recovery UI in this phase, matching the policy
+already applied to entries/settings/plans.
+
+**Contract note (not changed by this phase):** unlike entries, focus redemptions have no automatic
+reconnect-triggered push on a bare `.info/connected` transition from offline to online — convergence
+happens via `forceSyncNow()` ("Sync Now") or the next `startSync()` (the next sign-in/switch). This is
+pre-existing behavior; the new offline-reconnect test drives convergence the same way a user's "Sync Now"
+click would, rather than asserting an automatic push that the product does not perform for this store.
+
+**Correction to the previous phase's timezone claim:** the entry above states the Life surfaces that
+resolve the account timezone "never fall back to the unowned key." That is only true while
+`window.settings.timezone` is truthy. `cross-domain-intelligence-ui.js`, `life-feed-ui.js` and
+`life-character-sheet-ui.js` still contain `(window.settings && window.settings.timezone) ||
+localStorage.getItem('ta3-tz') || ''`, and `coarse-life-evidence-ui.js` / `life-ledger-runtime.js` still
+read the bare `ta3-tz` key directly as a fallback expression. None of these were touched by the prior
+phase or this one; fixing them is unrelated debt, out of scope here.
+
+**Tests:** new `tests/focus-redemption-account-isolation.spec.js` (12 cases, real browser, same
+room-partitioned Firebase-fake pattern as `tests/remaining-remote-account-isolation.spec.js`). Covers:
+direct A -> empty B (the reproduced leak); A -> B with B history (no merge/overwrite) plus a legitimate B
+redemption afterward; A -> B -> A (no duplicates); a direct wrong-room push; a stale late listener
+delivery from A after the switch; sign-out (stale callback refused, scoped slot/legacy key untouched,
+sign-back-in restores A); offline A -> B with no B cache and with a B cache; same-account reconnect;
+the unowned key never adopted/uploaded; same-id A/B isolation. Verified against `cb71298` (pre-fix): 10/12
+fail; against the candidate: 12/12 pass.
+
+**Regression:** `tests/remaining-remote-account-isolation.spec.js` (20), `tests/cross-store-account-isolation.spec.js`
+(10), `tests/commitments-sync-wiring.spec.js` (6), `tests/coarse-life-evidence.spec.js` (12),
+`tests/personal-day-boundary.spec.js` (15) and `personal-day-boundary-web-runtime.test.js` (13, updated for
+the new release token) all still pass. Full `npm test` (61 suites) and `npx playwright test` (745 tests)
+pass; `npm run lint` reports only pre-existing warnings (0 errors); `npm run check:www-parity` and
+`git diff --check` are clean.
+
+**Classification after this phase. App-wide account isolation is still NOT complete.**
+- **REMOTE CROSS-ROOM LEAK — FIXED in this phase:** focus redemptions.
+- **REMOTE CROSS-ROOM LEAK — FIXED (prior phase):** entries, settings/templates, legacy plans.
+- **LOCAL CROSS-ACCOUNT VISIBILITY — PROVEN (unchanged):** learning plan, career/capability, daily
+  routines, reviews, weekly reviews.
+- **REMOTE WRITE PATH UNKNOWN (unchanged):** reviews, weekly reviews.
+- **UNKNOWN (unchanged):** intention, timer/away state.
+- **ALREADY SCOPED:** Personal Day boundary, operational plans, commitments, coarse life evidence,
+  entries, settings/templates, legacy plans, and now focus redemptions.
+
+Remote cross-room leakage is closed for every synced store proven so far; device-local cross-account
+visibility (learning plan, career/capability, daily routines, reviews, weekly reviews) and the
+reviews/weekly-reviews remote write path remain open, separate phases.
+
 ## Remaining Remote Cross-Account Isolation V1 — candidate, not integrated
 
 **Candidate on `fix/remaining-remote-account-isolation-v1`** (from `origin/main` @ `c346388`). Not pushed,
