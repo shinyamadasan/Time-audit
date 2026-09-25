@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
-<meta name="pdb-release" content="20260924-remaining-remote-account-isolation-v1">
+<meta name="pdb-release" content="20260924-focus-redemption-account-isolation-v1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1666,7 +1666,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260924-remaining-remote-account-isolation-v1
+<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260924-focus-redemption-account-isolation-v1
      themselves, but the modules they IMPORT are bare URLs, which browsers cache independently of index.html
      — so a device could run new sync code against an old repository, or an old live wiring against a new
      storage.js (permanent "Off", or a link error that stops PlanAuthority loading at all). This map makes
@@ -1679,26 +1679,26 @@
 <script type="importmap">
 {
   "imports": {
-    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./operational-plan-model.js": "./operational-plan-model.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./plan-authority.js": "./plan-authority.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./commitments-repository.js": "./commitments-repository.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./commitments-sync.js": "./commitments-sync.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260924-remaining-remote-account-isolation-v1",
-    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260924-remaining-remote-account-isolation-v1"
+    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./operational-plan-model.js": "./operational-plan-model.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./plan-authority.js": "./plan-authority.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./commitments-repository.js": "./commitments-repository.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./commitments-sync.js": "./commitments-sync.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260924-focus-redemption-account-isolation-v1",
+    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260924-focus-redemption-account-isolation-v1"
   }
 }
 </script>
-<script src="storage.js?v=20260924-remaining-remote-account-isolation-v1"></script>
+<script src="storage.js?v=20260924-focus-redemption-account-isolation-v1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
@@ -1714,18 +1714,18 @@
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
 <script type="module" src="windows-hud-bridge.js?v=20260908-windows-ambient-focus-hud-v1"></script>
-<script type="module" src="coarse-life-evidence-ui.js?v=20260924-remaining-remote-account-isolation-v1"></script>
-<script type="module" src="coarse-life-evidence-sync.js?v=20260924-remaining-remote-account-isolation-v1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20260924-focus-redemption-account-isolation-v1"></script>
+<script type="module" src="coarse-life-evidence-sync.js?v=20260924-focus-redemption-account-isolation-v1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20260924-remaining-remote-account-isolation-v1"></script>
-<script type="module" src="personal-day-boundary-ui.js?v=20260924-remaining-remote-account-isolation-v1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20260924-focus-redemption-account-isolation-v1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20260924-focus-redemption-account-isolation-v1"></script>
 <script>
 // Read-only Personal Day sync diagnostics for a real device: open the app with ?pdbdiag=1.
-if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260924-remaining-remote-account-isolation-v1'), 1500));
+if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260924-focus-redemption-account-isolation-v1'), 1500));
 </script>
-<script type="module" src="operational-plan-ui.js?v=20260924-remaining-remote-account-isolation-v1"></script>
-<script type="module" src="commitments-sync.js?v=20260924-remaining-remote-account-isolation-v1"></script>
+<script type="module" src="operational-plan-ui.js?v=20260924-focus-redemption-account-isolation-v1"></script>
+<script type="module" src="commitments-sync.js?v=20260924-focus-redemption-account-isolation-v1"></script>
 <script type="module" src="planning-continuity-ui.js?v=20260918-planning-continuity-v1"></script>
 
 <script>

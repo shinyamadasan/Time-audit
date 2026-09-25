@@ -5,6 +5,32 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-25 — Focus Redemption Account Isolation V1 (review candidate, NOT integrated)
+
+Candidate on `fix/focus-redemption-account-isolation-v1`, from `origin/main` @ `cb71298` (Remaining
+Remote Cross-Account Isolation V1, integrated below). Not pushed, merged or deployed.
+
+Reproduced against `cb71298`: unlike entries/settings/legacy plans, `syncFocusRedemptions()` still
+checked only `if (!fbRoomRef)`, so a direct A -> B switch pushed A's redemption into
+`rooms/uid_B/focusRedemptions`, and the remote listener had no sync-generation guard. Focus redemptions
+now join the same account-scoped local-state group (`ta3-focus-redemptions:<room>`), the same
+`ownedRoomRef()` write guard, and the same `isCurrentSync()` listener guard entries/settings/plans
+already use — no new mechanism. The bare `ta3-focus-redemptions` key is quarantined, same policy as the
+other stores. Release token `20260924-focus-redemption-account-isolation-v1`. Details in CHANGELOG.md.
+
+**App-wide account isolation is still NOT complete:**
+- Remote cross-room leak FIXED in this phase: focus redemptions.
+- Remote cross-room leak FIXED (prior phase): entries, settings/templates, legacy plans.
+- Local cross-account visibility PROVEN: learning plan, career/capability, daily routines, reviews,
+  weekly reviews.
+- Remote write path UNKNOWN: reviews, weekly reviews.
+- UNKNOWN: intention, timer/away state.
+
+**Next:** strict independent review of this candidate. The local-visibility stores, the reviews/weekly-
+reviews remote write path, intention and timer/away state are separate phases, only on a fresh request.
+
+---
+
 ## 2026-09-24 — Remaining Remote Cross-Account Isolation V1 (review candidate, NOT integrated)
 
 Candidate on `fix/remaining-remote-account-isolation-v1`, from `origin/main` @ `c346388`. Cross-Store
