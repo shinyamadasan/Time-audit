@@ -88,8 +88,10 @@ export default [
         breakEndsAt: 'writable', breakTicker: 'writable', breakStartTs: 'writable',
         partnerData: 'writable', syncedDeviceId: 'writable', connectedDevices: 'writable',
         viewingDateKey: 'writable', lastUndoAction: 'writable', _todayRenderKey: 'writable',
+        _reviewGapDetour: 'writable',
         // Functions defined in index.html, called from .js files
         renderToday: 'readonly', renderWeek: 'readonly', showToast: 'readonly',
+        renderReflectView: 'readonly',
         updateRing: 'readonly', updateLiveCost: 'readonly', doPing: 'readonly',
         _updateBreakDisplay: 'readonly', endBreak: 'readonly', renderPartnerCard: 'readonly',
         renderPartnerSettings: 'readonly', computeStreak: 'readonly',

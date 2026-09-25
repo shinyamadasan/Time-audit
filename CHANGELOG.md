@@ -1,5 +1,88 @@
 # ChronaSense — Changelog
 
+## Device-Local Account Isolation V1 — candidate, not integrated
+
+**Candidate on `fix/device-local-account-isolation-v1`** (from `origin/main` @ `7ae7c68`, Focus Redemption
+Account Isolation V1). Not pushed, merged or deployed. Release token
+`20260925-device-local-account-isolation-v1` (retires `20260924-focus-redemption-account-isolation-v1`).
+storage.js changed, and the Learning Plan / Capability-Career / Daily Routine repositories joined the pinned
+import-map group, so every importer (Learning, Career, Life view, Plan Tomorrow, routines) resolves ONE scoped
+instance of one generation. The learning-plan-ui / capability-career-ui / daily-routines-ui entry tags moved
+to the same token. `www/` was re-mirrored.
+
+**Reproduced before the fix** (real browser, real index.html + runtime modules, real auth switch order,
+room-partitioned Firebase fake, `origin/main` @ `7ae7c68`), direct A -> B, no sign-out, no reload:
+- Learning Plans (`ta3-learning-plans-v1`), Capability/Career (`ta3-capability-career-v1`) and Daily Routines
+  (`ta3-daily-routines-v1`) were one unowned slot per device. B's Learning, Career, Today-routines and Life
+  views showed A's plan / skill / routine; the Learning view still held A's plan in its DOM with no re-render.
+  Device-local only: none of the three has a Firebase path.
+- Daily reviews (`ta3-reviews`) and weekly reviews (`ta3-weekly-reviews`) were one unowned map each, read once
+  at boot and merged with whichever room was joined. B's Reflect view listed A's reflections; the weekly
+  forms stayed pre-filled with A's text; the review modal pre-filled A's fields.
+- **Reviews / weekly reviews remote classification: C + D + E — they push (`fbRoomRef.update` on save),
+  merge bidirectionally (the listener merges remote into the unowned map by `_savedAt`), and had stale-listener
+  risk (no `isCurrentSync()` guard; the sign-out teardown never detached them).
+  REMOTE CROSS-ROOM LEAK — PROVEN:** B's own save of today's review wrote `{win: <B>, waste: <A's text>}` to
+  `rooms/uid_B/reviews/<date>` (the save spreads the existing, A-derived record), and merely focusing and
+  blurring one weekly field (onblur autosave) wrote A's weekly review to `rooms/uid_B/weeklyReviews/<week>`.
+  A late delivery from A's room after the switch merged into B's map; sign-out left every review in memory.
+  There is no bulk push of reviews on connect, so the leak needed a B save of a date/week A had written.
+- All 10 cases of the new spec fail against `7ae7c68` (run in a throwaway detached worktree, since removed).
+
+**What changed — bounded; no new identity or sync mechanism:**
+- `storage.js`: `reviews` / `weeklyReviews` join the existing per-room group (`ta3-reviews:<room>`,
+  `ta3-weekly-reviews:<room>`), loaded and cleared by `bindAccountLocalState()`, persisted via
+  `setAccountLocal()`. Both listeners now return early unless `isCurrentSync()`. `rebindAccountLocalState()`
+  closes and blanks the review modal, cancels a pending gap-editor detour back into it, and calls the three
+  module reset hooks, `renderReflectView()` and the Life view render, so no previous-account content stays in
+  the DOM, visible or hidden.
+- `index.html`: the review modal and the Reflect weekly forms record the account they were filled from;
+  `saveReview()` / `saveWeeklyReview()` / `saveWeeklyPlan()` refuse (toast, no write) unless that account is
+  still the owner and the joined room; their pushes go through `ownedRoomRef()`. An empty Daily Reflections
+  list now clears its hidden DOM too.
+- `learning-plan-repository.js`, `capability-career-repository.js`, `daily-routines-repository.js`: over the
+  real localStorage the slot is `<key>:<room>` via the existing `appRoomOwner()` (the coarse-evidence idiom),
+  re-resolved on every call. No room -> empty/default reads and writes refused (`no_account`). Injected-storage
+  callers (unit tests) are unchanged.
+- `learning-plan-ui.js`, `capability-career-ui.js`, `daily-routines-ui.js`: each exposes a reset hook that drops
+  the previous account's in-memory state (plans/profile/cached view, selections, open editors, half-typed
+  create/import forms, a pending Learning Focus outcome prompt and its Life Ledger retries, the routine
+  dialogs and their rendered content) and re-renders. Writes are refused if the state they were built from
+  was loaded for another account; routine record controls carry the account they were rendered for, so a
+  control from A never acts on B's routine with the same id.
+- Life view / Cross-Domain Intelligence / Character Sheet / Plan Tomorrow needed no change: they already
+  construct the repositories per render, which are now scoped.
+- `eslint.config.js`: declares the two cross-script globals storage.js now reads (`renderReflectView`,
+  `_reviewGapDetour`).
+
+**Unowned-key policy:** the bare `ta3-learning-plans-v1`, `ta3-capability-career-v1`, `ta3-daily-routines-v1`,
+`ta3-reviews`, `ta3-weekly-reviews` keys are QUARANTINED — never read, adopted, merged, uploaded, rewritten or
+deleted. Reviews an account already holds in its own room hydrate back into its scoped slot through the normal
+listener. Device-local-only data that exists only in a bare key becomes hidden; no recovery UI. Side effect,
+accepted: the legacy boot-time intention prefill from yesterday's review `tomorrow` field no longer fires at
+boot (no account owns local state at boot; it used to read the unowned map).
+
+**LOCAL CROSS-ACCOUNT VISIBILITY — FIXED:** learning plan, career/capability, daily routines, reviews, weekly
+reviews. **REMOTE CROSS-ROOM LEAK — PROVEN and FIXED:** reviews, weekly reviews.
+
+**Tests:** `tests/device-local-account-isolation.spec.js` (10 cases: A -> empty B, B's own saves into its room,
+A -> B with B history + legitimate B editing through the real controls, A -> B -> A, sign-out, late A
+listener deliveries, offline, stale editors, same-id stale routine control, same-id stale Learning/Career
+writes). Mutation-checked: 15 scratch mutations (each repository unscoped; reviews not rebound; each listener
+guard removed; each editor owner guard removed; review push back on raw `fbRoomRef`; module rebind hooks
+removed; routine owner stamp removed; review modal not blanked; Reflect/Life re-render removed) — every one
+turns the spec red. Unit tests: the "omitted storage" Learning Plan test now asserts the scoped contract;
+new scoped-repository tests for all three module stores. Existing specs that seeded the now-quarantined bare
+keys were moved to the scoped keys (same approach as prior isolation phases).
+
+**Not done here (deliberately):** the bare `ta3-tz` fallbacks in coarse-life-evidence-ui / cross-domain /
+character-sheet / life-feed / life-ledger-runtime were left: unreachable in the app (`window.settings` is a
+getter whose `timezone` is always set), and removing them would touch five unrelated modules with only
+source-level coverage. **Still unresolved:** intention — device-global `ta3-intention`, not reset on a switch,
+its listener unguarded, and `syncIntention()` pushes on blur via raw `fbRoomRef`: a probable remote cross-room
+path by code inspection, NOT reproduced or fixed here. Timer/away state: listeners unguarded, device-level
+keys; UNKNOWN. The Life Ledger local store (`ta3-life-ledger-v1`) is device-global and unaudited for ownership.
+
 ## Focus Redemption Account Isolation V1 — candidate, not integrated
 
 **Candidate on `fix/focus-redemption-account-isolation-v1`** (from `origin/main` @ `cb71298`, the

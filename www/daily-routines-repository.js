@@ -1,4 +1,11 @@
 import { DAILY_ROUTINES_KEY, instanceId, localContext, validateRoutine } from './daily-routines-model.js';
+import { appRoomOwner } from './personal-day-boundary-repository.js';
+
+/** The storage slot holding ONE room's routines: `<key>:<roomId>` (Device-Local Account Isolation V1).
+ *  Definitions, manual completions, links, skips and Focus outcomes are one envelope, so they switch together. */
+export function dailyRoutinesKeyForRoom(roomId, key = DAILY_ROUTINES_KEY) {
+  return `${key}:${roomId}`;
+}
 
 function validateState(state) {
   if (!state || state.schemaVersion !== 1 || !Array.isArray(state.routines)) throw new Error('Routine storage has an unsupported format.');
@@ -19,19 +26,31 @@ function validateState(state) {
   Object.entries(state.focus).forEach(([id, f]) => { checkId(f.instanceId); if (id !== f.entryId || !Number.isFinite(f.duration) || f.duration <= 0 || !Number.isFinite(f.startedAt) || !Number.isFinite(f.endedAt) || f.endedAt <= f.startedAt) throw new Error('Invalid Focus outcome.'); });
   return state;
 }
-export function createDailyRoutineRepository(storage = globalThis.localStorage) {
+export function createDailyRoutineRepository(injectedStorage, options = {}) {
+  const storage = injectedStorage || globalThis.localStorage;
+  // Scoped when told who the owner is, or when running over the real localStorage: the owner is the
+  // joined room, re-resolved on every call. No owner -> the empty state, and every write refused.
+  const getOwner = typeof options.getOwner === 'function' ? options.getOwner : (injectedStorage ? null : appRoomOwner);
+  const activeKey = () => {
+    if (!getOwner) return DAILY_ROUTINES_KEY;
+    const owner = getOwner();
+    return typeof owner === 'string' && owner ? dailyRoutinesKeyForRoom(owner) : null;
+  };
   return {
     read(timezone) {
-      const raw = storage.getItem(DAILY_ROUTINES_KEY);
+      const key = activeKey();
+      const raw = key === null ? null : storage.getItem(key);
       const state = raw === null ? { schemaVersion: 1, timezone, routines: [], manual: {}, links: {}, focus: {}, skips: {} } : JSON.parse(raw);
       if (state && state.schemaVersion === 1 && state.skips === undefined) state.skips = {};
       return validateState(state);
     },
     update(timezone, change) {
+      const key = activeKey();
+      if (key === null) throw new Error('No signed-in account owns routines on this device. Nothing was saved.');
       const state = this.read(timezone);
       change(state);
       validateState(state);
-      storage.setItem(DAILY_ROUTINES_KEY, JSON.stringify(state));
+      storage.setItem(key, JSON.stringify(state));
       return state;
     },
     manualDone(timezone, id, level) {

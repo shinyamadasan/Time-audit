@@ -9,6 +9,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Device-Local Account Isolation V1: these stores are per account now; this spec's account is uid_rr-user.
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
 let appServer = null;
@@ -67,9 +69,9 @@ async function openApp(page, { timezone = 'Etc/UTC', entries = [], reviews = {},
     localStorage.setItem('ta3-settings:uid_rr-user', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: !suppressSleep, templates: [] }));
     localStorage.setItem('ta3-entries:uid_rr-user', JSON.stringify(entries));
     localStorage.setItem('ta3-focus-redemptions', '[]');
-    localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
+    localStorage.setItem('ta3-reviews:uid_rr-user', JSON.stringify(reviews));
     localStorage.setItem('ta3-plans:uid_rr-user', '{}');
-    localStorage.setItem('ta3-daily-routines-v1', JSON.stringify({ schemaVersion: 1, timezone, routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
+    localStorage.setItem('ta3-daily-routines-v1:uid_rr-user', JSON.stringify({ schemaVersion: 1, timezone, routines: [], manual: {}, links: {}, focus: {}, skips: {} }));
     if (coarse) localStorage.setItem('ta3-coarse-life-evidence-v1:uid_rr-user', JSON.stringify(coarse));
   }, { timezone, entries, reviews, coarse, now, suppressSleep });
   await page.goto(appUrl);
@@ -105,7 +107,7 @@ test('reconciliation prompt appears and Save works without touching it', async (
 
   await saveReflection(page).click();
   await expect(page.locator('#review-overlay')).not.toHaveClass(/open/);
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-reviews'))[Object.keys(JSON.parse(localStorage.getItem('ta3-reviews')))[0]]);
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-reviews:uid_rr-user'))[Object.keys(JSON.parse(localStorage.getItem('ta3-reviews:uid_rr-user')))[0]]);
   expect(saved.reconciliation).toBeNull();
 });
 
@@ -120,7 +122,7 @@ test('Looks about right persists as a review acknowledgment and does not fabrica
   await saveReflection(page).click();
 
   const state = await page.evaluate(k => ({
-    review: JSON.parse(localStorage.getItem('ta3-reviews'))[k],
+    review: JSON.parse(localStorage.getItem('ta3-reviews:uid_rr-user'))[k],
     gaps: JSON.stringify(getCloseoutGaps(k)),
     entryCount: entries.length,
     coarse: localStorage.getItem('ta3-coarse-life-evidence-v1:uid_rr-user')
@@ -140,7 +142,7 @@ test('Leave unknown persists and never fabricates an activity', async ({ page })
   await expect(decision(page)).toContainText('Left unknown');
   await saveReflection(page).click();
 
-  const review = await page.evaluate(k => JSON.parse(localStorage.getItem('ta3-reviews'))[k], DATE);
+  const review = await page.evaluate(k => JSON.parse(localStorage.getItem('ta3-reviews:uid_rr-user'))[k], DATE);
   expect(review.reconciliation).toBe('left_unknown');
   expect(review.unloggedOk).toBe(true); // a real >=30m gap is present, so legacy field is set too
   const entryCount = await page.evaluate(() => entries.length);
@@ -180,7 +182,7 @@ test('a pre-6I review record with unloggedOk:true is treated as already left-unk
   await expect(decision(page)).not.toContainText('Anything important missing?');
   // Saving preserves both fields truthfully.
   await saveReflection(page).click();
-  const review = await page.evaluate(k => JSON.parse(localStorage.getItem('ta3-reviews'))[k], DATE);
+  const review = await page.evaluate(k => JSON.parse(localStorage.getItem('ta3-reviews:uid_rr-user'))[k], DATE);
   expect(review.unloggedOk).toBe(true);
   expect(review.reconciliation).toBe('left_unknown');
 });
@@ -219,7 +221,7 @@ test('adding coarse evidence after acknowledgment keeps the acknowledgment', asy
   // Still acknowledged, no nag.
   await expect(decision(page)).toContainText('Looks about right');
   await saveReflection(page).click();
-  const review = await page.evaluate(k => JSON.parse(localStorage.getItem('ta3-reviews'))[k], DATE);
+  const review = await page.evaluate(k => JSON.parse(localStorage.getItem('ta3-reviews:uid_rr-user'))[k], DATE);
   expect(review.reconciliation).toBe('reviewed_ok');
 });
 
@@ -235,7 +237,7 @@ test('after-midnight review of the previous day owns that day, not today', async
   await page.locator('#coarse-evidence-overlay').getByRole('button', { name: 'Cancel', exact: true }).click();
   await decision(page).getByRole('button', { name: 'Looks about right' }).click();
   await saveReflection(page).click();
-  const reviews = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-reviews')));
+  const reviews = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-reviews:uid_rr-user')));
   expect(reviews['2026-09-09'].reconciliation).toBe('reviewed_ok');
   expect(reviews['2026-09-10']).toBeUndefined();
 });
@@ -248,7 +250,7 @@ test('an empty historical day reconciles without a completeness claim', async ({
   await expect(page.locator('#review-overlay')).not.toContainText(/nothing happened|0 waste|all good|day complete/i);
   await decision(page).getByRole('button', { name: 'Leave unknown' }).click();
   await saveReflection(page).click();
-  const review = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-reviews'))['2026-09-01']);
+  const review = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-reviews:uid_rr-user'))['2026-09-01']);
   expect(review.reconciliation).toBe('left_unknown');
 });
 

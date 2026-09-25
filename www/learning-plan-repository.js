@@ -1,9 +1,16 @@
 import { hydrateLearningPlan } from './learning-plan-model.js';
+import { appRoomOwner } from './personal-day-boundary-repository.js';
 
 export const LEARNING_PLAN_REPOSITORY_SCHEMA_VERSION = 1;
 export const LEARNING_PLAN_REPOSITORY_KEY = 'ta3-learning-plans-v1';
 
 const ENVELOPE_KEYS = new Set(['schemaVersion', 'plans']);
+
+/** The storage slot holding ONE room's Learning Plans: `<key>:<roomId>` (Device-Local Account
+ *  Isolation V1). The pre-scoping bare key carries no owner and is quarantined: never read. */
+export function learningPlanKeyForRoom(roomId, key = LEARNING_PLAN_REPOSITORY_KEY) {
+  return `${key}:${roomId}`;
+}
 
 function hasOwn(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
@@ -134,18 +141,48 @@ function writeEnvelope(storage, key, plans) {
 
 export function createLearningPlanRepository(options = {}) {
   const storage = hasOwn(options, 'storage') ? options.storage : defaultStorage();
-  const key = hasOwn(options, 'key') ? options.key : LEARNING_PLAN_REPOSITORY_KEY;
+  const baseKey = hasOwn(options, 'key') ? options.key : LEARNING_PLAN_REPOSITORY_KEY;
   assertStorage(storage);
-  assertPlanId(key);
+  assertPlanId(baseKey);
+  // Scoped when told who the owner is, or when running over the real localStorage (same rule as
+  // the coarse-evidence repository): the owner is the joined room, re-resolved on EVERY call.
+  const getOwner = typeof options.getOwner === 'function' ? options.getOwner : (hasOwn(options, 'storage') ? null : appRoomOwner);
+
+  /** The room whose Learning Plans are active, or null (plain repository, or no room joined). */
+  function ownerRoomId() {
+    if (!getOwner) return null;
+    const owner = getOwner();
+    return typeof owner === 'string' && owner ? owner : null;
+  }
+
+  /** The active slot, or null when no account owns local state (signed out / auth pending). */
+  function activeKey() {
+    if (!getOwner) return baseKey;
+    const owner = ownerRoomId();
+    return owner ? learningPlanKeyForRoom(owner, baseKey) : null;
+  }
+
+  function readActive() {
+    const key = activeKey();
+    return key === null ? { schemaVersion: LEARNING_PLAN_REPOSITORY_SCHEMA_VERSION, plans: [] } : readEnvelope(storage, key);
+  }
+
+  function requireActiveKey() {
+    const key = activeKey();
+    if (key === null) throw new LearningPlanRepositoryError('no_account', 'No signed-in account owns Learning Plans on this device. Nothing was saved.');
+    return key;
+  }
 
   return {
+    ownerRoomId,
+
     listPlans() {
-      return readEnvelope(storage, key).plans;
+      return readActive().plans;
     },
 
     getPlan(planId) {
       assertPlanId(planId);
-      return readEnvelope(storage, key).plans.find(plan => plan.id === planId) || null;
+      return readActive().plans.find(plan => plan.id === planId) || null;
     },
 
     savePlan(plan) {
@@ -156,6 +193,7 @@ export function createLearningPlanRepository(options = {}) {
         throw new LearningPlanRepositoryError('invalid_plan', `Invalid Learning Plan: ${err.message}`, { cause: err });
       }
 
+      const key = requireActiveKey();
       const current = readEnvelope(storage, key).plans;
       const existingIndex = current.findIndex(existing => existing.id === hydrated.id);
       const next = existingIndex === -1
@@ -167,6 +205,7 @@ export function createLearningPlanRepository(options = {}) {
 
     removePlan(planId) {
       assertPlanId(planId);
+      const key = requireActiveKey();
       const current = readEnvelope(storage, key).plans;
       const next = current.filter(plan => plan.id !== planId);
       const removed = next.length !== current.length;

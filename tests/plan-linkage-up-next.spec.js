@@ -3,6 +3,8 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 
+// Device-Local Account Isolation V1: these stores are per account now; this spec's account is uid_plan-user.
+
 let APP_URL;
 let appServer;
 test.beforeAll(async () => {
@@ -142,8 +144,8 @@ async function openApp(page, { entries = [], plans = {}, reviews = {}, settings 
     localStorage.setItem('ta3-entries:uid_plan-user', JSON.stringify(entries));
     localStorage.setItem('ta3-focus-redemptions', '[]');
     localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
-    localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
-    if (routines) localStorage.setItem('ta3-daily-routines-v1', JSON.stringify(routines));
+    localStorage.setItem('ta3-reviews:uid_plan-user', JSON.stringify(reviews));
+    if (routines) localStorage.setItem('ta3-daily-routines-v1:uid_plan-user', JSON.stringify(routines));
     localStorage.setItem('ta3-test-seeded', '1');
   }, { entries, plans, reviews, settings: baseSettings(settings), routines, nowTs });
   await page.goto(APP_URL);

@@ -2602,12 +2602,66 @@ test('explicit null storage is rejected even when global localStorage exists', (
     assert.throws(() => createLearningPlanRepository({ storage: null }), error => error.code === 'storage_unavailable');
   });
 });
-test('omitted storage may use global localStorage', () => {
+// Device-Local Account Isolation V1: omitted storage means the app runtime, whose Learning Plans,
+// Capability/Career profile and routines belong to the joined room (`<key>:<room>`). The bare pre-scoping
+// key carries no owner and is quarantined: never read, rewritten or deleted.
+function withJoinedRoom(room, fn) {
+  const previous = globalThis.getChronaSenseRoomCode;
+  let current = room;
+  globalThis.getChronaSenseRoomCode = () => current;
+  try { fn(next => { current = next; }); } finally {
+    if (previous) globalThis.getChronaSenseRoomCode = previous; else delete globalThis.getChronaSenseRoomCode;
+  }
+}
+
+test('omitted storage uses global localStorage, scoped to the joined room', () => {
   const storage = makeMemoryStorage();
-  withGlobalLocalStorage(storage, () => {
+  withGlobalLocalStorage(storage, () => withJoinedRoom('uid_a', () => {
     createLearningPlanRepository().savePlan(seededLearningPlan());
-    assert.deepEqual(repositoryEnvelope(storage).plans.map(plan => plan.id), ['plan-1']);
-  });
+    assert.deepEqual(repositoryEnvelope(storage, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_a`).plans.map(plan => plan.id), ['plan-1']);
+    assert.equal(storage.raw(LEARNING_PLAN_REPOSITORY_KEY), undefined);
+  }));
+});
+
+test('app-runtime Learning Plans: each room sees only its own slot; no room -> empty and writes refused; bare key quarantined', () => {
+  const legacy = JSON.stringify({ schemaVersion: 1, plans: [seededLearningPlan()] });
+  const storage = makeMemoryStorage({ [LEARNING_PLAN_REPOSITORY_KEY]: legacy });
+  withGlobalLocalStorage(storage, () => withJoinedRoom('uid_a', setRoom => {
+    const repo = createLearningPlanRepository();
+    assert.deepEqual(repo.listPlans(), []); // the unowned legacy plan is never adopted
+    repo.savePlan(seededLearningPlan());
+    assert.equal(repo.ownerRoomId(), 'uid_a');
+    setRoom('uid_b');                      // the same repository object follows the owner on every call
+    assert.deepEqual(repo.listPlans(), []);
+    assert.equal(repo.getPlan('plan-1'), null);
+    setRoom('');
+    assert.deepEqual(repo.listPlans(), []);
+    assert.throws(() => repo.savePlan(seededLearningPlan()), error => error.code === 'no_account');
+    assert.throws(() => repo.removePlan('plan-1'), error => error.code === 'no_account');
+    setRoom('uid_a');
+    assert.deepEqual(repo.listPlans().map(plan => plan.id), ['plan-1']);
+  }));
+  assert.equal(storage.raw(LEARNING_PLAN_REPOSITORY_KEY), legacy);
+  assert.equal(storage.raw(`${LEARNING_PLAN_REPOSITORY_KEY}:uid_b`), undefined);
+});
+
+test('app-runtime Capability/Career: each room sees only its own profile; no room -> empty profile and saves refused; bare key quarantined', () => {
+  const legacy = JSON.stringify({ schemaVersion: 1, profile: addSkill(createEmptyCapabilityProfile({ clock: fixedClock(CC_TIME.created) }), { name: 'Legacy skill' }, ccOptions('sk-legacy')) });
+  const storage = makeMemoryStorage({ [CAPABILITY_CAREER_REPOSITORY_KEY]: legacy });
+  withGlobalLocalStorage(storage, () => withJoinedRoom('uid_a', setRoom => {
+    const repo = createCapabilityCareerRepository();
+    assert.equal(repo.loadProfile().skills.length, 0);
+    repo.saveProfile(addSkill(repo.loadProfile(), { name: 'A skill' }, ccOptions('sk-a')));
+    setRoom('uid_b');
+    assert.equal(repo.loadProfile().skills.length, 0);
+    setRoom('');
+    assert.equal(repo.loadProfile().skills.length, 0);
+    assert.throws(() => repo.saveProfile(repo.loadProfile()), error => error.code === 'no_account');
+    setRoom('uid_a');
+    assert.deepEqual(repo.loadProfile().skills.map(skill => skill.name), ['A skill']);
+  }));
+  assert.equal(storage.raw(CAPABILITY_CAREER_REPOSITORY_KEY), legacy);
+  assert.equal(storage.raw(`${CAPABILITY_CAREER_REPOSITORY_KEY}:uid_b`), undefined);
 });
 test('malformed plan is rejected before write', () => {
   const storage = makeMemoryStorage();

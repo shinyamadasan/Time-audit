@@ -47,7 +47,8 @@ globalThis.getChronaSenseRoomRef = () => fbRoomRef;
 globalThis.getChronaSenseRoomCode = () => roomCode;
 
 // ── Account-scoped local state (Remaining Remote Cross-Account Isolation V1;
-//    focusRedemptions added in Focus Redemption Account Isolation V1) ──
+//    focusRedemptions added in Focus Redemption Account Isolation V1;
+//    reviews / weeklyReviews added in Device-Local Account Isolation V1) ──
 // `entries`, `settings` (templates and the timezone pin included), the legacy `plans` and
 // `focusRedemptions` are local copies of ONE account's rooms/<room>/{entries,settings,templates,
 // plans,focusRedemptions}. They used to live in one unowned slot per device, so a direct A -> B
@@ -60,9 +61,17 @@ globalThis.getChronaSenseRoomCode = () => roomCode;
 //
 // With no room joined there is NO active slot: memory holds an empty/default state and
 // nothing is persisted for these stores. The pre-scoping keys (`ta3-entries`, `ta3-settings`,
-// `ta3-plans`, `ta3-tz`, `ta3-lv`, `ta3-last-sync`, `ta3-focus-redemptions`, no suffix) carry no
-// owner and are quarantined: never read, merged, pushed, rewritten or deleted. What an account
-// already holds in its own room hydrates back into its scoped slot through the normal listeners.
+// `ta3-plans`, `ta3-tz`, `ta3-lv`, `ta3-last-sync`, `ta3-focus-redemptions`, `ta3-reviews`,
+// `ta3-weekly-reviews`, no suffix) carry no owner and are quarantined: never read, merged, pushed,
+// rewritten or deleted. What an account already holds in its own room hydrates back into its
+// scoped slot through the normal listeners.
+//
+// Daily reviews and weekly reviews used to be one unowned map each, merged with whatever room was
+// joined: after a direct A -> B switch B saw A's reflections, and B's own save of the same date /
+// week spread A's fields into rooms/<B>/reviews (reproduced in Device-Local Account Isolation V1).
+// They are now bound here with the other per-room stores. The device-local Learning Plan,
+// Capability/Career and Daily Routine stores (ES modules) scope themselves through appRoomOwner();
+// rebindAccountLocalState() tells their UIs to drop the previous account's in-memory state.
 let _localStateOwner = null;  // the room whose entries/settings/plans are in memory, or null
 let _settingsDefaults = null; // pristine settings, captured at first load() — the base for every bind
 let _fbRoomRefRoom = '';      // the room fbRoomRef points at
@@ -139,6 +148,9 @@ function bindAccountLocalState(room) {
   try { plans = JSON.parse(read('ta3-plans') || '{}'); } catch { plans={}; }
   if (!plans || typeof plans !== 'object' || Array.isArray(plans)) plans = {};
   try { const raw = JSON.parse(read('ta3-focus-redemptions') || '[]'); focusRedemptions = Array.isArray(raw) ? raw : []; } catch { focusRedemptions = []; }
+  const readMap = base => { try { const raw = JSON.parse(read(base) || '{}'); return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}; } catch { return {}; } };
+  reviews = readMap('ta3-reviews');
+  weeklyReviews = readMap('ta3-weekly-reviews');
   // Previous owner's in-memory caches: a deferred remote plan candidate, and an undo snapshot
   // that would otherwise restore/tombstone that account's entries into this one.
   pendingPlanRemoteByDate.clear();
@@ -146,17 +158,26 @@ function bindAccountLocalState(room) {
 }
 
 /** A live account change (sign-in as another account, sign-out): rebind, then recompute
- *  everything on screen that derives from the four stores. */
+ *  everything on screen that derives from the per-account stores. */
 function rebindAccountLocalState() {
   bindAccountLocalState(roomCode || null);
+  // An open review was filled from the previous account; it closes rather than save into this one.
+  document.getElementById('review-overlay')?.classList.remove('open');
+  ['rv-win', 'rv-waste', 'rv-avoid', 'rv-legacy-tomorrow'].forEach(id => { const el = document.getElementById(id); if (el) el.value = el.defaultValue = ''; });
+  if (typeof _reviewGapDetour !== 'undefined') _reviewGapDetour = false;
   globalThis.PlanAuthority?.invalidate();
   if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
   if (typeof _todayRenderKey !== 'undefined') _todayRenderKey = '__FORCE__';
   const intervalInput = document.getElementById('interval-input');
   if (intervalInput) intervalInput.value = settings.intervalMin;
   if (!running) { totalSecs = settings.intervalMin * 60; remaining = totalSecs; }
+  // The device-local module stores (Learning Plans, Capability/Career, Daily Routines) drop the previous
+  // account's in-memory state and editors; Reflect's weekly forms and the Life view re-render from the
+  // new owner, so nothing on screen (visible or hidden) keeps the previous account's content.
   [renderToday, typeof renderWeek === 'function' && document.getElementById('view-week')?.classList.contains('active') && renderWeek,
-   typeof renderSettings === 'function' && renderSettings, globalThis.refreshTomorrowView]
+   typeof renderSettings === 'function' && renderSettings, globalThis.refreshTomorrowView,
+   globalThis.resetLearningPlansForAccount, globalThis.resetCapabilityCareerForAccount, globalThis.resetDailyRoutinesForAccount,
+   typeof renderReflectView === 'function' && renderReflectView, globalThis.renderLifeView]
     .forEach(fn => { if (typeof fn === 'function') { try { fn(); } catch (err) { console.warn('Account rebind render failed', err); } } });
 }
 
@@ -762,11 +783,11 @@ function persist() {
   ensureTemplateSyncStamp();
   // Always store entries in strict chronological order (newest first)
   entries.sort((a, b) => (b.tsStart || b.ts) - (a.tsStart || a.ts));
-  // Entries, settings, plans and focus redemptions go to the owning account's slot only (none when signed out).
+  // Entries, settings, reviews, plans and focus redemptions go to the owning account's slot only (none when signed out).
   setAccountLocal('ta3-entries', JSON.stringify(entries));
   setAccountLocal('ta3-settings', JSON.stringify(settings));
-  localStorage.setItem('ta3-reviews', JSON.stringify(reviews));
-  localStorage.setItem('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
+  setAccountLocal('ta3-reviews', JSON.stringify(reviews));
+  setAccountLocal('ta3-weekly-reviews', JSON.stringify(weeklyReviews));
   setAccountLocal('ta3-focus-redemptions', JSON.stringify(focusRedemptions));
   setAccountLocal('ta3-plans', JSON.stringify(plans));
   localStorage.setItem('ta3-intention', intention);
@@ -795,9 +816,7 @@ function load() {
   // At boot no room is joined yet, so this binds the empty/default state; the auth callback
   // binds the signed-in account's slots before anything is synced.
   bindAccountLocalState(roomCode || null);
-  try { reviews = JSON.parse(localStorage.getItem('ta3-reviews') || '{}'); } catch(e){ reviews={}; }
-  try { weeklyReviews = JSON.parse(localStorage.getItem('ta3-weekly-reviews') || '{}'); } catch(e){ weeklyReviews={}; }
-  // focusRedemptions is loaded per-account by bindAccountLocalState() above.
+  // focusRedemptions, reviews and weeklyReviews are loaded per-account by bindAccountLocalState() above.
   intention = localStorage.getItem('ta3-intention') || '';
   // Pre-fill intention from yesterday's "tomorrow" field if today's is empty
   if (!intention) {
@@ -1105,6 +1124,7 @@ function startSync() {
   });
 
   fbDb.ref(`rooms/${roomCode}/reviews`).on('value', snap => {
+    if (!isCurrentSync()) return;
     const val = snap.val();
     if (!val) return;
     let changed = false;
@@ -1114,7 +1134,7 @@ function startSync() {
         changed = true;
       }
     });
-    if (changed) { localStorage.setItem('ta3-reviews', JSON.stringify(reviews)); renderToday(); }
+    if (changed) { setAccountLocal('ta3-reviews', JSON.stringify(reviews)); renderToday(); }
   });
 
   // Plan conflicts are resolved only by the canonical model. If it is not ready yet,
@@ -1151,6 +1171,7 @@ function startSync() {
   });
 
   fbDb.ref(`rooms/${roomCode}/weeklyReviews`).on('value', snap => {
+    if (!isCurrentSync()) return;
     const val = snap.val();
     if (!val) return;
     let changed = false;
@@ -1160,7 +1181,7 @@ function startSync() {
         changed = true;
       }
     });
-    if (changed) { localStorage.setItem('ta3-weekly-reviews', JSON.stringify(weeklyReviews)); }
+    if (changed) { setAccountLocal('ta3-weekly-reviews', JSON.stringify(weeklyReviews)); }
   });
 
   fbDb.ref(`rooms/${roomCode}/focusRedemptions`).on('value', snap => {

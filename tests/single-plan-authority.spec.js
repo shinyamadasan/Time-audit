@@ -14,6 +14,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Device-Local Account Isolation V1: these stores are per account now; this spec's account is uid_spa-user.
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
 let appServer = null;
@@ -94,9 +96,9 @@ async function openApp(page, { now = SEVEN_PM, boundaryStore = null, plans = '{}
     localStorage.setItem('ta3-settings:uid_spa-user', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
     localStorage.setItem('ta3-entries:uid_spa-user', entries);
     localStorage.setItem('ta3-focus-redemptions', '[]');
-    localStorage.setItem('ta3-reviews', '{}');
+    localStorage.setItem('ta3-reviews:uid_spa-user', '{}');
     localStorage.setItem('ta3-plans:uid_spa-user', plans);
-    localStorage.setItem('ta3-daily-routines-v1', routines);
+    localStorage.setItem('ta3-daily-routines-v1:uid_spa-user', routines);
     if (boundaryStore) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_spa-user', boundaryStore);
   }, { timezone: TZ, now, boundaryStore, plans, entries, routines, useClock });
   await page.goto(appUrl);

@@ -5,6 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { addLesson, addPhase, addStep, createLearningPlan } from '../learning-plan-model.js';
 
+// Device-Local Account Isolation V1: these stores are per account now; this spec's account is uid_learning-user.
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
 let appServer = null;
@@ -161,8 +163,8 @@ async function openApp(page, { learningPlanRaw = null, dailyPlans = {}, lifeLedg
     localStorage.setItem('ta3-entries:uid_learning-user', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
     localStorage.setItem('ta3-plans:uid_learning-user', JSON.stringify(dailyPlans));
-    localStorage.setItem('ta3-reviews', '{}');
-    if (learningPlanRaw !== null) localStorage.setItem('ta3-learning-plans-v1', learningPlanRaw);
+    localStorage.setItem('ta3-reviews:uid_learning-user', '{}');
+    if (learningPlanRaw !== null) localStorage.setItem('ta3-learning-plans-v1:uid_learning-user', learningPlanRaw);
     if (lifeLedgerRaw !== null) localStorage.setItem('ta3-life-ledger-v1', lifeLedgerRaw);
     localStorage.setItem('firebase-auth-token', 'unrelated-secret-token');
     localStorage.setItem('ta3-learning-ui-test-seeded', '1');
@@ -193,7 +195,7 @@ const card = page => page.locator('.daily-routine-card');
 test('empty state creates no routines; manual minimum, reload, correction and one next-day instance',async({page})=>{
   await openApp(page);
   await expect(page.locator('#daily-routines')).toContainText('0 / 0');
-  expect(await page.evaluate(()=>localStorage.getItem('ta3-daily-routines-v1'))).toBeNull();
+  expect(await page.evaluate(()=>localStorage.getItem('ta3-daily-routines-v1:uid_learning-user'))).toBeNull();
   await addRoutine(page);
   const id=await card(page).getAttribute('data-instance-id');
   await card(page).getByRole('button',{name:'Minimum done',exact:true}).click();
@@ -274,7 +276,7 @@ test('phone and compact landscape remain usable; form fits and inputs avoid zoom
 });
 test('storage failure is visible and never reports Done',async({page})=>{
   await openApp(page); await addRoutine(page);
-  await page.evaluate(()=>{const set=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k==='ta3-daily-routines-v1')throw new Error('Quota exceeded');return set.call(this,k,v);};});
+  await page.evaluate(()=>{const set=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k==='ta3-daily-routines-v1:uid_learning-user')throw new Error('Quota exceeded');return set.call(this,k,v);};});
   await card(page).getByRole('button',{name:'Done',exact:true}).click();
   await expect(page.locator('#daily-routines-error')).toContainText('Quota exceeded');
   await expect(page.locator('#needs-you')).toBeVisible();
@@ -357,7 +359,7 @@ test('active scheduled Focus has a compact scrollable landscape surface',async({
 
 test('failed launch persistence reports the actual error and does not start the timer',async({page})=>{
   await openApp(page);await addRoutine(page,{title:'Deep Work',source:'focus'});
-  await page.evaluate(()=>{const set=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k==='ta3-daily-routines-v1')throw new Error('Quota exceeded');return set.call(this,k,v);};});
+  await page.evaluate(()=>{const set=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k==='ta3-daily-routines-v1:uid_learning-user')throw new Error('Quota exceeded');return set.call(this,k,v);};});
   await card(page).getByRole('button',{name:'Start Focus',exact:true}).click();
   expect(await page.evaluate(()=>pomodoroPhase)).toBe('idle');
   await expect(page.locator('#daily-routines-error')).toContainText('Quota exceeded');
@@ -402,5 +404,5 @@ test('review Learning: no unfinished step means no daily binding, despite comple
   await addRoutine(page,{title:'Learning',source:'learning'});
   await expect(card(page)).toContainText('No unfinished step available');
   await expect(page.locator('#daily-routines')).toContainText('0 / 1');
-  expect(await page.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('ta3-daily-routines-v1')).links))).toHaveLength(0);
+  expect(await page.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('ta3-daily-routines-v1:uid_learning-user')).links))).toHaveLength(0);
 });
