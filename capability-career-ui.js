@@ -19,6 +19,7 @@ import { formatLedgerDate, ledgerEventDate } from './capability-career-date.js';
 
 let repository = null;
 let profile = null;
+let profileOwner = null; // the room whose profile is in `profile` (Device-Local Account Isolation V1)
 let available = true;
 let initialized = false;
 let busy = false;
@@ -61,7 +62,9 @@ function runExclusive(fn) {
 
 function loadProfile() {
   try {
+    const owner = ensureRepository().ownerRoomId();
     profile = ensureRepository().loadProfile();
+    profileOwner = owner;
     available = true;
     setError('');
     return true;
@@ -75,6 +78,8 @@ function loadProfile() {
 
 function saveProfile(nextProfile, failure = 'Could not save Capability/Career changes. Nothing was changed.') {
   try {
+    // A profile edited for one account must never be saved into another account's slot.
+    if (ensureRepository().ownerRoomId() !== profileOwner) throw new Error('The signed-in account changed. Nothing was saved.');
     profile = ensureRepository().saveProfile(nextProfile);
     available = true;
     setError('');
@@ -750,5 +755,21 @@ export function renderCapabilityCareer() {
   renderCapabilityCareerState();
 }
 
+/** Device-Local Account Isolation V1 — the signed-in account changed (or signed out). Drops the
+ *  previous account's profile, selections, open panel and import preview, then re-renders from the
+ *  new owner's slot. Called synchronously by storage.js. */
+function resetCapabilityCareerForAccount() {
+  profile = null;
+  profileOwner = null;
+  openPanel = '';
+  selectedSkillId = '';
+  selectedProjectId = '';
+  selectedLedgerEventId = '';
+  importPreview = null;
+  importPreviewFingerprint = '';
+  renderCapabilityCareer();
+}
+
 window.renderCapabilityCareer = renderCapabilityCareer;
+globalThis.resetCapabilityCareerForAccount = resetCapabilityCareerForAccount;
 initCapabilityCareer();

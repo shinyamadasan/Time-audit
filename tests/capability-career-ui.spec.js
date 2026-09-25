@@ -17,6 +17,8 @@ import { normalizeChronaSenseEntry } from '../chronasense-life-ledger-adapter.js
 import { LIFE_LEDGER_RUNTIME_KEY } from '../life-ledger-runtime.js';
 import { deriveLifeLedgerKey, fingerprintLifeLedgerEvent } from '../life-ledger-core.js';
 
+// Device-Local Account Isolation V1: these stores are per account now; this spec's account is uid_career-user.
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
 let appServer = null;
@@ -251,8 +253,8 @@ async function openApp(page, { capabilityRaw = null, lifeLedgerRaw = null } = {}
     localStorage.setItem('ta3-entries:uid_career-user', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
     localStorage.setItem('ta3-plans:uid_career-user', '{}');
-    localStorage.setItem('ta3-reviews', '{}');
-    if (capabilityRaw !== null) localStorage.setItem('ta3-capability-career-v1', capabilityRaw);
+    localStorage.setItem('ta3-reviews:uid_career-user', '{}');
+    if (capabilityRaw !== null) localStorage.setItem('ta3-capability-career-v1:uid_career-user', capabilityRaw);
     if (lifeLedgerRaw !== null) localStorage.setItem('ta3-life-ledger-v1', lifeLedgerRaw);
     localStorage.setItem('ta3-career-ui-test-seeded', '1');
   }, { capabilityRaw, lifeLedgerRaw, settings: baseSettings() });
@@ -267,7 +269,7 @@ async function openCareer(page) {
 }
 
 async function storedProfile(page) {
-  return page.evaluate(key => JSON.parse(localStorage.getItem(key)).profile, CAPABILITY_CAREER_REPOSITORY_KEY);
+  return page.evaluate(key => JSON.parse(localStorage.getItem(key)).profile, `${CAPABILITY_CAREER_REPOSITORY_KEY}:uid_career-user`);
 }
 
 test('manual setup persists target, skill, and evidence through reload', async ({ page }) => {
@@ -309,7 +311,7 @@ test('quick import previews before persistence and escapes hostile text', async 
   }));
   await page.getByRole('button', { name: 'Preview' }).click();
   await expect(page.getByRole('region', { name: 'Capability import preview' })).toContainText('1 skills');
-  expect(await page.evaluate(key => localStorage.getItem(key), CAPABILITY_CAREER_REPOSITORY_KEY)).toBeNull();
+  expect(await page.evaluate(key => localStorage.getItem(key), `${CAPABILITY_CAREER_REPOSITORY_KEY}:uid_career-user`)).toBeNull();
 
   await page.getByRole('button', { name: 'Save import' }).click();
   await expect(page.locator('#cap-career-dashboard')).toContainText('<script>alert(1)</script>');
@@ -320,13 +322,13 @@ test('quick import previews before persistence and escapes hostile text', async 
 test('malformed import leaves existing profile unchanged', async ({ page }) => {
   await openApp(page, { capabilityRaw: profileEnvelope(seededProfile()) });
   await openCareer(page);
-  const before = await page.evaluate(key => localStorage.getItem(key), CAPABILITY_CAREER_REPOSITORY_KEY);
+  const before = await page.evaluate(key => localStorage.getItem(key), `${CAPABILITY_CAREER_REPOSITORY_KEY}:uid_career-user`);
 
   await page.getByRole('button', { name: 'Import starter profile' }).click();
   await page.locator('#cap-career-import-text').fill(JSON.stringify({ evidence: [{ skill: 'Missing', dimension: 'knowledge', summary: 'Bad' }] }));
   await page.getByRole('button', { name: 'Preview' }).click();
   await expect(page.locator('#cap-career-error')).toContainText('references missing skill');
-  expect(await page.evaluate(key => localStorage.getItem(key), CAPABILITY_CAREER_REPOSITORY_KEY)).toBe(before);
+  expect(await page.evaluate(key => localStorage.getItem(key), `${CAPABILITY_CAREER_REPOSITORY_KEY}:uid_career-user`)).toBe(before);
 });
 
 test('Life Ledger evidence picker stores only an explicit live reference and does not mutate ledger', async ({ page }) => {

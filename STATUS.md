@@ -5,6 +5,33 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-25 — Device-Local Account Isolation V1 (review candidate, NOT integrated)
+
+Candidate on `fix/device-local-account-isolation-v1`, from `origin/main` @ `7ae7c68` (Focus Redemption
+Account Isolation V1, which is on origin/main). Not pushed, merged or deployed. Release token
+`20260925-device-local-account-isolation-v1`. Details in CHANGELOG.md.
+
+Reproduced against `7ae7c68`: all five stores were visible to B after a direct A -> B switch, and reviews /
+weekly reviews were a REMOTE CROSS-ROOM LEAK — PROVEN (B's own review save carried A's fields into
+`rooms/uid_B/reviews`; a weekly-field blur autosave wrote A's weekly review into `rooms/uid_B/weeklyReviews`).
+Fixed with the existing machinery only: scoped `<key>:<room>` slots, `bindAccountLocalState()` /
+`rebindAccountLocalState()`, `isCurrentSync()`, `ownedRoomRef()`, `appRoomOwner()`. Bare keys quarantined.
+
+**Account isolation status:**
+- LOCAL CROSS-ACCOUNT VISIBILITY — FIXED: learning plan, career/capability, daily routines, reviews, weekly reviews.
+- REMOTE CROSS-ROOM LEAK — FIXED: reviews, weekly reviews (this phase); focus redemptions; entries,
+  settings/templates, legacy plans (prior phases).
+- Known personal-data stores audited to date are account-scoped; intention and timer/away ownership remain
+  unresolved (intention: probable remote path by code inspection, not reproduced). The Life Ledger local
+  store is device-global and unaudited for ownership.
+
+**Next:** strict independent review of this candidate. After it integrates, the next engineering phase is
+DAILY DOGFOODING / USABILITY (candidates already recorded: "Already done" option, visible "Now" marker,
+smaller checkbox visual/touch treatment, task timebox/duration ergonomics) — NOT more isolation hardening
+unless freshly requested.
+
+---
+
 ## 2026-09-25 — Focus Redemption Account Isolation V1 (review candidate, NOT integrated)
 
 Candidate on `fix/focus-redemption-account-isolation-v1`, from `origin/main` @ `cb71298` (Remaining

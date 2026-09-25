@@ -7,6 +7,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Device-Local Account Isolation V1: these stores are per account now; this spec's account is uid_plan-user.
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
 let appServer = null;
@@ -68,9 +70,9 @@ async function openApp(page, { plans = {}, routines = routineState([]), entries 
     localStorage.setItem('ta3-tz:uid_plan-user', 'Etc/UTC');
     localStorage.setItem('ta3-device-id', deviceId);
     localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries:uid_plan-user', JSON.stringify(entries)); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}');
+    localStorage.setItem('ta3-entries:uid_plan-user', JSON.stringify(entries)); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews:uid_plan-user', '{}');
     localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
-    localStorage.setItem('ta3-daily-routines-v1', JSON.stringify(routines));
+    localStorage.setItem('ta3-daily-routines-v1:uid_plan-user', JSON.stringify(routines));
     if (commitmentsView) localStorage.setItem('ta3-commitments-view', commitmentsView);
   }, { plans, routines, entries, now: NOW, deviceId, commitmentsView });
   await page.goto(appUrl);
@@ -237,7 +239,7 @@ test.describe('Read-only guarantee', () => {
       plans: { [TARGET]: { items: [planItem('p1', 'Untouched')], updatedAt: NOW } },
       routines: routineState([routine()])
     });
-    const snapshot = () => page.evaluate(() => ({ plans: localStorage.getItem('ta3-plans:uid_plan-user'), routines: localStorage.getItem('ta3-daily-routines-v1') }));
+    const snapshot = () => page.evaluate(() => ({ plans: localStorage.getItem('ta3-plans:uid_plan-user'), routines: localStorage.getItem('ta3-daily-routines-v1:uid_plan-user') }));
     const before = await snapshot();
     for (let i = 0; i < 3; i++) {
       await page.locator('#tmr-tab-tomorrow').click();

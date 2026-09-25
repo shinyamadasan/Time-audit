@@ -4,6 +4,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Device-Local Account Isolation V1: these stores are per account now; this spec's account is uid_plan-user.
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
 let appServer = null;
@@ -68,9 +70,9 @@ async function openApp(page, { timezone = 'Etc/UTC', routines = [], plans = {}, 
     localStorage.setItem('ta3-tz:uid_plan-user', timezone);
     localStorage.setItem('ta3-device-id', deviceId);
     localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries:uid_plan-user', '[]'); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
-    localStorage.setItem('ta3-daily-routines-v1', JSON.stringify(routines));
-    if (learningPlans) localStorage.setItem('ta3-learning-plans-v1', JSON.stringify(learningPlans));
+    localStorage.setItem('ta3-entries:uid_plan-user', '[]'); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews:uid_plan-user', '{}'); localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
+    localStorage.setItem('ta3-daily-routines-v1:uid_plan-user', JSON.stringify(routines));
+    if (learningPlans) localStorage.setItem('ta3-learning-plans-v1:uid_plan-user', JSON.stringify(learningPlans));
     if (failPlanWrite) {
       const set = Storage.prototype.setItem;
       Storage.prototype.setItem = function(key, value) { if (key === 'ta3-plans:uid_plan-user') throw new Error('Plan quota exceeded'); return set.call(this, key, value); };
@@ -127,7 +129,7 @@ for (const historical of [false, true]) {
     await page.locator('#rv-feeling').getByRole('button', { name: 'Focused', exact: true }).click();
     await page.locator('#rv-feeling').getByRole('button', { name: 'Focused', exact: true }).click();
     await saveReflection(page).click();
-    const saved = await page.evaluate(historical => JSON.parse(localStorage.getItem('ta3-reviews'))[historical ? '2026-09-07' : planTodayKey()], historical);
+    const saved = await page.evaluate(historical => JSON.parse(localStorage.getItem('ta3-reviews:uid_plan-user'))[historical ? '2026-09-07' : planTodayKey()], historical);
     expect(saved).toMatchObject({ waste: 'Saved waste', avoid: 'Saved avoid', tomorrow: 'Legacy tomorrow\r\nSecond line', focusRating: null, extraReflection: 'preserve me', _savedAt: NOW });
     await page.evaluate(historical => openReview(historical ? '2026-09-07' : undefined), historical);
     await page.locator('#rv-optional-details > summary').click();
@@ -191,7 +193,7 @@ test('unknown acknowledgement only saves on Save and leaves gaps intact; offline
   await context.setOffline(true);
   await page.evaluate(() => { fbRoomRef = null; });
   await saveReflection(page).click();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-reviews'))[planTodayKey()])).toMatchObject({ unloggedOk: true, focusRating: 'mixed' });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-reviews:uid_plan-user'))[planTodayKey()])).toMatchObject({ unloggedOk: true, focusRating: 'mixed' });
   expect(await page.evaluate(() => JSON.stringify(getCloseoutGaps(planTodayKey())))).toBe(before);
   expect(await page.evaluate(() => getGapRecoveryCandidate(getViewingEntries()))).toBeFalsy();
   await page.evaluate(() => openReview());
@@ -341,7 +343,7 @@ test('historical mouse feeling selection saves, restores and remains editable', 
   const mixed = page.locator('#rv-feeling').getByRole('button', { name: 'Mixed', exact: true });
   await mixed.click();
   await saveReflection(page).click();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-reviews'))['2026-09-07'].focusRating)).toBe('mixed');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-reviews:uid_plan-user'))['2026-09-07'].focusRating)).toBe('mixed');
   await page.evaluate(() => openReview('2026-09-07'));
   await expect(mixed).toHaveAttribute('aria-pressed', 'true');
   await mixed.click();

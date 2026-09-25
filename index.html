@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
-<meta name="pdb-release" content="20260924-focus-redemption-account-isolation-v1">
+<meta name="pdb-release" content="20260925-device-local-account-isolation-v1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1666,7 +1666,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260924-focus-redemption-account-isolation-v1
+<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260925-device-local-account-isolation-v1
      themselves, but the modules they IMPORT are bare URLs, which browsers cache independently of index.html
      — so a device could run new sync code against an old repository, or an old live wiring against a new
      storage.js (permanent "Off", or a link error that stops PlanAuthority loading at all). This map makes
@@ -1675,57 +1675,62 @@
      this map, the pdb-release meta, and the storage.js / boundary-live / boundary-ui / operational-plan-ui /
      commitments-sync / coarse-life-evidence-sync / coarse-life-evidence-ui tags (the commitment and coarse-evidence
      repositories + sync bridges, and the coarse-evidence editor UI, joined the group in Cross-Store Account
-     Isolation V1). A test enforces it. -->
+     Isolation V1), plus the learning-plan-ui / capability-career-ui / daily-routines-ui tags (their room-scoped
+     repositories joined the group in Device-Local Account Isolation V1: every Life / Plan Tomorrow / routines
+     importer must resolve the ONE scoped instance). A test enforces it. -->
 <script type="importmap">
 {
   "imports": {
-    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./operational-plan-model.js": "./operational-plan-model.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./plan-authority.js": "./plan-authority.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./commitments-repository.js": "./commitments-repository.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./commitments-sync.js": "./commitments-sync.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260924-focus-redemption-account-isolation-v1",
-    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260924-focus-redemption-account-isolation-v1"
+    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260925-device-local-account-isolation-v1",
+    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260925-device-local-account-isolation-v1",
+    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260925-device-local-account-isolation-v1",
+    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260925-device-local-account-isolation-v1",
+    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260925-device-local-account-isolation-v1",
+    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260925-device-local-account-isolation-v1",
+    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260925-device-local-account-isolation-v1",
+    "./operational-plan-model.js": "./operational-plan-model.js?v=20260925-device-local-account-isolation-v1",
+    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260925-device-local-account-isolation-v1",
+    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260925-device-local-account-isolation-v1",
+    "./plan-authority.js": "./plan-authority.js?v=20260925-device-local-account-isolation-v1",
+    "./commitments-repository.js": "./commitments-repository.js?v=20260925-device-local-account-isolation-v1",
+    "./commitments-sync.js": "./commitments-sync.js?v=20260925-device-local-account-isolation-v1",
+    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260925-device-local-account-isolation-v1",
+    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260925-device-local-account-isolation-v1",
+    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260925-device-local-account-isolation-v1",
+    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20260925-device-local-account-isolation-v1",
+    "./capability-career-repository.js": "./capability-career-repository.js?v=20260925-device-local-account-isolation-v1",
+    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20260925-device-local-account-isolation-v1"
   }
 }
 </script>
-<script src="storage.js?v=20260924-focus-redemption-account-isolation-v1"></script>
+<script src="storage.js?v=20260925-device-local-account-isolation-v1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
-<script type="module" src="daily-routines-ui.js?v=20260907"></script>
+<script type="module" src="daily-routines-ui.js?v=20260925-device-local-account-isolation-v1"></script>
 <script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
-<script type="module" src="learning-plan-ui.js?v=20260828-learning-plan-ui"></script>
-<script type="module" src="capability-career-ui.js?v=20260831-capability-career-v1"></script>
+<script type="module" src="learning-plan-ui.js?v=20260925-device-local-account-isolation-v1"></script>
+<script type="module" src="capability-career-ui.js?v=20260925-device-local-account-isolation-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
 <script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
 <script type="module" src="windows-hud-bridge.js?v=20260908-windows-ambient-focus-hud-v1"></script>
-<script type="module" src="coarse-life-evidence-ui.js?v=20260924-focus-redemption-account-isolation-v1"></script>
-<script type="module" src="coarse-life-evidence-sync.js?v=20260924-focus-redemption-account-isolation-v1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20260925-device-local-account-isolation-v1"></script>
+<script type="module" src="coarse-life-evidence-sync.js?v=20260925-device-local-account-isolation-v1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20260924-focus-redemption-account-isolation-v1"></script>
-<script type="module" src="personal-day-boundary-ui.js?v=20260924-focus-redemption-account-isolation-v1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20260925-device-local-account-isolation-v1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20260925-device-local-account-isolation-v1"></script>
 <script>
 // Read-only Personal Day sync diagnostics for a real device: open the app with ?pdbdiag=1.
-if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260924-focus-redemption-account-isolation-v1'), 1500));
+if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260925-device-local-account-isolation-v1'), 1500));
 </script>
-<script type="module" src="operational-plan-ui.js?v=20260924-focus-redemption-account-isolation-v1"></script>
-<script type="module" src="commitments-sync.js?v=20260924-focus-redemption-account-isolation-v1"></script>
+<script type="module" src="operational-plan-ui.js?v=20260925-device-local-account-isolation-v1"></script>
+<script type="module" src="commitments-sync.js?v=20260925-device-local-account-isolation-v1"></script>
 <script type="module" src="planning-continuity-ui.js?v=20260918-planning-continuity-v1"></script>
 
 <script>
@@ -8697,6 +8702,8 @@ function removePreset(i){settings.presets.splice(i,1);persist();renderSettings()
 // ══════════════════════════════════════════════════════
 let _reviewGapDetour = false; // bounded return from the Review gap editor; fields stay in the DOM
 let _reviewDateKey = null; // which date is currently open in the review modal
+let _reviewOwner = null;   // the account whose review the modal was filled from (Device-Local Account Isolation V1)
+let _weeklyFormOwner = null; // the account the Reflect weekly review/plan forms were pre-filled from
 let _reviewUnloggedOk = false;    // true when missing time was seen and intentionally left blank
 let _reviewFocusRating = null;    // Phase 11.8 optional subjective rating: 'focused' | 'mixed' | 'distracted'
 let _reviewReconciliation = null; // Phase 6I/J whole-day reconciliation acknowledgment: null | 'reviewed_ok' | 'left_unknown' — separate from unloggedOk (§18/19: distinct concept, not gap-size-gated)
@@ -8730,6 +8737,7 @@ function openReview(dateKey, fullAnalysis = false) {
   document.getElementById('rv-full-analysis').open = fullAnalysis;
   document.getElementById('rv-optional-details').open = false;
   _reviewDateKey = dateKey || toDateKey(new Date());
+  _reviewOwner = _localStateOwner;
   const isToday = _reviewDateKey === toDateKey(new Date());
   const r = reviews[_reviewDateKey] || {};
   _reviewUnloggedOk = !!r.unloggedOk;
@@ -8962,7 +8970,16 @@ function renderReviewPlanVsActual() {
   }).join('');
 }
 
+/** True only when a form filled for `formOwner` may be saved now: an account owns local state, it is
+ *  the joined one, and it is the account the form was filled from. Otherwise the save is refused. */
+function reflectionOwnerCurrent(formOwner) {
+  if (_localStateOwner && formOwner === _localStateOwner && _localStateOwner === roomCode) return true;
+  showToast('The signed-in account changed. Nothing was saved.');
+  return false;
+}
+
 function saveReview(){
+  if (!reflectionOwnerCurrent(_reviewOwner)) { closeModal('review-overlay'); return; }
   const k = _reviewDateKey || toDateKey(new Date());
   const summary = computeCloseoutSummary(k);
   // Keep legacy reflection text; preparation is owned solely by Plan Tomorrow.
@@ -8981,7 +8998,7 @@ function saveReview(){
   };
 
   persist();
-  if (fbRoomRef) fbRoomRef.update({ [`reviews/${k}`]: reviews[k] });
+  ownedRoomRef()?.update({ [`reviews/${k}`]: reviews[k] });
   closeModal('review-overlay');
   renderTodayPlan();
   renderMissedCloseoutCta();
@@ -9705,6 +9722,7 @@ function renderReflectView() {
   }
 
   // ── Pre-fill review form ──
+  _weeklyFormOwner = _localStateOwner;
   const wr = weeklyReviews[weekKey] || {};
   document.getElementById('wr-overall').value = wr.overall || '';
   document.getElementById('wr-drain').value = wr.drain || '';
@@ -9752,6 +9770,7 @@ function renderDailyReflections() {
 
   if (!days.length) {
     section.style.display = 'none';
+    el.innerHTML = ''; // hidden is not gone: another account's reflections must not stay in the DOM
     return;
   }
   section.style.display = '';
@@ -9793,6 +9812,7 @@ function renderDailyReflections() {
 }
 
 function saveWeeklyReview() {
+  if (!reflectionOwnerCurrent(_weeklyFormOwner)) return;
   const weekKey = weekKeyOffsetFromToday(0);
   if (!weeklyReviews[weekKey]) weeklyReviews[weekKey] = {};
   weeklyReviews[weekKey].overall  = document.getElementById('wr-overall').value.trim();
@@ -9804,7 +9824,7 @@ function saveWeeklyReview() {
   const ins = computeInsights(weekKey);
   if (ins) weeklyReviews[weekKey].stats = { deepHrs: ins.deepHrs, deepPct: ins.deepPct, wasteMin: ins.wasteMin, worstDist: ins.worstDist, topActivity: ins.topActivity };
   persist();
-  if (fbRoomRef) fbRoomRef.update({ [`weeklyReviews/${weekKey}`]: weeklyReviews[weekKey] });
+  ownedRoomRef()?.update({ [`weeklyReviews/${weekKey}`]: weeklyReviews[weekKey] });
   const reviewBadge = document.getElementById('weekly-review-saved');
   reviewBadge.textContent = '✓ Saved ' + formatSavedAt(weeklyReviews[weekKey].savedAt);
   reviewBadge.style.display = 'inline';
@@ -9812,6 +9832,7 @@ function saveWeeklyReview() {
 }
 
 function saveWeeklyPlan() {
+  if (!reflectionOwnerCurrent(_weeklyFormOwner)) return;
   const nextWeekKey = weekKeyOffsetFromToday(1);
   if (!weeklyReviews[nextWeekKey]) weeklyReviews[nextWeekKey] = {};
   weeklyReviews[nextWeekKey].plan = {
@@ -9824,7 +9845,7 @@ function saveWeeklyPlan() {
     _savedAt: Date.now()
   };
   persist();
-  if (fbRoomRef) fbRoomRef.update({ [`weeklyReviews/${nextWeekKey}`]: weeklyReviews[nextWeekKey] });
+  ownedRoomRef()?.update({ [`weeklyReviews/${nextWeekKey}`]: weeklyReviews[nextWeekKey] });
   const planBadge = document.getElementById('weekly-plan-saved');
   planBadge.textContent = '✓ Saved ' + formatSavedAt(weeklyReviews[nextWeekKey].plan.savedAt);
   planBadge.style.display = 'inline';

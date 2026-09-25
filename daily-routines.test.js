@@ -246,3 +246,32 @@ test('review Learning: a duplicate linked fact counts once; same step ID in anot
   assert.equal(dailyScore([matchCompletion(i,input(r,{links,events:[e,e]}),now)]).completed,1);
   assert.equal(matchCompletion(i,input(r,{links,events:[{...e,payload:{source:{planId:'other',stepId:'a'}}}]}),now),null);
 });
+
+// Device-Local Account Isolation V1: over the app's localStorage (no injected storage) routines belong to
+// the joined room (`ta3-daily-routines-v1:<room>`); no room -> the empty state and every write refused; the
+// bare pre-scoping key is quarantined (never read, rewritten or deleted).
+test('app-runtime routines are scoped to the joined room; no room -> empty and refused; bare key quarantined', () => {
+  const storage = memory(), r = routine(), legacy = JSON.stringify({ schemaVersion: 1, timezone: tz, routines: [routine({ id: 'legacy', title: 'Legacy' })], manual: {}, links: {}, focus: {}, skips: {} });
+  storage.setItem('ta3-daily-routines-v1', legacy);
+  const previousStorage = globalThis.localStorage, previousRoom = globalThis.getChronaSenseRoomCode;
+  let room = 'uid_a';
+  globalThis.localStorage = storage;
+  globalThis.getChronaSenseRoomCode = () => room;
+  try {
+    const repo = createDailyRoutineRepository();
+    assert.deepEqual(repo.read(tz).routines, []);
+    repo.update(tz, state => state.routines.push(r));
+    room = 'uid_b';
+    assert.deepEqual(repo.read(tz).routines, []);
+    room = '';
+    assert.deepEqual(repo.read(tz).routines, []);
+    assert.throws(() => repo.update(tz, () => {}), /No signed-in account/);
+    room = 'uid_a';
+    assert.deepEqual(repo.read(tz).routines.map(x => x.id), [r.id]);
+    assert.equal(storage.getItem('ta3-daily-routines-v1'), legacy);
+    assert.equal(storage.getItem('ta3-daily-routines-v1:uid_b'), null);
+  } finally {
+    if (previousStorage === undefined) delete globalThis.localStorage; else globalThis.localStorage = previousStorage;
+    if (previousRoom) globalThis.getChronaSenseRoomCode = previousRoom; else delete globalThis.getChronaSenseRoomCode;
+  }
+});

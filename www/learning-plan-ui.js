@@ -33,6 +33,7 @@ function mirrorLifeLedgerToOutbox() {
 
 let repository = null;
 let learningPlans = [];
+let learningPlansOwner = null; // the room whose plans are in `learningPlans` (Device-Local Account Isolation V1)
 let selectedPlanId = null;
 let initialized = false;
 let busy = false;
@@ -85,10 +86,17 @@ function setSelectedPlan(nextId) {
     : (learningPlans[0]?.id || null);
 }
 
+// A write built from plans loaded for one account must never land in another account's slot.
+function assertLearningPlansOwner() {
+  if (ensureRepository().ownerRoomId() !== learningPlansOwner) throw new Error('The signed-in account changed. Nothing was saved.');
+}
+
 function loadLearningPlans() {
   try {
+    const owner = ensureRepository().ownerRoomId();
     const plans = ensureRepository().listPlans();
     learningPlans = plans;
+    learningPlansOwner = owner;
     learningPlansAvailable = true;
     setSelectedPlan(selectedPlanId);
     showLearningPlanError('');
@@ -274,6 +282,7 @@ function saveLearningPlan(plan, failureMessage = 'Could not save Learning Plan c
   const renderOnSuccess = options.renderOnSuccess !== false;
   const renderOnFailure = options.renderOnFailure !== false;
   try {
+    assertLearningPlansOwner();
     const saved = ensureRepository().savePlan(plan);
     replaceLocalPlan(saved);
     showLearningPlanError('');
@@ -388,6 +397,7 @@ function recordManualReopenLedger(previousPlan, stepId) {
 
 function removeLearningPlan(planId) {
   try {
+    assertLearningPlansOwner();
     const result = ensureRepository().removePlan(planId);
     if (result.removed) {
       learningPlans = learningPlans.filter(plan => plan.id !== planId);
@@ -666,8 +676,10 @@ function findLearningPlanFocusTarget(plan, outcome) {
 
 function loadLearningPlansForFocusOutcome(outcome) {
   try {
+    const owner = ensureRepository().ownerRoomId();
     const plans = ensureRepository().listPlans();
     learningPlans = plans;
+    learningPlansOwner = owner;
     learningPlansAvailable = true;
     selectedPlanId = outcome.planId;
     setSelectedPlan(selectedPlanId);
@@ -1409,6 +1421,29 @@ export function renderLearningPlans() {
   renderLearningPlanState();
 }
 
+/** Device-Local Account Isolation V1 — the signed-in account changed (or signed out). Drops every
+ *  piece of the previous account's Learning Plan state this module holds (plans, selection, open
+ *  editors, half-typed create/import forms, a pending Focus outcome prompt and its Life Ledger
+ *  retries), then re-renders from the new owner's slot. Called synchronously by storage.js. */
+function resetLearningPlansForAccount() {
+  learningPlans = [];
+  learningPlansOwner = null;
+  selectedPlanId = null;
+  openCreationPanel = null;
+  expansionPlanId = null;
+  activeAddEditor = null;
+  activeRenameEditor = null;
+  pendingFocusOutcome = null;
+  focusOutcomeBusy = false;
+  pendingLedgerRetries = new Map();
+  expandedPhaseIds.clear();
+  expandedLessonIds.clear();
+  document.getElementById('learning-plan-create-form')?.reset();
+  resetImportTransient();
+  renderLearningPlans();
+}
+
 window.renderLearningPlans = renderLearningPlans;
+globalThis.resetLearningPlansForAccount = resetLearningPlansForAccount;
 window.onLearningPlanFocusSessionEnded = receiveLearningPlanFocusOutcome;
 initLearningPlans();

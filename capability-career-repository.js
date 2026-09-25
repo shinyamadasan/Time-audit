@@ -3,11 +3,18 @@ import {
   createEmptyCapabilityProfile,
   hydrateCapabilityProfile
 } from './capability-career-model.js';
+import { appRoomOwner } from './personal-day-boundary-repository.js';
 
 export const CAPABILITY_CAREER_REPOSITORY_KEY = 'ta3-capability-career-v1';
 export const CAPABILITY_CAREER_REPOSITORY_SCHEMA_VERSION = 1;
 
 const ENVELOPE_KEYS = new Set(['schemaVersion', 'profile']);
+
+/** The storage slot holding ONE room's profile: `<key>:<roomId>` (Device-Local Account Isolation
+ *  V1). The whole Capability/Career store is this one envelope, so one key switches everything. */
+export function capabilityCareerKeyForRoom(roomId, key = CAPABILITY_CAREER_REPOSITORY_KEY) {
+  return `${key}:${roomId}`;
+}
 
 function hasOwn(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
@@ -133,14 +140,33 @@ export function createCapabilityCareerRepository(options = {}) {
   const key = hasOwn(options, 'key') ? options.key : CAPABILITY_CAREER_REPOSITORY_KEY;
   assertStorage(storage);
   assertKey(key);
+  // Scoped when told who the owner is, or when running over the real localStorage: the owner is
+  // the joined room, re-resolved on every call. No owner -> an empty profile, and saves refused.
+  const getOwner = typeof options.getOwner === 'function' ? options.getOwner : (hasOwn(options, 'storage') ? null : appRoomOwner);
+
+  function ownerRoomId() {
+    if (!getOwner) return null;
+    const owner = getOwner();
+    return typeof owner === 'string' && owner ? owner : null;
+  }
+
+  function activeKey() {
+    if (!getOwner) return key;
+    const owner = ownerRoomId();
+    return owner ? capabilityCareerKeyForRoom(owner, key) : null;
+  }
 
   return {
     key,
+    ownerRoomId,
     loadProfile() {
-      return readEnvelope(storage, key, options).profile;
+      const active = activeKey();
+      return active === null ? createEmptyCapabilityProfile(options) : readEnvelope(storage, active, options).profile;
     },
     saveProfile(profile) {
-      return writeEnvelope(storage, key, profile).profile;
+      const active = activeKey();
+      if (active === null) throw new CapabilityCareerRepositoryError('no_account', 'No signed-in account owns Capability/Career data on this device. Nothing was saved.');
+      return writeEnvelope(storage, active, profile).profile;
     }
   };
 }

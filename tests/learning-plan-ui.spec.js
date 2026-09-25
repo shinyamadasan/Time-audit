@@ -23,6 +23,8 @@ import {
   LIFE_LEDGER_TRANSPORT_SCHEMA_VERSION
 } from '../life-ledger-transport.js';
 
+// Device-Local Account Isolation V1: these stores are per account now; this spec's account is uid_learning-user.
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
 let appServer = null;
@@ -306,8 +308,8 @@ async function openApp(page, { learningPlanRaw = null, dailyPlans = {}, lifeLedg
     localStorage.setItem('ta3-entries:uid_learning-user', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
     localStorage.setItem('ta3-plans:uid_learning-user', JSON.stringify(dailyPlans));
-    localStorage.setItem('ta3-reviews', '{}');
-    if (learningPlanRaw !== null) localStorage.setItem('ta3-learning-plans-v1', learningPlanRaw);
+    localStorage.setItem('ta3-reviews:uid_learning-user', '{}');
+    if (learningPlanRaw !== null) localStorage.setItem('ta3-learning-plans-v1:uid_learning-user', learningPlanRaw);
     if (lifeLedgerRaw !== null) localStorage.setItem('ta3-life-ledger-v1', lifeLedgerRaw);
     localStorage.setItem('firebase-auth-token', 'unrelated-secret-token');
     localStorage.setItem('ta3-learning-ui-test-seeded', '1');
@@ -426,7 +428,7 @@ async function renameThroughUi(page, kind, currentTitle, nextTitle) {
 }
 
 async function storedEnvelope(page) {
-  return page.evaluate(key => JSON.parse(localStorage.getItem(key)), LEARNING_PLAN_REPOSITORY_KEY);
+  return page.evaluate(key => JSON.parse(localStorage.getItem(key)), `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 }
 
 async function lifeLedgerEnvelope(page) {
@@ -502,7 +504,7 @@ async function countLearningPlanWrites(page) {
       if (keyName === key) window.__learningPlanSetCalls++;
       return window.__learningPlanRealSetItem.call(this, keyName, value);
     };
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 }
 
 async function finishLearningPlanFocusWork(page, buttonName = 'Start Focus: Step A', elapsedMin = 25) {
@@ -665,7 +667,7 @@ test('Learning Plans opens an empty repository without error', async ({ page }) 
 test('How this works guide is available, closed by default, toggleable, and storage-neutral', async ({ page }) => {
   await openApp(page);
   await openLearningPlans(page);
-  const before = await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY);
+  const before = await page.evaluate(key => localStorage.getItem(key), `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
   const guideButton = page.getByRole('button', { name: 'How this works' });
   const guide = page.getByRole('region', { name: 'How this works' });
 
@@ -691,7 +693,7 @@ test('How this works guide is available, closed by default, toggleable, and stor
   await guideButton.click();
   await expect(guideButton).toHaveAttribute('aria-expanded', 'false');
   await expect(guide).toBeHidden();
-  expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBe(before);
+  expect(await page.evaluate(key => localStorage.getItem(key), `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`)).toBe(before);
 });
 
 test('creation controls are collapsed by default and open one flow at a time', async ({ page }) => {
@@ -735,7 +737,7 @@ test('valid paste previews hierarchy and counts without writing repository stora
   await expect(preview).toContainText('Variables');
   await expect(preview).toContainText('Complete exercises');
   await expect(page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' })).toBeEnabled();
-  expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBeNull();
+  expect(await page.evaluate(key => localStorage.getItem(key), `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`)).toBeNull();
 });
 
 test('Import creates one durable Learning Plan and reload restores the hierarchy with model IDs', async ({ page }) => {
@@ -748,7 +750,7 @@ test('Import creates one durable Learning Plan and reload restores the hierarchy
       if (keyName === key) window.__learningPlanSetCalls++;
       return realSetItem.call(this, keyName, value);
     };
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
   await fillImportForm(page, {
     title: 'JavaScript Fundamentals',
     outline: '# Fundamentals\n## Variables\n- Read lesson\n- Complete exercises\n## Functions\n- Build project'
@@ -812,7 +814,7 @@ test('malformed import shows a line-level error and persists nothing', async ({ 
   await expect(page.locator('#learning-plan-import-preview')).toBeHidden();
   await expect(page.locator('#learning-plan-import-form').getByRole('button', { name: 'Import plan' })).toBeDisabled();
   await expect(page.locator('#learning-plan-import-panel')).toBeVisible();
-  expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBeNull();
+  expect(await page.evaluate(key => localStorage.getItem(key), `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`)).toBeNull();
 });
 
 test('import save failure keeps input contents and does not claim success', async ({ page }) => {
@@ -829,7 +831,7 @@ test('import save failure keeps input contents and does not claim success', asyn
       if (keyName === key) throw new Error('blocked write');
       return realSetItem.call(this, keyName, value);
     };
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 
   await importPlan(page);
 
@@ -838,7 +840,7 @@ test('import save failure keeps input contents and does not claim success', asyn
   await expect(page.locator('#learning-plan-import-title-input')).toHaveValue('Blocked import');
   await expect(page.locator('#learning-plan-import-outline')).toHaveValue('# Phase\n## Lesson\n- Step');
   await expect(page.locator('.learning-plan-list-item')).toHaveCount(0);
-  expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBeNull();
+  expect(await page.evaluate(key => localStorage.getItem(key), `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`)).toBeNull();
 });
 
 test('editing outline or title after Preview invalidates stale import state', async ({ page }) => {
@@ -971,7 +973,7 @@ test('incomplete plan shows the selected plan Next Action with context', async (
       if (keyName === key) window.__learningPlanSetCalls++;
       return realSetItem.call(this, keyName, value);
     };
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
   await openLearningPlans(page);
 
   const card = page.locator('.learning-plan-next-card');
@@ -1136,7 +1138,7 @@ test('duplicate-title Learning Plan outcome completes the step by immutable IDs 
       id: step.id,
       completed: step.completed
     }))));
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
   expect(stepStates).toEqual([
     { id: 'step-dup-a', completed: true },
     { id: 'step-dup-b', completed: true }
@@ -1153,7 +1155,7 @@ test('stale deleted outcome target cannot complete another Learning Plan step', 
     stored.plans[0].phases[0].lessons[0].steps = stored.plans[0].phases[0].lessons[0].steps.filter(step => step.id !== 'step-a');
     window.__learningPlanRealSetItem.call(localStorage, key, JSON.stringify(stored));
     window.__learningPlanSetCalls = 0;
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 
   await focusOutcomeButton(page, 'Done').click();
 
@@ -1175,7 +1177,7 @@ test('already-completed outcome target clears deterministically without another 
     stored.plans[0].phases[0].lessons[0].steps[0].completedAt = '2026-08-28T12:30:00.000Z';
     window.__learningPlanRealSetItem.call(localStorage, key, JSON.stringify(stored));
     window.__learningPlanSetCalls = 0;
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 
   await focusOutcomeButton(page, 'Done').click();
 
@@ -1195,7 +1197,7 @@ test('Done save failure keeps the outcome prompt and does not falsely advance', 
       if (keyName === key) throw new Error('blocked write');
       return realSetItem.call(this, keyName, value);
     };
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 
   await focusOutcomeButton(page, 'Done').click();
 
@@ -1270,12 +1272,12 @@ test('repository corruption during Done does not overwrite or reset stored data'
   await openApp(page, { learningPlanRaw: envelope([seededLearningPlan()]) });
   await openLearningPlans(page);
   await finishLearningPlanFocusWork(page);
-  await page.evaluate(key => localStorage.setItem(key, '{bad json'), LEARNING_PLAN_REPOSITORY_KEY);
+  await page.evaluate(key => localStorage.setItem(key, '{bad json'), `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 
   await focusOutcomeButton(page, 'Done').click();
 
   await expect(page.locator('#learning-plan-error')).toContainText('malformed JSON');
-  expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBe('{bad json');
+  expect(await page.evaluate(key => localStorage.getItem(key), `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`)).toBe('{bad json');
 });
 
 test('completion context clears after Done and after Continue', async ({ page }) => {
@@ -1289,7 +1291,7 @@ test('completion context clears after Done and after Continue', async ({ page })
   await page.evaluate(({ key, raw }) => {
     localStorage.setItem(key, raw);
     window.renderLearningPlans();
-  }, { key: LEARNING_PLAN_REPOSITORY_KEY, raw: envelope([plan]) });
+  }, { key: `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`, raw: envelope([plan]) });
   await openLearningPlans(page);
   await finishLearningPlanFocusWork(page, 'Start Focus: Step B');
   await focusOutcomeButton(page, 'Continue').click();
@@ -1583,7 +1585,7 @@ test('rapid Start Focus activation creates one Focus session and no duplicate Le
       if (keyName === key) window.__learningPlanSetCalls++;
       return realSetItem.call(this, keyName, value);
     };
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 
   const start = page.getByRole('button', { name: 'Start Focus: Step A' });
   await start.dblclick();
@@ -1761,7 +1763,7 @@ test('Open step expands the exact phase and lesson, reveals the target step, and
       if (keyName === key) window.__learningPlanSetCalls++;
       return realSetItem.call(this, keyName, value);
     };
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 
   await page.locator('[data-lp-action="toggle-phase"][data-phase-id="phase-1"]').click();
   await expect(page.locator('[data-lp-action="toggle-phase"][data-phase-id="phase-1"]')).toHaveAttribute('aria-expanded', 'false');
@@ -2093,7 +2095,7 @@ test('corrupt repository shows an error and does not reset storage', async ({ pa
   await expect(page.locator('.learning-plan-next-card')).toHaveCount(0);
   await page.getByRole('button', { name: 'How this works' }).click();
   await expect(page.getByRole('region', { name: 'How this works' })).toBeVisible();
-  expect(await page.evaluate(key => localStorage.getItem(key), LEARNING_PLAN_REPOSITORY_KEY)).toBe('{bad json');
+  expect(await page.evaluate(key => localStorage.getItem(key), `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`)).toBe('{bad json');
 });
 
 test('save failure shows an error and does not claim completion persisted', async ({ page }) => {
@@ -2105,7 +2107,7 @@ test('save failure shows an error and does not claim completion persisted', asyn
       if (keyName === key) throw new Error('blocked write');
       return realSetItem.call(this, keyName, value);
     };
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 
   await page.locator('.learning-plan-step input[type="checkbox"]').first().click();
 
@@ -2124,7 +2126,7 @@ test('failed create and duplicate click do not create duplicate plans', async ({
       if (keyName === key) throw new Error('blocked write');
       return realSetItem.call(this, keyName, value);
     };
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 
   await page.locator('[data-lp-action="show-create"]').click();
   await page.locator('#learning-plan-title-input').fill('Blocked plan');
@@ -2162,7 +2164,7 @@ test('failed add and failed rename keep editors open with input intact', async (
       if (keyName === key) throw new Error('blocked write');
       return realSetItem.call(this, keyName, value);
     };
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
 
   await expect(page.locator('[data-lp-action="open-add"][data-add-kind="step"]').first()).toBeVisible();
   await page.locator('[data-lp-action="open-add"][data-add-kind="step"]').first().click();
@@ -2203,7 +2205,7 @@ test('repeated renders do not duplicate add, checkbox, or rename actions', async
       if (keyName === key) window.__learningPlanSetCalls++;
       return window.__learningPlanRealSetItem.call(this, keyName, value);
     };
-  }, LEARNING_PLAN_REPOSITORY_KEY);
+  }, `${LEARNING_PLAN_REPOSITORY_KEY}:uid_learning-user`);
   await page.locator('.learning-plan-step input[type="checkbox"]').check();
   expect(await page.evaluate(() => window.__learningPlanSetCalls)).toBe(1);
 

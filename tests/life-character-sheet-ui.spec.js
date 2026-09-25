@@ -11,6 +11,8 @@ import {
   createLearningPlan, addPhase, addLesson, addStep, completeStep
 } from '../learning-plan-model.js';
 
+// Device-Local Account Isolation V1: these stores are per account now; this spec's account is uid_lcs-user.
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
 let appServer = null;
@@ -187,14 +189,14 @@ async function openApp(page, seed = {}) {
     localStorage.setItem('ta3-entries:uid_lcs-user', '[]');
     localStorage.setItem('ta3-focus-redemptions', '[]');
     localStorage.setItem('ta3-plans:uid_lcs-user', '{}');
-    localStorage.setItem('ta3-reviews', '{}');
+    localStorage.setItem('ta3-reviews:uid_lcs-user', '{}');
     if (seed.ledger != null) localStorage.setItem(ledgerKey, seed.ledger);
     if (seed.plans != null) localStorage.setItem(planKey, seed.plans);
     if (seed.profile != null) localStorage.setItem(profileKey, seed.profile);
     localStorage.setItem('ta3-lcs-test-seeded', '1');
   }, {
     seed, settings: baseSettings(),
-    ledgerKey: LIFE_LEDGER_RUNTIME_KEY, planKey: LEARNING_PLAN_REPOSITORY_KEY, profileKey: CAPABILITY_CAREER_REPOSITORY_KEY
+    ledgerKey: LIFE_LEDGER_RUNTIME_KEY, planKey: `${LEARNING_PLAN_REPOSITORY_KEY}:uid_lcs-user`, profileKey: `${CAPABILITY_CAREER_REPOSITORY_KEY}:uid_lcs-user`
   });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.renderLifeView === 'function');
@@ -309,7 +311,7 @@ test('opening / switching / re-rendering the Character Sheet never writes to any
   await openLife(page);
   const stored = await page.evaluate(({ l, p, c }) => ({
     ledger: localStorage.getItem(l), plans: localStorage.getItem(p), profile: localStorage.getItem(c)
-  }), { l: LIFE_LEDGER_RUNTIME_KEY, p: LEARNING_PLAN_REPOSITORY_KEY, c: CAPABILITY_CAREER_REPOSITORY_KEY });
+  }), { l: LIFE_LEDGER_RUNTIME_KEY, p: `${LEARNING_PLAN_REPOSITORY_KEY}:uid_lcs-user`, c: `${CAPABILITY_CAREER_REPOSITORY_KEY}:uid_lcs-user` });
   expect(stored.ledger).toBe(ledger);
   expect(stored.plans).toBe(plans);
   expect(stored.profile).toBe(profile);

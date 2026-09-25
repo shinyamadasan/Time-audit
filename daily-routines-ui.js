@@ -1,5 +1,6 @@
 import { localContext, instanceId, generateInstances, matchCompletion, scheduleState, dailyScore, routineStreak, validateRoutine } from './daily-routines-model.js';
 import { createDailyRoutineRepository } from './daily-routines-repository.js';
+import { appRoomOwner } from './personal-day-boundary-repository.js';
 import { createLocalLifeLedgerStore } from './life-ledger-runtime.js';
 import { createLearningPlanRepository } from './learning-plan-repository.js';
 import { findNextLearningPlanStep } from './learning-plan-next-action.js';
@@ -14,6 +15,8 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': 
 let view = null;
 let rendered = '';
 let editingId = null;
+let editingOwner = null; // the room the open editor was filled from (Device-Local Account Isolation V1)
+const STALE_ACCOUNT = 'The signed-in account changed. Nothing was changed.';
 const initialTimezone = () => globalThis.getDailyRoutineAppContext().timezone;
 const message = err => { error.textContent = err?.message || String(err); };
 
@@ -45,8 +48,10 @@ function scheduleLabel(r) {
   if (r.mode === 'window') return `${r.time}–${r.endTime}`;
   return r.mode === 'cue' ? r.cue : 'Anytime today';
 }
+// Every record action carries the account it was rendered for, so a control left over from another
+// account can never act on this one's routine of the same id.
 function button(action, id, label) {
-  return `<button type="button" class="btn sm" data-routine-action="${action}" data-routine-id="${escape(id)}">${label}</button>`;
+  return `<button type="button" class="btn sm" data-routine-action="${action}" data-routine-id="${escape(id)}" data-routine-owner="${escape(appRoomOwner() || '')}">${label}</button>`;
 }
 function renderCard(item, completion, status) {
   const r = item.routine;
@@ -118,6 +123,7 @@ function updateFields() {
 function openEditor(id) {
   view = readView();
   editingId = id || null;
+  editingOwner = appRoomOwner();
   const r = view.state.routines.find(item => item.id === id) || { title: '', enabled: true, cadence: 'daily', mode: 'anytime', targetMinutes: 15, minimumMinutes: '', source: 'manual', days: [] };
   form.reset();
   form.elements.planId.innerHTML = '<option value="">Choose a Learning Plan</option>' + view.plans.map(p => `<option value="${escape(p.id)}">${escape(p.title)}</option>`).join('');
@@ -132,6 +138,7 @@ form.addEventListener('change', updateFields);
 form.addEventListener('submit', event => {
   event.preventDefault();
   try {
+    if (editingOwner !== appRoomOwner()) throw new Error(STALE_ACCOUNT);
     const data = new globalThis.FormData(form);
     repository.update(initialTimezone(), state => {
       const previous = state.routines.find(r => r.id === editingId);
@@ -157,6 +164,7 @@ document.addEventListener('click', event => {
   try {
     const action = control.dataset.routineAction;
     const id = control.dataset.routineId;
+    if (control.dataset.routineOwner !== undefined && control.dataset.routineOwner !== (appRoomOwner() || '')) throw new Error(STALE_ACCOUNT);
     if (action === 'manage') {
       view = readView();
       document.getElementById('routine-manager-list').innerHTML = view.state.routines.map(r => `<p>${escape(r.title)} · ${r.enabled ? scheduleLabel(r) : 'Disabled'} ${button('edit', r.id, 'Edit')}</p>`).join('');
@@ -210,6 +218,21 @@ globalThis.onDailyRoutineFocusCompleted = (entry, startedAt, endedAt) => {
   } catch (err) { message(err); globalThis.showToast(`Focus saved; routine completion could not be saved: ${err.message}`); }
 };
 globalThis.renderDailyRoutines = renderDailyRoutines;
+/** Device-Local Account Isolation V1 — the signed-in account changed (or signed out). Closes every
+ *  routine dialog (an editor filled from the previous account included), drops the cached view, and
+ *  re-renders from the new owner's slot. Called synchronously by storage.js. */
+globalThis.resetDailyRoutinesForAccount = () => {
+  for (const id of ['daily-routine-dialog', 'routine-manager', 'routine-day-dialog']) document.getElementById(id)?.close?.();
+  form.reset();
+  form.elements.planId.innerHTML = '<option value="">Choose a Learning Plan</option>';
+  const manager = document.getElementById('routine-manager-list');
+  if (manager) manager.innerHTML = '';
+  editingId = null;
+  editingOwner = null;
+  view = null;
+  rendered = '';
+  renderDailyRoutines();
+};
 window.addEventListener('storage', renderDailyRoutines);
 window.addEventListener('focus', renderDailyRoutines);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDailyRoutines(); });

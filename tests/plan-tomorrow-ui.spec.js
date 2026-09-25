@@ -5,6 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { addLesson, addPhase, addStep, completeStep, createLearningPlan } from '../learning-plan-model.js';
 
+// Device-Local Account Isolation V1: these stores are per account now; this spec's account is uid_plan-user.
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
 let appServer = null;
@@ -108,9 +110,9 @@ async function openApp(page, { timezone = 'Etc/UTC', routines = [], plans = {}, 
     localStorage.setItem('ta3-tz:uid_plan-user', timezone);
     localStorage.setItem('ta3-device-id', deviceId);
     localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries:uid_plan-user', '[]'); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
-    localStorage.setItem('ta3-daily-routines-v1', JSON.stringify(routines));
-    if (learningPlans) localStorage.setItem('ta3-learning-plans-v1', JSON.stringify(learningPlans));
+    localStorage.setItem('ta3-entries:uid_plan-user', '[]'); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews:uid_plan-user', '{}'); localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
+    localStorage.setItem('ta3-daily-routines-v1:uid_plan-user', JSON.stringify(routines));
+    if (learningPlans) localStorage.setItem('ta3-learning-plans-v1:uid_plan-user', JSON.stringify(learningPlans));
     if (failPlanWrite) {
       const set = Storage.prototype.setItem;
       Storage.prototype.setItem = function(key, value) { if (key === 'ta3-plans:uid_plan-user') throw new Error('Plan quota exceeded'); return set.call(this, key, value); };
@@ -175,10 +177,10 @@ test('routine timezone mismatch warns and leaves one-off planning available', as
 test('skip tomorrow persists one occurrence identity and unskip restores it', async ({ page }) => {
   await openApp(page, { routines: routineState([routine()]) });
   await page.getByRole('button', { name: 'Skip tomorrow' }).click();
-  let skips = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-daily-routines-v1')).skips);
+  let skips = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-daily-routines-v1:uid_plan-user')).skips);
   expect(Object.keys(skips)).toEqual(['["routine-1","2026-09-09"]']);
   await page.getByRole('button', { name: 'Restore tomorrow' }).click();
-  skips = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-daily-routines-v1')).skips);
+  skips = await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-daily-routines-v1:uid_plan-user')).skips);
   expect(skips).toEqual({});
 });
 
@@ -189,9 +191,9 @@ test('Learning preview is live and never pins tomorrow tonight', async ({ page }
   const learningPlans = { schemaVersion: 1, plans: [plan] };
   await openApp(page, { routines: routineState([routine({ title: 'Learning', source: 'learning', planId: plan.id })]), learningPlans });
   await expect(page.locator('.pt-learning')).toHaveText('Likely next: Step A');
-  expect(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('ta3-daily-routines-v1')).links))).not.toContain('["routine-1","2026-09-09"]');
+  expect(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('ta3-daily-routines-v1:uid_plan-user')).links))).not.toContain('["routine-1","2026-09-09"]');
   const completed = completeStep(plan, plan.phases[0].lessons[0].steps[0].id);
-  await page.evaluate(value => localStorage.setItem('ta3-learning-plans-v1', JSON.stringify({ schemaVersion: 1, plans: [value] })), completed);
+  await page.evaluate(value => localStorage.setItem('ta3-learning-plans-v1:uid_plan-user', JSON.stringify({ schemaVersion: 1, plans: [value] })), completed);
   await page.locator('[data-pt-action="close"]').first().click(); await page.evaluate(() => openPlanTomorrow());
   await expect(page.locator('.pt-learning')).toHaveText('Likely next: Step B');
 });

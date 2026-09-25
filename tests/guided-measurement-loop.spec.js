@@ -5,6 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { addLesson, addPhase, addStep, completeStep, createLearningPlan } from '../learning-plan-model.js';
 
+// Device-Local Account Isolation V1: these stores are per account now; this spec's account is uid_plan-user.
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(ROOT, '..');
 let appServer = null;
@@ -70,9 +72,9 @@ async function openApp(page, { timezone = 'Etc/UTC', routines = [], plans = {}, 
     localStorage.setItem('ta3-tz:uid_plan-user', timezone);
     localStorage.setItem('ta3-device-id', deviceId);
     localStorage.setItem('ta3-settings:uid_plan-user', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    localStorage.setItem('ta3-entries:uid_plan-user', '[]'); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
-    localStorage.setItem('ta3-daily-routines-v1', JSON.stringify(routines));
-    if (learningPlans) localStorage.setItem('ta3-learning-plans-v1', JSON.stringify(learningPlans));
+    localStorage.setItem('ta3-entries:uid_plan-user', '[]'); localStorage.setItem('ta3-focus-redemptions', '[]'); localStorage.setItem('ta3-reviews:uid_plan-user', '{}'); localStorage.setItem('ta3-plans:uid_plan-user', JSON.stringify(plans));
+    localStorage.setItem('ta3-daily-routines-v1:uid_plan-user', JSON.stringify(routines));
+    if (learningPlans) localStorage.setItem('ta3-learning-plans-v1:uid_plan-user', JSON.stringify(learningPlans));
     if (failPlanWrite) {
       const set = Storage.prototype.setItem;
       Storage.prototype.setItem = function(key, value) { if (key === 'ta3-plans:uid_plan-user') throw new Error('Plan quota exceeded'); return set.call(this, key, value); };
@@ -129,7 +131,7 @@ test('due routine wins, skip preserves intent and exposes the priority', async (
   await page.locator('#routine-details > summary').click();
   await page.getByRole('button', { name: 'Skip today', exact: true }).click();
   await expect(page.locator('#today-action-title')).toHaveText('Client build');
-  expect(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('ta3-daily-routines-v1')).skips).length)).toBe(1);
+  expect(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('ta3-daily-routines-v1:uid_plan-user')).skips).length)).toBe(1);
 });
 
 test('Review saves without preparing tomorrow and preserves legacy reflection', async ({ page }) => {
@@ -214,7 +216,7 @@ test('Focus on a manual routine hands off its label without claiming completion'
   await today(page, { routines: routineState([routine({ mode: 'anytime' })]) });
   await page.getByRole('button', { name: 'Focus mode', exact: true }).click();
   expect(await page.evaluate(() => getFocusTaskLabel())).toBe('Deep work');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-daily-routines-v1') || '{"manual":{}}').manual)).toEqual({});
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ta3-daily-routines-v1:uid_plan-user') || '{"manual":{}}').manual)).toEqual({});
 });
 
 test('planned routine activity is not presented as unplanned work', async ({ page }) => {
