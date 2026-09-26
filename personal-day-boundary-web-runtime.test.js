@@ -220,10 +220,12 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // once more: an old cached storage.js beside new modules (or the reverse) must never be one page load.
 // Device-Local Account Isolation V1 changes storage.js (account-scoped reviews/weeklyReviews) and scopes the
 // Learning Plan / Capability-Career / Daily Routine repositories, which join the group: another new generation.
-const CURRENT_RELEASE = '20260925-device-local-account-isolation-v1';
+// Its FIX FIRST changes storage.js (full sign-out teardown) and index.html again, so it gets its own generation
+// ('-fix1', which deliberately does not contain the retired '-v1' token as a substring).
+const CURRENT_RELEASE = '20260926-device-local-account-isolation-fix1';
 // '20260924-cross-store-account-isolation-v1' was never deployed (review candidate only), but it was
 // published on the candidate branch, so it is retired like a shipped token.
-const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1'];
+const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1'];
 
 test('the release is a NEW generation: never a previously shipped token, and no URL is left on an old one', () => {
   assert.equal(release, CURRENT_RELEASE);

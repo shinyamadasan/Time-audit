@@ -161,10 +161,9 @@ function bindAccountLocalState(room) {
  *  everything on screen that derives from the per-account stores. */
 function rebindAccountLocalState() {
   bindAccountLocalState(roomCode || null);
-  // An open review was filled from the previous account; it closes rather than save into this one.
-  document.getElementById('review-overlay')?.classList.remove('open');
-  ['rv-win', 'rv-waste', 'rv-avoid', 'rv-legacy-tomorrow'].forEach(id => { const el = document.getElementById(id); if (el) el.value = el.defaultValue = ''; });
-  if (typeof _reviewGapDetour !== 'undefined') _reviewGapDetour = false;
+  // The Review modal was filled/rendered from the previous account: it closes and is emptied, so neither
+  // a save nor its hidden analysis DOM can carry that account's review, entries or plans into this one.
+  if (typeof resetReviewModalForAccount === 'function') resetReviewModalForAccount();
   globalThis.PlanAuthority?.invalidate();
   if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
   if (typeof _todayRenderKey !== 'undefined') _todayRenderKey = '__FORCE__';
@@ -172,8 +171,9 @@ function rebindAccountLocalState() {
   if (intervalInput) intervalInput.value = settings.intervalMin;
   if (!running) { totalSecs = settings.intervalMin * 60; remaining = totalSecs; }
   // The device-local module stores (Learning Plans, Capability/Career, Daily Routines) drop the previous
-  // account's in-memory state and editors; Reflect's weekly forms and the Life view re-render from the
-  // new owner, so nothing on screen (visible or hidden) keeps the previous account's content.
+  // account's in-memory state and editors, and Reflect's weekly forms and the Life view re-render from the
+  // new owner. This covers the five account-scoped stores' own UI (and the Review modal above) only — it is
+  // NOT an app-wide DOM guarantee: e.g. the Life view still renders the device-global Life Ledger.
   [renderToday, typeof renderWeek === 'function' && document.getElementById('view-week')?.classList.contains('active') && renderWeek,
    typeof renderSettings === 'function' && renderSettings, globalThis.refreshTomorrowView,
    globalThis.resetLearningPlansForAccount, globalThis.resetCapabilityCareerForAccount, globalThis.resetDailyRoutinesForAccount,
@@ -892,24 +892,15 @@ function initAutoSync() {
       startSync();
     } else {
       currentUser = null;
-      // Tear down listeners from previous session
-      if (fbDb && roomCode) {
-        ['timer','entries','intention','settings','devices','breakState'].forEach(k =>
-          fbDb.ref(`rooms/${roomCode}/${k}`).off()
-        );
-        fbDb.ref('.info/connected').off();
-      }
-      if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.detach();
-      // Personal Day Boundary Live Wiring V1 — detaches the boundary listener and
-      // every per-day operational plan listener this device had open.
-      if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.detach();
-      // Planning Continuity V1 — a signed-out session must not keep receiving the
-      // previous account's commitments.
-      if (globalThis.CommitmentsSync) globalThis.CommitmentsSync.detach();
+      // Tear down EVERY listener of the previous session through the one full teardown a direct switch,
+      // disconnectSync() and joinRoom() already use — while roomCode still names that room. (It used to
+      // detach only a hand-picked subset here, leaving reviews/weeklyReviews/templates/plans/
+      // focusRedemptions/awayState attached and inert only through isCurrentSync().) It also detaches the
+      // coarse-evidence, Personal Day Boundary and commitments listeners, the nudge/partnerUid/pair-code
+      // refs and both partner listeners, and stops the sync tickers; startSync() re-creates all of them.
+      teardownRoomListeners();
       // Partner View V1 — a signed-out session must never leave the previous
       // account's partner data visible.
-      if (_partnerListener) { _partnerListener.off(); _partnerListener = null; }
-      if (_partnerSharedListener) { _partnerSharedListener.off(); _partnerSharedListener = null; }
       partnerViewShared = null;
       if (typeof closePartnerView === 'function') closePartnerView();
       fbRoomRef = null; roomCode = '';

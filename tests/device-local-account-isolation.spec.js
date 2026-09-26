@@ -104,6 +104,7 @@ const firebaseStub = `
     get: p => clone(get(p) ?? null),
     seed(p, v) { put(p, clone(v)); },
     remoteWrite(p, v) { put(p, clone(v)); fireUp(p); },
+    listenerCount: p => (listeners.get(p) || []).length,
     fireLate(p) { retained.filter(r => r.path === p).forEach(r => r.cb(snapshot(get(p)))); },
     setFailWrites(v) { failWrites = v; },
     setConnected(v) { connected = v; (listeners.get('.info/connected') || []).forEach(cb => cb(snapshot(connected))); },
@@ -519,4 +520,82 @@ test('same-id stale writes: a Learning Plan step / Career skill edit built from 
   expect(await slots(page, B)).toEqual(bBefore);
   expect(await page.evaluate(() => document.getElementById('learning-plan-error').textContent)).toMatch(/account changed/);
   expect(await page.evaluate(() => document.getElementById('view-career').textContent)).toMatch(/account changed/);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIX FIRST — hidden Review-analysis residue; sign-out listener teardown
+// ═══════════════════════════════════════════════════════════════════════════
+
+// An entries/plan-derived marker (not one of the five keys): A's tracked activity and planned task
+// feed the Review modal's analysis (closeout summary, Plan vs Actual, unplanned activity, gaps).
+const A_ENTRY_MARK = /A-private (tracked activity|planned task)/;
+const aEntrySlot = () => {
+  const ts = NOW - 20 * 60 * 1000;
+  return { [`ta3-entries:${A}`]: JSON.stringify([{ id: ts, ts, tsStart: ts - 30 * 60 * 1000, updatedAt: ts, blockIntervalMin: 30,
+    activity: 'A-private tracked activity', energy: 'deep', category: 'deep_work', originalLabel: 'deep', retro: true }]) };
+};
+/** Every A-marked node in the Review modal subtree — text, attribute values and form values, hidden or not. */
+const reviewResidue = (page, source) => page.evaluate(src => {
+  const re = new RegExp(src);
+  const root = document.getElementById('review-overlay');
+  const hits = [];
+  root.querySelectorAll('*').forEach(el => {
+    const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('');
+    if (re.test(own)) hits.push(`#${el.closest('[id]')?.id} text: ${own.trim().slice(0, 80)}`);
+    for (const a of el.attributes) if (re.test(a.value)) hits.push(`#${el.closest('[id]')?.id} @${a.name}: ${a.value.slice(0, 80)}`);
+    if ('value' in el && typeof el.value === 'string' && re.test(el.value)) hits.push(`#${el.id} value: ${el.value.slice(0, 80)}`);
+  });
+  return hits;
+}, source);
+
+test('A\'s entries/plan-derived Review analysis leaves no residue in the Review modal DOM (hidden included) after A -> B; B\'s Review still works', async ({ page }) => {
+  await openApp(page, { slots: { ...A_SLOTS, ...aEntrySlot() } });
+  await page.evaluate(() => {
+    plans[toDateKey(new Date())] = { items: [{ id: 'a-p1', task: 'A-private planned task', done: false, doneAt: null }] };
+    persist();
+    openReview(toDateKey(new Date()), true);
+    document.getElementById('rv-win').value = 'A-private typed win';
+  });
+  await settle(page);
+  const before = await reviewResidue(page, `${A_ENTRY_MARK.source}|A-private`);
+  expect(before.some(h => h.startsWith('#rv-plan-vs-actual'))).toBe(true); // the analysis really rendered A's data
+  await switchTo(page, 'account-b');
+  expect(await reviewResidue(page, `${A_ENTRY_MARK.source}|A-private`)).toEqual([]);
+  expect(await page.evaluate(() => ['rv-full-analysis', 'rv-optional-details'].map(id => document.getElementById(id).open))).toEqual([false, false]);
+  // A stale save is still refused; B's own review still opens, saves and syncs to B's room only.
+  await page.evaluate(() => { _reviewOwner = 'uid_account-a'; saveReview(); });
+  await page.evaluate(() => { openReview(toDateKey(new Date()), true); document.getElementById('rv-win').value = 'B-own win'; saveReview(); });
+  await settle(page);
+  const intoB = writesUnder(await writesSinceMark(page), B);
+  expect(matching(intoB, /B-own win/)).toHaveLength(1);
+  expect(matching(intoB, /A-private/)).toEqual([]);
+});
+
+test('sign-out physically detaches A\'s reviews / weeklyReviews (and every other room) listener; late callbacks inert; re-sign-in attaches exactly once', async ({ page }) => {
+  await openApp(page);
+  await aWritesReflections(page);
+  const roomPaths = ['reviews', 'weeklyReviews', 'entries', 'settings', 'templates', 'plans', 'focusRedemptions', 'awayState', 'timer', 'intention'].map(p => `rooms/${A}/${p}`);
+  const counts = () => page.evaluate(ps => ps.map(p => window.__fbTest.listenerCount(p)), roomPaths);
+  expect(await counts()).toEqual(roomPaths.map(() => 1));
+  const aBefore = await slots(page, A);
+  await page.evaluate(() => { window.__mark = window.__fbTest.log.writes.length; window.__fbTest.signOut(); });
+  await page.waitForFunction(() => globalThis.getChronaSenseRoomCode() === '');
+  await settle(page);
+  expect(await counts()).toEqual(roomPaths.map(() => 0)); // physically detached, not merely guarded
+  await page.evaluate(a => {
+    window.__fbTest.seed(`rooms/${a}/reviews/2026-09-18`, { win: 'A-late win', _savedAt: 9e12 });
+    window.__fbTest.fireLate(`rooms/${a}/reviews`); window.__fbTest.fireLate(`rooms/${a}/weeklyReviews`);
+  }, A);
+  expect(await memory(page)).toBe(JSON.stringify({ reviews: {}, weeklyReviews: {} }));
+  expect(await writesSinceMark(page)).toEqual([]);
+  expect(await slots(page, A)).toEqual(aBefore);
+  // A signs in again: every listener is back exactly once, and they are live.
+  await page.evaluate(() => window.__fbTest.signInAs('account-a'));
+  await page.waitForFunction(a => globalThis.getChronaSenseRoomCode() === a, A);
+  await settle(page);
+  expect(await counts()).toEqual(roomPaths.map(() => 1));
+  await page.evaluate(a => window.__fbTest.remoteWrite(`rooms/${a}/reviews/2026-09-17`, { win: 'A-private remote win', _savedAt: 9e12 }), A);
+  await settle(page);
+  expect(await memory(page)).toMatch(/A-private remote win/);
+  expect(await memory(page)).toMatch(/A-private win/);
 });
