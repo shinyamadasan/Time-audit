@@ -5,6 +5,33 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-26 — Device-Local Account Isolation V1: FIX FIRST applied (targeted re-review candidate, NOT integrated)
+
+Same branch `fix/device-local-account-isolation-v1`; strict review of `2bf9cf4` returned FIX FIRST with three
+bounded items, all applied: (1) the closed Review modal's hidden analysis DOM (`#rv-plan-vs-actual`) kept A's
+tracked activity / planned task after A -> B — the modal is now emptied on every account rebind; (2) sign-out
+left six room listeners attached — it now runs the existing full `teardownRoomListeners()`; (3) doc accuracy.
+Release token `20260926-device-local-account-isolation-fix1`. Details in CHANGELOG.md.
+
+**Corrects the entry below:** its "Known personal-data stores audited to date are account-scoped" is no longer
+accurate, and the candidate's "no previous-account content stays in the DOM" claim (CHANGELOG) was an
+overclaim. What is guaranteed is scoped to the five target stores' UI and the Review modal. Its reported
+"raw `fbRoomRef`" mutant kill was also inaccurate: that mutant alone survives, because `reflectionOwnerCurrent()`
+independently blocks the write.
+
+**Account isolation status — the app-wide foundation is NOT completely closed:**
+- LOCAL CROSS-ACCOUNT VISIBILITY — FIXED: learning plan, career/capability, daily routines, reviews, weekly reviews.
+- REMOTE CROSS-ROOM LEAK — FIXED: reviews, weekly reviews; focus redemptions; entries, settings/templates,
+  legacy plans.
+- TIMER / AWAY: REMOTE CROSS-ROOM LEAK — PROVEN (open; the biggest remaining hole).
+- LIFE LEDGER: LOCAL CROSS-ACCOUNT VISIBILITY — PROVEN (open); remote Firebase path not observed.
+- INTENTION: LIKELY REMOTE CROSS-ROOM LEAK (open).
+
+**Next:** targeted re-review of this candidate. Timer/away, Life Ledger and intention are separate phases, only
+on a fresh request.
+
+---
+
 ## 2026-09-25 — Device-Local Account Isolation V1 (review candidate, NOT integrated)
 
 Candidate on `fix/device-local-account-isolation-v1`, from `origin/main` @ `7ae7c68` (Focus Redemption

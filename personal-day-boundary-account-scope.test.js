@@ -666,7 +666,14 @@ test('wiring: storage.js exposes the room identity and recomputes derived state 
   const storage = source('./storage.js');
   assert.match(storage, /globalThis\.getChronaSenseRoomCode = \(\) => roomCode;/);
   const signedOut = storage.slice(storage.indexOf("currentUser = null;"), storage.indexOf("document.getElementById('signin-overlay').style.display = 'flex'"));
-  assert.match(signedOut, /PersonalDayBoundaryLive\.detach\(\)/, 'A\'s listeners are detached');
+  // Device-Local Account Isolation V1 (FIX FIRST): sign-out detaches through the one full room teardown
+  // (the same path a direct switch uses), which must itself detach the Personal Day / plan listeners.
+  assert.match(signedOut, /teardownRoomListeners\(\)/, 'A\'s listeners are detached');
+  assert.ok(signedOut.indexOf('teardownRoomListeners()') < signedOut.indexOf("roomCode = ''"), 'teardown runs while roomCode still names A\'s room');
+  const teardown = storage.slice(storage.indexOf('function teardownRoomListeners()'), storage.indexOf('function initPartnerListener'));
+  for (const detach of ['PersonalDayBoundaryLive.detach()', 'CommitmentsSync.detach()', 'CoarseLifeEvidenceSync.detach()']) {
+    assert.ok(teardown.includes(detach), `the full teardown runs ${detach}`);
+  }
   assert.ok(signedOut.indexOf("roomCode = ''") < signedOut.indexOf('refreshPersonalDayBoundaryLive'), 'derived state is recomputed AFTER the room is cleared, so it cannot still read A\'s cache');
 });
 
