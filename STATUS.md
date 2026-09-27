@@ -5,6 +5,44 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-27 — Calendar Day + Extended My Day V1 (candidate, NOT integrated)
+
+Candidate on `feat/calendar-day-extended-my-day-v1`, from `origin/main` @ `b7796e4` (Device-Local Account
+Isolation V1, which is on origin/main). Not pushed, merged or deployed. Release token
+`20260927-calendar-day-extended-my-day-v1`. Details in CHANGELOG.md.
+
+Retires the Personal Day boundary as the PRIMARY day/streak authority without deleting or migrating any of
+it: a new account-owned **Plan-by deadline** setting (own revision history, own room-scoped store, own sync
+bridge, no anchor/default-guessing) now governs planning-streak evaluation; My Day's title is calendar-date-
+primary; a date-break divider and a "Carryover from Sunday"-style section make a cross-midnight personal
+day's items visible on the correct calendar date without ever cloning a record. Legacy Personal Day boundary
+code, history, sync and recovery are untouched and still live, just relabeled "(legacy/advanced)" in Settings.
+
+**Audit finding that shaped scope:** the legacy `plans[dateKey]` store structurally cannot hold cross-midnight
+items (`planItemEndTime()` explicitly refuses it) — only accounts on the operational-day store (i.e. that
+have ever configured ANY boundary revision) can have a plan that crosses midnight, so carryover only applies
+there. A never-enabled account's My Day was already calendar-canonical before this phase; it now also gets
+the deadline/off-day streak model, but not cross-midnight carryover (no data to carry over). This was a
+deliberate scope decision, not a gap — extending it would mean either migrating the frozen legacy store or
+silently auto-enabling the operational store for every account, both explicitly out of bounds for this phase.
+
+**Bug found by the new browser suite (not by unit tests):** an off-day revoked in the same instant as its
+declare (realistic under a fast UI action or a frozen/mocked clock) failed the model's own validator and threw
+mid-render, leaving the Settings toggle stuck. Fixed (`>=` not `>`) with a unit test added for the exact case.
+
+**Verification:** `npm test` full green (61 suites, 1389 assertions, including the new 60). `npm run lint`
+clean (0 errors; 35 pre-existing warnings, none in touched files). `www/` parity clean
+(`node scripts/runtime-mirror.mjs --check`). Targeted Playwright regression pass across every spec touching
+the changed rendering/settings code (`my-day-timeline`, `personal-day-boundary`, `single-plan-authority`,
+`plan`, `plan-tomorrow-ui`, `planning-continuity[-fixes]`, `tomorrow-view`, `plan-linkage-up-next`,
+`plan-time-range`, plus the new `calendar-day-extended-my-day` spec) — see CHANGELOG.md for the 8 pre-existing
+label assertions updated (not weakened) to match the intentional new calendar-date-primary label text.
+
+**Next:** independent/strict review of this candidate. Timer/away, Life Ledger and intention account-isolation
+gaps remain separate, deliberately-untouched phases (see the entry below), only on a fresh request.
+
+---
+
 ## 2026-09-26 — Device-Local Account Isolation V1: FIX FIRST applied (targeted re-review candidate, NOT integrated)
 
 Same branch `fix/device-local-account-isolation-v1`; strict review of `2bf9cf4` returned FIX FIRST with three
