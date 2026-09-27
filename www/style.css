@@ -588,6 +588,13 @@ td.act{font-family:var(--head);font-size:12px;max-width:160px;white-space:nowrap
 /* ── Activity timeline ── */
 .tl-row{display:flex;align-items:stretch;gap:0;min-height:42px;position:relative}
 .tl-row+.tl-row{margin-top:1px;border-top:1px solid var(--border)}
+/* Calendar Day + Extended My Day V1 (§21): date-break divider + carryover section */
+.tl-date-break{display:flex;align-items:center;gap:8px;margin:10px 0 6px;color:var(--muted);
+  font-size:10px;font-weight:700;letter-spacing:0.06em;text-align:center}
+.tl-date-break::before,.tl-date-break::after{content:'';flex:1;height:1px;background:var(--border)}
+.tl-carryover-section{margin-bottom:10px;padding-bottom:8px;border-bottom:1px dashed var(--border)}
+.tl-carryover-header{font-size:10px;font-weight:700;letter-spacing:0.06em;color:var(--muted);
+  text-transform:uppercase;padding:4px 0 6px}
 .tl-row-focus{animation:tl-row-focus 1.4s ease-out}
 @keyframes tl-row-focus{0%,100%{background:transparent}15%,55%{background:rgba(255,107,107,0.12)}}
 .tl-time{width:54px;font-family:var(--mono);font-size:10px;color:var(--muted);

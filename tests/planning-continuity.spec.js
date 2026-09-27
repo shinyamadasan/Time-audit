@@ -547,7 +547,8 @@ test('direct date scheduling jumps one week ahead without repeated paging', asyn
     input.value = '2026-09-25';
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await expect(page.locator('#timeline-date-label')).toContainText('My Day');
+  // Calendar Day + Extended My Day V1: the label is calendar-date-primary now.
+  await expect(page.locator('#timeline-date-label')).toContainText('Sep 25');
   await expect(page.locator('#timeline-anytime')).toContainText('One week ahead');
   const count = await page.evaluate(() => window.PlanAuthority.recoverableDays().reduce((sum, row) => sum + window.PlanAuthority.items(row.target).filter(item => item.task === 'One week ahead').length, 0));
   expect(count).toBe(1);

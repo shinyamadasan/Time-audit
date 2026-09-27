@@ -84,11 +84,19 @@ import {
   nextPlanItemRelocation,
   planItemIsActiveInDay,
 } from './plan-item-relocation.js';
+import {
+  deadlineInstantForCalendarDate,
+  evaluatePlanningDeadlineQualification,
+  offDayDeclaredAtForDeadline,
+} from './plan-by-deadline-model.js';
 // Side-effect import: personal-day-boundary-live.js owns the
 // `window.PersonalDayBoundaryLive` singleton this module's own singleton composes,
 // so importing it here makes that construction order a module-graph guarantee
 // rather than a dependency on <script> tag order. Inert under `node --test`.
 import './personal-day-boundary-live.js';
+// Same reasoning: plan-by-deadline-sync.js owns `window.PlanByDeadlineSync`,
+// whose `.repository` this module's singleton reads for planningDeadlineStreak().
+import './plan-by-deadline-sync.js';
 
 /** Carry-forward ids for operational days. Deliberately NOT the legacy
  *  `carry:<date>:<itemId>` shape (plan-tomorrow-model.js's carriedItemId, which
@@ -172,6 +180,11 @@ export function createPlanAuthority(deps = {}) {
   if (!live || !legacy) throw new Error('Plan authority needs the boundary live wiring and the legacy plan store.');
   const now = typeof deps.now === 'function' ? deps.now : () => Date.now();
   const accountTimezone = typeof deps.accountTimezone === 'function' ? deps.accountTimezone : () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Optional: the Plan-by-deadline repository (readDeadlines(), readOffDay(dateKey)).
+  // Absent for any caller that hasn't wired it up yet (including every existing
+  // test) — planningDeadlineStreak() reports 'unenforced' rather than throwing,
+  // exactly like an account that has never configured a deadline.
+  const planByDeadline = deps.planByDeadline || null;
   // The calendar-date interval a HISTORY SCREEN owns (index.html's own
   // tzParseTime-based day bounds in production), injected rather than
   // re-derived, so the projection can never disagree with the screen's own
@@ -779,6 +792,92 @@ export function createPlanAuthority(deps = {}) {
     return value;
   }
 
+  // ── Calendar Day + Extended My Day V1: Plan-by-deadline streak ────────────
+  //
+  // Independent of streak()/habitEarned() above (the Personal Day boundary
+  // model — "was the FOLLOWING day prepared before it began"). This model
+  // asks a different, calendar-date-canonical question: "by THIS calendar
+  // date's own configured deadline, was ITS OWN plan prepared (or the date
+  // explicitly marked an intentional off-day)?" It does not replace streak()
+  // — an account with no deadline configured keeps its historical boundary-
+  // based streak display untouched; this is a separate, additive evaluation
+  // that becomes the new streak authority only once a deadline exists.
+
+  /** The authoritative day whose OWN originating calendar date is `dateKey` —
+   *  never a day merely overlapping it from a prior cycle (Decision B already
+   *  gives us every overlapping day; this picks the one that actually STARTS
+   *  on this date, which is what "did the user plan today" must mean under
+   *  calendar-date-canonical semantics). For a legacy/never-enabled account
+   *  there is exactly one candidate and it always qualifies. */
+  function planTargetOriginatingOnCalendarDate(dateKey) {
+    const candidates = daysOverlappingCalendarDate(dateKey);
+    return candidates.find(t => (t.legacy ? t.dateKey === dateKey : t.ref?.boundaryStartDate === dateKey)) || candidates[candidates.length - 1];
+  }
+
+  /** The provenance timestamp that qualifies as "genuinely prepared" — same
+   *  definition earnsItsPredecessorCredit already uses for the boundary
+   *  streak (real content or an explicit intentional-blank/Open Day), so the
+   *  two streak models never disagree about what counts as a real plan. */
+  function qualifyingPreparedAtMs(target) {
+    const prepared = preparationFrom(target, record(target)?.preparation);
+    if (!prepared) return null;
+    const hasContent = prepared.intentionalBlank === true || (prepared.routineInstanceIds?.length > 0) || (prepared.oneOffItemIds?.length > 0);
+    return hasContent ? prepared.firstPreparedAt : null;
+  }
+
+  function deadlineQualificationForDate(dateKey, revisions, timezone) {
+    const deadlineInstantMs = deadlineInstantForCalendarDate(dateKey, timezone, revisions);
+    if (deadlineInstantMs === null) return { deadlineInstantMs: null, status: 'unenforced' };
+    let target;
+    try { target = planTargetOriginatingOnCalendarDate(dateKey); } catch { target = null; }
+    const planPreparedAtMs = target ? qualifyingPreparedAtMs(target) : null;
+    const offDayRecord = planByDeadline?.readOffDay ? planByDeadline.readOffDay(dateKey) : null;
+    const offDayDeclaredAtMs = offDayDeclaredAtForDeadline(offDayRecord, deadlineInstantMs);
+    return { deadlineInstantMs, ...evaluatePlanningDeadlineQualification(deadlineInstantMs, planPreparedAtMs, offDayDeclaredAtMs) };
+  }
+
+  /** Deterministic from persisted facts alone (§12) — never depends on this
+   *  function having been called at the exact deadline instant. Walks
+   *  calendar dates backwards from today, exactly like streak()'s own
+   *  backward walk, but stops the instant a date predates the very first
+   *  configured deadline revision (§8: no retroactive enforcement invented
+   *  for history that came before the feature existed) rather than treating
+   *  that date as "missed". Bounded by DAY_AHEAD_GUARD for the same
+   *  malformed-data-safety reason streak()'s walk is bounded by historyFloorMs.
+   *  @param {number} nowMs
+   *  @returns {{status:'unenforced'}|{status:'configured', today:{status:string,deadlineInstantMs:number|null}, current:number, best:number}} */
+  function planningDeadlineStreak(nowMs = now()) {
+    if (!planByDeadline?.readDeadlines) return { status: 'unenforced' };
+    const revisions = planByDeadline.readDeadlines();
+    if (!revisions.length) return { status: 'unenforced' };
+    const timezone = accountTimezone();
+    const todayDateKey = localPlanDate(nowMs, timezone);
+    const todayQualification = deadlineQualificationForDate(todayDateKey, revisions, timezone);
+    const todayStatus = todayQualification.status === 'unenforced' ? 'unenforced'
+      : todayQualification.status === 'maintained' ? 'maintained' // already satisfied — never demoted back to "pending" just because the deadline hasn't technically arrived yet
+      : (todayQualification.deadlineInstantMs !== null && nowMs < todayQualification.deadlineInstantMs) ? 'pending'
+      : 'missed';
+
+    const flags = [];
+    let cursorDateKey = addCalendarDays(todayDateKey, -1);
+    for (let guard = 0; guard < DAY_AHEAD_GUARD; guard++) {
+      const qualification = deadlineQualificationForDate(cursorDateKey, revisions, timezone);
+      if (qualification.status === 'unenforced') break; // predates the first configured deadline — stop, don't invent history
+      flags.unshift(qualification.status === 'maintained');
+      cursorDateKey = addCalendarDays(cursorDateKey, -1);
+    }
+
+    let backward = 0;
+    while (backward < flags.length && flags[flags.length - 1 - backward]) backward++;
+    const todayCounts = todayStatus === 'maintained' ? 1 : 0;
+    return {
+      status: 'configured',
+      today: { status: todayStatus, deadlineInstantMs: todayQualification.deadlineInstantMs },
+      current: backward + todayCounts,
+      best: Math.max(longestTrueRun(flags), backward + todayCounts),
+    };
+  }
+
   // ── Prepared Plans (recovery/discoverability, never a second editor) ──────
 
   /** Operational plan records that hold real preparation but are not reachable
@@ -1164,6 +1263,7 @@ export function createPlanAuthority(deps = {}) {
     validateItem, itemStartInstant, evidenceWindow, classifyItemActual,
     routineTarget, routinesForTarget, templatesForTarget,
     habitEarned, streak,
+    planTargetOriginatingOnCalendarDate, planningDeadlineStreak,
     preparedPlans, boundaryChangeImpact,
     setItemKind, updateItem,
     staleUnfinished, staleMoveDestination, moveStaleItem, rescheduleStaleItem,
@@ -1202,6 +1302,7 @@ if (typeof window !== 'undefined') {
     },
     priorityMax: (() => { try { return authorityAppContext().maxItems; } catch { return 3; } })(),
     accountTimezone: () => authorityAppContext().timezone,
+    planByDeadline: window.PlanByDeadlineSync?.repository,
     calendarDayBounds: dateKey => authorityAppContext().calendarDayBounds(dateKey),
     legacyClockInstant: (dateKey, hhmm) => authorityAppContext().clockInstant(dateKey, hhmm),
     onWrite: () => globalThis.refreshAuthoritativePlanSurfaces?.(),

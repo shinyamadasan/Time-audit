@@ -132,7 +132,10 @@ const timeline = page => page.locator('#timeline-blocks');
 test('Sat 14:44, 18:00 boundary: the timeline is Fri 18:00 → Sat 18:00, not the calendar Saturday', async ({ page }) => {
   await openApp(page, { now: at('2026-09-19', '14:44') });
 
-  await expect(page.locator('#timeline-date-label')).toHaveText('My Day · Fri Sep 18, 6:00 PM → Sat Sep 19, 6:00 PM');
+  // Calendar Day + Extended My Day V1: the label is calendar-date-primary now
+  // ("Today's timeline"), never the old interval span — the timeline CONTENT is
+  // still governed by the authoritative My Day window, which the rows below verify.
+  await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline");
 
   // Previous-evening schedule and entries are now visible…
   for (const label of ['Friday dinner', 'Friday evening study', 'Friday reading', 'Friday wind down']) {
@@ -169,7 +172,7 @@ test('the stored timestamps are untouched — only grouping changed', async ({ p
 
 test('at 18:00 the timeline rolls to the next My Day, which shows Saturday evening', async ({ page }) => {
   await openApp(page, { now: at('2026-09-19', '18:00') });
-  await expect(page.locator('#timeline-date-label')).toHaveText('My Day · Sat Sep 19, 6:00 PM → Sun Sep 20, 6:00 PM');
+  await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline"); // calendar date is still Sep 19
   await expect(timeline(page)).toContainText('Saturday party');
   for (const label of ['Friday dinner', 'Friday evening study', 'Saturday deep work', 'Saturday breakfast']) {
     await expect(timeline(page)).not.toContainText(label);
@@ -178,20 +181,26 @@ test('at 18:00 the timeline rolls to the next My Day, which shows Saturday eveni
 
 test('midnight does not roll the My Day timeline', async ({ page }) => {
   await openApp(page, { now: at('2026-09-19', '00:30') });
-  await expect(page.locator('#timeline-date-label')).toHaveText('My Day · Fri Sep 18, 6:00 PM → Sat Sep 19, 6:00 PM');
+  await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline"); // midnight changed the calendar date; the label says so plainly, with no window math
   await expect(timeline(page)).toContainText('Friday dinner');
   await expect(timeline(page)).toContainText('Friday evening study');
   await expect(timeline(page)).toContainText('Midnight notes');
 });
 
 test('timeline arrows move one authoritative My Day and return without changing the clock', async ({ page }) => {
+  // Calendar Day + Extended My Day V1: the label is calendar-date-primary now, so it
+  // no longer distinguishes Friday's still-current window from Saturday's own — both
+  // fall on "today" (Sep 19). The nav is verified by TIMELINE CONTENT instead, which
+  // still reflects whichever authoritative My Day is actually being viewed.
   await openApp(page, { now: at('2026-09-19', '14:44') });
-  const label = page.locator('#timeline-date-label');
-  const original = await label.textContent();
+  await expect(timeline(page)).toContainText('Friday dinner');
+  await expect(timeline(page)).not.toContainText('Saturday party');
   await page.getByRole('button', { name: 'Next My Day' }).click();
-  await expect(label).toHaveText('My Day · Sat Sep 19, 6:00 PM → Sun Sep 20, 6:00 PM');
+  await expect(timeline(page)).toContainText('Saturday party');
+  await expect(timeline(page)).not.toContainText('Friday dinner');
   await page.getByRole('button', { name: 'Previous My Day' }).click();
-  await expect(label).toHaveText(original);
+  await expect(timeline(page)).toContainText('Friday dinner');
+  await expect(timeline(page)).not.toContainText('Saturday party');
 });
 
 test('an in-session 18:00 rollover rebuilds the timeline without a calendar-date change', async ({ page }) => {
@@ -204,7 +213,7 @@ test('an in-session 18:00 rollover rebuilds the timeline without a calendar-date
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [ms])); } static now() { return ms; } };
     refreshOnPersonalDayRollover();
   }, at('2026-09-19', '18:01'));
-  await expect(page.locator('#timeline-date-label')).toHaveText('My Day · Sat Sep 19, 6:00 PM → Sun Sep 20, 6:00 PM');
+  await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline"); // an operational rollover alone never changes the calendar-date label
   await expect(timeline(page)).toContainText('Saturday party');
   await expect(timeline(page)).not.toContainText('Friday dinner');
 });
@@ -215,7 +224,7 @@ test('an in-session 18:00 rollover rebuilds the timeline without a calendar-date
 
 test('a 17:00 boundary uses its own interval', async ({ page }) => {
   await openApp(page, { now: at('2026-09-19', '14:44'), boundary: '17:00' });
-  await expect(page.locator('#timeline-date-label')).toHaveText('My Day · Fri Sep 18, 5:00 PM → Sat Sep 19, 5:00 PM');
+  await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline");
   await expect(timeline(page)).toContainText('Friday early errand'); // Fri 17:00 is now inside
   await expect(timeline(page)).toContainText('Friday dinner');
   await expect(timeline(page)).not.toContainText('Saturday party');
@@ -223,7 +232,7 @@ test('a 17:00 boundary uses its own interval', async ({ page }) => {
 
 test('custom 00:00 shows the calendar Saturday, labelled as My Day', async ({ page }) => {
   await openApp(page, { now: at('2026-09-19', '14:44'), boundary: '00:00' });
-  await expect(page.locator('#timeline-date-label')).toHaveText('My Day · Sat Sep 19, 12:00 AM → Sun Sep 20, 12:00 AM');
+  await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline");
   await expect(timeline(page)).not.toContainText('Friday dinner');
   await expect(timeline(page)).toContainText('Saturday breakfast');
   await expect(timeline(page)).toContainText('Saturday party');

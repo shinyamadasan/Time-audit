@@ -1,5 +1,75 @@
 # ChronaSense — Changelog
 
+## Calendar Day + Extended My Day V1 — candidate, not integrated
+
+**Candidate on `feat/calendar-day-extended-my-day-v1`** (from `origin/main` @ `b7796e4`, Device-Local Account
+Isolation V1). Not pushed, merged or deployed. Release token `20260927-calendar-day-extended-my-day-v1`
+(retires `20260926-device-local-account-isolation-fix1`). `www/` re-mirrored.
+
+**OLD:** the Personal Day boundary defined the primary My Day window and governed planning-streak timing
+(a day was "earned" only if the FOLLOWING personal day was prepared before it began — see
+`plan-authority.js`'s existing `habitEarned`/`streak`).
+
+**NEW:** calendar date is canonical for the primary UI; the Personal Day boundary subsystem is fully
+preserved (relabeled "legacy/advanced" in Settings, still live, still synced, still recoverable — nothing
+deleted, nothing migrated) but is no longer the primary day/streak authority. A new, independent,
+account-owned **Plan-by deadline** setting now governs planning-streak evaluation:
+
+- `plan-by-deadline-model.js` — pure math: a revision history with NO anchor concept (unconfigured = paused,
+  never a guessed default), reusing `personal-day-boundary-model.js`'s DST-safe civil-time primitives
+  (`resolveCivilBoundary`, `nextBoundaryInstant`) rather than re-implementing them. `proposeDeadlineRevision`
+  gives exactly the §9 activation rule (today if the new time hasn't passed yet, tomorrow otherwise) for free.
+  `deadlineInstantForCalendarDate` handles a revision change taking over mid-date. `evaluatePlanningDeadlineQualification`
+  and the intentional-off-day helpers are pure, deterministic, timer-free (§12).
+- `plan-by-deadline-repository.js` / `-sync.js` — local persistence + cross-device sync for deadline revisions
+  and Intentional Off-Day records, mirroring the Personal Day Boundary's `<key>:<roomId>` room-scoping
+  (`appRoomOwner()`) exactly, so account isolation is structural, not bolted on. The sync bridge is a lighter
+  per-child `update()` + whole-collection listener (not `personal-day-boundary-sync.js`'s Firebase
+  `.transaction()`) — deadline/off-day changes are rare, single-user, per-own-id writes, so the transactional
+  machinery built for a different subsystem's observed race isn't needed here.
+- `plan-authority.js` — additive: `planningDeadlineStreak(nowMs)` (new deadline-based streak, independent of
+  the existing `streak()`), `planTargetOriginatingOnCalendarDate(dateKey)` (the day that actually STARTS on a
+  calendar date, vs. `daysOverlappingCalendarDate`'s "every day overlapping it"). The existing `streak()` and
+  `habitEarned()` are byte-for-byte untouched; an account with no deadline configured keeps its historical
+  number exactly as before (§8).
+- `index.html` My Day: `#timeline-date-label` is calendar-date-primary now ("Today's timeline" / "Friday,
+  September 25's timeline"), never the old "My Day · Fri 6PM → Sat 6PM" interval span. A date-break divider
+  separates rows landing on two different calendar dates within one still-active personal day (§21, case 1).
+  A new **"Carryover from Sunday"-style** section surfaces a PRIOR operational day's items that land on
+  today's calendar date once that day is no longer current (§21, case 2) — a pure projection via
+  `TomorrowTimelineModel.deriveMyDayPlannedRows` called against the prior day's own target, rendered through
+  the SAME row template and the SAME `toggleTimelinePlanDone(dayId, itemId)` handler: no cloned record, no
+  duplicate completion state. Once the source day has fully ended, its items are correctly read-only there
+  too — the pre-existing `isTimelineTargetEditable` "past My Days are history" rule, not a new one.
+- Settings: a new "Planning deadline" section (`plan-by-deadline-ui.js`) is now primary; "Personal day
+  boundary" is relabeled "(legacy/advanced)" but left fully visible/interactive (a collapsed `<details>` was
+  tried and reverted — it hid the panel from a dozen existing, still-valid regression tests and from
+  assistive tech, which is not what "de-emphasize" means here). The streak line shown on Today (`s-streak`
+  Planning-streak text and the Partner card) now prefers `planningDeadlineStreak()` once configured, falls
+  back to the historical `streak()` otherwise.
+- Scope explicitly NOT changed: the legacy `plans[dateKey]` store still cannot hold cross-midnight items
+  (frozen, per §18/19) — cross-midnight plans and carryover are only possible for accounts that have an
+  active operational day (i.e. have ever configured ANY boundary revision, including 00:00), exactly as
+  before this phase. A never-enabled account's My Day was already plain-calendar-canonical; this phase adds
+  the deadline/off-day streak model for it too (verified with a never-enabled account in
+  `plan-authority-deadline-streak.test.js`) but does not and cannot add cross-midnight carryover to the
+  frozen legacy store without the destructive migration §1/§18 forbid.
+
+**Bug found and fixed by the new browser suite** (not by unit tests): `validateIntentionalOffDayRecord`
+required `revokedAtMs > declaredAtMs` strictly; a revoke in the SAME instant as the declare (realistic with a
+fast UI action or a frozen/mocked clock) failed validation and threw mid-render, leaving the Settings toggle
+stuck. Now `>=`.
+
+**Tests:** `plan-by-deadline-model.test.js` (23), `plan-by-deadline-repository.test.js` (15),
+`plan-by-deadline-sync.test.js` (10), `plan-authority-deadline-streak.test.js` (12) — 60 new, all passing, zero
+existing test behavior changed except the ones below. `tests/calendar-day-extended-my-day.spec.js` — 7 new
+Playwright cases (settings, off-day round-trip, date-break, carryover + no-duplication proof, midnight
+boredom). Updated (not weakened) 8 pre-existing assertions across `tests/my-day-timeline.spec.js` and
+`tests/planning-continuity.spec.js` that asserted the OLD interval-spanning label text — the primary label
+semantic they were pinning intentionally changed; their underlying content/behavior assertions are untouched.
+
+---
+
 ## Device-Local Account Isolation V1 — candidate, not integrated
 
 **Candidate on `fix/device-local-account-isolation-v1`** (from `origin/main` @ `7ae7c68`, Focus Redemption

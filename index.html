@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
-<meta name="pdb-release" content="20260926-device-local-account-isolation-fix1">
+<meta name="pdb-release" content="20260927-calendar-day-extended-my-day-v1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -788,13 +788,26 @@
     </div>
   </div>
 
+  <!-- Calendar Day + Extended My Day V1 (§20): the new primary streak-authority
+       setting, rendered by plan-by-deadline-ui.js. Its own append-only revisioned
+       store, never a field on the legacy `settings` object. -->
+  <div class="settings-section">
+    <div class="settings-title">Planning deadline</div>
+    <div id="plan-by-deadline-settings"></div>
+  </div>
+
   <!-- Personal Day Boundary Live Wiring V1. Deliberately its OWN settings section,
        not a row inside "Performance targets": it is an append-only revisioned
        store of its own, never a field on the legacy `settings` object, and it is
        never pushed through saveSettings(). The section body is rendered by
-       personal-day-boundary-ui.js. -->
+       personal-day-boundary-ui.js. Calendar Day + Extended My Day V1 (§19/§20):
+       relabeled legacy/advanced — no longer the primary streak/day setting — but
+       left visible and interactive exactly as before (its history, sync and
+       recovery code, and every test exercising them, are untouched). A collapsed
+       <details> was tried and rejected: it hid the panel from assistive tech and
+       from direct interaction, which is not what "de-emphasize" is supposed to mean. -->
   <div class="settings-section">
-    <div class="settings-title">Personal day boundary</div>
+    <div class="settings-title">Personal day boundary (legacy/advanced)</div>
     <div id="personal-day-boundary-settings"></div>
   </div>
 
@@ -1666,7 +1679,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260926-device-local-account-isolation-fix1
+<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260927-calendar-day-extended-my-day-v1
      themselves, but the modules they IMPORT are bare URLs, which browsers cache independently of index.html
      — so a device could run new sync code against an old repository, or an old live wiring against a new
      storage.js (permanent "Off", or a link error that stops PlanAuthority loading at all). This map makes
@@ -1681,56 +1694,60 @@
 <script type="importmap">
 {
   "imports": {
-    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260926-device-local-account-isolation-fix1",
-    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260926-device-local-account-isolation-fix1",
-    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260926-device-local-account-isolation-fix1",
-    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260926-device-local-account-isolation-fix1",
-    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260926-device-local-account-isolation-fix1",
-    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260926-device-local-account-isolation-fix1",
-    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260926-device-local-account-isolation-fix1",
-    "./operational-plan-model.js": "./operational-plan-model.js?v=20260926-device-local-account-isolation-fix1",
-    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260926-device-local-account-isolation-fix1",
-    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260926-device-local-account-isolation-fix1",
-    "./plan-authority.js": "./plan-authority.js?v=20260926-device-local-account-isolation-fix1",
-    "./commitments-repository.js": "./commitments-repository.js?v=20260926-device-local-account-isolation-fix1",
-    "./commitments-sync.js": "./commitments-sync.js?v=20260926-device-local-account-isolation-fix1",
-    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260926-device-local-account-isolation-fix1",
-    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260926-device-local-account-isolation-fix1",
-    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260926-device-local-account-isolation-fix1",
-    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20260926-device-local-account-isolation-fix1",
-    "./capability-career-repository.js": "./capability-career-repository.js?v=20260926-device-local-account-isolation-fix1",
-    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20260926-device-local-account-isolation-fix1"
+    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./operational-plan-model.js": "./operational-plan-model.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./plan-authority.js": "./plan-authority.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./commitments-repository.js": "./commitments-repository.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./commitments-sync.js": "./commitments-sync.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./capability-career-repository.js": "./capability-career-repository.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20260927-calendar-day-extended-my-day-v1",
+    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20260927-calendar-day-extended-my-day-v1"
   }
 }
 </script>
-<script src="storage.js?v=20260926-device-local-account-isolation-fix1"></script>
+<script src="storage.js?v=20260927-calendar-day-extended-my-day-v1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
-<script type="module" src="daily-routines-ui.js?v=20260926-device-local-account-isolation-fix1"></script>
+<script type="module" src="daily-routines-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
 <script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
-<script type="module" src="learning-plan-ui.js?v=20260926-device-local-account-isolation-fix1"></script>
-<script type="module" src="capability-career-ui.js?v=20260926-device-local-account-isolation-fix1"></script>
+<script type="module" src="learning-plan-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
+<script type="module" src="capability-career-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
 <script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
 <script type="module" src="windows-hud-bridge.js?v=20260908-windows-ambient-focus-hud-v1"></script>
-<script type="module" src="coarse-life-evidence-ui.js?v=20260926-device-local-account-isolation-fix1"></script>
-<script type="module" src="coarse-life-evidence-sync.js?v=20260926-device-local-account-isolation-fix1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
+<script type="module" src="coarse-life-evidence-sync.js?v=20260927-calendar-day-extended-my-day-v1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20260926-device-local-account-isolation-fix1"></script>
-<script type="module" src="personal-day-boundary-ui.js?v=20260926-device-local-account-isolation-fix1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20260927-calendar-day-extended-my-day-v1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
+<script type="module" src="plan-by-deadline-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
 <script>
 // Read-only Personal Day sync diagnostics for a real device: open the app with ?pdbdiag=1.
-if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260926-device-local-account-isolation-fix1'), 1500));
+if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260927-calendar-day-extended-my-day-v1'), 1500));
 </script>
-<script type="module" src="operational-plan-ui.js?v=20260926-device-local-account-isolation-fix1"></script>
-<script type="module" src="commitments-sync.js?v=20260926-device-local-account-isolation-fix1"></script>
+<script type="module" src="operational-plan-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
+<script type="module" src="commitments-sync.js?v=20260927-calendar-day-extended-my-day-v1"></script>
 <script type="module" src="planning-continuity-ui.js?v=20260918-planning-continuity-v1"></script>
 
 <script>
@@ -3813,14 +3830,6 @@ function isViewingCurrentTimelineDay() {
   catch { return false; }
 }
 
-/** "Fri Sep 18, 6:00 PM → Sat Sep 19, 6:00 PM" in the day's own timezone. */
-function myDayIntervalLabel(target) {
-  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: target.timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-  const label = ms => fmt.format(new Date(ms)).replace(/^(\w{3}), /, '$1 ');
-  return `${label(target.startMs)} → ${label(target.endMs)}`;
-}
-globalThis.myDayIntervalLabel = myDayIntervalLabel;
-
 function getEntriesForDateWindow(dateKey, includeDeleted = false) {
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const bounds = {
@@ -4589,8 +4598,18 @@ function isTimelineTargetEditable(target) {
   return target.dateKey >= today;
 }
 
+/** Calendar Day + Extended My Day V1, §21: a plain visual break where a My Day's
+ *  own rows cross into a new calendar date — never a "carryover" label (that
+ *  applies only to a DIFFERENT day's projection, see the carryover section built
+ *  in renderToday()); this is still the same plan, same day, just factual about
+ *  the date. */
+function renderDateBreakRow(item) {
+  const label = new Intl.DateTimeFormat('en-US', { timeZone: settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone, weekday: 'long', month: 'long', day: 'numeric' }).format(tzParseTime(item.dateKey, '12:00')).toUpperCase();
+  return `<div class="tl-date-break" role="separator" aria-label="${timelineRowEscape(label)}"><span>${timelineRowEscape(label)}</span></div>`;
+}
+
 function renderTimelineCombined(combined) {
-  return combined.map(item => item._timelinePlanned ? renderPlannedTimelineRow(item, item._editable) : item.isGap ? renderGapRow(item) : renderEntryRow(item)).join('');
+  return combined.map(item => item._dateBreak ? renderDateBreakRow(item) : item._timelinePlanned ? renderPlannedTimelineRow(item, item._editable) : item.isGap ? renderGapRow(item) : renderEntryRow(item)).join('');
 }
 
 /** @param {Object} e entry @returns {string} HTML for a recent-list row */
@@ -5918,10 +5937,47 @@ function renderToday() {
   try { notePersonalDayRendered(); } catch { /* not initialised yet */ }
   const timelineE = myDay ? getEntriesForWindow(myDay.startMs, myDay.endMs) : todayE;
   const displayTimelineE = myDay ? squashTinyPCTimeFragments(timelineE, null) : displayTodayE;
+
+  // Carryover from an active prior plan (Calendar Day + Extended My Day V1, §5/§21):
+  // when the calendar date being viewed is TODAY and the boundary has already moved
+  // PAST the day whose window still holds items landing on this calendar date (e.g.
+  // Sunday's plan continuing 1:00–4:00 AM into Monday, viewed once Monday's own
+  // operational day is current), those items would otherwise be invisible until the
+  // owner navigates back to Sunday's My Day. This projects them into today's view
+  // WITHOUT copying anything: same target id, same item ids, same toggle handler
+  // (toggleTimelinePlanDone) as the day they actually belong to — completing one
+  // here completes the one authoritative record, visible from either day.
+  let carryoverRows = [];
+  let carryoverFromLabel = null;
+  let carryoverTarget = null;
+  if (viewingCurrentTimeline && globalThis.PlanAuthority?.enabled?.()) {
+    try {
+      const overlapping = globalThis.PlanAuthority.daysOverlappingCalendarDate(_viewKey);
+      const priorCandidate = overlapping.length > 1 ? overlapping[0] : null;
+      if (priorCandidate && priorCandidate.id !== timelineTarget?.id) {
+        carryoverTarget = priorCandidate;
+        const priorProjection = globalThis.TomorrowTimelineModel?.deriveMyDayPlannedRows({
+          target: carryoverTarget,
+          planItems: planItemsFor(carryoverTarget),
+          commitments: globalThis.PlanningContinuityUI?.commitmentsForTarget?.(carryoverTarget) || [],
+          itemStartInstant: (target, when) => globalThis.PlanAuthority?.itemStartInstant(target, when) ?? null,
+        }) || { positioned: [] };
+        const carryoverEditable = isTimelineTargetEditable(carryoverTarget);
+        carryoverRows = priorProjection.positioned
+          .filter(row => getDateInTZ(row.startMs, _tz) === _viewKey)
+          .map(row => ({ ...row, tsStart: row.startMs, ts: row.endMs || row.startMs, _timelinePlanned: true, _editable: carryoverEditable }));
+        if (carryoverRows.length) {
+          carryoverFromLabel = new Intl.DateTimeFormat('en-US', { timeZone: _tz, weekday: 'long' }).format(tzParseTime(carryoverTarget.ref?.boundaryStartDate || _viewKey, '12:00'));
+        }
+      }
+    } catch { /* carryover is a bonus projection over existing data; never block the primary render */ }
+  }
+  const carryoverKey = carryoverRows.map(row => [row.dayId, row.itemId, row.done, row.startMs].join(':')).join(',');
+
   // The My Day id is part of the key, so the 18:00 rollover (which does not change the
   // calendar date) still rebuilds the rows, and midnight (which does not change My Day)
   // leaves them as they are.
-  const newRenderKey = _viewKey + '|' + (timelineTarget?.id || 'history') + '|' + timelineTemplateKey + '|' + timelinePlanKey + '|' + timelineE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
+  const newRenderKey = _viewKey + '|' + (timelineTarget?.id || 'history') + '|' + timelineTemplateKey + '|' + timelinePlanKey + '|' + carryoverKey + '|' + timelineE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
   const entriesChanged = newRenderKey !== _todayRenderKey;
   if (entriesChanged) _todayRenderKey = newRenderKey;
 
@@ -5940,11 +5996,29 @@ function renderToday() {
     const sourceOrder = item => item._timelinePlanned ? (item.sourceType === 'planned-task' ? 0 : 1) : item.template ? 2 : item.isGap ? 4 : 3;
     const rowId = item => String(item.id || item.templateId || '');
     const plannedRows = projection.positioned.map(row => ({ ...row, tsStart: row.startMs, ts: row.endMs || row.startMs, _timelinePlanned: true, _editable: editable }));
-    const combined = [...base, ...plannedRows].sort((a, b) => ((a.tsStart || a.ts) - (b.tsStart || b.ts)) || (sourceOrder(a) - sourceOrder(b)) || rowId(a).localeCompare(rowId(b)));
-    if (!combined.length && !projection.anytime.length) {
+    let combined = [...base, ...plannedRows].sort((a, b) => ((a.tsStart || a.ts) - (b.tsStart || b.ts)) || (sourceOrder(a) - sourceOrder(b)) || rowId(a).localeCompare(rowId(b)));
+    // Date-break divider (§21): when THIS My Day's own window still spans two
+    // calendar dates (a non-midnight boundary not yet crossed), separate the rows
+    // landing on each date with a plain divider — still one plan, one view; dates
+    // stay factual instead of hiding the crossing.
+    if (myDay && combined.length) {
+      const withBreaks = [];
+      let lastRowDateKey = null;
+      combined.forEach(row => {
+        const rowDateKey = getDateInTZ(row.tsStart ?? row.ts, myDay.timezone || _tz);
+        if (lastRowDateKey && rowDateKey !== lastRowDateKey) withBreaks.push({ _dateBreak: true, tsStart: row.tsStart, ts: row.tsStart, dateKey: rowDateKey });
+        withBreaks.push(row);
+        lastRowDateKey = rowDateKey;
+      });
+      combined = withBreaks;
+    }
+    if (!combined.length && !projection.anytime.length && !carryoverRows.length) {
       tlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">Nothing planned or recorded for this My Day.</div>';
     } else {
-      tlEl.innerHTML = renderTimelineCombined(combined);
+      const carryoverHtml = carryoverRows.length
+        ? `<div class="tl-carryover-section"><div class="tl-carryover-header">Carryover from ${timelineRowEscape(carryoverFromLabel)}</div>${renderTimelineCombined(carryoverRows)}</div>`
+        : '';
+      tlEl.innerHTML = carryoverHtml + renderTimelineCombined(combined);
       // Animate the most recently logged entry
       if (_lastLoggedEntryId) {
         const newRow = tlEl.querySelector(`[data-entry-id="${_lastLoggedEntryId}"]`);
@@ -5963,13 +6037,20 @@ function renderToday() {
   // ── Contextual visibility: show the right element for this moment ──
   applyContextualVisibility(displayTodayE);
 
-  // Timeline label + nav
+  // Timeline label + nav — calendar-date-primary always (Calendar Day + Extended
+  // My Day V1, §4/§20): a My Day never labels itself by its own window span
+  // ("Fri 6PM → Sat 6PM") any more. When browsing a non-current My Day, the label
+  // is anchored to THAT day's own originating calendar date (ref.boundaryStartDate),
+  // not getViewingDateKey() — which stays pinned to today's real date while a
+  // Personal-Day id is being viewed (viewingDateKey is null in that mode) and would
+  // otherwise mislabel a historical My Day as "Today".
   const _vk = getViewingDateKey();
-  const _diffDays = Math.round((new Date(_todayKey) - new Date(_vk)) / 86400000);
+  const _labelDateKey = (myDay && !viewingCurrentTimeline && myDay.ref?.boundaryStartDate) ? myDay.ref.boundaryStartDate : _vk;
+  const _diffDays = Math.round((new Date(_todayKey) - new Date(_labelDateKey)) / 86400000);
   const _tlLabel = _diffDays === 0 ? "Today's timeline"
     : _diffDays === 1 ? "Yesterday's timeline"
-    : new Intl.DateTimeFormat('en-US',{timeZone:_tz,weekday:'long',month:'short',day:'numeric'}).format(new Date(_vk + 'T12:00:00')) + "'s timeline";
-  document.getElementById('timeline-date-label').textContent = myDay ? `My Day · ${myDayIntervalLabel(myDay)}` : _tlLabel;
+    : new Intl.DateTimeFormat('en-US',{timeZone:_tz,weekday:'long',month:'short',day:'numeric'}).format(new Date(_labelDateKey + 'T12:00:00')) + "'s timeline";
+  document.getElementById('timeline-date-label').textContent = _tlLabel;
   document.getElementById('timeline-nav-next').style.display = '';
 
   // Timeline summary — describes the rows actually shown (My Day rows when active).
@@ -7219,12 +7300,22 @@ function renderTodayPlan() {
   renderTodayActionStrip(getViewingEntries());
 }
 
-/** The Planning Streak, always from the authoritative plan for each day. An
- *  account that never enabled a boundary gets the existing calendar function
- *  through the same call (see plan-authority.js), so its number cannot change. */
+/** The Planning Streak. Calendar Day + Extended My Day V1 (§7): once an account
+ *  has configured a Plan-by deadline, IT becomes the streak authority (current/
+ *  best come from planningDeadlineStreak(), never the Personal Day boundary
+ *  crossing) — no historical rewrite, this only changes which number is shown
+ *  going forward. An account with no deadline configured keeps its existing
+ *  boundary-based number exactly as before (§8: historical streak preserved,
+ *  new model simply not enforced yet). An account that never enabled a boundary
+ *  either gets the existing calendar function through the same call (see
+ *  plan-authority.js), so its number cannot change on its own. */
 function planningStreakForDisplay() {
   if (globalThis.PlanAuthority) {
-    try { return globalThis.PlanAuthority.streak(); } catch { return null; }
+    try {
+      const deadline = globalThis.PlanAuthority.planningDeadlineStreak?.();
+      if (deadline && deadline.status === 'configured') return { current: deadline.current, best: deadline.best, byDeadline: true, todayStatus: deadline.today.status };
+      return globalThis.PlanAuthority.streak();
+    } catch { return null; }
   }
   if (personalDayBoundaryConfigured()) return null;
   return globalThis.PlanTomorrowModel?.planningStreak(plans, Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone) || null;
@@ -8607,6 +8698,8 @@ function renderSettings() {
   // Rendering never creates a revision, so opening Settings can never put a
   // legacy account into operational mode.
   if (typeof globalThis.renderPersonalDayBoundarySettings === 'function') globalThis.renderPersonalDayBoundarySettings();
+  // Calendar Day + Extended My Day V1 — a pure read of the deadline/off-day store.
+  if (typeof globalThis.renderPlanByDeadlineSettings === 'function') globalThis.renderPlanByDeadlineSettings();
 }
 
 function isInQuietHours(ts) {

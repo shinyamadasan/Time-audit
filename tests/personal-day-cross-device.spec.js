@@ -227,8 +227,11 @@ test('until the account has been heard from, Settings is neutral (not "Off"), Sa
   expect(current.store).toBe('operational');
   expect(current.startMs).toBe(Date.parse('2026-09-16T18:00:00+08:00'));
   // ...and the visible My Day timeline was rebuilt for it, not left on the calendar day.
+  // Calendar Day + Extended My Day V1: the label is calendar-date-primary now — it reads
+  // "Today's timeline" both before and after the boundary arrives, exactly like line 216
+  // above; the REBUILD is proven by `current.store`/`current.startMs` above, not by the label.
   await page.evaluate(() => showView('today'));
-  await expect(page.locator('#timeline-date-label')).toHaveText('My Day · Wed Sep 16, 6:00 PM → Thu Sep 17, 6:00 PM');
+  await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline");
 });
 
 test('an account that is authoritatively empty really is Off once it has been heard from', async ({ page }) => {
@@ -339,8 +342,11 @@ test('A cached 20:00 -> sign out -> empty B: A is never uploaded, B shows Off (n
   expect(aCache).not.toBeNull();
 
   // Sit on Today, showing A's 20:00 My Day, and DO NOT navigate afterwards: a recompute must repaint it by itself.
+  // Calendar Day + Extended My Day V1: the label is calendar-date-primary now ("Today's
+  // timeline") both before and after sign-out — the REPAINT is proven below by PlanAuthority
+  // going back to enabled():false, not by the label text changing.
   await page.evaluate(() => showView('today'));
-  await expect(page.locator('#timeline-date-label')).toContainText('My Day');
+  await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline");
   await emitAuth(page, null); // sign-out
   await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline"); // A's personal day is gone from the surface, not left painted
   expect(await page.evaluate(() => window.PlanAuthority.enabled())).toBe(false);
