@@ -24,6 +24,8 @@ import { createCalendarPlanRepository } from './calendar-plan-repository.js';
 // guarantee rather than a dependency on <script> order. Inert under `node --test`.
 import './calendar-plan-sync.js';
 
+export const CALENDAR_AUTHORITY_STATE = Object.freeze({ UNKNOWN: 'unknown', LEGACY: 'legacy', CALENDAR: 'calendar' });
+
 export function createCalendarPlanLiveWiring(deps = {}) {
   const repository = deps.repository || createCalendarPlanRepository();
   const sync = deps.sync || null;
@@ -44,7 +46,7 @@ export function createCalendarPlanLiveWiring(deps = {}) {
   // ── authority ─────────────────────────────────────────────────────────────
 
   function status() {
-    return repository.status();
+    return { ...repository.status(), authorityState: authorityState(), ready: authorityReady() };
   }
 
   /** The account's effective activation, or null. Non-writing. */
@@ -53,7 +55,21 @@ export function createCalendarPlanLiveWiring(deps = {}) {
   }
 
   function active() {
-    return activation() !== null;
+    return authorityState() === CALENDAR_AUTHORITY_STATE.CALENDAR;
+  }
+
+  /** UNKNOWN is distinct from LEGACY: only a valid cached cutover or a completed,
+   *  trustworthy account snapshot may decide routing. */
+  function authorityState() {
+    if (activation()) return CALENDAR_AUTHORITY_STATE.CALENDAR;
+    const hydrated = sync && typeof sync.authorityHydrationState === 'function'
+      ? sync.authorityHydrationState() === 'hydrated'
+      : false;
+    return hydrated ? CALENDAR_AUTHORITY_STATE.LEGACY : CALENDAR_AUTHORITY_STATE.UNKNOWN;
+  }
+
+  function authorityReady() {
+    return authorityState() !== CALENDAR_AUTHORITY_STATE.UNKNOWN;
   }
 
   /** The ONE explicit cutover action. Idempotent for an already-activated account. The
@@ -174,7 +190,7 @@ export function createCalendarPlanLiveWiring(deps = {}) {
   }
 
   return {
-    status, activation, active, activate,
+    status, activation, active, authorityState, authorityReady, activate,
     readRecord, listAllRaw, writePlanItems, writePlanWithPreparation,
     liveDateKeys, attachLive, refreshLive, tick, pushAllLocal, detach,
     deviceId,

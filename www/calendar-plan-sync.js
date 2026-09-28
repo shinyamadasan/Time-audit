@@ -30,7 +30,7 @@
 
 import { createCalendarPlanRepository } from './calendar-plan-repository.js';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
-import { mergeCalendarPlanRecords, parseCalendarPlanId } from './calendar-plan-model.js';
+import { mergeCalendarPlanRecords, parseCalendarPlanId, validateActivationFact } from './calendar-plan-model.js';
 
 export const CALENDAR_PLANS_REMOTE_PATH = 'calendarPlans';
 export const CALENDAR_AUTHORITY_REMOTE_PATH = 'calendarPlanAuthority';
@@ -56,6 +56,7 @@ export function createCalendarPlanSyncBridge(deps = {}) {
 
   const planListeners = new Map(); // planId -> { ref, roomId, token }
   let authorityListener = null; // { ref, roomId, token }
+  let authorityHydratedRoomId = null;
   let listenerToken = 0;
   let hydratedRoomId = null;
 
@@ -215,10 +216,25 @@ export function createCalendarPlanSyncBridge(deps = {}) {
 
   function handleRemoteActivationSnapshot(val, roomId = activeRoomId()) {
     if (!roomOwnsCache(roomId)) return false;
-    if (!val || typeof val !== 'object') return true;
-    const result = repository.mergeRemoteActivations(val);
-    if (result.changed) announce('activation', null, result);
+    const empty = val === null || val === undefined;
+    if (!empty && (typeof val !== 'object' || Array.isArray(val))) return false;
+    const remote = empty ? {} : val;
+    const entries = Object.entries(remote);
+    const validCount = entries.filter(([id, fact]) => fact?.id === id && validateActivationFact(fact)).length;
+    const invalidCount = entries.length - validCount;
+    const result = repository.mergeRemoteActivations(remote);
+    // Empty is a trustworthy negative. Any valid fact is a trustworthy positive.
+    // An invalid-only snapshot proves neither and must stay fail-closed.
+    const hydrated = entries.length === 0 || validCount > 0;
+    const readinessChanged = hydrated && authorityHydratedRoomId !== roomId;
+    if (hydrated) authorityHydratedRoomId = roomId;
+    if (result.changed || readinessChanged) announce('activation', null, { ...result, hydrated, invalidCount });
     return true;
+  }
+
+  function authorityHydrationState() {
+    const roomId = activeRoomId();
+    return roomOwnsCache(roomId) && authorityHydratedRoomId === roomId ? 'hydrated' : 'unknown';
   }
 
   function attachAuthority() {
@@ -243,6 +259,7 @@ export function createCalendarPlanSyncBridge(deps = {}) {
   function detachAuthority() {
     if (authorityListener) authorityListener.ref.off();
     authorityListener = null;
+    authorityHydratedRoomId = null;
   }
 
   function detachAll() {
@@ -252,7 +269,7 @@ export function createCalendarPlanSyncBridge(deps = {}) {
 
   return {
     pushPlan, syncPlan, handleRemotePlanSnapshot, hydrateAll, attachPlan, detachPlan, detachPlans,
-    pushActivations, handleRemoteActivationSnapshot, attachAuthority, detachAuthority,
+    pushActivations, handleRemoteActivationSnapshot, attachAuthority, detachAuthority, authorityHydrationState,
     detachAll, onRemote, repository,
   };
 }
@@ -279,6 +296,11 @@ if (typeof window !== 'undefined') {
       if (window.PlanAuthority) window.PlanAuthority.invalidate();
       if (typeof globalThis.refreshAuthoritativePlanSurfaces === 'function') globalThis.refreshAuthoritativePlanSurfaces();
       if (typeof globalThis.renderCalendarPlanSettings === 'function') globalThis.renderCalendarPlanSettings();
+      // An empty first snapshot may be the moment LEGACY becomes trustworthy.
+      // Drain preserved legacy offline work only then; CALENDAR/UNKNOWN remain read-only.
+      if (kind === 'activation' && window.PlanAuthority?.authorityState?.() === 'legacy') {
+        window.PersonalDayBoundaryLive?.pushAllLocal?.();
+      }
     },
   });
 }

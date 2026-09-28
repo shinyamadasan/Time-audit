@@ -6,13 +6,16 @@
 - `calendar-plan-model.js` (pure): identity `cal1:<date>`, item time truth (`when` + `whenDayOffset` + item-owned
   `whenTz` -> `calendarItemInstants`), `stampCalendarItemTimes` (the ONLY place a zone is frozen), record merge
   (`mergeCalendarPlanRecords`, `restorePrunedPlanRecord` for Realtime Database pruning), activation facts
-  (`effectiveActivation` = earliest `(activatedAtMs, id)`), `calendarAuthorityForDate`.
+  (`effectiveActivation`: earliest `(activatedAtMs, id)` provenance plus minimum `activationDate` routing
+  bound), `calendarAuthorityForDate`.
 - `calendar-plan-repository.js`: room-scoped plans + activation facts, owner-guarded, validating (an invalid
   item throws before anything is written), no fallback to any legacy store.
 - `calendar-plan-sync.js`: `rooms/<room>/calendarPlans/<id>` (per-record transaction, per-item merge) and
-  `rooms/<room>/calendarPlanAuthority/<factId>`; listener generation/room guards, hydrate, foreign-room teardown.
+  `rooms/<room>/calendarPlanAuthority/<factId>`; listener generation/room guards, explicit per-room authority
+  hydration proof, account-switch reset, hydrate, foreign-room teardown.
 - `calendar-plan-live.js`: `window.CalendarPlanLive` — `activate()`, listener lifecycle (`attachLive`,
-  `refreshLive`, `tick`, `detach`), `pushAllLocal()` (every stored plan), refuses writes before activation.
+  `refreshLive`, `tick`, `detach`), `pushAllLocal()` (every calendar plan), and tri-state authority
+  (`UNKNOWN`/`LEGACY`/`CALENDAR`). UNKNOWN is read-only; a valid cached fact establishes CALENDAR.
 - `calendar-plan-ui.js`: Settings "Plan day" (`#calendar-plan-settings`), the Today switch card and read-only
   "Older plans" (`#calendar-plan-section`).
 - `plan-authority.js`: third store `calendar` behind the same targets. Public chain (`current`, `upcoming`,
@@ -20,11 +23,18 @@
   delegates to the untouched `legacy*` functions otherwise. New: `calendarActive/Activation`, `activateCalendar`,
   `boundaryEnabled` (the legacy boundary exists) vs `enabled()` (operational personal-day mode is IN FORCE: boundary
   and no cutover), `isCalendarAuthoritative`, `calendarCarryoverFor`, `supersededPlans`, `itemInstants`,
-  `calendarStreak`. Legacy days carry `supersededAtMs` after a cutover.
-- `stale-plan-recovery-model.js`: honours `supersededAtMs` and an optional per-item end (`itemEndMs`).
+  `calendarStreak`, `authorityState`, `reviewEvidenceWindow`. Legacy mutations fail while authority is UNKNOWN;
+  Review evidence derives from the frozen target zone and item instants. Legacy days carry `supersededAtMs`.
+- `stale-plan-recovery-model.js`: honours `supersededAtMs` and an optional per-item end (`itemEndMs`); relocation
+  claims choose one canonical destination for the source-owned `ocarry1|<day>|<item>` recovery identity.
 - `plan-tomorrow-model.js`: `planItemEndTime(when, minutes, wrap)` / `formatPlanItemSchedule` allow a calendar
   item to cross midnight and label a next-day item; every legacy caller is unchanged (`wrap` defaults false).
-- `storage.js`: attaches/re-pushes/detaches `CalendarPlanLive` and `PlanByDeadlineSync` with the rest of the room.
+- `storage.js`: attaches/re-pushes/detaches `CalendarPlanLive` and `PlanByDeadlineSync` with the rest of the room;
+  legacy date-plan re-push occurs only after trustworthy LEGACY authority.
+- `personal-day-boundary-live.js`: preserves local operational-plan recovery data but gates ordinary remote
+  operational-plan writes/re-pushes on trustworthy LEGACY authority.
+- `firebase.rules.json`: owner-only immutable activation-fact creation and the server-side post-cutover write
+  barrier for `plans`/`operationalPlans`; rules are authored here but deployment is a separate release action.
 - Tests: `calendar-plan-{model,repository,sync,live}.test.js`, `plan-authority-calendar.test.js` (production-
   equivalent modules), `npm-test-wiring.test.js` (the wiring itself), `tests/calendar-native-plan-identity.spec.js`.
 

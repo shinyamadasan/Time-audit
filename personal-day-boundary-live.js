@@ -125,6 +125,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     : () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Etc/UTC';
   const onChange = typeof deps.onChange === 'function' ? deps.onChange : () => {};
   const onTick = typeof deps.onTick === 'function' ? deps.onTick : () => {};
+  const mayWriteLegacyPlans = typeof deps.mayWriteLegacyPlans === 'function' ? deps.mayWriteLegacyPlans : () => true;
 
   // Operational days this device currently has a live remote listener on. Only
   // the current + upcoming day are ever attached — never a firehose over every
@@ -348,6 +349,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
    *  store), and items are range-validated against this day's real interval
    *  before anything is persisted. */
   function writePlanWithPreparation(day, items, preparation, history) {
+    if (!mayWriteLegacyPlans()) throw new Error('Plan authority is not in legacy write mode. No legacy planning change was saved.');
     if (authorityOf(day).store !== 'operational') throw new Error('writePlanWithPreparation is for operational days only.');
     const id = authorityOf(day).operationalDayId;
     planRepository.write(id, items, { updatedBy: deviceId(), now: now(), ref: day.ref, revisions: history });
@@ -391,6 +393,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
    *  is range-validated against that operational day's real interval before
    *  anything is persisted. */
   function writePlanItems(day, items, history) {
+    if (!mayWriteLegacyPlans()) throw new Error('Plan authority is not in legacy write mode. No legacy planning change was saved.');
     if (authorityOf(day).store === 'legacy') {
       if (!legacyPlans) throw new Error('Legacy plan access is not wired.');
       legacyPlans.saveItems(authorityOf(day).dateKey, items);
@@ -490,7 +493,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
    *  missing. Boundary revisions push as a set; plans push per live day. */
   function pushAllLocal(nowMs = now()) {
     if (boundarySync) { try { boundarySync.pushAllLocal(); } catch { /* offline */ } }
-    if (!planSync) return;
+    if (!planSync || !mayWriteLegacyPlans()) return;
     // Planning Continuity V1 (G2). This used to push only liveDayIds(), which meant
     // a plan written for a FUTURE day while offline was never re-pushed: by the time
     // the device reconnected, that day was neither current nor upcoming, so nothing
@@ -590,6 +593,7 @@ if (typeof window !== 'undefined') {
     onTick: () => {
       if (typeof window.refreshOperationalPlanSurfaceIfMounted === 'function') window.refreshOperationalPlanSurfaceIfMounted();
     },
+    mayWriteLegacyPlans: () => window.PlanAuthority?.authorityState?.() === 'legacy',
   });
 
   // Called by personal-day-boundary-sync.js when a REMOTE revision change lands:

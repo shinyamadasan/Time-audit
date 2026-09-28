@@ -827,7 +827,7 @@ test('on the transition day an item carries from the legacy day into the first p
   const destination = app.authority.upcoming();
   assert.equal(source.store, 'legacy');
   const id = carryItemIdFor(source, 'p-abc', destination);
-  assert.ok(id.startsWith('ocarry1|2026-09-16|p-abc|odv1:'), id);
+  assert.equal(id, 'ocarry1|2026-09-16|p-abc', 'the recovery identity is owned only by immutable source provenance');
   assert.equal(id, carryItemIdFor(source, 'p-abc', destination), 'deterministic across devices');
   assert.notEqual(id, carriedItemId(D, 'p-abc'), 'never mistaken for a legacy carry id');
 });

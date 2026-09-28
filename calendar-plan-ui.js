@@ -47,6 +47,7 @@ function confirmHtml() {
   return `<div class="cp-confirm" role="group" aria-label="Confirm switching to calendar-day plans">
     <p class="cp-body">From now on, <strong>today's plan is today's date</strong> — Sunday's plan is Sunday's, and it can run past midnight without becoming Monday's. This applies to all your devices and can't be switched back.</p>
     <p class="cp-body">Plans you already made under a Personal Day stay exactly as they are (read-only). You can move their unfinished tasks into today's plan.</p>
+    <p class="cp-body"><strong>Update all devices before switching.</strong> Older versions will no longer be able to modify current planning after cutover.</p>
     <div class="cp-actions">
       <button type="button" class="btn sm" data-cp-action="confirm">Switch to calendar-day plans</button>
       <button type="button" class="btn sm ghost" data-cp-action="cancel">Not now</button>
@@ -55,12 +56,16 @@ function confirmHtml() {
 }
 
 function settingsHtml(layer) {
+  if (layer.authorityState?.() === 'unknown') {
+    return '<div class="settings-hint" data-cp-state="syncing" role="status">Syncing plan authority… Planning changes are temporarily read-only.</div>';
+  }
   const activation = layer.calendarActivation();
   if (activation) {
     const legacy = layer.boundaryEnabled()
       ? '<p class="cp-body cp-muted">The Personal day boundary below is legacy: it no longer decides which plan is current, what "tomorrow" is, or your planning streak. It only describes plans made before you switched.</p>'
       : '';
-    return `<div class="settings-hint" data-cp-state="active">Plans follow calendar dates (since ${escape(formatCalendarDate(activation.activationDate))}). Sunday's plan is Sunday's and can continue past midnight.</div>${legacy}`;
+    const cutoverDate = activation.authorityActivationDate || activation.activationDate;
+    return `<div class="settings-hint" data-cp-state="active">Plans follow calendar dates (since ${escape(formatCalendarDate(cutoverDate))}). Sunday's plan is Sunday's and can continue past midnight.</div>${legacy}`;
   }
   const lead = layer.boundaryEnabled()
     ? 'Your plans currently follow a Personal Day window, so "today\'s plan" can be a different day than the calendar says.'
@@ -84,6 +89,9 @@ function olderPlanHtml(plan) {
 }
 
 function cardHtml(layer) {
+  if (layer.authorityState?.() === 'unknown') {
+    return '<div class="cp-card" data-cp-state="syncing"><p class="cp-body" role="status">Syncing plan authority… Planning changes are temporarily read-only.</p></div>';
+  }
   if (!layer.calendarActive()) {
     if (!layer.boundaryEnabled()) return '';
     const lead = 'Your plans follow a Personal Day window. Switch to calendar-day plans so today\'s plan is today\'s date.';

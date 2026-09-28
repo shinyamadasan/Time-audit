@@ -161,6 +161,20 @@ test('activation facts are pushed one child per fact; a second device that hears
   assert.equal(mac.repository.activation().id, fact.id, 'the Mac learned the cutover from the account');
 });
 
+test('authority hydration is explicit: empty snapshot proves legacy, detach/account switch returns to unknown', () => {
+  const db = fakeDatabase();
+  const a = device(db);
+  assert.equal(a.bridge.authorityHydrationState(), 'unknown');
+  a.bridge.attachAuthority();
+  assert.equal(a.bridge.authorityHydrationState(), 'hydrated', 'the initial empty value snapshot is a trustworthy negative');
+  a.state.room = 'uid_B';
+  assert.equal(a.bridge.authorityHydrationState(), 'unknown', 'A readiness never leaks into B');
+  a.bridge.attachAuthority();
+  assert.equal(a.bridge.authorityHydrationState(), 'hydrated');
+  a.bridge.detachAll();
+  assert.equal(a.bridge.authorityHydrationState(), 'unknown');
+});
+
 test('two devices that activated independently converge on the EARLIEST fact, whatever the delivery order', async () => {
   const early = buildActivationFact({ id: 'ca1-early', nowMs: at('2026-09-27', '11:00'), timezone: MANILA, deviceId: 'phone' });
   const late = buildActivationFact({ id: 'ca1-late', nowMs: at('2026-09-28', '08:00'), timezone: MANILA, deviceId: 'mac' });
@@ -181,11 +195,12 @@ test('an activation snapshot for a room that is no longer joined is dropped; pus
   const a = device(db, { onRemoteChange: (...args) => seen.push(args) });
   const fact = buildActivationFact({ id: 'ca1-x', nowMs: at('2026-09-27', '11:00'), timezone: MANILA, deviceId: 'x' });
   a.bridge.attachAuthority();
+  const beforeLate = seen.length;
   a.state.room = 'uid_B';
   db.setAt(`rooms/uid_A/${CALENDAR_AUTHORITY_REMOTE_PATH}/${fact.id}`, fact);
   db.fire();
   assert.equal(a.repository.activation(), null);
-  assert.equal(seen.length, 0);
+  assert.equal(seen.length, beforeLate, 'the old-room callback announced nothing');
   a.repository.activate({ nowMs: at('2026-09-27', '11:00'), deviceId: 'b-dev' });
   a.state.room = 'uid_A'; // the cache owner (B's slot) no longer matches the joined room
   a.state.room = 'uid_B';

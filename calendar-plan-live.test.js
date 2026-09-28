@@ -26,6 +26,7 @@ function device(db, { room = 'uid_A', clock = { now: at('2026-09-27', '11:00') }
 
 test('reading never activates: an account is inactive until the owner explicitly activates', () => {
   const d = device(fakeDatabase());
+  assert.equal(d.live.authorityState(), 'unknown');
   assert.equal(d.live.active(), false);
   assert.equal(d.live.activation(), null);
   assert.equal(d.live.status().status, 'inactive');
@@ -33,6 +34,21 @@ test('reading never activates: an account is inactive until the owner explicitly
   d.live.liveDateKeys();
   assert.equal(d.live.active(), false);
   assert.deepEqual(d.live.liveDateKeys(), [], 'no listeners are wanted for an inactive account');
+});
+
+test('fresh/no-cache offline authority fails closed, while a cached valid cutover establishes calendar authority', () => {
+  const db = fakeDatabase();
+  const fresh = device(db);
+  fresh.state.online = false;
+  fresh.live.attachLive();
+  assert.equal(fresh.live.authorityState(), 'unknown');
+  assert.equal(fresh.live.authorityReady(), false);
+
+  const cached = device(db);
+  cached.state.online = false;
+  cached.live.activate();
+  assert.equal(cached.live.authorityState(), 'calendar');
+  assert.equal(cached.live.authorityReady(), true);
 });
 
 test('activate() appends the fact, pushes it, announces the change, and is idempotent', async () => {
@@ -153,13 +169,16 @@ test('a direct A -> B switch: A\'s cutover and plans are not B\'s, and B -> A re
   d.live.activate();
   d.live.writePlanItems('2026-09-27', [item('a-only', '11:00')]);
   d.state.room = 'uid_B';
+  assert.equal(d.live.authorityState(), 'unknown', 'A cached CALENDAR does not establish anything for B');
   d.live.attachLive();
+  assert.equal(d.live.authorityState(), 'legacy', 'B becomes legacy only after its own empty snapshot');
   assert.equal(d.live.active(), false, 'B never activated');
   assert.equal(d.live.readRecord('2026-09-27'), null);
   assert.deepEqual(d.live.listAllRaw(), {});
   assert.deepEqual(d.live.liveDateKeys(), []);
   assert.throws(() => d.live.writePlanItems('2026-09-27', [item('x')]), /not active for this account/);
   d.state.room = 'uid_A';
+  assert.equal(d.live.authorityState(), 'calendar', 'A cached fact restores CALENDAR before a network answer');
   d.live.attachLive();
   assert.equal(d.live.active(), true);
   assert.equal(d.live.readRecord('2026-09-27').items[0].id, 'a-only');

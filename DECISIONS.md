@@ -439,8 +439,22 @@ Use the existing local Learning/Ledger persistence pattern, not auto-log day tem
 existing target abstraction). Items carry `when` + `whenDayOffset` (0|1) + an item-owned `whenTz`, so an item's
 instant is a pure function of the record: never of the account's current timezone, the Personal Day boundary or
 "today". A plan spans its own date and the next. Which store is authoritative for a date is decided ONLY by the
-account's activation facts (a grow-only set; the earliest `(activatedAtMs, id)` is effective). Legacy data is
-superseded at the activation instant and never migrated.
+account's activation facts (a grow-only set). The earliest `(activatedAtMs, id)` is the canonical provenance
+fact, while the minimum valid `activationDate` is the routing boundary; this makes convergence monotonic even
+when independent activations were created in different timezones. Legacy data is superseded and never migrated.
+
+Authority hydration is an explicit per-account state machine: `UNKNOWN`, `LEGACY`, or `CALENDAR`. A valid cached
+fact proves CALENDAR; otherwise only the room's remote snapshot proves LEGACY or CALENDAR. UNKNOWN is read-only,
+including every legacy write path, and detach/account switch clears the proof. The server contract reinforces
+this: authority facts are owner-created and immutable, and the legacy `plans`/`operationalPlans` stores reject all
+writes once any fact exists. The rules change must be deployed separately; activation copy tells users to update
+all devices because an old client will then receive permission errors.
+
+Explicit stale-item recovery uses one source-owned logical id, `ocarry1|<source-day>|<source-item>`, regardless of
+destination. Deterministic relocation revisions and the shared comparator select one live destination under
+concurrent different-destination moves, independent of arrival order; losing copies remain stored provenance but
+are not live. Review uses the plan's frozen home timezone and item-owned instants for its evidence extent, never
+the account's current timezone.
 
 **Why:** the previous phase proved no operational-day ref can represent "Sunday" as its own plan identity while
 holding a real Sunday-11:00 timestamp under an 18:00 boundary; labels and streak remapping would have papered over
@@ -451,6 +465,8 @@ identity, "tomorrow" or the streak day; do not infer authority from which store 
 not clone carryover into the next day's plan (it is a projection over the plan that owns it); do not restamp an
 item's `whenTz` unless its own reading changed; do not activate by reading. Do not make activation automatic
 without re-baselining the ~130 browser tests that encode the legacy model and deciding what becomes of today's
-plan, which lives in a legacy record at that moment.
+plan, which lives in a legacy record at that moment. Do not interpret missing local cache as LEGACY; do not let
+ordinary reconnect logic re-push preserved legacy records after cutover; do not key recovery identity by the
+chosen destination; and do not compute a historical Review window from current account settings.
 
 ---

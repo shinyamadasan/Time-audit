@@ -103,7 +103,7 @@ const TEST_SLOT = `ta3-day-boundary-revisions-v1:${TEST_ROOM}`;
 /** One device: its own local storage, its own repositories/bridges, its own
  *  injected clock. `roomRef` is shared between devices in multi-device tests;
  *  pass `null` to model a device that is offline / not in a room. */
-function makeDevice({ roomRef = null, storage = memory(), planStorage = memory(), idPrefix = 'rev', clock, legacy = legacyPlanStore(), deviceId = 'device-a', heard = true } = {}) {
+function makeDevice({ roomRef = null, storage = memory(), planStorage = memory(), idPrefix = 'rev', clock, legacy = legacyPlanStore(), deviceId = 'device-a', heard = true, legacyWriteGate = { allowed: true } } = {}) {
   const getRoomRef = () => roomRef;
   // The account is known even when its room ref is not reachable (offline): its cache slot is the room's.
   const boundaryRepository = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds(idPrefix), getOwner: () => TEST_ROOM });
@@ -123,6 +123,7 @@ function makeDevice({ roomRef = null, storage = memory(), planStorage = memory()
     now: () => nowRef.value,
     deviceId: () => deviceId,
     fallbackTimezone: () => MANILA,
+    mayWriteLegacyPlans: () => legacyWriteGate.allowed,
   });
   return { live, boundaryRepository, planRepository, boundarySync, planSync, legacy, storage, planStorage, nowRef, setNow: v => { nowRef.value = v; } };
 }
@@ -568,6 +569,29 @@ test('offline enable and change: everything works locally, then converges on rec
   const remote = remoteRevisions(roomRef);
   assert.equal(Object.keys(remote).length, 2, 'anchor + the offline revision both reached remote');
   assert.ok(remotePlan(roomRef, offlineDays.upcoming.authority.operationalDayId), 'the offline plan reached remote too');
+});
+
+test('post-cutover gate suppresses ordinary operational-plan re-push without deleting preserved local work', async () => {
+  const roomRef = fakeRoomRef();
+  const storage = memory();
+  const planStorage = memory();
+  const offline = makeDevice({ storage, planStorage, clock: manila(D, '08:00') });
+  offline.live.proposeBoundary({ boundaryTime: '18:00', timezone: MANILA });
+  const target = offline.live.planningDays().upcoming;
+  offline.live.writePlanItems(target, [{ id: 'preserved', task: 'offline legacy work', when: '', done: false }], offline.live.revisions());
+  assert.equal(offline.planRepository.listAllRaw()[target.authority.operationalDayId].items[0].id, 'preserved');
+
+  const gate = { allowed: false };
+  const reconnected = makeDevice({ roomRef, storage, planStorage, clock: manila(D, '08:00'), legacyWriteGate: gate });
+  reconnected.live.pushAllLocal();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(roomRef.child(OPERATIONAL_PLANS_REMOTE_PATH).val(), null, 'no rejected/noisy legacy write was attempted after cutover');
+  assert.equal(reconnected.planRepository.listAllRaw()[target.authority.operationalDayId].items[0].id, 'preserved', 'local recovery source remains intact');
+
+  gate.allowed = true;
+  reconnected.live.pushAllLocal();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.ok(remotePlan(roomRef, target.authority.operationalDayId), 'the fixture would push when LEGACY is trustworthy');
 });
 
 test('fresh device reconstructs the full boundary history and the live plan from remote alone', async () => {

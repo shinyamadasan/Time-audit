@@ -50,8 +50,8 @@
 // ── authority cutover ───────────────────────────────────────────────────────
 // Which store is authoritative for a date is decided ONLY by the account's
 // activation facts (never by which store holds data, never by load order):
-// a grow-only set of immutable facts; the effective activation is the one with the
-// smallest (activatedAtMs, id). Dates on/after its activationDate are
+// a grow-only set of immutable facts. One canonical fact is retained for provenance,
+// while routing uses the minimum activationDate across the whole valid set. Dates on/after it are
 // calendar-authoritative; earlier dates stay legacy-authoritative and read-only in
 // spirit (they remain viewable and their unfinished work recoverable).
 
@@ -317,15 +317,20 @@ export function buildActivationFact({ id, nowMs, timezone, deviceId }) {
   return fact;
 }
 
-/** The effective activation of a set of facts: the EARLIEST (activatedAtMs, then id).
- *  A grow-only set with a total order — every device that holds the same facts picks
- *  the same one, whatever order they arrived in. @param {object[]} facts @returns {object|null} */
+/** The effective activation of a set of facts. The earliest `(activatedAtMs, id)` fact
+ *  remains canonical provenance, while authorityActivationDate is the minimum date
+ *  declared by ANY valid fact. Adding to a grow-only set can therefore only leave the
+ *  routing cutover unchanged or move it earlier — never later. */
 export function effectiveActivation(facts) {
   const valid = (Array.isArray(facts) ? facts : []).filter(validateActivationFact);
   if (!valid.length) return null;
-  return valid.reduce((best, fact) => (
+  const canonicalFact = valid.reduce((best, fact) => (
     fact.activatedAtMs < best.activatedAtMs || (fact.activatedAtMs === best.activatedAtMs && compareStrings(fact.id, best.id) < 0) ? fact : best
   ));
+  const authorityActivationDate = valid.reduce((earliest, fact) => (
+    fact.activationDate < earliest ? fact.activationDate : earliest
+  ), valid[0].activationDate);
+  return { ...canonicalFact, authorityActivationDate };
 }
 
 /** Which store is authoritative for `dateKey`: 'calendar' on/after the effective
@@ -333,5 +338,6 @@ export function effectiveActivation(facts) {
  *  With no activation everything is legacy. */
 export function calendarAuthorityForDate(dateKey, activation) {
   if (!activation || !validPlanDate(dateKey)) return 'legacy';
-  return dateKey >= activation.activationDate ? 'calendar' : 'legacy';
+  const cutoverDate = activation.authorityActivationDate || activation.activationDate;
+  return dateKey >= cutoverDate ? 'calendar' : 'legacy';
 }
