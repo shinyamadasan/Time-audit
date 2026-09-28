@@ -285,7 +285,10 @@ tomorrowPane?.addEventListener('click', event => {
  *  rather than gating on the currently-governing revision — so a first 18:00
  *  enable reads as "next personal day" immediately, before 18:00 ever arrives. */
 function refreshPlanningTerminologyLabels() {
-  const usesPersonalDay = typeof globalThis.personalDayBoundaryConfigured === 'function' && globalThis.personalDayBoundaryConfigured();
+  // Once the account has switched to calendar-day plans, "tomorrow" IS the next calendar date again,
+  // whatever the (legacy) boundary says.
+  const usesPersonalDay = typeof globalThis.personalDayBoundaryConfigured === 'function' && globalThis.personalDayBoundaryConfigured()
+    && globalThis.PlanAuthority?.calendarActive?.() !== true;
   if (tomorrowTab) tomorrowTab.textContent = usesPersonalDay ? 'Next personal day' : 'Tomorrow';
   if (todayPrepareBtn) todayPrepareBtn.textContent = usesPersonalDay ? 'Prepare next personal day' : 'Prepare tomorrow';
 }

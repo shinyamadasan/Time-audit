@@ -46,12 +46,19 @@ export function normalizePriorityRow(item) {
   const row = baseRow(`priority:${item.id}`, 'priority', item.task);
   const when = typeof item.when === 'string' ? item.when : '';
   if (!validPlanItemTime(when)) return { ...row, precision: 'untimed' };
-  const endWhen = planItemEndTime(when, item.durationMinutes);
+  // A calendar-native item (marked by its own frozen zone or an explicit offset) may sit on the
+  // plan's NEXT date or cross midnight: minutes run on past 24:00 so it orders after the day's own
+  // items instead of before them (Monday 01:00 of Sunday's plan is not "01:00 tomorrow morning").
+  const calendarNative = item.whenDayOffset === 1 || (typeof item.whenTz === 'string' && item.whenTz.length > 0);
+  const endWhen = planItemEndTime(when, item.durationMinutes, calendarNative);
+  const dayShift = item.whenDayOffset === 1 ? 1440 : 0;
   row.startWhen = when;
-  row.startMinutes = toMinutes(when);
+  row.startMinutes = toMinutes(when) + dayShift;
+  row.nextDay = dayShift > 0;
   if (endWhen) {
     row.endWhen = endWhen;
-    row.endMinutes = toMinutes(endWhen);
+    row.endMinutes = row.startMinutes + item.durationMinutes;
+    row.crossesMidnight = toMinutes(when) + item.durationMinutes >= 1440;
     row.precision = 'ranged';
   } else {
     row.precision = 'start-only';
@@ -126,8 +133,9 @@ function statusLabel(row) {
 }
 
 function scheduleLabel(row) {
-  if (row.precision === 'ranged') return formatRangeLabel(row.startWhen, row.endWhen);
-  if (row.precision === 'start-only') return formatPlanItemTime(row.startWhen);
+  const suffix = row.nextDay ? ' (next day)' : '';
+  if (row.precision === 'ranged') return formatRangeLabel(row.startWhen, row.endWhen) + suffix;
+  if (row.precision === 'start-only') return formatPlanItemTime(row.startWhen) + suffix;
   return null;
 }
 
@@ -159,7 +167,7 @@ export function deriveTomorrowTimelinePreview({ priorityItems = [], routineRows 
 export function deriveMyDayPlannedRows({ target, planItems = [], commitments = [], itemStartInstant } = {}) {
   if (!target || typeof itemStartInstant !== 'function') return { anytime: [], positioned: [] };
   const planned = planItems.filter(item => item && !item.deleted).map(item => {
-    const startMs = validPlanItemTime(item.when) ? itemStartInstant(target, item.when) : null;
+    const startMs = validPlanItemTime(item.when) ? itemStartInstant(target, item.when, item) : null;
     return {
       id: `plan:${target.id}:${item.id}`,
       sourceType: 'planned-task',

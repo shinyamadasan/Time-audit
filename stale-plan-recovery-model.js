@@ -111,9 +111,17 @@ export function findMoveDestination(sourceItemId, sourceDayId, dayRecords) {
  *        module stays pure and makes no assumption about what "now" is.
  * @param {object} [input.dayRecords]
  *        id -> record, for already-moved detection. Defaults to `days`.
+ * @param {(target:object, item:object)=>number|null} [input.itemEndMs]
+ *        Calendar-Native Plan Identity V1: a calendar plan can hold items scheduled AFTER
+ *        its own date ends (Sunday's plan at Monday 04:00). Such an item is not stale until
+ *        its own span is over, so the caller may supply that end; the item is stale once
+ *        BOTH its day and its own span are over. Absent/null = the day's end alone.
  * @returns {{items:Array, unresolvable:Array}}
+ *
+ * A target may carry `supersededAtMs` (an account's calendar-native cutover): the day
+ * stopped being live at that instant if it came before the day's own end.
  */
-export function collectStaleUnfinished({ nowMs, days = [], dayRecords = null } = {}) {
+export function collectStaleUnfinished({ nowMs, days = [], dayRecords = null, itemEndMs = null } = {}) {
   if (!isFiniteMs(nowMs)) throw new Error('A valid current instant is required.');
   const lookup = dayRecords || Object.fromEntries(
     days.filter(entry => entry?.target?.id).map(entry => [entry.target.id, entry.record]),
@@ -132,11 +140,15 @@ export function collectStaleUnfinished({ nowMs, days = [], dayRecords = null } =
       if (items.length) unresolvable.push({ target, items });
       continue;
     }
-    if (target.endMs > nowMs) continue; // still in progress, or in the future
+    const dayEndMs = isFiniteMs(target.supersededAtMs) ? Math.min(target.endMs, target.supersededAtMs) : target.endMs;
+    if (dayEndMs > nowMs) continue; // the day is still in progress, or in the future
 
     const items = Array.isArray(entry.record?.items) ? entry.record.items : [];
     for (const item of items) {
       if (!itemIsRecoverable(item)) continue;
+      const ownEndMs = typeof itemEndMs === 'function' ? itemEndMs(target, item) : null;
+      const endedMs = isFiniteMs(ownEndMs) ? Math.max(dayEndMs, ownEndMs) : dayEndMs;
+      if (endedMs > nowMs) continue; // its own scheduled span is still ahead
       const moved = findMoveDestination(item.id, target.id, lookup);
       if (moved) continue; // already recovered once — never offered twice
       out.push({
@@ -145,8 +157,8 @@ export function collectStaleUnfinished({ nowMs, days = [], dayRecords = null } =
         sourceDayId: target.id,
         store: target.store,
         kind: planItemKind(item),
-        endedMs: target.endMs,
-        ageMs: nowMs - target.endMs,
+        endedMs,
+        ageMs: nowMs - endedMs,
       });
     }
   }

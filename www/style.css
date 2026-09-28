@@ -1679,3 +1679,11 @@ button, a, [role="button"],
 #review-overlay .rv-save-actions { display:flex; justify-content:flex-end; gap:8px; position:sticky; bottom:-24px; background:var(--bg2); padding:12px 0; z-index:1; }
 #review-overlay .rv-pva-row { overflow-wrap:anywhere; }
 #rv-tomorrow-status { margin-top:12px; }
+
+/* Calendar-Native Plan Identity V1 — the "next day" control and the cutover card. */
+.plan-nextday{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);white-space:nowrap}
+.plan-nextday input{width:auto;margin:0}
+.cp-card,.cp-confirm{border:1px solid var(--border2);border-radius:8px;padding:10px 12px;margin:8px 0;background:var(--bg3)}
+.cp-body{font-size:12px;line-height:1.45;margin:0 0 8px}
+.cp-muted{color:var(--muted)}
+.cp-actions{display:flex;gap:8px;flex-wrap:wrap}

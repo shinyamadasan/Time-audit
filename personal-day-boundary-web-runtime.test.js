@@ -194,14 +194,15 @@ test('the import map precedes every module script, and pins EVERY group module t
   }
   for (const required of ['personal-day-boundary-model', 'personal-day-boundary-repository', 'personal-day-boundary-sync', 'personal-day-boundary-live', 'operational-plan-model', 'operational-plan-repository', 'operational-plan-sync', 'plan-authority',
     'commitments-repository', 'commitments-sync', 'coarse-life-evidence-repository', 'coarse-life-evidence-sync', 'coarse-life-evidence-ui',
-    'learning-plan-repository', 'capability-career-repository', 'daily-routines-repository']) {
+    'learning-plan-repository', 'capability-career-repository', 'daily-routines-repository',
+    'calendar-plan-model', 'calendar-plan-repository', 'calendar-plan-sync', 'calendar-plan-live']) {
     assert.ok(GROUP.includes(`${required}.js`), `${required}.js must be in the pinned group`);
   }
 });
 
 test('every entry tag for the group, and storage.js, carries the SAME release token as the map and the meta', () => {
   for (const file of ['personal-day-boundary-live.js', 'personal-day-boundary-ui.js', 'operational-plan-ui.js', 'storage.js', 'commitments-sync.js', 'coarse-life-evidence-sync.js', 'coarse-life-evidence-ui.js',
-    'learning-plan-ui.js', 'capability-career-ui.js', 'daily-routines-ui.js']) {
+    'learning-plan-ui.js', 'capability-career-ui.js', 'daily-routines-ui.js', 'calendar-plan-ui.js']) {
     const tag = new RegExp(`src="${file.replace('.', '\\.')}\\?v=([^"]+)"`).exec(html);
     assert.ok(tag, `${file} has a versioned tag`);
     assert.equal(tag[1], release, `${file} must carry the release token`);
@@ -230,10 +231,14 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // and index.html (the carryover completion action, the Settings off-day dateKey fix), plan-by-deadline-model.js
 // (revision-owned timezone, equal-authority conflict detection) and plan-by-deadline-repository.js
 // (deadlineConflict()) — another new generation, its own '-fix1' token per the existing convention.
-const CURRENT_RELEASE = '20260927-calendar-day-extended-my-day-fix1';
+// Calendar-Native Plan Identity V1 adds the calendar-plan model / repository / sync / live modules to the
+// pinned group (plan-authority.js side-effect-imports the live wiring), changes plan-authority.js, storage.js
+// (calendar + Plan-by deadline listener lifecycle) and index.html — all group members, so the whole group moves
+// to a new generation again.
+const CURRENT_RELEASE = '20260927-calendar-native-plan-identity-v1';
 // '20260924-cross-store-account-isolation-v1' was never deployed (review candidate only), but it was
 // published on the candidate branch, so it is retired like a shipped token.
-const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1', '20260926-device-local-account-isolation-fix1', '20260927-calendar-day-extended-my-day-v1'];
+const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1', '20260926-device-local-account-isolation-fix1', '20260927-calendar-day-extended-my-day-v1', '20260927-calendar-day-extended-my-day-fix1'];
 
 test('the release is a NEW generation: never a previously shipped token, and no URL is left on an old one', () => {
   assert.equal(release, CURRENT_RELEASE);
@@ -270,7 +275,7 @@ test('every import of a group module, from any runtime module, is covered by the
     seen.add(file);
     for (const spec of importsOf(file)) {
       const target = spec.replace('./', '');
-      if (/\.js$/.test(target) && GROUP.includes(target) === false && /(personal-day-boundary|operational-plan|plan-authority|commitments-(repository|sync)|coarse-life-evidence-(repository|sync|ui)|learning-plan-repository|capability-career-repository|daily-routines-repository)/.test(target)) uncovered.push(`${file} -> ${target}`);
+      if (/\.js$/.test(target) && GROUP.includes(target) === false && /(personal-day-boundary|operational-plan|plan-authority|calendar-plan-(model|repository|sync|live)|commitments-(repository|sync)|coarse-life-evidence-(repository|sync|ui)|learning-plan-repository|capability-career-repository|daily-routines-repository)/.test(target)) uncovered.push(`${file} -> ${target}`);
       crawl(target);
     }
   };

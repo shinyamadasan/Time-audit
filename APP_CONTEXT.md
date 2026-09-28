@@ -925,3 +925,24 @@ a jump-to-date control; item-specific accessible labels on stale-row buttons.
   becomes current/upcoming or this device writes to it.
 - Two devices moving the same stale task offline to *different* destinations can each create a
   copy. Moves to the *same* destination converge to one.
+
+
+## Calendar-Native Plan Identity V1 (candidate, 2026-09-27)
+
+Full architecture: [docs/CALENDAR_NATIVE_PLAN_IDENTITY_V1.md](docs/CALENDAR_NATIVE_PLAN_IDENTITY_V1.md).
+
+- **NEW / LEGACY.** Calendar-native plan identity is authoritative for new planning once an account has cut over;
+  Personal Day / operational plans and `plans[dateKey]` are compatibility inputs. Legacy data is NOT migrated.
+- **A plan is its calendar date.** `cal1:2026-09-27` is Sunday's plan; its items may sit on Sunday or on Monday
+  (`whenDayOffset`), each with an item-owned `whenTz`, so instants never move when the account's timezone or the
+  Personal Day boundary later changes. A plan spans two dates; carryover is a projection over the plan that owns
+  the item (completing it writes that plan only — never a clone).
+- **The cutover is explicit, account-owned, one-way.** Facts are immutable and grow-only; the earliest
+  `(activatedAtMs, id)` is effective on every device. A calendar plan cannot be written before activation; a stale
+  device follows when it hears the cutover; its legacy work is surfaced as "Older plans" and recovered through the
+  ordinary Unfinished flow.
+- **Do not**: dual-write into a legacy store; let the boundary decide new-plan identity, "tomorrow" or the streak
+  day; clone carryover; restamp `whenTz` unless the item's own reading changed; activate by reading.
+- **Wire format:** Realtime Database drops empty arrays; calendar records are passed through
+  `restorePrunedPlanRecord` at the merge choke point. (The legacy/operational stores do not do this — see the
+  CHANGELOG note.)

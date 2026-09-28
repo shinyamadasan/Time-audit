@@ -44,7 +44,7 @@ function routinePlan(target, timezone) {
     const likelyNext = learningPlan ? findNextLearningPlanStep(learningPlan) : null;
     return { ...instance, skipped: !!state.skips[instance.id], actionable: instance.routine.source !== 'learning' || !!likelyNext, likelyNext };
   };
-  if (target.store === 'legacy') {
+  if (target.store !== 'operational') {
     return { state, mismatch: false, rows: generateInstances(state.routines, target.dateKey, state.timezone).map(decorate), unplaceable: [] };
   }
   const authority = globalThis.PlanAuthority;
@@ -183,7 +183,7 @@ function formatTargetDate(date) {
  *  interval it actually is — "Wed Sep 16 18:00 → Thu Sep 17 18:00" — because
  *  calling it "Thursday" would be false for most of its hours. */
 function targetHeading(target) {
-  if (target.store === 'legacy') return formatTargetDate(target.dateKey);
+  if (target.store !== 'operational') return formatTargetDate(target.dateKey);
   const fmt = new Intl.DateTimeFormat('en-US', { timeZone: target.timezone, weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   return `${fmt.format(new Date(target.startMs)).replace(',', '')} → ${fmt.format(new Date(target.endMs)).replace(',', '')}`;
 }
@@ -268,17 +268,28 @@ function chipRowHtml({ id, labelId, options, current, action }) {
   return `<div class="pt-chip-row" role="group" aria-labelledby="${labelId}">${chips}</div>`;
 }
 
+/** A calendar plan's item, as the store will see it: marked calendar-native so a range that
+ *  crosses midnight (Sunday 23:00 → Monday 01:00) is drawn as one. Drafts are not stamped with a
+ *  zone until they are saved, so the marker is supplied here for display only. */
+function scheduleView(item) {
+  return draft?.target?.store === 'calendar' && !item.whenTz ? { ...item, whenTz: draft.timezone } : item;
+}
+
 function schedulePanelHtml(item) {
   const timed = validPlanItemTime(item.when);
   const startLabelId = `pt-start-label-${escape(item.id)}`;
+  const nextDayToggle = draft?.target?.store === 'calendar' && timed
+    ? `<label class="pt-schedule-custom"><input type="checkbox" class="pt-nextday-input" data-pt-nextday="${escape(item.id)}" aria-label="Next day: ${escape(item.task)}" ${item.whenDayOffset === 1 ? 'checked' : ''}> Next day (after midnight)</label>`
+    : '';
   const startRow = `<div class="pt-schedule-row">
     <span class="pt-schedule-label" id="${startLabelId}">Start</span>
     ${chipRowHtml({ id: item.id, labelId: startLabelId, options: QUICK_STARTS, current: item.when, action: 'quick-start' })}
     <label class="pt-schedule-custom">Custom <input type="time" class="pt-time-input" data-pt-time="${escape(item.id)}" aria-label="Custom start time for ${escape(item.task)}" value="${timed ? escape(item.when) : ''}"></label>
+    ${nextDayToggle}
   </div>`;
   if (!timed) return `<div class="pt-schedule-panel" data-pt-schedule-panel="${escape(item.id)}">${startRow}</div>`;
   const lengthLabelId = `pt-length-label-${escape(item.id)}`;
-  const endValue = planItemEndTime(item.when, item.durationMinutes) || '';
+  const endValue = planItemEndTime(item.when, item.durationMinutes, draft?.target?.store === 'calendar') || '';
   const lengthRow = `<div class="pt-schedule-row">
     <span class="pt-schedule-label" id="${lengthLabelId}">Length</span>
     ${chipRowHtml({ id: item.id, labelId: lengthLabelId, options: QUICK_DURATIONS, current: item.durationMinutes, action: 'quick-duration' })}
@@ -293,8 +304,8 @@ function scheduleControlHtml(item) {
   if (!timed) {
     return `<button type="button" class="pt-time-link add" data-pt-action="edit-schedule" data-id="${escape(item.id)}" aria-label="Set time for ${escape(item.task)}">+ Add time</button>`;
   }
-  const label = formatPlanItemSchedule(item);
-  const ranged = !!planItemEndTime(item.when, item.durationMinutes);
+  const label = formatPlanItemSchedule(scheduleView(item));
+  const ranged = !!planItemEndTime(item.when, item.durationMinutes, draft?.target?.store === 'calendar');
   const rangeControl = ranged ? `<span aria-hidden="true"> · </span>
       <button type="button" class="pt-time-link" data-pt-action="remove-range" data-id="${escape(item.id)}" aria-label="Remove range for ${escape(item.task)}">Remove range</button>` : '';
   return `<span class="pt-time-value">${escape(label)}</span>
@@ -446,7 +457,7 @@ function render() {
  *  planTargetLabel when available, which is what every other surface uses). */
 function planTargetDayLabel(target) {
   if (typeof globalThis.planTargetLabel === 'function') return globalThis.planTargetLabel(target);
-  return target.store === 'legacy' ? target.dateKey : new Date(target.startMs).toISOString().slice(0, 10);
+  return target.store !== 'operational' ? target.dateKey : new Date(target.startMs).toISOString().slice(0, 10);
 }
 
 export function openPlanTomorrow({ returnToReview = false, target: explicitTarget = null } = {}) {
@@ -576,6 +587,21 @@ root?.addEventListener('click', async event => {
   } catch (err) { error.textContent = err.message; }
 });
 
+// The "next day" checkbox of a calendar plan's item. Only the offset changes; whichever range no
+// longer fits the plan's two dates is dropped in the SAME mutation (never left hidden).
+root?.addEventListener('change', event => {
+  const toggle = event.target.closest('.pt-nextday-input');
+  if (!toggle || !draft) return;
+  const id = toggle.dataset.ptNextday;
+  draft.items = draft.items.map(item => {
+    if (item.id !== id) return item;
+    const next = { ...item };
+    if (toggle.checked) next.whenDayOffset = 1; else delete next.whenDayOffset;
+    return context().stampItem(itemRangeValid(next) ? next : clearPlanItemRange(next));
+  });
+  render();
+});
+
 root?.addEventListener('change', event => {
   const input = event.target.closest('.pt-time-input');
   if (!input || !draft) return;
@@ -595,7 +621,12 @@ root?.addEventListener('change', event => {
   const id = input.dataset.ptEnd;
   const item = draft.items.find(i => i.id === id);
   try {
-    const duration = item ? durationBetween(item.when, input.value) : null;
+    let duration = item ? durationBetween(item.when, input.value) : null;
+    // In a calendar plan an end at or before the start means "the next day": 23:00 -> 01:00 is 120 minutes.
+    if (!duration && item && draft.target.store === 'calendar' && validPlanItemTime(item.when) && validPlanItemTime(input.value) && input.value !== item.when) {
+      const toMinutes = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
+      duration = toMinutes(input.value) + 24 * 60 - toMinutes(item.when);
+    }
     if (!duration) throw new Error('End time must be later than the start, on the same day.');
     if (!itemRangeValid({ ...item, durationMinutes: duration })) {
       throw new Error(draft.target.store === 'operational'

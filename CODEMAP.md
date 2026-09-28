@@ -1,6 +1,33 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## Calendar-Native Plan Identity V1 (candidate, 2026-09-27)
+
+- `calendar-plan-model.js` (pure): identity `cal1:<date>`, item time truth (`when` + `whenDayOffset` + item-owned
+  `whenTz` -> `calendarItemInstants`), `stampCalendarItemTimes` (the ONLY place a zone is frozen), record merge
+  (`mergeCalendarPlanRecords`, `restorePrunedPlanRecord` for Realtime Database pruning), activation facts
+  (`effectiveActivation` = earliest `(activatedAtMs, id)`), `calendarAuthorityForDate`.
+- `calendar-plan-repository.js`: room-scoped plans + activation facts, owner-guarded, validating (an invalid
+  item throws before anything is written), no fallback to any legacy store.
+- `calendar-plan-sync.js`: `rooms/<room>/calendarPlans/<id>` (per-record transaction, per-item merge) and
+  `rooms/<room>/calendarPlanAuthority/<factId>`; listener generation/room guards, hydrate, foreign-room teardown.
+- `calendar-plan-live.js`: `window.CalendarPlanLive` — `activate()`, listener lifecycle (`attachLive`,
+  `refreshLive`, `tick`, `detach`), `pushAllLocal()` (every stored plan), refuses writes before activation.
+- `calendar-plan-ui.js`: Settings "Plan day" (`#calendar-plan-settings`), the Today switch card and read-only
+  "Older plans" (`#calendar-plan-section`).
+- `plan-authority.js`: third store `calendar` behind the same targets. Public chain (`current`, `upcoming`,
+  `containing`, `next`, `previous`, `dayAhead`, ...) is calendar-first for calendar-authoritative dates and
+  delegates to the untouched `legacy*` functions otherwise. New: `calendarActive/Activation`, `activateCalendar`,
+  `boundaryEnabled` (the legacy boundary exists) vs `enabled()` (operational personal-day mode is IN FORCE: boundary
+  and no cutover), `isCalendarAuthoritative`, `calendarCarryoverFor`, `supersededPlans`, `itemInstants`,
+  `calendarStreak`. Legacy days carry `supersededAtMs` after a cutover.
+- `stale-plan-recovery-model.js`: honours `supersededAtMs` and an optional per-item end (`itemEndMs`).
+- `plan-tomorrow-model.js`: `planItemEndTime(when, minutes, wrap)` / `formatPlanItemSchedule` allow a calendar
+  item to cross midnight and label a next-day item; every legacy caller is unchanged (`wrap` defaults false).
+- `storage.js`: attaches/re-pushes/detaches `CalendarPlanLive` and `PlanByDeadlineSync` with the rest of the room.
+- Tests: `calendar-plan-{model,repository,sync,live}.test.js`, `plan-authority-calendar.test.js` (production-
+  equivalent modules), `npm-test-wiring.test.js` (the wiring itself), `tests/calendar-native-plan-identity.spec.js`.
+
 ## My Day UX Simplification V1 (2026-09-19 review candidate)
 
 - `index.html`: the My Day view's visible order is quiet date header, `UP NEXT`, universal

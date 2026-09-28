@@ -269,9 +269,12 @@ export function renderPersonalDayBoundarySettings() {
   // Either way the time/timezone editor below is always visible: there is no
   // separate "enable" checkbox gating it, only the explicit save/activation
   // button — one decision, not two.
+  // After the owner switches to calendar-day plans (calendar-plan-ui.js) this setting is legacy: it
+  // no longer decides which plan is current, so the copy must not claim it does.
+  const plansFollowCalendar = typeof window !== 'undefined' && window.PlanAuthority?.calendarActive?.() === true;
   const enableRow = activated
     ? `<div class="setting-row">
-        <div><div class="setting-label">Personal day boundary</div><div class="setting-sub">Active and adjustable. Your day starts at the time you choose instead of midnight.</div></div>
+        <div><div class="setting-label">Personal day boundary</div><div class="setting-sub">${plansFollowCalendar ? 'Legacy. Your plans now follow calendar dates; this only describes plans you made before switching.' : 'Active and adjustable. Your day starts at the time you choose instead of midnight.'}</div></div>
         <div class="setting-control"><span class="setting-sub" data-pdb-state="active">On</span></div>
       </div>`
     : `<div class="setting-row">

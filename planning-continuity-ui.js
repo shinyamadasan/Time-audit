@@ -104,7 +104,7 @@ function allCommitments() {
  *  operational-plan-ui.js uses, so the two never name a day differently. */
 function dayWindowLabel(target) {
   if (!target) return '';
-  if (target.store === 'legacy') return formatCalendarDate(target.dateKey);
+  if (target.store !== 'operational') return formatCalendarDate(target.dateKey);
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: target.timezone, weekday: 'short', month: 'short', day: 'numeric',
     hour: 'numeric', minute: '2-digit',

@@ -1,0 +1,284 @@
+// calendar-plan-sync.js
+//
+// Durable cross-device copy of the calendar-native plan store and of the account's
+// calendar-authority activation facts, on top of calendar-plan-repository.js.
+// Modeled directly on operational-plan-sync.js (plans: a real Firebase
+// `.transaction()` per record with the SAME per-item merge the other plan stores
+// get) and plan-by-deadline-sync.js (activation facts: a grow-only set, each fact
+// its own child key, one collection listener).
+//
+// Remote paths (room-scoped children; the existing owner-only `rooms/$roomId` rule
+// already covers them — no rules change):
+//   rooms/<roomCode>/calendarPlans/<calendarPlanId>        e.g. "cal1:2026-09-27"
+//   rooms/<roomCode>/calendarPlanAuthority/<activationId>
+// `:` is a legal Realtime Database key character, so the plaintext plan id stays the
+// one identity on the wire too (no encoding layer, unlike odv1 ids, which embed "/").
+//
+// ── account scope (same discipline as operational-plan-sync.js) ──────────────
+//   - PUSH is refused ('owner-mismatch', zero writes) unless the joined room equals
+//     the repository's active cache owner — re-checked inside the transaction, so an
+//     account switch mid-retry aborts with zero writes, and again before the committed
+//     result is merged back locally.
+//   - PULL: a snapshot is merged only if it came from the room that is joined RIGHT NOW
+//     and whose cache is active. Every listener carries the room it was attached for
+//     and a token; a detached/superseded or old-room callback is dropped — never merged,
+//     never announced.
+//   - ATTACH: listeners are bound to one room; attaching while listeners from another
+//     room exist (a direct switch, no sign-out between) drops them all first.
+//   - HYDRATE: one read of the joined room's calendarPlans, merged record by record
+//     under the same room/owner check.
+
+import { createCalendarPlanRepository } from './calendar-plan-repository.js';
+import { appRoomOwner } from './personal-day-boundary-repository.js';
+import { mergeCalendarPlanRecords, parseCalendarPlanId } from './calendar-plan-model.js';
+
+export const CALENDAR_PLANS_REMOTE_PATH = 'calendarPlans';
+export const CALENDAR_AUTHORITY_REMOTE_PATH = 'calendarPlanAuthority';
+
+export function createCalendarPlanSyncBridge(deps = {}) {
+  const repository = deps.repository || createCalendarPlanRepository();
+  const getRoomRef = typeof deps.getRoomRef === 'function' ? deps.getRoomRef : () => null;
+  const getRoomId = typeof deps.getRoomId === 'function' ? deps.getRoomId : () => null;
+  const onRemoteChange = typeof deps.onRemoteChange === 'function' ? deps.onRemoteChange : () => {};
+
+  // Internal subscribers (the live wiring re-derives its listeners when a cutover is heard)
+  // run BEFORE the app-level onRemoteChange, so a re-render never sees stale listeners.
+  const remoteHandlers = new Set();
+  function announce(kind, id, payload) {
+    remoteHandlers.forEach(handler => { try { handler(kind, id, payload); } catch { /* one subscriber never blocks the rest */ } });
+    onRemoteChange(kind, id, payload);
+  }
+  /** @param {(kind:'plan'|'activation', id:string|null, payload:*)=>void} handler @returns {()=>void} unsubscribe */
+  function onRemote(handler) {
+    remoteHandlers.add(handler);
+    return () => remoteHandlers.delete(handler);
+  }
+
+  const planListeners = new Map(); // planId -> { ref, roomId, token }
+  let authorityListener = null; // { ref, roomId, token }
+  let listenerToken = 0;
+  let hydratedRoomId = null;
+
+  function activeRoomId() {
+    const roomId = getRoomId();
+    return typeof roomId === 'string' && roomId ? roomId : null;
+  }
+
+  function cacheOwner() {
+    return typeof repository.ownerRoomId === 'function' ? repository.ownerRoomId() : null;
+  }
+
+  /** True iff `roomId` is the joined room AND its cache is the active one. Absence of an
+   *  owner is never a match: a plain repository cannot prove whose data it holds. */
+  function roomOwnsCache(roomId) {
+    return !!roomId && roomId === activeRoomId() && cacheOwner() === roomId;
+  }
+
+  /** Any listener (plan OR authority) bound to a room other than `roomId` is from a previous
+   *  account (a direct switch, no sign-out between): all of them are dropped together. */
+  function dropForeignListeners(roomId) {
+    const foreign = [...planListeners.values()].some(entry => entry.roomId !== roomId)
+      || (authorityListener && authorityListener.roomId !== roomId);
+    if (foreign) detachAll();
+  }
+
+  // ── plans ───────────────────────────────────────────────────────────────
+
+  /** 'committed' | 'skipped' | 'owner-mismatch' | 'aborted' | 'transport-failure'. */
+  function pushPlan(planId) {
+    if (!parseCalendarPlanId(planId)) return Promise.resolve({ committed: false, outcome: 'skipped' });
+    const roomRef = getRoomRef();
+    if (!roomRef) return Promise.resolve({ committed: false, outcome: 'skipped' });
+    const roomId = activeRoomId();
+    if (!roomOwnsCache(roomId)) return Promise.resolve({ committed: false, outcome: 'owner-mismatch' });
+    const local = repository.read(parseCalendarPlanId(planId));
+    if (!local) return Promise.resolve({ committed: false, outcome: 'skipped' });
+    const candidate = JSON.parse(JSON.stringify(local));
+    let planRef;
+    try {
+      planRef = roomRef.child(CALENDAR_PLANS_REMOTE_PATH).child(planId);
+      if (typeof planRef.transaction !== 'function') throw new Error('Firebase plan transactions are unavailable.');
+    } catch {
+      return Promise.resolve({ committed: false, outcome: 'transport-failure' });
+    }
+    let ownerLost = false;
+    return planRef.transaction(remote => {
+      // Firebase may re-run this later against fresh server data. If the account changed in
+      // between, abort with zero writes rather than finish a push the cache no longer backs.
+      ownerLost = !roomOwnsCache(roomId);
+      if (ownerLost) return undefined;
+      return mergeCalendarPlanRecords(remote, candidate, planId);
+    }, undefined, false)
+      .then(result => {
+        if (ownerLost) return { committed: false, outcome: 'owner-mismatch' };
+        if (!result?.committed || !result.snapshot) return { committed: false, outcome: 'aborted' };
+        if (roomOwnsCache(roomId)) {
+          const committed = mergeCalendarPlanRecords(null, result.snapshot.val(), planId);
+          const { changed, record } = repository.mergeRemote(planId, committed);
+          if (changed) announce('plan', planId, record);
+        }
+        return { committed: true, outcome: 'committed' };
+      })
+      .catch(() => ({ committed: false, outcome: 'transport-failure' }));
+  }
+
+  function syncPlan(planId) {
+    return pushPlan(planId).then(result => result.committed);
+  }
+
+  /** Merges one inbound snapshot for a single plan. `roomId` is the room the snapshot CAME
+   *  FROM; it is applied only if that room is joined now and its cache is active. */
+  function handleRemotePlanSnapshot(planId, val, roomId = activeRoomId()) {
+    if (!roomOwnsCache(roomId)) return false;
+    if (!val) return true;
+    const { changed, record } = repository.mergeRemote(planId, val);
+    if (changed) announce('plan', planId, record);
+    return true;
+  }
+
+  function hydrateAll() {
+    const roomRef = getRoomRef();
+    const roomId = activeRoomId();
+    if (!roomRef || !roomOwnsCache(roomId) || hydratedRoomId === roomId) return Promise.resolve(false);
+    let collectionRef;
+    try {
+      collectionRef = roomRef.child(CALENDAR_PLANS_REMOTE_PATH);
+      if (typeof collectionRef.once !== 'function') return Promise.resolve(false);
+    } catch {
+      return Promise.resolve(false);
+    }
+    hydratedRoomId = roomId;
+    return Promise.resolve(collectionRef.once('value'))
+      .then(snap => {
+        const all = snap && typeof snap.val === 'function' ? snap.val() : null;
+        if (!all || typeof all !== 'object') return true;
+        Object.entries(all).forEach(([id, val]) => {
+          if (!parseCalendarPlanId(id) || !val) return;
+          try { handleRemotePlanSnapshot(id, val, roomId); } catch { /* one bad record never blocks the rest */ }
+        });
+        return true;
+      })
+      .catch(() => { if (hydratedRoomId === roomId) hydratedRoomId = null; return false; });
+  }
+
+  function attachPlan(planId) {
+    if (!parseCalendarPlanId(planId)) return;
+    const roomRef = getRoomRef();
+    const roomId = activeRoomId();
+    if (!roomRef || !roomId) return; // with the room's identity unknown nothing is subscribed
+    dropForeignListeners(roomId);
+    if (planListeners.has(planId)) return;
+    const token = ++listenerToken;
+    const ref = roomRef.child(CALENDAR_PLANS_REMOTE_PATH).child(planId);
+    planListeners.set(planId, { ref, roomId, token });
+    ref.on('value', snap => {
+      if (planListeners.get(planId)?.token !== token) return; // detached or superseded
+      handleRemotePlanSnapshot(planId, snap.val(), roomId);
+    });
+  }
+
+  function detachPlan(planId) {
+    const entry = planListeners.get(planId);
+    if (entry) entry.ref.off();
+    planListeners.delete(planId);
+  }
+
+  function detachPlans() {
+    for (const id of [...planListeners.keys()]) detachPlan(id);
+    hydratedRoomId = null; // the next binding hydrates again
+  }
+
+  // ── authority activation facts ──────────────────────────────────────────
+
+  /** Pushes every locally known activation fact, each as its own child key (ids never
+   *  collide across devices), so concurrent activations never contend for one write. */
+  function pushActivations() {
+    const roomRef = getRoomRef();
+    const roomId = activeRoomId();
+    if (!roomRef) return Promise.resolve({ committed: false, outcome: 'skipped' });
+    if (!roomOwnsCache(roomId)) return Promise.resolve({ committed: false, outcome: 'owner-mismatch' });
+    const local = repository.listAllActivationsRaw();
+    if (!local.length) return Promise.resolve({ committed: false, outcome: 'skipped' });
+    let ref;
+    try {
+      ref = roomRef.child(CALENDAR_AUTHORITY_REMOTE_PATH);
+      if (typeof ref.update !== 'function') throw new Error('unavailable');
+    } catch {
+      return Promise.resolve({ committed: false, outcome: 'transport-failure' });
+    }
+    const updates = {};
+    local.forEach(fact => { updates[fact.id] = fact; });
+    return Promise.resolve(ref.update(updates))
+      .then(() => ({ committed: true, outcome: 'committed' }))
+      .catch(() => ({ committed: false, outcome: 'transport-failure' }));
+  }
+
+  function handleRemoteActivationSnapshot(val, roomId = activeRoomId()) {
+    if (!roomOwnsCache(roomId)) return false;
+    if (!val || typeof val !== 'object') return true;
+    const result = repository.mergeRemoteActivations(val);
+    if (result.changed) announce('activation', null, result);
+    return true;
+  }
+
+  function attachAuthority() {
+    const roomRef = getRoomRef();
+    const roomId = activeRoomId();
+    if (!roomRef || !roomId) return;
+    dropForeignListeners(roomId);
+    if (authorityListener) return;
+    let ref;
+    try {
+      ref = roomRef.child(CALENDAR_AUTHORITY_REMOTE_PATH);
+      if (typeof ref.on !== 'function') return;
+    } catch { return; }
+    const token = ++listenerToken;
+    authorityListener = { ref, roomId, token };
+    ref.on('value', snap => {
+      if (authorityListener?.token !== token) return; // detached or superseded
+      handleRemoteActivationSnapshot(typeof snap.val === 'function' ? snap.val() : null, roomId);
+    });
+  }
+
+  function detachAuthority() {
+    if (authorityListener) authorityListener.ref.off();
+    authorityListener = null;
+  }
+
+  function detachAll() {
+    detachPlans();
+    detachAuthority();
+  }
+
+  return {
+    pushPlan, syncPlan, handleRemotePlanSnapshot, hydrateAll, attachPlan, detachPlan, detachPlans,
+    pushActivations, handleRemoteActivationSnapshot, attachAuthority, detachAuthority,
+    detachAll, onRemote, repository,
+  };
+}
+
+// A ready-to-use singleton for the real app only — constructing it touches localStorage
+// (via the default repository), which does not exist under plain `node --test`. Tests
+// build their own bridge with fake deps. The repository's timezone comes from the same
+// app context every other plan surface reads, so a reading is always made in the
+// account's own zone.
+if (typeof window !== 'undefined') {
+  const repository = createCalendarPlanRepository({
+    getTimezone: () => {
+      const context = typeof globalThis.getOperationalPlanAppContext === 'function' ? globalThis.getOperationalPlanAppContext() : null;
+      return context?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    },
+  });
+  window.CalendarPlanSync = createCalendarPlanSyncBridge({
+    repository,
+    getRoomRef: () => (typeof globalThis.getChronaSenseRoomRef === 'function' ? globalThis.getChronaSenseRoomRef() : null),
+    getRoomId: appRoomOwner,
+    onRemoteChange: kind => {
+      // An inbound remote plan or cutover is an authoritative change like any other: drop the
+      // authority layer's derived caches, then re-render every surface that reads it.
+      if (window.PlanAuthority) window.PlanAuthority.invalidate();
+      if (typeof globalThis.refreshAuthoritativePlanSurfaces === 'function') globalThis.refreshAuthoritativePlanSurfaces();
+      if (typeof globalThis.renderCalendarPlanSettings === 'function') globalThis.renderCalendarPlanSettings();
+    },
+  });
+}
