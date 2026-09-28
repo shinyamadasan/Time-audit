@@ -184,6 +184,9 @@ const importMap = JSON.parse(/<script type="importmap">([\s\S]*?)<\/script>/.exe
 const release = /<meta name="pdb-release" content="([^"]+)">/.exec(html)[1];
 const importsOf = file => [...read(file).matchAll(/^\s*(?:import|export)\s[^;'"]*?from\s*['"](\.\/[^'"]+)['"]|^\s*import\s*['"](\.\/[^'"]+)['"]/gm)].map(m => m[1] || m[2]);
 const GROUP = Object.keys(importMap).map(k => k.replace('./', ''));
+const moduleEntries = [...html.matchAll(/<script[^>]*type="module"[^>]*src="([^"?]+)(?:\?v=([^"]+))?"/g)]
+  .map(m => ({ file: m[1].replace(/^\.\//, ''), version: m[2] || '' }));
+const governedModule = /^(?:personal-day-boundary-|operational-plan-|plan-authority\.js$|planning-continuity-ui\.js$|stale-plan-recovery-model\.js$|calendar-plan-(?:model|repository|sync|live)\.js$|commitments-(?:repository|sync)\.js$|coarse-life-evidence-(?:repository|sync|ui)\.js$|learning-plan-repository\.js$|capability-career-repository\.js$|daily-routines-repository\.js$)/;
 
 test('the import map precedes every module script, and pins EVERY group module to the one release token', () => {
   assert.ok(html.indexOf('<script type="importmap">') > -1);
@@ -195,14 +198,14 @@ test('the import map precedes every module script, and pins EVERY group module t
   for (const required of ['personal-day-boundary-model', 'personal-day-boundary-repository', 'personal-day-boundary-sync', 'personal-day-boundary-live', 'operational-plan-model', 'operational-plan-repository', 'operational-plan-sync', 'plan-authority',
     'commitments-repository', 'commitments-sync', 'coarse-life-evidence-repository', 'coarse-life-evidence-sync', 'coarse-life-evidence-ui',
     'learning-plan-repository', 'capability-career-repository', 'daily-routines-repository',
-    'calendar-plan-model', 'calendar-plan-repository', 'calendar-plan-sync', 'calendar-plan-live']) {
+    'stale-plan-recovery-model', 'calendar-plan-model', 'calendar-plan-repository', 'calendar-plan-sync', 'calendar-plan-live']) {
     assert.ok(GROUP.includes(`${required}.js`), `${required}.js must be in the pinned group`);
   }
 });
 
 test('every entry tag for the group, and storage.js, carries the SAME release token as the map and the meta', () => {
   for (const file of ['personal-day-boundary-live.js', 'personal-day-boundary-ui.js', 'operational-plan-ui.js', 'storage.js', 'commitments-sync.js', 'coarse-life-evidence-sync.js', 'coarse-life-evidence-ui.js',
-    'learning-plan-ui.js', 'capability-career-ui.js', 'daily-routines-ui.js', 'calendar-plan-ui.js']) {
+    'learning-plan-ui.js', 'capability-career-ui.js', 'daily-routines-ui.js', 'calendar-plan-ui.js', 'planning-continuity-ui.js']) {
     const tag = new RegExp(`src="${file.replace('.', '\\.')}\\?v=([^"]+)"`).exec(html);
     assert.ok(tag, `${file} has a versioned tag`);
     assert.equal(tag[1], release, `${file} must carry the release token`);
@@ -235,10 +238,12 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // pinned group (plan-authority.js side-effect-imports the live wiring), changes plan-authority.js, storage.js
 // (calendar + Plan-by deadline listener lifecycle) and index.html — all group members, so the whole group moves
 // to a new generation again.
-const CURRENT_RELEASE = '20260928-calendar-native-activation-safety-fix2';
+// Its final release-closure fix brings the changed planning-continuity entry and stale-recovery import under
+// that same generation, so fix2 is retired and the complete browser path moves to fix3.
+const CURRENT_RELEASE = '20260928-calendar-native-activation-safety-fix3';
 // '20260924-cross-store-account-isolation-v1' was never deployed (review candidate only), but it was
 // published on the candidate branch, so it is retired like a shipped token.
-const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1', '20260926-device-local-account-isolation-fix1', '20260927-calendar-day-extended-my-day-v1', '20260927-calendar-day-extended-my-day-fix1', '20260927-calendar-native-plan-identity-v1', '20260927-calendar-native-activation-safety-fix1'];
+const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1', '20260926-device-local-account-isolation-fix1', '20260927-calendar-day-extended-my-day-v1', '20260927-calendar-day-extended-my-day-fix1', '20260927-calendar-native-plan-identity-v1', '20260927-calendar-native-activation-safety-fix1', '20260928-calendar-native-activation-safety-fix2'];
 
 test('the release is a NEW generation: never a previously shipped token, and no URL is left on an old one', () => {
   assert.equal(release, CURRENT_RELEASE);
@@ -284,6 +289,28 @@ test('every import of a group module, from any runtime module, is covered by the
   assert.ok(seen.has('personal-day-boundary-sync.js') && seen.has('personal-day-boundary-repository.js') && seen.has('plan-authority.js'), 'the crawl really reached the group');
   assert.ok(seen.has('commitments-repository.js') && seen.has('coarse-life-evidence-repository.js'), 'the crawl reached both scoped repositories');
   assert.ok(seen.has('learning-plan-repository.js') && seen.has('capability-career-repository.js') && seen.has('daily-routines-repository.js'), 'the crawl reached the device-local scoped repositories');
+});
+
+test('every governed module reached from the real browser graph resolves through the active generation', () => {
+  const seen = new Set();
+  const imported = new Set();
+  const crawl = file => {
+    if (seen.has(file) || !existsSync(path.join(HERE, file))) return;
+    seen.add(file);
+    for (const spec of importsOf(file)) {
+      const target = spec.replace('./', '');
+      imported.add(target);
+      crawl(target);
+    }
+  };
+  moduleEntries.map(entry => entry.file).forEach(crawl);
+
+  assert.ok(seen.has('planning-continuity-ui.js') && seen.has('stale-plan-recovery-model.js'), 'the real graph must reach the changed recovery entry and model');
+  for (const file of [...seen].filter(name => governedModule.test(name))) {
+    const entries = moduleEntries.filter(entry => entry.file === file);
+    for (const entry of entries) assert.equal(entry.version, release, file + ' entry must carry the active release');
+    if (imported.has(file)) assert.equal(importMap['./' + file], './' + file + '?v=' + release, file + ' import must resolve through the active release map');
+  }
 });
 
 test('no runtime module imports a group module with its own ?v= (that would create a second instance of it)', () => {

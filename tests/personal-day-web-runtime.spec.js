@@ -35,7 +35,7 @@ const T_2100 = Date.parse('2026-09-16T21:00:00+08:00');
 
 /** The release token every group module must be requested with. */
 let RELEASE = '';
-const GROUP_FILES = ['personal-day-boundary-model', 'personal-day-boundary-repository', 'personal-day-boundary-sync', 'personal-day-boundary-live', 'personal-day-boundary-recovery', 'operational-plan-model', 'operational-plan-repository', 'operational-plan-sync', 'plan-authority'];
+const GROUP_FILES = ['personal-day-boundary-model', 'personal-day-boundary-repository', 'personal-day-boundary-sync', 'personal-day-boundary-live', 'personal-day-boundary-recovery', 'operational-plan-model', 'operational-plan-repository', 'operational-plan-sync', 'plan-authority', 'planning-continuity-ui', 'stale-plan-recovery-model', 'calendar-plan-model', 'calendar-plan-repository', 'calendar-plan-sync', 'calendar-plan-live'];
 
 function accountHistory() {
   const anchor = legacyBoundaryRevision(TZ);
@@ -138,7 +138,7 @@ test('MOBILE web: a fresh device converges on the account\'s 18:00 (viewport / U
   expect(await page.evaluate(() => window.PersonalDayBoundarySync.syncState())).toBe('synced');
 });
 
-test('ONE release: every group module is requested exactly once, always with the release token, never as a bare URL', async ({ page }) => {
+test('ONE release: every governed recovery/calendar module resolves once under the active release', async ({ page }) => {
   const requests = [];
   page.on('request', request => {
     const url = new URL(request.url());

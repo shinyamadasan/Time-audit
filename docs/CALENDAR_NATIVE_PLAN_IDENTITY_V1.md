@@ -121,6 +121,10 @@ accounts may hold the same id and the same item ids without colliding.
   behavior. These rules are local candidate files only and are **not deployed by this work**. The release
   order remains: **1. rules, 2. runtime, 3. update devices, 4. owner activation**. The confirmation warns
   users to update every device because old clients will receive permission errors after deployment.
+* **One coherent browser generation.** Release `20260928-calendar-native-activation-safety-fix3` governs
+  the release meta, import map, changed calendar/authority modules, the planning-continuity entry, and its
+  changed stale-recovery-model import. Static graph traversal and browser-resolved URL coverage enforce that
+  each governed module loads once under this same token.
 * **A stale legacy record from before the cutover** can never become the current plan and is never
   merged into a calendar plan. Same-date legacy + calendar data: the calendar plan is authoritative;
   the legacy record is surfaced, not chosen against.
@@ -136,10 +140,11 @@ Each move also carries a deterministic relocation revision; the shared comparato
 canonical live destination independent of write order. Same-content candidates, including candidates
 that differ only by destination, converge automatically to that single live item. If the highest
 competing revisions contain different user content, the source derives a **Recovery conflict** instead:
-both payloads, destinations, actors and relocation provenance appear in the existing Unfinished recovery
-surface, while the comparator still prevents two simultaneous live tasks. Choosing “Keep this version”
+both task payloads plus their user-facing destination/date/time and actor appear in the existing Unfinished
+recovery surface, while the comparator still prevents two simultaneous live tasks. Choosing “Keep this version”
 writes a later relocation revision containing the selected payload/destination; replay is idempotent and
-the losing raw candidate remains available for audit/recovery. No arbitrary fields are auto-merged and
+the losing raw candidate and full low-level relocation provenance remain available internally for
+audit/recovery. No arbitrary fields are auto-merged and
 arrival order never decides. History before the cutover date is still read through the legacy chain; the
 planning streak hands over at that date.
 
