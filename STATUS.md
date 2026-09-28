@@ -5,6 +5,49 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-27 — Calendar-Native Plan Identity V1 (candidate, NOT integrated)
+
+Branch `feat/calendar-native-plan-identity-v1`, created from the immutable WIP `9e2a45f` (which sits on
+`origin/main` @ `b7796e4`). Not pushed, merged or deployed; no production Firebase, no rules deploy, no Android
+action. Release token `20260927-calendar-native-plan-identity-v1`. Details in CHANGELOG.md; architecture in
+`docs/CALENDAR_NATIVE_PLAN_IDENTITY_V1.md`.
+
+**NEW:** calendar-native plan identity is authoritative for new planning: Sunday's plan is `cal1:2026-09-27`,
+whatever a Personal Day boundary says, and it can continue past midnight inside the same record.
+**LEGACY:** Personal Day / operational plans and `plans[dateKey]` remain historical compatibility. **Nothing was
+migrated**: the cutover rewrites, copies and deletes no legacy record.
+
+**Supersedes the previous entry's STOP** ("full calendar primacy needs the operational-plan model to gain a
+calendar-midnight-native identity"): that identity now exists, without touching the operational model.
+
+**Cutover semantics.** Owner-triggered, account-owned, one-way (Settings → "Plan day", or the Today card for a
+boundary account; two-step confirmation). Stored as an immutable fact in a grow-only set; the earliest
+`(activatedAtMs, id)` is effective, so every device converges on the same one in any delivery order. Dates on/after
+the activation date are calendar-authoritative; earlier dates stay legacy-routed. Every legacy day is treated as
+ended at the activation instant (read-only; unfinished tasks recoverable through the existing Unfinished/move
+flow). A calendar plan cannot be written before activation. A device offline on the old model follows when it hears
+the cutover; its legacy work is surfaced, never discarded or merged.
+
+**Verification** (final code): `npm test` exit 0 — 1560 tests, 1559 pass, 0 fail, 1 skipped (a pre-existing env-gated control proof in scripts/cross-repo-compat-check.test.js; skipped is NOT counted as passed); Playwright 785 passed, 0 failed (exit 0); the two known-flaky specs passed in this run and passed in isolation when they failed under load in an earlier full run; lint 0 errors; parity clean; `git diff
+--check` clean; 10/10 semantic mutations red (+ browser/lifecycle/wiring mutations). SKIP is not PASS: one env-gated
+control-proof test is skipped and is named in CHANGELOG.md.
+
+**Also fixed (WIP defect):** Plan-by deadline sync was never attached at room join, re-pushed on reconnect or
+detached at sign-out — an account-owned deadline never reached another device. Wired, and pinned by browser tests.
+
+**Open owner decisions.** (1) Activation is owner-triggered rather than automatic (auto would flip today's plan for
+existing data and re-baseline ~130 legacy-model specs). (2) A plan spans two calendar dates. (3) The streak day
+straddling the cutover is judged by its legacy successor.
+
+**Carried forward, untouched:** Timer/Away remote cross-room leak; Life Ledger local cross-account visibility;
+Intention likely remote cross-room leak; the two known CI flakes; a pre-existing legacy hazard where
+Realtime Database pruning an empty `routineInstanceIds` makes a second device read a prepared legacy plan as
+"unknown" (the calendar store restores pruned fields; the legacy stores are unchanged).
+
+**Next:** strict review of this candidate. Do not integrate, push or deploy without it.
+
+---
+
 ## 2026-09-27 — Calendar Day + Extended My Day V1: FIX FIRST applied (candidate, NOT integrated)
 
 Same branch `feat/calendar-day-extended-my-day-v1`; strict review of `77efac6` returned FIX FIRST with 5

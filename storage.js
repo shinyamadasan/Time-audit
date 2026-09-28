@@ -984,6 +984,13 @@ function startSync() {
   // upcoming operational days. Never a whole-subtree listener over every operational
   // day that has ever existed, and a complete no-op for a legacy account.
   if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.attachLiveDays();
+  // Calendar-Native Plan Identity V1 — the calendar-authority listener (how this device learns a
+  // cutover made elsewhere) and, once the account has switched, the calendar plan listeners. Room-
+  // and owner-guarded exactly like the boundary/operational bridges; a no-op until a room is joined.
+  if (globalThis.CalendarPlanLive) globalThis.CalendarPlanLive.attachLive();
+  // Plan-by deadline + intentional off-day sync. Deadlines are ACCOUNT-owned: without this attach a
+  // deadline set on another device (or a remote off-day) would never arrive here.
+  if (globalThis.PlanByDeadlineSync) globalThis.PlanByDeadlineSync.attachAll();
   // Planning Continuity V1 — ONE whole-subtree listener over rooms/<room>/commitments.
   // Deliberately not per-record: a commitment eight months out must converge as
   // reliably as one tomorrow, and any per-record attach would need a date horizon
@@ -1015,6 +1022,11 @@ function startSync() {
       // operational plan write made while offline. Both diff against what remote
       // already holds, so this is a no-op once converged.
       if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.pushAllLocal();
+      // Calendar-Native Plan Identity V1 — re-push the cutover fact and EVERY calendar plan held
+      // locally (each push is a transaction that merges against remote: a no-op once converged),
+      // and the Plan-by deadline history / off-days written while offline.
+      if (globalThis.CalendarPlanLive) globalThis.CalendarPlanLive.pushAllLocal();
+      if (globalThis.PlanByDeadlineSync) { globalThis.PlanByDeadlineSync.pushAllDeadlines(); globalThis.PlanByDeadlineSync.pushAllOffDays(); }
       // Planning Continuity V1 — drain any commitment write made while offline. Keyed
       // on the RECORD SET, never on a date range, so a future-dated offline write can
       // never remain unsynced forever. A no-op once converged.
@@ -1881,7 +1893,7 @@ function publishSharedAccountability() {
     // A partner-facing LABEL, not plan identity: the calendar date the upcoming
     // authoritative day starts on (identical to "tomorrow" for a legacy account).
     tomorrowDateKey: upcomingTarget
-      ? (upcomingTarget.store === 'legacy' ? upcomingTarget.dateKey : getDateInTZ(upcomingTarget.startMs, tz))
+      ? (upcomingTarget.store !== 'operational' ? upcomingTarget.dateKey : getDateInTZ(upcomingTarget.startMs, tz))
       : todayKey,
     tomorrowPrepStatus: prepStatus
   });
@@ -1952,6 +1964,8 @@ function teardownRoomListeners() {
   if (fbRoomRef) fbRoomRef.off();
   if (globalThis.CoarseLifeEvidenceSync) globalThis.CoarseLifeEvidenceSync.detach();
   if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.detach();
+  if (globalThis.CalendarPlanLive) globalThis.CalendarPlanLive.detach();
+  if (globalThis.PlanByDeadlineSync) globalThis.PlanByDeadlineSync.detachAll();
   if (globalThis.CommitmentsSync) globalThis.CommitmentsSync.detach();
   if (_nudgesRef)     { _nudgesRef.off();     _nudgesRef     = null; }
   if (_partnerUidRef) { _partnerUidRef.off(); _partnerUidRef = null; }

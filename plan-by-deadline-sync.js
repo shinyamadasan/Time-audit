@@ -193,4 +193,15 @@ if (typeof window !== 'undefined') {
       if (typeof globalThis.refreshAuthoritativePlanSurfaces === 'function') globalThis.refreshAuthoritativePlanSurfaces();
     },
   });
+
+  // storage.js joins the account room from onAuthStateChanged and attaches this bridge then — but only
+  // `if (globalThis.PlanByDeadlineSync)`. This module graph is deferred, so on a device where auth
+  // resolves first that call finds nothing and is never repeated: the device would never subscribe to
+  // the account's deadline history. If the room is ALREADY joined, attach and drain now; both calls are
+  // idempotent, so the other ordering (module first, room second) is unaffected.
+  if (typeof globalThis.getChronaSenseRoomRef === 'function' && globalThis.getChronaSenseRoomRef()) {
+    window.PlanByDeadlineSync.attachAll();
+    window.PlanByDeadlineSync.pushAllDeadlines();
+    window.PlanByDeadlineSync.pushAllOffDays();
+  }
 }

@@ -430,3 +430,27 @@ sufficiency-to-recommend threshold; Phase 12 owns its own sufficiency rule.
 ## 28. Phase 6 routines are local intentions with source-owned completion
 
 Use the existing local Learning/Ledger persistence pattern, not auto-log day templates. Stable routine/date identity derives daily instances; manual assertions and Focus linkage remain scheduler-owned. Pin and display one timezone for all scheduler calculations. Times/windows are soft cues until day end, with no overdue rollover. Only exact linked source completions count; ambiguous Workout/Learning matches abstain. Notifications and cross-device/timezone migration are deferred. See [Phase 6 semantics and review limits](docs/DAILY_OPERATING_LOOP_V1.md).
+
+---
+
+## 29. Calendar-Native Plan Identity V1: the calendar date is the identity of a NEW plan; the cutover is explicit, account-owned and one-way
+
+**Decision:** A new plan's identity is `cal1:<YYYY-MM-DD>` (a third store, `calendarPlans`, behind PlanAuthority's
+existing target abstraction). Items carry `when` + `whenDayOffset` (0|1) + an item-owned `whenTz`, so an item's
+instant is a pure function of the record: never of the account's current timezone, the Personal Day boundary or
+"today". A plan spans its own date and the next. Which store is authoritative for a date is decided ONLY by the
+account's activation facts (a grow-only set; the earliest `(activatedAtMs, id)` is effective). Legacy data is
+superseded at the activation instant and never migrated.
+
+**Why:** the previous phase proved no operational-day ref can represent "Sunday" as its own plan identity while
+holding a real Sunday-11:00 timestamp under an 18:00 boundary; labels and streak remapping would have papered over
+it. A separate versioned store also keeps an old-model device from mis-reading a next-day item as an earlier one.
+
+**What NOT to do:** do not dual-write a calendar plan into a legacy store; do not let the boundary decide new-plan
+identity, "tomorrow" or the streak day; do not infer authority from which store holds data or from load order; do
+not clone carryover into the next day's plan (it is a projection over the plan that owns it); do not restamp an
+item's `whenTz` unless its own reading changed; do not activate by reading. Do not make activation automatic
+without re-baselining the ~130 browser tests that encode the legacy model and deciding what becomes of today's
+plan, which lives in a legacy record at that moment.
+
+---

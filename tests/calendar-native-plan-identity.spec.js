@@ -1,0 +1,628 @@
+// Calendar-Native Plan Identity V1 — production-equivalent browser coverage.
+//
+// The page loads the app's REAL modules through the import map; the only fakes are Firebase (a
+// recording in-memory stub whose auth can be switched, whose writes can be made to fail, and into
+// which "another device" can write) and the clock (frozen, movable with window.__setNow).
+//
+// The definitive scenario (§9): Asia/Manila, a LEGACY Personal Day boundary of 18:00, the clock at
+// Sunday 2026-09-27 11:00 — no waiting until 18:00.
+
+import { test, expect } from '@playwright/test';
+import fs from 'node:fs/promises';
+import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const APP_ROOT = path.resolve(ROOT, '..');
+let appServer = null;
+let appUrl = '';
+
+const TZ = 'Asia/Manila';
+const ROOM = 'uid_account-a';
+const at = (date, hhmm) => Date.parse(`${date}T${hhmm}:00+08:00`);
+const SUN = '2026-09-27';
+const MON = '2026-09-28';
+const TOKEN = '20260927-calendar-native-plan-identity-v1';
+
+const BOUNDARY_ID = 'r-1800';
+const boundaryStore = () => JSON.stringify({ schemaVersion: 1, revisions: {
+  'legacy-calendar-day-v0': { id: 'legacy-calendar-day-v0', boundaryTime: '00:00', timezone: TZ, effectiveFromInstant: null },
+  [BOUNDARY_ID]: { id: BOUNDARY_ID, boundaryTime: '18:00', timezone: TZ, effectiveFromInstant: at('2026-09-01', '18:00') },
+} });
+// The personal day that is "current" at Sunday 11:00 under an 18:00 boundary is SATURDAY's: Sat 18:00 -> Sun 18:00.
+const SATURDAY_DAY_ID = `odv1:${BOUNDARY_ID}:${TZ}:2026-09-26`;
+const saturdayOperationalPlans = () => JSON.stringify({ schemaVersion: 1, plans: {
+  [SATURDAY_DAY_ID]: {
+    items: [
+      { id: 'sat-a', task: 'Saturday-window errand', when: '09:00', done: false, updatedAt: 1000, updatedBy: 'device-a' },
+      { id: 'sat-b', task: 'Saturday-window report', when: '', done: false, updatedAt: 1000, updatedBy: 'device-a' },
+    ],
+    updatedAt: 1000, updatedBy: 'device-a',
+  },
+} });
+
+// A recording Firebase stub (same shape the isolation specs use), plus a movable clock.
+const firebaseStub = `
+(() => {
+  if (window.firebase) return;
+  const log = { writes: [], listeners: [] };
+  const tree = {};
+  const listeners = new Map();
+  const retained = [];
+  const get = p => p.split('/').filter(Boolean).reduce((a, k) => (a && typeof a === 'object' ? a[k] : undefined), tree);
+  const put = (p, v) => {
+    const segs = p.split('/').filter(Boolean); let n = tree;
+    for (let i = 0; i < segs.length - 1; i++) { if (typeof n[segs[i]] !== 'object' || n[segs[i]] === null) n[segs[i]] = {}; n = n[segs[i]]; }
+    n[segs[segs.length - 1]] = v;
+  };
+  const clone = v => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
+  const snapshot = value => ({ val: () => clone(value), ref: { remove: () => Promise.resolve() } });
+  const fire = p => (listeners.get(p) || []).forEach(cb => cb(snapshot(get(p))));
+  const fireUp = p => { let q = p; while (q) { fire(q); q = q.includes('/') ? q.slice(0, q.lastIndexOf('/')) : ''; } };
+  let failWrites = false;
+  let authCb = null;
+  const makeRef = refPath => ({
+    path: refPath,
+    child(c) { return makeRef(refPath + '/' + c); },
+    on(ev, cb) {
+      if (ev !== 'value') return cb;
+      log.listeners.push(refPath);
+      if (!listeners.has(refPath)) listeners.set(refPath, []);
+      listeners.get(refPath).push(cb);
+      retained.push({ path: refPath, cb });
+      const value = refPath === '.info/connected' ? true : get(refPath);
+      setTimeout(() => cb(snapshot(value === undefined ? null : value)), 0);
+      return cb;
+    },
+    off() { listeners.delete(refPath); },
+    once() { return Promise.resolve(snapshot(get(refPath))); },
+    update(map) {
+      if (failWrites) return Promise.reject(new Error('offline'));
+      Object.entries(map || {}).forEach(([k, v]) => { log.writes.push({ path: refPath + '/' + k, value: clone(v) }); put(refPath + '/' + k, clone(v)); fireUp(refPath + '/' + k); });
+      return Promise.resolve();
+    },
+    set(v) { put(refPath, clone(v)); return Promise.resolve(); },
+    remove() { return Promise.resolve(); },
+    transaction(fn) {
+      if (failWrites) return Promise.reject(new Error('offline'));
+      const cur = get(refPath);
+      const next = fn(cur === undefined ? null : clone(cur));
+      if (next === undefined) return Promise.resolve({ committed: false, snapshot: snapshot(cur) });
+      log.writes.push({ path: refPath, value: clone(next) });
+      put(refPath, clone(next));
+      fireUp(refPath);
+      return Promise.resolve({ committed: true, snapshot: snapshot(next) });
+    },
+    push(v) { const r = makeRef(refPath + '/pushed'); r.key = 'pushed'; if (v !== undefined) r.set(v); return r; },
+    onDisconnect() { return { set: () => Promise.resolve(), remove: () => Promise.resolve(), cancel: () => Promise.resolve() }; },
+  });
+  const user = uid => (uid ? { uid, displayName: uid, email: uid + '@example.test', photoURL: '' } : null);
+  window.__fbTest = {
+    log,
+    get: p => clone(get(p) ?? null),
+    seed(p, v) { put(p, clone(v)); },
+    remoteWrite(p, v) { put(p, clone(v)); fireUp(p); },
+    setFailWrites(v) { failWrites = v; },
+    signInAs(uid) { authCb(user(uid)); },
+    reconnect() { put('.info/connected', true); retained.filter(r => r.path === '.info/connected').forEach(r => r.cb(snapshot(true))); },
+  };
+  const auth = () => ({ onAuthStateChanged(cb) { authCb = cb; setTimeout(() => cb(user('account-a')), 0); return () => {}; }, signInWithPopup() { return Promise.resolve(); }, signInWithCredential() { return Promise.resolve(); }, signOut() { return Promise.resolve(); } });
+  auth.GoogleAuthProvider = function GoogleAuthProvider() {}; auth.GoogleAuthProvider.credential = () => ({});
+  window.firebase = { apps: [], initializeApp(c) { const a = { config: c }; this.apps.push(a); return a; }, app() { return this.apps[0] || this.initializeApp({}); }, database() { return { ref: makeRef }; }, auth };
+})();`;
+
+test.beforeAll(async () => {
+  appServer = http.createServer(async (req, res) => {
+    try {
+      const url = new URL(req.url || '/', 'http://127.0.0.1');
+      const pathname = url.pathname === '/' ? '/index.html' : url.pathname;
+      const filePath = path.resolve(APP_ROOT, `.${decodeURIComponent(pathname)}`);
+      if (!filePath.startsWith(APP_ROOT)) { res.writeHead(403).end(); return; }
+      const body = await fs.readFile(filePath);
+      const ext = path.extname(filePath);
+      res.writeHead(200, { 'content-type': ext === '.html' ? 'text/html' : ext === '.js' ? 'application/javascript' : ext === '.css' ? 'text/css' : 'application/octet-stream' });
+      res.end(body);
+    } catch { res.writeHead(404).end(); }
+  });
+  await new Promise(resolve => appServer.listen(0, '127.0.0.1', resolve));
+  appUrl = `http://127.0.0.1:${appServer.address().port}/index.html`;
+});
+
+test.afterAll(async () => {
+  if (appServer) await new Promise(resolve => appServer.close(resolve));
+});
+
+/** Opens the app at a frozen instant. `boundary` seeds the legacy Personal Day boundary (18:00);
+ *  `operationalPlans` seeds a plan in the legacy operational store. The seed happens once per page
+ *  (a reload keeps whatever the app itself has written since). */
+async function openApp(page, { now, boundary = true, operationalPlans = null, legacyPlans = '{}' } = {}) {
+  await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: firebaseStub }));
+  await page.addInitScript(({ timezone, now, boundary, operationalPlans, legacyPlans }) => {
+    let frozen = Number(localStorage.getItem('cnpi-now')) || now;
+    const RealDate = Date;
+    window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [frozen])); } static now() { return frozen; } };
+    window.__setNow = value => { frozen = value; localStorage.setItem('cnpi-now', String(value)); };
+    if (localStorage.getItem('cnpi-seeded') === '1') return;
+    localStorage.clear(); sessionStorage.clear();
+    localStorage.setItem('cnpi-seeded', '1');
+    localStorage.setItem('ta3-onboarded', '1'); sessionStorage.setItem('ta3-session-started', '1');
+    localStorage.setItem('ta3-tz:uid_account-a', timezone);
+    localStorage.setItem('ta3-device-id', 'device-cnpi');
+    localStorage.setItem('ta3-settings:uid_account-a', JSON.stringify({ timezone, hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10, presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
+    localStorage.setItem('ta3-entries:uid_account-a', '[]');
+    localStorage.setItem('ta3-plans:uid_account-a', legacyPlans); localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-focus-redemptions', '[]');
+    if (boundary) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_account-a', boundary);
+    if (operationalPlans) localStorage.setItem('ta3-operational-plans-v1:uid_account-a', operationalPlans);
+  }, { timezone: TZ, now, boundary: boundary ? boundaryStore() : null, operationalPlans, legacyPlans });
+  await page.goto(appUrl);
+  await page.waitForFunction(() => typeof window.PlanAuthority === 'object' && typeof window.CalendarPlanLive === 'object' && typeof window.PlanByDeadlineSync === 'object' && !!window.__fbTest);
+  await page.waitForFunction(() => globalThis.getChronaSenseRoomCode?.() === 'uid_account-a');
+  await expect(page.locator('#signin-overlay')).toBeHidden();
+}
+
+/** Moves the frozen clock and makes every surface re-derive from it (what the 60s tick does). */
+async function setClock(page, ms) {
+  await page.evaluate(value => {
+    window.__setNow(value);
+    window.PlanAuthority.invalidate();
+    globalThis.CalendarPlanLive.tick();
+    globalThis.refreshOnPersonalDayRollover?.();
+    globalThis.renderTodayOnDateChange?.();
+    globalThis.refreshAuthoritativePlanSurfaces();
+  }, ms);
+}
+
+async function switchToCalendarPlans(page) {
+  await page.locator('#calendar-plan-section [data-cp-action="ask"]').click();
+  await page.locator('#calendar-plan-section [data-cp-action="confirm"]').click();
+  await page.waitForFunction(() => window.PlanAuthority.calendarActive());
+}
+
+const calendarStore = page => page.evaluate(() => JSON.parse(localStorage.getItem('ta3-calendar-plans-v1:uid_account-a') || '{"plans":{}}').plans);
+const current = page => page.evaluate(() => { const t = window.PlanAuthority.current(); return { store: t.store, id: t.id, dateKey: t.dateKey || null }; });
+const upcoming = page => page.evaluate(() => { const t = window.PlanAuthority.upcoming(); return { store: t.store, id: t.id, dateKey: t.dateKey || null }; });
+const rawLegacy = page => page.evaluate(() => ({ ops: localStorage.getItem('ta3-operational-plans-v1:uid_account-a'), plans: localStorage.getItem('ta3-plans:uid_account-a') }));
+
+/** Adds a Top Priority (default) or an "other planned task" through Today's own strip. */
+async function addToStrip(page, { task, when = '', nextDay = false, kind = 'priority' }) {
+  // Today keeps its plan pane collapsed by default; the other specs open it the same way.
+  await page.evaluate(() => { document.getElementById('today-commitments').hidden = false; });
+  const strip = page.locator('#plan-strip');
+  if (!(await strip.getAttribute('class') || '').includes('editing')) await strip.getByRole('button', { name: 'Edit', exact: true }).click();
+  const ids = kind === 'task' ? { when: '#plan-task-when', next: '#plan-task-when-next', task: '#plan-task-task' } : { when: '#plan-when', next: '#plan-when-next', task: '#plan-task' };
+  if (when) await page.locator(ids.when).fill(when);
+  if (nextDay) await page.locator(ids.next).check();
+  await page.locator(ids.task).fill(task);
+  if (kind === 'task') await strip.getByRole('button', { name: 'Plan task', exact: true }).click();
+  else await strip.locator('.plan-add').getByRole('button', { name: 'Add', exact: true }).click();
+}
+
+async function prepareViaPlanTomorrow(page, { target = null, tasks }) {
+  await page.evaluate(explicit => (explicit ? window.openPlanTomorrow({ target: window.PlanAuthority.current() }) : window.openPlanTomorrow()), !!target);
+  for (const task of tasks) {
+    await page.locator('#plan-tomorrow-add input[name="task"]').fill(task);
+    await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
+  }
+  await page.locator('#plan-tomorrow-confirm').click();
+  await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §9 — the literal Sunday 11:00 / 18:00 legacy boundary scenario
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('BEFORE switching: Sunday 11:00 under the 18:00 boundary is still the legacy personal day, and the switch is offered', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00'), operationalPlans: saturdayOperationalPlans() });
+  const now = await current(page);
+  expect(now.store).toBe('operational');
+  expect(now.id).toBe(SATURDAY_DAY_ID);
+  await expect(page.locator('#calendar-plan-section')).toBeVisible();
+  await expect(page.locator('#calendar-plan-section')).toContainText('Use calendar-day plans');
+  // Asking is not switching: nothing changes until the second confirmation.
+  await page.locator('#calendar-plan-section [data-cp-action="ask"]').click();
+  await expect(page.locator('#calendar-plan-section')).toContainText('can\'t be switched back');
+  await page.locator('#calendar-plan-section [data-cp-action="cancel"]').click();
+  expect(await page.evaluate(() => window.PlanAuthority.calendarActive())).toBe(false);
+  expect(await calendarStore(page)).toEqual({});
+});
+
+test('Sunday 11:00: after switching, the current plan is SUNDAY\'s; a first item at 11:00 writes ONLY Sunday\'s calendar plan; the legacy Saturday plan gets zero writes', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00'), operationalPlans: saturdayOperationalPlans() });
+  const legacyBefore = await rawLegacy(page);
+  await switchToCalendarPlans(page);
+  const legacyWritesAtSwitch = await page.evaluate(() => window.__fbTest.log.writes.filter(w => w.path.includes('operationalPlans')).length);
+
+  expect(await current(page)).toEqual({ store: 'calendar', id: `cal1:${SUN}`, dateKey: SUN });
+  expect(await upcoming(page)).toEqual({ store: 'calendar', id: `cal1:${MON}`, dateKey: MON });
+
+  await addToStrip(page, { task: 'Sunday morning priority', when: '11:00' });
+  await expect(page.locator('#plan-strip .plan-item').first()).toContainText('Sunday morning priority');
+  await expect(page.locator('#plan-strip .plan-item').first().locator('.plan-when')).toHaveText('11:00 AM →');
+
+  const plans = await calendarStore(page);
+  expect(Object.keys(plans)).toEqual([`cal1:${SUN}`]);
+  const [first] = plans[`cal1:${SUN}`].items;
+  expect(first).toMatchObject({ task: 'Sunday morning priority', when: '11:00', whenTz: TZ });
+  expect(first.whenDayOffset).toBeUndefined();
+  expect(await page.evaluate(() => { const t = window.PlanAuthority.current(); return window.PlanAuthority.itemInstants(t, window.PlanAuthority.items(t)[0]).startMs; })).toBe(at(SUN, '11:00'));
+
+  expect(await rawLegacy(page)).toEqual(legacyBefore);
+  const writes = await page.evaluate(() => window.__fbTest.log.writes.map(w => w.path));
+  // The app's ordinary re-push of the pre-existing legacy record may have happened at load; what must
+  // not exist is ANY legacy write caused by planning after the switch, or legacy content that is new.
+  expect(writes.filter(p => p.includes('operationalPlans')).length).toBe(legacyWritesAtSwitch);
+  const legacyContent = await page.evaluate(() => JSON.stringify(window.__fbTest.log.writes.filter(w => w.path.includes('operationalPlans')).map(w => w.value)));
+  expect(legacyContent).not.toContain('Sunday morning priority');
+  expect(writes.some(p => p.includes(`calendarPlans/cal1:${SUN}`))).toBe(true);
+  // The cutover survives a reload (and is synchronously readable, so the first paint agrees).
+  await page.reload();
+  await page.waitForFunction(() => typeof window.PlanAuthority === 'object' && window.PlanAuthority.calendarActive());
+  expect(await current(page)).toEqual({ store: 'calendar', id: `cal1:${SUN}`, dateKey: SUN });
+  await expect(page.locator('#plan-strip')).toContainText('Sunday morning priority');
+});
+
+test('Sunday 11:00: Plan Tomorrow prepares MONDAY\'s calendar plan (never derived from the 18:00 boundary)', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await switchToCalendarPlans(page);
+  // The static labels say "Tomorrow" again once plans follow the calendar (they read "Next personal day" before).
+  await expect(page.locator('#tmr-tab-tomorrow')).toHaveText('Tomorrow');
+  await page.evaluate(() => window.openPlanTomorrow());
+  await expect(page.locator('#plan-tomorrow-title')).toHaveText('Plan tomorrow');
+  await expect(page.locator('#plan-tomorrow-date')).toContainText('Monday');
+  await page.locator('#plan-tomorrow-add input[name="task"]').fill('Monday priority');
+  await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
+  await page.locator('#plan-tomorrow-confirm').click();
+  await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
+  const plans = await calendarStore(page);
+  expect(Object.keys(plans)).toEqual([`cal1:${MON}`]);
+  expect(plans[`cal1:${MON}`].preparation).toMatchObject({ targetDate: MON, intentionalBlank: false });
+  expect(plans[`cal1:${MON}`].items[0].task).toBe('Monday priority');
+  // 23:00 is still "tomorrow = Monday"; only midnight moves it.
+  await setClock(page, at(SUN, '23:00'));
+  expect(await upcoming(page)).toEqual({ store: 'calendar', id: `cal1:${MON}`, dateKey: MON });
+});
+
+test('Sunday 11:00: the Plan-by deadline evaluates THIS SAME Sunday plan once it is prepared (no waiting until 18:00)', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await switchToCalendarPlans(page);
+  await page.evaluate(() => window.showView('settings'));
+  await page.locator('#plan-by-deadline-time').fill('12:00');
+  await page.locator('#plan-by-deadline-settings').getByRole('button', { name: 'Save' }).click();
+  await prepareViaPlanTomorrow(page, { target: true, tasks: ['Sunday plan priority'] });
+  await page.evaluate(() => window.showView('settings'));
+  await expect(page.locator('#plan-by-deadline-settings')).toContainText('Today: maintained');
+  const streak = await page.evaluate(() => window.PlanAuthority.planningDeadlineStreak());
+  expect(streak.today.deadlineInstantMs).toBe(at(SUN, '12:00'));
+  expect(Object.keys(await calendarStore(page))).toEqual([`cal1:${SUN}`]);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §11 / §12 — one Sunday plan across midnight, carryover, completion, no clones
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function sundayPlanWithOvernight(page) {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await switchToCalendarPlans(page);
+  await addToStrip(page, { task: 'Sunday 11:00 item', when: '11:00' });
+  await addToStrip(page, { task: 'Overnight backup', when: '01:00', nextDay: true, kind: 'task' });
+  await addToStrip(page, { task: 'Early market check', when: '04:00', nextDay: true, kind: 'task' });
+  await addToStrip(page, { task: 'Monday 09:00 from Sunday', when: '09:00', nextDay: true, kind: 'task' });
+}
+
+test('a Sunday plan holds Sunday 11:00 AND Monday 01:00 / 04:00 / 09:00 with their true instants, in ONE record', async ({ page }) => {
+  await sundayPlanWithOvernight(page);
+  const items = (await calendarStore(page))[`cal1:${SUN}`].items;
+  // (Records are kept sorted by item id by the shared merge, so compare as a set of readings.)
+  expect(items.map(i => `${i.whenDayOffset ?? 0}:${i.when}`).sort()).toEqual(['0:11:00', '1:01:00', '1:04:00', '1:09:00']);
+  const instants = await page.evaluate(() => { const t = window.PlanAuthority.current(); return window.PlanAuthority.items(t).map(i => window.PlanAuthority.itemInstants(t, i).startMs); });
+  expect([...instants].sort((x, y) => x - y)).toEqual([at(SUN, '11:00'), at(MON, '01:00'), at(MON, '04:00'), at(MON, '09:00')]);
+  // Ordered by the real clock, not by the digits: Monday 01:00 does not jump ahead of Sunday 11:00.
+  await expect(page.locator('#plan-strip .plan-item .plan-task').first()).toContainText('Sunday 11:00 item');
+  await expect(page.locator('#plan-strip .plan-item .plan-when').nth(1)).toContainText('(next day)');
+  expect(Object.keys(await calendarStore(page))).toEqual([`cal1:${SUN}`]);
+  // Sunday's own My Day shows them after a date break, still one plan.
+  await expect(page.locator('#timeline-blocks .tl-date-break')).toContainText('MONDAY');
+});
+
+test('Monday 02:00 while still working through Sunday\'s plan: My Day shows Carryover from Sunday + Monday\'s own plan; completing a carryover row updates SUNDAY\'s record only', async ({ page }) => {
+  await sundayPlanWithOvernight(page);
+  await setClock(page, at(MON, '02:00'));
+  expect(await current(page)).toEqual({ store: 'calendar', id: `cal1:${MON}`, dateKey: MON });
+  expect(await upcoming(page)).toEqual({ store: 'calendar', id: 'cal1:2026-09-29', dateKey: '2026-09-29' });
+
+  await expect(page.locator('#timeline-blocks .tl-carryover-header')).toHaveText('Carryover from Sunday');
+  const carryover = page.locator('#timeline-blocks .tl-carryover-section .tl-plan-row');
+  await expect(carryover).toHaveCount(3);
+  await expect(carryover.first()).toContainText('Overnight backup');
+  await expect(page.locator('#plan-strip')).not.toContainText('Overnight backup'); // Monday's own strip is Monday's plan
+
+  // Monday's own plan is a separate plan: add something to it.
+  await addToStrip(page, { task: 'Monday morning priority', when: '10:00' });
+  expect(Object.keys(await calendarStore(page)).sort()).toEqual([`cal1:${SUN}`, `cal1:${MON}`]);
+
+  // Complete the 01:00 carryover row.
+  await carryover.first().locator('.tl-plan-check').click();
+  await expect.poll(async () => (await calendarStore(page))[`cal1:${SUN}`].items.find(i => i.task === 'Overnight backup').done).toBe(true);
+  const after = await calendarStore(page);
+  expect(after[`cal1:${MON}`].items.map(i => i.task)).toEqual(['Monday morning priority']); // no clone in Monday
+  expect(after[`cal1:${SUN}`].items.filter(i => i.task === 'Overnight backup')).toHaveLength(1);
+  await expect(carryover.first()).toHaveClass(/done/);
+  // Undo uses the same authority.
+  await page.evaluate(() => window.__setNow(Date.now() + 1000));
+  await carryover.first().locator('.tl-plan-check').click();
+  await expect.poll(async () => (await calendarStore(page))[`cal1:${SUN}`].items.find(i => i.task === 'Overnight backup').done).toBe(false);
+});
+
+test('Review: Sunday\'s card covers its Monday 01:10 work by exact link and the actual keeps its Monday timestamp; Monday\'s review does not list it as "unplanned"', async ({ page }) => {
+  await sundayPlanWithOvernight(page);
+  await setClock(page, at(MON, '12:00'));
+  const entryId = await page.evaluate(({ start, end, day }) => {
+    const target = window.PlanAuthority.targetById('cal1:2026-09-27');
+    const overnight = window.PlanAuthority.items(target).find(item => item.task === 'Overnight backup');
+    entries.push({ id: 'e-overnight', activity: 'Overnight backup', energy: 'deep', date: day, tsStart: start, ts: end, blockIntervalMin: 30, planItemId: overnight.id });
+    persist();
+    return 'e-overnight';
+  }, { start: at(MON, '01:10'), end: at(MON, '01:40'), day: MON });
+
+  await page.evaluate(() => openReview('2026-09-27'));
+  await expect(page.locator('#rv-plan-vs-actual')).toContainText('Overnight backup');
+  await expect(page.locator('#rv-plan-vs-actual')).toContainText('30m tracked with the same label');
+  await page.evaluate(() => closeModal('review-overlay'));
+
+  await page.evaluate(() => openReview('2026-09-28'));
+  // Nothing planned on Monday, and Sunday's linked work is not "unplanned": the renderer leaves the block empty.
+  // (Asserted on content: the block sits inside a collapsed <details>, so visibility would be vacuous.)
+  await expect(page.locator('#rv-plan-vs-actual')).toHaveText('');
+  await page.evaluate(() => closeModal('review-overlay'));
+
+  // The factual entry still sits at its Monday timestamp, once.
+  const factual = await page.evaluate(id => entries.filter(e => e.id === id).map(e => [e.tsStart, e.ts]), entryId);
+  expect(factual).toEqual([[at(MON, '01:10'), at(MON, '01:40')]]);
+  expect(Object.keys(await calendarStore(page))).toEqual([`cal1:${SUN}`]);
+});
+
+test('early wake and normal night shift: at Monday 04:30 (past Sunday\'s 01:00 and 04:00) the day is Monday and Sunday\'s remaining Monday-dated item is carryover', async ({ page }) => {
+  await sundayPlanWithOvernight(page);
+  await setClock(page, at(MON, '04:30'));
+  expect(await current(page)).toEqual({ store: 'calendar', id: `cal1:${MON}`, dateKey: MON });
+  await expect(page.locator('#timeline-blocks .tl-carryover-section .tl-plan-row')).toHaveCount(3);
+  // A night shift working 22:00 -> 06:00 crosses midnight inside ONE plan and never becomes a Monday plan.
+  const before = Object.keys(await calendarStore(page));
+  await setClock(page, at(MON, '05:59'));
+  expect(Object.keys(await calendarStore(page))).toEqual(before);
+});
+
+test('normal night shift: a 22:00 -> 06:00 range made in the real editor crosses midnight inside ONE Sunday plan; it is neither Monday carryover nor "unfinished" until its own span is over', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await switchToCalendarPlans(page);
+  await page.evaluate(() => window.openPlanTomorrow({ target: window.PlanAuthority.current() }));
+  await page.locator('#plan-tomorrow-add input[name="task"]').fill('Night shift');
+  await page.locator('#plan-tomorrow-add').getByRole('button', { name: 'Add' }).click();
+  await page.locator('[data-pt-action="edit-schedule"]').first().click();
+  await page.locator('.pt-time-input').first().fill('22:00');
+  await page.locator('[data-pt-action="edit-schedule"]').first().click();
+  await page.locator('.pt-end-input').first().fill('06:00');
+  await expect(page.locator('#plan-tomorrow-body')).toContainText('10:00 PM–6:00 AM');
+  await page.locator('#plan-tomorrow-confirm').click();
+  await expect(page.locator('#plan-tomorrow-overlay')).not.toHaveClass(/open/);
+
+  const [shift] = (await calendarStore(page))[`cal1:${SUN}`].items;
+  expect(shift).toMatchObject({ task: 'Night shift', when: '22:00', durationMinutes: 480, whenTz: TZ });
+  expect(shift.whenDayOffset).toBeUndefined();
+  const span = await page.evaluate(() => { const t = window.PlanAuthority.current(); return window.PlanAuthority.itemInstants(t, window.PlanAuthority.items(t)[0]); });
+  expect(span).toEqual({ startMs: at(SUN, '22:00'), endMs: at(MON, '06:00') });
+
+  await setClock(page, at(MON, '03:00'));
+  expect(await current(page)).toMatchObject({ dateKey: MON });
+  expect(await page.evaluate(() => window.PlanAuthority.calendarCarryoverFor('2026-09-28').items.length)).toBe(0); // it started on Sunday: not Monday-dated carryover
+  expect(await page.evaluate(() => window.PlanAuthority.staleUnfinished().items.length)).toBe(0);             // still inside its own span
+  await setClock(page, at(MON, '07:00'));
+  expect(await page.evaluate(() => window.PlanAuthority.staleUnfinished().items.map(row => row.item.task))).toEqual(['Night shift']);
+  expect(Object.keys(await calendarStore(page))).toEqual([`cal1:${SUN}`]);
+});
+
+test('a legacy write that lands AFTER the switch (another device on the old model) is a superseded plan — never the current plan, never merged into the calendar plan', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await switchToCalendarPlans(page);
+  await addToStrip(page, { task: 'Calendar priority', when: '12:00' });
+  const before = JSON.stringify(await calendarStore(page));
+  const key = Buffer.from(SATURDAY_DAY_ID).toString('base64url');
+  await page.evaluate(({ key }) => window.__fbTest.remoteWrite(`rooms/uid_account-a/operationalPlans/${key}`, { items: [{ id: 'late-legacy', task: 'Written by a stale device', when: '', done: false, updatedAt: 9000, updatedBy: 'old-device' }], updatedAt: 9000, updatedBy: 'old-device' }), { key });
+  await expect(page.locator('#calendar-plan-section [data-cp-older]')).toContainText('Written by a stale device');
+  expect((await current(page)).store).toBe('calendar');
+  await expect(page.locator('#plan-strip')).not.toContainText('Written by a stale device');
+  expect(JSON.stringify(await calendarStore(page))).toBe(before);
+});
+
+test('midnight rolls the current plan in-session with no reload: Sunday 23:59 -> Monday 00:01', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '23:59') });
+  await switchToCalendarPlans(page);
+  expect(await current(page)).toMatchObject({ dateKey: SUN });
+  await setClock(page, at(MON, '00:01'));
+  expect(await current(page)).toMatchObject({ dateKey: MON });
+  expect(await upcoming(page)).toMatchObject({ dateKey: '2026-09-29' });
+});
+
+test('an unfinished task from a superseded legacy day can be moved into the calendar plan — and the legacy record is never rewritten', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00'), operationalPlans: saturdayOperationalPlans() });
+  const legacyBefore = await rawLegacy(page);
+  await switchToCalendarPlans(page);
+  await expect(page.locator('#calendar-plan-section [data-cp-older]')).toHaveCount(1);
+  await expect(page.locator('#calendar-plan-section [data-cp-older]')).toContainText('Saturday-window errand');
+  await expect(page.locator('#calendar-plan-section [data-cp-older]')).toContainText('Made before you switched');
+  const moved = await page.evaluate(() => {
+    const layer = window.PlanAuthority;
+    const source = layer.targetById(layer.supersededPlans()[0].id);
+    return layer.moveStaleItem({ sourceTarget: source, itemId: 'sat-a', destination: layer.current(), stamp: item => ({ ...item, updatedAt: Date.now(), updatedBy: 'device-cnpi' }) }).moved;
+  });
+  expect(moved).toBe(true);
+  expect(await rawLegacy(page)).toEqual(legacyBefore);
+  // Still open (sat-b) → still listed, with the moved task marked; once it moves too, Today stops carrying it.
+  await expect(page.locator('#calendar-plan-section [data-cp-older]')).toContainText('moved to a calendar plan');
+  await page.evaluate(() => {
+    const layer = window.PlanAuthority;
+    const source = layer.targetById(layer.supersededPlans()[0].id);
+    layer.moveStaleItem({ sourceTarget: source, itemId: 'sat-b', destination: layer.current(), stamp: item => ({ ...item, updatedAt: Date.now() + 1, updatedBy: 'device-cnpi' }) });
+  });
+  await expect(page.locator('#calendar-plan-section [data-cp-older]')).toHaveCount(0);
+  expect(await rawLegacy(page)).toEqual(legacyBefore);
+  const plans = await calendarStore(page);
+  expect(plans[`cal1:${SUN}`].items[0]).toMatchObject({ task: 'Saturday-window errand', carriedFromId: 'sat-a' });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §16 / §22 — timezone and boundary changes decide nothing new
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('changing the account timezone later leaves the Sunday plan\'s scheduled instants — and its zone — where they were', async ({ page }) => {
+  await sundayPlanWithOvernight(page);
+  const snapshot = () => page.evaluate(() => { const t = window.PlanAuthority.targetById('cal1:2026-09-27'); return { zone: t.timezone, start: t.startMs, instants: window.PlanAuthority.items(t).map(i => window.PlanAuthority.itemInstants(t, i).startMs) }; });
+  const before = await snapshot();
+  await page.evaluate(() => { settings.timezone = 'America/Los_Angeles'; window.PlanAuthority.invalidate(); });
+  await page.evaluate(() => {
+    const t = window.PlanAuthority.targetById('cal1:2026-09-27');
+    window.PlanAuthority.saveItems(t, window.PlanAuthority.rawItems(t).map((item, index) => (index === 0 ? { ...item, done: true } : item)));
+  });
+  expect(await snapshot()).toEqual(before);
+  expect((await calendarStore(page))[`cal1:${SUN}`].items.every(i => i.whenTz === TZ)).toBe(true);
+});
+
+test('changing the legacy Personal Day boundary after the switch changes nothing about which plan is current', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await switchToCalendarPlans(page);
+  await page.evaluate(() => window.PersonalDayBoundaryLive.proposeBoundary({ boundaryTime: '20:00', timezone: 'Asia/Manila' }));
+  await setClock(page, at(SUN, '21:00'));
+  expect(await current(page)).toMatchObject({ store: 'calendar', dateKey: SUN });
+  expect(await upcoming(page)).toMatchObject({ store: 'calendar', dateKey: MON });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §17 — account isolation
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('direct A -> B: no A plan, deadline or cutover in B, no write into B\'s room; B -> A restores A; sign-out empties', async ({ page }) => {
+  await sundayPlanWithOvernight(page);
+  await page.evaluate(() => window.showView('settings'));
+  await page.locator('#plan-by-deadline-time').fill('12:00');
+  await page.locator('#plan-by-deadline-settings').getByRole('button', { name: 'Save' }).click();
+
+  await page.evaluate(() => window.__fbTest.signInAs('account-b'));
+  await page.waitForFunction(() => globalThis.getChronaSenseRoomCode() === 'uid_account-b');
+  await page.waitForTimeout(250);
+  const isolated = await page.evaluate(() => ({
+    active: window.PlanAuthority.calendarActive(),
+    current: window.PlanAuthority.current().store,
+    plans: Object.keys(window.CalendarPlanLive.listAllRaw()),
+    deadlines: window.PlanByDeadlineSync.repository.readDeadlines().length,
+    writesToB: window.__fbTest.log.writes.filter(w => w.path.startsWith('rooms/uid_account-b/')).map(w => w.path),
+    remoteB: window.__fbTest.get('rooms/uid_account-b/calendarPlans'),
+  }));
+  expect(isolated).toMatchObject({ active: false, current: 'legacy', plans: [], deadlines: 0, remoteB: null });
+  expect(isolated.writesToB.filter(p => /calendarPlan|planByDeadline|intentionalOffDays/.test(p))).toEqual([]);
+  await expect(page.locator('#plan-strip')).not.toContainText('Overnight backup');
+
+  // B's own cutover (made on some device of B) is heard through the join hook — and it is B's, not A's.
+  await page.evaluate(() => window.__fbTest.remoteWrite('rooms/uid_account-b/calendarPlanAuthority/ca1-b', { schemaVersion: 1, id: 'ca1-b', activatedAtMs: 1790000000000, timezone: 'Asia/Manila', activationDate: '2026-09-21', deviceId: 'b-device' }));
+  await expect.poll(() => page.evaluate(() => window.PlanAuthority.calendarActivation()?.deviceId)).toBe('b-device');
+
+  await page.evaluate(() => window.__fbTest.signInAs('account-a'));
+  await page.waitForFunction(() => globalThis.getChronaSenseRoomCode() === 'uid_account-a');
+  await expect.poll(() => page.evaluate(() => window.PlanAuthority.calendarActivation()?.deviceId)).toBe('device-cnpi'); // A's own cutover, not B's
+  await expect.poll(() => page.evaluate(() => window.CalendarPlanLive.readRecord('2026-09-27')?.items.length)).toBe(4);
+
+  await page.evaluate(() => window.__fbTest.signInAs(null));
+  await expect.poll(() => page.evaluate(() => globalThis.getChronaSenseRoomCode() || '')).toBe('');
+  expect(await page.evaluate(() => ({ active: window.PlanAuthority.calendarActive(), plans: Object.keys(window.CalendarPlanLive.listAllRaw()) }))).toEqual({ active: false, plans: [] });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §8 / §18 — offline, reconnect, cross-device cutover
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('offline: the switch and Sunday\'s plan persist locally, reach the cloud after reconnect, and nothing is lost', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await page.evaluate(() => window.__fbTest.setFailWrites(true));
+  await switchToCalendarPlans(page);
+  await addToStrip(page, { task: 'Written offline', when: '11:30' });
+  expect(await page.evaluate(() => [window.__fbTest.get('rooms/uid_account-a/calendarPlans'), window.__fbTest.get('rooms/uid_account-a/calendarPlanAuthority')])).toEqual([null, null]);
+  expect((await calendarStore(page))[`cal1:${SUN}`].items[0].task).toBe('Written offline');
+  await page.evaluate(() => { window.__fbTest.setFailWrites(false); window.__fbTest.reconnect(); });
+  await expect.poll(() => page.evaluate(() => window.__fbTest.get(`rooms/uid_account-a/calendarPlans/cal1:2026-09-27`)?.items?.[0]?.task)).toBe('Written offline');
+  await expect.poll(() => page.evaluate(() => Object.keys(window.__fbTest.get('rooms/uid_account-a/calendarPlanAuthority') || {}).length)).toBe(1);
+});
+
+test('cross-device: a cutover made on ANOTHER device is learned here, and this device then plans on the calendar', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00'), operationalPlans: saturdayOperationalPlans() });
+  expect((await current(page)).store).toBe('operational');
+  await expect(page.locator('#calendar-plan-section')).toContainText('Use calendar-day plans');
+  const fact = { schemaVersion: 1, id: 'ca1-other-device', activatedAtMs: at(SUN, '09:00'), timezone: TZ, activationDate: SUN, deviceId: 'device-other' };
+  await page.evaluate(value => window.__fbTest.remoteWrite('rooms/uid_account-a/calendarPlanAuthority/ca1-other-device', value), fact);
+  await expect.poll(() => page.evaluate(() => window.PlanAuthority.calendarActive())).toBe(true);
+  expect(await current(page)).toEqual({ store: 'calendar', id: `cal1:${SUN}`, dateKey: SUN });
+  await expect(page.locator('#calendar-plan-section')).not.toContainText('Use calendar-day plans');
+  // It also starts hearing the other device's calendar plans.
+  await page.evaluate(() => window.__fbTest.remoteWrite('rooms/uid_account-a/calendarPlans/cal1:2026-09-27', { items: [{ id: 'remote-item', task: 'From the other device', when: '15:00', whenTz: 'Asia/Manila', done: false, updatedAt: 5, updatedBy: 'device-other' }], updatedAt: 5, updatedBy: 'device-other' }));
+  await expect(page.locator('#plan-strip')).toContainText('From the other device');
+  // And a stale legacy write for the same window stays a superseded plan, never a second current plan.
+  await expect(page.locator('#calendar-plan-section [data-cp-older]')).toContainText('Saturday-window errand');
+  expect((await current(page)).store).toBe('calendar');
+});
+
+test('a never-switched account with NO Personal Day is offered the switch in Settings only, and its plans are untouched', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00'), boundary: false });
+  await expect(page.locator('#calendar-plan-section')).toBeHidden();
+  await page.evaluate(() => window.showView('settings'));
+  await expect(page.locator('#calendar-plan-settings')).toContainText('already follow the calendar date');
+  expect((await current(page)).store).toBe('legacy');
+  expect(await calendarStore(page)).toEqual({});
+});
+
+test('the Plan-by deadline is account-owned end to end: a deadline set on another device arrives, a deadline set here reaches the cloud after reconnect, and sign-out detaches it', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  // Another device of the same account sets a deadline.
+  const other = { id: 'pbd-other', deadlineTime: '09:30', timezone: TZ, effectiveFromInstant: at(SUN, '09:30') };
+  await page.evaluate(value => window.__fbTest.remoteWrite('rooms/uid_account-a/planByDeadlineRevisions/pbd-other', value), other);
+  await expect.poll(() => page.evaluate(() => window.PlanByDeadlineSync.repository.readDeadlines().map(r => r.id))).toEqual(['pbd-other']);
+
+  // A deadline saved here while offline stays local, then reaches the cloud on reconnect.
+  await page.evaluate(() => window.__fbTest.setFailWrites(true));
+  await page.evaluate(() => window.showView('settings'));
+  await page.locator('#plan-by-deadline-time').fill('12:00');
+  await page.locator('#plan-by-deadline-settings').getByRole('button', { name: 'Save' }).click();
+  expect(await page.evaluate(() => Object.keys(window.__fbTest.get('rooms/uid_account-a/planByDeadlineRevisions') || {}))).toEqual(['pbd-other']);
+  await page.evaluate(() => { window.__fbTest.setFailWrites(false); window.__fbTest.reconnect(); });
+  await expect.poll(() => page.evaluate(() => Object.keys(window.__fbTest.get('rooms/uid_account-a/planByDeadlineRevisions') || {}).length)).toBe(2);
+
+  // Joining ANOTHER room after the modules exist goes through storage.js's own join hook: B hears B's
+  // deadlines (never A's), and A's listener is gone.
+  await page.evaluate(() => window.__fbTest.signInAs('account-b'));
+  await page.waitForFunction(() => globalThis.getChronaSenseRoomCode() === 'uid_account-b');
+  expect(await page.evaluate(() => window.PlanByDeadlineSync.repository.readDeadlines().length)).toBe(0);
+  await page.evaluate(() => window.__fbTest.remoteWrite('rooms/uid_account-b/planByDeadlineRevisions/pbd-b', { id: 'pbd-b', deadlineTime: '07:00', timezone: 'Asia/Manila', effectiveFromInstant: 5 }));
+  await expect.poll(() => page.evaluate(() => window.PlanByDeadlineSync.repository.readDeadlines().map(r => r.id))).toEqual(['pbd-b']);
+  await page.evaluate(() => window.__fbTest.remoteWrite('rooms/uid_account-a/planByDeadlineRevisions/pbd-a-late', { id: 'pbd-a-late', deadlineTime: '05:00', timezone: 'Asia/Manila', effectiveFromInstant: 1 }));
+  expect(await page.evaluate(() => window.PlanByDeadlineSync.repository.readDeadlines().map(r => r.id))).toEqual(['pbd-b']);
+
+  // Sign-out tears the listeners down: a later remote change is not merged into a signed-out device.
+  await page.evaluate(() => window.__fbTest.signInAs(null));
+  await expect.poll(() => page.evaluate(() => globalThis.getChronaSenseRoomCode() || '')).toBe('');
+  await page.evaluate(() => window.__fbTest.remoteWrite('rooms/uid_account-b/planByDeadlineRevisions/pbd-late', { id: 'pbd-late', deadlineTime: '05:00', timezone: 'Asia/Manila', effectiveFromInstant: 1 }));
+  expect(await page.evaluate(() => window.PlanByDeadlineSync.repository.readDeadlines().map(r => r.id))).toEqual([]);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §25 — one page load, one generation
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('release generation: the meta, the import map and every loaded calendar/plan module carry the ONE token, each loaded once', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  const seen = await page.evaluate(() => performance.getEntriesByType('resource').map(entry => entry.name).filter(url => /(calendar-plan|plan-authority|plan-by-deadline|personal-day-boundary-live|operational-plan)[^/]*\.js/.test(url)));
+  expect(seen.length).toBeGreaterThanOrEqual(8);
+  for (const url of seen) expect(url).toContain(`?v=${TOKEN}`);
+  expect(new Set(seen).size).toBe(seen.length);
+  expect(await page.evaluate(() => document.querySelector('meta[name="pdb-release"]').content)).toBe(TOKEN);
+  for (const file of ['calendar-plan-model.js', 'calendar-plan-repository.js', 'calendar-plan-sync.js', 'calendar-plan-live.js', 'calendar-plan-ui.js']) {
+    expect(seen.filter(url => url.includes(file))).toHaveLength(1);
+  }
+});

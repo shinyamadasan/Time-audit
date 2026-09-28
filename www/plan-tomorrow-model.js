@@ -50,10 +50,13 @@ function minutesToTime(totalMinutes) {
  *  OR the block would run past midnight into the next calendar day. Cross-midnight ranges are
  *  explicitly unsupported in V1: rather than fabricating a next-day interpretation, an item whose
  *  computed end doesn't fit today is treated exactly like one with no range at all. */
-export function planItemEndTime(when, durationMinutes) {
+export function planItemEndTime(when, durationMinutes, wrap = false) {
   if (!validPlanItemTime(when) || !validPlanItemDuration(durationMinutes)) return null;
   const end = timeToMinutes(when) + durationMinutes;
-  return end < 24 * 60 ? minutesToTime(end) : null;
+  if (end < 24 * 60) return minutesToTime(end);
+  // Only a calendar-native plan (which spans its own date AND the next) may cross midnight; every
+  // legacy caller keeps the existing refusal by leaving `wrap` false.
+  return wrap ? minutesToTime(end % (24 * 60)) : null;
 }
 
 /** Derives the duration (minutes) implied by an exact custom start + end pair, for the "pick an
@@ -81,12 +84,16 @@ export function validPlanItemRange(when, durationMinutes) {
 export function formatPlanItemSchedule(item) {
   const startLabel = formatPlanItemTime(item && item.when);
   if (!startLabel) return null;
-  const endWhen = planItemEndTime(item && item.when, item && item.durationMinutes);
-  if (!endWhen) return startLabel;
+  // A calendar-native item is marked by its own frozen zone (or an explicit day offset): it may
+  // cross midnight, and one on the following date says so.
+  const calendarNative = !!(item && ((typeof item.whenTz === 'string' && item.whenTz) || item.whenDayOffset === 1));
+  const nextDay = item && item.whenDayOffset === 1 ? ' (next day)' : '';
+  const endWhen = planItemEndTime(item && item.when, item && item.durationMinutes, calendarNative);
+  if (!endWhen) return startLabel + nextDay;
   const endLabel = formatPlanItemTime(endWhen);
   const [, startClock, startPeriod] = startLabel.match(/^(.*) (AM|PM)$/);
   const [, endClock, endPeriod] = endLabel.match(/^(.*) (AM|PM)$/);
-  return startPeriod === endPeriod ? `${startClock}–${endClock} ${endPeriod}` : `${startLabel}–${endLabel}`;
+  return (startPeriod === endPeriod ? `${startClock}–${endClock} ${endPeriod}` : `${startLabel}–${endLabel}`) + nextDay;
 }
 
 /** Display label for any plan item, structured or legacy: a recognized start/range via

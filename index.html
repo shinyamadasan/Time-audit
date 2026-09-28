@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
-<meta name="pdb-release" content="20260927-calendar-day-extended-my-day-fix1">
+<meta name="pdb-release" content="20260927-calendar-native-plan-identity-v1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -123,6 +123,10 @@
        explicitly enabled a personal day boundary. It stays hidden and empty (and so
        out of the layout, tab order and accessibility tree) for every legacy account,
        which is what keeps Today byte-for-byte unchanged for them. -->
+  <!-- Calendar-Native Plan Identity V1 — the switch prompt (a boundary account that has not
+       switched yet) and the read-only "Older plans" list (after the switch). Hidden and empty
+       for every account that has nothing to say here. -->
+  <section id="calendar-plan-section" hidden aria-label="Calendar-day plans"></section>
   <section id="operational-plan-section" hidden aria-label="Personal day plan"></section>
   <section id="planning-continuity-section" hidden aria-label="Upcoming commitments and future planning"></section>
   <section id="today-commitments" aria-label="Today's commitments" hidden>
@@ -786,6 +790,13 @@
         </select>
       </div>
     </div>
+  </div>
+
+  <!-- Calendar-Native Plan Identity V1: which model this account plans on, and the one
+       explicit, one-way switch to calendar-day plans. Rendered by calendar-plan-ui.js. -->
+  <div class="settings-section">
+    <div class="settings-title">Plan day</div>
+    <div id="calendar-plan-settings"></div>
   </div>
 
   <!-- Calendar Day + Extended My Day V1 (§20): the new primary streak-authority
@@ -1679,7 +1690,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260927-calendar-day-extended-my-day-fix1
+<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260927-calendar-native-plan-identity-v1
      themselves, but the modules they IMPORT are bare URLs, which browsers cache independently of index.html
      — so a device could run new sync code against an old repository, or an old live wiring against a new
      storage.js (permanent "Off", or a link error that stops PlanAuthority loading at all). This map makes
@@ -1694,60 +1705,65 @@
 <script type="importmap">
 {
   "imports": {
-    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./operational-plan-model.js": "./operational-plan-model.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./plan-authority.js": "./plan-authority.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./commitments-repository.js": "./commitments-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./commitments-sync.js": "./commitments-sync.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./capability-career-repository.js": "./capability-career-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
-    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20260927-calendar-day-extended-my-day-fix1"
+    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260927-calendar-native-plan-identity-v1",
+    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260927-calendar-native-plan-identity-v1",
+    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260927-calendar-native-plan-identity-v1",
+    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260927-calendar-native-plan-identity-v1",
+    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260927-calendar-native-plan-identity-v1",
+    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260927-calendar-native-plan-identity-v1",
+    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260927-calendar-native-plan-identity-v1",
+    "./operational-plan-model.js": "./operational-plan-model.js?v=20260927-calendar-native-plan-identity-v1",
+    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260927-calendar-native-plan-identity-v1",
+    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260927-calendar-native-plan-identity-v1",
+    "./plan-authority.js": "./plan-authority.js?v=20260927-calendar-native-plan-identity-v1",
+    "./commitments-repository.js": "./commitments-repository.js?v=20260927-calendar-native-plan-identity-v1",
+    "./commitments-sync.js": "./commitments-sync.js?v=20260927-calendar-native-plan-identity-v1",
+    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260927-calendar-native-plan-identity-v1",
+    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260927-calendar-native-plan-identity-v1",
+    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260927-calendar-native-plan-identity-v1",
+    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20260927-calendar-native-plan-identity-v1",
+    "./capability-career-repository.js": "./capability-career-repository.js?v=20260927-calendar-native-plan-identity-v1",
+    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20260927-calendar-native-plan-identity-v1",
+    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20260927-calendar-native-plan-identity-v1",
+    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20260927-calendar-native-plan-identity-v1",
+    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20260927-calendar-native-plan-identity-v1",
+    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20260927-calendar-native-plan-identity-v1",
+    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20260927-calendar-native-plan-identity-v1",
+    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20260927-calendar-native-plan-identity-v1",
+    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20260927-calendar-native-plan-identity-v1"
   }
 }
 </script>
-<script src="storage.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
+<script src="storage.js?v=20260927-calendar-native-plan-identity-v1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
-<script type="module" src="daily-routines-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
+<script type="module" src="daily-routines-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
 <script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
-<script type="module" src="learning-plan-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
-<script type="module" src="capability-career-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
+<script type="module" src="learning-plan-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script type="module" src="capability-career-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
 <script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
 <script type="module" src="windows-hud-bridge.js?v=20260908-windows-ambient-focus-hud-v1"></script>
-<script type="module" src="coarse-life-evidence-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
-<script type="module" src="coarse-life-evidence-sync.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script type="module" src="coarse-life-evidence-sync.js?v=20260927-calendar-native-plan-identity-v1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
-<script type="module" src="personal-day-boundary-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
-<script type="module" src="plan-by-deadline-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script type="module" src="plan-by-deadline-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script type="module" src="calendar-plan-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
 <script>
 // Read-only Personal Day sync diagnostics for a real device: open the app with ?pdbdiag=1.
-if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260927-calendar-day-extended-my-day-fix1'), 1500));
+if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260927-calendar-native-plan-identity-v1'), 1500));
 </script>
-<script type="module" src="operational-plan-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
-<script type="module" src="commitments-sync.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
+<script type="module" src="operational-plan-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script type="module" src="commitments-sync.js?v=20260927-calendar-native-plan-identity-v1"></script>
 <script type="module" src="planning-continuity-ui.js?v=20260918-planning-continuity-v1"></script>
 
 <script>
@@ -5943,8 +5959,13 @@ function renderToday() {
   const timelineTemplateKey = (settings.templates || [])
     .map(t => [t.id, t.enabled !== false, (t.days || []).join('-'), t.startTime, t.endTime, t.activity, t.energy, !!t.autoLog, (t.skipDates || []).join('/')].join(':'))
     .join(',');
+  // Browsing a date that has NO plan identity of its own (a date before the calendar-day
+  // cutover on a boundary account, or any date under an active boundary) shows no plan rows: a
+  // calendar date is not a plan identity there (Decision B). A calendar-authoritative date IS one.
+  const historyHasNoPlan = globalThis.PlanAuthority && viewingDateKey
+    && (globalThis.PlanAuthority.enabled() || (globalThis.PlanAuthority.boundaryEnabled() && !globalThis.PlanAuthority.isCalendarAuthoritative(_viewKey)));
   const timelineTarget = myDay || (globalThis.PlanAuthority
-    ? (viewingDateKey && globalThis.PlanAuthority.enabled() ? null : globalThis.PlanAuthority.dayForCalendarDate(_viewKey))
+    ? (historyHasNoPlan ? null : globalThis.PlanAuthority.dayForCalendarDate(_viewKey))
     : personalDayBoundaryConfigured() ? null : legacyPlanTarget(_viewKey));
   const timelineItems = timelineTarget ? planItemsFor(timelineTarget) : [];
   const timelineCommitments = timelineTarget ? (globalThis.PlanningContinuityUI?.commitmentsForTarget?.(timelineTarget) || []) : [];
@@ -5974,17 +5995,27 @@ function renderToday() {
   let carryoverRows = [];
   let carryoverFromLabel = null;
   let carryoverTarget = null;
-  if (viewingCurrentTimeline && globalThis.PlanAuthority?.enabled?.()) {
+  if (viewingCurrentTimeline && globalThis.PlanAuthority) {
     try {
-      const overlapping = globalThis.PlanAuthority.daysOverlappingCalendarDate(_viewKey);
-      const priorCandidate = overlapping.length > 1 ? overlapping[0] : null;
+      // Calendar-native (after the switch): the previous DATE's plan reaching into this one — its
+      // items stay owned by that plan. Legacy (before the switch, an active boundary): the personal
+      // day still overlapping this calendar date. One or the other, never both.
+      const calendarCarry = globalThis.PlanAuthority.calendarCarryoverFor?.(_viewKey);
+      let priorCandidate = null;
+      let priorItems = null;
+      if (calendarCarry) {
+        if (calendarCarry.items.length) { priorCandidate = calendarCarry.target; priorItems = calendarCarry.items; }
+      } else if (globalThis.PlanAuthority.enabled?.()) {
+        const overlapping = globalThis.PlanAuthority.daysOverlappingCalendarDate(_viewKey);
+        priorCandidate = overlapping.length > 1 ? overlapping[0] : null;
+      }
       if (priorCandidate && priorCandidate.id !== timelineTarget?.id) {
         carryoverTarget = priorCandidate;
         const priorProjection = globalThis.TomorrowTimelineModel?.deriveMyDayPlannedRows({
           target: carryoverTarget,
-          planItems: planItemsFor(carryoverTarget),
+          planItems: priorItems || planItemsFor(carryoverTarget),
           commitments: globalThis.PlanningContinuityUI?.commitmentsForTarget?.(carryoverTarget) || [],
-          itemStartInstant: (target, when) => globalThis.PlanAuthority?.itemStartInstant(target, when) ?? null,
+          itemStartInstant: (target, when, item) => globalThis.PlanAuthority?.itemStartInstant(target, when, item) ?? null,
         }) || { positioned: [] };
         // Calendar Day + Extended My Day V1 FIX FIRST §10/§11: a carryover row that
         // survives the today-dated filter below IS, by construction, a live/current
@@ -5996,7 +6027,7 @@ function renderToday() {
           .filter(row => getDateInTZ(row.startMs, _tz) === _viewKey)
           .map(row => ({ ...row, tsStart: row.startMs, ts: row.endMs || row.startMs, _timelinePlanned: true, _editable: false, _completable: true, _toggleFn: 'toggleCarryoverItemDone' }));
         if (carryoverRows.length) {
-          carryoverFromLabel = new Intl.DateTimeFormat('en-US', { timeZone: _tz, weekday: 'long' }).format(tzParseTime(carryoverTarget.ref?.boundaryStartDate || _viewKey, '12:00'));
+          carryoverFromLabel = new Intl.DateTimeFormat('en-US', { timeZone: _tz, weekday: 'long' }).format(tzParseTime(carryoverTarget.ref?.boundaryStartDate || carryoverTarget.dateKey || _viewKey, '12:00'));
         }
       }
     } catch { /* carryover is a bonus projection over existing data; never block the primary render */ }
@@ -6017,7 +6048,7 @@ function renderToday() {
       target: timelineTarget,
       planItems: timelineItems,
       commitments: timelineCommitments,
-      itemStartInstant: (target, when) => globalThis.PlanAuthority?.itemStartInstant(target, when) ?? null,
+      itemStartInstant: (target, when, item) => globalThis.PlanAuthority?.itemStartInstant(target, when, item) ?? null,
     }) || { anytime: [], positioned: [] };
     const editable = isTimelineTargetEditable(timelineTarget);
     renderAnytimeLane(projection.anytime, editable);
@@ -6030,11 +6061,14 @@ function renderToday() {
     // calendar dates (a non-midnight boundary not yet crossed), separate the rows
     // landing on each date with a plain divider — still one plan, one view; dates
     // stay factual instead of hiding the crossing.
-    if (myDay && combined.length) {
+    // A calendar plan reaches into the next date by design (Sunday's plan at Monday 01:00), so its
+    // rows get the same honest divider — one plan, one view, the date stays factual.
+    const breakTarget = myDay || (timelineTarget?.store === 'calendar' ? timelineTarget : null);
+    if (breakTarget && combined.length) {
       const withBreaks = [];
       let lastRowDateKey = null;
       combined.forEach(row => {
-        const rowDateKey = getDateInTZ(row.tsStart ?? row.ts, myDay.timezone || _tz);
+        const rowDateKey = getDateInTZ(row.tsStart ?? row.ts, breakTarget.timezone || _tz);
         if (lastRowDateKey && rowDateKey !== lastRowDateKey) withBreaks.push({ _dateBreak: true, tsStart: row.tsStart, ts: row.tsStart, dateKey: rowDateKey });
         withBreaks.push(row);
         lastRowDateKey = rowDateKey;
@@ -6815,7 +6849,7 @@ function planTomorrowSuggestions(target) {
   planItemsFor(currentPlanTarget()).filter(item => !item.done).forEach(item => push(item.task, 'unfinished today'));
   // The week a target belongs to comes from the day it actually starts on —
   // for a personal day that is its own start instant, not a bare date string.
-  const weekDateKey = target.store === 'legacy' ? target.dateKey : getDateInTZ(target.startMs, tz);
+  const weekDateKey = target.store !== 'operational' ? target.dateKey : getDateInTZ(target.startMs, tz);
   const weekKey = getWeekKey(new Date(tzParseTime(weekDateKey, '12:00')));
   const weeklyPlan = (weeklyReviews[weekKey] || {}).plan || {};
   [weeklyPlan.p1, weeklyPlan.p2, weeklyPlan.p3].forEach(item => { if (item && item.trim()) push(item.trim(), 'this week'); });
@@ -6952,7 +6986,7 @@ function planTargetsForCalendarDate(dateKey) {
  *  interval for an operational one. */
 function planTargetLabel(target) {
   if (!target) return '';
-  if (target.store === 'legacy') return fmtDateKeyLong(target.dateKey);
+  if (target.store !== 'operational') return fmtDateKeyLong(target.dateKey);
   const fmt = new Intl.DateTimeFormat('en-US', { timeZone: target.timezone, weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   return `${fmt.format(new Date(target.startMs)).replace(',', '')} → ${fmt.format(new Date(target.endMs)).replace(',', '')}`;
 }
@@ -6993,6 +7027,7 @@ function refreshAuthoritativePlanSurfaces() {
   if (typeof publishSharedAccountability === 'function') publishSharedAccountability();
   if (typeof globalThis.refreshTomorrowView === 'function') globalThis.refreshTomorrowView();
   if (typeof globalThis.refreshOperationalPlanSurfaceIfMounted === 'function') globalThis.refreshOperationalPlanSurfaceIfMounted();
+  if (typeof globalThis.renderCalendarPlanSurfaces === 'function') globalThis.renderCalendarPlanSurfaces();
   // Planning Continuity V1 — Upcoming / future-day browser / stale recovery all read
   // authoritative plan state, so they refresh on the same signal as every other surface.
   if (typeof globalThis.refreshCommitmentSurfaces === 'function') globalThis.refreshCommitmentSurfaces();
@@ -7044,7 +7079,12 @@ function planTrackedMinFor(target, task, planItemId = null) {
   const wanted = normalizePlanTask(task);
   const seen = new Set();
   let total = 0;
-  getEntriesOverlappingRange(target.startMs, target.endMs).forEach(e => {
+  // A calendar plan may hold an item scheduled after its own date ends (Sunday's plan at Monday
+  // 01:00). Work linked to that item by its EXACT plan-item id counts toward it across that
+  // extended span; a text-only match never reaches past the plan's own date, so two plans that
+  // happen to word a task alike cannot both claim the same factual minutes.
+  const extendedEndMs = target.store === 'calendar' ? tzParseTime(_dateKeyPlusDays(target.dateKey, 2), '00:00') : target.endMs;
+  getEntriesOverlappingRange(target.startMs, extendedEndMs).forEach(e => {
     if (e.missed || e.deleted || e.away || e.break || !e.activity) return;
     const matchesId = planItemId && e.planItemId === planItemId;
     const matchesText = !e.planItemId && wanted && normalizePlanTask(e.activity) === wanted;
@@ -7053,19 +7093,20 @@ function planTrackedMinFor(target, task, planItemId = null) {
     seen.add(e.id);
     const range = entryTimeRange(e);
     if (!range) return;
-    // Clipped to the personal day, so one actual instant is counted for exactly
+    // Clipped to the plan's window, so one actual instant is counted for exactly
     // one authoritative day even when a block spans the boundary.
-    total += Math.max(0, Math.min(range.end, target.endMs) - Math.max(range.start, target.startMs)) / 60000;
+    const windowEndMs = matchesId ? extendedEndMs : target.endMs;
+    total += Math.max(0, Math.min(range.end, windowEndMs) - Math.max(range.start, target.startMs)) / 60000;
   });
   return Math.round(total);
 }
 
 /** The instant a planned "HH:MM" names inside this target. */
-function planItemInstant(target, when) {
+function planItemInstant(target, when, item = null) {
   if (!target) return null;
   const hhmm = parsePlanItemTime(when);
   if (!hhmm) return null;
-  if (globalThis.PlanAuthority) return globalThis.PlanAuthority.itemStartInstant(target, hhmm);
+  if (globalThis.PlanAuthority) return globalThis.PlanAuthority.itemStartInstant(target, hhmm, item);
   return target.store === 'legacy' ? tzParseTime(target.dateKey, hhmm) : null;
 }
 
@@ -7124,6 +7165,21 @@ function parsePlanItemTime(when) {
   return PLAN_TIME_RE.test(trimmed) ? trimmed : null;
 }
 
+/** Sort key for a timed plan item: its clock reading, after its day offset. A calendar plan's
+ *  after-midnight item (Monday 01:00 in Sunday's plan) sorts AFTER Sunday 23:00, never before
+ *  Sunday 11:00 just because "01:00" < "11:00". Legacy items have no offset: '0' + HH:MM. */
+function planItemOrderKey(item) {
+  return (item && item.whenDayOffset === 1 ? '1' : '0') + (parsePlanItemTime(item && item.when) || '');
+}
+
+/** The optional "next day" control on the add rows — shown only for a calendar plan, the one
+ *  model in which a plan can hold an item on the following date. */
+function planNextDayToggleHtml(id, target) {
+  return target && target.store === 'calendar'
+    ? `<label class="plan-nextday" title="Schedule this after midnight, on the next calendar date"><input type="checkbox" id="${id}"> next day</label>`
+    : '';
+}
+
 /** Time Truth V1: a planned `when` is always interpreted in the account timezone
  *  (settings.timezone), never the current device's. Most users' device timezone
  *  matches their account timezone, so this stays silent then; it only speaks up
@@ -7159,7 +7215,7 @@ function dueTimedPlanItem(items, target) {
     if (item.done) return false;
     // Resolved inside the authoritative day, so 01:00 on an 18:00 personal day
     // is due after midnight — not "already past" at 08:00 the morning before.
-    const instant = planItemInstant(target, item.when);
+    const instant = planItemInstant(target, item.when, item);
     return Number.isFinite(instant) ? instant <= now : false;
   });
   if (!due.length) return null;
@@ -7167,7 +7223,7 @@ function dueTimedPlanItem(items, target) {
   const candidates = pool.length ? pool : due;
   return candidates.reduce((best, item) => {
     if (!best) return item;
-    return parsePlanItemTime(item.when) < parsePlanItemTime(best.when) ? item : best;
+    return planItemOrderKey(item) < planItemOrderKey(best) ? item : best;
   }, null);
 }
 
@@ -7180,9 +7236,9 @@ function planDisplayOrder(items) {
   const rest = [];
   items.forEach(item => {
     const hhmm = parsePlanItemTime(item.when);
-    if (hhmm) timed.push({ item, hhmm }); else rest.push(item);
+    if (hhmm) timed.push({ item, hhmm, key: planItemOrderKey(item) }); else rest.push(item);
   });
-  timed.sort((a, b) => a.hhmm.localeCompare(b.hhmm));
+  timed.sort((a, b) => a.key.localeCompare(b.key));
   return [...timed.map(t => t.item), ...rest];
 }
 globalThis.planDisplayOrder = planDisplayOrder;
@@ -7296,7 +7352,7 @@ function renderTodayPlan() {
     footer = priorityRows.length >= PLAN_MAX
       ? `<div class="plan-full">${PLAN_MAX} of ${PLAN_MAX} priorities — finish or remove one, or add it below as another task.</div>`
       : `<div class="plan-add">
-          <input id="plan-when" type="time" class="plan-input when" aria-label="when (optional)">
+          <input id="plan-when" type="time" class="plan-input when" aria-label="when (optional)">${planNextDayToggleHtml('plan-when-next', target)}
           <input id="plan-task" class="plan-input task" maxlength="80" placeholder="what will you do?"
                  onkeydown="if(event.key==='Enter')addPlanItem()">
           <button class="btn sm" onclick="addPlanItem()">Add</button>
@@ -7311,7 +7367,7 @@ function renderTodayPlan() {
     // add row (.plan-add / "Add") and count (.plan-count) keep exactly one meaning, and
     // this add row sits behind the same Edit toggle (.plan-editor) as the priority one.
     const secondaryAdd = readOnly ? '' : `<div class="plan-editor"><div class="plan-task-add">
-          <input id="plan-task-when" type="time" class="plan-input when" aria-label="when (optional)">
+          <input id="plan-task-when" type="time" class="plan-input when" aria-label="when (optional)">${planNextDayToggleHtml('plan-task-when-next', target)}
           <input id="plan-task-task" class="plan-input task" maxlength="80" placeholder="another planned task"
                  onkeydown="if(event.key==='Enter')addPlanTask()">
           <button class="btn sm" onclick="addPlanTask()">Plan task</button>
@@ -7350,6 +7406,13 @@ function planningStreakForDisplay() {
   return globalThis.PlanTomorrowModel?.planningStreak(plans, Date.now(), settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone) || null;
 }
 
+/** The owner-facing reason a planned time was refused. */
+function planTimeRejection(reason) {
+  if (reason === 'outside-operational-day') return 'That time is outside this personal day';
+  if (reason === 'outside-plan-extent') return 'That runs past the end of the next day — a plan covers its own date and the one after';
+  return 'That time is not valid for this day';
+}
+
 function addPlanItem() {
   if (!isViewingToday()) return;
   const target = currentPlanTarget();
@@ -7365,10 +7428,11 @@ function addPlanItem() {
   if (!task) { showToast('What will you do?'); if (taskEl) taskEl.focus(); return; }
 
   const item = createPlanItem(task, (whenEl ? whenEl.value : '').trim());
-  // Validated against whichever day this actually is: a calendar day keeps the
-  // midnight clamp, a personal day is checked against its own real interval.
+  if (item.when && target.store === 'calendar' && document.getElementById('plan-when-next')?.checked) item.whenDayOffset = 1;
+  // Validated against whichever day this actually is: a legacy day keeps the midnight clamp, a
+  // personal day is checked against its own real interval, a calendar plan against its own two dates.
   const check = globalThis.PlanAuthority ? globalThis.PlanAuthority.validateItem(target, item) : { ok: true };
-  if (!check.ok) { showToast(check.reason === 'outside-operational-day' ? 'That time is outside this personal day' : 'That time is not valid for this day'); return; }
+  if (!check.ok) { showToast(planTimeRejection(check.reason)); return; }
   raw.push(item);
   savePlanItemsFor(target, raw);
 }
@@ -7394,8 +7458,9 @@ function addPlanTask() {
   const task = (taskEl ? taskEl.value : '').trim();
   if (!task) { showToast('What else is planned?'); if (taskEl) taskEl.focus(); return; }
   const item = createPlanItem(task, (whenEl ? whenEl.value : '').trim(), 'task');
+  if (item.when && target.store === 'calendar' && document.getElementById('plan-task-when-next')?.checked) item.whenDayOffset = 1;
   const check = globalThis.PlanAuthority ? globalThis.PlanAuthority.validateItem(target, item) : { ok: true };
-  if (!check.ok) { showToast(check.reason === 'outside-operational-day' ? 'That time is outside this personal day' : 'That time is not valid for this day'); return; }
+  if (!check.ok) { showToast(planTimeRejection(check.reason)); return; }
   raw.push(item);
   savePlanItemsFor(target, raw);
 }
@@ -8729,6 +8794,7 @@ function renderSettings() {
   if (typeof globalThis.renderPersonalDayBoundarySettings === 'function') globalThis.renderPersonalDayBoundarySettings();
   // Calendar Day + Extended My Day V1 — a pure read of the deadline/off-day store.
   if (typeof globalThis.renderPlanByDeadlineSettings === 'function') globalThis.renderPlanByDeadlineSettings();
+  if (typeof globalThis.renderCalendarPlanSettings === 'function') globalThis.renderCalendarPlanSettings();
 }
 
 function isInQuietHours(ts) {
@@ -8994,7 +9060,7 @@ function renderReviewTomorrowStatus() {
   const upcoming = upcomingPlanTarget();
   const browsingAnotherDay = _reviewDateKey !== toDateKey(new Date());
   const label = upcoming && browsingAnotherDay
-    ? ` (${upcoming.store === 'legacy' ? upcoming.dateKey : planTargetLabel(upcoming)}, relative to today)`
+    ? ` (${upcoming.store !== 'operational' ? upcoming.dateKey : planTargetLabel(upcoming)}, relative to today)`
     : '';
   // Prefer the resolved target's own authority when one exists; fall back to
   // the same synchronous "is a boundary configured at all" check first paint
@@ -9019,7 +9085,7 @@ function prepareTomorrowFromReview() {
  *  it, so one actual instant is counted for exactly one authoritative day even
  *  when a block runs across the boundary. */
 function reviewActualEntriesFor(target) {
-  if (target.store === 'legacy') {
+  if (target.store !== 'operational') {
     return getEntriesForDateWindow(target.dateKey).map(entry => ({ entry, minutes: entry.blockIntervalMin || 0 }));
   }
   return getEntriesOverlappingRange(target.startMs, target.endMs).map(entry => {
@@ -9073,9 +9139,14 @@ function renderReviewPlanVsActual() {
     const rows = [...itemRows, ...routineRows];
     const plannedLabels = new Set([...items.map(item => item.task), ...routineRows.flatMap(row => [row.title, row.taskLabel])].filter(Boolean).map(normalizePlanTask));
     const plannedItemIds = new Set(items.map(item => item.id));
+    // Calendar-native: an actual on THIS date that is linked to the previous date's plan (its
+    // Monday-02:00 item) belongs to THAT plan's card, not to "unplanned" here. The actual keeps
+    // its factual timestamp; nothing is duplicated into either plan.
+    const carriedInIds = new Set((globalThis.PlanAuthority?.calendarCarryoverFor?.(_reviewDateKey)?.items || []).map(item => item.id));
     const unplanned = new Map();
     reviewActualEntriesFor(target).filter(({ entry }) => !entry.deleted && !entry.missed && !entry.break && !entry.away
         && !(entry.planItemId && plannedItemIds.has(entry.planItemId))
+        && !(entry.planItemId && carriedInIds.has(entry.planItemId))
         && !plannedLabels.has(normalizePlanTask(entry.activity))).forEach(({ entry, minutes }) => {
       const label = entry.activity || 'Unlabeled work';
       unplanned.set(label, (unplanned.get(label) || 0) + minutes);
@@ -10166,7 +10237,7 @@ function buildPartnerViewProjectionForPublish() {
   // legacy account, since a calendar day starts on its own date).
   const upcomingLabelTarget = upcomingPlanTarget();
   const tomorrowKey = upcomingLabelTarget
-    ? (upcomingLabelTarget.store === 'legacy' ? upcomingLabelTarget.dateKey : getDateInTZ(upcomingLabelTarget.startMs, tz))
+    ? (upcomingLabelTarget.store !== 'operational' ? upcomingLabelTarget.dateKey : getDateInTZ(upcomingLabelTarget.startMs, tz))
     : (PT ? PT.planTomorrowTargetDate(Date.now(), tz) : todayKey);
 
   // Timeline assembly reads the ambient `viewingDateKey` — force it to today
@@ -12297,6 +12368,9 @@ setInterval(() => {
   // the attached current/upcoming days before re-rendering). A no-op for a legacy
   // account (no day is ever attached, the surface renders nothing).
   if (globalThis.PersonalDayBoundaryLive) globalThis.PersonalDayBoundaryLive.tick();
+  // Calendar-Native Plan Identity V1 — midnight moves "today" with no user action: re-derive the
+  // calendar plan listeners (a no-op until the account has switched).
+  if (globalThis.CalendarPlanLive) globalThis.CalendarPlanLive.tick();
   refreshOnPersonalDayRollover();
 }, 60000);
 

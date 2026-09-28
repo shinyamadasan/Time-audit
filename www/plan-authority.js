@@ -64,6 +64,7 @@ import {
 } from './operational-plan-model.js';
 import {
   addCalendarDays,
+  buildPreparation,
   computeReadyNow,
   localPlanDate,
   normalizePreparation,
@@ -89,6 +90,15 @@ import {
   evaluatePlanningDeadlineQualification,
   offDayDeclaredAtForDeadline,
 } from './plan-by-deadline-model.js';
+import {
+  calendarAuthorityForDate,
+  calendarItemInstants,
+  calendarPlanId,
+  calendarPlanInterval,
+  parseCalendarPlanId,
+  stampCalendarItemTimes,
+  validateCalendarPlanItem,
+} from './calendar-plan-model.js';
 // Side-effect import: personal-day-boundary-live.js owns the
 // `window.PersonalDayBoundaryLive` singleton this module's own singleton composes,
 // so importing it here makes that construction order a module-graph guarantee
@@ -97,6 +107,9 @@ import './personal-day-boundary-live.js';
 // Same reasoning: plan-by-deadline-sync.js owns `window.PlanByDeadlineSync`,
 // whose `.repository` this module's singleton reads for planningDeadlineStreak().
 import './plan-by-deadline-sync.js';
+// Same reasoning: calendar-plan-live.js owns `window.CalendarPlanLive`, the calendar-native
+// plan store this module's singleton routes calendar-authoritative days to.
+import './calendar-plan-live.js';
 
 /** Carry-forward ids for operational days. Deliberately NOT the legacy
  *  `carry:<date>:<itemId>` shape (plan-tomorrow-model.js's carriedItemId, which
@@ -114,9 +127,9 @@ export function operationalCarriedItemId(sourceDayId, sourceItemId, destinationO
   // operationalDayId, or a calendar dateKey on the transition day, when an item
   // is carried from the last legacy-governed day into the first personal one.
   // Neither is coerced into the other; each is used verbatim.
-  const validSource = !!parseOperationalDayId(sourceDayId) || validPlanDate(sourceDayId);
-  if (!validSource || !parseOperationalDayId(destinationOperationalDayId)) {
-    throw new Error('A valid source day identity and destination operationalDayId are required.');
+  const validSource = !!parseOperationalDayId(sourceDayId) || !!parseCalendarPlanId(sourceDayId) || validPlanDate(sourceDayId);
+  if (!validSource || !(parseOperationalDayId(destinationOperationalDayId) || parseCalendarPlanId(destinationOperationalDayId))) {
+    throw new Error('A valid source day identity and destination day identity are required.');
   }
   if (typeof sourceItemId !== 'string' || !sourceItemId || sourceItemId.includes('|')) throw new Error('A valid source item id is required.');
   return `${OPERATIONAL_CARRY_ID_PREFIX}|${sourceDayId}|${sourceItemId}|${destinationOperationalDayId}`;
@@ -185,6 +198,11 @@ export function createPlanAuthority(deps = {}) {
   // test) — planningDeadlineStreak() reports 'unenforced' rather than throwing,
   // exactly like an account that has never configured a deadline.
   const planByDeadline = deps.planByDeadline || null;
+  // Optional: the calendar-native plan store's live wiring (calendar-plan-live.js). Absent
+  // for every caller that has not wired it up (including every pre-existing test) — the
+  // account is then simply never calendar-active and every behavior below is exactly the
+  // legacy/operational behavior it always was.
+  const calendar = deps.calendar || null;
   // The calendar-date interval a HISTORY SCREEN owns (index.html's own
   // tzParseTime-based day bounds in production), injected rather than
   // re-derived, so the projection can never disagree with the screen's own
@@ -230,8 +248,37 @@ export function createPlanAuthority(deps = {}) {
     return `${cacheToken}|${owner}`;
   }
 
-  function enabled() {
+  /** The account's effective calendar-native activation, or null. Non-writing. */
+  function calendarActivation() {
+    try { return calendar?.activation?.() ?? null; } catch { return null; }
+  }
+
+  /** True once the account has cut over to calendar-native plans (the owner's explicit,
+   *  account-owned, one-way activation). */
+  function calendarActive() {
+    return calendarActivation() !== null;
+  }
+
+  /** A Personal Day boundary history exists. This alone says nothing about which store
+   *  is authoritative for a NEW plan once the account has cut over — it only describes
+   *  the LEGACY routing that still governs every day before the cutover. */
+  function boundaryEnabled() {
     return live.enabled();
+  }
+
+  /** Operational personal-day mode is in force: a boundary is configured AND the account
+   *  has not cut over. Every consumer that asks "is this account on a personal day?"
+   *  (My Day window, day navigation, the personal-day status strip) gets the truth for
+   *  NEW planning: after the cutover the answer is no, whatever the boundary says. */
+  function enabled() {
+    return boundaryEnabled() && !calendarActive();
+  }
+
+  /** Which store is authoritative for a calendar date: 'calendar' on/after the effective
+   *  activation date, otherwise 'legacy'. Decided by the account's own activation fact —
+   *  never by which store holds data. */
+  function isCalendarAuthoritative(dateKey) {
+    return calendarAuthorityForDate(dateKey, calendarActivation()) === 'calendar';
   }
 
   // ── targets ───────────────────────────────────────────────────────────────
@@ -247,49 +294,52 @@ export function createPlanAuthority(deps = {}) {
       : { store: 'operational', id: day.authority.operationalDayId, operationalDayId: day.authority.operationalDayId, ref: day.ref, startMs: day.startMs, endMs: day.endMs, timezone: day.timezone, boundaryTime: day.boundaryTime, legacy: false };
   }
 
-  /** The authoritative day for RIGHT NOW. For an account that never enabled the
-   *  feature this is exactly the existing calendar "today" (same helper, same
-   *  account timezone) — no boundary math, no operational store, no listener. */
-  function current(nowMs = now()) {
-    if (!enabled()) return legacyTarget(localPlanDate(nowMs, accountTimezone()));
+  /** The calendar-native target for one date. Its HOME interval is that calendar date in
+   *  the plan's own frozen zone (the zone of whoever wrote it first) — the account's
+   *  current zone only until the first write freezes one. `boundaryTime` is '00:00' by
+   *  definition: a calendar plan has no boundary. */
+  function calendarTarget(dateKey, knownRecord) {
+    const planId = calendarPlanId(dateKey);
+    // A caller that already holds the record passes it, so listing N plans never re-reads storage N times.
+    const stored = knownRecord !== undefined ? knownRecord : calendar?.readRecord?.(dateKey);
+    const timezone = stored?.timezone || accountTimezone();
+    const { startMs, endMs } = calendarPlanInterval(dateKey, timezone);
+    return { store: 'calendar', id: planId, calendarPlanId: planId, dateKey, ref: null, startMs, endMs, timezone, boundaryTime: '00:00', legacy: false, calendar: true };
+  }
+
+  // The legacy-routed navigation below is the pre-cutover behavior VERBATIM (it is what
+  // still answers for every date before an activation, and for every account that has
+  // not activated). It reads boundaryEnabled(), never the composite enabled().
+
+  function legacyCurrent(nowMs = now()) {
+    if (!boundaryEnabled()) return legacyTarget(localPlanDate(nowMs, accountTimezone()));
     return fromDay(live.planningDays(nowMs).current);
   }
 
-  /** The authoritative day the owner prepares in advance. Legacy: tomorrow's
-   *  calendar date, exactly as planTomorrowTargetDate() computes it. */
-  function upcoming(nowMs = now()) {
-    if (!enabled()) return legacyTarget(addCalendarDays(localPlanDate(nowMs, accountTimezone()), 1));
+  function legacyUpcoming(nowMs = now()) {
+    if (!boundaryEnabled()) return legacyTarget(addCalendarDays(localPlanDate(nowMs, accountTimezone()), 1));
     return fromDay(live.planningDays(nowMs).upcoming);
   }
 
-  /** The authoritative day containing a factual instant (an entry, a routine
-   *  anchor, a completion). Never a date string — an instant is unambiguous. */
-  function containing(instantMs) {
-    if (!Number.isFinite(instantMs)) throw new Error('A valid instant is required.');
-    if (!enabled()) return legacyTarget(localPlanDate(instantMs, accountTimezone()));
+  function legacyContaining(instantMs) {
+    if (!boundaryEnabled()) return legacyTarget(localPlanDate(instantMs, accountTimezone()));
     return fromDay(live.dayContaining(instantMs));
   }
 
-  function next(target) {
-    if (target.store === 'legacy' && !enabled()) return legacyTarget(addCalendarDays(target.dateKey, 1));
+  function legacyNext(target) {
+    if (target.store === 'legacy' && !boundaryEnabled()) return legacyTarget(addCalendarDays(target.dateKey, 1));
     const history = live.revisions();
     return fromDay(live.describeDay(nextOperationalDay(target.ref || operationalDayContaining(target.startMs, history), history), history));
   }
 
-  /** The authoritative day immediately before `target`. Personal-day ids are
-   *  never treated as calendar dates; the preceding half-open interval is the
-   *  one containing the instant immediately before this day starts. */
-  function previous(target) {
-    if (target.store === 'legacy' && !enabled()) return legacyTarget(addCalendarDays(target.dateKey, -1));
+  function legacyPrevious(target) {
+    if (target.store === 'legacy' && !boundaryEnabled()) return legacyTarget(addCalendarDays(target.dateKey, -1));
     if (!Number.isFinite(target.startMs)) throw new Error(`Cannot find the day before ${target.id}.`);
-    return containing(target.startMs - 1);
+    return legacyContaining(target.startMs - 1);
   }
 
-  /** Decision B. Every authoritative day overlapping calendar date D's own
-   *  interval, in order. One entry for a legacy/never-enabled account (the date
-   *  itself); commonly two once a non-midnight boundary is active. */
-  function daysOverlappingCalendarDate(dateKey) {
-    if (!enabled()) return [legacyTarget(dateKey)];
+  function legacyDaysOverlappingCalendarDate(dateKey) {
+    if (!boundaryEnabled()) return [legacyTarget(dateKey)];
     const { startMs, endMs } = calendarDayBounds(dateKey);
     const history = live.revisions();
     const out = [];
@@ -305,15 +355,68 @@ export function createPlanAuthority(deps = {}) {
     return out;
   }
 
-  /** Planning Continuity V1 (G4) — the authoritative day `steps` personal days
-   *  after the current one. `upcoming()` is exactly dayAhead(1); this is the general
-   *  case the future-day browser walks.
-   *
-   *  Deliberately implemented by CHAINING next(), not by adding days to a date: a
-   *  personal day's length is not fixed (a revision taking effect mid-day truncates
-   *  it), so only the real interval chain gives the right answer across a boundary
-   *  change. No new store, no new identity — every step returns an ordinary target.
-   *
+  // ── the public chain: calendar-authoritative dates first, legacy otherwise ─
+
+  /** The authoritative day for RIGHT NOW. Once the account has cut over this is the
+   *  plan of today's CALENDAR DATE, whatever a Personal Day boundary says. Otherwise it is
+   *  exactly what it always was: for an account that never enabled a boundary the existing
+   *  calendar "today" (same helper, same account timezone — no boundary math, no
+   *  operational store, no listener), and the operational day for one that did. */
+  function current(nowMs = now()) {
+    const today = localPlanDate(nowMs, accountTimezone());
+    if (isCalendarAuthoritative(today)) return calendarTarget(today);
+    return legacyCurrent(nowMs);
+  }
+
+  /** The authoritative day the owner prepares in advance: tomorrow's calendar plan once
+   *  cut over; otherwise the legacy/operational upcoming day. */
+  function upcoming(nowMs = now()) {
+    const tomorrow = addCalendarDays(localPlanDate(nowMs, accountTimezone()), 1);
+    if (isCalendarAuthoritative(tomorrow)) return calendarTarget(tomorrow);
+    return legacyUpcoming(nowMs);
+  }
+
+  /** The authoritative day containing a factual instant (an entry, a routine
+   *  anchor, a completion). Never a date string — an instant is unambiguous. */
+  function containing(instantMs) {
+    if (!Number.isFinite(instantMs)) throw new Error('A valid instant is required.');
+    const dateKey = localPlanDate(instantMs, accountTimezone());
+    if (isCalendarAuthoritative(dateKey)) return calendarTarget(dateKey);
+    return legacyContaining(instantMs);
+  }
+
+  function next(target) {
+    if (target.store === 'calendar') return calendarTarget(addCalendarDays(target.dateKey, 1));
+    return legacyNext(target);
+  }
+
+  /** The authoritative day immediately before `target`. Personal-day ids are never treated
+   *  as calendar dates; a calendar plan's predecessor is the previous calendar date's plan
+   *  — until the cutover date, where the chain hands over to the legacy day that was in
+   *  force the instant before the calendar date began. */
+  function previous(target) {
+    if (target.store === 'calendar') {
+      const before = addCalendarDays(target.dateKey, -1);
+      if (isCalendarAuthoritative(before)) return calendarTarget(before);
+      return legacyContaining(target.startMs - 1);
+    }
+    return legacyPrevious(target);
+  }
+
+  /** Decision B. Every authoritative day overlapping calendar date D's own interval, in
+   *  order. A calendar-authoritative date has EXACTLY ONE plan — its own (the previous
+   *  date's plan reaching into it is a separate projection: calendarCarryoverFor). One
+   *  entry for a legacy/never-enabled account; commonly two once a non-midnight boundary
+   *  is active and the account has not cut over. */
+  function daysOverlappingCalendarDate(dateKey) {
+    if (isCalendarAuthoritative(dateKey)) return [calendarTarget(dateKey)];
+    return legacyDaysOverlappingCalendarDate(dateKey);
+  }
+
+  /** Planning Continuity V1 (G4) — the authoritative day `steps` days after the current
+   *  one. Deliberately implemented by CHAINING next(), not by adding days to a date, for
+   *  the legacy chain (a personal day's length is not fixed); a calendar plan chains by
+   *  calendar date. No new store, no new identity — every step returns an ordinary target.
    *  Bounded by DAY_AHEAD_GUARD so a malformed revision history cannot spin. */
   function dayAhead(steps, nowMs = now()) {
     if (!Number.isInteger(steps) || steps < 0) throw new Error('A non-negative whole number of days ahead is required.');
@@ -331,36 +434,47 @@ export function createPlanAuthority(deps = {}) {
     return target;
   }
 
-  /** The authoritative day containing a future calendar date's own noon anchor.
-   *  A convenience for "which personal day is Sep 30 mostly about?", used to seed
-   *  the browser from a date picker — NOT an identity. When a calendar date overlaps
-   *  two personal days, callers must use daysOverlappingCalendarDate() and show
-   *  both; this only picks a starting point. Reuses the same noon anchor Decision A
-   *  already defines. */
+  /** The authoritative day containing a future calendar date's own noon anchor. For a
+   *  calendar-authoritative date that is simply the date's own plan (a calendar date IS a
+   *  plan identity there). For legacy days it is a convenience for "which personal day is
+   *  Sep 30 mostly about?" — NOT an identity. */
   function dayForCalendarDate(dateKey) {
     if (!validPlanDate(dateKey)) throw new Error(`A valid calendar date is required, got: ${dateKey}`);
-    if (!enabled()) return legacyTarget(dateKey);
+    if (isCalendarAuthoritative(dateKey)) return calendarTarget(dateKey);
+    if (!boundaryEnabled()) return legacyTarget(dateKey);
     const anchor = noonAnchorInstant(dateKey, accountTimezone());
     if (!anchor.ok) throw new Error(`Calendar date ${dateKey} has no unambiguous local noon.`);
-    return containing(anchor.instantMs);
+    return legacyContaining(anchor.instantMs);
   }
 
   /** Item-centric scheduling. Untimed tasks use the approved noon ownership
-   *  rule; timed tasks use the exact civil timestamp the owner entered. */
+   *  rule; timed tasks use the exact civil timestamp the owner entered. A calendar date's
+   *  tasks belong to that date's plan — the plan is chosen by the date the owner named. */
   function dayForScheduledDate(dateKey, when = '') {
     if (!validPlanDate(dateKey)) return { ok: false, reason: 'invalid-date' };
+    if (isCalendarAuthoritative(dateKey)) {
+      const target = calendarTarget(dateKey);
+      if (!when) return { ok: true, anchor: 'noon', target };
+      const instant = resolvePlannedInstant(dateKey, when, accountTimezone());
+      return instant.ok ? { ok: true, anchor: 'time', instantMs: instant.instantMs, target } : instant;
+    }
     if (!when) return { ok: true, anchor: 'noon', target: dayForCalendarDate(dateKey) };
     const instant = resolvePlannedInstant(dateKey, when, accountTimezone());
     if (!instant.ok) return instant;
-    return { ok: true, anchor: 'time', instantMs: instant.instantMs, target: containing(instant.instantMs) };
+    return { ok: true, anchor: 'time', instantMs: instant.instantMs, target: legacyContaining(instant.instantMs) };
   }
 
   /** Finds the civil date which pairs `hhmm` with an instant inside `target`.
    *  The target is primary: search its overlapping local dates and accept
-   *  exactly one instant in the half-open interval. */
+   *  exactly one instant in the half-open interval. A calendar plan's own date is the
+   *  answer by definition (a next-day reading is expressed by the item's offset). */
   function civilDateForTimeInTarget(target, hhmm) {
     if (!target?.id) return { ok: false, reason: 'invalid-target' };
     if (typeof hhmm !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hhmm)) return { ok: false, reason: 'invalid-time' };
+    if (target.store === 'calendar') {
+      const resolved = resolvePlannedInstant(target.dateKey, hhmm, target.timezone || accountTimezone());
+      return resolved.ok ? { ok: true, anchor: 'target-time', dateKey: target.dateKey, instantMs: resolved.instantMs, target } : resolved;
+    }
     const { startMs, endMs } = targetInterval(target);
     const timezone = target.timezone || accountTimezone();
     const first = localPlanDate(startMs, timezone);
@@ -389,10 +503,12 @@ export function createPlanAuthority(deps = {}) {
 
   /** Optional inverse of dayForScheduledDate(). Some truncated My Days contain
    *  no local noon, so no date-only civil date can represent them. `null` is an
-   *  explicit presentation result; the authoritative target remains usable. */
+   *  explicit presentation result; the authoritative target remains usable. A calendar
+   *  plan is named by its own date. */
   function scheduledDateForTarget(target, when = '') {
     if (!target?.id) throw new Error('An authoritative target is required.');
-    if (target.store === 'legacy' && !enabled()) return target.dateKey;
+    if (target.store === 'calendar') return target.dateKey;
+    if (target.store === 'legacy' && !boundaryEnabled()) return target.dateKey;
     if (when) {
       const resolved = civilDateForTimeInTarget(target, when);
       return resolved.ok ? resolved.dateKey : null;
@@ -430,12 +546,14 @@ export function createPlanAuthority(deps = {}) {
   // ── authoritative plan access ─────────────────────────────────────────────
 
   function record(target) {
+    if (target.store === 'calendar') return calendar ? calendar.readRecord(target.dateKey) : null;
     return target.store === 'legacy' ? legacy.record(target.dateKey) : live.readRecord(target);
   }
 
   /** Raw items INCLUDING tombstones — the shape every editor mutates. */
   function rawItems(target) {
-    return target.store === 'legacy' ? legacy.rawItems(target.dateKey) : (Array.isArray(record(target)?.items) ? record(target).items : []);
+    if (target.store === 'legacy') return legacy.rawItems(target.dateKey);
+    return Array.isArray(record(target)?.items) ? record(target).items : [];
   }
 
   function relocationIndex() {
@@ -457,9 +575,18 @@ export function createPlanAuthority(deps = {}) {
     throw new Error('That My Day interval cannot be resolved.');
   }
 
-  function assertDirectSchedulingTarget(target, nowMs = now()) {
+  /** The instant a day stopped being live: its own end — or, for a LEGACY day the account's
+   *  cutover superseded, the cutover instant if that came first. After the cutover nothing
+   *  may be written to a legacy day again; its unfinished work is recovered through the
+   *  ordinary Unfinished flow, which is what treating it as "ended" buys us. */
+  function effectiveEndMs(target) {
     const { endMs } = targetInterval(target);
-    if (endMs <= nowMs) throw new Error('Past My Days are history. Reschedule unfinished work from Unfinished instead.');
+    const activation = calendarActivation();
+    return activation && target.store !== 'calendar' ? Math.min(endMs, activation.activatedAtMs) : endMs;
+  }
+
+  function assertDirectSchedulingTarget(target, nowMs = now()) {
+    if (effectiveEndMs(target) <= nowMs) throw new Error('Past My Days are history. Reschedule unfinished work from Unfinished instead.');
     return target;
   }
 
@@ -467,6 +594,13 @@ export function createPlanAuthority(deps = {}) {
     if (target.store === 'legacy') {
       legacy.saveItems(target.dateKey, nextItems);
       invalidate();
+      return target;
+    }
+    if (target.store === 'calendar') {
+      if (!calendar) throw new Error('Calendar-day plans are not available yet.');
+      calendar.writePlanItems(target.dateKey, nextItems);
+      invalidate();
+      onWrite();
       return target;
     }
     live.writePlanItems(target, nextItems, live.revisions());
@@ -482,7 +616,8 @@ export function createPlanAuthority(deps = {}) {
    *  stores once) never re-reads storage — without either path being able to
    *  imply a different rule than the other. */
   function preparationFrom(target, value) {
-    return target.store === 'legacy' ? normalizePreparation(value, target.dateKey) : normalizeOperationalPreparation(value, target.id);
+    // A calendar plan's preparation IS the legacy date-keyed contract (targetDate = its date).
+    return target.store !== 'operational' ? normalizePreparation(value, target.dateKey) : normalizeOperationalPreparation(value, target.id);
   }
 
   function preparation(target) {
@@ -495,7 +630,7 @@ export function createPlanAuthority(deps = {}) {
    *  this personal day began. (For a legacy day those are the same sentence —
    *  a calendar date's start is midnight.) */
   function consistencyFrom(target, value) {
-    if (target.store === 'legacy') return planningConsistency(value, target.dateKey);
+    if (target.store !== 'operational') return planningConsistency(value, target.dateKey);
     if (value === undefined || value === null) return 'not-prepared';
     const prepared = normalizeOperationalPreparation(value, target.id);
     if (!prepared) return 'unknown';
@@ -510,7 +645,7 @@ export function createPlanAuthority(deps = {}) {
    *  answers for a legacy day, asked of whichever store is authoritative. */
   function readyNow(target, routines = [], localSaveSucceeded = true) {
     const plan = record(target);
-    if (target.store === 'legacy') return computeReadyNow({ plan: plan ? { ...plan, items: items(target) } : plan, targetDate: target.dateKey, routines, localSaveSucceeded });
+    if (target.store !== 'operational') return computeReadyNow({ plan: plan ? { ...plan, items: items(target) } : plan, targetDate: target.dateKey, routines, localSaveSucceeded });
     const prepared = normalizeOperationalPreparation(plan?.preparation, target.id);
     if (!prepared || !localSaveSucceeded) return false;
     const oneOffIds = new Set(prepared.oneOffItemIds);
@@ -540,6 +675,30 @@ export function createPlanAuthority(deps = {}) {
    *  operationalDayId-keyed preparation and persist it beside the same items. */
   function confirmPreparation(target, input) {
     const { items: nextItems, mode, intentionalBlank, routineInstanceIds, actionableRoutineInstanceIds = routineInstanceIds } = input;
+    if (target.store === 'calendar') {
+      if (!calendar) throw new Error('Calendar-day plans are not available yet.');
+      if (!Array.isArray(routineInstanceIds) || !Array.isArray(actionableRoutineInstanceIds)) throw new Error('Routine preparation references are invalid.');
+      // The same rules the legacy and operational confirmations apply: the cap and readiness are
+      // measured on TOP PRIORITIES only; a plan needs one priority, a kept routine, or Open day.
+      const priorities = activePriorityPlanItems(nextItems);
+      if (priorities.length > priorityMax) throw new Error(`Reduce the plan to ${priorityMax} priorities before confirming.`);
+      const acts = priorities.some(item => !item.done) || actionableRoutineInstanceIds.length > 0;
+      if (!acts && intentionalBlank !== true) throw new Error('Add one priority, keep a routine, or choose Open day.');
+      const built = buildPreparation(record(target)?.preparation, {
+        targetDate: target.dateKey,
+        timezone: accountTimezone(),
+        now: now(),
+        mode,
+        updatedBy: calendar.deviceId(),
+        intentionalBlank: !acts && intentionalBlank === true,
+        routineInstanceIds,
+        oneOffItemIds: priorities.map(item => item.id),
+      });
+      const syncPromise = calendar.writePlanWithPreparation(target.dateKey, nextItems, built);
+      invalidate();
+      onWrite();
+      return { localSaved: true, syncPromise };
+    }
     if (target.store === 'legacy') {
       const result = legacy.confirm({ targetDate: target.dateKey, items: nextItems, mode, intentionalBlank, routineInstanceIds, actionableRoutineInstanceIds });
       invalidate();
@@ -580,6 +739,13 @@ export function createPlanAuthority(deps = {}) {
    *  day is validated against its own real interval, so a 01:00 block on an
    *  18:00 personal day is valid while 21:00 on a day truncated at 20:00 is not. */
   function validateItem(target, item) {
+    if (target.store === 'calendar') {
+      if (item?.durationMinutes !== undefined && !validPlanItemDuration(item.durationMinutes)) return { ok: false, reason: 'invalid-range' };
+      // Judged exactly as the store will judge it: with the zone the reading would be stamped in.
+      let probe;
+      try { [probe] = stampCalendarItemTimes(rawItems(target), [item], accountTimezone()); } catch { return { ok: false, reason: 'invalid-timezone' }; }
+      return validateCalendarPlanItem(target.dateKey, probe);
+    }
     if (target.store === 'legacy') {
       if (item?.durationMinutes === undefined) return { ok: true };
       return validPlanItemRange(item.when, item.durationMinutes) ? { ok: true } : { ok: false, reason: 'invalid-range' };
@@ -600,8 +766,20 @@ export function createPlanAuthority(deps = {}) {
    *  makes 01:00 on an 18:00 day resolve to the following calendar date.
    *  Returns null when the reading is not a canonical HH:MM or cannot be
    *  resolved (a DST gap) — callers already fall back to stable order. */
-  function itemStartInstant(target, hhmm) {
+  function itemStartInstant(target, hhmm, item = null) {
     if (typeof hhmm !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hhmm)) return null;
+    if (target.store === 'calendar') {
+      // A calendar item's instant is a pure function of ITS OWN reading (when + day offset +
+      // the zone it was made in) — never of the account's current zone or the Personal Day
+      // boundary. Given only a clock reading (no item) the answer is that reading on the
+      // plan's own date.
+      if (item && item.when === hhmm) {
+        const instants = calendarItemInstants(target.dateKey, item.whenTz ? item : { ...item, whenTz: accountTimezone() });
+        return instants.ok && instants.timed ? instants.startMs : null;
+      }
+      const resolved = resolvePlannedInstant(target.dateKey, hhmm, target.timezone || accountTimezone());
+      return resolved.ok ? resolved.instantMs : null;
+    }
     if (target.store === 'legacy') {
       if (typeof deps.legacyClockInstant !== 'function') return null;
       const resolved = deps.legacyClockInstant(target.dateKey, hhmm);
@@ -619,7 +797,7 @@ export function createPlanAuthority(deps = {}) {
    *  through their own governing revision (the target carries it), never through
    *  whatever boundary happens to be active now. */
   function classifyItemActual(target, item, { trackedMinutes = 0, preparedAt = 0, timezone } = {}) {
-    if (target.store === 'legacy') {
+    if (target.store !== 'operational') {
       return classifyOneOffActual(item, { targetDate: target.dateKey, timezone: timezone || accountTimezone(), trackedMinutes, preparedAt });
     }
     if (item?.deleted && Number(item.updatedAt || 0) >= Number(preparedAt || 0)) return 'removed';
@@ -633,7 +811,7 @@ export function createPlanAuthority(deps = {}) {
    *  keep the calendar-day window the app already computes for entries; an
    *  operational day is its own interval. */
   function evidenceWindow(target) {
-    if (target.store === 'operational') return { startMs: target.startMs, endMs: target.endMs };
+    if (target.store !== 'legacy') return { startMs: target.startMs, endMs: target.endMs };
     return calendarDayBounds(target.dateKey);
   }
 
@@ -651,7 +829,7 @@ export function createPlanAuthority(deps = {}) {
    *  belong to `target`. Legacy days keep the existing calendar rule: an
    *  instance belongs to its own date, full stop. */
   function routinesForTarget(target, instances) {
-    if (target.store === 'legacy') return { rows: instances.filter(instance => instance.date === target.dateKey), unplaceable: [] };
+    if (target.store !== 'operational') return { rows: instances.filter(instance => instance.date === target.dateKey), unplaceable: [] };
     const rows = [];
     const unplaceable = [];
     instances.forEach(instance => {
@@ -666,7 +844,7 @@ export function createPlanAuthority(deps = {}) {
    *  carries real tsStart/ts instants) that fall inside this target. Template
    *  identity stays calendar-based — only the selection is by instant. */
   function templatesForTarget(target, entriesByDate) {
-    if (target.store === 'legacy') return entriesByDate(target.dateKey);
+    if (target.store !== 'operational') return entriesByDate(target.dateKey);
     const dates = new Set();
     [target.startMs, target.endMs - 1].forEach(instant => dates.add(localPlanDate(instant, target.timezone)));
     const seen = new Set();
@@ -735,6 +913,10 @@ export function createPlanAuthority(deps = {}) {
       if (!ref) continue;
       try { candidates.push(live.describeDay(ref, history).startMs); } catch { /* revision unknown — ignored */ }
     }
+    for (const [id, calendarRecord] of Object.entries(calendar ? calendar.listAllRaw() : {})) {
+      const dateKey = parseCalendarPlanId(id);
+      if (dateKey) { try { candidates.push(calendarTarget(dateKey, calendarRecord).startMs); } catch { /* unresolvable civil date — ignored */ } }
+    }
     return candidates.length ? Math.min(...candidates) : null;
   }
 
@@ -758,6 +940,7 @@ export function createPlanAuthority(deps = {}) {
    *  Both stores are snapshotted once and read through `lookup`, so a long
    *  history costs one read per store rather than one per day. */
   function streak(nowMs = now()) {
+    if (calendarActive()) return calendarStreak(nowMs);
     if (!enabled()) return planningStreak(legacy.allPlans(), nowMs, accountTimezone());
     const key = `${cacheKey()}:${nowMs - (nowMs % 60000)}`;
     if (streakCache && streakCache.key === key) return streakCache.value;
@@ -778,6 +961,49 @@ export function createPlanAuthority(deps = {}) {
       // `cursor` is exactly the day that decides `previous`'s habit credit.
       finalizedFlags.unshift(earnsItsPredecessorCredit(cursor, lookup));
       cursor = previous;
+    }
+
+    let backward = 0;
+    while (backward < finalizedFlags.length && finalizedFlags[finalizedFlags.length - 1 - backward]) backward++;
+    const value = {
+      current: backward + (todayEarned ? 1 : 0),
+      best: Math.max(longestTrueRun(finalizedFlags), backward + (todayEarned ? 1 : 0)),
+      todayEarned,
+      todayStillOpen: !todayEarned,
+    };
+    streakCache = { key, value };
+    return value;
+  }
+
+  /** The same rule as the boundary streak — habit day P earns credit when the day AFTER it
+   *  was genuinely prepared before that day began — walked over CALENDAR plans from today,
+   *  handing over to the legacy chain at the cutover date. Days before the cutover are
+   *  still judged by the legacy plan of THEIR OWN successor (so history is never re-judged
+   *  by a store that did not exist yet); the one day straddling the cutover is therefore
+   *  credited only if its legacy successor was prepared ahead, which is honest rather than
+   *  generous. Both stores are snapshotted once and read through `lookup`. */
+  function calendarStreak(nowMs) {
+    const key = `${cacheKey()}:${nowMs - (nowMs % 60000)}`;
+    if (streakCache && streakCache.key === key) return streakCache.value;
+    const history = live.revisions();
+    const operationalRecords = typeof live.planRepository?.listAllRaw === 'function' ? live.planRepository.listAllRaw() : {};
+    const calendarRecords = calendar ? calendar.listAllRaw() : {};
+    const lookup = target => (target.store === 'calendar' ? calendarRecords[target.id] || null
+      : target.store === 'legacy' ? legacy.record(target.dateKey) : operationalRecords[target.id] || null);
+    const bounded = target => (Number.isFinite(target.startMs) ? target : { ...target, ...targetInterval(target) });
+
+    const today = current(nowMs);
+    const todayEarned = habitEarned(today, lookup);
+    const finalizedFlags = [];
+    const floorMs = historyFloorMs(history);
+    let cursor = today;
+    while (floorMs !== null && Number.isFinite(cursor.startMs) && cursor.startMs >= floorMs) {
+      let previousDay;
+      try { previousDay = bounded(previous(cursor)); } catch { break; }
+      if (!Number.isFinite(previousDay.startMs) || previousDay.startMs >= cursor.startMs) break; // no progress: malformed history
+      const decider = cursor.store === 'calendar' && previousDay.store !== 'calendar' ? bounded(legacyNext(previousDay)) : cursor;
+      finalizedFlags.unshift(earnsItsPredecessorCredit(decider, lookup));
+      cursor = previousDay;
     }
 
     let backward = 0;
@@ -841,7 +1067,9 @@ export function createPlanAuthority(deps = {}) {
 
   /** The target's own origin calendar date. @param {object} target */
   function originDateKeyForTarget(target) {
-    return target.store === 'legacy' ? target.dateKey : target.ref.boundaryStartDate;
+    // A calendar (or legacy) plan IS its date. Only an operational day has an origin date
+    // that differs from where it started.
+    return target.store === 'operational' ? target.ref.boundaryStartDate : target.dateKey;
   }
 
   /** The ONE calendar date a Plan-by deadline / intentional off-day
@@ -867,7 +1095,8 @@ export function createPlanAuthority(deps = {}) {
    *  adjustment. */
   function effectiveDeadlineDateKey(target, revisions) {
     const originDate = originDateKeyForTarget(target);
-    if (target.store === 'legacy' || !Number.isFinite(target.startMs) || !revisions?.length) return originDate;
+    // Calendar-native plans have NO compatibility adjustment: the deadline for Sunday belongs to Sunday.
+    if (target.store !== 'operational' || !Number.isFinite(target.startMs) || !revisions?.length) return originDate;
     const naive = deadlineInstantForCalendarDate(originDate, revisions);
     if (naive === null || naive >= target.startMs) return originDate;
     return addCalendarDays(originDate, 1);
@@ -1011,7 +1240,7 @@ export function createPlanAuthority(deps = {}) {
       }
       out.push({ target, record: legacyPlans[dateKey] });
     }
-    if (enabled()) {
+    if (boundaryEnabled()) {
       const history = live.revisions();
       const stored = typeof live.planRepository?.listAllRaw === 'function' ? live.planRepository.listAllRaw() : {};
       for (const id of Object.keys(stored)) {
@@ -1028,7 +1257,36 @@ export function createPlanAuthority(deps = {}) {
         out.push({ target, record: stored[id] });
       }
     }
+    const activation = calendarActivation();
+    if (activation) {
+      // Every LEGACY day is superseded by the cutover: it stopped being live at that instant,
+      // so its unfinished work is recoverable (the ordinary Unfinished flow) exactly like a
+      // day that ended. Nothing is copied or rewritten by saying so.
+      out.forEach(entry => { entry.target = { ...entry.target, supersededAtMs: activation.activatedAtMs }; });
+    }
+    for (const [id, calendarRecord] of Object.entries(calendar ? calendar.listAllRaw() : {})) {
+      const dateKey = parseCalendarPlanId(id);
+      if (!dateKey) continue;
+      try { out.push({ target: calendarTarget(dateKey, calendarRecord), record: calendarRecord }); } catch { /* unresolvable civil date — the record itself is untouched */ }
+    }
     return out;
+  }
+
+  /** The end of one item's own scheduled span inside a calendar plan (its end instant, or
+   *  its start when it has no length), or null when it has no structured time. */
+  function calendarItemEndMs(target, item) {
+    const instants = calendarItemInstants(target.dateKey, item?.whenTz ? item : { ...item, whenTz: accountTimezone() });
+    return instants.ok && instants.timed ? (instants.endMs ?? instants.startMs) : null;
+  }
+
+  /** When an item stopped being "now": a calendar plan's item is stale once its plan's own
+   *  date is over AND the item's own scheduled span is over (a Sunday-plan item at Monday
+   *  09:00 is not "unfinished from a previous day" at Monday 02:00). */
+  function staleSourceEndMs(target, item) {
+    const dayEnd = effectiveEndMs(target);
+    if (target.store !== 'calendar') return dayEnd;
+    const own = calendarItemEndMs(target, item);
+    return own === null ? dayEnd : Math.max(dayEnd, own);
   }
 
   /** id -> record across BOTH stores, for already-moved detection. Keyed exactly as
@@ -1052,7 +1310,12 @@ export function createPlanAuthority(deps = {}) {
         items: (Array.isArray(entry.record?.items) ? entry.record.items : []).filter(item => item.deleted || planItemIsActiveInDay(item, entry.target.id, canonical)),
       },
     }));
-    return collectStaleUnfinished({ nowMs, days: visibleDays, dayRecords: Object.fromEntries(visibleDays.map(entry => [entry.target.id, entry.record])) });
+    return collectStaleUnfinished({
+      nowMs,
+      days: visibleDays,
+      dayRecords: Object.fromEntries(visibleDays.map(entry => [entry.target.id, entry.record])),
+      itemEndMs: (target, item) => (target.store === 'calendar' ? calendarItemEndMs(target, item) : null),
+    });
   }
 
   /** Where a stale item was moved to, or null — so a surface can render
@@ -1063,15 +1326,19 @@ export function createPlanAuthority(deps = {}) {
 
   /** Resolves a stored day id (either store) back to a target. */
   function targetById(dayId) {
+    const calendarDate = parseCalendarPlanId(dayId);
+    if (calendarDate) return calendar ? calendarTarget(calendarDate) : null;
+    const activation = calendarActivation();
+    const superseded = target => (activation ? { ...target, supersededAtMs: activation.activatedAtMs } : target);
     if (validPlanDate(dayId)) {
       try {
         const bounds = calendarDayBounds(dayId);
-        return { ...legacyTarget(dayId), startMs: bounds.startMs, endMs: bounds.endMs };
-      } catch { return legacyTarget(dayId); }
+        return superseded({ ...legacyTarget(dayId), startMs: bounds.startMs, endMs: bounds.endMs });
+      } catch { return superseded(legacyTarget(dayId)); }
     }
     const ref = parseOperationalDayId(dayId);
-    if (!ref || !enabled()) return null;
-    try { return fromDay(live.describeDay(ref, live.revisions())); } catch { return null; }
+    if (!ref || !boundaryEnabled()) return null;
+    try { return superseded(fromDay(live.describeDay(ref, live.revisions()))); } catch { return null; }
   }
 
   /** Moves an unfinished task from an ENDED day onto `destination`.
@@ -1092,7 +1359,7 @@ export function createPlanAuthority(deps = {}) {
     if (!sourceItem) throw new Error('That task is no longer on its original day.');
     if (sourceItem.deleted) throw new Error('That task was removed.');
     if (sourceItem.done) throw new Error('That task is already done.');
-    if (Number.isFinite(sourceTarget.endMs) && sourceTarget.endMs > nowMs) {
+    if (Number.isFinite(sourceTarget.endMs) && staleSourceEndMs(sourceTarget, sourceItem) > nowMs) {
       // Moving out of a day that is still running would leave TWO simultaneously
       // active copies. That case is the existing carry-forward flow, not this one.
       throw new Error('That day has not ended yet.');
@@ -1190,6 +1457,10 @@ export function createPlanAuthority(deps = {}) {
     if (kind !== 'priority' && kind !== 'task') throw new Error(`Unknown plan item kind: ${kind}`);
     let draft = { ...current, ...changes, id: current.id, task: title, deleted: false };
     if (Object.prototype.hasOwnProperty.call(changes, 'when') && !changes.when) draft = clearPlanItemRange(draft);
+    // A NEW clock reading is made against the day the owner chose, so it starts on that day: a stale
+    // next-day offset from the previous reading must not silently ride along. (An unchanged reading —
+    // a rename, a done toggle — keeps its offset, which is what keeps Monday 01:00 Monday.)
+    if (Object.prototype.hasOwnProperty.call(changes, 'when') && changes.when !== current.when && !Object.prototype.hasOwnProperty.call(changes, 'whenDayOffset')) delete draft.whenDayOffset;
     let nextItem = withPlanItemKind(draft, kind);
 
     const destinationItems = sourceTarget.id === destination.id ? sourceItems : rawItems(destination);
@@ -1247,13 +1518,89 @@ export function createPlanAuthority(deps = {}) {
     if (!target || typeof stamp !== 'function') return null;
     const current = items(target).find(candidate => candidate.id === itemId);
     if (!current) return null;
-    const startInstant = itemStartInstant(target, current.when);
+    const startInstant = itemStartInstant(target, current.when, current);
     const todayKey = localPlanDate(nowMs, accountTimezone());
     if (startInstant === null || localPlanDate(startInstant, accountTimezone()) !== todayKey) return null; // not live today — refused
     const done = !current.done;
     const nextItem = stamp({ ...current, done, doneAt: done ? nowMs : null });
     saveItems(target, rawItems(target).map(raw => raw.id === itemId ? nextItem : raw));
     return { item: nextItem };
+  }
+
+  /** The previous calendar date's plan items that are scheduled to land on `dateKey`
+   *  (Sunday's plan reaching Monday 01:00 / 04:00). A read-only projection over the ONE
+   *  record they live in: nothing is copied, cloned or re-owned — completing one writes
+   *  Sunday's plan (completeCarryoverItem). `null` when either date is not
+   *  calendar-authoritative (the legacy carryover mechanics then apply). */
+  function calendarCarryoverFor(dateKey) {
+    if (!validPlanDate(dateKey) || !isCalendarAuthoritative(dateKey)) return null;
+    const sourceDate = addCalendarDays(dateKey, -1);
+    if (!isCalendarAuthoritative(sourceDate)) return null;
+    const target = calendarTarget(sourceDate);
+    const landing = items(target).filter(item => {
+      const instants = calendarItemInstants(sourceDate, item?.whenTz ? item : { ...item, whenTz: accountTimezone() });
+      return instants.ok && instants.timed && localPlanDate(instants.startMs, item.whenTz || accountTimezone()) === dateKey;
+    });
+    return { target, items: landing };
+  }
+
+  /** Legacy plans (Personal Day / operational days, and plans[dateKey]) that hold real
+   *  content and were still live when the account cut over — kept exactly as they were,
+   *  read-only, and discoverable so nothing prepared before the cutover silently vanishes.
+   *  Their unfinished tasks move into a calendar plan through the ordinary Unfinished flow
+   *  (deterministic ids, provenance, never twice). A projection over records that already
+   *  exist: no new store, no copying. */
+  function supersededPlans(nowMs = now()) {
+    const activation = calendarActivation();
+    if (!activation) return [];
+    const canonical = relocationIndex();
+    const dayRecords = allDayRecords();
+    const out = [];
+    for (const { target, record: stored } of recoverableDays()) {
+      if (target.store === 'calendar') continue;
+      const endMs = Number.isFinite(target.endMs) ? target.endMs : null;
+      if (endMs !== null && endMs <= activation.activatedAtMs) continue; // finalized before the cutover: ordinary history
+      // `movedTo` names where an item already went (the ordinary recovery flow's own answer), so an
+      // older plan never reads as if a task that now lives in a calendar plan were still open here.
+      const activeItems = (Array.isArray(stored?.items) ? stored.items : [])
+        .filter(item => item && !item.deleted && planItemIsActiveInDay(item, target.id, canonical))
+        .map(item => ({ ...item, movedTo: findMoveDestination(item.id, target.id, dayRecords)?.dayId || null }));
+      const prepared = preparationFrom(target, stored?.preparation);
+      if (!activeItems.length && !prepared) continue;
+      out.push({
+        id: target.id,
+        store: target.store,
+        dateKey: target.store === 'legacy' ? target.dateKey : null,
+        items: activeItems,
+        preparation: prepared,
+        resolvable: endMs !== null,
+        startMs: Number.isFinite(target.startMs) ? target.startMs : null,
+        endMs,
+        timezone: target.timezone ?? null,
+        boundaryTime: target.boundaryTime ?? null,
+        past: endMs !== null ? endMs <= nowMs : null,
+      });
+    }
+    return out.sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0) || String(a.id).localeCompare(String(b.id)));
+  }
+
+  /** The ONE explicit cutover action (owner-triggered, account-owned, one-way). */
+  function activateCalendar(nowMs = now()) {
+    if (!calendar) throw new Error('Calendar-day plans are not available yet.');
+    const result = calendar.activate(nowMs);
+    invalidate();
+    return result;
+  }
+
+  /** The factual instants of one item ({startMs, endMs|null}) inside its target, or null when
+   *  it has no structured time. Calendar items are a pure function of their own reading. */
+  function itemInstants(target, item) {
+    if (target.store === 'calendar') {
+      const instants = calendarItemInstants(target.dateKey, item?.whenTz ? item : { ...item, whenTz: accountTimezone() });
+      return instants.ok && instants.timed ? { startMs: instants.startMs, endMs: instants.endMs } : null;
+    }
+    const startMs = itemStartInstant(target, item?.when);
+    return Number.isFinite(startMs) ? { startMs, endMs: Number.isFinite(item?.durationMinutes) ? startMs + item.durationMinutes * 60000 : null } : null;
   }
 
   /** Re-targets an already-moved task: tombstones the copy on the old destination,
@@ -1353,6 +1700,8 @@ export function createPlanAuthority(deps = {}) {
 
   return {
     enabled, invalidate,
+    calendarActive, calendarActivation, boundaryEnabled, isCalendarAuthoritative, activateCalendar,
+    calendarCarryoverFor, supersededPlans, itemInstants, calendarTarget,
     current, upcoming, containing, next, previous, daysOverlappingCalendarDate,
     dayAhead, dayForCalendarDate, dayForScheduledDate, scheduledDateForTarget, civilDateForTimeInTarget, upcomingDays,
     record, rawItems, items, saveItems, addItem, assertDirectSchedulingTarget,
@@ -1400,6 +1749,7 @@ if (typeof window !== 'undefined') {
     priorityMax: (() => { try { return authorityAppContext().maxItems; } catch { return 3; } })(),
     accountTimezone: () => authorityAppContext().timezone,
     planByDeadline: window.PlanByDeadlineSync?.repository,
+    calendar: window.CalendarPlanLive,
     calendarDayBounds: dateKey => authorityAppContext().calendarDayBounds(dateKey),
     legacyClockInstant: (dateKey, hhmm) => authorityAppContext().clockInstant(dateKey, hhmm),
     onWrite: () => globalThis.refreshAuthoritativePlanSurfaces?.(),
@@ -1413,6 +1763,9 @@ if (typeof window !== 'undefined') {
   // instead of a stuck one.
   globalThis.renderTodayPlan?.();
   globalThis.refreshTomorrowView?.();
+  // The static "Tomorrow" / "Next personal day" labels were painted before this module existed; for an
+  // account that has already switched to calendar-day plans they must read "Tomorrow" from the start.
+  globalThis.refreshPlanningTerminologyLabels?.();
   // The My Day timeline also reads the authoritative interval, and its first render
   // happened before this module existed (it fell back to the calendar day). Only an
   // account with an ACTIVE boundary needs that rebuild: without one, the calendar

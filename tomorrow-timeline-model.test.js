@@ -204,3 +204,28 @@ test('deriveMyDayPlannedRows keeps date-only commitments untimed and distinct fr
   assert.equal(result.anytime[0].sourceType, 'commitment');
   assert.equal(result.anytime[0].startMs, null);
 });
+
+// ── Calendar-Native Plan Identity V1: a plan's second date orders AFTER its own ──
+
+test('a calendar plan\'s next-day item orders after the day\'s own items, never before them (Monday 01:00 is not "01:00 tomorrow morning")', () => {
+  const day = normalizePriorityRow({ id: 'a', task: 'Evening review', when: '23:00', whenTz: 'Asia/Manila' });
+  const overnight = normalizePriorityRow({ id: 'b', task: 'Overnight backup', when: '01:00', whenDayOffset: 1, whenTz: 'Asia/Manila' });
+  const morning = normalizePriorityRow({ id: 'c', task: 'Morning', when: '09:00', whenTz: 'Asia/Manila' });
+  assert.equal(overnight.startMinutes, 25 * 60);
+  assert.equal(overnight.nextDay, true);
+  const { positioned } = deriveTomorrowTimelinePreview({ priorityItems: [overnight, day, morning].map(row => ({ id: row.id.replace('priority:', ''), task: row.title, when: row.startWhen, whenDayOffset: row.nextDay ? 1 : undefined, whenTz: 'Asia/Manila' })) });
+  assert.deepEqual(positioned.map(row => row.title), ['Morning', 'Evening review', 'Overnight backup']);
+  assert.match(positioned[2].scheduleLabel, /\(next day\)$/);
+});
+
+test('a calendar plan\'s range that crosses midnight is ranged, labelled as such, and legacy ranges are unchanged', () => {
+  const crossing = normalizePriorityRow({ id: 'n', task: 'Night shift', when: '22:00', durationMinutes: 480, whenTz: 'Asia/Manila' });
+  assert.equal(crossing.precision, 'ranged');
+  assert.equal(crossing.endWhen, '06:00');
+  assert.equal(crossing.endMinutes, 22 * 60 + 480);
+  assert.equal(crossing.crossesMidnight, true);
+  // A legacy item (no zone, no offset) is exactly what it always was: a range past midnight is not a range.
+  assert.equal(normalizePriorityRow({ id: 'l', task: 'Legacy', when: '22:00', durationMinutes: 480 }).precision, 'start-only');
+  const sameDay = normalizePriorityRow({ id: 's', task: 'Same day', when: '09:00', durationMinutes: 90 });
+  assert.deepEqual([sameDay.endWhen, sameDay.endMinutes, sameDay.crossesMidnight], ['10:30', 630, false]);
+});

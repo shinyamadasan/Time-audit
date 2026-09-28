@@ -1,5 +1,84 @@
 # ChronaSense — Changelog
 
+## Calendar-Native Plan Identity V1 — candidate, NOT integrated
+
+**Branch `feat/calendar-native-plan-identity-v1`**, created from the immutable WIP commit `9e2a45f`
+(Calendar Day + Extended My Day V1 FIX FIRST, itself on `origin/main` @ `b7796e4`). Not pushed, merged or
+deployed. Release token `20260927-calendar-native-plan-identity-v1` (retires
+`20260927-calendar-day-extended-my-day-fix1`). `www/` re-mirrored, parity clean.
+
+**NEW:** calendar-native plan identity is authoritative for new planning. Once an account has cut over,
+Sunday's plan is Sunday's (`cal1:2026-09-27`) whatever a Personal Day boundary says, and it can continue
+past midnight (Monday 01:00 / 04:00 / 09:00) without becoming a Monday-owned duplicate.
+**LEGACY:** Personal Day / operational plans and `plans[dateKey]` remain historical compatibility inputs.
+**Legacy data was NOT migrated** — no record is rewritten, copied or deleted by the cutover.
+
+**Resolves the previous phase's STOP.** The FIX FIRST proved that no operational-day ref can represent
+"Sunday" as its own plan identity while holding a real Sunday-11:00 timestamp under an active 18:00
+boundary. This phase adds the identity that can: a versioned calendar-plan store (`calendarPlans/cal1:<date>`)
+whose items carry `when` + `whenDayOffset` (0|1) + an item-owned `whenTz`, so an instant is a pure function
+of the record and never of the account's current zone or the boundary. Architecture, authority map, schema
+and the cutover contract: `docs/CALENDAR_NATIVE_PLAN_IDENTITY_V1.md`.
+
+**What was built.**
+- `calendar-plan-model.js` (pure: identity, item time truth, merge, activation facts),
+  `calendar-plan-repository.js` (room-scoped, owner-guarded, validating), `calendar-plan-sync.js` (per-record
+  transaction, per-item merge, listener generation/room guards, hydrate), `calendar-plan-live.js` (activation,
+  listener lifecycle, reconnect re-push of EVERY plan), `calendar-plan-ui.js` (Settings "Plan day", the Today
+  switch card, read-only "Older plans").
+- `plan-authority.js` gains a third store, `calendar`, behind the same target abstraction: `current()`,
+  `upcoming()`, `containing()`, `next()/previous()`, `dayAhead()`, preparation, streak (`calendarStreak`),
+  Plan-by qualification (the plan's own date — no compatibility shift), `calendarCarryoverFor()`,
+  `supersededPlans()`, `completeCarryoverItem()` for calendar plans.
+- **Cutover:** an account-owned, explicit, one-way activation fact (grow-only set; the earliest
+  `(activatedAtMs, id)` is effective — order-independent). A calendar plan can only be written by an activated
+  account; a device that has not heard the cutover is legitimately still on the legacy chain and follows when it
+  hears it; its offline legacy work is surfaced under "Older plans", never discarded or merged.
+- **Supersession, not migration:** every legacy day is treated as ended at the activation instant, so its
+  unfinished tasks flow through the EXISTING Unfinished/move recovery (deterministic ids, provenance, never twice).
+- UI: "next day" control on the Today add rows and in the Plan Tomorrow schedule panel; cross-midnight ranges
+  (22:00 → 06:00) in the real editor; items ordered by real time (offset-aware) on Today and the Tomorrow preview;
+  a carryover section over Sunday's own record; static "Tomorrow" labels no longer say "Next personal day" after
+  the switch; the legacy Personal Day setting says it is legacy once plans follow the calendar.
+- Review: minimal adapter only — linked work counts across a plan's second date by exact `planItemId`; actuals
+  keep their factual timestamps; Sunday's linked Monday work is not "unplanned" in Monday's review.
+- WIP deadline/carryover/off-day/conflict/revision-owned-timezone work preserved unchanged.
+
+**Defect found in the previous WIP and fixed here; one pre-existing defect noted.**
+1. **Plan-by deadline sync was never wired to the room lifecycle** — `PlanByDeadlineSync` was only pushed on Save:
+   never attached at join, never re-pushed on reconnect, never detached at sign-out, so an account-owned deadline
+   never reached (or left) another device. Now attached/re-pushed/detached in `storage.js` (with the same
+   late-attach the boundary and commitments singletons carry), pinned by browser tests that fail when the wiring
+   is removed.
+2. `plan-tomorrow-model.js`'s `validPlanDate` throws `RangeError` for an impossible date (`2026-13-40`) instead
+   of answering false — pre-existing, left as is; the calendar model guards it locally.
+
+**Verification** (final code). `npm ci --legacy-peer-deps`; `npm test`: exit 0, exit 0 — 1560 tests, 1559 pass, 0 fail, 1 skipped (a pre-existing env-gated control proof in scripts/cross-repo-compat-check.test.js; skipped is NOT counted as passed); full Playwright:
+785 passed, 0 failed (exit 0); the two known-flaky specs passed in this run and passed in isolation when they failed under load in an earlier full run; `npm run lint`: 0 errors (warnings are pre-existing plus none new in this phase's files);
+`check:www-parity` clean; `git diff --check` clean. Mutation sampling (§28): 10/10 semantic mutations turn
+tests red (legacy `current()`, boundary `upcoming()`, dual-write, carryover clone, current-timezone restamp,
+cutover ignored on a stale device, remote owner guard removed, load-order authority, write-before-activation,
+bare-key cache), plus browser mutations for the storage.js lifecycle hooks and both Review adapter pieces, and a
+mutation of the npm-test wiring caught by the new `npm-test-wiring.test.js` (closes the gap the previous phase
+left unguarded).
+
+**Known, carried forward (NOT changed here).** Timer/Away remote cross-room leak; Life Ledger local cross-account
+visibility; Intention likely remote cross-room leak; the known CI flakes (`smoke.spec.js` "editing an
+auto-logged schedule…" and `wife-shared-accountability.spec.js` "unlink clears the partner card…" fail under full
+load and pass in isolation); `personal-day-boundary-recovery.js` is not in the lint list (pre-existing, named
+in `npm-test-wiring.test.js`); one env-gated control-proof test is skipped in `scripts/cross-repo-compat-check`.
+**Pre-existing legacy hazard observed:** Realtime Database prunes empty arrays, and the legacy/operational
+`normalizePreparation` rejects a preparation whose `routineInstanceIds: []` was pruned, so a second device can
+read a prepared legacy plan as "unknown". The calendar store restores pruned fields at its merge choke point
+(`restorePrunedPlanRecord`); the legacy stores are untouched.
+
+**Owner decisions flagged.** (1) Activation is owner-triggered (one tap), not automatic: auto-activation would
+silently flip the meaning of "today" for existing data and invalidate ~130 browser tests that encode the legacy
+model. (2) A plan spans two calendar dates. (3) The streak day straddling the cutover is judged by its legacy
+successor.
+
+---
+
 ## Calendar Day + Extended My Day V1: FIX FIRST applied — candidate, not integrated
 
 **Same branch `feat/calendar-day-extended-my-day-v1`**, from `origin/main` @ `b7796e4`. Strict review of
