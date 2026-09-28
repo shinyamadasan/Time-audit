@@ -52,4 +52,3 @@ export function fakeDatabase() {
   });
   return { tree, ref, listenerCount: () => [...listeners.values()].reduce((n, s) => n + s.size, 0), fire: notify, getAt, setAt };
 }
-
