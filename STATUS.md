@@ -5,7 +5,55 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-09-27 — Calendar Day + Extended My Day V1: FIX FIRST applied (candidate, NOT integrated)
+
+Same branch `feat/calendar-day-extended-my-day-v1`; strict review of `77efac6` returned FIX FIRST with 5
+bounded blockers. Release token `20260927-calendar-day-extended-my-day-fix1`. Details in CHANGELOG.md.
+
+**Corrects the entry below:** its claim that the deadline-streak and live planning "never disagree" was
+FALSE for any account with an ACTIVE non-midnight Personal Day boundary — `planTargetOriginatingOnCalendarDate`
+resolved a DIFFERENT, empty target than `current()` (proven with a real operational-plan repository + live
+wiring: Sunday 11:00 under an 18:00 boundary, a plan prepared through the normal workflow was invisible to
+the streak). That function is removed; the streak now walks the same `current()`/`previous()` chain planning
+already uses.
+
+**Blocker outcomes:**
+1. Calendar-primary planning authority — **STOP, not faked.** Proven with the real model that no ref can
+   represent "Sunday" as its own plan identity while containing a real Sunday-11:00 timestamp under an
+   active 18:00 boundary; an anchor-governed ref routes to the frozen legacy store instead. Full calendar
+   primacy needs the operational-plan model to gain a calendar-midnight-native identity — real architecture
+   expansion, out of bounded scope. Fixed the actual damaging defect (the split-brain) without it.
+2. Historical timezone stability — fixed: `DeadlineRevision` now owns its timezone (revision-owned, like
+   `BoundaryRevision`); `deadlineInstantForCalendarDate` is a pure instant-space forward simulation with no
+   external timezone parameter.
+3. Carryover actionability — fixed: `PlanAuthority.completeCarryoverItem()` bypasses the general "past My
+   Day" refusal only after independently re-verifying the item's real timestamp is today.
+4. Standard npm test/lint wiring — fixed: the 4 new test files run under `npm test`; the 4 new production
+   modules lint under `npm run lint` (3 real parse errors fixed, now 0).
+5. Equal-authority contradictory revisions — fixed: both facts are now preserved (never picked by arrival
+   order); `planningDeadlineStreak()` reports an explicit `'conflict'` status, never a false `'missed'`.
+
+**Verification:** `npm test` full green (1469 tests, 0 failures — up from 1389, now genuinely wired per
+Blocker 4). `npm run lint` clean (0 errors; the 4 new modules now actually linted). `www/` parity clean.
+Full Playwright: 763 passed, 2 failed — both re-run in isolation and passed (`smoke.spec.js`'s unrelated,
+untouched "editing an auto-logged schedule" test, and `wife-shared-accountability.spec.js`'s already-known
+flaky class per prior sessions' notes) — neither is in a file this phase touches.
+
+**Mutation sampling (§24):** 4 of 5 required mutations applied and caught (split-brain reintroduction,
+disabled carryover completion, current-timezone-instead-of-revision-owned, first-arrival-wins conflict
+resolution — each reverted after confirming failure). The 5th ("remove a test file from npm test wiring")
+has NO automated safety net — nothing asserts package.json's chain matches the test files on disk; verified
+manually by inspection only. Flagged as a real, acknowledged gap, not claimed as caught.
+
+**Next:** targeted re-review of this FIX FIRST candidate. Timer/away, Life Ledger and intention remain
+separate, untouched phases (see the entries below), only on a fresh request.
+
+---
+
 ## 2026-09-27 — Calendar Day + Extended My Day V1 (candidate, NOT integrated)
+
+**SUPERSEDED by the FIX FIRST entry above — this entry's "no split-brain" framing was incomplete; see above
+for the actual finding.**
 
 Candidate on `feat/calendar-day-extended-my-day-v1`, from `origin/main` @ `b7796e4` (Device-Local Account
 Isolation V1, which is on origin/main). Not pushed, merged or deployed. Release token

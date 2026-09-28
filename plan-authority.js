@@ -796,23 +796,37 @@ export function createPlanAuthority(deps = {}) {
   //
   // Independent of streak()/habitEarned() above (the Personal Day boundary
   // model — "was the FOLLOWING day prepared before it began"). This model
-  // asks a different, calendar-date-canonical question: "by THIS calendar
-  // date's own configured deadline, was ITS OWN plan prepared (or the date
-  // explicitly marked an intentional off-day)?" It does not replace streak()
-  // — an account with no deadline configured keeps its historical boundary-
-  // based streak display untouched; this is a separate, additive evaluation
-  // that becomes the new streak authority only once a deadline exists.
-
-  /** The authoritative day whose OWN originating calendar date is `dateKey` —
-   *  never a day merely overlapping it from a prior cycle (Decision B already
-   *  gives us every overlapping day; this picks the one that actually STARTS
-   *  on this date, which is what "did the user plan today" must mean under
-   *  calendar-date-canonical semantics). For a legacy/never-enabled account
-   *  there is exactly one candidate and it always qualifies. */
-  function planTargetOriginatingOnCalendarDate(dateKey) {
-    const candidates = daysOverlappingCalendarDate(dateKey);
-    return candidates.find(t => (t.legacy ? t.dateKey === dateKey : t.ref?.boundaryStartDate === dateKey)) || candidates[candidates.length - 1];
-  }
+  // asks a different question: "by the configured deadline, was the plan the
+  // owner is ACTUALLY EDITING prepared (or the day explicitly marked an
+  // intentional off-day)?" It does not replace streak() — an account with no
+  // deadline configured keeps its historical boundary-based streak display
+  // untouched; this is a separate, additive evaluation that becomes the new
+  // streak authority only once a deadline exists.
+  //
+  // FIX FIRST §2/§9 correction (no split-brain): an earlier version of this
+  // walk resolved each date's qualification against
+  // `planTargetOriginatingOnCalendarDate(dateKey)` — the operational day whose
+  // OWN boundaryStartDate equals the calendar date being asked about. Under an
+  // ACTIVE non-midnight boundary that is a DIFFERENT target than current()/
+  // previous() (the ones every planning surface actually reads and writes):
+  // at Sunday 11:00 under an 18:00 boundary, current() is still Saturday's
+  // operational day (Sat 18:00 -> Sun 18:00), but that lookup asked for
+  // Sunday's OWN day (boundaryStartDate = Sunday, which only starts at Sunday
+  // 18:00) — an empty target the user never wrote to. Proven with a live
+  // authority + real operational repository in review; see
+  // plan-authority-deadline-streak.test.js's "current()/previous() chain"
+  // tests. The fix: the streak walks the SAME current()/previous() target
+  // chain the planning UI uses, and asks each target's OWN origin date (never
+  // an independently-derived one) for its deadline. This makes reads and
+  // writes structurally the same target — never a split-brain — but it is NOT
+  // full calendar-date primacy for a boundary-ENABLED account: such an
+  // account's "day" for planning/streak purposes remains the boundary-defined
+  // operational day (exactly as it already was for every other planning
+  // surface), just consistently so. True calendar-date primacy under an
+  // active non-midnight boundary would require the operational-plan model
+  // itself to gain a calendar-midnight-native identity — out of bounded scope
+  // here (see the FIX FIRST's own representability finding). A never-enabled
+  // account is unaffected: its "operational day" already IS the calendar day.
 
   /** The provenance timestamp that qualifies as "genuinely prepared" — same
    *  definition earnsItsPredecessorCredit already uses for the boundary
@@ -825,46 +839,103 @@ export function createPlanAuthority(deps = {}) {
     return hasContent ? prepared.firstPreparedAt : null;
   }
 
-  function deadlineQualificationForDate(dateKey, revisions, timezone) {
-    const deadlineInstantMs = deadlineInstantForCalendarDate(dateKey, timezone, revisions);
+  /** The target's own origin calendar date. @param {object} target */
+  function originDateKeyForTarget(target) {
+    return target.store === 'legacy' ? target.dateKey : target.ref.boundaryStartDate;
+  }
+
+  /** The ONE calendar date a Plan-by deadline / intentional off-day
+   *  declaration for `target` is keyed under — used identically by the streak
+   *  walk and by the Settings off-day toggle (plan-by-deadline-ui.js calls
+   *  this via PlanAuthority), so the two can never disagree about which date
+   *  they mean.
+   *
+   *  Normally this is just the target's own origin date. But a Personal Day
+   *  boundary time and a Plan-by deadline time are two fully independent
+   *  settings (by design — no second timezone/boundary source) and their
+   *  clock times can be in EITHER order: a very plausible combination is an
+   *  early deadline (e.g. 08:00, "have tomorrow planned before I get up")
+   *  under a late evening boundary (e.g. 18:00). The NAIVE origin-date
+   *  deadline instant would then fall BEFORE this operational day even
+   *  starts — an obligation the owner could structurally never have met for
+   *  THIS target, since it did not exist yet. In that case the deadline that
+   *  actually governs this target is the occurrence on the FOLLOWING calendar
+   *  date, which does fall inside the target's own [startMs, endMs) — still
+   *  one governing instant, just resolved against the target's real interval
+   *  rather than blindly against its origin date. A legacy target (always
+   *  midnight-aligned) or one with no deadline configured yet never needs the
+   *  adjustment. */
+  function effectiveDeadlineDateKey(target, revisions) {
+    const originDate = originDateKeyForTarget(target);
+    if (target.store === 'legacy' || !Number.isFinite(target.startMs) || !revisions?.length) return originDate;
+    const naive = deadlineInstantForCalendarDate(originDate, revisions);
+    if (naive === null || naive >= target.startMs) return originDate;
+    return addCalendarDays(originDate, 1);
+  }
+
+  /** Qualification for ONE authoritative target (never an independently
+   *  looked-up one) — the target IS the plan the owner actually reads/writes,
+   *  from current()/previous(). @param {object} target @param {object[]} revisions */
+  function deadlineQualificationForTarget(target, revisions) {
+    const dateKey = effectiveDeadlineDateKey(target, revisions);
+    const deadlineInstantMs = deadlineInstantForCalendarDate(dateKey, revisions);
     if (deadlineInstantMs === null) return { deadlineInstantMs: null, status: 'unenforced' };
-    let target;
-    try { target = planTargetOriginatingOnCalendarDate(dateKey); } catch { target = null; }
-    const planPreparedAtMs = target ? qualifyingPreparedAtMs(target) : null;
+    const planPreparedAtMs = qualifyingPreparedAtMs(target);
     const offDayRecord = planByDeadline?.readOffDay ? planByDeadline.readOffDay(dateKey) : null;
     const offDayDeclaredAtMs = offDayDeclaredAtForDeadline(offDayRecord, deadlineInstantMs);
     return { deadlineInstantMs, ...evaluatePlanningDeadlineQualification(deadlineInstantMs, planPreparedAtMs, offDayDeclaredAtMs) };
   }
 
+  /** Public: the calendar date the Settings "mark today an intentional
+   *  off-day" toggle must key its declaration under for the CURRENT target —
+   *  see effectiveDeadlineDateKey. Reads the deadline history itself so
+   *  callers (the Settings UI) never re-derive or duplicate this logic. */
+  function deadlineDateKeyForTarget(target) {
+    const revisions = planByDeadline?.readDeadlines ? planByDeadline.readDeadlines() : [];
+    return effectiveDeadlineDateKey(target, revisions);
+  }
+
   /** Deterministic from persisted facts alone (§12) — never depends on this
-   *  function having been called at the exact deadline instant. Walks
-   *  calendar dates backwards from today, exactly like streak()'s own
-   *  backward walk, but stops the instant a date predates the very first
-   *  configured deadline revision (§8: no retroactive enforcement invented
-   *  for history that came before the feature existed) rather than treating
-   *  that date as "missed". Bounded by DAY_AHEAD_GUARD for the same
-   *  malformed-data-safety reason streak()'s walk is bounded by historyFloorMs.
+   *  function having been called at the exact deadline instant. Walks the
+   *  AUTHORITATIVE target chain backwards from current() (never an
+   *  independently-derived per-calendar-date target — see the correction
+   *  above), stopping the instant a target's own origin date predates the
+   *  very first configured deadline revision (§8: no retroactive enforcement
+   *  invented for history that came before the feature existed). Bounded by
+   *  DAY_AHEAD_GUARD for the same malformed-data-safety reason streak()'s walk
+   *  is bounded by historyFloorMs.
+   *
+   *  FIX FIRST §14/§15: an ACTIVE equal-authority conflict is checked and
+   *  reported FIRST, before any streak math — a conflict never falls through
+   *  to compute a false 'missed' from a filtered-down revision set; it is its
+   *  own explicit status, resolved only by the owner saving a new revision
+   *  (repository.proposeDeadline draws from the conflict-free set already).
    *  @param {number} nowMs
-   *  @returns {{status:'unenforced'}|{status:'configured', today:{status:string,deadlineInstantMs:number|null}, current:number, best:number}} */
+   *  @returns {{status:'unenforced'}|{status:'conflict',conflicts:object[][]}|{status:'configured', today:{status:string,deadlineInstantMs:number|null}, current:number, best:number}} */
   function planningDeadlineStreak(nowMs = now()) {
     if (!planByDeadline?.readDeadlines) return { status: 'unenforced' };
+    const conflicts = typeof planByDeadline.deadlineConflict === 'function' ? planByDeadline.deadlineConflict() : [];
+    if (conflicts.length) return { status: 'conflict', conflicts };
     const revisions = planByDeadline.readDeadlines();
     if (!revisions.length) return { status: 'unenforced' };
-    const timezone = accountTimezone();
-    const todayDateKey = localPlanDate(nowMs, timezone);
-    const todayQualification = deadlineQualificationForDate(todayDateKey, revisions, timezone);
+
+    const todayTarget = current(nowMs);
+    const todayQualification = deadlineQualificationForTarget(todayTarget, revisions);
     const todayStatus = todayQualification.status === 'unenforced' ? 'unenforced'
       : todayQualification.status === 'maintained' ? 'maintained' // already satisfied — never demoted back to "pending" just because the deadline hasn't technically arrived yet
       : (todayQualification.deadlineInstantMs !== null && nowMs < todayQualification.deadlineInstantMs) ? 'pending'
       : 'missed';
 
     const flags = [];
-    let cursorDateKey = addCalendarDays(todayDateKey, -1);
+    let cursor = todayTarget;
     for (let guard = 0; guard < DAY_AHEAD_GUARD; guard++) {
-      const qualification = deadlineQualificationForDate(cursorDateKey, revisions, timezone);
+      let prev;
+      try { prev = previous(cursor); } catch { break; }
+      if (!Number.isFinite(prev.startMs) && prev.store !== 'legacy') break; // malformed history — stop, don't spin
+      const qualification = deadlineQualificationForTarget(prev, revisions);
       if (qualification.status === 'unenforced') break; // predates the first configured deadline — stop, don't invent history
       flags.unshift(qualification.status === 'maintained');
-      cursorDateKey = addCalendarDays(cursorDateKey, -1);
+      cursor = prev;
     }
 
     let backward = 0;
@@ -1159,6 +1230,32 @@ export function createPlanAuthority(deps = {}) {
     return { moved: true, item: nextItem, destination };
   }
 
+  /** Toggles ONE item's done state on `target`, bypassing updateItem's general
+   *  assertDirectSchedulingTarget "past My Day" refusal — the Calendar Day +
+   *  Extended My Day V1 carryover-completion exception (§10/§11). The SOURCE
+   *  day may have fully ended (that is exactly what makes it "carryover"), but
+   *  one item whose own REAL resolved instant still lands on today's calendar
+   *  date remains a live obligation. This function re-verifies that fact
+   *  itself, from the item's own `when` — never trusting the caller — so it
+   *  can never be used to edit an arbitrary historical day: any other item
+   *  refuses (returns null, no write) exactly like updateItem would. Writes
+   *  through saveItems (no editability guard) to the SAME target/itemId —
+   *  never a clone, never a different target.
+   *  @param {object} target @param {string} itemId @param {(item:object)=>object} stamp
+   *  @param {number} [nowMs] @returns {{item:object}|null} */
+  function completeCarryoverItem({ target, itemId, stamp, nowMs = now() }) {
+    if (!target || typeof stamp !== 'function') return null;
+    const current = items(target).find(candidate => candidate.id === itemId);
+    if (!current) return null;
+    const startInstant = itemStartInstant(target, current.when);
+    const todayKey = localPlanDate(nowMs, accountTimezone());
+    if (startInstant === null || localPlanDate(startInstant, accountTimezone()) !== todayKey) return null; // not live today — refused
+    const done = !current.done;
+    const nextItem = stamp({ ...current, done, doneAt: done ? nowMs : null });
+    saveItems(target, rawItems(target).map(raw => raw.id === itemId ? nextItem : raw));
+    return { item: nextItem };
+  }
+
   /** Re-targets an already-moved task: tombstones the copy on the old destination,
    *  then writes one on the new. Never leaves two active copies. A hard removal is
    *  not used because it would be resurrected by the per-item merge. */
@@ -1263,9 +1360,9 @@ export function createPlanAuthority(deps = {}) {
     validateItem, itemStartInstant, evidenceWindow, classifyItemActual,
     routineTarget, routinesForTarget, templatesForTarget,
     habitEarned, streak,
-    planTargetOriginatingOnCalendarDate, planningDeadlineStreak,
+    planningDeadlineStreak, deadlineDateKeyForTarget,
     preparedPlans, boundaryChangeImpact,
-    setItemKind, updateItem,
+    setItemKind, updateItem, completeCarryoverItem,
     staleUnfinished, staleMoveDestination, moveStaleItem, rescheduleStaleItem,
     dismissStaleItem, undismissStaleItem, targetById, recoverableDays,
     legacyTarget,

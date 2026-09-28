@@ -6,13 +6,31 @@
 // explicitly), mirroring personal-day-boundary-model.js's discipline.
 //
 // A Plan-by deadline is NOT an operational-day boundary. It does not define
-// what "today" is, does not group timeline entries, and does not carry its
-// own timezone — it reuses whatever the account's single authoritative
-// timezone currently is (callers pass it in explicitly; see project decision
-// against a second timezone source). It answers exactly one question: by
-// what wall-clock instant, on a given calendar date, must today's planning
-// obligation (a prepared plan or an intentional off-day) have been satisfied
-// for the planning streak to count that date as maintained?
+// what "today" is and does not group timeline entries. It answers exactly one
+// question: by what wall-clock instant, on a given calendar date, must today's
+// planning obligation (a prepared plan or an intentional off-day) have been
+// satisfied for the planning streak to count that date as maintained?
+//
+// ── revision-owned timezone (FIX FIRST correction) ─────────────────────────
+//
+// An earlier version of this module resolved every deadline instant against
+// whatever the ACCOUNT'S CURRENT timezone happened to be at read time. That is
+// a real historical-truth bug: a later timezone change (a move, a device
+// misconfiguration corrected) could silently change what an ALREADY-DECIDED
+// past day's maintained/missed result was, purely because "now" reads
+// differently. A revision's own timezone is captured once, at propose() time,
+// and never re-resolved against a later "current" value — exactly the same
+// discipline personal-day-boundary-model.js already uses for BoundaryRevision.
+// A timezone change is only ever prospective: it takes effect via a NEW
+// revision (propose() again), never by mutating history.
+
+/** The revision governing a real-world instant is decided purely from
+ *  ABSOLUTE instants (effectiveFromInstant, already UTC ms) — never by mixing
+ *  civil-time math across two different revisions' timezones. A per-date
+ *  deadline instant is found by a small forward simulation
+ *  (deadlineInstantForCalendarDate below), not by picking "the" timezone for a
+ *  date up front — there may be none if timezones genuinely differ across a
+ *  transition, and instant-space comparison never needs one. */
 //
 // Unlike a boundary revision history, a deadline revision history has NO
 // anchor/default revision. Absence of any revision — or an instant before
@@ -55,20 +73,60 @@ function validRevisionId(value) {
  *  A deadline revision is never an anchor — `effectiveFromInstant` is always a
  *  real, finite instant (never null): every deadline revision, including the
  *  very first one an account ever configures, is a genuine, timestamped user
- *  decision, not a default. */
+ *  decision, not a default. `timezone` is required and immutable once created
+ *  (see the module header) — the account's CURRENT timezone is never
+ *  substituted for it, at creation or at any later read. */
 export function validateDeadlineRevision(revision) {
   return !!revision && typeof revision === 'object'
     && validRevisionId(revision.id)
     && validDeadlineTime(revision.deadlineTime)
+    && validDeadlineTimezone(revision.timezone)
     && Number.isFinite(revision.effectiveFromInstant) && revision.effectiveFromInstant >= 0;
 }
 
 /** Two revisions are semantic duplicates (for concurrent-proposal dedup, a
- *  persistence-layer concern) when they name the same deadline time
- *  activating at the same instant, regardless of `id`.
+ *  persistence-layer concern) when they name the same deadline time, in the
+ *  same timezone, activating at the same instant, regardless of `id`. Same
+ *  clock reading + same instant but a DIFFERENT timezone is a genuine
+ *  difference in what was actually configured, never a duplicate.
  *  @param {object} a @param {object} b @returns {boolean} */
 export function revisionsAreSemanticDuplicates(a, b) {
-  return a.deadlineTime === b.deadlineTime && a.effectiveFromInstant === b.effectiveFromInstant;
+  return a.deadlineTime === b.deadlineTime && a.timezone === b.timezone && a.effectiveFromInstant === b.effectiveFromInstant;
+}
+
+/** Two revisions are an EQUAL-AUTHORITY CONTRADICTION (FIX FIRST §14): they
+ *  share an effectiveFromInstant (so neither is "more current" than the
+ *  other) but disagree on what the rule actually is. Never resolved by id, by
+ *  arrival order, or by which device wrote first — see
+ *  findEqualAuthorityConflicts / plan-by-deadline-repository.js's
+ *  deadlineConflict().
+ *  @param {object} a @param {object} b @returns {boolean} */
+export function revisionsContradict(a, b) {
+  return a.effectiveFromInstant === b.effectiveFromInstant && !revisionsAreSemanticDuplicates(a, b);
+}
+
+/** Scans a raw (possibly not yet deduplicated/merged) set of individually-valid
+ *  DeadlineRevisions for equal-authority contradictions — two different ids
+ *  sharing an effectiveFromInstant with different facts. Returns the groups of
+ *  contradicting revisions (each group sharing one effectiveFromInstant), or
+ *  [] if the set is internally consistent. Never throws, never picks a
+ *  winner: detection only, so a caller can preserve every conflicting fact and
+ *  present an explicit conflict state instead of guessing (§14/§15).
+ *  @param {object[]} revisions @returns {object[][]} */
+export function findEqualAuthorityConflicts(revisions) {
+  const byInstant = new Map();
+  for (const r of revisions) {
+    if (!validateDeadlineRevision(r)) continue;
+    if (!byInstant.has(r.effectiveFromInstant)) byInstant.set(r.effectiveFromInstant, []);
+    byInstant.get(r.effectiveFromInstant).push(r);
+  }
+  const conflicts = [];
+  for (const group of byInstant.values()) {
+    if (group.length < 2) continue;
+    const allSame = group.every(r => revisionsAreSemanticDuplicates(r, group[0]));
+    if (!allSame) conflicts.push(group);
+  }
+  return conflicts;
 }
 
 /** Validates and sorts a deadline revision history ascending by effective
@@ -105,59 +163,75 @@ export function activeDeadlineRevision(revisions, instantMs) {
  *  the history. This is the one rule for §9 activation semantics: if today's
  *  occurrence of the new time hasn't happened yet, the new rule begins today;
  *  if it already has, the new rule begins tomorrow. Never retroactive.
- *  @param {object[]} revisions @param {{id:string,deadlineTime:string}} candidate
+ *  `candidate.timezone` is canonicalized and stored ON the revision — the
+ *  account's current timezone AT PROPOSAL TIME becomes an immutable historical
+ *  fact; a later account timezone change never touches this revision (see
+ *  module header).
+ *  @param {object[]} revisions @param {{id:string,deadlineTime:string,timezone:string}} candidate
  *  @param {number} nowMs @returns {{revision:object, revisions:object[]}} */
 export function proposeDeadlineRevision(revisions, candidate, nowMs) {
-  if (!validRevisionId(candidate?.id) || !validDeadlineTime(candidate?.deadlineTime)) {
-    throw new Error('A valid candidate revision (id, deadlineTime) is required.');
+  if (!validRevisionId(candidate?.id) || !validDeadlineTime(candidate?.deadlineTime) || !validDeadlineTimezone(candidate?.timezone)) {
+    throw new Error('A valid candidate revision (id, deadlineTime, timezone) is required.');
   }
   if (!Number.isFinite(nowMs)) throw new Error('A valid reference instant (nowMs) is required.');
+  const timezone = canonicalizeOperationalDayTimezone(candidate.timezone);
   const revision = {
     id: candidate.id,
     deadlineTime: candidate.deadlineTime,
-    // nextBoundaryInstant only reads rule.boundaryTime/rule.timezone; timezone
-    // must be supplied by the caller (the account's current authoritative
-    // timezone) since a deadline revision itself carries none.
-    effectiveFromInstant: nextBoundaryInstant(nowMs, { boundaryTime: candidate.deadlineTime, timezone: candidate.timezone }),
+    timezone,
+    effectiveFromInstant: nextBoundaryInstant(nowMs, { boundaryTime: candidate.deadlineTime, timezone }),
   };
   return { revision, revisions: normalizeDeadlineRevisionHistory([...revisions, revision]) };
 }
 
 /** The deadline instant for one specific calendar date, or `null` if the
- *  deadline was unconfigured for that date (no revision had taken effect by
- *  the end of that date). Accounts for a revision change taking over partway
- *  through the date: since a revision's effectiveFromInstant is always an
- *  occurrence of ITS OWN deadline time (by construction of
- *  proposeDeadlineRevision), a revision that takes effect on this date before
- *  the previously-active revision's own deadline time would have fired
- *  supersedes it outright — its effectiveFromInstant *is* that date's
- *  deadline instant.
- *  @param {string} dateStr YYYY-MM-DD @param {string} timezone @param {object[]} revisions
+ *  deadline was unconfigured for that date. A pure forward simulation over
+ *  absolute instants — no external "current timezone" parameter at all (FIX
+ *  FIRST §8/§9): each revision's OWN stored timezone resolves its OWN
+ *  candidate instant for `dateStr`; a revision is a valid answer only if (a)
+ *  it already existed by the time of its own candidate (effectiveFromInstant
+ *  <= candidate — it can't govern a moment before it existed) and (b) no
+ *  later revision took over before that candidate fired (the NEXT revision's
+ *  effectiveFromInstant, if any, must be AFTER this candidate). Revisions are
+ *  walked earliest-first, so the first one satisfying both conditions is the
+ *  earliest valid candidate — the only sound answer, since once any revision's
+ *  deadline genuinely fires for a date, that IS the date's deadline instant.
+ *  This generalizes correctly across a timezone change with no special case:
+ *  every comparison here is instant-vs-instant, never civil-time-vs-civil-time
+ *  across two different revisions' timezones.
+ *  @param {string} dateStr YYYY-MM-DD @param {object[]} revisions
  *  @returns {number|null} UTC ms, or null if unconfigured for this date */
-export function deadlineInstantForCalendarDate(dateStr, timezone, revisions) {
+export function deadlineInstantForCalendarDate(dateStr, revisions) {
   const normalized = normalizeDeadlineRevisionHistory(revisions);
-  if (!normalized.length) return null;
-  const startOfDateMs = resolveCivilBoundary(dateStr, '00:00', timezone);
-  const nextDateStr = new Date(`${dateStr}T12:00:00Z`);
-  nextDateStr.setUTCDate(nextDateStr.getUTCDate() + 1);
-  const endOfDateMs = resolveCivilBoundary(nextDateStr.toISOString().slice(0, 10), '00:00', timezone);
+  for (let i = 0; i < normalized.length; i++) {
+    const r = normalized[i];
+    const next = normalized[i + 1];
+    const candidate = resolveCivilBoundary(dateStr, r.deadlineTime, r.timezone);
+    if (r.effectiveFromInstant > candidate) continue; // r did not exist yet at its own candidate moment for this date
+    if (next && next.effectiveFromInstant <= candidate) continue; // superseded before its own candidate fired
+    return candidate;
+  }
+  return null;
+}
 
-  const active = activeDeadlineRevision(normalized, startOfDateMs);
-  let naiveInstant = null;
-  if (active) naiveInstant = resolveCivilBoundary(dateStr, active.deadlineTime, timezone);
-
-  // Any revision whose effectiveFromInstant falls within this date, at or
-  // before the naive candidate's own instant (or anywhere in the date if
-  // there was no active candidate at all — a first-ever mid-date
-  // configuration), takes over: its effectiveFromInstant *is* the correct
-  // deadline instant for this date.
-  const upperBound = naiveInstant !== null ? naiveInstant : endOfDateMs;
-  const preempting = normalized
-    .filter(r => r.effectiveFromInstant > startOfDateMs && r.effectiveFromInstant < endOfDateMs && r.effectiveFromInstant <= upperBound)
-    .reduce((earliest, r) => (earliest === null || r.effectiveFromInstant < earliest.effectiveFromInstant ? r : earliest), null);
-
-  if (preempting) return preempting.effectiveFromInstant;
-  return naiveInstant;
+/** The conflict groups that are still ACTIVE — i.e. not already superseded by
+ *  a later, non-contradicting revision (FIX FIRST §14: "permit the user to
+ *  resolve by explicitly saving a new prospective revision"). Once the user
+ *  proposes any new, clean revision whose effectiveFromInstant is later than a
+ *  conflict's shared instant, that conflict stops blocking current/future
+ *  evaluation — it remains in storage as historical provenance (never
+ *  deleted), but is no longer reported as an open conflict.
+ *  @param {object[]} revisions raw, possibly-contradictory, possibly-unmerged
+ *  @returns {object[][]} the still-active conflict groups, [] if none */
+export function activeEqualAuthorityConflicts(revisions) {
+  const conflicts = findEqualAuthorityConflicts(revisions);
+  if (!conflicts.length) return [];
+  const conflictInstants = new Set(conflicts.map(group => group[0].effectiveFromInstant));
+  const cleanInstants = revisions
+    .filter(r => validateDeadlineRevision(r) && !conflictInstants.has(r.effectiveFromInstant))
+    .map(r => r.effectiveFromInstant);
+  const latestCleanInstant = cleanInstants.length ? Math.max(...cleanInstants) : -Infinity;
+  return conflicts.filter(group => group[0].effectiveFromInstant > latestCleanInstant);
 }
 
 // ── streak qualification (§10, §12) ────────────────────────────────────────

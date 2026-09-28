@@ -225,11 +225,15 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // Calendar Day + Extended My Day V1 adds plan-by-deadline-model.js / -repository.js / -sync.js to the pinned
 // group (plan-authority.js now side-effect-imports the sync bridge) and changes plan-authority.js itself
 // (planningDeadlineStreak) and index.html (calendar-date-primary My Day labels, date-break divider, carryover
-// section) — all group members, so the whole group moves to a new generation with them.
-const CURRENT_RELEASE = '20260927-calendar-day-extended-my-day-v1';
+// section) — all group members, so the whole group moves to a new generation with them. Its FIX FIRST
+// changes plan-authority.js again (the current()/previous() target-chain correction, completeCarryoverItem)
+// and index.html (the carryover completion action, the Settings off-day dateKey fix), plan-by-deadline-model.js
+// (revision-owned timezone, equal-authority conflict detection) and plan-by-deadline-repository.js
+// (deadlineConflict()) — another new generation, its own '-fix1' token per the existing convention.
+const CURRENT_RELEASE = '20260927-calendar-day-extended-my-day-fix1';
 // '20260924-cross-store-account-isolation-v1' was never deployed (review candidate only), but it was
 // published on the candidate branch, so it is retired like a shipped token.
-const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1', '20260926-device-local-account-isolation-fix1'];
+const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1', '20260926-device-local-account-isolation-fix1', '20260927-calendar-day-extended-my-day-v1'];
 
 test('the release is a NEW generation: never a previously shipped token, and no URL is left on an old one', () => {
   assert.equal(release, CURRENT_RELEASE);

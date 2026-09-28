@@ -1,6 +1,84 @@
 # ChronaSense — Changelog
 
+## Calendar Day + Extended My Day V1: FIX FIRST applied — candidate, not integrated
+
+**Same branch `feat/calendar-day-extended-my-day-v1`**, from `origin/main` @ `b7796e4`. Strict review of
+`77efac6` returned FIX FIRST with 5 bounded blockers; 4 fixed, 1 remains a genuine structural STOP (not
+faked). Release token `20260927-calendar-day-extended-my-day-fix1` (retires
+`20260927-calendar-day-extended-my-day-v1`). `www/` re-mirrored.
+
+**Corrects the entry below — its central claim was FALSE:** "an account with no deadline configured keeps
+its historical number... the two streak models never disagree" implied the new deadline-streak was
+consistent with live planning. It was not, for any account with an ACTIVE non-midnight Personal Day
+boundary. `planTargetOriginatingOnCalendarDate(dateKey)` resolved the operational day whose OWN
+`boundaryStartDate` equalled the calendar date being asked about — under an 18:00 boundary at Sunday 11:00,
+that is a DIFFERENT, empty target than `current()` (which is still Saturday's operational day, Sat 18:00 →
+Sun 18:00). A plan prepared through the ONE normal workflow (which always targets `current()`) was
+therefore invisible to the streak — a genuine split-brain, reproduced with a real operational-plan
+repository + live wiring in review, not a labeling issue. `planTargetOriginatingOnCalendarDate` is removed.
+
+**BLOCKER 1 (calendar-primary planning authority) — STOP, not faked:** proven with the real model
+(`operationalDayStartingOn`, `operationalDayInterval`, `resolveClockTimeInOperationalDay`) that under an
+18:00 boundary, NO existing ref can represent "Sunday" as its own plan identity while containing a real
+Sunday-11:00 timestamp — the ref that starts on Sunday only begins at Sunday 18:00, and an anchor-governed
+("legacy calendar-day") ref routes straight to the frozen `plans[dateKey]` store via
+`resolvePlanAuthority()`'s `isLegacyOperationalDay` check (12 files depend on that routing invariant),
+which cannot hold cross-midnight items. Making `current()` genuinely calendar-primary requires the
+operational-plan model itself to gain a calendar-midnight-native identity — real architecture expansion,
+out of this phase's bounded scope. **Fixed instead (smaller, sound, and the actual root cause of the
+concrete failing case):** the deadline-streak now walks the SAME `current()`/`previous()` target chain
+every planning surface already reads and writes — never an independently-derived one — so reads and writes
+are structurally the SAME record. This is not full calendar-date primacy for a boundary-ENABLED account
+(such an account's "day" for planning/streak purposes remains the boundary-defined operational day, exactly
+as it already was for every other surface); it eliminates the split-brain, which was the actually damaging
+defect.
+
+**BLOCKER 2 (historical timezone stability) — fixed:** `DeadlineRevision` now owns `timezone` (captured once
+at `proposeDeadlineRevision()` time, canonicalized, immutable), mirroring `BoundaryRevision`.
+`deadlineInstantForCalendarDate(dateStr, revisions)` dropped its external timezone parameter entirely and
+is now a pure forward simulation over revisions in effective order, comparing only absolute instants — never
+mixing civil time across two revisions' timezones — so it generalizes correctly across a timezone change
+with no special case. A revision's clock time can be EARLIER than the account's Personal Day boundary time
+(a plausible combination — an 08:00 "plan by" deadline under an 18:00 evening boundary): the naive
+origin-date deadline would then precede the operational day's own start, so `effectiveDeadlineDateKey()`
+uses the FOLLOWING calendar date's occurrence instead when that happens — still one governing instant,
+correctly inside the target's own interval, used identically for the deadline lookup AND the intentional
+off-day lookup (exposed to Settings via `PlanAuthority.deadlineDateKeyForTarget()`, never re-derived).
+
+**BLOCKER 3 (carryover actionability) — fixed:** a live/current carryover row is now completable.
+`PlanAuthority.completeCarryoverItem()` bypasses `updateItem`'s general "past My Day" refusal
+(`assertDirectSchedulingTarget`) but independently RE-VERIFIES, from the item's own real resolved start
+instant, that it lands on today's calendar date before writing — never trusting the caller, so it can never
+edit an arbitrary historical day. Writes through the existing guard-free `saveItems` to the SAME
+Sunday-originating dayId + itemId; no clone under Monday.
+
+**BLOCKER 4 (standard test/lint gates) — fixed:** `plan-by-deadline-model.test.js`,
+`-repository.test.js`, `-sync.test.js`, `plan-authority-deadline-streak.test.js` wired into `npm test`'s
+actual chained command; the 4 production modules added to `eslint.config.js`'s module-sourceType group and
+to `npm run lint`'s file list (they were parsing-erroring before — 3 real lint errors, now 0).
+
+**BLOCKER 5 (equal-authority contradictory revisions) — fixed:** two deadline revisions sharing an
+`effectiveFromInstant` with different facts are no longer resolved by arrival order (the prior design
+rejected whichever arrived second, permanently, per-device — a silent, arrival-order-dependent split-brain
+in the opposite direction from lexicographic-id-picking, but still order-dependent). Both facts are now
+WRITTEN and preserved (`mergeRemoteDeadlines` no longer gates the write on
+`normalizeDeadlineRevisionHistory`); `findEqualAuthorityConflicts`/`activeEqualAuthorityConflicts` detect it
+without picking a winner; `planningDeadlineStreak()` reports an explicit `'conflict'` status (never a false
+`'missed'`) until the owner resolves it by saving a new revision — `proposeDeadline()` builds from the
+conflict-free subset already, so that always works, and the old conflict is preserved as history, never
+deleted.
+
+**Tests:** 79 plan-by-deadline unit tests (up from 60 — 8 new for historical-timezone stability and
+conflict detection at the model layer, 4 new at the repository layer for conflict merge/preserve/resolve, 7
+new at the plan-authority layer including the production-equivalent boundary-ENABLED reproduction of the
+concrete failing case), all passing. `tests/calendar-day-extended-my-day.spec.js` grew from 7 to 9 cases
+(the carryover no-duplication test now proves an actual completion round-trip instead of asserting the
+pre-fix disabled state; one new negative test for the completion safety re-check).
+
 ## Calendar Day + Extended My Day V1 — candidate, not integrated
+
+**SUPERSEDED by the FIX FIRST entry above: this entry's "no split-brain" and "the two streak models never
+disagree" claims are FALSE as written — see the correction above for the actual finding and fix.**
 
 **Candidate on `feat/calendar-day-extended-my-day-v1`** (from `origin/main` @ `b7796e4`, Device-Local Account
 Isolation V1). Not pushed, merged or deployed. Release token `20260927-calendar-day-extended-my-day-v1`
