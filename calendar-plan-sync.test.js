@@ -25,6 +25,30 @@ function device(db, { room = 'uid_A', tz = MANILA, deviceId = 'dev', onRemoteCha
   return { state, storage, repository, bridge };
 }
 
+function trackedRoomRef(db, roomId, writes) {
+  const base = db.ref(`rooms/${roomId}`);
+  return {
+    child(name) {
+      const collection = base.child(name);
+      if (name !== CALENDAR_AUTHORITY_REMOTE_PATH) return collection;
+      return {
+        ...collection,
+        update(value) { writes.push({ kind: 'bulk-update', value }); return collection.update(value); },
+        child(id) {
+          const child = collection.child(id);
+          return {
+            ...child,
+            transaction(updateFn, ...rest) {
+              writes.push({ kind: 'child-transaction', id });
+              return child.transaction(updateFn, ...rest);
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
 const item = (id, extra = {}) => ({ id, task: id, when: '', done: false, updatedAt: 1, updatedBy: 'dev', ...extra });
 
 test('pushPlan commits through a transaction and two devices\' concurrent edits converge by per-item merge', async () => {
@@ -150,15 +174,92 @@ test('a hydrate that resolves AFTER the account switched merges nothing', async 
 
 // ── authority ───────────────────────────────────────────────────────────────
 
-test('activation facts are pushed one child per fact; a second device that hears them adopts the SAME cutover', async () => {
+test('activation facts are pushed one immutable child per missing fact after hydration', async () => {
   const db = fakeDatabase();
+  const writes = [];
   const phone = device(db, { deviceId: 'phone' });
+  phone.bridge = createCalendarPlanSyncBridge({
+    repository: phone.repository,
+    getRoomRef: () => trackedRoomRef(db, phone.state.room, writes),
+    getRoomId: () => phone.state.room,
+  });
   const mac = device(db, { deviceId: 'mac' });
   mac.bridge.attachAuthority();
   const { fact } = phone.repository.activate({ nowMs: at('2026-09-27', '11:00'), deviceId: 'phone' });
-  assert.equal((await phone.bridge.pushActivations()).outcome, 'committed');
+  assert.equal((await phone.bridge.pushActivations()).outcome, 'hydrating', 'unverified remote absence never authorizes a push');
+  phone.bridge.attachAuthority();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal((await phone.bridge.pushActivations()).outcome, 'skipped', 'the hydrated listener already created the one missing fact');
   assert.deepEqual(Object.keys(db.getAt(`rooms/uid_A/${CALENDAR_AUTHORITY_REMOTE_PATH}`)), [fact.id]);
+  assert.equal(writes.some(write => write.kind === 'bulk-update'), false, 'parent/bulk update is forbidden');
+  assert.deepEqual(writes.filter(write => write.kind === 'child-transaction').map(write => write.id), [fact.id]);
   assert.equal(mac.repository.activation().id, fact.id, 'the Mac learned the cutover from the account');
+});
+
+test('immutable authority reconnect uses hydrated set difference and never rewrites an existing fact', async () => {
+  const db = fakeDatabase();
+  const r1 = buildActivationFact({ id: 'r1', nowMs: at('2026-09-27', '09:00'), timezone: MANILA, deviceId: 'one' });
+  const r2 = buildActivationFact({ id: 'r2', nowMs: at('2026-09-27', '10:00'), timezone: MANILA, deviceId: 'two' });
+  db.setAt(`rooms/uid_A/${CALENDAR_AUTHORITY_REMOTE_PATH}/r1`, r1);
+  const writes = [];
+  const local = device(db, { deviceId: 'local' });
+  local.repository.mergeRemoteActivations({ r1, r2 });
+  local.bridge = createCalendarPlanSyncBridge({
+    repository: local.repository,
+    getRoomRef: () => trackedRoomRef(db, local.state.room, writes),
+    getRoomId: () => local.state.room,
+  });
+  local.bridge.attachAuthority();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(writes.filter(write => write.kind === 'child-transaction').map(write => write.id), ['r2'], 'R1 is never rewritten; only absent R2 is created');
+  assert.deepEqual(db.getAt(`rooms/uid_A/${CALENDAR_AUTHORITY_REMOTE_PATH}`), { r1, r2 });
+
+  writes.length = 0;
+  local.bridge.detachAuthority();
+  local.bridge.attachAuthority();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(writes, [], 'repeated disconnect/reconnect is idempotent with no permission-error loop');
+});
+
+test('an empty hydrated authority creates multiple missing facts independently', async () => {
+  const db = fakeDatabase();
+  const writes = [];
+  const local = device(db);
+  const r1 = buildActivationFact({ id: 'r1', nowMs: at('2026-09-27', '09:00'), timezone: MANILA, deviceId: 'one' });
+  const r2 = buildActivationFact({ id: 'r2', nowMs: at('2026-09-27', '10:00'), timezone: MANILA, deviceId: 'two' });
+  local.repository.mergeRemoteActivations({ r1, r2 });
+  local.bridge = createCalendarPlanSyncBridge({
+    repository: local.repository,
+    getRoomRef: () => trackedRoomRef(db, local.state.room, writes),
+    getRoomId: () => local.state.room,
+  });
+  local.bridge.attachAuthority();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(writes.filter(write => write.kind === 'child-transaction').map(write => write.id).sort(), ['r1', 'r2']);
+  assert.deepEqual(Object.keys(db.getAt(`rooms/uid_A/${CALENDAR_AUTHORITY_REMOTE_PATH}`)).sort(), ['r1', 'r2']);
+});
+
+test('same-id contradictory immutable facts surface conflict and never overwrite either side', async () => {
+  const db = fakeDatabase();
+  const remote = buildActivationFact({ id: 'same', nowMs: at('2026-09-27', '09:00'), timezone: MANILA, deviceId: 'remote' });
+  const localFact = buildActivationFact({ id: 'same', nowMs: at('2026-09-27', '10:00'), timezone: MANILA, deviceId: 'local' });
+  db.setAt(`rooms/uid_A/${CALENDAR_AUTHORITY_REMOTE_PATH}/same`, remote);
+  const writes = [];
+  const local = device(db);
+  local.repository.mergeRemoteActivations({ same: localFact });
+  local.bridge = createCalendarPlanSyncBridge({
+    repository: local.repository,
+    getRoomRef: () => trackedRoomRef(db, local.state.room, writes),
+    getRoomId: () => local.state.room,
+  });
+  local.bridge.attachAuthority();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const result = await local.bridge.pushActivations();
+  assert.equal(result.outcome, 'conflict');
+  assert.deepEqual(result.conflictIds, ['same']);
+  assert.deepEqual(writes, [], 'contradiction performs zero writes');
+  assert.deepEqual(db.getAt(`rooms/uid_A/${CALENDAR_AUTHORITY_REMOTE_PATH}/same`), remote, 'remote immutable fact is untouched');
+  assert.deepEqual(local.repository.listAllActivationsRaw(), [localFact], 'local immutable fact is also retained for diagnosis');
 });
 
 test('authority hydration is explicit: empty snapshot proves legacy, detach/account switch returns to unknown', () => {
@@ -167,6 +268,10 @@ test('authority hydration is explicit: empty snapshot proves legacy, detach/acco
   assert.equal(a.bridge.authorityHydrationState(), 'unknown');
   a.bridge.attachAuthority();
   assert.equal(a.bridge.authorityHydrationState(), 'hydrated', 'the initial empty value snapshot is a trustworthy negative');
+  a.bridge.handleRemoteActivationSnapshot({ broken: { id: 'broken' } });
+  assert.equal(a.bridge.authorityHydrationState(), 'unknown', 'an invalid-only snapshot revokes the hydration proof and fails closed');
+  a.bridge.handleRemoteActivationSnapshot(null);
+  assert.equal(a.bridge.authorityHydrationState(), 'hydrated');
   a.state.room = 'uid_B';
   assert.equal(a.bridge.authorityHydrationState(), 'unknown', 'A readiness never leaks into B');
   a.bridge.attachAuthority();

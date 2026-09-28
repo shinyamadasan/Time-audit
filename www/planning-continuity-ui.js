@@ -458,7 +458,8 @@ function staleHtml(nowMs) {
     return `<section class="pc-block"><h3>Unfinished from previous days</h3><p class="pc-muted" role="alert">${escape(err.message)}</p></section>`;
   }
   const { items, unresolvable } = projection;
-  if (!items.length && !unresolvable.length) return '';
+  const conflicts = layer.recoveryConflicts?.() || [];
+  if (!items.length && !unresolvable.length && !conflicts.length) return '';
   const shown = state.expanded.stale ? items : items.slice(0, PREVIEW_ROWS);
   const rows = shown.map(entry => {
     const where = `${escape(describeStaleAge(entry.ageMs))} · ${escape(dayWindowLabel(entry.target))}`;
@@ -483,8 +484,22 @@ function staleHtml(nowMs) {
   const stranded = unresolvable.length
     ? `<p class="pc-muted">${unresolvable.reduce((n, day) => n + day.items.length, 0)} task(s) belong to a personal day whose interval can’t be resolved right now. They are kept exactly as they are.</p>`
     : '';
+  const conflictRows = conflicts.map(conflict => {
+    const candidates = conflict.candidates.map(candidate => {
+      const target = layer.targetById(candidate.dayId);
+      const where = target ? dayWindowLabel(target) : candidate.dayId;
+      const when = candidate.item.when ? ` · ${candidate.item.when}` : '';
+      const actor = candidate.relocation?.updatedBy ? ` · ${candidate.relocation.updatedBy}` : '';
+      return `<div class="pc-row" data-pc-recovery-candidate="${escape(candidate.dayId)}">
+        <div class="pc-row-main"><div class="pc-row-title">${escape(candidate.item.task)}</div><div class="pc-row-meta">${escape(where + when + actor)}</div></div>
+        <button type="button" class="btn sm" data-pc-action="resolve-recovery" data-id="${escape(conflict.sourceItemId)}" data-day="${escape(conflict.sourceDayId)}" data-candidate-day="${escape(candidate.dayId)}">Keep this version</button>
+      </div>`;
+    }).join('');
+    return `<div class="pc-block" data-pc-recovery-conflict="${escape(conflict.sourceItemId)}"><div class="pc-head"><h3>Recovery conflict</h3></div><p class="pc-muted">Two devices edited this recovered task differently. Choose the version to keep; both candidates remain preserved in history.</p>${candidates}</div>`;
+  }).join('');
   return `<section class="pc-block">
-    <div class="pc-head"><h3>Unfinished · ${items.length + unresolvable.reduce((n, day) => n + day.items.length, 0)}</h3><button type="button" class="btn sm ghost" data-pc-action="collapse-stale">Close</button></div>
+    <div class="pc-head"><h3>Unfinished · ${items.length + unresolvable.reduce((n, day) => n + day.items.length, 0) + conflicts.length}</h3><button type="button" class="btn sm ghost" data-pc-action="collapse-stale">Close</button></div>
+    ${conflictRows}
     ${rows}
     ${more}
     ${stranded}
@@ -495,7 +510,7 @@ function staleCompactHtml(nowMs) {
   const layer = authority();
   if (!layer) return '';
   const projection = layer.staleUnfinished(nowMs);
-  const count = projection.items.length + projection.unresolvable.reduce((sum, day) => sum + day.items.length, 0);
+  const count = projection.items.length + projection.unresolvable.reduce((sum, day) => sum + day.items.length, 0) + (layer.recoveryConflicts?.().length || 0);
   if (!count) return '';
   if (state.expanded.stale) return staleHtml(nowMs);
   return `<section class="pc-block pc-stale-compact"><button type="button" class="pc-stale-trigger" data-pc-action="expand-stale" aria-expanded="false"><span>Unfinished · ${count}</span><span aria-hidden="true">›</span></button></section>`;
@@ -546,6 +561,24 @@ function staleAction(action, itemId, dayId) {
       setNotice(noticeFor(result));
       if (action === 'move-edit') state.itemForm = { type: 'task', dayId: destination.id, anchorDayId: destination.id, itemId: result.item.id, dateTouched: false };
     }
+  } catch (err) {
+    setNotice(err.message, 'error');
+  }
+  globalThis.refreshAuthoritativePlanSurfaces?.();
+  render();
+}
+
+function resolveRecoveryConflict(control) {
+  const layer = authority();
+  if (!layer) return;
+  try {
+    const result = layer.resolveRecoveryConflict({
+      sourceItemId: control.dataset.id,
+      sourceDayId: control.dataset.day,
+      candidateDayId: control.dataset.candidateDay,
+      stamp,
+    });
+    setNotice(result.resolved ? 'Recovery conflict resolved.' : 'That version is already the retained one.');
   } catch (err) {
     setNotice(err.message, 'error');
   }
@@ -651,6 +684,7 @@ function onClick(event) {
     case 'move-today': case 'move-edit': case 'reschedule': case 'dismiss':
       staleAction(action, id, control.dataset.day);
       break;
+    case 'resolve-recovery': resolveRecoveryConflict(control); break;
     default: break;
   }
 }

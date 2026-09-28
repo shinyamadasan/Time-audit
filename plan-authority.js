@@ -55,6 +55,7 @@ import {
   buildMovedItem,
   buildDismissedItem,
   buildUndismissedItem,
+  collectRecoveryConflicts,
   findMoveDestination,
 } from './stale-plan-recovery-model.js';
 import {
@@ -1355,6 +1356,47 @@ export function createPlanAuthority(deps = {}) {
     return findMoveDestination(sourceItemId, sourceDayId, allDayRecords());
   }
 
+  /** Divergent equal-authority recovery edits. Pure projection over raw account-owned
+   *  day records: no second store, no arrival-order state and no hidden candidate. */
+  function recoveryConflicts() {
+    return collectRecoveryConflicts(allDayRecords());
+  }
+
+  /** Explicitly chooses one candidate without deleting the other candidate's audit
+   *  provenance. A higher relocation sequence makes exactly one item authoritative;
+   *  replaying the same resolution is idempotent. */
+  function resolveRecoveryConflict({ sourceItemId, sourceDayId, candidateDayId, stamp }) {
+    if (typeof stamp !== 'function') throw new Error('An item stamping function is required.');
+    const conflict = recoveryConflicts().find(entry => (
+      entry.sourceItemId === sourceItemId && entry.sourceDayId === sourceDayId
+    ));
+    if (!conflict) {
+      const existing = staleMoveDestination(sourceItemId, sourceDayId);
+      if (existing?.dayId === candidateDayId) return { resolved: false, alreadyAt: existing };
+      throw new Error('That recovery conflict is no longer active.');
+    }
+    const chosen = conflict.candidates.find(candidate => candidate.dayId === candidateDayId);
+    if (!chosen) throw new Error('That recovery candidate is no longer available.');
+    const target = targetById(chosen.dayId);
+    if (!target) throw new Error('That candidate day cannot be resolved right now.');
+    const stamped = stamp({ ...chosen.item, deleted: false });
+    delete stamped.movedToDayId;
+    const resolved = {
+      ...stamped,
+      relocationRevision: nextPlanItemRelocation(chosen.item, {
+        fromDayId: sourceDayId,
+        toDayId: chosen.dayId,
+        updatedAt: stamped.updatedAt,
+        updatedBy: stamped.updatedBy,
+      }),
+    };
+    const check = validateItem(target, resolved);
+    if (!check.ok) throw new Error('That recovery candidate is not valid on its destination day.');
+    const stored = rawItems(target);
+    saveItems(target, stored.map(item => item.id === chosen.itemId ? resolved : item), { allowLegacyRecovery: true });
+    return { resolved: true, destination: target, item: resolved };
+  }
+
   /** Resolves a stored day id (either store) back to a target. */
   function targetById(dayId) {
     const calendarDate = parseCalendarPlanId(dayId);
@@ -1755,7 +1797,7 @@ export function createPlanAuthority(deps = {}) {
     planningDeadlineStreak, deadlineDateKeyForTarget,
     preparedPlans, boundaryChangeImpact,
     setItemKind, updateItem, completeCarryoverItem,
-    staleUnfinished, staleMoveDestination, moveStaleItem, rescheduleStaleItem,
+    staleUnfinished, staleMoveDestination, recoveryConflicts, resolveRecoveryConflict, moveStaleItem, rescheduleStaleItem,
     dismissStaleItem, undismissStaleItem, targetById, recoverableDays,
     legacyTarget,
     priorityMax: () => priorityMax,

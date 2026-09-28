@@ -57,6 +57,8 @@ export function createCalendarPlanSyncBridge(deps = {}) {
   const planListeners = new Map(); // planId -> { ref, roomId, token }
   let authorityListener = null; // { ref, roomId, token }
   let authorityHydratedRoomId = null;
+  let authorityRemoteRoomId = null;
+  let authorityRemoteFacts = null;
   let listenerToken = 0;
   let hydratedRoomId = null;
 
@@ -191,27 +193,79 @@ export function createCalendarPlanSyncBridge(deps = {}) {
 
   // ── authority activation facts ──────────────────────────────────────────
 
-  /** Pushes every locally known activation fact, each as its own child key (ids never
-   *  collide across devices), so concurrent activations never contend for one write. */
+  function sameActivationFact(a, b) {
+    return !!a && !!b
+      && a.schemaVersion === b.schemaVersion
+      && a.id === b.id
+      && a.activatedAtMs === b.activatedAtMs
+      && a.timezone === b.timezone
+      && a.activationDate === b.activationDate
+      && a.deviceId === b.deviceId;
+  }
+
+  /** Hydrated set-difference sync for immutable activation facts. Existing remote
+   *  children are never submitted again. Each missing fact uses its own create-if-absent
+   *  transaction, so one existing/conflicting fact cannot reject an unrelated new fact. */
   function pushActivations() {
     const roomRef = getRoomRef();
     const roomId = activeRoomId();
     if (!roomRef) return Promise.resolve({ committed: false, outcome: 'skipped' });
     if (!roomOwnsCache(roomId)) return Promise.resolve({ committed: false, outcome: 'owner-mismatch' });
+    if (authorityHydratedRoomId !== roomId || authorityRemoteRoomId !== roomId || !authorityRemoteFacts) {
+      return Promise.resolve({ committed: false, outcome: 'hydrating' });
+    }
     const local = repository.listAllActivationsRaw();
     if (!local.length) return Promise.resolve({ committed: false, outcome: 'skipped' });
-    let ref;
+    let collectionRef;
     try {
-      ref = roomRef.child(CALENDAR_AUTHORITY_REMOTE_PATH);
-      if (typeof ref.update !== 'function') throw new Error('unavailable');
+      collectionRef = roomRef.child(CALENDAR_AUTHORITY_REMOTE_PATH);
+      if (typeof collectionRef.child !== 'function') throw new Error('unavailable');
     } catch {
       return Promise.resolve({ committed: false, outcome: 'transport-failure' });
     }
-    const updates = {};
-    local.forEach(fact => { updates[fact.id] = fact; });
-    return Promise.resolve(ref.update(updates))
-      .then(() => ({ committed: true, outcome: 'committed' }))
-      .catch(() => ({ committed: false, outcome: 'transport-failure' }));
+    const conflictIds = [];
+    const missing = [];
+    local.forEach(fact => {
+      const remote = authorityRemoteFacts[fact.id];
+      if (remote === undefined) missing.push(fact);
+      else if (!sameActivationFact(remote, fact)) conflictIds.push(fact.id);
+    });
+    if (!missing.length) {
+      return Promise.resolve({ committed: false, outcome: conflictIds.length ? 'conflict' : 'skipped', createdIds: [], conflictIds });
+    }
+    const writes = missing.map(fact => {
+      let transactionOutcome = 'committed';
+      let factRef;
+      try {
+        factRef = collectionRef.child(fact.id);
+        if (typeof factRef.transaction !== 'function') throw new Error('unavailable');
+      } catch {
+        return Promise.resolve({ id: fact.id, outcome: 'transport-failure' });
+      }
+      return Promise.resolve(factRef.transaction(remote => {
+        transactionOutcome = 'committed';
+        if (!roomOwnsCache(roomId)) { transactionOutcome = 'owner-mismatch'; return undefined; }
+        if (remote === null || remote === undefined) return fact;
+        transactionOutcome = sameActivationFact(remote, fact) ? 'idempotent' : 'conflict';
+        return undefined;
+      }, undefined, false))
+        .then(result => ({
+          id: fact.id,
+          outcome: result?.committed ? 'committed' : transactionOutcome,
+        }))
+        .catch(() => ({ id: fact.id, outcome: 'transport-failure' }));
+    });
+    return Promise.all(writes).then(results => {
+      const createdIds = results.filter(result => result.outcome === 'committed').map(result => result.id);
+      results.filter(result => result.outcome === 'conflict').forEach(result => conflictIds.push(result.id));
+      const ownerMismatch = results.some(result => result.outcome === 'owner-mismatch');
+      const transportFailure = results.some(result => result.outcome === 'transport-failure');
+      const outcome = ownerMismatch ? 'owner-mismatch'
+        : conflictIds.length ? 'conflict'
+          : transportFailure ? 'transport-failure'
+            : createdIds.length ? 'committed' : 'skipped';
+      return { committed: createdIds.length > 0, outcome, createdIds, conflictIds: [...new Set(conflictIds)].sort() };
+    });
   }
 
   function handleRemoteActivationSnapshot(val, roomId = activeRoomId()) {
@@ -227,8 +281,23 @@ export function createCalendarPlanSyncBridge(deps = {}) {
     // An invalid-only snapshot proves neither and must stay fail-closed.
     const hydrated = entries.length === 0 || validCount > 0;
     const readinessChanged = hydrated && authorityHydratedRoomId !== roomId;
-    if (hydrated) authorityHydratedRoomId = roomId;
+    if (hydrated) {
+      authorityHydratedRoomId = roomId;
+      authorityRemoteRoomId = roomId;
+      authorityRemoteFacts = { ...remote };
+    } else if (authorityHydratedRoomId === roomId || authorityRemoteRoomId === roomId) {
+      authorityHydratedRoomId = null;
+      authorityRemoteRoomId = null;
+      authorityRemoteFacts = null;
+    }
     if (result.changed || readinessChanged) announce('activation', null, { ...result, hydrated, invalidCount });
+    if (hydrated) {
+      Promise.resolve().then(() => pushActivations()).then(syncResult => {
+        if (syncResult.createdIds?.length || syncResult.conflictIds?.length) {
+          announce('activation', null, { hydrated: true, immutableSync: syncResult });
+        }
+      });
+    }
     return true;
   }
 
@@ -260,6 +329,8 @@ export function createCalendarPlanSyncBridge(deps = {}) {
     if (authorityListener) authorityListener.ref.off();
     authorityListener = null;
     authorityHydratedRoomId = null;
+    authorityRemoteRoomId = null;
+    authorityRemoteFacts = null;
   }
 
   function detachAll() {

@@ -23,7 +23,7 @@ const ROOM = 'uid_account-a';
 const at = (date, hhmm) => Date.parse(`${date}T${hhmm}:00+08:00`);
 const SUN = '2026-09-27';
 const MON = '2026-09-28';
-const TOKEN = '20260927-calendar-native-activation-safety-fix1';
+const TOKEN = '20260928-calendar-native-activation-safety-fix2';
 
 const BOUNDARY_ID = 'r-1800';
 const boundaryStore = () => JSON.stringify({ schemaVersion: 1, revisions: {
@@ -527,6 +527,47 @@ test('an unfinished task from a superseded legacy day can be moved into the cale
   expect(await rawLegacy(page)).toEqual(legacyBefore);
   const plans = await calendarStore(page);
   expect(plans[`cal1:${SUN}`].items[0]).toMatchObject({ task: 'Saturday-window errand', carriedFromId: 'sat-a' });
+});
+
+test('divergent recovery edits expose both candidates and an explicit keep-version resolution', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await switchToCalendarPlans(page);
+  const sourceDayId = '2026-09-26';
+  const carryId = 'ocarry1|recovery-conflict-browser';
+  const candidate = (dayId, task, updatedBy) => ({
+    id: carryId, task, when: '', done: false, doneAt: null,
+    carriedFromId: 'source-task', carriedFromDayId: sourceDayId,
+    updatedAt: updatedBy === 'device-a' ? 20 : 21, updatedBy,
+    relocationRevision: {
+      schemaVersion: 1, sequence: 1, fromDayId: sourceDayId,
+      toDayId: dayId, updatedAt: updatedBy === 'device-a' ? 10 : 11, updatedBy,
+    },
+  });
+  await page.evaluate(({ sunday, monday }) => {
+    window.__fbTest.remoteWrite('rooms/uid_account-a/calendarPlans/cal1:2026-09-27', { items: [sunday], updatedAt: 20, updatedBy: 'device-a' });
+    window.__fbTest.remoteWrite('rooms/uid_account-a/calendarPlans/cal1:2026-09-28', { items: [monday], updatedAt: 21, updatedBy: 'device-b' });
+  }, {
+    sunday: candidate(`cal1:${SUN}`, 'Edited on Sunday device', 'device-a'),
+    monday: candidate(`cal1:${MON}`, 'Edited on Monday device', 'device-b'),
+  });
+
+  await expect.poll(() => page.evaluate(() => window.PlanAuthority.recoveryConflicts().length)).toBe(1);
+  const recovery = page.locator('#unfinished-recovery-section');
+  await recovery.getByRole('button', { name: 'Unfinished · 1' }).click();
+  const conflict = recovery.locator('[data-pc-recovery-conflict="source-task"]');
+  await expect(conflict).toContainText('Recovery conflict');
+  await expect(conflict).toContainText('Edited on Sunday device');
+  await expect(conflict).toContainText('Edited on Monday device');
+  await expect(conflict.getByRole('button', { name: 'Keep this version' })).toHaveCount(2);
+  await conflict.locator('[data-pc-recovery-candidate="cal1:2026-09-27"]').getByRole('button', { name: 'Keep this version' }).click();
+
+  await expect.poll(() => page.evaluate(() => window.PlanAuthority.recoveryConflicts().length)).toBe(0);
+  const live = await page.evaluate(() => [window.PlanAuthority.current(), window.PlanAuthority.upcoming()]
+    .flatMap(target => window.PlanAuthority.items(target))
+    .filter(item => item.carriedFromId === 'source-task')
+    .map(item => item.task));
+  expect(live).toEqual(['Edited on Sunday device']);
+  expect(await page.evaluate(() => window.__fbTest.get('rooms/uid_account-a/calendarPlans/cal1:2026-09-28').items[0].task)).toBe('Edited on Monday device');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

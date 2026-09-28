@@ -464,6 +464,83 @@ test('concurrent same-source recovery to the same date is one idempotent item', 
   assert.equal(a.authority.moveStaleItem({ sourceTarget: a.authority.targetById('2026-09-26'), itemId: 'source', destination: a.authority.current(), stamp: stampFrom(a) }).moved, false);
 });
 
+test('divergent recovery edits become an explicit order-independent conflict and resolve idempotently', async () => {
+  let expectedConflict = null;
+  for (const reverse of [false, true]) {
+    const db = fakeDatabase();
+    const legacySeed = { '2026-09-26': { items: [item('source', '')], updatedAt: 1 } };
+    const a = makeApp({ nowMs: at(SUN, '11:00'), boundary: null, db, deviceId: 'a', legacySeed, online: false });
+    const b = makeApp({ nowMs: at(SUN, '11:00'), boundary: null, db, deviceId: 'b', legacySeed, online: false });
+    a.authority.activateCalendar(); b.authority.activateCalendar();
+    const sourceA = a.authority.targetById('2026-09-26');
+    const sourceB = b.authority.targetById('2026-09-26');
+    const movedA = a.authority.moveStaleItem({ sourceTarget: sourceA, itemId: 'source', destination: a.authority.current(), stamp: value => ({ ...value, updatedAt: 10, updatedBy: 'a' }) });
+    const movedB = b.authority.moveStaleItem({ sourceTarget: sourceB, itemId: 'source', destination: b.authority.upcoming(), stamp: value => ({ ...value, updatedAt: 11, updatedBy: 'b' }) });
+    a.authority.updateItem({ sourceTarget: a.authority.current(), itemId: movedA.item.id, changes: { task: 'edited on A' }, stamp: value => ({ ...value, updatedAt: 20, updatedBy: 'a' }) });
+    b.authority.updateItem({ sourceTarget: b.authority.upcoming(), itemId: movedB.item.id, changes: { task: 'edited on B' }, stamp: value => ({ ...value, updatedAt: 21, updatedBy: 'b' }) });
+
+    for (const device of reverse ? [b, a] : [a, b]) {
+      device.state.online = true;
+      device.calendar.attachLive();
+      device.calendar.pushAllLocal();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    for (const device of [a, b]) {
+      device.calendar.attachLive();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      device.authority.invalidate();
+    }
+
+    const describe = conflict => ({
+      source: [conflict.sourceDayId, conflict.sourceItemId],
+      candidates: conflict.candidates.map(candidate => [candidate.dayId, candidate.item.task, candidate.relocation.updatedBy]),
+    });
+    const conflictA = a.authority.recoveryConflicts()[0];
+    const conflictB = b.authority.recoveryConflicts()[0];
+    assert.ok(conflictA && conflictB, 'the losing edited payload must be user-visible/recoverable');
+    assert.deepEqual(describe(conflictA), describe(conflictB));
+    if (expectedConflict) assert.deepEqual(describe(conflictA), expectedConflict, 'reverse delivery derives the identical conflict');
+    expectedConflict = describe(conflictA);
+    assert.deepEqual(conflictA.candidates.map(candidate => candidate.item.task), ['edited on B', 'edited on A']);
+    const otherAccount = makeApp({
+      nowMs: at(SUN, '11:00'), boundary: null, db, deviceId: 'other',
+      owner: { room: 'uid_B' }, legacySeed,
+    });
+    assert.deepEqual(otherAccount.authority.recoveryConflicts(), [], 'account A recovery conflicts are inert and invisible to account B');
+    const live = [a.authority.current(), a.authority.upcoming()]
+      .flatMap(target => a.authority.items(target))
+      .filter(candidate => candidate.carriedFromId === 'source');
+    assert.equal(live.length, 1, 'a conflict never creates two simultaneous live authoritative tasks');
+
+    const chosen = conflictA.candidates.find(candidate => candidate.item.task === 'edited on A');
+    const resolved = a.authority.resolveRecoveryConflict({
+      sourceDayId: conflictA.sourceDayId,
+      sourceItemId: conflictA.sourceItemId,
+      candidateDayId: chosen.dayId,
+      stamp: value => ({ ...value, updatedAt: 30, updatedBy: 'resolver' }),
+    });
+    assert.equal(resolved.resolved, true);
+    assert.equal(a.authority.recoveryConflicts().length, 0);
+    assert.equal(a.authority.resolveRecoveryConflict({
+      sourceDayId: conflictA.sourceDayId,
+      sourceItemId: conflictA.sourceItemId,
+      candidateDayId: chosen.dayId,
+      stamp: value => ({ ...value, updatedAt: 31, updatedBy: 'resolver' }),
+    }).resolved, false, 'replaying the same resolution is idempotent');
+    a.calendar.pushAllLocal();
+    a.calendar.pushAllLocal();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    b.authority.invalidate();
+    assert.equal(b.authority.recoveryConflicts().length, 0, 'the higher resolution revision converges');
+    const resolvedLive = [b.authority.current(), b.authority.upcoming()]
+      .flatMap(target => b.authority.items(target))
+      .filter(candidate => candidate.carriedFromId === 'source');
+    assert.deepEqual(resolvedLive.map(candidate => candidate.task), ['edited on A']);
+    const rawLosing = b.calendarRepository.read(MON).items.find(candidate => candidate.carriedFromId === 'source');
+    assert.equal(rawLosing.task, 'edited on B', 'losing provenance remains in raw history for audit/recovery');
+  }
+});
+
 test('a legacy plans[dateKey] plan for a date on/after the cutover is never the calendar plan\'s twin: calendar wins deterministically, legacy stays discoverable', () => {
   const legacySeed = { [MON]: { items: [{ id: 'old-mon', task: 'Prepared before the cutover', when: '', done: false, updatedAt: 5, updatedBy: 'old' }], updatedAt: 5 } };
   const app = makeApp({ nowMs: at(SUN, '11:00'), boundary: null, legacySeed });

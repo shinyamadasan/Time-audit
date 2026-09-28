@@ -220,12 +220,28 @@ test('calendar cutover barrier — legacy writes are allowed before cutover and 
   assert.equal(canWrite(after, C, '/rooms/uid_alice_uid/calendarPlans/cal1:2026-09-27', { items: [] }), false, 'other account denied');
 });
 
-test('calendar authority facts — owner create allowed; overwrite/delete/foreign writes denied', () => {
+test('calendar authority facts — exact owner-create contract and immutable children', () => {
   const empty = { rooms: { uid_alice_uid: {} } };
   assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, CUTOVER), true);
+  const second = { ...CUTOVER, id: 'ca1-second', activatedAtMs: CUTOVER.activatedAtMs + 1, deviceId: 'device-b' };
+  const withFirst = { rooms: { uid_alice_uid: { calendarPlanAuthority: { [CUTOVER.id]: CUTOVER } } } };
+  assert.equal(canWrite(withFirst, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${second.id}`, second), true, 'multiple distinct immutable facts are allowed');
   assert.equal(canWrite(empty, C, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, CUTOVER), false);
   assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, id: 'wrong' }), false, 'fact id must match its immutable child key');
-  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, activatedAtMs: 'soon' }), false, 'fact schema is validated server-side');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, activatedAtMs: 'soon' }), false, 'activatedAtMs must be numeric');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, activatedAtMs: 0 }), false, 'activatedAtMs must be a positive Date-range instant');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, activatedAtMs: 8640000000000001 }), false, 'activatedAtMs beyond JavaScript Date range is denied');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, activationDate: 'not-a-date' }), false, 'malformed date denied');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, activationDate: '2026-9-7' }), false, 'noncanonical date denied');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, activationDate: '2026-13-40' }), false, 'structurally impossible month/day denied');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, timezone: '' }), false, 'empty timezone denied');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, timezone: 'not a timezone' }), false, 'timezone must match the stable IANA-name shape');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, deviceId: '' }), false, 'empty device id denied');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, deviceId: 'x'.repeat(201) }), false, 'overlong device id denied');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, schemaVersion: 2 }), false, 'wrong schema denied');
+  const { deviceId: _missingDeviceId, ...missingRequired } = CUTOVER;
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, missingRequired), false, 'missing required field denied');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, surprise: true }), false, 'unexpected field denied');
   const existing = { rooms: { uid_alice_uid: { calendarPlanAuthority: { [CUTOVER.id]: CUTOVER } } } };
   assert.equal(canWrite(existing, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, deviceId: 'changed' }), false);
   assert.equal(canWrite(existing, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, null), false);

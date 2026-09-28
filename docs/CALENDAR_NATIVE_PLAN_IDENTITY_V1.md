@@ -32,7 +32,7 @@ plans" is a read-only projection; moving a task is an explicit, deterministic, i
 | Review (planned vs actual) | per target, judged in the target's window | per calendar plan: evidence extent is frozen from the plan's stored home zone and item-owned instants; work linked by exact `planItemId` counts across the plan's second date; actuals keep their factual timestamps |
 | Planning streak | boundary habit streak (`streak()`) | `calendarStreak()` — same rule over calendar plans, handing over to the legacy chain at the cutover date |
 | Plan-by deadline qualification | `effectiveDeadlineDateKey` compatibility shift for operational targets | the plan's own date (no shift) |
-| Account sync | `operationalPlans/*`, `plans/*` | `calendarPlans/<id>` (per-record transaction, per-item merge), `calendarPlanAuthority/<factId>` |
+| Account sync | `operationalPlans/*`, `plans/*` | `calendarPlans/<id>` (per-record transaction, per-item merge), `calendarPlanAuthority/<factId>` (hydrate, immutable-ID set difference, child create transaction) |
 | Partner / shared | `currentPlanTarget()` / `upcomingPlanTarget()` | unchanged calls; a calendar target carries `dateKey` |
 | Offline | local room-scoped caches, `pushAllLocal` on reconnect | cached valid activation facts route immediately to calendar; without one, authority is UNKNOWN and writes wait for hydration; calendar plans are re-pushed, while legacy operational plans are not re-pushed after cutover |
 
@@ -54,6 +54,14 @@ Plan item time fields (timed items only)
 ActivationFact (key = fact id, in calendarPlanAuthority/)
   schemaVersion, id, activatedAtMs, timezone, activationDate, deviceId
 ```
+
+The persisted activation object has exactly those six fields. The server accepts only an owner create
+whose key equals `id`, schema is 1, instant is numeric in `(0, 8640000000000000]`, date has the
+strongest stable calendar shape expressible in RTDB rules, timezone has a non-empty IANA-like path
+shape, device id is 1–200 characters, and no extra child exists. It rejects overwrite and deletion.
+RTDB rules cannot resolve the IANA database, canonicalize aliases, compare the date with the instant in
+that zone, or fully express leap-year validity. Runtime validation remains the exact semantic boundary
+for those checks: supported IANA zone, real calendar date, and date/instant/zone agreement.
 
 ## 3. Time representation (and its invariant)
 
@@ -101,12 +109,18 @@ accounts may hold the same id and the same item ids without colliding.
   offline. A cache-lost or fresh device waits read-only until the account authority snapshot arrives; it
   never guesses LEGACY. Preserved pre-cutover local work is not deleted and becomes recoverable after
   authority is known, but the reconnect machinery cannot ordinarily re-push it after cutover.
+* **Immutable authority sync.** An authority listener first hydrates the remote immutable fact set. Sync
+  then takes the local-minus-remote difference by fact id and creates each missing child in its own
+  create-if-absent transaction. An identical existing fact is a no-op. A same-id/different-content fact
+  is an explicit conflict and is never overwritten. No authority write is attempted while absence is
+  unverified (`UNKNOWN`/hydrating), and one existing child cannot prevent other missing children from
+  converging.
 * **Server barrier.** `firebase.rules.json` makes authority facts owner-created and immutable
-  (overwrite/delete denied) and denies writes to both legacy plan stores once any fact exists. Calendar
-  writes and every other audited owner-write room child retain their prior ownership behavior. These
-  rules are part of this candidate but are **not deployed by this work**; deploy them before relying on
-  the barrier in production. The confirmation warns users to update every device because old clients
-  will receive permission errors after deployment.
+  (validated create; overwrite/delete denied) and denies writes to both legacy plan stores once any fact
+  exists. Calendar writes and every other audited owner-write room child retain their prior ownership
+  behavior. These rules are local candidate files only and are **not deployed by this work**. The release
+  order remains: **1. rules, 2. runtime, 3. update devices, 4. owner activation**. The confirmation warns
+  users to update every device because old clients will receive permission errors after deployment.
 * **A stale legacy record from before the cutover** can never become the current plan and is never
   merged into a calendar plan. Same-date legacy + calendar data: the calendar plan is authoritative;
   the legacy record is surfaced, not chosen against.
@@ -119,9 +133,15 @@ and `assertDirectSchedulingTarget`). Moving a task into a calendar plan reuses t
 mechanism. Its deterministic carry id is source-owned — `ocarry1|<source-day>|<source-item>` — so two
 devices moving the same source item to different destinations create the same logical item identity.
 Each move also carries a deterministic relocation revision; the shared comparator selects exactly one
-canonical live destination independent of write order, while the losing stored copy remains provenance
-and is suppressed from live projections. A retry to the same destination is idempotent. History before
-the cutover date is still read through the legacy chain; the planning streak hands over at that date.
+canonical live destination independent of write order. Same-content candidates, including candidates
+that differ only by destination, converge automatically to that single live item. If the highest
+competing revisions contain different user content, the source derives a **Recovery conflict** instead:
+both payloads, destinations, actors and relocation provenance appear in the existing Unfinished recovery
+surface, while the comparator still prevents two simultaneous live tasks. Choosing “Keep this version”
+writes a later relocation revision containing the selected payload/destination; replay is idempotent and
+the losing raw candidate remains available for audit/recovery. No arbitrary fields are auto-merged and
+arrival order never decides. History before the cutover date is still read through the legacy chain; the
+planning streak hands over at that date.
 
 Review derives a calendar target's evidence window from the target's frozen timezone and extends it only
 to the date+2 bound or a later item-owned end instant. Changing the account's current timezone therefore

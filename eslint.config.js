@@ -104,6 +104,7 @@ export default [
         // Single Plan Authority V1 — the target-based plan accessors index.html
         // defines and storage.js / insights.js consume.
         currentPlanTarget: 'readonly', upcomingPlanTarget: 'readonly',
+        currentPlanReadTarget: 'readonly', upcomingPlanReadTarget: 'readonly',
         planTargetsForCalendarDate: 'readonly', planItemsFor: 'readonly',
         planPriorityItemsFor: 'readonly', planSecondaryItemsFor: 'readonly',
         planTrackedMinFor: 'readonly',

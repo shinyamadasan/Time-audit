@@ -12,7 +12,9 @@
   item throws before anything is written), no fallback to any legacy store.
 - `calendar-plan-sync.js`: `rooms/<room>/calendarPlans/<id>` (per-record transaction, per-item merge) and
   `rooms/<room>/calendarPlanAuthority/<factId>`; listener generation/room guards, explicit per-room authority
-  hydration proof, account-switch reset, hydrate, foreign-room teardown.
+  hydration proof, account-switch reset, hydrate, foreign-room teardown. Authority facts hydrate before
+  local-minus-remote set difference; only missing children are create-if-absent transactions. Same facts
+  are no-ops and same-id contradictions surface conflict without overwrite.
 - `calendar-plan-live.js`: `window.CalendarPlanLive` — `activate()`, listener lifecycle (`attachLive`,
   `refreshLive`, `tick`, `detach`), `pushAllLocal()` (every calendar plan), and tri-state authority
   (`UNKNOWN`/`LEGACY`/`CALENDAR`). UNKNOWN is read-only; a valid cached fact establishes CALENDAR.
@@ -27,14 +29,19 @@
   Review evidence derives from the frozen target zone and item instants. Legacy days carry `supersededAtMs`.
 - `stale-plan-recovery-model.js`: honours `supersededAtMs` and an optional per-item end (`itemEndMs`); relocation
   claims choose one canonical destination for the source-owned `ocarry1|<day>|<item>` recovery identity.
+  Equal-content claims converge; divergent highest-revision content derives an order-independent recovery
+  conflict whose candidates remain visible. `plan-authority.js` resolves an explicit choice with a later
+  revision, and `planning-continuity-ui.js` exposes both candidates in the existing Unfinished surface.
 - `plan-tomorrow-model.js`: `planItemEndTime(when, minutes, wrap)` / `formatPlanItemSchedule` allow a calendar
   item to cross midnight and label a next-day item; every legacy caller is unchanged (`wrap` defaults false).
 - `storage.js`: attaches/re-pushes/detaches `CalendarPlanLive` and `PlanByDeadlineSync` with the rest of the room;
   legacy date-plan re-push occurs only after trustworthy LEGACY authority.
 - `personal-day-boundary-live.js`: preserves local operational-plan recovery data but gates ordinary remote
   operational-plan writes/re-pushes on trustworthy LEGACY authority.
-- `firebase.rules.json`: owner-only immutable activation-fact creation and the server-side post-cutover write
-  barrier for `plans`/`operationalPlans`; rules are authored here but deployment is a separate release action.
+- `firebase.rules.json`: owner-only immutable activation-fact creation, exact required/no-extra child validation,
+  stable structural date/timezone validation, numeric instant bounds, and the server-side post-cutover write
+  barrier for `plans`/`operationalPlans`. Full IANA/date-in-zone/leap semantics stay runtime-validated. Rules are
+  local-only here; deployment is a separate release action before runtime/device updates and owner activation.
 - Tests: `calendar-plan-{model,repository,sync,live}.test.js`, `plan-authority-calendar.test.js` (production-
   equivalent modules), `npm-test-wiring.test.js` (the wiring itself), `tests/calendar-native-plan-identity.spec.js`.
 

@@ -76,6 +76,9 @@ export function createCalendarPlanLiveWiring(deps = {}) {
    *  durable copy is pushed through the sync bridge (a no-op offline — pushAllLocal
    *  retries on reconnect). */
   function activate(nowMs = now()) {
+    if (sync) {
+      try { sync.attachAuthority(); } catch { /* no room ref yet */ }
+    }
     const result = repository.activate({ nowMs, deviceId: deviceId(), timezone: timezone() });
     if (sync) {
       try { sync.pushActivations(); } catch { /* offline — pushAllLocal retries on reconnect */ }
@@ -177,6 +180,7 @@ export function createCalendarPlanLiveWiring(deps = {}) {
    *  transaction that merges against remote, so re-pushing a converged record is a no-op. */
   function pushAllLocal() {
     if (!sync) return;
+    try { sync.attachAuthority(); } catch { /* no room ref yet */ }
     try { sync.pushActivations(); } catch { /* offline */ }
     for (const id of Object.keys(listAllRaw())) {
       try { sync.syncPlan(id); } catch { /* offline — retried on the next reconnect */ }
