@@ -40,7 +40,7 @@
 // is still discoverable. Only what a surface RENDERS is bounded, by the caller.
 
 import { planItemKind } from './plan-tomorrow-model.js';
-import { comparePlanItemRelocations } from './plan-item-relocation.js';
+import { comparePlanItemRelocations, normalizePlanItemRelocation } from './plan-item-relocation.js';
 
 /** Additive, optional field written on the ORIGINAL item when the owner says
  *  "not doing this". It records abandonment; it does NOT claim completion, which
@@ -55,6 +55,11 @@ export const DISMISSED_FIELD = 'dismissedAt';
  *  from — and provenance has to survive even if two days ever held items with the
  *  same id. */
 export const CARRIED_FROM_DAY_FIELD = 'carriedFromDayId';
+
+const RECOVERY_METADATA_FIELDS = new Set([
+  'id', 'carriedFromId', CARRIED_FROM_DAY_FIELD, 'relocationRevision',
+  'updatedAt', 'updatedBy', 'deleted', 'movedToDayId',
+]);
 
 function isFiniteMs(value) {
   return Number.isFinite(value);
@@ -77,7 +82,7 @@ export function itemIsRecoverable(item) {
  *  cannot use that id, because it would require already knowing the destination.
  *  The scan reads the same full record set preparedPlans() and historyFloorMs()
  *  already walk, so it introduces no new cost class. */
-export function findMoveDestination(sourceItemId, sourceDayId, dayRecords) {
+function recoveryCandidatesForSource(sourceItemId, sourceDayId, dayRecords) {
   const matches = [];
   for (const [dayId, record] of Object.entries(dayRecords || {})) {
     if (dayId === sourceDayId) continue;
@@ -90,18 +95,73 @@ export function findMoveDestination(sourceItemId, sourceDayId, dayRecords) {
       // (written before that field existed) match on item id alone.
       const recordedDay = item[CARRIED_FROM_DAY_FIELD];
       if (recordedDay !== undefined && recordedDay !== sourceDayId) continue;
-      matches.push({ dayId, itemId: item.id, item });
+      const relocation = normalizePlanItemRelocation(item);
+      const candidate = { dayId, itemId: item.id, item };
+      if (relocation) candidate.relocation = relocation;
+      matches.push(candidate);
     }
   }
-  if (!matches.length) return null;
-  // Recovery claims use relocationRevision. Highest claim wins by the existing
-  // stable, arrival-order-independent contract; old pre-claim copies fall back to
-  // stable day/item ordering rather than Object insertion order.
-  return matches.sort((a, b) => (
-    comparePlanItemRelocations(b.item, a.item)
+  return matches;
+}
+
+function compareRecoveryCandidates(a, b) {
+  return comparePlanItemRelocations(b.item, a.item)
     || String(a.dayId).localeCompare(String(b.dayId))
-    || String(a.itemId).localeCompare(String(b.itemId))
-  ))[0];
+    || String(a.itemId).localeCompare(String(b.itemId));
+}
+
+/** User-visible candidate content, excluding identity, provenance, sync stamps and
+ *  relocation authority. Unknown content fields are deliberately retained: conflict
+ *  detection must not make a newer product field disappear merely because this version
+ *  does not understand it yet. */
+export function recoveryCandidateContent(item) {
+  if (!item || typeof item !== 'object') return {};
+  return Object.fromEntries(Object.keys(item).sort()
+    .filter(key => !RECOVERY_METADATA_FIELDS.has(key))
+    .map(key => [key, item[key]]));
+}
+
+/** Derived state for one legacy source. Concurrent equal-sequence claims with equal
+ *  content retain the ordinary deterministic destination winner. Divergent content is
+ *  an explicit conflict; every candidate remains reconstructible from the existing raw
+ *  day records and no arrival order participates. */
+export function recoveryStateForSource(sourceItemId, sourceDayId, dayRecords) {
+  const matches = recoveryCandidatesForSource(sourceItemId, sourceDayId, dayRecords);
+  if (!matches.length) return null;
+  const ordered = matches.sort(compareRecoveryCandidates);
+  const highestSequence = Math.max(...ordered.map(candidate => candidate.relocation?.sequence || 0));
+  const candidates = ordered.filter(candidate => (candidate.relocation?.sequence || 0) === highestSequence);
+  const contentKeys = new Set(candidates.map(candidate => JSON.stringify(recoveryCandidateContent(candidate.item))));
+  return {
+    status: candidates.length > 1 && contentKeys.size > 1 ? 'conflict' : 'recovered',
+    sourceItemId,
+    sourceDayId,
+    sequence: highestSequence,
+    winner: ordered[0],
+    candidates,
+  };
+}
+
+/** Every currently unresolved divergent recovery in a room-scoped record set. */
+export function collectRecoveryConflicts(dayRecords = {}) {
+  const sources = new Map();
+  for (const record of Object.values(dayRecords || {})) {
+    for (const item of Array.isArray(record?.items) ? record.items : []) {
+      if (!item || item.deleted || !item.carriedFromId || !item[CARRIED_FROM_DAY_FIELD]) continue;
+      if (!normalizePlanItemRelocation(item)) continue;
+      const key = `${item[CARRIED_FROM_DAY_FIELD]}\u0000${item.carriedFromId}`;
+      sources.set(key, { sourceItemId: item.carriedFromId, sourceDayId: item[CARRIED_FROM_DAY_FIELD] });
+    }
+  }
+  return [...sources.values()]
+    .map(source => recoveryStateForSource(source.sourceItemId, source.sourceDayId, dayRecords))
+    .filter(state => state?.status === 'conflict')
+    .sort((a, b) => String(a.sourceDayId).localeCompare(String(b.sourceDayId))
+      || String(a.sourceItemId).localeCompare(String(b.sourceItemId)));
+}
+
+export function findMoveDestination(sourceItemId, sourceDayId, dayRecords) {
+  return recoveryStateForSource(sourceItemId, sourceDayId, dayRecords)?.winner || null;
 }
 
 /**

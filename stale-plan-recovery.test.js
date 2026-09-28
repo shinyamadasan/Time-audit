@@ -22,6 +22,7 @@ import assert from 'node:assert/strict';
 import {
   DISMISSED_FIELD, CARRIED_FROM_DAY_FIELD,
   itemIsRecoverable, findMoveDestination, collectStaleUnfinished,
+  recoveryStateForSource, collectRecoveryConflicts,
   buildMovedItem, buildDismissedItem, buildUndismissedItem, describeStaleAge,
 } from './stale-plan-recovery-model.js';
 import { createPlanAuthority, OPERATIONAL_CARRY_ID_PREFIX } from './plan-authority.js';
@@ -586,6 +587,31 @@ test('describeStaleAge reads naturally across the ranges a surface shows', () =>
   assert.equal(describeStaleAge(20 * day), '2 weeks ago');
   assert.equal(describeStaleAge(35 * day), '5 weeks ago');
   assert.equal(describeStaleAge(70 * day), '2 months ago');
+});
+
+test('same-source recovery candidates converge automatically only while their content is equivalent', () => {
+  const candidate = (dayId, task, updatedBy) => ({
+    id: 'ocarry1|source-day|source', task, when: '', done: false,
+    carriedFromId: 'source', carriedFromDayId: 'source-day', updatedAt: 10, updatedBy,
+    relocationRevision: { schemaVersion: 1, sequence: 1, fromDayId: 'source-day', toDayId: dayId, updatedAt: 10, updatedBy },
+  });
+  const monday = candidate('monday', 'same text', 'a');
+  const tuesday = candidate('tuesday', 'same text', 'b');
+  const equivalent = recoveryStateForSource('source', 'source-day', {
+    monday: { items: [monday] }, tuesday: { items: [tuesday] },
+  });
+  assert.equal(equivalent.status, 'recovered');
+  assert.equal(equivalent.candidates.length, 2);
+
+  const edited = candidate('tuesday', 'edited on B', 'b');
+  const forward = collectRecoveryConflicts({ monday: { items: [monday] }, tuesday: { items: [edited] } });
+  const reverse = collectRecoveryConflicts({ tuesday: { items: [edited] }, monday: { items: [monday] } });
+  const visible = conflicts => conflicts.map(conflict => ({
+    source: [conflict.sourceDayId, conflict.sourceItemId],
+    candidates: conflict.candidates.map(entry => [entry.dayId, entry.item.task, entry.relocation.updatedBy]),
+  }));
+  assert.deepEqual(visible(forward), visible(reverse), 'delivery/insertion order cannot choose or hide a candidate');
+  assert.deepEqual(visible(forward)[0].candidates, [['tuesday', 'edited on B', 'b'], ['monday', 'same text', 'a']]);
 });
 
 test('buildMovedItem refuses malformed input rather than minting a broken copy', () => {

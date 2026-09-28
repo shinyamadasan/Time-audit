@@ -167,6 +167,8 @@ test('an activation fact carries the date its instant was in its own zone, and a
   assert.equal(validateActivationFact({ ...f, timezone: 'Mars/Base' }), false);
   assert.equal(validateActivationFact({ ...f, id: 'a/b' }), false);
   assert.equal(validateActivationFact({ ...f, schemaVersion: 2 }), false);
+  assert.equal(validateActivationFact({ ...f, activatedAtMs: 8640000000000001 }), false);
+  assert.equal(validateActivationFact({ ...f, unexpected: true }), false);
   assert.equal(validateActivationFact(null), false);
 });
 

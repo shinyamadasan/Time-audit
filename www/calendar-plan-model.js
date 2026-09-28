@@ -293,13 +293,15 @@ function factId(value) {
 /** @param {*} fact @returns {boolean} */
 export function validateActivationFact(fact) {
   if (!fact || typeof fact !== 'object' || Array.isArray(fact)) return false;
+  const fields = Object.keys(fact).sort();
+  if (fields.join('\u0000') !== ['activatedAtMs', 'activationDate', 'deviceId', 'id', 'schemaVersion', 'timezone'].join('\u0000')) return false;
   if (fact.schemaVersion !== CALENDAR_AUTHORITY_SCHEMA_VERSION || !factId(fact.id)) return false;
-  if (!Number.isFinite(fact.activatedAtMs) || fact.activatedAtMs <= 0) return false;
+  if (!Number.isFinite(fact.activatedAtMs) || fact.activatedAtMs <= 0 || fact.activatedAtMs > 8640000000000000) return false;
   if (typeof fact.deviceId !== 'string' || !fact.deviceId || fact.deviceId.length > 200) return false;
   if (!validOperationalDayTimezone(fact.timezone) || !validPlanDate(fact.activationDate)) return false;
   // The stored date must be the date the instant really was in the stored zone — a fact
   // whose three fields disagree is rejected, never repaired.
-  return localPlanDate(fact.activatedAtMs, fact.timezone) === fact.activationDate;
+  try { return localPlanDate(fact.activatedAtMs, fact.timezone) === fact.activationDate; } catch { return false; }
 }
 
 /** @param {{id:string, nowMs:number, timezone:string, deviceId:string}} input @returns {object} */

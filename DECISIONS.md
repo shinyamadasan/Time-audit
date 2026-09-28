@@ -456,6 +456,17 @@ concurrent different-destination moves, independent of arrival order; losing cop
 are not live. Review uses the plan's frozen home timezone and item-owned instants for its evidence extent, never
 the account's current timezone.
 
+**Final activation-safety amendment (2026-09-28; supersedes the preceding recovery projection where content
+diverges):** activation-fact sync may act only after a trustworthy remote snapshot, computes the immutable
+local-minus-remote id difference, and creates each missing child separately. It never rewrites an existing fact;
+same-id/different-content is a surfaced conflict. Firebase validates the exact six-child envelope and every stable
+structural/range constraint it can express, while supported-IANA, leap-date, and date-in-zone agreement remain
+runtime checks. Concurrent recovery candidates with equivalent content still converge to one deterministic live
+destination. Divergent edited content instead derives an explicit, order-independent Recovery conflict: both
+payloads/provenance are visible, only one task is live, and the owner's keep-version choice writes a later
+relocation revision without deleting losing history. These rules remain local-only in this candidate; release
+order is rules, runtime, device updates, then owner activation.
+
 **Why:** the previous phase proved no operational-day ref can represent "Sunday" as its own plan identity while
 holding a real Sunday-11:00 timestamp under an 18:00 boundary; labels and streak remapping would have papered over
 it. A separate versioned store also keeps an old-model device from mis-reading a next-day item as an earlier one.

@@ -31,8 +31,15 @@
         },
         "calendarPlanAuthority": {
           "$factId": {
-              ".write": "auth != null && $roomId === ('uid_' + auth.uid) && !data.exists() && newData.exists()",
-            ".validate": "newData.hasChildren(['schemaVersion','id','activatedAtMs','timezone','activationDate','deviceId']) && newData.child('schemaVersion').val() === 1 && newData.child('id').val() === $factId && newData.child('activatedAtMs').isNumber() && newData.child('activatedAtMs').val() > 0 && newData.child('timezone').isString() && newData.child('activationDate').isString() && newData.child('deviceId').isString()"
+            ".write": "auth != null && $roomId === ('uid_' + auth.uid) && !data.exists() && newData.exists()",
+            ".validate": "newData.hasChildren(['schemaVersion','id','activatedAtMs','timezone','activationDate','deviceId']) && newData.child('schemaVersion').val() === 1 && newData.child('id').val() === $factId && newData.child('id').val().length <= 200 && newData.child('activatedAtMs').isNumber() && newData.child('activatedAtMs').val() > 0 && newData.child('activatedAtMs').val() <= 8640000000000000 && newData.child('timezone').isString() && newData.child('timezone').val().matches(/^[A-Za-z][A-Za-z0-9_+.-]*(\\/[A-Za-z0-9_+.-]+)*$/) && newData.child('activationDate').isString() && newData.child('activationDate').val().matches(/^[0-9]{4}-((01|03|05|07|08|10|12)-(0[1-9]|[12][0-9]|3[01])|(04|06|09|11)-(0[1-9]|[12][0-9]|30)|02-(0[1-9]|1[0-9]|2[0-9]))$/) && newData.child('deviceId').isString() && newData.child('deviceId').val().length > 0 && newData.child('deviceId').val().length <= 200",
+            "schemaVersion": { ".validate": true },
+            "id": { ".validate": true },
+            "activatedAtMs": { ".validate": true },
+            "timezone": { ".validate": true },
+            "activationDate": { ".validate": true },
+            "deviceId": { ".validate": true },
+            "$other": { ".validate": false }
           }
         }
       }

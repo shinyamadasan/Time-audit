@@ -58,7 +58,7 @@ test('activate() appends the fact, pushes it, announces the change, and is idemp
   assert.equal(created, true);
   assert.equal(fact.activationDate, '2026-09-27');
   assert.equal(d.live.active(), true);
-  assert.deepEqual(d.changes, ['local']);
+  assert.ok(d.changes.includes('local'));
   await Promise.resolve();
   assert.equal(Object.keys(db.getAt('rooms/uid_A/calendarPlanAuthority')).length, 1);
   assert.equal(d.live.activate().created, false);
