@@ -1862,8 +1862,12 @@ function publishSharedAccountability() {
   // authoritative personal days — never a calendar-date plan lookup. For an
   // account that never enabled a boundary these resolve to today's and
   // tomorrow's calendar plans, exactly as before.
-  const currentTarget = typeof currentPlanTarget === 'function' ? currentPlanTarget() : null;
-  const upcomingTarget = typeof upcomingPlanTarget === 'function' ? upcomingPlanTarget() : null;
+  const currentTarget = typeof currentPlanReadTarget === 'function'
+    ? currentPlanReadTarget()
+    : (typeof currentPlanTarget === 'function' ? currentPlanTarget() : null);
+  const upcomingTarget = typeof upcomingPlanReadTarget === 'function'
+    ? upcomingPlanReadTarget()
+    : (typeof upcomingPlanTarget === 'function' ? upcomingPlanTarget() : null);
   // Planning Continuity V1: PRIORITIES only. SharedAccountabilityModel applies a
   // blind .slice(0, MAX_SHARED_PRIORITIES) privacy belt, so a mixed list would
   // publish an arbitrary three. Secondary planned tasks and scheduled commitments
@@ -2195,6 +2199,10 @@ function replayPendingPlanRemotes() {
 globalThis.replayPendingPlanRemotes = replayPendingPlanRemotes;
 
 function syncPlans(dateKey) {
+  const authorityState = globalThis.PlanAuthority?.authorityState?.()
+    || globalThis.CalendarPlanLive?.authorityState?.()
+    || 'unknown';
+  if (authorityState !== 'legacy') return Promise.resolve(false);
   const ref = ownedRoomRef();
   if (!ref || !dateKey || !plans[dateKey]) return Promise.resolve(false);
   const model = globalThis.PlanTomorrowModel;

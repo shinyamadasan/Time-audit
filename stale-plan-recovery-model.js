@@ -40,6 +40,7 @@
 // is still discoverable. Only what a surface RENDERS is bounded, by the caller.
 
 import { planItemKind } from './plan-tomorrow-model.js';
+import { comparePlanItemRelocations } from './plan-item-relocation.js';
 
 /** Additive, optional field written on the ORIGINAL item when the owner says
  *  "not doing this". It records abandonment; it does NOT claim completion, which
@@ -77,6 +78,7 @@ export function itemIsRecoverable(item) {
  *  The scan reads the same full record set preparedPlans() and historyFloorMs()
  *  already walk, so it introduces no new cost class. */
 export function findMoveDestination(sourceItemId, sourceDayId, dayRecords) {
+  const matches = [];
   for (const [dayId, record] of Object.entries(dayRecords || {})) {
     if (dayId === sourceDayId) continue;
     const items = Array.isArray(record?.items) ? record.items : [];
@@ -88,10 +90,18 @@ export function findMoveDestination(sourceItemId, sourceDayId, dayRecords) {
       // (written before that field existed) match on item id alone.
       const recordedDay = item[CARRIED_FROM_DAY_FIELD];
       if (recordedDay !== undefined && recordedDay !== sourceDayId) continue;
-      return { dayId, itemId: item.id, item };
+      matches.push({ dayId, itemId: item.id, item });
     }
   }
-  return null;
+  if (!matches.length) return null;
+  // Recovery claims use relocationRevision. Highest claim wins by the existing
+  // stable, arrival-order-independent contract; old pre-claim copies fall back to
+  // stable day/item ordering rather than Object insertion order.
+  return matches.sort((a, b) => (
+    comparePlanItemRelocations(b.item, a.item)
+    || String(a.dayId).localeCompare(String(b.dayId))
+    || String(a.itemId).localeCompare(String(b.itemId))
+  ))[0];
 }
 
 /**

@@ -196,3 +196,50 @@ test('rooms and root — unchanged and locked', () => {
   assert.equal(canRead(LINKED, C, '/'), false, 'root not readable');
   assert.equal(canWrite(LINKED, C, '/', {}), false, 'root not writable');
 });
+
+const CUTOVER = {
+  schemaVersion: 1,
+  id: 'ca1-cutover',
+  activatedAtMs: 1790480400000,
+  timezone: 'Asia/Manila',
+  activationDate: '2026-09-27',
+  deviceId: 'device-a',
+};
+
+test('calendar cutover barrier — legacy writes are allowed before cutover and denied after it, while history stays readable', () => {
+  const before = { rooms: { uid_alice_uid: { plans: {}, operationalPlans: {} } } };
+  assert.equal(canWrite(before, A, '/rooms/uid_alice_uid/plans/2026-09-27', { items: [] }), true);
+  assert.equal(canWrite(before, A, '/rooms/uid_alice_uid/operationalPlans/day-1', { items: [] }), true);
+
+  const after = { rooms: { uid_alice_uid: { calendarPlanAuthority: { [CUTOVER.id]: CUTOVER }, plans: { old: { items: [] } }, operationalPlans: { old: { items: [] } } } } };
+  assert.equal(canWrite(after, A, '/rooms/uid_alice_uid/plans/new', { items: [] }), false, 'old client plans write denied');
+  assert.equal(canWrite(after, A, '/rooms/uid_alice_uid/operationalPlans/new', { items: [] }), false, 'old client operational write denied');
+  assert.equal(canWrite(after, A, '/rooms/uid_alice_uid/calendarPlans/cal1:2026-09-27', { items: [] }), true, 'calendar owner write allowed');
+  assert.equal(canRead(after, A, '/rooms/uid_alice_uid/plans/old'), true, 'legacy history remains readable');
+  assert.equal(canRead(after, A, '/rooms/uid_alice_uid/operationalPlans/old'), true);
+  assert.equal(canWrite(after, C, '/rooms/uid_alice_uid/calendarPlans/cal1:2026-09-27', { items: [] }), false, 'other account denied');
+});
+
+test('calendar authority facts — owner create allowed; overwrite/delete/foreign writes denied', () => {
+  const empty = { rooms: { uid_alice_uid: {} } };
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, CUTOVER), true);
+  assert.equal(canWrite(empty, C, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, CUTOVER), false);
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, id: 'wrong' }), false, 'fact id must match its immutable child key');
+  assert.equal(canWrite(empty, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, activatedAtMs: 'soon' }), false, 'fact schema is validated server-side');
+  const existing = { rooms: { uid_alice_uid: { calendarPlanAuthority: { [CUTOVER.id]: CUTOVER } } } };
+  assert.equal(canWrite(existing, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, { ...CUTOVER, deviceId: 'changed' }), false);
+  assert.equal(canWrite(existing, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, null), false);
+});
+
+test('calendar barrier preserves every audited ordinary owner-write room path', () => {
+  const ordinary = [
+    'timer', 'entries', 'intention', 'devices', 'settings', 'templates', 'templatesSavedAt',
+    'breakState', 'awayState', 'reviews', 'weeklyReviews', 'focusRedemptions', 'coarseLifeEvidence',
+    'dayBoundaryRevisions', 'commitments', 'planByDeadlineRevisions', 'intentionalOffDays', 'calendarPlans',
+  ];
+  const root = { rooms: { uid_alice_uid: { calendarPlanAuthority: { [CUTOVER.id]: CUTOVER } } } };
+  for (const child of ordinary) {
+    assert.equal(canWrite(root, A, `/rooms/uid_alice_uid/${child}`, { proof: child }), true, `${child} remains owner-writable`);
+    assert.equal(canWrite(root, C, `/rooms/uid_alice_uid/${child}`, { proof: child }), false, `${child} remains account-isolated`);
+  }
+});

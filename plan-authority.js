@@ -111,34 +111,31 @@ import './plan-by-deadline-sync.js';
 // plan store this module's singleton routes calendar-authoritative days to.
 import './calendar-plan-live.js';
 
-/** Carry-forward ids for operational days. Deliberately NOT the legacy
+/** Carry-forward ids for non-legacy destinations. Deliberately NOT the legacy
  *  `carry:<date>:<itemId>` shape (plan-tomorrow-model.js's carriedItemId, which
  *  only accepts a bare calendar date and must keep doing exactly that): an
  *  operationalDayId is not a date and must never be coerced into one. Built from
- *  immutable identities only — source day, source item, destination day — so two
- *  devices carrying the same item to the same day independently mint the SAME id
- *  and the existing per-item merge collapses them into one. '|' is the separator
+ *  immutable SOURCE identities only — source day + source item — so concurrent
+ *  recoveries to different days still name one logical recovered item. Its
+ *  relocationRevision is the destination claim. '|' is the separator
  *  because an operationalDayId itself contains ':'; a minted plan item id
  *  ('p' + base36) can never contain either. */
 export const OPERATIONAL_CARRY_ID_PREFIX = 'ocarry1';
 
-export function operationalCarriedItemId(sourceDayId, sourceItemId, destinationOperationalDayId) {
+export function operationalCarriedItemId(sourceDayId, sourceItemId) {
   // The SOURCE is whatever that day's own authoritative identity is — an
   // operationalDayId, or a calendar dateKey on the transition day, when an item
   // is carried from the last legacy-governed day into the first personal one.
   // Neither is coerced into the other; each is used verbatim.
   const validSource = !!parseOperationalDayId(sourceDayId) || !!parseCalendarPlanId(sourceDayId) || validPlanDate(sourceDayId);
-  if (!validSource || !(parseOperationalDayId(destinationOperationalDayId) || parseCalendarPlanId(destinationOperationalDayId))) {
-    throw new Error('A valid source day identity and destination day identity are required.');
-  }
+  if (!validSource) throw new Error('A valid source day identity is required.');
   if (typeof sourceItemId !== 'string' || !sourceItemId || sourceItemId.includes('|')) throw new Error('A valid source item id is required.');
-  return `${OPERATIONAL_CARRY_ID_PREFIX}|${sourceDayId}|${sourceItemId}|${destinationOperationalDayId}`;
+  return `${OPERATIONAL_CARRY_ID_PREFIX}|${sourceDayId}|${sourceItemId}`;
 }
 
-/** The carry id for any source/destination pair. Legacy -> legacy keeps the
- *  exact existing id, so nothing already stored changes meaning; anything
- *  landing in a personal day gets the operational format, keyed by both days'
- *  immutable identities and the source item. */
+/** The carry id for a source recovery. Legacy -> legacy keeps the exact
+ *  existing id, so nothing already stored changes meaning; anything landing
+ *  in a personal/calendar day gets the source-owned operational format. */
 export function carryItemIdFor(sourceTarget, sourceItemId, destinationTarget) {
   if (destinationTarget.store === 'legacy') {
     if (sourceTarget.store !== 'legacy') {
@@ -149,7 +146,7 @@ export function carryItemIdFor(sourceTarget, sourceItemId, destinationTarget) {
     }
     return carriedItemId(sourceTarget.dateKey, sourceItemId);
   }
-  return operationalCarriedItemId(sourceTarget.id, sourceItemId, destinationTarget.id);
+  return operationalCarriedItemId(sourceTarget.id, sourceItemId);
 }
 
 /** 12:00 local on a calendar date, in that date's OWN subsystem timezone. */
@@ -253,10 +250,17 @@ export function createPlanAuthority(deps = {}) {
     try { return calendar?.activation?.() ?? null; } catch { return null; }
   }
 
+  /** UNKNOWN is a real authority state, never an alias for LEGACY. */
+  function authorityState() {
+    if (!calendar) return 'legacy';
+    if (typeof calendar.authorityState === 'function') return calendar.authorityState();
+    return calendarActivation() ? 'calendar' : 'legacy';
+  }
+
   /** True once the account has cut over to calendar-native plans (the owner's explicit,
    *  account-owned, one-way activation). */
   function calendarActive() {
-    return calendarActivation() !== null;
+    return authorityState() === 'calendar';
   }
 
   /** A Personal Day boundary history exists. This alone says nothing about which store
@@ -271,13 +275,14 @@ export function createPlanAuthority(deps = {}) {
    *  (My Day window, day navigation, the personal-day status strip) gets the truth for
    *  NEW planning: after the cutover the answer is no, whatever the boundary says. */
   function enabled() {
-    return boundaryEnabled() && !calendarActive();
+    return boundaryEnabled() && authorityState() === 'legacy';
   }
 
   /** Which store is authoritative for a calendar date: 'calendar' on/after the effective
    *  activation date, otherwise 'legacy'. Decided by the account's own activation fact —
    *  never by which store holds data. */
   function isCalendarAuthoritative(dateKey) {
+    if (authorityState() === 'unknown') return null;
     return calendarAuthorityForDate(dateKey, calendarActivation()) === 'calendar';
   }
 
@@ -363,6 +368,7 @@ export function createPlanAuthority(deps = {}) {
    *  calendar "today" (same helper, same account timezone — no boundary math, no
    *  operational store, no listener), and the operational day for one that did. */
   function current(nowMs = now()) {
+    if (authorityState() === 'unknown') return null;
     const today = localPlanDate(nowMs, accountTimezone());
     if (isCalendarAuthoritative(today)) return calendarTarget(today);
     return legacyCurrent(nowMs);
@@ -371,6 +377,7 @@ export function createPlanAuthority(deps = {}) {
   /** The authoritative day the owner prepares in advance: tomorrow's calendar plan once
    *  cut over; otherwise the legacy/operational upcoming day. */
   function upcoming(nowMs = now()) {
+    if (authorityState() === 'unknown') return null;
     const tomorrow = addCalendarDays(localPlanDate(nowMs, accountTimezone()), 1);
     if (isCalendarAuthoritative(tomorrow)) return calendarTarget(tomorrow);
     return legacyUpcoming(nowMs);
@@ -380,6 +387,7 @@ export function createPlanAuthority(deps = {}) {
    *  anchor, a completion). Never a date string — an instant is unambiguous. */
   function containing(instantMs) {
     if (!Number.isFinite(instantMs)) throw new Error('A valid instant is required.');
+    if (authorityState() === 'unknown') return null;
     const dateKey = localPlanDate(instantMs, accountTimezone());
     if (isCalendarAuthoritative(dateKey)) return calendarTarget(dateKey);
     return legacyContaining(instantMs);
@@ -409,6 +417,7 @@ export function createPlanAuthority(deps = {}) {
    *  entry for a legacy/never-enabled account; commonly two once a non-midnight boundary
    *  is active and the account has not cut over. */
   function daysOverlappingCalendarDate(dateKey) {
+    if (authorityState() === 'unknown') return [];
     if (isCalendarAuthoritative(dateKey)) return [calendarTarget(dateKey)];
     return legacyDaysOverlappingCalendarDate(dateKey);
   }
@@ -590,9 +599,17 @@ export function createPlanAuthority(deps = {}) {
     return target;
   }
 
-  function saveItems(target, nextItems) {
+  function assertLegacyWriteAuthority(target, allowRecovery = false) {
+    if (target.store === 'calendar' || !calendar) return;
+    const state = authorityState();
+    if (state === 'unknown') throw new Error('Plan authority is still syncing. No legacy planning change was saved.');
+    if (state === 'calendar' && !allowRecovery) throw new Error('Legacy plans are read-only after calendar-day activation.');
+  }
+
+  function saveItems(target, nextItems, { allowLegacyRecovery = false } = {}) {
+    assertLegacyWriteAuthority(target, allowLegacyRecovery);
     if (target.store === 'legacy') {
-      legacy.saveItems(target.dateKey, nextItems);
+      legacy.saveItems(target.dateKey, nextItems, { allowLegacyRecovery });
       invalidate();
       return target;
     }
@@ -700,6 +717,7 @@ export function createPlanAuthority(deps = {}) {
       return { localSaved: true, syncPromise };
     }
     if (target.store === 'legacy') {
+      assertLegacyWriteAuthority(target);
       const result = legacy.confirm({ targetDate: target.dateKey, items: nextItems, mode, intentionalBlank, routineInstanceIds, actionableRoutineInstanceIds });
       invalidate();
       return result;
@@ -813,6 +831,19 @@ export function createPlanAuthority(deps = {}) {
   function evidenceWindow(target) {
     if (target.store !== 'legacy') return { startMs: target.startMs, endMs: target.endMs };
     return calendarDayBounds(target.dateKey);
+  }
+
+  /** Review's extended calendar-plan boundary is historical plan truth: date+2
+   *  in the plan's frozen home zone, extended only by item-owned factual instants. */
+  function reviewEvidenceWindow(target) {
+    if (target.store !== 'calendar') return evidenceWindow(target);
+    const homeZone = target.timezone || record(target)?.timezone;
+    const homeExtent = calendarPlanInterval(addCalendarDays(target.dateKey, 1), homeZone).endMs;
+    const itemExtent = items(target).reduce((latest, item) => {
+      const instants = itemInstants(target, item);
+      return instants ? Math.max(latest, instants.endMs ?? instants.startMs) : latest;
+    }, target.endMs);
+    return { startMs: target.startMs, endMs: Math.max(homeExtent, itemExtent) };
   }
 
   // ── Decision A mapping, as targets ────────────────────────────────────────
@@ -1373,6 +1404,18 @@ export function createPlanAuthority(deps = {}) {
     const carryId = carryItemIdFor(sourceTarget, itemId, destination);
     const destinationItems = rawItems(destination);
     let moved = buildMovedItem({ carryId, sourceItem, sourceDayId: sourceTarget.id, stamp });
+    // This relocation revision is the recovery claim. The source-owned id and
+    // provenance identify WHAT was recovered; the claim names the chosen day.
+    // Concurrent claims resolve by the existing stable relocation ordering.
+    moved = {
+      ...moved,
+      relocationRevision: nextPlanItemRelocation(moved, {
+        fromDayId: sourceTarget.id,
+        toDayId: destination.id,
+        updatedAt: moved.updatedAt,
+        updatedBy: moved.updatedBy,
+      }),
+    };
     // The Top 3 holds on the destination too. A stale PRIORITY moved into a day whose
     // Top 3 is already full lands as an Other planned task instead: recovery is never
     // blocked by the cap, and the cap is never exceeded by recovery. A stale task stays
@@ -1615,7 +1658,7 @@ export function createPlanAuthority(deps = {}) {
     if (!oldTarget) throw new Error('The day this task was moved to cannot be resolved right now.');
     saveItems(oldTarget, rawItems(oldTarget).map(candidate => (
       candidate.id === existing.itemId ? stamp({ ...candidate, deleted: true }) : candidate
-    )));
+    )), { allowLegacyRecovery: true });
     return moveStaleItem({ sourceTarget, itemId, destination, stamp, nowMs });
   }
 
@@ -1629,7 +1672,7 @@ export function createPlanAuthority(deps = {}) {
     if (!sourceItem) throw new Error('That task is no longer on its original day.');
     saveItems(sourceTarget, items.map(candidate => (
       candidate.id === itemId ? buildDismissedItem(sourceItem, { nowMs, stamp }) : candidate
-    )));
+    )), { allowLegacyRecovery: true });
     return { dismissed: true };
   }
 
@@ -1639,7 +1682,7 @@ export function createPlanAuthority(deps = {}) {
     if (!sourceItem) throw new Error('That task is no longer on its original day.');
     saveItems(sourceTarget, items.map(candidate => (
       candidate.id === itemId ? buildUndismissedItem(sourceItem, { stamp }) : candidate
-    )));
+    )), { allowLegacyRecovery: true });
     return { dismissed: false };
   }
 
@@ -1700,13 +1743,13 @@ export function createPlanAuthority(deps = {}) {
 
   return {
     enabled, invalidate,
-    calendarActive, calendarActivation, boundaryEnabled, isCalendarAuthoritative, activateCalendar,
+    authorityState, calendarActive, calendarActivation, boundaryEnabled, isCalendarAuthoritative, activateCalendar,
     calendarCarryoverFor, supersededPlans, itemInstants, calendarTarget,
     current, upcoming, containing, next, previous, daysOverlappingCalendarDate,
     dayAhead, dayForCalendarDate, dayForScheduledDate, scheduledDateForTarget, civilDateForTimeInTarget, upcomingDays,
     record, rawItems, items, saveItems, addItem, assertDirectSchedulingTarget,
     preparation, consistency, readyNow, preparedState, confirmPreparation,
-    validateItem, itemStartInstant, evidenceWindow, classifyItemActual,
+    validateItem, itemStartInstant, evidenceWindow, reviewEvidenceWindow, classifyItemActual,
     routineTarget, routinesForTarget, templatesForTarget,
     habitEarned, streak,
     planningDeadlineStreak, deadlineDateKeyForTarget,
@@ -1741,7 +1784,7 @@ if (typeof window !== 'undefined') {
     legacy: {
       record: dateKey => authorityAppContext().plan(dateKey),
       rawItems: dateKey => authorityAppContext().rawItems(dateKey),
-      saveItems: (dateKey, items) => authorityAppContext().saveItems(dateKey, items),
+      saveItems: (dateKey, items, options) => authorityAppContext().saveItems(dateKey, items, options),
       confirm: input => authorityAppContext().confirm(input),
       allPlans: () => authorityAppContext().allPlans(),
       earliestPlanDate: () => authorityAppContext().earliestPlanDate(),

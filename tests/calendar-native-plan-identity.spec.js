@@ -23,7 +23,7 @@ const ROOM = 'uid_account-a';
 const at = (date, hhmm) => Date.parse(`${date}T${hhmm}:00+08:00`);
 const SUN = '2026-09-27';
 const MON = '2026-09-28';
-const TOKEN = '20260927-calendar-native-plan-identity-v1';
+const TOKEN = '20260927-calendar-native-activation-safety-fix1';
 
 const BOUNDARY_ID = 'r-1800';
 const boundaryStore = () => JSON.stringify({ schemaVersion: 1, revisions: {
@@ -50,6 +50,7 @@ const firebaseStub = `
   const tree = {};
   const listeners = new Map();
   const retained = [];
+  let delayAuthority = window.__delayCalendarAuthority === true;
   const get = p => p.split('/').filter(Boolean).reduce((a, k) => (a && typeof a === 'object' ? a[k] : undefined), tree);
   const put = (p, v) => {
     const segs = p.split('/').filter(Boolean); let n = tree;
@@ -58,7 +59,10 @@ const firebaseStub = `
   };
   const clone = v => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
   const snapshot = value => ({ val: () => clone(value), ref: { remove: () => Promise.resolve() } });
-  const fire = p => (listeners.get(p) || []).forEach(cb => cb(snapshot(get(p))));
+  const fire = p => {
+    if (delayAuthority && p.endsWith('/calendarPlanAuthority')) return;
+    (listeners.get(p) || []).forEach(cb => cb(snapshot(get(p))));
+  };
   const fireUp = p => { let q = p; while (q) { fire(q); q = q.includes('/') ? q.slice(0, q.lastIndexOf('/')) : ''; } };
   let failWrites = false;
   let authCb = null;
@@ -72,7 +76,9 @@ const firebaseStub = `
       listeners.get(refPath).push(cb);
       retained.push({ path: refPath, cb });
       const value = refPath === '.info/connected' ? true : get(refPath);
-      setTimeout(() => cb(snapshot(value === undefined ? null : value)), 0);
+      if (!(delayAuthority && refPath.endsWith('/calendarPlanAuthority'))) {
+        setTimeout(() => cb(snapshot(value === undefined ? null : value)), 0);
+      }
       return cb;
     },
     off() { listeners.delete(refPath); },
@@ -103,6 +109,12 @@ const firebaseStub = `
     get: p => clone(get(p) ?? null),
     seed(p, v) { put(p, clone(v)); },
     remoteWrite(p, v) { put(p, clone(v)); fireUp(p); },
+    deliverAuthority() {
+      delayAuthority = false;
+      for (const [p, callbacks] of listeners.entries()) {
+        if (p.endsWith('/calendarPlanAuthority')) callbacks.forEach(cb => cb(snapshot(get(p))));
+      }
+    },
     setFailWrites(v) { failWrites = v; },
     signInAs(uid) { authCb(user(uid)); },
     reconnect() { put('.info/connected', true); retained.filter(r => r.path === '.info/connected').forEach(r => r.cb(snapshot(true))); },
@@ -136,9 +148,10 @@ test.afterAll(async () => {
 /** Opens the app at a frozen instant. `boundary` seeds the legacy Personal Day boundary (18:00);
  *  `operationalPlans` seeds a plan in the legacy operational store. The seed happens once per page
  *  (a reload keeps whatever the app itself has written since). */
-async function openApp(page, { now, boundary = true, operationalPlans = null, legacyPlans = '{}' } = {}) {
+async function openApp(page, { now, boundary = true, operationalPlans = null, legacyPlans = '{}', delayAuthority = false } = {}) {
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: firebaseStub }));
-  await page.addInitScript(({ timezone, now, boundary, operationalPlans, legacyPlans }) => {
+  await page.addInitScript(({ timezone, now, boundary, operationalPlans, legacyPlans, delayAuthority }) => {
+    window.__delayCalendarAuthority = delayAuthority;
     let frozen = Number(localStorage.getItem('cnpi-now')) || now;
     const RealDate = Date;
     window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [frozen])); } static now() { return frozen; } };
@@ -154,7 +167,7 @@ async function openApp(page, { now, boundary = true, operationalPlans = null, le
     localStorage.setItem('ta3-plans:uid_account-a', legacyPlans); localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-focus-redemptions', '[]');
     if (boundary) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_account-a', boundary);
     if (operationalPlans) localStorage.setItem('ta3-operational-plans-v1:uid_account-a', operationalPlans);
-  }, { timezone: TZ, now, boundary: boundary ? boundaryStore() : null, operationalPlans, legacyPlans });
+  }, { timezone: TZ, now, boundary: boundary ? boundaryStore() : null, operationalPlans, legacyPlans, delayAuthority });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.PlanAuthority === 'object' && typeof window.CalendarPlanLive === 'object' && typeof window.PlanByDeadlineSync === 'object' && !!window.__fbTest);
   await page.waitForFunction(() => globalThis.getChronaSenseRoomCode?.() === 'uid_account-a');
@@ -222,9 +235,48 @@ test('BEFORE switching: Sunday 11:00 under the 18:00 boundary is still the legac
   // Asking is not switching: nothing changes until the second confirmation.
   await page.locator('#calendar-plan-section [data-cp-action="ask"]').click();
   await expect(page.locator('#calendar-plan-section')).toContainText('can\'t be switched back');
+  await expect(page.locator('#calendar-plan-section')).toContainText('Update all devices');
+  await expect(page.locator('#calendar-plan-section')).toContainText('Older versions');
   await page.locator('#calendar-plan-section [data-cp-action="cancel"]').click();
   expect(await page.evaluate(() => window.PlanAuthority.calendarActive())).toBe(false);
   expect(await calendarStore(page)).toEqual({});
+});
+
+test('delayed authority hydration is fail-closed: no legacy fallback or write occurs before the account answer arrives', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00'), operationalPlans: saturdayOperationalPlans(), delayAuthority: true });
+  expect(await page.evaluate(() => window.PlanAuthority.authorityState())).toBe('unknown');
+  expect(await page.evaluate(() => window.PlanAuthority.current())).toBeNull();
+  await expect(page.locator('#calendar-plan-section')).toContainText('Syncing plan authority');
+
+  const legacyBefore = await rawLegacy(page);
+  const attempt = await page.evaluate(() => {
+    try {
+      window.PlanAuthority.saveItems(window.PlanAuthority.legacyTarget('2026-09-27'), [
+        { id: 'must-not-land', task: 'Blocked while syncing', when: '', done: false },
+      ]);
+      return { threw: false };
+    } catch (error) {
+      return { threw: true, message: String(error?.message || error) };
+    }
+  });
+  expect(attempt).toMatchObject({ threw: true });
+  expect(attempt.message).toContain('still syncing');
+  expect(await rawLegacy(page)).toEqual(legacyBefore);
+  expect(await page.evaluate(() => window.__fbTest.log.writes.filter(w => /\/plans(?:\/|$)|\/operationalPlans(?:\/|$)/.test(w.path)).length)).toBe(0);
+
+  const fact = { schemaVersion: 1, id: 'ca1-hydrated', activatedAtMs: at(SUN, '09:00'), timezone: TZ, activationDate: SUN, deviceId: 'device-other' };
+  await page.evaluate(value => {
+    window.__fbTest.seed('rooms/uid_account-a/calendarPlanAuthority/ca1-hydrated', value);
+    window.__fbTest.deliverAuthority();
+  }, fact);
+  await expect.poll(() => page.evaluate(() => window.PlanAuthority.authorityState())).toBe('calendar');
+  expect(await current(page)).toEqual({ store: 'calendar', id: `cal1:${SUN}`, dateKey: SUN });
+  await page.evaluate(() => {
+    const target = window.PlanAuthority.current();
+    window.PlanAuthority.saveItems(target, [{ id: 'after-hydration', task: 'Calendar write only', when: '11:30', whenTz: target.timezone, done: false }]);
+  });
+  await expect.poll(async () => (await calendarStore(page))[`cal1:${SUN}`]?.items?.[0]?.task).toBe('Calendar write only');
+  expect(await rawLegacy(page)).toEqual(legacyBefore);
 });
 
 test('Sunday 11:00: after switching, the current plan is SUNDAY\'s; a first item at 11:00 writes ONLY Sunday\'s calendar plan; the legacy Saturday plan gets zero writes', async ({ page }) => {
@@ -365,9 +417,15 @@ test('Review: Sunday\'s card covers its Monday 01:10 work by exact link and the 
     return 'e-overnight';
   }, { start: at(MON, '01:10'), end: at(MON, '01:40'), day: MON });
 
+  const evidenceBefore = await page.evaluate(() => window.PlanAuthority.reviewEvidenceWindow(window.PlanAuthority.targetById('cal1:2026-09-27')));
+  await page.evaluate(() => { settings.timezone = 'America/Los_Angeles'; window.PlanAuthority.invalidate(); });
+  const evidenceAfter = await page.evaluate(() => window.PlanAuthority.reviewEvidenceWindow(window.PlanAuthority.targetById('cal1:2026-09-27')));
+  expect(evidenceAfter).toEqual(evidenceBefore);
+
   await page.evaluate(() => openReview('2026-09-27'));
   await expect(page.locator('#rv-plan-vs-actual')).toContainText('Overnight backup');
   await expect(page.locator('#rv-plan-vs-actual')).toContainText('30m tracked with the same label');
+  expect(((await page.locator('#rv-plan-vs-actual').textContent()).match(/Overnight backup/g) || []).length).toBe(1);
   await page.evaluate(() => closeModal('review-overlay'));
 
   await page.evaluate(() => openReview('2026-09-28'));

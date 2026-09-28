@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
-<meta name="pdb-release" content="20260927-calendar-native-plan-identity-v1">
+<meta name="pdb-release" content="20260927-calendar-native-activation-safety-fix1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1690,7 +1690,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260927-calendar-native-plan-identity-v1
+<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260927-calendar-native-activation-safety-fix1
      themselves, but the modules they IMPORT are bare URLs, which browsers cache independently of index.html
      — so a device could run new sync code against an old repository, or an old live wiring against a new
      storage.js (permanent "Off", or a link error that stops PlanAuthority loading at all). This map makes
@@ -1705,65 +1705,65 @@
 <script type="importmap">
 {
   "imports": {
-    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260927-calendar-native-plan-identity-v1",
-    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260927-calendar-native-plan-identity-v1",
-    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260927-calendar-native-plan-identity-v1",
-    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260927-calendar-native-plan-identity-v1",
-    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260927-calendar-native-plan-identity-v1",
-    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260927-calendar-native-plan-identity-v1",
-    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260927-calendar-native-plan-identity-v1",
-    "./operational-plan-model.js": "./operational-plan-model.js?v=20260927-calendar-native-plan-identity-v1",
-    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260927-calendar-native-plan-identity-v1",
-    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260927-calendar-native-plan-identity-v1",
-    "./plan-authority.js": "./plan-authority.js?v=20260927-calendar-native-plan-identity-v1",
-    "./commitments-repository.js": "./commitments-repository.js?v=20260927-calendar-native-plan-identity-v1",
-    "./commitments-sync.js": "./commitments-sync.js?v=20260927-calendar-native-plan-identity-v1",
-    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260927-calendar-native-plan-identity-v1",
-    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260927-calendar-native-plan-identity-v1",
-    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260927-calendar-native-plan-identity-v1",
-    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20260927-calendar-native-plan-identity-v1",
-    "./capability-career-repository.js": "./capability-career-repository.js?v=20260927-calendar-native-plan-identity-v1",
-    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20260927-calendar-native-plan-identity-v1",
-    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20260927-calendar-native-plan-identity-v1",
-    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20260927-calendar-native-plan-identity-v1",
-    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20260927-calendar-native-plan-identity-v1",
-    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20260927-calendar-native-plan-identity-v1",
-    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20260927-calendar-native-plan-identity-v1",
-    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20260927-calendar-native-plan-identity-v1",
-    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20260927-calendar-native-plan-identity-v1"
+    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./operational-plan-model.js": "./operational-plan-model.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./plan-authority.js": "./plan-authority.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./commitments-repository.js": "./commitments-repository.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./commitments-sync.js": "./commitments-sync.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./capability-career-repository.js": "./capability-career-repository.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20260927-calendar-native-activation-safety-fix1",
+    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20260927-calendar-native-activation-safety-fix1"
   }
 }
 </script>
-<script src="storage.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script src="storage.js?v=20260927-calendar-native-activation-safety-fix1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
-<script type="module" src="daily-routines-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script type="module" src="daily-routines-ui.js?v=20260927-calendar-native-activation-safety-fix1"></script>
 <script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
-<script type="module" src="learning-plan-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
-<script type="module" src="capability-career-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script type="module" src="learning-plan-ui.js?v=20260927-calendar-native-activation-safety-fix1"></script>
+<script type="module" src="capability-career-ui.js?v=20260927-calendar-native-activation-safety-fix1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
 <script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
 <script type="module" src="windows-hud-bridge.js?v=20260908-windows-ambient-focus-hud-v1"></script>
-<script type="module" src="coarse-life-evidence-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
-<script type="module" src="coarse-life-evidence-sync.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20260927-calendar-native-activation-safety-fix1"></script>
+<script type="module" src="coarse-life-evidence-sync.js?v=20260927-calendar-native-activation-safety-fix1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20260927-calendar-native-plan-identity-v1"></script>
-<script type="module" src="personal-day-boundary-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
-<script type="module" src="plan-by-deadline-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
-<script type="module" src="calendar-plan-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20260927-calendar-native-activation-safety-fix1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20260927-calendar-native-activation-safety-fix1"></script>
+<script type="module" src="plan-by-deadline-ui.js?v=20260927-calendar-native-activation-safety-fix1"></script>
+<script type="module" src="calendar-plan-ui.js?v=20260927-calendar-native-activation-safety-fix1"></script>
 <script>
 // Read-only Personal Day sync diagnostics for a real device: open the app with ?pdbdiag=1.
-if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260927-calendar-native-plan-identity-v1'), 1500));
+if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260927-calendar-native-activation-safety-fix1'), 1500));
 </script>
-<script type="module" src="operational-plan-ui.js?v=20260927-calendar-native-plan-identity-v1"></script>
-<script type="module" src="commitments-sync.js?v=20260927-calendar-native-plan-identity-v1"></script>
+<script type="module" src="operational-plan-ui.js?v=20260927-calendar-native-activation-safety-fix1"></script>
+<script type="module" src="commitments-sync.js?v=20260927-calendar-native-activation-safety-fix1"></script>
 <script type="module" src="planning-continuity-ui.js?v=20260918-planning-continuity-v1"></script>
 
 <script>
@@ -6759,7 +6759,21 @@ function isPlannableTask(task) {
   return !e || !PLAN_CHIP_SKIP_ENERGY.has(e);
 }
 
-function savePlanItems(dateKey, items) {
+function legacyPlanWriteState() {
+  return globalThis.PlanAuthority?.authorityState?.()
+    || globalThis.CalendarPlanLive?.authorityState?.()
+    || 'unknown';
+}
+
+function assertLegacyPlanWriteReady({ allowLegacyRecovery = false } = {}) {
+  const state = legacyPlanWriteState();
+  if (state === 'legacy' || (state === 'calendar' && allowLegacyRecovery)) return;
+  if (state === 'calendar') throw new Error('Legacy plans are read-only after calendar-day activation.');
+  throw new Error('Plan authority is still syncing. No legacy planning change was saved.');
+}
+
+function savePlanItems(dateKey, items, options = {}) {
+  assertLegacyPlanWriteReady(options);
   const now = Date.now();
   const current = plans[dateKey] && typeof plans[dateKey] === 'object' ? plans[dateKey] : {};
   writeDatePlanLocal(dateKey, { ...current, items, updatedAt: now, updatedBy: syncedDeviceId });
@@ -6800,6 +6814,7 @@ function writeDatePlanLocal(dateKey, nextPlan) {
 globalThis.writeDatePlanLocal = writeDatePlanLocal;
 
 function confirmPreparedDatePlan({ targetDate, items, mode, intentionalBlank, routineInstanceIds, actionableRoutineInstanceIds = routineInstanceIds }) {
+  assertLegacyPlanWriteReady();
   if (!Array.isArray(routineInstanceIds)) throw new Error('Routine preparation references are invalid.');
   if (!Array.isArray(actionableRoutineInstanceIds)) throw new Error('Actionable routine references are invalid.');
   const now = Date.now();
@@ -6956,12 +6971,31 @@ function legacyPlanTarget(dateKey) {
  *  plan entirely. plan-authority.js re-renders once it is ready. */
 function currentPlanTarget() {
   if (globalThis.PlanAuthority) return globalThis.PlanAuthority.current();
+  try { if (globalThis.getChronaSenseRoomCode?.()) return null; } catch { return null; }
   return personalDayBoundaryConfigured() ? null : legacyPlanTarget(planTodayKey());
 }
 
 function upcomingPlanTarget() {
   if (globalThis.PlanAuthority) return globalThis.PlanAuthority.upcoming();
+  try { if (globalThis.getChronaSenseRoomCode?.()) return null; } catch { return null; }
   if (personalDayBoundaryConfigured()) return null;
+  const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return legacyPlanTarget(globalThis.PlanTomorrowModel ? globalThis.PlanTomorrowModel.planTomorrowTargetDate(Date.now(), tz) : _dateKeyPlusDays(planTodayKey(), 1));
+}
+
+/** Read-only compatibility projection while authority is UNKNOWN. This never
+ *  authorizes a mutation: every write still goes through currentPlanTarget /
+ *  PlanAuthority and the fail-closed legacy write gate. A no-boundary account's
+ *  existing date-keyed records remain safe to publish to its linked partner. */
+function currentPlanReadTarget() {
+  const target = currentPlanTarget();
+  if (target || personalDayBoundaryConfigured()) return target;
+  return legacyPlanTarget(planTodayKey());
+}
+
+function upcomingPlanReadTarget() {
+  const target = upcomingPlanTarget();
+  if (target || personalDayBoundaryConfigured()) return target;
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   return legacyPlanTarget(globalThis.PlanTomorrowModel ? globalThis.PlanTomorrowModel.planTomorrowTargetDate(Date.now(), tz) : _dateKeyPlusDays(planTodayKey(), 1));
 }
@@ -7083,7 +7117,9 @@ function planTrackedMinFor(target, task, planItemId = null) {
   // 01:00). Work linked to that item by its EXACT plan-item id counts toward it across that
   // extended span; a text-only match never reaches past the plan's own date, so two plans that
   // happen to word a task alike cannot both claim the same factual minutes.
-  const extendedEndMs = target.store === 'calendar' ? tzParseTime(_dateKeyPlusDays(target.dateKey, 2), '00:00') : target.endMs;
+  const extendedEndMs = target.store === 'calendar'
+    ? globalThis.PlanAuthority.reviewEvidenceWindow(target).endMs
+    : target.endMs;
   getEntriesOverlappingRange(target.startMs, extendedEndMs).forEach(e => {
     if (e.missed || e.deleted || e.away || e.break || !e.activity) return;
     const matchesId = planItemId && e.planItemId === planItemId;
@@ -7266,16 +7302,18 @@ function renderTodayPlan() {
   syncCommitmentFromPlan();
   syncIntentionFromPlan();
 
-  const readOnly = !isViewingToday();
+  const browsingHistory = !isViewingToday();
+  const authorityPending = !browsingHistory && legacyPlanWriteState() === 'unknown';
+  const readOnly = browsingHistory || authorityPending;
   // Today edits the current authoritative personal day. Browsing history is a
   // Decision B overlap projection: every authoritative day that overlaps the
   // selected calendar date, each labeled by its own real interval, read-only —
   // never merged into one invented "plan for that date".
-  const targets = readOnly
+  const targets = browsingHistory
     ? planTargetsForCalendarDate(getViewingDateKey())
-    : [currentPlanTarget()].filter(Boolean);
+    : [authorityPending ? currentPlanReadTarget() : currentPlanTarget()].filter(Boolean);
 
-  if (!readOnly && !targets.length) {
+  if (!browsingHistory && !targets.length) {
     // A boundary is configured but the module graph has not loaded yet, so which
     // plan is authoritative is not knowable. Say so instead of showing the
     // calendar plan, which may be a different plan entirely.
@@ -10235,7 +10273,7 @@ function buildPartnerViewProjectionForPublish() {
   // A partner-facing LABEL for the upcoming authoritative day, not plan
   // identity: the calendar date it starts on (identical to "tomorrow" for a
   // legacy account, since a calendar day starts on its own date).
-  const upcomingLabelTarget = upcomingPlanTarget();
+  const upcomingLabelTarget = upcomingPlanReadTarget();
   const tomorrowKey = upcomingLabelTarget
     ? (upcomingLabelTarget.store !== 'operational' ? upcomingLabelTarget.dateKey : getDateInTZ(upcomingLabelTarget.startMs, tz))
     : (PT ? PT.planTomorrowTargetDate(Date.now(), tz) : todayKey);
@@ -10262,8 +10300,8 @@ function buildPartnerViewProjectionForPublish() {
   // authoritative personal days, never a calendar-date plan lookup (Decision B
   // reserves date lookup for history). For a legacy account those are exactly
   // today's and tomorrow's calendar plans, unchanged.
-  const currentTarget = currentPlanTarget();
-  const upcomingTarget = upcomingPlanTarget();
+  const currentTarget = currentPlanReadTarget();
+  const upcomingTarget = upcomingPlanReadTarget();
   const priorities = buildPartnerViewPriorityInputs(currentTarget);
   const tomorrowPriorities = buildPartnerViewPriorityInputs(upcomingTarget).map(p => ({ title: p.title, plannedTime: p.plannedTime }));
 

@@ -5,7 +5,36 @@
     "rooms": {
       "$roomId": {
         ".read": "auth != null && $roomId === ('uid_' + auth.uid)",
-        ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        "timer": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "entries": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "intention": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "devices": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "settings": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "templates": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "templatesSavedAt": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "breakState": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "awayState": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "reviews": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "weeklyReviews": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "focusRedemptions": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "coarseLifeEvidence": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "dayBoundaryRevisions": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "commitments": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "planByDeadlineRevisions": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "intentionalOffDays": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "calendarPlans": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "plans": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid) && !root.child('rooms').child($roomId).child('calendarPlanAuthority').exists()"
+        },
+        "operationalPlans": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid) && !root.child('rooms').child($roomId).child('calendarPlanAuthority').exists()"
+        },
+        "calendarPlanAuthority": {
+          "$factId": {
+              ".write": "auth != null && $roomId === ('uid_' + auth.uid) && !data.exists() && newData.exists()",
+            ".validate": "newData.hasChildren(['schemaVersion','id','activatedAtMs','timezone','activationDate','deviceId']) && newData.child('schemaVersion').val() === 1 && newData.child('id').val() === $factId && newData.child('activatedAtMs').isNumber() && newData.child('activatedAtMs').val() > 0 && newData.child('timezone').isString() && newData.child('activationDate').isString() && newData.child('deviceId').isString()"
+          }
+        }
       }
     },
     "pairs": {

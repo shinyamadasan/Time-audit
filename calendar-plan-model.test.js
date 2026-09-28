@@ -189,6 +189,41 @@ test('dates on/after the effective activation date are calendar-authoritative; e
   assert.equal(calendarAuthorityForDate('2026-09-27', null), 'legacy');
 });
 
+test('cross-timezone cutover is set-derived and monotonic: adding a fact can move authority earlier, never later', () => {
+  const earlierInstantLaterDate = buildActivationFact({
+    id: 'a-manila', nowMs: Date.parse('2026-09-27T00:30:00Z'), timezone: MANILA, deviceId: 'manila-device',
+  });
+  const laterInstantEarlierDate = buildActivationFact({
+    id: 'z-los-angeles', nowMs: Date.parse('2026-09-27T05:00:00Z'), timezone: 'America/Los_Angeles', deviceId: 'la-device',
+  });
+  assert.equal(earlierInstantLaterDate.activationDate, '2026-09-27');
+  assert.equal(laterInstantEarlierDate.activationDate, '2026-09-26');
+
+  for (const order of [[earlierInstantLaterDate, laterInstantEarlierDate], [laterInstantEarlierDate, earlierInstantLaterDate]]) {
+    const states = [];
+    for (let count = 1; count <= order.length; count++) {
+      const activation = effectiveActivation(order.slice(0, count));
+      states.push(calendarAuthorityForDate('2026-09-26', activation));
+    }
+    assert.equal(states.at(-1), 'calendar');
+    const firstCalendar = states.indexOf('calendar');
+    if (firstCalendar >= 0) assert.ok(states.slice(firstCalendar).every(state => state === 'calendar'));
+    assert.equal(effectiveActivation(order).authorityActivationDate, '2026-09-26');
+  }
+});
+
+test('same-instant cross-timezone facts converge by minimum activation date even when provenance selects the later date', () => {
+  const instant = Date.parse('2026-09-27T00:30:00Z');
+  const manila = buildActivationFact({ id: 'a-manila', nowMs: instant, timezone: MANILA, deviceId: 'a' });
+  const losAngeles = buildActivationFact({ id: 'z-la', nowMs: instant, timezone: 'America/Los_Angeles', deviceId: 'z' });
+  for (const facts of [[manila, losAngeles], [losAngeles, manila]]) {
+    const activation = effectiveActivation(facts);
+    assert.equal(activation.id, 'a-manila');
+    assert.equal(activation.authorityActivationDate, '2026-09-26');
+    assert.equal(calendarAuthorityForDate('2026-09-26', activation), 'calendar');
+  }
+});
+
 // ── wire format: Realtime Database persists no empty array ─────────────────
 
 import { restorePrunedPlanRecord } from './calendar-plan-model.js';

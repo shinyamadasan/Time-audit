@@ -701,7 +701,7 @@ test('today long labels wrap on phone width without horizontal overflow', async 
 
   await page.evaluate(async () => {
     const longTask = 'Very long focus task name that should wrap calmly instead of stretching the Today tab sideways';
-    savePlanItems(planTodayKey(), [createPlanItem(longTask, 'this morning after the first coffee')]);
+    writeDatePlanLocal(planTodayKey(), { items: [createPlanItem(longTask, 'this morning after the first coffee')], updatedAt: Date.now(), updatedBy: 'layout-fixture' });
     renderToday();
     await _startTimer(longTask);
   });

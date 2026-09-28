@@ -80,6 +80,7 @@ function makeApp({ nowMs, boundary = '18:00', db = fakeDatabase(), owner = { roo
     getRoomId: room,
   });
   const calendar = createCalendarPlanLiveWiring({ repository: calendarRepository, sync: calendarSync, now: () => clock.now, deviceId: () => deviceId, timezone: () => tz.tz });
+  calendar.attachLive();
   const planByDeadline = createPlanByDeadlineRepository({ storage: memoryStorage(), idGenerator: () => `pbd-${++seq}`, getOwner: room });
   const authority = createPlanAuthority({ live, legacy, calendar, now: () => clock.now, accountTimezone: () => tz.tz, planByDeadline });
   return { authority, calendar, live, legacy, planByDeadline, calendarRepository, planRepository, boundaryRepository, db, owner, tz, clock, state, setNow: v => { clock.now = v; } };
@@ -101,6 +102,52 @@ test('BEFORE the cutover nothing changed: at Sunday 11:00 an 18:00 boundary stil
   assert.equal(current.ref.boundaryStartDate, '2026-09-26'); // the very defect being completed
   assert.equal(app.authority.calendarActive(), false);
   assert.equal(app.authority.enabled(), true);
+});
+
+test('delayed authority hydration fails closed on the real legacy write path, then switches to CALENDAR', () => {
+  const db = fakeDatabase();
+  const fact = {
+    schemaVersion: 1, id: 'ca1-remote', activatedAtMs: at(SUN, '09:00'), timezone: MANILA,
+    activationDate: SUN, deviceId: 'device-a',
+  };
+  const base = db.ref('rooms/uid_A');
+  let deliver = null;
+  const delayedRoomRef = {
+    child(name) {
+      const child = base.child(name);
+      if (name !== 'calendarPlanAuthority') return child;
+      return {
+        ...child,
+        on(event, callback) { deliver = () => callback({ val: () => ({ [fact.id]: fact }) }); return callback; },
+      };
+    },
+  };
+  const owner = { room: 'uid_A' };
+  const legacy = legacyStore();
+  const boundaryRepository = createPersonalDayBoundaryRepository({ storage: memoryStorage(), idGenerator: () => `rev-${++seq}`, getOwner: () => owner.room });
+  boundaryRepository.propose({ boundaryTime: '18:00', timezone: MANILA }, at('2026-01-01', '00:00'));
+  const planRepository = createOperationalPlanRepository({ storage: memoryStorage(), getOwner: () => owner.room });
+  const live = createPersonalDayBoundaryLiveWiring({
+    boundaryRepository, planRepository,
+    legacyPlans: { readItems: key => legacy.rawItems(key), saveItems: (key, items) => legacy.saveItems(key, items) },
+    now: () => at(SUN, '11:00'), fallbackTimezone: () => MANILA,
+  });
+  const calendarRepository = createCalendarPlanRepository({ storage: memoryStorage(), getOwner: () => owner.room, getTimezone: () => MANILA, idGenerator: () => 'local-fact' });
+  const calendarSync = createCalendarPlanSyncBridge({ repository: calendarRepository, getRoomRef: () => delayedRoomRef, getRoomId: () => owner.room });
+  const calendar = createCalendarPlanLiveWiring({ repository: calendarRepository, sync: calendarSync, now: () => at(SUN, '11:00'), deviceId: () => 'device-b', timezone: () => MANILA });
+  const authority = createPlanAuthority({ live, legacy, calendar, now: () => at(SUN, '11:00'), accountTimezone: () => MANILA });
+
+  calendar.attachLive();
+  assert.equal(authority.authorityState(), 'unknown');
+  assert.equal(authority.current(), null);
+  assert.throws(() => authority.saveItems(authority.legacyTarget(SUN), [item('must-not-write')]), /authority.*sync/i);
+  assert.deepEqual(legacy.plans, {}, 'ZERO authoritative legacy write before the snapshot');
+
+  deliver();
+  assert.equal(authority.authorityState(), 'calendar');
+  assert.equal(authority.current().id, SUN_ID);
+  authority.saveItems(authority.current(), [item('calendar-write')]);
+  assert.equal(calendarRepository.read(SUN).items[0].id, 'calendar-write');
 });
 
 test('Sunday 11:00 @ 18:00: after the owner activates, the current plan IS Sunday\'s, the next IS Monday\'s', () => {
@@ -365,6 +412,58 @@ test('legacy data does not disappear: the pre-cutover personal day stays readabl
   assert.deepEqual(app.authority.staleUnfinished().items.map(row => row.item.id), ['legacy-2']);
 });
 
+test('concurrent same-source recovery to different dates converges to one authoritative live item in either delivery order', async () => {
+  for (const reverse of [false, true]) {
+    const db = fakeDatabase();
+    const legacySeed = { '2026-09-26': { items: [item('source', '')], updatedAt: 1 } };
+    const a = makeApp({ nowMs: at(SUN, '11:00'), boundary: null, db, deviceId: 'a', legacySeed, online: false });
+    const b = makeApp({ nowMs: at(SUN, '11:00'), boundary: null, db, deviceId: 'b', legacySeed, online: false });
+    a.authority.activateCalendar(); b.authority.activateCalendar();
+    const claimA = a.authority.moveStaleItem({ sourceTarget: a.authority.targetById('2026-09-26'), itemId: 'source', destination: a.authority.current(), stamp: value => ({ ...value, updatedAt: 10, updatedBy: 'a' }) });
+    const claimB = b.authority.moveStaleItem({ sourceTarget: b.authority.targetById('2026-09-26'), itemId: 'source', destination: b.authority.upcoming(), stamp: value => ({ ...value, updatedAt: 11, updatedBy: 'b' }) });
+    assert.equal(claimA.carryId, claimB.carryId, 'identity is source-owned, not destination-owned');
+    assert.deepEqual(claimA.item.relocationRevision, {
+      schemaVersion: 1, sequence: 1, fromDayId: '2026-09-26', toDayId: `cal1:${SUN}`, updatedAt: 10, updatedBy: 'a',
+    }, 'the materialized item carries its account-owned destination claim');
+    assert.equal(claimB.item.relocationRevision.toDayId, `cal1:${MON}`);
+
+    for (const device of reverse ? [b, a] : [a, b]) {
+      device.state.online = true;
+      device.calendar.attachLive();
+      device.calendar.pushAllLocal();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    for (const device of [a, b]) {
+      device.calendar.attachLive();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      device.authority.invalidate();
+      const liveRecovered = [device.authority.current(), device.authority.upcoming()]
+        .flatMap(target => device.authority.items(target))
+        .filter(candidate => candidate.carriedFromId === 'source');
+      assert.equal(liveRecovered.length, 1, `reverse=${reverse}: never two authoritative recovered copies`);
+      assert.equal(device.authority.staleUnfinished().items.some(row => row.item.id === 'source'), false);
+    }
+  }
+});
+
+test('concurrent same-source recovery to the same date is one idempotent item', async () => {
+  const db = fakeDatabase();
+  const legacySeed = { '2026-09-26': { items: [item('source', '')], updatedAt: 1 } };
+  const a = makeApp({ nowMs: at(SUN, '11:00'), boundary: null, db, deviceId: 'a', legacySeed, online: false });
+  const b = makeApp({ nowMs: at(SUN, '11:00'), boundary: null, db, deviceId: 'b', legacySeed, online: false });
+  a.authority.activateCalendar(); b.authority.activateCalendar();
+  for (const device of [a, b]) device.authority.moveStaleItem({ sourceTarget: device.authority.targetById('2026-09-26'), itemId: 'source', destination: device.authority.current(), stamp: stampFrom(device) });
+  for (const device of [a, b]) {
+    device.state.online = true;
+    device.calendar.attachLive();
+    device.calendar.pushAllLocal();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  assert.equal(a.authority.items(a.authority.current()).filter(candidate => candidate.carriedFromId === 'source').length, 1);
+  assert.equal(b.authority.items(b.authority.current()).filter(candidate => candidate.carriedFromId === 'source').length, 1);
+  assert.equal(a.authority.moveStaleItem({ sourceTarget: a.authority.targetById('2026-09-26'), itemId: 'source', destination: a.authority.current(), stamp: stampFrom(a) }).moved, false);
+});
+
 test('a legacy plans[dateKey] plan for a date on/after the cutover is never the calendar plan\'s twin: calendar wins deterministically, legacy stays discoverable', () => {
   const legacySeed = { [MON]: { items: [{ id: 'old-mon', task: 'Prepared before the cutover', when: '', done: false, updatedAt: 5, updatedBy: 'old' }], updatedAt: 5 } };
   const app = makeApp({ nowMs: at(SUN, '11:00'), boundary: null, legacySeed });
@@ -416,7 +515,11 @@ test('a direct A -> B switch: no A plan, deadline, cutover or carryover reaches 
 
   app.owner.room = 'uid_B';
   app.authority.invalidate();
+  assert.equal(app.authority.authorityState(), 'unknown', 'B is not inferred legacy from A state or absent cache');
   assert.equal(app.authority.calendarActive(), false, 'B has its own (absent) cutover');
+  assert.equal(app.authority.current(), null, 'writes fail closed while B hydrates');
+  app.calendar.attachLive();
+  assert.equal(app.authority.authorityState(), 'legacy', 'B becomes legacy only after B\'s snapshot');
   assert.equal(app.authority.current().store, 'legacy', 'B has no Personal Day of its own: plain legacy routing');
   assert.equal(app.authority.calendarCarryoverFor(MON), null);
   assert.deepEqual(app.authority.supersededPlans(), []);
@@ -427,6 +530,7 @@ test('a direct A -> B switch: no A plan, deadline, cutover or carryover reaches 
 
   app.owner.room = 'uid_A';
   app.authority.invalidate();
+  assert.equal(app.authority.authorityState(), 'calendar', 'A cached cutover restores A independently');
   assert.equal(app.authority.calendarActive(), true);
   assert.equal(app.authority.calendarCarryoverFor(MON).items.length, 3);
   assert.equal(app.calendarRepository.read(SUN).items.length, 6);
@@ -460,16 +564,19 @@ test('device A adopts calendar authority and prepares Sunday; stale device B (of
   const db = fakeDatabase();
   const phone = makeApp({ nowMs: at(SUN, '11:00'), db, deviceId: 'phone' });
   const mac = makeApp({ nowMs: at(SUN, '11:00'), db, deviceId: 'mac', online: false });
-  mac.calendar.attachLive();
+  // Work written by the already-installed old version before this new startup remains recoverable.
+  const oldMacDay = mac.live.planningDays().current;
+  mac.live.writePlanItems(oldMacDay, [item('mac-offline-legacy', '13:00')], mac.live.revisions());
 
   phone.calendar.attachLive();
   phone.authority.activateCalendar();
   prepareAs(phone, phone.authority.current(), [item('from-phone', '11:00')]);
   await new Promise(resolve => setTimeout(resolve, 0));
 
-  // The Mac has not heard: it is still (legitimately) on the legacy chain and works offline.
-  assert.equal(mac.authority.current().store, 'operational');
-  mac.authority.saveItems(mac.authority.current(), [item('mac-offline-legacy', '13:00')]);
+  // The Mac has not heard: absence of a cache is UNKNOWN, not permission to create new legacy truth.
+  assert.equal(mac.authority.authorityState(), 'unknown');
+  assert.equal(mac.authority.current(), null);
+  assert.throws(() => mac.authority.saveItems(mac.authority.legacyTarget(SUN), [item('must-not-write')]), /authority.*sync/i);
 
   // Reconnect: it learns the cutover from the account.
   mac.state.online = true;
@@ -580,4 +687,16 @@ test('Review: Sunday\'s plan context includes its Monday 02:00 item and the actu
   assert.equal(app.authority.classifyItemActual(sunday, { ...overnight, done: true, doneAt: at(MON, '01:30') }, {}), 'done');
   assert.equal(app.authority.classifyItemActual(sunday, { ...overnight, done: true, doneAt: at(SUN, '20:00') }, {}), 'done', 'done during the plan\'s own date is not "early"');
   assert.equal(app.authority.classifyItemActual(sunday, { ...overnight, done: true, doneAt: at('2026-09-26', '20:00') }, {}), 'done-early');
+});
+
+test('Review extent is frozen to the calendar plan home timezone and item-owned instants after the account timezone changes', () => {
+  const { app, sunday } = sundayWithOvernight();
+  const overnight = app.authority.items(sunday).find(candidate => candidate.id === 'd');
+  const itemBefore = app.authority.itemInstants(sunday, overnight);
+  const before = app.authority.reviewEvidenceWindow(sunday);
+  app.tz.tz = LA;
+  const historical = app.authority.calendarTarget(SUN);
+  const itemAfter = app.authority.itemInstants(historical, app.authority.items(historical).find(candidate => candidate.id === 'd'));
+  assert.deepEqual(app.authority.reviewEvidenceWindow(historical), before);
+  assert.deepEqual(itemAfter, itemBefore);
 });
