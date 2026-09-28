@@ -92,7 +92,7 @@ test('pushAllDeadlines refuses with owner-mismatch when the joined room is not t
 // ── deadline pull / attach ──────────────────────────────────────────────────
 
 test('attachDeadlines merges an inbound remote snapshot into the room-owning cache', () => {
-  const remoteRevision = { id: 'remote-1', deadlineTime: '08:00', effectiveFromInstant: 1000 };
+  const remoteRevision = { id: 'remote-1', deadlineTime: '08:00', timezone: MANILA, effectiveFromInstant: 1000 };
   const roomRef = fakeRoomRef({ [PLAN_BY_DEADLINE_REVISIONS_REMOTE_PATH]: { 'remote-1': remoteRevision } });
   const repository = repoFor(TEST_ROOM);
   const bridge = createPlanByDeadlineSyncBridge({ repository, getRoomRef: () => roomRef, getRoomId: () => TEST_ROOM });
@@ -101,7 +101,7 @@ test('attachDeadlines merges an inbound remote snapshot into the room-owning cac
 });
 
 test('a snapshot from a room that is no longer joined/owning is never merged', () => {
-  const remoteRevision = { id: 'remote-1', deadlineTime: '08:00', effectiveFromInstant: 1000 };
+  const remoteRevision = { id: 'remote-1', deadlineTime: '08:00', timezone: MANILA, effectiveFromInstant: 1000 };
   const roomRef = fakeRoomRef({ [PLAN_BY_DEADLINE_REVISIONS_REMOTE_PATH]: { 'remote-1': remoteRevision } });
   const repository = repoFor(TEST_ROOM);
   const bridge = createPlanByDeadlineSyncBridge({ repository, getRoomRef: () => roomRef, getRoomId: () => OTHER_ROOM }); // never owns TEST_ROOM's cache
@@ -112,13 +112,13 @@ test('a snapshot from a room that is no longer joined/owning is never merged', (
 test('attachDeadlines for a different room drops the previous room\'s listener first (account switch)', () => {
   let currentRoom = TEST_ROOM;
   const roomRefA = fakeRoomRef();
-  const roomRefB = fakeRoomRef({ [PLAN_BY_DEADLINE_REVISIONS_REMOTE_PATH]: { 'remote-1': { id: 'remote-1', deadlineTime: '09:00', effectiveFromInstant: 2000 } } });
+  const roomRefB = fakeRoomRef({ [PLAN_BY_DEADLINE_REVISIONS_REMOTE_PATH]: { 'remote-1': { id: 'remote-1', deadlineTime: '09:00', timezone: MANILA, effectiveFromInstant: 2000 } } });
   const repository = createPlanByDeadlineRepository({ storage: memory(), idGenerator: seqIds, getOwner: () => currentRoom });
   const bridge = createPlanByDeadlineSyncBridge({ repository, getRoomRef: () => (currentRoom === TEST_ROOM ? roomRefA : roomRefB), getRoomId: () => currentRoom });
   bridge.attachDeadlines();
   currentRoom = OTHER_ROOM;
   bridge.attachDeadlines();
-  assert.deepEqual(repository.readDeadlines(), [{ id: 'remote-1', deadlineTime: '09:00', effectiveFromInstant: 2000 }]);
+  assert.deepEqual(repository.readDeadlines(), [{ id: 'remote-1', deadlineTime: '09:00', timezone: MANILA, effectiveFromInstant: 2000 }]);
 });
 
 // ── off-day push/pull ────────────────────────────────────────────────────

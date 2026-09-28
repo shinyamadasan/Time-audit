@@ -72,7 +72,7 @@ test('deadline cache is room-scoped: A and B never see each other\'s deadline', 
 
 test('mergeRemoteDeadlines: a remote id local does not have is adopted', () => {
   const r = repo();
-  const remote = { id: 'remote-1', deadlineTime: '08:00', effectiveFromInstant: 1000 };
+  const remote = { id: 'remote-1', deadlineTime: '08:00', timezone: MANILA, effectiveFromInstant: 1000 };
   const result = r.mergeRemoteDeadlines({ 'remote-1': remote });
   assert.equal(result.changed, true);
   assert.deepEqual(r.readDeadlines(), [remote]);
@@ -82,7 +82,7 @@ test('mergeRemoteDeadlines: a genuine conflicting duplicate id is rejected, not 
   const r = repo();
   r.proposeDeadline({ deadlineTime: '08:00', timezone: MANILA }, Date.parse('2026-01-01T00:00:00Z'));
   const localId = r.readDeadlines()[0].id;
-  const conflicting = { id: localId, deadlineTime: '09:00', effectiveFromInstant: 999999999 };
+  const conflicting = { id: localId, deadlineTime: '09:00', timezone: MANILA, effectiveFromInstant: 999999999 };
   const result = r.mergeRemoteDeadlines({ [localId]: conflicting });
   assert.equal(result.changed, false);
   assert.deepEqual(result.rejectedIds, [localId]);
@@ -92,11 +92,67 @@ test('mergeRemoteDeadlines: semantic duplicates converge on the canonical (lexic
   const r = repo();
   r.proposeDeadline({ deadlineTime: '08:00', timezone: MANILA }, Date.parse('2026-01-01T00:00:00Z'));
   const localRevision = r.readDeadlines()[0];
-  const remoteSemanticDup = { id: `aaa-${localRevision.id}`, deadlineTime: localRevision.deadlineTime, effectiveFromInstant: localRevision.effectiveFromInstant };
+  const remoteSemanticDup = { id: `aaa-${localRevision.id}`, deadlineTime: localRevision.deadlineTime, timezone: localRevision.timezone, effectiveFromInstant: localRevision.effectiveFromInstant };
   const result = r.mergeRemoteDeadlines({ [remoteSemanticDup.id]: remoteSemanticDup });
   const idsNow = r.readDeadlines().map(rv => rv.id);
   assert.equal(idsNow.length, 1);
   assert.equal(idsNow[0], [localRevision.id, remoteSemanticDup.id].sort()[0]);
+});
+
+// ── FIX FIRST §14/§15: equal-authority contradictory revisions ────────────
+
+test('mergeRemoteDeadlines: an equal-authority CONTRADICTION (same effectiveFromInstant, different facts, different ids) is WRITTEN, not rejected — both facts preserved', () => {
+  const r = repo();
+  const local = { id: 'x', deadlineTime: '08:00', timezone: MANILA, effectiveFromInstant: 1000 };
+  const remote = { id: 'y', deadlineTime: '09:00', timezone: MANILA, effectiveFromInstant: 1000 };
+  // Seed local directly via a remote-merge (simplest way to seed an arbitrary raw revision in a test).
+  r.mergeRemoteDeadlines({ x: local });
+  const result = r.mergeRemoteDeadlines({ y: remote });
+  assert.equal(result.changed, true);
+  assert.ok(result.conflict, 'the merge result reports the conflict explicitly');
+  const raw = r.listAllDeadlinesRaw();
+  assert.equal(raw.length, 2);
+  assert.ok(raw.some(rv => rv.id === 'x') && raw.some(rv => rv.id === 'y'), 'both contradicting facts are preserved in storage');
+});
+
+test('a stored equal-authority conflict is reported by deadlineConflict()/deadlineStatus(), and readDeadlines() safely excludes it rather than throwing', () => {
+  const r = repo();
+  r.mergeRemoteDeadlines({ x: { id: 'x', deadlineTime: '08:00', timezone: MANILA, effectiveFromInstant: 1000 } });
+  r.mergeRemoteDeadlines({ y: { id: 'y', deadlineTime: '09:00', timezone: MANILA, effectiveFromInstant: 1000 } });
+  assert.equal(r.deadlineConflict().length, 1);
+  assert.equal(r.deadlineStatus().status, 'conflict');
+  assert.doesNotThrow(() => r.readDeadlines());
+  assert.deepEqual(r.readDeadlines(), []); // the only revisions on record are the conflicting pair — safely unconfigured, never a crash or a guessed winner
+});
+
+test('reversed arrival order (y merged before x) converges on the IDENTICAL stored conflict state', () => {
+  const rForward = repo();
+  rForward.mergeRemoteDeadlines({ x: { id: 'x', deadlineTime: '08:00', timezone: MANILA, effectiveFromInstant: 1000 } });
+  rForward.mergeRemoteDeadlines({ y: { id: 'y', deadlineTime: '09:00', timezone: MANILA, effectiveFromInstant: 1000 } });
+
+  const rReversed = repo();
+  rReversed.mergeRemoteDeadlines({ y: { id: 'y', deadlineTime: '09:00', timezone: MANILA, effectiveFromInstant: 1000 } });
+  rReversed.mergeRemoteDeadlines({ x: { id: 'x', deadlineTime: '08:00', timezone: MANILA, effectiveFromInstant: 1000 } });
+
+  const sortById = list => [...list].sort((a, b) => a.id.localeCompare(b.id));
+  assert.deepEqual(sortById(rForward.listAllDeadlinesRaw()), sortById(rReversed.listAllDeadlinesRaw()));
+  assert.equal(rForward.deadlineStatus().status, 'conflict');
+  assert.equal(rReversed.deadlineStatus().status, 'conflict');
+});
+
+test('the owner resolves a conflict by proposing a new revision — proposeDeadline works despite the stored conflict, and the old conflict is preserved (not deleted)', () => {
+  const r = repo();
+  r.mergeRemoteDeadlines({ x: { id: 'x', deadlineTime: '08:00', timezone: MANILA, effectiveFromInstant: 1000 } });
+  r.mergeRemoteDeadlines({ y: { id: 'y', deadlineTime: '09:00', timezone: MANILA, effectiveFromInstant: 1000 } });
+  assert.equal(r.deadlineStatus().status, 'conflict');
+
+  const { revision } = r.proposeDeadline({ deadlineTime: '07:00', timezone: MANILA }, Date.parse('2026-09-27T00:00:00Z'));
+  assert.ok(revision.effectiveFromInstant > 1000);
+  assert.equal(r.deadlineStatus().status, 'configured'); // resolved going forward
+  assert.deepEqual(r.readDeadlines().map(rv => rv.id), [revision.id]); // only the new, clean revision is usable
+  assert.equal(r.deadlineConflict().length, 0); // no longer ACTIVE...
+  const raw = r.listAllDeadlinesRaw();
+  assert.ok(raw.some(rv => rv.id === 'x') && raw.some(rv => rv.id === 'y'), '...but the old conflict is still preserved as raw history, never deleted');
 });
 
 // ── intentional off-day ────────────────────────────────────────────────────

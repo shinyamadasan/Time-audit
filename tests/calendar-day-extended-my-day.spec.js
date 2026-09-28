@@ -201,25 +201,45 @@ test('once Monday\'s own day is current, Monday\'s view still surfaces Sunday\'s
   await expect(timeline(page)).toContainText('Monday evening wrap-up');
 });
 
-test('a carryover row is a projection over the SAME authoritative record — never a clone under Monday\'s id, and its rendered state matches the one stored record', async ({ page }) => {
+test('FIX FIRST §10/§11: a carryover row is completable through the normal action, writes to Sunday\'s OWN dayId + itemId, and never clones under Monday', async ({ page }) => {
   await openApp(page, { now: at('2026-09-28', '19:00'), plans: operationalPlanStore() });
   const carryoverCheck = page.locator('.tl-carryover-section [data-plan-item-id="sun-overnight-1"] .tl-plan-check');
   await expect(carryoverCheck).toBeVisible();
   // Sunday's own operational day has fully ended by Monday 19:00 (its window was Sun
-  // 18:00 -> Mon 18:00), so — exactly like navigating directly to any other past My Day
-  // — it is correctly read-only here too; this is the SAME pre-existing "past My Days
-  // are history" rule (isTimelineTargetEditable), not a carryover-specific regression.
-  await expect(carryoverCheck).toBeDisabled();
+  // 18:00 -> Mon 18:00) — a live/current carryover row is completable anyway, unlike
+  // any OTHER (non-carryover) reference to a past day, which stays correctly read-only.
+  await expect(carryoverCheck).toBeEnabled();
   await expect(carryoverCheck).toHaveText(''); // stored done:false, rendered unchecked — no divergence
 
-  const dayId = await carryoverCheck.getAttribute('onclick');
-  expect(dayId).toContain(sundayDayId); // the row routes back to Sunday's own target id, never a copy
+  const onclick = await carryoverCheck.getAttribute('onclick');
+  expect(onclick).toContain('toggleCarryoverItemDone');
+  expect(onclick).toContain(sundayDayId); // routes back to Sunday's own target id, never a copy
+
+  await carryoverCheck.click();
+  await expect(carryoverCheck).toHaveText('✓');
 
   const sunRecord = await page.evaluate(dayId => JSON.parse(localStorage.getItem('ta3-operational-plans-v1:uid_cdemd-user')).plans[dayId], sundayDayId);
-  expect(sunRecord.items.filter(i => i.id === 'sun-overnight-1').length).toBe(1);
-  // Exactly one record for this item anywhere in the store — no clone under Monday's id either.
+  const item = sunRecord.items.find(i => i.id === 'sun-overnight-1');
+  expect(item.done).toBe(true);
+  expect(sunRecord.items.filter(i => i.id === 'sun-overnight-1').length).toBe(1); // exactly one record
+  // No clone under Monday's id either.
   const monRecord = await page.evaluate(dayId => JSON.parse(localStorage.getItem('ta3-operational-plans-v1:uid_cdemd-user')).plans[dayId], mondayDayId);
   expect(monRecord.items.some(i => i.id === 'sun-overnight-1')).toBe(false);
+});
+
+test('FIX FIRST §11: an item that is NOT live today (source day fully past, real timestamp not today) is never completable via the carryover bypass', async ({ page }) => {
+  // Seed a plan where Sunday's evening item (23:00, stays on Sunday) is the only one
+  // rendered outside the carryover filter — confirm the safety re-check inside
+  // toggleCarryoverItemDone refuses an id/itemId pair whose real date isn't today,
+  // even if called directly (never trusting the caller).
+  await openApp(page, { now: at('2026-09-28', '19:00'), plans: operationalPlanStore() });
+  const refused = await page.evaluate(dayId => {
+    const before = JSON.parse(localStorage.getItem('ta3-operational-plans-v1:uid_cdemd-user')).plans[dayId].items.find(i => i.id === 'sun-evening').done;
+    window.toggleCarryoverItemDone(dayId, 'sun-evening'); // Sunday 23:00 — stayed on Sunday, not today (Monday)
+    const after = JSON.parse(localStorage.getItem('ta3-operational-plans-v1:uid_cdemd-user')).plans[dayId].items.find(i => i.id === 'sun-evening').done;
+    return before === after; // unchanged -> refused
+  }, sundayDayId);
+  expect(refused).toBe(true);
 });
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
-<meta name="pdb-release" content="20260927-calendar-day-extended-my-day-v1">
+<meta name="pdb-release" content="20260927-calendar-day-extended-my-day-fix1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1679,7 +1679,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260927-calendar-day-extended-my-day-v1
+<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20260927-calendar-day-extended-my-day-fix1
      themselves, but the modules they IMPORT are bare URLs, which browsers cache independently of index.html
      — so a device could run new sync code against an old repository, or an old live wiring against a new
      storage.js (permanent "Off", or a link error that stops PlanAuthority loading at all). This map makes
@@ -1694,60 +1694,60 @@
 <script type="importmap">
 {
   "imports": {
-    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./operational-plan-model.js": "./operational-plan-model.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./plan-authority.js": "./plan-authority.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./commitments-repository.js": "./commitments-repository.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./commitments-sync.js": "./commitments-sync.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./capability-career-repository.js": "./capability-career-repository.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20260927-calendar-day-extended-my-day-v1",
-    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20260927-calendar-day-extended-my-day-v1"
+    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./operational-plan-model.js": "./operational-plan-model.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./plan-authority.js": "./plan-authority.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./commitments-repository.js": "./commitments-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./commitments-sync.js": "./commitments-sync.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./capability-career-repository.js": "./capability-career-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20260927-calendar-day-extended-my-day-fix1",
+    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20260927-calendar-day-extended-my-day-fix1"
   }
 }
 </script>
-<script src="storage.js?v=20260927-calendar-day-extended-my-day-v1"></script>
+<script src="storage.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
-<script type="module" src="daily-routines-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
+<script type="module" src="daily-routines-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
 <script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
-<script type="module" src="learning-plan-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
-<script type="module" src="capability-career-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
+<script type="module" src="learning-plan-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
+<script type="module" src="capability-career-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
 <script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
 <script type="module" src="windows-hud-bridge.js?v=20260908-windows-ambient-focus-hud-v1"></script>
-<script type="module" src="coarse-life-evidence-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
-<script type="module" src="coarse-life-evidence-sync.js?v=20260927-calendar-day-extended-my-day-v1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
+<script type="module" src="coarse-life-evidence-sync.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20260927-calendar-day-extended-my-day-v1"></script>
-<script type="module" src="personal-day-boundary-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
-<script type="module" src="plan-by-deadline-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
+<script type="module" src="plan-by-deadline-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
 <script>
 // Read-only Personal Day sync diagnostics for a real device: open the app with ?pdbdiag=1.
-if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260927-calendar-day-extended-my-day-v1'), 1500));
+if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20260927-calendar-day-extended-my-day-fix1'), 1500));
 </script>
-<script type="module" src="operational-plan-ui.js?v=20260927-calendar-day-extended-my-day-v1"></script>
-<script type="module" src="commitments-sync.js?v=20260927-calendar-day-extended-my-day-v1"></script>
+<script type="module" src="operational-plan-ui.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
+<script type="module" src="commitments-sync.js?v=20260927-calendar-day-extended-my-day-fix1"></script>
 <script type="module" src="planning-continuity-ui.js?v=20260918-planning-continuity-v1"></script>
 
 <script>
@@ -4538,7 +4538,13 @@ function timelineRowEscape(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
-function renderPlannedTimelineRow(row, editable) {
+/** @param {object} row @param {boolean} editable governs the edit-task icon only
+ *  @param {{completable?:boolean, toggleFn?:string}} [opts] `completable` governs
+ *  the checkbox independently of `editable` — Calendar Day + Extended My Day V1
+ *  §10/§11: a live/current carryover row is completable (its one authoritative
+ *  record, via a safety-checked toggle handler) without being generally
+ *  editable (retitling/rescheduling a technically-past source day stays refused). */
+function renderPlannedTimelineRow(row, editable, { completable = editable, toggleFn = 'toggleTimelinePlanDone' } = {}) {
   const title = timelineRowEscape(row.title);
   if (row.sourceType === 'commitment') {
     const end = Number.isFinite(row.endMs) ? `–${localTime(row.endMs)}` : '';
@@ -4551,7 +4557,7 @@ function renderPlannedTimelineRow(row, editable) {
   const star = row.planKind === 'priority' ? '<span aria-label="Top Priority">★</span> ' : '';
   return `<div class="tl-row tl-plan-row${row.done ? ' done' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}">
     <div class="tl-time">${localTime(row.startMs)}</div><div class="tl-bar-col tl-bar-plan"></div>
-    <button class="tl-plan-check" onclick="toggleTimelinePlanDone('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${editable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>
+    <button class="tl-plan-check" onclick="${toggleFn}('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${completable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>
     <div class="tl-content"><div class="tl-activity">${star}${title}</div><div class="tl-meta">Planned ${row.planKind === 'priority' ? 'priority' : 'task'} · no time logged by this check</div></div>
     ${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}
   </div>`;
@@ -4591,6 +4597,24 @@ function toggleTimelinePlanDone(dayId, itemId) {
   renderToday();
 }
 
+/** Calendar Day + Extended My Day V1 FIX FIRST §10/§11: completes a carryover
+ *  row — writes to the SAME Sunday-originating dayId + itemId toggleTimelinePlanDone
+ *  would, never a clone under today's target. Delegates to
+ *  PlanAuthority.completeCarryoverItem(), which independently RE-VERIFIES
+ *  (from the item's own real resolved start instant, never trusting this
+ *  caller) that it lands on TODAY's calendar date before writing — the one
+ *  narrow exception to "past My Days are history," scoped to a live/current
+ *  carryover item only. */
+function toggleCarryoverItemDone(dayId, itemId) {
+  if (!globalThis.PlanAuthority) return;
+  const target = globalThis.PlanAuthority.targetById(dayId);
+  if (!target) return;
+  const result = globalThis.PlanAuthority.completeCarryoverItem({ target, itemId, stamp: stampPlanItemMutation });
+  if (!result) return; // not live today — refused
+  _todayRenderKey = '__FORCE__';
+  renderToday();
+}
+
 function isTimelineTargetEditable(target) {
   if (!target) return false;
   if (Number.isFinite(target.endMs)) return target.endMs > Date.now();
@@ -4609,7 +4633,7 @@ function renderDateBreakRow(item) {
 }
 
 function renderTimelineCombined(combined) {
-  return combined.map(item => item._dateBreak ? renderDateBreakRow(item) : item._timelinePlanned ? renderPlannedTimelineRow(item, item._editable) : item.isGap ? renderGapRow(item) : renderEntryRow(item)).join('');
+  return combined.map(item => item._dateBreak ? renderDateBreakRow(item) : item._timelinePlanned ? renderPlannedTimelineRow(item, item._editable, { completable: item._completable, toggleFn: item._toggleFn }) : item.isGap ? renderGapRow(item) : renderEntryRow(item)).join('');
 }
 
 /** @param {Object} e entry @returns {string} HTML for a recent-list row */
@@ -5962,10 +5986,15 @@ function renderToday() {
           commitments: globalThis.PlanningContinuityUI?.commitmentsForTarget?.(carryoverTarget) || [],
           itemStartInstant: (target, when) => globalThis.PlanAuthority?.itemStartInstant(target, when) ?? null,
         }) || { positioned: [] };
-        const carryoverEditable = isTimelineTargetEditable(carryoverTarget);
+        // Calendar Day + Extended My Day V1 FIX FIRST §10/§11: a carryover row that
+        // survives the today-dated filter below IS, by construction, a live/current
+        // item — completable via toggleCarryoverItemDone (which independently
+        // re-verifies the same today-dated fact before writing) regardless of
+        // whether the SOURCE day's own window has ended. _editable stays false
+        // (no rename/reschedule icon) — only completion is the supported action here.
         carryoverRows = priorProjection.positioned
           .filter(row => getDateInTZ(row.startMs, _tz) === _viewKey)
-          .map(row => ({ ...row, tsStart: row.startMs, ts: row.endMs || row.startMs, _timelinePlanned: true, _editable: carryoverEditable }));
+          .map(row => ({ ...row, tsStart: row.startMs, ts: row.endMs || row.startMs, _timelinePlanned: true, _editable: false, _completable: true, _toggleFn: 'toggleCarryoverItemDone' }));
         if (carryoverRows.length) {
           carryoverFromLabel = new Intl.DateTimeFormat('en-US', { timeZone: _tz, weekday: 'long' }).format(tzParseTime(carryoverTarget.ref?.boundaryStartDate || _viewKey, '12:00'));
         }

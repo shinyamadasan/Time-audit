@@ -37,7 +37,19 @@ function accountTimezone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Etc/UTC';
 }
 
+/** The SAME origin date planningDeadlineStreak() uses for "today" — the
+ *  current() target's own origin date, never an independently-derived
+ *  calendar date (FIX FIRST §2: the off-day toggle must target the exact
+ *  date the streak looks up, or "mark today off" could silently apply to a
+ *  date the streak never even asks about under an active boundary). Falls
+ *  back to a plain calendar date only if PlanAuthority is unavailable. */
 function todayDateKey() {
+  try {
+    const target = window.PlanAuthority?.current?.();
+    if (target && typeof window.PlanAuthority.deadlineDateKeyForTarget === 'function') {
+      return window.PlanAuthority.deadlineDateKeyForTarget(target);
+    }
+  } catch { /* fall through */ }
   const tz = accountTimezone();
   return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
 }
@@ -90,7 +102,14 @@ function render() {
   const offDayRecord = bridge.repository.readOffDay(dateKey);
   const offDayActive = !!offDayRecord && !Number.isFinite(offDayRecord.revokedAtMs);
 
-  const explain = configured
+  // FIX FIRST §14/§15: two devices independently set conflicting settings at the
+  // same activation instant — paused-safe (never a guessed winner), resolved only
+  // by explicitly saving a new time below (Save always works: proposeDeadline
+  // builds from the conflict-free set and never rejects because of it).
+  const hasConflict = typeof bridge.repository.deadlineConflict === 'function' && bridge.repository.deadlineConflict().length > 0;
+  const explain = hasConflict
+    ? 'Two devices set conflicting planning deadlines at the same time. Planning streak tracking is paused until you save a time below to resolve it.'
+    : configured
     ? 'Plan your day before this time to maintain your planning streak.'
     : 'Choose a planning deadline to enable planning streak tracking.';
 
@@ -99,6 +118,8 @@ function render() {
   })();
   const streakLine = streak?.status === 'configured'
     ? `<div class="settings-hint" style="margin-top:6px">Today: ${escape(streak.today.status)} · Current streak ${streak.current} · Best ${streak.best}</div>`
+    : streak?.status === 'conflict'
+    ? `<div class="settings-hint" style="margin-top:6px">Streak tracking paused — conflicting deadline settings need resolving.</div>`
     : '';
 
   el.innerHTML = `

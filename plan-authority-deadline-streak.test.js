@@ -1,15 +1,24 @@
 // plan-authority-deadline-streak.test.js
 //
 // Calendar Day + Extended My Day V1 — planningDeadlineStreak(), the new
-// deadline-based streak authority layered onto plan-authority.js, tested
-// against a never-enabled (Personal Day boundary off) account, since that
-// account is already calendar-date-canonical (per the project's own audit:
-// "for a never-enabled account, day is already calendar-canonical").
+// deadline-based streak authority layered onto plan-authority.js. Most of this
+// file tests against a never-enabled (Personal Day boundary off) account,
+// since that account is already calendar-date-canonical (per the project's
+// own audit: "for a never-enabled account, day is already calendar-
+// canonical"). The "boundary ENABLED" section further down uses a full,
+// production-equivalent authority (real operational-plan repository, real
+// live wiring) — the FIX FIRST §5 requirement: a test that reproduces the
+// Sunday-11:00-under-an-18:00-boundary case and fails on the pre-fix code.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPlanAuthority } from './plan-authority.js';
 import { createPlanByDeadlineRepository } from './plan-by-deadline-repository.js';
+import { createPersonalDayBoundaryLiveWiring } from './personal-day-boundary-live.js';
+import { createPersonalDayBoundaryRepository } from './personal-day-boundary-repository.js';
+import { createOperationalPlanRepository } from './operational-plan-repository.js';
+import { createOperationalPlanSyncBridge } from './operational-plan-sync.js';
+import { createPersonalDayBoundarySyncBridge } from './personal-day-boundary-sync.js';
 
 const MANILA = 'Asia/Manila';
 const manila = (dateStr, hhmm) => Date.parse(`${dateStr}T${hhmm}:00+08:00`);
@@ -176,4 +185,140 @@ test('midnight crossing alone does not change a previously-decided day\'s status
   pbdNextDay.proposeDeadline({ deadlineTime: '08:00', timezone: MANILA }, manila('2026-01-01', '00:00'));
   const afterMidnight = authorityNextDay.planningDeadlineStreak();
   assert.equal(afterMidnight.today.status, 'pending'); // a NEW day's own deadline hasn't arrived — no missed-day cascade from crossing midnight
+});
+
+// ── FIX FIRST §14/§15/§16: a stored conflict surfaces explicitly, never a false miss ─
+
+test('planningDeadlineStreak reports an explicit "conflict" status — never a false "missed" — when the deadline history holds an unresolved equal-authority contradiction', () => {
+  const { authority, planByDeadline } = makeApp({ clock: manila('2026-09-27', '09:00') });
+  // Seed a genuine contradiction directly (same effectiveFromInstant, different facts, different ids) via merge.
+  planByDeadline.mergeRemoteDeadlines({ x: { id: 'x', deadlineTime: '08:00', timezone: MANILA, effectiveFromInstant: manila('2026-01-01', '00:00') } });
+  planByDeadline.mergeRemoteDeadlines({ y: { id: 'y', deadlineTime: '09:00', timezone: MANILA, effectiveFromInstant: manila('2026-01-01', '00:00') } });
+  const result = authority.planningDeadlineStreak();
+  assert.equal(result.status, 'conflict');
+  assert.equal(result.conflicts.length, 1);
+});
+
+test('resolving the conflict by proposing a new revision makes planningDeadlineStreak configured again', () => {
+  const { authority, planByDeadline } = makeApp({ clock: manila('2026-09-27', '09:00') });
+  planByDeadline.mergeRemoteDeadlines({ x: { id: 'x', deadlineTime: '08:00', timezone: MANILA, effectiveFromInstant: manila('2026-01-01', '00:00') } });
+  planByDeadline.mergeRemoteDeadlines({ y: { id: 'y', deadlineTime: '09:00', timezone: MANILA, effectiveFromInstant: manila('2026-01-01', '00:00') } });
+  assert.equal(authority.planningDeadlineStreak().status, 'conflict');
+  planByDeadline.proposeDeadline({ deadlineTime: '08:00', timezone: MANILA }, manila('2026-09-27', '09:00'));
+  assert.equal(authority.planningDeadlineStreak().status, 'configured');
+});
+
+// ── FIX FIRST §19: account isolation for deadline/off-day/conflict state ──
+
+test('A and B never see each other\'s deadline, off-day, or conflict state, even sharing the same underlying storage', () => {
+  let currentRoom = 'uid_account-a';
+  const storage = memory();
+  const planByDeadline = createPlanByDeadlineRepository({ storage, idGenerator: (() => { let n = 0; return () => `id-${++n}`; })(), getOwner: () => currentRoom });
+  const authority = createPlanAuthority({
+    live: { enabled: () => false }, legacy: legacyStore(),
+    now: () => manila('2026-09-27', '09:00'), accountTimezone: () => MANILA, planByDeadline,
+  });
+
+  planByDeadline.proposeDeadline({ deadlineTime: '08:00', timezone: MANILA }, manila('2026-01-01', '00:00'));
+  planByDeadline.declareOffDay('2026-09-27', manila('2026-09-27', '07:00'));
+  assert.equal(authority.planningDeadlineStreak().status, 'configured');
+  assert.equal(authority.planningDeadlineStreak().today.status, 'maintained');
+
+  currentRoom = 'uid_account-b'; // A -> B switch, same repository instance/storage
+  assert.deepEqual(authority.planningDeadlineStreak(), { status: 'unenforced' }); // B has no deadline of its own
+  assert.equal(planByDeadline.readOffDay('2026-09-27'), null); // B never sees A's off-day
+  assert.equal(planByDeadline.deadlineConflict().length, 0); // B never sees any of A's state, conflicted or not
+
+  currentRoom = 'uid_account-a'; // back to A
+  assert.equal(authority.planningDeadlineStreak().today.status, 'maintained'); // A's own state is untouched
+});
+
+// ── FIX FIRST §19: sign-out ────────────────────────────────────────────────
+
+test('sign-out (no room joined) reports unenforced, never a stale account\'s deadline state, and writes nothing', () => {
+  let currentRoom = 'uid_account-a';
+  const storage = memory();
+  const planByDeadline = createPlanByDeadlineRepository({ storage, idGenerator: (() => { let n = 0; return () => `id-${++n}`; })(), getOwner: () => currentRoom });
+  const authority = createPlanAuthority({
+    live: { enabled: () => false }, legacy: legacyStore(),
+    now: () => manila('2026-09-27', '09:00'), accountTimezone: () => MANILA, planByDeadline,
+  });
+  planByDeadline.proposeDeadline({ deadlineTime: '08:00', timezone: MANILA }, manila('2026-01-01', '00:00'));
+  assert.equal(authority.planningDeadlineStreak().status, 'configured');
+
+  currentRoom = null; // sign-out
+  assert.deepEqual(authority.planningDeadlineStreak(), { status: 'unenforced' });
+  assert.throws(() => planByDeadline.declareOffDay('2026-09-27', Date.now()), /No account is active/);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// FIX FIRST §5/§16: boundary ENABLED — production-equivalent authority.
+// Reproduces the exact concrete failing case and fails on the pre-fix code
+// (planTargetOriginatingOnCalendarDate resolved a DIFFERENT, empty target
+// than current() under an active non-midnight boundary).
+// ═══════════════════════════════════════════════════════════════════════
+
+let boundarySeq = 0;
+function makeBoundaryEnabledApp({ nowMs, boundaryTime = '18:00' }) {
+  const nowRef = { value: nowMs };
+  const boundaryRepository = createPersonalDayBoundaryRepository({ storage: memory(), idGenerator: () => `rev-${++boundarySeq}`, getOwner: () => 'uid_boundary-test' });
+  boundaryRepository.propose({ boundaryTime, timezone: MANILA }, manila('2026-01-01', '00:00'));
+  const planRepository = createOperationalPlanRepository({ storage: memory(), getOwner: () => 'uid_boundary-test' });
+  const planSync = createOperationalPlanSyncBridge({ repository: planRepository, getRoomRef: () => null, getRoomId: () => 'uid_boundary-test' });
+  const boundarySync = createPersonalDayBoundarySyncBridge({ repository: boundaryRepository, getRoomRef: () => null, getRoomId: () => 'uid_boundary-test' });
+  const legacy = legacyStore();
+  const live = createPersonalDayBoundaryLiveWiring({
+    boundaryRepository, planRepository, planSync, boundarySync,
+    legacyPlans: { readItems: k => legacy.rawItems(k), saveItems: (k, i) => legacy.saveItems(k, i) },
+    now: () => nowRef.value, deviceId: () => 'device-a', fallbackTimezone: () => MANILA,
+  });
+  const planByDeadline = createPlanByDeadlineRepository({ storage: memory(), idGenerator: (() => { let n = 0; return () => `pbd-${++n}`; })(), getOwner: () => 'uid_boundary-test' });
+  const authority = createPlanAuthority({ live, legacy, now: () => nowRef.value, accountTimezone: () => MANILA, planByDeadline });
+  return { authority, planByDeadline, legacy, setNow: v => { nowRef.value = v; } };
+}
+
+test('FIX FIRST concrete case: Sunday 11:00 under an 18:00 boundary — current planning target and the deadline-streak target are the SAME record (no split-brain)', () => {
+  const { authority, planByDeadline } = makeBoundaryEnabledApp({ nowMs: manila('2026-09-27', '11:00') });
+  const current = authority.current();
+  assert.equal(current.store, 'operational');
+
+  // The owner prepares TODAY's plan through the ONE normal workflow — targets current().
+  authority.confirmPreparation(current, { items: [{ id: 'p1', task: 'Sunday morning priority', kind: 'priority' }], mode: 'normal', intentionalBlank: false, routineInstanceIds: [] });
+  assert.ok(authority.items(current).some(i => i.task === 'Sunday morning priority'), 'the item is visible on the target the owner actually prepared');
+
+  planByDeadline.proposeDeadline({ deadlineTime: '12:00', timezone: MANILA }, manila('2026-01-01', '00:00'));
+  const result = authority.planningDeadlineStreak();
+  assert.equal(result.status, 'configured');
+  // Prepared at 11:00, deadline is 12:00 that same (current-target) day -> maintained.
+  // This is the exact assertion that FAILS on the pre-fix code (it silently read an
+  // empty, different "Sunday-originating" target and reported 'missed' with no way
+  // for the owner to ever satisfy it before 18:00).
+  assert.equal(result.today.status, 'maintained');
+  assert.equal(result.current, 1);
+});
+
+test('FIX FIRST: preparing before the configured deadline qualifies correctly without waiting until the legacy boundary time, and no Saturday write ever happens', () => {
+  const { authority, legacy, planByDeadline } = makeBoundaryEnabledApp({ nowMs: manila('2026-09-27', '11:00') });
+  const current = authority.current();
+  planByDeadline.proposeDeadline({ deadlineTime: '12:00', timezone: MANILA }, manila('2026-01-01', '00:00'));
+  authority.confirmPreparation(current, { items: [{ id: 'p1', task: 'Early prep', kind: 'priority' }], mode: 'normal', intentionalBlank: false, routineInstanceIds: [] });
+  assert.equal(authority.planningDeadlineStreak().today.status, 'maintained'); // no wait until 18:00 required
+  assert.deepEqual(legacy.plans, {}); // no Saturday (or any) legacy write ever happened
+});
+
+test('ordinary night-shift: a Monday-evening-start plan may extend into Tuesday — the SAME target, and the SAME streak result, on both sides of the midnight crossing', () => {
+  // Monday 19:00 (past that day's own 18:00 boundary, so Monday's own operational day, Mon 18:00 -> Tue 18:00, is current).
+  const { authority, planByDeadline, setNow } = makeBoundaryEnabledApp({ nowMs: manila('2026-09-28', '19:00') });
+  const targetBeforeMidnight = authority.current();
+  authority.confirmPreparation(targetBeforeMidnight, { items: [{ id: 'p1', task: 'Monday evening shift', kind: 'priority' }], mode: 'normal', intentionalBlank: false, routineInstanceIds: [] });
+  planByDeadline.proposeDeadline({ deadlineTime: '20:00', timezone: MANILA }, manila('2026-01-01', '00:00'));
+  assert.equal(authority.planningDeadlineStreak().today.status, 'maintained');
+
+  // Advance past real midnight into Tuesday — still WITHIN the same Monday-originating
+  // operational day (it doesn't end until Tuesday 18:00). The calendar date has
+  // genuinely changed, but the plan identity, and the streak's verdict for it, must not.
+  setNow(manila('2026-09-29', '02:00'));
+  const targetAfterMidnight = authority.current();
+  assert.equal(targetAfterMidnight.id, targetBeforeMidnight.id, 'midnight alone never changes which plan is current for a still-open operational day');
+  assert.ok(authority.items(targetAfterMidnight).some(i => i.task === 'Monday evening shift'), 'the item prepared before midnight is still visible after it — one record, not two');
 });

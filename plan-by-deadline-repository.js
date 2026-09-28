@@ -25,12 +25,15 @@
 
 import {
   validDeadlineTime,
+  validDeadlineTimezone,
   pickCanonicalRevisionId,
   proposeDeadlineRevision,
   normalizeDeadlineRevisionHistory,
   revisionsAreSemanticDuplicates,
   validateDeadlineRevision,
   validateIntentionalOffDayRecord,
+  findEqualAuthorityConflicts,
+  activeEqualAuthorityConflicts,
 } from './plan-by-deadline-model.js';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
 
@@ -62,6 +65,14 @@ function defaultIdGenerator() {
   throw new Error('No UUID generator available; inject idGenerator for this runtime');
 }
 
+/** Reads the raw envelope and checks per-revision structural validity only —
+ *  it does NOT require the set to be a globally consistent, contradiction-free
+ *  history (unlike the old design). An equal-authority contradiction (FIX
+ *  FIRST §14) between two INDIVIDUALLY valid revisions is a real, storable
+ *  state, not corruption — see deadlineConflict()/readDeadlines() below, which
+ *  filter it out of ACTIVE computation while this function preserves it in
+ *  storage untouched. Only genuine structural corruption (malformed JSON, an
+ *  id/key mismatch, an individually-invalid revision) still throws here. */
 function readDeadlineEnvelope(storage, key) {
   const raw = storage.getItem(key);
   if (raw === null) return null;
@@ -76,9 +87,27 @@ function readDeadlineEnvelope(storage, key) {
   }
   Object.entries(envelope.revisions).forEach(([id, revision]) => {
     if (!revision || revision.id !== id) throw new Error('Plan-by-deadline storage key/identity mismatch.');
+    if (!validateDeadlineRevision(revision)) throw new Error(`Plan-by-deadline storage holds a structurally invalid revision: ${id}.`);
   });
-  normalizeDeadlineRevisionHistory(Object.values(envelope.revisions)); // throws loudly on malformed history (never silently reinterpreted, mirrors §18)
+  if (new Set(Object.keys(envelope.revisions)).size !== Object.keys(envelope.revisions).length) {
+    throw new Error('Plan-by-deadline storage has duplicate revision ids.'); // structurally impossible via a Map key, defense in depth
+  }
   return envelope;
+}
+
+/** The revisions usable for ACTIVE computation: every stored revision minus
+ *  any that belongs to an equal-authority conflict group (active or already
+ *  historically superseded — either way, that specific revision can never be
+ *  trusted alone; see plan-by-deadline-model.js's deadlineInstantForCalendarDate,
+ *  which would otherwise have two contradicting candidates for the same
+ *  instant). Nothing is deleted from STORAGE by this filtering — it only
+ *  affects what this accessor hands to a computation. */
+function usableRevisions(envelope) {
+  if (!envelope) return [];
+  const all = Object.values(envelope.revisions);
+  const conflicts = findEqualAuthorityConflicts(all);
+  const conflictingIds = new Set(conflicts.flat().map(r => r.id));
+  return all.filter(r => !conflictingIds.has(r.id));
 }
 
 function writeDeadlineEnvelope(storage, key, envelope) {
@@ -135,7 +164,11 @@ export function createPlanByDeadlineRepository(deps = {}) {
 
     // ── deadline revisions ──────────────────────────────────────────────
 
-    /** {status:'unconfigured'|'configured'|'invalid', revisions?, error?} */
+    /** {status:'unconfigured'|'configured'|'conflict'|'invalid', revisions?, conflicts?, error?}
+     *  'conflict' — an equal-authority contradiction (§14) is still ACTIVE (not
+     *  yet superseded by a later clean revision). Both contradicting facts
+     *  remain in storage (see usableRevisions); this is reported explicitly
+     *  rather than picking a winner or reporting 'invalid'. */
     deadlineStatus() {
       const key = activeKeyFor(deadlineBaseKey);
       if (key === null) return { status: 'unconfigured' };
@@ -146,36 +179,61 @@ export function createPlanByDeadlineRepository(deps = {}) {
         return { status: 'invalid', error: err.message };
       }
       if (!envelope || !Object.keys(envelope.revisions).length) return { status: 'unconfigured' };
-      return { status: 'configured', revisions: normalizeDeadlineRevisionHistory(Object.values(envelope.revisions)) };
+      const conflicts = activeEqualAuthorityConflicts(Object.values(envelope.revisions));
+      if (conflicts.length) return { status: 'conflict', conflicts };
+      const usable = usableRevisions(envelope);
+      if (!usable.length) return { status: 'unconfigured' }; // only historically-superseded conflict entries remain
+      return { status: 'configured', revisions: normalizeDeadlineRevisionHistory(usable) };
     },
 
-    /** The deadline revision history, or an empty array for an unconfigured
+    /** The USABLE deadline revision history (equal-authority conflicts
+     *  excluded — see usableRevisions), or an empty array for an unconfigured
      *  account. Never synthesizes a guessed default (unlike the boundary
-     *  repository's legacy anchor) — absence stays absence. Throws for a
-     *  genuinely invalid persisted history rather than degrading silently.
+     *  repository's legacy anchor) — absence stays absence. Never throws for a
+     *  conflict specifically (§14/§15: a conflict must never crash evaluation
+     *  or manufacture a false 'missed') — check deadlineConflict() to detect
+     *  and surface it explicitly. Still throws for genuine structural
+     *  corruption (see readDeadlineEnvelope).
      *  @returns {object[]} DeadlineRevision[] */
     readDeadlines() {
       const key = activeKeyFor(deadlineBaseKey);
       const envelope = key === null ? null : readDeadlineEnvelope(storage, key);
-      return envelope ? normalizeDeadlineRevisionHistory(Object.values(envelope.revisions)) : [];
+      const usable = usableRevisions(envelope);
+      return usable.length ? normalizeDeadlineRevisionHistory(usable) : [];
     },
 
-    /** Appends a new prospective deadline revision (§9). `candidate.timezone`
-     *  is the account's current authoritative timezone, passed through only to
-     *  compute the activation instant — it is never itself persisted on the
-     *  revision (plan-by-deadline-model.js: no second timezone source).
+    /** The still-ACTIVE equal-authority conflict groups (§14), or [] if none.
+     *  A caller (Settings UI, PlanAuthority) checks this BEFORE treating an
+     *  empty readDeadlines() as "never configured" — a conflict and a genuine
+     *  absence are different facts and must be shown differently.
+     *  @returns {object[][]} */
+    deadlineConflict() {
+      const key = activeKeyFor(deadlineBaseKey);
+      if (key === null) return [];
+      const envelope = readDeadlineEnvelope(storage, key);
+      return envelope ? activeEqualAuthorityConflicts(Object.values(envelope.revisions)) : [];
+    },
+
+    /** Appends a new prospective deadline revision (§9), built from only the
+     *  USABLE (conflict-free) existing history — so a genuine equal-authority
+     *  conflict can never make a new, clean proposal impossible, and this IS
+     *  how the owner resolves a conflict (§14: "permit the user to resolve by
+     *  explicitly saving a new prospective revision"). The write is additive:
+     *  any previously-stored conflicting revisions are preserved untouched in
+     *  the envelope (never deleted) as historical provenance, alongside the
+     *  new one.
      *  @param {{deadlineTime:string, timezone:string}} candidate @param {number} nowMs
-     *  @returns {{revision:object, revisions:object[]}} */
+     *  @returns {{revision:object, revisions:object[]}} usable revisions only */
     proposeDeadline(candidate, nowMs) {
-      if (!candidate || !validDeadlineTime(candidate.deadlineTime) || typeof candidate.timezone !== 'string') {
+      if (!candidate || !validDeadlineTime(candidate.deadlineTime) || !validDeadlineTimezone(candidate.timezone)) {
         throw new Error('A candidate deadline revision (deadlineTime, timezone) is required.');
       }
       const key = activeKeyFor(deadlineBaseKey);
       if (key === null) throw new Error('No account is active, so there is no plan-by-deadline cache to change.');
       const envelope = readDeadlineEnvelope(storage, key);
-      const existing = envelope ? Object.values(envelope.revisions) : [];
-      const { revision, revisions } = proposeDeadlineRevision(existing, { id: idGenerator(), deadlineTime: candidate.deadlineTime, timezone: candidate.timezone }, nowMs);
-      const nextRevisions = {};
+      const existingUsable = usableRevisions(envelope);
+      const { revision, revisions } = proposeDeadlineRevision(existingUsable, { id: idGenerator(), deadlineTime: candidate.deadlineTime, timezone: candidate.timezone }, nowMs);
+      const nextRevisions = { ...(envelope ? envelope.revisions : {}) }; // preserves any old conflicting entries untouched
       revisions.forEach(r => { nextRevisions[r.id] = r; });
       writeDeadlineEnvelope(storage, key, { schemaVersion: PLAN_BY_DEADLINE_SCHEMA_VERSION, revisions: nextRevisions });
       return { revision, revisions };
@@ -189,14 +247,17 @@ export function createPlanByDeadlineRepository(deps = {}) {
       return envelope ? Object.values(envelope.revisions) : [];
     },
 
-    /** Sync-only: merges a remote deadline-revision snapshot. Same union-by-id,
-     *  semantic-dedup-by-canonical-id, hard-conflict-on-contradiction rules as
-     *  personal-day-boundary-repository.js's mergeRemoteRevisions — see that
-     *  file's extensive contract comment for the full rationale; it applies
-     *  unchanged here (deadline revisions are just as immutable-once-created).
-     *  The one difference: there is no anchor-only incompleteness case, since
-     *  deadline histories have no anchor concept at all.
-     *  @returns {{changed:boolean, changedIds:string[], rejectedIds:string[], droppedIds:string[], conflict:string|null}} */
+    /** Sync-only: merges a remote deadline-revision snapshot. Union-by-id,
+     *  semantic-dedup-by-canonical-id (see personal-day-boundary-repository.js's
+     *  mergeRemoteRevisions for the full identity-convergence rationale, which
+     *  applies unchanged here). FIX FIRST §14 correction: an equal-authority
+     *  CONTRADICTION (same effectiveFromInstant, different facts, different
+     *  ids) is no longer a write-refusing gate — both sides are WRITTEN and
+     *  preserved (never picking a winner by id or arrival order), and become
+     *  detectable via deadlineConflict()/readDeadlines() filtering them out of
+     *  active computation. Reversed delivery order converges on the identical
+     *  stored state either way, since the write is a pure set-union.
+     *  @returns {{changed:boolean, changedIds:string[], rejectedIds:string[], droppedIds:string[], conflict:string[][]|null}} */
     mergeRemoteDeadlines(remoteRecordsById) {
       const key = activeKeyFor(deadlineBaseKey);
       if (key === null || !isPlainObject(remoteRecordsById)) return { changed: false, changedIds: [], rejectedIds: [], droppedIds: [], conflict: null };
@@ -210,7 +271,7 @@ export function createPlanByDeadlineRepository(deps = {}) {
         if (!remote || typeof remote !== 'object' || remote.id !== id || !validateDeadlineRevision(remote)) { rejectedIds.push(id); return; }
         const local = localById[id];
         if (local) {
-          if (JSON.stringify(local) !== JSON.stringify(remote)) rejectedIds.push(id);
+          if (JSON.stringify(local) !== JSON.stringify(remote)) rejectedIds.push(id); // same id, different facts — genuinely impossible (ids are randomly generated), fail safe rather than overwrite
           return;
         }
         const semanticMatchId = Object.keys(candidateById).find(existingId => existingId !== id && revisionsAreSemanticDuplicates(candidateById[existingId], remote));
@@ -223,20 +284,18 @@ export function createPlanByDeadlineRepository(deps = {}) {
           }
           return;
         }
+        // A different id, not a semantic duplicate: adopted as-is, even if it
+        // shares an effectiveFromInstant with something already in
+        // candidateById (a genuine equal-authority contradiction) — both are
+        // preserved; normalizeDeadlineRevisionHistory is deliberately never
+        // called as a write gate here (see module header / §14).
         candidateById[id] = remote;
         changedIds.push(id);
       });
       if (!changedIds.length) return { changed: false, changedIds, rejectedIds, droppedIds: [], conflict: null };
-      let normalized;
-      try {
-        normalized = normalizeDeadlineRevisionHistory(Object.values(candidateById));
-      } catch (err) {
-        return { changed: false, changedIds: [], rejectedIds, droppedIds: [], conflict: err.message };
-      }
-      const nextRevisions = {};
-      normalized.forEach(r => { nextRevisions[r.id] = r; });
-      writeDeadlineEnvelope(storage, key, { schemaVersion: PLAN_BY_DEADLINE_SCHEMA_VERSION, revisions: nextRevisions });
-      return { changed: true, changedIds, rejectedIds, droppedIds, conflict: null };
+      writeDeadlineEnvelope(storage, key, { schemaVersion: PLAN_BY_DEADLINE_SCHEMA_VERSION, revisions: candidateById });
+      const conflicts = findEqualAuthorityConflicts(Object.values(candidateById));
+      return { changed: true, changedIds, rejectedIds, droppedIds, conflict: conflicts.length ? conflicts : null };
     },
 
     // ── intentional off-days ────────────────────────────────────────────
