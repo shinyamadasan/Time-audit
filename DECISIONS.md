@@ -463,8 +463,9 @@ same-id/different-content is a surfaced conflict. Firebase validates the exact s
 structural/range constraint it can express, while supported-IANA, leap-date, and date-in-zone agreement remain
 runtime checks. Concurrent recovery candidates with equivalent content still converge to one deterministic live
 destination. Divergent edited content instead derives an explicit, order-independent Recovery conflict: both
-payloads/provenance are visible, only one task is live, and the owner's keep-version choice writes a later
-relocation revision without deleting losing history. These rules remain local-only in this candidate; release
+task payloads and their user-facing destination/date/time and actor are visible, only one task is live, and the
+owner's keep-version choice writes a later relocation revision without deleting losing history or its full
+internal relocation provenance. These rules remain local-only in this candidate; release
 order is rules, runtime, device updates, then owner activation.
 
 **Why:** the previous phase proved no operational-day ref can represent "Sunday" as its own plan identity while

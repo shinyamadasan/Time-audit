@@ -31,7 +31,8 @@
   claims choose one canonical destination for the source-owned `ocarry1|<day>|<item>` recovery identity.
   Equal-content claims converge; divergent highest-revision content derives an order-independent recovery
   conflict whose candidates remain visible. `plan-authority.js` resolves an explicit choice with a later
-  revision, and `planning-continuity-ui.js` exposes both candidates in the existing Unfinished surface.
+  revision, and `planning-continuity-ui.js` exposes both tasks plus destination/date/time and actor in the
+  existing Unfinished surface; full relocation provenance remains internal.
 - `plan-tomorrow-model.js`: `planItemEndTime(when, minutes, wrap)` / `formatPlanItemSchedule` allow a calendar
   item to cross midnight and label a next-day item; every legacy caller is unchanged (`wrap` defaults false).
 - `storage.js`: attaches/re-pushes/detaches `CalendarPlanLive` and `PlanByDeadlineSync` with the rest of the room;
