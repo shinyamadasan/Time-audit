@@ -314,6 +314,22 @@ test('Sunday 11:00: after switching, the current plan is SUNDAY\'s; a first item
   await expect(page.locator('#plan-strip')).toContainText('Sunday morning priority');
 });
 
+test('direct date navigation remains calendar-date-primary after switching to calendar plans', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await switchToCalendarPlans(page);
+  const plansBefore = await page.evaluate(() => localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'));
+  await page.locator('#my-day-calendar').evaluate(input => {
+    input.value = '2026-09-28';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(page.locator('#timeline-date-label')).toHaveText("Monday, Sep 28's timeline");
+  expect(await page.evaluate(() => {
+    const target = window.PlanAuthority.dayForCalendarDate('2026-09-28');
+    return { id: target.id, store: target.store, dateKey: target.dateKey };
+  })).toEqual({ id: 'cal1:2026-09-28', store: 'calendar', dateKey: '2026-09-28' });
+  expect(await page.evaluate(() => localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'))).toBe(plansBefore);
+});
+
 test('Sunday 11:00: Plan Tomorrow prepares MONDAY\'s calendar plan (never derived from the 18:00 boundary)', async ({ page }) => {
   await openApp(page, { now: at(SUN, '11:00') });
   await switchToCalendarPlans(page);
