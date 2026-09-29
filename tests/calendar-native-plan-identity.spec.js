@@ -317,7 +317,15 @@ test('Sunday 11:00: after switching, the current plan is SUNDAY\'s; a first item
 test('direct date navigation remains calendar-date-primary after switching to calendar plans', async ({ page }) => {
   await openApp(page, { now: at(SUN, '11:00') });
   await switchToCalendarPlans(page);
+  await page.evaluate(() => {
+    const target = window.PlanAuthority.dayForCalendarDate('2026-09-28');
+    window.PlanAuthority.confirmPreparation(target, {
+      items: [{ id: 'monday-identity-proof', task: 'Monday identity proof', when: '', done: false, doneAt: null, updatedAt: 123456789, updatedBy: 'device-cnpi' }],
+      mode: 'normal', intentionalBlank: false, routineInstanceIds: [],
+    });
+  });
   const plansBefore = await page.evaluate(() => localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'));
+  const writesBefore = await page.evaluate(() => window.__fbTest.log.writes.length);
   await page.locator('#my-day-calendar').evaluate(input => {
     input.value = '2026-09-28';
     input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -327,7 +335,60 @@ test('direct date navigation remains calendar-date-primary after switching to ca
     const target = window.PlanAuthority.dayForCalendarDate('2026-09-28');
     return { id: target.id, store: target.store, dateKey: target.dateKey };
   })).toEqual({ id: 'cal1:2026-09-28', store: 'calendar', dateKey: '2026-09-28' });
+  await expect(page.locator('#timeline-anytime')).toContainText('Monday identity proof');
   expect(await page.evaluate(() => localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'))).toBe(plansBefore);
+  expect(await page.evaluate(() => window.__fbTest.log.writes.length)).toBe(writesBefore);
+});
+
+test('delayed authority hydration and midnight cannot leave a selected date attached to a different target', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00'), operationalPlans: saturdayOperationalPlans(), delayAuthority: true });
+  await page.evaluate(() => window.__fbTest.deliverAuthority());
+  await expect.poll(() => page.evaluate(() => window.PlanAuthority.authorityState())).toBe('legacy');
+  const storesBefore = await page.evaluate(() => ({
+    legacy: localStorage.getItem('ta3-plans:uid_account-a'),
+    operational: localStorage.getItem('ta3-operational-plans-v1:uid_account-a'),
+    calendar: localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'),
+  }));
+  const planWritesBefore = await page.evaluate(() => window.__fbTest.log.writes.filter(write => /\/(?:plans|operationalPlans|calendarPlans)(?:\/|$)/.test(write.path)).length);
+  await page.locator('#my-day-calendar').evaluate(input => {
+    input.value = '2026-09-27';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const selectedId = await page.evaluate(() => window.currentMyDayTimelineTarget().id);
+  expect(selectedId).toBe(SATURDAY_DAY_ID);
+  expect(await page.evaluate(() => ({
+    legacy: localStorage.getItem('ta3-plans:uid_account-a'),
+    operational: localStorage.getItem('ta3-operational-plans-v1:uid_account-a'),
+    calendar: localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'),
+  }))).toEqual(storesBefore);
+  expect(await page.evaluate(() => window.__fbTest.log.writes.filter(write => /\/(?:plans|operationalPlans|calendarPlans)(?:\/|$)/.test(write.path)).length)).toBe(planWritesBefore);
+
+  const fact = { schemaVersion: 1, id: 'ca1-hydrated-label', activatedAtMs: at(SUN, '09:00'), timezone: TZ, activationDate: SUN, deviceId: 'device-other' };
+  await page.evaluate(value => window.__fbTest.remoteWrite('rooms/uid_account-a/calendarPlanAuthority/ca1-hydrated-label', value), fact);
+  await expect.poll(() => page.evaluate(() => window.PlanAuthority.authorityState())).toBe('calendar');
+  await page.evaluate(() => window.refreshAuthoritativePlanSurfaces());
+  expect(await current(page)).toEqual({ store: 'calendar', id: `cal1:${SUN}`, dateKey: SUN });
+  await page.evaluate(() => {
+    const target = window.PlanAuthority.dayForCalendarDate('2026-09-28');
+    window.PlanAuthority.saveItems(target, [{ id: 'hydrated-monday', task: 'Hydrated Monday proof', when: '', done: false, updatedAt: 987654321, updatedBy: 'device-cnpi' }]);
+  });
+  const storesAfterSetup = await page.evaluate(() => ({
+    legacy: localStorage.getItem('ta3-plans:uid_account-a'),
+    operational: localStorage.getItem('ta3-operational-plans-v1:uid_account-a'),
+    calendar: localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'),
+  }));
+  const planWritesAfterSetup = await page.evaluate(() => window.__fbTest.log.writes.filter(write => /\/(?:plans|operationalPlans|calendarPlans)(?:\/|$)/.test(write.path)).length);
+
+  await setClock(page, at(MON, '00:01'));
+  expect(await current(page)).toEqual({ store: 'calendar', id: `cal1:${MON}`, dateKey: MON });
+  await expect(page.locator('#timeline-anytime')).toContainText('Hydrated Monday proof');
+  await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline");
+  expect(await page.evaluate(() => ({
+    legacy: localStorage.getItem('ta3-plans:uid_account-a'),
+    operational: localStorage.getItem('ta3-operational-plans-v1:uid_account-a'),
+    calendar: localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'),
+  }))).toEqual(storesAfterSetup);
+  expect(await page.evaluate(() => window.__fbTest.log.writes.filter(write => /\/(?:plans|operationalPlans|calendarPlans)(?:\/|$)/.test(write.path)).length)).toBe(planWritesAfterSetup);
 });
 
 test('Sunday 11:00: Plan Tomorrow prepares MONDAY\'s calendar plan (never derived from the 18:00 boundary)', async ({ page }) => {
