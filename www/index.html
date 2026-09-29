@@ -6113,7 +6113,10 @@ function renderToday() {
   const _diffDays = Math.round((new Date(_todayKey) - new Date(_labelDateKey)) / 86400000);
   const _tlLabel = _diffDays === 0 ? "Today's timeline"
     : _diffDays === 1 ? "Yesterday's timeline"
-    : new Intl.DateTimeFormat('en-US',{timeZone:_tz,weekday:'long',month:'short',day:'numeric'}).format(new Date(_labelDateKey + 'T12:00:00')) + "'s timeline";
+    // Anchored at UTC noon (never the browser's own local time zone) — the same idiom
+    // fmtDateKeyLong()/formatCalendarDate() already use elsewhere in this file, so the
+    // calendar DATE this names can never slip a day depending on which machine renders it.
+    : new Intl.DateTimeFormat('en-US',{timeZone:_tz,weekday:'long',month:'short',day:'numeric'}).format(new Date(_labelDateKey + 'T12:00:00Z')) + "'s timeline";
   document.getElementById('timeline-date-label').textContent = _tlLabel;
   document.getElementById('timeline-nav-next').style.display = '';
 

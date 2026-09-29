@@ -298,3 +298,53 @@ test('streak and readiness follow My Day across 17:59, 18:00, 23:59, 00:00 and 0
   expect(rolled.current).toBe(nextId);
   expect(rolled.streak.current).toBeGreaterThanOrEqual(1);
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// timezone-anchor regression — a far-navigated label must not depend on
+// the BROWSER'S OWN system timezone
+// ═══════════════════════════════════════════════════════════════════════
+//
+// #timeline-date-label's non-Today/Yesterday branch built its Date from
+// `_labelDateKey + 'T12:00:00'` — no trailing 'Z' — so it was parsed in
+// whatever timezone the machine RENDERING the page happens to be in, not
+// UTC (the idiom fmtDateKeyLong()/formatCalendarDate() already use
+// elsewhere in this file specifically to make a date label immune to
+// this). A build machine west of UTC (e.g. US Pacific) could silently
+// roll the shown weekday/date forward by one full day relative to a
+// machine at or east of UTC (GitHub Actions' own runners, or the
+// account's real Asia/Manila timezone) for the exact same underlying
+// state — this is what let a real defect (see the sibling assertion
+// this test intentionally does NOT make — the *which* calendar date a
+// personal day should be labelled by, once resolved, belongs in a
+// dedicated product-contract test) pass on some machines and fail on
+// others without any code difference at all.
+//
+// This test takes no position on which calendar date a personal day
+// "should" be labelled by — it only proves the label is now the SAME
+// text regardless of which timezone renders it, for a target far enough
+// ahead to exercise the buggy Intl.DateTimeFormat branch (diffDays
+// outside {0, 1}).
+for (const boundary of ['20:00']) {
+  test(`the far-future timeline label is identical across browser timezones (boundary ${boundary})`, async ({ browser }) => {
+    const labelFor = async timezoneId => {
+      const context = await browser.newContext({ timezoneId });
+      const page = await context.newPage();
+      await openApp(page, { now: at('2026-09-18', '19:00'), boundary });
+      await page.locator('#my-day-calendar').evaluate(input => {
+        input.value = '2026-09-25';
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await expect(page.locator('#timeline-date-label')).not.toHaveText("Today's timeline");
+      const text = await page.locator('#timeline-date-label').textContent();
+      await context.close();
+      return text;
+    };
+    const utc = await labelFor('UTC');
+    const pacific = await labelFor('America/Los_Angeles');
+    const manila = await labelFor('Asia/Manila');
+    const tokyo = await labelFor('Asia/Tokyo');
+    expect(pacific, 'UTC vs America/Los_Angeles').toBe(utc);
+    expect(manila, 'UTC vs Asia/Manila').toBe(utc);
+    expect(tokyo, 'UTC vs Asia/Tokyo').toBe(utc);
+  });
+}
