@@ -1782,6 +1782,7 @@ let currentTask = '';
 let currentTaskPlanItemId = null;
 let viewingDateKey = null; // null = today; "YYYY-MM-DD" = browsing a past day
 let viewingMyDayId = null; // null = current authoritative My Day
+let viewingSelectedCalendarDateKey = null; // direct date-picker label only; never plan identity
 let entries = [];
 let settings = {hardMode: true, intervalMin:30, targetRate:250, deepGoal:20, exitDelay:10, presets:[], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, activityColors:{}, coachTone:'analyst', reviewHour:22, reviewTime:'22:00', sleepTime:'23:00', wakeTime:'07:00', sleepReminderMin:30, sleepSetupDone:false, templates:[] };
 // The timezone pin is per account now (storage.js: ta3-tz:<room>), so the modules that resolve the
@@ -3881,6 +3882,7 @@ function isViewingToday() {
 function setViewDate(dateKey) {
   viewingDateKey = dateKey;
   viewingMyDayId = null;
+  viewingSelectedCalendarDateKey = null;
   _todayRenderKey = '__FORCE__'; // sentinel: forces re-render even for empty days
   renderToday();
   document.getElementById('date-picker-dropdown').style.display = 'none';
@@ -3903,6 +3905,7 @@ function navigateTimelineDay(delta) {
     const target = delta < 0 ? globalThis.PlanAuthority.previous(shown) : globalThis.PlanAuthority.next(shown);
     viewingMyDayId = target.id === current.id ? null : target.id;
     viewingDateKey = null;
+    viewingSelectedCalendarDateKey = null;
     _todayRenderKey = '__FORCE__';
     renderToday();
   } catch (err) { showToast(err.message); }
@@ -3919,6 +3922,7 @@ function jumpTimelineToDate(dateKey) {
     const target = globalThis.PlanAuthority.dayForCalendarDate(dateKey);
     viewingMyDayId = target.id === current.id ? null : target.id;
     viewingDateKey = null;
+    viewingSelectedCalendarDateKey = dateKey;
     _todayRenderKey = '__FORCE__';
     renderToday();
   } catch (err) { showToast(err.message); }
@@ -6103,13 +6107,13 @@ function renderToday() {
 
   // Timeline label + nav — calendar-date-primary always (Calendar Day + Extended
   // My Day V1, §4/§20): a My Day never labels itself by its own window span
-  // ("Fri 6PM → Sat 6PM") any more. When browsing a non-current My Day, the label
-  // is anchored to THAT day's own originating calendar date (ref.boundaryStartDate),
-  // not getViewingDateKey() — which stays pinned to today's real date while a
-  // Personal-Day id is being viewed (viewingDateKey is null in that mode) and would
-  // otherwise mislabel a historical My Day as "Today".
+  // ("Fri 6PM → Sat 6PM") any more. Direct date-picker navigation keeps the selected
+  // factual date as its display anchor without changing the compatibility My Day target.
+  // Arrow navigation through non-current My Days uses each day's own originating date
+  // (ref.boundaryStartDate), because viewingDateKey stays pinned to today's real date
+  // while a Personal-Day id is being viewed and would otherwise say "Today".
   const _vk = getViewingDateKey();
-  const _labelDateKey = (myDay && !viewingCurrentTimeline && myDay.ref?.boundaryStartDate) ? myDay.ref.boundaryStartDate : _vk;
+  const _labelDateKey = viewingSelectedCalendarDateKey || ((myDay && !viewingCurrentTimeline && myDay.ref?.boundaryStartDate) ? myDay.ref.boundaryStartDate : _vk);
   const _diffDays = Math.round((new Date(_todayKey) - new Date(_labelDateKey)) / 86400000);
   const _tlLabel = _diffDays === 0 ? "Today's timeline"
     : _diffDays === 1 ? "Yesterday's timeline"
