@@ -22,10 +22,24 @@ let appUrl = '';
 
 const TZ = 'Asia/Manila';
 const at = (date, hhmm) => Date.parse(`${date}T${hhmm}:00+08:00`);
+const ZONE_OFFSET_MINUTES = {
+  UTC: 0,
+  'Asia/Manila': 8 * 60,
+  'Asia/Tokyo': 9 * 60,
+  'America/Los_Angeles': -7 * 60,
+  'America/Phoenix': -7 * 60,
+  'Pacific/Auckland': 12 * 60,
+  'Pacific/Kiritimati': 14 * 60,
+};
+const atInTimezone = (date, hhmm, timezone) => {
+  const [year, month, day] = date.split('-').map(Number);
+  const [hour, minute] = hhmm.split(':').map(Number);
+  return Date.UTC(year, month - 1, day, hour, minute) - ZONE_OFFSET_MINUTES[timezone] * 60000;
+};
 
-const boundaryStore = boundaryTime => JSON.stringify({ schemaVersion: 1, revisions: {
+const boundaryStore = (boundaryTime, timezone = TZ) => JSON.stringify({ schemaVersion: 1, revisions: {
   'legacy-calendar-day-v0': { id: 'legacy-calendar-day-v0', boundaryTime: '00:00', timezone: TZ, effectiveFromInstant: null },
-  [`r-${boundaryTime.replace(':', '')}`]: { id: `r-${boundaryTime.replace(':', '')}`, boundaryTime, timezone: TZ, effectiveFromInstant: at('2026-09-01', boundaryTime) },
+  [`r-${boundaryTime.replace(':', '')}`]: { id: `r-${boundaryTime.replace(':', '')}`, boundaryTime, timezone, effectiveFromInstant: atInTimezone('2026-09-01', boundaryTime, timezone) },
 } });
 
 // Sep 18 2026 is a Friday (5), Sep 19 a Saturday (6). Friday-only blocks sit in the
@@ -95,7 +109,7 @@ test.afterAll(async () => {
 
 /** Opens the app at a frozen instant. The instant can be changed between reloads with
  *  setClock(), which is how the rollover tests move time forward on ONE device. */
-async function openApp(page, { now, boundary = '18:00' }) {
+async function openApp(page, { now, boundary = '18:00', timezone = TZ }) {
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: firebaseStub }));
   await page.addInitScript(({ timezone, now, boundary, templates, entries }) => {
     const frozen = Number(localStorage.getItem('myday-now')) || now;
@@ -111,7 +125,7 @@ async function openApp(page, { now, boundary = '18:00' }) {
     localStorage.setItem('ta3-entries:uid_myday-user', JSON.stringify(entries));
     localStorage.setItem('ta3-plans:uid_myday-user', '{}'); localStorage.setItem('ta3-reviews', '{}'); localStorage.setItem('ta3-focus-redemptions', '[]');
     if (boundary) localStorage.setItem('ta3-day-boundary-revisions-v1:uid_myday-user', boundary);
-  }, { timezone: TZ, now, boundary: boundary ? boundaryStore(boundary) : null, templates: TEMPLATES, entries: ENTRIES });
+  }, { timezone, now, boundary: boundary ? boundaryStore(boundary, timezone) : null, templates: TEMPLATES, entries: ENTRIES });
   await page.goto(appUrl);
   await page.waitForFunction(() => typeof window.PlanAuthority === 'object');
   await expect(page.locator('#signin-overlay')).toBeHidden();
@@ -124,6 +138,11 @@ async function setClock(page, ms) {
 }
 
 const timeline = page => page.locator('#timeline-blocks');
+const planStores = page => page.evaluate(() => ({
+  operational: localStorage.getItem('ta3-operational-plans-v1:uid_myday-user'),
+  legacy: localStorage.getItem('ta3-plans:uid_myday-user'),
+  calendar: localStorage.getItem('ta3-calendar-plans-v1:uid_myday-user'),
+}));
 
 // ═══════════════════════════════════════════════════════════════════════
 // the owner's screenshot scenario
@@ -300,30 +319,20 @@ test('streak and readiness follow My Day across 17:59, 18:00, 23:59, 00:00 and 0
 });
 
 // ═══════════════════════════════════════════════════════════════════════
-// Calendar-date-primary regression — a directly selected date stays factual
-// and must not depend on the BROWSER'S OWN system timezone
+// Calendar-date-primary regression — a directly selected civil date stays factual
+// in every account/browser timezone and stays owned by its authoritative target
 // ═══════════════════════════════════════════════════════════════════════
 //
-// #timeline-date-label's non-Today/Yesterday branch built its Date from
-// `_labelDateKey + 'T12:00:00'` — no trailing 'Z' — so it was parsed in
-// whatever timezone the machine RENDERING the page happens to be in, not
-// UTC (the idiom fmtDateKeyLong()/formatCalendarDate() already use
-// elsewhere in this file specifically to make a date label immune to
-// this). Direct calendar-date navigation must label the selected factual
-// date even when its compatibility Personal Day starts the evening before.
-// The target remains that authoritative Personal Day; only its presentation
-// label is calendar-date-primary.
+// The selected YYYY-MM-DD is a civil-date fact, not an instant to reinterpret in
+// an account timezone. Its presentation override belongs only to the target that
+// direct navigation selected; navigation or rollover onto another target clears it.
 for (const boundary of ['20:00']) {
-  test(`selected Sep 25 is calendar-date-primary across browser timezones without changing Personal Day identity (boundary ${boundary})`, async ({ browser }) => {
+  test(`selected Sep 25 is calendar-date-primary across extreme account/browser timezones without changing Personal Day identity (boundary ${boundary})`, async ({ browser }) => {
     const labelFor = async timezoneId => {
       const context = await browser.newContext({ timezoneId });
       const page = await context.newPage();
-      await openApp(page, { now: at('2026-09-18', '19:00'), boundary });
-      const storesBefore = await page.evaluate(() => ({
-        operational: localStorage.getItem('ta3-operational-plans-v1:uid_myday-user'),
-        legacy: localStorage.getItem('ta3-plans:uid_myday-user'),
-        calendar: localStorage.getItem('ta3-calendar-plans-v1:uid_myday-user'),
-      }));
+      await openApp(page, { now: atInTimezone('2026-09-18', '19:00', timezoneId), boundary, timezone: timezoneId });
+      const storesBefore = await planStores(page);
       await page.locator('#my-day-calendar').evaluate(input => {
         input.value = '2026-09-25';
         input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -337,26 +346,78 @@ for (const boundary of ['20:00']) {
           shownId: shown.id,
           expectedId: expected.id,
           boundaryStartDate: shown.ref?.boundaryStartDate,
-          stores: {
-            operational: localStorage.getItem('ta3-operational-plans-v1:uid_myday-user'),
-            legacy: localStorage.getItem('ta3-plans:uid_myday-user'),
-            calendar: localStorage.getItem('ta3-calendar-plans-v1:uid_myday-user'),
-          },
         };
       });
       expect(projection.shownId).toBe(projection.expectedId);
       expect(projection.boundaryStartDate).toBe('2026-09-24');
-      expect(projection.stores).toEqual(storesBefore);
+      expect(await planStores(page)).toEqual(storesBefore);
       await context.close();
       return text;
     };
-    const utc = await labelFor('UTC');
-    const pacific = await labelFor('America/Los_Angeles');
-    const manila = await labelFor('Asia/Manila');
-    const tokyo = await labelFor('Asia/Tokyo');
-    expect(pacific, 'UTC vs America/Los_Angeles').toBe(utc);
-    expect(manila, 'UTC vs Asia/Manila').toBe(utc);
-    expect(tokyo, 'UTC vs Asia/Tokyo').toBe(utc);
-    expect(utc).toBe("Friday, Sep 25's timeline");
+    for (const timezone of ['UTC', 'Asia/Manila', 'Asia/Tokyo', 'America/Los_Angeles', 'America/Phoenix', 'Pacific/Auckland', 'Pacific/Kiritimati']) {
+      expect(await labelFor(timezone), timezone).toBe("Friday, Sep 25's timeline");
+    }
   });
 }
+
+test('direct selection override clears on arrow navigation while Personal Day identity and stores remain authoritative', async ({ page }) => {
+  await openApp(page, { now: at('2026-09-18', '19:00'), boundary: '20:00' });
+  const selectedId = await page.evaluate(() => {
+    const target = window.PlanAuthority.dayForCalendarDate('2026-09-25');
+    window.PlanAuthority.confirmPreparation(target, {
+      items: [{ id: 'selected-plan-item', task: 'Selected day proof', when: '', done: false, doneAt: null, updatedAt: 123456789, updatedBy: 'device-myday' }],
+      mode: 'normal', intentionalBlank: false, routineInstanceIds: [],
+    });
+    return target.id;
+  });
+  const storesBefore = await planStores(page);
+  await page.locator('#my-day-calendar').evaluate(input => {
+    input.value = '2026-09-25';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(page.locator('#timeline-date-label')).toHaveText("Friday, Sep 25's timeline");
+  expect(await page.evaluate(() => window.currentMyDayTimelineTarget().id)).toBe(selectedId);
+
+  await page.getByRole('button', { name: 'Previous My Day' }).click();
+  const previous = await page.evaluate(id => {
+    const selected = window.PlanAuthority.targetById(id);
+    const expected = window.PlanAuthority.previous(selected);
+    const shown = window.currentMyDayTimelineTarget();
+    return { expectedId: expected.id, shownId: shown.id, boundaryStartDate: shown.ref?.boundaryStartDate };
+  }, selectedId);
+  expect(previous.shownId).toBe(previous.expectedId);
+  expect(previous.boundaryStartDate).toBe('2026-09-23');
+  await expect(page.locator('#timeline-date-label')).toHaveText("Wednesday, Sep 23's timeline");
+
+  await page.getByRole('button', { name: 'Next My Day' }).click();
+  expect(await page.evaluate(() => window.currentMyDayTimelineTarget().id)).toBe(selectedId);
+  await expect(page.locator('#timeline-date-label')).toHaveText("Thursday, Sep 24's timeline");
+  expect(await planStores(page)).toEqual(storesBefore);
+});
+
+test('a direct-date override is discarded when an in-session rollover changes the authoritative target', async ({ page }) => {
+  await openApp(page, { now: at('2026-09-19', '19:00'), boundary: '20:00' });
+  const storesBefore = await planStores(page);
+  await page.locator('#my-day-calendar').evaluate(input => {
+    input.value = '2026-09-19';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const selectedId = await page.evaluate(() => window.PlanAuthority.dayForCalendarDate('2026-09-19').id);
+  expect(await page.evaluate(() => window.currentMyDayTimelineTarget().id)).toBe(selectedId);
+
+  await page.evaluate(ms => {
+    const RealDate = Object.getPrototypeOf(window.Date);
+    window.Date = class MockDate extends RealDate { constructor(...args) { super(...(args.length ? args : [ms])); } static now() { return ms; } };
+    refreshOnPersonalDayRollover();
+    renderTodayOnDateChange();
+  }, at('2026-09-20', '20:01'));
+  const rolled = await page.evaluate(() => {
+    const shown = window.currentMyDayTimelineTarget();
+    return { shownId: shown.id, currentId: window.PlanAuthority.current().id, boundaryStartDate: shown.ref?.boundaryStartDate };
+  });
+  expect(rolled.shownId).toBe(rolled.currentId);
+  expect(rolled.shownId).not.toBe(selectedId);
+  expect(rolled.boundaryStartDate).toBe('2026-09-20');
+  await expect(page.locator('#timeline-date-label')).toHaveText("Today's timeline");
+  expect(await planStores(page)).toEqual(storesBefore);
+});
