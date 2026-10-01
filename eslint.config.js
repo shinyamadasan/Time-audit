@@ -84,7 +84,7 @@ export default [
         totalSecs: 'writable', remaining: 'writable', lastTaskForRepeat: 'writable',
         fbApp: 'writable', fbDb: 'writable', fbRoomRef: 'writable',
         roomCode: 'writable', timerOwnerDeviceId: 'writable', syncedFocusTimer: 'writable', ticker: 'writable',
-        taskStartTime: 'writable', currentTask: 'writable', breakActive: 'writable',
+        taskStartTime: 'writable', currentTask: 'writable', currentTaskPlanItemId: 'writable', breakActive: 'writable',
         breakEndsAt: 'writable', breakTicker: 'writable', breakStartTs: 'writable',
         partnerData: 'writable', syncedDeviceId: 'writable', connectedDevices: 'writable',
         viewingDateKey: 'writable', lastUndoAction: 'writable', _todayRenderKey: 'writable',
