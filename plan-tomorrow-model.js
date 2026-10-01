@@ -59,12 +59,13 @@ export function planItemEndTime(when, durationMinutes, wrap = false) {
   return wrap ? minutesToTime(end % (24 * 60)) : null;
 }
 
-/** Derives the duration (minutes) implied by an exact custom start + end pair, for the "pick an
- *  end time" editing path. An end at or before its start — same value, earlier, or a wrap past
- *  midnight — is rejected outright (null), never reinterpreted as spanning into the next day. */
-export function durationBetween(startWhen, endWhen) {
+/** Derives the duration (minutes) implied by an exact custom start + end pair. Legacy callers
+ *  keep `wrap=false`, so an earlier end is rejected. Calendar-native callers may opt into one
+ *  factual midnight crossing; equal clocks remain ambiguous and are always rejected. */
+export function durationBetween(startWhen, endWhen, wrap = false) {
   if (!validPlanItemTime(startWhen) || !validPlanItemTime(endWhen)) return null;
-  const diff = timeToMinutes(endWhen) - timeToMinutes(startWhen);
+  let diff = timeToMinutes(endWhen) - timeToMinutes(startWhen);
+  if (wrap && diff < 0) diff += 24 * 60;
   return diff > 0 ? diff : null;
 }
 

@@ -121,6 +121,14 @@ function extentEndMs(dateKey, timezone) {
   return dayStart(addCalendarDays(dateKey, MAX_PLAN_DAY_OFFSET + 1), timezone);
 }
 
+/** The hard presentation/storage cap for a calendar plan: midnight after its
+ *  optional second factual date. Display projections may add breathing room,
+ *  but must never invent a third date. */
+export function calendarPlanExtentEndMs(dateKey, timezone) {
+  if (!validPlanDate(dateKey) || !validOperationalDayTimezone(timezone)) throw new Error('A valid calendar date and timezone are required.');
+  return extentEndMs(dateKey, timezone);
+}
+
 /** The factual instant(s) of one item — a pure function of (plan date, item). Untimed
  *  items (no structured `when`) have none. @returns
  *  {{ok:true, timed:false} | {ok:true, timed:true, startMs:number, endMs:number|null} | {ok:false, reason:string}} */

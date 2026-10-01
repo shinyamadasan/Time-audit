@@ -94,6 +94,7 @@ import {
 import {
   calendarAuthorityForDate,
   calendarItemInstants,
+  calendarPlanExtentEndMs,
   calendarPlanId,
   calendarPlanInterval,
   parseCalendarPlanId,
@@ -310,7 +311,7 @@ export function createPlanAuthority(deps = {}) {
     const stored = knownRecord !== undefined ? knownRecord : calendar?.readRecord?.(dateKey);
     const timezone = stored?.timezone || accountTimezone();
     const { startMs, endMs } = calendarPlanInterval(dateKey, timezone);
-    return { store: 'calendar', id: planId, calendarPlanId: planId, dateKey, ref: null, startMs, endMs, timezone, boundaryTime: '00:00', legacy: false, calendar: true };
+    return { store: 'calendar', id: planId, calendarPlanId: planId, dateKey, ref: null, startMs, endMs, extentEndMs: calendarPlanExtentEndMs(dateKey, timezone), timezone, boundaryTime: '00:00', legacy: false, calendar: true };
   }
 
   // The legacy-routed navigation below is the pre-cutover behavior VERBATIM (it is what
@@ -1542,6 +1543,7 @@ export function createPlanAuthority(deps = {}) {
     if (kind !== 'priority' && kind !== 'task') throw new Error(`Unknown plan item kind: ${kind}`);
     let draft = { ...current, ...changes, id: current.id, task: title, deleted: false };
     if (Object.prototype.hasOwnProperty.call(changes, 'when') && !changes.when) draft = clearPlanItemRange(draft);
+    if (Object.prototype.hasOwnProperty.call(changes, 'durationMinutes') && changes.durationMinutes == null) draft = clearPlanItemRange(draft);
     // A NEW clock reading is made against the day the owner chose, so it starts on that day: a stale
     // next-day offset from the previous reading must not silently ride along. (An unchanged reading —
     // a rename, a done toggle — keeps its offset, which is what keeps Monday 01:00 Monday.)

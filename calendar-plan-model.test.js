@@ -4,6 +4,7 @@ import {
   buildActivationFact,
   calendarAuthorityForDate,
   calendarItemInstants,
+  calendarPlanExtentEndMs,
   calendarPlanId,
   calendarPlanInterval,
   effectiveActivation,
@@ -63,10 +64,25 @@ test('the legacy Personal Day boundary is not an input to any of it (an 18:00 bo
 
 test('a range may cross midnight inside its plan, and never past the end of the next date', () => {
   assert.equal(calendarItemInstants(SUNDAY, timed('r', '23:00', { durationMinutes: 120 })).endMs, at('2026-09-28', '01:00'));
+  assert.equal(calendarItemInstants(SUNDAY, timed('r', '23:00', { durationMinutes: 240 })).endMs, at('2026-09-28', '03:00'));
   assert.deepEqual(validateCalendarPlanItem(SUNDAY, timed('r', '23:00', { durationMinutes: 120 })), { ok: true });
   // Monday 23:00 + 2h ends on Tuesday: outside a plan's two-date extent.
   assert.deepEqual(validateCalendarPlanItem(SUNDAY, timed('r', '23:00', { whenDayOffset: 1, durationMinutes: 120 })), { ok: false, reason: 'outside-plan-extent' });
   assert.deepEqual(validateCalendarPlanItem(SUNDAY, timed('r', '22:00', { whenDayOffset: 1, durationMinutes: 120 })), { ok: true });
+});
+
+test('cross-midnight civil dates are stable in the required timezone matrix', () => {
+  const factualDate = (instantMs, timeZone) => new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date(instantMs));
+  for (const whenTz of ['Asia/Manila', 'UTC', 'America/Los_Angeles', 'Pacific/Kiritimati']) {
+    const item = { id: 'range', task: 'Night work', when: '23:00', durationMinutes: 120, whenTz };
+    const before = structuredClone(item);
+    const instants = calendarItemInstants(SUNDAY, item);
+    assert.equal(factualDate(instants.startMs, whenTz), SUNDAY, `${whenTz} start stays Sunday`);
+    assert.equal(factualDate(instants.endMs, whenTz), '2026-09-28', `${whenTz} end stays Monday`);
+    assert.equal(instants.endMs - instants.startMs, 120 * 60000, `${whenTz} keeps the duration`);
+    assert.deepEqual(item, before, `${whenTz} projection is non-mutating`);
+    assert.ok(instants.endMs < calendarPlanExtentEndMs(SUNDAY, whenTz));
+  }
 });
 
 test('malformed time fields are refused with a reason, never coerced', () => {
