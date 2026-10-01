@@ -2595,9 +2595,10 @@ test('stale remote away snapshot cannot overwrite newer local away state', async
 
   await page.evaluate(({ startTs, stamp }) => {
     awayActive = true;
+    claimAwayStateOwnership();
     awayStartTime = startTs;
     awayLabel = 'Cooking';
-    localStorage.setItem('ta3-away-updated-at', String(stamp));
+    localStorage.setItem('ta3-away-updated-at:uid_smoke-user', String(stamp));
     showHeroState('away');
     document.getElementById('hero-away-label').textContent = 'Cooking';
     document.getElementById('timer-status').textContent = 'Away · Cooking · synced';
@@ -2669,7 +2670,7 @@ test('remote timer handoff updates task label and block anchors', async ({ page 
     taskStartTime,
     blockStartTime,
     timerOwnerDeviceId,
-    savedTimer: JSON.parse(localStorage.getItem('ta3-timer') || 'null')
+    savedTimer: JSON.parse(localStorage.getItem('ta3-timer:uid_smoke-user') || 'null')
   }));
   expect(state.currentTask).toBe('Cooking');
   expect(state.lastTaskForRepeat).toBe('Cooking');
@@ -2710,7 +2711,7 @@ test('remote focus timer is adopted as active sync state', async ({ page }) => {
     taskStartTime,
     blockStartTime,
     timerOwnerDeviceId,
-    savedTimer: JSON.parse(localStorage.getItem('ta3-timer') || 'null')
+    savedTimer: JSON.parse(localStorage.getItem('ta3-timer:uid_smoke-user') || 'null')
   }));
   expect(state.currentTask).toBe('PC focus block');
   expect(state.taskStartTime).toBe(remoteStart);
@@ -2954,6 +2955,7 @@ test('stale remote timer snapshot cannot overwrite newer local timer state', asy
 
   await page.evaluate(({ startTs, stamp }) => {
     running = true;
+    claimTimerStateOwnership();
     totalSecs = 1800;
     remaining = 1740;
     currentTask = 'Cooking';
@@ -2962,7 +2964,7 @@ test('stale remote timer snapshot cannot overwrite newer local timer state', asy
     taskStartTime = startTs;
     blockStartTime = startTs;
     timerOwnerDeviceId = syncedDeviceId;
-    localStorage.setItem('ta3-timer-updated-at', String(stamp));
+    localStorage.setItem('ta3-timer-updated-at:uid_smoke-user', String(stamp));
     showHeroState('active');
     document.getElementById('hero-task-name').textContent = 'Cooking';
     document.getElementById('timer-status').textContent = 'Pinging every 30 min';
@@ -3190,6 +3192,7 @@ test('remote timer stop resets local state and clears restored timer storage', a
 
   await page.evaluate((ts) => {
     running = true;
+    claimTimerStateOwnership();
     totalSecs = 1800;
     remaining = 1200;
     currentTask = 'Cooking';
@@ -3198,7 +3201,7 @@ test('remote timer stop resets local state and clears restored timer storage', a
     taskStartTime = ts;
     blockStartTime = ts;
     timerOwnerDeviceId = 'phone-device';
-    localStorage.setItem('ta3-timer', JSON.stringify({
+    localStorage.setItem('ta3-timer:uid_smoke-user', JSON.stringify({
       running: true,
       currentTask: 'Cooking',
       lastTask: 'Cooking',
@@ -3231,7 +3234,7 @@ test('remote timer stop resets local state and clears restored timer storage', a
     blockStartTime,
     timerStartedAt,
     timerOwnerDeviceId,
-    savedTimer: localStorage.getItem('ta3-timer')
+    savedTimer: localStorage.getItem('ta3-timer:uid_smoke-user')
   }));
   expect(state).toEqual({
     running: false,
@@ -3258,6 +3261,7 @@ test('local timer reset publishes stopped state for other devices', async ({ pag
     };
     _fbRoomRefRoom = roomCode; // the test fake stands in for the joined room's ref
     running = true;
+    claimTimerStateOwnership();
     totalSecs = 1800;
     remaining = 1000;
     currentTask = 'Cooking';
@@ -3266,7 +3270,7 @@ test('local timer reset publishes stopped state for other devices', async ({ pag
     taskStartTime = ts;
     blockStartTime = ts;
     timerOwnerDeviceId = syncedDeviceId;
-    localStorage.setItem('ta3-timer', JSON.stringify({
+    localStorage.setItem('ta3-timer:uid_smoke-user', JSON.stringify({
       running: true,
       currentTask: 'Cooking',
       timerStartedAt: ts,

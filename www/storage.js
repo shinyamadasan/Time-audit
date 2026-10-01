@@ -31,6 +31,8 @@ let _syncReconcileInFlight = false;
 const pendingPlanRemoteByDate = new Map();
 const TIMER_SYNC_STAMP_KEY = 'ta3-timer-updated-at';
 const AWAY_SYNC_STAMP_KEY = 'ta3-away-updated-at';
+const TIMER_STORAGE_KEY = 'ta3-timer';
+const AWAY_STORAGE_KEY = 'ta3-away-state';
 const SYNC_EVENT_LOG_KEY = 'ta3-sync-event-log';
 const SYNC_EVENT_LOG_LIMIT = 6;
 const SYNC_RECONCILE_MS = 2 * 60 * 1000;
@@ -76,6 +78,8 @@ let _localStateOwner = null;  // the room whose entries/settings/plans are in me
 let _settingsDefaults = null; // pristine settings, captured at first load() — the base for every bind
 let _fbRoomRefRoom = '';      // the room fbRoomRef points at
 let _syncGeneration = 0;      // bumped on every bind/startSync; older listeners and callbacks go inert
+let _timerStateOwner = null;  // account whose ordinary/Focus timer is currently attached to the runtime
+let _awayStateOwner = null;   // account whose Away state is currently attached to the runtime
 
 /** The storage slot for one room's copy of `base`, or null when no room owns local state. */
 function accountLocalKey(base, room = _localStateOwner) {
@@ -90,6 +94,39 @@ function setAccountLocal(base, value) {
   return true;
 }
 
+/** Removes only the active account's scoped slot. Unowned pre-scoping keys remain quarantined. */
+function removeAccountLocal(base) {
+  const key = _localStateOwner && _localStateOwner === roomCode ? accountLocalKey(base) : null;
+  if (!key) return false;
+  localStorage.removeItem(key);
+  return true;
+}
+
+function timerStateOwnerRoom() { return _timerStateOwner; }
+function awayStateOwnerRoom() { return _awayStateOwner; }
+function claimTimerStateOwnership(room = _localStateOwner) {
+  if (!room || room !== _localStateOwner || room !== roomCode) return false;
+  _timerStateOwner = room;
+  return true;
+}
+function claimAwayStateOwnership(room = _localStateOwner) {
+  if (!room || room !== _localStateOwner || room !== roomCode) return false;
+  _awayStateOwner = room;
+  return true;
+}
+function timerStateOwnedByCurrentAccount() {
+  return !!_timerStateOwner && _timerStateOwner === _localStateOwner && _timerStateOwner === roomCode;
+}
+function awayStateOwnedByCurrentAccount() {
+  return !!_awayStateOwner && _awayStateOwner === _localStateOwner && _awayStateOwner === roomCode;
+}
+function releaseTimerStateOwnership(room = _timerStateOwner) {
+  if (_timerStateOwner === room) _timerStateOwner = null;
+}
+function releaseAwayStateOwnership(room = _awayStateOwner) {
+  if (_awayStateOwner === room) _awayStateOwner = null;
+}
+
 /** fbRoomRef, but only while it points at the joined room AND the local state in memory is
  *  that room's. Every push of entries/settings/templates/plans goes through this. A Firebase
  *  Reference's own `key` is its room, so a ref re-pointed elsewhere is refused too. */
@@ -100,10 +137,128 @@ function ownedRoomRef() {
   return fbRoomRef;
 }
 
+/** Detaches the previous account's active state without stopping/logging it. Its scoped local record and
+ *  Firebase room remain authoritative, so returning to that account restores/reconciles the same state. */
+function detachTimerAwayRuntime(previousOwner) {
+  if (!previousOwner) return;
+  if (typeof detachFocusSessionForAccountSwitch === 'function') detachFocusSessionForAccountSwitch(previousOwner);
+  clearInterval(ticker); ticker = null;
+  clearInterval(awayElapsedTicker); awayElapsedTicker = null;
+  if (typeof _stopHeartbeatForAccount === 'function') _stopHeartbeatForAccount(previousOwner);
+  if (typeof cancelNativePing === 'function') cancelNativePing();
+  running = false;
+  timerStartedAt = null;
+  taskStartTime = null;
+  blockStartTime = null;
+  timerOwnerDeviceId = null;
+  syncedFocusTimer = null;
+  currentTask = '';
+  currentTaskPlanItemId = null;
+  totalSecs = settings.intervalMin * 60;
+  remaining = totalSecs;
+  awayActive = false;
+  awayStartTime = null;
+  awayLabel = 'Away';
+  _timerStateOwner = null;
+  _awayStateOwner = null;
+  fbTimerReceived = false;
+  const mainBtn = document.getElementById('main-btn');
+  if (mainBtn) { mainBtn.textContent = 'Start'; mainBtn.disabled = false; }
+  const switchBtn = document.getElementById('switch-btn');
+  if (switchBtn) switchBtn.style.display = 'none';
+  const breakBtn = document.getElementById('break-btn');
+  if (breakBtn) breakBtn.style.display = 'none';
+  const status = document.getElementById('timer-status');
+  if (status) status.textContent = 'Ready';
+  const awayBtn = document.getElementById('away-btn');
+  if (awayBtn) {
+    awayBtn.textContent = '⊙ Away';
+    awayBtn.style.borderColor = 'var(--away)';
+    awayBtn.style.color = 'var(--away)';
+  }
+  if (typeof updateTimerTaskLabel === 'function') updateTimerTaskLabel();
+  if (typeof showHeroState === 'function') showHeroState('idle');
+  if (typeof updateRing === 'function') updateRing();
+}
+
+function restoreTimerAwayState(room) {
+  if (!room || room !== _localStateOwner || room !== roomCode) return false;
+  let restored = false;
+  try {
+    const saved = JSON.parse(localStorage.getItem(accountLocalKey(TIMER_STORAGE_KEY, room)) || 'null');
+    if (saved && saved.running && saved.timerStartedAt) {
+      const elapsed = Math.floor((Date.now() - saved.timerStartedAt) / 1000);
+      if (elapsed < saved.totalSecs) {
+        _timerStateOwner = room;
+        timerStartedAt = saved.timerStartedAt;
+        totalSecs = saved.totalSecs;
+        remaining = Math.max(0, totalSecs - elapsed);
+        running = true;
+        lastTaskForRepeat = saved.lastTask || '';
+        currentTask = saved.currentTask || saved.lastTask || '';
+        taskStartTime = saved.taskStartTime || saved.timerStartedAt;
+        blockStartTime = saved.blockStartTime || saved.timerStartedAt;
+        if (saved.timerUpdatedAt) rememberTimerSyncStamp(saved.timerUpdatedAt);
+        timerOwnerDeviceId = saved.ownerDeviceId || null;
+        currentTaskPlanItemId = typeof saved.planItemId === 'string' && saved.planItemId ? saved.planItemId : null;
+        const mainBtn = document.getElementById('main-btn');
+        if (mainBtn) mainBtn.textContent = 'Break';
+        const status = document.getElementById('timer-status');
+        if (status) status.textContent = `Pinging every ${settings.intervalMin} min (restored)`;
+        const taskName = document.getElementById('hero-task-name');
+        if (taskName) taskName.textContent = currentTask;
+        if (typeof showHeroState === 'function') showHeroState('active');
+        if (typeof updateTimerTaskLabel === 'function') updateTimerTaskLabel();
+        ticker = setInterval(() => {
+          if (!timerStateOwnedByCurrentAccount()) return;
+          remaining = Math.max(0, totalSecs - Math.floor((Date.now() - timerStartedAt) / 1000));
+          remaining <= 0 ? doPing() : updateRing();
+        }, 1000);
+        restored = true;
+      }
+    }
+  } catch {}
+  try {
+    const savedAway = JSON.parse(localStorage.getItem(accountLocalKey(AWAY_STORAGE_KEY, room)) || 'null');
+    if (!running && savedAway && savedAway.active && savedAway.startedAt && savedAway.label) {
+      _awayStateOwner = room;
+      awayActive = true;
+      awayStartTime = savedAway.startedAt;
+      awayLabel = savedAway.label;
+      if (savedAway.updatedAt) rememberAwaySyncStamp(savedAway.updatedAt);
+      if (typeof showHeroState === 'function') showHeroState('away');
+      const label = document.getElementById('hero-away-label');
+      if (label) label.textContent = awayLabel;
+      const status = document.getElementById('timer-status');
+      if (status) status.textContent = `Away · ${awayLabel}`;
+      const renderElapsed = () => {
+        if (!awayStateOwnedByCurrentAccount()) return;
+        const seconds = Math.floor((Date.now() - awayStartTime) / 1000);
+        const el = document.getElementById('hero-away-elapsed');
+        if (el) el.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+      };
+      renderElapsed();
+      awayElapsedTicker = setInterval(renderElapsed, 1000);
+      restored = true;
+    }
+  } catch {}
+  if (typeof restoreHeartbeatRecoveryForAccount === 'function') restoreHeartbeatRecoveryForAccount();
+  const restoreBoundFocus = () => {
+    if (room === roomCode && room === _localStateOwner && typeof restoreFocusSession === 'function') {
+      restoreFocusSession();
+    }
+  };
+  if (document.readyState === 'complete') restoreBoundFocus();
+  else window.addEventListener('load', restoreBoundFocus, { once: true });
+  return restored;
+}
+
 /** Loads `room`'s entries, settings, legacy plans and focus redemptions into memory (room null ->
  *  empty/default, nothing persisted) and drops every in-memory cache that belongs to the
  *  previous owner. */
 function bindAccountLocalState(room) {
+  const previousOwner = _localStateOwner;
+  if (previousOwner && previousOwner !== (room || null)) detachTimerAwayRuntime(previousOwner);
   _localStateOwner = room || null;
   _syncGeneration++;
   const read = base => {
@@ -155,6 +310,7 @@ function bindAccountLocalState(room) {
   // that would otherwise restore/tombstone that account's entries into this one.
   pendingPlanRemoteByDate.clear();
   if (typeof lastUndoAction !== 'undefined') lastUndoAction = null;
+  restoreTimerAwayState(_localStateOwner);
 }
 
 /** A live account change (sign-in as another account, sign-out): rebind, then recompute
@@ -462,13 +618,15 @@ function numberFromStorage(key) {
 
 function rememberTimerSyncStamp(ts = Date.now()) {
   const stamp = Number(ts) || Date.now();
-  localStorage.setItem(TIMER_SYNC_STAMP_KEY, String(stamp));
+  setAccountLocal(TIMER_SYNC_STAMP_KEY, String(stamp));
   return stamp;
 }
 
 function currentTimerSyncStamp() {
-  const saved = numberFromStorage(TIMER_SYNC_STAMP_KEY);
-  const activeAnchor = running ? Math.max(timerStartedAt || 0, taskStartTime || 0, blockStartTime || 0) : 0;
+  const key = accountLocalKey(TIMER_SYNC_STAMP_KEY);
+  const saved = key ? numberFromStorage(key) : 0;
+  const activeAnchor = running && timerStateOwnedByCurrentAccount()
+    ? Math.max(timerStartedAt || 0, taskStartTime || 0, blockStartTime || 0) : 0;
   return Math.max(saved, activeAnchor);
 }
 
@@ -485,12 +643,14 @@ function isStaleRemoteTimerState(data) {
 
 function rememberAwaySyncStamp(ts = Date.now()) {
   const stamp = Number(ts) || Date.now();
-  localStorage.setItem(AWAY_SYNC_STAMP_KEY, String(stamp));
+  setAccountLocal(AWAY_SYNC_STAMP_KEY, String(stamp));
   return stamp;
 }
 
 function currentAwaySyncStamp() {
-  return Math.max(numberFromStorage(AWAY_SYNC_STAMP_KEY), awayActive ? (awayStartTime || 0) : 0);
+  const key = accountLocalKey(AWAY_SYNC_STAMP_KEY);
+  return Math.max(key ? numberFromStorage(key) : 0,
+    awayActive && awayStateOwnedByCurrentAccount() ? (awayStartTime || 0) : 0);
 }
 
 function remoteAwaySyncStamp(data) {
@@ -793,8 +953,8 @@ function persist() {
   localStorage.setItem('ta3-intention', intention);
   localStorage.setItem('ta3-commitment', JSON.stringify({goal: dailyCommitment, date: toDateKey(new Date()), snoozesToday: snoozesUsedToday}));
   setAccountLocal('ta3-lv', Date.now()); // local version — used to detect unsynced changes
-  if (running && timerStartedAt) {
-    localStorage.setItem('ta3-timer', JSON.stringify({
+  if (running && timerStartedAt && timerStateOwnedByCurrentAccount()) {
+    setAccountLocal(TIMER_STORAGE_KEY, JSON.stringify({
       timerStartedAt,
       totalSecs,
       running: true,
@@ -806,8 +966,18 @@ function persist() {
       ownerDeviceId: timerOwnerDeviceId || null,
       planItemId: currentTaskPlanItemId || null
     }));
-  } else {
-    localStorage.removeItem('ta3-timer');
+  } else if (!running && (!_timerStateOwner || timerStateOwnedByCurrentAccount())) {
+    removeAccountLocal(TIMER_STORAGE_KEY);
+  }
+  if (awayActive && awayStartTime && awayStateOwnedByCurrentAccount()) {
+    setAccountLocal(AWAY_STORAGE_KEY, JSON.stringify({
+      active: true,
+      label: awayLabel,
+      startedAt: awayStartTime,
+      updatedAt: currentAwaySyncStamp()
+    }));
+  } else if (!awayActive && (!_awayStateOwner || awayStateOwnedByCurrentAccount())) {
+    removeAccountLocal(AWAY_STORAGE_KEY);
   }
 }
 
@@ -831,28 +1001,8 @@ function load() {
       snoozesUsedToday = c.snoozesToday || 0;
     }
   } catch(e) {}
-  // Restore timer state across refresh
-  try {
-    const saved = JSON.parse(localStorage.getItem('ta3-timer') || 'null');
-    if (saved && saved.running && saved.timerStartedAt) {
-      const elapsed = Math.floor((Date.now() - saved.timerStartedAt) / 1000);
-      if (elapsed < saved.totalSecs) {
-        timerStartedAt = saved.timerStartedAt;
-        totalSecs = saved.totalSecs;
-        remaining = Math.max(0, totalSecs - elapsed);
-        running = true;
-        lastTaskForRepeat = saved.lastTask || '';
-        if (saved.currentTask) currentTask = saved.currentTask;
-        if (saved.taskStartTime) taskStartTime = saved.taskStartTime;
-        blockStartTime = saved.blockStartTime || saved.timerStartedAt;
-        if (saved.timerUpdatedAt) rememberTimerSyncStamp(saved.timerUpdatedAt);
-        if (saved.ownerDeviceId) timerOwnerDeviceId = saved.ownerDeviceId;
-        // Plan Linkage V1 — a blob saved before this field existed, or an ordinary unplanned
-        // timer, restores with no linkage (the pre-existing default), never a stale/fabricated one.
-        currentTaskPlanItemId = (typeof saved.planItemId === 'string' && saved.planItemId) ? saved.planItemId : null;
-      }
-    }
-  } catch(e) {}
+  // Timer/Away recovery is account-scoped and therefore happens only when auth binds an owner room.
+  // The unscoped pre-isolation Timer/Away keys carry no owner and remain quarantined untouched.
 }
 
 // ══════════════════════════════════════════════════════
@@ -1008,6 +1158,7 @@ function startSync() {
         name: navigator.userAgent.includes('Mobile') ? '📱 Mobile' : '💻 Desktop'
       });
       syncLocalActiveTimerState();
+      syncLocalActiveAwayState();
       // Push any local changes that happened while offline
       const lv = parseInt(localStorage.getItem(accountLocalKey('ta3-lv', syncRoom)) || '0', 10);
       const ls = parseInt(localStorage.getItem(accountLocalKey('ta3-last-sync', syncRoom)) || '0', 10);
@@ -1058,7 +1209,8 @@ function startSync() {
   deviceRef.onDisconnect().remove();
 
   fbDb.ref(`rooms/${roomCode}/timer`).on('value', snap => {
-    const changed = applyRemoteTimerState(snap.val());
+    if (!isCurrentSync()) return;
+    const changed = applyRemoteTimerState(snap.val(), syncRoom);
     if (changed) {
       scheduleRenderToday();
     }
@@ -1241,7 +1393,8 @@ function startSync() {
   });
 
   fbDb.ref(`rooms/${roomCode}/awayState`).on('value', snap => {
-    const changed = applyRemoteAwayState(snap.val());
+    if (!isCurrentSync()) return;
+    const changed = applyRemoteAwayState(snap.val(), syncRoom);
     if (changed) scheduleRenderToday();
   });
 
@@ -1316,8 +1469,8 @@ async function forceSyncNow() {
     ]);
     // These snapshots are the initiating account's: never apply them to another's state.
     if (ownedRoomRef() !== ref) return false;
-    const timerChanged = applyRemoteTimerState(timerSnap.val());
-    const awayChanged = applyRemoteAwayState(awaySnap.val());
+    const timerChanged = applyRemoteTimerState(timerSnap.val(), ref.key);
+    const awayChanged = applyRemoteAwayState(awaySnap.val(), ref.key);
     const settingsChanged = applyRemoteSettings(settingsSnap.val());
     const templatesChanged = applyRemoteTemplates(templatesSnap.val(), templateStampSnap.val());
     await Promise.all([syncEntries(), syncFocusRedemptions(), syncSettings(), syncTemplates()]);
@@ -1341,18 +1494,19 @@ async function forceSyncNow() {
 }
 
 async function reconcileRemoteActiveState() {
-  if (!fbRoomRef || _syncReconcileInFlight) return false;
+  const currentRef = ownedRoomRef();
+  if (!currentRef || _syncReconcileInFlight) return false;
   _syncReconcileInFlight = true;
-  const ref = fbRoomRef;
+  const ref = currentRef;
   try {
     const [timerSnap, awaySnap] = await Promise.all([
       ref.child('timer').once('value'),
       ref.child('awayState').once('value')
     ]);
     // Read for the initiating room: after a switch it must not stamp the new account's last-sync marker.
-    if (fbRoomRef !== ref) return false;
-    const timerChanged = applyRemoteTimerState(timerSnap.val());
-    const awayChanged = applyRemoteAwayState(awaySnap.val());
+    if (ownedRoomRef() !== ref) return false;
+    const timerChanged = applyRemoteTimerState(timerSnap.val(), ref.key);
+    const awayChanged = applyRemoteAwayState(awaySnap.val(), ref.key);
     setAccountLocal('ta3-last-sync', Date.now());
     if (timerChanged || awayChanged) {
       persist();
@@ -1437,7 +1591,7 @@ function isLocalFocusTimerActive() {
 }
 
 function syncLocalActiveTimerState() {
-  if (!fbRoomRef) return false;
+  if (!ownedRoomRef() || !timerStateOwnedByCurrentAccount()) return false;
   if (isLocalFocusTimerActive() && typeof syncFocusTimerState === 'function') {
     syncFocusTimerState();
     return true;
@@ -1449,8 +1603,35 @@ function syncLocalActiveTimerState() {
   return false;
 }
 
-function applyRemoteTimerState(data) {
+function syncAwayState({ active = awayActive, label = awayLabel, startedAt = awayStartTime, ownerRoom = _awayStateOwner } = {}) {
+  const ref = ownedRoomRef();
+  if (!ref || !ownerRoom || ownerRoom !== roomCode || ownerRoom !== _localStateOwner) return false;
+  const now = Date.now();
+  const payload = {
+    active: !!active,
+    startedBy: syncedDeviceId,
+    updatedAt: now,
+    deviceName: navigator.userAgent.includes('Mobile') ? 'phone' : 'PC',
+    ownerRoom
+  };
+  if (active) {
+    payload.label = label;
+    payload.startedAt = startedAt;
+  }
+  rememberAwaySyncStamp(now);
+  ref.update({ awayState: payload });
+  return true;
+}
+
+function syncLocalActiveAwayState() {
+  if (!awayActive || !awayStateOwnedByCurrentAccount()) return false;
+  return syncAwayState();
+}
+
+function applyRemoteTimerState(data, sourceRoom = _localStateOwner) {
   if (!data) return false;
+  if (!sourceRoom || sourceRoom !== roomCode || sourceRoom !== _localStateOwner) return false;
+  if (data.ownerRoom && data.ownerRoom !== sourceRoom) return false;
 
   // Reload-restore reconciliation: a Focus session reconstructed from
   // localStorage (restoreFocusSession() in focus-mode.js) sets this
@@ -1534,6 +1715,7 @@ function applyRemoteTimerState(data) {
   }
 
   if (data.running && data.startedAt) {
+    _timerStateOwner = sourceRoom;
     const isFocusTimer = data.mode === 'focus';
     const elapsed = Math.floor((Date.now() - data.startedAt) / 1000);
     timerStartedAt = data.startedAt;
@@ -1641,8 +1823,10 @@ function applyRemoteTimerState(data) {
   return false;
 }
 
-function applyRemoteAwayState(data) {
+function applyRemoteAwayState(data, sourceRoom = _localStateOwner) {
   if (!data) return false;
+  if (!sourceRoom || sourceRoom !== roomCode || sourceRoom !== _localStateOwner) return false;
+  if (data.ownerRoom && data.ownerRoom !== sourceRoom) return false;
   if (isStaleRemoteAwayState(data)) {
     updateTimerSyncDetail({
       updatedAt: data.updatedAt || data.startedAt || Date.now(),
@@ -1651,11 +1835,12 @@ function applyRemoteAwayState(data) {
     }, 'ignored stale away', 'away');
     return false;
   }
-  if (data.startedBy === syncedDeviceId) {
+  if (data.startedBy === syncedDeviceId && awayActive && awayStateOwnedByCurrentAccount()) {
     if (data.updatedAt || data.startedAt) rememberAwaySyncStamp(remoteAwaySyncStamp(data));
     return false;
   }
   if (data.active && data.label) {
+    _awayStateOwner = sourceRoom;
     const startedAt = data.startedAt || Date.now();
     const changed = !awayActive || awayLabel !== data.label || awayStartTime !== startedAt;
     if (!changed) return false;
@@ -1707,6 +1892,7 @@ function applyRemoteAwayState(data) {
     return true;
   }
   if (!data.active && awayActive) {
+    if (_awayStateOwner !== sourceRoom) return false;
     // Remote ended away — clear local away UI. The device ending away owns the entry log.
     rememberAwaySyncStamp(remoteAwaySyncStamp(data) || Date.now());
     clearInterval(awayElapsedTicker);
@@ -1714,6 +1900,7 @@ function applyRemoteAwayState(data) {
     awayActive = false;
     awayStartTime = null;
     awayLabel = 'Away';
+    _awayStateOwner = null;
     showHeroState('idle');
     updateTimerSyncDetail({
       updatedAt: data.updatedAt || Date.now(),
@@ -1726,7 +1913,9 @@ function applyRemoteAwayState(data) {
 }
 
 function syncTimerState(extra = {}) {
-  if (!fbRoomRef) return;
+  const ownerRoom = extra.ownerRoom || _timerStateOwner;
+  const ref = ownedRoomRef();
+  if (!ref || !ownerRoom || ownerRoom !== roomCode || ownerRoom !== _localStateOwner) return false;
   const now = Date.now();
   rememberTimerSyncStamp(now);
   const isStopped = !!extra.stopped;
@@ -1758,12 +1947,14 @@ function syncTimerState(extra = {}) {
     updatedBy: syncedDeviceId,
     deviceName: navigator.userAgent.includes('Mobile') ? 'phone' : 'PC'
   };
-  fbRoomRef.update({
+  timer.ownerRoom = ownerRoom;
+  ref.update({
     timer
   });
   updateTimerSyncDetail(timer, extra.stateLabel || (timer.running
     ? `${timer.mode === 'focus' ? 'focus' : 'active'}: ${timer.lastTask || 'Work'}`
     : timer.stopped ? 'timer stopped' : 'timer paused'));
+  return true;
 }
 
 function resolveEntrySync(local, remote, nowTs = Date.now()) {

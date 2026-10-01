@@ -119,12 +119,12 @@ test('already-visible install is suppressed by the actual Focus restore path', a
   await openApp(page);
   await page.evaluate(() => {
     enterFocusMode({ task: 'Restored work', autoStart: true });
-    window.__savedFocus = localStorage.getItem('ta3-focus-timer');
+    window.__savedFocus = localStorage.getItem('ta3-focus-timer:uid_plan-user');
     confirmExitFocus();
   });
   await eligible(page);
   await expect(page.locator('#install-banner')).toBeVisible();
-  await page.evaluate(() => { localStorage.setItem('ta3-focus-timer', window.__savedFocus); restoreFocusSession(); });
+  await page.evaluate(() => { localStorage.setItem('ta3-focus-timer:uid_plan-user', window.__savedFocus); restoreFocusSession(); });
   await suppressed(page);
   expect(await page.evaluate(() => pomodoroPhase)).toBe('work');
 });
@@ -133,11 +133,11 @@ test('timer crash recovery defers eligibility until its actual decision complete
   await openApp(page);
   await page.evaluate(async () => {
     await _startTimer('Recover admin');
-    localStorage.setItem('ta3-heartbeat-ts', String(Date.now() - 3 * 60000));
+    localStorage.setItem('ta3-heartbeat-ts:uid_plan-user', String(Date.now() - 3 * 60000));
   });
   // Emulate a crashed process: the normal unload handler must not refresh the heartbeat.
   await page.addInitScript(() => {
-    localStorage.setItem('ta3-heartbeat-ts', String(Date.now() - 3 * 60000));
+    localStorage.setItem('ta3-heartbeat-ts:uid_plan-user', String(Date.now() - 3 * 60000));
     document.addEventListener('DOMContentLoaded', () => {
       const event = new Event('beforeinstallprompt', { cancelable: true });
       event.prompt = () => {}; event.userChoice = Promise.resolve({ outcome: 'dismissed' });
