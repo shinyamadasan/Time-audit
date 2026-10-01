@@ -1,4 +1,4 @@
-// Timer / Away Account Isolation V1 — direct account switches in the real browser runtime.
+// Timer / Away Account Isolation V1 + Break ownership fix — direct account switches in the real browser runtime.
 // Firebase is an in-memory, room-partitioned stub; no network or production data is used.
 
 import { test, expect } from '@playwright/test';
@@ -173,6 +173,8 @@ const state = page => page.evaluate(() => ({
   running,
   task: currentTask,
   timerOwnerRoom: timerStateOwnerRoom(),
+  breakActive,
+  breakOwnerRoom: breakStateOwnerRoom(),
   awayActive,
   awayLabel,
   awayOwnerRoom: awayStateOwnerRoom(),
@@ -386,4 +388,160 @@ test('Timer/Away switching does not mutate Calendar-Native plan paths or authori
   const calendarWrites = await page.evaluate(() => window.__fbTest.log.writes.filter(write => /calendarPlans|calendarPlanAuthority/.test(write.path)));
   expect(calendarWrites).toEqual([]);
   expect(await page.evaluate(() => typeof globalThis.PlanAuthority?.current === 'function' && typeof globalThis.CalendarPlanLive?.authorityState === 'function')).toBe(true);
+});
+
+test('A Break -> B detaches without ending, logging, or writing A state into B', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => { _startTimer('A before break'); startBreak(5); });
+  const aBreak = await roomValue(page, A, 'breakState');
+  const aBreakWrites = await page.evaluate(() => window.__fbTest.log.writes.filter(write => write.path.endsWith('/breakState')));
+
+  await switchTo(page, 'account-b');
+
+  expect(await state(page)).toMatchObject({ room: B, running: false, breakActive: false, breakOwnerRoom: null });
+  expect(aBreak).toMatchObject({ active: true, ownerRoom: A });
+  expect(aBreakWrites).toContainEqual(expect.objectContaining({ path: `rooms/${A}/breakState`, value: expect.objectContaining({ active: true, ownerRoom: A }) }));
+  expect(aBreakWrites.some(write => write.path === `rooms/${B}/breakState`)).toBe(false);
+  expect((await state(page)).activities.filter(activity => activity === 'Break')).toHaveLength(0);
+  const writes = await writesSinceSwitch(page);
+  expect(writes.filter(write => write.path.startsWith(`rooms/${B}/`) && JSON.stringify(write.value).includes(aBreak.endsAt))).toEqual([]);
+});
+
+test('a stale A end callback after switching cannot log or mutate B', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    _startTimer('A stale end');
+    startBreak(5);
+    const ownerRoom = breakStateOwnerRoom();
+    window.__staleBreakEnd = () => endBreak(ownerRoom);
+  });
+  await switchTo(page, 'account-b');
+
+  expect(await page.evaluate(() => window.__staleBreakEnd())).toBe(false);
+  expect(await state(page)).toMatchObject({ room: B, running: false, breakActive: false, breakOwnerRoom: null });
+  expect(JSON.stringify(await roomValue(page, B))).not.toMatch(/A stale end|Break/);
+});
+
+test('late and held A Break hydration cannot attach to B', async ({ page }) => {
+  await openApp(page);
+  const remoteTimer = { running: true, lastTask: 'A held break timer', intervalSecs: 1800, startedAt: NOW - 60000, taskStartTime: NOW - 60000, blockStartTime: NOW - 60000, ownerDeviceId: 'other-a', ownerRoom: A, updatedAt: NOW, updatedBy: 'other-a' };
+  const remoteBreak = { active: true, startedAt: NOW - 30000, endsAt: NOW + 300000, durationMin: 5, startedBy: 'other-a', ownerRoom: A };
+  await page.evaluate(({ A, remoteTimer, remoteBreak }) => {
+    window.__fbTest.seed(`rooms/${A}/timer`, remoteTimer);
+    window.__fbTest.seed(`rooms/${A}/breakState`, remoteBreak);
+    window.__fbTest.holdReads(`rooms/${A}/`);
+    window.__heldBreakHydration = forceSyncNow();
+  }, { A, remoteTimer, remoteBreak });
+  await switchTo(page, 'account-b');
+  await page.evaluate(A => {
+    window.__fbTest.fireLate(`rooms/${A}/breakState`);
+    window.__fbTest.releaseReads();
+  }, A);
+
+  expect(await page.evaluate(() => window.__heldBreakHydration)).toBe(false);
+  expect(await state(page)).toMatchObject({ room: B, running: false, breakActive: false, breakOwnerRoom: null });
+  expect(JSON.stringify(await roomValue(page, B))).not.toContain('A held break timer');
+});
+
+test('reconnect and logout/login never replay A Break into B', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => { _startTimer('A reconnect break'); startBreak(5); window.__fbTest.setConnected(false); });
+  await page.evaluate(() => window.__fbTest.signOut());
+  await page.waitForFunction(() => globalThis.getChronaSenseRoomCode?.() === '');
+  expect(await state(page)).toMatchObject({ room: '', running: false, breakActive: false, breakOwnerRoom: null });
+  await page.evaluate(() => window.__fbTest.signInAs('account-b'));
+  await page.waitForFunction(B => globalThis.getChronaSenseRoomCode?.() === B, B);
+  await page.evaluate(() => { window.__writeMark = window.__fbTest.log.writes.length; window.__fbTest.setConnected(true); });
+  await page.waitForTimeout(100);
+
+  expect(await state(page)).toMatchObject({ room: B, running: false, breakActive: false, breakOwnerRoom: null });
+  expect((await writesSinceSwitch(page)).filter(write => write.path.startsWith(`rooms/${B}/`) && JSON.stringify(write.value).includes('A reconnect break'))).toEqual([]);
+});
+
+test('A and B can own identical independent Breaks and A restores after rapid switching', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => { _startTimer('Same task'); startBreak(5); });
+  await switchTo(page, 'account-b');
+  await page.evaluate(() => { _startTimer('Same task'); startBreak(5); });
+
+  const [aBreak, bBreak, keys] = await Promise.all([
+    roomValue(page, A, 'breakState'),
+    roomValue(page, B, 'breakState'),
+    page.evaluate(({ A, B }) => [localStorage.getItem(`ta3-break-state:${A}`), localStorage.getItem(`ta3-break-state:${B}`)], { A, B })
+  ]);
+  expect(aBreak).toMatchObject({ active: true, durationMin: 5, ownerRoom: A });
+  expect(bBreak).toMatchObject({ active: true, durationMin: 5, ownerRoom: B });
+  expect(keys.every(Boolean)).toBe(true);
+
+  await switchTo(page, 'account-a');
+  await switchTo(page, 'account-b');
+  await switchTo(page, 'account-a');
+  expect(await state(page)).toMatchObject({ room: A, breakActive: true, breakOwnerRoom: A });
+  expect(await page.evaluate(() => endBreak(breakStateOwnerRoom()))).toBe(true);
+  expect((await state(page)).activities.filter(activity => activity === 'Break')).toHaveLength(1);
+  expect(await roomValue(page, A, 'breakState')).toMatchObject({ active: false, ownerRoom: A });
+  expect(await roomValue(page, B, 'breakState')).toMatchObject({ active: true, ownerRoom: B });
+});
+
+test('a mirrored remote Break never auto-logs a duplicate entry', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(({ A, NOW }) => {
+    window.__fbTest.remoteWrite(`rooms/${A}/timer`, {
+      running: false,
+      pausedRemaining: 1200,
+      lastTask: 'Remote owner task',
+      ownerDeviceId: 'other-device',
+      ownerRoom: A,
+      updatedAt: NOW,
+      updatedBy: 'other-device'
+    });
+    window.__fbTest.remoteWrite(`rooms/${A}/breakState`, {
+      active: true,
+      startedAt: NOW - 60000,
+      endsAt: NOW + 240000,
+      durationMin: 5,
+      startedBy: 'other-device',
+      ownerRoom: A
+    });
+    breakEndsAt = Date.now() - 1;
+  }, { A, NOW });
+  await page.waitForTimeout(1100);
+
+  expect(await state(page)).toMatchObject({ room: A, breakActive: true, breakOwnerRoom: A });
+  expect((await state(page)).activities.filter(activity => activity === 'Break')).toHaveLength(0);
+  await page.evaluate(A => window.__fbTest.remoteWrite(`rooms/${A}/breakState`, {
+    active: false,
+    startedBy: 'other-device',
+    ownerRoom: A
+  }), A);
+  expect(await state(page)).toMatchObject({ room: A, breakActive: false, breakOwnerRoom: null });
+  expect((await state(page)).activities.filter(activity => activity === 'Break')).toHaveLength(0);
+});
+
+test('unowned Break residue stays quarantined on reload and is never uploaded or deleted', async ({ page }) => {
+  await openApp(page);
+  const residue = JSON.stringify({ active: true, startedAt: NOW, endsAt: NOW + 300000, durationMin: 5, marker: 'UNOWNED BREAK' });
+  await page.evaluate(residue => localStorage.setItem('ta3-break-state', residue), residue);
+  await switchTo(page, 'account-b');
+  await page.addInitScript(() => { window.__initialUid = 'account-b'; });
+  await page.reload();
+  await page.waitForFunction(B => globalThis.getChronaSenseRoomCode?.() === B, B);
+  await page.waitForTimeout(150);
+
+  expect(await state(page)).toMatchObject({ room: B, breakActive: false, breakOwnerRoom: null });
+  expect(await page.evaluate(() => localStorage.getItem('ta3-break-state'))).toBe(residue);
+  expect(JSON.stringify(await roomValue(page, B))).not.toContain('UNOWNED BREAK');
+});
+
+test('Break actions refuse Timer/Break ownership disagreement', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => _startTimer('A ownership guard'));
+  expect(await page.evaluate(B => startBreak(5, B), B)).toBe(false);
+  expect(await state(page)).toMatchObject({ room: A, running: true, breakActive: false, timerOwnerRoom: A, breakOwnerRoom: null });
+
+  await page.evaluate(() => { startBreak(5); window.__breakOwnerBeforeMismatch = breakStateOwnerRoom(); _timerStateOwner = null; });
+  expect(await page.evaluate(() => endBreak(window.__breakOwnerBeforeMismatch))).toBe(false);
+  expect(await state(page)).toMatchObject({ room: A, breakActive: true, breakOwnerRoom: A, timerOwnerRoom: null });
+  await switchTo(page, 'account-b');
+  expect(await state(page)).toMatchObject({ room: B, running: false, breakActive: false, breakOwnerRoom: null, timerOwnerRoom: null });
 });
