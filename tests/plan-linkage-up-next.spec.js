@@ -465,11 +465,11 @@ test('U: an ordinary plan-linked timer survives reload with its plan item id int
   expect(created[0].planItemId).toBe(planItemId);
 });
 
-test('U2: a pre-existing ta3-timer blob with no planItemId field restores safely with no fabricated linkage', async ({ page }) => {
+test('U2: a pre-existing account-scoped timer blob with no planItemId field restores safely with no fabricated linkage', async ({ page }) => {
   const nowTs = nowAtUTC(10, 0);
   await openApp(page, { nowTs });
   await page.evaluate((now) => {
-    localStorage.setItem('ta3-timer', JSON.stringify({
+    localStorage.setItem('ta3-timer:uid_plan-user', JSON.stringify({
       timerStartedAt: now - 5 * 60000, totalSecs: 1800, running: true,
       lastTask: 'Old task', currentTask: 'Old task',
       taskStartTime: now - 5 * 60000, blockStartTime: now - 5 * 60000,

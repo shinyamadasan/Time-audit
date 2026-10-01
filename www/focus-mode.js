@@ -125,8 +125,9 @@ let restoredFocusBaselineSyncStamp = 0;
 
 function persistFocusSession() {
   if (pomodoroPhase === 'idle') { clearPersistedFocusSession(); return; }
+  if (typeof timerStateOwnedByCurrentAccount !== 'function' || !timerStateOwnedByCurrentAccount()) return;
   try {
-    localStorage.setItem(FOCUS_TIMER_STORAGE_KEY, JSON.stringify({
+    setAccountLocal(FOCUS_TIMER_STORAGE_KEY, JSON.stringify({
       pomodoroPhase,
       pomodoroPhaseStartedAt,
       pomodoroWorkMin,
@@ -143,11 +144,30 @@ function persistFocusSession() {
 }
 
 function clearPersistedFocusSession() {
-  try { localStorage.removeItem(FOCUS_TIMER_STORAGE_KEY); } catch {}
+  try { removeAccountLocal(FOCUS_TIMER_STORAGE_KEY); } catch {}
   // Focus ending/exiting locally means there is nothing left to reconcile —
   // never let this leak into a later, unrelated session.
   restoredFocusAwaitingSyncReconciliation = false;
   restoredFocusBaselineSyncStamp = 0;
+}
+
+/** Account switching detaches Focus from the active UI/runtime without ending or logging it. The
+ *  previous account's scoped record and remote timer remain intact for later reconciliation. */
+function detachFocusSessionForAccountSwitch() {
+  if (pomodoroPhase === 'idle' && !focusModeOn) return;
+  clearInterval(pomodoroTimer);
+  pomodoroTimer = null;
+  pomodoroPhase = 'idle';
+  pomodoroPhaseStartedAt = null;
+  pomodoroRemaining = 0;
+  pomodoroWasPaused = false;
+  restoredFocusAwaitingSyncReconciliation = false;
+  restoredFocusBaselineSyncStamp = 0;
+  stopFocusMusic();
+  focusModeOn = false;
+  document.getElementById('focus-overlay')?.classList.remove('open');
+  clearFocusLearningPlanContext();
+  pushHudFocusEnded();
 }
 
 // Reconstructs an active Focus session from persisted state after a reload.
@@ -159,8 +179,10 @@ function clearPersistedFocusSession() {
 // called, once, instead of inventing a parallel recovery path.
 function restoreFocusSession() {
   if (pomodoroPhase !== 'idle') return false; // never clobber an already-active session
+  const ownerRoom = globalThis.getChronaSenseRoomCode?.() || '';
+  if (!ownerRoom || typeof accountLocalKey !== 'function') return false;
   let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(FOCUS_TIMER_STORAGE_KEY) || 'null'); }
+  try { saved = JSON.parse(localStorage.getItem(accountLocalKey(FOCUS_TIMER_STORAGE_KEY, ownerRoom)) || 'null'); }
   catch { clearPersistedFocusSession(); return false; }
   if (!saved || typeof saved !== 'object') return false;
 
@@ -173,13 +195,13 @@ function restoreFocusSession() {
     clearPersistedFocusSession(); // corrupt/incomplete — fail safe, never fabricate a session
     return false;
   }
+  if (typeof claimTimerStateOwnership !== 'function' || !claimTimerStateOwnership(ownerRoom)) return false;
 
   // Capture the pre-restore local sync recency stamp BEFORE anything below
   // (including the syncFocusTimerState() push later in this function) can
   // touch it — this is the reconciliation baseline. See the declaration
   // comment above and applyRemoteTimerState() in storage.js.
-  restoredFocusBaselineSyncStamp = typeof numberFromStorage === 'function' && typeof TIMER_SYNC_STAMP_KEY !== 'undefined'
-    ? numberFromStorage(TIMER_SYNC_STAMP_KEY) : 0;
+  restoredFocusBaselineSyncStamp = typeof currentTimerSyncStamp === 'function' ? currentTimerSyncStamp() : 0;
   restoredFocusAwaitingSyncReconciliation = true;
 
   pomodoroPhase = saved.pomodoroPhase;
@@ -302,6 +324,7 @@ function notifyLearningPlanFocusSessionEnded(entry, tsStart, tsEnd) {
 }
 
 function finishLearningPlanFocusSession() {
+  const ownerRoom = typeof timerStateOwnerRoom === 'function' ? timerStateOwnerRoom() : null;
   pomodoroPhase = 'idle';
   pomodoroPhaseStartedAt = null;
   pomodoroRemaining = 0;
@@ -310,7 +333,8 @@ function finishLearningPlanFocusSession() {
   focusModeOn = false;
   document.getElementById('focus-overlay')?.classList.remove('open');
   if (typeof _stopHeartbeat === 'function') _stopHeartbeat();
-  syncTimerState({ stopped: true, lastTask: null, mode: 'focus' });
+  syncTimerState({ stopped: true, lastTask: null, mode: 'focus', ownerRoom });
+  if (typeof releaseTimerStateOwnership === 'function') releaseTimerStateOwnership(ownerRoom);
   timerOwnerDeviceId = null;
   currentTask = '';
   pushHudFocusEnded();
@@ -547,6 +571,7 @@ function takeOverSyncedFocusTimer() {
   const remainingSecs = Math.max(0, intervalSecs - elapsed);
   const task = syncedFocusTimer.task || currentTask || 'Focus session';
 
+  if (typeof claimTimerStateOwnership !== 'function' || !claimTimerStateOwnership()) return false;
   timerOwnerDeviceId = syncedDeviceId;
   currentTask = task;
   lastTaskForRepeat = task;
@@ -587,6 +612,10 @@ function takeOverSyncedFocusTimer() {
 
 function startPomodoro(options = {}) {
   if (pomodoroPhase !== 'idle') return false;
+  if (typeof claimTimerStateOwnership !== 'function' || !claimTimerStateOwnership()) {
+    showToast('Sign in before starting Focus');
+    return false;
+  }
   pomodoroWorkMin = parseInt(document.getElementById('pomo-work-min').value) || 25;
   pomodoroBreakMin = parseInt(document.getElementById('pomo-break-min').value) || 5;
 
@@ -1059,6 +1088,7 @@ function exitFocusConfirm() {
 }
 
 function confirmExitFocus() {
+  const ownerRoom = typeof timerStateOwnerRoom === 'function' ? timerStateOwnerRoom() : null;
   clearPersistedFocusSession();
   const mirroredRemoteFocus = isSyncedFocusMirrorActive();
   if (mirroredRemoteFocus) {
@@ -1092,7 +1122,8 @@ function confirmExitFocus() {
   }
   pomodoroWasPaused = false;
   clearFocusLearningPlanContext();
-  syncTimerState({ stopped: true, lastTask: null, mode: 'focus' });
+  syncTimerState({ stopped: true, lastTask: null, mode: 'focus', ownerRoom });
+  if (typeof releaseTimerStateOwnership === 'function') releaseTimerStateOwnership(ownerRoom);
   timerOwnerDeviceId = null;
   currentTask = '';
   pushHudFocusEnded();
@@ -1201,28 +1232,5 @@ function handleFocusKey(e) {
   }
 }
 
-// Restore any Focus session that was active when the page was last unloaded.
-// index.html's inline boot script (load(), the generic ta3-timer restore)
-// has already run above this in document order, and initAutoSync()'s
-// Firebase listener callbacks can't possibly have fired yet (those need a
-// network round-trip) — so a locally-owned session always wins over a stale
-// remote mirror, consistent with the existing ownership rules in
-// storage.js's isLocalFocusTimerActive()/applyRemoteTimerState().
-//
-// This script itself is classic (not type="module"), so it runs immediately
-// during parsing — BEFORE the type="module" scripts declared earlier in the
-// document (daily-routines-ui.js, learning-plan-ui.js, windows-hud-bridge.js
-// etc.), which are deferred like `defer` and only run once parsing finishes.
-// Those modules register onDailyRoutineFocusCompleted/onLearningPlanFocus-
-// SessionEnded and window.chronaSenseHudBridge. If a persisted session's
-// planned duration already elapsed while the app was closed, restoration
-// calls endWorkSession()/endPomodoroBreak() to conclude it — and that path
-// must see those hooks already registered, or Daily Routine / Learning Plan
-// completion and the HUD push would be silently skipped on that first
-// restore. So defer to DOMContentLoaded (after modules run) when parsing
-// isn't finished yet; otherwise (script injected/loaded late) run inline.
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', restoreFocusSession, { once: true });
-} else {
-  restoreFocusSession();
-}
+// Account-scoped restore is initiated by storage.js only after auth binds the owning room and all
+// deferred modules have initialized their Focus completion/HUD hooks.

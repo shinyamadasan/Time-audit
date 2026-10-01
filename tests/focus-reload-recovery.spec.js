@@ -157,7 +157,7 @@ function readFocusState(page) {
     entriesCount: entries.length,
     overlayOpen: document.getElementById('focus-overlay').classList.contains('open'),
     phaseLabel: document.getElementById('focus-phase-label').textContent,
-    persisted: localStorage.getItem('ta3-focus-timer')
+    persisted: localStorage.getItem('ta3-focus-timer:uid_reload-test-user')
   }));
 }
 
@@ -172,6 +172,9 @@ test.describe('Focus reload recovery', () => {
     // Simulate 6 minutes of real elapsed time before the user reloads.
     await page.clock.setFixedTime(before.pomodoroPhaseStartedAt + 6 * 60 * 1000);
     await page.reload();
+    await page.waitForFunction(() =>
+      globalThis.getChronaSenseRoomCode?.() === 'uid_reload-test-user' && pomodoroPhase === 'work'
+    );
 
     const after = await readFocusState(page);
     expect(after.pomodoroPhase).toBe('work');
@@ -294,14 +297,14 @@ test.describe('Focus reload recovery', () => {
 
   test('chaos 7: corrupt or incomplete persisted Focus state fails safely and never fabricates a session', async ({ page }) => {
     await openApp(page);
-    await page.evaluate(() => localStorage.setItem('ta3-focus-timer', 'not valid json {{'));
+    await page.evaluate(() => localStorage.setItem('ta3-focus-timer:uid_reload-test-user', 'not valid json {{'));
     await page.reload();
     let after = await readFocusState(page);
     expect(after.pomodoroPhase).toBe('idle');
     expect(after.overlayOpen).toBe(false);
     expect(after.persisted).toBeNull(); // corrupt record discarded rather than left to break the next load
 
-    await page.evaluate(() => localStorage.setItem('ta3-focus-timer', JSON.stringify({ pomodoroPhase: 'work' })));
+    await page.evaluate(() => localStorage.setItem('ta3-focus-timer:uid_reload-test-user', JSON.stringify({ pomodoroPhase: 'work' })));
     await page.reload();
     after = await readFocusState(page);
     expect(after.pomodoroPhase).toBe('idle');
@@ -384,7 +387,7 @@ test.describe('Focus reload recovery', () => {
         pomodoroPhase,
         timerOwnerDeviceId,
         syncedFocusOwner: syncedFocusTimer?.ownerDeviceId,
-        persisted: localStorage.getItem('ta3-focus-timer')
+        persisted: localStorage.getItem('ta3-focus-timer:uid_reload-test-user')
       };
     }, before.pomodoroPhaseStartedAt);
 
@@ -432,7 +435,7 @@ test.describe('Focus reload recovery', () => {
         updatedBy: 'device-b',
         ownerDeviceId: 'device-b'
       });
-      return localStorage.getItem('ta3-focus-timer');
+      return localStorage.getItem('ta3-focus-timer:uid_reload-test-user');
     }, before.pomodoroPhaseStartedAt);
     expect(persistedAfterWin).toBeNull();
 
@@ -584,7 +587,7 @@ test.describe('Focus reload recovery', () => {
         applied,
         awaitingAfter: restoredFocusAwaitingSyncReconciliation,
         timerOwnerDeviceId,
-        persisted: localStorage.getItem('ta3-focus-timer')
+        persisted: localStorage.getItem('ta3-focus-timer:uid_reload-test-user')
       };
     }, before.pomodoroPhaseStartedAt);
 
@@ -737,7 +740,7 @@ test.describe('Focus reload recovery', () => {
         awaitingAfter: restoredFocusAwaitingSyncReconciliation,
         baselineAfter: restoredFocusBaselineSyncStamp,
         pomodoroPhase, currentTask, timerOwnerDeviceId, syncedDeviceId,
-        persisted: localStorage.getItem('ta3-focus-timer')
+        persisted: localStorage.getItem('ta3-focus-timer:uid_reload-test-user')
       };
     }, before.pomodoroPhaseStartedAt);
 
@@ -824,7 +827,7 @@ test.describe('Focus reload recovery', () => {
         awaitingAfter: restoredFocusAwaitingSyncReconciliation,
         timerOwnerDeviceId,
         syncedFocusOwner: syncedFocusTimer?.ownerDeviceId,
-        persisted: localStorage.getItem('ta3-focus-timer')
+        persisted: localStorage.getItem('ta3-focus-timer:uid_reload-test-user')
       };
     }, before.pomodoroPhaseStartedAt);
 
@@ -848,7 +851,7 @@ test.describe('Focus reload recovery', () => {
   test('pomodoroCount clamp: an absurdly large corrupted count is bounded on restore and does not build an unbounded dot list', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => {
-      localStorage.setItem('ta3-focus-timer', JSON.stringify({
+      localStorage.setItem('ta3-focus-timer:uid_reload-test-user', JSON.stringify({
         pomodoroPhase: 'work',
         pomodoroPhaseStartedAt: Date.now() - 60 * 1000,
         pomodoroWorkMin: 25,
@@ -895,6 +898,11 @@ test.describe('Focus reload recovery', () => {
     // Reload mid-session first — linkage must survive untouched, no outcome yet.
     await page.clock.setFixedTime(before.pomodoroPhaseStartedAt + 5 * 60 * 1000);
     await page.reload();
+    await page.waitForFunction(() =>
+      globalThis.getChronaSenseRoomCode?.() === 'uid_reload-test-user' &&
+      pomodoroPhase === 'work' &&
+      activeFocusLearningPlan?.stepId === 'step-1'
+    );
     const mid = await page.evaluate(() => ({
       stepId: activeFocusLearningPlan && activeFocusLearningPlan.stepId,
       entriesCount: entries.length
@@ -919,7 +927,10 @@ test.describe('Focus reload recovery', () => {
     // clears the persisted record) — a further reload must find nothing left
     // to restore, and must not re-log a second entry.
     await page.reload();
-    const after = await page.evaluate(() => ({ pomodoroPhase, entriesCount: entries.length, persisted: localStorage.getItem('ta3-focus-timer') }));
+    await page.waitForFunction(() =>
+      globalThis.getChronaSenseRoomCode?.() === 'uid_reload-test-user'
+    );
+    const after = await page.evaluate(() => ({ pomodoroPhase, entriesCount: entries.length, persisted: localStorage.getItem('ta3-focus-timer:uid_reload-test-user') }));
     expect(after.pomodoroPhase).toBe('idle');
     expect(after.entriesCount).toBe(1);
     expect(after.persisted).toBeNull();

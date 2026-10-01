@@ -1004,7 +1004,7 @@ test('Start Focus starts existing Focus with exact Next Action IDs and readable 
   const state = await page.evaluate(() => ({
     metadata: getFocusLearningPlanMetadata(),
     entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]'),
-    timer: JSON.parse(localStorage.getItem('ta3-timer') || 'null')
+    timer: JSON.parse(localStorage.getItem('ta3-timer:uid_learning-user') || 'null')
   }));
   expect(state.metadata).toEqual({
     planId: 'plan-structured',
@@ -1380,7 +1380,7 @@ test('Learning Plan outcome keeps provenance out of entries, timer sync, and Fir
 
   const state = await page.evaluate(() => ({
     entries: JSON.parse(localStorage.getItem('ta3-entries:uid_learning-user') || '[]'),
-    timer: JSON.parse(localStorage.getItem('ta3-timer') || 'null'),
+    timer: JSON.parse(localStorage.getItem('ta3-timer:uid_learning-user') || 'null'),
     payloads: window.__syncPayloads,
     dispatchedEvents: window.__dispatchedEvents,
     allStorage: Object.fromEntries(Array.from({ length: localStorage.length }, (_, index) => {
