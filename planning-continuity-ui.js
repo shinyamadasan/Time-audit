@@ -28,6 +28,7 @@ import {
   formatCommitmentTime, normalizeCommitment,
 } from './commitments-model.js';
 import { describeStaleAge } from './stale-plan-recovery-model.js';
+import { addCalendarDays, durationBetween, planItemEndTime } from './plan-tomorrow-model.js';
 
 const SECTION_ID = 'planning-continuity-section';
 /** How many rows each list renders before "Show all". A DISPLAY bound only — the
@@ -232,13 +233,16 @@ function taskFormValue() {
   const anchorTarget = (state.itemForm?.anchorDayId && layer?.targetById(state.itemForm.anchorDayId))
     || sourceTarget || quick.today.target;
   const date = item && anchorTarget?.id === sourceTarget?.id
-    ? taskDateHint(sourceTarget, item.when || '')
+    ? sourceTarget?.store === 'calendar' && item.whenDayOffset === 1
+      ? addCalendarDays(sourceTarget.dateKey, 1)
+      : taskDateHint(sourceTarget, item.when || '')
     : taskDateHint(anchorTarget);
-  return { sourceTarget, anchorTarget, item, date, quick };
+  const endTime = item ? planItemEndTime(item.when, item.durationMinutes, sourceTarget?.store === 'calendar') || '' : '';
+  return { sourceTarget, anchorTarget, item, date, endTime, quick };
 }
 
 function taskFormHtml() {
-  const { item, date, quick } = taskFormValue();
+  const { item, date, endTime, quick } = taskFormValue();
   const kind = item?.kind === 'task' ? 'task' : 'priority';
   return `<form class="pc-form pc-item-form" id="pc-task-form">
     <div class="pc-head"><h3>${item ? 'Edit planned task' : 'Add to My Day'}</h3><button type="button" class="pc-icon" data-pc-action="close-item-form" aria-label="Close add task">✕</button></div>
@@ -248,7 +252,8 @@ function taskFormHtml() {
       <button type="button" class="btn sm ghost" data-pc-action="set-date" data-day="${escape(quick.today.target?.id || '')}" data-date="${escape(quick.today.date)}">Today</button>
       <button type="button" class="btn sm ghost" data-pc-action="set-date" data-day="${escape(quick.tomorrow.target?.id || '')}" data-date="${escape(quick.tomorrow.date)}">Tomorrow</button>
     </div><input name="date" type="date" value="${escape(date)}" required aria-label="Task date"></fieldset>
-    <label>Time <input name="time" type="time" value="${escape(item?.when || '')}" aria-label="Task time, optional"><span class="pc-muted">Leave blank for Anytime.</span></label>
+    <div class="pc-form-row"><label>Start <input name="time" type="time" value="${escape(item?.when || '')}" aria-label="Task start time, optional"></label><label>End <input name="endTime" type="time" value="${escape(endTime)}" aria-label="Task end time, optional"></label></div>
+    <p class="pc-muted pc-hint">Leave Start blank for Anytime. End is optional; an earlier End continues after midnight.</p>
     <label>Type <select name="kind"><option value="priority"${kind === 'priority' ? ' selected' : ''}>Top Priority</option><option value="task"${kind === 'task' ? ' selected' : ''}>Other task</option></select></label>
     ${state.formError ? `<p class="pc-error" role="alert">${escape(state.formError)}</p>` : ''}
     <div class="pc-form-actions"><button type="submit" class="btn sm primary">${item ? 'Save' : 'Add'}</button><button type="button" class="btn sm ghost" data-pc-action="close-item-form">Cancel</button></div>
@@ -271,6 +276,7 @@ function submitTaskForm(form) {
   const title = String(data.get('title') || '').trim();
   const date = String(data.get('date') || '');
   const time = String(data.get('time') || '');
+  const endTime = String(data.get('endTime') || '');
   const kind = data.get('kind') === 'task' ? 'task' : 'priority';
   if (!title) { refuseTaskForm('Name the task first.'); return; }
   const editing = taskFormValue();
@@ -288,11 +294,22 @@ function submitTaskForm(form) {
           : 'Choose a valid date.');
     return;
   }
+  if (endTime && !time) { refuseTaskForm('Choose a Start before setting an End.'); return; }
+  const durationMinutes = endTime ? durationBetween(time, endTime, resolved.target.store === 'calendar') : null;
+  if (endTime && !durationMinutes) { refuseTaskForm('End must be later than Start or continue into the next calendar date.'); return; }
+  if (durationMinutes > 720) { refuseTaskForm('End must be within 12 hours of Start.'); return; }
+  const changes = { task: title, when: time, durationMinutes, kind };
+  if (time && resolved.target.store === 'calendar') {
+    const nextDate = addCalendarDays(resolved.target.dateKey, 1);
+    if (date === resolved.target.dateKey) changes.whenDayOffset = 0;
+    else if (date === nextDate) changes.whenDayOffset = 1;
+    else { refuseTaskForm('That time is outside this calendar plan. Choose Today or Tomorrow again.'); return; }
+  }
   try {
     if (state.itemForm?.itemId) {
-      layer.updateItem({ sourceTarget: editing.sourceTarget, itemId: state.itemForm.itemId, destination: resolved.target, changes: { task: title, when: time, kind }, stamp: stamp });
+      layer.updateItem({ sourceTarget: editing.sourceTarget, itemId: state.itemForm.itemId, destination: resolved.target, changes, stamp: stamp });
     } else {
-      const item = context.createItem(title, time, kind);
+      const item = { ...context.createItem(title, time, kind), ...(durationMinutes ? { durationMinutes } : {}) };
       layer.addItem({ destination: resolved.target, item });
     }
     state.itemForm = null;
@@ -716,7 +733,13 @@ function onInput(event) {
   const dateInput = section()?.querySelector('#pc-task-form [name="date"]');
   if (!dateInput) return;
   if (!input.value) {
+    const endInput = section()?.querySelector('#pc-task-form [name="endTime"]');
+    if (endInput) endInput.value = '';
     dateInput.value = taskDateHint(editing.anchorTarget);
+    return;
+  }
+  if (editing.anchorTarget?.store === 'calendar' && editing.item?.whenDayOffset === 1) {
+    dateInput.value = addCalendarDays(editing.anchorTarget.dateKey, 1);
     return;
   }
   const resolved = authority()?.civilDateForTimeInTarget(editing.anchorTarget, input.value);

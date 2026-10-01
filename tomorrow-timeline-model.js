@@ -10,6 +10,7 @@
 import { validPlanItemTime, planItemEndTime, formatPlanItemTime } from './plan-tomorrow-model.js';
 
 const ROUTINE_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const MY_DAY_EXTENSION_PADDING_MINUTES = 30;
 
 function toMinutes(hhmm) {
   const [hour, minute] = hhmm.split(':').map(Number);
@@ -161,13 +162,32 @@ export function deriveTomorrowTimelinePreview({ priorityItems = [], routineRows 
   return { positioned, unscheduled };
 }
 
+/** Extends only when real projected content crosses the calendar plan's home
+ *  midnight. Thirty minutes of padding keeps the last row from sitting on the
+ *  visual edge; the canonical two-date extent is the hard cap. */
+export function extendedMyDayEnd(target, positioned = []) {
+  if (!Number.isFinite(target?.endMs)) return null;
+  const baseEndMs = target.endMs;
+  const latestRelevantMs = positioned.reduce((latest, row) => {
+    const rowEndMs = Number.isFinite(row.endMs) ? row.endMs : row.startMs;
+    return Number.isFinite(rowEndMs) && rowEndMs > baseEndMs ? Math.max(latest, rowEndMs) : latest;
+  }, baseEndMs);
+  if (latestRelevantMs === baseEndMs) return baseEndMs;
+  const paddedEndMs = latestRelevantMs + MY_DAY_EXTENSION_PADDING_MINUTES * 60000;
+  return Number.isFinite(target.extentEndMs) ? Math.min(paddedEndMs, target.extentEndMs) : paddedEndMs;
+}
+
 /** Planned rows for the existing Today/My Day timeline. This is a display
  *  projection only: task and commitment records remain in their own canonical
  *  stores, and no row is an evidence entry. */
-export function deriveMyDayPlannedRows({ target, planItems = [], commitments = [], itemStartInstant } = {}) {
-  if (!target || typeof itemStartInstant !== 'function') return { anytime: [], positioned: [] };
+export function deriveMyDayPlannedRows({ target, planItems = [], commitments = [], itemStartInstant, itemInstants } = {}) {
+  if (!target || (typeof itemStartInstant !== 'function' && typeof itemInstants !== 'function')) return { anytime: [], positioned: [], displayEndMs: null };
   const planned = planItems.filter(item => item && !item.deleted).map(item => {
-    const startMs = validPlanItemTime(item.when) ? itemStartInstant(target, item.when, item) : null;
+    const instants = validPlanItemTime(item.when) && typeof itemInstants === 'function' ? itemInstants(target, item) : null;
+    const startMs = Number.isFinite(instants?.startMs)
+      ? instants.startMs
+      : validPlanItemTime(item.when) && typeof itemStartInstant === 'function' ? itemStartInstant(target, item.when, item) : null;
+    const endMs = Number.isFinite(instants?.endMs) ? instants.endMs : null;
     return {
       id: `plan:${target.id}:${item.id}`,
       sourceType: 'planned-task',
@@ -177,6 +197,9 @@ export function deriveMyDayPlannedRows({ target, planItems = [], commitments = [
       planKind: item.kind === 'task' ? 'task' : 'priority',
       done: item.done === true,
       startMs: Number.isFinite(startMs) ? startMs : null,
+      endMs,
+      durationMinutes: endMs && Number.isFinite(startMs) ? Math.round((endMs - startMs) / 60000) : null,
+      timezone: item.whenTz || target.timezone || null,
       when: validPlanItemTime(item.when) ? item.when : '',
     };
   });
@@ -198,8 +221,8 @@ export function deriveMyDayPlannedRows({ target, planItems = [], commitments = [
     const rank = row => row.sourceType === 'planned-task' ? (row.planKind === 'priority' ? 0 : 1) : 2;
     return (rank(a) - rank(b)) || compareStrings(a.id, b.id);
   });
-  return { anytime, positioned };
+  return { anytime, positioned, displayEndMs: extendedMyDayEnd(target, positioned) };
 }
 
-const api = { normalizePriorityRow, normalizeRoutineRow, normalizeTemplateRow, deriveTomorrowTimelinePreview, deriveMyDayPlannedRows };
+const api = { normalizePriorityRow, normalizeRoutineRow, normalizeTemplateRow, deriveTomorrowTimelinePreview, deriveMyDayPlannedRows, extendedMyDayEnd, MY_DAY_EXTENSION_PADDING_MINUTES };
 globalThis.TomorrowTimelineModel = api;

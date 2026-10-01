@@ -376,6 +376,8 @@ test('durationBetween derives a length from an exact custom start+end pair, neve
   assert.equal(durationBetween('23:00', '01:00'), null); // would only work as a next-day wrap — rejected, not inferred
   assert.equal(durationBetween('after lunch', '10:00'), null);
   assert.equal(durationBetween('09:00', 'nonsense'), null);
+  assert.equal(durationBetween('23:00', '01:00', true), 120, 'calendar-native callers opt into one factual midnight crossing');
+  assert.equal(durationBetween('23:00', '23:00', true), null, 'equal clocks stay ambiguous instead of becoming 24 hours');
 });
 
 test('formatPlanItemSchedule covers untimed, start-only, ranged, and every formatting edge case', () => {

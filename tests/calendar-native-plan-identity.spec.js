@@ -23,7 +23,7 @@ const ROOM = 'uid_account-a';
 const at = (date, hhmm) => Date.parse(`${date}T${hhmm}:00+08:00`);
 const SUN = '2026-09-27';
 const MON = '2026-09-28';
-const TOKEN = '20261001-timer-break-account-isolation-fix1';
+const TOKEN = '20261001-daily-plan-ux-v2-time-ranges-extended-my-day1';
 
 const BOUNDARY_ID = 'r-1800';
 const boundaryStore = () => JSON.stringify({ schemaVersion: 1, revisions: {
@@ -554,6 +554,102 @@ test('normal night shift: a 22:00 -> 06:00 range made in the real editor crosses
   expect(await page.evaluate(() => window.PlanAuthority.staleUnfinished().items.length)).toBe(0);             // still inside its own span
   await setClock(page, at(MON, '07:00'));
   expect(await page.evaluate(() => window.PlanAuthority.staleUnfinished().items.map(row => row.item.task))).toEqual(['Night shift']);
+  expect(Object.keys(await calendarStore(page))).toEqual([`cal1:${SUN}`]);
+});
+
+test('primary My Day editor creates, reloads, crosses midnight, returns same-day, and clears one canonical range without changing item or plan identity', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await switchToCalendarPlans(page);
+  await page.locator('[data-pc-action="open-item-form"]').click();
+  const form = page.locator('#pc-task-form');
+  await form.locator('input[name="title"]').fill('Evening build');
+  await form.locator('input[name="time"]').fill('20:00');
+  await form.locator('input[name="endTime"]').fill('22:00');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+
+  let item = (await calendarStore(page))[`cal1:${SUN}`].items.find(row => row.task === 'Evening build');
+  const itemId = item.id;
+  expect(item).toMatchObject({ when: '20:00', durationMinutes: 120, whenTz: TZ });
+  expect(item.whenDayOffset).toBeUndefined();
+  let row = page.locator(`#timeline-blocks [data-plan-item-id="${itemId}"]`);
+  await expect(row).toContainText('8:00 PM–10:00 PM');
+  await expect(row).toContainText('2h');
+
+  await page.reload();
+  await page.waitForFunction(() => window.PlanAuthority?.authorityState() === 'calendar' && typeof window.PlanningContinuityUI?.editTask === 'function');
+  row = page.locator(`#timeline-blocks [data-plan-item-id="${itemId}"]`);
+  await expect(row).toContainText('8:00 PM–10:00 PM');
+  item = (await calendarStore(page))[`cal1:${SUN}`].items.find(candidate => candidate.id === itemId);
+  expect(item.durationMinutes).toBe(120);
+
+  await setClock(page, at(SUN, '11:01'));
+  await row.getByRole('button', { name: 'Edit planned task Evening build' }).click();
+  await form.locator('input[name="time"]').fill('23:00');
+  await form.locator('input[name="endTime"]').fill('01:00');
+  await form.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(form).toBeHidden();
+  item = (await calendarStore(page))[`cal1:${SUN}`].items.find(candidate => candidate.id === itemId);
+  expect(item).toMatchObject({ id: itemId, when: '23:00', durationMinutes: 120 });
+  expect(Object.keys(await calendarStore(page))).toEqual([`cal1:${SUN}`]);
+  await expect(row).toContainText('11:00 PM–1:00 AM');
+  await expect(row).toContainText('Ends Monday, Sep 28');
+
+  await setClock(page, at(SUN, '11:02'));
+  await row.getByRole('button', { name: 'Edit planned task Evening build' }).click();
+  await form.locator('input[name="endTime"]').fill('03:00');
+  await form.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(row).toContainText('11:00 PM–3:00 AM');
+  expect((await calendarStore(page))[`cal1:${SUN}`].items.find(candidate => candidate.id === itemId).durationMinutes).toBe(240);
+
+  await setClock(page, at(SUN, '11:03'));
+  await row.getByRole('button', { name: 'Edit planned task Evening build' }).click();
+  await form.locator('input[name="time"]').fill('20:00');
+  await form.locator('input[name="endTime"]').fill('22:00');
+  await form.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(row).toContainText('8:00 PM–10:00 PM');
+  await expect(row).not.toContainText('Ends Monday');
+
+  await setClock(page, at(SUN, '11:04'));
+  await row.getByRole('button', { name: 'Edit planned task Evening build' }).click();
+  await form.locator('input[name="endTime"]').fill('');
+  await form.getByRole('button', { name: 'Save', exact: true }).click();
+  item = (await calendarStore(page))[`cal1:${SUN}`].items.find(candidate => candidate.id === itemId);
+  expect(item.id).toBe(itemId);
+  expect(item.when).toBe('20:00');
+  expect(item).not.toHaveProperty('durationMinutes');
+  await expect(row).toContainText('8:00 PM');
+  await expect(row).not.toContainText('10:00 PM');
+});
+
+test('My Day extends to several factual Monday items through 3 AM, with no projection writes or duplicate persistence', async ({ page }) => {
+  await openApp(page, { now: at(SUN, '11:00') });
+  await switchToCalendarPlans(page);
+  await page.evaluate(() => {
+    const target = window.PlanAuthority.current();
+    window.PlanAuthority.saveItems(target, [
+      { id: 'late-work', task: 'Late work', when: '23:00', durationMinutes: 120, done: false, updatedAt: 1, updatedBy: 'device-cnpi' },
+      { id: 'wind-down', task: 'Wind down', when: '01:00', whenDayOffset: 1, done: false, updatedAt: 2, updatedBy: 'device-cnpi' },
+      { id: 'sleep', task: 'Sleep', when: '03:00', whenDayOffset: 1, done: false, updatedAt: 3, updatedBy: 'device-cnpi' },
+    ]);
+    window.refreshAuthoritativePlanSurfaces();
+  });
+  const before = await page.evaluate(() => ({
+    store: localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'),
+    writes: window.__fbTest.log.writes.length,
+  }));
+  await expect(page.locator('#timeline-blocks .tl-date-break')).toContainText('MONDAY');
+  await expect(page.locator('#timeline-blocks [data-plan-item-id="late-work"]')).toContainText('11:00 PM–1:00 AM');
+  await expect(page.locator('#timeline-blocks [data-plan-item-id="late-work"]')).toContainText('Ends Monday, Sep 28');
+  await expect(page.locator('#timeline-blocks [data-plan-item-id="wind-down"]')).toContainText('1:00 AM');
+  await expect(page.locator('#timeline-blocks [data-plan-item-id="sleep"]')).toContainText('3:00 AM');
+  await expect(page.locator('#timeline-blocks')).toHaveAttribute('data-display-end-ms', String(at(MON, '03:30')));
+  const after = await page.evaluate(() => ({
+    store: localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'),
+    writes: window.__fbTest.log.writes.length,
+  }));
+  expect(after).toEqual(before);
+  const persisted = (await calendarStore(page))[`cal1:${SUN}`].items;
+  expect(persisted.map(item => item.id).sort()).toEqual(['late-work', 'sleep', 'wind-down']);
   expect(Object.keys(await calendarStore(page))).toEqual([`cal1:${SUN}`]);
 });
 
