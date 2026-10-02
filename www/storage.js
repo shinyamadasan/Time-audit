@@ -1259,6 +1259,10 @@ function startSync() {
   // reliably as one tomorrow, and any per-record attach would need a date horizon
   // to decide what to subscribe to.
   if (globalThis.CommitmentsSync) globalThis.CommitmentsSync.attach();
+  // Brain Dump + Eisenhower V1 — ONE whole-subtree listener over rooms/<room>/brainDump,
+  // for the same reason as commitments: the capture set is small and not bounded to
+  // "near today", so no per-record listener needs a date horizon to decide what to attach.
+  if (globalThis.BrainDumpSync) globalThis.BrainDumpSync.attach();
 
   fbDb.ref('.info/connected').on('value', snap => {
     if (!isCurrentSync()) return;
@@ -1296,6 +1300,9 @@ function startSync() {
       // on the RECORD SET, never on a date range, so a future-dated offline write can
       // never remain unsynced forever. A no-op once converged.
       if (globalThis.CommitmentsSync) globalThis.CommitmentsSync.pushAllLocal();
+      // Brain Dump + Eisenhower V1 — retry any capture/triage/disposition write made
+      // while offline. Keyed on the record set, never a date range. A no-op once converged.
+      if (globalThis.BrainDumpSync) globalThis.BrainDumpSync.pushAllLocal();
     } else {
       stopSyncReconcileTicker();
       const pill = document.getElementById('sync-pill');
@@ -2333,6 +2340,7 @@ function teardownRoomListeners() {
   if (globalThis.CalendarPlanLive) globalThis.CalendarPlanLive.detach();
   if (globalThis.PlanByDeadlineSync) globalThis.PlanByDeadlineSync.detachAll();
   if (globalThis.CommitmentsSync) globalThis.CommitmentsSync.detach();
+  if (globalThis.BrainDumpSync) globalThis.BrainDumpSync.detach();
   if (_nudgesRef)     { _nudgesRef.off();     _nudgesRef     = null; }
   if (_partnerUidRef) { _partnerUidRef.off(); _partnerUidRef = null; }
   if (_pairCodeRef)   { _pairCodeRef.off();   _pairCodeRef   = null; }

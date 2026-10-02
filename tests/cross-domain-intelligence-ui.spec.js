@@ -218,8 +218,8 @@ test('Life view exposes a third "Next" sub-tab that shows the intelligence view 
   await expect(page.locator('#life-character-sheet-root')).toBeHidden();
   await expect(page.locator('#life-feed-root')).toBeHidden();
   await expect(page.locator('#life-subnav-next')).toHaveAttribute('aria-pressed', 'true');
-  // still exactly 7 bottom-nav items — no 8th
-  await expect(page.locator('nav.nav .nav-btn')).toHaveCount(7);
+  // still exactly 8 bottom-nav items (7 + Brain Dump, added by Brain Dump + Eisenhower V1) — no 9th
+  await expect(page.locator('nav.nav .nav-btn')).toHaveCount(8);
 });
 
 test('empty state: honest "no recommendation yet" plus a Data-not-evaluated list — never a fake verdict', async ({ page }) => {

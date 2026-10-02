@@ -1,5 +1,59 @@
 # ChronaSense — Changelog
 
+## Brain Dump + Eisenhower V1 — candidate, NOT integrated
+
+**Branch `feat/brain-dump-eisenhower-v1`**, created from fresh `origin/main` @ `7c75e05` (Daily Plan UX V2 +
+Time Ranges + Extended My Day). Not pushed, merged or deployed. New, independently-versioned module graph
+(`?v=20261001-brain-dump-eisenhower-v1`) — not joined to the pinned Personal Day / plan module importmap
+group, since nothing in that group imports these files. `www/` re-mirrored, parity clean
+(`npm run check:www-parity` passes, 85-file runtime closure).
+
+**NEW:** a fast, account-owned capture queue — "Brain Dump" — for thoughts/tasks the owner wants out of
+their head before deciding where they belong. Capture collects text only (no time, date, duration,
+category or priority). Triage asks exactly two yes/no questions (Important? Urgent?) and labels the
+resulting Eisenhower quadrant, advisory only. The owner then explicitly promotes a triaged item: **Do
+Today** and **Schedule** write a real plan item through the existing `PlanAuthority` (never around it);
+**Archive** and **Delegate** are terminal dispositions recorded on the capture itself.
+
+**Scope decision (owner-confirmed):** this codebase has no existing delegation/handoff model (confirmed by
+a full-repo grep before writing any code). Building one would be the second task-management system the
+product brief explicitly forbids. **Delegate is a minimal disposition** — a terminal status plus an
+optional free-text "delegated to" note on the capture — not a tracked destination. Flagged as a bounded,
+owner-approved V1 scope choice, not a silent gap.
+
+**What was built.**
+- `brain-dump-model.js` (pure: schema, atomic triage, idempotent promote/archive/delegate, per-record LWW
+  merge with a canonical tie-break — the same algorithm commitments and plan items already use —
+  deterministic ordering, the Eisenhower quadrant label, and the deterministic plan-item id a promoted
+  capture mints: `bdp1|<captureId>`).
+- `brain-dump-repository.js` (room-scoped local storage, mirrors `commitments-repository.js`'s envelope,
+  validate-before-write and `mergeRemote` seam; storage key `ta3-brain-dump-v1`, pre-scoping key quarantined).
+- `brain-dump-sync.js` (per-record Firebase transaction push + one whole-subtree listener over
+  `rooms/<room>/brainDump`, same owner-mismatch/offline-queue/stale-token discipline as
+  `commitments-sync.js`; wired into `storage.js`'s `startSync()` / reconnect / `teardownRoomListeners()`
+  alongside the other sync bridges — no rules change, `rooms/$roomId` already owner-only).
+- `brain-dump-promotion.js` (Do Today / Schedule orchestration: resolves the target via `PlanAuthority`,
+  checks for the deterministic plan-item id before writing so a retry — crash, network drop, or a
+  second device racing the same action — never duplicates the plan item; records provenance on the
+  capture only after the plan write succeeds).
+- `brain-dump-ui.js` + a new "Brain Dump" nav entry/view in `index.html` (capture form; To-triage list with
+  inline Important/Urgent toggles; Triaged list with quadrant label and the four destination actions;
+  a "Recently handled" strip distinguishing promoted/archived/delegated from "still pending" — never a
+  silent delete, since V1 has no delete action at all).
+
+**No new task/plan store competing with the existing architecture.** Do Today and Schedule both go through
+`PlanAuthority.current()` / `dayForScheduledDate()` / `addItem()` exactly as every other planning consumer
+does; an untimed "Do Today" item uses the existing `when: ''` (anytime) representation, not a new concept.
+
+**Tests:** `brain-dump-model.test.js` (27), `brain-dump-sync.test.js` (9), `brain-dump-account-isolation.test.js`
+(7, direct-switch leak, offline-queue-per-owner, stale-callback-drop, two-device LWW convergence, pre-scoping
+key quarantine — mirrors Cross-Store Account Isolation V1's proven harness), `brain-dump-promotion.test.js`
+(10, idempotent retry/duplicate-prevention against a fake Plan Authority), and
+`tests/brain-dump-eisenhower.spec.js` (15 Playwright: capture/triage/promote/archive/delegate, reload
+persistence, My Day regression check). All four unit suites wired into `npm test` and `npm run lint`;
+`npm-test-wiring.test.js` passes. Full `npm test` (76 files) and the full canonical Playwright suite both
+green. No production mutation: no push, no deploy, no Firebase rules change.
+
 ## Calendar-Native Plan Identity V1 — candidate, NOT integrated
 
 **Branch `feat/calendar-native-plan-identity-v1`**, created from the immutable WIP commit `9e2a45f`
