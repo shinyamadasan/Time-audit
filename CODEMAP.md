@@ -1,6 +1,29 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## Brain Dump + Eisenhower V1 (candidate, 2026-10-01)
+
+New nav entry `#nav-braindump` / view `#view-braindump` (mounted between My Day and Week), rendered
+entirely by `brain-dump-ui.js` into `#bd-root` via `showView('braindump')`. Independently versioned
+(`?v=20261001-brain-dump-eisenhower-v1`) — not joined to the pinned Personal Day / plan importmap group,
+since nothing in that group imports these files (mirrors `life-feed-ui.js`'s precedent for a standalone
+module graph with internal bare relative imports).
+
+- `brain-dump-model.js` (pure): capture schema (`untriaged -> triaged -> {promoted|archived|delegated}`,
+  terminal/idempotent), atomic `triageCapture` (both important+urgent together), deterministic plan-item id
+  `brainDumpPlanItemId()` -> `bdp1|<captureId>`, per-record LWW merge (`mergeCaptureRecords`, same
+  canonical-tie-break algorithm as `commitments-model.js`), deterministic ordering, `quadrantOf()`.
+- `brain-dump-repository.js`: room-scoped (`ta3-brain-dump-v1:<roomId>`), mirrors
+  `commitments-repository.js`'s envelope/validate-before-write/`mergeRemote` seam.
+- `brain-dump-sync.js`: `rooms/<room>/brainDump/<captureId>`, one whole-subtree listener + per-record
+  transaction push, same owner-mismatch/offline-queue/stale-token discipline as `commitments-sync.js`.
+  Wired into `storage.js`'s `startSync()` / `.info/connected` reconnect / `teardownRoomListeners()`.
+- `brain-dump-promotion.js`: Do Today / Schedule only — resolves the target via `window.PlanAuthority`
+  (`current()` / `dayForScheduledDate()`), writes the plan item via `addItem()` using the deterministic id
+  (idempotent under retry), then records provenance on the capture via `repository.promote()`. Archive and
+  Delegate never touch Plan Authority — handled directly in `brain-dump-ui.js` via
+  `repository.archive()`/`repository.delegate()`.
+
 ## Calendar-Native Plan Identity V1 (candidate, 2026-09-27)
 
 - `calendar-plan-model.js` (pure): identity `cal1:<date>`, item time truth (`when` + `whenDayOffset` + item-owned
