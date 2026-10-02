@@ -1,5 +1,30 @@
 # ChronaSense — Changelog
 
+## Configurable 24–48 Hour Daily View V1 — candidate, NOT integrated
+
+Branch `feat/configurable-daily-view-window-v1` from `origin/main` @ `7557562`. Not pushed, merged or deployed.
+
+**What changed:** a calendar-day Today timeline is now `[selected date 00:00, +N hours)` with N = Daily View
+Length (24–48, default 36), in the selected plan's home zone. Planned rows from the previous/next dates' plans
+that intersect the window are projected in place — never copied, re-dated or re-owned — and keep their owner's
+`dayId`/`itemId`, so Edit / done-toggle / "Log it" / "Off today" act on the owning record. A carry-in row is
+placed at the window start ("Continues from Saturday") and keeps its real times; a row from another date's plan
+says whose it is ("Sunday's plan"); the first next-date row is preceded by a "SUNDAY, … · NEXT DAY" divider.
+DECISIONS #30.
+
+**Retired:** Extended My Day's content-driven extension (`extendedMyDayEnd`, `MY_DAY_EXTENSION_PADDING_MINUTES`,
+`displayEndMs` / `data-display-end-ms`) and, for calendar dates, the separate "Carryover from <day>" section —
+the window subsumes both. `data-daily-view-hours` / `-start-ms` / `-end-ms` now describe the window.
+
+**Files:** new pure `daily-view-window.js` (window, half-open intersection, bounded D-1/D/D+1 projection) with
+its own entry tag `?v=20261002-configurable-daily-view-window-v1`; `index.html` (Settings → Daily view control,
+device-local `ta3-daily-view-hours`, renderToday wiring, template occurrences for the window, owner/carry-in
+labels, NEXT DAY divider); `tomorrow-timeline-model.js` (extension removed). The governed Personal Day / plan
+release token is unchanged: no governed module changed.
+
+**Scope boundary:** evidence entries, gaps and So Far stay calendar-date evidence; legacy and Personal Day views
+are unchanged.
+
 ## Brain Dump + Eisenhower V1 FIX FIRST round 3 — candidate, NOT integrated
 
 **Same branch**, on top of round 2's fix `ec0012ca`. The governed release token

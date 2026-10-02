@@ -454,16 +454,20 @@ test('a Sunday plan holds Sunday 11:00 AND Monday 01:00 / 04:00 / 09:00 with the
   await expect(page.locator('#timeline-blocks .tl-date-break')).toContainText('MONDAY');
 });
 
-test('Monday 02:00 while still working through Sunday\'s plan: My Day shows Carryover from Sunday + Monday\'s own plan; completing a carryover row updates SUNDAY\'s record only', async ({ page }) => {
+test('Monday 02:00 while still working through Sunday\'s plan: Monday\'s Daily View projects Sunday\'s Monday-dated items in place + Monday\'s own plan; completing one updates SUNDAY\'s record only', async ({ page }) => {
   await sundayPlanWithOvernight(page);
   await setClock(page, at(MON, '02:00'));
   expect(await current(page)).toEqual({ store: 'calendar', id: `cal1:${MON}`, dateKey: MON });
   expect(await upcoming(page)).toEqual({ store: 'calendar', id: 'cal1:2026-09-29', dateKey: '2026-09-29' });
 
-  await expect(page.locator('#timeline-blocks .tl-carryover-header')).toHaveText('Carryover from Sunday');
-  const carryover = page.locator('#timeline-blocks .tl-carryover-section .tl-plan-row');
+  // Configurable Daily View V1: no separate carryover section — Sunday's rows sit in Monday's
+  // window where they fall, still owned by (and routed to) Sunday's plan.
+  await expect(page.locator('#timeline-blocks .tl-carryover-header')).toHaveCount(0);
+  const carryover = page.locator(`#timeline-blocks .tl-plan-row[data-plan-day-id="cal1:${SUN}"]`);
   await expect(carryover).toHaveCount(3);
   await expect(carryover.first()).toContainText('Overnight backup');
+  await expect(carryover.first()).toContainText("Sunday's plan");
+  await expect(carryover.first().locator('.tl-plan-check')).toHaveAttribute('onclick', /toggleCarryoverItemDone\('cal1:2026-09-27'/);
   await expect(page.locator('#plan-strip')).not.toContainText('Overnight backup'); // Monday's own strip is Monday's plan
 
   // Monday's own plan is a separate plan: add something to it.
@@ -521,7 +525,7 @@ test('early wake and normal night shift: at Monday 04:30 (past Sunday\'s 01:00 a
   await sundayPlanWithOvernight(page);
   await setClock(page, at(MON, '04:30'));
   expect(await current(page)).toEqual({ store: 'calendar', id: `cal1:${MON}`, dateKey: MON });
-  await expect(page.locator('#timeline-blocks .tl-carryover-section .tl-plan-row')).toHaveCount(3);
+  await expect(page.locator(`#timeline-blocks .tl-plan-row[data-plan-day-id="cal1:${SUN}"]`)).toHaveCount(3);
   // A night shift working 22:00 -> 06:00 crosses midnight inside ONE plan and never becomes a Monday plan.
   const before = Object.keys(await calendarStore(page));
   await setClock(page, at(MON, '05:59'));
@@ -621,7 +625,7 @@ test('primary My Day editor creates, reloads, crosses midnight, returns same-day
   await expect(row).not.toContainText('10:00 PM');
 });
 
-test('My Day extends to several factual Monday items through 3 AM, with no projection writes or duplicate persistence', async ({ page }) => {
+test('the default 36h Daily View shows several factual Monday items through 3 AM, with no projection writes or duplicate persistence', async ({ page }) => {
   await openApp(page, { now: at(SUN, '11:00') });
   await switchToCalendarPlans(page);
   await page.evaluate(() => {
@@ -642,7 +646,12 @@ test('My Day extends to several factual Monday items through 3 AM, with no proje
   await expect(page.locator('#timeline-blocks [data-plan-item-id="late-work"]')).toContainText('Ends Monday, Sep 28');
   await expect(page.locator('#timeline-blocks [data-plan-item-id="wind-down"]')).toContainText('1:00 AM');
   await expect(page.locator('#timeline-blocks [data-plan-item-id="sleep"]')).toContainText('3:00 AM');
-  await expect(page.locator('#timeline-blocks')).toHaveAttribute('data-display-end-ms', String(at(MON, '03:30')));
+  // Configurable Daily View V1: the extent is selected date + Daily View Length (default 36h),
+  // never derived from content (the old "+30 min after the last item" rule is retired).
+  await expect(page.locator('#timeline-blocks')).toHaveAttribute('data-daily-view-hours', '36');
+  await expect(page.locator('#timeline-blocks')).toHaveAttribute('data-daily-view-start-ms', String(at(SUN, '00:00')));
+  await expect(page.locator('#timeline-blocks')).toHaveAttribute('data-daily-view-end-ms', String(at(MON, '12:00')));
+  await expect(page.locator('#timeline-blocks')).not.toHaveAttribute('data-display-end-ms', /.*/);
   const after = await page.evaluate(() => ({
     store: localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'),
     writes: window.__fbTest.log.writes.length,
@@ -897,4 +906,131 @@ test('release generation: the meta, the import map and every loaded calendar/pla
   for (const file of ['calendar-plan-model.js', 'calendar-plan-repository.js', 'calendar-plan-sync.js', 'calendar-plan-live.js', 'calendar-plan-ui.js']) {
     expect(seen.filter(url => url.includes(file))).toHaveLength(1);
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Configurable 24–48 Hour Daily View V1 — the owner's acceptance case, in the real app
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SAT = '2026-09-26';
+
+/** Saturday 09:00, calendar-day plans on since Saturday. Saturday's plan: "Ticktick list"
+ *  22:00 for 600 min (ends Sunday 08:00). Sunday's plan: "★ sad" 01:43 for 121 min. */
+async function saturdaySundayPlans(page) {
+  await openApp(page, { now: at(SAT, '09:00') });
+  await switchToCalendarPlans(page);
+  await page.evaluate(({ sat, sun, tz }) => {
+    window.PlanAuthority.saveItems(window.PlanAuthority.calendarTarget(sat), [
+      { id: 'ticktick', task: 'Ticktick list', kind: 'task', when: '22:00', durationMinutes: 600, whenTz: tz, done: false, updatedAt: 1, updatedBy: 'device-cnpi' },
+    ]);
+    window.PlanAuthority.saveItems(window.PlanAuthority.calendarTarget(sun), [
+      { id: 'sad', task: 'sad', when: '01:43', durationMinutes: 121, whenTz: tz, done: false, updatedAt: 2, updatedBy: 'device-cnpi' },
+    ]);
+    window.refreshAuthoritativePlanSurfaces();
+  }, { sat: SAT, sun: SUN, tz: TZ });
+}
+
+const timelineOrder = page => page.evaluate(() => [...document.querySelectorAll('#timeline-blocks > .tl-row, #timeline-blocks > .tl-date-break')]
+  .map(el => el.classList.contains('tl-date-break') ? `break:${el.textContent.trim()}` : (el.dataset.planItemId ? `plan:${el.dataset.planItemId}` : 'other')));
+
+test('Daily View ACCEPTANCE — Saturday 36h: Sat 00:00 → Sun 12:00, Ticktick, the Sunday boundary, then ★ sad 1:43–3:44 AM still owned by Sunday', async ({ page }) => {
+  await saturdaySundayPlans(page);
+  const tl = page.locator('#timeline-blocks');
+  await expect(tl).toHaveAttribute('data-daily-view-hours', '36');
+  await expect(tl).toHaveAttribute('data-daily-view-start-ms', String(at(SAT, '00:00')));
+  await expect(tl).toHaveAttribute('data-daily-view-end-ms', String(at(SUN, '12:00')));
+
+  const ticktick = tl.locator('[data-plan-item-id="ticktick"]');
+  await expect(ticktick).toHaveAttribute('data-plan-day-id', `cal1:${SAT}`);
+  await expect(ticktick).toContainText('10:00 PM–8:00 AM');
+  await expect(ticktick).toContainText('Ends Sunday, Sep 27');
+  await expect(tl.locator('.tl-date-break')).toHaveText('SUNDAY, SEPTEMBER 27 · NEXT DAY');
+  const sad = tl.locator('[data-plan-item-id="sad"]');
+  await expect(sad).toHaveAttribute('data-plan-day-id', `cal1:${SUN}`);
+  await expect(sad).toContainText('★');
+  await expect(sad).toContainText('1:43 AM–3:44 AM');
+  await expect(sad).toContainText("Sunday's plan");
+  expect(await timelineOrder(page)).toEqual(['plan:ticktick', 'break:SUNDAY, SEPTEMBER 27 · NEXT DAY', 'plan:sad']);
+  // Its actions name Sunday's plan, never the Saturday view date.
+  await expect(sad.getByRole('button', { name: 'Edit planned task sad' })).toHaveAttribute('onclick', `PlanningContinuityUI.editTask('cal1:${SUN}','sad')`);
+  await expect(sad.locator('.tl-plan-check')).toHaveAttribute('onclick', `toggleTimelinePlanDone('cal1:${SUN}','sad')`);
+
+  // Completing it from Saturday's view writes Sunday's one record; Saturday is untouched; no copy anywhere.
+  const saturdayBefore = JSON.stringify((await calendarStore(page))[`cal1:${SAT}`]);
+  await sad.locator('.tl-plan-check').click();
+  await expect.poll(async () => (await calendarStore(page))[`cal1:${SUN}`].items.find(i => i.id === 'sad').done).toBe(true);
+  const store = await calendarStore(page);
+  expect(Object.keys(store).sort()).toEqual([`cal1:${SAT}`, `cal1:${SUN}`]);
+  expect(store[`cal1:${SUN}`].items.map(i => i.id)).toEqual(['sad']);
+  expect(JSON.stringify(store[`cal1:${SAT}`])).toBe(saturdayBefore);
+});
+
+test('Daily View ACCEPTANCE — Sunday view: ★ sad as Sunday\'s own and Saturday\'s Ticktick continuing until 8:00 AM, same records, viewing writes nothing', async ({ page }) => {
+  await saturdaySundayPlans(page);
+  const before = await page.evaluate(() => ({ store: localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'), writes: window.__fbTest.log.writes.length }));
+  await page.evaluate(day => window.setViewDate(day), SUN);
+  const tl = page.locator('#timeline-blocks');
+  await expect(tl).toHaveAttribute('data-daily-view-start-ms', String(at(SUN, '00:00')));
+  await expect(tl).toHaveAttribute('data-daily-view-end-ms', String(at(MON, '12:00')));
+  const ticktick = tl.locator('[data-plan-item-id="ticktick"]');
+  await expect(ticktick).toHaveClass(/tl-carry-in/);
+  await expect(ticktick).toHaveAttribute('data-plan-day-id', `cal1:${SAT}`);
+  await expect(ticktick).toContainText('Continues from Saturday');
+  await expect(ticktick).toContainText('10:00 PM–8:00 AM');
+  await expect(ticktick).toContainText("Saturday's plan");
+  const sad = tl.locator('[data-plan-item-id="sad"]');
+  await expect(sad).toHaveAttribute('data-plan-day-id', `cal1:${SUN}`);
+  await expect(sad).not.toContainText("Sunday's plan");
+  expect(await timelineOrder(page)).toEqual(['plan:ticktick', 'plan:sad']);
+  // Saturday's plan is still running at Saturday 09:00, so the carry-in row edits Saturday's record.
+  await expect(ticktick.getByRole('button', { name: 'Edit planned task Ticktick list' })).toHaveAttribute('onclick', `PlanningContinuityUI.editTask('cal1:${SAT}','ticktick')`);
+  const after = await page.evaluate(() => ({ store: localStorage.getItem('ta3-calendar-plans-v1:uid_account-a'), writes: window.__fbTest.log.writes.length }));
+  expect(after).toEqual(before);
+});
+
+test('Daily View Length: 24–48h control, device-local only; 24h drops Sunday 1:43 AM from Saturday; malformed reads as 36h', async ({ page }) => {
+  await saturdaySundayPlans(page);
+  await page.evaluate(() => window.renderSettings());
+  const options = await page.locator('#set-daily-view-hours option').evaluateAll(els => els.map(el => el.value));
+  expect(options).toEqual(Array.from({ length: 25 }, (_, i) => String(24 + i)));
+  await expect(page.locator('#set-daily-view-hours')).toHaveValue('36');
+
+  const remoteWritesBefore = await page.evaluate(() => window.__fbTest.log.writes.length);
+  await page.evaluate(() => window.saveDailyViewHours('24'));
+  expect(await page.evaluate(() => localStorage.getItem('ta3-daily-view-hours'))).toBe('24');
+  expect(await page.evaluate(() => window.__fbTest.log.writes.length)).toBe(remoteWritesBefore);
+  expect(await page.evaluate(() => JSON.stringify(settings).includes('dailyView'))).toBe(false);
+  const tl = page.locator('#timeline-blocks');
+  await expect(tl).toHaveAttribute('data-daily-view-end-ms', String(at(SUN, '00:00')));
+  await expect(tl.locator('[data-plan-item-id="ticktick"]')).toBeVisible();
+  await expect(tl.locator('[data-plan-item-id="sad"]')).toHaveCount(0);
+  await expect(tl.locator('.tl-date-break')).toHaveCount(0);
+
+  await page.evaluate(() => window.saveDailyViewHours('48'));
+  await expect(tl).toHaveAttribute('data-daily-view-end-ms', String(at(MON, '00:00')));
+  await expect(tl.locator('[data-plan-item-id="sad"]')).toBeVisible();
+
+  await page.evaluate(() => { localStorage.setItem('ta3-daily-view-hours', 'banana'); _todayRenderKey = '__FORCE__'; renderToday(); renderSettings(); });
+  await expect(tl).toHaveAttribute('data-daily-view-hours', '36');
+  await expect(page.locator('#set-daily-view-hours')).toHaveValue('36');
+});
+
+test('Daily View: a next-date schedule occurrence keeps its own date — "Off today" on Sunday\'s 07:00 shown in Saturday\'s view skips SUNDAY only', async ({ page }) => {
+  await saturdaySundayPlans(page);
+  await page.evaluate(() => {
+    settings.templates = [{ id: 'tpl-gym', enabled: true, days: [0, 1, 2, 3, 4, 5, 6], startTime: '07:00', endTime: '08:00', activity: 'Gym', energy: 'deep', autoLog: false, skipDates: [] }];
+    _todayRenderKey = '__FORCE__';
+    renderToday();
+  });
+  const rows = page.locator('#timeline-blocks .tl-template-row');
+  await expect(rows).toHaveCount(2); // Saturday 07:00 and Sunday 07:00 (inside the 36h window); Friday's ended before it
+  const offButtons = page.locator('#timeline-blocks .tl-template-row .template-off-btn');
+  const handlers = await offButtons.evaluateAll(els => els.map(el => el.getAttribute('onclick')));
+  expect(handlers[0]).toContain(`'${SAT}'`);
+  expect(handlers[1]).toContain(`'${SUN}'`);
+  expect(await timelineOrder(page)).toEqual(['other', 'plan:ticktick', `break:SUNDAY, SEPTEMBER 27 · NEXT DAY`, 'plan:sad', 'other']);
+  await offButtons.nth(1).click();
+  expect(await page.evaluate(() => settings.templates[0].skipDates)).toEqual([SUN]);
+  await expect(rows).toHaveCount(1);
+  await expect(page.locator('#timeline-blocks .tl-template-row .template-off-btn')).toHaveAttribute('onclick', new RegExp(`'${SAT}'`));
 });

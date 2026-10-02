@@ -10,7 +10,6 @@
 import { validPlanItemTime, planItemEndTime, formatPlanItemTime } from './plan-tomorrow-model.js';
 
 const ROUTINE_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
-export const MY_DAY_EXTENSION_PADDING_MINUTES = 30;
 
 function toMinutes(hhmm) {
   const [hour, minute] = hhmm.split(':').map(Number);
@@ -162,26 +161,13 @@ export function deriveTomorrowTimelinePreview({ priorityItems = [], routineRows 
   return { positioned, unscheduled };
 }
 
-/** Extends only when real projected content crosses the calendar plan's home
- *  midnight. Thirty minutes of padding keeps the last row from sitting on the
- *  visual edge; the canonical two-date extent is the hard cap. */
-export function extendedMyDayEnd(target, positioned = []) {
-  if (!Number.isFinite(target?.endMs)) return null;
-  const baseEndMs = target.endMs;
-  const latestRelevantMs = positioned.reduce((latest, row) => {
-    const rowEndMs = Number.isFinite(row.endMs) ? row.endMs : row.startMs;
-    return Number.isFinite(rowEndMs) && rowEndMs > baseEndMs ? Math.max(latest, rowEndMs) : latest;
-  }, baseEndMs);
-  if (latestRelevantMs === baseEndMs) return baseEndMs;
-  const paddedEndMs = latestRelevantMs + MY_DAY_EXTENSION_PADDING_MINUTES * 60000;
-  return Number.isFinite(target.extentEndMs) ? Math.min(paddedEndMs, target.extentEndMs) : paddedEndMs;
-}
-
 /** Planned rows for the existing Today/My Day timeline. This is a display
  *  projection only: task and commitment records remain in their own canonical
- *  stores, and no row is an evidence entry. */
+ *  stores, and no row is an evidence entry. How far a calendar-native Daily View
+ *  reaches is not decided here (Configurable Daily View V1 retired the old
+ *  content-driven extension): daily-view-window.js owns that one rule. */
 export function deriveMyDayPlannedRows({ target, planItems = [], commitments = [], itemStartInstant, itemInstants } = {}) {
-  if (!target || (typeof itemStartInstant !== 'function' && typeof itemInstants !== 'function')) return { anytime: [], positioned: [], displayEndMs: null };
+  if (!target || (typeof itemStartInstant !== 'function' && typeof itemInstants !== 'function')) return { anytime: [], positioned: [] };
   const planned = planItems.filter(item => item && !item.deleted).map(item => {
     const instants = validPlanItemTime(item.when) && typeof itemInstants === 'function' ? itemInstants(target, item) : null;
     const startMs = Number.isFinite(instants?.startMs)
@@ -221,8 +207,8 @@ export function deriveMyDayPlannedRows({ target, planItems = [], commitments = [
     const rank = row => row.sourceType === 'planned-task' ? (row.planKind === 'priority' ? 0 : 1) : 2;
     return (rank(a) - rank(b)) || compareStrings(a.id, b.id);
   });
-  return { anytime, positioned, displayEndMs: extendedMyDayEnd(target, positioned) };
+  return { anytime, positioned };
 }
 
-const api = { normalizePriorityRow, normalizeRoutineRow, normalizeTemplateRow, deriveTomorrowTimelinePreview, deriveMyDayPlannedRows, extendedMyDayEnd, MY_DAY_EXTENSION_PADDING_MINUTES };
+const api = { normalizePriorityRow, normalizeRoutineRow, normalizeTemplateRow, deriveTomorrowTimelinePreview, deriveMyDayPlannedRows };
 globalThis.TomorrowTimelineModel = api;
