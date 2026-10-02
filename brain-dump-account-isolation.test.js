@@ -278,3 +278,46 @@ test('the pre-scoping (unsuffixed) storage key is never touched by a scoped repo
   assert.equal(storage.getItem('ta3-brain-dump-v1'), JSON.stringify({ schemaVersion: 1, captures: { legacycap1: { id: 'legacycap1' } } }));
   assert.ok(storage.getItem(brainDumpCacheKeyForRoom(ROOM('account-a'))));
 });
+
+test('11. account switch DURING an in-flight remote claim: the resolved transaction must not be adopted under the new room, and nothing is written for B', async () => {
+  // FIX FIRST round 2. A genuinely in-flight scenario: the claim's Firebase
+  // transaction is still awaiting its network round trip when the account
+  // switches — unlike a synchronously-resolving fake, this one is only released
+  // once the test explicitly says the "server" has answered, AFTER the switch
+  // already happened. roomOwnsCache() is re-checked both inside the
+  // transaction's own update function and again once it settles, so either
+  // check alone closes this window.
+  let release = null;
+  const delayableRoomA = {
+    child() { return this; },
+    transaction(updateFn) {
+      return new Promise(resolve => {
+        release = () => {
+          const result = updateFn(null); // nothing authoritative existed yet for this capture
+          resolve(result === undefined ? { committed: false, snapshot: { val: () => null } } : { committed: true, snapshot: { val: () => result } });
+        };
+      });
+    },
+    on() {}, off() {},
+  };
+  const roomB = { child() { return this; }, transaction() { return Promise.resolve({ committed: false }); }, on() {}, off() {} };
+
+  const env = { roomCode: ROOM('account-a'), fbRoomRef: delayableRoomA };
+  const repository = createBrainDumpRepository({ storage: memory(), getOwner: () => env.roomCode, now: () => T0, deviceId: () => 'device-1' });
+  const bridge = createBrainDumpSyncBridge({ repository, getRoomRef: () => env.fbRoomRef, getRoomId: () => env.roomCode, now: () => T0, deviceId: () => 'device-1' });
+
+  const { record } = repository.create({ text: 'Switched mid-claim' });
+  const claimPromise = bridge.claimPromotionRemote(record.id, { type: 'do-today', store: 'legacy', targetId: '2026-10-01', planItemId: `bdp1|${record.id}` });
+
+  // The switch happens WHILE the transaction above is still pending — no
+  // sign-out, the historical bug's exact reproduction shape.
+  env.roomCode = ROOM('account-b');
+  env.fbRoomRef = roomB;
+
+  release(); // the "server" finally answers, now that B is the active room
+  const result = await claimPromise;
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'offline', 'the stale in-flight claim is refused, never silently adopted under B');
+  assert.equal(repository.read(record.id), null, 'B\'s active cache never receives A\'s capture or claim');
+});

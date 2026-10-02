@@ -48,6 +48,29 @@
 // the existing LWW + canonical tie-break still applies (two claims: earliest
 // claimedAt wins, so only one target is ever authoritative for one capture).
 //
+// ── FIX FIRST round 2: a BRAND NEW claim must be established against the
+// AUTHORITATIVE REMOTE record, not merely written to local cache ──────────────
+// The rank rule above protects an ALREADY-ESTABLISHED claim/promotion from a
+// stale archive/delegate (there may already be a real plan item to protect).
+// It must NOT let a client that still sees TRIAGED locally — because it is
+// stale or offline — mint a BRAND NEW claim that outranks a remote archive/
+// delegate that has ALREADY become authoritative: nothing has been protected
+// yet from THIS claim's point of view (it has created no plan item), so there
+// is nothing to weigh by rank. arbitratePromotionClaim() is the gate a NEW
+// claim attempt must pass, evaluated against the CURRENT remote value inside a
+// real Firebase transaction (brain-dump-sync.js's claimPromotionRemote) BEFORE
+// Plan Authority is ever touched — never against local cache alone:
+//   - remote already TERMINAL (promoted/archived/delegated): refuse outright,
+//     no write at all — the new claim loses unconditionally, regardless of rank.
+//   - remote has its OWN outstanding (non-terminal) claim: two claims racing to
+//     be established, genuinely concurrent, NEITHER has a side effect yet —
+//     falls through to the ordinary rank+tie-break merge (earliest wins).
+//   - remote is untriaged/triaged with no claim: safe to establish ours.
+// mergeCaptureRecords itself is unchanged and still governs every ORDINARY
+// sync merge (archive/delegate's own push, finalize's push, inbound snapshots)
+// — those still correctly let an already-won claim/promotion beat a stale
+// archive/delegate, exactly as round 1 fixed.
+//
 // ── delegate is a disposition, not a destination (deliberate V1 scope) ──────
 // This codebase has no existing model for handing work to another person — no
 // commitment-to-someone-else, no assignee, no second task store. Building one here
@@ -412,6 +435,18 @@ export function mergeCaptureRecords(localValue, remoteValue) {
   return compareStrings(canonical(local), canonical(remote)) >= 0 ? local : remote;
 }
 
+/** The gate a BRAND NEW promotion claim must pass against the AUTHORITATIVE
+ *  REMOTE record — see the file banner's "FIX FIRST round 2" section. Returns
+ *  the record to write, or `undefined` to mean "refuse: write nothing" (the
+ *  caller feeds this straight into a Firebase `.transaction()` update
+ *  function, where returning `undefined` aborts the transaction with zero
+ *  writes — exactly the "no fake authoritative success" contract). */
+export function arbitratePromotionClaim(remoteValue, candidate) {
+  const remote = normalizeCapture(remoteValue);
+  if (remote && TERMINAL_STATUSES.has(remote.status)) return undefined;
+  return mergeCaptureRecords(remote, candidate);
+}
+
 /** Merges two whole capture maps, record by record. Never a store-wide replace: a
  *  peer that has never seen a capture must not be able to make it disappear by
  *  simply not mentioning it — absence is not deletion (and V1 has no deletion). */
@@ -471,8 +506,8 @@ export function quadrantOf(record) {
 const api = {
   BRAIN_DUMP_SCHEMA_VERSION, BRAIN_DUMP_STATUSES, TERMINAL_STATUSES, PROMOTION_TYPES, BRAIN_DUMP_PLAN_ITEM_PREFIX,
   validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, claimPromotion, finalizePromotion,
-  archiveCapture, delegateCapture, normalizeCapture, mergeCaptureRecords, mergeCaptureMaps, allCaptures,
-  untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
+  archiveCapture, delegateCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
+  mergeCaptureMaps, allCaptures, untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
 };
 globalThis.BrainDumpModel = api;
 export default api;

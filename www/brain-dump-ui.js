@@ -210,9 +210,20 @@ function saveTriage(id) {
   render();
 }
 
+/** Thin wrapper so brain-dump-promotion.js never needs to know about `window` —
+ *  it only ever sees a function. If the sync bridge has not loaded yet (or
+ *  never will — module load order edge case), report 'offline' rather than
+ *  throwing: no fake success, fully retryable once it has. */
+function claimPromotionRemote(id, promotion) {
+  if (!window.BrainDumpSync) return Promise.resolve({ ok: false, reason: 'offline' });
+  return window.BrainDumpSync.claimPromotionRemote(id, promotion);
+}
+
 function reportPromotionOutcome(result, successLabel) {
-  // The claim phase writes locally even on a losing/failed attempt — push it so
-  // other devices learn who won as soon as possible.
+  // Phase 3 (finalize) is local-first — push it so other devices see the
+  // completed promotion as soon as possible. The claim itself (phase 1) is
+  // already authoritative-remote by the time this runs; this is a no-op merge
+  // when nothing local has changed since.
   if (result.record && window.BrainDumpSync) window.BrainDumpSync.syncCapture(result.record.id);
   if (result.ok) {
     notify(result.alreadyDisposed ? 'Already handled.' : successLabel);
@@ -226,15 +237,17 @@ function reportPromotionOutcome(result, successLabel) {
     'invalid-date': 'Pick a valid date.',
     'already-claimed': 'Already being promoted elsewhere — try again in a moment.',
     'already-disposed': 'Already handled.',
+    offline: 'Could not confirm with the server — check your connection and try again.',
   };
   notify(messages[result.reason] || result.reason || 'Could not promote that item.');
   render();
 }
 
-function doToday(id) {
-  const result = promoteCaptureToPlan({
+async function doToday(id) {
+  const result = await promoteCaptureToPlan({
     repository: repository(),
     planAuthority: window.PlanAuthority,
+    claimPromotionRemote,
     id,
     type: 'do-today',
     now: Date.now(),
@@ -248,7 +261,7 @@ function toggleSchedule(id) {
   render();
 }
 
-function confirmSchedule(id) {
+async function confirmSchedule(id) {
   const dateInput = document.getElementById(`bd-sched-date-${id}`);
   const timeInput = document.getElementById(`bd-sched-time-${id}`);
   const durationInput = document.getElementById(`bd-sched-duration-${id}`);
@@ -256,9 +269,10 @@ function confirmSchedule(id) {
   if (!dateKey) { notify('Pick a date first.'); return; }
   const when = timeInput && timeInput.value ? timeInput.value : '';
   const durationMinutes = durationInput && durationInput.value ? Number(durationInput.value) : undefined;
-  const result = promoteCaptureToPlan({
+  const result = await promoteCaptureToPlan({
     repository: repository(),
     planAuthority: window.PlanAuthority,
+    claimPromotionRemote,
     id,
     type: 'schedule',
     dateKey,

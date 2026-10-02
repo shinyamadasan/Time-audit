@@ -177,12 +177,16 @@ export function createBrainDumpRepository(deps = {}) {
       return { ok: true, record: persist(key, result.record) };
     },
 
-    /** PHASE 1 of promotion — see brain-dump-model.js's file banner. Idempotent: a
-     *  re-claim of the SAME (store, targetId, planItemId) is a no-op success (a
-     *  retry, or this device's own repeated attempt); a DIFFERENT outstanding claim
-     *  refuses with 'already-claimed'; an already-disposed capture refuses with
-     *  'already-disposed' — callers use either to recognize a race rather than
-     *  writing a second, competing claim or a second plan item. */
+    /** LOCAL-ONLY phase-1 eligibility check. FIX FIRST round 2: production no
+     *  longer calls this to establish a promotion claim — brain-dump-sync.js's
+     *  claimPromotionRemote() does that against the AUTHORITATIVE REMOTE record
+     *  via a real transaction (local cache alone can be stale). This method
+     *  remains as the local building block that function's own candidate-check
+     *  reuses, and as a pure-local test seam. Idempotent: a re-claim of the SAME
+     *  (store, targetId, planItemId) is a no-op success (a retry, or this
+     *  device's own repeated attempt); a DIFFERENT outstanding claim refuses
+     *  with 'already-claimed'; an already-disposed capture refuses with
+     *  'already-disposed'. */
     claimPromotion(id, { promotion, now: at, updatedBy } = {}) {
       if (!validBrainDumpId(id)) return { ok: false, reason: 'invalid-input', field: 'id' };
       const key = activeKey();
