@@ -51,14 +51,43 @@
 //     file banner: a BRAND NEW claim must be refused outright if the remote
 //     record is already a settled terminal state (archived/delegated/promoted),
 //     never merely out-ranked-and-overwritten.
-//   - a bounded timeout guards against the real Firebase SDK's documented
-//     behavior of a transaction() Promise that does not settle at all while
-//     genuinely offline — "do not assume a locally queued transaction means the
-//     server has accepted the claim" means this call must resolve to a clear
-//     refusal in bounded time, never hang the caller forever.
-//   - the committed (or refused-but-current) snapshot is merged into local cache
-//     via the ordinary repository.mergeRemote(), so the UI reflects authoritative
-//     truth immediately either way.
+//
+// ── timeout vs pending, and why the transaction is never abandoned (FIX FIRST
+// round 3) ───────────────────────────────────────────────────────────────────
+//
+// A bounded timeout guards the FOREGROUND caller against the real Firebase
+// SDK's documented behavior of a transaction() Promise that does not settle at
+// all while genuinely offline. Round 2 treated a timeout as `reason:'offline'`
+// — but that is a LIE: the transaction may still be running, and may commit a
+// real authoritative claim seconds or minutes later, with nobody ever told.
+// That is a GHOST CLAIM: an authoritative promotionClaim sitting on the remote
+// record forever, blocking archive/delegate, with no plan item and no caller
+// left to finish it.
+//
+// So the transaction (`attempt`) and the FOREGROUND caller's bounded wait are
+// now two SEPARATE things:
+//   - `attempt` is NEVER dropped. Its `.then()/.catch()` (finishClaimAttempt)
+//     always runs, whenever it actually settles, regardless of whether the
+//     foreground caller is still waiting. It is what eventually: (a) merges
+//     the authoritative result into local cache via the ordinary
+//     repository.mergeRemote() — but ONLY if this account's room is STILL the
+//     active one at settlement time, never into whatever cache happens to be
+//     active by then (see "account switch" below); and (b) fires the SAME
+//     onRemoteChange hook every other merge already fires, which is what lets
+//     brain-dump-ui.js notice a newly-authoritative claim and reconcile it —
+//     see reconcilePromotionClaim in brain-dump-promotion.js — whether that
+//     happens before or long after the original caller gave up.
+//   - the foreground caller only ever races a VIEW of `settlement`'s own
+//     eventual value against the timeout. If the timeout wins, this call
+//     resolves `{ok:false, reason:'pending'}` — explicitly UNKNOWN, never a
+//     claim that nothing happened and never a claim that it failed. Plan
+//     Authority must never be touched on a 'pending' result.
+//   - a genuine pre-flight refusal (no room ref, wrong room — the transaction
+//     never even started) is the ONLY case that still reports `'offline'`: a
+//     real, definite, immediate fact, not a guess about an in-flight op.
+//   - a transport-level rejection (the Promise rejects outright, not merely
+//     slow) is also a definite `'offline'` — the SDK itself reported failure,
+//     unlike a timeout, which is this module's own impatience, not the SDK's.
 
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
@@ -185,12 +214,51 @@ export function createBrainDumpSyncBridge(deps = {}) {
     return pushCapture(id).then(result => result.committed);
   }
 
+  /** Processes the transaction's REAL, eventual outcome — always runs exactly
+   *  once per attempt, whenever `attempt` actually settles, independent of
+   *  whether the foreground caller is still waiting. Re-checks room ownership
+   *  AT SETTLEMENT TIME (not just at call time): if the account has since
+   *  switched away, this never merges into the wrong cache and never fires
+   *  Plan Authority work for the wrong account — the claim stays exactly as
+   *  authoritative on the remote record as it already was, for whichever
+   *  account owns it to reconcile whenever it is active again. */
+  function finishClaimAttempt(id, promotion, roomId, ownerLostRef, result) {
+    if (ownerLostRef.lost || !roomOwnsCache(roomId) || !result || !result.snapshot) {
+      return { ok: false, reason: 'offline' };
+    }
+    const authoritative = result.snapshot.val();
+    const { changed, record } = repository.mergeRemote(id, authoritative);
+    // The SAME hook every other merge fires. This is what lets brain-dump-ui.js
+    // notice — and reconcile — a newly-authoritative claim, whether this runs
+    // before or long after the original caller's own bounded wait gave up.
+    if (changed) onRemoteChange(id, record);
+    const finalRecord = record || repository.read(id);
+    // Checked BEFORE the committed/aborted branch deliberately: an idempotent
+    // retry of a claim THIS device already won can "abort" (no change needed)
+    // while still correctly reporting success.
+    const wonClaim = !!finalRecord?.promotionClaim
+      && finalRecord.promotionClaim.store === promotion.store
+      && finalRecord.promotionClaim.targetId === promotion.targetId
+      && finalRecord.promotionClaim.planItemId === promotion.planItemId;
+    if (wonClaim) return { ok: true, record: finalRecord };
+    if (!result.committed) {
+      // Refused by arbitratePromotionClaim: remote was already a settled
+      // terminal state, or a competing claim's tie-break beat ours.
+      const reason = finalRecord && finalRecord.status !== 'untriaged' && finalRecord.status !== 'triaged' ? 'already-disposed' : 'already-claimed';
+      return { ok: false, reason, record: finalRecord };
+    }
+    return { ok: false, reason: 'already-claimed', record: finalRecord };
+  }
+
   /** Establishes a BRAND NEW promotion claim against the AUTHORITATIVE REMOTE
-   *  record — see the file banner. Must be awaited and must resolve `ok:true`
-   *  before the caller (brain-dump-promotion.js) ever touches Plan Authority.
+   *  record — see the file banner. Must be awaited; PlanAuthority may only be
+   *  touched once this resolves `ok:true`. A `reason:'pending'` result means
+   *  the OUTCOME IS UNKNOWN — never treat it as failure, never treat it as
+   *  permission to touch Plan Authority; see the file banner's round-3 section.
    *  @param {string} id
-   *  @param {{type:'do-today'|'schedule', store:string, targetId:string, planItemId:string}} promotion
-   *  @returns {Promise<{ok:true, record:object} | {ok:false, reason:string, record?:object}>} */
+   *  @param {{type:'do-today'|'schedule', store:string, targetId:string, planItemId:string,
+   *           when?:string, durationMinutes?:number}} promotion
+   *  @returns {Promise<{ok:true, record:object} | {ok:false, reason:'offline'|'pending'|'already-claimed'|'already-disposed'|'not-found'|'invalid-input', record?:object}>} */
   function claimPromotionRemote(id, promotion) {
     if (!validBrainDumpId(id)) return Promise.resolve({ ok: false, reason: 'invalid-input' });
     const local = repository.read(id);
@@ -206,39 +274,31 @@ export function createBrainDumpSyncBridge(deps = {}) {
     const roomId = activeRoomId();
     const ref = captureRef(id);
     if (!ref || !roomOwnsCache(roomId)) {
-      // OFFLINE, or this cache is not (yet) the joined room's. Never fake a win:
-      // no local write at all, fully retryable the instant authority can be
-      // established — see the file banner's offline-semantics contract.
+      // Never even started — a genuine, definite "cannot reach authority right
+      // now", not a guess about an in-flight operation. Never fake a win: no
+      // local write at all, fully retryable the instant authority can be
+      // established.
       return Promise.resolve({ ok: false, reason: 'offline' });
     }
 
-    let ownerLost = false;
+    const ownerLostRef = { lost: false };
     const attempt = ref.transaction(remote => {
-      ownerLost = !roomOwnsCache(roomId);
-      if (ownerLost) return undefined;
+      ownerLostRef.lost = !roomOwnsCache(roomId);
+      if (ownerLostRef.lost) return undefined;
       return arbitratePromotionClaim(remote, candidate);
     }, undefined, false);
 
-    return withTimeout(attempt, claimTimeoutMs)
-      .then(result => {
-        if (ownerLost || !result || !result.snapshot) return { ok: false, reason: 'offline' };
-        const authoritative = result.snapshot.val();
-        const { record } = repository.mergeRemote(id, authoritative);
-        const finalRecord = record || repository.read(id);
-        if (!result.committed) {
-          // Refused by arbitratePromotionClaim: remote was already a settled
-          // terminal state, or a competing claim's tie-break beat ours.
-          const reason = finalRecord && finalRecord.status !== 'untriaged' && finalRecord.status !== 'triaged' ? 'already-disposed' : 'already-claimed';
-          return { ok: false, reason, record: finalRecord };
-        }
-        const wonClaim = finalRecord?.promotionClaim
-          && finalRecord.promotionClaim.store === promotion.store
-          && finalRecord.promotionClaim.targetId === promotion.targetId
-          && finalRecord.promotionClaim.planItemId === promotion.planItemId;
-        if (wonClaim) return { ok: true, record: finalRecord };
-        return { ok: false, reason: 'already-claimed', record: finalRecord };
-      })
-      .catch(() => ({ ok: false, reason: 'offline' }));
+    // NEVER dropped: this runs to completion whenever the transaction actually
+    // settles, independent of the foreground race below.
+    const settlement = attempt
+      .then(result => finishClaimAttempt(id, promotion, roomId, ownerLostRef, result))
+      .catch(() => finishClaimAttempt(id, promotion, roomId, ownerLostRef, null));
+
+    return withTimeout(settlement, claimTimeoutMs)
+      // The timeout fired first: the REAL outcome above is still being awaited
+      // by `settlement` itself and will be processed when it lands — this call
+      // merely stops waiting for it. Explicitly UNKNOWN, never offline/failure.
+      .catch(() => ({ ok: false, reason: 'pending', record: local }));
   }
 
   /** Merges one inbound remote record. Record-level only — a peer's snapshot can
@@ -322,7 +382,9 @@ if (typeof window !== 'undefined') {
     getRoomRef: () => (typeof globalThis.getChronaSenseRoomRef === 'function' ? globalThis.getChronaSenseRoomRef() : null),
     getRoomId: appRoomOwner,
     deviceId: () => globalThis.syncedDeviceId || 'unknown-device',
-    onRemoteChange: () => globalThis.refreshBrainDumpSurfaces?.(),
+    // (id, record) passed through — brain-dump-ui.js's reconcilePromotionClaim
+    // trigger (FIX FIRST round 3) needs to know WHICH capture changed.
+    onRemoteChange: (id, record) => globalThis.refreshBrainDumpSurfaces?.(id, record),
     // A new binding (or none) means a different account's cache is now the active
     // one: re-render so nothing drawn from the previous account's captures lingers.
     // Deferred to a microtask so it runs after storage.js has finished changing the

@@ -15,7 +15,9 @@
 //    locally because it is stale or offline can never mint a winning claim over
 //    a remote that has ALREADY moved to archived/delegated/promoted. This
 //    function is therefore async — it genuinely waits on a network round trip
-//    (bounded by a timeout — see brain-dump-sync.js) before proceeding.
+//    (bounded by a timeout — see brain-dump-sync.js) before proceeding. A
+//    `reason:'pending'` result means the OUTCOME IS UNKNOWN (FIX FIRST round 3
+//    — see reconcilePromotionClaim below): Plan Authority must NOT be touched.
 // 2. CREATE (planAuthority.addItem): idempotent — checks rawItems() for the
 //    DETERMINISTIC plan-item id (brainDumpPlanItemId, a pure function of the
 //    capture's own immutable id, never minted fresh) before writing, so a retry
@@ -46,8 +48,58 @@
 // plan item is created, the capture is left exactly as it was (fully
 // retryable), and the caller surfaces an explicit non-success result rather
 // than a fake success.
+//
+// ── reconcilePromotionClaim: the abandoned-claim fix (FIX FIRST round 3) ─────
+// A `pending` result from claimPromotionRemote means phase 1's transaction is
+// still in flight somewhere — brain-dump-sync.js never abandons it (see its own
+// file banner), and it will eventually settle and merge into local cache via
+// the ordinary onRemoteChange hook. If it turns out WE won, nobody has yet run
+// phases 2/3 for it: the original promoteCaptureToPlan() call already returned
+// to its caller with 'pending' and is gone. reconcilePromotionClaim() is phases
+// 2+3 alone, driven SOLELY by the capture's own persisted promotionClaim — never
+// by a freshly-built target or a fresh UI action — so it can finish the
+// promotion from ANY session that later observes the authoritative claim: the
+// SAME device after the foreground call gave up, a DIFFERENT device, or a
+// completely fresh app load whose repository just hydrated it from remote. The
+// claim's `targetId` is resolved back into a real Plan Authority target via
+// targetById() (never by re-deriving "today" or re-resolving a schedule date
+// fresh — the ORIGINAL target is exactly what was claimed, however much time has
+// passed), and `when`/`durationMinutes` — carried on the claim precisely so this
+// is possible — rebuild the exact intended item. Idempotent and safe to call
+// redundantly from multiple observers (a listener update, a reconnect, a reload,
+// or two devices both noticing the same outstanding claim) — the deterministic
+// plan-item id and finalizePromotion's own idempotent guard are what make that
+// safe, exactly as they already do for promoteCaptureToPlan's own retries.
 
 import { brainDumpPlanItemId } from './brain-dump-model.js';
+
+function buildPlanItem(claim, text, now, deviceId) {
+  const item = { id: claim.planItemId, task: text, when: claim.when || '', done: false, doneAt: null, updatedAt: now, updatedBy: deviceId, kind: 'task' };
+  if (Number.isFinite(claim.durationMinutes)) item.durationMinutes = claim.durationMinutes;
+  return item;
+}
+
+/** Shared phase 2+3: create the destination (idempotent) and finalize (reads
+ *  the claim already on the record). Used by both promoteCaptureToPlan (right
+ *  after ITS OWN claim just won) and reconcilePromotionClaim (for a claim this
+ *  call never made itself). */
+function createAndFinalize({ repository, planAuthority, id, target, claim, text, now, deviceId }) {
+  const alreadyCreated = planAuthority.rawItems(target).some(item => item.id === claim.planItemId);
+  if (!alreadyCreated) {
+    try {
+      planAuthority.addItem({ destination: target, item: buildPlanItem(claim, text, now, deviceId), nowMs: now });
+    } catch (err) {
+      // The claim stays recorded (authoritatively, remotely); a retry (this
+      // device or another) recovers from the SAME claim rather than losing
+      // track of the attempt, and archive/delegate stay refused in the meantime.
+      return { ok: false, reason: err.message };
+    }
+  }
+  const finalized = repository.finalizePromotion(id, { now, updatedBy: deviceId });
+  if (!finalized.ok && finalized.reason === 'already-disposed') return { ok: true, record: finalized.record, alreadyDisposed: true };
+  if (!finalized.ok) return finalized;
+  return { ok: true, record: finalized.record };
+}
 
 /** @param {{repository:object, planAuthority:object, claimPromotionRemote:function, id:string,
  *           type:'do-today'|'schedule', dateKey?:string, when?:string, durationMinutes?:number,
@@ -83,14 +135,11 @@ export async function promoteCaptureToPlan(input = {}) {
   const planItemId = brainDumpPlanItemId(id);
 
   // Phase 1: REMOTE CLAIM GATE — authoritative, before Plan Authority is
-  // touched. Never fakes success: offline/timeout/refusal all come back here
-  // as ok:false with no local or remote write having happened for THIS attempt.
-  const claim = await claimPromotionRemote(id, { type, store: target.store, targetId: target.id, planItemId });
-  if (!claim.ok) {
-    // 'offline' | 'already-disposed' | 'already-claimed' | 'not-found' |
-    // 'invalid-input' — none of them ever reach Plan Authority.
-    return claim;
-  }
+  // touched. Never fakes success: offline/already-claimed/already-disposed all
+  // come back here as ok:false with no local or remote write for THIS attempt.
+  // 'pending' means the outcome is UNKNOWN — see reconcilePromotionClaim.
+  const claim = await claimPromotionRemote(id, { type, store: target.store, targetId: target.id, planItemId, when, durationMinutes });
+  if (!claim.ok) return claim;
   const winningClaim = claim.record?.promotionClaim;
   if (!winningClaim || winningClaim.store !== target.store || winningClaim.targetId !== target.id || winningClaim.planItemId !== planItemId) {
     // Our claim did not win the merge (a concurrent claim for a different target
@@ -98,38 +147,33 @@ export async function promoteCaptureToPlan(input = {}) {
     return { ok: false, reason: 'already-claimed', record: claim.record };
   }
 
-  // Phase 2: CREATE — idempotent via the deterministic id. Only reached after
-  // the claim is confirmed authoritative.
-  const alreadyCreated = planAuthority.rawItems(target).some(item => item.id === planItemId);
-  if (!alreadyCreated) {
-    const item = {
-      id: planItemId,
-      task: claim.record.text,
-      when: when || '',
-      done: false,
-      doneAt: null,
-      updatedAt: now,
-      updatedBy: deviceId,
-      kind: 'task',
-    };
-    if (Number.isFinite(durationMinutes)) item.durationMinutes = durationMinutes;
-    try {
-      planAuthority.addItem({ destination: target, item, nowMs: now });
-    } catch (err) {
-      // The claim stays recorded (authoritatively, remotely); a retry (this
-      // device or another) recovers from the SAME claim rather than losing
-      // track of the attempt, and archive/delegate stay refused in the meantime.
-      return { ok: false, reason: err.message, record: claim.record };
-    }
-  }
+  return createAndFinalize({ repository, planAuthority, id, target, claim: winningClaim, text: claim.record.text, now, deviceId });
+}
 
-  // Phase 3: FINALIZE — local-first (safe: the claim is already authoritative
-  // and the plan item already exists); reads the destination off the claim
-  // already on the record.
-  const finalized = repository.finalizePromotion(id, { now, updatedBy: deviceId });
-  if (!finalized.ok && finalized.reason === 'already-disposed') {
-    return { ok: true, record: finalized.record, alreadyDisposed: true };
+/** Resumes an authoritative promotion claim that is ALREADY WON — i.e. the
+ *  capture's own promotionClaim is already the remote-confirmed truth. Never
+ *  re-attempts the claim itself (see promoteCaptureToPlan/claimPromotionRemote
+ *  for that) — this is phases 2+3 alone, driven solely by persisted provenance.
+ *  See the file banner's "abandoned-claim fix" section for why this exists and
+ *  why it is safe to call redundantly from any observer.
+ *  @param {{repository:object, planAuthority:object, id:string, now:number, deviceId:string}} input
+ *  @returns {{ok:true, record:object, alreadyDisposed?:boolean} | {ok:false, reason:string, record?:object}} */
+export function reconcilePromotionClaim({ repository, planAuthority, id, now, deviceId }) {
+  if (!repository || !planAuthority) return { ok: false, reason: 'invalid-input' };
+  const current = repository.read(id);
+  if (!current) return { ok: false, reason: 'not-found' };
+  if (current.status !== 'untriaged' && current.status !== 'triaged') {
+    return { ok: true, record: current, alreadyDisposed: true };
   }
-  if (!finalized.ok) return finalized;
-  return { ok: true, record: finalized.record };
+  const claim = current.promotionClaim;
+  if (!claim) return { ok: false, reason: 'no-claim' };
+
+  // The ORIGINAL target, reconstructed from the claim's own persisted id — NOT
+  // re-derived (never "today" resolved fresh, never a schedule date re-resolved):
+  // targetById() rebuilds exactly the day that was claimed, however much time
+  // has passed since.
+  const target = typeof planAuthority.targetById === 'function' ? planAuthority.targetById(claim.targetId) : null;
+  if (!target) return { ok: false, reason: 'invalid-input', record: current };
+
+  return createAndFinalize({ repository, planAuthority, id, target, claim, text: current.text, now, deviceId });
 }

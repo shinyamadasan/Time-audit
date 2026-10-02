@@ -14,7 +14,7 @@
 import './plan-authority.js';
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf } from './brain-dump-model.js';
-import { promoteCaptureToPlan } from './brain-dump-promotion.js';
+import { promoteCaptureToPlan, reconcilePromotionClaim } from './brain-dump-promotion.js';
 import { localPlanDate } from './plan-tomorrow-model.js';
 
 function repository() {
@@ -63,6 +63,25 @@ const pendingTriage = new Map();
 // at a time, to keep the list readable — not a product requirement, purely a
 // rendering simplification.
 let openScheduleId = null;
+
+// FIX FIRST round 3. A capture id lands here while a promotion attempt's
+// outcome is genuinely UNKNOWN (claimPromotionRemote returned 'pending') —
+// never while it merely failed. While present: the triaged row shows a neutral
+// "Still confirming…" state instead of Do Today/Schedule/Archive/Delegate, so
+// the owner cannot launch a second, INCOMPATIBLE promotion attempt from the
+// same local UI state before the first's authority is known (see
+// brain-dump-sync.js's file banner). Cleared the instant fresh authoritative
+// info arrives for that id (success, a different terminal state, or a
+// definitive failure) — never by a timer, never by guessing.
+const pendingPromotionIds = new Set();
+
+// In-flight guard so a burst of remote-change notifications for the same
+// capture (the claim's own late settlement AND the whole-subtree listener
+// AND a reconnect replay can all fire close together) never runs
+// reconcilePromotionClaim more than once concurrently for one id. Persisted
+// truth stays the claim itself — this is purely a local dedupe, never
+// authoritative.
+const reconciling = new Set();
 
 function pendingFor(id) {
   if (!pendingTriage.has(id)) pendingTriage.set(id, { important: null, urgent: null });
@@ -126,17 +145,27 @@ function triagedSectionHtml(items) {
   if (!items.length) return '';
   const rows = items.map(item => {
     const quadrant = quadrantOf(item);
+    // A promotion attempt with a genuinely UNKNOWN outcome: Do Today/Schedule
+    // are withheld here — never launch a SECOND, possibly-incompatible
+    // promotion attempt before the first's authority is known (requirement
+    // 5). Archive/Delegate stay available on purpose: the authoritative
+    // remote ordering (never which local toast appeared first) is what
+    // decides that race, and a user is allowed to try (see
+    // brain-dump-sync.js's file banner, "Archive wins before the late
+        // transaction runs").
+    const pending = pendingPromotionIds.has(item.id);
     return `
     <div class="bd-item" style="padding:10px 0;border-bottom:1px solid var(--border,#2a2a2a)">
       <div>${escapeHtml(item.text)}</div>
-      <div style="font-size:12px;opacity:.7;margin-top:2px">${QUADRANT_LABEL[quadrant] || ''}</div>
+      <div style="font-size:12px;opacity:.7;margin-top:2px">${pending ? 'Still confirming a previous action…' : (QUADRANT_LABEL[quadrant] || '')}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+        ${pending ? '' : `
         <button type="button" class="btn sm" onclick="window.BrainDumpUI.doToday('${item.id}')">Do today</button>
-        <button type="button" class="btn sm" onclick="window.BrainDumpUI.toggleSchedule('${item.id}')">Schedule</button>
+        <button type="button" class="btn sm" onclick="window.BrainDumpUI.toggleSchedule('${item.id}')">Schedule</button>`}
         <button type="button" class="btn sm ghost" onclick="window.BrainDumpUI.archive('${item.id}')">Archive</button>
         <button type="button" class="btn sm ghost" onclick="window.BrainDumpUI.delegate('${item.id}')">Delegate</button>
       </div>
-      ${openScheduleId === item.id ? scheduleFormHtml(item.id) : ''}
+      ${!pending && openScheduleId === item.id ? scheduleFormHtml(item.id) : ''}
     </div>`;
   }).join('');
   return `
@@ -219,7 +248,19 @@ function claimPromotionRemote(id, promotion) {
   return window.BrainDumpSync.claimPromotionRemote(id, promotion);
 }
 
-function reportPromotionOutcome(result, successLabel) {
+function reportPromotionOutcome(result, successLabel, id) {
+  if (result.reason === 'pending') {
+    // Outcome genuinely UNKNOWN — never shown as success or failure. Nothing
+    // local changed (brain-dump-sync.js wrote nothing for a pending attempt),
+    // so there is nothing to push here; the eventual late settlement pushes
+    // and merges itself, and that merge's own onRemoteChange is what clears
+    // this and resolves the UI — see maybeReconcile.
+    pendingPromotionIds.add(id);
+    notify('Still confirming…');
+    render();
+    return;
+  }
+  pendingPromotionIds.delete(id);
   // Phase 3 (finalize) is local-first — push it so other devices see the
   // completed promotion as soon as possible. The claim itself (phase 1) is
   // already authoritative-remote by the time this runs; this is a no-op merge
@@ -244,6 +285,7 @@ function reportPromotionOutcome(result, successLabel) {
 }
 
 async function doToday(id) {
+  if (pendingPromotionIds.has(id)) return; // avoid a second, possibly-incompatible attempt while the first's outcome is unknown
   const result = await promoteCaptureToPlan({
     repository: repository(),
     planAuthority: window.PlanAuthority,
@@ -253,7 +295,7 @@ async function doToday(id) {
     now: Date.now(),
     deviceId: deviceId(),
   });
-  reportPromotionOutcome(result, 'Added to today.');
+  reportPromotionOutcome(result, 'Added to today.', id);
 }
 
 function toggleSchedule(id) {
@@ -262,6 +304,7 @@ function toggleSchedule(id) {
 }
 
 async function confirmSchedule(id) {
+  if (pendingPromotionIds.has(id)) return;
   const dateInput = document.getElementById(`bd-sched-date-${id}`);
   const timeInput = document.getElementById(`bd-sched-time-${id}`);
   const durationInput = document.getElementById(`bd-sched-duration-${id}`);
@@ -282,7 +325,34 @@ async function confirmSchedule(id) {
     deviceId: deviceId(),
   });
   if (result.ok) openScheduleId = null;
-  reportPromotionOutcome(result, 'Scheduled.');
+  reportPromotionOutcome(result, 'Scheduled.', id);
+}
+
+/** FIX FIRST round 3 — the abandoned-claim fix's UI-side trigger. Called from
+ *  globalThis.refreshBrainDumpSurfaces (itself the sync bridge's onRemoteChange
+ *  hook — see brain-dump-sync.js), so this runs whenever ANY merge changes this
+ *  capture's local record: the claim's own late settlement, the ordinary
+ *  whole-subtree listener, a reconnect replay, or a fresh hydration on load —
+ *  all four of round 3's required triggers, through the one existing hook.
+ *  Idempotent and safe to call redundantly — reconcilePromotionClaim's own
+ *  guards (status/claim checks, the deterministic plan-item id) make a
+ *  redundant call a no-op; `reconciling` only prevents two concurrent calls
+ *  for the same id from racing each other pointlessly. */
+function maybeReconcile(id, record) {
+  if (!id || !record) return;
+  pendingPromotionIds.delete(id); // fresh authoritative info has arrived either way
+  if ((record.status !== 'untriaged' && record.status !== 'triaged') || !record.promotionClaim) return;
+  if (reconciling.has(id)) return;
+  reconciling.add(id);
+  try {
+    const outcome = reconcilePromotionClaim({ repository: repository(), planAuthority: window.PlanAuthority, id, now: Date.now(), deviceId: deviceId() });
+    if (outcome?.record && window.BrainDumpSync) window.BrainDumpSync.syncCapture(outcome.record.id);
+  } finally {
+    reconciling.delete(id);
+  }
+  // The caller (refreshBrainDumpSurfaces) re-renders the Brain Dump view itself
+  // if it is the active one; reconciliation still runs here regardless of
+  // which view is on screen.
 }
 
 function archive(id) {
@@ -307,7 +377,12 @@ if (typeof window !== 'undefined') {
   // A different account's cache becoming active (sign-in/out, a direct switch) must
   // re-render so nothing drawn from the previous account's captures lingers — the
   // same reasoning commitments-sync.js documents for refreshCommitmentSurfaces.
-  globalThis.refreshBrainDumpSurfaces = () => {
+  // `id`/`record`, when present, are brain-dump-sync.js's onRemoteChange payload
+  // (a merge actually changed something for that capture) — the trigger for
+  // reconcilePromotionClaim (FIX FIRST round 3). Absent on a plain re-render
+  // call (e.g. onRebind, which has no single capture in mind).
+  globalThis.refreshBrainDumpSurfaces = (id, record) => {
+    if (id) maybeReconcile(id, record);
     if (document.getElementById('view-braindump')?.classList.contains('active')) render();
   };
 }
