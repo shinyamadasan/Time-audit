@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, promoteCapture,
+  validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, claimPromotion, finalizePromotion,
   archiveCapture, delegateCapture, normalizeCapture, mergeCaptureRecords, mergeCaptureMaps,
   allCaptures, untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
   TERMINAL_STATUSES,
@@ -21,6 +21,14 @@ const memory = () => {
   const map = new Map();
   return { getItem: k => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, v), removeItem: k => map.delete(k), _map: map };
 };
+
+/** Pure-model convenience: both promotion phases, no Plan Authority involved
+ *  (these tests are about the capture-side arbitration, not the plan write). */
+function promoteFully(record, { promotion, now, updatedBy }) {
+  const claimed = claimPromotion(record, { promotion, now, updatedBy });
+  if (!claimed.ok) return claimed;
+  return finalizePromotion(claimed.record, { now: now + 1, updatedBy });
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // capture: minimal at creation
@@ -110,17 +118,17 @@ test('promote/archive/delegate are each idempotent: a capture already disposed o
   assert.equal(delegateAttempt.ok, false);
   assert.equal(delegateAttempt.reason, 'already-disposed');
 
-  const promoteAttempt = promoteCapture(archived, {
-    promotion: { type: 'do-today', store: 'calendar', targetId: 'calplan:2026-10-01', planItemId: 'bdp1|b1' },
+  const claimAttempt = claimPromotion(archived, {
+    promotion: { type: 'do-today', store: 'calendar', targetId: 'calplan:2026-10-01', planItemId: 'bdp1|bidone1' },
     now: T0 + 4, updatedBy: 'd',
   });
-  assert.equal(promoteAttempt.ok, false);
-  assert.equal(promoteAttempt.reason, 'already-disposed');
+  assert.equal(claimAttempt.ok, false);
+  assert.equal(claimAttempt.reason, 'already-disposed');
 });
 
-test('promoteCapture records provenance (store, targetId, planItemId) and nothing else', () => {
+test('claimPromotion then finalizePromotion records provenance (store, targetId, planItemId) and nothing else', () => {
   const base = buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record;
-  const result = promoteCapture(base, {
+  const result = promoteFully(base, {
     promotion: { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-05', planItemId: brainDumpPlanItemId('bidone1') },
     now: T0 + 1, updatedBy: 'd',
   });
@@ -128,7 +136,8 @@ test('promoteCapture records provenance (store, targetId, planItemId) and nothin
   assert.equal(result.record.status, 'promoted');
   assert.equal(result.record.promotion.type, 'schedule');
   assert.equal(result.record.promotion.planItemId, 'bdp1|bidone1');
-  assert.equal(result.record.disposedAt, T0 + 1);
+  assert.equal(result.record.promotionClaim, null);
+  assert.equal(result.record.disposedAt, T0 + 2);
 });
 
 test('delegateCapture stores an optional free-text note, trimmed and capped, with no tracked destination', () => {
@@ -216,11 +225,11 @@ test('untriagedCaptures/triagedCaptures/disposedCaptures sort by creation time w
 test('allCaptures/triagedCaptures/disposedCaptures each filter by status', () => {
   const base = buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record;
   const triaged = triageCapture(base, { important: true, urgent: false, now: T0 + 1, updatedBy: 'd' }).record;
-  const promoted = promoteCapture(triaged, {
-    promotion: { type: 'do-today', store: 'legacy', targetId: '2026-10-01', planItemId: 'bdp1|b1' },
+  const promoted = promoteFully(triaged, {
+    promotion: { type: 'do-today', store: 'legacy', targetId: '2026-10-01', planItemId: 'bdp1|bidone1' },
     now: T0 + 2, updatedBy: 'd',
   }).record;
-  const records = { b1: promoted };
+  const records = { bidone1: promoted };
   assert.equal(allCaptures(records).length, 1);
   assert.equal(untriagedCaptures(records).length, 0);
   assert.equal(triagedCaptures(records).length, 0);
@@ -258,13 +267,31 @@ test('repository.triage/promote/archive/delegate round-trip through persist()', 
   assert.equal(second.reason, 'already-disposed');
 });
 
-test('repository.promote is idempotent at the storage layer too', () => {
+test('repository.claimPromotion + finalizePromotion round-trip and are each idempotent at the storage layer', () => {
   const repo = createBrainDumpRepository({ storage: memory(), now: () => T0, deviceId: () => 'device-1' });
   const { record } = repo.create({ text: 'Ping the landlord' });
   const promotion = { type: 'do-today', store: 'calendar', targetId: 'calplan:2026-10-01', planItemId: brainDumpPlanItemId(record.id) };
-  const first = repo.promote(record.id, { promotion });
-  assert.ok(first.ok);
-  const retry = repo.promote(record.id, { promotion });
+
+  const claimed = repo.claimPromotion(record.id, { promotion });
+  assert.ok(claimed.ok);
+  assert.equal(repo.read(record.id).status, 'untriaged'); // claiming never changes status by itself
+  assert.deepEqual(repo.read(record.id).promotionClaim, { ...promotion, claimedAt: T0, claimedBy: 'device-1' });
+
+  // Re-claiming the SAME target is a no-op success (a retry).
+  const reclaim = repo.claimPromotion(record.id, { promotion });
+  assert.ok(reclaim.ok);
+
+  // Archive refuses outright while the claim is outstanding.
+  const archiveAttempt = repo.archive(record.id);
+  assert.equal(archiveAttempt.ok, false);
+  assert.equal(archiveAttempt.reason, 'promotion-claimed');
+
+  const finalized = repo.finalizePromotion(record.id);
+  assert.ok(finalized.ok);
+  assert.equal(finalized.record.status, 'promoted');
+  assert.equal(finalized.record.promotionClaim, null);
+
+  const retry = repo.finalizePromotion(record.id);
   assert.equal(retry.ok, false);
   assert.equal(retry.reason, 'already-disposed');
   assert.equal(retry.record.promotion.planItemId, promotion.planItemId);
@@ -302,4 +329,119 @@ test('validBrainDumpId matches the same Firebase-key-safe shape every other stor
   assert.equal(validBrainDumpId('has.dot'), false);
   assert.equal(validBrainDumpId('has/slash'), false);
   assert.equal(validBrainDumpId('ab'), false); // too short
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIX FIRST: promote-vs-archive/delegate arbitration (brain-dump-model.js's
+// captureAuthorityRank + claimPromotion/finalizePromotion). These are the
+// pure-model-level proofs; brain-dump-promotion.test.js proves the same
+// invariants at the orchestration layer (capture state AND the destination plan
+// store), and brain-dump-account-isolation.test.js proves the account-switch case.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const PROMO_A = { type: 'do-today', store: 'calendar', targetId: 'calplan:2026-10-01', planItemId: 'bdp1|bidone1' };
+const PROMO_B = { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-10', planItemId: 'bdp1|bidone1' };
+
+test('claimPromotion refuses a DIFFERENT competing claim, but a re-claim of the SAME target is a no-op success', () => {
+  const triaged = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const claimed = claimPromotion(triaged, { promotion: PROMO_A, now: T0 + 2, updatedBy: 'device-1' });
+  assert.ok(claimed.ok);
+
+  const competing = claimPromotion(claimed.record, { promotion: PROMO_B, now: T0 + 3, updatedBy: 'device-2' });
+  assert.equal(competing.ok, false);
+  assert.equal(competing.reason, 'already-claimed');
+  assert.deepEqual(competing.record.promotionClaim, claimed.record.promotionClaim, 'the existing claim is untouched');
+
+  const reclaim = claimPromotion(claimed.record, { promotion: PROMO_A, now: T0 + 4, updatedBy: 'device-1' });
+  assert.ok(reclaim.ok, 're-claiming the SAME target is idempotent, not a conflict');
+});
+
+test('archiveCapture/delegateCapture fail closed — reason "promotion-claimed" — whenever a claim is outstanding', () => {
+  const triaged = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: false, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const claimed = claimPromotion(triaged, { promotion: PROMO_A, now: T0 + 2, updatedBy: 'd' }).record;
+  assert.equal(archiveCapture(claimed, { now: T0 + 3, updatedBy: 'd' }).ok, false);
+  assert.equal(archiveCapture(claimed, { now: T0 + 3, updatedBy: 'd' }).reason, 'promotion-claimed');
+  assert.equal(delegateCapture(claimed, { now: T0 + 3, updatedBy: 'd' }).ok, false);
+  assert.equal(delegateCapture(claimed, { now: T0 + 3, updatedBy: 'd' }).reason, 'promotion-claimed');
+});
+
+test('finalizePromotion without a prior claim refuses with "no-claim"', () => {
+  const triaged = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const result = finalizePromotion(triaged, { now: T0 + 2, updatedBy: 'd' });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'no-claim');
+});
+
+test('merge authority rank: PROMOTED always beats ARCHIVED/DELEGATED, regardless of updatedAt or argument order', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const promoted = promoteFully(base, { promotion: PROMO_A, now: T0 + 2, updatedBy: 'device-a' }).record;
+  // The archive happened LATER in wall-clock time than the promotion — naive LWW
+  // would wrongly pick this one. It must still lose.
+  const archived = archiveCapture(base, { now: T0 + 1000, updatedBy: 'device-b' }).record;
+
+  const mergedPA = mergeCaptureRecords(promoted, archived);
+  const mergedAP = mergeCaptureRecords(archived, promoted);
+  assert.equal(mergedPA.status, 'promoted');
+  assert.equal(mergedAP.status, 'promoted');
+  assert.deepEqual(mergedPA.promotion, promoted.promotion, 'provenance survives the merge');
+  assert.deepEqual(mergedAP.promotion, promoted.promotion);
+});
+
+test('merge authority rank: PROMOTED always beats DELEGATED too, regardless of updatedAt', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: false, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const promoted = promoteFully(base, { promotion: PROMO_A, now: T0 + 2, updatedBy: 'device-a' }).record;
+  const delegated = delegateCapture(base, { delegatedTo: 'Alex', now: T0 + 1000, updatedBy: 'device-b' }).record;
+  assert.equal(mergeCaptureRecords(promoted, delegated).status, 'promoted');
+  assert.equal(mergeCaptureRecords(delegated, promoted).status, 'promoted');
+});
+
+test('merge authority rank: a CLAIM (promotion in progress, plan item may not exist yet) beats ARCHIVED/DELEGATED too', () => {
+  // This is the crash-window case: the plan write has not necessarily happened
+  // yet, but the claim alone must still outrank a concurrent archive/delegate —
+  // see the file banner.
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: false, now: T0 + 1, updatedBy: 'd' }).record;
+  const claimed = claimPromotion(base, { promotion: PROMO_A, now: T0 + 2, updatedBy: 'device-a' }).record;
+  const archived = archiveCapture(base, { now: T0 + 1000, updatedBy: 'device-b' }).record;
+  const merged = mergeCaptureRecords(claimed, archived);
+  assert.ok(merged.promotionClaim, 'the claim survives the merge, not the later archive');
+  assert.equal(merged.status, 'triaged');
+});
+
+test('merge authority rank: a LATE remote snapshot of a stale archived/delegated record cannot resurrect over an already-promoted truth', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const promoted = promoteFully(base, { promotion: PROMO_A, now: T0 + 2, updatedBy: 'device-a' }).record;
+  // A stale snapshot from BEFORE the promotion (lower updatedAt), arriving LATE
+  // over the network, showing the capture as archived from a device that never
+  // saw the promotion.
+  const staleArchived = archiveCapture(base, { now: T0 + 1, updatedBy: 'device-b' }).record;
+  const merged = mergeCaptureRecords(promoted, staleArchived);
+  assert.equal(merged.status, 'promoted');
+  assert.deepEqual(merged.promotion, promoted.promotion);
+});
+
+test('merge: two outstanding claims for DIFFERENT targets converge on the EARLIEST claim, independent of argument order (tie case)', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const claimedA = claimPromotion(base, { promotion: PROMO_A, now: T0 + 10, updatedBy: 'device-a' }).record;
+  const claimedB = claimPromotion(base, { promotion: PROMO_B, now: T0 + 20, updatedBy: 'device-b' }).record;
+  const mergedAB = mergeCaptureRecords(claimedA, claimedB);
+  const mergedBA = mergeCaptureRecords(claimedB, claimedA);
+  assert.deepEqual(mergedAB.promotionClaim, claimedA.promotionClaim, 'earliest claimedAt wins');
+  assert.deepEqual(mergedBA.promotionClaim, claimedA.promotionClaim, 'independent of argument order');
+});
+
+test('merge: an EXACT tie between two different claims (same claimedAt) is still deterministic both ways', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const claimedA = claimPromotion(base, { promotion: PROMO_A, now: T0 + 10, updatedBy: 'device-a' }).record;
+  const claimedB = claimPromotion(base, { promotion: PROMO_B, now: T0 + 10, updatedBy: 'device-b' }).record;
+  const mergedAB = mergeCaptureRecords(claimedA, claimedB);
+  const mergedBA = mergeCaptureRecords(claimedB, claimedA);
+  assert.deepEqual(mergedAB, mergedBA, 'deterministic regardless of which side is "local"');
+});
+
+test('normalizeCapture refuses a promotionClaim on a terminal record, and refuses a malformed claim shape', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const claimed = claimPromotion(base, { promotion: PROMO_A, now: T0 + 2, updatedBy: 'd' }).record;
+  const archived = archiveCapture(base, { now: T0 + 3, updatedBy: 'd' }).record;
+  assert.equal(normalizeCapture({ ...archived, promotionClaim: claimed.promotionClaim }), null, 'a terminal record may never carry a claim');
+  assert.equal(normalizeCapture({ ...claimed, promotionClaim: { ...claimed.promotionClaim, claimedAt: undefined } }), null, 'a malformed claim is refused, not half-trusted');
 });

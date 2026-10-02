@@ -180,3 +180,225 @@ test('two near-simultaneous promotions of the same capture (a two-device race) n
   assert.equal(planAuthority.items.filter(i => i.id === sameDeterministicId).length, 1);
   assert.ok(first.ok);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIX FIRST — REQUIRED CONCURRENCY TESTS (promote vs archive/delegate
+// arbitration). Each asserts BOTH the capture's own state (via repository.read)
+// AND the destination plan store (via planAuthority.items/rawItems), per the
+// review's explicit requirement. These FAIL on 6d71ed16 (pre-fix): that candidate
+// let a later archive/delegate silently discard an already-created plan item's
+// provenance via plain last-write-wins.
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('1. promote vs archive, promote claim wins: plan item exists exactly once, capture converges to promoted, archive does not override', () => {
+  const repository = makeRepository();
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = repository.create({ text: 'Promote wins' });
+  const promoted = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'do-today', now: T0 + 1, deviceId: 'device-1' });
+  assert.ok(promoted.ok);
+
+  const archiveAttempt = repository.archive(record.id, { now: T0 + 2, updatedBy: 'device-2' });
+  assert.equal(archiveAttempt.ok, false);
+  assert.equal(archiveAttempt.reason, 'already-disposed');
+
+  assert.equal(repository.read(record.id).status, 'promoted');
+  assert.equal(planAuthority.items.filter(i => i.id === brainDumpPlanItemId(record.id)).length, 1);
+});
+
+test('2. archive vs promote, archive wins first: no plan item is created, the stale promotion aborts', () => {
+  const repository = makeRepository();
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = repository.create({ text: 'Archive wins' });
+  const archived = repository.archive(record.id, { now: T0 + 1, updatedBy: 'device-2' });
+  assert.ok(archived.ok);
+
+  const staleePromotion = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'do-today', now: T0 + 2, deviceId: 'device-1' });
+  assert.equal(staleePromotion.ok, true);
+  assert.equal(staleePromotion.alreadyDisposed, true);
+
+  assert.equal(repository.read(record.id).status, 'archived');
+  assert.equal(planAuthority.calls.addItem, 0, 'no plan item was ever created');
+  assert.equal(planAuthority.items.length, 0);
+});
+
+test('3. promote vs delegate, promote wins: no delegated terminal state overrides promotion', () => {
+  const repository = makeRepository();
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = repository.create({ text: 'Promote beats delegate' });
+  const promoted = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'do-today', now: T0 + 1, deviceId: 'device-1' });
+  assert.ok(promoted.ok);
+
+  const delegateAttempt = repository.delegate(record.id, { delegatedTo: 'Alex', now: T0 + 2, updatedBy: 'device-2' });
+  assert.equal(delegateAttempt.ok, false);
+  assert.equal(delegateAttempt.reason, 'already-disposed');
+
+  assert.equal(repository.read(record.id).status, 'promoted');
+  assert.equal(repository.read(record.id).delegatedTo, null);
+  assert.equal(planAuthority.items.filter(i => i.id === brainDumpPlanItemId(record.id)).length, 1);
+});
+
+test('4. delegate vs promote, delegate wins first: no plan item is created', () => {
+  const repository = makeRepository();
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = repository.create({ text: 'Delegate wins' });
+  const delegated = repository.delegate(record.id, { delegatedTo: 'Alex', now: T0 + 1, updatedBy: 'device-2' });
+  assert.ok(delegated.ok);
+
+  const stalePromotion = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'do-today', now: T0 + 2, deviceId: 'device-1' });
+  assert.equal(stalePromotion.ok, true);
+  assert.equal(stalePromotion.alreadyDisposed, true);
+
+  assert.equal(repository.read(record.id).status, 'delegated');
+  assert.equal(planAuthority.calls.addItem, 0);
+  assert.equal(planAuthority.items.length, 0);
+});
+
+test('5. two-device simultaneous promote (same destination): one deterministic plan item only', () => {
+  const repository = makeRepository();
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = repository.create({ text: 'Simultaneous promote' });
+  // Both devices race the identical claim (same type -> same deterministic target
+  // and planItemId). The second call observes the first device's already-won
+  // claim (same repository here stands in for "already synced").
+  const deviceOne = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'do-today', now: T0 + 1, deviceId: 'device-1' });
+  const deviceTwo = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'do-today', now: T0 + 2, deviceId: 'device-2' });
+  assert.ok(deviceOne.ok);
+  assert.ok(deviceTwo.ok);
+  assert.equal(planAuthority.calls.addItem, 1, 'only one addItem call across both devices');
+  assert.equal(planAuthority.items.filter(i => i.id === brainDumpPlanItemId(record.id)).length, 1);
+  assert.equal(repository.read(record.id).status, 'promoted');
+});
+
+test('5b. two-device simultaneous promote for DIFFERENT targets: only the winning claim ever creates a plan item', () => {
+  const repository = makeRepository();
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = repository.create({ text: 'Competing targets' });
+  // Device A claims "do today"; device B (racing, before pulling A's claim)
+  // claims a DIFFERENT schedule target for the SAME capture.
+  const claimA = repository.claimPromotion(record.id, {
+    promotion: { type: 'do-today', store: 'calendar', targetId: 'calplan:2026-10-01', planItemId: brainDumpPlanItemId(record.id) },
+    now: T0 + 1, updatedBy: 'device-a',
+  });
+  assert.ok(claimA.ok);
+  const claimB = repository.claimPromotion(record.id, {
+    promotion: { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-10', planItemId: brainDumpPlanItemId(record.id) },
+    now: T0 + 2, updatedBy: 'device-b',
+  });
+  assert.equal(claimB.ok, false);
+  assert.equal(claimB.reason, 'already-claimed', 'B\'s claim lost — A\'s (earlier) claim is the one on record');
+  assert.deepEqual(repository.read(record.id).promotionClaim.targetId, 'calplan:2026-10-01');
+
+  // B's own promoteCaptureToPlan call (for the target it originally wanted) must
+  // not create a plan item at B's target — it lost the claim.
+  const bAttempt = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'schedule', dateKey: '2026-10-10', now: T0 + 3, deviceId: 'device-b' });
+  assert.equal(bAttempt.ok, false);
+  assert.equal(bAttempt.reason, 'already-claimed');
+  assert.equal(planAuthority.calls.addItem, 0, 'B never creates a plan item for the target it lost');
+
+  // A's own call completes the WINNING claim.
+  const aAttempt = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'do-today', now: T0 + 4, deviceId: 'device-a' });
+  assert.ok(aAttempt.ok);
+  assert.equal(planAuthority.items.length, 1);
+  assert.equal(planAuthority.items[0].id, brainDumpPlanItemId(record.id));
+  assert.equal(repository.read(record.id).promotion.targetId, 'calplan:2026-10-01');
+});
+
+test('6. plan-write succeeds, source-finalize is interrupted (crash window): retry recovers, no duplicate, archive/delegate cannot erase the claim', () => {
+  const repository = makeRepository();
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = repository.create({ text: 'Crash window' });
+
+  // Phase 1 (claim) and phase 2 (plan write) happen; phase 3 (finalize) is
+  // simulated as interrupted by calling the phases directly instead of the
+  // full promoteCaptureToPlan() helper.
+  const target = planAuthority.current();
+  const planItemId = brainDumpPlanItemId(record.id);
+  const claimed = repository.claimPromotion(record.id, { promotion: { type: 'do-today', store: target.store, targetId: target.id, planItemId }, now: T0 + 1, updatedBy: 'device-1' });
+  assert.ok(claimed.ok);
+  planAuthority.addItem({ destination: target, item: { id: planItemId, task: record.text, when: '', done: false, doneAt: null, updatedAt: T0 + 1, updatedBy: 'device-1', kind: 'task' }, nowMs: T0 + 1 });
+  // CRASH — finalizePromotion never runs. Capture is still 'triaged' (never even
+  // was, here — still 'untriaged'), with the claim and a REAL plan item both in place.
+  assert.equal(repository.read(record.id).status, 'untriaged');
+  assert.equal(planAuthority.items.length, 1);
+
+  // Archive/delegate must fail closed during this window — the evidence that the
+  // destination exists must not be erased.
+  const archiveDuringWindow = repository.archive(record.id, { now: T0 + 2, updatedBy: 'device-2' });
+  assert.equal(archiveDuringWindow.ok, false);
+  assert.equal(archiveDuringWindow.reason, 'promotion-claimed');
+
+  // RETRY (same or another device) recovers: addItem is not called again, and
+  // finalize completes using the SAME claim.
+  const retry = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'do-today', now: T0 + 3, deviceId: 'device-1' });
+  assert.ok(retry.ok);
+  assert.equal(planAuthority.calls.addItem, 1, 'the plan item was not re-created on retry');
+  assert.equal(planAuthority.items.length, 1, 'still exactly one plan item');
+  assert.equal(repository.read(record.id).status, 'promoted');
+  assert.equal(repository.read(record.id).promotion.planItemId, planItemId);
+});
+
+test('7. a late remote snapshot carrying a stale archived/delegated record cannot resurrect over an already-promoted capture', () => {
+  const repository = makeRepository();
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = repository.create({ text: 'Late stale snapshot' });
+  const promoted = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'do-today', now: T0 + 1, deviceId: 'device-1' });
+  assert.ok(promoted.ok);
+
+  // A remote snapshot from a peer that archived the capture BEFORE ever seeing
+  // the promotion (lower updatedAt), delivered late over the network.
+  const staleArchived = { ...repository.read(record.id), status: 'archived', promotion: null, promotionClaim: null, disposedAt: T0, updatedAt: T0, updatedBy: 'device-2' };
+  const mergeResult = repository.mergeRemote(record.id, staleArchived);
+  assert.equal(mergeResult.changed, false, 'the stale archived snapshot must not overwrite the promoted truth');
+  assert.equal(repository.read(record.id).status, 'promoted');
+  assert.deepEqual(repository.read(record.id).promotion, promoted.record.promotion);
+});
+
+test('8. equal-authority tie: a deterministic result independent of which claim arrives first', () => {
+  const planAuthority = makeFakePlanAuthority();
+  const target = planAuthority.current();
+
+  function freshRepository(id) {
+    const repo = makeRepository();
+    repo.create({ id, text: 'Tie case', now: T0, updatedBy: 'device-1' });
+    return repo;
+  }
+
+  const id = 'btiecase1';
+  const planItemId = brainDumpPlanItemId(id);
+  const claimA = { type: 'do-today', store: target.store, targetId: target.id, planItemId };
+  const claimB = { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-20', planItemId };
+  const base = freshRepository(id).read(id);
+  const recordA = { ...base, promotionClaim: { ...claimA, claimedAt: T0 + 5, claimedBy: 'device-a' }, updatedAt: T0 + 5, updatedBy: 'device-a' };
+  const recordB = { ...base, promotionClaim: { ...claimB, claimedAt: T0 + 5, claimedBy: 'device-b' }, updatedAt: T0 + 5, updatedBy: 'device-b' };
+
+  // Order 1: A arrives, then B (the tie).
+  const repoAB = freshRepository(id);
+  repoAB.mergeRemote(id, recordA);
+  const resultAB = repoAB.mergeRemote(id, recordB);
+
+  // Order 2: B arrives, then A (the same tie, reversed order).
+  const repoBA = freshRepository(id);
+  repoBA.mergeRemote(id, recordB);
+  const resultBA = repoBA.mergeRemote(id, recordA);
+
+  assert.deepEqual(resultAB.record.promotionClaim, resultBA.record.promotionClaim, 'deterministic regardless of arrival order');
+});
+
+test('10. Schedule promotion gets the same crash/duplication guarantees as Do Today', () => {
+  const repository = makeRepository();
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = repository.create({ text: 'Scheduled, then archived, then retried' });
+
+  const scheduled = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'schedule', dateKey: '2026-10-15', when: '09:00', now: T0 + 1, deviceId: 'device-1' });
+  assert.ok(scheduled.ok);
+
+  const archiveAttempt = repository.archive(record.id, { now: T0 + 2, updatedBy: 'device-2' });
+  assert.equal(archiveAttempt.ok, false);
+  assert.equal(archiveAttempt.reason, 'already-disposed');
+
+  const retry = promoteCaptureToPlan({ repository, planAuthority, id: record.id, type: 'schedule', dateKey: '2026-10-15', when: '09:00', now: T0 + 3, deviceId: 'device-1' });
+  assert.ok(retry.ok);
+  assert.equal(retry.alreadyDisposed, true);
+  assert.equal(planAuthority.calls.addItem, 1, 'Schedule is idempotent under retry exactly like Do Today');
+  assert.equal(repository.read(record.id).status, 'promoted');
+});

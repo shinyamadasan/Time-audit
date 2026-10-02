@@ -12,13 +12,41 @@
 //
 // ── lifecycle ─────────────────────────────────────────────────────────────────
 //
-//   untriaged -> triaged -> { promoted | archived | delegated }
+//   untriaged -> triaged -> [claimed] -> { promoted | archived | delegated }
 //
 // `promoted` / `archived` / `delegated` are TERMINAL dispositions: once set, the
 // record is done being an actionable Brain Dump item. Nothing here ever deletes a
 // capture — there is no "delete" action in V1 — so every record that has ever
 // existed stays discoverable by its own id, with its full history on it. Absence
 // is therefore trivially never deletion: no caller ever drops a key from the map.
+//
+// ── the promote/archive/delegate arbitration (FIX FIRST) ────────────────────
+// Promotion is the only disposition with an external, irreversible side effect (a
+// real plan item, via Plan Authority) that this module must never try to undo —
+// there is no safe authoritative deletion contract for a plan item. Archive and
+// delegate have no side effect at all: they are a status flag, nothing more. That
+// asymmetry is why "last write wins" (fine for an ordinary field edit) is UNSAFE
+// for terminal dispositions: a later archive could otherwise discard a capture's
+// only record that a real plan item already exists, stranding it with no
+// provenance (exactly the contradiction this phase closes).
+//
+// The fix is a one-field claim, written BEFORE the plan write:
+//   promotionClaim: { type, store, targetId, planItemId, claimedAt, claimedBy } | null
+// A claim is recorded on a non-terminal capture the instant a promotion begins —
+// before Plan Authority is ever touched — so the "decide the winner" step happens
+// first, and only the winning path's side effect may proceed:
+//   - archiveCapture()/delegateCapture() refuse outright (fail closed) whenever a
+//     promotionClaim is present, regardless of which arrived "first" by clock time.
+//   - a claim, once finalized (promoteCapture()), clears to null; the terminal
+//     `promoted` status and its `promotion` provenance are what survive from then on.
+// Per-record convergence (mergeCaptureRecords) ranks authority instead of using
+// plain recency: promoted (3) > claimed (2) > archived/delegated (1) > active (0).
+// A higher rank always wins the merge outright, REGARDLESS of updatedAt — so a
+// late-arriving stale archive/delegate can never resurrect over an already-claimed
+// or already-promoted truth, and a promotion claim can never be silently discarded
+// by a peer that simply raced an archive/delegate against it. Within the same rank,
+// the existing LWW + canonical tie-break still applies (two claims: earliest
+// claimedAt wins, so only one target is ever authoritative for one capture).
 //
 // ── delegate is a disposition, not a destination (deliberate V1 scope) ──────
 // This codebase has no existing model for handing work to another person — no
@@ -117,6 +145,7 @@ export function buildCapture(input = {}) {
       urgent: null,
       triagedAt: null,
       disposedAt: null,
+      promotionClaim: null,
       promotion: null,
       delegatedTo: null,
     },
@@ -152,6 +181,26 @@ export function triageCapture(current, patch = {}) {
   };
 }
 
+function validPromotion(promotion) {
+  return !!promotion && PROMOTION_TYPES.has(promotion.type)
+    && typeof promotion.store === 'string' && !!promotion.store
+    && typeof promotion.targetId === 'string' && !!promotion.targetId
+    && typeof promotion.planItemId === 'string' && !!promotion.planItemId;
+}
+
+/** A capture's current arbitration authority. Higher always wins a merge outright
+ *  (see mergeCaptureRecords) — this is the ranking, not the tie-break within it. */
+function captureAuthorityRank(record) {
+  if (record.status === 'promoted') return 3;
+  if (record.promotionClaim) return 2;
+  if (record.status === 'archived' || record.status === 'delegated') return 1;
+  return 0;
+}
+
+/** Archive/delegate (no side effect, so a single atomic write is safe). Refuses
+ *  outright — fail closed — whenever the capture is already disposed of OR a
+ *  promotion claim is outstanding: a promotion that has already started (even if
+ *  its plan write has not happened yet) always wins. See the file banner. */
 function disposeCapture(current, status, extra, patch) {
   const base = normalizeCapture(current);
   if (!base) return { ok: false, reason: 'invalid-input', field: 'record' };
@@ -163,28 +212,73 @@ function disposeCapture(current, status, extra, patch) {
   // caller (repository) uses this to recognize "already promoted" on a retry
   // without ever creating a second disposition for one capture.
   if (TERMINAL_STATUSES.has(base.status)) return { ok: false, reason: 'already-disposed', record: base };
+  // A promotion claim, even an unfinished one, always wins — see the file banner.
+  if (base.promotionClaim) return { ok: false, reason: 'promotion-claimed', record: base };
   return { ok: true, record: { ...base, status, disposedAt: now, updatedAt: now, updatedBy: by, ...extra } };
 }
 
-/** Marks a capture promoted into an existing plan via Plan Authority.
- *  `promotion` is PROVENANCE ONLY (which plan target and item it became) — this
- *  function never touches a plan itself; the caller writes the plan item first
- *  (via Plan Authority) and only then calls this to record that it happened.
+/** PHASE 1 of promotion: records intent BEFORE Plan Authority is ever touched, so
+ *  the winner of a promote-vs-archive/delegate race is decided before either
+ *  side's effect becomes real. Does not change `status` — the capture stays
+ *  `triaged` (still visibly actionable) until finalizePromotion() lands.
+ *  Idempotent: re-claiming the SAME (store, targetId, planItemId) — a retry after
+ *  a crash, or this device's own repeated attempt — is a no-op success. A
+ *  DIFFERENT claim already in progress refuses with 'already-claimed', so only one
+ *  target is ever authoritative for one capture (never two independently
+ *  authoritative promotion attempts).
  *  @param {{type:'do-today'|'schedule', store:string, targetId:string, planItemId:string}} promotion */
-export function promoteCapture(current, { promotion, now, updatedBy } = {}) {
-  if (!promotion || !PROMOTION_TYPES.has(promotion.type)) return { ok: false, reason: 'invalid-input', field: 'promotion' };
-  if (typeof promotion.store !== 'string' || !promotion.store) return { ok: false, reason: 'invalid-input', field: 'promotion.store' };
-  if (typeof promotion.targetId !== 'string' || !promotion.targetId) return { ok: false, reason: 'invalid-input', field: 'promotion.targetId' };
-  if (typeof promotion.planItemId !== 'string' || !promotion.planItemId) return { ok: false, reason: 'invalid-input', field: 'promotion.planItemId' };
-  return disposeCapture(current, 'promoted', {
-    promotion: {
-      type: promotion.type,
-      store: promotion.store,
-      targetId: promotion.targetId,
-      planItemId: promotion.planItemId,
-      promotedAt: timestamp(now) || now,
+export function claimPromotion(current, { promotion, now, updatedBy } = {}) {
+  const base = normalizeCapture(current);
+  if (!base) return { ok: false, reason: 'invalid-input', field: 'record' };
+  if (!validPromotion(promotion)) return { ok: false, reason: 'invalid-input', field: 'promotion' };
+  const at = timestamp(now);
+  if (!at) return { ok: false, reason: 'invalid-input', field: 'now' };
+  const by = writer(updatedBy);
+  if (!by) return { ok: false, reason: 'invalid-input', field: 'updatedBy' };
+  if (TERMINAL_STATUSES.has(base.status)) return { ok: false, reason: 'already-disposed', record: base };
+  const existing = base.promotionClaim;
+  if (existing) {
+    const same = existing.store === promotion.store && existing.targetId === promotion.targetId && existing.planItemId === promotion.planItemId;
+    if (same) return { ok: true, record: base };
+    return { ok: false, reason: 'already-claimed', record: base };
+  }
+  return {
+    ok: true,
+    record: {
+      ...base,
+      promotionClaim: { type: promotion.type, store: promotion.store, targetId: promotion.targetId, planItemId: promotion.planItemId, claimedAt: at, claimedBy: by },
+      updatedAt: at,
+      updatedBy: by,
     },
-  }, { now, updatedBy });
+  };
+}
+
+/** PHASE 2 of promotion: finalizes using the capture's OWN recorded claim — never
+ *  a freshly-passed promotion object — so finalizing can never diverge from what
+ *  was actually claimed (and, by the time this runs, actually created). Idempotent:
+ *  an already-promoted capture is reported, never re-finalized. */
+export function finalizePromotion(current, { now, updatedBy } = {}) {
+  const base = normalizeCapture(current);
+  if (!base) return { ok: false, reason: 'invalid-input', field: 'record' };
+  const at = timestamp(now);
+  if (!at) return { ok: false, reason: 'invalid-input', field: 'now' };
+  const by = writer(updatedBy);
+  if (!by) return { ok: false, reason: 'invalid-input', field: 'updatedBy' };
+  if (TERMINAL_STATUSES.has(base.status)) return { ok: false, reason: 'already-disposed', record: base };
+  if (!base.promotionClaim) return { ok: false, reason: 'no-claim', record: base };
+  const claim = base.promotionClaim;
+  return {
+    ok: true,
+    record: {
+      ...base,
+      status: 'promoted',
+      promotion: { type: claim.type, store: claim.store, targetId: claim.targetId, planItemId: claim.planItemId, promotedAt: at },
+      promotionClaim: null,
+      disposedAt: at,
+      updatedAt: at,
+      updatedBy: by,
+    },
+  };
 }
 
 /** Marks a capture archived. No plan is touched, nothing is deleted — the record
@@ -227,6 +321,20 @@ export function normalizeCapture(value) {
   if (terminal && !timestamp(value.disposedAt)) return null;
   if (!terminal && value.disposedAt !== null) return null;
 
+  // A promotion claim only ever exists on a non-terminal capture — once finalized
+  // (or if ever archived/delegated, which refuses while a claim is outstanding —
+  // see disposeCapture), the claim is cleared. A terminal record carrying one is malformed.
+  let promotionClaim = null;
+  if (value.promotionClaim !== null && value.promotionClaim !== undefined) {
+    if (terminal) return null;
+    const c = value.promotionClaim;
+    if (!validPromotion(c)) return null;
+    if (!timestamp(c.claimedAt)) return null;
+    const claimedBy = writer(c.claimedBy);
+    if (!claimedBy) return null;
+    promotionClaim = { type: c.type, store: c.store, targetId: c.targetId, planItemId: c.planItemId, claimedAt: c.claimedAt, claimedBy };
+  }
+
   let promotion = null;
   if (value.status === 'promoted') {
     const p = value.promotion;
@@ -254,6 +362,7 @@ export function normalizeCapture(value) {
     urgent: value.urgent === true || value.urgent === false ? value.urgent : null,
     triagedAt: timestamp(value.triagedAt) || null,
     disposedAt: timestamp(value.disposedAt) || null,
+    promotionClaim,
     promotion,
     delegatedTo,
   };
@@ -269,19 +378,37 @@ function canonical(value) {
   return JSON.stringify(value);
 }
 
-/** Per-record convergence. The same algorithm every other store in this codebase
- *  uses (plan items, commitments): highest updatedAt wins; an exact tie is broken
- *  by a canonical form of the record, so two devices racing a triage or a
- *  disposition in the same millisecond still agree, with no coordination. A
- *  disposition (promote/archive/delegate) is an ordinary later write by this
- *  rule — it can win or lose a race deterministically, but it can never be
- *  silently undone by a stale peer that simply never mentions it. */
+/** Per-record convergence. Unlike an ordinary field edit (where highest updatedAt
+ *  wins, as everywhere else in this codebase), a terminal disposition is ranked by
+ *  AUTHORITY first (captureAuthorityRank: promoted > claimed > archived/delegated >
+ *  active) — a higher rank wins the merge outright, regardless of updatedAt. This
+ *  is what makes the promote-vs-archive/delegate race deterministic and safe: a
+ *  real plan item, once it exists, can never be stranded by a merge that happens to
+ *  pick a "later" archive/delegate write instead (see the file banner).
+ *  Within the SAME rank, ties are broken deterministically:
+ *    - two outstanding claims: the EARLIEST claimedAt wins, so only one target is
+ *      ever authoritative for one capture (an exact tie falls through to the
+ *      canonical tie-break, same as everywhere else);
+ *    - every other same-rank case (two actives, two promoted, two archived/delegated):
+ *      highest updatedAt wins, exact tie broken by a canonical form of the record —
+ *      the same algorithm plan items and commitments already use, so two devices
+ *      racing an ordinary edit in the same millisecond still agree, with no
+ *      coordination. Deterministic independent of arrival order either way. */
 export function mergeCaptureRecords(localValue, remoteValue) {
   const local = normalizeCapture(localValue);
   const remote = normalizeCapture(remoteValue);
   if (!local) return remote;
   if (!remote) return local;
-  if (local.updatedAt !== remote.updatedAt) return remote.updatedAt > local.updatedAt ? remote : local;
+  const localRank = captureAuthorityRank(local);
+  const remoteRank = captureAuthorityRank(remote);
+  if (localRank !== remoteRank) return remoteRank > localRank ? remote : local;
+  if (localRank === 2) {
+    const a = local.promotionClaim.claimedAt;
+    const b = remote.promotionClaim.claimedAt;
+    if (a !== b) return a < b ? local : remote;
+  } else if (local.updatedAt !== remote.updatedAt) {
+    return remote.updatedAt > local.updatedAt ? remote : local;
+  }
   return compareStrings(canonical(local), canonical(remote)) >= 0 ? local : remote;
 }
 
@@ -343,9 +470,9 @@ export function quadrantOf(record) {
 
 const api = {
   BRAIN_DUMP_SCHEMA_VERSION, BRAIN_DUMP_STATUSES, TERMINAL_STATUSES, PROMOTION_TYPES, BRAIN_DUMP_PLAN_ITEM_PREFIX,
-  validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, promoteCapture, archiveCapture, delegateCapture,
-  normalizeCapture, mergeCaptureRecords, mergeCaptureMaps, allCaptures, untriagedCaptures, triagedCaptures,
-  disposedCaptures, quadrantOf,
+  validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, claimPromotion, finalizePromotion,
+  archiveCapture, delegateCapture, normalizeCapture, mergeCaptureRecords, mergeCaptureMaps, allCaptures,
+  untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
 };
 globalThis.BrainDumpModel = api;
 export default api;

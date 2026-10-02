@@ -231,6 +231,42 @@ test('account switch mid-capture: a capture created right before a switch still 
   assert.equal(device.repository.read(record.id)?.text, 'Created right before switching');
 });
 
+test('9. account switch during a claimed promotion: a stale callback cannot write/promote under another room', async () => {
+  // FIX FIRST — promote-vs-archive/delegate arbitration. A promotion claim made
+  // under account A, followed by a direct switch to B (no sign-out), must never
+  // let a late-arriving callback from A's room finalize/promote anything into B's
+  // active cache — the same roomOwnsCache() discipline every write already uses,
+  // now exercised against claimPromotion/finalizePromotion specifically.
+  const db = makeDatabase();
+  const device = makeDevice(db);
+  await device.switchTo('account-a');
+  const { record } = device.repository.create({ text: 'Claimed under A' });
+  const claimed = device.repository.claimPromotion(record.id, {
+    promotion: { type: 'do-today', store: 'legacy', targetId: '2026-10-01', planItemId: `bdp1|${record.id}` },
+  });
+  assert.ok(claimed.ok);
+  await device.bridge.syncCapture(record.id);
+  await settle();
+
+  // Direct switch, no teardown — the historical bug's exact reproduction shape.
+  await device.switchTo('account-b');
+  await settle();
+  assert.equal(Object.keys(device.repository.listAllRaw()).length, 0, 'B\'s active cache starts empty');
+
+  // A stale callback from A's room (e.g. another of A's own devices finalizing
+  // the SAME claim) must be dropped, never merged into B's now-active cache.
+  device.bridge.handleRemoteSnapshot({
+    [record.id]: { ...claimed.record, status: 'promoted', promotion: { type: 'do-today', store: 'legacy', targetId: '2026-10-01', planItemId: `bdp1|${record.id}`, promotedAt: T0 + 50 }, promotionClaim: null, disposedAt: T0 + 50, updatedAt: T0 + 50 },
+  }, ROOM('account-a'));
+  assert.equal(device.repository.read(record.id), null, 'B never sees A\'s capture at all, claimed or finalized');
+
+  // And B's own finalizePromotion/claimPromotion calls for A's id must refuse —
+  // there is nothing to act on under B's active (empty) cache.
+  const stillUnderB = device.repository.finalizePromotion(record.id);
+  assert.equal(stillUnderB.ok, false);
+  assert.equal(stillUnderB.reason, 'not-found');
+});
+
 test('the pre-scoping (unsuffixed) storage key is never touched by a scoped repository', async () => {
   const storage = memory();
   storage.setItem('ta3-brain-dump-v1', JSON.stringify({ schemaVersion: 1, captures: { legacycap1: { id: 'legacycap1' } } }));

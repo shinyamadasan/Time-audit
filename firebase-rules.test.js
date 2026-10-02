@@ -247,11 +247,55 @@ test('calendar authority facts — exact owner-create contract and immutable chi
   assert.equal(canWrite(existing, A, `/rooms/uid_alice_uid/calendarPlanAuthority/${CUTOVER.id}`, null), false);
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Brain Dump + Eisenhower V1 — rooms/$roomId/brainDump/<captureId>
+// Mirrors 'commitments' exactly: owner-only write via the room-level $roomId
+// shape, no calendar-cutover barrier (never day-scoped), no extra .validate
+// (same minimal pattern commitments uses — client-side validation only).
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('brainDump — A. the rightful room owner may read and write its own captures', () => {
+  const empty = { rooms: { uid_alice_uid: {} } };
+  assert.equal(canWrite(empty, A, '/rooms/uid_alice_uid/brainDump/cap1', { text: 'Call the vet', status: 'untriaged' }), true, 'owner creates a capture');
+  const withCapture = { rooms: { uid_alice_uid: { brainDump: { cap1: { text: 'Call the vet', status: 'untriaged' } } } } };
+  assert.equal(canRead(withCapture, A, '/rooms/uid_alice_uid/brainDump'), true, 'owner reads its own brainDump subtree');
+  assert.equal(canRead(withCapture, A, '/rooms/uid_alice_uid/brainDump/cap1'), true, 'owner reads one capture');
+  assert.equal(canWrite(withCapture, A, '/rooms/uid_alice_uid/brainDump/cap1', { text: 'Call the vet', status: 'archived' }), true, 'owner updates its own capture');
+});
+
+test('brainDump — B. a foreign account cannot read or write another room\'s brainDump', () => {
+  const withCapture = { rooms: { uid_alice_uid: { brainDump: { cap1: { text: 'Private thought', status: 'untriaged' } } } } };
+  assert.equal(canRead(withCapture, C, '/rooms/uid_alice_uid/brainDump'), false, 'outsider cannot read the subtree');
+  assert.equal(canRead(withCapture, C, '/rooms/uid_alice_uid/brainDump/cap1'), false, 'outsider cannot read one capture');
+  assert.equal(canWrite(withCapture, C, '/rooms/uid_alice_uid/brainDump/cap1', { text: 'Hijacked', status: 'untriaged' }), false, 'outsider cannot overwrite');
+  assert.equal(canWrite({ rooms: { uid_alice_uid: {} } }, C, '/rooms/uid_alice_uid/brainDump/cap2', { text: 'Injected', status: 'untriaged' }), false, 'outsider cannot create a new capture in A\'s room');
+});
+
+test('brainDump — C. unauthenticated writes are denied the same as every other owner-only room path', () => {
+  const empty = { rooms: { uid_alice_uid: {} } };
+  assert.equal(canWrite(empty, null, '/rooms/uid_alice_uid/brainDump/cap1', { text: 'x', status: 'untriaged' }), false, 'unauthenticated write denied');
+  assert.equal(canRead(empty, null, '/rooms/uid_alice_uid/brainDump'), false, 'unauthenticated read denied');
+  // No calendar-cutover barrier applies to brainDump (unlike plans/operationalPlans) — it is
+  // never day-scoped, exactly like commitments. Confirmed by the same owner still writing
+  // after a cutover fact exists.
+  const afterCutover = { rooms: { uid_alice_uid: { calendarPlanAuthority: { [CUTOVER.id]: CUTOVER } } } };
+  assert.equal(canWrite(afterCutover, A, '/rooms/uid_alice_uid/brainDump/cap1', { text: 'still writable', status: 'untriaged' }), true, 'brainDump is not subject to the calendar cutover barrier');
+});
+
+test('brainDump — D. adding this rule disturbs no other room path (see "calendar barrier preserves every audited ordinary owner-write room path" below, which now includes brainDump in its own enumerated list)', () => {
+  // Explicit, narrow proof in addition to the shared enumerated-array test: a sibling path
+  // (commitments) is unaffected by the brainDump rule's presence.
+  const root = { rooms: { uid_alice_uid: { brainDump: { cap1: { text: 'x' } }, commitments: { c1: { title: 'y' } } } } };
+  assert.equal(canWrite(root, A, '/rooms/uid_alice_uid/commitments/c1', { title: 'still owner-writable' }), true);
+  assert.equal(canWrite(root, C, '/rooms/uid_alice_uid/commitments/c1', { title: 'hijack' }), false);
+});
+
 test('calendar barrier preserves every audited ordinary owner-write room path', () => {
   const ordinary = [
     'timer', 'entries', 'intention', 'devices', 'settings', 'templates', 'templatesSavedAt',
     'breakState', 'awayState', 'reviews', 'weeklyReviews', 'focusRedemptions', 'coarseLifeEvidence',
     'dayBoundaryRevisions', 'commitments', 'planByDeadlineRevisions', 'intentionalOffDays', 'calendarPlans',
+    'brainDump',
   ];
   const root = { rooms: { uid_alice_uid: { calendarPlanAuthority: { [CUTOVER.id]: CUTOVER } } } };
   for (const child of ordinary) {

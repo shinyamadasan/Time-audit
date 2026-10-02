@@ -23,7 +23,7 @@ const ROOM = 'uid_account-a';
 const at = (date, hhmm) => Date.parse(`${date}T${hhmm}:00+08:00`);
 const SUN = '2026-09-27';
 const MON = '2026-09-28';
-const TOKEN = '20261001-daily-plan-ux-v2-time-ranges-extended-my-day1';
+const TOKEN = '20261002-brain-dump-eisenhower-v1-fix1';
 
 const BOUNDARY_ID = 'r-1800';
 const boundaryStore = () => JSON.stringify({ schemaVersion: 1, revisions: {
