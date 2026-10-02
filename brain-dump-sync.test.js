@@ -20,6 +20,7 @@ const memory = () => {
   const map = new Map();
   return { getItem: k => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, v), removeItem: k => map.delete(k) };
 };
+const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve)); };
 
 /** A minimal in-memory room: one subtree, transaction() + on('value')/off(). */
 function makeRoom() {
@@ -180,8 +181,8 @@ test('claimPromotionRemote establishes the claim via a real transaction and merg
   repository.create({ id: 'bcapture1', text: 'Water the plants' });
   const result = await bridge.claimPromotionRemote('bcapture1', PROMO_DO_TODAY);
   assert.ok(result.ok);
-  assert.deepEqual(room.raw().bcapture1.promotionClaim, { ...PROMO_DO_TODAY, claimedAt: T0, claimedBy: 'device-1' });
-  assert.deepEqual(repository.read('bcapture1').promotionClaim, { ...PROMO_DO_TODAY, claimedAt: T0, claimedBy: 'device-1' });
+  assert.deepEqual(room.raw().bcapture1.promotionClaim, { ...PROMO_DO_TODAY, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1' });
+  assert.deepEqual(repository.read('bcapture1').promotionClaim, { ...PROMO_DO_TODAY, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1' });
 });
 
 test('claimPromotionRemote is REFUSED — reason "already-disposed" — when the AUTHORITATIVE remote is already archived, even though this device\'s local cache still says triaged', async () => {
@@ -259,7 +260,7 @@ test('two devices racing claimPromotionRemote for the SAME capture: only the fir
   assert.equal(deviceTwo.repository.read('bcapture1').promotionClaim.targetId, '2026-10-01', 'device two converges to the WINNING claim, not its own');
 });
 
-test('claimPromotionRemote resolves to a bounded "offline" refusal, never hangs forever, when the transaction genuinely never settles', async () => {
+test('claimPromotionRemote resolves to a bounded "pending" (never "offline"/"failed") when the transaction genuinely never settles — outcome stays UNKNOWN, not false failure', async () => {
   const hangingRoom = {
     ref: {
       child() { return this; },
@@ -271,6 +272,192 @@ test('claimPromotionRemote resolves to a bounded "offline" refusal, never hangs 
   repository.create({ id: 'bcapture1', text: 'Hangs forever' });
   const result = await bridge.claimPromotionRemote('bcapture1', PROMO_DO_TODAY);
   assert.equal(result.ok, false);
-  assert.equal(result.reason, 'offline');
+  assert.equal(result.reason, 'pending', 'UNKNOWN outcome, never a false definitive failure');
   assert.equal(repository.read('bcapture1').promotionClaim, null);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIX FIRST round 3 — the transaction is NEVER abandoned merely because the
+// foreground caller timed out. A delayable (not merely never-settling) room:
+// the transaction genuinely commits/aborts LATER, after this call already
+// returned 'pending', and that late settlement must still be processed.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** A room whose transaction() only settles when the test explicitly releases
+ *  it — unlike the never-settling Promise above, this one DOES eventually
+ *  resolve, modeling a genuinely slow (not permanently dead) round trip. */
+/** Unlike a single `release` slot, this QUEUES every in-flight transaction()
+ *  call, so a second transaction (e.g. an ordinary archive push) started while
+ *  the first (the original claim) is still unresolved never orphans it by
+ *  overwriting its resolver. releaseOldest()/releaseNewest() pick which queued
+ *  one settles now, by FIFO/LIFO order — tests pick whichever matches the
+ *  real-world ordering they are modeling. */
+function makeDelayableRoom() {
+  const store = {};
+  const listeners = new Set();
+  const queue = []; // { run }
+  const clone = v => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
+  function notify() { listeners.forEach(fn => fn({ val: () => clone(store) })); }
+  function makeRef(segments = []) {
+    return {
+      child(seg) { return makeRef([...segments, seg]); },
+      on(_event, fn) { listeners.add(fn); fn({ val: () => clone(store) }); },
+      off() { listeners.clear(); },
+      transaction(updateFn) {
+        return new Promise(resolve => {
+          queue.push({
+            run: () => {
+              if (segments.length !== 2 || segments[0] !== BRAIN_DUMP_REMOTE_PATH) { resolve({ committed: false }); return; }
+              const id = segments[1];
+              const next = updateFn(clone(store[id]));
+              if (next === undefined) { resolve({ committed: false, snapshot: { val: () => clone(store[id]) } }); return; }
+              store[id] = clone(next);
+              notify();
+              resolve({ committed: true, snapshot: { val: () => clone(store[id]) } });
+            },
+          });
+        });
+      },
+    };
+  }
+  function releaseAt(index) {
+    if (index < 0 || index >= queue.length) return false;
+    const [entry] = queue.splice(index, 1);
+    entry.run();
+    return true;
+  }
+  return {
+    ref: makeRef(),
+    raw: () => clone(store),
+    seed(id, record) { store[id] = clone(record); },
+    release() { return releaseAt(0); }, // FIFO default — the ORIGINAL (oldest) transaction
+    releaseOldest() { return releaseAt(0); },
+    releaseNewest() { return releaseAt(queue.length - 1); },
+  };
+}
+
+test('A. timeout -> late COMMIT: no Plan Authority before commit; once the late claim lands, onRemoteChange fires with the authoritative claim', async () => {
+  const room = makeDelayableRoom();
+  const { repository, bridge } = makeHarness({ roomRef: room.ref, claimTimeoutMs: 20 });
+  repository.create({ id: 'bcapture1', text: 'Late commit' });
+
+  const pending = await bridge.claimPromotionRemote('bcapture1', PROMO_DO_TODAY);
+  assert.equal(pending.ok, false);
+  assert.equal(pending.reason, 'pending');
+  assert.equal(repository.read('bcapture1').promotionClaim, null, 'nothing local yet — no fake claim');
+
+  room.release(); // the "server" finally answers
+  await settle();
+  assert.ok(repository.read('bcapture1').promotionClaim, 'the late-settled authoritative claim is now reflected locally');
+  assert.deepEqual(repository.read('bcapture1').promotionClaim.targetId, PROMO_DO_TODAY.targetId);
+});
+
+test('B. timeout -> Archive wins before the late transaction runs: transaction aborts, zero plan item, capture ends up archived', async () => {
+  const room = makeDelayableRoom();
+  const { repository, bridge } = makeHarness({ roomRef: room.ref, claimTimeoutMs: 20 });
+  repository.create({ id: 'bcapture1', text: 'Archived before late settlement' });
+
+  const pending = await bridge.claimPromotionRemote('bcapture1', PROMO_DO_TODAY);
+  assert.equal(pending.reason, 'pending');
+
+  // While the ORIGINAL transaction is still unresolved, a DIFFERENT push
+  // (archive, via the ordinary pushCapture path) reaches the authoritative
+  // remote FIRST — its own transaction is released immediately, leaving the
+  // ORIGINAL claim's transaction still queued, untouched.
+  repository.archive('bcapture1');
+  const archivePush = bridge.syncCapture('bcapture1');
+  room.releaseNewest();
+  await archivePush;
+  assert.equal(room.raw().bcapture1.status, 'archived');
+
+  // NOW the original (still-pending) transaction finally runs its update
+  // function against the archived remote — arbitratePromotionClaim refuses.
+  room.releaseOldest();
+  await settle();
+  assert.equal(repository.read('bcapture1').status, 'archived', 'the late-settling claim attempt never overrides the authoritative archive');
+  assert.equal(repository.read('bcapture1').promotionClaim, null);
+});
+
+test('C. timeout -> Delegate wins before the late transaction runs: delegatedTo preserved, zero plan item', async () => {
+  const room = makeDelayableRoom();
+  const { repository, bridge } = makeHarness({ roomRef: room.ref, claimTimeoutMs: 20 });
+  repository.create({ id: 'bcapture1', text: 'Delegated before late settlement' });
+
+  const pending = await bridge.claimPromotionRemote('bcapture1', PROMO_DO_TODAY);
+  assert.equal(pending.reason, 'pending');
+
+  repository.delegate('bcapture1', { delegatedTo: 'Alex' });
+  const delegatePush = bridge.syncCapture('bcapture1');
+  room.releaseNewest();
+  await delegatePush;
+
+  room.releaseOldest();
+  await settle();
+  assert.equal(repository.read('bcapture1').status, 'delegated');
+  assert.equal(repository.read('bcapture1').delegatedTo, 'Alex');
+  assert.equal(repository.read('bcapture1').promotionClaim, null);
+});
+
+test('E. timeout -> late claim settles AFTER the account has switched away: never merged into the (now-wrong) active cache', async () => {
+  const room = makeDelayableRoom();
+  const storage = memory();
+  const env = { owner: 'uid_a' };
+  const repository = createBrainDumpRepository({ storage, getOwner: () => env.owner, now: () => T0, deviceId: () => 'device-1' });
+  const bridge = createBrainDumpSyncBridge({ repository, getRoomRef: () => room.ref, getRoomId: () => env.owner, now: () => T0, deviceId: () => 'device-1', claimTimeoutMs: 20 });
+  repository.create({ id: 'bcapture1', text: 'Account switches mid-flight' });
+
+  const pending = await bridge.claimPromotionRemote('bcapture1', PROMO_DO_TODAY);
+  assert.equal(pending.reason, 'pending');
+
+  env.owner = 'uid_b'; // direct switch, no sign-out — the historical bug shape
+  room.release();
+  await settle();
+
+  assert.equal(repository.read('bcapture1'), null, 'B\'s now-active cache never receives A\'s claim');
+});
+
+test('H. a late transaction that definitively aborts (not because of a race, but a structural refusal) still clears the local pending view once observed', async () => {
+  const room = makeDelayableRoom();
+  const { repository, bridge } = makeHarness({ roomRef: room.ref, claimTimeoutMs: 20 });
+  repository.create({ id: 'bcapture1', text: 'Structural refusal' });
+  room.seed('bcapture1', {
+    schemaVersion: 1, id: 'bcapture1', text: 'Structural refusal', createdAt: T0, updatedAt: T0, updatedBy: 'device-2',
+    status: 'promoted', important: true, urgent: true, triagedAt: T0, disposedAt: T0,
+    promotionClaim: null, promotion: { type: 'do-today', store: 'legacy', targetId: '2026-09-30', planItemId: 'bdp1|other', promotedAt: T0 }, delegatedTo: null,
+  });
+
+  const pending = await bridge.claimPromotionRemote('bcapture1', PROMO_DO_TODAY);
+  assert.equal(pending.reason, 'pending');
+  room.release();
+  await settle();
+  assert.equal(repository.read('bcapture1').status, 'promoted', 'authoritative state adopted once observed');
+});
+
+test('G. a Do Today claim still pending (unknown) does not let a concurrent Schedule attempt for the SAME capture create an incompatible second destination', async () => {
+  const room = makeDelayableRoom();
+  const { repository, bridge } = makeHarness({ roomRef: room.ref, claimTimeoutMs: 20 });
+  repository.create({ id: 'bcapture1', text: 'Pending Do Today, then Schedule attempted' });
+
+  const doTodayPending = bridge.claimPromotionRemote('bcapture1', PROMO_DO_TODAY);
+  const doToday = await doTodayPending; // times out to 'pending' — outcome still unknown
+  assert.equal(doToday.reason, 'pending');
+
+  // The user, seeing no definitive outcome yet, tries Schedule instead — its
+  // OWN transaction starts immediately (never blocked from starting), but it
+  // must not win while the Do Today claim's eventual authority is undecided.
+  const schedulePromo = { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-20', planItemId: PROMO_DO_TODAY.planItemId };
+  const schedulePending = await bridge.claimPromotionRemote('bcapture1', schedulePromo);
+  assert.equal(schedulePending.reason, 'pending', 'Schedule\'s own transaction is ALSO still queued, unsettled');
+
+  // Now both late transactions settle, in arrival order: Do Today was queued
+  // first, so it is evaluated against remote first.
+  room.releaseOldest(); // Do Today's transaction
+  await settle();
+  room.releaseOldest(); // Schedule's transaction, now queued alone
+  await settle();
+
+  const final = repository.read('bcapture1');
+  assert.ok(final.promotionClaim, 'exactly one claim survives');
+  assert.equal(final.promotionClaim.targetId, PROMO_DO_TODAY.targetId, 'Do Today — queued first — is the one authoritative claim');
+  assert.notEqual(final.promotionClaim.targetId, schedulePromo.targetId, 'Schedule never wins a competing, incompatible destination');
 });

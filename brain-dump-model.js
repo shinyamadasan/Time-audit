@@ -205,10 +205,18 @@ export function triageCapture(current, patch = {}) {
 }
 
 function validPromotion(promotion) {
-  return !!promotion && PROMOTION_TYPES.has(promotion.type)
-    && typeof promotion.store === 'string' && !!promotion.store
-    && typeof promotion.targetId === 'string' && !!promotion.targetId
-    && typeof promotion.planItemId === 'string' && !!promotion.planItemId;
+  if (!promotion || !PROMOTION_TYPES.has(promotion.type)) return false;
+  if (typeof promotion.store !== 'string' || !promotion.store) return false;
+  if (typeof promotion.targetId !== 'string' || !promotion.targetId) return false;
+  if (typeof promotion.planItemId !== 'string' || !promotion.planItemId) return false;
+  // Optional, round-3: carried on the CLAIM so a reconciler that never saw the
+  // original UI action (a different device, or the same device after a
+  // restart) can still build the EXACT intended item — see reconcilePromotionClaim
+  // in brain-dump-promotion.js. Absent (do-today is always untimed) or a valid
+  // "HH:MM" reading; never required.
+  if (promotion.when !== undefined && typeof promotion.when !== 'string') return false;
+  if (promotion.durationMinutes !== undefined && promotion.durationMinutes !== null && !(Number.isInteger(promotion.durationMinutes) && promotion.durationMinutes > 0)) return false;
+  return true;
 }
 
 /** A capture's current arbitration authority. Higher always wins a merge outright
@@ -269,7 +277,12 @@ export function claimPromotion(current, { promotion, now, updatedBy } = {}) {
     ok: true,
     record: {
       ...base,
-      promotionClaim: { type: promotion.type, store: promotion.store, targetId: promotion.targetId, planItemId: promotion.planItemId, claimedAt: at, claimedBy: by },
+      promotionClaim: {
+        type: promotion.type, store: promotion.store, targetId: promotion.targetId, planItemId: promotion.planItemId,
+        when: typeof promotion.when === 'string' ? promotion.when : '',
+        durationMinutes: Number.isFinite(promotion.durationMinutes) ? promotion.durationMinutes : null,
+        claimedAt: at, claimedBy: by,
+      },
       updatedAt: at,
       updatedBy: by,
     },
@@ -355,7 +368,12 @@ export function normalizeCapture(value) {
     if (!timestamp(c.claimedAt)) return null;
     const claimedBy = writer(c.claimedBy);
     if (!claimedBy) return null;
-    promotionClaim = { type: c.type, store: c.store, targetId: c.targetId, planItemId: c.planItemId, claimedAt: c.claimedAt, claimedBy };
+    promotionClaim = {
+      type: c.type, store: c.store, targetId: c.targetId, planItemId: c.planItemId,
+      when: typeof c.when === 'string' ? c.when : '',
+      durationMinutes: Number.isFinite(c.durationMinutes) ? c.durationMinutes : null,
+      claimedAt: c.claimedAt, claimedBy,
+    };
   }
 
   let promotion = null;

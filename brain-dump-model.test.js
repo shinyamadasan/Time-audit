@@ -275,7 +275,7 @@ test('repository.claimPromotion + finalizePromotion round-trip and are each idem
   const claimed = repo.claimPromotion(record.id, { promotion });
   assert.ok(claimed.ok);
   assert.equal(repo.read(record.id).status, 'untriaged'); // claiming never changes status by itself
-  assert.deepEqual(repo.read(record.id).promotionClaim, { ...promotion, claimedAt: T0, claimedBy: 'device-1' });
+  assert.deepEqual(repo.read(record.id).promotionClaim, { ...promotion, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1' });
 
   // Re-claiming the SAME target is a no-op success (a retry).
   const reclaim = repo.claimPromotion(record.id, { promotion });
@@ -496,4 +496,30 @@ test('arbitratePromotionClaim: two genuinely concurrent NEW claims against each 
   const candidate = claimPromotion(base, { promotion: PROMO_B, now: T0 + 20, updatedBy: 'device-b' }).record; // arriving later
   const result = arbitratePromotionClaim(remoteClaim, candidate);
   assert.deepEqual(result.promotionClaim, remoteClaim.promotionClaim, 'the earlier claim still wins — not a blanket refusal, since remote is not terminal');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIX FIRST round 3: the claim carries `when`/`durationMinutes` so a reconciler
+// that never saw the original UI action (a different device, or the same
+// device after a restart) can still build the EXACT intended item — see
+// reconcilePromotionClaim in brain-dump-promotion.js.
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('claimPromotion persists when/durationMinutes on the claim for a Schedule promotion, so a later reconciler needs no fresh UI input', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: false, now: T0 + 1, updatedBy: 'd' }).record;
+  const claimed = claimPromotion(base, {
+    promotion: { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-10', planItemId: 'bdp1|bidone1', when: '14:30', durationMinutes: 45 },
+    now: T0 + 2, updatedBy: 'device-a',
+  });
+  assert.ok(claimed.ok);
+  assert.equal(claimed.record.promotionClaim.when, '14:30');
+  assert.equal(claimed.record.promotionClaim.durationMinutes, 45);
+});
+
+test('claimPromotion defaults when to "" and durationMinutes to null when omitted (Do Today is always untimed)', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const claimed = claimPromotion(base, { promotion: PROMO_A, now: T0 + 2, updatedBy: 'device-a' });
+  assert.ok(claimed.ok);
+  assert.equal(claimed.record.promotionClaim.when, '');
+  assert.equal(claimed.record.promotionClaim.durationMinutes, null);
 });

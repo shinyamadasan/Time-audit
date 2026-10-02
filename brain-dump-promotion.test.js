@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { createBrainDumpSyncBridge, BRAIN_DUMP_REMOTE_PATH } from './brain-dump-sync.js';
 import { brainDumpPlanItemId } from './brain-dump-model.js';
-import { promoteCaptureToPlan } from './brain-dump-promotion.js';
+import { promoteCaptureToPlan, reconcilePromotionClaim } from './brain-dump-promotion.js';
 
 const T0 = Date.parse('2026-10-01T08:00:00Z');
 const memory = () => {
@@ -70,7 +70,7 @@ function makeRoom() {
  *  account-wide regardless of which device writes to it. */
 function makeFakePlanAuthority({ todayTarget = { store: 'calendar', id: 'calplan:2026-10-01', dateKey: '2026-10-01' }, schedule = null } = {}) {
   const items = [];
-  const calls = { current: 0, addItem: 0, dayForScheduledDate: 0 };
+  const calls = { current: 0, addItem: 0, dayForScheduledDate: 0, targetById: 0 };
   return {
     items,
     calls,
@@ -85,6 +85,15 @@ function makeFakePlanAuthority({ todayTarget = { store: 'calendar', id: 'calplan
       calls.addItem++;
       items.push(item);
       return { item };
+    },
+    /** Reconstructs a target from its own `id` alone — exactly what
+     *  reconcilePromotionClaim relies on, never re-deriving "today" fresh. */
+    targetById(id) {
+      calls.targetById++;
+      if (id === todayTarget.id) return todayTarget;
+      const match = /^calplan:(.+)$/.exec(id);
+      if (match) return { store: 'calendar', id, dateKey: match[1] };
+      return null;
     },
   };
 }
@@ -489,3 +498,96 @@ test('10b. a stale remote snapshot cannot resurrect over an already-ARCHIVED aut
 // test #11 (account switch during a claimed/claiming promotion) lives in
 // brain-dump-account-isolation.test.js, which already owns the full
 // storage.js-style switchTo()/signOut() harness this needs.
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIX FIRST round 3 — reconcilePromotionClaim(): the abandoned-claim fix.
+// claimPromotionRemote's own 'pending'/late-settlement mechanics are proven at
+// the sync layer (brain-dump-sync.test.js, tests A-C/E/G/H). These tests prove
+// the OTHER half: once an authoritative claim exists, ANY session that
+// observes it — even one that never made the original call — can finish it,
+// using only the claim's own persisted provenance.
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('D / mandatory app-restart test: a fresh session that never made the original call reconciles an authoritative claim on its own, from persisted provenance alone — exactly one destination', async () => {
+  const room = makeRoom();
+  const a = makeDevice({ room, deviceId: 'device-a' });
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = a.repository.create({ text: 'Schedule me, then I disappear' });
+  await a.bridge.syncCapture(record.id);
+
+  // The claim is established and is authoritative on remote — but device A's
+  // process disappears before phases 2/3 ever run (simulated by simply never
+  // calling promoteCaptureToPlan's remainder, or touching `a` again).
+  const claimResult = await a.claimPromotionRemote(record.id, { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-20', planItemId: brainDumpPlanItemId(record.id), when: '09:00', durationMinutes: 30 });
+  assert.ok(claimResult.ok);
+  assert.equal(planAuthority.calls.addItem, 0, 'nothing created yet — A disappeared before phase 2');
+
+  // A completely FRESH session for the same account: its own repository, its
+  // own bridge, never involved in the original claim attempt at all.
+  const fresh = makeDevice({ room, deviceId: 'device-fresh' });
+  await fresh.pull(record.id); // hydration — e.g. the app's own reload/listener replay
+  assert.ok(fresh.repository.read(record.id).promotionClaim, 'the fresh session sees the outstanding authoritative claim');
+
+  const reconciled = reconcilePromotionClaim({ repository: fresh.repository, planAuthority, id: record.id, now: T0 + 500, deviceId: 'device-fresh' });
+  assert.ok(reconciled.ok, 'no exact-action retry from the user was required');
+  assert.equal(reconciled.record.status, 'promoted');
+  assert.equal(planAuthority.calls.addItem, 1);
+  assert.equal(planAuthority.items.length, 1);
+  assert.equal(planAuthority.items[0].when, '09:00', 'the exact originally-intended time, carried on the claim, not re-asked');
+  assert.equal(planAuthority.items[0].durationMinutes, 30);
+  assert.equal(planAuthority.calls.current, 0, 'never re-derives "today" — targetById reconstructs the ORIGINAL target');
+});
+
+test('F: two devices simultaneously reconcile the same outstanding authoritative claim — one logical destination, both converge, finalize is idempotent', async () => {
+  const room = makeRoom();
+  const a = makeDevice({ room, deviceId: 'device-a' });
+  const b = makeDevice({ room, deviceId: 'device-b', now: T0 + 10 });
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = a.repository.create({ text: 'Both reconcile me' });
+  await a.bridge.syncCapture(record.id);
+
+  const claimResult = await a.claimPromotionRemote(record.id, { type: 'do-today', store: 'calendar', targetId: 'calplan:2026-10-01', planItemId: brainDumpPlanItemId(record.id) });
+  assert.ok(claimResult.ok);
+
+  await a.pull(record.id);
+  await b.pull(record.id);
+  assert.ok(a.repository.read(record.id).promotionClaim);
+  assert.ok(b.repository.read(record.id).promotionClaim);
+
+  // Both devices observe the same claim and both attempt to finish it —
+  // "simultaneously" in the sense that neither has seen the other's finalize
+  // yet (this harness's repositories are independent local caches).
+  const resultA = reconcilePromotionClaim({ repository: a.repository, planAuthority, id: record.id, now: T0 + 20, deviceId: 'device-a' });
+  const resultB = reconcilePromotionClaim({ repository: b.repository, planAuthority, id: record.id, now: T0 + 21, deviceId: 'device-b' });
+  assert.ok(resultA.ok);
+  assert.ok(resultB.ok);
+
+  assert.equal(planAuthority.calls.addItem, 1, 'the deterministic plan-item id means the second reconciler sees the item already there');
+  assert.equal(planAuthority.items.length, 1, 'no duplicate task');
+  assert.equal(a.repository.read(record.id).status, 'promoted');
+  assert.equal(b.repository.read(record.id).status, 'promoted');
+
+  // Pushing both finalizes converges them to the identical provenance —
+  // finalize's own idempotent guard plus the ordinary LWW+tiebreak merge, no
+  // competing target can appear.
+  await a.bridge.syncCapture(record.id);
+  await b.bridge.syncCapture(record.id);
+  await a.pull(record.id);
+  await b.pull(record.id);
+  assert.deepEqual(a.repository.read(record.id).promotion, b.repository.read(record.id).promotion);
+});
+
+test('reconcilePromotionClaim is a safe no-op when there is no outstanding claim, or the capture is already disposed', () => {
+  const device = makeDevice({ room: makeRoom() });
+  const planAuthority = makeFakePlanAuthority();
+  const { record } = device.repository.create({ text: 'Nothing to reconcile' });
+  const noClaim = reconcilePromotionClaim({ repository: device.repository, planAuthority, id: record.id, now: T0 + 1, deviceId: 'device-1' });
+  assert.equal(noClaim.ok, false);
+  assert.equal(noClaim.reason, 'no-claim');
+  assert.equal(planAuthority.calls.addItem, 0);
+
+  device.repository.archive(record.id);
+  const disposed = reconcilePromotionClaim({ repository: device.repository, planAuthority, id: record.id, now: T0 + 2, deviceId: 'device-1' });
+  assert.ok(disposed.ok);
+  assert.equal(disposed.alreadyDisposed, true);
+});

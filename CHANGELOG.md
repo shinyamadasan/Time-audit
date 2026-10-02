@@ -1,5 +1,53 @@
 # ChronaSense — Changelog
 
+## Brain Dump + Eisenhower V1 FIX FIRST round 3 — candidate, NOT integrated
+
+**Same branch**, on top of round 2's fix `ec0012ca`. The governed release token
+(`20261002-brain-dump-eisenhower-v1-fix1`) is UNCHANGED this round — no governed file changed. Brain
+Dump's own independent entry tags (`brain-dump-sync.js`, `brain-dump-ui.js`) move to `...-fix3`, since
+both files' content changed again. Firebase rules are untouched, per policy — nothing required reopening
+them.
+
+**The remaining blocker, closed:** round 2's `claimPromotionRemote()` wrapped the real Firebase
+transaction in `Promise.race([attempt, timeout])` and, when the timeout won, reported `reason:'offline'`
+— but the underlying `attempt` kept running, unobserved. If it later committed a real authoritative claim,
+nobody was left to process it: no merge, no reconciliation, no plan item, and Archive/Delegate permanently
+blocked by a claim nobody could finish — a ghost claim.
+
+**Fix: the transaction is never abandoned, and a timeout now means PENDING, never OFFLINE/FAILED.**
+`claimPromotionRemote()`'s foreground race and the transaction's own eventual settlement are now two
+separate things. `finishClaimAttempt()` always runs — whenever `attempt` actually resolves, independent
+of whether the foreground caller already gave up — and re-checks room ownership AT SETTLEMENT TIME (not
+just at call time) before merging, so a late result is never adopted under an account that has since
+switched away. The foreground caller only races a *view* of that settlement against the bounded timeout;
+when the timeout wins, this now resolves `{ok:false, reason:'pending'}` — explicitly UNKNOWN, never a
+claim that nothing happened and never a claim that it failed. `'offline'` is reserved for genuinely
+definite cases: no room ref, wrong cache owner, or a transport-level rejection (the real SDK answering
+"no"), never a timeout (this module's own impatience, not the SDK's).
+
+**The claim is now self-recoverable.** `promotionClaim` gains `when`/`durationMinutes` (optional, carried
+alongside the existing `type`/`store`/`targetId`/`planItemId`) so an authoritative claim can be finished
+by a session that never made the original call. New `reconcilePromotionClaim()` in
+`brain-dump-promotion.js`: given a capture with an outstanding claim, reconstructs the ORIGINAL destination
+via `PlanAuthority.targetById(claim.targetId)` — never by re-deriving "today" or re-resolving a schedule
+date fresh — and runs the same idempotent create+finalize phase `promoteCaptureToPlan()` already used.
+Succeeds from the SAME device after the foreground call gave up, a DIFFERENT device, or a fresh app load
+whose repository just hydrated the claim from remote — no exact-action retry required. Wired into
+`brain-dump-ui.js` via the SAME `onRemoteChange` hook every other merge already fires (the claim's own
+late settlement, the ordinary whole-subtree listener, a reconnect replay, and a fresh hydration on load
+all flow through this one hook), with an in-memory in-flight guard so concurrent notifications for one
+capture never run the reconciler twice. The UI shows "Still confirming…" (never success or failure) for
+a pending attempt and withholds Do Today/Schedule — never a second, incompatible promotion attempt from
+the same local state — while leaving Archive/Delegate available, since the authoritative remote ordering
+(never which local toast appeared first) is what should decide that race.
+
+**Test coverage.** `brain-dump-sync.test.js` gains a genuinely delayable (not merely never-settling) fake
+room and 7 new tests (A/B/C/E/G/H, the required late-settlement set) proving the transaction's eventual
+outcome is always processed, whichever side of the race wins. `brain-dump-promotion.test.js` gains the
+mandatory app-restart test (a session that never made the original call reconciles purely from persisted
+provenance) and a two-device simultaneous reconciliation test (one logical destination, idempotent
+finalize). `brain-dump-model.test.js` gains coverage for the new claim fields.
+
 ## Brain Dump + Eisenhower V1 FIX FIRST round 2 — candidate, NOT integrated
 
 **Same branch**, on top of the round-1 fix `708c84a1`. The release token
