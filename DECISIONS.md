@@ -482,3 +482,29 @@ ordinary reconnect logic re-push preserved legacy records after cutover; do not 
 chosen destination; and do not compute a historical Review window from current account settings.
 
 ---
+
+## 30. Configurable Daily View V1: a calendar-day timeline is `selected date 00:00 + Daily View Length`, never content-driven
+
+**Decision:** For a calendar-authoritative date, the Today timeline covers the half-open window
+`[selected date 00:00, +N civil hours)` in the selected plan's home zone, N an integer 24–48 (default 36;
+anything missing, malformed or out of range reads as 36 — never clamped, never inferred from content).
+A positioned planned row (plan item, timed commitment, schedule occurrence) is shown when its own interval
+intersects the window; a start-only row is placed by its start. Rows from neighbouring dates keep their
+owner's target id and item id, so every action writes the owner's one record, gated by the owner's own
+editability (the existing live-today carryover completion is the only path into an ended owner). Only the
+plans of D-1, D and D+1 are read, because a calendar plan reaches at most its next date. This retires
+Extended My Day's content-driven extension (`extendedMyDayEnd`, "+30 min after the last overnight item")
+and, for calendar dates, the separate "Carryover from <day>" section: one deterministic window, one rule.
+
+**Why device-local for the preference:** it changes what is shown, never any record. The only existing
+display-only Today preference (`ta3-today-details-open`) is a plain device-local key, while the synced
+`settings` object carries behavioural/coaching configuration. So `ta3-daily-view-hours` is device-local,
+reversible, and never written to Firebase.
+
+**Scope boundary:** logged evidence entries, gaps and the So Far stats stay calendar-date evidence (Hard
+Rules 1–3 untouched). Legacy and Personal Day (operational) views keep their own windows.
+
+**Do not:** copy, mirror or re-date a neighbouring record into the viewed day; let the view date stand in
+for an item's owner; or add a second, content-derived extent beside this window.
+
+---

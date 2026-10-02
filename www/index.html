@@ -804,6 +804,18 @@
     <div id="calendar-plan-settings"></div>
   </div>
 
+  <!-- Configurable Daily View V1: how far a calendar-day timeline reaches past its own date.
+       A device-local display preference (never a field on the synced `settings` object). -->
+  <div class="settings-section">
+    <div class="settings-title">Daily view</div>
+    <div class="setting-row" style="border-bottom:none">
+      <div><div class="setting-label">Daily view length</div><div class="setting-sub">Starts at 00:00 of the selected date. Items from the next date show where they fall, still owned by their own day. Calendar-day plans only.</div></div>
+      <div class="setting-control">
+        <select id="set-daily-view-hours" onchange="saveDailyViewHours(this.value)" aria-label="Daily view length in hours" style="width:auto;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 7px;border-radius:6px;outline:none"></select>
+      </div>
+    </div>
+  </div>
+
   <!-- Calendar Day + Extended My Day V1 (§20): the new primary streak-authority
        setting, rendered by plan-by-deadline-ui.js. Its own append-only revisioned
        store, never a field on the legacy `settings` object. -->
@@ -1751,6 +1763,7 @@
 <script type="module" src="daily-routines-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
 <script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
+<script type="module" src="daily-view-window.js?v=20261002-configurable-daily-view-window-v1"></script>
 <script type="module" src="learning-plan-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
 <script type="module" src="capability-career-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
@@ -4623,10 +4636,14 @@ function renderPlannedTimelineRow(row, editable, { completable = editable, toggl
   const startDate = getDateInTZ(row.startMs, row.timezone || settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
   const endDate = Number.isFinite(row.endMs) ? getDateInTZ(row.endMs, row.timezone || settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone) : startDate;
   const nextDateLabel = endDate !== startDate ? ` · Ends ${plannedTimelineDate(row.endMs, row.timezone)}` : '';
-  return `<div class="tl-row tl-plan-row${row.done ? ' done' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}">
+  // Configurable Daily View V1: a row from another date's plan says whose it is, and a
+  // carry-in row says it started earlier — the view date never re-owns either.
+  const ownerLabel = row.ownedBySelected === false && row.ownerDateKey ? ` · ${civilWeekday(row.ownerDateKey)}'s plan` : '';
+  const carryInLabel = row.carryIn ? `Continues from ${civilWeekday(startDate)} · ` : '';
+  return `<div class="tl-row tl-plan-row${row.done ? ' done' : ''}${row.carryIn ? ' tl-carry-in' : ''}" data-plan-item-id="${timelineRowEscape(row.itemId)}" data-plan-day-id="${timelineRowEscape(row.dayId)}">
     <div class="tl-time">${timelineRowEscape(startLabel)}</div><div class="tl-bar-col tl-bar-plan"></div>
     <button class="tl-plan-check" onclick="${toggleFn}('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="${row.done ? 'Mark not done' : 'Mark done'}: ${title}" ${completable ? '' : 'disabled'}>${row.done ? '✓' : ''}</button>
-    <div class="tl-content"><div class="tl-activity">${star}${title}</div><div class="tl-meta">Planned ${row.planKind === 'priority' ? 'priority' : 'task'} · ${timelineRowEscape(startLabel)}${endLabel ? `–${timelineRowEscape(endLabel)}` : ''}${durationLabel}${timelineRowEscape(nextDateLabel)} · no time logged by this check</div></div>
+    <div class="tl-content"><div class="tl-activity">${star}${title}</div><div class="tl-meta">${timelineRowEscape(carryInLabel)}Planned ${row.planKind === 'priority' ? 'priority' : 'task'} · ${timelineRowEscape(startLabel)}${endLabel ? `–${timelineRowEscape(endLabel)}` : ''}${durationLabel}${timelineRowEscape(nextDateLabel)}${timelineRowEscape(ownerLabel)} · no time logged by this check</div></div>
     ${editable ? `<button class="tl-icon-action" onclick="PlanningContinuityUI.editTask('${timelineRowEscape(row.dayId)}','${timelineRowEscape(row.itemId)}')" aria-label="Edit planned task ${title}">✎</button>` : ''}
   </div>`;
 }
@@ -4690,13 +4707,69 @@ function isTimelineTargetEditable(target) {
   return target.dateKey >= today;
 }
 
+// ── Configurable Daily View V1 ─────────────────────────────────────────────
+// Daily View Length is a device-local DISPLAY preference (like ta3-today-details-open): it
+// changes which rows a calendar-day timeline shows, never any record. Every whole hour from
+// 24 to 48; anything missing or malformed reads as the 36h default (daily-view-window.js).
+const DAILY_VIEW_HOURS_KEY = 'ta3-daily-view-hours';
+
+function dailyViewHours() {
+  let stored = null;
+  try { stored = localStorage.getItem(DAILY_VIEW_HOURS_KEY); } catch { stored = null; }
+  return globalThis.DailyViewWindow ? globalThis.DailyViewWindow.normalizeDailyViewHours(stored) : 36;
+}
+
+function saveDailyViewHours(value) {
+  if (!globalThis.DailyViewWindow) return;
+  const hours = globalThis.DailyViewWindow.normalizeDailyViewHours(value);
+  try { localStorage.setItem(DAILY_VIEW_HOURS_KEY, String(hours)); } catch { /* a display preference only */ }
+  renderDailyViewHoursSetting();
+  _todayRenderKey = '__FORCE__';
+  renderToday();
+}
+
+function renderDailyViewHoursSetting() {
+  const select = document.getElementById('set-daily-view-hours');
+  const model = globalThis.DailyViewWindow;
+  if (!select || !model) return;
+  if (!select.options.length) {
+    const hours = [];
+    for (let h = model.DAILY_VIEW_MIN_HOURS; h <= model.DAILY_VIEW_MAX_HOURS; h++) hours.push(h);
+    select.innerHTML = hours.map(h => `<option value="${h}">${h} hours${h === model.DAILY_VIEW_DEFAULT_HOURS ? ' (default)' : ''}</option>`).join('');
+  }
+  select.value = String(dailyViewHours());
+}
+
+/** Schedule occurrences for a Daily View window: each neighbouring date's own occurrences
+ *  (generateTemplateEntries, unchanged — "Log it" / "Off today" keep their templateId + date),
+ *  kept when their own interval intersects the window. A carry-in occurrence is placed at
+ *  the window start for ordering; its own times are untouched. */
+function dailyViewTemplateEntries(viewWindow) {
+  const seen = new Set();
+  const out = [];
+  viewWindow.sourceDateKeys.forEach(dateKey => {
+    generateTemplateEntries(dateKey).forEach(entry => {
+      if (seen.has(entry.id) || !globalThis.DailyViewWindow.intersectsDailyViewWindow(viewWindow, entry.tsStart, entry.ts)) return;
+      seen.add(entry.id);
+      out.push(entry.tsStart < viewWindow.startMs ? { ...entry, _displayStartMs: viewWindow.startMs } : entry);
+    });
+  });
+  return out;
+}
+
+/** "Saturday" for a YYYY-MM-DD — a civil-date fact, formatted in fixed UTC so no zone shifts it. */
+function civilWeekday(dateKey) {
+  const [year, month, day] = String(dateKey).split('-').map(Number);
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'long' }).format(new Date(Date.UTC(year, month - 1, day, 12)));
+}
+
 /** Calendar Day + Extended My Day V1, §21: a plain visual break where a My Day's
  *  own rows cross into a new calendar date — never a "carryover" label (that
  *  applies only to a DIFFERENT day's projection, see the carryover section built
  *  in renderToday()); this is still the same plan, same day, just factual about
  *  the date. */
 function renderDateBreakRow(item) {
-  const label = new Intl.DateTimeFormat('en-US', { timeZone: settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone, weekday: 'long', month: 'long', day: 'numeric' }).format(tzParseTime(item.dateKey, '12:00')).toUpperCase();
+  const label = new Intl.DateTimeFormat('en-US', { timeZone: settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone, weekday: 'long', month: 'long', day: 'numeric' }).format(tzParseTime(item.dateKey, '12:00')).toUpperCase() + (item.nextDay ? ' · NEXT DAY' : '');
   return `<div class="tl-date-break" role="separator" aria-label="${timelineRowEscape(label)}"><span>${timelineRowEscape(label)}</span></div>`;
 }
 
@@ -4742,7 +4815,7 @@ function buildEntryRowHTML(e) {
 // Sorts, clips, merges, and gaps today's entries into the combined array for renderTimelineCombined.
 // Handles nested browser sub-activities (pcSubMap) and attaches them to their container entries.
 /** @param {Array} todayE entries for the viewed day @returns {Array} combined display items (entries + gaps) */
-function assembleTodayTimeline(todayE, myDay = null, { includeGaps = true } = {}) {
+function assembleTodayTimeline(todayE, myDay = null, { includeGaps = true, templateEntries: windowTemplateEntries = null } = {}) {
   const sorted = [...todayE].filter(e => !e.missed).sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
   const browserEntries   = sorted.filter(e => e.browserUsage);
   const nestedBrowserIds = new Set();
@@ -4786,9 +4859,11 @@ function assembleTodayTimeline(todayE, myDay = null, { includeGaps = true } = {}
   // selects by each occurrence's START instant inside [startMs, endMs) and de-duplicates
   // by template id + start, so a block crossing midnight appears exactly once and one
   // starting at exactly the end boundary belongs to the next My Day.
-  const templateEntries = myDay
-    ? globalThis.PlanAuthority.templatesForTarget(myDay, dateKey => generateTemplateEntries(dateKey))
-    : generateTemplateEntries(getViewingDateKey());
+  // A calendar Daily View passes its own window's occurrences (dailyViewTemplateEntries).
+  const templateEntries = windowTemplateEntries
+    || (myDay
+      ? globalThis.PlanAuthority.templatesForTarget(myDay, dateKey => generateTemplateEntries(dateKey))
+      : generateTemplateEntries(getViewingDateKey()));
   const combined = [...mergedDisplay, ...gaps, ...templateEntries].sort((a, b) => (a.tsStart || a.ts) - (b.tsStart || b.ts));
   combined.forEach(item => {
     if (!item.isGap && pcSubMap.has(item.id)) item._subActivities = pcSubMap.get(item.id);
@@ -6022,8 +6097,26 @@ function renderToday() {
   if (viewingSelectedCalendarDate && viewingSelectedCalendarDate.targetId !== timelineTarget?.id) viewingSelectedCalendarDate = null;
   const timelineItems = timelineTarget ? planItemsFor(timelineTarget) : [];
   const timelineCommitments = timelineTarget ? (globalThis.PlanningContinuityUI?.commitmentsForTarget?.(timelineTarget) || []) : [];
+  // Configurable Daily View V1: a calendar-day timeline covers [selected date 00:00, +N hours)
+  // — the ONE visual-extent rule (it replaces Extended My Day's content-driven extension).
+  // Planned rows from the neighbouring dates' plans that intersect it are projected in place,
+  // each still owned by (and acted on through) its own plan. Personal Day / legacy views keep
+  // their own windows.
+  let dailyView = null;
+  if (!myDay && timelineTarget?.store === 'calendar' && globalThis.DailyViewWindow) {
+    try {
+      dailyView = globalThis.DailyViewWindow.deriveDailyViewPlannedRows({
+        dateKey: timelineTarget.dateKey,
+        hours: dailyViewHours(),
+        authority: globalThis.PlanAuthority,
+        commitments: timelineCommitments,
+        commitmentsBetween: (startMs, endMs) => globalThis.PlanningContinuityUI?.commitmentsForTarget?.({ startMs, endMs }) || [],
+      });
+    } catch { dailyView = null; }
+  }
   const timelinePlanKey = timelineItems.map(item => [timelineTarget.id, item.id, item.task, item.kind || 'priority', item.when || '', item.whenDayOffset || 0, item.whenTz || '', item.durationMinutes || '', item.done, item.updatedAt || ''].join(':')).join(',')
-    + '|' + timelineCommitments.map(item => [item.id, item.title, item.startMs, item.updatedAt || ''].join(':')).join(',');
+    + '|' + timelineCommitments.map(item => [item.id, item.title, item.startMs, item.updatedAt || ''].join(':')).join(',')
+    + '|' + (dailyView ? [dailyView.window.hours, dailyView.window.endMs, ...dailyView.positioned.map(row => [row.id, row.title, row.planKind || '', row.startMs, row.endMs || '', row.done].join(':'))].join(',') : '');
   // My Day timeline. With a Personal Day boundary active, the timeline's ROWS cover the
   // authoritative My Day interval [startMs, endMs) from Plan Authority instead of the
   // calendar date — e.g. Fri 18:00 → Sat 18:00 for an 18:00 boundary. Timestamps are
@@ -6048,17 +6141,14 @@ function renderToday() {
   let carryoverRows = [];
   let carryoverFromLabel = null;
   let carryoverTarget = null;
-  if (viewingCurrentTimeline && globalThis.PlanAuthority) {
+  // A calendar-day timeline never takes this path: its Daily View window (Configurable Daily
+  // View V1) already projects the previous date's plan wherever it intersects the window.
+  // This section is the legacy (before the switch, an active boundary) personal day still
+  // overlapping this calendar date.
+  if (viewingCurrentTimeline && globalThis.PlanAuthority && timelineTarget?.store !== 'calendar') {
     try {
-      // Calendar-native (after the switch): the previous DATE's plan reaching into this one — its
-      // items stay owned by that plan. Legacy (before the switch, an active boundary): the personal
-      // day still overlapping this calendar date. One or the other, never both.
-      const calendarCarry = globalThis.PlanAuthority.calendarCarryoverFor?.(_viewKey);
       let priorCandidate = null;
-      let priorItems = null;
-      if (calendarCarry) {
-        if (calendarCarry.items.length) { priorCandidate = calendarCarry.target; priorItems = calendarCarry.items; }
-      } else if (globalThis.PlanAuthority.enabled?.()) {
+      if (globalThis.PlanAuthority.enabled?.()) {
         const overlapping = globalThis.PlanAuthority.daysOverlappingCalendarDate(_viewKey);
         priorCandidate = overlapping.length > 1 ? overlapping[0] : null;
       }
@@ -6066,7 +6156,7 @@ function renderToday() {
         carryoverTarget = priorCandidate;
         const priorProjection = globalThis.TomorrowTimelineModel?.deriveMyDayPlannedRows({
           target: carryoverTarget,
-          planItems: priorItems || planItemsFor(carryoverTarget),
+          planItems: planItemsFor(carryoverTarget),
           commitments: globalThis.PlanningContinuityUI?.commitmentsForTarget?.(carryoverTarget) || [],
           itemStartInstant: (target, when, item) => globalThis.PlanAuthority?.itemStartInstant(target, when, item) ?? null,
           itemInstants: (target, item) => globalThis.PlanAuthority?.itemInstants(target, item) ?? null,
@@ -6091,29 +6181,49 @@ function renderToday() {
   // The My Day id is part of the key, so the 18:00 rollover (which does not change the
   // calendar date) still rebuilds the rows, and midnight (which does not change My Day)
   // leaves them as they are.
-  const newRenderKey = _viewKey + '|' + (timelineTarget?.id || 'history') + '|' + timelineTemplateKey + '|' + timelinePlanKey + '|' + carryoverKey + '|' + timelineE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
+  const dailyViewTemplates = dailyView ? dailyViewTemplateEntries(dailyView.window) : null;
+  const dailyViewTemplateKey = dailyViewTemplates ? dailyViewTemplates.map(e => [e.id, e.tsStart, e.ts].join(':')).join(',') : '';
+  const newRenderKey = _viewKey + '|' + (timelineTarget?.id || 'history') + '|' + timelineTemplateKey + '|' + timelinePlanKey + '|' + carryoverKey + '|' + dailyViewTemplateKey + '|' + timelineE.map(e => [e.id, e.tsStart || '', e.ts || '', e.updatedAt || ''].join(':')).join(',');
   const entriesChanged = newRenderKey !== _todayRenderKey;
   if (entriesChanged) _todayRenderKey = newRenderKey;
 
   const tlEl = document.getElementById('timeline-blocks');
 
   if (entriesChanged) {
-    const projection = globalThis.TomorrowTimelineModel?.deriveMyDayPlannedRows({
+    const projection = dailyView || globalThis.TomorrowTimelineModel?.deriveMyDayPlannedRows({
       target: timelineTarget,
       planItems: timelineItems,
       commitments: timelineCommitments,
       itemStartInstant: (target, when, item) => globalThis.PlanAuthority?.itemStartInstant(target, when, item) ?? null,
       itemInstants: (target, item) => globalThis.PlanAuthority?.itemInstants(target, item) ?? null,
     }) || { anytime: [], positioned: [] };
-    if (Number.isFinite(projection.displayEndMs)) tlEl.dataset.displayEndMs = String(projection.displayEndMs);
-    else delete tlEl.dataset.displayEndMs;
+    if (dailyView) {
+      tlEl.dataset.dailyViewHours = String(dailyView.window.hours);
+      tlEl.dataset.dailyViewStartMs = String(dailyView.window.startMs);
+      tlEl.dataset.dailyViewEndMs = String(dailyView.window.endMs);
+    } else {
+      delete tlEl.dataset.dailyViewHours;
+      delete tlEl.dataset.dailyViewStartMs;
+      delete tlEl.dataset.dailyViewEndMs;
+    }
     const editable = isTimelineTargetEditable(timelineTarget);
     renderAnytimeLane(projection.anytime, editable);
-    const base = assembleTodayTimeline(displayTimelineE, myDay, { includeGaps: viewingCurrentTimeline });
+    const base = assembleTodayTimeline(displayTimelineE, myDay, { includeGaps: viewingCurrentTimeline, templateEntries: dailyViewTemplates });
     const sourceOrder = item => item._timelinePlanned ? (item.sourceType === 'planned-task' ? 0 : 1) : item.template ? 2 : item.isGap ? 4 : 3;
     const rowId = item => String(item.id || item.templateId || '');
-    const plannedRows = projection.positioned.map(row => ({ ...row, tsStart: row.startMs, ts: row.endMs || row.startMs, _timelinePlanned: true, _editable: editable }));
-    let combined = [...base, ...plannedRows].sort((a, b) => ((a.tsStart || a.ts) - (b.tsStart || b.ts)) || (sourceOrder(a) - sourceOrder(b)) || rowId(a).localeCompare(rowId(b)));
+    // A row from ANOTHER date's plan keeps that plan's identity: its edit/toggle write the
+    // owner's one record, gated by the owner's own editability — the selected view date
+    // never stands in for it. A carry-in row is placed at the window start but keeps its
+    // real start; only the existing live-today completion exception reaches an ended owner.
+    const plannedRows = projection.positioned.map(row => {
+      const shown = { ...row, tsStart: row.startMs, ts: row.endMs || row.startMs, _displayStartMs: row.displayStartMs, _timelinePlanned: true, _editable: editable };
+      if (!dailyView || row.ownedBySelected) return shown;
+      if (isTimelineTargetEditable(dailyView.sourceTargets[row.dayId])) return { ...shown, _editable: true };
+      const liveToday = getDateInTZ(row.startMs, _tz) === _todayKey;
+      return { ...shown, _editable: false, _completable: liveToday, _toggleFn: liveToday ? 'toggleCarryoverItemDone' : undefined };
+    });
+    const displayStart = item => item._displayStartMs ?? (item.tsStart || item.ts);
+    let combined = [...base, ...plannedRows].sort((a, b) => (displayStart(a) - displayStart(b)) || (sourceOrder(a) - sourceOrder(b)) || rowId(a).localeCompare(rowId(b)));
     // Date-break divider (§21): when THIS My Day's own window still spans two
     // calendar dates (a non-midnight boundary not yet crossed), separate the rows
     // landing on each date with a plain divider — still one plan, one view; dates
@@ -6123,10 +6233,13 @@ function renderToday() {
     const breakTarget = myDay || (timelineTarget?.store === 'calendar' ? timelineTarget : null);
     if (breakTarget && combined.length) {
       const withBreaks = [];
-      let lastRowDateKey = null;
+      // A Daily View starts on its selected date, so the first row from the next date is
+      // marked even when nothing on the selected date is shown before it.
+      let lastRowDateKey = dailyView ? dailyView.window.dateKey : null;
+      const nextDateKey = dailyView ? _dateKeyPlusDays(dailyView.window.dateKey, 1) : null;
       combined.forEach(row => {
-        const rowDateKey = getDateInTZ(row.tsStart ?? row.ts, breakTarget.timezone || _tz);
-        if (lastRowDateKey && rowDateKey !== lastRowDateKey) withBreaks.push({ _dateBreak: true, tsStart: row.tsStart, ts: row.tsStart, dateKey: rowDateKey });
+        const rowDateKey = getDateInTZ(row._displayStartMs ?? row.tsStart ?? row.ts, breakTarget.timezone || _tz);
+        if (lastRowDateKey && rowDateKey !== lastRowDateKey) withBreaks.push({ _dateBreak: true, tsStart: row.tsStart, ts: row.tsStart, dateKey: rowDateKey, nextDay: rowDateKey === nextDateKey });
         withBreaks.push(row);
         lastRowDateKey = rowDateKey;
       });
@@ -8845,6 +8958,7 @@ function renderSettings() {
   const toneEl = document.getElementById('set-coach-tone');
   toneEl.value = settings.coachTone || 'analyst';
   renderTonePreview();
+  renderDailyViewHoursSetting();
   document.getElementById('settings-stats').textContent=`${entries.length} total entries · ${getWeekEntries().length} this week`;
   const buildEl = document.getElementById('app-build-label');
   if (buildEl) buildEl.textContent = APP_BUILD;

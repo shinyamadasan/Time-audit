@@ -194,44 +194,29 @@ test('deriveMyDayPlannedRows positions timed tasks and keeps same-time source or
   assert.equal(result.positioned[0].itemId, 'plan');
 });
 
-test('deriveMyDayPlannedRows preserves the canonical range and extends only for relevant overnight content', () => {
-  const midnight = Date.parse('2026-09-28T00:00:00+08:00');
-  const cap = Date.parse('2026-09-29T00:00:00+08:00');
-  const target = { id: 'cal1:2026-09-27', store: 'calendar', timezone: 'Asia/Manila', endMs: midnight, extentEndMs: cap };
+test('deriveMyDayPlannedRows preserves the canonical range and owner identity, and no longer decides any display extent', () => {
+  const target = { id: 'cal1:2026-09-27', store: 'calendar', timezone: 'Asia/Manila', endMs: Date.parse('2026-09-28T00:00:00+08:00') };
   const instantsById = {
     evening: { startMs: Date.parse('2026-09-27T20:00:00+08:00'), endMs: Date.parse('2026-09-27T22:00:00+08:00') },
     one: { startMs: Date.parse('2026-09-28T01:00:00+08:00'), endMs: null },
     three: { startMs: Date.parse('2026-09-28T02:00:00+08:00'), endMs: Date.parse('2026-09-28T03:00:00+08:00') },
   };
-  const evening = deriveMyDayPlannedRows({
-    target,
-    planItems: [{ id: 'evening', task: 'Evening', when: '20:00', durationMinutes: 120, whenTz: 'Asia/Manila' }],
-    itemInstants: (_target, item) => instantsById[item.id],
-  });
-  assert.equal(evening.displayEndMs, midnight, 'no overnight content means no extension');
-  assert.equal(evening.positioned[0].durationMinutes, 120);
-
-  const overnight = deriveMyDayPlannedRows({
+  const result = deriveMyDayPlannedRows({
     target,
     planItems: [
-      { id: 'one', task: 'Wind down', when: '01:00', whenDayOffset: 1, whenTz: 'Asia/Manila' },
       { id: 'three', task: 'Sleep', when: '02:00', durationMinutes: 60, whenDayOffset: 1, whenTz: 'Asia/Manila' },
+      { id: 'evening', task: 'Evening', when: '20:00', durationMinutes: 120, whenTz: 'Asia/Manila' },
+      { id: 'one', task: 'Wind down', when: '01:00', whenDayOffset: 1, whenTz: 'Asia/Manila' },
     ],
     itemInstants: (_target, item) => instantsById[item.id],
   });
-  assert.deepEqual(overnight.positioned.map(row => row.itemId), ['one', 'three']);
-  assert.equal(overnight.displayEndMs, Date.parse('2026-09-28T03:30:00+08:00'), 'latest relevant end plus deterministic 30-minute padding');
-});
-
-test('extended My Day padding is capped at the calendar plan two-date extent and never duplicates persistence identities', () => {
-  const cap = Date.parse('2026-09-29T00:00:00+08:00');
-  const result = deriveMyDayPlannedRows({
-    target: { id: 'cal1:2026-09-27', store: 'calendar', timezone: 'Asia/Manila', endMs: Date.parse('2026-09-28T00:00:00+08:00'), extentEndMs: cap },
-    planItems: [{ id: 'late', task: 'Late', when: '23:50', whenDayOffset: 1, whenTz: 'Asia/Manila' }],
-    itemInstants: () => ({ startMs: Date.parse('2026-09-28T23:50:00+08:00'), endMs: null }),
-  });
-  assert.equal(result.displayEndMs, cap);
-  assert.deepEqual(result.positioned.map(row => [row.dayId, row.itemId]), [['cal1:2026-09-27', 'late']]);
+  assert.deepEqual(result.positioned.map(row => [row.dayId, row.itemId]), [
+    ['cal1:2026-09-27', 'evening'], ['cal1:2026-09-27', 'one'], ['cal1:2026-09-27', 'three'],
+  ]);
+  assert.equal(result.positioned[0].durationMinutes, 120);
+  // Configurable Daily View V1: the content-driven extension is retired; the window is
+  // selectedDate + Daily View Length (daily-view-window.js), never this projection.
+  assert.equal('displayEndMs' in result, false);
 });
 
 test('deriveMyDayPlannedRows keeps date-only commitments untimed and distinct from tasks', () => {

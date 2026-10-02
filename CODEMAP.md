@@ -105,6 +105,21 @@ room-level rule like every other subtree). Covered by `firebase-rules.test.js`. 
 - Tests: `calendar-plan-{model,repository,sync,live}.test.js`, `plan-authority-calendar.test.js` (production-
   equivalent modules), `npm-test-wiring.test.js` (the wiring itself), `tests/calendar-native-plan-identity.spec.js`.
 
+## Configurable 24–48 Hour Daily View V1 (2026-10-02 review candidate)
+
+- `daily-view-window.js` (new, pure, own entry tag): `normalizeDailyViewHours()` (24–48, default 36),
+  `dailyViewWindow(dateKey, hours, timezone)` → `{startMs, endMs, factualDateSegments, sourceDateKeys}`,
+  `intersectsDailyViewWindow()` (half-open), `deriveDailyViewPlannedRows({dateKey, hours, authority,
+  commitments, commitmentsBetween})` — reads only D-1/D/D+1 calendar plans through PlanAuthority and keeps
+  each row's owner `dayId`/`itemId`. Exposed as `globalThis.DailyViewWindow`.
+- `index.html`: `dailyViewHours()` / `saveDailyViewHours()` / `renderDailyViewHoursSetting()` (Settings →
+  Daily view, device-local `ta3-daily-view-hours`), `dailyViewTemplateEntries()`, `civilWeekday()`;
+  `renderToday()` uses the window for calendar targets; `assembleTodayTimeline()` accepts a
+  `templateEntries` override; `renderPlannedTimelineRow()` adds owner / carry-in labels and
+  `data-plan-day-id`; `renderDateBreakRow()` adds `· NEXT DAY`.
+- `tomorrow-timeline-model.js`: `extendedMyDayEnd` / `MY_DAY_EXTENSION_PADDING_MINUTES` removed.
+- Tests: `daily-view-window.test.js`; browser acceptance in `tests/calendar-native-plan-identity.spec.js`.
+
 ## My Day UX Simplification V1 (2026-09-19 review candidate)
 
 - `index.html`: the My Day view's visible order is quiet date header, `UP NEXT`, universal
