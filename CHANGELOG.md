@@ -1,5 +1,61 @@
 # ChronaSense — Changelog
 
+## Brain Dump + Eisenhower V1 FIX FIRST round 2 — candidate, NOT integrated
+
+**Same branch**, on top of the round-1 fix `708c84a1`. The release token
+(`20261002-brain-dump-eisenhower-v1-fix1`) governing storage.js and the rest of the pinned Personal
+Day/plan group is UNCHANGED this round — nothing governed changed. Brain Dump's own independent entry
+tags (`brain-dump-sync.js`, `brain-dump-ui.js`) move to `...-fix2`, since both files' content changed
+again.
+
+**The remaining blocker, closed:** round 1's `claimPromotion()` only ever checked LOCAL cache before
+declaring a claim won — the actual remote push happened afterward, as a separate async step, by which
+time Plan Authority had already been written to. A stale/offline device that still saw a capture as
+TRIAGED could mint a winning local claim and create a real plan item even though the AUTHORITATIVE remote
+record had already moved to `archived`/`delegated` (or a different device's `promoted`) — exactly
+the contradiction round 1 set out to prevent, just reached through the window round 1 didn't close.
+
+**Fix: the claim is now established against the AUTHORITATIVE REMOTE record, via a real Firebase
+transaction, BEFORE Plan Authority is ever touched.** `brain-dump-sync.js` gains
+`claimPromotionRemote(id, promotion)`: refuses immediately (`reason:'offline'`, zero writes) if there is
+no room ref or this cache is not the joined room's; otherwise runs a `.transaction()` against
+`rooms/<room>/brainDump/<id>` whose update function is a NEW, stricter gate —
+`brain-dump-model.js`'s `arbitratePromotionClaim()` — which refuses outright (no write at all) if the
+remote is ALREADY a settled terminal state (archived/delegated/promoted by someone else), and only falls
+back to the ordinary rank+tie-break merge when remote carries its own non-terminal outstanding claim
+(two genuinely concurrent new claims, neither with a side effect yet). This is deliberately a DIFFERENT,
+stricter rule than `mergeCaptureRecords`'s ordinary rank logic, which is still unchanged and still
+correctly protects an ALREADY-ESTABLISHED claim/promotion from a stale archive/delegate's own later push
+(round 1's fix, still in force for that case). A bounded timeout (default 8s, injectable) guards against
+the real Firebase SDK's documented behavior of a `transaction()` that does not settle at all while
+genuinely offline, so this call always resolves to an explicit non-success result in bounded time rather
+than hanging. `promoteCaptureToPlan()` is now `async`: phase 1 (claim) awaits this remote gate before
+phase 2 (Plan Authority write) is ever reached; phase 3 (finalize) stays local-first, since by then the
+claim is already authoritative and the plan item already exists — no new side effect is left to protect,
+so no second remote round trip is needed. `brain-dump-ui.js`'s `doToday()`/`confirmSchedule()` are now
+`async` too, with a new "Could not confirm with the server" toast for `reason:'offline'`.
+`brain-dump-repository.js`'s local-only `claimPromotion()`/`finalizePromotion()` are unchanged in shape —
+`finalizePromotion()` remains the production phase-3 path; `claimPromotion()` is no longer called by
+production (superseded by the remote gate) but remains as the local building block
+`claimPromotionRemote()` itself reuses for its pre-flight local check, and as a pure-local test seam.
+
+**Corrected test coverage.** The previous round's "archive wins first" / "delegate wins first" tests
+shared one repository between simulated "devices", which could not actually reproduce a stale client.
+`brain-dump-promotion.test.js` is rewritten around `makeDevice()` — its own repository AND its own real
+sync bridge, sharing one fake Firebase room — so staleness is genuine: a device only learns of another's
+write by actually syncing. 19 tests (was 20; consolidated/corrected), covering the full required set:
+archive/delegate-first-then-stale-promote (both blocked, no plan item, provenance preserved, stale device
+converges on reconnect), promote-first-then-archive/delegate (stale local write is not refused, but its
+*push* loses the rank-merge, exactly as round 1 already proved), Schedule parity, two different
+targets racing (exactly one claim/destination survives), offline (no side effect, retryable, resolves on
+retry), the crash-before-plan-write and plan-write-then-finalize-fails windows (idempotent retry, no
+duplicate), and a stale snapshot unable to resurrect over an already-settled truth. `brain-dump-model.test.js`
+gains 5 pure-model tests for `arbitratePromotionClaim()` specifically (the new, stricter gate, as distinct
+from the unchanged `mergeCaptureRecords` rank rule). `brain-dump-account-isolation.test.js` gains the
+required account-switch-during-an-in-flight-remote-claim test (a genuinely deferred transaction,
+released only after the switch, proving the stale in-flight response is never adopted under the new
+room).
+
 ## Brain Dump + Eisenhower V1 FIX FIRST — candidate, NOT integrated
 
 **Same branch**, on top of the reviewed candidate `6d71ed16`. Release token bumped to

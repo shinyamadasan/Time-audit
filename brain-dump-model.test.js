@@ -10,8 +10,8 @@ import assert from 'node:assert/strict';
 
 import {
   validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, claimPromotion, finalizePromotion,
-  archiveCapture, delegateCapture, normalizeCapture, mergeCaptureRecords, mergeCaptureMaps,
-  allCaptures, untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
+  archiveCapture, delegateCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
+  mergeCaptureMaps, allCaptures, untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
   TERMINAL_STATUSES,
 } from './brain-dump-model.js';
 import { createBrainDumpRepository, brainDumpCacheKeyForRoom } from './brain-dump-repository.js';
@@ -444,4 +444,56 @@ test('normalizeCapture refuses a promotionClaim on a terminal record, and refuse
   const archived = archiveCapture(base, { now: T0 + 3, updatedBy: 'd' }).record;
   assert.equal(normalizeCapture({ ...archived, promotionClaim: claimed.promotionClaim }), null, 'a terminal record may never carry a claim');
   assert.equal(normalizeCapture({ ...claimed, promotionClaim: { ...claimed.promotionClaim, claimedAt: undefined } }), null, 'a malformed claim is refused, not half-trusted');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIX FIRST round 2: arbitratePromotionClaim — the gate a BRAND NEW claim must
+// pass against the AUTHORITATIVE REMOTE record (distinct from the ordinary
+// mergeCaptureRecords rank rule, which protects an ALREADY-ESTABLISHED
+// claim/promotion). This is the pure-model proof; brain-dump-sync.test.js and
+// brain-dump-promotion.test.js prove it wired into a real Firebase transaction
+// and the full orchestration layer.
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('arbitratePromotionClaim: a brand-new claim is REFUSED outright against an already-authoritative ARCHIVED remote, even though claimed would outrank archived by the ordinary merge rule', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const archivedRemote = archiveCapture(base, { now: T0 + 2, updatedBy: 'device-b' }).record;
+  const candidate = claimPromotion(base, { promotion: PROMO_A, now: T0 + 3, updatedBy: 'device-a' }).record;
+
+  // The ordinary merge rule WOULD let the claim (rank 2) beat archived (rank 1)
+  // — that is correct for protecting an ALREADY-ESTABLISHED claim, but wrong
+  // for establishing a BRAND NEW one against settled remote truth.
+  assert.equal(mergeCaptureRecords(archivedRemote, candidate).status, 'triaged', 'sanity: the ordinary rule alone would let the new claim win');
+
+  const result = arbitratePromotionClaim(archivedRemote, candidate);
+  assert.equal(result, undefined, 'the claim gate refuses outright — no write at all');
+});
+
+test('arbitratePromotionClaim: a brand-new claim is REFUSED outright against an already-authoritative DELEGATED remote', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: false, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const delegatedRemote = delegateCapture(base, { delegatedTo: 'Alex', now: T0 + 2, updatedBy: 'device-b' }).record;
+  const candidate = claimPromotion(base, { promotion: PROMO_A, now: T0 + 3, updatedBy: 'device-a' }).record;
+  assert.equal(arbitratePromotionClaim(delegatedRemote, candidate), undefined);
+});
+
+test('arbitratePromotionClaim: a brand-new claim is REFUSED against an already-authoritative PROMOTED remote (a different device already finished)', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const promotedRemote = promoteFully(base, { promotion: PROMO_A, now: T0 + 2, updatedBy: 'device-b' }).record;
+  const candidate = claimPromotion(base, { promotion: PROMO_B, now: T0 + 3, updatedBy: 'device-a' }).record;
+  assert.equal(arbitratePromotionClaim(promotedRemote, candidate), undefined);
+});
+
+test('arbitratePromotionClaim: establishes the claim cleanly when remote is untriaged/triaged with no outstanding claim', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const candidate = claimPromotion(base, { promotion: PROMO_A, now: T0 + 2, updatedBy: 'device-a' }).record;
+  const result = arbitratePromotionClaim(base, candidate);
+  assert.deepEqual(result, candidate);
+});
+
+test('arbitratePromotionClaim: two genuinely concurrent NEW claims against each other (neither remote is terminal yet) fall through to the ordinary earliest-wins tie-break', () => {
+  const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const remoteClaim = claimPromotion(base, { promotion: PROMO_A, now: T0 + 10, updatedBy: 'device-a' }).record; // already on remote
+  const candidate = claimPromotion(base, { promotion: PROMO_B, now: T0 + 20, updatedBy: 'device-b' }).record; // arriving later
+  const result = arbitratePromotionClaim(remoteClaim, candidate);
+  assert.deepEqual(result.promotionClaim, remoteClaim.promotionClaim, 'the earlier claim still wins — not a blanket refusal, since remote is not terminal');
 });
