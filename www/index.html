@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChronaSense</title>
 <meta name="theme-color" content="#0b0b0c">
-<meta name="pdb-release" content="20261001-daily-plan-ux-v2-time-ranges-extended-my-day1">
+<meta name="pdb-release" content="20261002-brain-dump-eisenhower-v1-fix1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1698,7 +1698,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1
+<!-- One release token for the whole Personal Day / plan module graph. Module scripts pin ?v=20261002-brain-dump-eisenhower-v1-fix1
      themselves, but the modules they IMPORT are bare URLs, which browsers cache independently of index.html
      — so a device could run new sync code against an old repository, or an old live wiring against a new
      storage.js (permanent "Off", or a link error that stops PlanAuthority loading at all). This map makes
@@ -1713,69 +1713,69 @@
 <script type="importmap">
 {
   "imports": {
-    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./operational-plan-model.js": "./operational-plan-model.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./plan-authority.js": "./plan-authority.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./stale-plan-recovery-model.js": "./stale-plan-recovery-model.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./commitments-repository.js": "./commitments-repository.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./commitments-sync.js": "./commitments-sync.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./capability-career-repository.js": "./capability-career-repository.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1",
-    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"
+    "./personal-day-boundary-model.js": "./personal-day-boundary-model.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./personal-day-boundary-repository.js": "./personal-day-boundary-repository.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./personal-day-boundary-sync.js": "./personal-day-boundary-sync.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./personal-day-boundary-live.js": "./personal-day-boundary-live.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./personal-day-boundary-ui.js": "./personal-day-boundary-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./personal-day-boundary-diagnostics.js": "./personal-day-boundary-diagnostics.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./personal-day-boundary-recovery.js": "./personal-day-boundary-recovery.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./operational-plan-model.js": "./operational-plan-model.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./operational-plan-repository.js": "./operational-plan-repository.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./operational-plan-sync.js": "./operational-plan-sync.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./plan-authority.js": "./plan-authority.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./stale-plan-recovery-model.js": "./stale-plan-recovery-model.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./commitments-repository.js": "./commitments-repository.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./commitments-sync.js": "./commitments-sync.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./coarse-life-evidence-repository.js": "./coarse-life-evidence-repository.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./coarse-life-evidence-sync.js": "./coarse-life-evidence-sync.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./coarse-life-evidence-ui.js": "./coarse-life-evidence-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./learning-plan-repository.js": "./learning-plan-repository.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./capability-career-repository.js": "./capability-career-repository.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./daily-routines-repository.js": "./daily-routines-repository.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./plan-by-deadline-model.js": "./plan-by-deadline-model.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./plan-by-deadline-repository.js": "./plan-by-deadline-repository.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./plan-by-deadline-sync.js": "./plan-by-deadline-sync.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./calendar-plan-model.js": "./calendar-plan-model.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./calendar-plan-repository.js": "./calendar-plan-repository.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./calendar-plan-sync.js": "./calendar-plan-sync.js?v=20261002-brain-dump-eisenhower-v1-fix1",
+    "./calendar-plan-live.js": "./calendar-plan-live.js?v=20261002-brain-dump-eisenhower-v1-fix1"
   }
 }
 </script>
-<script src="storage.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
+<script src="storage.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
 <script src="evidence-interpretation.js?v=20260909-analytics-truth-fixes-v1"></script>
 <script src="insights.js?v=20260719-template-sync-doctor-2"></script>
 <script src="focus-wallet.js?v=20260719-template-sync-doctor-2"></script>
 <script type="module" src="attention-signals.js?v=20260905-minimal-distraction-signals"></script>
-<script type="module" src="daily-routines-ui.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
+<script type="module" src="daily-routines-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
 <script type="module" src="plan-tomorrow-ui.js?v=20260908-plan-tomorrow-v1"></script>
 <script type="module" src="tomorrow-view-ui.js?v=20260913-tomorrow-timeline-preview-v1"></script>
-<script type="module" src="learning-plan-ui.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
-<script type="module" src="capability-career-ui.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
+<script type="module" src="learning-plan-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
+<script type="module" src="capability-career-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
 <script type="module" src="life-feed-ui.js?v=20260901-unified-life-feed-v1"></script>
 <script type="module" src="cross-domain-intelligence-ui.js?v=20260901-cross-domain-intelligence-v1"></script>
 <script type="module" src="life-character-sheet-ui.js?v=20260901-life-character-sheet-v1"></script>
 <script type="module" src="life-ledger-export-ui.js?v=20260830-life-ledger-export-transport"></script>
 <script type="module" src="life-ledger-sync-status-ui.js?v=20260903-life-ledger-background-sync-v1"></script>
 <script type="module" src="windows-hud-bridge.js?v=20260908-windows-ambient-focus-hud-v1"></script>
-<script type="module" src="coarse-life-evidence-ui.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
-<script type="module" src="coarse-life-evidence-sync.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
+<script type="module" src="coarse-life-evidence-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
+<script type="module" src="coarse-life-evidence-sync.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
 <script type="module" src="shared-accountability-model.js?v=20260911-wife-shared-v1"></script>
 <script type="module" src="partner-view-model.js?v=20260912-partner-view-v1"></script>
-<script type="module" src="personal-day-boundary-live.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
-<script type="module" src="personal-day-boundary-ui.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
-<script type="module" src="plan-by-deadline-ui.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
-<script type="module" src="calendar-plan-ui.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
+<script type="module" src="personal-day-boundary-live.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
+<script type="module" src="personal-day-boundary-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
+<script type="module" src="plan-by-deadline-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
+<script type="module" src="calendar-plan-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
 <script>
 // Read-only Personal Day sync diagnostics for a real device: open the app with ?pdbdiag=1.
-if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1'), 1500));
+if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEventListener('load', () => setTimeout(() => import('./personal-day-boundary-diagnostics.js?v=20261002-brain-dump-eisenhower-v1-fix1'), 1500));
 </script>
-<script type="module" src="operational-plan-ui.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
-<script type="module" src="commitments-sync.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
-<script type="module" src="planning-continuity-ui.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
-<script type="module" src="brain-dump-sync.js?v=20261001-brain-dump-eisenhower-v1"></script>
-<script type="module" src="brain-dump-ui.js?v=20261001-brain-dump-eisenhower-v1"></script>
+<script type="module" src="operational-plan-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
+<script type="module" src="commitments-sync.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
+<script type="module" src="planning-continuity-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
+<script type="module" src="brain-dump-sync.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
+<script type="module" src="brain-dump-ui.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -12556,7 +12556,7 @@ if (!localStorage.getItem('ta3-onboarded')) {
   setTimeout(openOnboarding, 400);
 }
 </script>
-<script src="focus-mode.js?v=20261001-daily-plan-ux-v2-time-ranges-extended-my-day1"></script>
+<script src="focus-mode.js?v=20261002-brain-dump-eisenhower-v1-fix1"></script>
 
 <!-- ══ ONBOARDING ══ -->
 <div class="ob-overlay" id="ob-overlay">

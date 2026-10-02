@@ -29,7 +29,8 @@ import {
   BRAIN_DUMP_SCHEMA_VERSION,
   buildCapture,
   triageCapture,
-  promoteCapture,
+  claimPromotion,
+  finalizePromotion,
   archiveCapture,
   delegateCapture,
   mergeCaptureRecords,
@@ -176,21 +177,38 @@ export function createBrainDumpRepository(deps = {}) {
       return { ok: true, record: persist(key, result.record) };
     },
 
-    /** Idempotent: a capture already promoted/archived/delegated is returned as
-     *  `{ok:false, reason:'already-disposed', record}` rather than erroring or
-     *  double-disposing — callers (the UI promotion flow) use that to recognize a
-     *  retried action and avoid writing a second plan item. */
-    promote(id, { promotion, now: at, updatedBy } = {}) {
+    /** PHASE 1 of promotion — see brain-dump-model.js's file banner. Idempotent: a
+     *  re-claim of the SAME (store, targetId, planItemId) is a no-op success (a
+     *  retry, or this device's own repeated attempt); a DIFFERENT outstanding claim
+     *  refuses with 'already-claimed'; an already-disposed capture refuses with
+     *  'already-disposed' — callers use either to recognize a race rather than
+     *  writing a second, competing claim or a second plan item. */
+    claimPromotion(id, { promotion, now: at, updatedBy } = {}) {
       if (!validBrainDumpId(id)) return { ok: false, reason: 'invalid-input', field: 'id' };
       const key = activeKey();
       if (key === null) return NO_ACCOUNT;
       const current = readIn(key, id);
       if (!current) return { ok: false, reason: 'not-found' };
-      const result = promoteCapture(current, { promotion, now: Number.isFinite(at) ? at : now(), updatedBy: updatedBy || deviceId() });
+      const result = claimPromotion(current, { promotion, now: Number.isFinite(at) ? at : now(), updatedBy: updatedBy || deviceId() });
       if (!result.ok) return result;
       return { ok: true, record: persist(key, result.record) };
     },
 
+    /** PHASE 2 of promotion: finalizes using the capture's OWN recorded claim.
+     *  Idempotent: an already-promoted capture refuses with 'already-disposed'. */
+    finalizePromotion(id, { now: at, updatedBy } = {}) {
+      if (!validBrainDumpId(id)) return { ok: false, reason: 'invalid-input', field: 'id' };
+      const key = activeKey();
+      if (key === null) return NO_ACCOUNT;
+      const current = readIn(key, id);
+      if (!current) return { ok: false, reason: 'not-found' };
+      const result = finalizePromotion(current, { now: Number.isFinite(at) ? at : now(), updatedBy: updatedBy || deviceId() });
+      if (!result.ok) return result;
+      return { ok: true, record: persist(key, result.record) };
+    },
+
+    /** Fails closed with 'promotion-claimed' (never 'already-disposed') if a
+     *  promotion claim is outstanding — see brain-dump-model.js's file banner. */
     archive(id, { now: at, updatedBy } = {}) {
       if (!validBrainDumpId(id)) return { ok: false, reason: 'invalid-input', field: 'id' };
       const key = activeKey();

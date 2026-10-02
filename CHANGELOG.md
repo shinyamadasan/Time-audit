@@ -1,6 +1,37 @@
 # ChronaSense — Changelog
 
-## Brain Dump + Eisenhower V1 — candidate, NOT integrated
+## Brain Dump + Eisenhower V1 FIX FIRST — candidate, NOT integrated
+
+**Same branch**, on top of the reviewed candidate `6d71ed16`. Release token bumped to
+`20261002-brain-dump-eisenhower-v1-fix1` (retires `20261001-daily-plan-ux-v2-time-ranges-extended-my-day1`)
+because this FIX FIRST wires `BrainDumpSync` into `storage.js`'s runtime lifecycle, moving the whole
+governed Personal Day / plan module group with it — `focus-mode.js`'s entry tag (coincidentally sharing
+the retired token, though it is outside the governed group) moves too, so no retired token is left
+referenced anywhere in `index.html`. Three review blockers fixed:
+
+1. **Firebase rules.** `rooms/$roomId/brainDump` had no rule at all — add-only, mirrored exactly on
+   `commitments` (the nearest analog): owner-only `.write`, no new `.validate`, no broadened access.
+   `firebase-rules.test.js` gains explicit Brain Dump coverage (owner read/write, foreign-account denial,
+   unauthenticated denial, no calendar-cutover barrier, sibling-path non-interference) and `brainDump` joins
+   the enumerated "every ordinary owner-write room path" regression array.
+
+2. **Promote-vs-archive/delegate race (the serious one).** The reviewed candidate let a capture converge to
+   `archived`/`delegated` via plain last-write-wins while a real, already-created plan item silently
+   survived with no provenance connecting them. Fixed with the smallest capture-side arbitration compatible
+   with the existing repository pattern: a `promotionClaim` field, written BEFORE Plan Authority is ever
+   touched (`claimPromotion`/`finalizePromotion` replace the old one-shot `promoteCapture`), plus an
+   authority-rank merge rule (`promoted` > claimed > `archived`/`delegated` > active) that wins a merge
+   OUTRIGHT regardless of `updatedAt` — so a late-arriving stale archive/delegate can never resurrect over
+   an already-claimed or already-promoted truth, and `archiveCapture`/`delegateCapture` fail closed
+   (`reason: 'promotion-claimed'`) the instant a claim exists, win or lose the underlying race. 37 model
+   tests (brain-dump-model.test.js, +10 from the prior candidate), 20 orchestration tests
+   (brain-dump-promotion.test.js, +10 — the required adversarial set: promote/archive/delegate in both
+   orders, competing-target claims, the crash-window retry, late-stale-snapshot, the equal-authority tie,
+   Schedule parity), and one new account-isolation test (the stale-callback-under-another-room case).
+
+3. **Release generation.** See above.
+
+
 
 **Branch `feat/brain-dump-eisenhower-v1`**, created from fresh `origin/main` @ `7c75e05` (Daily Plan UX V2 +
 Time Ranges + Extended My Day). Not pushed, merged or deployed. New, independently-versioned module graph

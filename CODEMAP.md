@@ -1,28 +1,45 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
-## Brain Dump + Eisenhower V1 (candidate, 2026-10-01)
+## Brain Dump + Eisenhower V1 (candidate, 2026-10-01; FIX FIRST 2026-10-02)
 
 New nav entry `#nav-braindump` / view `#view-braindump` (mounted between My Day and Week), rendered
 entirely by `brain-dump-ui.js` into `#bd-root` via `showView('braindump')`. Independently versioned
-(`?v=20261001-brain-dump-eisenhower-v1`) — not joined to the pinned Personal Day / plan importmap group,
-since nothing in that group imports these files (mirrors `life-feed-ui.js`'s precedent for a standalone
-module graph with internal bare relative imports).
+(`brain-dump-sync.js` / `brain-dump-ui.js` entry tags share `?v=20261002-brain-dump-eisenhower-v1-fix1`;
+`brain-dump-model.js` / `-repository.js` / `-promotion.js` are plain, unversioned bare imports reached only
+from those two entries) — not joined to the pinned Personal Day / plan importmap group, since nothing in
+that group imports these files (mirrors `life-feed-ui.js`'s precedent for a standalone module graph with
+internal bare relative imports). `storage.js` itself (wiring `BrainDumpSync.attach()`/`pushAllLocal()`/
+`detach()` into `startSync()`/`.info/connected`/`teardownRoomListeners()`) IS in the governed group, so its
+FIX FIRST change moved the whole group to `20261002-brain-dump-eisenhower-v1-fix1` too (same token,
+different reason — see CHANGELOG).
 
-- `brain-dump-model.js` (pure): capture schema (`untriaged -> triaged -> {promoted|archived|delegated}`,
-  terminal/idempotent), atomic `triageCapture` (both important+urgent together), deterministic plan-item id
-  `brainDumpPlanItemId()` -> `bdp1|<captureId>`, per-record LWW merge (`mergeCaptureRecords`, same
-  canonical-tie-break algorithm as `commitments-model.js`), deterministic ordering, `quadrantOf()`.
+Firebase: `rooms/$roomId/brainDump` has an owner-only `.write` rule, added alongside `commitments` in
+`firebase.rules.json` (no `.validate`, matching that nearest analog exactly; `.read` is inherited from the
+room-level rule like every other subtree). Covered by `firebase-rules.test.js`.
+
+- `brain-dump-model.js` (pure): capture schema (`untriaged -> triaged -> [claimed] ->
+  {promoted|archived|delegated}`, terminal/idempotent), atomic `triageCapture` (both important+urgent
+  together), deterministic plan-item id `brainDumpPlanItemId()` -> `bdp1|<captureId>`, the
+  `promotionClaim` field + `claimPromotion()`/`finalizePromotion()` (the two-phase promotion that decides
+  the promote-vs-archive/delegate race BEFORE Plan Authority is touched — see the file's own banner), and
+  an AUTHORITY-RANK merge (`mergeCaptureRecords`: promoted(3) > claimed(2) > archived/delegated(1) >
+  active(0) — a higher rank wins the merge outright regardless of `updatedAt`, unlike every other field
+  edit in this codebase, which stays plain LWW + canonical tie-break).
 - `brain-dump-repository.js`: room-scoped (`ta3-brain-dump-v1:<roomId>`), mirrors
-  `commitments-repository.js`'s envelope/validate-before-write/`mergeRemote` seam.
+  `commitments-repository.js`'s envelope/validate-before-write/`mergeRemote` seam. `claimPromotion()` /
+  `finalizePromotion()` replace the FIX-FIRST-retired one-shot `promote()`.
 - `brain-dump-sync.js`: `rooms/<room>/brainDump/<captureId>`, one whole-subtree listener + per-record
   transaction push, same owner-mismatch/offline-queue/stale-token discipline as `commitments-sync.js`.
   Wired into `storage.js`'s `startSync()` / `.info/connected` reconnect / `teardownRoomListeners()`.
-- `brain-dump-promotion.js`: Do Today / Schedule only — resolves the target via `window.PlanAuthority`
-  (`current()` / `dayForScheduledDate()`), writes the plan item via `addItem()` using the deterministic id
-  (idempotent under retry), then records provenance on the capture via `repository.promote()`. Archive and
-  Delegate never touch Plan Authority — handled directly in `brain-dump-ui.js` via
-  `repository.archive()`/`repository.delegate()`.
+  Unchanged by the FIX FIRST — the arbitration fix is entirely capture-side; the SAME transaction+merge
+  mechanism already pushes/pulls `promotionClaim` for free since it's just another field on the record.
+- `brain-dump-promotion.js`: Do Today / Schedule — three phases (CLAIM via
+  `repository.claimPromotion()`, CREATE via `PlanAuthority.addItem()` using the deterministic id, FINALIZE
+  via `repository.finalizePromotion()`, which reads the destination off the capture's OWN claim rather than
+  a freshly-built object). Archive and Delegate never touch Plan Authority and fail closed
+  (`reason: 'promotion-claimed'`) the instant a claim is outstanding — handled directly in
+  `brain-dump-ui.js` via `repository.archive()`/`repository.delegate()`.
 
 ## Calendar-Native Plan Identity V1 (candidate, 2026-09-27)
 

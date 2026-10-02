@@ -211,9 +211,11 @@ function saveTriage(id) {
 }
 
 function reportPromotionOutcome(result, successLabel) {
+  // The claim phase writes locally even on a losing/failed attempt — push it so
+  // other devices learn who won as soon as possible.
+  if (result.record && window.BrainDumpSync) window.BrainDumpSync.syncCapture(result.record.id);
   if (result.ok) {
     notify(result.alreadyDisposed ? 'Already handled.' : successLabel);
-    if (window.BrainDumpSync) window.BrainDumpSync.syncCapture(result.record.id);
     render();
     return;
   }
@@ -222,8 +224,11 @@ function reportPromotionOutcome(result, successLabel) {
     ambiguous: 'That local time happens twice (clock change) — pick a different time.',
     nonexistent: 'That local time does not exist (clock change) — pick a different time.',
     'invalid-date': 'Pick a valid date.',
+    'already-claimed': 'Already being promoted elsewhere — try again in a moment.',
+    'already-disposed': 'Already handled.',
   };
   notify(messages[result.reason] || result.reason || 'Could not promote that item.');
+  render();
 }
 
 function doToday(id) {
@@ -268,6 +273,7 @@ function confirmSchedule(id) {
 
 function archive(id) {
   const result = repository().archive(id, { now: Date.now(), updatedBy: deviceId() });
+  if (!result.ok && result.reason === 'promotion-claimed') { notify('Already being promoted — cannot archive.'); render(); return; }
   if (!result.ok && result.reason !== 'already-disposed') { notify('Could not archive that item.'); return; }
   if (window.BrainDumpSync) window.BrainDumpSync.syncCapture(id);
   render();
@@ -276,6 +282,7 @@ function archive(id) {
 function delegate(id) {
   const delegatedTo = typeof window.prompt === 'function' ? window.prompt('Delegated to (optional):', '') : null;
   const result = repository().delegate(id, { delegatedTo, now: Date.now(), updatedBy: deviceId() });
+  if (!result.ok && result.reason === 'promotion-claimed') { notify('Already being promoted — cannot delegate.'); render(); return; }
   if (!result.ok && result.reason !== 'already-disposed') { notify('Could not delegate that item.'); return; }
   if (window.BrainDumpSync) window.BrainDumpSync.syncCapture(id);
   render();
