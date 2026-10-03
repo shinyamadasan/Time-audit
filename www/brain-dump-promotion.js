@@ -84,7 +84,7 @@
 // plan-item id and finalizePromotion's own idempotent guard are what make that
 // safe, exactly as they already do for promoteCaptureToPlan's own retries.
 
-import { brainDumpPlanItemId, promotedTo, samePromotionIntent } from './brain-dump-model.js';
+import { brainDumpPlanItemId, promotedTo, samePromotionIntent, normalizeCapture } from './brain-dump-model.js';
 
 function buildPlanItem(claim, text, now, deviceId) {
   const item = { id: claim.planItemId, task: text, when: claim.when || '', done: false, doneAt: null, updatedAt: now, updatedBy: deviceId, kind: 'task' };
@@ -244,5 +244,66 @@ export function reconcilePromotionClaim({ repository, planAuthority, id, now, de
   const target = typeof planAuthority.targetById === 'function' ? planAuthority.targetById(claim.targetId) : null;
   if (!target) return { ok: false, reason: 'invalid-input', record: current };
 
+  // Case A (FIX FIRST #3): the deterministic item already exists, so the
+  // promotion's side effect provably happened. Finalize, never release, however
+  // old the day is.
+  let items;
+  try { items = planAuthority.rawItems(target); } catch { return { ok: false, reason: 'destination-unreadable', record: current }; }
+  if (!Array.isArray(items)) return { ok: false, reason: 'destination-unreadable', record: current };
+  if (items.some(item => item.id === claim.planItemId)) {
+    return createAndFinalize({ repository, planAuthority, id, target, claim, text: current.text, now, deviceId });
+  }
+
+  const marked = normalizeCapture(current)?.promotionClaim?.planWriteStarted === true;
+  if (targetHasEnded(planAuthority, target, now) === true) {
+    // Case B: proven-ended target and no item. Releasable only if no client can
+    // ever have written that item (the claim was never marked); a marked claim's
+    // absence here might just be a plan cache that has not caught up.
+    return marked
+      ? { ok: false, reason: 'expired-write-may-have-started', record: current }
+      : { ok: false, reason: 'expired', claim, target, record: current };
+  }
+  // A claim this device did not mint, never yet marked: the mark must be
+  // authoritative remotely BEFORE this device writes anything for it.
+  if (!marked) return { ok: false, reason: 'needs-write-mark', claim, record: current };
   return createAndFinalize({ repository, planAuthority, id, target, claim, text: current.text, now, deviceId });
+}
+
+/** true = Plan Authority PROVABLY refuses this target because its day has ended;
+ *  false = it is still writable; null = cannot tell. Uses Plan Authority's own
+ *  normal-contract gate (assertDirectSchedulingTarget), never a local clock rule:
+ *  refused at `now` but accepted at the beginning of time proves the refusal is
+ *  the time-based "Past My Days are history" one, not some other failure. */
+function targetHasEnded(planAuthority, target, now) {
+  if (typeof planAuthority.assertDirectSchedulingTarget !== 'function') return null;
+  try { planAuthority.assertDirectSchedulingTarget(target, now); return false; } catch { /* refused now */ }
+  try { planAuthority.assertDirectSchedulingTarget(target, 0); return true; } catch { return null; }
+}
+
+/** Drives one outstanding claim to its settled state (FIX FIRST #3). Runs
+ *  reconcilePromotionClaim synchronously FIRST, so a claim that can be finished
+ *  right away (this device's own, already marked) still finishes inside the same
+ *  listener callback, before any await. Then, only if needed:
+ *  - 'needs-write-mark': marks the claim authoritatively, then reconciles again;
+ *  - 'expired': resolves the claim as expired authoritatively (the capture goes
+ *    back to the active list). Committed only if the remote still holds that
+ *    exact, unmarked claim, so a concurrent mark, promotion or other recovery
+ *    wins instead.
+ *  Never releases on uncertainty: an unreadable destination, an unresolvable
+ *  target, an unknown end state or an offline remote all leave the claim as is.
+ *  @returns {Promise<object>} the final outcome; `recovered: true` when THIS call
+ *  returned the capture to the active list. */
+export async function settleOutstandingClaim({ repository, planAuthority, id, now, deviceId, markClaimWrite, resolveExpiredClaim }) {
+  const outcome = reconcilePromotionClaim({ repository, planAuthority, id, now, deviceId });
+  if (outcome.reason === 'needs-write-mark' && typeof markClaimWrite === 'function') {
+    const marked = await markClaimWrite(id, outcome.claim);
+    if (!marked.ok) return { ok: false, reason: marked.reason, record: marked.record };
+    return reconcilePromotionClaim({ repository, planAuthority, id, now, deviceId });
+  }
+  if (outcome.reason === 'expired' && typeof resolveExpiredClaim === 'function') {
+    const resolved = await resolveExpiredClaim(id, outcome.claim);
+    if (!resolved.ok) return { ok: false, reason: resolved.reason, record: resolved.record };
+    return { ok: true, record: resolved.record, recovered: true, expiredClaim: outcome.claim, target: outcome.target };
+  }
+  return outcome;
 }

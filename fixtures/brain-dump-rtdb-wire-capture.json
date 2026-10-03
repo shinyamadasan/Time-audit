@@ -21,9 +21,12 @@
         "promotionClaim": null,
         "promotion": null,
         "delegatedTo": null,
-        "reopenCount": 0
+        "reopenCount": 0,
+        "claimEpoch": 0,
+        "expiredClaim": null
       },
       "transactionSnapshot": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "id": "bwuntri",
         "reopenCount": 0,
@@ -34,6 +37,7 @@
         "updatedBy": "device-wire"
       },
       "listenerValue": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "id": "bwuntri",
         "reopenCount": 0,
@@ -65,9 +69,12 @@
         "promotionClaim": null,
         "promotion": null,
         "delegatedTo": null,
-        "reopenCount": 0
+        "reopenCount": 0,
+        "claimEpoch": 0,
+        "expiredClaim": null
       },
       "transactionSnapshot": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "id": "bwtria",
         "important": true,
@@ -81,6 +88,7 @@
         "urgent": false
       },
       "listenerValue": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "id": "bwtria",
         "important": true,
@@ -115,9 +123,12 @@
         "promotionClaim": null,
         "promotion": null,
         "delegatedTo": "Alex",
-        "reopenCount": 0
+        "reopenCount": 0,
+        "claimEpoch": 0,
+        "expiredClaim": null
       },
       "transactionSnapshot": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "delegatedTo": "Alex",
         "disposedAt": 1790816400003,
@@ -133,6 +144,7 @@
         "urgent": false
       },
       "listenerValue": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "delegatedTo": "Alex",
         "disposedAt": 1790816400003,
@@ -169,9 +181,12 @@
         "promotionClaim": null,
         "promotion": null,
         "delegatedTo": null,
-        "reopenCount": 0
+        "reopenCount": 0,
+        "claimEpoch": 0,
+        "expiredClaim": null
       },
       "transactionSnapshot": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "disposedAt": 1790816400003,
         "id": "bwdeln",
@@ -186,6 +201,7 @@
         "urgent": false
       },
       "listenerValue": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "disposedAt": 1790816400003,
         "id": "bwdeln",
@@ -221,9 +237,12 @@
         "promotionClaim": null,
         "promotion": null,
         "delegatedTo": null,
-        "reopenCount": 0
+        "reopenCount": 0,
+        "claimEpoch": 0,
+        "expiredClaim": null
       },
       "transactionSnapshot": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "disposedAt": 1790816400003,
         "id": "bwarch",
@@ -238,6 +257,7 @@
         "urgent": false
       },
       "listenerValue": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "disposedAt": 1790816400003,
         "id": "bwarch",
@@ -259,7 +279,7 @@
     {
       "name": "claimedSchedule",
       "logical": {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "bwclms",
         "text": "capture bwclms",
         "createdAt": 1790816400000,
@@ -278,13 +298,17 @@
           "when": "14:30",
           "durationMinutes": 30,
           "claimedAt": 1790816400002,
-          "claimedBy": "device-wire"
+          "claimedBy": "device-wire",
+          "planWriteStarted": true
         },
         "promotion": null,
         "delegatedTo": null,
-        "reopenCount": 0
+        "reopenCount": 0,
+        "claimEpoch": 0,
+        "expiredClaim": null
       },
       "transactionSnapshot": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "id": "bwclms",
         "important": true,
@@ -293,13 +317,14 @@
           "claimedBy": "device-wire",
           "durationMinutes": 30,
           "planItemId": "bdp1|bwclms",
+          "planWriteStarted": true,
           "store": "calendar",
           "targetId": "cal1:2026-10-10",
           "type": "schedule",
           "when": "14:30"
         },
         "reopenCount": 0,
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "status": "triaged",
         "text": "capture bwclms",
         "triagedAt": 1790816400001,
@@ -308,6 +333,7 @@
         "urgent": false
       },
       "listenerValue": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "id": "bwclms",
         "important": true,
@@ -316,13 +342,14 @@
           "claimedBy": "device-wire",
           "durationMinutes": 30,
           "planItemId": "bdp1|bwclms",
+          "planWriteStarted": true,
           "store": "calendar",
           "targetId": "cal1:2026-10-10",
           "type": "schedule",
           "when": "14:30"
         },
         "reopenCount": 0,
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "status": "triaged",
         "text": "capture bwclms",
         "triagedAt": 1790816400001,
@@ -338,7 +365,7 @@
     {
       "name": "claimedDoToday",
       "logical": {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "bwclmd",
         "text": "capture bwclmd",
         "createdAt": 1790816400000,
@@ -357,13 +384,17 @@
           "when": "",
           "durationMinutes": null,
           "claimedAt": 1790816400002,
-          "claimedBy": "device-wire"
+          "claimedBy": "device-wire",
+          "planWriteStarted": true
         },
         "promotion": null,
         "delegatedTo": null,
-        "reopenCount": 0
+        "reopenCount": 0,
+        "claimEpoch": 0,
+        "expiredClaim": null
       },
       "transactionSnapshot": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "id": "bwclmd",
         "important": true,
@@ -371,13 +402,14 @@
           "claimedAt": 1790816400002,
           "claimedBy": "device-wire",
           "planItemId": "bdp1|bwclmd",
+          "planWriteStarted": true,
           "store": "calendar",
           "targetId": "cal1:2026-10-03",
           "type": "do-today",
           "when": ""
         },
         "reopenCount": 0,
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "status": "triaged",
         "text": "capture bwclmd",
         "triagedAt": 1790816400001,
@@ -386,6 +418,7 @@
         "urgent": false
       },
       "listenerValue": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "id": "bwclmd",
         "important": true,
@@ -393,13 +426,14 @@
           "claimedAt": 1790816400002,
           "claimedBy": "device-wire",
           "planItemId": "bdp1|bwclmd",
+          "planWriteStarted": true,
           "store": "calendar",
           "targetId": "cal1:2026-10-03",
           "type": "do-today",
           "when": ""
         },
         "reopenCount": 0,
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "status": "triaged",
         "text": "capture bwclmd",
         "triagedAt": 1790816400001,
@@ -415,7 +449,7 @@
     {
       "name": "promotedSchedule",
       "logical": {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "bwprms",
         "text": "capture bwprms",
         "createdAt": 1790816400000,
@@ -438,9 +472,12 @@
           "promotedAt": 1790816400004
         },
         "delegatedTo": null,
-        "reopenCount": 0
+        "reopenCount": 0,
+        "claimEpoch": 0,
+        "expiredClaim": null
       },
       "transactionSnapshot": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "disposedAt": 1790816400004,
         "id": "bwprms",
@@ -456,7 +493,7 @@
           "when": "14:30"
         },
         "reopenCount": 0,
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "status": "promoted",
         "text": "capture bwprms",
         "triagedAt": 1790816400001,
@@ -465,6 +502,7 @@
         "urgent": false
       },
       "listenerValue": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "disposedAt": 1790816400004,
         "id": "bwprms",
@@ -480,7 +518,7 @@
           "when": "14:30"
         },
         "reopenCount": 0,
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "status": "promoted",
         "text": "capture bwprms",
         "triagedAt": 1790816400001,
@@ -496,7 +534,7 @@
     {
       "name": "promotedDoToday",
       "logical": {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "id": "bwprmd",
         "text": "capture bwprmd",
         "createdAt": 1790816400000,
@@ -519,9 +557,12 @@
           "promotedAt": 1790816400004
         },
         "delegatedTo": null,
-        "reopenCount": 0
+        "reopenCount": 0,
+        "claimEpoch": 0,
+        "expiredClaim": null
       },
       "transactionSnapshot": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "disposedAt": 1790816400004,
         "id": "bwprmd",
@@ -536,7 +577,7 @@
           "when": ""
         },
         "reopenCount": 0,
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "status": "promoted",
         "text": "capture bwprmd",
         "triagedAt": 1790816400001,
@@ -545,6 +586,7 @@
         "urgent": false
       },
       "listenerValue": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "disposedAt": 1790816400004,
         "id": "bwprmd",
@@ -559,7 +601,7 @@
           "when": ""
         },
         "reopenCount": 0,
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "status": "promoted",
         "text": "capture bwprmd",
         "triagedAt": 1790816400001,
@@ -589,9 +631,12 @@
         "promotionClaim": null,
         "promotion": null,
         "delegatedTo": null,
-        "reopenCount": 1
+        "reopenCount": 1,
+        "claimEpoch": 0,
+        "expiredClaim": null
       },
       "transactionSnapshot": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "id": "bwreop",
         "important": true,
@@ -605,6 +650,7 @@
         "urgent": false
       },
       "listenerValue": {
+        "claimEpoch": 0,
         "createdAt": 1790816400000,
         "id": "bwreop",
         "important": true,
@@ -614,6 +660,95 @@
         "text": "capture bwreop",
         "triagedAt": 1790816400001,
         "updatedAt": 1790816400005,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    },
+    {
+      "name": "recoveredExpiredClaim",
+      "logical": {
+        "schemaVersion": 2,
+        "id": "bwrecv",
+        "text": "capture bwrecv",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400006,
+        "updatedBy": "device-wire",
+        "status": "triaged",
+        "important": true,
+        "urgent": false,
+        "triagedAt": 1790816400001,
+        "disposedAt": null,
+        "promotionClaim": null,
+        "promotion": null,
+        "delegatedTo": null,
+        "reopenCount": 0,
+        "claimEpoch": 1,
+        "expiredClaim": {
+          "type": "schedule",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-01",
+          "planItemId": "bdp1|bwrecv",
+          "when": "14:30",
+          "durationMinutes": 30,
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire",
+          "expiredAt": 1790816400006,
+          "expiredBy": "device-wire"
+        }
+      },
+      "transactionSnapshot": {
+        "claimEpoch": 1,
+        "createdAt": 1790816400000,
+        "expiredClaim": {
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire",
+          "durationMinutes": 30,
+          "expiredAt": 1790816400006,
+          "expiredBy": "device-wire",
+          "planItemId": "bdp1|bwrecv",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-01",
+          "type": "schedule",
+          "when": "14:30"
+        },
+        "id": "bwrecv",
+        "important": true,
+        "reopenCount": 0,
+        "schemaVersion": 2,
+        "status": "triaged",
+        "text": "capture bwrecv",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400006,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "listenerValue": {
+        "claimEpoch": 1,
+        "createdAt": 1790816400000,
+        "expiredClaim": {
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire",
+          "durationMinutes": 30,
+          "expiredAt": 1790816400006,
+          "expiredBy": "device-wire",
+          "planItemId": "bdp1|bwrecv",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-01",
+          "type": "schedule",
+          "when": "14:30"
+        },
+        "id": "bwrecv",
+        "important": true,
+        "reopenCount": 0,
+        "schemaVersion": 2,
+        "status": "triaged",
+        "text": "capture bwrecv",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400006,
         "updatedBy": "device-wire",
         "urgent": false
       },

@@ -184,8 +184,8 @@ test('claimPromotionRemote establishes the claim via a real transaction and merg
   const result = await bridge.claimPromotionRemote('bcapture1', PROMO_DO_TODAY);
   assert.ok(result.ok);
   // Compared semantically: the wire omits the null durationMinutes (RTDB prunes nulls).
-  assert.deepEqual(normalizeCapture(room.raw().bcapture1).promotionClaim, { ...PROMO_DO_TODAY, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1' });
-  assert.deepEqual(repository.read('bcapture1').promotionClaim, { ...PROMO_DO_TODAY, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1' });
+  assert.deepEqual(normalizeCapture(room.raw().bcapture1).promotionClaim, { ...PROMO_DO_TODAY, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1', planWriteStarted: true });
+  assert.deepEqual(repository.read('bcapture1').promotionClaim, { ...PROMO_DO_TODAY, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1', planWriteStarted: true });
 });
 
 test('claimPromotionRemote is REFUSED — reason "already-disposed" — when the AUTHORITATIVE remote is already archived, even though this device\'s local cache still says triaged', async () => {

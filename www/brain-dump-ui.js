@@ -13,8 +13,8 @@
 // planning-continuity-ui.js already documents for its own import of this file.
 import './plan-authority.js';
 import { createBrainDumpRepository } from './brain-dump-repository.js';
-import { untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf } from './brain-dump-model.js';
-import { promoteCaptureToPlan, reconcilePromotionClaim, promotionDestination } from './brain-dump-promotion.js';
+import { untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf, normalizeCapture } from './brain-dump-model.js';
+import { promoteCaptureToPlan, settleOutstandingClaim, promotionDestination } from './brain-dump-promotion.js';
 import { localPlanDate } from './plan-tomorrow-model.js';
 
 function repository() {
@@ -121,6 +121,7 @@ function untriagedSectionHtml(items) {
   const rows = items.map(item => `
     <div class="bd-item" style="padding:10px 0;border-bottom:1px solid var(--border,#2a2a2a)">
       <div>${escapeHtml(item.text)}</div>
+      ${expiredClaimNote(item)}
       ${triageControlsHtml(item.id)}
     </div>`).join('');
   return `
@@ -157,6 +158,7 @@ function triagedSectionHtml(items) {
     return `
     <div class="bd-item" style="padding:10px 0;border-bottom:1px solid var(--border,#2a2a2a)">
       <div>${escapeHtml(item.text)}</div>
+      ${expiredClaimNote(item)}
       <div style="font-size:12px;opacity:.7;margin-top:2px">${pending ? 'Still confirming a previous action…' : (QUADRANT_LABEL[quadrant] || '')}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
         ${pending ? '' : `
@@ -422,21 +424,72 @@ async function confirmSchedule(id) {
  *  guards (status/claim checks, the deterministic plan-item id) make a
  *  redundant call a no-op; `reconciling` only prevents two concurrent calls
  *  for the same id from racing each other pointlessly. */
-function maybeReconcile(id, record) {
+function maybeReconcile(id, record, { fromSweep = false } = {}) {
   if (!id || !record) return;
-  pendingPromotionIds.delete(id); // fresh authoritative info has arrived either way
+  if (!fromSweep) pendingPromotionIds.delete(id); // fresh authoritative info has arrived either way
   if ((record.status !== 'untriaged' && record.status !== 'triaged') || !record.promotionClaim) return;
   if (reconciling.has(id)) return;
   reconciling.add(id);
-  try {
-    const outcome = reconcilePromotionClaim({ repository: repository(), planAuthority: window.PlanAuthority, id, now: Date.now(), deviceId: deviceId() });
-    if (outcome?.record && window.BrainDumpSync) window.BrainDumpSync.syncCapture(outcome.record.id);
-  } finally {
-    reconciling.delete(id);
-  }
+  // settleOutstandingClaim runs its synchronous part FIRST, so this device's own
+  // (already marked) claim still finishes inside this very listener callback.
+  // Only a claim that needs an authoritative mark or an expiry resolution waits
+  // on a remote transaction.
+  const sync = window.BrainDumpSync;
+  settleOutstandingClaim({
+    repository: repository(), planAuthority: window.PlanAuthority, id, now: Date.now(), deviceId: deviceId(),
+    markClaimWrite: sync ? sync.markClaimWriteRemote : undefined,
+    resolveExpiredClaim: sync ? sync.resolveExpiredClaimRemote : undefined,
+  })
+    .then(outcome => {
+      if (outcome?.record && sync) sync.syncCapture(outcome.record.id);
+      if (outcome?.recovered) announceRecovery(id, outcome.expiredClaim);
+    })
+    .catch(() => { /* left exactly as it was; a later change or load retries */ })
+    .finally(() => { reconciling.delete(id); });
   // The caller (refreshBrainDumpSurfaces) re-renders the Brain Dump view itself
   // if it is the active one; reconciliation still runs here regardless of
   // which view is on screen.
+}
+
+/** A claim that expired since this device last looked would never produce a
+ *  merge "change" on its own, so a (re)bind also sweeps every local capture that
+ *  still holds a claim. Same idempotent path as a listener update. */
+function settleAllOutstandingClaims() {
+  let all;
+  try { all = repository().listAllRaw(); } catch { return; }
+  for (const [id, raw] of Object.entries(all)) {
+    const record = normalizeCapture(raw);
+    if (record?.promotionClaim) maybeReconcile(id, record, { fromSweep: true });
+  }
+}
+
+/** The day an expired claim had aimed at, in plain words ('' when unknown). */
+function expiredClaimDay(expiredClaim) {
+  const destination = promotionDestination(window.PlanAuthority, { promotion: expiredClaim });
+  if (destination.kind === 'date') return formatDateKey(destination.dateKey);
+  if (destination.kind === 'personal-day') return formatPersonalDayStart(destination.startMs, destination.timezone);
+  return '';
+}
+
+// Recoveries already announced in this tab: one toast per capture, never per render.
+const announcedRecoveries = new Set();
+
+function announceRecovery(id, expiredClaim) {
+  if (announcedRecoveries.has(id)) return;
+  announcedRecoveries.add(id);
+  const day = expiredClaim ? expiredClaimDay(expiredClaim) : '';
+  notify(day
+    ? `Couldn't add this to ${day} because that day had already ended. It's back in Brain Dump.`
+    : 'Couldn\'t add this to your plan because that day had already ended. It\'s back in Brain Dump.');
+}
+
+/** The quiet in-row note for a capture that came back from an expired claim,
+ *  shown until the owner does anything with it (any change moves updatedAt). */
+function expiredClaimNote(item) {
+  const e = item.expiredClaim;
+  if (!e || item.updatedAt !== e.expiredAt) return '';
+  const day = expiredClaimDay(e);
+  return `<div style="font-size:12px;opacity:.7;margin-top:2px">${day ? `Couldn't be added to ${escapeHtml(day)}: that day had ended.` : 'Couldn\'t be added: that day had ended.'}</div>`;
 }
 
 function archive(id) {
@@ -517,6 +570,7 @@ if (typeof window !== 'undefined') {
   // call (e.g. onRebind, which has no single capture in mind).
   globalThis.refreshBrainDumpSurfaces = (id, record) => {
     if (id) maybeReconcile(id, record);
+    else settleAllOutstandingClaims(); // a (re)bind: the account's cache just became active
     if (document.getElementById('view-braindump')?.classList.contains('active')) render();
   };
 }

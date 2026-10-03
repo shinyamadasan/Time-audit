@@ -258,11 +258,11 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // generation (BRAIN_DUMP_RELEASE below), pinned to the token its two entry tags carry. The governed
 // token is unchanged by it.
 const CURRENT_RELEASE = '20261002-brain-dump-eisenhower-v1-fix1';
-const BRAIN_DUMP_RELEASE = '20261003-brain-dump-production-ux-fix2';
+const BRAIN_DUMP_RELEASE = '20261003-brain-dump-production-ux-fix3';
 // Brain Dump entry tokens that were published (on main or a candidate branch) and must never be reused.
 // (Its round-1 entries also used '20261002-brain-dump-eisenhower-v1-fix1', which is still the governed
 // token, so it is checked as "not the Brain Dump token" instead of "absent from index.html".)
-const PREVIOUS_BRAIN_DUMP_RELEASES = ['20261001-brain-dump-eisenhower-v1', '20261002-brain-dump-eisenhower-v1-fix2', '20261002-brain-dump-eisenhower-v1-fix3', '20261003-brain-dump-production-ux-v1', '20261003-brain-dump-production-ux-fix1'];
+const PREVIOUS_BRAIN_DUMP_RELEASES = ['20261001-brain-dump-eisenhower-v1', '20261002-brain-dump-eisenhower-v1-fix2', '20261002-brain-dump-eisenhower-v1-fix3', '20261003-brain-dump-production-ux-v1', '20261003-brain-dump-production-ux-fix1', '20261003-brain-dump-production-ux-fix2'];
 
 test('Brain Dump is ONE coherent generation: every brain-dump-*.js module any Brain Dump entry reaches is import-mapped to the entry tags\' token', () => {
   const entries = moduleEntries.filter(entry => isBrainDump(entry.file));
