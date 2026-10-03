@@ -1,5 +1,37 @@
 # ChronaSense — Changelog
 
+## Brain Dump Production UX Correction V1 FIX FIRST #2 — candidate, NOT integrated
+
+Same branch, on top of `3a2529b`. Not pushed, merged or deployed.
+
+**F5, the real wire format:** Firebase RTDB prunes null-valued keys, recursively. This was proven with the
+real Firebase JS SDK 10.12.2 (compat) against the real RTDB emulator 4.11.2. `normalizeCapture` required
+literal nulls, so it rejected EVERY non-terminal record read back from the wire (untriaged, triaged,
+claimed, reopened). On the real wire that meant:
+- the claim transaction's merge treated the remote as absent;
+- neither the listener nor finishClaimAttempt could merge the committed claim back;
+- the foreground got `already-claimed` ("Already being promoted elsewhere");
+- no plan item was ever created, and the remote kept a stuck claim.
+Cross-device sync of active captures, and promote-vs-archive arbitration against a remote claim, were
+silently inert for the same reason. The listener-first race fixed in V1 is real, but only becomes visible
+once normalization works. The fix: absent optional nullable fields now read as null; required fields stay
+required. A stuck claim on a current or future day self-recovers when a client loads it. One on a day that
+has ended cannot (Plan Authority refuses past days); see "Known residual".
+
+**F6, legacy provenance:** finalized promotions record `intentRecorded: true`. A legacy promotion's timing
+is unknown, never "untimed", so it is never reported equivalent to a new Schedule. Do Today is untimed by
+construction.
+
+**Tests:** `fixtures/brain-dump-rtdb-wire-capture.json` (recorded with the real SDK and emulator) and
+`brain-dump-wire-format.test.js`, which pins `pruneLikeFirebase` to that recording. EVERY Brain Dump fake room
+and the Playwright stub now store and deliver only the pruned wire form (`brain-dump-test-support.js`). A
+literal-null mutation fails 52 tests across 5 suites. Brain Dump token -> `20261003-brain-dump-production-ux-fix2`.
+No rules change.
+
+**Known residual:** a claim already stuck in production on a day that has since ENDED stays claimed with no
+plan item, and it still blocks archive/delegate. Releasing it would be new unpromotion semantics, so it is
+left for a product decision.
+
 ## Brain Dump Production UX Correction V1 FIX FIRST — candidate, NOT integrated
 
 Same branch, on top of the reviewed candidate `80c1e83`. Not pushed, merged or deployed.

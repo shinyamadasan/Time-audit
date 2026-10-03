@@ -18,10 +18,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireCopy } from './brain-dump-test-support.js';
 
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { createBrainDumpSyncBridge, BRAIN_DUMP_REMOTE_PATH } from './brain-dump-sync.js';
-import { brainDumpPlanItemId } from './brain-dump-model.js';
+import { brainDumpPlanItemId, normalizeCapture } from './brain-dump-model.js';
 import { promoteCaptureToPlan, reconcilePromotionClaim } from './brain-dump-promotion.js';
 
 const T0 = Date.parse('2026-10-01T08:00:00Z');
@@ -38,7 +39,7 @@ function makeRoom() {
   const store = {};
   const listeners = new Set();
   let offline = false;
-  const clone = v => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
+  const clone = wireCopy; // RTDB wire form: null keys pruned (see brain-dump-test-support.js)
   function notify() {
     if (offline) return;
     listeners.forEach(fn => fn({ val: () => clone(store) }));
@@ -60,7 +61,7 @@ function makeRoom() {
       },
     };
   }
-  return { ref: makeRef(), raw: () => clone(store), goOffline() { offline = true; }, goOnline() { offline = false; notify(); } };
+  return { ref: makeRef(), raw: () => clone(store) || {}, goOffline() { offline = true; }, goOnline() { offline = false; notify(); } };
 }
 
 /** A fake Plan Authority. `items` is the mutable backing array addItem()/rawItems()
@@ -158,7 +159,8 @@ test('Do Today builds a plan item via Plan Authority with the deterministic id, 
   // Phase 3 (finalize) is local-first by design — the caller (brain-dump-ui.js
   // in production) pushes it explicitly, exactly like every other write.
   await device.bridge.syncCapture(record.id);
-  assert.deepEqual(device.room.raw()[record.id].promotion, result.record.promotion, 'the REMOTE record is authoritative too, once pushed');
+  // Compared semantically: the wire omits the null durationMinutes (RTDB prunes nulls).
+  assert.deepEqual(normalizeCapture(device.room.raw()[record.id]).promotion, result.record.promotion, 'the REMOTE record is authoritative too, once pushed');
 });
 
 test('Do Today is idempotent at the top level: a capture already promoted is never promoted twice', async () => {
@@ -347,7 +349,7 @@ test('4. PROMOTION CLAIM FIRST, DELEGATE SECOND: same guarantee as archive', asy
   const bDelegate = await b.delegateAndPush(record.id, 'Alex');
   assert.ok(bDelegate.ok, 'the local write is not refused');
   assert.equal(room.raw()[record.id].status, 'promoted');
-  assert.equal(room.raw()[record.id].delegatedTo, null, 'delegate never wins, never records provenance remotely');
+  assert.equal(room.raw()[record.id].delegatedTo ?? null, null, 'delegate never wins, never records provenance remotely');
   assert.equal(planAuthority.items.length, 1);
 });
 

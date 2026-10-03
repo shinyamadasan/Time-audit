@@ -1,0 +1,626 @@
+{
+  "note": "Recorded with the REAL Firebase JS SDK 10.12.2 (compat, as index.html loads it) against the REAL Realtime Database emulator v4.11.2: each logical record was written with a transaction, exactly as brain-dump-sync.js pushes, and read back through the same subtree value listener it attaches. Regenerate only by re-running that capture; never hand-edit.",
+  "sdk": "firebase@10.12.2 (compat)",
+  "emulator": "firebase-database-emulator-v4.11.2",
+  "absentNodeValue": null,
+  "cases": [
+    {
+      "name": "untriaged",
+      "logical": {
+        "schemaVersion": 1,
+        "id": "bwuntri",
+        "text": "capture bwuntri",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400000,
+        "updatedBy": "device-wire",
+        "status": "untriaged",
+        "important": null,
+        "urgent": null,
+        "triagedAt": null,
+        "disposedAt": null,
+        "promotionClaim": null,
+        "promotion": null,
+        "delegatedTo": null,
+        "reopenCount": 0
+      },
+      "transactionSnapshot": {
+        "createdAt": 1790816400000,
+        "id": "bwuntri",
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "untriaged",
+        "text": "capture bwuntri",
+        "updatedAt": 1790816400000,
+        "updatedBy": "device-wire"
+      },
+      "listenerValue": {
+        "createdAt": 1790816400000,
+        "id": "bwuntri",
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "untriaged",
+        "text": "capture bwuntri",
+        "updatedAt": 1790816400000,
+        "updatedBy": "device-wire"
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    },
+    {
+      "name": "triaged",
+      "logical": {
+        "schemaVersion": 1,
+        "id": "bwtria",
+        "text": "capture bwtria",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400001,
+        "updatedBy": "device-wire",
+        "status": "triaged",
+        "important": true,
+        "urgent": false,
+        "triagedAt": 1790816400001,
+        "disposedAt": null,
+        "promotionClaim": null,
+        "promotion": null,
+        "delegatedTo": null,
+        "reopenCount": 0
+      },
+      "transactionSnapshot": {
+        "createdAt": 1790816400000,
+        "id": "bwtria",
+        "important": true,
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "triaged",
+        "text": "capture bwtria",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400001,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "listenerValue": {
+        "createdAt": 1790816400000,
+        "id": "bwtria",
+        "important": true,
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "triaged",
+        "text": "capture bwtria",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400001,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    },
+    {
+      "name": "delegatedWithPerson",
+      "logical": {
+        "schemaVersion": 1,
+        "id": "bwdelp",
+        "text": "capture bwdelp",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400003,
+        "updatedBy": "device-wire",
+        "status": "delegated",
+        "important": true,
+        "urgent": false,
+        "triagedAt": 1790816400001,
+        "disposedAt": 1790816400003,
+        "promotionClaim": null,
+        "promotion": null,
+        "delegatedTo": "Alex",
+        "reopenCount": 0
+      },
+      "transactionSnapshot": {
+        "createdAt": 1790816400000,
+        "delegatedTo": "Alex",
+        "disposedAt": 1790816400003,
+        "id": "bwdelp",
+        "important": true,
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "delegated",
+        "text": "capture bwdelp",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400003,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "listenerValue": {
+        "createdAt": 1790816400000,
+        "delegatedTo": "Alex",
+        "disposedAt": 1790816400003,
+        "id": "bwdelp",
+        "important": true,
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "delegated",
+        "text": "capture bwdelp",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400003,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    },
+    {
+      "name": "delegatedNoPerson",
+      "logical": {
+        "schemaVersion": 1,
+        "id": "bwdeln",
+        "text": "capture bwdeln",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400003,
+        "updatedBy": "device-wire",
+        "status": "delegated",
+        "important": true,
+        "urgent": false,
+        "triagedAt": 1790816400001,
+        "disposedAt": 1790816400003,
+        "promotionClaim": null,
+        "promotion": null,
+        "delegatedTo": null,
+        "reopenCount": 0
+      },
+      "transactionSnapshot": {
+        "createdAt": 1790816400000,
+        "disposedAt": 1790816400003,
+        "id": "bwdeln",
+        "important": true,
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "delegated",
+        "text": "capture bwdeln",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400003,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "listenerValue": {
+        "createdAt": 1790816400000,
+        "disposedAt": 1790816400003,
+        "id": "bwdeln",
+        "important": true,
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "delegated",
+        "text": "capture bwdeln",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400003,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    },
+    {
+      "name": "archived",
+      "logical": {
+        "schemaVersion": 1,
+        "id": "bwarch",
+        "text": "capture bwarch",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400003,
+        "updatedBy": "device-wire",
+        "status": "archived",
+        "important": true,
+        "urgent": false,
+        "triagedAt": 1790816400001,
+        "disposedAt": 1790816400003,
+        "promotionClaim": null,
+        "promotion": null,
+        "delegatedTo": null,
+        "reopenCount": 0
+      },
+      "transactionSnapshot": {
+        "createdAt": 1790816400000,
+        "disposedAt": 1790816400003,
+        "id": "bwarch",
+        "important": true,
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "archived",
+        "text": "capture bwarch",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400003,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "listenerValue": {
+        "createdAt": 1790816400000,
+        "disposedAt": 1790816400003,
+        "id": "bwarch",
+        "important": true,
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "archived",
+        "text": "capture bwarch",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400003,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    },
+    {
+      "name": "claimedSchedule",
+      "logical": {
+        "schemaVersion": 1,
+        "id": "bwclms",
+        "text": "capture bwclms",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400002,
+        "updatedBy": "device-wire",
+        "status": "triaged",
+        "important": true,
+        "urgent": false,
+        "triagedAt": 1790816400001,
+        "disposedAt": null,
+        "promotionClaim": {
+          "type": "schedule",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-10",
+          "planItemId": "bdp1|bwclms",
+          "when": "14:30",
+          "durationMinutes": 30,
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire"
+        },
+        "promotion": null,
+        "delegatedTo": null,
+        "reopenCount": 0
+      },
+      "transactionSnapshot": {
+        "createdAt": 1790816400000,
+        "id": "bwclms",
+        "important": true,
+        "promotionClaim": {
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire",
+          "durationMinutes": 30,
+          "planItemId": "bdp1|bwclms",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-10",
+          "type": "schedule",
+          "when": "14:30"
+        },
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "triaged",
+        "text": "capture bwclms",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400002,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "listenerValue": {
+        "createdAt": 1790816400000,
+        "id": "bwclms",
+        "important": true,
+        "promotionClaim": {
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire",
+          "durationMinutes": 30,
+          "planItemId": "bdp1|bwclms",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-10",
+          "type": "schedule",
+          "when": "14:30"
+        },
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "triaged",
+        "text": "capture bwclms",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400002,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    },
+    {
+      "name": "claimedDoToday",
+      "logical": {
+        "schemaVersion": 1,
+        "id": "bwclmd",
+        "text": "capture bwclmd",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400002,
+        "updatedBy": "device-wire",
+        "status": "triaged",
+        "important": true,
+        "urgent": false,
+        "triagedAt": 1790816400001,
+        "disposedAt": null,
+        "promotionClaim": {
+          "type": "do-today",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-03",
+          "planItemId": "bdp1|bwclmd",
+          "when": "",
+          "durationMinutes": null,
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire"
+        },
+        "promotion": null,
+        "delegatedTo": null,
+        "reopenCount": 0
+      },
+      "transactionSnapshot": {
+        "createdAt": 1790816400000,
+        "id": "bwclmd",
+        "important": true,
+        "promotionClaim": {
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire",
+          "planItemId": "bdp1|bwclmd",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-03",
+          "type": "do-today",
+          "when": ""
+        },
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "triaged",
+        "text": "capture bwclmd",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400002,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "listenerValue": {
+        "createdAt": 1790816400000,
+        "id": "bwclmd",
+        "important": true,
+        "promotionClaim": {
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire",
+          "planItemId": "bdp1|bwclmd",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-03",
+          "type": "do-today",
+          "when": ""
+        },
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "triaged",
+        "text": "capture bwclmd",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400002,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    },
+    {
+      "name": "promotedSchedule",
+      "logical": {
+        "schemaVersion": 1,
+        "id": "bwprms",
+        "text": "capture bwprms",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400004,
+        "updatedBy": "device-wire",
+        "status": "promoted",
+        "important": true,
+        "urgent": false,
+        "triagedAt": 1790816400001,
+        "disposedAt": 1790816400004,
+        "promotionClaim": null,
+        "promotion": {
+          "type": "schedule",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-10",
+          "planItemId": "bdp1|bwprms",
+          "intentRecorded": true,
+          "when": "14:30",
+          "durationMinutes": 30,
+          "promotedAt": 1790816400004
+        },
+        "delegatedTo": null,
+        "reopenCount": 0
+      },
+      "transactionSnapshot": {
+        "createdAt": 1790816400000,
+        "disposedAt": 1790816400004,
+        "id": "bwprms",
+        "important": true,
+        "promotion": {
+          "durationMinutes": 30,
+          "intentRecorded": true,
+          "planItemId": "bdp1|bwprms",
+          "promotedAt": 1790816400004,
+          "store": "calendar",
+          "targetId": "cal1:2026-10-10",
+          "type": "schedule",
+          "when": "14:30"
+        },
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "promoted",
+        "text": "capture bwprms",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400004,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "listenerValue": {
+        "createdAt": 1790816400000,
+        "disposedAt": 1790816400004,
+        "id": "bwprms",
+        "important": true,
+        "promotion": {
+          "durationMinutes": 30,
+          "intentRecorded": true,
+          "planItemId": "bdp1|bwprms",
+          "promotedAt": 1790816400004,
+          "store": "calendar",
+          "targetId": "cal1:2026-10-10",
+          "type": "schedule",
+          "when": "14:30"
+        },
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "promoted",
+        "text": "capture bwprms",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400004,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    },
+    {
+      "name": "promotedDoToday",
+      "logical": {
+        "schemaVersion": 1,
+        "id": "bwprmd",
+        "text": "capture bwprmd",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400004,
+        "updatedBy": "device-wire",
+        "status": "promoted",
+        "important": true,
+        "urgent": false,
+        "triagedAt": 1790816400001,
+        "disposedAt": 1790816400004,
+        "promotionClaim": null,
+        "promotion": {
+          "type": "do-today",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-03",
+          "planItemId": "bdp1|bwprmd",
+          "intentRecorded": true,
+          "when": "",
+          "durationMinutes": null,
+          "promotedAt": 1790816400004
+        },
+        "delegatedTo": null,
+        "reopenCount": 0
+      },
+      "transactionSnapshot": {
+        "createdAt": 1790816400000,
+        "disposedAt": 1790816400004,
+        "id": "bwprmd",
+        "important": true,
+        "promotion": {
+          "intentRecorded": true,
+          "planItemId": "bdp1|bwprmd",
+          "promotedAt": 1790816400004,
+          "store": "calendar",
+          "targetId": "cal1:2026-10-03",
+          "type": "do-today",
+          "when": ""
+        },
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "promoted",
+        "text": "capture bwprmd",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400004,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "listenerValue": {
+        "createdAt": 1790816400000,
+        "disposedAt": 1790816400004,
+        "id": "bwprmd",
+        "important": true,
+        "promotion": {
+          "intentRecorded": true,
+          "planItemId": "bdp1|bwprmd",
+          "promotedAt": 1790816400004,
+          "store": "calendar",
+          "targetId": "cal1:2026-10-03",
+          "type": "do-today",
+          "when": ""
+        },
+        "reopenCount": 0,
+        "schemaVersion": 1,
+        "status": "promoted",
+        "text": "capture bwprmd",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400004,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    },
+    {
+      "name": "reopenedV2",
+      "logical": {
+        "schemaVersion": 2,
+        "id": "bwreop",
+        "text": "capture bwreop",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400005,
+        "updatedBy": "device-wire",
+        "status": "triaged",
+        "important": true,
+        "urgent": false,
+        "triagedAt": 1790816400001,
+        "disposedAt": null,
+        "promotionClaim": null,
+        "promotion": null,
+        "delegatedTo": null,
+        "reopenCount": 1
+      },
+      "transactionSnapshot": {
+        "createdAt": 1790816400000,
+        "id": "bwreop",
+        "important": true,
+        "reopenCount": 1,
+        "schemaVersion": 2,
+        "status": "triaged",
+        "text": "capture bwreop",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400005,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "listenerValue": {
+        "createdAt": 1790816400000,
+        "id": "bwreop",
+        "important": true,
+        "reopenCount": 1,
+        "schemaVersion": 2,
+        "status": "triaged",
+        "text": "capture bwreop",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400005,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    }
+  ]
+}

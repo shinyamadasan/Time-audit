@@ -15,12 +15,13 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireCopy } from './brain-dump-test-support.js';
 
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { createBrainDumpSyncBridge, BRAIN_DUMP_REMOTE_PATH } from './brain-dump-sync.js';
 import {
   brainDumpPlanItemId, buildCapture, triageCapture, archiveCapture, delegateCapture, reopenCapture,
-  claimPromotion, mergeCaptureRecords, normalizeCapture,
+  claimPromotion, finalizePromotion, promotedTo, mergeCaptureRecords, normalizeCapture,
 } from './brain-dump-model.js';
 import { promoteCaptureToPlan, reconcilePromotionClaim } from './brain-dump-promotion.js';
 
@@ -38,8 +39,9 @@ function makeRoom() {
   const store = {};
   const listeners = new Set();
   const held = new Map();
-  const clone = v => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
-  function notify() { listeners.forEach(fn => fn({ val: () => clone(store) })); }
+  const events = []; // 'listener:<snapshot>' / 'resolved:<id>', in the order they happened
+  const clone = wireCopy; // RTDB wire form: null keys pruned (see brain-dump-test-support.js)
+  function notify() { events.push({ kind: 'listener', value: clone(store) }); listeners.forEach(fn => fn({ val: () => clone(store) })); }
   function run(segments, updateFn) {
     if (segments.length !== 2 || segments[0] !== BRAIN_DUMP_REMOTE_PATH) return { committed: false };
     const id = segments[1];
@@ -56,14 +58,16 @@ function makeRoom() {
       off() { listeners.clear(); },
       transaction(updateFn) {
         const queue = held.get(segments[1]);
-        if (queue) return new Promise(resolve => queue.push(() => resolve(run(segments, updateFn))));
-        return Promise.resolve(run(segments, updateFn));
+        const settle = result => { events.push({ kind: 'resolved', id: segments[1] }); return result; };
+        if (queue) return new Promise(resolve => queue.push(() => resolve(run(segments, updateFn)))).then(settle);
+        return Promise.resolve(run(segments, updateFn)).then(settle);
       },
     };
   }
   return {
     ref: makeRef(),
-    raw: () => clone(store),
+    events,
+    raw: () => clone(store) || {}, // test inspector: wire form, empty store as {}
     /** Writes a record straight into the room, as another device's push would. */
     put(id, value) { store[id] = clone(value); notify(); },
     hold(id) { held.set(id, []); },
@@ -394,7 +398,7 @@ test('P1. a stale delegated snapshot pushed after a reopen never re-delegates th
   assert.equal(stale.repository.editHandled(id, { delegatedTo: 'Sam' }).ok, true);
   await stale.bridge.syncCapture(id);
   assert.equal(room.raw()[id].status, 'triaged', 'remote stays reopened');
-  assert.equal(room.raw()[id].delegatedTo, null);
+  assert.equal(room.raw()[id].delegatedTo ?? null, null); // absent on the wire = not delegated
   assert.equal(stale.repository.read(id).status, 'triaged', 'stale device converges to the reopened truth');
 });
 
@@ -576,4 +580,189 @@ test('F3. the listener-first self-reconciliation of a TIMED Schedule is still th
   assert.equal(promotion.when, '15:00');
   assert.equal(promotion.durationMinutes, 45);
   assert.equal(pa.items.length, 1);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIX FIRST #2 F5: the EXACT production path, over the real (null-pruned) wire
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** The listener's delivery of `id` around the claim commit, as the room recorded it. */
+function claimDelivery(room, id) {
+  const index = room.events.findIndex(e => e.kind === 'listener' && e.value?.[id]?.promotionClaim);
+  return { index, record: index >= 0 ? room.events[index].value[id] : null, resolvedAt: room.events.findIndex((e, i) => i > index && e.kind === 'resolved' && e.id === id) };
+}
+
+for (const [label, intent, expected] of [
+  ['Schedule 14:30, 30 minutes', { type: 'schedule', dateKey: '2026-10-10', when: '14:30', durationMinutes: 30 }, { when: '14:30', durationMinutes: 30 }],
+  ['Do Today', { type: 'do-today' }, { when: '', durationMinutes: undefined }],
+]) {
+  test(`F5 production path (${label}): pruned listener snapshot BEFORE resolve -> normalizes -> reconciler finishes -> foreground SUCCESS, one plan item`, async () => {
+    const room = makeRoom();
+    const pa = makeFakePlanAuthority();
+    const device = makeProductionDevice({ room, planAuthority: pa });
+    const id = await device.capture(`Production ${label}`);
+    const result = await device.promote(id, intent);
+
+    // The wire really was pruned, and really did arrive before the transaction settled.
+    const delivered = claimDelivery(room, id);
+    assert.ok(delivered.record, 'the listener delivered the committed claim');
+    for (const key of ['disposedAt', 'delegatedTo', 'promotion']) assert.equal(key in delivered.record, false, `${key} pruned on the wire`);
+    assert.ok(delivered.resolvedAt > delivered.index, 'listener first, transaction resolved after');
+    // ... and the reconciler (not the foreground call) is what finished it, from that pruned snapshot.
+    assert.ok(device.reconciles.some(r => r.id === id && r.outcome.ok), 'maybeReconcile ran off the pruned snapshot');
+
+    assert.equal(result.ok, true, `UI would show: ${result.reason}`);
+    assert.notEqual(result.alreadyDisposed, true, 'a plain success, not "already handled" and never "elsewhere"');
+    assert.equal(pa.items.length, 1);
+    assert.equal(pa.items[0].when, expected.when);
+    assert.equal(pa.items[0].durationMinutes, expected.durationMinutes);
+    const local = device.repository.read(id);
+    assert.equal(local.status, 'promoted');
+    assert.equal(local.promotionClaim, null, 'claim finalized');
+    await flush();
+    const remote = normalizeCapture(room.raw()[id]);
+    assert.equal(remote.status, 'promoted');
+    assert.equal(remote.promotionClaim, null);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F5: captures already stuck in production (authoritative claim, no plan item)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Exactly what cf43080 left behind: its claim transaction committed, but neither
+ *  the listener nor finishClaimAttempt could normalize the pruned record, so no
+ *  plan item was ever created and the remote holds a bare claim. */
+function stuckClaimRecord(id, claim) {
+  const base = triageCapture(buildCapture({ id, text: 'Stuck in production', now: T0, updatedBy: 'old-phone' }).record, { important: true, urgent: false, now: T0 + 1, updatedBy: 'old-phone' }).record;
+  const claimed = claimPromotion(base, { promotion: { planItemId: brainDumpPlanItemId(id), store: 'calendar', ...claim }, now: T0 + 2, updatedBy: 'old-phone' }).record;
+  delete claimed.reopenCount; // cf43080 never wrote it
+  return claimed;
+}
+
+test('F5 already-stuck claim (current/future day): a fresh NEW client loading it self-recovers, exactly one destination, promoted', async () => {
+  const room = makeRoom();
+  const pa = makeFakePlanAuthority();
+  const id = 'bstuckfuture';
+  room.put(id, stuckClaimRecord(id, { type: 'schedule', targetId: 'calplan:2026-10-10', when: '14:30', durationMinutes: 30 }));
+  assert.equal('disposedAt' in room.raw()[id], false, 'stored in its pruned wire shape');
+  assert.equal(pa.items.length, 0, 'stuck: no plan item');
+
+  const device = makeProductionDevice({ room, planAuthority: pa }); // attach() replays the subtree
+  await flush();
+  assert.equal(pa.items.length, 1);
+  assert.equal(pa.items[0].when, '14:30');
+  assert.equal(device.repository.read(id).status, 'promoted');
+  assert.equal(normalizeCapture(room.raw()[id]).status, 'promoted', 'the recovery is pushed back');
+
+  const second = makeProductionDevice({ room, planAuthority: pa, deviceId: 'device-2' });
+  await flush();
+  assert.equal(pa.items.length, 1, 'a second device loading afterwards never duplicates');
+  assert.equal(second.repository.read(id).status, 'promoted');
+});
+
+test('F5 already-stuck claim on a day that has ENDED: not recoverable by the existing contract; it stays claimed with no plan item (reported residual)', async () => {
+  const room = makeRoom();
+  const pa = makeFakePlanAuthority();
+  // Real Plan Authority refuses a past target (assertDirectSchedulingTarget).
+  pa.addItem = () => { throw new Error('Past My Days are history. Reschedule unfinished work from Unfinished instead.'); };
+  const id = 'bstuckpast';
+  room.put(id, stuckClaimRecord(id, { type: 'do-today', targetId: 'calplan:2026-09-01', when: '' }));
+  const device = makeProductionDevice({ room, planAuthority: pa });
+  await flush();
+  const local = device.repository.read(id);
+  assert.equal(local.status, 'triaged', 'still visible, now normalized');
+  assert.ok(local.promotionClaim, 'the claim is still authoritative');
+  assert.equal(pa.items.length, 0, 'no plan item can be created on an ended day');
+  assert.equal(device.repository.archive(id).reason, 'promotion-claimed', 'and the claim still blocks archive/delegate');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F6: legacy promotions with unknown provenance are never PROVABLY equivalent
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** A promoted record as cf43080 finalized it: no intentRecorded, no when/durationMinutes. */
+function legacyPromotedRepository({ type, targetId }) {
+  const repository = createBrainDumpRepository({ storage: memory(), getOwner: () => 'uid_a', now: () => T0, deviceId: () => 'device-1' });
+  const id = 'blegacy1';
+  const base = triageCapture(buildCapture({ id, text: 'Legacy promotion', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const legacy = { ...base, status: 'promoted', disposedAt: T0 + 2, promotion: { type, store: 'calendar', targetId, planItemId: brainDumpPlanItemId(id), promotedAt: T0 + 2 } };
+  delete legacy.reopenCount;
+  repository.mergeRemote(id, wireCopy(legacy));
+  return { repository, id };
+}
+
+const claimNever = () => { throw new Error('a legacy promoted capture must never be claimed again'); };
+
+test('F6 A. legacy promoted Do Today -> exact Do Today retry: provably equivalent (Do Today is untimed by construction), idempotent success', async () => {
+  const pa = makeFakePlanAuthority();
+  const { repository, id } = legacyPromotedRepository({ type: 'do-today', targetId: 'calplan:2026-10-01' });
+  assert.equal(repository.read(id).promotion.intentRecorded, false);
+  const result = await promoteCaptureToPlan({ repository, planAuthority: pa, claimPromotionRemote: claimNever, id, type: 'do-today', now: T0 + 10, deviceId: 'device-1' });
+  assert.equal(result.ok, true);
+  assert.equal(result.alreadyDisposed, true);
+  assert.equal(pa.items.length, 0, 'never a second plan item');
+});
+
+test('F6 B. legacy promoted Do Today -> a same-day Schedule: non-success', async () => {
+  const pa = makeFakePlanAuthority();
+  const { repository, id } = legacyPromotedRepository({ type: 'do-today', targetId: 'calplan:2026-10-01' });
+  const result = await promoteCaptureToPlan({ repository, planAuthority: pa, claimPromotionRemote: claimNever, id, type: 'schedule', dateKey: '2026-10-01', now: T0 + 10, deviceId: 'device-1' });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'already-disposed');
+});
+
+test('F6 C. legacy promoted Schedule with no recorded time/duration -> neither an untimed nor a timed Schedule is reported equivalent', async () => {
+  const pa = makeFakePlanAuthority();
+  const { repository, id } = legacyPromotedRepository({ type: 'schedule', targetId: 'calplan:2026-10-10' });
+  const promotion = repository.read(id).promotion;
+  assert.equal(promotion.when, null, 'unknown, never invented as untimed');
+  assert.equal(promotion.durationMinutes, null);
+  for (const retry of [{ when: '' }, { when: '14:00' }, { when: '14:00', durationMinutes: 30 }]) {
+    const result = await promoteCaptureToPlan({ repository, planAuthority: pa, claimPromotionRemote: claimNever, id, type: 'schedule', dateKey: '2026-10-10', now: T0 + 10, deviceId: 'device-1', ...retry });
+    assert.equal(result.ok, false, `retry ${JSON.stringify(retry)} must not be reported equivalent`);
+    assert.equal(result.reason, 'already-disposed');
+  }
+  assert.equal(pa.items.length, 0);
+});
+
+test('F6 D. a legacy promoted record stays promoted, keeps its unknown provenance through a wire round trip, and is never re-promoted', async () => {
+  const pa = makeFakePlanAuthority();
+  const { repository, id } = legacyPromotedRepository({ type: 'schedule', targetId: 'calplan:2026-10-10' });
+  const roundTripped = normalizeCapture(wireCopy(repository.read(id)));
+  assert.equal(roundTripped.status, 'promoted');
+  assert.equal(roundTripped.promotion.intentRecorded, false, 'still unknown after the wire');
+  assert.equal(roundTripped.promotion.when, null);
+  await promoteCaptureToPlan({ repository, planAuthority: pa, claimPromotionRemote: claimNever, id, type: 'do-today', now: T0 + 10, deviceId: 'device-1' });
+  assert.equal(repository.read(id).status, 'promoted');
+  assert.equal(pa.items.length, 0);
+  // Renders through the destination helper with no invented time.
+  const { promotionDestination } = await import('./brain-dump-promotion.js');
+  const destination = promotionDestination(pa, repository.read(id));
+  assert.equal(destination.dateKey, '2026-10-10');
+  assert.equal(destination.when, '', 'no plan item found and no recorded time: shows no time rather than a guess');
+});
+
+test('F6: a NEW finalized promotion records its intent, so an explicit untimed Schedule survives the wire as provably untimed', () => {
+  const base = triageCapture(buildCapture({ id: 'bnewprom', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: false, now: T0 + 1, updatedBy: 'd' }).record;
+  const claim = claimPromotion(base, { promotion: { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-10', planItemId: brainDumpPlanItemId('bnewprom'), when: '' }, now: T0 + 2, updatedBy: 'd' }).record;
+  const promoted = normalizeCapture(wireCopy(finalizePromotion(claim, { now: T0 + 3, updatedBy: 'd' }).record));
+  assert.equal(promoted.promotion.intentRecorded, true);
+  assert.equal(promoted.promotion.when, '');
+  assert.equal(promoted.promotion.durationMinutes, null, 'pruned on the wire, still KNOWN none');
+  assert.equal(promotedTo(promoted, { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-10', planItemId: brainDumpPlanItemId('bnewprom'), when: '' }), true);
+});
+
+test('authority order holds over the wire: promoted and claim both beat any reopen, independent of arrival order', () => {
+  const base = triageCapture(buildCapture({ id: 'bauth1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
+  const reopened = { ...reopenCapture(delegateCapture(base, { delegatedTo: 'A', now: T0 + 2, updatedBy: 'd' }).record, { now: T0 + 3, updatedBy: 'd' }).record, reopenCount: 7, updatedAt: T0 + 99 };
+  const claim = claimPromotion(base, { promotion: { type: 'do-today', store: 'calendar', targetId: 't', planItemId: 'p' }, now: T0 + 2, updatedBy: 'd' }).record;
+  const promoted = finalizePromotion(claim, { now: T0 + 4, updatedBy: 'd' }).record;
+  for (const [winner, label] of [[claim, 'claim'], [promoted, 'promoted']]) {
+    const a = mergeCaptureRecords(wireCopy(winner), wireCopy(reopened));
+    const b = mergeCaptureRecords(wireCopy(reopened), wireCopy(winner));
+    assert.deepEqual(a, b, `${label}: arrival order never decides`);
+    assert.equal(a.status, winner.status, `${label} beats the reopen`);
+    assert.equal(a.schemaVersion, 2, 'and the generation is still carried');
+  }
 });

@@ -542,8 +542,27 @@ stay generation 1 and fully usable by old clients. There is no bulk migration. *
 deployed before the client:** an old client cannot even read a generation-2 record, so without the rule
 it would overwrite one blindly, including a promoted one.
 
+**Wire contract (FIX FIRST #2):** Firebase RTDB removes every null-valued key, recursively. So a capture
+read off the wire lacks every field that was null, and `normalizeCapture` reads an optional nullable field
+that is absent exactly as null. Those fields are important, urgent, triagedAt, disposedAt, promotionClaim,
+promotion and delegatedTo; inside a claim, when (absent = '') and durationMinutes (absent = null);
+reopenCount (absent = 0). Required fields stay required: schemaVersion, id, text, status, createdAt,
+updatedAt, updatedBy, a terminal record's disposedAt, a promoted record's promotion, and every
+claim/promotion identity field. A missing capture node is absence, never an empty record. Requiring
+literal nulls rejected every non-terminal record production ever read back. That, not only the
+listener-first race, is what produced "Already being promoted elsewhere", left no plan item, and left the
+remote holding a stuck claim.
+
+**Promotion provenance:** a finalized promotion carries `intentRecorded: true` with its when/durationMinutes.
+The marker is needed because a pruned `durationMinutes: null` is indistinguishable from "never recorded".
+A promotion without the marker (finalized before this existed) has UNKNOWN timing, and it is never provably
+equivalent to a new request. The one exception is Do Today, which every shipped path builds untimed.
+Unknown is never normalized into "untimed".
+
 **Do not:** reopen or unpromote a promoted capture from Brain Dump; let `reopenCount` outvote a claim or a
 promotion; edit plan-item text by mutating the capture; ship a client that writes generation 2 before the
-monotonic rule is live; or treat two promotions as equivalent on planItemId alone.
+monotonic rule is live; treat two promotions as equivalent on planItemId alone; require a literal null
+for any field a record can legitimately leave null; or test Brain Dump sync against a fake that keeps
+null keys.
 
 ---
