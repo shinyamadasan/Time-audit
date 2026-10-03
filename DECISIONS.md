@@ -525,12 +525,25 @@ wins outright. A claim (2) or a promotion (3) still beats any `reopenCount`, so 
 authoritative promotion claim. Reopen is an optimistic local write like archive. Pushed against a remote
 claim, it loses the merge and converges to the promotion.
 
-**Also:** a foreground promotion treats "already promoted into exactly my destination" as its own success.
+**Also:** a foreground promotion treats "already promoted with exactly my intent" as its own success.
 Real Firebase raises the listener event before the transaction resolves, so the listener-driven reconciler
 routinely finishes a fresh claim first. Suppressing the reconciler instead would leave a timed-out
-(`pending`) claim with nobody to finish it.
+(`pending`) claim with nobody to finish it. "Exactly my intent" (`samePromotionIntent`) means type,
+store, targetId, planItemId, `when` and `durationMinutes` all match. The deterministic planItemId alone is
+shared by Do Today and any same-day Schedule. A finalized `promotion` now records `when` and
+`durationMinutes` so the comparison still works after finalize.
+
+**Rolling deployment (FIX FIRST):** a client from before reopen existed drops `reopenCount` and ranks
+archived/delegated above active, so a stale one would push its old disposition back over a reopen. So a
+reopen upgrades that one record to `schemaVersion: 2`. The generation is monotonic: the merge keeps the
+higher of the two, and `firebase.rules.json` refuses any write that lowers a capture's `schemaVersion`.
+An old client ignores a generation-2 record and cannot write over it. Records that were never reopened
+stay generation 1 and fully usable by old clients. There is no bulk migration. **The rules must be
+deployed before the client:** an old client cannot even read a generation-2 record, so without the rule
+it would overwrite one blindly, including a promoted one.
 
 **Do not:** reopen or unpromote a promoted capture from Brain Dump; let `reopenCount` outvote a claim or a
-promotion; or edit plan-item text by mutating the capture.
+promotion; edit plan-item text by mutating the capture; ship a client that writes generation 2 before the
+monotonic rule is live; or treat two promotions as equivalent on planItemId alone.
 
 ---

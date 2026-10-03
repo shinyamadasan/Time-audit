@@ -176,7 +176,9 @@ test('normalizeCapture refuses an untriaged record carrying triage answers', () 
 
 test('normalizeCapture refuses a schema-version mismatch and a malformed id', () => {
   const base = buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record;
-  assert.equal(normalizeCapture({ ...base, schemaVersion: 2 }), null);
+  // Generation 2 is the reopen-aware record generation (Production UX Correction V1); 3 is unknown.
+  assert.equal(normalizeCapture({ ...base, schemaVersion: 3 }), null);
+  assert.equal(normalizeCapture({ ...base, schemaVersion: 2 }).schemaVersion, 2);
   assert.equal(normalizeCapture({ ...base, id: 'bad id' }), null);
 });
 

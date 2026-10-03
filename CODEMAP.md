@@ -6,15 +6,17 @@
 Production UX Correction V1: `promotedTo()` (model) lets a foreground promotion recognize its own claim
 already finished by the listener-driven reconciler. `editHandledCapture()`/`reopenCapture()` +
 `reopenCount` (model), `editHandled()`/`reopen()` (repository), and Recently handled Edit / Reopen / Open in
-plan (UI). See DECISIONS #31.
+plan (UI). See DECISIONS #31. FIX FIRST: `samePromotionIntent()` (exact intent), the reopen-aware
+record generation `schemaVersion: 2` with a monotonic merge plus a `firebase.rules.json` anti-downgrade
+`.validate`, and `promotionDestination()` (promotion.js).
 
 New nav entry `#nav-braindump` / view `#view-braindump` (mounted between My Day and Week), rendered
-entirely by `brain-dump-ui.js` into `#bd-root` via `showView('braindump')`. Independently versioned
-(`brain-dump-sync.js` / `brain-dump-ui.js` entry tags share `?v=20261003-brain-dump-production-ux-v1`;
-`brain-dump-model.js` / `-repository.js` / `-promotion.js` are plain, unversioned bare imports reached only
-from those two entries) — not joined to the pinned Personal Day / plan importmap group, since nothing in
-that group imports these files (mirrors `life-feed-ui.js`'s precedent for a standalone module graph with
-internal bare relative imports). `storage.js` itself (wiring `BrainDumpSync.attach()`/`pushAllLocal()`/
+entirely by `brain-dump-ui.js` into `#bd-root` via `showView('braindump')`. Independently versioned as its
+OWN generation inside the shared import map: all five `brain-dump-*.js` modules map to
+`?v=20261003-brain-dump-production-ux-fix1`, the token the `brain-dump-sync.js` / `brain-dump-ui.js` entry
+tags carry. They are not part of the governed Personal Day / plan token, since nothing in that group
+imports them. (Until FIX FIRST the internal imports were bare, which let a fresh entry link against a stale
+cached model.) `storage.js` itself (wiring `BrainDumpSync.attach()`/`pushAllLocal()`/
 `detach()` into `startSync()`/`.info/connected`/`teardownRoomListeners()`) IS in the governed group — its
 FIX FIRST (round 1) change moved the whole group to `20261002-brain-dump-eisenhower-v1-fix1`; rounds 2-3
 changed no governed file, so that token has stayed put since.

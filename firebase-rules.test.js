@@ -290,6 +290,33 @@ test('brainDump — D. adding this rule disturbs no other room path (see "calend
   assert.equal(canWrite(root, C, '/rooms/uid_alice_uid/commitments/c1', { title: 'hijack' }), false);
 });
 
+// Brain Dump Production UX Correction V1 FIX FIRST: a capture's schemaVersion is monotonic. A reopen
+// upgrades that one record to generation 2; a client from before reopen existed cannot represent it and
+// would push its stale archived/delegated copy back over it, so the server refuses any write that
+// lowers the generation. Records that never reached generation 2 stay writable exactly as before.
+test('brainDump — E. a capture\'s schemaVersion can never be lowered (old clients cannot downgrade a reopened record)', () => {
+  const at = '/rooms/uid_alice_uid/brainDump/cap1';
+  const withVersion = v => ({ rooms: { uid_alice_uid: { brainDump: { cap1: { schemaVersion: v, text: 'x', status: 'triaged' } } } } });
+  const empty = { rooms: { uid_alice_uid: {} } };
+  const rec = (v, status = 'triaged') => ({ schemaVersion: v, text: 'x', status });
+  // creating: either generation
+  assert.equal(canWrite(empty, A, at, rec(1)), true, 'a new generation-1 capture');
+  assert.equal(canWrite(empty, A, at, rec(2)), true, 'a new generation-2 capture');
+  // generation 1 keeps working exactly as before, including for old clients
+  assert.equal(canWrite(withVersion(1), A, at, rec(1, 'archived')), true, 'gen 1 -> gen 1');
+  assert.equal(canWrite(withVersion(1), A, at, rec(2)), true, 'gen 1 -> gen 2 (the reopen upgrade)');
+  // generation 2 is never lowered
+  assert.equal(canWrite(withVersion(2), A, at, rec(2, 'archived')), true, 'gen 2 -> gen 2');
+  assert.equal(canWrite(withVersion(2), A, at, rec(1, 'delegated')), false, 'gen 2 -> gen 1 is a downgrade');
+  assert.equal(canWrite(withVersion(2), A, at, { text: 'x', status: 'delegated' }), false, 'dropping schemaVersion is a downgrade');
+  assert.equal(canWrite(withVersion(2), A, at, { schemaVersion: '2', text: 'x', status: 'triaged' }), false, 'a non-numeric version is not a generation');
+  // ownership still applies on top
+  assert.equal(canWrite(withVersion(1), C, at, rec(2)), false, 'an outsider still cannot write');
+  // the monotonic rule is per capture: another capture in the same room is unaffected
+  const mixed = { rooms: { uid_alice_uid: { brainDump: { cap1: { schemaVersion: 2, text: 'x', status: 'triaged' }, cap2: { schemaVersion: 1, text: 'y', status: 'triaged' } } } } };
+  assert.equal(canWrite(mixed, A, '/rooms/uid_alice_uid/brainDump/cap2', rec(1, 'archived')), true);
+});
+
 test('calendar barrier preserves every audited ordinary owner-write room path', () => {
   const ordinary = [
     'timer', 'entries', 'intention', 'devices', 'settings', 'templates', 'templatesSavedAt',

@@ -152,6 +152,36 @@ async function schedule(page, id, dateKey) {
 const FALSE_CONFLICT = /elsewhere|another device/i;
 
 // ═══════════════════════════════════════════════════════════════════════
+// F1 — one coherent Brain Dump module generation
+// ═══════════════════════════════════════════════════════════════════════
+
+test('F1. a stale browser cache of the OLD bare brain-dump modules cannot break the new page: every Brain Dump module loads through its versioned URL', async ({ page }) => {
+  // Simulates the HTTP cache still holding the pre-reopen (cf43080) model/repository/promotion at their
+  // BARE urls. A page that imports them bare links new entry code against old modules and fails with
+  // "does not provide an export named ...". The new page must never request them bare at all.
+  const stale = {};
+  for (const name of ['brain-dump-model.js', 'brain-dump-repository.js', 'brain-dump-promotion.js']) {
+    stale[name] = (await fs.readFile(path.join(APP_ROOT, 'fixtures', 'brain-dump-pre-reopen', name), 'utf8'))
+      .replace("'../../personal-day-boundary-repository.js'", "'./personal-day-boundary-repository.js'");
+  }
+  const bareRequests = [];
+  const errors = [];
+  page.on('pageerror', err => errors.push(err.message));
+  await page.route(url => /\/brain-dump-[a-z-]+\.js$/.test(url.pathname) && !url.search, route => {
+    const name = new URL(route.request().url()).pathname.split('/').pop();
+    bareRequests.push(name);
+    return stale[name] ? route.fulfill({ status: 200, contentType: 'application/javascript', body: stale[name] }) : route.continue();
+  });
+  await openApp(page, { now: at('2026-10-01', '09:00') });
+  expect(bareRequests, 'no Brain Dump module may be fetched through a bare (cacheable-forever-stale) URL').toEqual([]);
+  expect(errors.filter(m => /does not provide an export/.test(m))).toEqual([]);
+  const id = await captureOne(page, 'Coherent generation');
+  await triage(page, id, true, true);
+  await page.locator(`button[onclick="window.BrainDumpUI.doToday('${id}')"]`).click();
+  await expect.poll(async () => (await storage(page))[id].status).toBe('promoted');
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // Problem 1 — fresh captures never report a false conflict
 // ═══════════════════════════════════════════════════════════════════════
 

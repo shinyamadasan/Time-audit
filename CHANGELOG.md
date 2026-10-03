@@ -1,5 +1,34 @@
 # ChronaSense — Changelog
 
+## Brain Dump Production UX Correction V1 FIX FIRST — candidate, NOT integrated
+
+Same branch, on top of the reviewed candidate `80c1e83`. Not pushed, merged or deployed.
+
+**F1, coherent module generation:** every `brain-dump-*.js` module (model, repository, promotion, sync,
+ui) is now in the import map, pinned to the Brain Dump token `20261003-brain-dump-production-ux-fix1`,
+which both entry tags also carry. A fresh entry can no longer link against an old cached bare model; the
+reproduced error was "does not provide an export named 'promotedTo'". The governed token is unchanged. The
+release guard enforces this by crawling the graph.
+
+**F2, rollout compatibility:** a reopen upgrades that one record to `schemaVersion: 2`. The merge keeps the
+higher generation. A new `firebase.rules.json` `.validate` refuses any write that lowers a capture's
+`schemaVersion`, so an old client can no longer push Archived/Delegated back over a reopen. Untouched
+records stay generation 1. **Requires a scoped rules deploy BEFORE this client ships.**
+
+**F3, exact promotion intent:** `samePromotionIntent()` compares type, store, targetId, planItemId, when
+and durationMinutes. It is used for the claim-win check, the listener-first self-recognition, the local
+re-claim check and the "already promoted" entry check. A finalized promotion now records `when`/
+`durationMinutes`. A same-day Do Today vs Schedule, or 14:00 vs 15:00, is no longer reported as success.
+
+**F4, destination:** `promotionDestination()` (promotion.js, pure) reads the destination from Plan
+Authority. "Open in plan" is offered only when the date navigation resolves to the promotion's own
+targetId. A Personal Day (operational) target is labeled "Personal day from <start>" and gets no button.
+
+**Tests:** new `brain-dump-rollout-compat.test.js` runs the REAL cf43080 client (vendored verbatim in
+`fixtures/brain-dump-pre-reopen/`) against the real rules via targaryen. New
+`brain-dump-destination.test.js` runs against the real Plan Authority. Also added: F3 cases, rules test E,
+release-guard Brain Dump generation tests, and an F1 Playwright test with a stale bare-URL cache.
+
 ## Brain Dump Production UX Correction V1 — candidate, NOT integrated
 
 Branch `fix/brain-dump-production-ux-v1` from `origin/main` @ `cf43080`. Not pushed, merged or deployed.
