@@ -1,3 +1,7 @@
+// VERBATIM copy of brain-dump-sync.js as deployed at cf43080 (the pre-reopen production client), kept so
+// brain-dump-rollout-compat.test.js can run a REAL old client against new records. Only the
+// personal-day-boundary-repository.js import path is rewritten for this directory. Never edit.
+
 // brain-dump-sync.js
 //
 // Durable cross-device copy of the canonical Brain Dump store, on top of
@@ -90,8 +94,8 @@
 //     unlike a timeout, which is this module's own impatience, not the SDK's.
 
 import { createBrainDumpRepository } from './brain-dump-repository.js';
-import { appRoomOwner } from './personal-day-boundary-repository.js';
-import { validBrainDumpId, mergeCaptureRecords, claimPromotion, arbitratePromotionClaim, promotedTo, samePromotionIntent } from './brain-dump-model.js';
+import { appRoomOwner } from '../../personal-day-boundary-repository.js';
+import { validBrainDumpId, mergeCaptureRecords, claimPromotion, arbitratePromotionClaim } from './brain-dump-model.js';
 
 const DEFAULT_CLAIM_TIMEOUT_MS = 8000;
 
@@ -232,29 +236,22 @@ export function createBrainDumpSyncBridge(deps = {}) {
     // notice — and reconcile — a newly-authoritative claim, whether this runs
     // before or long after the original caller's own bounded wait gave up.
     if (changed) onRemoteChange(id, record);
-    // Read AFTER onRemoteChange, never the pre-hook `record`: the hook may have
-    // just reconciled (and finalized) this very claim.
-    const finalRecord = repository.read(id) || record;
+    const finalRecord = record || repository.read(id);
     // Checked BEFORE the committed/aborted branch deliberately: an idempotent
     // retry of a claim THIS device already won can "abort" (no change needed)
     // while still correctly reporting success.
-    // Exact intent, never merely the same deterministic plan item: another
-    // device's same-day Do Today vs this Schedule (or 14:00 vs 15:00) shares
-    // store, targetId and planItemId, and must NOT read as this caller's win.
-    if (samePromotionIntent(finalRecord?.promotionClaim, promotion)) return { ok: true, record: finalRecord };
-    // Production UX Correction V1 — the root cause of the false "already being
-    // promoted elsewhere". Real Firebase raises the whole-subtree 'value' event
-    // for a committed transaction BEFORE resolving the transaction itself. That
-    // listener merges our new claim, and onRemoteChange -> the UI's reconciler
-    // then finishes it (plan item + finalize) before this function runs. By now
-    // the record is already PROMOTED with exactly our intent and the claim
-    // cleared. That is our own win, finished cooperatively, not a competing actor.
-    if (promotedTo(finalRecord, promotion)) return { ok: true, record: finalRecord };
-    // Lost: either refused by arbitratePromotionClaim (remote already settled,
-    // or a competing claim's tie-break beat ours), or something else finished
-    // first with a different intent.
-    const reason = finalRecord && finalRecord.status !== 'untriaged' && finalRecord.status !== 'triaged' ? 'already-disposed' : 'already-claimed';
-    return { ok: false, reason, record: finalRecord };
+    const wonClaim = !!finalRecord?.promotionClaim
+      && finalRecord.promotionClaim.store === promotion.store
+      && finalRecord.promotionClaim.targetId === promotion.targetId
+      && finalRecord.promotionClaim.planItemId === promotion.planItemId;
+    if (wonClaim) return { ok: true, record: finalRecord };
+    if (!result.committed) {
+      // Refused by arbitratePromotionClaim: remote was already a settled
+      // terminal state, or a competing claim's tie-break beat ours.
+      const reason = finalRecord && finalRecord.status !== 'untriaged' && finalRecord.status !== 'triaged' ? 'already-disposed' : 'already-claimed';
+      return { ok: false, reason, record: finalRecord };
+    }
+    return { ok: false, reason: 'already-claimed', record: finalRecord };
   }
 
   /** Establishes a BRAND NEW promotion claim against the AUTHORITATIVE REMOTE

@@ -37,8 +37,12 @@
 // Remote even resolves, because Firebase raises the listener event first. The
 // foreground call must not suppress that reconciler: if it did, and then timed
 // out ('pending'), nobody would be left to finish the claim. So the reconciler
-// stays free to run, and the foreground call treats "already promoted into
-// exactly my destination" (promotedTo) as its own success, never as a conflict.
+// stays free to run, and the foreground call treats "already promoted with
+// exactly my intent" (promotedTo) as its own success, never as a conflict.
+// "Exactly" means samePromotionIntent: type, store, targetId, planItemId, when
+// and durationMinutes all match. The deterministic planItemId alone is shared
+// by every promotion of one capture into one day, so it cannot tell a Do Today
+// from a same-day Schedule, or 14:00 from 15:00.
 //
 // ── crash-window recovery ─────────────────────────────────────────────────────
 // A crash/reload between any two phases is safe to retry, from this device or
@@ -80,7 +84,7 @@
 // plan-item id and finalizePromotion's own idempotent guard are what make that
 // safe, exactly as they already do for promoteCaptureToPlan's own retries.
 
-import { brainDumpPlanItemId, promotedTo } from './brain-dump-model.js';
+import { brainDumpPlanItemId, promotedTo, samePromotionIntent } from './brain-dump-model.js';
 
 function buildPlanItem(claim, text, now, deviceId) {
   const item = { id: claim.planItemId, task: text, when: claim.when || '', done: false, doneAt: null, updatedAt: now, updatedBy: deviceId, kind: 'task' };
@@ -108,7 +112,7 @@ function createAndFinalize({ repository, planAuthority, id, target, claim, text,
   // Already finalized into THIS claim's destination (a cooperating reconciler
   // got there first): the same promotion, not a different earlier disposition.
   if (!finalized.ok && promotedTo(finalized.record, claim)) return { ok: true, record: finalized.record };
-  if (!finalized.ok && finalized.reason === 'already-disposed') return { ok: true, record: finalized.record, alreadyDisposed: true };
+  // Anything else already settled is NOT this claim's success.
   if (!finalized.ok) return finalized;
   return { ok: true, record: finalized.record };
 }
@@ -122,9 +126,9 @@ export async function promoteCaptureToPlan(input = {}) {
   if (!repository || !planAuthority || typeof claimPromotionRemote !== 'function') return { ok: false, reason: 'invalid-input' };
   const current = repository.read(id);
   if (!current) return { ok: false, reason: 'not-found' };
-  if (current.status !== 'untriaged' && current.status !== 'triaged') {
-    // Already promoted/archived/delegated — never re-promote. The caller reads the
-    // existing record (including `promotion`, if it was promoted) off this result.
+  if (current.status === 'archived' || current.status === 'delegated') {
+    // Already handled without a plan item — never re-promote, and never touch
+    // Plan Authority to find that out.
     return { ok: true, record: current, alreadyDisposed: true };
   }
 
@@ -145,26 +149,74 @@ export async function promoteCaptureToPlan(input = {}) {
   }
 
   const planItemId = brainDumpPlanItemId(id);
+  // Everything that shapes the resulting plan item — see samePromotionIntent.
+  const intent = { type, store: target.store, targetId: target.id, planItemId, when, durationMinutes };
+
+  if (current.status === 'promoted') {
+    // Never re-promote. An exact retry of the SAME intent is an idempotent
+    // success; a different intent (Do Today vs a same-day Schedule, or another
+    // time) was NOT honored, so it is never reported as success.
+    return promotedTo(current, intent)
+      ? { ok: true, record: current, alreadyDisposed: true }
+      : { ok: false, reason: 'already-disposed', record: current };
+  }
 
   // Phase 1: REMOTE CLAIM GATE — authoritative, before Plan Authority is
   // touched. Never fakes success: offline/already-claimed/already-disposed all
   // come back here as ok:false with no local or remote write for THIS attempt.
   // 'pending' means the outcome is UNKNOWN — see reconcilePromotionClaim.
-  const claim = await claimPromotionRemote(id, { type, store: target.store, targetId: target.id, planItemId, when, durationMinutes });
+  const claim = await claimPromotionRemote(id, intent);
   if (!claim.ok) return claim;
-  const destination = { store: target.store, targetId: target.id, planItemId };
   // The listener-driven reconciler observed our claim first and already
   // finished it (see brain-dump-sync.js's finishClaimAttempt). This is our own
   // promotion succeeding, so report it as a plain success.
-  if (promotedTo(claim.record, destination)) return { ok: true, record: claim.record };
+  if (promotedTo(claim.record, intent)) return { ok: true, record: claim.record };
   const winningClaim = claim.record?.promotionClaim;
-  if (!winningClaim || winningClaim.store !== target.store || winningClaim.targetId !== target.id || winningClaim.planItemId !== planItemId) {
-    // Our claim did not win the merge (a concurrent claim for a different target
-    // was earlier/authoritative). Never create a second, competing plan item.
+  if (!samePromotionIntent(winningClaim, intent)) {
+    // Our claim did not win the merge (a concurrent claim with a different
+    // intent was earlier/authoritative). Never create a second, competing plan item.
     return { ok: false, reason: 'already-claimed', record: claim.record };
   }
 
   return createAndFinalize({ repository, planAuthority, id, target, claim: winningClaim, text: claim.record.text, now, deviceId });
+}
+
+/** Where a promoted capture landed, read back from Plan Authority (the plan
+ *  item is the authority, not the capture). Pure over the injected Plan
+ *  Authority; any failure just yields less detail.
+ *
+ *  `openDateKey` is the date My Day's existing date navigation
+ *  (jumpTimelineToDate) can open, and is set ONLY when opening that date
+ *  provably lands on this promotion's own target: legacy routing must show that
+ *  same legacy date, and Plan Authority routing must resolve the date back to
+ *  this exact targetId. A Personal Day (operational) target has no calendar
+ *  date of its own, so it never gets one, and is described by its start
+ *  instant instead. Never a guessed date.
+ *  @returns {{kind:'date'|'personal-day'|'unknown', dateKey:string, startMs:number|null,
+ *            timezone:string, when:string, openDateKey:string}} */
+export function promotionDestination(planAuthority, record) {
+  const none = { kind: 'unknown', dateKey: '', startMs: null, timezone: '', when: '', openDateKey: '' };
+  const promotion = record?.promotion;
+  if (!promotion || !planAuthority || typeof planAuthority.targetById !== 'function') return none;
+  try {
+    const target = planAuthority.targetById(promotion.targetId);
+    if (!target) return { ...none, when: promotion.when || '' };
+    const planItem = typeof planAuthority.rawItems === 'function' ? planAuthority.rawItems(target).find(i => i.id === promotion.planItemId) : null;
+    const when = planItem ? (planItem.when || '') : (promotion.when || '');
+    if (!target.dateKey) {
+      return { kind: 'personal-day', dateKey: '', startMs: Number.isFinite(target.startMs) ? target.startMs : null, timezone: target.timezone || '', when, openDateKey: '' };
+    }
+    // Mirrors index.html's jumpTimelineToDate: with Plan Authority routing it
+    // opens dayForCalendarDate(date); otherwise it opens the plain date view,
+    // which shows that date's legacy or calendar plan. Either way the date must
+    // resolve back to THIS target, or the button would open the wrong day.
+    const routed = typeof planAuthority.enabled === 'function' && planAuthority.enabled();
+    const resolved = typeof planAuthority.dayForCalendarDate === 'function' ? planAuthority.dayForCalendarDate(target.dateKey) : null;
+    const opens = resolved?.id === target.id && (routed || target.store === 'legacy' || target.store === 'calendar');
+    return { kind: 'date', dateKey: target.dateKey, startMs: null, timezone: target.timezone || '', when, openDateKey: opens ? target.dateKey : '' };
+  } catch {
+    return none;
+  }
 }
 
 /** Resumes an authoritative promotion claim that is ALREADY WON — i.e. the

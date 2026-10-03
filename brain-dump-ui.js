@@ -14,7 +14,7 @@
 import './plan-authority.js';
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf } from './brain-dump-model.js';
-import { promoteCaptureToPlan, reconcilePromotionClaim } from './brain-dump-promotion.js';
+import { promoteCaptureToPlan, reconcilePromotionClaim, promotionDestination } from './brain-dump-promotion.js';
 import { localPlanDate } from './plan-tomorrow-model.js';
 
 function repository() {
@@ -178,29 +178,35 @@ function formatDateKey(dateKey) {
   return new Date(`${dateKey}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-/** Where a promoted capture landed, read back from Plan Authority (the plan
- *  item is the authority, not this capture): its day and, if timed, its time.
- *  Read-only; any failure just means less detail is shown. */
-function promotionDestination(item) {
-  const pa = window.PlanAuthority;
-  if (!item.promotion || !pa || typeof pa.targetById !== 'function') return { dateKey: '', when: '' };
+/** A Personal Day has no calendar date of its own: describe it by when it
+ *  starts, in its own zone, never by a guessed date. */
+function formatPersonalDayStart(startMs, timezone) {
+  if (!Number.isFinite(startMs)) return '';
   try {
-    const target = pa.targetById(item.promotion.targetId);
-    if (!target) return { dateKey: '', when: '' };
-    const planItem = typeof pa.rawItems === 'function' ? pa.rawItems(target).find(i => i.id === item.promotion.planItemId) : null;
-    return { dateKey: target.dateKey || '', when: planItem?.when || '' };
+    return new Date(startMs).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: timezone || undefined });
   } catch {
-    return { dateKey: '', when: '' };
+    return '';
   }
+}
+
+function destinationOf(item) {
+  return promotionDestination(window.PlanAuthority, item);
 }
 
 function dispositionLabel(item) {
   if (item.status === 'promoted') {
-    const { dateKey, when } = promotionDestination(item);
-    const day = formatDateKey(dateKey);
+    const destination = destinationOf(item);
     let label = item.promotion?.type === 'do-today' ? 'Added to plan' : 'Scheduled';
-    if (day) label += ` · ${day}`;
-    if (when) label += ` at ${escapeHtml(when)}`;
+    if (destination.kind === 'date') {
+      const day = formatDateKey(destination.dateKey);
+      if (day) label += ` · ${day}`;
+    } else if (destination.kind === 'personal-day') {
+      const start = formatPersonalDayStart(destination.startMs, destination.timezone);
+      label += start ? ` · Personal day from ${start}` : ' · Personal day';
+    }
+    if (destination.when) label += ` at ${escapeHtml(destination.when)}`;
+    // No "Open in plan" when navigation cannot prove it lands on this day.
+    if (destination.kind === 'personal-day') label += ' (open it from My Day)';
     return label;
   }
   if (item.status === 'archived') return 'Archived';
@@ -226,8 +232,8 @@ function handledEditFormHtml(item) {
 function handledActionsHtml(item) {
   if (item.status === 'promoted') {
     // No Reopen/Edit here: the plan item is live and is the thing to edit.
-    const { dateKey } = promotionDestination(item);
-    if (!dateKey || typeof globalThis.jumpTimelineToDate !== 'function') return '';
+    const { openDateKey } = destinationOf(item);
+    if (!openDateKey || typeof globalThis.jumpTimelineToDate !== 'function') return '';
     return `<button type="button" class="btn sm ghost" onclick="window.BrainDumpUI.openInPlan('${item.id}')">Open in plan</button>`;
   }
   if (editingHandledId === item.id) return '';
@@ -338,7 +344,15 @@ function reportPromotionOutcome(result, successLabel, id) {
     render();
     return;
   }
-  if (result.reason === 'already-disposed') { notify(alreadyHandledMessage(result.record)); render(); return; }
+  if (result.reason === 'already-disposed') {
+    // A promotion that already happened with DIFFERENT details (Do Today vs a
+    // time, or another time) did not honor this request: never say it did.
+    notify(result.record?.status === 'promoted'
+      ? 'This item was already added to your plan with different details. Open it in your plan to change it.'
+      : alreadyHandledMessage(result.record));
+    render();
+    return;
+  }
   const messages = {
     'no-authoritative-day': 'Plans are still syncing — try again in a moment.',
     ambiguous: 'That local time happens twice (clock change) — pick a different time.',
@@ -486,10 +500,10 @@ async function reopen(id) {
 
 function openInPlan(id) {
   const item = repository().read(id);
-  const { dateKey } = item ? promotionDestination(item) : { dateKey: '' };
-  if (!dateKey || typeof globalThis.jumpTimelineToDate !== 'function' || typeof globalThis.showView !== 'function') return;
+  const { openDateKey } = item ? destinationOf(item) : { openDateKey: '' };
+  if (!openDateKey || typeof globalThis.jumpTimelineToDate !== 'function' || typeof globalThis.showView !== 'function') return;
   globalThis.showView('today');
-  globalThis.jumpTimelineToDate(dateKey);
+  globalThis.jumpTimelineToDate(openDateKey);
 }
 
 if (typeof window !== 'undefined') {

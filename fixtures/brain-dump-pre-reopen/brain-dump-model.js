@@ -1,3 +1,7 @@
+// VERBATIM copy of brain-dump-model.js as deployed at cf43080 (the pre-reopen production client), kept so
+// brain-dump-rollout-compat.test.js can run a REAL old client against new records. Only the
+// personal-day-boundary-repository.js import path is rewritten for this directory. Never edit.
+
 // brain-dump-model.js
 //
 // Pure. The canonical model for a BRAIN DUMP CAPTURE — a fast, undated thought or
@@ -71,39 +75,6 @@
 // — those still correctly let an already-won claim/promotion beat a stale
 // archive/delegate, exactly as round 1 fixed.
 //
-// ── edit + reopen on handled items (Production UX Correction V1) ────────────
-// Handled is not immutable forever. An ARCHIVED or DELEGATED capture may have
-// its text (and, if delegated, delegatedTo) corrected in place: it stays
-// handled, and the ordinary same-rank LWW decides between two such edits.
-// It may also be explicitly REOPENED back into triage (reopenCapture): status
-// returns to triaged (or untriaged if it was never classified), Important/
-// Urgent are kept, disposedAt and delegatedTo clear (delegatedTo describes
-// the CURRENT disposition, and a reopened capture is no longer delegated).
-// A PROMOTED capture is never editable or reopenable here: it has a live plan
-// item, and reopening it would allow a second promotion. Its plan item is
-// edited through Plan Authority instead.
-//
-// The rank rule alone would let a stale archived/delegated snapshot (rank 1)
-// beat a newer reopened record (rank 0) and silently re-dispose it. So every
-// reopen bumps `reopenCount` (absent on older records = 0), and among records
-// below claim rank, the HIGHER reopenCount wins outright: a reopen supersedes
-// every disposition from before it. Claimed (2) and promoted (3) still beat
-// everything regardless of reopenCount, so a reopen can never invalidate a
-// promotion claim that is already authoritative remotely. A reopen pushed
-// against such a claim simply loses the merge and converges to the promotion.
-//
-// ── rollout: an old client must never undo a reopen ─────────────────────────
-// A client from before reopen existed normalizes reopenCount away and ranks
-// archived/delegated above active, so a stale one would push its old
-// disposition straight back over a reopen. So a reopen also upgrades that ONE
-// record to schemaVersion 2 (BRAIN_DUMP_REOPEN_SCHEMA_VERSION), and the generation
-// is monotonic: mergeCaptureRecords keeps the higher of the two, and
-// firebase.rules.json refuses any write that lowers a record's schemaVersion.
-// An old client cannot normalize a generation-2 record (it ignores it) and
-// cannot write over one (the server refuses it). Every record that has never
-// been reopened stays generation 1 and fully writable by old clients: the
-// upgrade is lazy and per record, never a bulk migration.
-//
 // ── delegate is a disposition, not a destination (deliberate V1 scope) ──────
 // This codebase has no existing model for handing work to another person — no
 // commitment-to-someone-else, no assignee, no second task store. Building one here
@@ -127,16 +98,11 @@
 // must not depend on content).
 
 export const BRAIN_DUMP_SCHEMA_VERSION = 1;
-/** The reopen-aware record generation (see the file banner's rollout section).
- *  BRAIN_DUMP_SCHEMA_VERSION stays the storage-envelope version and the
- *  generation of every record that has never been reopened. */
-export const BRAIN_DUMP_REOPEN_SCHEMA_VERSION = 2;
-const RECORD_SCHEMA_VERSIONS = new Set([BRAIN_DUMP_SCHEMA_VERSION, BRAIN_DUMP_REOPEN_SCHEMA_VERSION]);
 
 export const BRAIN_DUMP_STATUSES = new Set(['untriaged', 'triaged', 'promoted', 'archived', 'delegated']);
 /** Terminal: once a capture reaches one of these, it is no longer an actionable
- *  Brain Dump list item. Archived/delegated may be explicitly reopened
- *  (reopenCapture); promoted never reverts. */
+ *  Brain Dump list item. Triage data may still be edited for record-keeping, but
+ *  the status itself never reverts in V1 (there is no "undo" action). */
 export const TERMINAL_STATUSES = new Set(['promoted', 'archived', 'delegated']);
 export const PROMOTION_TYPES = new Set(['do-today', 'schedule']);
 
@@ -209,7 +175,6 @@ export function buildCapture(input = {}) {
       promotionClaim: null,
       promotion: null,
       delegatedTo: null,
-      reopenCount: 0,
     },
   };
 }
@@ -308,7 +273,7 @@ export function claimPromotion(current, { promotion, now, updatedBy } = {}) {
   if (TERMINAL_STATUSES.has(base.status)) return { ok: false, reason: 'already-disposed', record: base };
   const existing = base.promotionClaim;
   if (existing) {
-    const same = samePromotionIntent(existing, promotion);
+    const same = existing.store === promotion.store && existing.targetId === promotion.targetId && existing.planItemId === promotion.planItemId;
     if (same) return { ok: true, record: base };
     return { ok: false, reason: 'already-claimed', record: base };
   }
@@ -347,9 +312,7 @@ export function finalizePromotion(current, { now, updatedBy } = {}) {
     record: {
       ...base,
       status: 'promoted',
-      // when/durationMinutes persist so the finalized promotion still records
-      // the exact intent (see samePromotionIntent).
-      promotion: { type: claim.type, store: claim.store, targetId: claim.targetId, planItemId: claim.planItemId, when: claim.when, durationMinutes: claim.durationMinutes, promotedAt: at },
+      promotion: { type: claim.type, store: claim.store, targetId: claim.targetId, planItemId: claim.planItemId, promotedAt: at },
       promotionClaim: null,
       disposedAt: at,
       updatedAt: at,
@@ -372,104 +335,12 @@ export function delegateCapture(current, { delegatedTo = null, now, updatedBy } 
   return disposeCapture(current, 'delegated', { delegatedTo: cleanDelegatedTo(delegatedTo) }, { now, updatedBy });
 }
 
-function intentWhen(value) {
-  return typeof value === 'string' ? value : '';
-}
-
-function intentDuration(value) {
-  return Number.isInteger(value) && value > 0 ? value : null;
-}
-
-/** Two promotion intents (a claim, a finalized promotion, or a caller's fresh
- *  request) are the same only when EVERY field that shapes the resulting plan
- *  item matches: type, store, targetId, planItemId, when and durationMinutes.
- *  The deterministic planItemId alone is not enough. Do Today and an untimed
- *  or 15:00 Schedule on the same day share it, and treating them as one would
- *  silently drop the losing caller's time. */
-export function samePromotionIntent(a, b) {
-  return !!a && !!b
-    && a.type === b.type
-    && a.store === b.store
-    && a.targetId === b.targetId
-    && a.planItemId === b.planItemId
-    && intentWhen(a.when) === intentWhen(b.when)
-    && intentDuration(a.durationMinutes) === intentDuration(b.durationMinutes);
-}
-
-/** True iff `record` is already promoted with exactly this intent. Lets a
- *  foreground promotion recognize that its OWN claim was finished first (by the
- *  reconciler that observed it), instead of mistaking that for a competing
- *  actor, without ever mistaking a DIFFERENT intent for its own success. */
-export function promotedTo(record, intent) {
-  return !!record && record.status === 'promoted' && samePromotionIntent(record.promotion, intent);
-}
-
-const HANDLED_EDITABLE = new Set(['archived', 'delegated']);
-
-/** Corrects an archived/delegated capture IN PLACE: `text` and (delegated only)
- *  `delegatedTo`. Never changes status — editing a handled item never reopens
- *  it. Promoted captures refuse ('promoted'): their plan item is the thing to
- *  edit, through Plan Authority. Active captures refuse ('not-handled'). */
-export function editHandledCapture(current, patch = {}) {
-  const base = normalizeCapture(current);
-  if (!base) return { ok: false, reason: 'invalid-input', field: 'record' };
-  const now = timestamp(patch.now);
-  if (!now) return { ok: false, reason: 'invalid-input', field: 'now' };
-  const by = writer(patch.updatedBy);
-  if (!by) return { ok: false, reason: 'invalid-input', field: 'updatedBy' };
-  if (base.status === 'promoted') return { ok: false, reason: 'promoted', record: base };
-  if (!HANDLED_EDITABLE.has(base.status)) return { ok: false, reason: 'not-handled', record: base };
-  const next = { ...base };
-  if (patch.text !== undefined) {
-    const text = cleanText(patch.text);
-    if (!text) return { ok: false, reason: 'invalid-input', field: 'text' };
-    next.text = text;
-  }
-  if (patch.delegatedTo !== undefined) {
-    if (base.status !== 'delegated') return { ok: false, reason: 'invalid-input', field: 'delegatedTo' };
-    next.delegatedTo = cleanDelegatedTo(patch.delegatedTo);
-  }
-  if (next.text === base.text && next.delegatedTo === base.delegatedTo) return { ok: true, record: base, unchanged: true };
-  return { ok: true, record: { ...next, updatedAt: now, updatedBy: by } };
-}
-
-/** Explicitly returns an archived/delegated capture to the active triage
- *  workflow — same id, Important/Urgent kept. Bumps reopenCount so this reopen
- *  supersedes every earlier archive/delegate in a merge (see the file banner).
- *  Promoted refuses ('promoted'); an already-active capture refuses
- *  ('not-handled') so a double-click never bumps the generation twice. */
-export function reopenCapture(current, patch = {}) {
-  const base = normalizeCapture(current);
-  if (!base) return { ok: false, reason: 'invalid-input', field: 'record' };
-  const now = timestamp(patch.now);
-  if (!now) return { ok: false, reason: 'invalid-input', field: 'now' };
-  const by = writer(patch.updatedBy);
-  if (!by) return { ok: false, reason: 'invalid-input', field: 'updatedBy' };
-  if (base.status === 'promoted') return { ok: false, reason: 'promoted', record: base };
-  if (!HANDLED_EDITABLE.has(base.status)) return { ok: false, reason: 'not-handled', record: base };
-  return {
-    ok: true,
-    record: {
-      ...base,
-      status: base.important === null ? 'untriaged' : 'triaged',
-      disposedAt: null,
-      delegatedTo: null,
-      reopenCount: base.reopenCount + 1,
-      // A reopen is the one write an old client cannot represent: from here on
-      // this record is reopen-aware, and the rules refuse any older generation.
-      schemaVersion: BRAIN_DUMP_REOPEN_SCHEMA_VERSION,
-      updatedAt: now,
-      updatedBy: by,
-    },
-  };
-}
-
 /** Validates and canonicalizes a stored/remote record. Returns null for anything
  *  that is not a well-formed capture — a malformed remote payload must never
  *  become a half-valid item on the list. */
 export function normalizeCapture(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  if (!RECORD_SCHEMA_VERSIONS.has(value.schemaVersion)) return null;
+  if (value.schemaVersion !== BRAIN_DUMP_SCHEMA_VERSION) return null;
   if (!validBrainDumpId(value.id)) return null;
   const text = cleanText(value.text);
   if (!text) return null;
@@ -516,10 +387,7 @@ export function normalizeCapture(value) {
     if (typeof p.targetId !== 'string' || !p.targetId) return null;
     if (typeof p.planItemId !== 'string' || !p.planItemId) return null;
     if (!timestamp(p.promotedAt)) return null;
-    if (p.when !== undefined && p.when !== null && typeof p.when !== 'string') return null;
-    if (p.durationMinutes !== undefined && p.durationMinutes !== null && !(Number.isInteger(p.durationMinutes) && p.durationMinutes > 0)) return null;
-    // Promotions finalized before exact intent was recorded read as untimed.
-    promotion = { type: p.type, store: p.store, targetId: p.targetId, planItemId: p.planItemId, when: intentWhen(p.when), durationMinutes: intentDuration(p.durationMinutes), promotedAt: p.promotedAt };
+    promotion = { type: p.type, store: p.store, targetId: p.targetId, planItemId: p.planItemId, promotedAt: p.promotedAt };
   } else if (value.promotion !== null && value.promotion !== undefined) return null;
 
   let delegatedTo = null;
@@ -527,18 +395,8 @@ export function normalizeCapture(value) {
     delegatedTo = cleanDelegatedTo(value.delegatedTo);
   } else if (value.delegatedTo !== null && value.delegatedTo !== undefined) return null;
 
-  // Absent on every record written before reopen existed — those are generation 0.
-  let reopenCount = 0;
-  if (value.reopenCount !== undefined && value.reopenCount !== null) {
-    if (!Number.isInteger(value.reopenCount) || value.reopenCount < 0) return null;
-    reopenCount = value.reopenCount;
-  }
-  // A reopened record is always reopen-aware: a generation-1 record claiming a
-  // reopen is malformed (an old client could not have written it).
-  if (reopenCount > 0 && value.schemaVersion < BRAIN_DUMP_REOPEN_SCHEMA_VERSION) return null;
-
   return {
-    schemaVersion: value.schemaVersion,
+    schemaVersion: BRAIN_DUMP_SCHEMA_VERSION,
     id: value.id,
     text,
     createdAt,
@@ -552,7 +410,6 @@ export function normalizeCapture(value) {
     promotionClaim,
     promotion,
     delegatedTo,
-    reopenCount,
   };
 }
 
@@ -587,24 +444,8 @@ export function mergeCaptureRecords(localValue, remoteValue) {
   const remote = normalizeCapture(remoteValue);
   if (!local) return remote;
   if (!remote) return local;
-  const winner = pickCaptureWinner(local, remote);
-  // The record generation is monotonic: once either side is reopen-aware, the
-  // merged record is too, whichever side won. Otherwise a new client's own
-  // claim or edit could carry a generation-1 copy back over a generation-2
-  // record (refused by the rules) — see the file banner's rollout section.
-  const schemaVersion = Math.max(local.schemaVersion, remote.schemaVersion);
-  return winner.schemaVersion === schemaVersion ? winner : { ...winner, schemaVersion };
-}
-
-function pickCaptureWinner(local, remote) {
   const localRank = captureAuthorityRank(local);
   const remoteRank = captureAuthorityRank(remote);
-  // Below claim rank, a later reopen supersedes any earlier archive/delegate
-  // (see the file banner's "edit + reopen" section). Claimed/promoted are never
-  // out-voted by reopenCount.
-  if (localRank < 2 && remoteRank < 2 && local.reopenCount !== remote.reopenCount) {
-    return remote.reopenCount > local.reopenCount ? remote : local;
-  }
   if (localRank !== remoteRank) return remoteRank > localRank ? remote : local;
   if (localRank === 2) {
     const a = local.promotionClaim.claimedAt;
@@ -685,9 +526,9 @@ export function quadrantOf(record) {
 }
 
 const api = {
-  BRAIN_DUMP_SCHEMA_VERSION, BRAIN_DUMP_REOPEN_SCHEMA_VERSION, BRAIN_DUMP_STATUSES, TERMINAL_STATUSES, PROMOTION_TYPES, BRAIN_DUMP_PLAN_ITEM_PREFIX,
+  BRAIN_DUMP_SCHEMA_VERSION, BRAIN_DUMP_STATUSES, TERMINAL_STATUSES, PROMOTION_TYPES, BRAIN_DUMP_PLAN_ITEM_PREFIX,
   validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, claimPromotion, finalizePromotion,
-  archiveCapture, delegateCapture, samePromotionIntent, promotedTo, editHandledCapture, reopenCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
+  archiveCapture, delegateCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
   mergeCaptureMaps, allCaptures, untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
 };
 globalThis.BrainDumpModel = api;

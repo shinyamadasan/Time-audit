@@ -92,6 +92,18 @@
 // promotion claim that is already authoritative remotely. A reopen pushed
 // against such a claim simply loses the merge and converges to the promotion.
 //
+// ── rollout: an old client must never undo a reopen ─────────────────────────
+// A client from before reopen existed normalizes reopenCount away and ranks
+// archived/delegated above active, so a stale one would push its old
+// disposition straight back over a reopen. So a reopen also upgrades that ONE
+// record to schemaVersion 2 (BRAIN_DUMP_REOPEN_SCHEMA_VERSION), and the generation
+// is monotonic: mergeCaptureRecords keeps the higher of the two, and
+// firebase.rules.json refuses any write that lowers a record's schemaVersion.
+// An old client cannot normalize a generation-2 record (it ignores it) and
+// cannot write over one (the server refuses it). Every record that has never
+// been reopened stays generation 1 and fully writable by old clients: the
+// upgrade is lazy and per record, never a bulk migration.
+//
 // ── delegate is a disposition, not a destination (deliberate V1 scope) ──────
 // This codebase has no existing model for handing work to another person — no
 // commitment-to-someone-else, no assignee, no second task store. Building one here
@@ -115,6 +127,11 @@
 // must not depend on content).
 
 export const BRAIN_DUMP_SCHEMA_VERSION = 1;
+/** The reopen-aware record generation (see the file banner's rollout section).
+ *  BRAIN_DUMP_SCHEMA_VERSION stays the storage-envelope version and the
+ *  generation of every record that has never been reopened. */
+export const BRAIN_DUMP_REOPEN_SCHEMA_VERSION = 2;
+const RECORD_SCHEMA_VERSIONS = new Set([BRAIN_DUMP_SCHEMA_VERSION, BRAIN_DUMP_REOPEN_SCHEMA_VERSION]);
 
 export const BRAIN_DUMP_STATUSES = new Set(['untriaged', 'triaged', 'promoted', 'archived', 'delegated']);
 /** Terminal: once a capture reaches one of these, it is no longer an actionable
@@ -291,7 +308,7 @@ export function claimPromotion(current, { promotion, now, updatedBy } = {}) {
   if (TERMINAL_STATUSES.has(base.status)) return { ok: false, reason: 'already-disposed', record: base };
   const existing = base.promotionClaim;
   if (existing) {
-    const same = existing.store === promotion.store && existing.targetId === promotion.targetId && existing.planItemId === promotion.planItemId;
+    const same = samePromotionIntent(existing, promotion);
     if (same) return { ok: true, record: base };
     return { ok: false, reason: 'already-claimed', record: base };
   }
@@ -330,7 +347,9 @@ export function finalizePromotion(current, { now, updatedBy } = {}) {
     record: {
       ...base,
       status: 'promoted',
-      promotion: { type: claim.type, store: claim.store, targetId: claim.targetId, planItemId: claim.planItemId, promotedAt: at },
+      // when/durationMinutes persist so the finalized promotion still records
+      // the exact intent (see samePromotionIntent).
+      promotion: { type: claim.type, store: claim.store, targetId: claim.targetId, planItemId: claim.planItemId, when: claim.when, durationMinutes: claim.durationMinutes, promotedAt: at },
       promotionClaim: null,
       disposedAt: at,
       updatedAt: at,
@@ -353,15 +372,36 @@ export function delegateCapture(current, { delegatedTo = null, now, updatedBy } 
   return disposeCapture(current, 'delegated', { delegatedTo: cleanDelegatedTo(delegatedTo) }, { now, updatedBy });
 }
 
-/** True iff `record` is promoted INTO exactly this destination — the same
- *  (store, targetId, planItemId) a claim names. Lets a foreground promotion
- *  recognize that its OWN claim was already finished (by the reconciler that
- *  observed it first) instead of mistaking that for a competing actor. */
-export function promotedTo(record, destination) {
-  return !!record && record.status === 'promoted' && !!record.promotion && !!destination
-    && record.promotion.store === destination.store
-    && record.promotion.targetId === destination.targetId
-    && record.promotion.planItemId === destination.planItemId;
+function intentWhen(value) {
+  return typeof value === 'string' ? value : '';
+}
+
+function intentDuration(value) {
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+/** Two promotion intents (a claim, a finalized promotion, or a caller's fresh
+ *  request) are the same only when EVERY field that shapes the resulting plan
+ *  item matches: type, store, targetId, planItemId, when and durationMinutes.
+ *  The deterministic planItemId alone is not enough. Do Today and an untimed
+ *  or 15:00 Schedule on the same day share it, and treating them as one would
+ *  silently drop the losing caller's time. */
+export function samePromotionIntent(a, b) {
+  return !!a && !!b
+    && a.type === b.type
+    && a.store === b.store
+    && a.targetId === b.targetId
+    && a.planItemId === b.planItemId
+    && intentWhen(a.when) === intentWhen(b.when)
+    && intentDuration(a.durationMinutes) === intentDuration(b.durationMinutes);
+}
+
+/** True iff `record` is already promoted with exactly this intent. Lets a
+ *  foreground promotion recognize that its OWN claim was finished first (by the
+ *  reconciler that observed it), instead of mistaking that for a competing
+ *  actor, without ever mistaking a DIFFERENT intent for its own success. */
+export function promotedTo(record, intent) {
+  return !!record && record.status === 'promoted' && samePromotionIntent(record.promotion, intent);
 }
 
 const HANDLED_EDITABLE = new Set(['archived', 'delegated']);
@@ -415,6 +455,9 @@ export function reopenCapture(current, patch = {}) {
       disposedAt: null,
       delegatedTo: null,
       reopenCount: base.reopenCount + 1,
+      // A reopen is the one write an old client cannot represent: from here on
+      // this record is reopen-aware, and the rules refuse any older generation.
+      schemaVersion: BRAIN_DUMP_REOPEN_SCHEMA_VERSION,
       updatedAt: now,
       updatedBy: by,
     },
@@ -426,7 +469,7 @@ export function reopenCapture(current, patch = {}) {
  *  become a half-valid item on the list. */
 export function normalizeCapture(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  if (value.schemaVersion !== BRAIN_DUMP_SCHEMA_VERSION) return null;
+  if (!RECORD_SCHEMA_VERSIONS.has(value.schemaVersion)) return null;
   if (!validBrainDumpId(value.id)) return null;
   const text = cleanText(value.text);
   if (!text) return null;
@@ -473,7 +516,10 @@ export function normalizeCapture(value) {
     if (typeof p.targetId !== 'string' || !p.targetId) return null;
     if (typeof p.planItemId !== 'string' || !p.planItemId) return null;
     if (!timestamp(p.promotedAt)) return null;
-    promotion = { type: p.type, store: p.store, targetId: p.targetId, planItemId: p.planItemId, promotedAt: p.promotedAt };
+    if (p.when !== undefined && p.when !== null && typeof p.when !== 'string') return null;
+    if (p.durationMinutes !== undefined && p.durationMinutes !== null && !(Number.isInteger(p.durationMinutes) && p.durationMinutes > 0)) return null;
+    // Promotions finalized before exact intent was recorded read as untimed.
+    promotion = { type: p.type, store: p.store, targetId: p.targetId, planItemId: p.planItemId, when: intentWhen(p.when), durationMinutes: intentDuration(p.durationMinutes), promotedAt: p.promotedAt };
   } else if (value.promotion !== null && value.promotion !== undefined) return null;
 
   let delegatedTo = null;
@@ -487,9 +533,12 @@ export function normalizeCapture(value) {
     if (!Number.isInteger(value.reopenCount) || value.reopenCount < 0) return null;
     reopenCount = value.reopenCount;
   }
+  // A reopened record is always reopen-aware: a generation-1 record claiming a
+  // reopen is malformed (an old client could not have written it).
+  if (reopenCount > 0 && value.schemaVersion < BRAIN_DUMP_REOPEN_SCHEMA_VERSION) return null;
 
   return {
-    schemaVersion: BRAIN_DUMP_SCHEMA_VERSION,
+    schemaVersion: value.schemaVersion,
     id: value.id,
     text,
     createdAt,
@@ -538,6 +587,16 @@ export function mergeCaptureRecords(localValue, remoteValue) {
   const remote = normalizeCapture(remoteValue);
   if (!local) return remote;
   if (!remote) return local;
+  const winner = pickCaptureWinner(local, remote);
+  // The record generation is monotonic: once either side is reopen-aware, the
+  // merged record is too, whichever side won. Otherwise a new client's own
+  // claim or edit could carry a generation-1 copy back over a generation-2
+  // record (refused by the rules) — see the file banner's rollout section.
+  const schemaVersion = Math.max(local.schemaVersion, remote.schemaVersion);
+  return winner.schemaVersion === schemaVersion ? winner : { ...winner, schemaVersion };
+}
+
+function pickCaptureWinner(local, remote) {
   const localRank = captureAuthorityRank(local);
   const remoteRank = captureAuthorityRank(remote);
   // Below claim rank, a later reopen supersedes any earlier archive/delegate
@@ -626,9 +685,9 @@ export function quadrantOf(record) {
 }
 
 const api = {
-  BRAIN_DUMP_SCHEMA_VERSION, BRAIN_DUMP_STATUSES, TERMINAL_STATUSES, PROMOTION_TYPES, BRAIN_DUMP_PLAN_ITEM_PREFIX,
+  BRAIN_DUMP_SCHEMA_VERSION, BRAIN_DUMP_REOPEN_SCHEMA_VERSION, BRAIN_DUMP_STATUSES, TERMINAL_STATUSES, PROMOTION_TYPES, BRAIN_DUMP_PLAN_ITEM_PREFIX,
   validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, claimPromotion, finalizePromotion,
-  archiveCapture, delegateCapture, promotedTo, editHandledCapture, reopenCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
+  archiveCapture, delegateCapture, samePromotionIntent, promotedTo, editHandledCapture, reopenCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
   mergeCaptureMaps, allCaptures, untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
 };
 globalThis.BrainDumpModel = api;

@@ -20,7 +20,12 @@
         "coarseLifeEvidence": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
         "dayBoundaryRevisions": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
         "commitments": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "brainDump": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "brainDump": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)",
+          "$captureId": {
+            ".validate": "!data.child('schemaVersion').isNumber() || (newData.child('schemaVersion').isNumber() && newData.child('schemaVersion').val() >= data.child('schemaVersion').val())"
+          }
+        },
         "planByDeadlineRevisions": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
         "intentionalOffDays": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
         "calendarPlans": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },

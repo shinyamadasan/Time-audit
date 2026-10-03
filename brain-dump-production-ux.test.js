@@ -328,7 +328,8 @@ test('M. a promoted capture cannot be reopened or edited into an independently p
   assert.equal(device.repository.reopen(id).reason, 'promoted');
   assert.equal(device.repository.editHandled(id, { text: 'changed' }).reason, 'promoted');
   const again = await device.promote(id, { type: 'schedule', dateKey: '2026-10-10' });
-  assert.equal(again.alreadyDisposed, true);
+  assert.equal(again.ok, false, 'a different intent is never reported as success');
+  assert.equal(again.reason, 'already-disposed');
   assert.equal(pa.items.length, 1);
   assert.equal(device.repository.read(id).text, 'Already in plan');
 });
@@ -486,4 +487,93 @@ test('records written before reopen existed normalize to reopenCount 0; a malfor
   // An archive of a never-classified capture reopens to untriaged, not triaged.
   const archived = archiveCapture(legacy, { now: T0 + 1, updatedBy: 'd' }).record;
   assert.equal(reopenCapture(archived, { now: T0 + 2, updatedBy: 'd' }).record.status, 'untriaged');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIX FIRST F3: "already promoted with my intent" must mean the EXACT intent
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Device A promotes first and its claim is authoritative remotely. Device B,
+ *  stale (it still sees "triaged"), then promotes the SAME capture into the
+ *  SAME day with a different intent. Both share store, targetId and the
+ *  deterministic planItemId, so only the full intent can tell them apart. */
+async function sameDayRace(first, second) {
+  const room = makeRoom();
+  const clock = { now: T0 };
+  const pa = makeFakePlanAuthority();
+  const a = makeProductionDevice({ room, planAuthority: pa, clock, deviceId: 'device-a', live: false });
+  const b = makeProductionDevice({ room, planAuthority: pa, clock, deviceId: 'device-b', live: false });
+  const id = await a.capture('Same day, two intents');
+  b.repository.mergeRemote(id, room.raw()[id]);
+  clock.now += 1000;
+  const ra = await a.promote(id, first);
+  clock.now += 1000;
+  const rb = await b.promote(id, second);
+  return { pa, id, ra, rb, a, b };
+}
+
+test('F3. Do Today vs a same-day Schedule 15:00: the loser is NOT reported success, one untimed plan item', async () => {
+  const { pa, id, ra, rb, b } = await sameDayRace({ type: 'do-today' }, { type: 'schedule', dateKey: '2026-10-01', when: '15:00' });
+  assert.equal(ra.ok, true);
+  assert.equal(rb.ok, false, `the Schedule caller must not see success (got ${JSON.stringify({ ok: rb.ok, reason: rb.reason })})`);
+  assert.ok(['already-claimed', 'already-disposed'].includes(rb.reason));
+  assert.equal(pa.items.filter(i => i.id === brainDumpPlanItemId(id)).length, 1);
+  assert.equal(pa.items[0].when, '', 'the plan item is the untimed Do Today one');
+  assert.equal(b.repository.read(id).promotion?.type ?? b.repository.read(id).promotionClaim?.type, 'do-today');
+});
+
+test('F3. Schedule 14:00 vs Schedule 15:00 on the same day: the loser is NOT reported equivalent success', async () => {
+  const { pa, ra, rb } = await sameDayRace({ type: 'schedule', dateKey: '2026-10-10', when: '14:00' }, { type: 'schedule', dateKey: '2026-10-10', when: '15:00' });
+  assert.equal(ra.ok, true);
+  assert.equal(rb.ok, false, `got ${JSON.stringify({ ok: rb.ok, reason: rb.reason })}`);
+  assert.equal(pa.items.length, 1);
+  assert.equal(pa.items[0].when, '14:00');
+});
+
+test('F3. differing durations are different intents too', async () => {
+  const { pa, rb } = await sameDayRace({ type: 'schedule', dateKey: '2026-10-10', when: '14:00', durationMinutes: 30 }, { type: 'schedule', dateKey: '2026-10-10', when: '14:00', durationMinutes: 60 });
+  assert.equal(rb.ok, false);
+  assert.equal(pa.items.length, 1);
+  assert.equal(pa.items[0].durationMinutes, 30);
+});
+
+test('F3. an identical Schedule (date, time, duration) retried from another device is an idempotent success, no duplicate', async () => {
+  const intent = { type: 'schedule', dateKey: '2026-10-10', when: '14:00', durationMinutes: 30 };
+  const { pa, ra, rb } = await sameDayRace(intent, intent);
+  assert.equal(ra.ok, true);
+  assert.equal(rb.ok, true, `got ${rb.reason}`);
+  assert.equal(pa.items.length, 1);
+});
+
+test('F3. exact retries on the same device: same Do Today and same Schedule are idempotent successes; a different one after it is not', async () => {
+  const room = makeRoom();
+  const pa = makeFakePlanAuthority();
+  const device = makeProductionDevice({ room, planAuthority: pa });
+  const today = await device.capture('Do it today');
+  await device.promote(today, { type: 'do-today' });
+  const retryToday = await device.promote(today, { type: 'do-today' });
+  assert.equal(retryToday.ok, true); assert.equal(retryToday.alreadyDisposed, true);
+
+  const later = await device.capture('Schedule it');
+  const first = await device.promote(later, { type: 'schedule', dateKey: '2026-10-10', when: '14:00' });
+  assert.equal(first.ok, true); assert.notEqual(first.alreadyDisposed, true);
+  const retry = await device.promote(later, { type: 'schedule', dateKey: '2026-10-10', when: '14:00' });
+  assert.equal(retry.ok, true); assert.equal(retry.alreadyDisposed, true);
+  const moved = await device.promote(later, { type: 'schedule', dateKey: '2026-10-10', when: '15:00' });
+  assert.equal(moved.ok, false); assert.equal(moved.reason, 'already-disposed');
+  assert.equal(pa.items.length, 2);
+});
+
+test('F3. the listener-first self-reconciliation of a TIMED Schedule is still the caller\'s own success, and the finalized promotion records the exact intent', async () => {
+  const room = makeRoom();
+  const pa = makeFakePlanAuthority();
+  const device = makeProductionDevice({ room, planAuthority: pa });
+  const id = await device.capture('Timed');
+  const result = await device.promote(id, { type: 'schedule', dateKey: '2026-10-10', when: '15:00', durationMinutes: 45 });
+  assert.ok(device.reconciles.some(r => r.id === id && r.outcome.ok), 'the reconciler finished it first');
+  assert.equal(result.ok, true, result.reason); assert.notEqual(result.alreadyDisposed, true);
+  const promotion = device.repository.read(id).promotion;
+  assert.equal(promotion.when, '15:00');
+  assert.equal(promotion.durationMinutes, 45);
+  assert.equal(pa.items.length, 1);
 });

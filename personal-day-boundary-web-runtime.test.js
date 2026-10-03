@@ -183,7 +183,12 @@ const html = read('index.html');
 const importMap = JSON.parse(/<script type="importmap">([\s\S]*?)<\/script>/.exec(html)[1]).imports;
 const release = /<meta name="pdb-release" content="([^"]+)">/.exec(html)[1];
 const importsOf = file => [...read(file).matchAll(/^\s*(?:import|export)\s[^;'"]*?from\s*['"](\.\/[^'"]+)['"]|^\s*import\s*['"](\.\/[^'"]+)['"]/gm)].map(m => m[1] || m[2]);
-const GROUP = Object.keys(importMap).map(k => k.replace('./', ''));
+// Brain Dump is its own generation inside the same import map (Production UX Correction V1 FIX FIRST):
+// its modules are pinned to the Brain Dump entry token, not the governed release. Everything else in
+// the map is the governed group.
+const isBrainDump = file => /^brain-dump-[a-z-]+\.js$/.test(file);
+const GROUP = Object.keys(importMap).map(k => k.replace('./', '')).filter(file => !isBrainDump(file));
+const BRAIN_DUMP_GROUP = Object.keys(importMap).map(k => k.replace('./', '')).filter(isBrainDump);
 const moduleEntries = [...html.matchAll(/<script[^>]*type="module"[^>]*src="([^"?]+)(?:\?v=([^"]+))?"/g)]
   .map(m => ({ file: m[1].replace(/^\.\//, ''), version: m[2] || '' }));
 const governedModule = /^(?:personal-day-boundary-|operational-plan-|plan-authority\.js$|planning-continuity-ui\.js$|stale-plan-recovery-model\.js$|calendar-plan-(?:model|repository|sync|live)\.js$|commitments-(?:repository|sync)\.js$|coarse-life-evidence-(?:repository|sync|ui)\.js$|learning-plan-repository\.js$|capability-career-repository\.js$|daily-routines-repository\.js$)/;
@@ -191,7 +196,7 @@ const governedModule = /^(?:personal-day-boundary-|operational-plan-|plan-author
 test('the import map precedes every module script, and pins EVERY group module to the one release token', () => {
   assert.ok(html.indexOf('<script type="importmap">') > -1);
   assert.ok(html.indexOf('<script type="importmap">') < html.indexOf('<script type="module"'), 'an import map must come before any module script');
-  for (const [key, target] of Object.entries(importMap)) {
+  for (const [key, target] of Object.entries(importMap).filter(([key]) => GROUP.includes(key.replace('./', '')))) {
     assert.equal(target, `${key}?v=${release}`, `${key} must map to itself with the release token`);
     assert.ok(existsSync(path.join(HERE, key)), `${key} must exist`);
   }
@@ -245,10 +250,55 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // Brain Dump + Eisenhower V1's FIX FIRST wires BrainDumpSync into storage.js's runtime lifecycle
 // (startSync/.info-connected/teardownRoomListeners), so storage.js changes again and the whole
 // governed group moves with it — an old cached storage.js beside new group modules (or the reverse)
-// must never be one page load. brain-dump-*.js itself stays OUTSIDE this governed group (its own,
-// independently-versioned module graph — nothing in the group imports it), so only storage.js's own
-// entry tag and this token move; the importmap gains no new brain-dump-*.js entries.
+// must never be one page load. brain-dump-*.js itself stays OUTSIDE this governed group: nothing in
+// the group imports it, so it never moves this token.
+// Brain Dump Production UX Correction V1's FIX FIRST found that leaving Brain Dump's INTERNAL imports
+// bare broke a fresh brain-dump-sync/-ui against an old cached brain-dump-model ("does not provide an
+// export named 'promotedTo'"). So every brain-dump-*.js module is now in the import map too, as its OWN
+// generation (BRAIN_DUMP_RELEASE below), pinned to the token its two entry tags carry. The governed
+// token is unchanged by it.
 const CURRENT_RELEASE = '20261002-brain-dump-eisenhower-v1-fix1';
+const BRAIN_DUMP_RELEASE = '20261003-brain-dump-production-ux-fix1';
+// Brain Dump entry tokens that were published (on main or a candidate branch) and must never be reused.
+// (Its round-1 entries also used '20261002-brain-dump-eisenhower-v1-fix1', which is still the governed
+// token, so it is checked as "not the Brain Dump token" instead of "absent from index.html".)
+const PREVIOUS_BRAIN_DUMP_RELEASES = ['20261001-brain-dump-eisenhower-v1', '20261002-brain-dump-eisenhower-v1-fix2', '20261002-brain-dump-eisenhower-v1-fix3', '20261003-brain-dump-production-ux-v1'];
+
+test('Brain Dump is ONE coherent generation: every brain-dump-*.js module any Brain Dump entry reaches is import-mapped to the entry tags\' token', () => {
+  const entries = moduleEntries.filter(entry => isBrainDump(entry.file));
+  assert.deepEqual(entries.map(entry => entry.file).sort(), ['brain-dump-sync.js', 'brain-dump-ui.js']);
+  for (const entry of entries) assert.equal(entry.version, BRAIN_DUMP_RELEASE, `${entry.file} entry tag`);
+  assert.ok(!PREVIOUS_BRAIN_DUMP_RELEASES.includes(BRAIN_DUMP_RELEASE));
+  for (const old of PREVIOUS_BRAIN_DUMP_RELEASES) assert.ok(!html.includes(`?v=${old}"`), `index.html still references ${old}`);
+  assert.notEqual(BRAIN_DUMP_RELEASE, release, 'Brain Dump moves independently of the governed token');
+  assert.notEqual(BRAIN_DUMP_RELEASE, '20261002-brain-dump-eisenhower-v1-fix1', 'a retired Brain Dump token');
+
+  // Crawl the real Brain Dump graph from its entries: EVERY brain-dump-*.js module it imports must be
+  // mapped to the one Brain Dump URL. A bare, unmapped one is the mixed-cache link failure.
+  const seen = new Set();
+  const crawl = file => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    for (const spec of importsOf(file)) {
+      const target = spec.replace('./', '');
+      if (isBrainDump(target)) crawl(target);
+    }
+  };
+  entries.forEach(entry => crawl(entry.file));
+  for (const file of ['brain-dump-model.js', 'brain-dump-repository.js', 'brain-dump-promotion.js']) assert.ok(seen.has(file), `the crawl reached ${file}`);
+  for (const file of seen) {
+    assert.equal(importMap[`./${file}`], `./${file}?v=${BRAIN_DUMP_RELEASE}`, `${file} must resolve through the Brain Dump generation`);
+  }
+  assert.deepEqual([...BRAIN_DUMP_GROUP].sort(), [...seen].sort(), 'the map pins exactly the Brain Dump graph');
+});
+
+test('no Brain Dump module pins its own ?v= import, and no governed module imports Brain Dump', () => {
+  for (const file of BRAIN_DUMP_GROUP) assert.ok(!/from\s*['"]\.\/[^'"]*\?v=/.test(read(file)), `${file} must import through the map, never with its own ?v=`);
+  for (const file of GROUP) {
+    if (!existsSync(path.join(HERE, file))) continue;
+    assert.ok(!importsOf(file).some(spec => isBrainDump(spec.replace('./', ''))), `${file} (governed) must not import Brain Dump`);
+  }
+});
 // '20260924-cross-store-account-isolation-v1' was never deployed (review candidate only), but it was
 // published on the candidate branch, so it is retired like a shipped token.
 const PREVIOUS_RELEASES = ['20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1', '20260926-device-local-account-isolation-fix1', '20260927-calendar-day-extended-my-day-v1', '20260927-calendar-day-extended-my-day-fix1', '20260927-calendar-native-plan-identity-v1', '20260927-calendar-native-activation-safety-fix1', '20260928-calendar-native-activation-safety-fix2', '20260928-calendar-native-activation-safety-fix3', '20260930-timer-away-account-isolation-v1', '20261001-daily-plan-ux-v2-time-ranges-extended-my-day1'];
