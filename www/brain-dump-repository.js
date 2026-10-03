@@ -33,6 +33,8 @@ import {
   finalizePromotion,
   archiveCapture,
   delegateCapture,
+  editHandledCapture,
+  reopenCapture,
   mergeCaptureRecords,
   validBrainDumpId,
 } from './brain-dump-model.js';
@@ -231,6 +233,31 @@ export function createBrainDumpRepository(deps = {}) {
       const current = readIn(key, id);
       if (!current) return { ok: false, reason: 'not-found' };
       const result = delegateCapture(current, { delegatedTo, now: Number.isFinite(at) ? at : now(), updatedBy: updatedBy || deviceId() });
+      if (!result.ok) return result;
+      return { ok: true, record: persist(key, result.record) };
+    },
+
+    /** Corrects an archived/delegated capture in place (text, delegatedTo).
+     *  Status is unchanged — see brain-dump-model.js's editHandledCapture. */
+    editHandled(id, { text, delegatedTo, now: at, updatedBy } = {}) {
+      if (!validBrainDumpId(id)) return { ok: false, reason: 'invalid-input', field: 'id' };
+      const key = activeKey();
+      if (key === null) return NO_ACCOUNT;
+      const current = readIn(key, id);
+      if (!current) return { ok: false, reason: 'not-found' };
+      const result = editHandledCapture(current, { text, delegatedTo, now: Number.isFinite(at) ? at : now(), updatedBy: updatedBy || deviceId() });
+      if (!result.ok || result.unchanged) return result;
+      return { ok: true, record: persist(key, result.record) };
+    },
+
+    /** Explicitly returns an archived/delegated capture to triage, same id. */
+    reopen(id, { now: at, updatedBy } = {}) {
+      if (!validBrainDumpId(id)) return { ok: false, reason: 'invalid-input', field: 'id' };
+      const key = activeKey();
+      if (key === null) return NO_ACCOUNT;
+      const current = readIn(key, id);
+      if (!current) return { ok: false, reason: 'not-found' };
+      const result = reopenCapture(current, { now: Number.isFinite(at) ? at : now(), updatedBy: updatedBy || deviceId() });
       if (!result.ok) return result;
       return { ok: true, record: persist(key, result.record) };
     },

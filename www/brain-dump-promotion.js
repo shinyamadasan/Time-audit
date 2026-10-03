@@ -31,6 +31,15 @@
 //    is safe and avoids a second remote round trip. Reads the destination back
 //    OFF THE CAPTURE'S OWN CLAIM (never a freshly-built object).
 //
+// ── foreground + reconciler cooperate (Production UX Correction V1) ─────────
+// In production the reconciler (reconcilePromotionClaim, driven by the sync
+// listener) usually finishes a fresh foreground claim BEFORE claimPromotion-
+// Remote even resolves, because Firebase raises the listener event first. The
+// foreground call must not suppress that reconciler: if it did, and then timed
+// out ('pending'), nobody would be left to finish the claim. So the reconciler
+// stays free to run, and the foreground call treats "already promoted into
+// exactly my destination" (promotedTo) as its own success, never as a conflict.
+//
 // ── crash-window recovery ─────────────────────────────────────────────────────
 // A crash/reload between any two phases is safe to retry, from this device or
 // another: phase 1 is itself idempotent for the SAME claim (a different
@@ -71,7 +80,7 @@
 // plan-item id and finalizePromotion's own idempotent guard are what make that
 // safe, exactly as they already do for promoteCaptureToPlan's own retries.
 
-import { brainDumpPlanItemId } from './brain-dump-model.js';
+import { brainDumpPlanItemId, promotedTo } from './brain-dump-model.js';
 
 function buildPlanItem(claim, text, now, deviceId) {
   const item = { id: claim.planItemId, task: text, when: claim.when || '', done: false, doneAt: null, updatedAt: now, updatedBy: deviceId, kind: 'task' };
@@ -96,6 +105,9 @@ function createAndFinalize({ repository, planAuthority, id, target, claim, text,
     }
   }
   const finalized = repository.finalizePromotion(id, { now, updatedBy: deviceId });
+  // Already finalized into THIS claim's destination (a cooperating reconciler
+  // got there first): the same promotion, not a different earlier disposition.
+  if (!finalized.ok && promotedTo(finalized.record, claim)) return { ok: true, record: finalized.record };
   if (!finalized.ok && finalized.reason === 'already-disposed') return { ok: true, record: finalized.record, alreadyDisposed: true };
   if (!finalized.ok) return finalized;
   return { ok: true, record: finalized.record };
@@ -140,6 +152,11 @@ export async function promoteCaptureToPlan(input = {}) {
   // 'pending' means the outcome is UNKNOWN — see reconcilePromotionClaim.
   const claim = await claimPromotionRemote(id, { type, store: target.store, targetId: target.id, planItemId, when, durationMinutes });
   if (!claim.ok) return claim;
+  const destination = { store: target.store, targetId: target.id, planItemId };
+  // The listener-driven reconciler observed our claim first and already
+  // finished it (see brain-dump-sync.js's finishClaimAttempt). This is our own
+  // promotion succeeding, so report it as a plain success.
+  if (promotedTo(claim.record, destination)) return { ok: true, record: claim.record };
   const winningClaim = claim.record?.promotionClaim;
   if (!winningClaim || winningClaim.store !== target.store || winningClaim.targetId !== target.id || winningClaim.planItemId !== planItemId) {
     // Our claim did not win the merge (a concurrent claim for a different target

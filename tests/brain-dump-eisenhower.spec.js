@@ -194,7 +194,7 @@ test('Do Today promotes into the real plan via Plan Authority, and the item leav
   const id = await captureOne(page, 'Ship the brain dump feature');
   await triage(page, id, true, true);
   await page.locator(`button[onclick="window.BrainDumpUI.doToday('${id}')"]`).click();
-  await expect(root(page)).toContainText('Done today');
+  await expect(root(page)).toContainText('Added to plan');
 
   const captures = await brainDumpStorage(page);
   expect(captures[id].status).toBe('promoted');

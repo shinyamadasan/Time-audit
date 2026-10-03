@@ -508,3 +508,29 @@ Rules 1–3 untouched). Legacy and Personal Day (operational) views keep their o
 for an item's owner; or add a second, content-derived extent beside this window.
 
 ---
+
+## 31. Brain Dump handled items: archived/delegated are editable and reopenable; promoted is not; a reopen is a new generation
+
+**Decision:** An archived or delegated capture can have its text (and, if delegated, `delegatedTo`)
+corrected in place without changing status. It can also be explicitly reopened. Reopen keeps the same id
+and Important/Urgent, returns status to `triaged` (or `untriaged` if never classified), and clears
+`disposedAt` and `delegatedTo`. `delegatedTo` describes the current disposition, and no second history
+store is kept. A promoted capture is neither editable nor reopenable in Brain Dump: its plan item is live,
+it is edited through Plan Authority, and the Brain Dump row offers "Open in plan" instead.
+
+**Why a generation counter:** the authority-rank merge ranks archived/delegated (1) above active (0), so a
+stale delegated snapshot would otherwise beat a newer reopen and silently re-delegate it. Each reopen bumps
+`reopenCount` (absent = 0, so no schema bump). Among records below claim rank, the higher `reopenCount`
+wins outright. A claim (2) or a promotion (3) still beats any `reopenCount`, so a reopen can never erase an
+authoritative promotion claim. Reopen is an optimistic local write like archive. Pushed against a remote
+claim, it loses the merge and converges to the promotion.
+
+**Also:** a foreground promotion treats "already promoted into exactly my destination" as its own success.
+Real Firebase raises the listener event before the transaction resolves, so the listener-driven reconciler
+routinely finishes a fresh claim first. Suppressing the reconciler instead would leave a timed-out
+(`pending`) claim with nobody to finish it.
+
+**Do not:** reopen or unpromote a promoted capture from Brain Dump; let `reopenCount` outvote a claim or a
+promotion; or edit plan-item text by mutating the capture.
+
+---

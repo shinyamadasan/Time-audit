@@ -173,20 +173,80 @@ function triagedSectionHtml(items) {
     <div class="bd-list">${rows}</div>`;
 }
 
+function formatDateKey(dateKey) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || '')) return '';
+  return new Date(`${dateKey}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+/** Where a promoted capture landed, read back from Plan Authority (the plan
+ *  item is the authority, not this capture): its day and, if timed, its time.
+ *  Read-only; any failure just means less detail is shown. */
+function promotionDestination(item) {
+  const pa = window.PlanAuthority;
+  if (!item.promotion || !pa || typeof pa.targetById !== 'function') return { dateKey: '', when: '' };
+  try {
+    const target = pa.targetById(item.promotion.targetId);
+    if (!target) return { dateKey: '', when: '' };
+    const planItem = typeof pa.rawItems === 'function' ? pa.rawItems(target).find(i => i.id === item.promotion.planItemId) : null;
+    return { dateKey: target.dateKey || '', when: planItem?.when || '' };
+  } catch {
+    return { dateKey: '', when: '' };
+  }
+}
+
 function dispositionLabel(item) {
-  if (item.status === 'promoted') return item.promotion?.type === 'do-today' ? 'Done today' : 'Scheduled';
+  if (item.status === 'promoted') {
+    const { dateKey, when } = promotionDestination(item);
+    const day = formatDateKey(dateKey);
+    let label = item.promotion?.type === 'do-today' ? 'Added to plan' : 'Scheduled';
+    if (day) label += ` · ${day}`;
+    if (when) label += ` at ${escapeHtml(when)}`;
+    return label;
+  }
   if (item.status === 'archived') return 'Archived';
   if (item.status === 'delegated') return item.delegatedTo ? `Delegated — ${escapeHtml(item.delegatedTo)}` : 'Delegated';
   return '';
+}
+
+// Which handled (archived/delegated) item currently has its inline edit form
+// open. At most one at a time, same simplification as openScheduleId.
+let editingHandledId = null;
+
+function handledEditFormHtml(item) {
+  const delegated = item.status === 'delegated';
+  return `
+    <div class="bd-edit-form" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px">
+      <input type="text" id="bd-edit-text-${item.id}" value="${escapeHtml(item.text)}" maxlength="1000" style="flex:1;min-width:160px" />
+      ${delegated ? `<input type="text" id="bd-edit-delegated-${item.id}" value="${escapeHtml(item.delegatedTo || '')}" placeholder="Delegated to" maxlength="200" style="width:140px" />` : ''}
+      <button type="button" class="btn sm primary" onclick="window.BrainDumpUI.saveHandledEdit('${item.id}')">Save</button>
+      <button type="button" class="btn sm ghost" onclick="window.BrainDumpUI.toggleHandledEdit('${item.id}')">Cancel</button>
+    </div>`;
+}
+
+function handledActionsHtml(item) {
+  if (item.status === 'promoted') {
+    // No Reopen/Edit here: the plan item is live and is the thing to edit.
+    const { dateKey } = promotionDestination(item);
+    if (!dateKey || typeof globalThis.jumpTimelineToDate !== 'function') return '';
+    return `<button type="button" class="btn sm ghost" onclick="window.BrainDumpUI.openInPlan('${item.id}')">Open in plan</button>`;
+  }
+  if (editingHandledId === item.id) return '';
+  return `
+    <button type="button" class="btn sm ghost" onclick="window.BrainDumpUI.toggleHandledEdit('${item.id}')">Edit</button>
+    <button type="button" class="btn sm ghost" onclick="window.BrainDumpUI.reopen('${item.id}')">Reopen</button>`;
 }
 
 function disposedSectionHtml(items) {
   if (!items.length) return '';
   const recent = items.slice(0, 20);
   const rows = recent.map(item => `
-    <div class="bd-item" style="padding:8px 0;border-bottom:1px solid var(--border,#2a2a2a);opacity:.7">
-      <div>${escapeHtml(item.text)}</div>
-      <div style="font-size:12px">${dispositionLabel(item)}</div>
+    <div class="bd-item" data-bd-handled="${item.id}" style="padding:8px 0;border-bottom:1px solid var(--border,#2a2a2a)">
+      <div style="opacity:.8">${escapeHtml(item.text)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:2px">
+        <span style="font-size:12px;opacity:.7">${dispositionLabel(item)}</span>
+        ${handledActionsHtml(item)}
+      </div>
+      ${editingHandledId === item.id && item.status !== 'promoted' ? handledEditFormHtml(item) : ''}
     </div>`).join('');
   return `
     <div class="page-header" style="margin-top:8px"><div class="page-title">Recently handled</div></div>
@@ -248,6 +308,13 @@ function claimPromotionRemote(id, promotion) {
   return window.BrainDumpSync.claimPromotionRemote(id, promotion);
 }
 
+function alreadyHandledMessage(record) {
+  if (record?.status === 'promoted') return 'Already added to your plan.';
+  if (record?.status === 'archived') return 'This item was already archived.';
+  if (record?.status === 'delegated') return 'This item was already delegated.';
+  return 'Already handled.';
+}
+
 function reportPromotionOutcome(result, successLabel, id) {
   if (result.reason === 'pending') {
     // Outcome genuinely UNKNOWN — never shown as success or failure. Nothing
@@ -267,17 +334,20 @@ function reportPromotionOutcome(result, successLabel, id) {
   // when nothing local has changed since.
   if (result.record && window.BrainDumpSync) window.BrainDumpSync.syncCapture(result.record.id);
   if (result.ok) {
-    notify(result.alreadyDisposed ? 'Already handled.' : successLabel);
+    notify(result.alreadyDisposed ? alreadyHandledMessage(result.record) : successLabel);
     render();
     return;
   }
+  if (result.reason === 'already-disposed') { notify(alreadyHandledMessage(result.record)); render(); return; }
   const messages = {
     'no-authoritative-day': 'Plans are still syncing — try again in a moment.',
     ambiguous: 'That local time happens twice (clock change) — pick a different time.',
     nonexistent: 'That local time does not exist (clock change) — pick a different time.',
     'invalid-date': 'Pick a valid date.',
-    'already-claimed': 'Already being promoted elsewhere — try again in a moment.',
-    'already-disposed': 'Already handled.',
+    // Only reached for a genuinely different claim (another device or tab chose
+    // a different destination first). Our own claim, even if the reconciler
+    // finished it, is reported as success instead.
+    'already-claimed': 'This item is already being added to your plan on another device.',
     offline: 'Could not confirm with the server — check your connection and try again.',
   };
   notify(messages[result.reason] || result.reason || 'Could not promote that item.');
@@ -295,7 +365,7 @@ async function doToday(id) {
     now: Date.now(),
     deviceId: deviceId(),
   });
-  reportPromotionOutcome(result, 'Added to today.', id);
+  reportPromotionOutcome(result, 'Added to today\'s plan.', id);
 }
 
 function toggleSchedule(id) {
@@ -325,7 +395,7 @@ async function confirmSchedule(id) {
     deviceId: deviceId(),
   });
   if (result.ok) openScheduleId = null;
-  reportPromotionOutcome(result, 'Scheduled.', id);
+  reportPromotionOutcome(result, 'Added to your plan.', id);
 }
 
 /** FIX FIRST round 3 — the abandoned-claim fix's UI-side trigger. Called from
@@ -357,7 +427,7 @@ function maybeReconcile(id, record) {
 
 function archive(id) {
   const result = repository().archive(id, { now: Date.now(), updatedBy: deviceId() });
-  if (!result.ok && result.reason === 'promotion-claimed') { notify('Already being promoted — cannot archive.'); render(); return; }
+  if (!result.ok && result.reason === 'promotion-claimed') { notify('This item is being added to your plan, so it can\'t be archived.'); render(); return; }
   if (!result.ok && result.reason !== 'already-disposed') { notify('Could not archive that item.'); return; }
   if (window.BrainDumpSync) window.BrainDumpSync.syncCapture(id);
   render();
@@ -366,14 +436,64 @@ function archive(id) {
 function delegate(id) {
   const delegatedTo = typeof window.prompt === 'function' ? window.prompt('Delegated to (optional):', '') : null;
   const result = repository().delegate(id, { delegatedTo, now: Date.now(), updatedBy: deviceId() });
-  if (!result.ok && result.reason === 'promotion-claimed') { notify('Already being promoted — cannot delegate.'); render(); return; }
+  if (!result.ok && result.reason === 'promotion-claimed') { notify('This item is being added to your plan, so it can\'t be delegated.'); render(); return; }
   if (!result.ok && result.reason !== 'already-disposed') { notify('Could not delegate that item.'); return; }
   if (window.BrainDumpSync) window.BrainDumpSync.syncCapture(id);
   render();
 }
 
+function toggleHandledEdit(id) {
+  editingHandledId = editingHandledId === id ? null : id;
+  render();
+}
+
+function saveHandledEdit(id) {
+  const textInput = document.getElementById(`bd-edit-text-${id}`);
+  const delegatedInput = document.getElementById(`bd-edit-delegated-${id}`);
+  const patch = { text: textInput ? textInput.value : undefined, now: Date.now(), updatedBy: deviceId() };
+  if (delegatedInput) patch.delegatedTo = delegatedInput.value;
+  const result = repository().editHandled(id, patch);
+  if (!result.ok) {
+    notify(result.field === 'text' ? 'The text can\'t be empty.' : result.reason === 'promoted' ? 'Edit this item in your plan instead.' : 'Could not save that change.');
+    render();
+    return;
+  }
+  editingHandledId = null;
+  if (!result.unchanged && window.BrainDumpSync) window.BrainDumpSync.syncCapture(id);
+  if (!result.unchanged) notify('Saved.');
+  render();
+}
+
+async function reopen(id) {
+  const result = repository().reopen(id, { now: Date.now(), updatedBy: deviceId() });
+  if (!result.ok) {
+    notify(result.reason === 'promoted' ? 'Already added to your plan.' : 'Could not reopen that item.');
+    render();
+    return;
+  }
+  if (editingHandledId === id) editingHandledId = null;
+  render();
+  // Optimistic like every other non-promotion write. If the remote record
+  // already holds a promotion claim (or is promoted), that truth wins the merge
+  // and the push brings it back here. Say so instead of claiming the reopen
+  // stuck.
+  if (window.BrainDumpSync) await window.BrainDumpSync.syncCapture(id);
+  const after = repository().read(id);
+  if (after && (after.status === 'promoted' || after.promotionClaim)) notify('This item was already added to your plan on another device.');
+  else notify('Moved back to triage.');
+  render();
+}
+
+function openInPlan(id) {
+  const item = repository().read(id);
+  const { dateKey } = item ? promotionDestination(item) : { dateKey: '' };
+  if (!dateKey || typeof globalThis.jumpTimelineToDate !== 'function' || typeof globalThis.showView !== 'function') return;
+  globalThis.showView('today');
+  globalThis.jumpTimelineToDate(dateKey);
+}
+
 if (typeof window !== 'undefined') {
-  window.BrainDumpUI = { render, setTriageAnswer, saveTriage, doToday, toggleSchedule, confirmSchedule, archive, delegate };
+  window.BrainDumpUI = { render, setTriageAnswer, saveTriage, doToday, toggleSchedule, confirmSchedule, archive, delegate, toggleHandledEdit, saveHandledEdit, reopen, openInPlan };
   // A different account's cache becoming active (sign-in/out, a direct switch) must
   // re-render so nothing drawn from the previous account's captures lingers — the
   // same reasoning commitments-sync.js documents for refreshCommitmentSurfaces.
