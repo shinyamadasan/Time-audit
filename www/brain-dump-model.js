@@ -349,7 +349,7 @@ export function finalizePromotion(current, { now, updatedBy } = {}) {
       status: 'promoted',
       // when/durationMinutes persist so the finalized promotion still records
       // the exact intent (see samePromotionIntent).
-      promotion: { type: claim.type, store: claim.store, targetId: claim.targetId, planItemId: claim.planItemId, when: claim.when, durationMinutes: claim.durationMinutes, promotedAt: at },
+      promotion: { type: claim.type, store: claim.store, targetId: claim.targetId, planItemId: claim.planItemId, intentRecorded: true, when: claim.when, durationMinutes: claim.durationMinutes, promotedAt: at },
       promotionClaim: null,
       disposedAt: at,
       updatedAt: at,
@@ -387,13 +387,24 @@ function intentDuration(value) {
  *  or 15:00 Schedule on the same day share it, and treating them as one would
  *  silently drop the losing caller's time. */
 export function samePromotionIntent(a, b) {
-  return !!a && !!b
-    && a.type === b.type
-    && a.store === b.store
-    && a.targetId === b.targetId
-    && a.planItemId === b.planItemId
-    && intentWhen(a.when) === intentWhen(b.when)
-    && intentDuration(a.durationMinutes) === intentDuration(b.durationMinutes);
+  if (!a || !b) return false;
+  if (a.type !== b.type || a.store !== b.store || a.targetId !== b.targetId || a.planItemId !== b.planItemId) return false;
+  const left = knownTiming(a);
+  const right = knownTiming(b);
+  // Unknown historical timing is never PROVABLY equal to anything.
+  return !!left && !!right && left.when === right.when && left.durationMinutes === right.durationMinutes;
+}
+
+/** The provable when/durationMinutes of an intent, or null when it is unknown. A
+ *  claim or a caller's request always carries its timing. A promotion finalized
+ *  before intentRecorded existed does not, except a Do Today, which every shipped
+ *  path builds untimed (no time, no duration), so its timing is provable by
+ *  construction. A legacy Schedule's time was never persisted: unknown. */
+function knownTiming(intent) {
+  if (intent.intentRecorded === false) {
+    return intent.type === 'do-today' ? { when: '', durationMinutes: null } : null;
+  }
+  return { when: intentWhen(intent.when), durationMinutes: intentDuration(intent.durationMinutes) };
 }
 
 /** True iff `record` is already promoted with exactly this intent. Lets a
@@ -464,9 +475,28 @@ export function reopenCapture(current, patch = {}) {
   };
 }
 
+/** Firebase RTDB never stores a null: writing `{ disposedAt: null }` REMOVES the
+ *  key (at every nesting level), so a record read back from the wire simply lacks
+ *  every field that was null. For an optional nullable field, absent therefore
+ *  means exactly what null means. Required fields are never read this way. */
+function wireNullable(value) {
+  return value === undefined ? null : value;
+}
+
 /** Validates and canonicalizes a stored/remote record. Returns null for anything
  *  that is not a well-formed capture — a malformed remote payload must never
- *  become a half-valid item on the list. */
+ *  become a half-valid item on the list.
+ *
+ *  Accepts both representations of the same record: the local logical object
+ *  (explicit nulls, as localStorage keeps them) and its Firebase-pruned wire form
+ *  (those keys absent). Optional nullable fields (important, urgent, triagedAt,
+ *  disposedAt, promotionClaim, promotion, delegatedTo, and inside a claim
+ *  `when`/`durationMinutes`) read absent as null. reopenCount reads absent as 0.
+ *  Required fields (schemaVersion, id, text, status, createdAt, updatedAt,
+ *  updatedBy, a terminal record's disposedAt, a promoted record's promotion and
+ *  every claim/promotion identity field) are still required. A missing capture
+ *  NODE is a different thing: callers never pass one here (it is absence, never
+ *  a record). */
 export function normalizeCapture(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   if (!RECORD_SCHEMA_VERSIONS.has(value.schemaVersion)) return null;
@@ -478,17 +508,21 @@ export function normalizeCapture(value) {
   const updatedAt = timestamp(value.updatedAt);
   const updatedBy = writer(value.updatedBy);
   if (!createdAt || !updatedAt || updatedAt < createdAt || !updatedBy) return null;
-  if (value.important !== null && typeof value.important !== 'boolean') return null;
-  if (value.urgent !== null && typeof value.urgent !== 'boolean') return null;
+  const important = wireNullable(value.important);
+  const urgent = wireNullable(value.urgent);
+  const triagedAt = wireNullable(value.triagedAt);
+  const disposedAt = wireNullable(value.disposedAt);
+  if (important !== null && typeof important !== 'boolean') return null;
+  if (urgent !== null && typeof urgent !== 'boolean') return null;
   // Triage fields are answered together — one set without the other is malformed.
-  if ((value.important === null) !== (value.urgent === null)) return null;
-  if (value.triagedAt !== null && !timestamp(value.triagedAt)) return null;
-  if ((value.important === null) !== (value.triagedAt === null)) return null;
-  if (value.status === 'untriaged' && value.important !== null) return null;
+  if ((important === null) !== (urgent === null)) return null;
+  if (triagedAt !== null && !timestamp(triagedAt)) return null;
+  if ((important === null) !== (triagedAt === null)) return null;
+  if (value.status === 'untriaged' && important !== null) return null;
 
   const terminal = TERMINAL_STATUSES.has(value.status);
-  if (terminal && !timestamp(value.disposedAt)) return null;
-  if (!terminal && value.disposedAt !== null) return null;
+  if (terminal && !timestamp(disposedAt)) return null;
+  if (!terminal && disposedAt !== null) return null;
 
   // A promotion claim only ever exists on a non-terminal capture — once finalized
   // (or if ever archived/delegated, which refuses while a claim is outstanding —
@@ -518,8 +552,18 @@ export function normalizeCapture(value) {
     if (!timestamp(p.promotedAt)) return null;
     if (p.when !== undefined && p.when !== null && typeof p.when !== 'string') return null;
     if (p.durationMinutes !== undefined && p.durationMinutes !== null && !(Number.isInteger(p.durationMinutes) && p.durationMinutes > 0)) return null;
-    // Promotions finalized before exact intent was recorded read as untimed.
-    promotion = { type: p.type, store: p.store, targetId: p.targetId, planItemId: p.planItemId, when: intentWhen(p.when), durationMinutes: intentDuration(p.durationMinutes), promotedAt: p.promotedAt };
+    if (p.intentRecorded !== undefined && p.intentRecorded !== null && typeof p.intentRecorded !== 'boolean') return null;
+    // A promotion finalized before exact intent was recorded has NO intentRecorded
+    // marker: its when/durationMinutes are UNKNOWN (null here), never "untimed".
+    // The marker is required because the wire cannot say "no duration" any other
+    // way: a null durationMinutes is pruned to absent, same as never recorded.
+    const intentRecorded = p.intentRecorded === true;
+    promotion = {
+      type: p.type, store: p.store, targetId: p.targetId, planItemId: p.planItemId, intentRecorded,
+      when: intentRecorded ? intentWhen(p.when) : null,
+      durationMinutes: intentRecorded ? intentDuration(p.durationMinutes) : null,
+      promotedAt: p.promotedAt,
+    };
   } else if (value.promotion !== null && value.promotion !== undefined) return null;
 
   let delegatedTo = null;
@@ -545,10 +589,10 @@ export function normalizeCapture(value) {
     updatedAt,
     updatedBy,
     status: value.status,
-    important: value.important === true || value.important === false ? value.important : null,
-    urgent: value.urgent === true || value.urgent === false ? value.urgent : null,
-    triagedAt: timestamp(value.triagedAt) || null,
-    disposedAt: timestamp(value.disposedAt) || null,
+    important,
+    urgent,
+    triagedAt: timestamp(triagedAt) || null,
+    disposedAt: timestamp(disposedAt) || null,
     promotionClaim,
     promotion,
     delegatedTo,

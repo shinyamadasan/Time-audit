@@ -2,11 +2,12 @@
 // exact production usage.
 //
 // Unlike tests/brain-dump-eisenhower.spec.js, this stub keeps a real in-memory
-// brainDump subtree and reproduces real Firebase event ordering for it: a
-// committed transaction raises the subtree 'value' event BEFORE the
-// transaction's own Promise resolves. That ordering is what made every fresh
-// promotion in production report "Already being promoted elsewhere", and the
-// old stub (which never re-fires the listener) could not show it.
+// brainDump subtree and reproduces real Firebase behavior for it: a committed
+// transaction raises the subtree 'value' event BEFORE the transaction's own
+// Promise resolves, and every record is stored in RTDB's wire form, with null
+// keys pruned. Normalization rejecting that pruned form is what made every fresh
+// promotion in production report "Already being promoted elsewhere"; the old
+// stub (which never re-fires the listener, and kept nulls) could not show it.
 // `window.__bdHold(id)` / `window.__bdRelease(id)` delay one capture's
 // transactions, to observe a pending claim.
 //
@@ -31,6 +32,15 @@ const firebaseStub = `
 (() => {
   if (window.firebase) return;
   const snapshot = value => ({ val: () => (value === undefined ? null : JSON.parse(JSON.stringify(value))), ref: { remove: () => Promise.resolve() } });
+  // Real RTDB never stores a null: its key disappears, recursively (proven against the real SDK in
+  // brain-dump-wire-format.test.js). The brainDump subtree here is stored ONLY in that wire form.
+  const prune = value => {
+    if (value === null || value === undefined) return undefined;
+    if (Array.isArray(value) || typeof value !== 'object') return value;
+    const out = {};
+    for (const [key, child] of Object.entries(value)) { const kept = prune(child); if (kept !== undefined) out[key] = kept; }
+    return Object.keys(out).length ? out : undefined;
+  };
   const bd = {};
   const bdListeners = new Set();
   const held = new Map();
@@ -42,7 +52,7 @@ const firebaseStub = `
   function runBd(id, updateFn) {
     const next = updateFn(bd[id] === undefined ? null : JSON.parse(JSON.stringify(bd[id])));
     if (next === undefined) return { committed: false, snapshot: snapshot(bd[id]) };
-    bd[id] = JSON.parse(JSON.stringify(next));
+    bd[id] = prune(JSON.parse(JSON.stringify(next)));
     bdListeners.forEach(cb => cb(snapshot(bd))); // real Firebase: events first, then the transaction settles
     return { committed: true, snapshot: snapshot(bd[id]) };
   }

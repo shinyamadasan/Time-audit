@@ -12,6 +12,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireCopy } from './brain-dump-test-support.js';
 
 import { createBrainDumpRepository, brainDumpCacheKeyForRoom } from './brain-dump-repository.js';
 import { createBrainDumpSyncBridge, BRAIN_DUMP_REMOTE_PATH } from './brain-dump-sync.js';
@@ -36,7 +37,7 @@ function makeDatabase() {
   const listeners = new Map();
   const stats = { writes: [], offline: false };
   const get = path => path.split('/').filter(Boolean).reduce((acc, seg) => (acc && typeof acc === 'object' ? acc[seg] : undefined), root.value);
-  const clone = v => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
+  const clone = wireCopy; // RTDB wire form: null keys pruned (see brain-dump-test-support.js)
   function deliver(path) {
     if (stats.offline) return;
     (listeners.get(path) || []).forEach(fn => fn({ val: () => clone(get(path)) }));

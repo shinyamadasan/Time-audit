@@ -11,9 +11,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireCopy } from './brain-dump-test-support.js';
 
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { createBrainDumpSyncBridge, BRAIN_DUMP_REMOTE_PATH } from './brain-dump-sync.js';
+import { normalizeCapture } from './brain-dump-model.js';
 
 const T0 = Date.parse('2026-10-01T08:00:00Z');
 const memory = () => {
@@ -27,7 +29,7 @@ function makeRoom() {
   const store = {}; // id -> record, under BRAIN_DUMP_REMOTE_PATH
   const listeners = new Set();
   let offline = false;
-  const clone = v => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
+  const clone = wireCopy; // RTDB wire form: null keys pruned (see brain-dump-test-support.js)
   function notify() {
     if (offline) return;
     listeners.forEach(fn => fn({ val: () => clone(store) }));
@@ -54,7 +56,7 @@ function makeRoom() {
   }
   return {
     ref: makeRef(),
-    raw: () => clone(store),
+    raw: () => clone(store) || {}, // test inspector: wire form, empty store as {}
     seed(id, record) { store[id] = clone(record); },
     goOffline() { offline = true; },
     goOnline() { offline = false; notify(); },
@@ -181,7 +183,8 @@ test('claimPromotionRemote establishes the claim via a real transaction and merg
   repository.create({ id: 'bcapture1', text: 'Water the plants' });
   const result = await bridge.claimPromotionRemote('bcapture1', PROMO_DO_TODAY);
   assert.ok(result.ok);
-  assert.deepEqual(room.raw().bcapture1.promotionClaim, { ...PROMO_DO_TODAY, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1' });
+  // Compared semantically: the wire omits the null durationMinutes (RTDB prunes nulls).
+  assert.deepEqual(normalizeCapture(room.raw().bcapture1).promotionClaim, { ...PROMO_DO_TODAY, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1' });
   assert.deepEqual(repository.read('bcapture1').promotionClaim, { ...PROMO_DO_TODAY, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1' });
 });
 
@@ -203,7 +206,7 @@ test('claimPromotionRemote is REFUSED — reason "already-disposed" — when the
   assert.equal(result.reason, 'already-disposed');
   // No claim was written anywhere — remote is untouched, archived.
   assert.equal(room.raw().bcapture1.status, 'archived');
-  assert.equal(room.raw().bcapture1.promotionClaim, null);
+  assert.equal(room.raw().bcapture1.promotionClaim ?? null, null); // absent on the wire = no claim
   // The device's own local cache converges to the authoritative truth.
   assert.equal(repository.read('bcapture1').status, 'archived');
 });
@@ -296,7 +299,7 @@ function makeDelayableRoom() {
   const store = {};
   const listeners = new Set();
   const queue = []; // { run }
-  const clone = v => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
+  const clone = wireCopy; // RTDB wire form: null keys pruned (see brain-dump-test-support.js)
   function notify() { listeners.forEach(fn => fn({ val: () => clone(store) })); }
   function makeRef(segments = []) {
     return {
@@ -328,7 +331,7 @@ function makeDelayableRoom() {
   }
   return {
     ref: makeRef(),
-    raw: () => clone(store),
+    raw: () => clone(store) || {}, // test inspector: wire form, empty store as {}
     seed(id, record) { store[id] = clone(record); },
     release() { return releaseAt(0); }, // FIFO default — the ORIGINAL (oldest) transaction
     releaseOldest() { return releaseAt(0); },

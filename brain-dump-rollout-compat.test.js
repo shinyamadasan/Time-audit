@@ -14,6 +14,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireCopy } from './brain-dump-test-support.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,7 +38,7 @@ const memory = () => {
   return { getItem: k => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, v), removeItem: k => map.delete(k) };
 };
 const flush = async () => { for (let i = 0; i < 4; i++) await new Promise(resolve => setImmediate(resolve)); };
-const clone = v => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
+const clone = wireCopy; // RTDB wire form: null keys pruned (see brain-dump-test-support.js)
 
 /** All rooms in one database. Every committed write is checked against the
  *  real rules first; a denial rejects the transaction with no write. */
@@ -72,7 +73,7 @@ function makeDatabase() {
     };
     return { child: seg => (seg === 'brainDump' ? brainDump : null) };
   }
-  return { rooms, denials, roomRef, raw: (room = ROOM) => clone(subtree(room)) };
+  return { rooms, denials, roomRef, raw: (room = ROOM) => clone(subtree(room)) || {} };
 }
 
 function makePlanAuthority() {
@@ -192,7 +193,11 @@ test('D. OLD client holding a stale active copy cannot archive, delegate or clai
   const id = await triagedCapture(env, 'Old client tries');
   // The old client goes stale here (still holds "triaged", generation 1).
   const staleOld = makeDevice({ kind: 'old', db, planAuthority: pa, deviceId: 'old-stale', clock, live: false });
-  staleOld.repository.mergeRemote(id, db.raw()[id]);
+  // Seeded with the LOCAL logical record (what that old device's own localStorage would hold): the
+  // cf43080 model cannot even normalize a pruned non-terminal record straight off the wire.
+  const localV1 = fresh.repository.read(id);
+  staleOld.repository.mergeRemote(id, localV1);
+  assert.equal(staleOld.repository.read(id).status, 'triaged', 'the old client really holds a stale copy');
   clock.now += 1000;
   fresh.repository.archive(id);
   await fresh.bridge.syncCapture(id);
@@ -208,11 +213,13 @@ test('D. OLD client holding a stale active copy cannot archive, delegate or clai
 
   const oldPromotion = await import('./fixtures/brain-dump-pre-reopen/brain-dump-promotion.js');
   const stale2 = makeDevice({ kind: 'old', db, planAuthority: pa, deviceId: 'old-stale-2', clock, live: false });
-  const legacyCopy = { ...before, schemaVersion: 1, status: 'triaged', reopenCount: undefined };
+  const legacyCopy = { ...localV1 };
   delete legacyCopy.reopenCount;
   stale2.repository.mergeRemote(id, legacyCopy);
+  assert.equal(stale2.repository.read(id).status, 'triaged', 'the second old client also holds a real stale copy');
   const claim = await oldPromotion.promoteCaptureToPlan({ repository: stale2.repository, planAuthority: pa, claimPromotionRemote: stale2.bridge.claimPromotionRemote, id, type: 'do-today', now: clock.now, deviceId: 'old-stale-2' });
   assert.equal(claim.ok, false, 'an old client cannot claim a new-generation record');
+  assert.notEqual(claim.reason, 'not-found', 'refused by the server, not for lack of a local copy');
   assert.equal(pa.items.length, 0, 'no plan item');
   assert.deepEqual(db.raw()[id], before);
 
@@ -326,4 +333,45 @@ test('H. the generation is carried, never lowered: a NEW client whose stale gene
   assert.equal(db.raw()[id].schemaVersion, 2);
   assert.equal(db.denials.length, 0, 'a new client is never refused');
   assert.equal(pa.items.length, 1);
+});
+
+test('I. reopened v2 over the PRUNED wire: a fresh NEW device sees it exactly, and an OLD stale push is still refused', async () => {
+  const env = setup();
+  const { db, pa, clock, fresh } = env;
+  const id = await triagedCapture(env, 'Reopen across devices');
+  // An old device that created/held this record locally while it was delegated (generation 1).
+  clock.now += 1000;
+  fresh.repository.delegate(id, { delegatedTo: 'Alex' });
+  await fresh.bridge.syncCapture(id);
+  const old = makeDevice({ kind: 'old', db, planAuthority: pa, deviceId: 'old-holder', clock, live: false });
+  old.repository.mergeRemote(id, fresh.repository.read(id));
+  assert.equal(old.repository.read(id).status, 'delegated');
+
+  clock.now += 1000;
+  fresh.repository.reopen(id);
+  await fresh.bridge.syncCapture(id);
+  const wire = db.raw()[id];
+  for (const key of ['disposedAt', 'delegatedTo', 'promotionClaim', 'promotion']) assert.equal(key in wire, false, `${key} is pruned on the wire`);
+
+  // Device B: a FRESH new client loading the room from scratch.
+  const deviceB = makeDevice({ kind: 'new', db, planAuthority: pa, deviceId: 'device-b', clock });
+  await flush();
+  const seen = deviceB.repository.read(id);
+  assert.ok(seen, 'device B sees the reopened capture');
+  assert.equal(seen.status, 'triaged');
+  assert.equal(seen.schemaVersion, 2);
+  assert.equal(seen.reopenCount, 1);
+  assert.equal(seen.important, true);
+  assert.equal(seen.urgent, false);
+  assert.equal(seen.disposedAt, null);
+  assert.equal(seen.delegatedTo, null);
+
+  // The F2 barrier still holds: the old holder re-pushes its stale delegated copy.
+  clock.now += 60_000;
+  await old.bridge.pushAllLocal({ all: true });
+  await flush();
+  assert.ok(db.denials.some(d => d.id === id && d.attempted.status === 'delegated'), 'the stale downgrade was refused');
+  assert.equal(db.raw()[id].status, 'triaged');
+  assert.equal(db.raw()[id].schemaVersion, 2);
+  assert.equal(deviceB.repository.read(id).status, 'triaged', 'device B keeps the reopened truth');
 });
