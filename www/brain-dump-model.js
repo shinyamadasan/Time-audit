@@ -71,6 +71,27 @@
 // — those still correctly let an already-won claim/promotion beat a stale
 // archive/delegate, exactly as round 1 fixed.
 //
+// ── edit + reopen on handled items (Production UX Correction V1) ────────────
+// Handled is not immutable forever. An ARCHIVED or DELEGATED capture may have
+// its text (and, if delegated, delegatedTo) corrected in place: it stays
+// handled, and the ordinary same-rank LWW decides between two such edits.
+// It may also be explicitly REOPENED back into triage (reopenCapture): status
+// returns to triaged (or untriaged if it was never classified), Important/
+// Urgent are kept, disposedAt and delegatedTo clear (delegatedTo describes
+// the CURRENT disposition, and a reopened capture is no longer delegated).
+// A PROMOTED capture is never editable or reopenable here: it has a live plan
+// item, and reopening it would allow a second promotion. Its plan item is
+// edited through Plan Authority instead.
+//
+// The rank rule alone would let a stale archived/delegated snapshot (rank 1)
+// beat a newer reopened record (rank 0) and silently re-dispose it. So every
+// reopen bumps `reopenCount` (absent on older records = 0), and among records
+// below claim rank, the HIGHER reopenCount wins outright: a reopen supersedes
+// every disposition from before it. Claimed (2) and promoted (3) still beat
+// everything regardless of reopenCount, so a reopen can never invalidate a
+// promotion claim that is already authoritative remotely. A reopen pushed
+// against such a claim simply loses the merge and converges to the promotion.
+//
 // ── delegate is a disposition, not a destination (deliberate V1 scope) ──────
 // This codebase has no existing model for handing work to another person — no
 // commitment-to-someone-else, no assignee, no second task store. Building one here
@@ -97,8 +118,8 @@ export const BRAIN_DUMP_SCHEMA_VERSION = 1;
 
 export const BRAIN_DUMP_STATUSES = new Set(['untriaged', 'triaged', 'promoted', 'archived', 'delegated']);
 /** Terminal: once a capture reaches one of these, it is no longer an actionable
- *  Brain Dump list item. Triage data may still be edited for record-keeping, but
- *  the status itself never reverts in V1 (there is no "undo" action). */
+ *  Brain Dump list item. Archived/delegated may be explicitly reopened
+ *  (reopenCapture); promoted never reverts. */
 export const TERMINAL_STATUSES = new Set(['promoted', 'archived', 'delegated']);
 export const PROMOTION_TYPES = new Set(['do-today', 'schedule']);
 
@@ -171,6 +192,7 @@ export function buildCapture(input = {}) {
       promotionClaim: null,
       promotion: null,
       delegatedTo: null,
+      reopenCount: 0,
     },
   };
 }
@@ -331,6 +353,74 @@ export function delegateCapture(current, { delegatedTo = null, now, updatedBy } 
   return disposeCapture(current, 'delegated', { delegatedTo: cleanDelegatedTo(delegatedTo) }, { now, updatedBy });
 }
 
+/** True iff `record` is promoted INTO exactly this destination — the same
+ *  (store, targetId, planItemId) a claim names. Lets a foreground promotion
+ *  recognize that its OWN claim was already finished (by the reconciler that
+ *  observed it first) instead of mistaking that for a competing actor. */
+export function promotedTo(record, destination) {
+  return !!record && record.status === 'promoted' && !!record.promotion && !!destination
+    && record.promotion.store === destination.store
+    && record.promotion.targetId === destination.targetId
+    && record.promotion.planItemId === destination.planItemId;
+}
+
+const HANDLED_EDITABLE = new Set(['archived', 'delegated']);
+
+/** Corrects an archived/delegated capture IN PLACE: `text` and (delegated only)
+ *  `delegatedTo`. Never changes status — editing a handled item never reopens
+ *  it. Promoted captures refuse ('promoted'): their plan item is the thing to
+ *  edit, through Plan Authority. Active captures refuse ('not-handled'). */
+export function editHandledCapture(current, patch = {}) {
+  const base = normalizeCapture(current);
+  if (!base) return { ok: false, reason: 'invalid-input', field: 'record' };
+  const now = timestamp(patch.now);
+  if (!now) return { ok: false, reason: 'invalid-input', field: 'now' };
+  const by = writer(patch.updatedBy);
+  if (!by) return { ok: false, reason: 'invalid-input', field: 'updatedBy' };
+  if (base.status === 'promoted') return { ok: false, reason: 'promoted', record: base };
+  if (!HANDLED_EDITABLE.has(base.status)) return { ok: false, reason: 'not-handled', record: base };
+  const next = { ...base };
+  if (patch.text !== undefined) {
+    const text = cleanText(patch.text);
+    if (!text) return { ok: false, reason: 'invalid-input', field: 'text' };
+    next.text = text;
+  }
+  if (patch.delegatedTo !== undefined) {
+    if (base.status !== 'delegated') return { ok: false, reason: 'invalid-input', field: 'delegatedTo' };
+    next.delegatedTo = cleanDelegatedTo(patch.delegatedTo);
+  }
+  if (next.text === base.text && next.delegatedTo === base.delegatedTo) return { ok: true, record: base, unchanged: true };
+  return { ok: true, record: { ...next, updatedAt: now, updatedBy: by } };
+}
+
+/** Explicitly returns an archived/delegated capture to the active triage
+ *  workflow — same id, Important/Urgent kept. Bumps reopenCount so this reopen
+ *  supersedes every earlier archive/delegate in a merge (see the file banner).
+ *  Promoted refuses ('promoted'); an already-active capture refuses
+ *  ('not-handled') so a double-click never bumps the generation twice. */
+export function reopenCapture(current, patch = {}) {
+  const base = normalizeCapture(current);
+  if (!base) return { ok: false, reason: 'invalid-input', field: 'record' };
+  const now = timestamp(patch.now);
+  if (!now) return { ok: false, reason: 'invalid-input', field: 'now' };
+  const by = writer(patch.updatedBy);
+  if (!by) return { ok: false, reason: 'invalid-input', field: 'updatedBy' };
+  if (base.status === 'promoted') return { ok: false, reason: 'promoted', record: base };
+  if (!HANDLED_EDITABLE.has(base.status)) return { ok: false, reason: 'not-handled', record: base };
+  return {
+    ok: true,
+    record: {
+      ...base,
+      status: base.important === null ? 'untriaged' : 'triaged',
+      disposedAt: null,
+      delegatedTo: null,
+      reopenCount: base.reopenCount + 1,
+      updatedAt: now,
+      updatedBy: by,
+    },
+  };
+}
+
 /** Validates and canonicalizes a stored/remote record. Returns null for anything
  *  that is not a well-formed capture — a malformed remote payload must never
  *  become a half-valid item on the list. */
@@ -391,6 +481,13 @@ export function normalizeCapture(value) {
     delegatedTo = cleanDelegatedTo(value.delegatedTo);
   } else if (value.delegatedTo !== null && value.delegatedTo !== undefined) return null;
 
+  // Absent on every record written before reopen existed — those are generation 0.
+  let reopenCount = 0;
+  if (value.reopenCount !== undefined && value.reopenCount !== null) {
+    if (!Number.isInteger(value.reopenCount) || value.reopenCount < 0) return null;
+    reopenCount = value.reopenCount;
+  }
+
   return {
     schemaVersion: BRAIN_DUMP_SCHEMA_VERSION,
     id: value.id,
@@ -406,6 +503,7 @@ export function normalizeCapture(value) {
     promotionClaim,
     promotion,
     delegatedTo,
+    reopenCount,
   };
 }
 
@@ -442,6 +540,12 @@ export function mergeCaptureRecords(localValue, remoteValue) {
   if (!remote) return local;
   const localRank = captureAuthorityRank(local);
   const remoteRank = captureAuthorityRank(remote);
+  // Below claim rank, a later reopen supersedes any earlier archive/delegate
+  // (see the file banner's "edit + reopen" section). Claimed/promoted are never
+  // out-voted by reopenCount.
+  if (localRank < 2 && remoteRank < 2 && local.reopenCount !== remote.reopenCount) {
+    return remote.reopenCount > local.reopenCount ? remote : local;
+  }
   if (localRank !== remoteRank) return remoteRank > localRank ? remote : local;
   if (localRank === 2) {
     const a = local.promotionClaim.claimedAt;
@@ -524,7 +628,7 @@ export function quadrantOf(record) {
 const api = {
   BRAIN_DUMP_SCHEMA_VERSION, BRAIN_DUMP_STATUSES, TERMINAL_STATUSES, PROMOTION_TYPES, BRAIN_DUMP_PLAN_ITEM_PREFIX,
   validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, claimPromotion, finalizePromotion,
-  archiveCapture, delegateCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
+  archiveCapture, delegateCapture, promotedTo, editHandledCapture, reopenCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
   mergeCaptureMaps, allCaptures, untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
 };
 globalThis.BrainDumpModel = api;

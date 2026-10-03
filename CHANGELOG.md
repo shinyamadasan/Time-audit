@@ -1,5 +1,34 @@
 # ChronaSense — Changelog
 
+## Brain Dump Production UX Correction V1 — candidate, NOT integrated
+
+Branch `fix/brain-dump-production-ux-v1` from `origin/main` @ `cf43080`. Not pushed, merged or deployed.
+
+**False "Already being promoted elsewhere" (root cause):** real Firebase raises the whole-subtree `value`
+event for a committed transaction before the transaction's own Promise resolves. The listener merged the
+fresh claim, `onRemoteChange` ran the UI's reconciler, and that reconciler created the plan item and
+finalized the capture. Then `finishClaimAttempt` saw a promoted record with no claim and returned
+`already-claimed`. So every fresh Do Today / Schedule really succeeded, but reported a conflict. Fix:
+`finishClaimAttempt` re-reads the record after the hook runs, and the sync and promotion layers accept
+"promoted into exactly my destination" (`promotedTo`) as the caller's own success. The reconciler is not
+suppressed, because doing so would strand a timed-out claim.
+
+**Handled items:** archived/delegated rows in "Recently handled" get Edit (text; plus delegatedTo for
+delegated, status unchanged) and Reopen (back to triage, same id). Promoted rows show their destination
+day/time, read from Plan Authority, plus "Open in plan" (existing `jumpTimelineToDate`). There is no
+Edit/Reopen for promoted rows. New `reopenCount` generation, DECISIONS #31.
+
+**Copy:** "Added to today's plan." / "Added to your plan." on success. "Already added to your plan." /
+"This item was already archived/delegated." on a repeat. "This item is already being added to your plan on
+another device." is shown only for a genuinely different claim. The promoted label reads "Added to plan ·
+<day>" instead of "Done today".
+
+**Files:** `brain-dump-model.js`, `-repository.js`, `-sync.js`, `-promotion.js`, `-ui.js` (+ `www/` mirror);
+new `brain-dump-production-ux.test.js` (wired into `npm test`) and `tests/brain-dump-production-ux.spec.js`
+(stub reproduces real listener-before-resolve ordering). Brain Dump entry tags move to
+`?v=20261003-brain-dump-production-ux-v1`. The governed Personal Day / plan token is unchanged, and so are
+the Firebase rules.
+
 ## Configurable 24–48 Hour Daily View V1 — candidate, NOT integrated
 
 Branch `feat/configurable-daily-view-window-v1` from `origin/main` @ `7557562`. Not pushed, merged or deployed.

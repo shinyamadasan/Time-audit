@@ -91,7 +91,7 @@
 
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
-import { validBrainDumpId, mergeCaptureRecords, claimPromotion, arbitratePromotionClaim } from './brain-dump-model.js';
+import { validBrainDumpId, mergeCaptureRecords, claimPromotion, arbitratePromotionClaim, promotedTo } from './brain-dump-model.js';
 
 const DEFAULT_CLAIM_TIMEOUT_MS = 8000;
 
@@ -232,7 +232,9 @@ export function createBrainDumpSyncBridge(deps = {}) {
     // notice — and reconcile — a newly-authoritative claim, whether this runs
     // before or long after the original caller's own bounded wait gave up.
     if (changed) onRemoteChange(id, record);
-    const finalRecord = record || repository.read(id);
+    // Read AFTER onRemoteChange, never the pre-hook `record`: the hook may have
+    // just reconciled (and finalized) this very claim.
+    const finalRecord = repository.read(id) || record;
     // Checked BEFORE the committed/aborted branch deliberately: an idempotent
     // retry of a claim THIS device already won can "abort" (no change needed)
     // while still correctly reporting success.
@@ -241,6 +243,14 @@ export function createBrainDumpSyncBridge(deps = {}) {
       && finalRecord.promotionClaim.targetId === promotion.targetId
       && finalRecord.promotionClaim.planItemId === promotion.planItemId;
     if (wonClaim) return { ok: true, record: finalRecord };
+    // Production UX Correction V1 — the root cause of the false "already being
+    // promoted elsewhere". Real Firebase raises the whole-subtree 'value' event
+    // for a committed transaction BEFORE resolving the transaction itself. That
+    // listener merges our new claim, and onRemoteChange -> the UI's reconciler
+    // then finishes it (plan item + finalize) before this function runs. By now
+    // the record is already PROMOTED into exactly our destination with the claim
+    // cleared. That is our own win, finished cooperatively, not a competing actor.
+    if (promotedTo(finalRecord, promotion)) return { ok: true, record: finalRecord };
     if (!result.committed) {
       // Refused by arbitratePromotionClaim: remote was already a settled
       // terminal state, or a competing claim's tie-break beat ours.

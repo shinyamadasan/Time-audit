@@ -1,11 +1,16 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
-## Brain Dump + Eisenhower V1 (candidate, 2026-10-01; FIX FIRST rounds 1-3, 2026-10-02)
+## Brain Dump + Eisenhower V1 (candidate, 2026-10-01; FIX FIRST rounds 1-3, 2026-10-02; Production UX Correction V1, 2026-10-03)
+
+Production UX Correction V1: `promotedTo()` (model) lets a foreground promotion recognize its own claim
+already finished by the listener-driven reconciler. `editHandledCapture()`/`reopenCapture()` +
+`reopenCount` (model), `editHandled()`/`reopen()` (repository), and Recently handled Edit / Reopen / Open in
+plan (UI). See DECISIONS #31.
 
 New nav entry `#nav-braindump` / view `#view-braindump` (mounted between My Day and Week), rendered
 entirely by `brain-dump-ui.js` into `#bd-root` via `showView('braindump')`. Independently versioned
-(`brain-dump-sync.js` / `brain-dump-ui.js` entry tags share `?v=20261002-brain-dump-eisenhower-v1-fix3`;
+(`brain-dump-sync.js` / `brain-dump-ui.js` entry tags share `?v=20261003-brain-dump-production-ux-v1`;
 `brain-dump-model.js` / `-repository.js` / `-promotion.js` are plain, unversioned bare imports reached only
 from those two entries) — not joined to the pinned Personal Day / plan importmap group, since nothing in
 that group imports these files (mirrors `life-feed-ui.js`'s precedent for a standalone module graph with
