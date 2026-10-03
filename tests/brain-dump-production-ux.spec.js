@@ -41,7 +41,8 @@ const firebaseStub = `
     for (const [key, child] of Object.entries(value)) { const kept = prune(child); if (kept !== undefined) out[key] = kept; }
     return Object.keys(out).length ? out : undefined;
   };
-  const bd = {};
+  // A test may pre-seed the remote subtree (e.g. a record left stuck by the old client).
+  const bd = window.__bdInitialRemote ? prune(JSON.parse(JSON.stringify(window.__bdInitialRemote))) || {} : {};
   const bdListeners = new Set();
   const held = new Map();
   window.__bdRemote = () => JSON.parse(JSON.stringify(bd));
@@ -103,8 +104,9 @@ test.afterAll(async () => {
   if (appServer) await new Promise(resolve => appServer.close(resolve));
 });
 
-async function openApp(page, { now } = {}) {
+async function openApp(page, { now, initialRemote = null } = {}) {
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: firebaseStub }));
+  if (initialRemote) await page.addInitScript(remote => { window.__bdInitialRemote = remote; }, initialRemote);
   await page.addInitScript(({ timezone, now, uid }) => {
     // Starts at `now` and keeps ticking. A frozen clock would give every write
     // the same updatedAt, and this stub (unlike the old one) holds real remote
@@ -321,4 +323,44 @@ test('M. a promoted item shows where it went and offers Open in plan, never Edit
   await row.locator('button', { hasText: 'Open in plan' }).click();
   await expect(page.locator('#view-today')).toHaveClass(/active/);
   await expect(page.locator('#view-today')).toContainText('Dentist follow-up');
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// FIX FIRST #3 — an expired stuck claim comes back to Brain Dump
+// ═══════════════════════════════════════════════════════════════════════
+
+test('an old stuck claim for a day that has ended comes back to triage on load, with one clear message and no plan item', async ({ page }) => {
+  // Exactly what the pre-fix production client left behind: generation 1, an
+  // UNMARKED claim for a legacy day that has since ended, no plan item anywhere.
+  const id = 'bexpiredui1';
+  const T = at('2026-09-28', '20:00');
+  const stuck = {
+    schemaVersion: 1, id, text: 'Renew the car registration', createdAt: T, updatedAt: T + 2, updatedBy: 'old-phone',
+    status: 'triaged', important: true, urgent: true, triagedAt: T + 1,
+    promotionClaim: { type: 'schedule', store: 'legacy', targetId: '2026-09-29', planItemId: `bdp1|${id}`, when: '14:30', durationMinutes: 30, claimedAt: T + 2, claimedBy: 'old-phone' },
+  };
+  await openApp(page, { now: at('2026-10-01', '09:00'), initialRemote: { [id]: stuck } });
+  await expect.poll(async () => (await storage(page))[id]?.claimEpoch).toBe(1);
+  const record = (await storage(page))[id];
+  expect(record.status).toBe('triaged');
+  expect(record.promotionClaim).toBe(null);
+  expect(record.important).toBe(true);
+  expect(record.expiredClaim.targetId).toBe('2026-09-29');
+  expect((await page.evaluate(() => window.__bdRemote()))[id].claimEpoch).toBe(1);
+  expect((await planItemsNamed(page, 'Renew the car registration')).length).toBe(0);
+
+  // The recovery ran during startup, before this test's toast spy existed: read the real, visible toast.
+  await expect(page.locator('#toast')).toContainText("Couldn't add this to Tue, Sep 29 because that day had already ended. It's back in Brain Dump.");
+  await expect(root(page)).toContainText('Renew the car registration');
+  await expect(root(page)).toContainText("Couldn't be added to Tue, Sep 29: that day had ended.");
+  await expect(page.locator(`button[onclick="window.BrainDumpUI.doToday('${id}')"]`)).toHaveCount(1);
+
+  // Re-rendering never repeats the message.
+  await page.evaluate(() => { showView('today'); showView('braindump'); window.refreshBrainDumpSurfaces(); });
+  expect((await toasts(page)).filter(m => /already ended/.test(m)), 'never announced again').toEqual([]);
+
+  // The owner decides again: Do Today now creates exactly one item, today.
+  await page.locator(`button[onclick="window.BrainDumpUI.doToday('${id}')"]`).click();
+  await expect.poll(async () => (await storage(page))[id].status).toBe('promoted');
+  expect((await planItemsNamed(page, 'Renew the car registration')).length).toBe(1);
 });

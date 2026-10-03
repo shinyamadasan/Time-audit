@@ -104,6 +104,31 @@
 // been reopened stays generation 1 and fully writable by old clients: the
 // upgrade is lazy and per record, never a bulk migration.
 //
+// ── expired claims (FIX FIRST #3) ───────────────────────────────────────────
+// A claim whose target day has ENDED, with no plan item, can never be finished:
+// Plan Authority refuses past days. Product decision: it returns the capture to
+// the active list (same id, text and classification) so the owner decides again.
+//
+// The hard part is PROVING the item does not exist. A plan cache can lag, and a
+// past legacy date may never be loaded at all, so absence is proven by
+// construction instead: every new client durably marks a claim
+// `planWriteStarted` (remotely, in a transaction) before it writes that claim's
+// plan item, and a claim it mints is born marked. An UNMARKED claim therefore
+// never had its item written by anyone. That covers every claim the pre-fix
+// production client left: it could never normalize a claim off the pruned
+// wire, so it never reached the plan write at all. recoverExpiredClaim releases
+// only an unmarked claim, and only inside a remote transaction that re-checks
+// it, so a concurrent mark or promotion wins instead.
+//
+// Recovery bumps `claimEpoch`. Below promoted rank, the higher claimEpoch wins
+// every merge outright, so no stale copy of the expired claim (or of anything
+// from before it) can resurrect it. Promoted still beats everything, because a
+// real plan item exists. claimEpoch > 0 needs schemaVersion 2, so an old client
+// cannot overwrite a recovered record either (the monotonic rule refuses it).
+// `expiredClaim` keeps the attempt as compact provenance: what was claimed,
+// for which day, and when it expired. Only the latest is kept; this is not a
+// history store.
+//
 // ── delegate is a disposition, not a destination (deliberate V1 scope) ──────
 // This codebase has no existing model for handing work to another person — no
 // commitment-to-someone-else, no assignee, no second task store. Building one here
@@ -210,6 +235,8 @@ export function buildCapture(input = {}) {
       promotion: null,
       delegatedTo: null,
       reopenCount: 0,
+      claimEpoch: 0,
+      expiredClaim: null,
     },
   };
 }
@@ -321,7 +348,67 @@ export function claimPromotion(current, { promotion, now, updatedBy } = {}) {
         when: typeof promotion.when === 'string' ? promotion.when : '',
         durationMinutes: Number.isFinite(promotion.durationMinutes) ? promotion.durationMinutes : null,
         claimedAt: at, claimedBy: by,
+        // The claiming device writes the plan item right after this commits, so
+        // from now on absence of that item can never be proven by construction
+        // (see the file banner's "expired claims" section).
+        planWriteStarted: true,
       },
+      // A marked claim is reopen-aware data an old client cannot represent: keep
+      // it behind the same monotonic generation barrier as a reopen.
+      schemaVersion: BRAIN_DUMP_REOPEN_SCHEMA_VERSION,
+      updatedAt: at,
+      updatedBy: by,
+    },
+  };
+}
+
+/** Same claim, not merely the same intent: also the same claimedAt and claimedBy.
+ *  Two copies of ONE claim (one marked, one not) are this; a different device's
+ *  claim for the same intent is not. */
+export function sameClaimIdentity(a, b) {
+  return samePromotionIntent(a, b) && a.claimedAt === b.claimedAt && a.claimedBy === b.claimedBy;
+}
+
+/** Durably marks `claim` (which must be the record's own outstanding claim) as
+ *  "a plan write may have started". A client must commit this against the
+ *  AUTHORITATIVE remote record before it writes the plan item for a claim it did
+ *  not mint itself. Idempotent. Never changes the claim's identity or intent. */
+export function markClaimWriteStarted(current, claim) {
+  const base = normalizeCapture(current);
+  if (!base) return { ok: false, reason: 'invalid-input', field: 'record' };
+  if (!base.promotionClaim || !sameClaimIdentity(base.promotionClaim, claim || {})) return { ok: false, reason: 'claim-changed', record: base };
+  if (base.promotionClaim.planWriteStarted) return { ok: true, record: base, unchanged: true };
+  return { ok: true, record: { ...base, promotionClaim: { ...base.promotionClaim, planWriteStarted: true }, schemaVersion: BRAIN_DUMP_REOPEN_SCHEMA_VERSION } };
+}
+
+/** Resolves a claim that provably can never produce its plan item: its target day
+ *  has ended (Plan Authority refuses it) and no client can ever have written the
+ *  item (the claim was never marked planWriteStarted). The capture returns to the
+ *  active list unchanged otherwise: same id, text and classification. The claim is
+ *  kept as compact provenance (expiredClaim), and claimEpoch moves forward so any
+ *  stale copy of the old claim (or of anything from before this) loses every merge.
+ *  The caller must establish the proof first; this function only refuses what it
+ *  can see is unsafe. */
+export function recoverExpiredClaim(current, claim, { now, updatedBy } = {}) {
+  const base = normalizeCapture(current);
+  if (!base) return { ok: false, reason: 'invalid-input', field: 'record' };
+  const at = timestamp(now);
+  if (!at) return { ok: false, reason: 'invalid-input', field: 'now' };
+  const by = writer(updatedBy);
+  if (!by) return { ok: false, reason: 'invalid-input', field: 'updatedBy' };
+  if (TERMINAL_STATUSES.has(base.status)) return { ok: false, reason: 'already-disposed', record: base };
+  if (!base.promotionClaim || !sameClaimIdentity(base.promotionClaim, claim || {})) return { ok: false, reason: 'claim-changed', record: base };
+  if (base.promotionClaim.planWriteStarted) return { ok: false, reason: 'write-may-have-started', record: base };
+  const expired = { ...base.promotionClaim };
+  delete expired.planWriteStarted; // provenance of the attempt, not live claim state
+  return {
+    ok: true,
+    record: {
+      ...base,
+      promotionClaim: null,
+      claimEpoch: base.claimEpoch + 1,
+      expiredClaim: { ...expired, expiredAt: at, expiredBy: by },
+      schemaVersion: BRAIN_DUMP_REOPEN_SCHEMA_VERSION,
       updatedAt: at,
       updatedBy: by,
     },
@@ -535,11 +622,15 @@ export function normalizeCapture(value) {
     if (!timestamp(c.claimedAt)) return null;
     const claimedBy = writer(c.claimedBy);
     if (!claimedBy) return null;
+    if (c.planWriteStarted !== undefined && c.planWriteStarted !== null && typeof c.planWriteStarted !== 'boolean') return null;
     promotionClaim = {
       type: c.type, store: c.store, targetId: c.targetId, planItemId: c.planItemId,
       when: typeof c.when === 'string' ? c.when : '',
       durationMinutes: Number.isFinite(c.durationMinutes) ? c.durationMinutes : null,
       claimedAt: c.claimedAt, claimedBy,
+      // Absent on every claim the pre-fix production client minted: that client
+      // provably never wrote a plan item for any claim (see the file banner).
+      planWriteStarted: c.planWriteStarted === true,
     };
   }
 
@@ -581,6 +672,31 @@ export function normalizeCapture(value) {
   // reopen is malformed (an old client could not have written it).
   if (reopenCount > 0 && value.schemaVersion < BRAIN_DUMP_REOPEN_SCHEMA_VERSION) return null;
 
+  // How many claims on this capture have been resolved as expired (absent = 0).
+  // Monotonic, like reopenCount, and likewise only ever written by a
+  // reopen-aware client.
+  let claimEpoch = 0;
+  if (value.claimEpoch !== undefined && value.claimEpoch !== null) {
+    if (!Number.isInteger(value.claimEpoch) || value.claimEpoch < 0) return null;
+    claimEpoch = value.claimEpoch;
+  }
+  if (claimEpoch > 0 && value.schemaVersion < BRAIN_DUMP_REOPEN_SCHEMA_VERSION) return null;
+
+  // Compact provenance of the most recent expired claim: what was attempted, and
+  // when it was resolved. Only ever present once a claim has expired.
+  let expiredClaim = null;
+  if (value.expiredClaim !== undefined && value.expiredClaim !== null) {
+    const e = value.expiredClaim;
+    if (claimEpoch < 1 || !validPromotion(e) || !timestamp(e.claimedAt) || !writer(e.claimedBy)) return null;
+    if (!timestamp(e.expiredAt) || !writer(e.expiredBy)) return null;
+    expiredClaim = {
+      type: e.type, store: e.store, targetId: e.targetId, planItemId: e.planItemId,
+      when: typeof e.when === 'string' ? e.when : '',
+      durationMinutes: Number.isFinite(e.durationMinutes) ? e.durationMinutes : null,
+      claimedAt: e.claimedAt, claimedBy: e.claimedBy, expiredAt: e.expiredAt, expiredBy: e.expiredBy,
+    };
+  }
+
   return {
     schemaVersion: value.schemaVersion,
     id: value.id,
@@ -597,6 +713,8 @@ export function normalizeCapture(value) {
     promotion,
     delegatedTo,
     reopenCount,
+    claimEpoch,
+    expiredClaim,
   };
 }
 
@@ -631,18 +749,32 @@ export function mergeCaptureRecords(localValue, remoteValue) {
   const remote = normalizeCapture(remoteValue);
   if (!local) return remote;
   if (!remote) return local;
-  const winner = pickCaptureWinner(local, remote);
+  let winner = pickCaptureWinner(local, remote);
   // The record generation is monotonic: once either side is reopen-aware, the
   // merged record is too, whichever side won. Otherwise a new client's own
   // claim or edit could carry a generation-1 copy back over a generation-2
   // record (refused by the rules) — see the file banner's rollout section.
   const schemaVersion = Math.max(local.schemaVersion, remote.schemaVersion);
-  return winner.schemaVersion === schemaVersion ? winner : { ...winner, schemaVersion };
+  if (winner.schemaVersion !== schemaVersion) winner = { ...winner, schemaVersion };
+  // planWriteStarted is monotonic for one claim: two copies of the SAME claim
+  // merge to "marked" if either is, whichever copy won the tie-break.
+  const loser = winner === local ? remote : local;
+  if (winner.promotionClaim && !winner.promotionClaim.planWriteStarted && loser.promotionClaim?.planWriteStarted
+    && sameClaimIdentity(winner.promotionClaim, loser.promotionClaim)) {
+    winner = { ...winner, promotionClaim: { ...winner.promotionClaim, planWriteStarted: true } };
+  }
+  return winner;
 }
 
 function pickCaptureWinner(local, remote) {
   const localRank = captureAuthorityRank(local);
   const remoteRank = captureAuthorityRank(remote);
+  // Below promoted rank, a later expired-claim recovery supersedes EVERYTHING
+  // from before it, including the expired claim itself (see the file banner's
+  // "expired claims" section). Promoted always wins: a real plan item exists.
+  if (localRank < 3 && remoteRank < 3 && local.claimEpoch !== remote.claimEpoch) {
+    return remote.claimEpoch > local.claimEpoch ? remote : local;
+  }
   // Below claim rank, a later reopen supersedes any earlier archive/delegate
   // (see the file banner's "edit + reopen" section). Claimed/promoted are never
   // out-voted by reopenCount.
@@ -669,6 +801,14 @@ function pickCaptureWinner(local, remote) {
 export function arbitratePromotionClaim(remoteValue, candidate) {
   const remote = normalizeCapture(remoteValue);
   if (remote && TERMINAL_STATUSES.has(remote.status)) return undefined;
+  // A claim built from a local copy that has not yet seen a newer expired-claim
+  // recovery is still a fresh, legitimate request: the remote is active and
+  // unclaimed. Rebase it onto that newer epoch (and its provenance) instead of
+  // letting the stale epoch lose the merge.
+  const next = normalizeCapture(candidate);
+  if (remote && next && !remote.promotionClaim && next.promotionClaim && remote.claimEpoch > next.claimEpoch) {
+    return mergeCaptureRecords(remote, { ...next, claimEpoch: remote.claimEpoch, expiredClaim: remote.expiredClaim });
+  }
   return mergeCaptureRecords(remote, candidate);
 }
 
@@ -731,7 +871,7 @@ export function quadrantOf(record) {
 const api = {
   BRAIN_DUMP_SCHEMA_VERSION, BRAIN_DUMP_REOPEN_SCHEMA_VERSION, BRAIN_DUMP_STATUSES, TERMINAL_STATUSES, PROMOTION_TYPES, BRAIN_DUMP_PLAN_ITEM_PREFIX,
   validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, claimPromotion, finalizePromotion,
-  archiveCapture, delegateCapture, samePromotionIntent, promotedTo, editHandledCapture, reopenCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
+  archiveCapture, delegateCapture, samePromotionIntent, sameClaimIdentity, markClaimWriteStarted, recoverExpiredClaim, promotedTo, editHandledCapture, reopenCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
   mergeCaptureMaps, allCaptures, untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
 };
 globalThis.BrainDumpModel = api;

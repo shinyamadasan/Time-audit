@@ -91,7 +91,7 @@
 
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
-import { validBrainDumpId, mergeCaptureRecords, claimPromotion, arbitratePromotionClaim, promotedTo, samePromotionIntent } from './brain-dump-model.js';
+import { validBrainDumpId, mergeCaptureRecords, claimPromotion, arbitratePromotionClaim, promotedTo, samePromotionIntent, markClaimWriteStarted, recoverExpiredClaim } from './brain-dump-model.js';
 
 const DEFAULT_CLAIM_TIMEOUT_MS = 8000;
 
@@ -308,6 +308,55 @@ export function createBrainDumpSyncBridge(deps = {}) {
       .catch(() => ({ ok: false, reason: 'pending', record: local }));
   }
 
+  /** One remote-first claim transition (FIX FIRST #3), evaluated against the
+   *  AUTHORITATIVE remote record inside a real transaction, never against local
+   *  cache alone. `transform(remoteRecord)` returns {ok:true, record, unchanged?}
+   *  to write (or, if unchanged, to accept without writing), or {ok:false, reason}
+   *  to refuse with zero writes. Same room-ownership discipline as
+   *  claimPromotionRemote: no room ref or a foreign cache refuses up front, and a
+   *  switch mid-transaction aborts. The outcome is merged locally and announced
+   *  through onRemoteChange like every other merge. Not bounded by a timeout: these
+   *  run in the background, and an unsettled one simply means "not yet".
+   *  @returns {Promise<{ok:true, record:object} | {ok:false, reason:string, record?:object}>} */
+  function remoteClaimTransition(id, transform) {
+    if (!validBrainDumpId(id)) return Promise.resolve({ ok: false, reason: 'invalid-input' });
+    const roomId = activeRoomId();
+    const ref = captureRef(id);
+    if (!ref || !roomOwnsCache(roomId)) return Promise.resolve({ ok: false, reason: 'offline' });
+    const ownerLostRef = { lost: false };
+    let verdict = { ok: false, reason: 'not-found' };
+    return ref.transaction(remote => {
+      ownerLostRef.lost = !roomOwnsCache(roomId);
+      if (ownerLostRef.lost) return undefined;
+      verdict = transform(remote);
+      return verdict.ok && !verdict.unchanged ? verdict.record : undefined;
+    }, undefined, false)
+      .then(result => {
+        if (ownerLostRef.lost || !roomOwnsCache(roomId) || !result?.snapshot) return { ok: false, reason: 'offline' };
+        const { changed, record } = repository.mergeRemote(id, result.snapshot.val());
+        if (changed) onRemoteChange(id, record);
+        const finalRecord = repository.read(id) || record;
+        return verdict.ok ? { ok: true, record: finalRecord } : { ok: false, reason: verdict.reason, record: finalRecord };
+      })
+      .catch(() => ({ ok: false, reason: 'offline' }));
+  }
+
+  /** Durably marks this capture's outstanding `claim` as "a plan write may have
+   *  started" on the authoritative remote BEFORE this device writes the plan item
+   *  for a claim it did not mint. ok only if the remote still holds exactly that
+   *  claim (marked now, or already). */
+  function markClaimWriteRemote(id, claim) {
+    return remoteClaimTransition(id, remote => markClaimWriteStarted(remote, claim));
+  }
+
+  /** Resolves `claim` as expired against the authoritative remote: committed only
+   *  if the remote still holds exactly that claim, still UNMARKED, on an active
+   *  capture. The caller must already have proven the target day has ended and the
+   *  plan item cannot exist (see brain-dump-promotion.js's settleOutstandingClaim). */
+  function resolveExpiredClaimRemote(id, claim) {
+    return remoteClaimTransition(id, remote => recoverExpiredClaim(remote, claim, { now: now(), updatedBy: deviceId() }));
+  }
+
   /** Merges one inbound remote record. Record-level only — a peer's snapshot can
    *  never remove a capture it simply does not mention. `roomId` is the room the
    *  record CAME FROM; applied only if that room is joined now and its cache is active. */
@@ -373,7 +422,7 @@ export function createBrainDumpSyncBridge(deps = {}) {
   }
 
   return {
-    syncCapture, pushCapture, claimPromotionRemote, attach, detach, pushAllLocal, pendingPushIds,
+    syncCapture, pushCapture, claimPromotionRemote, markClaimWriteRemote, resolveExpiredClaimRemote, attach, detach, pushAllLocal, pendingPushIds,
     handleRemoteRecord, handleRemoteSnapshot, repository,
     BRAIN_DUMP_REMOTE_PATH,
   };

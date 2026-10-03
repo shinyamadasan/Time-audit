@@ -22,7 +22,7 @@ import targaryen from 'targaryen';
 
 import { createBrainDumpRepository as createNewRepository } from './brain-dump-repository.js';
 import { createBrainDumpSyncBridge as createNewBridge } from './brain-dump-sync.js';
-import { promoteCaptureToPlan, reconcilePromotionClaim } from './brain-dump-promotion.js';
+import { promoteCaptureToPlan, settleOutstandingClaim } from './brain-dump-promotion.js';
 import { brainDumpPlanItemId } from './brain-dump-model.js';
 import { createBrainDumpRepository as createOldRepository } from './fixtures/brain-dump-pre-reopen/brain-dump-repository.js';
 import { createBrainDumpSyncBridge as createOldBridge } from './fixtures/brain-dump-pre-reopen/brain-dump-sync.js';
@@ -101,8 +101,9 @@ function makeDevice({ kind, db, planAuthority, deviceId, clock, uid = UID, live 
     repository, getRoomRef: () => db.roomRef(room, uid), getRoomId: () => room, now: () => clock.now, deviceId: () => deviceId,
     onRemoteChange: (id, record) => {
       if (kind !== 'new' || !record || !record.promotionClaim || (record.status !== 'untriaged' && record.status !== 'triaged')) return;
-      const outcome = reconcilePromotionClaim({ repository, planAuthority, id, now: clock.now, deviceId });
-      if (outcome?.record) bridge.syncCapture(id);
+      // Exactly what brain-dump-ui.js's maybeReconcile runs.
+      settleOutstandingClaim({ repository, planAuthority, id, now: clock.now, deviceId, markClaimWrite: bridge.markClaimWriteRemote, resolveExpiredClaim: bridge.resolveExpiredClaimRemote })
+        .then(outcome => { if (outcome?.record) bridge.syncCapture(id); });
     },
   });
   if (live) bridge.attach();

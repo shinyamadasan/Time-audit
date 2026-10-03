@@ -28,7 +28,7 @@ const CAPTURE = JSON.parse(readFileSync(path.join(HERE, 'fixtures', 'brain-dump-
 test('the recording covers every capture state the app writes', () => {
   assert.deepEqual(CAPTURE.cases.map(c => c.name).sort(), [
     'archived', 'claimedDoToday', 'claimedSchedule', 'delegatedNoPerson', 'delegatedWithPerson',
-    'promotedDoToday', 'promotedSchedule', 'reopenedV2', 'triaged', 'untriaged',
+    'promotedDoToday', 'promotedSchedule', 'recoveredExpiredClaim', 'reopenedV2', 'triaged', 'untriaged',
   ]);
   assert.match(CAPTURE.sdk, /10\.12\.2/);
 });
@@ -87,6 +87,17 @@ test('meaningful semantics survive the wire, state by state', () => {
   assert.equal(reopened.important, true);
   assert.equal(reopened.delegatedTo, null);
   assert.equal(reopened.disposedAt, null);
+  // FIX FIRST #3: a new claim is marked, and an expired-claim recovery keeps its provenance.
+  assert.equal(read('claimedSchedule').promotionClaim.planWriteStarted, true);
+  const recovered = read('recoveredExpiredClaim');
+  assert.equal(recovered.status, 'triaged');
+  assert.equal(recovered.promotionClaim, null);
+  assert.equal(recovered.claimEpoch, 1);
+  assert.equal(recovered.schemaVersion, 2);
+  assert.equal(recovered.expiredClaim.targetId, 'cal1:2026-10-01');
+  assert.equal(recovered.expiredClaim.when, '14:30');
+  assert.equal(recovered.expiredClaim.durationMinutes, 30);
+  assert.equal('planWriteStarted' in recovered.expiredClaim, false, 'provenance, not live claim state');
 });
 
 test('required fields are still required on the wire: absence never stands in for them', () => {

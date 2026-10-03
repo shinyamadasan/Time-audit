@@ -559,10 +559,29 @@ A promotion without the marker (finalized before this existed) has UNKNOWN timin
 equivalent to a new request. The one exception is Do Today, which every shipped path builds untimed.
 Unknown is never normalized into "untimed".
 
+**Expired claims (FIX FIRST #3, locked product decision):** a claim whose target day has ended, and whose
+deterministic plan item provably does not exist, returns the capture to the active list. It keeps the same
+id, text and classification, so the owner decides again. All four proofs are required:
+1. The claim is authoritative. Recovery is a remote transaction that re-checks the exact claim.
+2. The day has ended, by Plan Authority's own `assertDirectSchedulingTarget`: it refuses at "now" but not
+   at the beginning of time, so the refusal is the time-based one.
+3. The item is absent. If it is present in the plan, the capture is finalized as promoted instead.
+4. No client can ever have written the item: the claim is not marked `planWriteStarted`. A new client
+   marks a claim remotely before it writes the item, and claims it mints are born marked. The only
+   Brain Dump build ever deployed before this (7557562 ≡ cf43080) could never reach the plan write, so
+   all of its claims are unmarked.
+Uncertainty never releases a claim: an unreadable destination, an unresolvable target, an unprovable end
+or an offline remote all leave it as it is. Recovery bumps `claimEpoch`. Below promoted rank, the higher
+claimEpoch wins outright, and a recovered record is generation 2, so neither a stale new copy nor an old
+client can resurrect the claim. `expiredClaim` keeps the attempt (intent, target, claimedAt/By,
+expiredAt/By) as compact provenance. A claim a new client marked stays claimed on an ended day, because
+absence cannot be proven for it.
+
 **Do not:** reopen or unpromote a promoted capture from Brain Dump; let `reopenCount` outvote a claim or a
 promotion; edit plan-item text by mutating the capture; ship a client that writes generation 2 before the
 monotonic rule is live; treat two promotions as equivalent on planItemId alone; require a literal null
-for any field a record can legitimately leave null; or test Brain Dump sync against a fake that keeps
-null keys.
+for any field a record can legitimately leave null; test Brain Dump sync against a fake that keeps
+null keys; release a claim without all four proofs; write a plan item for a claim not yet marked
+remotely; or retarget, archive or delete an expired capture on the owner's behalf.
 
 ---

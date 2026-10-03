@@ -1,5 +1,30 @@
 # ChronaSense — Changelog
 
+## Brain Dump Production UX Correction V1 FIX FIRST #3 — candidate, NOT integrated
+
+Same branch, on top of `bf6689d`. Not pushed, merged or deployed.
+
+**Expired stuck claims return to Brain Dump.** A claim whose day has ended and whose plan item provably
+does not exist is resolved, and the capture goes back to the active list (same id, text and classification)
+with one message: "Couldn't add this to <day> because that day had already ended. It's back in Brain Dump."
+A quiet row note stays until the owner acts. If the item already exists, the capture is finalized as
+promoted instead.
+
+**How absence is proven:** new clients mark a claim `planWriteStarted` remotely before writing its plan
+item, and claims they mint are born marked. An unmarked claim never had its item written, and that covers
+every claim the only previously deployed Brain Dump build left behind. "Ended" comes from Plan Authority's
+own public `assertDirectSchedulingTarget`. Uncertainty never releases a claim. Recovery is a remote
+transaction that re-checks the exact unmarked claim.
+
+**Monotonic:** a new `claimEpoch` counter (higher wins below promoted rank) plus `expiredClaim` provenance,
+on the existing generation 2. A stale new copy loses the merge, the old client is refused by the existing
+rule, and promoted still wins. A bind-time sweep heals claims that expired since the last session.
+
+**Files:** brain-dump-model/-sync/-promotion/-ui (+ www); new `brain-dump-expired-claim.test.js` (real Plan
+Authority, wire-faithful room with the real rules, real cf43080 client); wire fixture re-recorded with the
+real SDK and emulator (11 states); Playwright recovery test. Brain Dump token ->
+`20261003-brain-dump-production-ux-fix3`. No rules change. No schema version beyond 2.
+
 ## Brain Dump Production UX Correction V1 FIX FIRST #2 — candidate, NOT integrated
 
 Same branch, on top of `3a2529b`. Not pushed, merged or deployed.

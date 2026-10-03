@@ -11,12 +11,16 @@ record generation `schemaVersion: 2` with a monotonic merge plus a `firebase.rul
 `.validate`, and `promotionDestination()` (promotion.js). FIX FIRST #2: `normalizeCapture` accepts the
 Firebase-pruned wire form (absent optional nullable fields = null), and promotions carry `intentRecorded`.
 Test fakes use `brain-dump-test-support.js`'s `pruneLikeFirebase`/`wireCopy`, pinned to the real-SDK
-recording in `fixtures/brain-dump-rtdb-wire-capture.json`.
+recording in `fixtures/brain-dump-rtdb-wire-capture.json`. FIX FIRST #3: claims carry `planWriteStarted`;
+records carry `claimEpoch` + `expiredClaim`. `settleOutstandingClaim()` (promotion.js) drives each claim:
+it finalizes, marks (`markClaimWriteRemote`) then writes, or resolves an expired claim
+(`resolveExpiredClaimRemote`, sync.js). brain-dump-ui.js runs it from maybeReconcile and from a
+bind-time sweep.
 
 New nav entry `#nav-braindump` / view `#view-braindump` (mounted between My Day and Week), rendered
 entirely by `brain-dump-ui.js` into `#bd-root` via `showView('braindump')`. Independently versioned as its
 OWN generation inside the shared import map: all five `brain-dump-*.js` modules map to
-`?v=20261003-brain-dump-production-ux-fix2`, the token the `brain-dump-sync.js` / `brain-dump-ui.js` entry
+`?v=20261003-brain-dump-production-ux-fix3`, the token the `brain-dump-sync.js` / `brain-dump-ui.js` entry
 tags carry. They are not part of the governed Personal Day / plan token, since nothing in that group
 imports them. (Until FIX FIRST the internal imports were bare, which let a fresh entry link against a stale
 cached model.) `storage.js` itself (wiring `BrainDumpSync.attach()`/`pushAllLocal()`/

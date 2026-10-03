@@ -5,7 +5,7 @@
 // The earlier suites never wired the sync bridge's onRemoteChange hook to the
 // reconciler, but production does (brain-dump-sync.js's window singleton ->
 // globalThis.refreshBrainDumpSurfaces -> brain-dump-ui.js's maybeReconcile ->
-// reconcilePromotionClaim). Real Firebase also raises the whole-subtree 'value'
+// settleOutstandingClaim -> reconcilePromotionClaim). Real Firebase also raises the whole-subtree 'value'
 // event for a committed transaction BEFORE the transaction's own Promise
 // resolves. Together those mean the reconciler always finishes a fresh
 // foreground promotion first, and the foreground call then has to recognize
@@ -23,7 +23,7 @@ import {
   brainDumpPlanItemId, buildCapture, triageCapture, archiveCapture, delegateCapture, reopenCapture,
   claimPromotion, finalizePromotion, promotedTo, mergeCaptureRecords, normalizeCapture,
 } from './brain-dump-model.js';
-import { promoteCaptureToPlan, reconcilePromotionClaim } from './brain-dump-promotion.js';
+import { promoteCaptureToPlan, settleOutstandingClaim } from './brain-dump-promotion.js';
 
 const T0 = Date.parse('2026-10-01T08:00:00Z');
 const memory = () => {
@@ -97,14 +97,20 @@ function makeProductionDevice({ room, planAuthority, deviceId = 'device-1', owne
   const ownerOf = getOwner || (() => owner);
   const repository = createBrainDumpRepository({ storage, getOwner: ownerOf, now: () => clock.now, deviceId: () => deviceId });
   const reconciles = [];
+  const settling = new Set();
   let bridge = null;
   bridge = createBrainDumpSyncBridge({
     repository, getRoomRef: getRoomRef || (() => room.ref), getRoomId: ownerOf, now: () => clock.now, deviceId: () => deviceId, claimTimeoutMs,
     onRemoteChange: (id, record) => {
       if (!record || (record.status !== 'untriaged' && record.status !== 'triaged') || !record.promotionClaim) return;
-      const outcome = reconcilePromotionClaim({ repository, planAuthority, id, now: clock.now, deviceId });
-      reconciles.push({ id, outcome });
-      if (outcome?.record) bridge.syncCapture(id);
+      // Exactly what brain-dump-ui.js's maybeReconcile runs (one in flight per id).
+      if (settling.has(id)) return;
+      settling.add(id);
+      const entry = { id, outcome: null };
+      reconciles.push(entry);
+      settleOutstandingClaim({ repository, planAuthority, id, now: clock.now, deviceId, markClaimWrite: bridge.markClaimWriteRemote, resolveExpiredClaim: bridge.resolveExpiredClaimRemote })
+        .then(outcome => { entry.outcome = outcome; if (outcome?.record) bridge.syncCapture(id); })
+        .finally(() => settling.delete(id));
     },
   });
   if (live) bridge.attach();
@@ -636,8 +642,24 @@ for (const [label, intent, expected] of [
 function stuckClaimRecord(id, claim) {
   const base = triageCapture(buildCapture({ id, text: 'Stuck in production', now: T0, updatedBy: 'old-phone' }).record, { important: true, urgent: false, now: T0 + 1, updatedBy: 'old-phone' }).record;
   const claimed = claimPromotion(base, { promotion: { planItemId: brainDumpPlanItemId(id), store: 'calendar', ...claim }, now: T0 + 2, updatedBy: 'old-phone' }).record;
-  delete claimed.reopenCount; // cf43080 never wrote it
+  // cf43080 wrote none of these: no reopenCount/claimEpoch, generation 1, and an UNMARKED claim.
+  delete claimed.reopenCount;
+  delete claimed.claimEpoch;
+  delete claimed.expiredClaim;
+  delete claimed.promotionClaim.planWriteStarted;
+  claimed.schemaVersion = 1;
   return claimed;
+}
+
+/** The real Plan Authority's own time gate: refuses a target whose day has ended. */
+function withEndedGate(pa, endedTargetIds) {
+  pa.assertDirectSchedulingTarget = (target, nowMs) => {
+    if (endedTargetIds.includes(target.id) && nowMs > 0) throw new Error('Past My Days are history. Reschedule unfinished work from Unfinished instead.');
+    return target;
+  };
+  const addItem = pa.addItem;
+  pa.addItem = input => { pa.assertDirectSchedulingTarget(input.destination, 1); return addItem(input); };
+  return pa;
 }
 
 test('F5 already-stuck claim (current/future day): a fresh NEW client loading it self-recovers, exactly one destination, promoted', async () => {
@@ -661,20 +683,35 @@ test('F5 already-stuck claim (current/future day): a fresh NEW client loading it
   assert.equal(second.repository.read(id).status, 'promoted');
 });
 
-test('F5 already-stuck claim on a day that has ENDED: not recoverable by the existing contract; it stays claimed with no plan item (reported residual)', async () => {
+test('F5 + FIX FIRST #3: an already-stuck cf43080 claim on a day that has ENDED returns to triage (no plan item can exist for it)', async () => {
   const room = makeRoom();
-  const pa = makeFakePlanAuthority();
-  // Real Plan Authority refuses a past target (assertDirectSchedulingTarget).
-  pa.addItem = () => { throw new Error('Past My Days are history. Reschedule unfinished work from Unfinished instead.'); };
+  const pa = withEndedGate(makeFakePlanAuthority(), ['calplan:2026-09-01']);
   const id = 'bstuckpast';
   room.put(id, stuckClaimRecord(id, { type: 'do-today', targetId: 'calplan:2026-09-01', when: '' }));
   const device = makeProductionDevice({ room, planAuthority: pa });
   await flush();
   const local = device.repository.read(id);
-  assert.equal(local.status, 'triaged', 'still visible, now normalized');
-  assert.ok(local.promotionClaim, 'the claim is still authoritative');
-  assert.equal(pa.items.length, 0, 'no plan item can be created on an ended day');
-  assert.equal(device.repository.archive(id).reason, 'promotion-claimed', 'and the claim still blocks archive/delegate');
+  assert.equal(local.status, 'triaged');
+  assert.equal(local.promotionClaim, null, 'no longer claimed');
+  assert.equal(local.expiredClaim.targetId, 'calplan:2026-09-01');
+  assert.equal(pa.items.length, 0, 'never written into the ended day');
+  assert.equal(device.repository.archive(id).ok, true, 'the owner can decide again');
+});
+
+test('FIX FIRST #3 residual: a claim a NEW client marked (its item may have been written) is never released on an ended day', async () => {
+  const room = makeRoom();
+  const pa = withEndedGate(makeFakePlanAuthority(), ['calplan:2026-09-01']);
+  const id = 'bmarkedpast';
+  const marked = stuckClaimRecord(id, { type: 'do-today', targetId: 'calplan:2026-09-01', when: '' });
+  marked.promotionClaim.planWriteStarted = true;
+  marked.schemaVersion = 2;
+  room.put(id, marked);
+  const device = makeProductionDevice({ room, planAuthority: pa });
+  await flush();
+  const local = device.repository.read(id);
+  assert.ok(local.promotionClaim, 'the claim stands: absence cannot be proven');
+  assert.equal(device.reconciles.find(r => r.id === id)?.outcome?.reason, 'expired-write-may-have-started');
+  assert.equal(pa.items.length, 0);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
