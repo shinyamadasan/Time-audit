@@ -91,7 +91,8 @@
 
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
-import { validBrainDumpId, mergeCaptureRecords, claimPromotion, arbitratePromotionClaim, promotedTo, samePromotionIntent, markClaimWriteStarted, recoverExpiredClaim } from './brain-dump-model.js';
+import { validBrainDumpId, mergeCaptureRecords, claimPromotion, arbitratePromotionClaim, promotedTo, samePromotionIntent, revokeExpiredClaim, recoverExpiredClaim } from './brain-dump-model.js';
+import { setBrainDumpCaptureLookup } from './plan-item-origin.js';
 
 const DEFAULT_CLAIM_TIMEOUT_MS = 8000;
 
@@ -341,18 +342,18 @@ export function createBrainDumpSyncBridge(deps = {}) {
       .catch(() => ({ ok: false, reason: 'offline' }));
   }
 
-  /** Durably marks this capture's outstanding `claim` as "a plan write may have
-   *  started" on the authoritative remote BEFORE this device writes the plan item
-   *  for a claim it did not mint. ok only if the remote still holds exactly that
-   *  claim (marked now, or already). */
-  function markClaimWriteRemote(id, claim) {
-    return remoteClaimTransition(id, remote => markClaimWriteStarted(remote, claim));
+  /** Revokes this capture's outstanding `claim` on the authoritative remote (step 1
+   *  of resolving an ended claim): once this commits, the server refuses any plan
+   *  write for it, so a following destination read is final. ok only if the remote
+   *  still holds exactly that claim (revoked now, or already). */
+  function revokeClaimRemote(id, claim) {
+    return remoteClaimTransition(id, remote => revokeExpiredClaim(remote, claim, { now: now() }));
   }
 
   /** Resolves `claim` as expired against the authoritative remote: committed only
-   *  if the remote still holds exactly that claim, still UNMARKED, on an active
-   *  capture. The caller must already have proven the target day has ended and the
-   *  plan item cannot exist (see brain-dump-promotion.js's settleOutstandingClaim). */
+   *  if the remote still holds exactly that claim, REVOKED, on an active capture.
+   *  The caller must already have read the destination's authoritative remote
+   *  record and found no item (see brain-dump-promotion.js's settleOutstandingClaim). */
   function resolveExpiredClaimRemote(id, claim) {
     return remoteClaimTransition(id, remote => recoverExpiredClaim(remote, claim, { now: now(), updatedBy: deviceId() }));
   }
@@ -422,7 +423,7 @@ export function createBrainDumpSyncBridge(deps = {}) {
   }
 
   return {
-    syncCapture, pushCapture, claimPromotionRemote, markClaimWriteRemote, resolveExpiredClaimRemote, attach, detach, pushAllLocal, pendingPushIds,
+    syncCapture, pushCapture, claimPromotionRemote, revokeClaimRemote, resolveExpiredClaimRemote, attach, detach, pushAllLocal, pendingPushIds,
     handleRemoteRecord, handleRemoteSnapshot, repository,
     BRAIN_DUMP_REMOTE_PATH,
   };
@@ -451,6 +452,12 @@ if (typeof window !== 'undefined') {
     }),
   });
   window.BrainDumpSync = bridge;
+  // The plan stores' outbound queue guard (plan-item-origin.js) resolves a Brain
+  // Dump plan item's capture through this device's own Brain Dump cache. A guard
+  // only: the server-side fence in firebase.rules.json is what enforces it.
+  setBrainDumpCaptureLookup(captureId => {
+    try { return bridge.repository.read(captureId); } catch { return null; }
+  });
   // storage.js attaches this bridge when the room is joined. This module is
   // deferred, so if the room was ALREADY joined before it finished loading, that
   // call found no bridge — attach and drain now instead. Both calls are idempotent.

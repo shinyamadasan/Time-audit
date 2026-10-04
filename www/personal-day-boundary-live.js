@@ -525,7 +525,15 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     if (boundarySync) { try { boundarySync.detach(); } catch { /* nothing attached */ } }
   }
 
+  /** One authoritative read of an operational day's REMOTE record (Brain Dump
+   *  promotion fence), via the plan sync bridge. {ok:false} without one. */
+  function readRemoteOperationalDay(operationalDayIdValue, options) {
+    if (!planSync || typeof planSync.readRemoteDay !== 'function') return Promise.resolve({ ok: false, reason: 'offline' });
+    return planSync.readRemoteDay(operationalDayIdValue, options);
+  }
+
   return {
+    readRemoteOperationalDay,
     status,
     enabled,
     revisions,

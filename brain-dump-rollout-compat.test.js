@@ -85,6 +85,8 @@ function makePlanAuthority() {
     dayForScheduledDate: dateKey => ({ ok: true, anchor: 'noon', target: { store: 'calendar', id: `calplan:${dateKey}`, dateKey } }),
     rawItems: () => items,
     addItem({ item }) { items.push(item); return { item }; },
+    // One shared array stands in for the plan store's server copy in these tests.
+    remoteItemPresence: (_target, itemId) => Promise.resolve(items.some(i => i.id === itemId) ? 'present' : 'absent'),
     targetById(id) { const m = /^calplan:(.+)$/.exec(id); return m ? { store: 'calendar', id, dateKey: m[1] } : null; },
   };
 }
@@ -102,7 +104,7 @@ function makeDevice({ kind, db, planAuthority, deviceId, clock, uid = UID, live 
     onRemoteChange: (id, record) => {
       if (kind !== 'new' || !record || !record.promotionClaim || (record.status !== 'untriaged' && record.status !== 'triaged')) return;
       // Exactly what brain-dump-ui.js's maybeReconcile runs.
-      settleOutstandingClaim({ repository, planAuthority, id, now: clock.now, deviceId, markClaimWrite: bridge.markClaimWriteRemote, resolveExpiredClaim: bridge.resolveExpiredClaimRemote })
+      settleOutstandingClaim({ repository, planAuthority, id, now: clock.now, deviceId, revokeClaim: bridge.revokeClaimRemote, resolveExpiredClaim: bridge.resolveExpiredClaimRemote })
         .then(outcome => { if (outcome?.record) bridge.syncCapture(id); });
     },
   });

@@ -2568,6 +2568,26 @@ function replayPendingPlanRemotes() {
 
 globalThis.replayPendingPlanRemotes = replayPendingPlanRemotes;
 
+/** ONE authoritative read of a legacy date plan's remote record (Brain Dump promotion
+ *  fence: deciding whether a frozen promotion's item really exists). Never merged
+ *  here. {ok:false} for no owned room, a transport failure or a timeout: never
+ *  mistaken for an absent record. @returns {Promise<{ok:true, record:object|null}|{ok:false, reason:string}>} */
+function readRemoteDatePlan(dateKey, { timeoutMs = 8000 } = {}) {
+  const ref = ownedRoomRef();
+  if (!ref || !dateKey) return Promise.resolve({ ok: false, reason: 'offline' });
+  let dateRef;
+  try { dateRef = ref.child('plans').child(dateKey); } catch { return Promise.resolve({ ok: false, reason: 'offline' }); }
+  if (typeof dateRef.once !== 'function') return Promise.resolve({ ok: false, reason: 'offline' });
+  let timer;
+  const timeout = new Promise(resolve => { timer = setTimeout(() => resolve({ ok: false, reason: 'timeout' }), timeoutMs); });
+  const read = Promise.resolve(dateRef.once('value'))
+    .then(snapshot => (ownedRoomRef() === ref ? { ok: true, record: snapshot.val() } : { ok: false, reason: 'owner-mismatch' }))
+    .catch(() => ({ ok: false, reason: 'transport-failure' }));
+  return Promise.race([read, timeout]).finally(() => clearTimeout(timer));
+}
+
+globalThis.readRemoteDatePlan = readRemoteDatePlan;
+
 function syncPlans(dateKey) {
   const authorityState = globalThis.PlanAuthority?.authorityState?.()
     || globalThis.CalendarPlanLive?.authorityState?.()
@@ -2579,6 +2599,15 @@ function syncPlans(dateKey) {
   if (!model) {
     notifySyncWriteFailed(new Error('Plan sync is waiting for the Plan Tomorrow merge model.'));
     return Promise.resolve(false);
+  }
+  // Brain Dump promotion fence, client side (plan-item-origin.js): an item this device
+  // KNOWS is superseded is purged from its own cache, never pushed. The server rule
+  // refuses it regardless; this only avoids a denied write that would also block every
+  // other change to this date.
+  const outbound = globalThis.PlanItemOrigin?.partitionOutboundItems?.(Array.isArray(plans[dateKey].items) ? plans[dateKey].items : Object.values(plans[dateKey].items || {}));
+  if (outbound && outbound.superseded.length) {
+    plans[dateKey] = { ...plans[dateKey], items: outbound.kept };
+    setAccountLocal('ta3-plans', JSON.stringify(plans));
   }
   const candidate = JSON.parse(JSON.stringify(plans[dateKey]));
   let dateRef;

@@ -559,29 +559,66 @@ A promotion without the marker (finalized before this existed) has UNKNOWN timin
 equivalent to a new request. The one exception is Do Today, which every shipped path builds untimed.
 Unknown is never normalized into "untimed".
 
-**Expired claims (FIX FIRST #3, locked product decision):** a claim whose target day has ended, and whose
-deterministic plan item provably does not exist, returns the capture to the active list. It keeps the same
-id, text and classification, so the owner decides again. All four proofs are required:
-1. The claim is authoritative. Recovery is a remote transaction that re-checks the exact claim.
-2. The day has ended, by Plan Authority's own `assertDirectSchedulingTarget`: it refuses at "now" but not
-   at the beginning of time, so the refusal is the time-based one.
-3. The item is absent. If it is present in the plan, the capture is finalized as promoted instead.
-4. No client can ever have written the item: the claim is not marked `planWriteStarted`. A new client
-   marks a claim remotely before it writes the item, and claims it mints are born marked. The only
-   Brain Dump build ever deployed before this (7557562 ≡ cf43080) could never reach the plan write, so
-   all of its claims are unmarked.
-Uncertainty never releases a claim: an unreadable destination, an unresolvable target, an unprovable end
-or an offline remote all leave it as it is. Recovery bumps `claimEpoch`. Below promoted rank, the higher
-claimEpoch wins outright, and a recovered record is generation 2, so neither a stale new copy nor an old
-client can resurrect the claim. `expiredClaim` keeps the attempt (intent, target, claimedAt/By,
-expiredAt/By) as compact provenance. A claim a new client marked stays claimed on an ended day, because
-absence cannot be proven for it.
+**Expired claims (locked product decision):** a claim whose target day has ended, and whose deterministic
+plan item provably does not exist, returns the capture to the active list (same id, text and
+classification) so the owner decides again. HOW absence is proven is DECISIONS #32 (the promotion fence).
+It supersedes the earlier `planWriteStarted` marker, which could leave a crashed new-client claim claimed
+forever. `expiredClaim` keeps the attempt (intent, target, claimedAt/By, expiredAt/By) as compact
+provenance, and recovery bumps `claimEpoch`.
 
 **Do not:** reopen or unpromote a promoted capture from Brain Dump; let `reopenCount` outvote a claim or a
 promotion; edit plan-item text by mutating the capture; ship a client that writes generation 2 before the
 monotonic rule is live; treat two promotions as equivalent on planItemId alone; require a literal null
 for any field a record can legitimately leave null; test Brain Dump sync against a fake that keeps
-null keys; release a claim without all four proofs; write a plan item for a claim not yet marked
-remotely; or retarget, archive or delete an expired capture on the owner's behalf.
+null keys; or retarget, archive or delete an expired capture on the owner's behalf.
+
+---
+
+## 32. Brain Dump promotion fence: a Brain Dump plan item exists only while its capture authorizes it (server-enforced)
+
+**Problem:** plan writes are local-first (every store writes localStorage, then syncs, re-pushing on
+reconnect), so a device that wrote a promotion's item may push it arbitrarily late. Nothing tied a plan
+item to the Brain Dump claim, so a crashed claim on an ended day could neither be safely released nor ever
+resolved.
+
+**Decision (architecture fix #5): server-side fence + client queue guard.**
+- **Contract (governed, plan-item):** every item a Brain Dump promotion creates (id `bdp1|<captureId>`)
+  carries `brainDumpOrigin { v: 1, claimEpoch, type, targetId }`, immutable for the item's life. The capture
+  id is the item id. `targetId` is the ORIGINAL destination (the item may later be moved by ordinary Plan
+  Authority edits). `when`/`durationMinutes` stay ordinary editable fields. Non-Brain-Dump items are untouched.
+- **Server (the correctness authority):** `firebase.rules.json` validates every `items/$i` of
+  `calendarPlans`, `operationalPlans` and legacy `plans`. A `bdp1|` item is accepted only if
+  `rooms/<room>/brainDump/<captureId>` has the same claimEpoch (absent = 0) AND either an outstanding,
+  UNREVOKED claim with the same targetId and type, or `status: promoted` with the same promotion targetId
+  and type. The capture record itself is fenced too: claimEpoch never decreases, a revoke is never undone,
+  and schemaVersion never drops. RTDB validates every node of a whole-record write, so an item that is no
+  longer authorized blocks every later write of that day. That is why the client guard exists, and why
+  resolution goes through a revoke first.
+- **Resolving an ended claim:** (1) REVOKE it (a remote transaction; from then on the server refuses its
+  item, so the destination is frozen); (2) read the destination's AUTHORITATIVE remote record (Plan
+  Authority `remoteItemPresence`, never the local cache): present → finalize promoted (which authorizes
+  the item again); absent → recover to triage (claimEpoch + 1); unknown → stay revoked and retry on the
+  next observation. Never permanent, never on uncertainty.
+- **Client queue guard (optimization only):** before pushing, each plan sync bridge withholds and purges
+  from its own cache any `bdp1|` item its device's Brain Dump cache PROVES superseded. It never withholds
+  on "unknown". The server refuses regardless.
+- **Generation:** a newer claimEpoch beats every older-generation record, a "promoted" one included. Under
+  the fence an authoritative promotion and a recovery can never coexist (recovery requires a post-revoke
+  read showing absence, and nothing can land after the revoke), so an older-generation promoted record can
+  only be a stale local finalize whose item never landed.
+
+**Compatibility:** no `bdp1|` plan item exists in production (the only Brain Dump build ever deployed,
+7557562 ≡ cf43080, never reached the plan write), and old clients never create one. So the rules can be
+deployed before the client without rejecting any existing write. Old clients keep items verbatim through
+merges (the same merge code), so a promoted item they re-push stays authorized. A local `bdp1|` item WITHOUT
+an origin (only possible from undeployed candidates) is unpushable, and the guard purges it.
+
+**Deployment order (mandatory):** rules first (backward compatible: they constrain only `bdp1|` items and
+generation-2 capture fields, neither of which exists before this client), verify live, then this exact
+client.
+
+**Do not:** write a Brain Dump plan item without its origin; let any client decide absence from its local
+plan cache; release a claim without revoking it first; let the queue guard drop an item on "unknown"; or
+broaden plan-store write authority for non-Brain-Dump items.
 
 ---

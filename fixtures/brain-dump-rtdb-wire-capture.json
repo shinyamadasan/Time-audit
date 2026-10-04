@@ -299,7 +299,7 @@
           "durationMinutes": 30,
           "claimedAt": 1790816400002,
           "claimedBy": "device-wire",
-          "planWriteStarted": true
+          "revokedAt": null
         },
         "promotion": null,
         "delegatedTo": null,
@@ -317,7 +317,6 @@
           "claimedBy": "device-wire",
           "durationMinutes": 30,
           "planItemId": "bdp1|bwclms",
-          "planWriteStarted": true,
           "store": "calendar",
           "targetId": "cal1:2026-10-10",
           "type": "schedule",
@@ -342,7 +341,6 @@
           "claimedBy": "device-wire",
           "durationMinutes": 30,
           "planItemId": "bdp1|bwclms",
-          "planWriteStarted": true,
           "store": "calendar",
           "targetId": "cal1:2026-10-10",
           "type": "schedule",
@@ -385,7 +383,7 @@
           "durationMinutes": null,
           "claimedAt": 1790816400002,
           "claimedBy": "device-wire",
-          "planWriteStarted": true
+          "revokedAt": null
         },
         "promotion": null,
         "delegatedTo": null,
@@ -402,7 +400,6 @@
           "claimedAt": 1790816400002,
           "claimedBy": "device-wire",
           "planItemId": "bdp1|bwclmd",
-          "planWriteStarted": true,
           "store": "calendar",
           "targetId": "cal1:2026-10-03",
           "type": "do-today",
@@ -426,7 +423,6 @@
           "claimedAt": 1790816400002,
           "claimedBy": "device-wire",
           "planItemId": "bdp1|bwclmd",
-          "planWriteStarted": true,
           "store": "calendar",
           "targetId": "cal1:2026-10-03",
           "type": "do-today",
@@ -669,6 +665,92 @@
       ]
     },
     {
+      "name": "revokedClaim",
+      "logical": {
+        "schemaVersion": 2,
+        "id": "bwrevk",
+        "text": "capture bwrevk",
+        "createdAt": 1790816400000,
+        "updatedAt": 1790816400002,
+        "updatedBy": "device-wire",
+        "status": "triaged",
+        "important": true,
+        "urgent": false,
+        "triagedAt": 1790816400001,
+        "disposedAt": null,
+        "promotionClaim": {
+          "type": "schedule",
+          "store": "calendar",
+          "targetId": "cal1:2026-10-01",
+          "planItemId": "bdp1|bwrevk",
+          "when": "14:30",
+          "durationMinutes": 30,
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire",
+          "revokedAt": 1790816400005
+        },
+        "promotion": null,
+        "delegatedTo": null,
+        "reopenCount": 0,
+        "claimEpoch": 0,
+        "expiredClaim": null
+      },
+      "transactionSnapshot": {
+        "claimEpoch": 0,
+        "createdAt": 1790816400000,
+        "id": "bwrevk",
+        "important": true,
+        "promotionClaim": {
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire",
+          "durationMinutes": 30,
+          "planItemId": "bdp1|bwrevk",
+          "revokedAt": 1790816400005,
+          "store": "calendar",
+          "targetId": "cal1:2026-10-01",
+          "type": "schedule",
+          "when": "14:30"
+        },
+        "reopenCount": 0,
+        "schemaVersion": 2,
+        "status": "triaged",
+        "text": "capture bwrevk",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400002,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "listenerValue": {
+        "claimEpoch": 0,
+        "createdAt": 1790816400000,
+        "id": "bwrevk",
+        "important": true,
+        "promotionClaim": {
+          "claimedAt": 1790816400002,
+          "claimedBy": "device-wire",
+          "durationMinutes": 30,
+          "planItemId": "bdp1|bwrevk",
+          "revokedAt": 1790816400005,
+          "store": "calendar",
+          "targetId": "cal1:2026-10-01",
+          "type": "schedule",
+          "when": "14:30"
+        },
+        "reopenCount": 0,
+        "schemaVersion": 2,
+        "status": "triaged",
+        "text": "capture bwrevk",
+        "triagedAt": 1790816400001,
+        "updatedAt": 1790816400002,
+        "updatedBy": "device-wire",
+        "urgent": false
+      },
+      "eventOrder": [
+        "listener",
+        "transaction-resolved"
+      ]
+    },
+    {
       "name": "recoveredExpiredClaim",
       "logical": {
         "schemaVersion": 2,
@@ -696,6 +778,7 @@
           "durationMinutes": 30,
           "claimedAt": 1790816400002,
           "claimedBy": "device-wire",
+          "revokedAt": 1790816400005,
           "expiredAt": 1790816400006,
           "expiredBy": "device-wire"
         }
@@ -710,6 +793,7 @@
           "expiredAt": 1790816400006,
           "expiredBy": "device-wire",
           "planItemId": "bdp1|bwrecv",
+          "revokedAt": 1790816400005,
           "store": "calendar",
           "targetId": "cal1:2026-10-01",
           "type": "schedule",
@@ -736,6 +820,7 @@
           "expiredAt": 1790816400006,
           "expiredBy": "device-wire",
           "planItemId": "bdp1|bwrecv",
+          "revokedAt": 1790816400005,
           "store": "calendar",
           "targetId": "cal1:2026-10-01",
           "type": "schedule",

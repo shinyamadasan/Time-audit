@@ -11,21 +11,24 @@ record generation `schemaVersion: 2` with a monotonic merge plus a `firebase.rul
 `.validate`, and `promotionDestination()` (promotion.js). FIX FIRST #2: `normalizeCapture` accepts the
 Firebase-pruned wire form (absent optional nullable fields = null), and promotions carry `intentRecorded`.
 Test fakes use `brain-dump-test-support.js`'s `pruneLikeFirebase`/`wireCopy`, pinned to the real-SDK
-recording in `fixtures/brain-dump-rtdb-wire-capture.json`. FIX FIRST #3: claims carry `planWriteStarted`;
-records carry `claimEpoch` + `expiredClaim`. `settleOutstandingClaim()` (promotion.js) drives each claim:
-it finalizes, marks (`markClaimWriteRemote`) then writes, or resolves an expired claim
-(`resolveExpiredClaimRemote`, sync.js). brain-dump-ui.js runs it from maybeReconcile and from a
+recording in `fixtures/brain-dump-rtdb-wire-capture.json`. Claims carry `revokedAt`; records carry
+`claimEpoch` + `expiredClaim`. `settleOutstandingClaim()` (promotion.js) drives each claim: an open day
+writes the item and finalizes; an ended day revokes it (`revokeClaimRemote`), reads Plan Authority's
+`remoteItemPresence`, then finalizes or recovers (`resolveExpiredClaimRemote`, sync.js). ARCHITECTURE FIX
+#5, the promotion fence (DECISIONS #32): `plan-item-origin.js` (governed, pure) holds the item origin
+contract and the per-bridge queue guard; the plan stores' sync bridges guard their pushes and expose
+authoritative remote reads; `firebase.rules.json` fences `items/$i` in all three plan stores. brain-dump-ui.js runs it from maybeReconcile and from a
 bind-time sweep.
 
 New nav entry `#nav-braindump` / view `#view-braindump` (mounted between My Day and Week), rendered
 entirely by `brain-dump-ui.js` into `#bd-root` via `showView('braindump')`. Independently versioned as its
 OWN generation inside the shared import map: all five `brain-dump-*.js` modules map to
-`?v=20261003-brain-dump-production-ux-fix3`, the token the `brain-dump-sync.js` / `brain-dump-ui.js` entry
+`?v=20261003-brain-dump-production-ux-fix4`, the token the `brain-dump-sync.js` / `brain-dump-ui.js` entry
 tags carry. They are not part of the governed Personal Day / plan token, since nothing in that group
 imports them. (Until FIX FIRST the internal imports were bare, which let a fresh entry link against a stale
 cached model.) `storage.js` itself (wiring `BrainDumpSync.attach()`/`pushAllLocal()`/
 `detach()` into `startSync()`/`.info/connected`/`teardownRoomListeners()`) IS in the governed group — its
-FIX FIRST (round 1) change moved the whole group to `20261002-brain-dump-eisenhower-v1-fix1`; rounds 2-3
+FIX FIRST (round 1) change moved the whole group to `20261003-brain-dump-promotion-fence-v1`; rounds 2-3
 changed no governed file, so that token has stayed put since.
 
 Firebase: `rooms/$roomId/brainDump` has an owner-only `.write` rule, added alongside `commitments` in

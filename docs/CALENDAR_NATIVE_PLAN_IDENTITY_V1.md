@@ -51,6 +51,12 @@ Plan item time fields (timed items only)
   whenTz         IANA zone               owned BY THE ITEM, frozen when the reading is set
   durationMinutes 1..720                 a range may cross midnight inside the plan
 
+Brain Dump promotion origin (items with id `bdp1|<captureId>` only; every plan store)
+  brainDumpOrigin { v: 1, claimEpoch, type, targetId }   immutable; see DECISIONS #32
+                 The server accepts such an item only while rooms/<room>/brainDump/<captureId>
+                 authorizes exactly that origin (an unrevoked claim, or the promotion it became).
+                 All other item fields stay ordinarily editable.
+
 ActivationFact (key = fact id, in calendarPlanAuthority/)
   schemaVersion, id, activatedAtMs, timezone, activationDate, deviceId
 ```

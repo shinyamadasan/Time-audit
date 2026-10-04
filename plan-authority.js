@@ -567,6 +567,31 @@ export function createPlanAuthority(deps = {}) {
     return Array.isArray(record(target)?.items) ? record(target).items : [];
   }
 
+  /** Whether item `itemId` exists in `target`'s AUTHORITATIVE REMOTE record, not
+   *  this device's cache (which can lag, and for a legacy date may never have been
+   *  loaded): 'present' | 'absent' | 'unknown'. A tombstoned item counts as present
+   *  (it was written). Any failed, timed-out, offline or foreign read is 'unknown',
+   *  never 'absent'. Used by the Brain Dump promotion fence (brain-dump-promotion.js)
+   *  only after the claim is revoked, when no further write for it can succeed.
+   *  @returns {Promise<'present'|'absent'|'unknown'>} */
+  function remoteItemPresence(target, itemId, { timeoutMs = 8000 } = {}) {
+    let read = null;
+    try {
+      if (target.store === 'calendar') read = typeof calendar?.readRemotePlan === 'function' ? calendar.readRemotePlan(target.dateKey, { timeoutMs }) : null;
+      else if (target.store === 'operational') read = typeof live.readRemoteOperationalDay === 'function' ? live.readRemoteOperationalDay(target.id, { timeoutMs }) : null;
+      else read = typeof legacy.readRemote === 'function' ? legacy.readRemote(target.dateKey, { timeoutMs }) : null;
+    } catch { read = null; }
+    if (!read) return Promise.resolve('unknown');
+    return Promise.resolve(read)
+      .then(result => {
+        if (!result || result.ok !== true) return 'unknown';
+        const items = result.record?.items;
+        const list = Array.isArray(items) ? items : (items && typeof items === 'object' ? Object.values(items) : []);
+        return list.some(item => item && item.id === itemId) ? 'present' : 'absent';
+      })
+      .catch(() => 'unknown');
+  }
+
   function relocationIndex() {
     const token = cacheKey();
     if (relocationCache?.token === token) return relocationCache.value;
@@ -1801,7 +1826,7 @@ export function createPlanAuthority(deps = {}) {
     setItemKind, updateItem, completeCarryoverItem,
     staleUnfinished, staleMoveDestination, recoveryConflicts, resolveRecoveryConflict, moveStaleItem, rescheduleStaleItem,
     dismissStaleItem, undismissStaleItem, targetById, recoverableDays,
-    legacyTarget,
+    legacyTarget, remoteItemPresence,
     priorityMax: () => priorityMax,
   };
 }
@@ -1832,6 +1857,10 @@ if (typeof window !== 'undefined') {
       confirm: input => authorityAppContext().confirm(input),
       allPlans: () => authorityAppContext().allPlans(),
       earliestPlanDate: () => authorityAppContext().earliestPlanDate(),
+      // storage.js's authoritative remote read (Brain Dump promotion fence).
+      readRemote: (dateKey, options) => (typeof globalThis.readRemoteDatePlan === 'function'
+        ? globalThis.readRemoteDatePlan(dateKey, options)
+        : Promise.resolve({ ok: false, reason: 'offline' })),
     },
     priorityMax: (() => { try { return authorityAppContext().maxItems; } catch { return 3; } })(),
     accountTimezone: () => authorityAppContext().timezone,
