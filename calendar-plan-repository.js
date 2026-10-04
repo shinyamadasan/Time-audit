@@ -197,6 +197,25 @@ export function createCalendarPlanRepository(deps = {}) {
       return writePlan(dateKey, items, { updatedBy, now }, preparation);
     },
 
+    /** Sync-only: removes items from THIS device's cached copy of one plan, without
+     *  touching updatedAt and without writing anything remotely. Used only for Brain
+     *  Dump plan items the promotion fence has made unpushable (plan-item-origin.js):
+     *  a cache correction, never a user edit. @returns {boolean} whether anything was removed */
+    dropItemsLocal(planId, itemIds) {
+      if (!parseCalendarPlanId(planId)) throw new Error('A valid calendar plan id is required.');
+      const key = activeKeyFor(plansBaseKey);
+      if (key === null || !Array.isArray(itemIds) || !itemIds.length) return false;
+      const envelope = readPlansEnvelope(storage, key);
+      const local = envelope.plans[planId];
+      if (!local) return false;
+      const drop = new Set(itemIds);
+      const before = normalizeItems(local.items);
+      const items = before.filter(item => !drop.has(item.id));
+      if (items.length === before.length) return false;
+      writePlansEnvelopeFor(key, envelope, planId, { ...local, items });
+      return true;
+    },
+
     /** Sync-only: merges one remote record via mergeCalendarPlanRecords (per-item LWW —
      *  never a whole-record replace). Range safety was enforced by whichever device wrote
      *  each item; the merge does not re-validate, matching the other plan stores. */

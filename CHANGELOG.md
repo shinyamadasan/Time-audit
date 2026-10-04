@@ -1,5 +1,35 @@
 # ChronaSense — Changelog
 
+## Brain Dump Production UX Correction V1 ARCHITECTURE FIX #5 — candidate, NOT integrated
+
+Same branch, on top of `27aec2d`. Not pushed, merged or deployed. **Governed plan contract change** (DECISIONS #32).
+
+**F8 (crashed new-client claim claimed forever) is closed by a server-side promotion fence.**
+- Brain Dump plan items (`bdp1|<captureId>`) carry an immutable `brainDumpOrigin { v: 1, claimEpoch, type,
+  targetId }`.
+- `firebase.rules.json` accepts such an item in `calendarPlans`, `operationalPlans` or legacy `plans` only
+  while the capture authorizes exactly that origin: an unrevoked claim, or the promotion it became, at the
+  same claimEpoch. Capture records gain server-side claimEpoch monotonicity and no-un-revoke.
+- An ended claim is REVOKED (frozen server-side), then resolved from the destination's authoritative REMOTE
+  record (new Plan Authority `remoteItemPresence`, backed by `readRemotePlan` / `readRemoteDay` /
+  `readRemoteDatePlan` per store): present → promoted; absent → triage; unknown → retried, never permanent.
+- `planWriteStarted` is removed (it described a guess). Claims carry `revokedAt` instead.
+- A newer claimEpoch beats an older-generation "promoted" record.
+
+**Client queue guard:** `plan-item-origin.js` (new governed module, import-mapped) lets each plan sync
+bridge withhold and purge, from its own cache, a Brain Dump item its device's Brain Dump cache proves
+superseded. It is injectable per bridge. The server remains the authority.
+
+**Tests:**
+- `firebase-rules-emulator.test.js`: the REAL emulator and the real rules, all three stores, the full
+  authorization matrix (`npm run test:rules-emulator`; needs Java and the emulator jar).
+- `brain-dump-promotion-fence.test.js`: crash points C2–C10, late writes, recovery + new Do Today/Schedule
+  in both orders, two-device retry and cf43080 compatibility. Each device has its own real Plan Authority
+  over one rules-enforcing, wire-faithful database (`brain-dump-fence-harness.js`).
+
+**Release:** governed token `20261002-brain-dump-eisenhower-v1-fix1` → `20261003-brain-dump-promotion-fence-v1`
+(retired). Brain Dump `…-fix3` → `…-fix4`. **Rules must deploy before the client.**
+
 ## Brain Dump Production UX Correction V1 FIX FIRST #3 — candidate, NOT integrated
 
 Same branch, on top of `bf6689d`. Not pushed, merged or deployed.

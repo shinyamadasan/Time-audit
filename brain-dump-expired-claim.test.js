@@ -129,7 +129,7 @@ function makeDevice({ room, planAuthority, clock, deviceId = 'new-device', live 
   const settle = id => {
     if (settling.has(id)) return Promise.resolve(null);
     settling.add(id);
-    return settleOutstandingClaim({ repository, planAuthority, id, now: clock.now, deviceId, markClaimWrite: bridge.markClaimWriteRemote, resolveExpiredClaim: bridge.resolveExpiredClaimRemote })
+    return settleOutstandingClaim({ repository, planAuthority, id, now: clock.now, deviceId, revokeClaim: bridge.revokeClaimRemote, resolveExpiredClaim: bridge.resolveExpiredClaimRemote })
       .then(outcome => { outcomes.push({ id, outcome }); if (outcome?.record) bridge.syncCapture(id); return outcome; })
       .finally(() => settling.delete(id));
   };
@@ -255,7 +255,8 @@ for (const [label, dateKey] of [['C. current (today)', '2026-10-03'], ['D. futur
 
 test('E. uncertainty is never proof: an unreadable destination, an unresolvable target, an unprovable end, or an offline remote all leave the claim exactly as it is', async () => {
   const cases = [
-    ['destination read fails', pa => ({ ...pa, rawItems: () => { throw new Error('plan cache unavailable'); } })],
+    // Only the AUTHORITATIVE remote read can prove absence; a local cache is never asked.
+    ['authoritative destination read fails', pa => ({ ...pa, remoteItemPresence: () => Promise.resolve('unknown') })],
     ['target unresolvable', pa => ({ ...pa, targetById: () => null })],
     ['end not provable (refused even at the beginning of time)', pa => ({ ...pa, assertDirectSchedulingTarget: () => { throw new Error('unrelated failure'); }, addItem: () => { throw new Error('unrelated failure'); } })],
   ];
@@ -337,49 +338,38 @@ test('G + O. after recovery, neither a stale NEW device nor the real OLD cf43080
   assert.equal(healer.repository.read(id).promotionClaim, null);
 });
 
-test('H. recovery vs an authoritative PROMOTED result: promoted wins, in either arrival order', () => {
+test('H. a newer generation beats an older-generation "promoted" record, in either arrival order (the fence makes both being real impossible)', () => {
+  // A recovery (epoch 1) is committed only after the claim was revoked and the
+  // destination's authoritative record had no item, and the server refuses that
+  // item from then on. So an epoch-0 "promoted" record can only be a stale local
+  // finalize whose item never landed: it must not replace the newer truth.
   const stuck = normalizeCapture(wireCopy(productionStuckClaim('bexph1')));
-  const promoted = finalizePromotion({ ...stuck, promotionClaim: { ...stuck.promotionClaim, planWriteStarted: true } }, { now: NOW, updatedBy: 'b' }).record;
+  const stalePromoted = finalizePromotion(stuck, { now: NOW, updatedBy: 'b' }).record;
   const recovered = { ...stuck, schemaVersion: 2, promotionClaim: null, claimEpoch: 1, expiredClaim: { ...stuck.promotionClaim, expiredAt: NOW + 5, expiredBy: 'a' }, updatedAt: NOW + 5, updatedBy: 'a' };
-  delete recovered.expiredClaim.planWriteStarted;
-  const ab = mergeCaptureRecords(wireCopy(recovered), wireCopy(promoted));
-  const ba = mergeCaptureRecords(wireCopy(promoted), wireCopy(recovered));
-  assert.equal(ab.status, 'promoted');
+  const ab = mergeCaptureRecords(wireCopy(recovered), wireCopy(stalePromoted));
+  const ba = mergeCaptureRecords(wireCopy(stalePromoted), wireCopy(recovered));
+  assert.equal(ab.status, 'triaged');
+  assert.equal(ab.claimEpoch, 1);
   assert.deepEqual(ab, ba, 'arrival order never decides');
+  // Within one generation, promoted still beats the claim it came from.
+  const claimed = normalizeCapture(wireCopy(productionStuckClaim('bexph2')));
+  const promotedSame = finalizePromotion(claimed, { now: NOW, updatedBy: 'b' }).record;
+  assert.equal(mergeCaptureRecords(wireCopy(claimed), wireCopy(promotedSame)).status, 'promoted');
 });
 
-test('race 3. a device that MARKED the claim (it may be writing the item) blocks recovery; a recovery that committed first blocks the mark: never active triage beside a possible item', async () => {
-  // Order 1: mark first.
-  {
-    const { clock, planAuthority, room } = setup();
-    const id = 'bexpr1';
-    room.put(id, productionStuckClaim(id));
-    const writer = makeDevice({ room, planAuthority, clock, deviceId: 'writer', live: false });
-    writer.repository.mergeRemote(id, room.raw()[id]);
-    const claim = normalizeCapture(room.raw()[id]).promotionClaim;
-    assert.equal((await writer.bridge.markClaimWriteRemote(id, claim)).ok, true);
-    const healer = makeDevice({ room, planAuthority, clock, deviceId: 'healer' });
-    await flush();
-    assert.deepEqual(healer.recovered(), []);
-    const remote = normalizeCapture(room.raw()[id]);
-    assert.ok(remote.promotionClaim?.planWriteStarted, 'the marked claim stands');
-    assert.equal(remote.claimEpoch, 0);
-  }
-  // Order 2: recovery first.
-  {
-    const { clock, planAuthority, room } = setup();
-    const id = 'bexpr2';
-    room.put(id, productionStuckClaim(id));
-    const writer = makeDevice({ room, planAuthority, clock, deviceId: 'writer', live: false });
-    writer.repository.mergeRemote(id, room.raw()[id]);
-    const claim = normalizeCapture(room.raw()[id]).promotionClaim;
-    makeDevice({ room, planAuthority, clock, deviceId: 'healer' });
-    await flush();
-    const mark = await writer.bridge.markClaimWriteRemote(id, claim);
-    assert.equal(mark.ok, false, 'the claim is gone, so nothing may be written for it');
-    assert.equal(itemsFor(planAuthority, PAST, id).length, 0);
-    assert.equal(normalizeCapture(room.raw()[id]).promotionClaim, null);
-  }
+test('race 3. an item that landed BEFORE the revoke is found by the authoritative read: finalized promoted, never released (a push AFTER the revoke is refused by the server: brain-dump-promotion-fence.test.js)', async () => {
+  const { clock, planAuthority, room } = setup();
+  const id = 'bexpr1';
+  // Written while that day was still open, before anyone revoked anything.
+  clock.now = at(PAST, '10:00');
+  planAuthority.addItem({ destination: planAuthority.targetById(calId(PAST)), item: { id: brainDumpPlanItemId(id), task: 'x', when: '', done: false, doneAt: null, updatedAt: clock.now, updatedBy: 'w', kind: 'task' } });
+  clock.now = NOW;
+  room.put(id, productionStuckClaim(id));
+  const healer = makeDevice({ room, planAuthority, clock, deviceId: 'healer' });
+  await flush();
+  assert.deepEqual(healer.recovered(), []);
+  assert.equal(normalizeCapture(room.raw()[id]).status, 'promoted');
+  assert.equal(itemsFor(planAuthority, PAST, id).length, 1);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

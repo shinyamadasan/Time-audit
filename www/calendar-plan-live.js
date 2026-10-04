@@ -112,6 +112,13 @@ export function createCalendarPlanLiveWiring(deps = {}) {
     }
   }
 
+  /** One authoritative read of a calendar plan's REMOTE record (Brain Dump
+   *  promotion fence), via the sync bridge. {ok:false} without one. */
+  function readRemotePlan(dateKey, options) {
+    if (!sync || typeof sync.readRemotePlan !== 'function') return Promise.resolve({ ok: false, reason: 'offline' });
+    return sync.readRemotePlan(calendarPlanId(dateKey), options);
+  }
+
   /** Items + a preparation confirmation as ONE write, then pushed. @returns {Promise<boolean>} whether the cloud committed */
   function writePlanWithPreparation(dateKey, items, preparation) {
     requireActive();
@@ -195,7 +202,7 @@ export function createCalendarPlanLiveWiring(deps = {}) {
 
   return {
     status, activation, active, authorityState, authorityReady, activate,
-    readRecord, listAllRaw, writePlanItems, writePlanWithPreparation,
+    readRecord, listAllRaw, writePlanItems, writePlanWithPreparation, readRemotePlan,
     liveDateKeys, attachLive, refreshLive, tick, pushAllLocal, detach,
     deviceId,
     attachedPlanIds: () => [...attachedPlanIds],

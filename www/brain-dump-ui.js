@@ -430,14 +430,13 @@ function maybeReconcile(id, record, { fromSweep = false } = {}) {
   if ((record.status !== 'untriaged' && record.status !== 'triaged') || !record.promotionClaim) return;
   if (reconciling.has(id)) return;
   reconciling.add(id);
-  // settleOutstandingClaim runs its synchronous part FIRST, so this device's own
-  // (already marked) claim still finishes inside this very listener callback.
-  // Only a claim that needs an authoritative mark or an expiry resolution waits
-  // on a remote transaction.
+  // settleOutstandingClaim runs its synchronous part FIRST, so a claim whose day
+  // is still open finishes inside this very listener callback. Only an ended
+  // claim (revoke, then an authoritative destination read) waits on the remote.
   const sync = window.BrainDumpSync;
   settleOutstandingClaim({
     repository: repository(), planAuthority: window.PlanAuthority, id, now: Date.now(), deviceId: deviceId(),
-    markClaimWrite: sync ? sync.markClaimWriteRemote : undefined,
+    revokeClaim: sync ? sync.revokeClaimRemote : undefined,
     resolveExpiredClaim: sync ? sync.resolveExpiredClaimRemote : undefined,
   })
     .then(outcome => {

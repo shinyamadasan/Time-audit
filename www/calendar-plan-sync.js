@@ -31,6 +31,7 @@
 import { createCalendarPlanRepository } from './calendar-plan-repository.js';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
 import { mergeCalendarPlanRecords, parseCalendarPlanId, validateActivationFact } from './calendar-plan-model.js';
+import { partitionOutboundItems } from './plan-item-origin.js';
 
 export const CALENDAR_PLANS_REMOTE_PATH = 'calendarPlans';
 export const CALENDAR_AUTHORITY_REMOTE_PATH = 'calendarPlanAuthority';
@@ -40,6 +41,9 @@ export function createCalendarPlanSyncBridge(deps = {}) {
   const getRoomRef = typeof deps.getRoomRef === 'function' ? deps.getRoomRef : () => null;
   const getRoomId = typeof deps.getRoomId === 'function' ? deps.getRoomId : () => null;
   const onRemoteChange = typeof deps.onRemoteChange === 'function' ? deps.onRemoteChange : () => {};
+  // The Brain Dump promotion fence's queue guard (plan-item-origin.js). Injectable
+  // so one device's bridge can be bound to that device's own Brain Dump cache.
+  const partitionOutbound = typeof deps.partitionOutboundItems === 'function' ? deps.partitionOutboundItems : partitionOutboundItems;
 
   // Internal subscribers (the live wiring re-derives its listeners when a cutover is heard)
   // run BEFORE the app-level onRemoteChange, so a re-render never sees stale listeners.
@@ -94,8 +98,17 @@ export function createCalendarPlanSyncBridge(deps = {}) {
     if (!roomRef) return Promise.resolve({ committed: false, outcome: 'skipped' });
     const roomId = activeRoomId();
     if (!roomOwnsCache(roomId)) return Promise.resolve({ committed: false, outcome: 'owner-mismatch' });
-    const local = repository.read(parseCalendarPlanId(planId));
+    let local = repository.read(parseCalendarPlanId(planId));
     if (!local) return Promise.resolve({ committed: false, outcome: 'skipped' });
+    // Brain Dump promotion fence, client side (plan-item-origin.js): an item this
+    // device KNOWS is superseded is purged from its own cache, never pushed. The
+    // server rule refuses it regardless; this only avoids a denied write that would
+    // also block every other change to this plan.
+    const outbound = partitionOutbound(Array.isArray(local.items) ? local.items : Object.values(local.items || {}));
+    if (outbound.superseded.length && repository.dropItemsLocal(planId, outbound.superseded)) {
+      local = repository.read(parseCalendarPlanId(planId));
+      if (!local) return Promise.resolve({ committed: false, outcome: 'skipped' });
+    }
     const candidate = JSON.parse(JSON.stringify(local));
     let planRef;
     try {
@@ -127,6 +140,27 @@ export function createCalendarPlanSyncBridge(deps = {}) {
 
   function syncPlan(planId) {
     return pushPlan(planId).then(result => result.committed);
+  }
+
+  /** ONE authoritative read of a plan's remote record (Brain Dump promotion fence:
+   *  deciding whether a frozen promotion's item really exists). Never merged into
+   *  cache here. {ok:false} for no room, a foreign cache, a transport failure or a
+   *  timeout: never mistaken for an absent record.
+   *  @returns {Promise<{ok:true, record:object|null} | {ok:false, reason:string}>} */
+  function readRemotePlan(planId, { timeoutMs = 8000 } = {}) {
+    if (!parseCalendarPlanId(planId)) return Promise.resolve({ ok: false, reason: 'invalid-input' });
+    const roomRef = getRoomRef();
+    const roomId = activeRoomId();
+    if (!roomRef || !roomOwnsCache(roomId)) return Promise.resolve({ ok: false, reason: 'offline' });
+    let ref;
+    try { ref = roomRef.child(CALENDAR_PLANS_REMOTE_PATH).child(planId); } catch { return Promise.resolve({ ok: false, reason: 'offline' }); }
+    if (typeof ref.once !== 'function') return Promise.resolve({ ok: false, reason: 'offline' });
+    let timer;
+    const timeout = new Promise(resolve => { timer = setTimeout(() => resolve({ ok: false, reason: 'timeout' }), timeoutMs); });
+    const read = Promise.resolve(ref.once('value'))
+      .then(snapshot => (roomOwnsCache(roomId) ? { ok: true, record: snapshot.val() } : { ok: false, reason: 'owner-mismatch' }))
+      .catch(() => ({ ok: false, reason: 'transport-failure' }));
+    return Promise.race([read, timeout]).finally(() => clearTimeout(timer));
   }
 
   /** Merges one inbound snapshot for a single plan. `roomId` is the room the snapshot CAME
@@ -339,7 +373,7 @@ export function createCalendarPlanSyncBridge(deps = {}) {
   }
 
   return {
-    pushPlan, syncPlan, handleRemotePlanSnapshot, hydrateAll, attachPlan, detachPlan, detachPlans,
+    pushPlan, syncPlan, readRemotePlan, handleRemotePlanSnapshot, hydrateAll, attachPlan, detachPlan, detachPlans,
     pushActivations, handleRemoteActivationSnapshot, attachAuthority, detachAuthority, authorityHydrationState,
     detachAll, onRemote, repository,
   };

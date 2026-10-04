@@ -26,6 +26,8 @@ const html = readFileSync(path.join(HERE, 'index.html'), 'utf8');
 const OWN_SCRIPT = new Map([
   ['workout-source-contract-gate.test.js', 'test:workout-source-gate'],
   ['meal-source-contract-gate.test.js', 'test:meal-source-gate'],
+  // Boots the real Firebase RTDB emulator (needs Java + the cached emulator jar).
+  ['firebase-rules-emulator.test.js', 'test:rules-emulator'],
 ]);
 
 /** A pre-existing runtime module that is not in the lint list. Listed by name so it stays visible

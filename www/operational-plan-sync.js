@@ -44,6 +44,7 @@ import { createOperationalPlanRepository } from './operational-plan-repository.j
 import { appRoomOwner } from './personal-day-boundary-repository.js';
 import { mergeOperationalPlanRecords } from './operational-plan-model.js';
 import { parseOperationalDayId } from './personal-day-boundary-model.js';
+import { partitionOutboundItems } from './plan-item-origin.js';
 
 export const OPERATIONAL_PLANS_REMOTE_PATH = 'operationalPlans';
 
@@ -75,6 +76,9 @@ export function createOperationalPlanSyncBridge(deps = {}) {
   // The joined room's identity, independent of whether its ref is reachable right now.
   const getRoomId = typeof deps.getRoomId === 'function' ? deps.getRoomId : () => null;
   const onRemoteChange = typeof deps.onRemoteChange === 'function' ? deps.onRemoteChange : () => {};
+  // The Brain Dump promotion fence's queue guard (plan-item-origin.js). Injectable
+  // so one device's bridge can be bound to that device's own Brain Dump cache.
+  const partitionOutbound = typeof deps.partitionOutboundItems === 'function' ? deps.partitionOutboundItems : partitionOutboundItems;
 
   const listeners = new Map(); // operationalDayId -> { ref, roomId, token }, for attachDay/detachDay
   let listenerToken = 0;
@@ -106,8 +110,17 @@ export function createOperationalPlanSyncBridge(deps = {}) {
     if (!roomRef) return Promise.resolve({ committed: false, outcome: 'skipped' });
     const roomId = activeRoomId();
     if (!roomOwnsCache(roomId)) return Promise.resolve({ committed: false, outcome: 'owner-mismatch' });
-    const local = repository.read(operationalDayIdValue);
+    let local = repository.read(operationalDayIdValue);
     if (!local) return Promise.resolve({ committed: false, outcome: 'skipped' });
+    // Brain Dump promotion fence, client side (plan-item-origin.js): an item this
+    // device KNOWS is superseded is purged from its own cache, never pushed. The
+    // server rule refuses it regardless; this only avoids a denied write that would
+    // also block every other change to this day.
+    const outbound = partitionOutbound(Array.isArray(local.items) ? local.items : Object.values(local.items || {}));
+    if (outbound.superseded.length && repository.dropItemsLocal(operationalDayIdValue, outbound.superseded)) {
+      local = repository.read(operationalDayIdValue);
+      if (!local) return Promise.resolve({ committed: false, outcome: 'skipped' });
+    }
     const candidate = JSON.parse(JSON.stringify(local));
     let dayRef;
     try {
@@ -233,7 +246,28 @@ export function createOperationalPlanSyncBridge(deps = {}) {
     hydratedRoomId = null; // the next binding hydrates again
   }
 
-  return { syncDay, pushDay, attachDay, detachDay, detachAll, hydrateAll, handleRemoteDaySnapshot, repository };
+  /** ONE authoritative read of a day's remote record (Brain Dump promotion fence:
+   *  deciding whether a frozen promotion's item really exists). Never merged into
+   *  cache here. {ok:false} for no room, a foreign cache, a transport failure or a
+   *  timeout: never mistaken for an absent record.
+   *  @returns {Promise<{ok:true, record:object|null} | {ok:false, reason:string}>} */
+  function readRemoteDay(operationalDayIdValue, { timeoutMs = 8000 } = {}) {
+    if (!parseOperationalDayId(operationalDayIdValue)) return Promise.resolve({ ok: false, reason: 'invalid-input' });
+    const roomRef = getRoomRef();
+    const roomId = activeRoomId();
+    if (!roomRef || !roomOwnsCache(roomId)) return Promise.resolve({ ok: false, reason: 'offline' });
+    let ref;
+    try { ref = roomRef.child(OPERATIONAL_PLANS_REMOTE_PATH).child(toFirebaseSafeKey(operationalDayIdValue)); } catch { return Promise.resolve({ ok: false, reason: 'offline' }); }
+    if (typeof ref.once !== 'function') return Promise.resolve({ ok: false, reason: 'offline' });
+    let timer;
+    const timeout = new Promise(resolve => { timer = setTimeout(() => resolve({ ok: false, reason: 'timeout' }), timeoutMs); });
+    const read = Promise.resolve(ref.once('value'))
+      .then(snapshot => (roomOwnsCache(roomId) ? { ok: true, record: snapshot.val() } : { ok: false, reason: 'owner-mismatch' }))
+      .catch(() => ({ ok: false, reason: 'transport-failure' }));
+    return Promise.race([read, timeout]).finally(() => clearTimeout(timer));
+  }
+
+  return { syncDay, pushDay, readRemoteDay, attachDay, detachDay, detachAll, hydrateAll, handleRemoteDaySnapshot, repository };
 }
 
 // A ready-to-use singleton for the real app (index.html) only — constructing it touches

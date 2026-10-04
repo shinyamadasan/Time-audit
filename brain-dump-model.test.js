@@ -277,7 +277,7 @@ test('repository.claimPromotion + finalizePromotion round-trip and are each idem
   const claimed = repo.claimPromotion(record.id, { promotion });
   assert.ok(claimed.ok);
   assert.equal(repo.read(record.id).status, 'untriaged'); // claiming never changes status by itself
-  assert.deepEqual(repo.read(record.id).promotionClaim, { ...promotion, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1', planWriteStarted: true });
+  assert.deepEqual(repo.read(record.id).promotionClaim, { ...promotion, when: '', durationMinutes: null, claimedAt: T0, claimedBy: 'device-1', revokedAt: null });
 
   // Re-claiming the SAME target is a no-op success (a retry).
   const reclaim = repo.claimPromotion(record.id, { promotion });

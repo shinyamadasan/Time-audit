@@ -84,6 +84,8 @@ function makeFakePlanAuthority() {
     dayForScheduledDate: (dateKey) => ({ ok: true, anchor: 'noon', target: { store: 'calendar', id: `calplan:${dateKey}`, dateKey } }),
     rawItems: () => items,
     addItem({ item }) { items.push(item); return { item }; },
+    // One shared array stands in for the plan store's server copy in these tests.
+    remoteItemPresence: (_target, itemId) => Promise.resolve(items.some(i => i.id === itemId) ? 'present' : 'absent'),
     targetById(id) { const m = /^calplan:(.+)$/.exec(id); return m ? { store: 'calendar', id, dateKey: m[1] } : null; },
   };
 }
@@ -108,7 +110,7 @@ function makeProductionDevice({ room, planAuthority, deviceId = 'device-1', owne
       settling.add(id);
       const entry = { id, outcome: null };
       reconciles.push(entry);
-      settleOutstandingClaim({ repository, planAuthority, id, now: clock.now, deviceId, markClaimWrite: bridge.markClaimWriteRemote, resolveExpiredClaim: bridge.resolveExpiredClaimRemote })
+      settleOutstandingClaim({ repository, planAuthority, id, now: clock.now, deviceId, revokeClaim: bridge.revokeClaimRemote, resolveExpiredClaim: bridge.resolveExpiredClaimRemote })
         .then(outcome => { entry.outcome = outcome; if (outcome?.record) bridge.syncCapture(id); })
         .finally(() => settling.delete(id));
     },
@@ -698,19 +700,19 @@ test('F5 + FIX FIRST #3: an already-stuck cf43080 claim on a day that has ENDED 
   assert.equal(device.repository.archive(id).ok, true, 'the owner can decide again');
 });
 
-test('FIX FIRST #3 residual: a claim a NEW client marked (its item may have been written) is never released on an ended day', async () => {
+test('F8 regression: a claim a NEW client minted (generation 2), crashed before writing, on a day that has ENDED, returns to triage instead of staying claimed forever', async () => {
   const room = makeRoom();
   const pa = withEndedGate(makeFakePlanAuthority(), ['calplan:2026-09-01']);
-  const id = 'bmarkedpast';
-  const marked = stuckClaimRecord(id, { type: 'do-today', targetId: 'calplan:2026-09-01', when: '' });
-  marked.promotionClaim.planWriteStarted = true;
-  marked.schemaVersion = 2;
-  room.put(id, marked);
+  const id = 'bnewcrash1';
+  const minted = stuckClaimRecord(id, { type: 'do-today', targetId: 'calplan:2026-09-01', when: '' });
+  minted.schemaVersion = 2; // exactly what claimPromotion now writes
+  room.put(id, minted);
   const device = makeProductionDevice({ room, planAuthority: pa });
   await flush();
   const local = device.repository.read(id);
-  assert.ok(local.promotionClaim, 'the claim stands: absence cannot be proven');
-  assert.equal(device.reconciles.find(r => r.id === id)?.outcome?.reason, 'expired-write-may-have-started');
+  assert.equal(local.promotionClaim, null, 'no permanent claim');
+  assert.equal(local.status, 'triaged');
+  assert.equal(local.claimEpoch, 1);
   assert.equal(pa.items.length, 0);
 });
 

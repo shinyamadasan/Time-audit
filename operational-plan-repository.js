@@ -198,6 +198,25 @@ export function createOperationalPlanRepository(deps = {}) {
         writeEnvelope(storage, key, { schemaVersion: OPERATIONAL_PLAN_SCHEMA_VERSION, plans: { ...envelope.plans, [operationalDayIdValue]: merged } });
       }
       return { changed, record: merged };
+    },
+
+    /** Sync-only: removes items from THIS device's cached copy of one day, without
+     *  touching updatedAt and without writing anything remotely. Used only for Brain
+     *  Dump plan items the promotion fence has made unpushable (plan-item-origin.js):
+     *  a cache correction, never a user edit. @returns {boolean} whether anything was removed */
+    dropItemsLocal(operationalDayIdValue, itemIds) {
+      if (!parseOperationalDayId(operationalDayIdValue)) throw new Error('A valid operationalDayId is required.');
+      const key = activeKey();
+      if (key === null || !Array.isArray(itemIds) || !itemIds.length) return false;
+      const envelope = readEnvelope(storage, key);
+      const local = envelope.plans[operationalDayIdValue];
+      if (!local) return false;
+      const drop = new Set(itemIds);
+      const before = normalizeItems(local.items);
+      const items = before.filter(item => !drop.has(item.id));
+      if (items.length === before.length) return false;
+      writeEnvelope(storage, key, { schemaVersion: OPERATIONAL_PLAN_SCHEMA_VERSION, plans: { ...envelope.plans, [operationalDayIdValue]: { ...local, items } } });
+      return true;
     }
   };
 }
