@@ -364,3 +364,74 @@ test('an old stuck claim for a day that has ended comes back to triage on load, 
   await expect.poll(async () => (await storage(page))[id].status).toBe('promoted');
   expect((await planItemsNamed(page, 'Renew the car registration')).length).toBe(1);
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// Location-Bound Brain Dump Promotion Fence V1 — a promoted task keeps its plan
+// ═══════════════════════════════════════════════════════════════════════
+
+const planIdOf = (page, text) => page.evaluate(async name => {
+  const authority = window.PlanAuthority;
+  const target = authority.current();
+  const item = authority.items(target).find(row => row.task === name);
+  return { dayId: target.id, itemId: item.id };
+}, text);
+
+test('a promoted Brain Dump task is FENCED: it carries its origin, and the editor pins its date and says so in the repo copy style', async ({ page }) => {
+  await openApp(page, { now: at('2026-10-01', '09:00') });
+  const id = await captureOne(page, 'Pinned to today');
+  await triage(page, id, true, true);
+  await page.locator(`button[onclick="window.BrainDumpUI.doToday('${id}')"]`).click();
+  await expect.poll(async () => (await storage(page))[id].status).toBe('promoted');
+  const [item] = await planItemsNamed(page, 'Pinned to today');
+  expect(item.brainDumpOrigin).toMatchObject({ v: 2, claimEpoch: 0, type: 'do-today' });
+  expect(['legacy', 'operational', 'calendar']).toContain(item.brainDumpOrigin.store);
+  expect(item.brainDumpOrigin.targetKey).toBeTruthy();
+  expect((await storage(page))[id].promotion.targetKey, 'the promotion records the physical location').toBe(item.brainDumpOrigin.targetKey);
+
+  const { dayId, itemId } = await planIdOf(page, 'Pinned to today');
+  await page.evaluate(() => showView('today'));
+  await page.evaluate(([day, itemKey]) => window.PlanningContinuityUI.editTask(day, itemKey), [dayId, itemId]);
+  const form = page.locator('#pc-task-form');
+  await expect(form).toBeVisible();
+  await expect(form.locator('input[name="date"]')).toHaveAttribute('readonly', '');
+  await expect(form.locator('[data-pc-action="set-date"]')).toHaveCount(0);
+  await expect(form).toContainText("Brain Dump tasks can't be moved to another day yet.");
+});
+
+test('editing a promoted task in place works (title, time, duration) and a forced move to another day is refused BEFORE anything is written', async ({ page }) => {
+  await openApp(page, { now: at('2026-10-01', '09:00') });
+  const id = await captureOne(page, 'Stay put');
+  await triage(page, id, true, true);
+  await page.locator(`button[onclick="window.BrainDumpUI.doToday('${id}')"]`).click();
+  await expect.poll(async () => (await storage(page))[id].status).toBe('promoted');
+  const { dayId, itemId } = await planIdOf(page, 'Stay put');
+  await page.evaluate(() => showView('today'));
+  const open = () => page.evaluate(([day, itemKey]) => window.PlanningContinuityUI.editTask(day, itemKey), [dayId, itemId]);
+  await open();
+  const form = page.locator('#pc-task-form');
+  await form.locator('input[name="title"]').fill('Stay put (edited)');
+  await form.locator('input[name="time"]').fill('15:00');
+  await form.locator('input[name="endTime"]').fill('16:00');
+  await form.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(form).toBeHidden();
+  const [saved] = await planItemsNamed(page, 'Stay put (edited)');
+  expect(saved).toMatchObject({ id: itemId, when: '15:00', durationMinutes: 60 });
+  expect(saved.brainDumpOrigin.targetKey, 'the origin never changes').toBeTruthy();
+
+  // Force a move the editor itself no longer offers: a synthetic "Tomorrow" button inside the form.
+  await open();
+  const before = JSON.stringify(await plans(page));
+  await page.evaluate(() => {
+    const tomorrow = window.PlanAuthority.upcoming();
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.pcAction = 'set-date';
+    button.dataset.day = tomorrow.id;
+    button.dataset.date = tomorrow.dateKey || '2026-10-02';
+    document.querySelector('#pc-task-form').appendChild(button);
+    button.click();
+  });
+  await page.locator('#pc-task-form').getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#pc-task-form .pc-error')).toHaveText("Brain Dump tasks can't be moved to another day yet.");
+  expect(JSON.stringify(await plans(page)), 'refused before a source tombstone or destination copy could exist').toBe(before);
+});

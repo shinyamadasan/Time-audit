@@ -576,6 +576,10 @@ null keys; or retarget, archive or delete an expired capture on the owner's beha
 
 ## 32. Brain Dump promotion fence: a Brain Dump plan item exists only while its capture authorizes it (server-enforced)
 
+> **Superseded in representation by #33.** The protocol below (revoke, authoritative read, promoted-or-recovered, never on uncertainty) stands.
+> The server rule over `items/$i` (an unaddressable, re-sorted array) and the `{ v: 1, targetId }` origin do not: a fenced item now lives at a
+> stable keyed child and carries `{ v: 2, store, targetKey }`.
+
 **Problem:** plan writes are local-first (every store writes localStorage, then syncs, re-pushing on
 reconnect), so a device that wrote a promotion's item may push it arbitrarily late. Nothing tied a plan
 item to the Brain Dump claim, so a crashed claim on an ended day could neither be safely released nor ever
@@ -620,5 +624,101 @@ client.
 **Do not:** write a Brain Dump plan item without its origin; let any client decide absence from its local
 plan cache; release a claim without revoking it first; let the queue guard drop an item on "unknown"; or
 broaden plan-store write authority for non-Brain-Dump items.
+
+---
+
+## 33. Location-bound Brain Dump promotion fence: a fenced plan item has ONE physical location and ONE server-addressable key
+
+**Status:** supersedes the *representation* of #32 (the array-indexed server rule). #32's protocol (revoke, authoritative read,
+promoted-or-recovered, never on uncertainty) is unchanged and now actually enforceable.
+
+**Problem (strict architecture review of #32):** plan records serialize `items` as an id-sorted array, so Firebase's numeric child
+positions move whenever any item is inserted. A rule cannot name "this exact item" there, so the #32 rules allowed authorized-item
+replay into another target or store, origin/capture swapping, `bdp1|` -> ordinary-id conversion, origin stripping, revoked-claim
+replacement, and parent overwrites. Adding predicates to an unaddressable array could not fix that.
+
+**Decision: a fenced item lives at a stable keyed child OUTSIDE the plan record.**
+
+| store | fenced item path (`rooms/<room>/…`) |
+|---|---|
+| calendar | `calendarPlanFences/<planId>/bdp1|<captureId>` |
+| operational | `operationalPlanFences/<base64url(operationalDayId)>/bdp1|<captureId>` |
+| legacy | `planFences/<dateKey>/bdp1|<captureId>` |
+
+- The path IS the authorization identity (store, target, item id). The child holds the whole plan item. There is no duplicate
+  `items` entry, no second PlanAuthority store, no global registry: one fenced item has exactly one authoritative remote copy.
+- The local app is unchanged: PlanAuthority still sees ONE array per plan. The sync boundary (`plan-fence-sync.js`, the calendar and
+  operational bridges, and `storage.js` for the legacy store) splits fenced items out on push (one create-or-merge transaction each)
+  and folds them back in on listener/hydrate (`mergeRemoteFenced`, `applyRemoteFencedLegacyItems`).
+- `brainDumpOrigin` is `{ v: 2, claimEpoch, type, store, targetKey }`; the capture id is the item id's suffix. A claim and a
+  promotion carry `targetKey` (`physicalTargetKey(target.store, target.id)`: the plan's own Firebase child key; for operational the
+  base64url the sync bridge already uses). Ordinary fields (title, when, whenDayOffset, duration, done, kind, ...) never decide authorization.
+
+**Invariants (the rules enforce all of these; `firebase-rules-emulator.test.js` proves each on the real emulator, all three stores):**
+1. *Location binding.* A fenced item is authorized only at the path its capture's claim/promotion names (`store`, `targetKey`),
+   and its stored origin must equal that path. A calendar Monday authorization never authorizes Tuesday, legacy, operational, or another room.
+2. *Id <-> capture binding.* The key must match `bdp1|<captureId>` (suffix grammar), the capture must exist with `id == its key`,
+   the item body's `id` equals the key, and the claim/promotion `planItemId` equals the key.
+3. *Immutable origin.* On update the rules judge the item by its STORED origin and require the new origin to be identical
+   (v, claimEpoch, type, store, targetKey). No stripping, rewriting, fenced -> ordinary, or ordinary -> fenced except by a valid CREATE.
+4. *Capture state machine* (`brainDump/$captureId`, no `.write` grant on the collection, so no parent overwrite and no capture deletion):
+   live claim -> the SAME claim + an immutable `revokedAt`; revoked claim -> promoted (same generation, and the exact destination
+   must exist) OR recovered at `claimEpoch + 1` (the exact destination must be ABSENT); a claim can only be removed by those two
+   transitions; epoch is an integer that never decreases, is never omitted and moves only through recovery; a promoted capture is terminal.
+5. *Generation = (captureId, claimEpoch).* Epoch >= 0 integer, one claim per epoch (replacement denied), recovery is exactly +1, a
+   stale generation can never regain authorization (no nonce was needed).
+6. *Monotonic tombstone.* `deleted: true` can never be cleared, the child can never be removed, a stale create cannot resurrect it,
+   and a tombstone counts as present. The capture stays promoted after its item is deleted.
+7. *Revoke freeze.* A revoked claim authorizes no create AND no edit, so the exact-child read that follows a revoke is final.
+8. *Exact remote presence.* `fencedPresence()`: present = the child exists and is exactly this generation/store/target/type/id;
+   absent = the child does not exist; anything else is `unknown`. Never inferred from an array, never from a local cache.
+
+**Two-connection ordering (preserved as a permanent test):** `brain-dump-fence-sdk.test.js` uses two real Firebase JS SDK 10.12.2
+connections against RTDB emulator 4.11.2. Both serializations are forced (write-first: the read sees the destination; revoke-first:
+the late stale writer is denied and the read is absent), then 70 real races (one-shot reads and a live listener on the child) assert
+that an acknowledged revoke followed by an absent read is never followed by the old item appearing.
+
+**Old-client compatibility (the design gate).** A cf43080 client does whole-RECORD transactions built from the fields it knows. Any
+fenced data inside the record would be erased or reordered by that write, so fenced items are outside it. Verified with the REAL
+cf43080 modules (`fixtures/cf43080-client`, byte-identical, hash-pinned): after a new client created a fenced item, the old client
+loaded the plan, edited and toggled ordinary items, re-pushed everything and wrote its whole-plan transaction in all three stores; the
+fenced child survived byte-for-byte and the old client's operations all succeeded (its record never contained the fenced item).
+Impact: a stale cf43080 client does not display Brain Dump items created by a new client until it refreshes (it neither reads the
+fence collections nor can it read a generation-2 capture). That is a visibility gap, not corruption, and not a blocked edit.
+
+**Pre-fence (legacy) Brain Dump items.** A claim or promotion WITHOUT `targetKey` was made before the fence. Policy: grandfathered,
+never migrated, never fabricated. Its `bdp1|` item stays an ordinary array item with no origin; the rules authorize it by capture
+state alone (an unrevoked pre-fence claim, or a pre-fence promotion, naming that item), and refuse any `bdp1|` array item whose
+capture is fenced or unknown, any array item carrying an origin, and any malformed `bdp1|` id. It is deliberately NOT
+location-bound (an ordinary edit may legitimately have moved it) and its tombstone is not server-monotonic. Pre-fence stuck claims are
+resolved by the unchanged protocol (revoke; the destination's array is read only after the revoke froze it). No production
+inventory is needed for safety; note the only Brain Dump build ever deployed (cf43080) cannot read its own null-pruned wire records
+back, so it never reaches the plan write and such items are not expected to exist at all.
+
+**V1 refusals.** (a) Cross-target / cross-store moves of a fenced item are refused at three levels: Plan Authority `updateItem`
+(before any write), the `saveItems` funnel (a fenced item may only be written to the plan its origin names), the task editor (date
+shown, not offered, with "Brain Dump tasks can't be moved to another day yet.") and the server (no destination, no
+`relocationRevision`/`movedToDayId`). Relocation will need an explicit protocol. (b) Cross-midnight is NOT relocation: a later End or
+`whenDayOffset` keeps the same `targetKey`; the plan's date is the factual owner.
+
+**Client queue guard** (`partitionOutboundItems`) is a convergence optimisation only: it withholds and purges, from the writer's own
+cache, an item it can PROVE superseded (newer epoch; or an un-fenced item whose capture is fenced or recovered). Purging is cache
+cleanup, never a tombstone or deletion. Disabling it never permits corruption (`fence-source-mutation.test.js`).
+
+**Rules are built, not hand-edited.** `scripts/firebase-rules-builder.mjs` expands named predicates into `firebase.rules.json`
+(`npm run check:firebase-rules`, part of `npm test`). `firebase-rules-mutation.test.js` rebuilds the rules with each predicate
+removed and attacks the real emulator: all 15 named-predicate mutants (and a legacy-array authorization mutant) are accepted by the server while the real rules refuse the same attack.
+
+**Deployment order (mandatory):** rules first (backward compatible with cf43080: ordinary plan operations, pre-fence Brain Dump
+records and claims, archive/delegate, account sync all verified), verify live, then this exact client. No client-first release.
+
+**Known limits (stated, not hidden):** the operational `targetKey` is base64url, so the rules compare it to the claim's `targetKey`
+(path == claim == origin) but cannot decode it against the plaintext `targetId`; a malicious room owner can forge anything inside
+their own room, so the fence guards stale and buggy writers, not the owner's own credentials. A capture transaction's first run needs
+a primed cache (the whole-subtree listener `attach()` provides it; otherwise it aborts and the next observer retries).
+
+**Do not:** write a fenced item into a plan record's `items`; scan an array (or a cache) to decide absence for a fenced claim;
+store a second copy of a fenced item; edit `firebase.rules.json` by hand; add a grant above `$itemId` / `$captureId`; let a client
+relocate a fenced item; give a pre-fence item a fabricated origin; or run a tombstone through last-writer-wins.
 
 ---

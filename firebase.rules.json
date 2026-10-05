@@ -5,52 +5,204 @@
     "rooms": {
       "$roomId": {
         ".read": "auth != null && $roomId === ('uid_' + auth.uid)",
-        "timer": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "entries": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "intention": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "devices": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "settings": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "templates": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "templatesSavedAt": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "breakState": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "awayState": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "reviews": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "weeklyReviews": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "focusRedemptions": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "coarseLifeEvidence": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "dayBoundaryRevisions": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "commitments": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "timer": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "entries": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "intention": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "devices": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "settings": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "templates": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "templatesSavedAt": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "breakState": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "awayState": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "reviews": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "weeklyReviews": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "focusRedemptions": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "coarseLifeEvidence": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "dayBoundaryRevisions": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "commitments": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
         "brainDump": {
-          ".write": "auth != null && $roomId === ('uid_' + auth.uid)",
           "$captureId": {
-            ".validate": "(!data.child('schemaVersion').isNumber() || (newData.child('schemaVersion').isNumber() && newData.child('schemaVersion').val() >= data.child('schemaVersion').val())) && (newData.child('claimEpoch').isNumber() ? newData.child('claimEpoch').val() : 0) >= (data.child('claimEpoch').isNumber() ? data.child('claimEpoch').val() : 0) && (!data.child('promotionClaim').child('revokedAt').exists() || !newData.child('promotionClaim').exists() || newData.child('promotionClaim').child('claimedAt').val() !== data.child('promotionClaim').child('claimedAt').val() || newData.child('promotionClaim').child('revokedAt').exists())"
+            ".write": "auth != null && $roomId === ('uid_' + auth.uid) && newData.exists() && newData.child('id').val() === $captureId && ((!data.exists() && (!newData.child('claimEpoch').exists() || (newData.child('claimEpoch').isNumber() && newData.child('claimEpoch').val() >= 0 && newData.child('claimEpoch').val() % 1 === 0)) && (!newData.child('promotionClaim').exists() || (newData.child('promotionClaim').child('planItemId').val() === ('bdp1|' + $captureId) && (newData.child('promotionClaim').child('store').val() === 'calendar' || newData.child('promotionClaim').child('store').val() === 'operational' || newData.child('promotionClaim').child('store').val() === 'legacy') && (newData.child('promotionClaim').child('type').val() === 'do-today' || newData.child('promotionClaim').child('type').val() === 'schedule') && (!newData.child('promotionClaim').child('targetKey').exists() || newData.child('promotionClaim').child('targetKey').isString()) && !newData.child('promotionClaim').child('revokedAt').exists())) && (!newData.child('promotionClaim').exists() || (newData.child('status').val() === 'untriaged' || newData.child('status').val() === 'triaged'))) || (data.exists() && newData.child('createdAt').val() === data.child('createdAt').val() && (!data.child('schemaVersion').isNumber() || (newData.child('schemaVersion').isNumber() && newData.child('schemaVersion').val() >= data.child('schemaVersion').val())) && ((!data.child('promotionClaim').exists() && (!newData.child('promotionClaim').exists() || ((data.child('status').val() === 'untriaged' || data.child('status').val() === 'triaged') && (newData.child('status').val() === 'untriaged' || newData.child('status').val() === 'triaged') && newData.child('promotionClaim').child('planItemId').val() === ('bdp1|' + $captureId) && (newData.child('promotionClaim').child('store').val() === 'calendar' || newData.child('promotionClaim').child('store').val() === 'operational' || newData.child('promotionClaim').child('store').val() === 'legacy') && (newData.child('promotionClaim').child('type').val() === 'do-today' || newData.child('promotionClaim').child('type').val() === 'schedule') && (!newData.child('promotionClaim').child('targetKey').exists() || newData.child('promotionClaim').child('targetKey').isString()) && !newData.child('promotionClaim').child('revokedAt').exists() && (newData.child('claimEpoch').isNumber() ? newData.child('claimEpoch').val() : 0) === (data.child('claimEpoch').isNumber() ? data.child('claimEpoch').val() : 0))) && (newData.child('claimEpoch').isNumber() ? newData.child('claimEpoch').val() : 0) === (data.child('claimEpoch').isNumber() ? data.child('claimEpoch').val() : 0)) || (data.child('promotionClaim').exists() && ((newData.child('promotionClaim').exists() && newData.child('promotionClaim').child('type').val() === data.child('promotionClaim').child('type').val() && newData.child('promotionClaim').child('store').val() === data.child('promotionClaim').child('store').val() && newData.child('promotionClaim').child('targetId').val() === data.child('promotionClaim').child('targetId').val() && newData.child('promotionClaim').child('targetKey').val() === data.child('promotionClaim').child('targetKey').val() && newData.child('promotionClaim').child('planItemId').val() === data.child('promotionClaim').child('planItemId').val() && newData.child('promotionClaim').child('when').val() === data.child('promotionClaim').child('when').val() && newData.child('promotionClaim').child('durationMinutes').val() === data.child('promotionClaim').child('durationMinutes').val() && newData.child('promotionClaim').child('claimedAt').val() === data.child('promotionClaim').child('claimedAt').val() && newData.child('promotionClaim').child('claimedBy').val() === data.child('promotionClaim').child('claimedBy').val() && (!data.child('promotionClaim').child('revokedAt').exists() || newData.child('promotionClaim').child('revokedAt').val() === data.child('promotionClaim').child('revokedAt').val()) && (newData.child('claimEpoch').isNumber() ? newData.child('claimEpoch').val() : 0) === (data.child('claimEpoch').isNumber() ? data.child('claimEpoch').val() : 0) && (newData.child('status').val() === 'untriaged' || newData.child('status').val() === 'triaged')) || (!newData.child('promotionClaim').exists() && ((newData.child('status').val() === 'promoted' && (newData.child('claimEpoch').isNumber() ? newData.child('claimEpoch').val() : 0) === (data.child('claimEpoch').isNumber() ? data.child('claimEpoch').val() : 0) && newData.child('promotion').child('type').val() === data.child('promotionClaim').child('type').val() && newData.child('promotion').child('store').val() === data.child('promotionClaim').child('store').val() && newData.child('promotion').child('targetId').val() === data.child('promotionClaim').child('targetId').val() && newData.child('promotion').child('targetKey').val() === data.child('promotionClaim').child('targetKey').val() && newData.child('promotion').child('planItemId').val() === data.child('promotionClaim').child('planItemId').val() && (!data.child('promotionClaim').child('targetKey').exists() || !data.child('promotionClaim').child('revokedAt').exists() || (root.child('rooms').child($roomId).child((data.child('promotionClaim').child('store').val() === 'calendar' ? 'calendarPlanFences' : (data.child('promotionClaim').child('store').val() === 'operational' ? 'operationalPlanFences' : 'planFences'))).child(data.child('promotionClaim').child('targetKey').val()).child(data.child('promotionClaim').child('planItemId').val()).exists() && root.child('rooms').child($roomId).child((data.child('promotionClaim').child('store').val() === 'calendar' ? 'calendarPlanFences' : (data.child('promotionClaim').child('store').val() === 'operational' ? 'operationalPlanFences' : 'planFences'))).child(data.child('promotionClaim').child('targetKey').val()).child(data.child('promotionClaim').child('planItemId').val()).child('brainDumpOrigin').child('claimEpoch').val() === (data.child('claimEpoch').isNumber() ? data.child('claimEpoch').val() : 0)))) || (data.child('promotionClaim').child('revokedAt').exists() && (newData.child('claimEpoch').isNumber() ? newData.child('claimEpoch').val() : 0) === (data.child('claimEpoch').isNumber() ? data.child('claimEpoch').val() : 0) + 1 && (newData.child('status').val() === 'untriaged' || newData.child('status').val() === 'triaged') && (!data.child('promotionClaim').child('targetKey').exists() || !root.child('rooms').child($roomId).child((data.child('promotionClaim').child('store').val() === 'calendar' ? 'calendarPlanFences' : (data.child('promotionClaim').child('store').val() === 'operational' ? 'operationalPlanFences' : 'planFences'))).child(data.child('promotionClaim').child('targetKey').val()).child(data.child('promotionClaim').child('planItemId').val()).exists()))))))) && (data.child('status').val() !== 'promoted' || (newData.child('status').val() === 'promoted' && !newData.child('promotionClaim').exists() && (newData.child('claimEpoch').isNumber() ? newData.child('claimEpoch').val() : 0) === (data.child('claimEpoch').isNumber() ? data.child('claimEpoch').val() : 0) && newData.child('promotion').child('type').val() === data.child('promotion').child('type').val() && newData.child('promotion').child('store').val() === data.child('promotion').child('store').val() && newData.child('promotion').child('targetId').val() === data.child('promotion').child('targetId').val() && newData.child('promotion').child('targetKey').val() === data.child('promotion').child('targetKey').val() && newData.child('promotion').child('planItemId').val() === data.child('promotion').child('planItemId').val())) && (newData.child('status').val() !== 'promoted' || data.child('status').val() === 'promoted' || data.child('promotionClaim').exists())))"
           }
         },
-        "planByDeadlineRevisions": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
-        "intentionalOffDays": { ".write": "auth != null && $roomId === ('uid_' + auth.uid)" },
+        "planByDeadlineRevisions": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
+        "intentionalOffDays": {
+          ".write": "auth != null && $roomId === ('uid_' + auth.uid)"
+        },
         "calendarPlans": {
           ".write": "auth != null && $roomId === ('uid_' + auth.uid)",
-          "$planId": { "items": { "$i": { ".validate": "!newData.child('id').isString() || !newData.child('id').val().beginsWith('bdp1|') || (newData.child('brainDumpOrigin').child('v').val() === 1 && newData.child('brainDumpOrigin').child('claimEpoch').isNumber() && newData.child('brainDumpOrigin').child('claimEpoch').val() === (root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('claimEpoch').isNumber() ? root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('claimEpoch').val() : 0) && newData.child('brainDumpOrigin').child('type').isString() && newData.child('brainDumpOrigin').child('targetId').isString() && ((root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('targetId').val() === newData.child('brainDumpOrigin').child('targetId').val() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('type').val() === newData.child('brainDumpOrigin').child('type').val()) || (root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('status').val() === 'promoted' && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('targetId').val() === newData.child('brainDumpOrigin').child('targetId').val() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('type').val() === newData.child('brainDumpOrigin').child('type').val())))" } } }
+          "$planId": {
+            "items": {
+              "$i": {
+                ".validate": "!newData.child('brainDumpOrigin').exists() && (!newData.child('id').isString() || !newData.child('id').val().beginsWith('bdp1|') || (newData.child('id').val().matches(/^bdp1\\|[A-Za-z0-9_-]{3,64}$/) && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('id').val() === newData.child('id').val().replace('bdp1|', '') && ((root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('targetKey').exists() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('planItemId').val() === newData.child('id').val()) || (root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('status').val() === 'promoted' && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('targetKey').exists() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('planItemId').val() === newData.child('id').val()))))"
+              }
+            }
+          }
         },
         "plans": {
           ".write": "auth != null && $roomId === ('uid_' + auth.uid) && !root.child('rooms').child($roomId).child('calendarPlanAuthority').exists()",
-          "$dateKey": { "items": { "$i": { ".validate": "!newData.child('id').isString() || !newData.child('id').val().beginsWith('bdp1|') || (newData.child('brainDumpOrigin').child('v').val() === 1 && newData.child('brainDumpOrigin').child('claimEpoch').isNumber() && newData.child('brainDumpOrigin').child('claimEpoch').val() === (root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('claimEpoch').isNumber() ? root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('claimEpoch').val() : 0) && newData.child('brainDumpOrigin').child('type').isString() && newData.child('brainDumpOrigin').child('targetId').isString() && ((root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('targetId').val() === newData.child('brainDumpOrigin').child('targetId').val() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('type').val() === newData.child('brainDumpOrigin').child('type').val()) || (root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('status').val() === 'promoted' && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('targetId').val() === newData.child('brainDumpOrigin').child('targetId').val() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('type').val() === newData.child('brainDumpOrigin').child('type').val())))" } } }
+          "$dateKey": {
+            "items": {
+              "$i": {
+                ".validate": "!newData.child('brainDumpOrigin').exists() && (!newData.child('id').isString() || !newData.child('id').val().beginsWith('bdp1|') || (newData.child('id').val().matches(/^bdp1\\|[A-Za-z0-9_-]{3,64}$/) && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('id').val() === newData.child('id').val().replace('bdp1|', '') && ((root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('targetKey').exists() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('planItemId').val() === newData.child('id').val()) || (root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('status').val() === 'promoted' && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('targetKey').exists() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('planItemId').val() === newData.child('id').val()))))"
+              }
+            }
+          }
         },
         "operationalPlans": {
           ".write": "auth != null && $roomId === ('uid_' + auth.uid) && !root.child('rooms').child($roomId).child('calendarPlanAuthority').exists()",
-          "$dayKey": { "items": { "$i": { ".validate": "!newData.child('id').isString() || !newData.child('id').val().beginsWith('bdp1|') || (newData.child('brainDumpOrigin').child('v').val() === 1 && newData.child('brainDumpOrigin').child('claimEpoch').isNumber() && newData.child('brainDumpOrigin').child('claimEpoch').val() === (root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('claimEpoch').isNumber() ? root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('claimEpoch').val() : 0) && newData.child('brainDumpOrigin').child('type').isString() && newData.child('brainDumpOrigin').child('targetId').isString() && ((root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('targetId').val() === newData.child('brainDumpOrigin').child('targetId').val() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('type').val() === newData.child('brainDumpOrigin').child('type').val()) || (root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('status').val() === 'promoted' && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('targetId').val() === newData.child('brainDumpOrigin').child('targetId').val() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('type').val() === newData.child('brainDumpOrigin').child('type').val())))" } } }
+          "$dayKey": {
+            "items": {
+              "$i": {
+                ".validate": "!newData.child('brainDumpOrigin').exists() && (!newData.child('id').isString() || !newData.child('id').val().beginsWith('bdp1|') || (newData.child('id').val().matches(/^bdp1\\|[A-Za-z0-9_-]{3,64}$/) && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('id').val() === newData.child('id').val().replace('bdp1|', '') && ((root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('targetKey').exists() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotionClaim').child('planItemId').val() === newData.child('id').val()) || (root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('status').val() === 'promoted' && !root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('targetKey').exists() && root.child('rooms').child($roomId).child('brainDump').child(newData.child('id').val().replace('bdp1|', '')).child('promotion').child('planItemId').val() === newData.child('id').val()))))"
+              }
+            }
+          }
+        },
+        "calendarPlanFences": {
+          "$targetKey": {
+            "$itemId": {
+              ".write": "auth != null && $roomId === ('uid_' + auth.uid) && newData.exists() && $targetKey.matches(/^cal1:[0-9]{4}-[0-9]{2}-[0-9]{2}$/) && $itemId.matches(/^bdp1\\|[A-Za-z0-9_-]{3,64}$/) && newData.child('id').val() === $itemId && ((!data.exists() && newData.child('brainDumpOrigin').child('v').val() === 2 && newData.child('brainDumpOrigin').child('type').isString() && newData.child('brainDumpOrigin').child('store').val() === 'calendar' && newData.child('brainDumpOrigin').child('targetKey').val() === $targetKey && newData.child('brainDumpOrigin').child('claimEpoch').isNumber() && newData.child('brainDumpOrigin').child('claimEpoch').val() === (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').isNumber() ? root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').val() : 0) && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('id').val() === $itemId.replace('bdp1|', '') && ((root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('store').val() === 'calendar' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('type').val() === newData.child('brainDumpOrigin').child('type').val()) || (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('status').val() === 'promoted' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('store').val() === 'calendar' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('type').val() === newData.child('brainDumpOrigin').child('type').val()))) || (data.exists() && newData.child('brainDumpOrigin').child('v').val() === data.child('brainDumpOrigin').child('v').val() && newData.child('brainDumpOrigin').child('claimEpoch').val() === data.child('brainDumpOrigin').child('claimEpoch').val() && newData.child('brainDumpOrigin').child('type').val() === data.child('brainDumpOrigin').child('type').val() && newData.child('brainDumpOrigin').child('store').val() === data.child('brainDumpOrigin').child('store').val() && newData.child('brainDumpOrigin').child('targetKey').val() === data.child('brainDumpOrigin').child('targetKey').val() && (data.child('deleted').val() !== true || newData.child('deleted').val() === true) && data.child('brainDumpOrigin').child('v').val() === 2 && data.child('brainDumpOrigin').child('type').isString() && data.child('brainDumpOrigin').child('store').val() === 'calendar' && data.child('brainDumpOrigin').child('targetKey').val() === $targetKey && data.child('brainDumpOrigin').child('claimEpoch').isNumber() && data.child('brainDumpOrigin').child('claimEpoch').val() === (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').isNumber() ? root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').val() : 0) && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('id').val() === $itemId.replace('bdp1|', '') && ((root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('store').val() === 'calendar' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('type').val() === data.child('brainDumpOrigin').child('type').val()) || (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('status').val() === 'promoted' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('store').val() === 'calendar' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('type').val() === data.child('brainDumpOrigin').child('type').val()))))",
+              ".validate": "newData.hasChildren(['id', 'brainDumpOrigin']) && !newData.child('relocationRevision').exists() && !newData.child('movedToDayId').exists()",
+              "brainDumpOrigin": {
+                ".validate": "newData.hasChildren(['v', 'claimEpoch', 'type', 'store', 'targetKey'])",
+                "v": {
+                  ".validate": true
+                },
+                "claimEpoch": {
+                  ".validate": true
+                },
+                "type": {
+                  ".validate": true
+                },
+                "store": {
+                  ".validate": true
+                },
+                "targetKey": {
+                  ".validate": true
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            }
+          }
+        },
+        "planFences": {
+          "$targetKey": {
+            "$itemId": {
+              ".write": "auth != null && $roomId === ('uid_' + auth.uid) && newData.exists() && !root.child('rooms').child($roomId).child('calendarPlanAuthority').exists() && $targetKey.matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) && $itemId.matches(/^bdp1\\|[A-Za-z0-9_-]{3,64}$/) && newData.child('id').val() === $itemId && ((!data.exists() && newData.child('brainDumpOrigin').child('v').val() === 2 && newData.child('brainDumpOrigin').child('type').isString() && newData.child('brainDumpOrigin').child('store').val() === 'legacy' && newData.child('brainDumpOrigin').child('targetKey').val() === $targetKey && newData.child('brainDumpOrigin').child('claimEpoch').isNumber() && newData.child('brainDumpOrigin').child('claimEpoch').val() === (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').isNumber() ? root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').val() : 0) && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('id').val() === $itemId.replace('bdp1|', '') && ((root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('store').val() === 'legacy' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('type').val() === newData.child('brainDumpOrigin').child('type').val()) || (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('status').val() === 'promoted' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('store').val() === 'legacy' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('type').val() === newData.child('brainDumpOrigin').child('type').val()))) || (data.exists() && newData.child('brainDumpOrigin').child('v').val() === data.child('brainDumpOrigin').child('v').val() && newData.child('brainDumpOrigin').child('claimEpoch').val() === data.child('brainDumpOrigin').child('claimEpoch').val() && newData.child('brainDumpOrigin').child('type').val() === data.child('brainDumpOrigin').child('type').val() && newData.child('brainDumpOrigin').child('store').val() === data.child('brainDumpOrigin').child('store').val() && newData.child('brainDumpOrigin').child('targetKey').val() === data.child('brainDumpOrigin').child('targetKey').val() && (data.child('deleted').val() !== true || newData.child('deleted').val() === true) && data.child('brainDumpOrigin').child('v').val() === 2 && data.child('brainDumpOrigin').child('type').isString() && data.child('brainDumpOrigin').child('store').val() === 'legacy' && data.child('brainDumpOrigin').child('targetKey').val() === $targetKey && data.child('brainDumpOrigin').child('claimEpoch').isNumber() && data.child('brainDumpOrigin').child('claimEpoch').val() === (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').isNumber() ? root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').val() : 0) && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('id').val() === $itemId.replace('bdp1|', '') && ((root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('store').val() === 'legacy' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('type').val() === data.child('brainDumpOrigin').child('type').val()) || (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('status').val() === 'promoted' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('store').val() === 'legacy' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('type').val() === data.child('brainDumpOrigin').child('type').val()))))",
+              ".validate": "newData.hasChildren(['id', 'brainDumpOrigin']) && !newData.child('relocationRevision').exists() && !newData.child('movedToDayId').exists()",
+              "brainDumpOrigin": {
+                ".validate": "newData.hasChildren(['v', 'claimEpoch', 'type', 'store', 'targetKey'])",
+                "v": {
+                  ".validate": true
+                },
+                "claimEpoch": {
+                  ".validate": true
+                },
+                "type": {
+                  ".validate": true
+                },
+                "store": {
+                  ".validate": true
+                },
+                "targetKey": {
+                  ".validate": true
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            }
+          }
+        },
+        "operationalPlanFences": {
+          "$targetKey": {
+            "$itemId": {
+              ".write": "auth != null && $roomId === ('uid_' + auth.uid) && newData.exists() && !root.child('rooms').child($roomId).child('calendarPlanAuthority').exists() && $targetKey.matches(/^[A-Za-z0-9_-]+$/) && $itemId.matches(/^bdp1\\|[A-Za-z0-9_-]{3,64}$/) && newData.child('id').val() === $itemId && ((!data.exists() && newData.child('brainDumpOrigin').child('v').val() === 2 && newData.child('brainDumpOrigin').child('type').isString() && newData.child('brainDumpOrigin').child('store').val() === 'operational' && newData.child('brainDumpOrigin').child('targetKey').val() === $targetKey && newData.child('brainDumpOrigin').child('claimEpoch').isNumber() && newData.child('brainDumpOrigin').child('claimEpoch').val() === (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').isNumber() ? root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').val() : 0) && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('id').val() === $itemId.replace('bdp1|', '') && ((root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('store').val() === 'operational' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('type').val() === newData.child('brainDumpOrigin').child('type').val()) || (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('status').val() === 'promoted' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('store').val() === 'operational' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('type').val() === newData.child('brainDumpOrigin').child('type').val()))) || (data.exists() && newData.child('brainDumpOrigin').child('v').val() === data.child('brainDumpOrigin').child('v').val() && newData.child('brainDumpOrigin').child('claimEpoch').val() === data.child('brainDumpOrigin').child('claimEpoch').val() && newData.child('brainDumpOrigin').child('type').val() === data.child('brainDumpOrigin').child('type').val() && newData.child('brainDumpOrigin').child('store').val() === data.child('brainDumpOrigin').child('store').val() && newData.child('brainDumpOrigin').child('targetKey').val() === data.child('brainDumpOrigin').child('targetKey').val() && (data.child('deleted').val() !== true || newData.child('deleted').val() === true) && data.child('brainDumpOrigin').child('v').val() === 2 && data.child('brainDumpOrigin').child('type').isString() && data.child('brainDumpOrigin').child('store').val() === 'operational' && data.child('brainDumpOrigin').child('targetKey').val() === $targetKey && data.child('brainDumpOrigin').child('claimEpoch').isNumber() && data.child('brainDumpOrigin').child('claimEpoch').val() === (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').isNumber() ? root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('claimEpoch').val() : 0) && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('id').val() === $itemId.replace('bdp1|', '') && ((root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').exists() && !root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('revokedAt').exists() && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('store').val() === 'operational' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotionClaim').child('type').val() === data.child('brainDumpOrigin').child('type').val()) || (root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('status').val() === 'promoted' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('planItemId').val() === $itemId && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('store').val() === 'operational' && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('targetKey').val() === $targetKey && root.child('rooms').child($roomId).child('brainDump').child($itemId.replace('bdp1|', '')).child('promotion').child('type').val() === data.child('brainDumpOrigin').child('type').val()))))",
+              ".validate": "newData.hasChildren(['id', 'brainDumpOrigin']) && !newData.child('relocationRevision').exists() && !newData.child('movedToDayId').exists()",
+              "brainDumpOrigin": {
+                ".validate": "newData.hasChildren(['v', 'claimEpoch', 'type', 'store', 'targetKey'])",
+                "v": {
+                  ".validate": true
+                },
+                "claimEpoch": {
+                  ".validate": true
+                },
+                "type": {
+                  ".validate": true
+                },
+                "store": {
+                  ".validate": true
+                },
+                "targetKey": {
+                  ".validate": true
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            }
+          }
         },
         "calendarPlanAuthority": {
           "$factId": {
             ".write": "auth != null && $roomId === ('uid_' + auth.uid) && !data.exists() && newData.exists()",
             ".validate": "newData.hasChildren(['schemaVersion','id','activatedAtMs','timezone','activationDate','deviceId']) && newData.child('schemaVersion').val() === 1 && newData.child('id').val() === $factId && newData.child('id').val().length <= 200 && newData.child('activatedAtMs').isNumber() && newData.child('activatedAtMs').val() > 0 && newData.child('activatedAtMs').val() <= 8640000000000000 && newData.child('timezone').isString() && newData.child('timezone').val().matches(/^[A-Za-z][A-Za-z0-9_+.-]*(\\/[A-Za-z0-9_+.-]+)*$/) && newData.child('activationDate').isString() && newData.child('activationDate').val().matches(/^[0-9]{4}-((01|03|05|07|08|10|12)-(0[1-9]|[12][0-9]|3[01])|(04|06|09|11)-(0[1-9]|[12][0-9]|30)|02-(0[1-9]|1[0-9]|2[0-9]))$/) && newData.child('deviceId').isString() && newData.child('deviceId').val().length > 0 && newData.child('deviceId').val().length <= 200",
-            "schemaVersion": { ".validate": true },
-            "id": { ".validate": true },
-            "activatedAtMs": { ".validate": true },
-            "timezone": { ".validate": true },
-            "activationDate": { ".validate": true },
-            "deviceId": { ".validate": true },
-            "$other": { ".validate": false }
+            "schemaVersion": {
+              ".validate": true
+            },
+            "id": {
+              ".validate": true
+            },
+            "activatedAtMs": {
+              ".validate": true
+            },
+            "timezone": {
+              ".validate": true
+            },
+            "activationDate": {
+              ".validate": true
+            },
+            "deviceId": {
+              ".validate": true
+            },
+            "$other": {
+              ".validate": false
+            }
           }
         }
       }

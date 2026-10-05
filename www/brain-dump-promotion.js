@@ -85,15 +85,16 @@
 // safe, exactly as they already do for promoteCaptureToPlan's own retries.
 
 import { brainDumpPlanItemId, promotedTo, samePromotionIntent, normalizeCapture } from './brain-dump-model.js';
-import { brainDumpOrigin } from './plan-item-origin.js';
+import { brainDumpOrigin, physicalTargetKey } from './plan-item-origin.js';
 
 function buildPlanItem(claim, text, now, deviceId, claimEpoch) {
-  const item = {
-    id: claim.planItemId, task: text, when: claim.when || '', done: false, doneAt: null, updatedAt: now, updatedBy: deviceId, kind: 'task',
-    // The promotion fence (plan-item-origin.js): the server accepts this item only
-    // while the capture still authorizes exactly this generation and destination.
-    brainDumpOrigin: brainDumpOrigin({ claimEpoch, type: claim.type, targetId: claim.targetId }),
-  };
+  const item = { id: claim.planItemId, task: text, when: claim.when || '', done: false, doneAt: null, updatedAt: now, updatedBy: deviceId, kind: 'task' };
+  // The promotion fence (plan-item-origin.js): a claim that names its physical location (targetKey) yields a
+  // FENCED item, which lives at that exact stable child and which the server accepts only while the capture
+  // still authorizes exactly this generation and location. A claim made by a client that predates the fence has
+  // no targetKey: its item is an ordinary one the server authorizes by capture state alone, and is never
+  // upgraded or given a fabricated origin.
+  if (claim.targetKey) item.brainDumpOrigin = brainDumpOrigin({ claimEpoch, type: claim.type, store: claim.store, targetKey: claim.targetKey });
   if (Number.isFinite(claim.durationMinutes)) item.durationMinutes = claim.durationMinutes;
   return item;
 }
@@ -155,8 +156,12 @@ export async function promoteCaptureToPlan(input = {}) {
   }
 
   const planItemId = brainDumpPlanItemId(id);
+  // The destination's PHYSICAL location, from Plan Authority's own target identity: what the server binds the
+  // fenced item to. A target this contract cannot key is refused before anything is claimed.
+  const targetKey = physicalTargetKey(target.store, target.id);
+  if (!targetKey) return { ok: false, reason: 'invalid-input', field: 'target' };
   // Everything that shapes the resulting plan item — see samePromotionIntent.
-  const intent = { type, store: target.store, targetId: target.id, planItemId, when, durationMinutes };
+  const intent = { type, store: target.store, targetId: target.id, targetKey, planItemId, when, durationMinutes };
 
   if (current.status === 'promoted') {
     // Never re-promote. An exact retry of the SAME intent is an idempotent
@@ -310,7 +315,14 @@ export async function settleOutstandingClaim({ repository, planAuthority, id, no
     if (!revoked.ok) return { ok: false, reason: revoked.reason, record: revoked.record };
   }
   // Only now (revoked, so frozen) is the destination's remote state final.
-  const presence = await planAuthority.remoteItemPresence(outcome.target, outcome.claim.planItemId);
+  // A fenced claim's destination is read at its exact stable child and must be exactly this generation's
+  // item; a claim from before the fence has no such child, and is read from the record as it always was
+  // (safe only because the revoke above already froze it).
+  const claim = outcome.claim;
+  const expected = claim.targetKey
+    ? { claimEpoch: normalizeCapture(outcome.record)?.claimEpoch ?? 0, type: claim.type, store: claim.store, targetKey: claim.targetKey }
+    : null;
+  const presence = await planAuthority.remoteItemPresence(outcome.target, claim.planItemId, expected ? { expected } : {});
   if (presence === 'present') {
     const finalized = repository.finalizePromotion(id, { now, updatedBy: deviceId });
     if (!finalized.ok) return promotedTo(finalized.record, outcome.claim) ? { ok: true, record: finalized.record } : finalized;

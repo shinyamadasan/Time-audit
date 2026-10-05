@@ -69,7 +69,7 @@ function makeRoom() {
  *  two "devices" in a test — it represents the one real plan store both
  *  eventually converge against, exactly as Plan Authority itself is single and
  *  account-wide regardless of which device writes to it. */
-function makeFakePlanAuthority({ todayTarget = { store: 'calendar', id: 'calplan:2026-10-01', dateKey: '2026-10-01' }, schedule = null } = {}) {
+function makeFakePlanAuthority({ todayTarget = { store: 'calendar', id: 'cal1:2026-10-01', dateKey: '2026-10-01' }, schedule = null } = {}) {
   const items = [];
   const calls = { current: 0, addItem: 0, dayForScheduledDate: 0, targetById: 0 };
   return {
@@ -79,7 +79,7 @@ function makeFakePlanAuthority({ todayTarget = { store: 'calendar', id: 'calplan
     dayForScheduledDate(dateKey, when) {
       calls.dayForScheduledDate++;
       if (schedule) return schedule(dateKey, when);
-      return { ok: true, anchor: when ? 'time' : 'noon', target: { store: 'calendar', id: `calplan:${dateKey}`, dateKey } };
+      return { ok: true, anchor: when ? 'time' : 'noon', target: { store: 'calendar', id: `cal1:${dateKey}`, dateKey } };
     },
     rawItems() { return items; },
     addItem({ item }) {
@@ -92,7 +92,7 @@ function makeFakePlanAuthority({ todayTarget = { store: 'calendar', id: 'calplan
     targetById(id) {
       calls.targetById++;
       if (id === todayTarget.id) return todayTarget;
-      const match = /^calplan:(.+)$/.exec(id);
+      const match = /^cal1:(.+)$/.exec(id);
       if (match) return { store: 'calendar', id, dateKey: match[1] };
       return null;
     },
@@ -189,7 +189,7 @@ test('Schedule resolves the target via dayForScheduledDate and carries an option
   assert.equal(planAuthority.items[0].when, '14:30');
   assert.equal(planAuthority.items[0].durationMinutes, 45);
   assert.equal(device.repository.read(record.id).promotion.type, 'schedule');
-  assert.equal(device.repository.read(record.id).promotion.targetId, 'calplan:2026-10-05');
+  assert.equal(device.repository.read(record.id).promotion.targetId, 'cal1:2026-10-05');
 });
 
 test('Schedule with no time produces an untimed (anytime) item — a time is never required', async () => {
@@ -520,7 +520,7 @@ test('D / mandatory app-restart test: a fresh session that never made the origin
   // The claim is established and is authoritative on remote — but device A's
   // process disappears before phases 2/3 ever run (simulated by simply never
   // calling promoteCaptureToPlan's remainder, or touching `a` again).
-  const claimResult = await a.claimPromotionRemote(record.id, { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-20', planItemId: brainDumpPlanItemId(record.id), when: '09:00', durationMinutes: 30 });
+  const claimResult = await a.claimPromotionRemote(record.id, { type: 'schedule', store: 'calendar', targetId: 'cal1:2026-10-20', planItemId: brainDumpPlanItemId(record.id), when: '09:00', durationMinutes: 30 });
   assert.ok(claimResult.ok);
   assert.equal(planAuthority.calls.addItem, 0, 'nothing created yet — A disappeared before phase 2');
 
@@ -548,7 +548,7 @@ test('F: two devices simultaneously reconcile the same outstanding authoritative
   const { record } = a.repository.create({ text: 'Both reconcile me' });
   await a.bridge.syncCapture(record.id);
 
-  const claimResult = await a.claimPromotionRemote(record.id, { type: 'do-today', store: 'calendar', targetId: 'calplan:2026-10-01', planItemId: brainDumpPlanItemId(record.id) });
+  const claimResult = await a.claimPromotionRemote(record.id, { type: 'do-today', store: 'calendar', targetId: 'cal1:2026-10-01', planItemId: brainDumpPlanItemId(record.id) });
   assert.ok(claimResult.ok);
 
   await a.pull(record.id);

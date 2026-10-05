@@ -41,6 +41,7 @@ import {
   validateCalendarPlanItem,
 } from './calendar-plan-model.js';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
+import { foldFencedItems } from './plan-item-origin.js';
 
 export const CALENDAR_PLAN_STORAGE_KEY = 'ta3-calendar-plans-v1';
 export const CALENDAR_AUTHORITY_STORAGE_KEY = 'ta3-calendar-plan-authority-v1';
@@ -229,6 +230,25 @@ export function createCalendarPlanRepository(deps = {}) {
       const changed = JSON.stringify(local) !== JSON.stringify(merged);
       if (changed) writePlansEnvelopeFor(key, envelope, planId, merged);
       return { changed, record: merged };
+    },
+
+    /** Sync-only: folds FENCED Brain Dump items read from their stable keyed children
+     *  (plan-item-origin.js) into this device's one local array, with the fenced-item merge
+     *  (newer generation wins, a tombstone is monotonic) — never the store's last-writer-wins,
+     *  which could un-delete what the server will refuse to un-delete. Touches only those items.
+     *  @param {string} planId @param {object[]} items @returns {{changed:boolean, record:object|null}} */
+    mergeRemoteFenced(planId, items) {
+      if (!parseCalendarPlanId(planId)) throw new Error('A valid calendar plan id is required.');
+      const key = activeKeyFor(plansBaseKey);
+      if (key === null) return { changed: false, record: null };
+      const envelope = readPlansEnvelope(storage, key);
+      const local = envelope.plans[planId] || null;
+      const choose = (a, b) => mergeCalendarPlanRecords({ items: [a] }, { items: [b] }, planId).items[0];
+      const { items: next, changed } = foldFencedItems(normalizeItems(local?.items), items, choose);
+      if (!changed) return { changed: false, record: local };
+      const record = { ...(local || { updatedAt: 0 }), items: next };
+      writePlansEnvelopeFor(key, envelope, planId, record);
+      return { changed: true, record };
     },
 
     // ── authority cutover ───────────────────────────────────────────────────

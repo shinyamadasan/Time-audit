@@ -525,6 +525,13 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
     if (boundarySync) { try { boundarySync.detach(); } catch { /* nothing attached */ } }
   }
 
+  /** One exact read of a FENCED Brain Dump item's stable server child (promotion fence), via the plan
+   *  sync bridge. {ok:false} without one. */
+  function readRemoteOperationalFencedItem(operationalDayIdValue, itemId, options) {
+    if (!planSync || typeof planSync.readRemoteFencedItem !== 'function') return Promise.resolve({ ok: false, reason: 'offline' });
+    return planSync.readRemoteFencedItem(operationalDayIdValue, itemId, options);
+  }
+
   /** One authoritative read of an operational day's REMOTE record (Brain Dump
    *  promotion fence), via the plan sync bridge. {ok:false} without one. */
   function readRemoteOperationalDay(operationalDayIdValue, options) {
@@ -534,6 +541,7 @@ export function createPersonalDayBoundaryLiveWiring(deps = {}) {
 
   return {
     readRemoteOperationalDay,
+    readRemoteOperationalFencedItem,
     status,
     enabled,
     revisions,

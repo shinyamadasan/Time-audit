@@ -44,7 +44,8 @@ import { createOperationalPlanRepository } from './operational-plan-repository.j
 import { appRoomOwner } from './personal-day-boundary-repository.js';
 import { mergeOperationalPlanRecords } from './operational-plan-model.js';
 import { parseOperationalDayId } from './personal-day-boundary-model.js';
-import { partitionOutboundItems } from './plan-item-origin.js';
+import { FENCE_REMOTE_PATHS, fencedItemsOf, partitionOutboundItems, splitFencedItems } from './plan-item-origin.js';
+import { pushFencedItems, readFencedValue } from './plan-fence-sync.js';
 
 export const OPERATIONAL_PLANS_REMOTE_PATH = 'operationalPlans';
 
@@ -121,34 +122,57 @@ export function createOperationalPlanSyncBridge(deps = {}) {
       local = repository.read(operationalDayIdValue);
       if (!local) return Promise.resolve({ committed: false, outcome: 'skipped' });
     }
-    const candidate = JSON.parse(JSON.stringify(local));
-    let dayRef;
-    try {
-      dayRef = roomRef.child(OPERATIONAL_PLANS_REMOTE_PATH).child(toFirebaseSafeKey(operationalDayIdValue));
-      if (typeof dayRef.transaction !== 'function') throw new Error('Firebase plan transactions are unavailable.');
-    } catch {
-      return Promise.resolve({ committed: false, outcome: 'transport-failure' });
-    }
+    // The Brain Dump fence (plan-item-origin.js): a FENCED item lives at its own stable keyed child, never
+    // in the day record's array. The record transaction below carries the ordinary items only, so a
+    // whole-record write can neither reorder nor erase a fenced item, and the fenced items are pushed
+    // one transaction each, at the exact child the server's rules authorize.
+    const { ordinary, fenced } = splitFencedItems(Array.isArray(local.items) ? local.items : Object.values(local.items || {}));
+    const candidate = JSON.parse(JSON.stringify({ ...local, items: ordinary }));
+    const choose = (a, b) => mergeOperationalPlanRecords({ items: [a] }, { items: [b] }, operationalDayIdValue).items[0];
+    // A record that exists only to hold fenced items (folded in from their children, no preparation, never
+    // written by this device) has nothing for the day record itself to say.
+    const needsRecord = ordinary.length > 0 || !!local.preparation || Number.isFinite(local.createdAt);
+    const key = toFirebaseSafeKey(operationalDayIdValue);
     let ownerLost = false;
-    return dayRef.transaction(remote => {
-      // Firebase may re-run this later against fresh server data. If the account changed in
-      // between, abort with zero writes rather than finish a push the cache no longer backs.
-      ownerLost = !roomOwnsCache(roomId);
-      if (ownerLost) return undefined;
-      return mergeOperationalPlanRecords(remote, candidate, operationalDayIdValue);
-    }, undefined, false)
-      .then(result => {
-        if (ownerLost) return { committed: false, outcome: 'owner-mismatch' };
-        if (!result?.committed || !result.snapshot) return { committed: false, outcome: 'aborted' };
-        // The committed room value is merged back only into THAT room's cache, and only while it is active.
-        if (roomOwnsCache(roomId)) {
-          const committed = mergeOperationalPlanRecords(null, result.snapshot.val(), operationalDayIdValue);
-          const { changed, record } = repository.mergeRemote(operationalDayIdValue, committed);
-          if (changed) onRemoteChange(operationalDayIdValue, record);
-        }
-        return { committed: true, outcome: 'committed' };
-      })
-      .catch(() => ({ committed: false, outcome: 'transport-failure' }));
+    const pushRecord = () => {
+      let dayRef;
+      try {
+        dayRef = roomRef.child(OPERATIONAL_PLANS_REMOTE_PATH).child(key);
+        if (typeof dayRef.transaction !== 'function') throw new Error('Firebase plan transactions are unavailable.');
+      } catch {
+        return Promise.resolve({ committed: false, outcome: 'transport-failure' });
+      }
+      return dayRef.transaction(remote => {
+        // Firebase may re-run this later against fresh server data. If the account changed in
+        // between, abort with zero writes rather than finish a push the cache no longer backs.
+        ownerLost = !roomOwnsCache(roomId);
+        if (ownerLost) return undefined;
+        return mergeOperationalPlanRecords(remote, candidate, operationalDayIdValue);
+      }, undefined, false)
+        .then(result => {
+          if (ownerLost) return { committed: false, outcome: 'owner-mismatch' };
+          if (!result?.committed || !result.snapshot) return { committed: false, outcome: 'aborted' };
+          // The committed room value is merged back only into THAT room's cache, and only while it is active.
+          if (roomOwnsCache(roomId)) {
+            const committed = mergeOperationalPlanRecords(null, result.snapshot.val(), operationalDayIdValue);
+            const { changed, record } = repository.mergeRemote(operationalDayIdValue, committed);
+            if (changed) onRemoteChange(operationalDayIdValue, record);
+          }
+          return { committed: true, outcome: 'committed' };
+        })
+        .catch(() => ({ committed: false, outcome: 'transport-failure' }));
+    };
+    return (needsRecord ? pushRecord() : Promise.resolve({ committed: true, outcome: 'skipped' })).then(async recordResult => {
+      if (!fenced.length) return recordResult;
+      const pushed = await pushFencedItems({ roomRef, store: 'operational', targetKey: key, items: fenced, choose, stillOwned: () => roomOwnsCache(roomId) });
+      if (roomOwnsCache(roomId) && pushed.items.length) {
+        const { changed, record } = repository.mergeRemoteFenced(operationalDayIdValue, fencedItemsOf(Object.fromEntries(pushed.items.map(item => [item.id, item]))));
+        if (changed) onRemoteChange(operationalDayIdValue, record);
+      }
+      if (!recordResult.committed) return recordResult;
+      if (pushed.outcome === 'committed' || pushed.outcome === 'unchanged') return { committed: true, outcome: 'committed' };
+      return { committed: false, outcome: pushed.outcome === 'denied' ? 'fence-denied' : pushed.outcome };
+    });
   }
 
   /** Pushes local changes for ONE operational day via a real Firebase
@@ -178,6 +202,17 @@ export function createOperationalPlanSyncBridge(deps = {}) {
     return true;
   }
 
+  /** Folds one inbound snapshot of a day's fence collection ({ [itemId]: item }) into the local array.
+   *  Same room/owner rule as handleRemoteDaySnapshot. */
+  function handleRemoteFenceSnapshot(operationalDayIdValue, val, roomId = activeRoomId()) {
+    if (!roomOwnsCache(roomId)) return false;
+    const items = fencedItemsOf(val);
+    if (!items.length) return true;
+    const { changed, record } = repository.mergeRemoteFenced(operationalDayIdValue, items);
+    if (changed) onRemoteChange(operationalDayIdValue, record);
+    return true;
+  }
+
   /** One read of the joined room's whole operationalPlans subtree, merged record by
    *  record into that room's scoped cache. Once per room binding; a no-op when the
    *  SDK ref has no once() or the room/owner does not match. Never pushes. */
@@ -193,8 +228,22 @@ export function createOperationalPlanSyncBridge(deps = {}) {
       return Promise.resolve(false);
     }
     hydratedRoomId = roomId;
-    return Promise.resolve(collectionRef.once('value'))
-      .then(snap => {
+    const readFences = () => {
+      try {
+        return Promise.resolve(roomRef.child(FENCE_REMOTE_PATHS.operational).once('value')).then(snap => {
+          const all = snap && typeof snap.val === 'function' ? snap.val() : null;
+          if (!all || typeof all !== 'object') return;
+          Object.entries(all).forEach(([key, val]) => {
+            let id;
+            try { id = fromFirebaseSafeKey(key); } catch { return; }
+            if (!parseOperationalDayId(id) || !val) return;
+            try { handleRemoteFenceSnapshot(id, val, roomId); } catch { /* one bad record never blocks the rest */ }
+          });
+        });
+      } catch { return Promise.resolve(); }
+    };
+    return Promise.all([Promise.resolve(collectionRef.once('value')), readFences()])
+      .then(([snap]) => {
         // Each record goes through handleRemoteDaySnapshot's own room/owner check, so a read that
         // resolves after a switch or sign-out merges nothing.
         const all = snap && typeof snap.val === 'function' ? snap.val() : null;
@@ -228,16 +277,22 @@ export function createOperationalPlanSyncBridge(deps = {}) {
     if (listeners.has(operationalDayIdValue)) return;
     const token = ++listenerToken;
     const ref = roomRef.child(OPERATIONAL_PLANS_REMOTE_PATH).child(toFirebaseSafeKey(operationalDayIdValue));
-    listeners.set(operationalDayIdValue, { ref, roomId, token });
+    const fenceRef = roomRef.child(FENCE_REMOTE_PATHS.operational).child(toFirebaseSafeKey(operationalDayIdValue));
+    listeners.set(operationalDayIdValue, { ref, fenceRef, roomId, token });
     ref.on('value', snap => {
       if (listeners.get(operationalDayIdValue)?.token !== token) return; // detached or superseded
       handleRemoteDaySnapshot(operationalDayIdValue, snap.val(), roomId);
+    });
+    // The day's fenced Brain Dump items arrive on their own stable child (plan-item-origin.js).
+    fenceRef.on('value', snap => {
+      if (listeners.get(operationalDayIdValue)?.token !== token) return;
+      handleRemoteFenceSnapshot(operationalDayIdValue, snap.val(), roomId);
     });
   }
 
   function detachDay(operationalDayIdValue) {
     const entry = listeners.get(operationalDayIdValue);
-    if (entry) entry.ref.off();
+    if (entry) { entry.ref.off(); entry.fenceRef?.off(); }
     listeners.delete(operationalDayIdValue);
   }
 
@@ -267,7 +322,18 @@ export function createOperationalPlanSyncBridge(deps = {}) {
     return Promise.race([read, timeout]).finally(() => clearTimeout(timer));
   }
 
-  return { syncDay, pushDay, readRemoteDay, attachDay, detachDay, detachAll, hydrateAll, handleRemoteDaySnapshot, repository };
+  /** ONE exact read of a FENCED item's stable server child (Brain Dump promotion fence): the only way a
+   *  promotion's destination is proven present or absent. The day record's array is never scanned.
+   *  @returns {Promise<{ok:true, value:*} | {ok:false, reason:string}>} value null = the child does not exist */
+  function readRemoteFencedItem(operationalDayIdValue, itemId, { timeoutMs = 8000 } = {}) {
+    if (!parseOperationalDayId(operationalDayIdValue)) return Promise.resolve({ ok: false, reason: 'invalid-input' });
+    const roomRef = getRoomRef();
+    const roomId = activeRoomId();
+    if (!roomRef || !roomOwnsCache(roomId)) return Promise.resolve({ ok: false, reason: 'offline' });
+    return readFencedValue({ roomRef, store: 'operational', targetKey: toFirebaseSafeKey(operationalDayIdValue), itemId, stillOwned: () => roomOwnsCache(roomId), timeoutMs });
+  }
+
+  return { syncDay, pushDay, readRemoteDay, readRemoteFencedItem, attachDay, detachDay, detachAll, hydrateAll, handleRemoteDaySnapshot, handleRemoteFenceSnapshot, repository };
 }
 
 // A ready-to-use singleton for the real app (index.html) only — constructing it touches

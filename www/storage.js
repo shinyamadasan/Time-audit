@@ -29,6 +29,8 @@ let _syncDetailAgeTicker = null;
 let _syncReconcileTicker = null;
 let _syncReconcileInFlight = false;
 const pendingPlanRemoteByDate = new Map();
+// Fenced Brain Dump items (plan-item-origin.js) that arrived before the modules that fold them in had loaded.
+const pendingFenceRemoteByDate = new Map();
 const TIMER_SYNC_STAMP_KEY = 'ta3-timer-updated-at';
 const AWAY_SYNC_STAMP_KEY = 'ta3-away-updated-at';
 const TIMER_STORAGE_KEY = 'ta3-timer';
@@ -404,6 +406,7 @@ function bindAccountLocalState(room) {
   // Previous owner's in-memory caches: a deferred remote plan candidate, and an undo snapshot
   // that would otherwise restore/tombstone that account's entries into this one.
   pendingPlanRemoteByDate.clear();
+  pendingFenceRemoteByDate.clear();
   if (typeof lastUndoAction !== 'undefined') lastUndoAction = null;
   restoreTimerAwayState(_localStateOwner);
 }
@@ -1449,6 +1452,16 @@ function startSync() {
     }
   });
 
+  // Brain Dump promotion fence: a fenced item lives at its own stable child of planFences/<dateKey>, never
+  // inside plans/<dateKey>/items (plan-item-origin.js). Folded into the one local array with the fenced-item
+  // merge (a tombstone is monotonic), never last-writer-wins.
+  fbDb.ref(`rooms/${roomCode}/planFences`).on('value', snap => {
+    if (!isCurrentSync()) return;
+    const val = snap.val();
+    if (!val || typeof val !== 'object') return;
+    applyRemoteFencedLegacyItems(val);
+  });
+
   fbDb.ref(`rooms/${roomCode}/weeklyReviews`).on('value', snap => {
     if (!isCurrentSync()) return;
     const val = snap.val();
@@ -2331,7 +2344,7 @@ function teardownRoomListeners() {
   if (!fbDb || !roomCode) return;
   stopSyncDetailAgeTicker();
   stopSyncReconcileTicker();
-  const paths = ['timer','entries','intention','devices','settings','templates','templatesSavedAt','breakState','reviews','weeklyReviews','focusRedemptions','awayState','plans'];
+  const paths = ['timer','entries','intention','devices','settings','templates','templatesSavedAt','breakState','reviews','weeklyReviews','focusRedemptions','awayState','plans','planFences'];
   paths.forEach(p => fbDb.ref(`rooms/${roomCode}/${p}`).off());
   fbDb.ref('.info/connected').off();
   if (fbRoomRef) fbRoomRef.off();
@@ -2563,10 +2576,63 @@ function replayPendingPlanRemotes() {
     renderToday();
   }
   replayedDates.forEach(date => pendingPlanRemoteByDate.delete(date));
+  if (pendingFenceRemoteByDate.size && globalThis.PlanItemOrigin) {
+    const deferred = Object.fromEntries(pendingFenceRemoteByDate);
+    pendingFenceRemoteByDate.clear();
+    if (applyRemoteFencedLegacyItems(deferred)) changed = true;
+  }
   return { pending: pendingPlanRemoteByDate.size, replayed: replayedDates.length, changed };
 }
 
 globalThis.replayPendingPlanRemotes = replayPendingPlanRemotes;
+
+/** The fenced-item merge's per-item choice for a legacy date: the model's own mergeDatePlans over one-item
+ *  records, so the choice is exactly the store's, minus nothing. */
+function legacyFencedChoose(dateKey) {
+  const model = globalThis.PlanTomorrowModel;
+  return (a, b) => model.mergeDatePlans({ items: [a] }, { items: [b] }, dateKey).items[0];
+}
+
+/** Folds remote fenced items ({ [dateKey]: { [itemId]: item } }) into the local legacy plans. Deferred (and
+ *  replayed) when the modules that own the merge have not loaded yet. Returns whether anything changed. */
+function applyRemoteFencedLegacyItems(byDate) {
+  const origin = globalThis.PlanItemOrigin;
+  if (!origin || !globalThis.PlanTomorrowModel) {
+    Object.entries(byDate).forEach(([date, items]) => pendingFenceRemoteByDate.set(date, JSON.parse(JSON.stringify(items))));
+    return false;
+  }
+  let changed = false;
+  Object.entries(byDate).forEach(([date, itemsById]) => {
+    const fenced = origin.fencedItemsOf(itemsById);
+    if (!fenced.length) return;
+    const local = plans[date];
+    const { items, changed: dateChanged } = origin.foldFencedItems(normalizePlanItems(local?.items), fenced, legacyFencedChoose(date));
+    if (!dateChanged) return;
+    plans[date] = { ...(local && typeof local === 'object' ? local : { updatedAt: 0 }), items };
+    changed = true;
+  });
+  if (changed) {
+    setAccountLocal('ta3-plans', JSON.stringify(plans));
+    globalThis.PlanAuthority?.invalidate();
+    if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
+    renderToday();
+    publishSharedAccountability();
+  }
+  return changed;
+}
+
+/** ONE exact read of a fenced Brain Dump item's stable child under planFences/<dateKey> (the promotion fence):
+ *  the only way a legacy destination is proven present or absent. {ok:false} for no owned room, a transport
+ *  failure or a timeout: never mistaken for an absent child.
+ *  @returns {Promise<{ok:true, value:*}|{ok:false, reason:string}>} value null = the child does not exist */
+function readRemoteDateFencedItem(dateKey, itemId, { timeoutMs = 8000 } = {}) {
+  const ref = ownedRoomRef();
+  const fence = globalThis.PlanFenceSync;
+  if (!ref || !dateKey || !fence) return Promise.resolve({ ok: false, reason: 'offline' });
+  return fence.readFencedValue({ roomRef: ref, store: 'legacy', targetKey: dateKey, itemId, stillOwned: () => ownedRoomRef() === ref, timeoutMs });
+}
+
+globalThis.readRemoteDateFencedItem = readRemoteDateFencedItem;
 
 /** ONE authoritative read of a legacy date plan's remote record (Brain Dump promotion
  *  fence: deciding whether a frozen promotion's item really exists). Never merged
@@ -2609,31 +2675,52 @@ function syncPlans(dateKey) {
     plans[dateKey] = { ...plans[dateKey], items: outbound.kept };
     setAccountLocal('ta3-plans', JSON.stringify(plans));
   }
-  const candidate = JSON.parse(JSON.stringify(plans[dateKey]));
-  let dateRef;
-  try {
-    dateRef = ref.child('plans').child(dateKey);
-    if (typeof dateRef.transaction !== 'function') throw new Error('Firebase plan transactions are unavailable.');
-  } catch (err) {
-    notifySyncWriteFailed(err);
+  const fence = globalThis.PlanFenceSync;
+  const origin = globalThis.PlanItemOrigin;
+  if (!fence || !origin) {
+    notifySyncWriteFailed(new Error('Plan sync is waiting for the plan fence module.'));
     return Promise.resolve(false);
   }
-  // Firebase may re-run the update on every retry: each run re-checks that the account which
-  // captured `candidate` is still the one whose state is in memory, and aborts otherwise.
-  return dateRef.transaction(remote => (ownedRoomRef() === ref ? model.mergeDatePlans(remote, candidate, dateKey) : undefined), undefined, false)
-    .then(result => {
-      if (!result?.committed || !result.snapshot) return false;
-      // Committed for the initiating account; never written into another account's local plans.
-      if (ownedRoomRef() !== ref) return false;
-      const committed = model.mergeDatePlans(null, result.snapshot.val(), dateKey);
-      if (typeof globalThis.writeDatePlanLocal === 'function') globalThis.writeDatePlanLocal(dateKey, committed);
-      else {
-        plans[dateKey] = committed;
-        setAccountLocal('ta3-plans', JSON.stringify(plans));
-      }
-      return true;
-    })
-    .catch(err => { notifySyncWriteFailed(err); return false; });
+  // A FENCED Brain Dump item travels to its own stable child (plan-item-origin.js), never in the date record's
+  // array: the record transaction carries the ordinary items only, so a whole-record write can neither reorder
+  // nor erase a fenced item.
+  const { ordinary, fenced } = origin.splitFencedItems(normalizePlanItems(plans[dateKey].items));
+  const candidate = JSON.parse(JSON.stringify({ ...plans[dateKey], items: ordinary }));
+  // A record that exists only to hold fenced items (folded in from their children, never prepared or
+  // written by this device) has nothing for the date record itself to say.
+  const needsRecord = ordinary.length > 0 || !!plans[dateKey].preparation || Number.isFinite(plans[dateKey].updatedAt) && plans[dateKey].updatedAt > 0;
+  const pushRecord = () => {
+    let dateRef;
+    try {
+      dateRef = ref.child('plans').child(dateKey);
+      if (typeof dateRef.transaction !== 'function') throw new Error('Firebase plan transactions are unavailable.');
+    } catch (err) {
+      notifySyncWriteFailed(err);
+      return Promise.resolve(false);
+    }
+    // Firebase may re-run the update on every retry: each run re-checks that the account which
+    // captured `candidate` is still the one whose state is in memory, and aborts otherwise.
+    return dateRef.transaction(remote => (ownedRoomRef() === ref ? model.mergeDatePlans(remote, candidate, dateKey) : undefined), undefined, false)
+      .then(result => {
+        if (!result?.committed || !result.snapshot) return false;
+        // Committed for the initiating account; never written into another account's local plans.
+        if (ownedRoomRef() !== ref) return false;
+        const committed = model.mergeDatePlans(null, result.snapshot.val(), dateKey);
+        if (typeof globalThis.writeDatePlanLocal === 'function') globalThis.writeDatePlanLocal(dateKey, committed);
+        else {
+          plans[dateKey] = committed;
+          setAccountLocal('ta3-plans', JSON.stringify(plans));
+        }
+        return true;
+      })
+      .catch(err => { notifySyncWriteFailed(err); return false; });
+  };
+  return (needsRecord ? pushRecord() : Promise.resolve(true)).then(async recordOk => {
+    if (!fenced.length) return recordOk;
+    const pushed = await fence.pushFencedItems({ roomRef: ref, store: 'legacy', targetKey: dateKey, items: fenced, choose: legacyFencedChoose(dateKey), stillOwned: () => ownedRoomRef() === ref });
+    if (ownedRoomRef() === ref && pushed.items.length) applyRemoteFencedLegacyItems({ [dateKey]: Object.fromEntries(pushed.items.map(item => [item.id, item])) });
+    return recordOk && (pushed.outcome === 'committed' || pushed.outcome === 'unchanged');
+  });
 }
 
 function disconnectSync() {

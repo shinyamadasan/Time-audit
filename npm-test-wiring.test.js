@@ -28,6 +28,10 @@ const OWN_SCRIPT = new Map([
   ['meal-source-contract-gate.test.js', 'test:meal-source-gate'],
   // Boots the real Firebase RTDB emulator (needs Java + the cached emulator jar).
   ['firebase-rules-emulator.test.js', 'test:rules-emulator'],
+  // The same emulator, driven by real Firebase JS SDK connections (ordering/race proof, the real cf43080 client).
+  ['brain-dump-fence-sdk.test.js', 'test:fence-sdk'],
+  // Rebuilds the rules with one named predicate disabled and attacks the real emulator.
+  ['firebase-rules-mutation.test.js', 'test:rules-mutation'],
 ]);
 
 /** A pre-existing runtime module that is not in the lint list. Listed by name so it stays visible

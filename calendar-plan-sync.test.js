@@ -126,12 +126,13 @@ test('attaching for another room drops every listener bound to the previous one 
   a.bridge.attachPlan(PLAN_ID);
   a.bridge.attachPlan(calendarPlanId('2026-09-28'));
   a.bridge.attachAuthority();
-  assert.equal(db.listenerCount(), 3);
+  // Each attached plan has TWO listeners: its record and its stable fence child (Brain Dump promotion fence).
+  assert.equal(db.listenerCount(), 5);
   a.state.room = 'uid_B';
   a.bridge.attachPlan(PLAN_ID);
-  assert.equal(db.listenerCount(), 1, 'only the B-bound plan listener remains; the old plan + authority listeners are gone');
+  assert.equal(db.listenerCount(), 2, 'only the B-bound plan record + fence listeners remain; the old plan + fence + authority listeners are gone');
   a.bridge.attachAuthority();
-  assert.equal(db.listenerCount(), 2);
+  assert.equal(db.listenerCount(), 3);
 });
 
 test('sign-out: detachAll removes every listener, and a stale hydrate/push does nothing', async () => {

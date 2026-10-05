@@ -86,6 +86,7 @@ import {
   nextPlanItemRelocation,
   planItemIsActiveInDay,
 } from './plan-item-relocation.js';
+import { BRAIN_DUMP_MOVE_REFUSED, fencedPresence, isFencedItem, originOf, physicalTargetKey } from './plan-item-origin.js';
 import {
   deadlineInstantForCalendarDate,
   evaluatePlanningDeadlineQualification,
@@ -123,6 +124,8 @@ import './calendar-plan-live.js';
  *  because an operationalDayId itself contains ':'; a minted plan item id
  *  ('p' + base36) can never contain either. */
 export const OPERATIONAL_CARRY_ID_PREFIX = 'ocarry1';
+
+export { BRAIN_DUMP_MOVE_REFUSED };
 
 export function operationalCarriedItemId(sourceDayId, sourceItemId) {
   // The SOURCE is whatever that day's own authoritative identity is — an
@@ -574,8 +577,21 @@ export function createPlanAuthority(deps = {}) {
    *  never 'absent'. Used by the Brain Dump promotion fence (brain-dump-promotion.js)
    *  only after the claim is revoked, when no further write for it can succeed.
    *  @returns {Promise<'present'|'absent'|'unknown'>} */
-  function remoteItemPresence(target, itemId, { timeoutMs = 8000 } = {}) {
+  function remoteItemPresence(target, itemId, { timeoutMs = 8000, expected = null } = {}) {
     let read = null;
+    // A FENCED destination is read at its exact stable child (plan-item-origin.js), never found by scanning an
+    // array: a missing child is a provable absence, a child that is not exactly the expected item is unknown.
+    if (expected) {
+      try {
+        if (target.store === 'calendar') read = typeof calendar?.readRemoteFencedItem === 'function' ? calendar.readRemoteFencedItem(target.dateKey, itemId, { timeoutMs }) : null;
+        else if (target.store === 'operational') read = typeof live.readRemoteOperationalFencedItem === 'function' ? live.readRemoteOperationalFencedItem(target.id, itemId, { timeoutMs }) : null;
+        else read = typeof legacy.readRemoteFenced === 'function' ? legacy.readRemoteFenced(target.dateKey, itemId, { timeoutMs }) : null;
+      } catch { read = null; }
+      if (!read) return Promise.resolve('unknown');
+      return Promise.resolve(read)
+        .then(result => (!result || result.ok !== true ? 'unknown' : fencedPresence(result.value, { itemId, ...expected })))
+        .catch(() => 'unknown');
+    }
     try {
       if (target.store === 'calendar') read = typeof calendar?.readRemotePlan === 'function' ? calendar.readRemotePlan(target.dateKey, { timeoutMs }) : null;
       else if (target.store === 'operational') read = typeof live.readRemoteOperationalDay === 'function' ? live.readRemoteOperationalDay(target.id, { timeoutMs }) : null;
@@ -633,8 +649,19 @@ export function createPlanAuthority(deps = {}) {
     if (state === 'calendar' && !allowRecovery) throw new Error('Legacy plans are read-only after calendar-day activation.');
   }
 
+  /** The single write funnel's own cross-target guard: a fenced Brain Dump item may only ever be written to the
+   *  exact plan its origin names. Nothing is saved (no source/destination ghost) when it is anywhere else. */
+  function assertFencedItemsBelong(target, nextItems) {
+    const key = physicalTargetKey(target.store, target.id);
+    for (const item of Array.isArray(nextItems) ? nextItems : []) {
+      const origin = isFencedItem(item) ? originOf(item) : null;
+      if (origin && (origin.store !== target.store || origin.targetKey !== key)) throw new Error(BRAIN_DUMP_MOVE_REFUSED);
+    }
+  }
+
   function saveItems(target, nextItems, { allowLegacyRecovery = false } = {}) {
     assertLegacyWriteAuthority(target, allowLegacyRecovery);
+    assertFencedItemsBelong(target, nextItems);
     if (target.store === 'legacy') {
       legacy.saveItems(target.dateKey, nextItems, { allowLegacyRecovery });
       invalidate();
@@ -1561,6 +1588,8 @@ export function createPlanAuthority(deps = {}) {
     const sourceItems = rawItems(sourceTarget);
     const current = items(sourceTarget).find(item => item.id === itemId);
     if (!current) throw new Error('That planned task no longer exists.');
+    // Refused BEFORE anything is written, so no source tombstone or destination copy can ever exist.
+    if (isFencedItem(current) && (destination.store !== sourceTarget.store || destination.id !== sourceTarget.id)) throw new Error(BRAIN_DUMP_MOVE_REFUSED);
 
     const title = Object.prototype.hasOwnProperty.call(changes, 'task') ? String(changes.task || '').trim() : current.task;
     if (!title) throw new Error('Name the task first.');
@@ -1860,6 +1889,10 @@ if (typeof window !== 'undefined') {
       // storage.js's authoritative remote read (Brain Dump promotion fence).
       readRemote: (dateKey, options) => (typeof globalThis.readRemoteDatePlan === 'function'
         ? globalThis.readRemoteDatePlan(dateKey, options)
+        : Promise.resolve({ ok: false, reason: 'offline' })),
+      // storage.js's exact read of a fenced item's stable child (planFences/<dateKey>/<itemId>).
+      readRemoteFenced: (dateKey, itemId, options) => (typeof globalThis.readRemoteDateFencedItem === 'function'
+        ? globalThis.readRemoteDateFencedItem(dateKey, itemId, options)
         : Promise.resolve({ ok: false, reason: 'offline' })),
     },
     priorityMax: (() => { try { return authorityAppContext().maxItems; } catch { return 3; } })(),

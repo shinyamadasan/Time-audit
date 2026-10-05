@@ -1,192 +1,350 @@
 // firebase-rules-emulator.test.js
 //
-// The Brain Dump promotion fence (firebase.rules.json), proven against the REAL
-// Firebase Realtime Database emulator, not an interpreter. Cross-path rules (a plan
-// item's validity depends on rooms/<room>/brainDump/<captureId>) are exactly where a
-// rules interpreter and the real server could disagree, so this file boots the
-// emulator jar, loads the real firebase.rules.json, and drives it over REST with
-// unsigned emulator auth tokens (`?auth=`), the emulator's own testing contract.
+// The location-bound Brain Dump promotion fence (firebase.rules.json, DECISIONS #33), proven
+// against the REAL Firebase Realtime Database emulator, not an interpreter. Cross-path rules (a
+// fenced item's validity depends on rooms/<room>/brainDump/<captureId>, and a capture's recovery
+// depends on its destination child NOT existing) are exactly where a rules interpreter and the
+// real server could disagree, so this boots the emulator jar, loads the real firebase.rules.json
+// and drives it as an AUTHENTICATED ADVERSARY: the room owner writing RTDB directly, bypassing every
+// client guard.
 //
-// Needs Java and the cached emulator jar (firebase-tools' cache, or
-// FIREBASE_DATABASE_EMULATOR_JAR). Run: npm run test:rules-emulator
-// It FAILS (never silently skips) when either is missing: a fence that was not
-// exercised is not proven.
+// Needs Java and the cached emulator jar (see rtdb-emulator-support.js). Run:
+// npm run test:rules-emulator. It FAILS (never silently skips) when either is missing.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import os from 'node:os';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import net from 'node:net';
 import { fileURLToPath } from 'node:url';
+
+import { MALLORY, ROOM, startEmulator } from './rtdb-emulator-support.js';
+import {
+  CAPTURE, ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, legacyClaim, ordinary, origin, planRecord, promotedCapture, promotion,
+} from './fence-rules-fixtures.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RULES = readFileSync(path.join(HERE, 'firebase.rules.json'), 'utf8');
-const JAR = process.env.FIREBASE_DATABASE_EMULATOR_JAR
-  || path.join(os.homedir(), '.cache', 'firebase', 'emulators', 'firebase-database-emulator-v4.11.2.jar');
 
-const b64 = value => Buffer.from(JSON.stringify(value)).toString('base64url');
-const token = uid => `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ sub: uid, user_id: uid, uid, iat: 1, exp: 9999999999, aud: 'demo', iss: 'https://securetoken.google.com/demo', auth_time: 1, firebase: { sign_in_provider: 'custom' } })}.`;
-const ALICE = token('alice');
-const MALLORY = token('mallory');
-const ROOM = 'rooms/uid_alice';
+let emulator;
+test.before(async () => { emulator = await startEmulator(); });
+test.after(() => emulator?.stop());
+const freshDb = () => emulator.fresh(RULES);
 
-let emulator = null;
-let base = '';
-let ns = 0;
+/** The state in which a fenced item is authorized: a live claim at the exact location. */
+async function liveClaim(db, def, extra = {}) { await db.seed(captureAt(), capture({ promotionClaim: claim(def), ...extra })); }
+async function promoted(db, def, extra = {}) { await db.seed(captureAt(), promotedCapture(def, extra)); }
+const otherStore = def => Object.values(STORES).find(o => o.store !== def.store);
 
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, '127.0.0.1', () => { const { port } = server.address(); server.close(() => resolve(port)); });
-    server.on('error', reject);
+for (const def of Object.values(STORES)) {
+  const { store } = def;
+
+  test(`${store}: ordinary owner items stay writable; an outsider is denied; a valid fenced create is allowed and the plan record is untouched`, async () => {
+    const db = await freshDb();
+    assert.equal(await db.write(def.planAt, planRecord([ordinary])), true, 'ordinary owner create');
+    assert.equal(await db.write(def.planAt, planRecord([{ ...ordinary, task: 'edited' }])), true, 'ordinary owner edit');
+    assert.equal(await db.write(def.planAt, planRecord([ordinary]), MALLORY), false, 'outsider write');
+    assert.equal(await db.write(def.itemAt, fencedItem(def), MALLORY), false, 'outsider fenced write');
+    await liveClaim(db, def);
+    assert.equal(await db.write(def.itemAt, fencedItem(def)), true, 'exact location, live claim');
+    assert.deepEqual((await db.read(def.planAt)).items.map(i => i.id), ['pnormal1'], 'the plan record never holds the fenced item');
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { task: 'renamed' })), true, 'a same-target edit while the claim is live');
+  });
+
+  test(`${store}: wrong LOCATION is denied (the path is the authorization identity)`, async () => {
+    const db = await freshDb();
+    await liveClaim(db, def);
+    assert.equal(await db.write(def.fenceAt(def.otherKey), fencedItem(def)), false, 'authorized for key A, written under key B (origin names A)');
+    assert.equal(await db.write(def.fenceAt(def.otherKey), fencedItem(def, { origin: { targetKey: def.otherKey } })), false, 'origin rewritten to the path, but the claim still names A');
+    await db.seed(captureAt(), capture({ promotionClaim: claim(def, { targetKey: def.otherKey }) }));
+    assert.equal(await db.write(def.itemAt, fencedItem(def)), false, 'the claim names another location than this one');
+  });
+
+  test(`${store}: wrong STORE is denied, including a replay into another store's fence collection`, async () => {
+    const db = await freshDb();
+    await liveClaim(db, def);
+    for (const other of Object.values(STORES).filter(o => o.store !== store)) {
+      assert.equal(await db.write(`${ROOM}/${other.fence}/${other.key}/${ITEM_ID}`, fencedItem(def)), false, `${store} item replayed into ${other.store}'s collection (origin names ${store})`);
+      assert.equal(await db.write(`${ROOM}/${other.fence}/${other.key}/${ITEM_ID}`, fencedItem(other)), false, `${other.store} origin, but the claim is ${store}'s`);
+    }
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { origin: { store: otherStore(def).store } })), false, 'origin.store rewritten');
+  });
+
+  test(`${store}: wrong CAPTURE, malformed id, capture swap and an arbitrary key are denied`, async () => {
+    const db = await freshDb();
+    await liveClaim(db, def);
+    const at = id => def.fenceAt(def.key).replace(ITEM_ID, id);
+    assert.equal(await db.write(at('bdp1|bnobody1'), fencedItem(def, { id: 'bdp1|bnobody1' })), false, 'no such capture');
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { id: 'bdp1|bother001' })), false, 'body id differs from the key');
+    assert.equal(await db.write(at('plain-key'), fencedItem(def, { id: 'plain-key' })), false, 'a key outside the bdp1 grammar');
+    assert.equal(await db.write(at('bdp1|'), fencedItem(def, { id: 'bdp1|' })), false, 'empty suffix');
+    // Capture swap: capture B is claimed for location B; the item for capture A is replayed at B.
+    const other = 'bfence2';
+    await db.seed(captureAt(other), capture({ id: other, promotionClaim: claim(def, { planItemId: `bdp1|${other}`, targetKey: def.otherKey, targetId: def.otherId }) }));
+    assert.equal(await db.write(def.fenceAt(def.otherKey), fencedItem(def, { origin: { targetKey: def.otherKey } })), false, 'capture A\'s item at capture B\'s location');
+    assert.equal(await db.write(def.fenceAt(def.otherKey).replace(ITEM_ID, `bdp1|${other}`), fencedItem(def, { id: `bdp1|${other}`, origin: { targetKey: def.otherKey } })), true, 'capture B\'s own item at its own location is fine');
+  });
+
+  test(`${store}: wrong epoch, wrong type, missing and malformed origin are denied`, async () => {
+    const db = await freshDb();
+    await liveClaim(db, def);
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { origin: { claimEpoch: 1 } })), false, 'epoch ahead of the capture');
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { origin: { type: 'schedule' } })), false, 'wrong type');
+    const noOrigin = fencedItem(def); delete noOrigin.brainDumpOrigin;
+    assert.equal(await db.write(def.itemAt, noOrigin), false, 'missing origin');
+    const without = key => { const o = origin(def); delete o[key]; return o; };
+    for (const [label, bad] of Object.entries({
+      'v:1': origin(def, { v: 1 }), 'string epoch': origin(def, { claimEpoch: '0' }), 'missing store': without('store'),
+      'missing targetKey': without('targetKey'), 'extra key': { ...origin(def), evil: true }, 'numeric targetKey': origin(def, { targetKey: 7 }),
+    })) assert.equal(await db.write(def.itemAt, fencedItem(def, { brainDumpOrigin: bad })), false, `malformed origin: ${label}`);
+    // The same item, correctly formed, is accepted: the refusals above were about the origin, nothing else.
+    assert.equal(await db.write(def.itemAt, fencedItem(def)), true);
+  });
+
+  test(`${store}: a newer generation is accepted only at its own epoch; the stale one is denied`, async () => {
+    const db = await freshDb();
+    await db.seed(captureAt(), capture({ claimEpoch: 1, promotionClaim: claim(def, { claimedAt: T + 20 }), expiredClaim: expired(def) }));
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { origin: { claimEpoch: 0 } })), false, 'G0 item vs a capture now at epoch 1');
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { origin: { claimEpoch: 1 } })), true, 'G1 item');
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { origin: { claimEpoch: 0 } })), false, 'an update cannot step the origin back to G0');
+  });
+
+  test(`${store}: REVOKED generation authorizes no create and no edit (the freeze), a late stale writer is refused`, async () => {
+    const db = await freshDb();
+    await db.seed(captureAt(), capture({ promotionClaim: claim(def, { revokedAt: T + 5 }) }));
+    assert.equal(await db.write(def.itemAt, fencedItem(def)), false, 'late stale G1 writer after the revoke');
+    // An item that already exists is frozen too while the outcome is resolved.
+    await db.seed(def.itemAt, fencedItem(def));
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { task: 'edited' })), false, 'edit while revoked');
+  });
+
+  test(`${store}: a PROMOTED generation: a late first create is accepted, same-target edits all work, the origin is immutable`, async () => {
+    const db = await freshDb();
+    await promoted(db, def);
+    assert.equal(await db.write(def.itemAt, fencedItem(def)), true, 'a late create after finalize (offline-first)');
+    for (const [label, edit] of Object.entries({
+      title: { task: 'renamed' }, 'start time': { when: '15:00' }, 'next-day reading (cross-midnight, same owner)': { when: '01:00', whenDayOffset: 1, whenTz: 'Asia/Manila' },
+      duration: { when: '15:00', durationMinutes: 45 }, done: { done: true, doneAt: T + 9 }, kind: { kind: 'priority' }, metadata: { updatedAt: T + 10, updatedBy: 'e', reason: 'slipped' },
+    })) assert.equal(await db.write(def.itemAt, fencedItem(def, edit)), true, `edit: ${label}`);
+    for (const [label, bad] of Object.entries({
+      type: { type: 'schedule' }, epoch: { claimEpoch: 3 }, store: { store: otherStore(def).store }, targetKey: { targetKey: def.otherKey }, version: { v: 1 },
+    })) assert.equal(await db.write(def.itemAt, fencedItem(def, { origin: bad })), false, `origin mutation: ${label}`);
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { id: 'bdp1|bother001' })), false, 'item-id mutation');
+    const stripped = fencedItem(def); delete stripped.brainDumpOrigin;
+    assert.equal(await db.write(def.itemAt, stripped), false, 'origin stripping');
+    assert.equal(await db.write(def.itemAt, { ...fencedItem(def), brainDumpOrigin: null }), false, 'origin deleted');
+    assert.equal(await db.write(def.itemAt, { ...ordinary, id: ITEM_ID }), false, 'converted to an ordinary item (fenced -> ordinary)');
+  });
+
+  test(`${store}: cross-target relocation is refused by the server: no destination, no relocation metadata`, async () => {
+    const db = await freshDb();
+    await promoted(db, def);
+    assert.equal(await db.write(def.itemAt, fencedItem(def)), true);
+    assert.equal(await db.write(def.fenceAt(def.otherKey), fencedItem(def)), false, 'a second copy at another target of the same store');
+    assert.equal(await db.write(def.fenceAt(def.otherKey), fencedItem(def, { origin: { targetKey: def.otherKey } })), false, 'the same, with the origin rewritten');
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { relocationRevision: { schemaVersion: 1, sequence: 1, fromDayId: def.targetId, toDayId: def.otherId, updatedBy: 'd' } })), false, 'relocation metadata');
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { deleted: true, movedToDayId: def.otherId })), false, 'a tombstone claiming a move');
+    // And as an ordinary array item in another day's plan record:
+    assert.equal(await db.write(`${ROOM}/${def.plans}/${def.otherKey}`, planRecord([fencedItem(def)])), false, 'the fenced item smuggled into another day\'s ordinary array');
+  });
+
+  test(`${store}: tombstone is monotonic: stays at its stable child, can never be cleared or removed, and counts as present`, async () => {
+    const db = await freshDb();
+    await promoted(db, def);
+    assert.equal(await db.write(def.itemAt, fencedItem(def)), true);
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { deleted: true, updatedAt: T + 11 })), true, 'user deletes (tombstone)');
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { deleted: true, task: 'still gone', updatedAt: T + 12 })), true, 'a tombstone stays editable');
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { deleted: false, updatedAt: T + 99 })), false, 'a stale client clears the deletion');
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { updatedAt: T + 100 })), false, 'a stale create replays the live item (resurrection)');
+    assert.equal(await db.write(def.itemAt, null), false, 'physical removal of the tombstone');
+    assert.equal((await db.read(def.itemAt)).deleted, true);
+    assert.equal((await db.read(captureAt())).status, 'promoted', 'the capture stays promoted after its item was deleted');
+  });
+
+  test(`${store}: parent overwrites cannot bypass the item rule (no grant exists above the item)`, async () => {
+    const db = await freshDb();
+    await liveClaim(db, def);
+    assert.equal(await db.write(def.itemAt, fencedItem(def)), true);
+    const good = fencedItem(def, { task: 'ok' });
+    const forged = fencedItem(def, { origin: { claimEpoch: 5 } });
+    assert.equal(await db.write(`${ROOM}/${def.fence}/${def.key}`, { [ITEM_ID]: good }), false, 'whole target overwrite, even with only a good item');
+    assert.equal(await db.write(`${ROOM}/${def.fence}/${def.key}`, { [ITEM_ID]: forged, 'bdp1|bother001': good }), false, 'whole target overwrite with mixed good and bad');
+    assert.equal(await db.write(`${ROOM}/${def.fence}`, { [def.key]: { [ITEM_ID]: forged } }), false, 'whole collection overwrite');
+    assert.equal(await db.write(`${ROOM}/${def.fence}`, null), false, 'whole collection delete');
+    assert.equal(await db.write(`${ROOM}/${def.fence}/${def.key}`, null), false, 'whole target delete');
+    assert.equal(await db.write(ROOM, { [def.fence]: { [def.key]: { [ITEM_ID]: forged } } }), false, 'the whole room');
+    assert.equal(await db.patch(ROOM, { [`${def.fence}/${def.key}/${ITEM_ID}`]: forged }), false, 'a multi-path update naming the item');
+    assert.equal(await db.patch(ROOM, { [`${def.fence}/${def.key}/${ITEM_ID}/brainDumpOrigin/claimEpoch`]: 5 }), false, 'a direct child write of the origin');
+    assert.equal(await db.patch(ROOM, { [`${def.fence}/${def.key}/${ITEM_ID}/task`]: 'direct child edit' }), true, 'an ordinary direct child edit is judged as the whole item and passes');
+    assert.equal((await db.read(def.itemAt)).task, 'direct child edit');
+    assert.equal((await db.read(def.itemAt)).brainDumpOrigin.claimEpoch, 0, 'nothing forged landed');
+  });
+
+  test(`${store}: ordinary plan arrays — pre-fence Brain Dump items are authorized by capture state alone; fenced and forged ones are refused`, async () => {
+    const db = await freshDb();
+    const legacyItem = { id: ITEM_ID, task: 'old', when: '', done: false, updatedAt: T, updatedBy: 'old', kind: 'task' };
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, legacyItem])), false, 'no capture at all');
+    await db.seed(captureAt(), capture({ schemaVersion: 1, promotionClaim: legacyClaim(def) }));
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, legacyItem])), true, 'a pre-fence client\'s item under its own pre-fence claim');
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, { ...legacyItem, task: 'edited' }])), true, 'and its ordinary edit');
+    await db.seed(captureAt(), capture({ schemaVersion: 1, status: 'promoted', disposedAt: T + 3, promotion: { type: 'do-today', store: def.store, targetId: def.targetId, planItemId: ITEM_ID, promotedAt: T + 3 } }));
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, legacyItem])), true, 'a pre-fence promoted capture keeps its item writable');
+    assert.equal(await db.write(`${ROOM}/${def.plans}/${def.otherKey}`, planRecord([legacyItem])), true, 'a pre-fence item that was moved by an ordinary edit stays writable (not location-bound)');
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, { ...legacyItem, brainDumpOrigin: origin(def) }])), false, 'an origin-bearing item can never live in an ordinary array');
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, { ...ordinary, id: 'bdp1|bunknown1' }])), false, 'an ordinary item renamed into the bdp1 namespace');
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, { ...ordinary, id: 'bdp1|bad id!' }])), false, 'malformed bdp1 id');
+    // A FENCED capture's item is refused in an array.
+    await db.seed(captureAt(), capture({ promotionClaim: claim(def) }));
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, legacyItem])), false, 'the capture is fenced now: its item lives in the fence collection');
+    await db.seed(captureAt(), promotedCapture(def));
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, legacyItem])), false, 'a fenced promotion too');
+    assert.equal(await db.write(def.planAt, planRecord([ordinary])), true, 'the day itself stays writable');
+  });
+
+  test(`${store}: an OLD client's whole-record write leaves the fenced child alone and is not blocked by it`, async () => {
+    const db = await freshDb();
+    await promoted(db, def);
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { task: 'fenced task', updatedAt: T + 4 })), true);
+    // The old client has never seen the fence collection: it rewrites its whole record, reordering its items.
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, { ...ordinary, id: 'pnormal2', task: 'second' }])), true, 'ordinary edit');
+    assert.equal(await db.write(def.planAt, planRecord([{ ...ordinary, id: 'pnormal2', task: 'second' }, { ...ordinary, task: 'edited' }])), true, 'reordered whole-record rewrite');
+    assert.equal(await db.write(def.planAt, null), true, 'even deleting its own record');
+    const fenced = await db.read(def.itemAt);
+    assert.equal(fenced.task, 'fenced task');
+    assert.equal(fenced.brainDumpOrigin.targetKey, def.key, 'the fenced item survived byte-for-byte');
+  });
+
+  test(`${store}: the calendar cutover barrier applies to the fence collections exactly as it applies to the plan records`, async () => {
+    const db = await freshDb();
+    await promoted(db, def);
+    assert.equal(await db.write(def.itemAt, fencedItem(def)), true, 'before the cutover');
+    // The account activates calendar-native plans: legacy and operational plan records become read-only.
+    await db.seed(`${ROOM}/calendarPlanAuthority/fact1`, { schemaVersion: 1, id: 'fact1', activatedAtMs: T, timezone: 'Asia/Manila', activationDate: '2026-10-03', deviceId: 'd' });
+    const barred = store !== 'calendar';
+    assert.equal(await db.write(def.itemAt, fencedItem(def, { task: 'after cutover', updatedAt: T + 20 })), !barred, `a fenced ${store} edit after the cutover`);
+    assert.equal(await db.write(def.planAt, planRecord([ordinary])), !barred, `the ${store} plan record after the cutover (the same barrier)`);
+  });
+
+  test(`${store}: recovery protocol — revoke, then recover only when the exact destination is absent; finalize only when it is present`, async () => {
+    const revoked = capture({ promotionClaim: claim(def, { revokedAt: T + 5 }), updatedAt: T + 5 });
+    const recovered = capture({ claimEpoch: 1, updatedAt: T + 6, expiredClaim: expired(def) });
+    const db = await freshDb();
+    await liveClaim(db, def);
+    assert.equal(await db.write(captureAt(), revoked), true, 'revoke (same claim + revokedAt)');
+    // Destination absent: recover (epoch + 1), claim removed.
+    assert.equal(await db.write(captureAt(), recovered), true, 'recovered to triage at epoch + 1');
+    assert.equal(await db.write(def.itemAt, fencedItem(def)), false, 'the old generation can never land afterwards');
+    // Destination PRESENT: recovery is refused; finalize is accepted.
+    const db2 = await freshDb();
+    await liveClaim(db2, def);
+    assert.equal(await db2.write(def.itemAt, fencedItem(def)), true, 'the item landed first');
+    assert.equal(await db2.write(captureAt(), revoked), true, 'revoke');
+    assert.equal(await db2.write(captureAt(), recovered), false, 'recovery with the destination present');
+    assert.equal(await db2.write(captureAt(), promotedCapture(def, { updatedAt: T + 7 })), true, 'finalize: destination present');
+    // Finalizing a REVOKED claim whose destination is absent is refused.
+    const db3 = await freshDb();
+    await db3.seed(captureAt(), revoked);
+    assert.equal(await db3.write(captureAt(), promotedCapture(def, { updatedAt: T + 7 })), false, 'finalize a revoked claim with NO destination');
+    // A destination that exists at a different epoch is not "present" for finalize.
+    const db4 = await freshDb();
+    await db4.seed(captureAt(), revoked);
+    await db4.seed(def.itemAt, fencedItem(def, { origin: { claimEpoch: 7 } }));
+    assert.equal(await db4.write(captureAt(), promotedCapture(def, { updatedAt: T + 7 })), false, 'a different generation\'s child is not this generation\'s destination');
+    assert.equal(await db4.write(captureAt(), recovered), false, 'and it is not absent either: recovery stays refused');
   });
 }
 
-test.before(async () => {
-  assert.ok(existsSync(JAR), `the RTDB emulator jar is required (looked for ${JAR}); set FIREBASE_DATABASE_EMULATOR_JAR`);
-  const port = await freePort();
-  base = `http://127.0.0.1:${port}`;
-  emulator = spawn('java', ['-jar', JAR, '--port', String(port)], { stdio: 'ignore' });
-  emulator.on('error', err => { throw new Error(`java could not start the emulator: ${err.message}`); });
-  for (let i = 0; i < 120; i++) {
-    try { const r = await fetch(`${base}/.json?ns=boot`); if (r.ok) return; } catch { /* not up yet */ }
-    await new Promise(resolve => setTimeout(resolve, 250));
-  }
-  throw new Error('the RTDB emulator did not come up');
+// ── the capture state machine ───────────────────────────────────────────────
+
+const CAL = STORES.calendar;
+
+test('capture: a live claim may only become the SAME claim + an immutable revokedAt; nothing else', async () => {
+  const db = await freshDb();
+  await liveClaim(db, CAL);
+  assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL) })), true, 'idempotent re-write');
+  for (const [label, changed] of Object.entries({
+    planItemId: { planItemId: 'bdp1|bother001' }, targetKey: { targetKey: CAL.otherKey }, targetId: { targetId: CAL.otherId }, store: { store: 'legacy' }, type: { type: 'schedule' },
+    claimedAt: { claimedAt: T + 99 }, claimedBy: { claimedBy: 'someone-else' }, when: { when: '15:00' }, duration: { durationMinutes: 30 },
+  })) assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL, changed) })), false, `same-epoch claim replacement: ${label}`);
+  assert.equal(await db.write(captureAt(), capture({})), false, 'claim deletion');
+  assert.equal(await db.write(captureAt(), capture({ status: 'archived', disposedAt: T + 4 })), false, 'a stale archive over a claim');
+  assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL, { revokedAt: T + 5 }) })), true, 'revoke');
+  assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL) })), false, 'un-revoke');
+  assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL, { revokedAt: T + 50 }) })), false, 'change revokedAt');
+  assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL, { revokedAt: T + 5 }), updatedAt: T + 60 })), true, 'the same revoked claim again');
+  assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL, { claimedAt: T, revokedAt: T + 5 }) })), false, 'a replaced revoked claim');
 });
 
-test.after(() => { if (emulator) emulator.kill(); });
-
-/** A fresh, isolated namespace per test, loaded with the REAL rules. */
-async function freshDb() {
-  const name = `fence${++ns}x${Date.now()}`;
-  const r = await fetch(`${base}/.settings/rules.json?ns=${name}`, { method: 'PUT', headers: { Authorization: 'Bearer owner' }, body: RULES });
-  assert.equal(r.status, 200, `rules load: ${await r.text()}`);
-  const call = (method, at, body, auth) => fetch(`${base}/${at}.json?ns=${name}${auth ? `&auth=${auth}` : ''}`, {
-    method, headers: auth ? undefined : { Authorization: 'Bearer owner' }, body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  return {
-    /** As the room owner (or `as`): true iff the server ALLOWED the write. */
-    async write(at, value, as = ALICE) { const r = await call('PUT', at, value, as); return r.status === 200; },
-    /** Seeds data as an admin (bypassing rules), to set up the starting state. */
-    async seed(at, value) { const r = await call('PUT', at, value, null); assert.equal(r.status, 200); },
-    async read(at) { const r = await call('GET', at, undefined, null); return r.json(); },
-  };
-}
-
-const T = 1790816400000;
-const CAPTURE = 'bfence1';
-const ITEM_ID = `bdp1|${CAPTURE}`;
-const TARGET = 'cal1:2026-10-03';
-const capture = (extra = {}) => ({ schemaVersion: 2, id: CAPTURE, text: 'x', createdAt: T, updatedAt: T, updatedBy: 'd', status: 'triaged', important: true, urgent: false, triagedAt: T, reopenCount: 0, ...extra });
-const claim = (extra = {}) => ({ type: 'do-today', store: 'calendar', targetId: TARGET, planItemId: ITEM_ID, when: '', claimedAt: T + 1, claimedBy: 'd', ...extra });
-const origin = (extra = {}) => ({ v: 1, claimEpoch: 0, type: 'do-today', targetId: TARGET, ...extra });
-const bdItem = (extra = {}) => ({ id: ITEM_ID, task: 'x', when: '', done: false, updatedAt: T, updatedBy: 'd', kind: 'task', brainDumpOrigin: origin(), ...extra });
-const normal = { id: 'pnormal1', task: 'ordinary', when: '', done: false, updatedAt: T, updatedBy: 'd' };
-
-const STORES = [
-  ['calendar', `${ROOM}/calendarPlans/${TARGET}`],
-  ['legacy', `${ROOM}/plans/2026-10-03`],
-  ['operational', `${ROOM}/operationalPlans/odv1~2026-10-03`],
-];
-const plan = items => ({ items, updatedAt: T, updatedBy: 'd' });
-
-for (const [store, at] of STORES) {
-  test(`${store}: ordinary owner items unchanged; strangers denied; a current claim's fenced item is accepted`, async () => {
-    const db = await freshDb();
-    assert.equal(await db.write(at, plan([normal])), true, 'ordinary owner item');
-    assert.equal(await db.write(at, plan([{ ...normal, task: 'edited' }])), true, 'ordinary owner edit');
-    assert.equal(await db.write(at, plan([normal]), MALLORY), false, 'stranger');
-    await db.seed(`${ROOM}/brainDump/${CAPTURE}`, capture({ promotionClaim: claim() }));
-    assert.equal(await db.write(at, plan([normal, bdItem()])), true, 'the current generation');
-  });
-
-  test(`${store}: the fence refuses every unauthorized Brain Dump item`, async () => {
-    const db = await freshDb();
-    await db.seed(`${ROOM}/brainDump/${CAPTURE}`, capture({ promotionClaim: claim() }));
-    const refused = {
-      'stale generation (origin epoch 0, capture now epoch 1)': async () => { await db.seed(`${ROOM}/brainDump/${CAPTURE}/claimEpoch`, 1); return bdItem(); },
-      'wrong target': async () => bdItem({ brainDumpOrigin: origin({ targetId: 'cal1:2026-10-09' }) }),
-      'wrong type': async () => bdItem({ brainDumpOrigin: origin({ type: 'schedule' }) }),
-      'missing origin': async () => { const item = bdItem(); delete item.brainDumpOrigin; return item; },
-      'unknown origin version': async () => bdItem({ brainDumpOrigin: origin({ v: 2 }) }),
-      'wrong capture (no claim there)': async () => bdItem({ id: 'bdp1|bnobody', brainDumpOrigin: origin() }),
-    };
-    for (const [label, build] of Object.entries(refused)) {
-      await db.seed(`${ROOM}/brainDump/${CAPTURE}`, capture({ promotionClaim: claim() }));
-      const item = await build();
-      assert.equal(await db.write(at, plan([normal, item])), false, label);
-    }
-    // A REVOKED claim authorizes nothing.
-    await db.seed(`${ROOM}/brainDump/${CAPTURE}`, capture({ promotionClaim: claim({ revokedAt: T + 5 }) }));
-    assert.equal(await db.write(at, plan([normal, bdItem()])), false, 'revoked claim');
-    // A RECOVERED capture (claim resolved as expired, epoch moved on) authorizes nothing of the old generation.
-    await db.seed(`${ROOM}/brainDump/${CAPTURE}`, capture({ claimEpoch: 1, expiredClaim: { ...claim(), expiredAt: T + 6, expiredBy: 'b' } }));
-    assert.equal(await db.write(at, plan([normal, bdItem()])), false, 'recovered capture');
-    assert.equal(await db.write(at, plan([normal])), true, 'the day itself stays writable once the stale item is gone');
-  });
-
-  test(`${store}: a finalized promotion keeps its item normally editable, but its origin cannot be changed to escape the fence`, async () => {
-    const db = await freshDb();
-    const promoted = capture({ status: 'promoted', disposedAt: T + 3, promotion: { type: 'do-today', store: 'calendar', targetId: TARGET, planItemId: ITEM_ID, intentRecorded: true, when: '', promotedAt: T + 3 } });
-    await db.seed(`${ROOM}/brainDump/${CAPTURE}`, promoted);
-    assert.equal(await db.write(at, plan([normal, bdItem()])), true, 'promoted item');
-    assert.equal(await db.write(at, plan([normal, bdItem({ task: 'renamed', when: '15:00', durationMinutes: 45, updatedAt: T + 9 })])), true, 'rename / retime');
-    assert.equal(await db.write(at, plan([normal, bdItem({ done: true, doneAt: T + 10, updatedAt: T + 10 })])), true, 'toggle done');
-    assert.equal(await db.write(at, plan([normal, bdItem({ deleted: true, updatedAt: T + 11 })])), true, 'delete (tombstone)');
-    for (const forged of [origin({ claimEpoch: 3 }), origin({ targetId: 'cal1:2026-10-09' }), origin({ type: 'schedule' })]) {
-      assert.equal(await db.write(at, plan([normal, bdItem({ brainDumpOrigin: forged })])), false, `forged origin ${JSON.stringify(forged)}`);
-    }
-  });
-}
-
-test('late stale write after recovery: refused by the server; the plan stays without it, the capture stays recovered', async () => {
+test('capture: claimEpoch is an integer that only moves +1, only through recovery; decrement, omission, skip and bare bumps are denied', async () => {
   const db = await freshDb();
-  const at = `${ROOM}/calendarPlans/${TARGET}`;
-  await db.seed(`${ROOM}/brainDump/${CAPTURE}`, capture({ promotionClaim: claim() }));
-  await db.seed(at, plan([normal]));
-  // Device B: revoke, read (absent), recover.
-  assert.equal(await db.write(`${ROOM}/brainDump/${CAPTURE}`, capture({ promotionClaim: claim({ revokedAt: T + 5 }) })), true, 'revoke');
-  assert.equal(await db.write(at, plan([normal, bdItem()])), false, 'a push between revoke and read is already refused');
-  assert.equal(await db.write(`${ROOM}/brainDump/${CAPTURE}`, capture({ claimEpoch: 1, updatedAt: T + 6, expiredClaim: { ...claim(), expiredAt: T + 6, expiredBy: 'b' } })), true, 'recover');
-  // Device A finally reconnects and pushes its OLD queued item.
-  assert.equal(await db.write(at, plan([normal, bdItem()])), false, 'old item refused');
-  const remote = await db.read(at);
-  assert.deepEqual(remote.items.map(i => i.id), ['pnormal1'], 'no old item remotely');
-  assert.equal((await db.read(`${ROOM}/brainDump/${CAPTURE}`)).claimEpoch, 1);
+  await db.seed(captureAt(), capture({ claimEpoch: 2, promotionClaim: claim(CAL, { revokedAt: T + 5 }) }));
+  assert.equal(await db.write(captureAt(), capture({ claimEpoch: 1, promotionClaim: claim(CAL, { revokedAt: T + 5 }) })), false, 'decrement');
+  assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL, { revokedAt: T + 5 }) })), false, 'omission (= 0)');
+  assert.equal(await db.write(captureAt(), capture({ claimEpoch: 4 })), false, 'skip +2 (and drop the claim)');
+  assert.equal(await db.write(captureAt(), capture({ claimEpoch: 3, promotionClaim: claim(CAL, { revokedAt: T + 5 }) })), false, 'bump while keeping the claim');
+  assert.equal(await db.write(captureAt(), capture({ claimEpoch: 2.5 })), false, 'a fractional epoch');
+  assert.equal(await db.write(captureAt(), capture({ claimEpoch: 3, expiredClaim: expired(CAL) })), true, 'recovery: revoked claim, destination absent, +1');
+  const bare = await freshDb();
+  await bare.seed(captureAt(), capture({ claimEpoch: 1 }));
+  assert.equal(await bare.write(captureAt(), capture({ claimEpoch: 2 })), false, 'a bare bump with no claim is not a recovery');
+  assert.equal(await bare.write(captureAt(), capture({ claimEpoch: 1, text: 'edited' })), true, 'ordinary edits at the same epoch');
 });
 
-for (const order of ['old push first', 'new push first']) {
-  test(`recovery then a NEW promotion (${order}): the old generation is refused, the new one accepted, exactly one destination`, async () => {
-    const db = await freshDb();
-    const oldAt = `${ROOM}/calendarPlans/${TARGET}`;
-    const newTarget = 'cal1:2026-10-05';
-    const newAt = `${ROOM}/calendarPlans/${newTarget}`;
-    // Recovered (epoch 1), then the owner promoted again: a new claim at epoch 1 for a new day.
-    await db.seed(`${ROOM}/brainDump/${CAPTURE}`, capture({ claimEpoch: 1, promotionClaim: claim({ targetId: newTarget, claimedAt: T + 20 }), expiredClaim: { ...claim(), expiredAt: T + 6, expiredBy: 'b' } }));
-    const pushOld = () => db.write(oldAt, plan([bdItem()]));
-    const pushNew = () => db.write(newAt, plan([bdItem({ brainDumpOrigin: origin({ claimEpoch: 1, targetId: newTarget }) })]));
-    const results = order === 'old push first' ? [await pushOld(), await pushNew()] : [await pushNew(), await pushOld()].reverse();
-    assert.deepEqual(results, [false, true], '[old, new]');
-    assert.equal(await db.read(oldAt), null, 'no old destination');
-    assert.equal((await db.read(newAt)).items.length, 1, 'exactly the new destination');
-  });
-}
-
-test('the capture record itself: claimEpoch never moves backwards, a revoke is never undone, schemaVersion never drops', async () => {
+test('capture: recovery needs the claim REVOKED first; finalize of an unrevoked claim needs no proof (offline-first), a promoted capture is terminal', async () => {
   const db = await freshDb();
-  const at = `${ROOM}/brainDump/${CAPTURE}`;
-  await db.seed(at, capture({ claimEpoch: 2 }));
-  assert.equal(await db.write(at, capture({ claimEpoch: 1 })), false, 'claimEpoch 2 -> 1');
-  assert.equal(await db.write(at, capture({})), false, 'claimEpoch 2 -> absent (0)');
-  assert.equal(await db.write(at, capture({ claimEpoch: 3 })), true, 'claimEpoch 2 -> 3');
-  await db.seed(at, capture({ promotionClaim: claim({ revokedAt: T + 5 }) }));
-  assert.equal(await db.write(at, capture({ promotionClaim: claim() })), false, 'un-revoke the same claim');
-  assert.equal(await db.write(at, capture({ claimEpoch: 1, expiredClaim: { ...claim(), expiredAt: T + 6, expiredBy: 'b' } })), true, 'resolve it (recover)');
-  assert.equal(await db.write(at, { ...capture({ claimEpoch: 1 }), schemaVersion: 1 }), false, 'schemaVersion 2 -> 1');
-  // A legacy (generation 1, no epoch) capture keeps working for an old client.
-  await db.seed(`${ROOM}/brainDump/blegacy1`, { schemaVersion: 1, id: 'blegacy1', text: 'old', createdAt: T, updatedAt: T, updatedBy: 'old', status: 'untriaged' });
-  assert.equal(await db.write(`${ROOM}/brainDump/blegacy1`, { schemaVersion: 1, id: 'blegacy1', text: 'old', createdAt: T, updatedAt: T + 1, updatedBy: 'old', status: 'archived', disposedAt: T + 1 }), true, 'old client, legacy record');
+  await liveClaim(db, CAL);
+  assert.equal(await db.write(captureAt(), capture({ claimEpoch: 1, expiredClaim: expired(CAL) })), false, 'recover an UNREVOKED claim');
+  assert.equal(await db.write(captureAt(), promotedCapture(CAL)), true, 'finalize before the item has landed');
+  assert.equal(await db.write(captureAt(), promotedCapture(CAL, { promotion: promotion(CAL, { targetKey: CAL.otherKey }) })), false, 'promotion identity is immutable');
+  assert.equal(await db.write(captureAt(), promotedCapture(CAL, { promotion: promotion(CAL, { planItemId: 'bdp1|bother001' }) })), false, 'promotion planItemId immutable');
+  assert.equal(await db.write(captureAt(), capture({})), false, 'un-promote');
+  assert.equal(await db.write(captureAt(), promotedCapture(CAL, { claimEpoch: 1 })), false, 'promoted: epoch frozen');
+  assert.equal(await db.write(captureAt(), promotedCapture(CAL, { promotionClaim: claim(CAL) })), false, 'a promoted capture cannot grow a claim');
+  assert.equal(await db.write(captureAt(), promotedCapture(CAL, { text: 'still editable provenance', updatedAt: T + 9 })), true, 'ordinary field edits of a promoted record');
+});
+
+test('capture: a promotion cannot appear without a claim; a new claim needs an active capture, the right item id and no revoke', async () => {
+  const db = await freshDb();
+  await db.seed(captureAt(), capture({}));
+  assert.equal(await db.write(captureAt(), promotedCapture(CAL)), false, 'promoted out of nowhere');
+  assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL, { planItemId: 'bdp1|bother001' }) })), false, 'claim for another capture\'s item id');
+  assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL, { revokedAt: T + 2 }) })), false, 'a claim born revoked');
+  assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL, { store: 'nowhere' }) })), false, 'unknown store');
+  assert.equal(await db.write(captureAt(), capture({ promotionClaim: claim(CAL) })), true, 'a proper claim');
+  const archived = await freshDb();
+  await archived.seed(captureAt(), capture({ status: 'archived', disposedAt: T + 2 }));
+  assert.equal(await archived.write(captureAt(), capture({ status: 'archived', disposedAt: T + 2, promotionClaim: claim(CAL) })), false, 'claim on an archived capture');
+  assert.equal(await archived.write(captureAt(), capture({ reopenCount: 1 })), true, 'reopen (archived -> triaged) is untouched');
+});
+
+test('capture: whole-record deletion, parent overwrites and direct-child bypasses are all denied', async () => {
+  const db = await freshDb();
+  await liveClaim(db, CAL, { claimEpoch: 2 });
+  assert.equal(await db.write(captureAt(), null), false, 'delete the capture');
+  assert.equal(await db.write(`${ROOM}/brainDump`, null), false, 'delete the whole collection');
+  assert.equal(await db.write(`${ROOM}/brainDump`, { [CAPTURE]: capture({ claimEpoch: 0 }) }), false, 'whole-collection overwrite lowering the epoch');
+  assert.equal(await db.write(ROOM, { brainDump: { [CAPTURE]: capture({}) } }), false, 'the whole room');
+  assert.equal(await db.write(`${captureAt()}/promotionClaim`, null), false, 'direct child: delete the claim');
+  assert.equal(await db.write(`${captureAt()}/promotionClaim/revokedAt`, T + 1), true, 'direct child: revoke the live claim');
+  assert.equal(await db.write(`${captureAt()}/promotionClaim/revokedAt`, null), false, 'direct child: un-revoke');
+  assert.equal(await db.write(`${captureAt()}/claimEpoch`, 1), false, 'direct child: epoch decrement');
+  assert.equal(await db.write(`${captureAt()}/claimEpoch`, null), false, 'direct child: epoch removal');
+  assert.equal(await db.write(`${captureAt()}/promotionClaim/targetKey`, CAL.otherKey), false, 'direct child: retarget the claim');
+  assert.equal(await db.patch(ROOM, { [`brainDump/${CAPTURE}/promotionClaim`]: null }), false, 'multi-path: delete the claim');
+  assert.equal(await db.write(`${captureAt()}/schemaVersion`, 1), false, 'schemaVersion can never be lowered');
+  assert.equal(await db.write(`${captureAt()}/text`, 'x', MALLORY), false, 'a stranger');
+});
+
+test('capture: a capture is created with id === its key; a legacy (generation 1, no epoch, no targetKey) capture keeps working for an old client', async () => {
+  const db = await freshDb();
+  assert.equal(await db.write(captureAt('bwrongid1'), capture({ id: 'bother0001' })), false, 'id must equal the key');
+  assert.equal(await db.write(captureAt('bnew00001'), capture({ id: 'bnew00001' })), true, 'create');
+  assert.equal(await db.write(captureAt('bnew00002'), capture({ id: 'bnew00002', claimEpoch: -1 })), false, 'negative epoch');
+  // A cf43080-shaped record: gen 1, no claimEpoch, a claim without targetKey/revokedAt.
+  const old = (extra = {}) => ({ schemaVersion: 1, id: 'blegacy1', text: 'old', createdAt: T, updatedAt: T, updatedBy: 'old', status: 'triaged', important: true, urgent: false, triagedAt: T, ...extra });
+  await db.seed(captureAt('blegacy1'), old());
+  assert.equal(await db.write(captureAt('blegacy1'), old({ promotionClaim: legacyClaim(CAL, { planItemId: 'bdp1|blegacy1' }), updatedAt: T + 1 })), true, 'old client claims');
+  assert.equal(await db.write(captureAt('blegacy1'), old({ status: 'promoted', disposedAt: T + 2, updatedAt: T + 2, promotion: { type: 'do-today', store: 'calendar', targetId: CAL.targetId, planItemId: 'bdp1|blegacy1', promotedAt: T + 2 } })), true, 'old client finalizes');
+  await db.seed(captureAt('blegacy2'), old({ id: 'blegacy2' }));
+  assert.equal(await db.write(captureAt('blegacy2'), old({ id: 'blegacy2', status: 'archived', disposedAt: T + 1, updatedAt: T + 1 })), true, 'old client archives');
+  assert.equal(await db.write(captureAt('blegacy2'), old({ id: 'blegacy2', status: 'triaged', reopenCount: 1, schemaVersion: 2, updatedAt: T + 2 })), true, 'new client reopens (gen 2)');
 });

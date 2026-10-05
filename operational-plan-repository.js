@@ -41,6 +41,7 @@
 import { validateOperationalPlanItemRange, mergeOperationalPlanRecords, OPERATIONAL_PLAN_SCHEMA_VERSION } from './operational-plan-model.js';
 import { parseOperationalDayId } from './personal-day-boundary-model.js';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
+import { foldFencedItems } from './plan-item-origin.js';
 
 export const OPERATIONAL_PLAN_STORAGE_KEY = 'ta3-operational-plans-v1';
 
@@ -198,6 +199,25 @@ export function createOperationalPlanRepository(deps = {}) {
         writeEnvelope(storage, key, { schemaVersion: OPERATIONAL_PLAN_SCHEMA_VERSION, plans: { ...envelope.plans, [operationalDayIdValue]: merged } });
       }
       return { changed, record: merged };
+    },
+
+    /** Sync-only: folds FENCED Brain Dump items read from their stable keyed children
+     *  (plan-item-origin.js) into this device's one local array, with the fenced-item merge
+     *  (newer generation wins, a tombstone is monotonic) — never the store's last-writer-wins,
+     *  which could un-delete what the server will refuse to un-delete. Touches only those items.
+     *  @returns {{changed:boolean, record:object|null}} */
+    mergeRemoteFenced(operationalDayIdValue, items) {
+      if (!parseOperationalDayId(operationalDayIdValue)) throw new Error('A valid operationalDayId is required.');
+      const key = activeKey();
+      if (key === null) return { changed: false, record: null };
+      const envelope = readEnvelope(storage, key);
+      const local = envelope.plans[operationalDayIdValue] || null;
+      const choose = (a, b) => mergeOperationalPlanRecords({ items: [a] }, { items: [b] }, operationalDayIdValue).items[0];
+      const { items: next, changed } = foldFencedItems(normalizeItems(local?.items), items, choose);
+      if (!changed) return { changed: false, record: local };
+      const record = { ...(local || { updatedAt: 0 }), items: next };
+      writeEnvelope(storage, key, { schemaVersion: OPERATIONAL_PLAN_SCHEMA_VERSION, plans: { ...envelope.plans, [operationalDayIdValue]: record } });
+      return { changed: true, record };
     },
 
     /** Sync-only: removes items from THIS device's cached copy of one day, without

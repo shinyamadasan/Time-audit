@@ -157,6 +157,8 @@
 // text is editable-adjacent in spirit even though V1 has no edit action — identity
 // must not depend on content).
 
+import { physicalTargetKey } from './plan-item-origin.js';
+
 export const BRAIN_DUMP_SCHEMA_VERSION = 1;
 /** The reopen-aware record generation (see the file banner's rollout section).
  *  BRAIN_DUMP_SCHEMA_VERSION stays the storage-envelope version and the
@@ -281,6 +283,10 @@ function validPromotion(promotion) {
   if (typeof promotion.store !== 'string' || !promotion.store) return false;
   if (typeof promotion.targetId !== 'string' || !promotion.targetId) return false;
   if (typeof promotion.planItemId !== 'string' || !promotion.planItemId) return false;
+  // Optional: the PHYSICAL location (plan-item-origin.js physicalTargetKey) of a fence-aware claim. Absent on
+  // a claim made by a client that predates the fence (its item is an ordinary array item the rules authorize by
+  // capture state alone); present on every claim made since, whose item lives at that exact keyed location.
+  if (promotion.targetKey !== undefined && (typeof promotion.targetKey !== 'string' || !promotion.targetKey)) return false;
   // Optional, round-3: carried on the CLAIM so a reconciler that never saw the
   // original UI action (a different device, or the same device after a
   // restart) can still build the EXACT intended item — see reconcilePromotionClaim
@@ -350,7 +356,7 @@ export function claimPromotion(current, { promotion, now, updatedBy } = {}) {
     record: {
       ...base,
       promotionClaim: {
-        type: promotion.type, store: promotion.store, targetId: promotion.targetId, planItemId: promotion.planItemId,
+        type: promotion.type, store: promotion.store, targetId: promotion.targetId, ...(promotion.targetKey ? { targetKey: promotion.targetKey } : {}), planItemId: promotion.planItemId,
         when: typeof promotion.when === 'string' ? promotion.when : '',
         durationMinutes: Number.isFinite(promotion.durationMinutes) ? promotion.durationMinutes : null,
         claimedAt: at, claimedBy: by,
@@ -446,7 +452,7 @@ export function finalizePromotion(current, { now, updatedBy } = {}) {
       status: 'promoted',
       // when/durationMinutes persist so the finalized promotion still records
       // the exact intent (see samePromotionIntent).
-      promotion: { type: claim.type, store: claim.store, targetId: claim.targetId, planItemId: claim.planItemId, intentRecorded: true, when: claim.when, durationMinutes: claim.durationMinutes, promotedAt: at },
+      promotion: { type: claim.type, store: claim.store, targetId: claim.targetId, ...(claim.targetKey ? { targetKey: claim.targetKey } : {}), planItemId: claim.planItemId, intentRecorded: true, when: claim.when, durationMinutes: claim.durationMinutes, promotedAt: at },
       promotionClaim: null,
       disposedAt: at,
       updatedAt: at,
@@ -477,6 +483,10 @@ function intentDuration(value) {
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
+function effectiveTargetKey(intent) {
+  return intent.targetKey ?? physicalTargetKey(intent.store, intent.targetId);
+}
+
 /** Two promotion intents (a claim, a finalized promotion, or a caller's fresh
  *  request) are the same only when EVERY field that shapes the resulting plan
  *  item matches: type, store, targetId, planItemId, when and durationMinutes.
@@ -486,6 +496,9 @@ function intentDuration(value) {
 export function samePromotionIntent(a, b) {
   if (!a || !b) return false;
   if (a.type !== b.type || a.store !== b.store || a.targetId !== b.targetId || a.planItemId !== b.planItemId) return false;
+  // The same PHYSICAL location too. A claim or promotion made before the fence has no targetKey, but its
+  // location is still a pure function of (store, targetId), so it is compared by the key it would have had.
+  if (effectiveTargetKey(a) !== effectiveTargetKey(b)) return false;
   const left = knownTiming(a);
   const right = knownTiming(b);
   // Unknown historical timing is never PROVABLY equal to anything.
@@ -635,7 +648,7 @@ export function normalizeCapture(value) {
     const revokedAt = wireNullable(c.revokedAt);
     if (revokedAt !== null && !timestamp(revokedAt)) return null;
     promotionClaim = {
-      type: c.type, store: c.store, targetId: c.targetId, planItemId: c.planItemId,
+      type: c.type, store: c.store, targetId: c.targetId, ...(c.targetKey ? { targetKey: c.targetKey } : {}), planItemId: c.planItemId,
       when: typeof c.when === 'string' ? c.when : '',
       durationMinutes: Number.isFinite(c.durationMinutes) ? c.durationMinutes : null,
       claimedAt: c.claimedAt, claimedBy,
@@ -651,6 +664,7 @@ export function normalizeCapture(value) {
     if (!p || !PROMOTION_TYPES.has(p.type) || typeof p.store !== 'string' || !p.store) return null;
     if (typeof p.targetId !== 'string' || !p.targetId) return null;
     if (typeof p.planItemId !== 'string' || !p.planItemId) return null;
+    if (p.targetKey !== undefined && (typeof p.targetKey !== 'string' || !p.targetKey)) return null;
     if (!timestamp(p.promotedAt)) return null;
     if (p.when !== undefined && p.when !== null && typeof p.when !== 'string') return null;
     if (p.durationMinutes !== undefined && p.durationMinutes !== null && !(Number.isInteger(p.durationMinutes) && p.durationMinutes > 0)) return null;
@@ -661,7 +675,7 @@ export function normalizeCapture(value) {
     // way: a null durationMinutes is pruned to absent, same as never recorded.
     const intentRecorded = p.intentRecorded === true;
     promotion = {
-      type: p.type, store: p.store, targetId: p.targetId, planItemId: p.planItemId, intentRecorded,
+      type: p.type, store: p.store, targetId: p.targetId, ...(p.targetKey ? { targetKey: p.targetKey } : {}), planItemId: p.planItemId, intentRecorded,
       when: intentRecorded ? intentWhen(p.when) : null,
       durationMinutes: intentRecorded ? intentDuration(p.durationMinutes) : null,
       promotedAt: p.promotedAt,
@@ -701,7 +715,7 @@ export function normalizeCapture(value) {
     if (claimEpoch < 1 || !validPromotion(e) || !timestamp(e.claimedAt) || !writer(e.claimedBy)) return null;
     if (!timestamp(e.expiredAt) || !writer(e.expiredBy)) return null;
     expiredClaim = {
-      type: e.type, store: e.store, targetId: e.targetId, planItemId: e.planItemId,
+      type: e.type, store: e.store, targetId: e.targetId, ...(e.targetKey ? { targetKey: e.targetKey } : {}), planItemId: e.planItemId,
       when: typeof e.when === 'string' ? e.when : '',
       durationMinutes: Number.isFinite(e.durationMinutes) ? e.durationMinutes : null,
       claimedAt: e.claimedAt, claimedBy: e.claimedBy, expiredAt: e.expiredAt, expiredBy: e.expiredBy,
@@ -818,6 +832,14 @@ function pickCaptureWinner(local, remote) {
 export function arbitratePromotionClaim(remoteValue, candidate) {
   const remote = normalizeCapture(remoteValue);
   if (remote && TERMINAL_STATUSES.has(remote.status)) return undefined;
+  // First committed claim wins: the server refuses to replace a claim within one generation (the capture
+  // state machine in firebase.rules.json), so a competing claim is refused here too, never merged over it.
+  // The same intent is an idempotent retry and is accepted unchanged.
+  if (remote?.promotionClaim) {
+    const mine = normalizeCapture(candidate)?.promotionClaim;
+    // A REVOKED claim is being resolved (its day ended): nobody may (re-)claim over it either.
+    return mine && !remote.promotionClaim.revokedAt && samePromotionIntent(remote.promotionClaim, mine) ? remote : undefined;
+  }
   // A claim built from a local copy that has not yet seen a newer expired-claim
   // recovery is still a fresh, legitimate request: the remote is active and
   // unclaimed. Rebase it onto that newer epoch (and its provenance) instead of
