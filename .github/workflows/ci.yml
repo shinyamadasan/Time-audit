@@ -34,3 +34,35 @@ jobs:
 
       - name: Run smoke tests
         run: npm run test:smoke
+
+  # Required gate: firebase.rules.json is part of the production correctness boundary for the Brain Dump
+  # promotion fence, so the REAL Realtime Database emulator suites must run on every change. Nothing here may be
+  # skipped, soft-failed or cache-dependent: the emulator is provisioned (and checksum-verified) on every run.
+  firebase-fence:
+    name: Firebase fence / rules integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java (the RTDB emulator is a JVM jar)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Verify firebase.rules.json is the rules builder's output
+        run: npm run check:firebase-rules
+
+      - name: Run the Firebase fence suites (provisions RTDB emulator 4.11.2, then rules / real-SDK / mutation tests)
+        run: npm run test:fence
