@@ -51,10 +51,17 @@ Plan item time fields (timed items only)
   whenTz         IANA zone               owned BY THE ITEM, frozen when the reading is set
   durationMinutes 1..720                 a range may cross midnight inside the plan
 
-Brain Dump promotion origin (items with id `bdp1|<captureId>` only; every plan store)
-  brainDumpOrigin { v: 1, claimEpoch, type, targetId }   immutable; see DECISIONS #32
-                 The server accepts such an item only while rooms/<room>/brainDump/<captureId>
-                 authorizes exactly that origin (an unrevoked claim, or the promotion it became).
+Brain Dump promotion origin (items with id `bdp1|<captureId>` only; every plan store) — DECISIONS #33
+  brainDumpOrigin { v: 2, claimEpoch, type, store, targetKey }   immutable
+                 A FENCED item is stored at its own stable child, NEVER inside the plan record's `items`:
+                   calendarPlanFences/<planId>/bdp1|<captureId>
+                 (operationalPlanFences/<base64url(dayId)>/…, planFences/<dateKey>/… for the other stores).
+                 The path is the authorization identity; the server accepts the item only while
+                 rooms/<room>/brainDump/<captureId> authorizes exactly that origin AT THAT PATH (an unrevoked
+                 claim, or the promotion it became, naming the same store/targetKey/type at the same claimEpoch).
+                 The local app still sees one array: the sync boundary splits/folds it. A Brain Dump task keeps
+                 ONE factual owner for life (no cross-target move in V1); a later End or whenDayOffset is not a move.
+                 A pre-fence item (no origin) is an ordinary array item the server authorizes by capture state alone.
                  All other item fields stay ordinarily editable.
 
 ActivationFact (key = fact id, in calendarPlanAuthority/)

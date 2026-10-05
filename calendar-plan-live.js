@@ -112,6 +112,13 @@ export function createCalendarPlanLiveWiring(deps = {}) {
     }
   }
 
+  /** One exact read of a FENCED Brain Dump item's stable server child (promotion fence), via the sync
+   *  bridge. {ok:false} without one. */
+  function readRemoteFencedItem(dateKey, itemId, options) {
+    if (!sync || typeof sync.readRemoteFencedItem !== 'function') return Promise.resolve({ ok: false, reason: 'offline' });
+    return sync.readRemoteFencedItem(calendarPlanId(dateKey), itemId, options);
+  }
+
   /** One authoritative read of a calendar plan's REMOTE record (Brain Dump
    *  promotion fence), via the sync bridge. {ok:false} without one. */
   function readRemotePlan(dateKey, options) {
@@ -202,7 +209,7 @@ export function createCalendarPlanLiveWiring(deps = {}) {
 
   return {
     status, activation, active, authorityState, authorityReady, activate,
-    readRecord, listAllRaw, writePlanItems, writePlanWithPreparation, readRemotePlan,
+    readRecord, listAllRaw, writePlanItems, writePlanWithPreparation, readRemotePlan, readRemoteFencedItem,
     liveDateKeys, attachLive, refreshLive, tick, pushAllLocal, detach,
     deviceId,
     attachedPlanIds: () => [...attachedPlanIds],

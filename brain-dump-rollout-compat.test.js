@@ -78,16 +78,16 @@ function makeDatabase() {
 
 function makePlanAuthority() {
   const items = [];
-  const today = { store: 'calendar', id: 'calplan:2026-10-03', dateKey: '2026-10-03' };
+  const today = { store: 'calendar', id: 'cal1:2026-10-03', dateKey: '2026-10-03' };
   return {
     items,
     current: () => today,
-    dayForScheduledDate: dateKey => ({ ok: true, anchor: 'noon', target: { store: 'calendar', id: `calplan:${dateKey}`, dateKey } }),
+    dayForScheduledDate: dateKey => ({ ok: true, anchor: 'noon', target: { store: 'calendar', id: `cal1:${dateKey}`, dateKey } }),
     rawItems: () => items,
     addItem({ item }) { items.push(item); return { item }; },
     // One shared array stands in for the plan store's server copy in these tests.
     remoteItemPresence: (_target, itemId) => Promise.resolve(items.some(i => i.id === itemId) ? 'present' : 'absent'),
-    targetById(id) { const m = /^calplan:(.+)$/.exec(id); return m ? { store: 'calendar', id, dateKey: m[1] } : null; },
+    targetById(id) { const m = /^cal1:(.+)$/.exec(id); return m ? { store: 'calendar', id, dateKey: m[1] } : null; },
   };
 }
 

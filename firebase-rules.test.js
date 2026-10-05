@@ -249,37 +249,44 @@ test('calendar authority facts — exact owner-create contract and immutable chi
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Brain Dump + Eisenhower V1 — rooms/$roomId/brainDump/<captureId>
-// Mirrors 'commitments' exactly: owner-only write via the room-level $roomId
-// shape, no calendar-cutover barrier (never day-scoped), no extra .validate
-// (same minimal pattern commitments uses — client-side validation only).
+// Owner-only write, no calendar-cutover barrier (never day-scoped). Since the location-bound fence
+// (DECISIONS #33) a capture is also a governed record: it is written only at its OWN key (there is no
+// grant on the collection, so no parent overwrite), carries id === its key, and moves through the
+// capture state machine proven against the real emulator in firebase-rules-emulator.test.js.
 // ═══════════════════════════════════════════════════════════════════════════
+
+/** A well-formed capture record (what every real client writes). */
+const bd = (id, extra = {}) => ({ schemaVersion: 1, id, text: 'x', createdAt: 1, updatedAt: 1, updatedBy: 'd', status: 'untriaged', ...extra });
 
 test('brainDump — A. the rightful room owner may read and write its own captures', () => {
   const empty = { rooms: { uid_alice_uid: {} } };
-  assert.equal(canWrite(empty, A, '/rooms/uid_alice_uid/brainDump/cap1', { text: 'Call the vet', status: 'untriaged' }), true, 'owner creates a capture');
-  const withCapture = { rooms: { uid_alice_uid: { brainDump: { cap1: { text: 'Call the vet', status: 'untriaged' } } } } };
+  assert.equal(canWrite(empty, A, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1', { text: 'Call the vet' })), true, 'owner creates a capture');
+  const withCapture = { rooms: { uid_alice_uid: { brainDump: { cap1: bd('cap1', { text: 'Call the vet' }) } } } };
   assert.equal(canRead(withCapture, A, '/rooms/uid_alice_uid/brainDump'), true, 'owner reads its own brainDump subtree');
   assert.equal(canRead(withCapture, A, '/rooms/uid_alice_uid/brainDump/cap1'), true, 'owner reads one capture');
-  assert.equal(canWrite(withCapture, A, '/rooms/uid_alice_uid/brainDump/cap1', { text: 'Call the vet', status: 'archived' }), true, 'owner updates its own capture');
+  assert.equal(canWrite(withCapture, A, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1', { text: 'Call the vet', status: 'archived', disposedAt: 2, updatedAt: 2 })), true, 'owner updates its own capture');
+  assert.equal(canWrite(withCapture, A, '/rooms/uid_alice_uid/brainDump/cap1', null), false, 'a capture is never deleted (no governed capture deletion exists)');
+  assert.equal(canWrite(withCapture, A, '/rooms/uid_alice_uid/brainDump', { cap1: bd('cap1') }), false, 'no grant on the collection: a whole-collection overwrite is refused');
+  assert.equal(canWrite(empty, A, '/rooms/uid_alice_uid/brainDump/cap1', bd('other')), false, "a capture's id must equal its key");
 });
 
 test('brainDump — B. a foreign account cannot read or write another room\'s brainDump', () => {
-  const withCapture = { rooms: { uid_alice_uid: { brainDump: { cap1: { text: 'Private thought', status: 'untriaged' } } } } };
+  const withCapture = { rooms: { uid_alice_uid: { brainDump: { cap1: bd('cap1', { text: 'Private thought' }) } } } };
   assert.equal(canRead(withCapture, C, '/rooms/uid_alice_uid/brainDump'), false, 'outsider cannot read the subtree');
   assert.equal(canRead(withCapture, C, '/rooms/uid_alice_uid/brainDump/cap1'), false, 'outsider cannot read one capture');
-  assert.equal(canWrite(withCapture, C, '/rooms/uid_alice_uid/brainDump/cap1', { text: 'Hijacked', status: 'untriaged' }), false, 'outsider cannot overwrite');
-  assert.equal(canWrite({ rooms: { uid_alice_uid: {} } }, C, '/rooms/uid_alice_uid/brainDump/cap2', { text: 'Injected', status: 'untriaged' }), false, 'outsider cannot create a new capture in A\'s room');
+  assert.equal(canWrite(withCapture, C, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1', { text: 'Hijacked' })), false, 'outsider cannot overwrite');
+  assert.equal(canWrite({ rooms: { uid_alice_uid: {} } }, C, '/rooms/uid_alice_uid/brainDump/cap2', bd('cap2', { text: 'Injected' })), false, 'outsider cannot create a new capture in A\'s room');
 });
 
 test('brainDump — C. unauthenticated writes are denied the same as every other owner-only room path', () => {
   const empty = { rooms: { uid_alice_uid: {} } };
-  assert.equal(canWrite(empty, null, '/rooms/uid_alice_uid/brainDump/cap1', { text: 'x', status: 'untriaged' }), false, 'unauthenticated write denied');
+  assert.equal(canWrite(empty, null, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1')), false, 'unauthenticated write denied');
   assert.equal(canRead(empty, null, '/rooms/uid_alice_uid/brainDump'), false, 'unauthenticated read denied');
   // No calendar-cutover barrier applies to brainDump (unlike plans/operationalPlans) — it is
   // never day-scoped, exactly like commitments. Confirmed by the same owner still writing
   // after a cutover fact exists.
   const afterCutover = { rooms: { uid_alice_uid: { calendarPlanAuthority: { [CUTOVER.id]: CUTOVER } } } };
-  assert.equal(canWrite(afterCutover, A, '/rooms/uid_alice_uid/brainDump/cap1', { text: 'still writable', status: 'untriaged' }), true, 'brainDump is not subject to the calendar cutover barrier');
+  assert.equal(canWrite(afterCutover, A, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1', { text: 'still writable' })), true, 'brainDump is not subject to the calendar cutover barrier');
 });
 
 test('brainDump — D. adding this rule disturbs no other room path (see "calendar barrier preserves every audited ordinary owner-write room path" below, which now includes brainDump in its own enumerated list)', () => {
@@ -296,9 +303,9 @@ test('brainDump — D. adding this rule disturbs no other room path (see "calend
 // lowers the generation. Records that never reached generation 2 stay writable exactly as before.
 test('brainDump — E. a capture\'s schemaVersion can never be lowered (old clients cannot downgrade a reopened record)', () => {
   const at = '/rooms/uid_alice_uid/brainDump/cap1';
-  const withVersion = v => ({ rooms: { uid_alice_uid: { brainDump: { cap1: { schemaVersion: v, text: 'x', status: 'triaged' } } } } });
+  const withVersion = v => ({ rooms: { uid_alice_uid: { brainDump: { cap1: bd('cap1', { schemaVersion: v, status: 'triaged' }) } } } });
   const empty = { rooms: { uid_alice_uid: {} } };
-  const rec = (v, status = 'triaged') => ({ schemaVersion: v, text: 'x', status });
+  const rec = (v, status = 'triaged') => bd('cap1', { schemaVersion: v, status, ...(status === 'untriaged' || status === 'triaged' ? {} : { disposedAt: 2 }) });
   // creating: either generation
   assert.equal(canWrite(empty, A, at, rec(1)), true, 'a new generation-1 capture');
   assert.equal(canWrite(empty, A, at, rec(2)), true, 'a new generation-2 capture');
@@ -308,13 +315,15 @@ test('brainDump — E. a capture\'s schemaVersion can never be lowered (old clie
   // generation 2 is never lowered
   assert.equal(canWrite(withVersion(2), A, at, rec(2, 'archived')), true, 'gen 2 -> gen 2');
   assert.equal(canWrite(withVersion(2), A, at, rec(1, 'delegated')), false, 'gen 2 -> gen 1 is a downgrade');
-  assert.equal(canWrite(withVersion(2), A, at, { text: 'x', status: 'delegated' }), false, 'dropping schemaVersion is a downgrade');
-  assert.equal(canWrite(withVersion(2), A, at, { schemaVersion: '2', text: 'x', status: 'triaged' }), false, 'a non-numeric version is not a generation');
+  const bare = bd('cap1', { status: 'delegated', disposedAt: 2 });
+  delete bare.schemaVersion;
+  assert.equal(canWrite(withVersion(2), A, at, bare), false, 'dropping schemaVersion is a downgrade');
+  assert.equal(canWrite(withVersion(2), A, at, bd('cap1', { schemaVersion: '2', status: 'triaged' })), false, 'a non-numeric version is not a generation');
   // ownership still applies on top
   assert.equal(canWrite(withVersion(1), C, at, rec(2)), false, 'an outsider still cannot write');
   // the monotonic rule is per capture: another capture in the same room is unaffected
-  const mixed = { rooms: { uid_alice_uid: { brainDump: { cap1: { schemaVersion: 2, text: 'x', status: 'triaged' }, cap2: { schemaVersion: 1, text: 'y', status: 'triaged' } } } } };
-  assert.equal(canWrite(mixed, A, '/rooms/uid_alice_uid/brainDump/cap2', rec(1, 'archived')), true);
+  const mixed = { rooms: { uid_alice_uid: { brainDump: { cap1: bd('cap1', { schemaVersion: 2, status: 'triaged' }), cap2: bd('cap2', { status: 'triaged' }) } } } };
+  assert.equal(canWrite(mixed, A, '/rooms/uid_alice_uid/brainDump/cap2', bd('cap2', { status: 'archived', disposedAt: 2 })), true);
 });
 
 test('calendar barrier preserves every audited ordinary owner-write room path', () => {
@@ -322,11 +331,13 @@ test('calendar barrier preserves every audited ordinary owner-write room path', 
     'timer', 'entries', 'intention', 'devices', 'settings', 'templates', 'templatesSavedAt',
     'breakState', 'awayState', 'reviews', 'weeklyReviews', 'focusRedemptions', 'coarseLifeEvidence',
     'dayBoundaryRevisions', 'commitments', 'planByDeadlineRevisions', 'intentionalOffDays', 'calendarPlans',
-    'brainDump',
   ];
   const root = { rooms: { uid_alice_uid: { calendarPlanAuthority: { [CUTOVER.id]: CUTOVER } } } };
   for (const child of ordinary) {
     assert.equal(canWrite(root, A, `/rooms/uid_alice_uid/${child}`, { proof: child }), true, `${child} remains owner-writable`);
     assert.equal(canWrite(root, C, `/rooms/uid_alice_uid/${child}`, { proof: child }), false, `${child} remains account-isolated`);
   }
+  // brainDump is governed per capture (no collection grant), so it is audited at its record.
+  assert.equal(canWrite(root, A, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1')), true, 'brainDump captures remain owner-writable');
+  assert.equal(canWrite(root, C, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1')), false, 'brainDump captures remain account-isolated');
 });

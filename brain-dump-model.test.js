@@ -12,7 +12,7 @@ import {
   validBrainDumpId, brainDumpPlanItemId, buildCapture, triageCapture, claimPromotion, finalizePromotion,
   archiveCapture, delegateCapture, normalizeCapture, mergeCaptureRecords, arbitratePromotionClaim,
   mergeCaptureMaps, allCaptures, untriagedCaptures, triagedCaptures, disposedCaptures, quadrantOf,
-  TERMINAL_STATUSES,
+  TERMINAL_STATUSES, revokeExpiredClaim,
 } from './brain-dump-model.js';
 import { createBrainDumpRepository, brainDumpCacheKeyForRoom } from './brain-dump-repository.js';
 
@@ -492,12 +492,24 @@ test('arbitratePromotionClaim: establishes the claim cleanly when remote is untr
   assert.deepEqual(result, candidate);
 });
 
-test('arbitratePromotionClaim: two genuinely concurrent NEW claims against each other (neither remote is terminal yet) fall through to the ordinary earliest-wins tie-break', () => {
+test('arbitratePromotionClaim: the FIRST COMMITTED claim wins; a competing claim never replaces it, whatever its clock says (the server refuses a same-generation replacement)', () => {
   const base = triageCapture(buildCapture({ id: 'bidone1', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: true, now: T0 + 1, updatedBy: 'd' }).record;
   const remoteClaim = claimPromotion(base, { promotion: PROMO_A, now: T0 + 10, updatedBy: 'device-a' }).record; // already on remote
-  const candidate = claimPromotion(base, { promotion: PROMO_B, now: T0 + 20, updatedBy: 'device-b' }).record; // arriving later
-  const result = arbitratePromotionClaim(remoteClaim, candidate);
-  assert.deepEqual(result.promotionClaim, remoteClaim.promotionClaim, 'the earlier claim still wins — not a blanket refusal, since remote is not terminal');
+  const later = claimPromotion(base, { promotion: PROMO_B, now: T0 + 20, updatedBy: 'device-b' }).record; // arriving later
+  assert.equal(arbitratePromotionClaim(remoteClaim, later), undefined, 'a later competing claim is refused with zero writes');
+  // A skewed clock must not turn a LATER arrival into a replacement: previously the earlier claimedAt won.
+  const skewed = claimPromotion(base, { promotion: PROMO_B, now: T0 + 5, updatedBy: 'device-b' }).record;
+  assert.equal(arbitratePromotionClaim(remoteClaim, skewed), undefined, 'an earlier-clocked later arrival is refused too');
+  // The SAME intent is an idempotent retry and is accepted as the remote record, unchanged.
+  const retry = claimPromotion(base, { promotion: PROMO_A, now: T0 + 30, updatedBy: 'device-a' }).record;
+  assert.deepEqual(arbitratePromotionClaim(remoteClaim, retry).promotionClaim, remoteClaim.promotionClaim);
+  // A revoked claim is being resolved: nobody may (re-)claim over it.
+  const revoked = revokeExpiredClaim(remoteClaim, remoteClaim.promotionClaim, { now: T0 + 40 }).record;
+  assert.equal(arbitratePromotionClaim(revoked, retry), undefined, 'a revoked claim cannot be re-claimed');
+  // The same location with a different physical key is a different intent.
+  const keyed = claimPromotion(base, { promotion: { ...PROMO_A, targetKey: 'cal1:2026-10-01' }, now: T0 + 50, updatedBy: 'device-a' }).record;
+  assert.equal(keyed.promotionClaim.targetKey, 'cal1:2026-10-01', 'the claim carries the physical location');
+  assert.equal(arbitratePromotionClaim(remoteClaim, keyed), undefined, 'targetKey is part of the intent');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

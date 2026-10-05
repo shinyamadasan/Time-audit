@@ -242,6 +242,8 @@ export function createBrainDumpSyncBridge(deps = {}) {
     // Exact intent, never merely the same deterministic plan item: another
     // device's same-day Do Today vs this Schedule (or 14:00 vs 15:00) shares
     // store, targetId and planItemId, and must NOT read as this caller's win.
+    // A REVOKED claim is being resolved (its day ended): it is nobody's win to act on.
+    if (finalRecord?.promotionClaim?.revokedAt) return { ok: false, reason: 'already-claimed', record: finalRecord };
     if (samePromotionIntent(finalRecord?.promotionClaim, promotion)) return { ok: true, record: finalRecord };
     // Production UX Correction V1 — the root cause of the false "already being
     // promoted elsewhere". Real Firebase raises the whole-subtree 'value' event

@@ -129,11 +129,14 @@ function makeDevice({ db, clock, name = `device-${++seq}`, listen = true }) {
   return device;
 }
 
-/** Items for `id` in a calendar plan, as the SERVER holds them. */
+/** Items for `id` in a calendar plan, as the SERVER holds them: the fenced item at its stable keyed child
+ *  (plan-item-origin.js) AND any un-fenced copy in the plan record's array, so a duplicate anywhere is seen. */
 export function remoteItemsFor(db, dateKey, captureId) {
+  const id = `bdp1|${captureId}`;
   const record = db.read(`rooms/${ROOM}/calendarPlans/${calId(dateKey)}`);
   const items = Array.isArray(record?.items) ? record.items : Object.values(record?.items || {});
-  return items.filter(item => item?.id === `bdp1|${captureId}`);
+  const fenced = db.read(`rooms/${ROOM}/calendarPlanFences/${calId(dateKey)}/${id}`);
+  return [...items.filter(item => item?.id === id), ...(fenced ? [fenced] : [])];
 }
 
 export function remoteCapture(db, id) {

@@ -29,6 +29,7 @@ import {
 } from './commitments-model.js';
 import { describeStaleAge } from './stale-plan-recovery-model.js';
 import { addCalendarDays, durationBetween, planItemEndTime } from './plan-tomorrow-model.js';
+import { BRAIN_DUMP_MOVE_REFUSED, isFencedItem } from './plan-item-origin.js';
 
 const SECTION_ID = 'planning-continuity-section';
 /** How many rows each list renders before "Show all". A DISPLAY bound only — the
@@ -244,14 +245,16 @@ function taskFormValue() {
 function taskFormHtml() {
   const { item, date, endTime, quick } = taskFormValue();
   const kind = item?.kind === 'task' ? 'task' : 'priority';
+  // A Brain Dump task stays on the day it was promoted into (plan-item-origin.js): its date is shown, not offered.
+  const pinned = isFencedItem(item);
   return `<form class="pc-form pc-item-form" id="pc-task-form">
     <div class="pc-head"><h3>${item ? 'Edit planned task' : 'Add to My Day'}</h3><button type="button" class="pc-icon" data-pc-action="close-item-form" aria-label="Close add task">✕</button></div>
     ${item ? '' : `<div class="pc-entry-types" role="group" aria-label="What to add"><button type="button" class="btn sm primary" aria-pressed="true">Task</button><button type="button" class="btn sm ghost" data-pc-action="add-commitment" aria-pressed="false">Commitment</button></div>`}
     <label>What do you want to do?<input name="title" maxlength="200" value="${escape(item?.task || '')}" required autofocus></label>
-    <fieldset class="pc-when"><legend>When?</legend><div class="pc-quick-dates">
+    <fieldset class="pc-when"><legend>When?</legend>${pinned ? '' : `<div class="pc-quick-dates">
       <button type="button" class="btn sm ghost" data-pc-action="set-date" data-day="${escape(quick.today.target?.id || '')}" data-date="${escape(quick.today.date)}">Today</button>
       <button type="button" class="btn sm ghost" data-pc-action="set-date" data-day="${escape(quick.tomorrow.target?.id || '')}" data-date="${escape(quick.tomorrow.date)}">Tomorrow</button>
-    </div><input name="date" type="date" value="${escape(date)}" required aria-label="Task date"></fieldset>
+    </div>`}<input name="date" type="date" value="${escape(date)}" required aria-label="Task date"${pinned ? ' readonly' : ''}>${pinned ? `<p class="pc-muted pc-hint">${escape(BRAIN_DUMP_MOVE_REFUSED)}</p>` : ''}</fieldset>
     <div class="pc-form-row"><label>Start <input name="time" type="time" value="${escape(item?.when || '')}" aria-label="Task start time, optional"></label><label>End <input name="endTime" type="time" value="${escape(endTime)}" aria-label="Task end time, optional"></label></div>
     <p class="pc-muted pc-hint">Leave Start blank for Anytime. End is optional; an earlier End continues after midnight.</p>
     <label>Type <select name="kind"><option value="priority"${kind === 'priority' ? ' selected' : ''}>Top Priority</option><option value="task"${kind === 'task' ? ' selected' : ''}>Other task</option></select></label>
@@ -294,6 +297,9 @@ function submitTaskForm(form) {
           : 'Choose a valid date.');
     return;
   }
+  // A Brain Dump task never changes plan. Refused before anything is written, so no source or destination copy can exist.
+  if (editing.item && isFencedItem(editing.item) && editing.sourceTarget
+    && (resolved.target.store !== editing.sourceTarget.store || resolved.target.id !== editing.sourceTarget.id)) { refuseTaskForm(BRAIN_DUMP_MOVE_REFUSED); return; }
   if (endTime && !time) { refuseTaskForm('Choose a Start before setting an End.'); return; }
   const durationMinutes = endTime ? durationBetween(time, endTime, resolved.target.store === 'calendar') : null;
   if (endTime && !durationMinutes) { refuseTaskForm('End must be later than Start or continue into the next calendar date.'); return; }

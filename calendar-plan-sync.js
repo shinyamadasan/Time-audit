@@ -31,7 +31,8 @@
 import { createCalendarPlanRepository } from './calendar-plan-repository.js';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
 import { mergeCalendarPlanRecords, parseCalendarPlanId, validateActivationFact } from './calendar-plan-model.js';
-import { partitionOutboundItems } from './plan-item-origin.js';
+import { FENCE_REMOTE_PATHS, fencedItemsOf, partitionOutboundItems, splitFencedItems } from './plan-item-origin.js';
+import { pushFencedItems, readFencedValue } from './plan-fence-sync.js';
 
 export const CALENDAR_PLANS_REMOTE_PATH = 'calendarPlans';
 export const CALENDAR_AUTHORITY_REMOTE_PATH = 'calendarPlanAuthority';
@@ -109,33 +110,55 @@ export function createCalendarPlanSyncBridge(deps = {}) {
       local = repository.read(parseCalendarPlanId(planId));
       if (!local) return Promise.resolve({ committed: false, outcome: 'skipped' });
     }
-    const candidate = JSON.parse(JSON.stringify(local));
-    let planRef;
-    try {
-      planRef = roomRef.child(CALENDAR_PLANS_REMOTE_PATH).child(planId);
-      if (typeof planRef.transaction !== 'function') throw new Error('Firebase plan transactions are unavailable.');
-    } catch {
-      return Promise.resolve({ committed: false, outcome: 'transport-failure' });
-    }
+    // The Brain Dump fence (plan-item-origin.js): a FENCED item lives at its own stable keyed child, never
+    // in the plan record's array. The record transaction below carries the ordinary items only, so a
+    // whole-record write can neither reorder nor erase a fenced item, and the fenced items are pushed
+    // one transaction each, at the exact child the server's rules authorize.
+    const { ordinary, fenced } = splitFencedItems(Array.isArray(local.items) ? local.items : Object.values(local.items || {}));
+    const candidate = JSON.parse(JSON.stringify({ ...local, items: ordinary }));
+    const choose = (a, b) => mergeCalendarPlanRecords({ items: [a] }, { items: [b] }, planId).items[0];
+    // A record that exists only to hold fenced items (folded in from their children, no preparation, never
+    // written by this device) has nothing for the plan record itself to say.
+    const needsRecord = ordinary.length > 0 || !!local.preparation || Number.isFinite(local.createdAt);
     let ownerLost = false;
-    return planRef.transaction(remote => {
-      // Firebase may re-run this later against fresh server data. If the account changed in
-      // between, abort with zero writes rather than finish a push the cache no longer backs.
-      ownerLost = !roomOwnsCache(roomId);
-      if (ownerLost) return undefined;
-      return mergeCalendarPlanRecords(remote, candidate, planId);
-    }, undefined, false)
-      .then(result => {
-        if (ownerLost) return { committed: false, outcome: 'owner-mismatch' };
-        if (!result?.committed || !result.snapshot) return { committed: false, outcome: 'aborted' };
-        if (roomOwnsCache(roomId)) {
-          const committed = mergeCalendarPlanRecords(null, result.snapshot.val(), planId);
-          const { changed, record } = repository.mergeRemote(planId, committed);
-          if (changed) announce('plan', planId, record);
-        }
-        return { committed: true, outcome: 'committed' };
-      })
-      .catch(() => ({ committed: false, outcome: 'transport-failure' }));
+    const pushRecord = () => {
+      let planRef;
+      try {
+        planRef = roomRef.child(CALENDAR_PLANS_REMOTE_PATH).child(planId);
+        if (typeof planRef.transaction !== 'function') throw new Error('Firebase plan transactions are unavailable.');
+      } catch {
+        return Promise.resolve({ committed: false, outcome: 'transport-failure' });
+      }
+      return planRef.transaction(remote => {
+        // Firebase may re-run this later against fresh server data. If the account changed in
+        // between, abort with zero writes rather than finish a push the cache no longer backs.
+        ownerLost = !roomOwnsCache(roomId);
+        if (ownerLost) return undefined;
+        return mergeCalendarPlanRecords(remote, candidate, planId);
+      }, undefined, false)
+        .then(result => {
+          if (ownerLost) return { committed: false, outcome: 'owner-mismatch' };
+          if (!result?.committed || !result.snapshot) return { committed: false, outcome: 'aborted' };
+          if (roomOwnsCache(roomId)) {
+            const committed = mergeCalendarPlanRecords(null, result.snapshot.val(), planId);
+            const { changed, record } = repository.mergeRemote(planId, committed);
+            if (changed) announce('plan', planId, record);
+          }
+          return { committed: true, outcome: 'committed' };
+        })
+        .catch(() => ({ committed: false, outcome: 'transport-failure' }));
+    };
+    return (needsRecord ? pushRecord() : Promise.resolve({ committed: true, outcome: 'skipped' })).then(async recordResult => {
+      if (!fenced.length) return recordResult;
+      const pushed = await pushFencedItems({ roomRef, store: 'calendar', targetKey: planId, items: fenced, choose, stillOwned: () => roomOwnsCache(roomId) });
+      if (roomOwnsCache(roomId) && pushed.items.length) {
+        const { changed, record } = repository.mergeRemoteFenced(planId, fencedItemsOf(Object.fromEntries(pushed.items.map(item => [item.id, item]))));
+        if (changed) announce('plan', planId, record);
+      }
+      if (!recordResult.committed) return recordResult;
+      if (pushed.outcome === 'committed' || pushed.outcome === 'unchanged') return { committed: true, outcome: 'committed' };
+      return { committed: false, outcome: pushed.outcome === 'denied' ? 'fence-denied' : pushed.outcome };
+    });
   }
 
   function syncPlan(planId) {
@@ -163,6 +186,28 @@ export function createCalendarPlanSyncBridge(deps = {}) {
     return Promise.race([read, timeout]).finally(() => clearTimeout(timer));
   }
 
+  /** ONE exact read of a FENCED item's stable server child (Brain Dump promotion fence): the only way a
+   *  promotion's destination is proven present or absent. The plan record's array is never scanned.
+   *  @returns {Promise<{ok:true, value:*} | {ok:false, reason:string}>} value null = the child does not exist */
+  function readRemoteFencedItem(planId, itemId, { timeoutMs = 8000 } = {}) {
+    if (!parseCalendarPlanId(planId)) return Promise.resolve({ ok: false, reason: 'invalid-input' });
+    const roomRef = getRoomRef();
+    const roomId = activeRoomId();
+    if (!roomRef || !roomOwnsCache(roomId)) return Promise.resolve({ ok: false, reason: 'offline' });
+    return readFencedValue({ roomRef, store: 'calendar', targetKey: planId, itemId, stillOwned: () => roomOwnsCache(roomId), timeoutMs });
+  }
+
+  /** Folds one inbound snapshot of a plan's fence collection ({ [itemId]: item }) into the local array.
+   *  Same room/owner rule as handleRemotePlanSnapshot. */
+  function handleRemoteFenceSnapshot(planId, val, roomId = activeRoomId()) {
+    if (!roomOwnsCache(roomId)) return false;
+    const items = fencedItemsOf(val);
+    if (!items.length) return true;
+    const { changed, record } = repository.mergeRemoteFenced(planId, items);
+    if (changed) announce('plan', planId, record);
+    return true;
+  }
+
   /** Merges one inbound snapshot for a single plan. `roomId` is the room the snapshot CAME
    *  FROM; it is applied only if that room is joined now and its cache is active. */
   function handleRemotePlanSnapshot(planId, val, roomId = activeRoomId()) {
@@ -185,8 +230,20 @@ export function createCalendarPlanSyncBridge(deps = {}) {
       return Promise.resolve(false);
     }
     hydratedRoomId = roomId;
-    return Promise.resolve(collectionRef.once('value'))
-      .then(snap => {
+    const readFences = () => {
+      try {
+        return Promise.resolve(roomRef.child(FENCE_REMOTE_PATHS.calendar).once('value')).then(snap => {
+          const all = snap && typeof snap.val === 'function' ? snap.val() : null;
+          if (!all || typeof all !== 'object') return;
+          Object.entries(all).forEach(([id, val]) => {
+            if (!parseCalendarPlanId(id) || !val) return;
+            try { handleRemoteFenceSnapshot(id, val, roomId); } catch { /* one bad record never blocks the rest */ }
+          });
+        });
+      } catch { return Promise.resolve(); }
+    };
+    return Promise.all([Promise.resolve(collectionRef.once('value')), readFences()])
+      .then(([snap]) => {
         const all = snap && typeof snap.val === 'function' ? snap.val() : null;
         if (!all || typeof all !== 'object') return true;
         Object.entries(all).forEach(([id, val]) => {
@@ -207,16 +264,22 @@ export function createCalendarPlanSyncBridge(deps = {}) {
     if (planListeners.has(planId)) return;
     const token = ++listenerToken;
     const ref = roomRef.child(CALENDAR_PLANS_REMOTE_PATH).child(planId);
-    planListeners.set(planId, { ref, roomId, token });
+    const fenceRef = roomRef.child(FENCE_REMOTE_PATHS.calendar).child(planId);
+    planListeners.set(planId, { ref, fenceRef, roomId, token });
     ref.on('value', snap => {
       if (planListeners.get(planId)?.token !== token) return; // detached or superseded
       handleRemotePlanSnapshot(planId, snap.val(), roomId);
+    });
+    // The plan's fenced Brain Dump items arrive on their own stable child (plan-item-origin.js).
+    fenceRef.on('value', snap => {
+      if (planListeners.get(planId)?.token !== token) return;
+      handleRemoteFenceSnapshot(planId, snap.val(), roomId);
     });
   }
 
   function detachPlan(planId) {
     const entry = planListeners.get(planId);
-    if (entry) entry.ref.off();
+    if (entry) { entry.ref.off(); entry.fenceRef?.off(); }
     planListeners.delete(planId);
   }
 
@@ -373,7 +436,7 @@ export function createCalendarPlanSyncBridge(deps = {}) {
   }
 
   return {
-    pushPlan, syncPlan, readRemotePlan, handleRemotePlanSnapshot, hydrateAll, attachPlan, detachPlan, detachPlans,
+    pushPlan, syncPlan, readRemotePlan, readRemoteFencedItem, handleRemotePlanSnapshot, handleRemoteFenceSnapshot, hydrateAll, attachPlan, detachPlan, detachPlans,
     pushActivations, handleRemoteActivationSnapshot, attachAuthority, detachAuthority, authorityHydrationState,
     detachAll, onRemote, repository,
   };

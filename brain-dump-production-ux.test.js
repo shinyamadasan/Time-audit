@@ -77,16 +77,16 @@ function makeRoom() {
 
 function makeFakePlanAuthority() {
   const items = [];
-  const today = { store: 'calendar', id: 'calplan:2026-10-01', dateKey: '2026-10-01' };
+  const today = { store: 'calendar', id: 'cal1:2026-10-01', dateKey: '2026-10-01' };
   return {
     items,
     current: () => today,
-    dayForScheduledDate: (dateKey) => ({ ok: true, anchor: 'noon', target: { store: 'calendar', id: `calplan:${dateKey}`, dateKey } }),
+    dayForScheduledDate: (dateKey) => ({ ok: true, anchor: 'noon', target: { store: 'calendar', id: `cal1:${dateKey}`, dateKey } }),
     rawItems: () => items,
     addItem({ item }) { items.push(item); return { item }; },
     // One shared array stands in for the plan store's server copy in these tests.
     remoteItemPresence: (_target, itemId) => Promise.resolve(items.some(i => i.id === itemId) ? 'present' : 'absent'),
-    targetById(id) { const m = /^calplan:(.+)$/.exec(id); return m ? { store: 'calendar', id, dateKey: m[1] } : null; },
+    targetById(id) { const m = /^cal1:(.+)$/.exec(id); return m ? { store: 'calendar', id, dateKey: m[1] } : null; },
   };
 }
 
@@ -167,8 +167,8 @@ test('B. a second fresh capture right after A succeeds independently; A does not
   assert.equal(rb.ok, true, `B: ${rb.reason}`); assert.notEqual(rb.alreadyDisposed, true);
   assert.equal(pa.items.length, 2);
   assert.equal(pa.items.find(i => i.id === brainDumpPlanItemId(b)).task, 'Capture B');
-  assert.equal(device.repository.read(a).promotion.targetId, 'calplan:2026-10-10');
-  assert.equal(device.repository.read(b).promotion.targetId, 'calplan:2026-10-11');
+  assert.equal(device.repository.read(a).promotion.targetId, 'cal1:2026-10-10');
+  assert.equal(device.repository.read(b).promotion.targetId, 'cal1:2026-10-11');
 });
 
 test('C. fresh capture -> Do Today: one plan item, plain success', async () => {
@@ -437,7 +437,7 @@ test('P3. Reopen while another device already holds an authoritative promotion c
   // Meanwhile another device's claim became authoritative remotely (its plan write not yet done).
   const claimed = {
     ...room.raw()[id],
-    promotionClaim: { type: 'do-today', store: 'calendar', targetId: 'calplan:2026-10-01', planItemId: brainDumpPlanItemId(id), when: '', durationMinutes: null, claimedAt: clock.now + 10, claimedBy: 'device-y' },
+    promotionClaim: { type: 'do-today', store: 'calendar', targetId: 'cal1:2026-10-01', planItemId: brainDumpPlanItemId(id), when: '', durationMinutes: null, claimedAt: clock.now + 10, claimedBy: 'device-y' },
     updatedAt: clock.now + 10, updatedBy: 'device-y',
   };
   room.put(id, claimed);
@@ -668,7 +668,7 @@ test('F5 already-stuck claim (current/future day): a fresh NEW client loading it
   const room = makeRoom();
   const pa = makeFakePlanAuthority();
   const id = 'bstuckfuture';
-  room.put(id, stuckClaimRecord(id, { type: 'schedule', targetId: 'calplan:2026-10-10', when: '14:30', durationMinutes: 30 }));
+  room.put(id, stuckClaimRecord(id, { type: 'schedule', targetId: 'cal1:2026-10-10', when: '14:30', durationMinutes: 30 }));
   assert.equal('disposedAt' in room.raw()[id], false, 'stored in its pruned wire shape');
   assert.equal(pa.items.length, 0, 'stuck: no plan item');
 
@@ -687,24 +687,24 @@ test('F5 already-stuck claim (current/future day): a fresh NEW client loading it
 
 test('F5 + FIX FIRST #3: an already-stuck cf43080 claim on a day that has ENDED returns to triage (no plan item can exist for it)', async () => {
   const room = makeRoom();
-  const pa = withEndedGate(makeFakePlanAuthority(), ['calplan:2026-09-01']);
+  const pa = withEndedGate(makeFakePlanAuthority(), ['cal1:2026-09-01']);
   const id = 'bstuckpast';
-  room.put(id, stuckClaimRecord(id, { type: 'do-today', targetId: 'calplan:2026-09-01', when: '' }));
+  room.put(id, stuckClaimRecord(id, { type: 'do-today', targetId: 'cal1:2026-09-01', when: '' }));
   const device = makeProductionDevice({ room, planAuthority: pa });
   await flush();
   const local = device.repository.read(id);
   assert.equal(local.status, 'triaged');
   assert.equal(local.promotionClaim, null, 'no longer claimed');
-  assert.equal(local.expiredClaim.targetId, 'calplan:2026-09-01');
+  assert.equal(local.expiredClaim.targetId, 'cal1:2026-09-01');
   assert.equal(pa.items.length, 0, 'never written into the ended day');
   assert.equal(device.repository.archive(id).ok, true, 'the owner can decide again');
 });
 
 test('F8 regression: a claim a NEW client minted (generation 2), crashed before writing, on a day that has ENDED, returns to triage instead of staying claimed forever', async () => {
   const room = makeRoom();
-  const pa = withEndedGate(makeFakePlanAuthority(), ['calplan:2026-09-01']);
+  const pa = withEndedGate(makeFakePlanAuthority(), ['cal1:2026-09-01']);
   const id = 'bnewcrash1';
-  const minted = stuckClaimRecord(id, { type: 'do-today', targetId: 'calplan:2026-09-01', when: '' });
+  const minted = stuckClaimRecord(id, { type: 'do-today', targetId: 'cal1:2026-09-01', when: '' });
   minted.schemaVersion = 2; // exactly what claimPromotion now writes
   room.put(id, minted);
   const device = makeProductionDevice({ room, planAuthority: pa });
@@ -735,7 +735,7 @@ const claimNever = () => { throw new Error('a legacy promoted capture must never
 
 test('F6 A. legacy promoted Do Today -> exact Do Today retry: provably equivalent (Do Today is untimed by construction), idempotent success', async () => {
   const pa = makeFakePlanAuthority();
-  const { repository, id } = legacyPromotedRepository({ type: 'do-today', targetId: 'calplan:2026-10-01' });
+  const { repository, id } = legacyPromotedRepository({ type: 'do-today', targetId: 'cal1:2026-10-01' });
   assert.equal(repository.read(id).promotion.intentRecorded, false);
   const result = await promoteCaptureToPlan({ repository, planAuthority: pa, claimPromotionRemote: claimNever, id, type: 'do-today', now: T0 + 10, deviceId: 'device-1' });
   assert.equal(result.ok, true);
@@ -745,7 +745,7 @@ test('F6 A. legacy promoted Do Today -> exact Do Today retry: provably equivalen
 
 test('F6 B. legacy promoted Do Today -> a same-day Schedule: non-success', async () => {
   const pa = makeFakePlanAuthority();
-  const { repository, id } = legacyPromotedRepository({ type: 'do-today', targetId: 'calplan:2026-10-01' });
+  const { repository, id } = legacyPromotedRepository({ type: 'do-today', targetId: 'cal1:2026-10-01' });
   const result = await promoteCaptureToPlan({ repository, planAuthority: pa, claimPromotionRemote: claimNever, id, type: 'schedule', dateKey: '2026-10-01', now: T0 + 10, deviceId: 'device-1' });
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'already-disposed');
@@ -753,7 +753,7 @@ test('F6 B. legacy promoted Do Today -> a same-day Schedule: non-success', async
 
 test('F6 C. legacy promoted Schedule with no recorded time/duration -> neither an untimed nor a timed Schedule is reported equivalent', async () => {
   const pa = makeFakePlanAuthority();
-  const { repository, id } = legacyPromotedRepository({ type: 'schedule', targetId: 'calplan:2026-10-10' });
+  const { repository, id } = legacyPromotedRepository({ type: 'schedule', targetId: 'cal1:2026-10-10' });
   const promotion = repository.read(id).promotion;
   assert.equal(promotion.when, null, 'unknown, never invented as untimed');
   assert.equal(promotion.durationMinutes, null);
@@ -767,7 +767,7 @@ test('F6 C. legacy promoted Schedule with no recorded time/duration -> neither a
 
 test('F6 D. a legacy promoted record stays promoted, keeps its unknown provenance through a wire round trip, and is never re-promoted', async () => {
   const pa = makeFakePlanAuthority();
-  const { repository, id } = legacyPromotedRepository({ type: 'schedule', targetId: 'calplan:2026-10-10' });
+  const { repository, id } = legacyPromotedRepository({ type: 'schedule', targetId: 'cal1:2026-10-10' });
   const roundTripped = normalizeCapture(wireCopy(repository.read(id)));
   assert.equal(roundTripped.status, 'promoted');
   assert.equal(roundTripped.promotion.intentRecorded, false, 'still unknown after the wire');
@@ -784,12 +784,12 @@ test('F6 D. a legacy promoted record stays promoted, keeps its unknown provenanc
 
 test('F6: a NEW finalized promotion records its intent, so an explicit untimed Schedule survives the wire as provably untimed', () => {
   const base = triageCapture(buildCapture({ id: 'bnewprom', text: 'x', now: T0, updatedBy: 'd' }).record, { important: true, urgent: false, now: T0 + 1, updatedBy: 'd' }).record;
-  const claim = claimPromotion(base, { promotion: { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-10', planItemId: brainDumpPlanItemId('bnewprom'), when: '' }, now: T0 + 2, updatedBy: 'd' }).record;
+  const claim = claimPromotion(base, { promotion: { type: 'schedule', store: 'calendar', targetId: 'cal1:2026-10-10', planItemId: brainDumpPlanItemId('bnewprom'), when: '' }, now: T0 + 2, updatedBy: 'd' }).record;
   const promoted = normalizeCapture(wireCopy(finalizePromotion(claim, { now: T0 + 3, updatedBy: 'd' }).record));
   assert.equal(promoted.promotion.intentRecorded, true);
   assert.equal(promoted.promotion.when, '');
   assert.equal(promoted.promotion.durationMinutes, null, 'pruned on the wire, still KNOWN none');
-  assert.equal(promotedTo(promoted, { type: 'schedule', store: 'calendar', targetId: 'calplan:2026-10-10', planItemId: brainDumpPlanItemId('bnewprom'), when: '' }), true);
+  assert.equal(promotedTo(promoted, { type: 'schedule', store: 'calendar', targetId: 'cal1:2026-10-10', planItemId: brainDumpPlanItemId('bnewprom'), when: '' }), true);
 });
 
 test('authority order holds over the wire: promoted and claim both beat any reopen, independent of arrival order', () => {

@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { makeWorld, flush, at, calId, ROOM, remoteItemsFor, remoteCapture } from './brain-dump-fence-harness.js';
 import { brainDumpPlanItemId } from './brain-dump-model.js';
 import { promoteCaptureToPlan } from './brain-dump-promotion.js';
-import { setBrainDumpCaptureLookup } from './plan-item-origin.js';
+import { physicalTargetKey, setBrainDumpCaptureLookup } from './plan-item-origin.js';
 import * as oldModel from './fixtures/brain-dump-pre-reopen/brain-dump-model.js';
 import { wireCopy } from './brain-dump-test-support.js';
 
@@ -34,7 +34,7 @@ async function claimThenCrash(world, text = 'Crashed after claim') {
   await flush();
   const id = await writer.capture(text);
   const today = writer.planAuthority.current();
-  const pending = writer.bridge.claimPromotionRemote(id, { type: 'do-today', store: today.store, targetId: today.id, planItemId: brainDumpPlanItemId(id), when: '' });
+  const pending = writer.bridge.claimPromotionRemote(id, { type: 'do-today', store: today.store, targetId: today.id, targetKey: physicalTargetKey(today.store, today.id), planItemId: brainDumpPlanItemId(id), when: '' });
   writer.state.crashed = true; // the process dies the instant the claim is in flight
   const claim = await pending;
   assert.equal(claim.ok, true, 'the claim committed');
@@ -104,7 +104,7 @@ for (const order of ['plan push first', 'Brain Dump first']) {
       writer.state.plansOnline = true;
       await writer.calendar.pushAllLocal();
       await flush();
-      assert.ok(world.db.denials.some(d => d.path.includes('calendarPlans')), 'the server refused the old item');
+      assert.ok(world.db.denials.some(d => d.path.includes('calendarPlanFences')), 'the server refused the old item');
       writer.state.brainDumpOnline = true;
       writer.bridge.attach();
       await flush();
@@ -326,6 +326,8 @@ test('a normal fresh promotion is untouched by the fence: one item, carrying its
   await flush();
   const items = remoteItemsFor(world.db, TODAY, id);
   assert.equal(items.length, 1);
-  assert.deepEqual(items[0].brainDumpOrigin, { v: 1, claimEpoch: 0, type: 'do-today', targetId: calId(TODAY) });
+  assert.deepEqual(items[0].brainDumpOrigin, { v: 2, claimEpoch: 0, type: 'do-today', store: 'calendar', targetKey: calId(TODAY) });
+  assert.equal(world.db.read(`rooms/${ROOM}/calendarPlanFences/${calId(TODAY)}/bdp1|${id}`).id, `bdp1|${id}`, 'at its stable keyed child');
+  assert.ok(!(world.db.read(`rooms/${ROOM}/calendarPlans/${calId(TODAY)}`)?.items || []).some(item => item.id === `bdp1|${id}`), 'and never inside the plan record array');
   assert.equal(world.db.denials.length, 0);
 });
