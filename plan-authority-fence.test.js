@@ -69,4 +69,3 @@ test('local ghost cleanup on the queue guard path is cache-only: nothing reaches
   const facts = await ghostPushScenario({ db, createPlanAuthority, createCalendarPlanSyncBridge: undefined, recoveredCapture: capture({ claimEpoch: 1 }) });
   assert.deepEqual(facts, { outcome: 'committed', denied: 0, onServer: false, stillLocal: false });
 });
-

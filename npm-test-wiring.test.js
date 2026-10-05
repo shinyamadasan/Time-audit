@@ -69,3 +69,18 @@ test('the calendar-native modules specifically are wired everywhere: runtime, li
     assert.ok(pkg.scripts.test.includes(`node --test ${file}`), `${file} runs under npm test`);
   }
 });
+
+test('CI runs the Firebase fence suites as a required, non-skippable gate', () => {
+  const workflow = readFileSync(path.join(HERE, '.github', 'workflows', 'ci.yml'), 'utf8');
+  assert.match(workflow, /^\s+run: npm run test:fence\s*$/m, 'ci.yml must run `npm run test:fence`');
+  assert.match(workflow, /uses: actions\/setup-java@v\d+/, 'the emulator is a JVM jar: Java must be provisioned');
+  assert.match(workflow, /^\s+run: npm run check:firebase-rules\s*$/m, 'the rules must be proven to be the builder output');
+  assert.doesNotMatch(workflow, /continue-on-error|\|\|\s*true/, 'no soft-failing step anywhere in CI');
+  // The fence script provisions the pinned, checksum-verified emulator itself and runs every emulator suite.
+  const fence = pkg.scripts['test:fence'];
+  assert.match(fence, /^npm run provision:rtdb-emulator && /);
+  for (const script of ['test:rules-emulator', 'test:fence-sdk', 'test:rules-mutation']) assert.ok(fence.includes(`npm run ${script}`), `${script} is part of test:fence`);
+  const provision = readFileSync(path.join(HERE, 'scripts', 'provision-rtdb-emulator.mjs'), 'utf8');
+  assert.match(provision, /EMULATOR_VERSION = '4\.11\.2'/);
+  assert.match(provision, /EMULATOR_SHA256 = '[0-9a-f]{64}'/);
+});
