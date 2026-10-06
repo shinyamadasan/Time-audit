@@ -16,7 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ROOM, startEmulator } from './rtdb-emulator-support.js';
-import { PREDICATES, buildRules, serializeRules } from './scripts/firebase-rules-builder.mjs';
+import { PREDICATES, artifactMatchesBuilder, buildRules, serializeRules } from './scripts/firebase-rules-builder.mjs';
 import { ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, planRecord, promotedCapture } from './fence-rules-fixtures.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -30,7 +30,8 @@ test.before(async () => { emulator = await startEmulator(); });
 test.after(() => emulator?.stop());
 
 test('the committed firebase.rules.json is exactly the builder\'s output (no hand edit can drift from the named predicates)', () => {
-  assert.equal(COMMITTED, serializeRules(buildRules()));
+  // CRLF-vs-LF is the only tolerated difference (a Windows autocrlf checkout); the comparison is the builder's own.
+  assert.ok(artifactMatchesBuilder(COMMITTED, serializeRules(buildRules())), 'firebase.rules.json is not the builder output');
 });
 
 /** predicate -> the attack it stops. Each returns true iff the SERVER ALLOWED the forbidden write. */
