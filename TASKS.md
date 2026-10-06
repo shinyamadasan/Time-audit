@@ -227,6 +227,40 @@ test steps:
 
 ---
 
+### TASK-004 - Owner-direct task governance (docs-only)
+status: in-progress
+owner: claude
+source: BQ-001
+priority: P1
+depends-on: none
+files: CLAUDE.md, AGENTS.md, TASKS.md, planning/BUILD_QUEUE.md, WORKFLOW.md, AI-DEV-OS.md, SYSTEM-OVERVIEW.md, DECISIONS.md
+
+context:
+  Today every Codex task must originate from an approved `planning/BUILD_QUEUE.md` item, so an
+  explicit, fully specified owner instruction still needs a manual Claude relay before work can
+  start. Owner approved removing that bottleneck for owner-direct tasks only, while keeping the
+  invariant that agents must not self-authorize work. Implemented directly by Claude (these files
+  are Claude-owned; Codex may not edit CLAUDE.md, docs/ or planning/).
+
+acceptance:
+  - [ ] CLAUDE.md, AGENTS.md, TASKS.md, planning/BUILD_QUEUE.md, WORKFLOW.md, AI-DEV-OS.md and
+        SYSTEM-OVERVIEW.md support two valid task sources — approved BUILD_QUEUE item, or explicit
+        owner-direct instruction — with no contradiction about who originates, who records, or the
+        BUILD_QUEUE role.
+  - [ ] An agent cannot label its own idea owner-direct; ambiguous/under-specified requests stop and ask.
+  - [ ] Preflight, git safety, testing, review, risk-gated merge, deploy and destructive/production
+        authorization rules are unchanged.
+
+constraints:
+  - Docs only: no runtime code, no tools/ change, no deploy, no push, no Firebase/production mutation.
+  - Red-zone (touches the AI Dev OS itself): held at `approved` for the human merge, never auto-merged.
+
+test steps:
+  - [ ] `git diff --check`
+  - [ ] Re-read every modified governance file; confirm no contradiction.
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
