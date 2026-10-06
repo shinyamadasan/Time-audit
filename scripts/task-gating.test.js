@@ -174,6 +174,20 @@ test('GOV-001: unparseable words beside a real dependency do not hide it (existi
   assert.match(r.out, /TASK-004/);
 });
 
+test('GOV-001: the block follows the task-004 ref, not the dependency\'s lifecycle status (review, approved)', () => {
+  for (const status of ['review', 'approved']) {
+    const tasks = tasksFile(
+      task({ id: 'TASK-004', status, source: 'BQ-001' }),
+      task({ id: 'TASK-005', source: 'owner-direct', deps: 'TASK-004', priority: 'P1' }));
+    const blocked = build(PRIMARY, makeRepo({ tasks }));                       // task-004 NOT merged
+    assert.equal(blocked.code, 2, `${status}: ${blocked.out}`);
+    assert.match(blocked.out, new RegExp(`TASK-004 \\(status: ${status}; branch 'task-004' is not merged into main\\)`), status);
+    const released = build(PRIMARY, makeRepo({ tasks, merged: ['task-004'] })); // merged ref releases it
+    assert.equal(released.code, 0, `${status} + merged: ${released.out}`);
+    assert.match(released.out, /would checkout\/create task-005/);
+  }
+});
+
 test('GOV-001: TASK-005-like owner-direct task with an unresolved dependency is blocked on the MANUAL path', () => {
   const repo = makeRepo({ tasks: tasksFile(
     task({ id: 'TASK-004', status: 'review', source: 'BQ-001' }),
@@ -313,7 +327,9 @@ test('the REAL recorded TASKS.md: TASK-005 is blocked manually until TASK-004 me
   const before = makeRepo({ tasks: real });                                   // TASK-004 not merged
   const m1 = build(PRIMARY, before);
   assert.equal(m1.code, 2, m1.out);
-  assert.match(m1.out, /TASK-005.*TASK-004 \(status: review/);
+  // the dependency and the unmerged ref are the invariant; TASK-004's lifecycle status is incidental
+  // (review -> approved -> done), so it is not pinned
+  assert.match(m1.out, /TASK-005.*unresolved dependency.*TASK-004 \(status: [\w-]+; branch 'task-004' is not merged into main\)/);
   assert.equal(build(PRIMARY, before, ['-Unattended']).code, 2);              // owner-direct wins first
   const after = makeRepo({ tasks: real, merged: ['task-004'] });              // TASK-004 integrated
   const m2 = build(PRIMARY, after);
