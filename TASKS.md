@@ -230,7 +230,7 @@ test steps:
 ---
 
 ### TASK-004 - Owner-direct task governance (docs-only)
-status: approved
+status: done
 review: Claude implemented directly (docs-only, Claude-owned files). Independent strict review PASSED
   on 4f5704ed0c8d28428e0992312c5da57d576d96bb (as reported by the owner); owner explicitly approved
   integration. Red-zone (touches the AI Dev OS itself), so held at `approved` for the human-confirmed
