@@ -1,6 +1,10 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## Action API V1 architecture (docs only)
+
+`docs/CHRONASENSE_ACTION_API_V1.md` defines the proposed Firebase Functions v2 HTTPS backend, Worker service authentication, user-scoped RTDB authority, typed query/command contracts, receipts, idempotency, revisions, time handling, scopes, errors, security, phases and stop conditions. `contracts/CHRONASENSE_ACTION_PROVENANCE_V1.md` defines controller-action provenance and its boundary from the evidence semantics in `contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md`. No runtime implementation or release generation is introduced.
+
 ## Brain Dump + Eisenhower V1 (candidate, 2026-10-01; FIX FIRST rounds 1-3, 2026-10-02; Production UX Correction V1, 2026-10-03)
 
 Production UX Correction V1: `promotedTo()` (model) lets a foreground promotion recognize its own claim
