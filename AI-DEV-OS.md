@@ -76,6 +76,11 @@ Telegram capture
     → docs/ + DONE + DECISIONS updated
 ```
 
+**Owner-direct shortcut (DECISIONS #35):** a bounded task the owner explicitly instructs (goal, scope,
+constraints, acceptance, stop conditions all stated) may be recorded straight into `TASKS.md` as
+`source: owner-direct`, skipping the Telegram/BUILD_QUEUE relay. Everything from "Codex implements"
+onward is unchanged. Agents never self-authorize work; see `CLAUDE.md` § Owner-Direct Tasks.
+
 Telegram also doubles as a remote control panel — `/status /next /go /run /build /review /stop
 /enable /disable` (plus `/log`). **`/go` is the everyday driver: a mission autopilot that runs the
 whole plan→build→review→merge span above for one task per press and returns a single summary**

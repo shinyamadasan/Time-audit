@@ -1,7 +1,9 @@
 # Tasks
 
 > **Handoff document.** Claude writes tasks; Codex checks them off.
-> Tasks must come from an approved item in `planning/BUILD_QUEUE.md`.
+> Tasks must come from an approved item in `planning/BUILD_QUEUE.md` (`source: BQ-<id>`) **or** an
+> explicit owner instruction (`source: owner-direct`, which Codex may also record — see CLAUDE.md
+> § Owner-Direct Tasks). Never from an agent's own idea.
 > One task = one atomic, independently testable unit.
 
 ## Status legend
@@ -228,7 +230,10 @@ test steps:
 ---
 
 ### TASK-004 - Owner-direct task governance (docs-only)
-status: in-progress
+status: review
+review: Claude implemented directly (docs-only, Claude-owned files). NOT self-approved — needs an
+  independent Claude review pass, then held at `approved` for the human merge (red-zone: touches the
+  AI Dev OS itself). Until it is merged to main, TASK-005 is recorded but not yet actionable.
 owner: claude
 source: BQ-001
 priority: P1
@@ -243,12 +248,12 @@ context:
   are Claude-owned; Codex may not edit CLAUDE.md, docs/ or planning/).
 
 acceptance:
-  - [ ] CLAUDE.md, AGENTS.md, TASKS.md, planning/BUILD_QUEUE.md, WORKFLOW.md, AI-DEV-OS.md and
+  - [x] CLAUDE.md, AGENTS.md, TASKS.md, planning/BUILD_QUEUE.md, WORKFLOW.md, AI-DEV-OS.md and
         SYSTEM-OVERVIEW.md support two valid task sources — approved BUILD_QUEUE item, or explicit
         owner-direct instruction — with no contradiction about who originates, who records, or the
-        BUILD_QUEUE role.
-  - [ ] An agent cannot label its own idea owner-direct; ambiguous/under-specified requests stop and ask.
-  - [ ] Preflight, git safety, testing, review, risk-gated merge, deploy and destructive/production
+        BUILD_QUEUE role. (DECISIONS #35 records the decision.)
+  - [x] An agent cannot label its own idea owner-direct; ambiguous/under-specified requests stop and ask.
+  - [x] Preflight, git safety, testing, review, risk-gated merge, deploy and destructive/production
         authorization rules are unchanged.
 
 constraints:
@@ -256,8 +261,93 @@ constraints:
   - Red-zone (touches the AI Dev OS itself): held at `approved` for the human merge, never auto-merged.
 
 test steps:
+  - [x] `git diff --check`
+  - [x] Re-read every modified governance file; confirm no contradiction.
+
+---
+
+### TASK-005 - ChronaSense Action API — Phase A1: backend/auth foundation + read-only `get_brain_dump`
+status: codex
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: TASK-004
+files: functions/ (new: Firebase Functions v2 HTTPS backend, its package.json, tests, README), scripts/firebase-rules-builder.mjs, firebase.rules.json (GENERATED via `npm run build:firebase-rules` only), firebase.json (functions entry only), package.json (only to wire new tests into `npm test` per npm-test-wiring.test.js), firebase-rules emulator/test files as needed for private-path denial proofs, CHANGELOG.md, TEST_REPORT.md
+
+context:
+  Owner-direct instruction (repository owner, 2026-10-06): establish ChronaSense Action API Phase A1.
+  Base: integrated architecture at b936eae87cb92e1e71d2479f8878b9f5b780af97 (design/chronasense-action-api-v1
+  == origin/main at the time). Authoritative contracts — follow them exactly, do not reinterpret:
+  `docs/CHRONASENSE_ACTION_API_V1.md` (esp. §1–§7, §10 `get_brain_dump`, §12–§15),
+  `contracts/CHRONASENSE_ACTION_PROVENANCE_V1.md`, `contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md`
+  (semantic authority; a read creates no life evidence and no command receipt). This is Phase A only of
+  §14; phases B–E are separate tasks and not authorized here. Goal: a reviewable, locally tested
+  backend foundation plus the first read-only vertical slice.
+
+acceptance:
+  - [ ] Firebase Functions v2 HTTPS backend foundation in `asia-southeast1` (not deployed).
+  - [ ] HMAC-SHA-256 service authentication exactly per §2: canonical signing tuple, key ID,
+        service identity `chronasense-plugin-worker-v1`, constant-time compare, body-hash check,
+        300-second freshness, canonical-path / duplicate-header / unknown-key / unknown-service
+        rejection; all failures reject before any domain read.
+  - [ ] Exact owner subject → single configured Firebase UID binding; `roomId = "uid_" + firebaseUid`;
+        no caller-supplied subject/UID/room/path/account is ever accepted or influences identity;
+        missing/mismatched mapping fails closed.
+  - [ ] Private request-nonce infrastructure (`serverRequestNonces/<service-or-owner>/<requestId>`):
+        atomic create-if-absent after the freshness check, duplicate fails closed, ~10-minute
+        retention/cleanup. Transport replay protection only.
+  - [ ] Private receipt infrastructure FOUNDATION (`serverActionReceipts/<firebaseUid>/<actionId>`):
+        storage module, canonical request hashing (RFC 8785 JCS, SHA-256) and state-machine types
+        sufficient for later phases, claimed only by Admin-only infrastructure access. No command
+        execution; reads create no receipt.
+  - [ ] User-scoped Firebase domain access: Admin SDK only to validate the configured UID, mint the
+        custom token, and manage nonces/receipts; domain reads go through the exchanged short-lived ID
+        token via authenticated RTDB REST so existing rules stay enforced. No silent fallback to Admin
+        domain access (else STOP — AUTHORITY BOUNDARY VIOLATED). Tokens never leave the backend.
+  - [ ] `get_brain_dump` ONLY (scope `chronasense:read`): typed captures + allowed dispositions,
+        revisions (`rev1:` opaque, with the documented field projection) and IDs; no claims/fence
+        internals, no raw RTDB snapshot or path; typed errors per §12; a timeout/unknown is never
+        reported as absent.
+  - [ ] Envelope per §5: JSON/UTF-8, 64 KiB cap, unknown fields rejected, `contractVersion: 1`,
+        response carries `requestId`, typed `result`, `authority`.
+  - [ ] `scripts/firebase-rules-builder.mjs` gains explicit server-private nodes/denies for
+        `serverActionReceipts` and `serverRequestNonces` (`.read = false`, `.write = false` for normal
+        clients, no broader wildcard granting access); `firebase.rules.json` regenerated by the
+        builder (never hand-edited); rules drift check passes; emulator/rules tests prove an
+        authenticated owner client cannot read or write either path while the privileged server
+        mechanism can.
+  - [ ] Tests for every item above, including negative/attack cases (bad signature, replay, stale
+        timestamp, body tamper, wrong subject, caller-supplied uid/room/path, Admin-fallback attempt),
+        wired into `npm test`; `npm test` passes; documentation (functions README: config/secrets
+        names, local run, test instructions, explicit "not deployed") and the CHANGELOG/TEST_REPORT
+        evidence entries.
+
+constraints:
+  - Scope is EXACTLY the list above. Out of scope and forbidden: deployment of anything (functions or
+    rules); any domain WRITE (only server-private nonce/receipt infrastructure writes are allowed);
+    any Cloudflare/Worker/MCP/OAuth implementation; any generic/arbitrary Firebase API, tool, or path
+    parameter; any other tool (`get_today`, `get_plan`, `get_item`) or any command (`brain_dump_*`,
+    `plan_*`); actual-log/evidence writes; browser/app/www/runtime code changes; reading real secrets or
+    production data; running anything against production Firebase (emulator/local only).
+  - Do not broaden scope or invent tasks. An adjacent improvement you notice is reported in the
+    CHANGELOG entry, never built.
+  - Secrets never enter code, logs, fixtures or commits; use named config/secret references only.
+  - Read CODEMAP.md first; never read index.html in full. Never hand-edit `firebase.rules.json`.
+  - Stop (set `status: blocked` with the exact blocker) on any condition in
+    `docs/CHRONASENSE_ACTION_API_V1.md` §15, or if a required Firebase operation cannot be expressed
+    with user-authenticated RTDB REST semantics, or if satisfying the task seems to need a deploy, a
+    domain write, or an Admin domain bypass.
+  - Solo task: never chained. Red-zone (auth, security, Firebase rules): when reviewed, held at
+    `approved` for the human merge — never auto-merged; deployment (rules first, then anything else)
+    is a separate, separately authorized step.
+
+test steps:
+  - [ ] `npm test` (includes `node scripts/firebase-rules-builder.mjs` drift check and
+        `npm-test-wiring.test.js`)
+  - [ ] Emulator proof of owner-client denial on both private paths (`npm run test:rules-emulator` /
+        project's existing emulator flow; if the emulator cannot run, say so in TEST_REPORT.md)
+  - [ ] Functions package unit tests, run locally (no network to production)
   - [ ] `git diff --check`
-  - [ ] Re-read every modified governance file; confirm no contradiction.
 
 ---
 
@@ -268,7 +358,7 @@ test steps:
 ### TASK-001 - <short title>
 status: codex
 owner: codex
-source: BQ-<id>
+source: BQ-<id>   (or `owner-direct` for an explicit owner instruction; see CLAUDE.md)
 priority: P2
 depends-on: none
 files: index.html (CODEMAP section: <name>), storage.js
