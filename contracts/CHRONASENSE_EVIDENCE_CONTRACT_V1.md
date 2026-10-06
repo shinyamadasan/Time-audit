@@ -44,12 +44,20 @@ A known count of zero source records is not proof of zero behavior.
 | Duration without placement | Stated duration within a declared date/window | Exact start/end or hourly placement |
 | Occurrence only | Something happened | Any duration without another duration source |
 
-Duration-without-placement has a first storage/capture implementation as of Phase 6H
-(`feat/coarse-life-evidence-v1`, uncommitted candidate) — see "Implementation status
-(Phase 6H)" below. Do not use fallback timestamps, a schedule, a default duration,
+Duration-without-placement has a first storage/capture implementation in the current
+production baseline (Phase 6H) — see "Implementation status (Phase 6H)" below. Do not use
+fallback timestamps, a schedule, a default duration,
 start=end placeholders, or arbitrary estimates to manufacture missing duration. Existing
 source equal-endpoint encodings can be preserved as compatibility data, but do not turn
 an occurrence into a measured zero-minute interval. Date precision alone supplies no duration.
+
+**Action intent is not observed life evidence.** A plan records intended activity; an Action
+API command records that the user/controller requested a ChronaSense mutation. Neither
+establishes that the planned or requested real-world activity occurred. Action provenance
+may reference evidence that motivated an action, and evidence may motivate a later action,
+but a transformed copy or summary does not become independent evidence merely because it
+passed through a different system. See `contracts/CHRONASENSE_ACTION_PROVENANCE_V1.md`; it
+supplements rather than changes this contract.
 
 **Provenance** describes origin and transformation, not resolution. Reuse source IDs,
 source references, `captureMethod`, Ledger provenance, adapter fields, and source flags:
@@ -211,8 +219,7 @@ Keep historical repair separate: do not infer which old long sessions were affec
 Subsequent separate milestones can address schedule-v-actual capture and diagnostic gaps
 versus stable accounting boundaries. No estimate storage or full allocation engine here.
 
-**Implementation status (Phase 6G.1, branch `feat/source-truth-fixes-v1`, uncommitted
-candidate):** implemented. `endWorkSession()` now derives its end timestamp from the
+**Implementation status (Phase 6G.1, present in the production baseline):** `endWorkSession()` now derives its end timestamp from the
 planned endpoint — phase start (`focusStartTime`, or `pomodoroPhaseStartedAt` as fallback)
 plus configured work minutes — instead of `Date.now()`. It is only ever reached by a phase
 that ran to its configured length (`tickPomodoro()` at zero, or `restoreFocusSession()`
@@ -232,8 +239,7 @@ attention-signals/Focus-Wallet interpretation of any pre-fix inflated entries, a
 schedule-v-actual, passive-device-purpose, PC-Time-purpose and unknown-as-drift semantics
 below.
 
-**Implementation status (Phase 6G.2, branch `feat/analytics-truth-fixes-v1`, uncommitted
-candidate):** implemented for Today, Review, weekly Insights, attention signals and Focus
+**Implementation status (Phase 6G.2, present in the production baseline):** implemented for Today, Review, weekly Insights, attention signals and Focus
 Wallet. One small shared helper, `evidence-interpretation.js`, answers the single bounded
 question every one of those consumers needed: does an entry's `energy` reflect a confirmed
 classification (user assertion, or timer + chosen label) or only a passive default / schedule
@@ -324,8 +330,7 @@ the pre-6G.1 restoration defect is still not identified, capped or repaired — 
 only changed how *currently computed* metrics interpret entries going forward; it does not
 know which past entries were inflated and did not guess.
 
-**Implementation status (Phase 6H, branch `feat/coarse-life-evidence-v1`, uncommitted
-candidate):** implemented — the minimum truthful storage/capture form for duration without
+**Implementation status (Phase 6H, present in the production baseline):** the minimum truthful storage/capture form for duration without
 placement. `coarse-life-evidence-model.js` defines the record shape (`id`, `date`, `timezone`,
 `label`, `estimatedMinutes`, `resolution: 'duration_without_placement'`,
 `measurement: 'estimated'`, `provenance: 'user_assertion'`, `createdAt`, `updatedAt`) and
@@ -368,12 +373,10 @@ centralized "export everything" backup surface today (CSV covers only `entries`;
 Ledger snapshot covers only Ledger events), so there was no existing seam to extend without
 redesigning backup, which was out of scope. Both are documented limitations, not oversights.
 
-Still future (as of 6H): daily Review reconciliation, a whole-day coverage model, replacing
-the generic Today gap prompt, combined exact+estimated allocation, Life Ledger projection,
-cross-device sync, export/import, Wife/Shared, Personal Model/Advisor.
+Still future: a whole-day coverage model, combined exact+estimated allocation, Life Ledger
+projection, export/import, Wife/Shared, Personal Model/Advisor.
 
-**Implementation status (Phase 6I/J, branch `feat/review-reconciliation-v1`, uncommitted
-candidate):** implemented — the minimum end-of-day reconciliation flow, plus removal of the
+**Implementation status (Phase 6I/J, present in the production baseline):** the minimum end-of-day reconciliation flow, plus removal of the
 generic daytime Today gap interruption. No new coverage engine, no interval-allocation
 engine, no schema migration, no life taxonomy, no AI inference, no mandatory gap repair.
 
@@ -448,8 +451,7 @@ coarse-evidence durability / sync, Life Ledger projection, export/import, Wife/S
 Personal Model/Advisor. Gates before Wife/Shared or serious dogfood: (1) coarse-evidence
 durability, (2) onboarding rewrite, (3) Focus Wallet / streak pressure decision.
 
-**Implementation status (Coarse Evidence Durability V1, branch
-`feat/coarse-evidence-durability-v1`, uncommitted candidate):** implemented — closes gate (1)
+**Implementation status (Coarse Evidence Durability V1, present in the production baseline):** closes gate (1)
 above. **DURABILITY GATE SATISFIED.** Coarse life evidence now has an account-scoped durable
 remote copy (Firebase Realtime Database, `rooms/<roomCode>/coarseLifeEvidence/<id>` — the same
 private per-user room `entries`/`reviews`/`plans` already sync through; no rules change, no new

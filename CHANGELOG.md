@@ -1,5 +1,11 @@
 # ChronaSense — Changelog
 
+## ChronaSense Action API V1 architecture — ready for strict review
+
+Docs-only specification on `design/chronasense-action-api-v1`, based on verified production commit `745123d697175b314b82bd0de0dd3400679e8266`. Adds the backend/MCP boundary, identity and HMAC authentication contracts, user-scoped Firebase authority strategy, typed query/command tools, immutable action IDs, receipts/reconciliation, opaque revisions, provenance/evidence separation, explicit time handling, scopes, errors, security, phases and stop conditions. Adds Action Provenance V1 and clarifies the evidence contract without changing its semantic model. Updates CODEMAP and records proposed architecture decision #34. No runtime code, Firebase rules, deployment, production data, or release generation changed.
+
+Checks: `git diff --check`; documentation/reference test inventory reviewed (none dedicated to these contracts). Runtime/browser suites not run for this docs-only change.
+
 ## Location-Bound Brain Dump Promotion Fence V1 — candidate, NOT integrated
 
 Branch `fix/location-bound-brain-dump-fence-v1`, on top of `37d5fed`. Not pushed, merged or deployed; no production data touched.

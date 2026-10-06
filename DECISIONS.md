@@ -721,4 +721,14 @@ a primed cache (the whole-subtree listener `attach()` provides it; otherwise it 
 store a second copy of a fenced item; edit `firebase.rules.json` by hand; add a grant above `$itemId` / `$captureId`; let a client
 relocate a fenced item; give a pre-fence item a fabricated origin; or run a tombstone through last-writer-wins.
 
+## 34. ChronaSense Action API V1: Functions owns domain boundary; Worker stays transport-only
+
+**Status:** proposed for strict review; documentation only.
+
+**Decision:** add a ChronaSense-owned Firebase Functions v2 HTTPS API in `asia-southeast1`. The private Cloudflare Worker remains OAuth/MCP/scope/transport and forwards typed requests. Verified Cloudflare Access `sub` maps server-side to one configured Firebase UID; room identity is derived as `uid_<FirebaseUID>`. No caller supplies UID, room, path, or account parameters.
+
+The Worker authenticates to the backend with a dedicated HMAC service credential and signed body hash/freshness envelope. Domain RTDB access uses a custom-token exchange for a short-lived Firebase ID token, then user-scoped REST operations so existing rules remain enforced. Admin SDK is limited to token minting and server-only receipt/nonce infrastructure. Action receipts and API revision tokens are metadata; neither replaces domain authority. Brain Dump promotion continues through its existing claim/fence/finalize/reconcile state machine. Action intent and plan intent are not life evidence; see `contracts/CHRONASENSE_ACTION_PROVENANCE_V1.md` and `contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md`.
+
+**Do not:** implement an Admin bypass, caller-selected account/path, arbitrary write tool, second Brain Dump promotion state, or actual-log command without a separate authority model. See `docs/CHRONASENSE_ACTION_API_V1.md` for wire contracts, failure semantics and implementation stop conditions.
+
 ---
