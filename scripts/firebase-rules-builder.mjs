@@ -282,6 +282,18 @@ export function serializeRules(rules) {
   return `${JSON.stringify(rules, null, 2)}\n`;
 }
 
+/**
+ * Parity check between the checked-in artifact and the builder's output. The ONLY representation
+ * difference tolerated is CRLF vs LF: with `core.autocrlf=true` (and no .gitattributes eol rule) a
+ * Windows checkout legitimately holds this file with CRLF while the builder always emits LF. Everything
+ * else stays strict -- content, key order, indentation, trailing whitespace and the final newline.
+ * It is deliberately NOT a JSON-semantic comparison.
+ */
+export function artifactMatchesBuilder(current, wanted) {
+  const toLf = text => text.replace(/\r\n/g, '\n');
+  return toLf(current) === toLf(wanted);
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const wanted = serializeRules(buildRules());
   if (process.argv.includes('--write')) {
@@ -289,7 +301,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log('firebase.rules.json written');
   } else {
     const current = readFileSync(RULES_PATH, 'utf8');
-    if (current !== wanted) { console.error('firebase.rules.json is NOT the builder output. Run: node scripts/firebase-rules-builder.mjs --write'); process.exit(1); }
+    if (!artifactMatchesBuilder(current, wanted)) { console.error('firebase.rules.json is NOT the builder output. Run: node scripts/firebase-rules-builder.mjs --write'); process.exit(1); }
     console.log('firebase.rules.json matches the builder');
   }
 }

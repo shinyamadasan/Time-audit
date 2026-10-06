@@ -238,9 +238,12 @@ owner: claude
 source: BQ-001
 priority: P1
 depends-on: none
-files: CLAUDE.md, AGENTS.md, TASKS.md, planning/BUILD_QUEUE.md, WORKFLOW.md, AI-DEV-OS.md, SYSTEM-OVERVIEW.md, DECISIONS.md, tools/Task-Gating.ps1 (new), tools/Dispatch-Commands.ps1, tools/Run-Codex-Build.ps1, scripts/task-gating.test.js (new), package.json (test wiring only)
+files: CLAUDE.md, AGENTS.md, TASKS.md, planning/BUILD_QUEUE.md, WORKFLOW.md, AI-DEV-OS.md, SYSTEM-OVERVIEW.md, DECISIONS.md, tools/Task-Gating.ps1 (new), tools/Dispatch-Commands.ps1, tools/Run-Codex-Build.ps1, scripts/task-gating.test.js (new), scripts/firebase-rules-builder.mjs (parity-check line-ending fix only), scripts/firebase-rules-builder.test.js (new), package.json (test wiring only)
 
 context:
+  Integration-gate fix: `npm test`'s rules-parity step failed on a Windows (core.autocrlf=true) checkout
+  because the builder compared raw strings (CRLF artifact vs LF output). The check now ignores ONLY
+  CRLF-vs-LF; firebase.rules.json and the generated rules are unchanged.
   Review follow-up (GOV-001/GOV-002): the strict review found the manual builder skipped dependency
   checks and unattended /go could run owner-direct tasks; fixed by the shared tools/Task-Gating.ps1
   (execution gating only; see DECISIONS #35).
