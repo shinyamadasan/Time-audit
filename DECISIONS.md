@@ -732,3 +732,15 @@ The Worker authenticates to the backend with a dedicated HMAC service credential
 **Do not:** implement an Admin bypass, caller-selected account/path, arbitrary write tool, second Brain Dump promotion state, or actual-log command without a separate authority model. See `docs/CHRONASENSE_ACTION_API_V1.md` for wire contracts, failure semantics and implementation stop conditions.
 
 ---
+
+## 35. Owner-direct tasks: an explicit owner instruction may authorize a bounded task without a BUILD_QUEUE relay; agents still never self-authorize
+
+**Status:** accepted by the owner (2026-10-06); governance/docs only.
+
+**Decision:** `TASKS.md` entries have two valid sources: an approved `planning/BUILD_QUEUE.md` item (normal path for planned, backlog and Claude/Tech-Lead-created work) or an explicit owner-direct instruction (`source: owner-direct`). Previously every task had to originate from `BUILD_QUEUE.md`, so even a fully specified owner instruction waited on a manual Claude relay. Owner-direct requires the owner's own message in the current session containing goal, allowed scope, constraints, acceptance/verification and stop conditions; Claude or Codex may then record the entry (`status: codex`), must re-read `TASKS.md` to verify it matches, and may not widen it. Missing/ambiguous instructions or an undecided product/architecture/security question: record nothing, stop and ask. Contract: `CLAUDE.md` § Owner-Direct Tasks.
+
+**Unchanged:** the invariant that agents must not self-authorize work; preflight, Git safety, tests, review, risk-gated merge, deploy, and destructive/production/external-write authorization; repo stop conditions. Owner-direct tasks are solo (never chained) and never created by unattended automation.
+
+**Known limit:** `tools/` (dispatcher, `run-claude.ps1`) still keys unattended planning on `BQ-<id>` sources and was deliberately not changed; it ignores `source: owner-direct` entries, which is the intended behavior.
+
+---

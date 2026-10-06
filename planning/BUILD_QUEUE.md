@@ -2,6 +2,10 @@
 
 > **Approved sprint input.** Claude's planning reads this and converts items into `TASKS.md`.
 > Only the human approval gate writes here. Codex must NEVER read this file as an execution source.
+> This remains the normal path for planned, backlog and Claude/Tech-Lead-created work. It is no longer
+> a mandatory relay for a bounded task the owner explicitly instructs (`source: owner-direct` in
+> `TASKS.md`; see CLAUDE.md § Owner-Direct Tasks). Anything the owner did not explicitly request still
+> goes through here.
 
 ---
 

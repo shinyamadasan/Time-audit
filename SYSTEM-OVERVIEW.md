@@ -126,6 +126,11 @@ lanes is a hard rule violation (DECISIONS D-015, extended to the Claude/Codex sp
 The Claude→TASKS.md conversion step can run unattended overnight (gated behind `$AUTOMATION_ENABLED`,
 default off — see Layer 7) or interactively via the "Plan" command; either way it never invokes Codex.
 
+The one bypass of this gated path is an **owner-direct** task: a bounded task the owner explicitly
+instructs (goal, scope, constraints, acceptance, stop conditions) may be recorded directly in
+`TASKS.md` as `source: owner-direct` (DECISIONS #35). Agents still may not self-authorize work;
+unattended automation never creates owner-direct tasks. See `CLAUDE.md` § Owner-Direct Tasks.
+
 ### Layer 5 — The Agent + Skill Workforce
 13 skills and 12 agents. A **skill** is a deep playbook (guides, research, templates, examples). An **agent** is the specialist persona that wields it.
 
