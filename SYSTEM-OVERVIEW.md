@@ -129,7 +129,9 @@ default off — see Layer 7) or interactively via the "Plan" command; either way
 The one bypass of this gated path is an **owner-direct** task: a bounded task the owner explicitly
 instructs (goal, scope, constraints, acceptance, stop conditions) may be recorded directly in
 `TASKS.md` as `source: owner-direct` (DECISIONS #35). Agents still may not self-authorize work;
-unattended automation never creates owner-direct tasks. See `CLAUDE.md` § Owner-Direct Tasks.
+unattended automation never creates or executes owner-direct tasks (`/go` and `/build` skip them;
+they run only from a manual `Run-Codex-Build.ps1` or interactive Codex, once their `depends-on` tasks
+are merged — `tools/Task-Gating.ps1`). See `CLAUDE.md` § Owner-Direct Tasks.
 
 ### Layer 5 — The Agent + Skill Workforce
 13 skills and 12 agents. A **skill** is a deep playbook (guides, research, templates, examples). An **agent** is the specialist persona that wields it.

@@ -741,6 +741,6 @@ The Worker authenticates to the backend with a dedicated HMAC service credential
 
 **Unchanged:** the invariant that agents must not self-authorize work; preflight, Git safety, tests, review, risk-gated merge, deploy, and destructive/production/external-write authorization; repo stop conditions. Owner-direct tasks are solo (never chained) and never created by unattended automation.
 
-**Known limit:** `tools/` (dispatcher, `run-claude.ps1`) still keys unattended planning on `BQ-<id>` sources and was deliberately not changed; it ignores `source: owner-direct` entries, which is the intended behavior.
+**Enforcement (review fixes GOV-001/GOV-002):** `tools/Task-Gating.ps1` is the single shared definition, dot-sourced by `Dispatch-Commands.ps1` and `Run-Codex-Build.ps1`. (1) A task starts only if every `depends-on` task's branch `task-<n>` is merged into `main` — the rule `/go` always used, now also enforced before the manual builder launches Codex (it stops with the blocker ids/status and never skips to another task). (2) `/go` and `/build` (dispatcher-launched, `-Unattended`) never execute a task whose parsed `source:` field is `owner-direct`; `TASKS.md` is not edited to dodge it. Because Codex self-selects the first `status: codex` task, an owner-direct task at the front of the list pauses unattended builds until it is run manually. Tests: `scripts/task-gating.test.js`. `tools/` planning (`BQ-<id>` sources, `run-claude.ps1`) is unchanged and ignores owner-direct entries.
 
 ---

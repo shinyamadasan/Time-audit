@@ -24,7 +24,10 @@ or the lifecycle model; read CLAUDE.md for those if you need the wider picture.
 2. Read `HANDOFF.md` if present for the latest thread-reset checkpoint. Treat it as context only;
    `TASKS.md` remains the execution contract.
 3. Open `TASKS.md`.
-4. Find the first task with `status: codex`.
+4. Find the first task with `status: codex`. If it has `depends-on:`, every listed task's branch
+   (`task-<n>`) must already be merged into `main` — if not, stop and report the unresolved
+   dependency; do not start it and do not substitute another task. (`tools/Run-Codex-Build.ps1`
+   enforces the same rule before it launches you.)
 5. If this task previously returned from review, read `REVIEW.md` before continuing — see Rework
    Path.
 6. Read the task's `acceptance:` checklist, `files:`, and `constraints:`.
@@ -119,7 +122,9 @@ You must never self-authorize work. A `TASKS.md` entry comes from an approved `B
    the one case where you ask directly — there is no task yet to mark `blocked`.)
 5. **Never** broaden the scope, invent additional tasks, or convert an ambiguous request into
    authority. An unrelated improvement you notice is reported, not recorded. Owner-direct tasks are
-   never chained, and unattended runs never create them.
+   never chained, and unattended runs never create or execute them (`/go` and `/build` refuse a
+   `source: owner-direct` task); you run one only from a manual `tools/Run-Codex-Build.ps1` or an
+   interactive session, after its `depends-on` tasks are merged.
 
 Everything else is unchanged: preflight, Git safety, tests, review, risk-gated merge, deploy, and
 destructive/production/external-write authorization. Repo stop conditions override task convenience.

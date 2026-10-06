@@ -41,11 +41,19 @@
   Writes its final human-readable result to .last-phase-result.txt (gitignored) for
   Dispatch-Commands.ps1 to relay -- this script does not talk to Telegram itself.
 
+  EXECUTION GATES (tools/Task-Gating.ps1 -- the same rules /go uses). Codex self-selects the FIRST
+  `status: codex` task, so if that task may not start this script STOPS (exit 2); it never skips to
+  another task and never edits TASKS.md to dodge one:
+    - every `depends-on:` task must already be merged into main (branch task-<n>), manual or not;
+    - with -Unattended (passed by Dispatch-Commands.ps1 for /go and /build) a `source: owner-direct`
+      task is refused -- owner-direct tasks (DECISIONS #35) run only from a manual invocation of this
+      script (no -Unattended) or an interactive Codex session.
+
 .EXAMPLE
   ./tools/Run-Codex-Build.ps1
   ./tools/Run-Codex-Build.ps1 -DryRun
 #>
-param([switch]$DryRun)
+param([switch]$DryRun, [switch]$Unattended)
 
 # Platform. PowerShell 7 defines $IsWindows/$IsMacOS; Windows PowerShell 5.1 does NOT -- there the
 # variable is $null, which is FALSY. A naive "if ($IsWindows)" would therefore take the macOS branch
@@ -74,6 +82,9 @@ $logFile    = Join-Path $root 'claude-session.log'
 $resultFile = Join-Path $root '.last-phase-result.txt'
 $tasksFile  = Join-Path $root 'TASKS.md'
 $utf8       = New-Object System.Text.UTF8Encoding($false)
+
+# Shared task-eligibility rules (dependencies, owner-direct) -- also used by Dispatch-Commands.ps1.
+. (Join-Path $PSScriptRoot 'Task-Gating.ps1')
 $AUTO_NOTE  = 'auto:'   # matches Dispatch-Commands.ps1's Invoke-Autopilot -- marks blocks IT wrote,
                         # never a human's, so its own retry-release logic knows what it may touch.
 
@@ -210,6 +221,25 @@ if ($tracked.Count -eq 0) {
 }
 $first = $tracked[0]
 $branchName = ($first.Id -replace 'TASK-', 'task-').ToLower()
+
+# --- Execution gates (tools/Task-Gating.ps1). Checked before any branch/engine work, and before
+#     -DryRun reports success, so a refused task is refused identically in a dry run. ---
+$gateTable = @(Get-TaskTable)
+$firstRow = @($gateTable | Where-Object { $_.Id -eq $first.Id })[0]
+if (-not $firstRow) {
+    Write-Result "ABORTED: $($first.Id) could not be re-read from TASKS.md for its execution gates. Nothing was built."
+    exit 2
+}
+if ($Unattended -and (Test-OwnerDirectTask $firstRow)) {
+    Write-Result "ABORTED: $($first.Id) ($($first.Title)) is source: owner-direct, which is interactive/manual only -- unattended runs (/go, /build) never execute it. Nothing was built and TASKS.md was not changed. Run tools\Run-Codex-Build.ps1 by hand (no -Unattended) or start an interactive Codex session."
+    exit 2
+}
+$mergedNow = @(Invoke-Git -C $root branch --merged main | ForEach-Object { $_.TrimStart('*').Trim() } | Where-Object { $_ })
+$blockers = @(Get-UnresolvedDepDetails -Task $firstRow -MergedBranches $mergedNow -Table $gateTable)
+if ($blockers.Count -gt 0) {
+    Write-Result "ABORTED: $($first.Id) ($($first.Title)) cannot start -- unresolved dependenc$(if ($blockers.Count -eq 1) { 'y' } else { 'ies' }): $($blockers -join '; '). Nothing was built and no other task was selected. Merge the dependenc$(if ($blockers.Count -eq 1) { 'y' } else { 'ies' }) into main, then run again."
+    exit 2
+}
 
 if ($DryRun) {
     $firstChoice = if ($codexAvailable) { 'codex' } elseif ($claudeAvailable) { 'claude' } else { 'neither available' }

@@ -238,9 +238,12 @@ owner: claude
 source: BQ-001
 priority: P1
 depends-on: none
-files: CLAUDE.md, AGENTS.md, TASKS.md, planning/BUILD_QUEUE.md, WORKFLOW.md, AI-DEV-OS.md, SYSTEM-OVERVIEW.md, DECISIONS.md
+files: CLAUDE.md, AGENTS.md, TASKS.md, planning/BUILD_QUEUE.md, WORKFLOW.md, AI-DEV-OS.md, SYSTEM-OVERVIEW.md, DECISIONS.md, tools/Task-Gating.ps1 (new), tools/Dispatch-Commands.ps1, tools/Run-Codex-Build.ps1, scripts/task-gating.test.js (new), package.json (test wiring only)
 
 context:
+  Review follow-up (GOV-001/GOV-002): the strict review found the manual builder skipped dependency
+  checks and unattended /go could run owner-direct tasks; fixed by the shared tools/Task-Gating.ps1
+  (execution gating only; see DECISIONS #35).
   Today every Codex task must originate from an approved `planning/BUILD_QUEUE.md` item, so an
   explicit, fully specified owner instruction still needs a manual Claude relay before work can
   start. Owner approved removing that bottleneck for owner-direct tasks only, while keeping the
@@ -257,7 +260,8 @@ acceptance:
         authorization rules are unchanged.
 
 constraints:
-  - Docs only: no runtime code, no tools/ change, no deploy, no push, no Firebase/production mutation.
+  - Docs plus the bounded GOV-001/GOV-002 execution-gating fix in tools/: no product/runtime code, no
+    deploy, no push, no Firebase/production mutation.
   - Red-zone (touches the AI Dev OS itself): held at `approved` for the human merge, never auto-merged.
 
 test steps:

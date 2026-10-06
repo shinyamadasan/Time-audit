@@ -44,6 +44,9 @@ $logFile      = Join-Path $root 'claude-session.log'
 $utf8         = New-Object System.Text.UTF8Encoding($false)
 $NO_REPLIES   = 'No pending replies.'
 
+# Shared task-eligibility rules (dependencies, owner-direct) -- also used by Run-Codex-Build.ps1.
+. (Join-Path $PSScriptRoot 'Task-Gating.ps1')
+
 # KEEP-AWAKE (D-033). This task runs on a WakeToRun timer, so it can be the thing that woke a
 # sleeping PC. A /build it then dispatches runs Codex for 10-15 minutes -- long enough for Windows'
 # unattended-sleep timer to suspend the machine mid-build and leave a half-finished branch. Assert
@@ -221,7 +224,9 @@ function Invoke-BuildPhase {
     # Hashtable splat, NOT array (D-041): PowerShell array splatting binds POSITIONALLY, not by
     # name, so an array holding just '-DryRun' happens to not crash here (no competing mandatory
     # positional parameter) but silently never actually activates -DryRun on the target script.
-    $a = @{}; if ($DryRun) { $a['DryRun'] = $true }
+    # -Unattended: every dispatcher-launched build (/go, /build) refuses `source: owner-direct` tasks
+    # (DECISIONS #35) -- those run only from a manual Run-Codex-Build.ps1 / interactive Codex session.
+    $a = @{ Unattended = $true }; if ($DryRun) { $a['DryRun'] = $true }
     & (Join-Path $root 'tools\Run-Codex-Build.ps1') @a
     $code = $LASTEXITCODE
     $resultFile = Join-Path $root '.last-phase-result.txt'
@@ -320,43 +325,10 @@ $AUTOPILOT_MAX_ACTIONS = 10           # Plan / Build / Review each count as one 
 $AUTOPILOT_MAX_MINUTES  = 30          # wall-clock budget; whichever limit trips first ends the run
 $AUTO_NOTE = 'auto:'                  # prefix marking blocker notes AUTOPILOT itself wrote (never touch human-set blocks)
 
-# Parse every task block once: id, title, status, priority (P1<P2<P3, default P3), depends-on list,
-# and its blocker note (first line). This is the single source the loop reasons over.
-function Get-TaskTable {
-    if (-not (Test-Path $tasksFile)) { return @() }
-    $text = Get-Content $tasksFile -Raw -Encoding UTF8
-    $body = ($text -split '<!-- TASK TEMPLATE')[0]
-    $blocks = [regex]::Matches($body, '(?ms)^###\s+(?<id>TASK-\d+)\s*\p{Pd}?\s*[·•]?\s*(?<title>.+?)\r?\n(?<rest>.*?)(?=^###\s|\z)')
-    $out = @()
-    foreach ($b in $blocks) {
-        $rest = $b.Groups['rest'].Value
-        $status = ([regex]::Match($rest, '(?m)^status:\s*(?<s>[\w-]+)')).Groups['s'].Value
-        $pm = [regex]::Match($rest, '(?m)^priority:\s*P(?<p>[0-9])')
-        $priority = if ($pm.Success) { [int]$pm.Groups['p'].Value } else { 3 }
-        $dm = [regex]::Match($rest, '(?m)^depends-on:\s*(?<d>.+)$')
-        $deps = @()
-        if ($dm.Success -and $dm.Groups['d'].Value.Trim() -notmatch '^(none|n/a|-)$') {
-            $deps = @($dm.Groups['d'].Value -split '[,\s]+' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^TASK-\d+$' })
-        }
-        $bn = [regex]::Match($rest, '(?ms)^blocker:\s*\r?\n\s*-\s*(?<n>.+?)$')
-        $note = if ($bn.Success) { $bn.Groups['n'].Value.Trim() } else { '' }
-        $out += [pscustomobject]@{
-            Id = $b.Groups['id'].Value; Title = $b.Groups['title'].Value.Trim()
-            Status = $status; Priority = $priority; Deps = $deps; Note = $note
-        }
-    }
-    $out
-}
-
-# A dependency is satisfied only if its task branch is already merged into main.
-function Test-DepsSatisfied {
-    param($Task, $MergedBranches)
-    foreach ($d in $Task.Deps) {
-        $depBranch = ($d -replace 'TASK-', 'task-').ToLower()
-        if ($depBranch -notin $MergedBranches) { return $false }
-    }
-    $true
-}
+# Get-TaskTable (parse every task block once: id, title, status, priority, depends-on, source,
+# blocker note -- the single source the loop reasons over) and Test-DepsSatisfied now live in
+# tools/Task-Gating.ps1 (dot-sourced at the top), shared with Run-Codex-Build.ps1 so /go and the
+# manual builder use ONE dependency definition.
 
 # Isolate ONE task's block from the whole file so per-task edits can never bleed into a neighbouring
 # task (a `.*?` over the full file will happily cross `###` boundaries and grab another task's
@@ -672,6 +644,7 @@ function Invoke-Autopilot {
     #     action: a task already built and pushed is further along than anything not yet started, so
     #     finishing its review takes priority over starting something new. ---
     $waiting = @()
+    $ownerDirectHold = $null
     $built = $null
     $pendingReview = Get-TaskTable | Where-Object { $_.Status -eq 'review' } | Select-Object -First 1
     if ($pendingReview) {
@@ -726,6 +699,10 @@ function Invoke-Autopilot {
     while (-not $built -and $actions -lt $AUTOPILOT_MAX_ACTIONS -and ((Get-Date) - $start).TotalMinutes -lt $AUTOPILOT_MAX_MINUTES) {
         $next = Get-TaskTable | Where-Object { $_.Status -eq 'codex' } | Select-Object -First 1
         if (-not $next) { break }
+        # Owner-direct tasks are interactive/manual only (DECISIONS #35): /go never builds one, and
+        # never edits TASKS.md to dodge it. Codex self-selects the FIRST status:codex task, so when
+        # that task is owner-direct this mission stops here rather than skipping past it.
+        if (Test-OwnerDirectTask $next) { $ownerDirectHold = $next; break }
         $mergedNow = @(Invoke-Git -C $root branch --merged main | ForEach-Object { $_.TrimStart('*').Trim() } | Where-Object { $_ })
         if (-not (Test-DepsSatisfied -Task $next -MergedBranches $mergedNow)) {
             $depList = ($next.Deps -join ', ')
@@ -759,6 +736,8 @@ function Invoke-Autopilot {
             $out += "NEEDS YOU: $($built.Id) [P$($built.P)] -- $($built.Outcome)"
             $out += "Branch $(($built.Id -replace 'TASK-','task-').ToLower()) left for inspection."
         }
+    } elseif ($ownerDirectHold) {
+        $out += "Nothing built -- first ready task $($ownerDirectHold.Id) ($($ownerDirectHold.Title)) is owner-direct: interactive/manual only, /go never runs it. Run tools\Run-Codex-Build.ps1 by hand once its dependencies are merged."
     } elseif ($waiting.Count -gt 0) {
         $out += "Nothing built -- top task(s) waiting on a merge."
     } elseif ($triageOnlyPlan) {
