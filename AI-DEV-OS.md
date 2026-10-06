@@ -79,7 +79,10 @@ Telegram capture
 **Owner-direct shortcut (DECISIONS #35):** a bounded task the owner explicitly instructs (goal, scope,
 constraints, acceptance, stop conditions all stated) may be recorded straight into `TASKS.md` as
 `source: owner-direct`, skipping the Telegram/BUILD_QUEUE relay. Everything from "Codex implements"
-onward is unchanged. Agents never self-authorize work; see `CLAUDE.md` § Owner-Direct Tasks.
+onward is unchanged, except that owner-direct tasks are never executed by `/go` or `/build` (only by a
+manual `tools/Run-Codex-Build.ps1` / interactive Codex), and every task waits for its `depends-on`
+tasks to be merged (`tools/Task-Gating.ps1`). Agents never self-authorize work; see `CLAUDE.md`
+§ Owner-Direct Tasks.
 
 Telegram also doubles as a remote control panel — `/status /next /go /run /build /review /stop
 /enable /disable` (plus `/log`). **`/go` is the everyday driver: a mission autopilot that runs the

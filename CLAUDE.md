@@ -173,7 +173,11 @@ Rules:
    or turn an ambiguous request into implementation authority. An unrelated improvement noticed along
    the way is reported, never recorded or built.
 6. **Solo, interactive only.** Owner-direct tasks are never `Execution: Chained`, and unattended
-   automation (`run-claude.ps1`, the dispatcher, `/go`) never creates them.
+   automation (`run-claude.ps1`, the dispatcher, `/go`, `/build`) never creates or executes them:
+   `tools/Task-Gating.ps1` (shared by the dispatcher and `tools/Run-Codex-Build.ps1`) skips a
+   `source: owner-direct` task for every unattended run without editing `TASKS.md`. It runs only from
+   a manual `Run-Codex-Build.ps1` or an interactive Codex session. Every task — owner-direct or not —
+   also requires its `depends-on` tasks to be merged into `main` before it starts, on both paths.
 
 ## What to Read
 
