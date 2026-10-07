@@ -1,5 +1,29 @@
 # ChronaSense — Changelog
 
+## TASK-005 — Phase A1 FIX FIRST (A1-01, A1-02, A1-03) — targeted re-review (branch: task-005)
+
+On top of reviewed candidate `8b0ff02`. NOT deployed; no push; no production Firebase access.
+changed:
+  - A1-01 packaging: scripts/functions-shared.mjs (new) generates functions/shared/{brain-dump-model.js,
+    plan-item-origin.js} as byte-identical copies of the root authority and checks parity (differs / missing /
+    stale extra file / unpackaged import; only CRLF vs LF tolerated). Run by `npm test`, by functions `npm test`,
+    and by the firebase.json functions predeploy hook; root scripts check:/build:functions-shared, functions
+    build/check:shared. functions/src/brain-dump-query.js now imports ../shared/brain-dump-model.js.
+    functions/test/packaging.test.js (5).
+  - A1-02 response limit: functions/src/action-api.js serializes the body once, refuses > 65536 UTF-8 bytes
+    (inclusive "maximum 64 KiB", §5) with DOMAIN_LIMIT 422 `details.limitBytes`, never a partial list; returns
+    `payload`, which functions/index.js now sends verbatim. functions/test/response-limit.test.js (6).
+  - A1-03 guard: functions/test/authority-scan.js (bounded scan: static + literal dynamic import specifiers, non-
+    literal import(), require(, createRequire) over index.js, src/ and shared/; authority-boundary.test.js
+    extended (+4 focused tests).
+  - functions/README.md (packaging + response-size sections; resolved open items removed).
+gate correction: `8b0ff02` FAILED `npm test` (scripts/task-gating.test.js pins the real TASK-005 `Status: codex`);
+  the round-1 handoff set `status: review` after the last full run. TASKS.md is restored to the base line
+  (`status: codex`); scripts/task-gating.test.js is untouched. Reconciling that test with the review lifecycle (as
+  f4c159b did for TASK-004) is left to the owner.
+unchanged: root brain-dump-model.js / plan-item-origin.js, firebase.rules.json + builder, HMAC, identity, nonce,
+  receipt, get_brain_dump field semantics.
+
 ## TASK-005 — ChronaSense Action API Phase A1 — review (branch: task-005)
 
 Owner-direct (2026-10-07), base `0958da4` (= origin/main, TASK-004 merged, main CI green). Built by Claude on the

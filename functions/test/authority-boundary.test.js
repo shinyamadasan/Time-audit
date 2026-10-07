@@ -13,32 +13,85 @@ import { fileURLToPath } from 'node:url';
 
 import { ApiError, AuthorityBoundaryViolation } from '../src/errors.js';
 import { assertInfraPath, createInfraRtdb } from '../src/infra-rtdb.js';
+import { APPROVED_SPECIFIERS, authorityViolations, specifiersOf } from './authority-scan.js';
 import { OWNER, harness, signedRequest } from './support.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'src');
 const source = file => readFileSync(path.join(SRC, file), 'utf8');
-const imports = text => [...text.matchAll(/^import[^'"]*['"]([^'"]+)['"]/gm)].map(match => match[1]);
 const SRC_FILES = readdirSync(SRC).filter(name => name.endsWith('.js'));
+/** Every runtime module the deployment package ships (tests excluded). */
+const PACKAGE_FILES = [
+  'index.js',
+  ...SRC_FILES.map(name => `src/${name}`),
+  ...readdirSync(path.join(ROOT, 'shared')).filter(name => name.endsWith('.js')).map(name => `shared/${name}`),
+].map(name => ({ name, text: readFileSync(path.join(ROOT, name), 'utf8') }));
 
-test('static: only index.js imports Firebase; no src module can reach the Admin SDK', () => {
-  for (const file of SRC_FILES) {
-    for (const specifier of imports(source(file))) assert.ok(!/^firebase/.test(specifier), `${file} imports ${specifier}`);
-  }
-  const entry = readFileSync(path.join(ROOT, 'index.js'), 'utf8');
-  assert.deepEqual(imports(entry).filter(s => s.startsWith('firebase')).sort(), ['firebase-admin/app', 'firebase-admin/auth', 'firebase-functions/params', 'firebase-functions/v2/https']);
-  assert.ok(!/firebase-admin\/database/.test(entry), 'the Admin Database SDK is never loaded');
+test('static: the real package holds the boundary; only index.js loads Firebase, and only app/auth/functions', () => {
+  assert.deepEqual(authorityViolations(PACKAGE_FILES), []);
+  const entry = PACKAGE_FILES.find(file => file.name === 'index.js').text;
+  assert.deepEqual(specifiersOf(entry).filter(s => s.startsWith('firebase')).sort(), [...APPROVED_SPECIFIERS]);
+  assert.ok(PACKAGE_FILES.length >= SRC_FILES.length + 3, 'index.js, every src module and the packaged shared modules were scanned');
+});
+
+test('scan: the approved privileged infrastructure wiring stays allowed', () => {
+  const approved = `import { applicationDefault, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { onRequest } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
+/** @param {ReturnType<import('./infra-rtdb.js').createInfraRtdb>} x */
+`;
+  assert.deepEqual(authorityViolations([{ name: 'index.js', text: approved }]), []);
+  assert.deepEqual(authorityViolations([{ name: 'src/nonce-store.js', text: "/** @param {ReturnType<import('./infra-rtdb.js').createInfraRtdb>} x */\nimport { ApiError } from './errors.js';\n" }]), []);
+});
+
+test('scan: static Admin/domain misuse is rejected (Database/Firestore SDK, bare Admin namespace, client SDK, outside index.js)', () => {
+  const cases = [
+    ['index.js', "import { getDatabase } from 'firebase-admin/database';"],
+    ['index.js', "import admin from 'firebase-admin';"],
+    ['index.js', "import { getFirestore } from 'firebase-admin/firestore';"],
+    ['index.js', "import { getDatabase } from 'firebase/database';"],
+    ['index.js', "export { getDatabase } from '@firebase/database';"],
+    ['src/brain-dump-query.js', "import { getAuth } from 'firebase-admin/auth';"],
+    ['src/user-scoped-rtdb.js', "import { initializeApp } from 'firebase-admin/app';"],
+    ['shared/brain-dump-model.js', "import 'firebase-admin/database';"],
+    ['src/x.js', "import { Database } from '@google-cloud/firestore';"],
+  ];
+  for (const [name, text] of cases) assert.equal(authorityViolations([{ name, text }]).length, 1, `${name}: ${text}`);
+});
+
+test('scan: dynamic import() misuse is rejected, literal or computed', () => {
+  const cases = [
+    ['src/brain-dump-query.js', "const { getDatabase } = await import('firebase-admin/database');"],
+    ['index.js', "const admin = await import( \"firebase-admin\" );"],
+    ['src/x.js', "const m = await import(name);"],
+    ['src/x.js', "const m = await import('firebase-' + 'admin/database');"],
+    ['src/x.js', "const m = await import(`firebase-admin/database`);"],
+  ];
+  for (const [name, text] of cases) assert.ok(authorityViolations([{ name, text }]).length >= 1, `${name}: ${text}`);
+});
+
+test('scan: require() and createRequire misuse is rejected', () => {
+  const cases = [
+    ['src/x.js', "const admin = require('firebase-admin');"],
+    ['index.js', "const { getDatabase } = require ('firebase-admin/database');"],
+    ['src/x.js', "import { createRequire } from 'node:module';\nconst load = createRequire(import.meta.url);\nload('firebase-admin');"],
+    ['shared/brain-dump-model.js', "const x = require('./plan-item-origin.js');"],
+  ];
+  for (const [name, text] of cases) assert.ok(authorityViolations([{ name, text }]).length >= 1, `${name}: ${text}`);
 });
 
 test('static: only infra-rtdb.js sends a privileged Authorization header; domain modules never import it', () => {
-  for (const file of SRC_FILES.filter(name => name !== 'infra-rtdb.js')) {
-    assert.ok(!/Authorization|Bearer/.test(source(file)), `${file} must not carry a privileged credential`);
+  for (const file of PACKAGE_FILES.filter(file => file.name !== 'src/infra-rtdb.js' && file.name !== 'index.js')) {
+    assert.ok(!/\bAuthorization\s*:|Bearer\s/.test(file.text), `${file.name} must not send a privileged Authorization header`);
   }
+  // Runtime coupling only: JSDoc type references (`@param {ReturnType<import('./nonce-store.js')...>}`) are not loads.
+  const code = text => text.replace(/\/\*[\s\S]*?\*\//g, '');
   for (const file of ['user-scoped-rtdb.js', 'brain-dump-query.js', 'action-api.js', 'envelope.js', 'identity.js']) {
-    assert.ok(!imports(source(file)).some(s => /infra-rtdb|nonce-store|receipts/.test(s)), `${file} must not import privileged infrastructure`);
+    assert.ok(!specifiersOf(code(source(file))).some(s => /infra-rtdb|nonce-store|receipts/.test(s)), `${file} must not import privileged infrastructure`);
   }
-  // The domain query's only data dependency is the shared, pure domain model.
-  assert.deepEqual(imports(source('brain-dump-query.js')).filter(s => !s.startsWith('./') && !s.startsWith('node:')), ['../../brain-dump-model.js']);
+  // The domain query's only data dependency is the packaged copy of the shared, pure domain model.
+  assert.deepEqual(specifiersOf(source('brain-dump-query.js')).filter(s => !s.startsWith('./') && !s.startsWith('node:')), ['../shared/brain-dump-model.js']);
 });
 
 test('static: index.js wires the domain reader with the ID-token provider only, never the Admin credential', () => {
@@ -50,7 +103,7 @@ test('static: index.js wires the domain reader with the ID-token provider only, 
 });
 
 test('static: a read never creates a receipt (the request pipeline does not import the receipt store)', () => {
-  assert.ok(!imports(source('action-api.js')).some(s => s.includes('receipts')));
+  assert.ok(!specifiersOf(source('action-api.js')).some(s => s.includes('receipts')));
 });
 
 test('runtime: the privileged client refuses every domain / non-infrastructure path before touching a token or the network', async () => {

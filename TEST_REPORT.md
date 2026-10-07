@@ -5,6 +5,20 @@
 
 ---
 
+## TASK-005 FIX FIRST (A1-01..03) · 2026-10-07
+suite: functions `npm test` (parity check + node --test test/*.test.js); root `npm test`; `npm run test:fence`;
+  `npm run check:firebase-rules`; `npm run check:functions-shared`; `npm run check:www-parity`; `git diff --check`.
+result:
+  - functions: 77 passed, 0 failed (packaging 5, response-limit 6, authority-boundary 11, others unchanged).
+  - npm test: exit 0, 1964 node:test passes. NOTE: on the previous tip 8b0ff02 npm test FAILED 2 tests in
+    scripts/task-gating.test.js (TASK-005 status pinned to `codex`); fixed by restoring the TASKS.md status line.
+  - test:fence: rules-emulator 57/57, fence-sdk 19/19, rules-mutation 18/18.
+  - check:firebase-rules: matches the builder. check:functions-shared: matches. www parity: OK. diff --check: clean.
+untested: no real deploy upload (the clean-package test copies functions/ minus node_modules and tests to a temp dir
+  and imports from there); predeploy hook not executed by firebase-tools.
+
+---
+
 ## TASK-005 · 2026-10-07
 suite: `npm test` (exit 0; includes `node --test functions/test/*.test.js`, the rules builder drift check and
   npm-test-wiring); `npm run test:fence` (provision RTDB emulator 4.11.2 → test:rules-emulator → test:fence-sdk →

@@ -8,7 +8,9 @@
     "node": "22"
   },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "build": "node ../scripts/functions-shared.mjs --write",
+    "check:shared": "node ../scripts/functions-shared.mjs",
+    "test": "node ../scripts/functions-shared.mjs && node --test test/*.test.js"
   },
   "dependencies": {
     "firebase-admin": "^14.5.0",
