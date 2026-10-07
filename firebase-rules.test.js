@@ -341,3 +341,25 @@ test('calendar barrier preserves every audited ordinary owner-write room path', 
   assert.equal(canWrite(root, A, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1')), true, 'brainDump captures remain owner-writable');
   assert.equal(canWrite(root, C, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1')), false, 'brainDump captures remain account-isolated');
 });
+
+// Action API V1 Phase A1 (TASK-005): server-private infrastructure nodes.
+test('action api: serverRequestNonces / serverActionReceipts are explicit nodes that grant nothing anywhere below', () => {
+  const grants = node => Object.entries(node).flatMap(([key, child]) => ((key === '.read' || key === '.write') ? [child] : (child && typeof child === 'object' ? grants(child) : [])));
+  for (const name of ['serverRequestNonces', 'serverActionReceipts']) {
+    const node = rules.rules[name];
+    assert.ok(node, `${name} is an explicit node, never matched by the $userNode wildcard`);
+    assert.equal(node['.read'], false);
+    assert.equal(node['.write'], false);
+    assert.deepEqual(grants(node), [false, false], `${name}: no descendant .read/.write rule exists`);
+  }
+  assert.deepEqual(rules.rules.serverRequestNonces.$service['.indexOn'], ['expiresAt'], 'the bounded retention sweep is indexed');
+  assert.equal(rules.rules['.read'], false);
+  assert.equal(rules.rules['.write'], false);
+  const data = { serverRequestNonces: { svc: { n1: { expiresAt: 1 } } }, serverActionReceipts: { alice_uid: { act1_x: { state: 'started' } } } };
+  for (const who of [A, C, null]) {
+    for (const at of ['/serverRequestNonces', '/serverRequestNonces/svc/n1', '/serverRequestNonces/public', '/serverActionReceipts/alice_uid', '/serverActionReceipts/alice_uid/act1_x', '/serverActionReceipts/public']) {
+      assert.equal(canRead(data, who, at), false, `read ${at}`);
+      assert.equal(canWrite(data, who, at, { forged: true }), false, `write ${at}`);
+    }
+  }
+});

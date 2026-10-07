@@ -255,6 +255,11 @@ export function buildRules({ without = [] } = {}) {
       '.read': false,
       '.write': false,
       rooms: { $roomId: { '.read': "auth != null && $roomId === ('uid_' + auth.uid)", ...roomChildren } },
+      // Action API server-private infrastructure (docs/CHRONASENSE_ACTION_API_V1.md §6): only the backend's Admin
+      // credential (which bypasses rules) may touch these. Explicit nodes so the top-level $userNode wildcard can
+      // never match them, and no rule anywhere below grants a read or write.
+      serverRequestNonces: { '.read': false, '.write': false, $service: { '.indexOn': ['expiresAt'] } },
+      serverActionReceipts: { '.read': false, '.write': false },
       pairs: {
         $pairId: {
           '.read': "auth != null && (data.child('creator').val() === auth.uid || data.child('partner').val() === auth.uid)",
