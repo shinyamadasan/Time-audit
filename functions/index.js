@@ -52,9 +52,10 @@ export const chronasenseActionApi = onRequest({ region: 'asia-southeast1', secre
     if (!(error instanceof ConfigError)) throw error;
     console.error(JSON.stringify({ component: 'chronasense-action-api', event: 'config-invalid' }));
     const refused = new ApiError('AUTH_REQUIRED', 'Service authentication failed.', { reason: 'config-invalid' });
-    res.status(refused.status).json(errorBody(refused));
+    res.status(refused.status).set('content-type', 'application/json; charset=utf-8').send(JSON.stringify(errorBody(refused)));
     return;
   }
-  const { status, body } = await handle({ method: req.method, path: req.url, rawHeaders: req.rawHeaders, rawBody: req.rawBody });
-  res.status(status).set('cache-control', 'no-store').json(body);
+  // Sends exactly the bytes the handler measured against the 64 KiB response limit (never re-serialized).
+  const { status, payload } = await handle({ method: req.method, path: req.url, rawHeaders: req.rawHeaders, rawBody: req.rawBody });
+  res.status(status).set('content-type', 'application/json; charset=utf-8').set('cache-control', 'no-store').send(payload);
 });

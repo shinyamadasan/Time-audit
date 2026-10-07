@@ -17,9 +17,11 @@ import { getBrainDump } from './brain-dump-query.js';
 import { ApiError, errorBody } from './errors.js';
 import { bindIdentity, requireScope } from './identity.js';
 import { parseQueryEnvelope } from './envelope.js';
-import { SERVICE_IDENTITY, verifyServiceRequest } from './service-auth.js';
+import { MAX_BODY_BYTES, SERVICE_IDENTITY, verifyServiceRequest } from './service-auth.js';
 
 export const CANONICAL_PATH = '/v1/query';
+/** §5 "maximum 64 KiB" applies to every API body, responses included: inclusive, 65536 bytes is allowed. */
+export const MAX_RESPONSE_BYTES = MAX_BODY_BYTES;
 
 const QUERIES = Object.freeze({ get_brain_dump: getBrainDump });
 
@@ -28,7 +30,7 @@ const QUERIES = Object.freeze({ get_brain_dump: getBrainDump });
  *          nonces:ReturnType<import('./nonce-store.js').createNonceStore>,
  *          domain:{readRoomCollection(identity:object, collection:string):Promise<unknown>},
  *          now?:()=>number, log?:(entry:object)=>void}} deps
- * @returns {(request:{method:string, path:string, rawHeaders:string[], rawBody:Uint8Array}) => Promise<{status:number, body:object, reason:string}>}
+ * @returns {(request:{method:string, path:string, rawHeaders:string[], rawBody:Uint8Array}) => Promise<{status:number, body:object, payload:string, reason:string}>}  `payload` is the exact JSON text to send
  */
 export function createActionApiHandler({ keys, owner, nonces, domain, now = Date.now, log = () => {} }) {
   return async function handle(request) {
@@ -44,13 +46,21 @@ export function createActionApiHandler({ keys, owner, nonces, domain, now = Date
       // Bounded retention sweep; best-effort, it never decides the outcome of this request.
       nonces.sweepExpired(SERVICE_IDENTITY, nowMs).catch(() => log({ event: 'nonce-sweep-failed', requestId }));
       const { result, authority } = await QUERIES[query.kind](identity, { domain, nowMs });
+      const body = { contractVersion: 1, requestId, kind: query.kind, result, authority };
+      const payload = JSON.stringify(body);
+      // §5: every API body is at most 64 KiB, measured in UTF-8 bytes of exactly what is sent. A complete result
+      // that does not fit is refused whole; a truncated list would present partial authoritative data as complete.
+      if (Buffer.byteLength(payload, 'utf8') > MAX_RESPONSE_BYTES) {
+        throw new ApiError('DOMAIN_LIMIT', 'The complete result exceeds the 64 KiB response limit; no partial result is returned.', { reason: 'response-too-large', details: { limitBytes: MAX_RESPONSE_BYTES } });
+      }
       log({ event: 'ok', kind: query.kind, requestId });
-      return { status: 200, reason: 'ok', body: { contractVersion: 1, requestId, kind: query.kind, result, authority } };
+      return { status: 200, reason: 'ok', body, payload };
     } catch (error) {
       // Anything untyped (including an AuthorityBoundaryViolation) is a server fault: fail closed, say nothing.
       const typed = error instanceof ApiError ? error : new ApiError('RETRYABLE_TRANSPORT', 'The request could not be completed.', { reason: error?.name === 'AuthorityBoundaryViolation' ? 'authority-boundary' : 'internal', status: 500 });
       log({ event: 'rejected', code: typed.code, reason: typed.reason, requestId });
-      return { status: typed.status, reason: typed.reason, body: errorBody(typed, requestId) };
+      const body = errorBody(typed, requestId);
+      return { status: typed.status, reason: typed.reason, body, payload: JSON.stringify(body) };
     }
   };
 }

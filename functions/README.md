@@ -76,17 +76,37 @@ npm run test:rules-emulator               # real RTDB emulator: private-path den
 ```
 
 `functions/node_modules` is only needed to load `index.js` (the Firebase entry); `src/` and its tests depend on
-Node built-ins and the shared domain model only.
+Node built-ins and the packaged shared domain model only.
+
+## Packaging the shared domain model
+
+A deploy uploads only `functions/`. The backend needs the Brain Dump domain model, whose ONLY authority is the
+repository-root `brain-dump-model.js` (+ its import `plan-item-origin.js`). `functions/shared/` holds
+byte-identical GENERATED copies — never edit them; edit the root file, then regenerate:
+
+```
+npm run build:functions-shared            # (root) copy the authoritative files into functions/shared/
+npm run check:functions-shared            # (root) parity check; also run by npm test, by `npm test` in
+                                          # functions/, and by the firebase.json functions predeploy hook
+```
+
+The check fails on any drift: a copy differing from its root source (only CRLF vs LF is tolerated), a missing
+copy, an unexpected/stale file in `functions/shared/`, or an authoritative module importing a file that is not
+packaged. `test/packaging.test.js` also proves a clean copy of `functions/` (no `node_modules`, no tests, no
+repository root) resolves and runs.
+
+## Response size
+
+§5's 64 KiB maximum applies to responses as well as requests, inclusively (65,536 bytes allowed). It is measured in
+UTF-8 bytes of the exact JSON payload `index.js` sends. A complete result that does not fit is refused whole with
+`DOMAIN_LIMIT` (HTTP 422, `details.limitBytes: 65536`, not retryable) — never truncated into a partial list.
 
 ## Known open items (not Phase A1 scope)
 
-- **Deploy packaging:** `src/brain-dump-query.js` imports the shared `brain-dump-model.js` (and its
-  `plan-item-origin.js`) from the repository root, outside `functions/`. A deploy uploads only `functions/`, so a
-  reviewed packaging step (e.g. vendoring with a parity check) is required before any deployment.
 - **Invoker / rate limits / concurrency:** §13 per-principal and per-action rate limits and bounded concurrency
   are not implemented; the Cloud Run invoker policy is left at the platform default. Both are deploy-time
   decisions.
-- **Response size:** §5's 64 KiB cap is enforced on request bodies. A very large Brain Dump could produce a larger
-  `get_brain_dump` response; whether responses are capped/paginated is an open contract question.
+- **Large Brain Dumps:** a Brain Dump whose complete projection exceeds 64 KiB is currently unreadable through
+  the API (`DOMAIN_LIMIT`); pagination/filtering would be a separate contract change.
 - **Canonical path on the deployed URL:** the signed path is the request path the function sees (`/v1/query`).
   Phase B must verify it matches what the Worker signs for the deployed URL form.
