@@ -15,13 +15,15 @@ export const APPROVED_ENTRY = 'index.js';
 export const APPROVED_SPECIFIERS = Object.freeze(['firebase-admin/app', 'firebase-admin/auth', 'firebase-functions/params', 'firebase-functions/v2/https']);
 const PRIVILEGED = /^(@?firebase|@google-cloud\/|googleapis)/;
 const REGEX_KEYWORDS = new Set(['return', 'typeof', 'instanceof', 'case', 'do', 'else', 'in', 'of', 'new', 'delete', 'void', 'throw', 'await', 'yield']);
+const CONTROL_KEYWORDS = new Set(['if', 'while', 'for', 'with']);
 
 /**
  * Two same-length views of `text` (so indices line up):
  *   code     — comments and regex-literal bodies blanked; string/template text kept (specifiers are read here);
  *   codeOnly — additionally every string/template text blanked, leaving only executable tokens.
  * Blanking keeps newlines. Template `${...}` expressions are code. A `/` starts a regex literal where an operand
- * is expected (after punctuation/operators, a keyword, or at the start), otherwise it is division.
+ * is expected (after punctuation/operators, a keyword, a control-flow header's `)`, or at the start), otherwise it
+ * is division.
  */
 export function lex(text) {
   // UTF-16 units, NOT [...text] (code points): text[i] indexes UTF-16, so an astral character would misalign.
@@ -29,15 +31,19 @@ export function lex(text) {
   const only = text.split('');
   const blank = (i, both) => { if (text[i] !== '\n') { only[i] = ' '; if (both) code[i] = ' '; } };
   const stack = []; // 'brace' | 'template-expr'
+  // `)` normally ends an operand (`(a) / b` is division), but the `)` closing an if/while/for/with header ends a
+  // statement head, so a `/` after it starts a regex literal: `if (x) /re/.test(y)`.
+  const parens = []; // per open '(': does it open a control-flow header?
+  const controlCloses = new Set();
+  const previousSignificant = i => { let j = i - 1; while (j >= 0 && /\s/.test(only[j])) j--; return j; };
+  const wordEndingAt = j => { let k = j; while (k >= 0 && /[\w$]/.test(only[k])) k--; return only.slice(k + 1, j + 1).join(''); };
   const regexAllowedAt = i => {
-    let j = i - 1;
-    while (j >= 0 && /\s/.test(only[j])) j--;
+    const j = previousSignificant(i);
     if (j < 0) return true;
+    if (only[j] === ')') return controlCloses.has(j);
     if (/[(,=:[!&|?{};+\-*%<>~^}]/.test(only[j])) return true;
     if (!/[\w$]/.test(only[j])) return false;
-    let k = j;
-    while (k >= 0 && /[\w$]/.test(only[k])) k--;
-    return REGEX_KEYWORDS.has(only.slice(k + 1, j + 1).join(''));
+    return REGEX_KEYWORDS.has(wordEndingAt(j));
   };
   let i = 0;
   const template = () => { // at the opening backtick or just after a closing `}` of ${...}
@@ -80,6 +86,8 @@ export function lex(text) {
       i++;
       continue;
     }
+    if (ch === '(') { const j = previousSignificant(i); parens.push(j >= 0 && CONTROL_KEYWORDS.has(wordEndingAt(j))); }
+    if (ch === ')' && parens.pop()) controlCloses.add(i);
     if (ch === '{') stack.push('brace');
     if (ch === '}' && stack.pop() === 'template-expr') { i++; template(); continue; }
     i++;
