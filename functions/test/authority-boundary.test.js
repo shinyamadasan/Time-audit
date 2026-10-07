@@ -81,6 +81,52 @@ test('scan: require() and createRequire misuse is rejected', () => {
   for (const [name, text] of cases) assert.ok(authorityViolations([{ name, text }]).length >= 1, `${name}: ${text}`);
 });
 
+test('scan: comments cannot hide a load (import / require / createRequire through comments and newlines)', () => {
+  const cases = [
+    ['src/x.js', "await import /* comment */ ('firebase-admin/database');"],
+    ['src/x.js', "await import /* c1 */ ( /* c2 */ 'firebase-admin/database' /* c3 */ );"],
+    ['src/x.js', "await import // trailing comment\n  ('firebase-admin/database');"],
+    ['src/x.js', "await import\n/* multi\n   line */\n('firebase-admin');"],
+    ['index.js', "const m = await import /* x */ ('firebase-admin');"],
+    ['src/x.js', "const a = require /* comment */ ('firebase-admin');"],
+    ['src/x.js', "const a = require // c\n('firebase-admin');"],
+    ['src/x.js', "const a = require\n/* c */\n(name);"],
+    ['src/x.js', "import { createRequire /* x */ } from 'node:module';"],
+    ['src/x.js', "const load = /* x */ createRequire(import.meta.url);"],
+    ['src/x.js', "import /* c */ { getDatabase } /* c */ from /* c */ 'firebase-admin/database';"],
+    ['src/x.js', "import { getDatabase }\n// c\nfrom 'firebase-admin/database';"],
+    // A regex literal holding quotes or slashes must not swallow the code after it.
+    ['src/x.js', "const re = /['\"`]/g; const m = await import('firebase-admin/database');"],
+    ['src/x.js', "const s = x.replace(/\\//g, '_'); const a = require('firebase-admin');"],
+    ['src/x.js', "const t = `${'x'}`; const a = require('firebase-admin');"],
+  ];
+  for (const [name, text] of cases) assert.ok(authorityViolations([{ name, text }]).length >= 1, `${name}: ${JSON.stringify(text)}`);
+});
+
+test('scan: comment-only and string-only mentions are not loads (no false positives)', () => {
+  const harmless = [
+    "// require('firebase-admin')\nexport const x = 1;",
+    "// await import('firebase-admin/database')\nexport const x = 1;",
+    "/* require('firebase-admin'); import('firebase-admin/database'); createRequire(import.meta.url) */\nexport const x = 1;",
+    "/**\n * @param {ReturnType<import('firebase-admin/database').Database>} db  (JSDoc type only)\n */\nexport function f(db) {}",
+    "export const note = \"call require('firebase-admin') or import('firebase-admin/database') -- never\";",
+    "export const t = `require('firebase-admin') ${1 + 1} import(x)`;",
+    "export const url = 'https://example.invalid/require(/'; const re = /require\\(x\\)/; const half = 4 / 2 / 1;",
+    "export const emoji = '😀'; // require('firebase-admin')\nexport const y = 2;",
+  ];
+  for (const text of harmless) assert.deepEqual(authorityViolations([{ name: 'src/x.js', text }]), [], JSON.stringify(text));
+  // Content after a harmless comment, string, template or emoji is still scanned.
+  assert.equal(authorityViolations([{ name: 'src/x.js', text: "export const emoji = '😀'; /* ok */ const a = require('firebase-admin');" }]).length, 1);
+});
+
+test('scan fidelity: the lexer loses no real import of the package (every static import line is still seen)', () => {
+  for (const file of PACKAGE_FILES) {
+    const lines = [...file.text.matchAll(/^import\b[^'"]*?\bfrom\s*['"]([^'"]+)['"];?\s*$/gm)].map(m => m[1]);
+    const seen = specifiersOf(file.text);
+    for (const specifier of lines) assert.ok(seen.includes(specifier), `${file.name}: ${specifier}`);
+  }
+});
+
 test('static: only infra-rtdb.js sends a privileged Authorization header; domain modules never import it', () => {
   for (const file of PACKAGE_FILES.filter(file => file.name !== 'src/infra-rtdb.js' && file.name !== 'index.js')) {
     assert.ok(!/\bAuthorization\s*:|Bearer\s/.test(file.text), `${file.name} must not send a privileged Authorization header`);

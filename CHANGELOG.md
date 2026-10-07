@@ -1,5 +1,20 @@
 # ChronaSense — Changelog
 
+## TASK-005 — Phase A1 FINAL FIX FIRST (A1-03 comment bypass, A1-04 lifecycle gate) (branch: task-005)
+
+On top of `4d69095`. Test-only changes; no production code, rules, packaging, TASKS.md or gating logic touched.
+changed:
+  - functions/test/authority-scan.js: checks now run on executable code only, via a small lexer that blanks
+    line/block comments, string and template text (keeping `${}` code) and regex-literal bodies, length- and
+    newline-preserving. Comments can no longer hide `import (…)` / `require (…)` / createRequire, nor fake them.
+  - functions/test/authority-boundary.test.js: +3 tests (comment bypasses incl. newline and regex-literal cases;
+    comment/string/template-only false positives; lexer fidelity over every real package import).
+  - scripts/task-gating.test.js: TASK-005's lifecycle status is no longer pinned. The real entry is exercised with
+    its status line rewritten to codex / review / approved: owner-direct + TASK-004 dependency parsed in all three;
+    as codex the existing manual-blocked-until-merged / unattended-refused proof; as review or approved it is never
+    built (manual or unattended, TASK-004 merged or not). Verified with the real TASKS.md set to review and to
+    approved (28/28 each), then restored to `status: codex`.
+
 ## TASK-005 — Phase A1 FIX FIRST (A1-01, A1-02, A1-03) — targeted re-review (branch: task-005)
 
 On top of reviewed candidate `8b0ff02`. NOT deployed; no push; no production Firebase access.

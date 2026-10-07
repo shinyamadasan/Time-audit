@@ -5,6 +5,16 @@
 
 ---
 
+## TASK-005 FINAL FIX FIRST (A1-03, A1-04) · 2026-10-07
+suite: functions `npm test`; scripts/task-gating.test.js; root `npm test`; `npm run test:fence`;
+  `npm run check:firebase-rules`; `npm run check:functions-shared`; `git diff --check`.
+result: functions 80/80 (authority-boundary 14); task-gating 28/28 (0 skipped), also 28/28 with the real TASKS.md
+  temporarily at review and at approved (restored, not committed); npm test exit 0 (1968 node:test passes);
+  test:fence 57/57, 19/19, 18/18; rules match the builder; functions/shared matches; diff --check clean.
+untested: no general JS parse; the scanner is bounded by design (heuristic regex-literal detection).
+
+---
+
 ## TASK-005 FIX FIRST (A1-01..03) · 2026-10-07
 suite: functions `npm test` (parity check + node --test test/*.test.js); root `npm test`; `npm run test:fence`;
   `npm run check:firebase-rules`; `npm run check:functions-shared`; `npm run check:www-parity`; `git diff --check`.
