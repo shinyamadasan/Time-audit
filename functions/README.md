@@ -4,7 +4,7 @@
 > rules change is a separate, separately authorized step (rules first). Nothing here has run against
 > production Firebase.
 
-Firebase Functions v2 HTTPS function `chronasense_action_api` (export `chronasenseActionApi`) in `asia-southeast1`.
+Firebase Functions v2 HTTPS function `chronasenseActionApi` in `asia-southeast1`.
 Contract: [`docs/CHRONASENSE_ACTION_API_V1.md`](../docs/CHRONASENSE_ACTION_API_V1.md). Phase A1 serves exactly one
 read-only query, `get_brain_dump`, behind Worker→backend HMAC authentication. There is no write surface: every
 other `kind` (other reads, every command) is rejected as `INVALID_INPUT`.
