@@ -1,0 +1,98 @@
+// functions/src/brain-dump-query.js
+//
+// `get_brain_dump` (docs/CHRONASENSE_ACTION_API_V1.md §10): typed captures, their allowed dispositions, opaque
+// `rev1:` revisions and IDs, read through the user-scoped RTDB path and validated by the EXISTING Brain Dump
+// domain authority (brain-dump-model.js normalizeCapture, the same validator the app uses). No claim/fence
+// internals, raw RTDB snapshot or path is returned. A read creates no receipt and no life evidence.
+//
+// Malformed authoritative data is never silently dropped: omitting a record would report it as absent. Any
+// record the domain model rejects (or whose key and id disagree) fails the whole read with CONFLICT (§12:
+// authoritative state is known, and it is incompatible).
+//
+// NOTE (deploy prerequisite, not Phase A1): this imports the shared domain model from the repository root,
+// outside functions/. Firebase deploys only functions/, so deployment needs a reviewed packaging step.
+
+import { createHash } from 'node:crypto';
+
+import { normalizeCapture, quadrantOf } from '../../brain-dump-model.js';
+import { canonicalize } from './canonical-json.js';
+import { ApiError } from './errors.js';
+
+export const BRAIN_DUMP_STORE = 'brainDump';
+
+/**
+ * The `rev1:` revision of one capture (§7). Projection, documented and pinned by tests: the WHOLE normalized
+ * authoritative record (id, text, status, classification and triage time, disposition and its time, delegatedTo,
+ * the promotion claim identity including revokedAt, the promotion identity, claimEpoch (fence generation),
+ * expiredClaim (revoke/recovery state), reopenCount (reopen generation), schemaVersion, createdAt, updatedAt,
+ * updatedBy), wrapped with the revision version and target identity (store + captureId). There is no
+ * capture tombstone in the current model. Not a Firebase ETag, not persisted.
+ */
+export function captureRevision(normalized) {
+  const projection = { v: 1, store: BRAIN_DUMP_STORE, captureId: normalized.id, record: normalized };
+  return `rev1:${createHash('sha256').update(canonicalize(projection), 'utf8').digest('base64url')}`;
+}
+
+/** The §10 dispositions (archive / delegate / reopen) the domain model would accept right now. */
+export function allowedDispositions(normalized) {
+  if (normalized.status === 'promoted' || normalized.promotionClaim) return [];
+  if (normalized.status === 'archived' || normalized.status === 'delegated') return ['reopen'];
+  return ['archive', 'delegate'];
+}
+
+const iso = ms => (ms === null ? null : new Date(ms).toISOString());
+
+function projectCapture(normalized) {
+  return {
+    captureId: normalized.id,
+    text: normalized.text,
+    status: normalized.status,
+    classification: normalized.important === null ? null : {
+      important: normalized.important, urgent: normalized.urgent, quadrant: quadrantOf(normalized), triagedAt: iso(normalized.triagedAt),
+    },
+    // A promotion is in progress; its claim internals (target key, epoch, claimant, revoke state) stay private.
+    promotionPending: normalized.status !== 'promoted' && !!normalized.promotionClaim,
+    promotion: normalized.promotion ? {
+      type: normalized.promotion.type, store: normalized.promotion.store, targetId: normalized.promotion.targetId,
+      planItemId: normalized.promotion.planItemId, promotedAt: iso(normalized.promotion.promotedAt),
+    } : null,
+    delegatedTo: normalized.delegatedTo,
+    createdAt: iso(normalized.createdAt),
+    updatedAt: iso(normalized.updatedAt),
+    disposedAt: iso(normalized.disposedAt),
+    allowedDispositions: allowedDispositions(normalized),
+    revision: captureRevision(normalized),
+  };
+}
+
+/**
+ * @param {Readonly<{firebaseUid:string, roomId:string}>} identity bound by identity.js, never from the request
+ * @param {{readRoomCollection(identity:object, collection:string):Promise<unknown>}} domain the USER-SCOPED reader
+ */
+export async function getBrainDump(identity, { domain, nowMs }) {
+  const raw = await domain.readRoomCollection(identity, BRAIN_DUMP_STORE);
+  if (raw !== null && (typeof raw !== 'object' || Array.isArray(raw))) {
+    throw new ApiError('CONFLICT', 'The Brain Dump store holds malformed data.', { reason: 'malformed-store', details: { malformedRecords: 1 } });
+  }
+  const captures = [];
+  let malformed = 0;
+  for (const [key, value] of Object.entries(raw ?? {})) {
+    const normalized = normalizeCapture(value);
+    if (!normalized || normalized.id !== key) { malformed++; continue; }
+    captures.push(normalized);
+  }
+  if (malformed) throw new ApiError('CONFLICT', 'The Brain Dump store holds malformed records.', { reason: 'malformed-record', details: { malformedRecords: malformed } });
+  // Deterministic order (the domain's own): creation time, then id. Arrival order never decides.
+  captures.sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const projected = captures.map(projectCapture);
+  return {
+    result: { captures: projected },
+    authority: {
+      authority: 'brain_dump_capture',
+      store: BRAIN_DUMP_STORE,
+      access: 'user_scoped',
+      recordIds: projected.map(capture => capture.captureId),
+      readAt: new Date(nowMs).toISOString(),
+    },
+  };
+}

@@ -5,6 +5,28 @@
 
 ---
 
+## TASK-005 · 2026-10-07
+suite: `npm test` (exit 0; includes `node --test functions/test/*.test.js`, the rules builder drift check and
+  npm-test-wiring); `npm run test:fence` (provision RTDB emulator 4.11.2 → test:rules-emulator → test:fence-sdk →
+  test:rules-mutation); `git diff --check`. Local Windows, Node 24.19, Java 21. No network to production.
+result:
+  - functions/test: 62 passed, 0 failed (service-auth 13, canonical-json 5, action-api 13, brain-dump-query 9,
+    user-scoped-rtdb 6, receipts 6, authority-boundary 7, config 3).
+  - firebase-rules.test.js (targaryen): 23 passed incl. the private-node structural test.
+  - test:rules-emulator: 57 passed (51 existing + 6 Action API): owner/stranger/anonymous denied GET/PUT/DELETE/
+    multi-path PATCH on both private nodes at every depth; Admin mechanism claims nonce + receipt; 25 concurrent
+    nonce claims → exactly 1 wins; indexed sweep deletes only expired; own-account read OK, cross-account token
+    and empty token → FORBIDDEN; signed end-to-end get_brain_dump then replay refused, no receipt written.
+  - test:fence-sdk 19 passed; test:rules-mutation 18 passed. Rules builder: "matches the builder".
+  - `functions/index.js` loads under Node with the installed firebase-functions 7.4 / firebase-admin 14.5
+    (region asia-southeast1, secret CHRONASENSE_WORKER_HMAC_KEYS declared) — manual check, not in npm test
+    (CI installs no functions/node_modules).
+untested: no deployed function, no real Firebase Auth token exchange or Admin access token (both injected/faked;
+  the emulator accepts unsigned tokens); the deployed URL's `req.url` form; Playwright smoke not affected (no
+  browser/app/www change) and not re-run.
+
+---
+
 ## Personal Day Cross-Device Sync — integrated verification · 2026-09-21
 
 integration: pure fast-forward of local `main` from `b9e2de89e4ca07084fa7335b7b10270ce10a60a0` to

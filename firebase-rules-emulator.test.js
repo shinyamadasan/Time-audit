@@ -17,7 +17,14 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { MALLORY, ROOM, startEmulator } from './rtdb-emulator-support.js';
+import { ALICE, MALLORY, ROOM, startEmulator, token } from './rtdb-emulator-support.js';
+import { createActionApiHandler } from './functions/src/action-api.js';
+import { createInfraRtdb } from './functions/src/infra-rtdb.js';
+import { createNonceStore, NONCE_ROOT } from './functions/src/nonce-store.js';
+import { createReceiptStore } from './functions/src/receipts.js';
+import { createUserScopedRtdb } from './functions/src/user-scoped-rtdb.js';
+import { getBrainDump } from './functions/src/brain-dump-query.js';
+import { KEYS, NOW_MS, signedRequest } from './functions/test/support.js';
 import {
   CAPTURE, ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, legacyClaim, ordinary, origin, planRecord, promotedCapture, promotion,
 } from './fence-rules-fixtures.js';
@@ -347,4 +354,104 @@ test('capture: a capture is created with id === its key; a legacy (generation 1,
   await db.seed(captureAt('blegacy2'), old({ id: 'blegacy2' }));
   assert.equal(await db.write(captureAt('blegacy2'), old({ id: 'blegacy2', status: 'archived', disposedAt: T + 1, updatedAt: T + 1 })), true, 'old client archives');
   assert.equal(await db.write(captureAt('blegacy2'), old({ id: 'blegacy2', status: 'triaged', reopenCount: 1, schemaVersion: 2, updatedAt: T + 2 })), true, 'new client reopens (gen 2)');
+});
+
+// ── Action API V1 Phase A1 (TASK-005): server-private infrastructure + user-scoped domain reads ─────────────
+// docs/CHRONASENSE_ACTION_API_V1.md §3/§6: an ordinary Firebase-authenticated client (even the room owner) can
+// neither read nor write serverRequestNonces / serverActionReceipts; only the privileged server mechanism (the
+// Admin credential; `Bearer owner` in the emulator) can. Domain reads go through the owner's own token and the
+// unchanged room rules. These drive the REAL backend modules against the REAL emulator.
+
+const SERVICE = 'chronasense-plugin-worker-v1';
+const ACTION = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+const NONCE_ID = '0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+const asClient = (db, method, at, auth, value) => fetch(`${emulator.base}/${at}.json?ns=${db.name}${auth ? `&auth=${auth}` : ''}`, { method, body: value === undefined ? undefined : JSON.stringify(value) });
+const infraFor = db => createInfraRtdb({ databaseUrl: emulator.base, namespace: db.name, getAccessToken: async () => 'owner' });
+const userScopedFor = (db, tokenFor) => createUserScopedRtdb({ databaseUrl: emulator.base, namespace: db.name, idTokens: { getIdToken: async uid => tokenFor(uid) } });
+const apiCapture = (id, extra = {}) => ({ schemaVersion: 1, id, text: `thought ${id}`, createdAt: T, updatedAt: T, updatedBy: 'dev', status: 'untriaged', ...extra });
+
+test('action api: an owner client can neither read nor write request nonces or action receipts, at any depth', async () => {
+  const db = await freshDb();
+  await db.seed(`${NONCE_ROOT}/${SERVICE}/${NONCE_ID}`, { v: 1, claimedAt: 1, expiresAt: 2 });
+  await db.seed(`serverActionReceipts/alice/${ACTION}`, { actionId: ACTION, state: 'started' });
+  const paths = [
+    NONCE_ROOT, `${NONCE_ROOT}/${SERVICE}`, `${NONCE_ROOT}/${SERVICE}/${NONCE_ID}`, `${NONCE_ROOT}/${SERVICE}/${NONCE_ID}/expiresAt`, `${NONCE_ROOT}/public`, `${NONCE_ROOT}/shared`,
+    'serverActionReceipts', 'serverActionReceipts/alice', `serverActionReceipts/alice/${ACTION}`, `serverActionReceipts/alice/${ACTION}/state`, 'serverActionReceipts/public', 'serverActionReceipts/uid_alice',
+  ];
+  for (const auth of [ALICE, MALLORY, null]) {
+    const who = auth === ALICE ? 'owner' : auth ? 'stranger' : 'anonymous';
+    for (const at of paths) {
+      assert.notEqual((await asClient(db, 'GET', at, auth)).status, 200, `read ${at} as ${who}`);
+      assert.notEqual((await asClient(db, 'PUT', at, auth, { forged: true })).status, 200, `write ${at} as ${who}`);
+      assert.notEqual((await asClient(db, 'DELETE', at, auth)).status, 200, `delete ${at} as ${who}`);
+    }
+    assert.notEqual((await asClient(db, 'PATCH', '', auth, { [`${NONCE_ROOT}/${SERVICE}/${NONCE_ID}`]: null })).status, 200, `multi-path nonce delete as ${who}`);
+    assert.notEqual((await asClient(db, 'PATCH', '', auth, { [`serverActionReceipts/alice/${ACTION}/state`]: 'applied' })).status, 200, `multi-path receipt edit as ${who}`);
+  }
+  assert.deepEqual(await db.read(`${NONCE_ROOT}/${SERVICE}/${NONCE_ID}`), { v: 1, claimedAt: 1, expiresAt: 2 }, 'nonce untouched');
+  assert.deepEqual(await db.read(`serverActionReceipts/alice/${ACTION}`), { actionId: ACTION, state: 'started' }, 'receipt untouched');
+  assert.equal((await asClient(db, 'GET', ROOM, ALICE)).status, 200, 'the owner still reads their own room');
+});
+
+test('action api: the privileged server mechanism can claim nonces and receipts', async () => {
+  const db = await freshDb();
+  const infra = infraFor(db);
+  await createNonceStore({ infra }).claim(SERVICE, NONCE_ID, NOW_MS);
+  assert.equal((await db.read(`${NONCE_ROOT}/${SERVICE}/${NONCE_ID}`)).claimedAt, NOW_MS);
+  const receipts = createReceiptStore({ infra });
+  const first = await receipts.claim({ firebaseUid: 'alice', actionId: ACTION, requestHash: 'a'.repeat(64), kind: 'brain_dump_add', attemptId: 'x1', nowMs: NOW_MS, leaseMs: 30_000 });
+  assert.equal(first.claimed, true);
+  assert.equal((await receipts.read('alice', ACTION)).state, 'started');
+  const again = await receipts.claim({ firebaseUid: 'alice', actionId: ACTION, requestHash: 'b'.repeat(64), kind: 'brain_dump_add', attemptId: 'x2', nowMs: NOW_MS, leaseMs: 30_000 });
+  assert.equal(again.claimed, false);
+  assert.equal(again.existing.requestHash, 'a'.repeat(64), 'the first claim is never overwritten');
+});
+
+test('action api: concurrent replay against the real server -> exactly one nonce claim wins', async () => {
+  const db = await freshDb();
+  const nonces = createNonceStore({ infra: infraFor(db) });
+  const results = await Promise.allSettled(Array.from({ length: 25 }, () => nonces.claim(SERVICE, NONCE_ID, NOW_MS)));
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+  assert.ok(results.filter(r => r.status === 'rejected').every(r => r.reason.reason === 'replayed-request-id'));
+});
+
+test('action api: the bounded sweep uses the indexed query and deletes only expired claims', async () => {
+  const db = await freshDb();
+  const ids = Array.from({ length: 6 }, (_, i) => `0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c${i}`);
+  // expiresAt: now-3, now-2, now-1 (expired) | now, now+1, now+2 (live)
+  for (const [i, id] of ids.entries()) await db.seed(`${NONCE_ROOT}/${SERVICE}/${id}`, { v: 1, claimedAt: 0, expiresAt: NOW_MS - 3 + i });
+  assert.equal(await createNonceStore({ infra: infraFor(db) }).sweepExpired(SERVICE, NOW_MS), 3);
+  assert.deepEqual(Object.keys(await db.read(`${NONCE_ROOT}/${SERVICE}`)).sort(), ids.slice(3));
+});
+
+test('action api: own-account Brain Dump read is user-scoped; a cross-account token is refused by the unchanged rules', async () => {
+  const db = await freshDb();
+  await db.seed(`${ROOM}/brainDump/bdc_alice1`, apiCapture('bdc_alice1'));
+  await db.seed('rooms/uid_mallory/brainDump/bdc_mall01', apiCapture('bdc_mall01', { text: 'MALLORY ONLY' }));
+  const alice = Object.freeze({ principalSubject: 's', firebaseUid: 'alice', roomId: 'uid_alice', scopes: ['chronasense:read'] });
+  const own = await getBrainDump(alice, { domain: userScopedFor(db, () => ALICE), nowMs: NOW_MS });
+  assert.deepEqual(own.result.captures.map(c => c.captureId), ['bdc_alice1']);
+  // Bound to alice but holding mallory's token: the server's rules refuse it.
+  await assert.rejects(getBrainDump(alice, { domain: userScopedFor(db, () => MALLORY), nowMs: NOW_MS }), error => error.code === 'FORBIDDEN');
+  // No token at all is refused too: there is no unauthenticated or privileged fallback.
+  await assert.rejects(getBrainDump(alice, { domain: userScopedFor(db, () => ''), nowMs: NOW_MS }), error => error.code === 'FORBIDDEN');
+});
+
+test('action api: end to end against the real server - signed get_brain_dump, then its replay', async () => {
+  const db = await freshDb();
+  await db.seed('rooms/uid_ownerUid123/brainDump/bdc_owner1', apiCapture('bdc_owner1'));
+  await db.seed(`${ROOM}/brainDump/bdc_alice1`, apiCapture('bdc_alice1', { text: 'NOT THE OWNER' }));
+  const ownerToken = token('ownerUid123');
+  const handle = createActionApiHandler({
+    keys: KEYS, owner: { ownerSubject: 'access-sub-owner-1', ownerFirebaseUid: 'ownerUid123' },
+    nonces: createNonceStore({ infra: infraFor(db) }), domain: userScopedFor(db, () => ownerToken), now: () => NOW_MS,
+  });
+  const request = signedRequest();
+  const response = await handle(request);
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  assert.deepEqual(response.body.result.captures.map(c => c.captureId), ['bdc_owner1']);
+  assert.ok(!JSON.stringify(response.body).includes('NOT THE OWNER'));
+  assert.equal((await handle(request)).reason, 'replayed-request-id');
+  assert.ok(await db.read(`${NONCE_ROOT}/${SERVICE}/${request.requestId}`), 'the nonce is persisted server-side');
+  assert.equal(await db.read('serverActionReceipts'), null, 'a read creates no receipt');
 });

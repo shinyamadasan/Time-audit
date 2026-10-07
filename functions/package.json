@@ -1,0 +1,17 @@
+{
+  "name": "chronasense-action-api-functions",
+  "private": true,
+  "description": "ChronaSense Action API V1 backend (Firebase Functions v2 HTTPS, asia-southeast1). Phase A1: service auth + read-only get_brain_dump. NOT deployed.",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0"
+  }
+}

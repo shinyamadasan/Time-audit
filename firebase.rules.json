@@ -207,6 +207,19 @@
         }
       }
     },
+    "serverRequestNonces": {
+      ".read": false,
+      ".write": false,
+      "$service": {
+        ".indexOn": [
+          "expiresAt"
+        ]
+      }
+    },
+    "serverActionReceipts": {
+      ".read": false,
+      ".write": false
+    },
     "pairs": {
       "$pairId": {
         ".read": "auth != null && (data.child('creator').val() === auth.uid || data.child('partner').val() === auth.uid)",
