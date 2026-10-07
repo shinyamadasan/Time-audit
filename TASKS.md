@@ -276,7 +276,7 @@ test steps:
 ---
 
 ### TASK-005 - ChronaSense Action API — Phase A1: backend/auth foundation + read-only `get_brain_dump`
-status: approved
+status: done
 owner: codex
 source: owner-direct
 priority: P1
