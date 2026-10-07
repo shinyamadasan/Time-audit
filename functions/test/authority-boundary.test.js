@@ -119,6 +119,31 @@ test('scan: comment-only and string-only mentions are not loads (no false positi
   assert.equal(authorityViolations([{ name: 'src/x.js', text: "export const emoji = '😀'; /* ok */ const a = require('firebase-admin');" }]).length, 1);
 });
 
+test('scan: a regex literal right after a control-flow header is data, not a load; a real load there is still caught', () => {
+  const harmless = [
+    "if (x) /import('firebase-admin\\/database')/.test(y);",
+    "while (x) /import('firebase-admin\\/database')/.test(y);",
+    "for (;;) /import('firebase-admin\\/database')/.test(y);",
+    "for (const k of ks) /require('firebase-admin')/.test(k);",
+    "if (f(a, (b))) /createRequire(import.meta.url)/.exec(y);",
+    "if (x) /require\\('firebase-admin'\\)/.test(y); else /import\\(\"firebase-admin\"\\)/.test(z);",
+    "if (x)\n  /createRequire\\(x\\)/g.test(y);",
+    "with (o) /require(x)/.test(y);",
+  ];
+  for (const text of harmless) assert.deepEqual(authorityViolations([{ name: 'src/x.js', text }]), [], JSON.stringify(text));
+  const real = [
+    ["if (x) import('firebase-admin/database');", 'src/x.js: loads firebase-admin/database'],
+    ["while (x) import('firebase-admin');", 'src/x.js: loads firebase-admin'],
+    ["for (;;) require('firebase-admin');", 'src/x.js: require()'],
+    ["if (x) createRequire(import.meta.url);", 'src/x.js: createRequire'],
+    ["if (x) /re/.test(y); await import('firebase-admin/database');", 'src/x.js: loads firebase-admin/database'],
+    ["if (x) /import('a')/.test(y); const a = require('firebase-admin');", 'src/x.js: require()'],
+  ];
+  for (const [text, expected] of real) assert.deepEqual(authorityViolations([{ name: 'src/x.js', text }]), [expected], JSON.stringify(text));
+  // A `)` that is NOT a control-flow header still means division, so the code after it stays code.
+  assert.deepEqual(authorityViolations([{ name: 'src/x.js', text: "const r = (a) / b; const q = f(x) / 2; const m = require('firebase-admin');" }]), ['src/x.js: require()']);
+});
+
 test('scan fidelity: the lexer loses no real import of the package (every static import line is still seen)', () => {
   for (const file of PACKAGE_FILES) {
     const lines = [...file.text.matchAll(/^import\b[^'"]*?\bfrom\s*['"]([^'"]+)['"];?\s*$/gm)].map(m => m[1]);
