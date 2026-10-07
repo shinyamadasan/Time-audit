@@ -278,14 +278,30 @@ function parseTable(shell, text) {
   return JSON.parse(r.stdout);
 }
 
-test('the recorded TASK-005 is parsed as owner-direct and depends on TASK-004; TASK-001..004 are not owner-direct', () => {
-  const rows = parseTable(PRIMARY, readFileSync(path.join(REPO, 'TASKS.md'), 'utf8'));
-  const by = Object.fromEntries(rows.map((r) => [r.Id, r]));
-  assert.equal(by['TASK-005'].OwnerDirect, true);
-  assert.deepEqual([].concat(by['TASK-005'].Deps), ['TASK-004']);
-  assert.equal(by['TASK-005'].Status, 'codex');
-  for (const id of ['TASK-001', 'TASK-002', 'TASK-003', 'TASK-004']) assert.equal(by[id].OwnerDirect, false, id);
-  assert.equal(by['TASK-004'].Source, 'BQ-001');
+// TASK-005's lifecycle status is incidental (codex -> review -> approved -> done), exactly like TASK-004's
+// (f4c159b): the invariants are its owner-direct source and its TASK-004 dependency, never its current status.
+// These helpers rewrite ONLY the status line of the real TASK-005 block, the same way the builder's
+// Set-TaskStatus addresses it, so every lifecycle state is exercised against the real recorded entry.
+const LIFECYCLE = ['codex', 'review', 'approved'];
+const realTasks = () => readFileSync(path.join(REPO, 'TASKS.md'), 'utf8');
+function withTask005Status(text, status) {
+  const next = text.replace(/(^###\s+TASK-005\b[\s\S]*?^status:)[^\r\n]*/m, `$1 ${status}`);
+  assert.notEqual(next.indexOf('### TASK-005'), -1, 'the real TASK-005 entry exists');
+  return next;
+}
+
+test('the recorded TASK-005 is parsed as owner-direct and depends on TASK-004, in every lifecycle status; TASK-001..004 are not owner-direct', () => {
+  const real = Object.fromEntries(parseTable(PRIMARY, realTasks()).map((r) => [r.Id, r]));
+  assert.match(real['TASK-005'].Status, /^(codex|in-progress|review|approved|blocked|done)$/, 'a recognised lifecycle status (not pinned)');
+  for (const status of LIFECYCLE) {
+    const by = Object.fromEntries(parseTable(PRIMARY, withTask005Status(realTasks(), status)).map((r) => [r.Id, r]));
+    assert.equal(by['TASK-005'].Status, status, 'the fixture rewrote exactly the status line');
+    assert.equal(by['TASK-005'].OwnerDirect, true, status);
+    assert.equal(by['TASK-005'].Source, 'owner-direct', status);
+    assert.deepEqual([].concat(by['TASK-005'].Deps), ['TASK-004'], status);
+    for (const id of ['TASK-001', 'TASK-002', 'TASK-003', 'TASK-004']) assert.equal(by[id].OwnerDirect, false, `${id} (${status})`);
+    assert.equal(by['TASK-004'].Source, 'BQ-001');
+  }
 });
 
 test('a REAL (non-dry) refusal exits 2 and leaves the result the dispatcher relays, before any engine starts', () => {
@@ -322,8 +338,8 @@ $two  = [pscustomobject]@{ Deps = @('TASK-004', 'TASK-006') }
   assert.deepEqual([].concat(v.unresolved), ['TASK-006']);
 });
 
-test('the REAL recorded TASKS.md: TASK-005 is blocked manually until TASK-004 merges, and never runs unattended', () => {
-  const real = readFileSync(path.join(REPO, 'TASKS.md'), 'utf8');
+test('the REAL recorded TASKS.md (as codex): TASK-005 is blocked manually until TASK-004 merges, and never runs unattended', () => {
+  const real = withTask005Status(realTasks(), 'codex');                       // the one buildable lifecycle state
   const before = makeRepo({ tasks: real });                                   // TASK-004 not merged
   const m1 = build(PRIMARY, before);
   assert.equal(m1.code, 2, m1.out);
@@ -338,6 +354,22 @@ test('the REAL recorded TASKS.md: TASK-005 is blocked manually until TASK-004 me
   const u2 = build(PRIMARY, after, ['-Unattended']);
   assert.equal(u2.code, 2, u2.out);                                           // /go still never runs it
   assert.match(u2.out, /TASK-005.*owner-direct/);
+});
+
+test('the REAL recorded TASKS.md after hand-off (review, approved): TASK-005 is never built, manually or unattended', () => {
+  // Only a `status: codex` task is buildable (Run-Codex-Build.ps1's tracked set), so a TASK-005 under review or
+  // approved must never be picked, whether or not TASK-004 is merged. `done` adds nothing: it is equally unbuildable.
+  for (const status of LIFECYCLE.filter((s) => s !== 'codex')) {
+    const tasks = withTask005Status(realTasks(), status);
+    for (const merged of [[], ['task-004']]) {
+      const repo = makeRepo({ tasks, merged });
+      for (const flags of [[], ['-Unattended']]) {
+        const r = build(PRIMARY, repo, flags);
+        const label = `${status}, task-004 ${merged.length ? 'merged' : 'unmerged'}, ${flags.length ? 'unattended' : 'manual'}`;
+        assert.doesNotMatch(r.out, /would checkout\/create task-005/, label);
+      }
+    }
+  }
 });
 
 // ------------------------------------------------ dispatcher (/go, /build) -- Windows-only paths
