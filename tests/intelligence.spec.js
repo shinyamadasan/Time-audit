@@ -157,7 +157,7 @@ test('linked work is derived, explicit completion is fact, and neither is a titl
 test('read/refresh is recomputable and creates no domain writes or storage changes', async ({ page }) => {
   await open(page); await seed(page);
   const result = await page.evaluate(async () => {
-    const { collectIntelligenceInput } = await import('./intelligence-ui.js?v=20261007-intelligence-v1');
+    const { collectIntelligenceInput } = await import('./intelligence-ui.js?v=20261008-intelligence-int001');
     const before = Object.fromEntries(Object.keys(localStorage).filter(k => k.includes(':uid_')).sort().map(k => [k, localStorage.getItem(k)]));
     const writes = __fbTest.log.writes.length;
     collectIntelligenceInput(); renderIntelligence(); renderIntelligence();
@@ -218,7 +218,7 @@ test('live session requires current account ownership and never counts as logged
 test('normalized collector drops all source data on an account-context mismatch', async ({ page }) => {
   await open(page); await seed(page);
   const snapshot = await page.evaluate(async () => {
-    const { collectIntelligenceInput } = await import('./intelligence-ui.js?v=20261007-intelligence-v1');
+    const { collectIntelligenceInput } = await import('./intelligence-ui.js?v=20261008-intelligence-int001');
     const original = getIntelligenceAppContext;
     globalThis.getIntelligenceAppContext = (...args) => ({ ...original(...args), contextOwner: 'uid_other-account' });
     try { return collectIntelligenceInput(); }
@@ -227,4 +227,14 @@ test('normalized collector drops all source data on an account-context mismatch'
   expect(Object.keys(snapshot).sort()).toEqual(['contextOwner', 'now', 'owner']);
   expect(snapshot.contextOwner).toBeNull();
   expect(JSON.stringify(snapshot)).not.toContain('Private');
+});
+
+test('INT-001: one source interval crossing three dates remains actual evidence without a repeat pattern', async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => {
+    entries.push({ id: 'single-long-record', activity: 'Long session', tsStart: Date.parse('2026-10-05T10:00:00+08:00'), ts: Date.now(), blockIntervalMin: 3000, energy: 'deep' });
+    renderIntelligence();
+  });
+  await expect(page.locator('#intelligence-root [data-intelligence-kind="pattern"]')).toHaveCount(0);
+  await expect(page.locator('#intelligence-root [data-record-key="entry:single-long-record"]')).toContainText('Long session');
 });
