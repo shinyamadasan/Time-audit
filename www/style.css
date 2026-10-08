@@ -1687,3 +1687,17 @@ button, a, [role="button"],
 .cp-body{font-size:12px;line-height:1.45;margin:0 0 8px}
 .cp-muted{color:var(--muted)}
 .cp-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Intelligence V1: a factual read surface inside the existing My Day disclosure. */
+#intelligence-panel { display: block; }
+#intelligence-root { overflow-wrap: anywhere; }
+.intelligence-context, .intelligence-empty, .intelligence-section small { color: var(--muted); font-family: var(--ui); font-size: 13px; line-height: 1.5; }
+.intelligence-context { margin: 12px 0; }
+.intelligence-section { margin-top: 18px; }
+.intelligence-section h3 { font-size: 15px; margin-bottom: 8px; }
+.intelligence-section article { border-top: 1px solid var(--border2); padding: 10px 0; }
+.intelligence-section article > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.intelligence-section article p, .intelligence-section > p { font-size: 13px; margin: 5px 0; }
+.intelligence-tag { color: var(--muted); font: 11px var(--ui); flex-shrink: 0; }
+[data-intelligence-kind="unknown"] .intelligence-tag { color: var(--admin); }
+@media (max-width: 768px) { .intelligence-section article > div { flex-wrap: wrap; gap: 4px; } }

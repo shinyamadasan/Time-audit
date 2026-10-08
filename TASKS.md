@@ -360,6 +360,67 @@ test steps:
 
 ---
 
+### TASK-006 - ChronaSense Intelligence V1
+status: review
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: TASK-004
+files: intelligence-read-model.js (new), intelligence-ui.js (new), intelligence-read-model.test.js (new), tests/intelligence.spec.js (new), personal-day-boundary-web-runtime.test.js (release generation only), tests/calendar-native-plan-identity.spec.js (release-token expectation only), scripts/runtime-mirror.mjs (versioned-import physical-path resolution only), scripts/runtime-mirror.test.js (regression for that blocker), index.html (Today read context/rendering and Intelligence mount/module include only), style.css (Intelligence styles only), storage.js (read surface account reset/refresh only if required), package.json (test wiring only), eslint.config.js (new module lint wiring only), CODEMAP.md (new Intelligence section only), www/ (generated runtime mirror only), CHANGELOG.md, TEST_REPORT.md, INTELLIGENCE_V1_HANDOFF.md (new)
+
+context:
+  Owner-direct authorization, 2026-10-07: the owner's ChronaSense Intelligence V1 Goal Mode
+  instruction and explicit continuation authorize this complete bounded milestone. Current integrated
+  base: 2a4863d3781f5fac45ab7bf3c4f98ff8988b237a, containing TASK-004 owner-direct governance.
+  Interactive/manual only; no Execution: Chained header. Unattended /go and /build must refuse it.
+  Goal: useful deterministic read-only intelligence from existing authoritative life records.
+  Authority chain: Source -> Evidence -> Interpretation -> Validation -> Domain Authority ->
+  Timeline / Intelligence. Derivations never become canonical life truth or a universal event store.
+  Inspect live Plan Authority/calendar identity, Brain Dump, commitments, routines, Focus/timer,
+  actual/evidence, existing reporting, account isolation, time helpers and tests before implementing.
+
+acceptance:
+  - [ ] Useful Today/Attention shows supported unresolved, overdue or slipping commitments and planned
+        items lacking known actual evidence, without invented obligation semantics.
+  - [ ] Plan-vs-actual distinguishes plans, explicit completion, known linked actuals, unplanned actuals
+        and unknown/gap. Missing actual evidence never proves an item did not happen.
+  - [ ] Open loops reflect existing unresolved Brain Dump, commitments and authoritative pending states;
+        completed/resolved items are excluded, claim ambiguity remains visible.
+  - [ ] At least one useful recent/longitudinal pattern is deterministically supported by actual records,
+        with explicit window/thresholds and provenance; no fabricated incompletion or streak.
+  - [ ] One small coherent read-only UI fits the existing product and distinguishes facts, derived
+        statuses, unknown/gap and patterns where material. No whole-app redesign or second ranker.
+  - [ ] Pure recomputable derivation and normalized read inputs are separate from UI handlers; no LLM,
+        persistent intelligence truth, input mutation, canonical writes or arrival-order truth selection.
+  - [ ] Stable IDs, deterministic ordering, equal-authority ambiguity and malformed/missing inputs fail
+        safely. Existing account isolation, authoritative plan targets and timezone semantics are preserved.
+  - [ ] Required gates pass; adversarial self-review is recorded; candidate is clean and committed;
+        strict-review handoff includes exact base/candidate SHAs, files, contracts, time, checks, limitations
+        and review hotspots. Candidate is not integrated automatically.
+
+constraints:
+  - Owner-defined stop conditions: genuine owner/product/architecture/authorization invariant requiring
+    input; required external credential/service blockage; or session/quota end (leave a clean committed
+    resumable checkpoint with exact SHAs, checks, remaining priorities and continuation prompt).
+  - No deployment, production mutation, destructive migration, Cloudflare/Phase B, ChatGPT write tools,
+    autonomous planning, closed Brain Dump promotion redesign, calendar identity redesign, or authority replacement.
+  - Read CODEMAP before code; never read index.html in full. Reuse canonical date/time/account helpers.
+  - Preserve all Hard Rules, existing domain writes and the current mechanical/Next recommendation authority.
+  - Read-only life record selectors may expose provenance internally; absence is neither deletion nor failure.
+  - Update only this owner-direct TASKS entry; no BUILD_QUEUE bootstrap or other governance edits.
+
+verification:
+  - [ ] Unit invariants: empty account, plans without actuals, actuals without plans, unresolved/resolved
+        captures/commitments, deterministic ordering, duplicates/conflicts, malformed sources, account isolation,
+        unknown vs negative fact, pattern thresholds, midnight/date/timezone/DST boundaries where applicable.
+  - [ ] Browser checks: fact/derived/unknown/pattern UI, safe escaping, fresh record changes, account switch/signout
+        clearing, no source writes from the Intelligence read, mobile layout.
+  - [ ] npm test; npm run test:smoke; targeted and full relevant Playwright; npm run lint;
+        npm run check:www-parity; npm run check:firebase-rules; npm run test:fence; git diff --check.
+  - [ ] SELF_REVIEW.md Code Health and QA.md applicable AI gates; record human device checks as pending.
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

@@ -418,6 +418,7 @@ function rebindAccountLocalState() {
   // The Review modal was filled/rendered from the previous account: it closes and is emptied, so neither
   // a save nor its hidden analysis DOM can carry that account's review, entries or plans into this one.
   if (typeof resetReviewModalForAccount === 'function') resetReviewModalForAccount();
+  globalThis.resetIntelligenceForAccount?.();
   globalThis.PlanAuthority?.invalidate();
   if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
   if (typeof _todayRenderKey !== 'undefined') _todayRenderKey = '__FORCE__';

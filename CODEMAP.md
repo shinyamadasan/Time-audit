@@ -1,6 +1,26 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## Intelligence V1 (TASK-006 review candidate)
+
+- `intelligence-read-model.js`: `buildIntelligence()` consumes account-proven authoritative snapshots;
+  pure, deterministic and read-only. `unambiguousRecords()` excludes same-identity contradictions.
+  Current plans/explicit completion, exact linked recorded work, unknown actuals, separate unlinked
+  records, approximate day evidence, unresolved captures, existing unfinished-plan recovery and routines.
+  Appointments have no completion authority: elapsed time is an unknown outcome, never a missed fact.
+  Seven canonical calendar windows and a three-distinct-date threshold derive repeated recorded labels.
+- `intelligence-ui.js`: `collectIntelligenceInput()` only READS PlanAuthority and scoped Brain Dump,
+  appointments, broad-evidence and routine repositories. Uses existing manual/Focus routine completion;
+  external Ledger completion is explicitly unevaluated because its cache has no account ownership proof.
+  `renderIntelligence()` mounts in `#intelligence-panel` / `#intelligence-root` on My Day, with fact,
+  derived, unknown and pattern labels. Toggle, explicit refresh and visible 30s tick recompute snapshots.
+  `resetIntelligenceForAccount()` clears hidden DOM at the account rebind seam in storage.js.
+- `getIntelligenceAppContext()` in index.html supplies owner proof, canonical calendar bounds,
+  `entryTimeRange()` and `hasConfirmedEnergyClassification()` projections, raw routine evidence and
+  live timer/Away/Break state. No domain writes or persistent Intelligence cache.
+- Tests: `intelligence-read-model.test.js` and `tests/intelligence.spec.js`. Governed runtime token
+  `20261007-intelligence-v1`; Brain Dump retains its independent generation. Mirrors generated only.
+
 ## Action API V1 architecture (docs only)
 
 `docs/CHRONASENSE_ACTION_API_V1.md` defines the proposed Firebase Functions v2 HTTPS backend, Worker service authentication, user-scoped RTDB authority, typed query/command contracts, receipts, idempotency, revisions, time handling, scopes, errors, security, phases and stop conditions. `contracts/CHRONASENSE_ACTION_PROVENANCE_V1.md` defines controller-action provenance and its boundary from the evidence semantics in `contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md`. No runtime implementation or release generation is introduced.
