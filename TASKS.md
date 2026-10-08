@@ -361,7 +361,7 @@ test steps:
 ---
 
 ### TASK-006 - ChronaSense Intelligence V1
-status: approved
+status: done
 owner: codex
 source: owner-direct
 priority: P1
