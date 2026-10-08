@@ -421,6 +421,62 @@ verification:
 
 ---
 
+### TASK-007 - Make the Partner View scheduled auto-log smoke fixture day-stable
+status: blocked
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: tests/partner-view.spec.js, TASKS.md, CHANGELOG.md, TEST_REPORT.md
+
+context:
+  Owner-direct authorization, 2026-10-08: restore trustworthy hosted CI on current production main
+  without changing Partner View semantics. GitHub Actions CI run 37811850639 on base
+  8193a90c6eddebf6d9392d5ba2ac27c00315182e failed only
+  tests/partner-view.spec.js — the scheduled auto-log Partner View smoke test expected "Scribe shift"
+  but the current-day timeline was empty. At the failure time (about 2026-10-08 17:02 UTC), the
+  Asia/Manila publisher day had crossed midnight; the fixture used Date.now()-60/120 minutes and
+  seeded yesterday's entry. Fix test determinism only unless direct evidence establishes a product
+  defect. Do not touch Intelligence V1 absent direct causation evidence.
+
+acceptance:
+  - [ ] Record the precise runner timezone, test/assertion, expected/actual, retries, and date-boundary
+        root cause from the hosted run; distinguish runner timezone from account timezone.
+  - [ ] Make the focused Partner View scheduled auto-log test deterministic under UTC runner settings
+        and the reported Manila-midnight boundary using canonical date/time helpers.
+  - [ ] Preserve the assertion and Partner View product semantics; do not skip, weaken, retry, or sleep.
+  - [ ] Focused Partner View test passes repeatedly and under CI-equivalent timezone/time settings.
+  - [ ] Relevant Partner View/unit/browser tests and full Playwright gate pass; no Intelligence V1
+        regression; no deployment or backend changes.
+  - [ ] Candidate is committed cleanly on task-007 and ready for review/integration.
+
+constraints:
+  - Use current origin/main at 8193a90c6eddebf6d9392d5ba2ac27c00315182e; inspect any base delta first.
+  - Change test setup only unless evidence proves a smallest product defect; no Intelligence V1 changes
+    without direct causal evidence.
+  - No test skips, weakened assertions, arbitrary sleeps, retry increases, deployment, backend changes,
+    or production mutations.
+  - Owner-direct scope is limited to tests/partner-view.spec.js and this task's TASKS.md entry plus
+    required CHANGELOG.md and TEST_REPORT.md evidence.
+
+verification:
+  - [ ] Re-run the exact focused test repeatedly, including controlled UTC / 00:52 Asia/Manila boundary.
+  - [ ] Run the Partner View model and related accountability/browser tests.
+  - [ ] Run npm test and npm run test:smoke (full required Playwright gate).
+  - [ ] Run relevant additional QA checks and git diff --check; complete SELF_REVIEW.md and QA.md.
+  - [ ] Obtain hosted GitHub Actions green on the candidate; if inaccessible, report exact external blocker
+        after local CI-equivalent proof.
+
+blocker:
+  Local verification is green, but the candidate's hosted check cannot be triggered from this environment:
+  the GitHub CLI keyring token is invalid, git has no GitHub credentials, and the read-only public workflow
+  job-log endpoint returns HTTP 403 "Must have admin rights to Repository." The public run metadata identifies
+  the failed smoke job and its time, but not the full assertion output or effective runner timezone. Restore
+  repository Actions-log/admin access and GitHub write credentials, or have an authorized operator attach the
+  job log and run the candidate check.
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

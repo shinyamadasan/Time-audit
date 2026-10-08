@@ -4645,3 +4645,19 @@ blockers: none
 deviations: none. Existing helper reused; threshold, wording and seven-calendar-date window unchanged. No more specific source-owned date exists in normalized interval inputs; start attribution matches existing analytics. Other Intelligence derivations, interval attribution, domain writes and persistent data untouched.
 self-review: bounded correction, no new date rule or input mutation, ID deduplication plus one date per source guarantees independent evidence; applicable Code Health and QA checks pass.
 release: no deploy, production mutation, main refresh, rebase, push or merge. TASK-006 remains at review for targeted re-review.
+
+## TASK-007 — local candidate; hosted CI blocked (branch: task-007, 2026-10-08)
+changed:
+  - tests/partner-view.spec.js — freeze UTC browser time at the reported Manila-midnight boundary and construct the scheduled auto-log interval on the publisher's current Manila date with `getDateInTZ()` / `tzParseTime()`; assertion and product code unchanged.
+  - TASKS.md — recorded owner-direct TASK-007 and the external hosted-CI blocker.
+tests:
+  - focused scheduled auto-log test repeated 5 times: 5/5; complete Partner View browser suite: 15/15; Partner View and Shared Accountability model suites: 40/40.
+  - npm test: exit 0; npm run test:smoke -- --workers=2: 857/857; npm run test:fence: 94/94; npm run check:www-parity and npm run check:firebase-rules: pass; git diff --check: clean.
+investigation:
+  - Public run 37811850639 confirms base 8193a90c6eddebf6d9392d5ba2ac27c00315182e, attempt 1, Ubuntu latest / Node 22, unit job passed, smoke job failed and ended 2026-10-08 17:02:34 UTC. Workflow and Playwright config set no retry and no timezone override. The recorded assertion expected "Scribe shift" in the current Partner View timeline; actual was empty.
+  - At 17:02 UTC, the old `Date.now()-120m` start was 23:02 on the prior Asia/Manila date and `Date.now()-60m` end was 00:02 on the current date. `getTodayEntries()` keys by `tsStart`, so the fixture belonged to yesterday and was excluded. The test now seeds 00:02–00:42 within today's publisher date. This is test-fixture determinism; no Partner View semantics changed.
+blockers:
+  - GitHub's job-log download endpoint returned 403 "Must have admin rights to Repository"; the public annotation exposed only a generic process exit. `gh auth status` reports an invalid keyring token, and git reports no GitHub credentials. Could not verify the effective runner timezone from logs, trigger/push the candidate, or obtain a hosted green run.
+deviations: hosted CI and complete hosted logs unavailable; all local CI-equivalent gates completed. The first six-worker full smoke attempt had 8 load-sensitive unrelated failures and the four-worker attempt had one unrelated planning-continuity failure; those failures passed serially, and the full two-worker run passed all 857 tests without retries or skips.
+review: test-only diff is bounded and uses canonical date/time helpers; no Intelligence V1 or product files changed. Applicable AI QA checks and `git diff --check` pass. Coverage percentage not measured.
+→ status set to `blocked` in TASKS.md
