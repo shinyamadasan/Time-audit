@@ -4631,3 +4631,17 @@ deviations: supporting 1-line runtime-mirror query/fragment fix was required for
 self-review: adversarial Code Health + applicable QA AI checks pass; Would I ship this bounded read surface? yes. Hard Rules and source domain writes unchanged. Physical-device feel/render checks remain human verification.
 release: no push, merge, integration, deployment, production mutation or write tool. The stale docs worktree remained unchanged.
 → status set to `review` in TASKS.md
+
+## TASK-006 — INT-001 fix (branch: task-006, 2026-10-08)
+previous-tip: b5ece25e573795cc8fc6d440638d2ed9d9f396b0
+changed:
+  - intelligence-read-model.js (3 functional lines in recent-pattern grouping: each unique eligible record contributes localPlanDate(startMs, account timezone), once)
+  - intelligence-read-model.test.js (6 focused regressions: one 3-date interval, 2/3 independent dated records, same-date/cross-midnight, seven-date boundary, timezone and order)
+  - tests/intelligence.spec.js (1 new browser regression retaining actual interval visibility; 3 cache-import fixture URLs advanced)
+  - intelligence-ui.js / index.html (Intelligence-only cache URLs: 20261008-intelligence-int001; no rendering/architecture change)
+  - www/ (generated index and 2 Intelligence module copies); INTELLIGENCE_V1_HANDOFF.md (targeted re-review evidence)
+tests: focused model 46/46; focused browser 11/11; full Playwright 857/857, 0 failed; npm test exit 0 (2,016 node:test passes, 0 fails, 1 existing skip; legacy 455 passes); Firebase fence 94/94; lint / mirror / rules / diff checks pass
+blockers: none
+deviations: none. Existing helper reused; threshold, wording and seven-calendar-date window unchanged. No more specific source-owned date exists in normalized interval inputs; start attribution matches existing analytics. Other Intelligence derivations, interval attribution, domain writes and persistent data untouched.
+self-review: bounded correction, no new date rule or input mutation, ID deduplication plus one date per source guarantees independent evidence; applicable Code Health and QA checks pass.
+release: no deploy, production mutation, main refresh, rebase, push or merge. TASK-006 remains at review for targeted re-review.

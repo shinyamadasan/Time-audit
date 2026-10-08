@@ -152,12 +152,12 @@ export function buildIntelligence(input = {}) {
     const groups = new Map();
     for (const e of entries) {
       const key = e.title.toLowerCase().replace(/\s+/g, ' ').trim();
-      const observed = recent.filter(d => overlaps(e, d));
-      if (!observed.length) continue;
+      const date = localPlanDate(e.startMs, input.timezone);
+      if (!expectedDates.includes(date)) continue;
       if (!groups.has(key)) groups.set(key, { titles: new Set(), dates: new Set(), refs: [] });
       const g = groups.get(key);
       g.titles.add(e.title);
-      observed.forEach(d => g.dates.add(d.date));
+      g.dates.add(date);
       g.refs.push({ source: 'entry', id: e.id });
     }
     for (const [key, g] of groups) if (g.dates.size >= PATTERN_MIN_DAYS) {

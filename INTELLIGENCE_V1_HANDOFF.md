@@ -45,8 +45,9 @@ including frozen-home-zone/calendar next-day extension. Plan date, item zone and
 Routine date/soft timing comes from its source-owned scheduler timezone, never a new account day rule.
 Timed appointments retain authored instants. Date-only elapsed status changes at midnight in the
 appointment's authored zone, never at its noon anchor or another zone's midnight.
-Patterns: repeated normalized activity labels recorded on >=3 distinct dates in the current and six
-previous calendar dates, in the account timezone. They assert neither habit consistency nor missing days.
+Patterns: independent eligible activity records with repeated normalized labels on >=3 distinct dates
+in the current and six previous calendar dates. Each record is attributed exactly once via
+`localPlanDate(record.startMs, accountTimezone)`; crossing midnight never creates repeated evidence. They assert neither habit consistency nor missing days.
 
 ## Verification
 
@@ -98,3 +99,31 @@ separation (Intelligence's own pinned model import; Brain Dump generation unchan
 
 Deployments: none. Production mutations: none. Integrations/pushes/merges: none.
 Review the base..candidate range; no automatic integration is authorized.
+
+
+## TASK-006 INT-001 targeted re-review (2026-10-08)
+
+Previous reviewed tip: b5ece25e573795cc8fc6d440638d2ed9d9f396b0. No rebase or main refresh.
+Only recent-pattern date attribution changes: unique eligible source records each contribute their
+canonical start date, converted by the already imported localPlanDate helper in the account zone.
+The normalized interval projection has start/end instants, no separate source-owned date. This matches
+the existing start-date attribution in analytics (getDateInTZ(tsStart || ts)); canonical entryTimeRange
+still supplies interval starts. The threshold, seven-calendar-date window and wording are unchanged.
+
+Other Intelligence semantics: unchanged. Actuals and plan-vs-actual continue to use interval overlaps;
+Attention, open loops, quarantine, account guards, PlanAuthority and all domain writes are unchanged.
+Intelligence's independent model/UI cache generation is 20261008-intelligence-int001. The governed
+20261007-intelligence-v1 token and Brain Dump generation remain unchanged. www/ is generated only.
+
+Verification: focused model 46/46 (6 new INT-001 cases); focused browser 11/11 (1 new INT-001 case).
+Full Playwright 857/857 passed, 0 failed (15.8m, 2 workers, no retries). npm test exit 0:
+2,017 node:test cases, 2,016 passed, 0 failed, 1 existing optional cross-repo control skip;
+legacy runner 455 passed. Firebase fence 94/94 passed. Lint 0 errors / 47 pre-existing warnings;
+90-file mirror parity, generated rules parity and git diff --check clean. No gate weakened.
+Self-review: the functional diff changes only three lines inside pattern grouping. Independent record
+IDs are deduplicated before grouping; each contributes one start date. Other overlap consumers and
+Intelligence sections are untouched. Cache URL changes prevent stale reviewed code; no UI redesign.
+No deployment, production mutation, persistent data change, main refresh, rebase, push or merge.
+
+Review hotspot: one record -> one pattern date, and distinct-date set cardinality requires independent
+source IDs because source records are already deduplicated/conflict-excluded before pattern grouping.

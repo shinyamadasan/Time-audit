@@ -201,3 +201,48 @@ test('finite numbers outside the JavaScript instant range are malformed, not sou
   const r = run({ entries: [entry({ startMs: -1e30 })] });
   assert.equal(r.actuals.length + r.patterns.length, 0); assert.match(r.notes.join(), /malformed/);
 });
+
+// INT-001: independent records, each attributed once by canonical start in the account zone.
+test('INT-001: one eligible interval spanning three dates is not repeated evidence', () => {
+  const r = run({ entries: [entry({ startMs: Date.parse('2026-10-05T10:00:00+08:00'), endMs: NOW })] });
+  assert.equal(r.patterns.length, 0);
+  assert.equal(r.actuals.length, 1, 'calendar actual interval attribution is unchanged');
+});
+test('INT-001: two independent records on two dates do not reach the threshold', () => {
+  assert.equal(run({ entries: repeated(2) }).patterns.length, 0);
+});
+test('INT-001: three independent records on three dates produce exactly three-of-seven', () => {
+  const r = run({ entries: repeated(3) });
+  assert.equal(r.patterns.length, 1); assert.equal(r.patterns[0].status, 'Recorded on 3 of 7 calendar dates');
+  assert.deepEqual(r.patterns[0].refs.map(r => r.id), ['e0', 'e1', 'e2']);
+});
+test('INT-001: cross-midnight record contributes only its start date, with same-date records deduplicated', () => {
+  const records = [
+    entry({ id: 'cross', startMs: Date.parse('2026-10-05T23:30:00+08:00'), endMs: Date.parse('2026-10-06T00:30:00+08:00') }),
+    entry({ id: 'same', startMs: Date.parse('2026-10-05T10:00:00+08:00'), endMs: Date.parse('2026-10-05T11:00:00+08:00') }),
+    entry({ id: 'previous', startMs: Date.parse('2026-10-04T10:00:00+08:00'), endMs: Date.parse('2026-10-04T11:00:00+08:00') }),
+  ];
+  assert.equal(run({ entries: records }).patterns.length, 0, 'only October 4 and 5 have canonical record starts');
+  const third = entry({ id: 'third', startMs: Date.parse('2026-10-06T10:00:00+08:00'), endMs: Date.parse('2026-10-06T11:00:00+08:00') });
+  const r = run({ entries: [...records, third] });
+  assert.equal(r.patterns[0].status, 'Recorded on 3 of 7 calendar dates');
+  assert.equal(r.patterns[0].refs.length, 4);
+  assert.deepEqual(r, run({ entries: [third, ...records].reverse() }));
+});
+test('INT-001: a start outside the seven-date window does not enter via overlap', () => {
+  const r = run({ entries: [entry({ id: 'before-window', startMs: Date.parse('2026-09-30T10:00:00+08:00'), endMs: NOW }), ...repeated(2)] });
+  assert.equal(r.patterns.length, 0);
+});
+test('INT-001: the account timezone determines canonical start date, independently of UTC date and input order', () => {
+  const records = [
+    entry({ id: 'early', startMs: Date.parse('2026-10-05T06:30:00Z'), endMs: Date.parse('2026-10-05T07:30:00Z') }),
+    entry({ id: 'same-utc', startMs: Date.parse('2026-10-05T08:00:00Z'), endMs: Date.parse('2026-10-05T09:00:00Z') }),
+    entry({ id: 'next', startMs: Date.parse('2026-10-06T08:00:00Z'), endMs: Date.parse('2026-10-06T09:00:00Z') }),
+  ];
+  const now = Date.parse('2026-10-07T18:00:00Z');
+  const utc = run({ timezone: 'Etc/UTC', now, entries: records });
+  assert.equal(utc.patterns.length, 0, 'UTC has only October 5 and 6');
+  const phoenix = run({ timezone: 'America/Phoenix', now, entries: records });
+  assert.equal(phoenix.patterns[0].status, 'Recorded on 3 of 7 calendar dates', 'Phoenix has October 4, 5 and 6');
+  assert.deepEqual(phoenix, run({ timezone: 'America/Phoenix', now, entries: [...records].reverse() }));
+});

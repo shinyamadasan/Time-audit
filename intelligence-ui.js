@@ -1,4 +1,4 @@
-import { buildIntelligence, RECENT_DAYS, unambiguousRecords } from './intelligence-read-model.js?v=20261007-intelligence-v1';
+import { buildIntelligence, RECENT_DAYS, unambiguousRecords } from './intelligence-read-model.js?v=20261008-intelligence-int001';
 import { appRoomOwner } from './personal-day-boundary-repository.js';
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { createCommitmentsRepository } from './commitments-repository.js';
