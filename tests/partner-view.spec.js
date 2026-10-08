@@ -215,12 +215,17 @@ async function openBobPartnerView(bob) {
   await bob.waitForFunction(() => document.getElementById('partner-view-screen').hidden === false);
 }
 
-async function setupLinkedPair(browser) {
+async function setupLinkedPair(browser, { timezoneId, fixedTime } = {}) {
   const shared = makeSharedDb();
-  const ctxA = await browser.newContext();
-  const ctxB = await browser.newContext();
+  const contextOptions = timezoneId ? { timezoneId } : {};
+  const ctxA = await browser.newContext(contextOptions);
+  const ctxB = await browser.newContext(contextOptions);
   const alice = await ctxA.newPage();
   const bob = await ctxB.newPage();
+  if (fixedTime) {
+    await alice.clock.setFixedTime(fixedTime);
+    await bob.clock.setFixedTime(fixedTime);
+  }
   await boot(alice, 'alice');
   await boot(bob, 'bob');
   await shared.attach(alice);
@@ -395,15 +400,20 @@ test.describe('Partner View V1', () => {
   });
 
   test('a scheduled auto-log block appears as ordinary actual evidence, exactly as the owner sees it', async ({ browser }) => {
-    const { shared, ctxA, ctxB, alice, bob } = await setupLinkedPair(browser);
+    const { ctxA, ctxB, alice, bob } = await setupLinkedPair(browser, {
+      timezoneId: 'UTC', fixedTime: '2026-10-08T16:52:00Z'
+    });
     const todayKey = await alice.evaluate(() => getDateInTZ(Date.now(), 'Asia/Manila'));
-    const now = await alice.evaluate(() => Date.now());
+    const { tsStart, ts } = await alice.evaluate(({ todayKey }) => {
+      settings.timezone = 'Asia/Manila';
+      return { tsStart: tzParseTime(todayKey, '00:02'), ts: tzParseTime(todayKey, '00:42') };
+    }, { todayKey });
 
     await setAliceStateAndPublish(alice, {
       timezone: 'Asia/Manila', todayKey, items: [],
       entries: [{
-        id: 'tpllog_scribe_' + todayKey, ts: now - 60 * 60000, tsStart: now - 120 * 60000,
-        activity: 'Scribe shift', energy: 'nine5', blockIntervalMin: 60,
+        id: 'tpllog_scribe_' + todayKey, ts, tsStart,
+        activity: 'Scribe shift', energy: 'nine5', blockIntervalMin: 40,
         onPlan: true, retro: false, autoLogged: true, scheduledAutoLog: true, templateId: 'tpl1'
       }]
     });
