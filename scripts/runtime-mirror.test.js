@@ -336,3 +336,19 @@ test('write mode adds missing files, updates drift, removes stale mirror copies'
     cleanup(dir);
   }
 });
+
+
+test('versioned module imports resolve to the same physical file and retain the complete closure', () => {
+  const dir = makeFixture({
+    'index.html': '<script type="module" src="entry.js?v=release"></script>',
+    'entry.js': "import { a } from './model.js?v=first'; export { b } from './model.js?v=second#part'; import('./nested/ui.js?v=third');",
+    'model.js': "import './shared.js?v=fourth';",
+    'nested/ui.js': "import '../shared.js?v=fifth';",
+    'shared.js': '',
+  });
+  try {
+    assert.deepEqual(computeClosure({ rootDir: dir }).files, ['entry.js', 'index.html', 'model.js', 'nested/ui.js', 'shared.js']);
+    mirror({ rootDir: dir });
+    assert.equal(checkParity({ rootDir: dir }).ok, true);
+  } finally { cleanup(dir); }
+});

@@ -172,7 +172,7 @@ export function computeClosure({ rootDir = ROOT_DIR } = {}) {
     const deps = parseModuleDeps(readFileSync(abs, 'utf8'));
     const dir = path.dirname(rel);
     for (const spec of deps) {
-      const resolved = toPosix(path.normalize(path.join(dir, spec)));
+      const resolved = toPosix(path.normalize(path.join(dir, normalizeSpec(spec))));
       if (resolved.startsWith('..')) {
         throw new Error(`runtime import escapes repo root: ${rel} -> ${spec}`);
       }

@@ -4611,3 +4611,23 @@ changed:
 unchanged: currentEvidenceScope(), evidence filtering, source/Ledger records and all later truth-fix milestones.
 status: uncommitted and unpushed; required Medium finding addressed, pending targeted re-review.
 deferred Low findings: explicit unloggedOk missingness wording; accounting boundaries versus sleep/wake/planning boundaries.
+
+## TASK-006 — done (branch: task-006)
+changed:
+  - intelligence-read-model.js (176 loc; deterministic, read-only authoritative snapshot derivation)
+  - intelligence-ui.js (109 loc; scoped source readers and fact/derived/unknown/pattern review UI)
+  - intelligence-read-model.test.js (203 loc; invariant and boundary proofs)
+  - tests/intelligence.spec.js (230 loc; production-browser, read-only and account-lifecycle proofs)
+  - index.html (getIntelligenceAppContext, Intelligence mount/module, renderToday refresh; governed release 20261007-intelligence-v1)
+  - storage.js (one resetIntelligenceForAccount call before PlanAuthority invalidation)
+  - style.css (14 loc of scoped disclosure/row styles, existing palette and mobile wrapping)
+  - scripts/runtime-mirror.mjs (1-line normalizeSpec reuse for versioned module physical paths); scripts/runtime-mirror.test.js (1 regression)
+  - package.json / eslint.config.js (new model/test/runtime wiring); release assertions updated, old token retired, no gate relaxed
+  - CODEMAP.md (Intelligence section); INTELLIGENCE_V1_HANDOFF.md (authority map, contracts, exact base, gates, limits and hotspots)
+  - www/ (generated copies only: index, storage, styles, the 2 new runtime modules)
+tests: intelligence-read-model.test.js (40 cases, all pass); tests/intelligence.spec.js (10 cases, all pass); complete browser gate 856/856 passed; npm test exit 0; local Firebase fence gate 94/94 passed; lint/parity/rules/diff checks pass
+blockers: none. Existing Life Ledger cache has no account ownership proof: external workout/Learning routine completion visibly unevaluated; scoped manual and Focus facts supported. Appointment records have no completion authority: elapsed time stays unknown.
+deviations: supporting 1-line runtime-mirror query/fragment fix was required for the independently pinned Intelligence model. Both release-token assertion files advanced with the governed token; no assertion weakened. Existing unrelated recurring-schedule editor flake passed unchanged in isolation and in the complete final gate.
+self-review: adversarial Code Health + applicable QA AI checks pass; Would I ship this bounded read surface? yes. Hard Rules and source domain writes unchanged. Physical-device feel/render checks remain human verification.
+release: no push, merge, integration, deployment, production mutation or write tool. The stale docs worktree remained unchanged.
+→ status set to `review` in TASKS.md
