@@ -79,6 +79,7 @@ noticed, not built:
   - The deployed URL's request path must be verified to be `/v1/query` in Phase B.
 → status set to `review` in TASKS.md
 
+
 ## ChronaSense Action API V1 architecture — ready for strict review
 
 Docs-only specification on `design/chronasense-action-api-v1`, based on verified production commit `745123d697175b314b82bd0de0dd3400679e8266`. Adds the backend/MCP boundary, identity and HMAC authentication contracts, user-scoped Firebase authority strategy, typed query/command tools, immutable action IDs, receipts/reconciliation, opaque revisions, provenance/evidence separation, explicit time handling, scopes, errors, security, phases and stop conditions. Adds Action Provenance V1 and clarifies the evidence contract without changing its semantic model. Updates CODEMAP and records proposed architecture decision #34. No runtime code, Firebase rules, deployment, production data, or release generation changed.
@@ -4677,3 +4678,15 @@ tests:
 deviations: a default-worker (6) local full smoke run had 6 load-sensitive failures in untouched specs (timeouts / Playwright "object not bound" connection error), the same class TASK-007 recorded; the full run at CI's 2 workers passed 857/857. Temporary tests/zz-diag.spec.js and in-place probes were investigation-only and are not committed.
 release: no deploy, production mutation or merge.
 → status set to `review` in TASKS.md
+
+## TASK-009 — Conversational Read V1 (branch: task-009-conversational-read-v1, 2026-10-09)
+changed:
+  - functions/src/ and functions/shared/ — extend the TASK-005 signed query pipeline with fixed Today, Plan, Item and Intelligence reads; preserve get_brain_dump, user-scoped data access, authoritative plan identity, frozen time and deterministic interpretation.
+  - scripts/functions-shared.mjs — package byte-identical root domain models needed by the deployable Function.
+  - functions/test/ and functions/README.md — add adversarial read tests and document the exact contract and known source gaps.
+  - workers/chronasense-conversational-bridge/ — add the canonical thin read-only OAuth/MCP Worker with Access-sub owner binding, dedicated OAUTH_KV and matching Action API HMAC, plus Worker tests.
+  - .github/workflows/ci.yml — require Worker tests in PR CI without any deployment.
+  - TASKS.md and CONVERSATIONAL_READ_V1_HANDOFF.md — track the owner-direct milestone and strict-review handoff.
+tests: see TASK-009 in TEST_REPORT.md.
+deviations: no production deployment or mutation; real Access sub and service secrets remain deployment-phase configuration.
+→ local gates complete; TASK-009 remains `in-progress` until hosted PR CI is verified.
