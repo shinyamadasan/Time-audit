@@ -4701,3 +4701,11 @@ changed:
   - Focused adversarial tests and readme/handoff notes cover the four findings and limits.
 tests: see the TASK-009 CR-001..CR-004 entry in TEST_REPORT.md. Draft PR #5 carries hosted CI for the pushed tip.
 release: no deployment, production mutation or merge. TASK-009 remains `review`.
+
+## TASK-009 — CR-002R relocation conflict repair (branch: task-009-conversational-read-v1, 2026-10-09)
+reviewed tip: `9be724f38f46b36dd7b15a536d1321e2260e35e0`.
+changed:
+  - The existing Function relocation validator now compares normalized claims for each stable item ID at its highest sequence. Equal-sequence claims with different source or destination identities return typed `CONFLICT` before any read projection. A later valid sequence still supersedes lower claims; the canonical comparator and valid response shapes are unchanged.
+  - Focused tests reproduce the reviewed contradiction in both record orders across Plan, Item, Today and Intelligence reads, then verify a later sequence wins. Existing same-identity, ordinary-item, fenced-child, tombstone and recovery-conflict cases remain in the suite.
+tests: see TASK-009 CR-002R in TEST_REPORT.md. PR #5 carries the exact-tip hosted result.
+release: no deployment, production mutation or merge. TASK-009 remains `review`.

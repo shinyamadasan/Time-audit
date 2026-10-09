@@ -77,6 +77,7 @@ function planItems(rawItems, canonical, targetId, store, targetKey, date, ref, h
 
 function validateRelocations(dayRecords) {
   const validDay = id => validDate(id) || !!parseCalendarPlanId(id) || !!parseOperationalDayId(id);
+  const claims = new Map();
   for (const [dayId, record] of Object.entries(dayRecords)) {
     for (const item of record.items) {
       if (!Object.hasOwn(item, 'relocationRevision')) continue;
@@ -91,8 +92,14 @@ function validateRelocations(dayRecords) {
         candidate.id === item.id && normalizePlanItemRelocation(candidate))) throw malformed('plan relocation');
       if (dayId === relocation.toDayId && !dayRecords[relocation.fromDayId]?.items.some(candidate =>
         candidate.id === (item.carriedFromId || item.id))) throw malformed('plan relocation');
+      const current = claims.get(item.id);
+      if (!current || relocation.sequence > current.sequence) claims.set(item.id, {
+        sequence: relocation.sequence, fromDayId: relocation.fromDayId, toDayId: relocation.toDayId, conflict: false });
+      else if (relocation.sequence === current.sequence &&
+          (relocation.fromDayId !== current.fromDayId || relocation.toDayId !== current.toDayId)) current.conflict = true;
     }
   }
+  if ([...claims.values()].some(claim => claim.conflict)) throw malformed('plan relocation');
 }
 
 export async function createPlanRead(identity, { domain, nowMs }) {

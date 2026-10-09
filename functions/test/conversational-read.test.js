@@ -113,6 +113,48 @@ test('relocation authority, not input order, decides which plan owns one stable 
   assert.deepEqual(target.body.result.plan.items.map(row => row.itemId), [item.id]);
 });
 
+test('equal-sequence relocation identities for one stable ID conflict in either record order', async () => {
+  const a = 'cal1:2026-10-07';
+  const c = 'cal1:2026-10-08';
+  const b = TARGET.id;
+  const claim = fromDayId => ({ schemaVersion: 1, sequence: 1, fromDayId, toDayId: b, updatedBy: 'fixture' });
+  const source = fromDayId => ({ ...item, deleted: true, movedToDayId: b, relocationRevision: claim(fromDayId) });
+  for (const order of [[a, c, b], [b, c, a]]) {
+    const records = { [a]: { timezone: 'UTC', items: [source(a)] },
+      [c]: { timezone: 'UTC', items: [source(c)] },
+      [b]: { timezone: 'UTC', items: [{ ...item, relocationRevision: claim(c) }] } };
+    const data = rooms({ calendarPlans: Object.fromEntries(order.map(day => [day, records[day]])) });
+    for (const [kind, parameters] of [['get_plan', {}], ['get_item', { source: 'plan', id: item.id, target: TARGET }],
+      ['get_today', {}], ['get_intelligence', {}]]) {
+      const response = await query(harness({ rooms: data, nowMs: NOW }), kind, parameters);
+      assert.equal(response.body.error?.code, 'CONFLICT', `${order.join(',')} ${kind}: ${JSON.stringify(response.body)}`);
+      assert.ok(!('result' in response.body));
+    }
+  }
+});
+
+test('a valid higher relocation sequence supersedes lower contradictory claims', async () => {
+  const a = 'cal1:2026-10-07';
+  const c = 'cal1:2026-10-08';
+  const b = TARGET.id;
+  const d = 'cal1:2026-10-10';
+  const lower = fromDayId => ({ schemaVersion: 1, sequence: 1, fromDayId, toDayId: b, updatedBy: 'fixture' });
+  const higher = { schemaVersion: 1, sequence: 2, fromDayId: b, toDayId: d, updatedBy: 'fixture' };
+  const data = rooms({ calendarPlans: {
+    [a]: { timezone: 'UTC', items: [{ ...item, deleted: true, movedToDayId: b, relocationRevision: lower(a) }] },
+    [c]: { timezone: 'UTC', items: [{ ...item, deleted: true, movedToDayId: b, relocationRevision: lower(c) }] },
+    [b]: { timezone: 'UTC', items: [{ ...item, deleted: true, movedToDayId: d, relocationRevision: higher }] },
+    [d]: { timezone: 'UTC', items: [{ ...item, relocationRevision: higher }] },
+  } });
+  const current = await query(harness({ rooms: data, nowMs: NOW }), 'get_plan');
+  assert.equal(current.status, 200, JSON.stringify(current.body));
+  assert.deepEqual(current.body.result.plan.items, []);
+  const destination = await query(harness({ rooms: data, nowMs: NOW }), 'get_plan',
+    { target: { store: 'calendar', id: d } });
+  assert.equal(destination.status, 200, JSON.stringify(destination.body));
+  assert.deepEqual(destination.body.result.plan.items.map(row => row.itemId), [item.id]);
+});
+
 test('divergent equal-authority recovery destinations fail every affected read in either record order', async () => {
   const source = 'cal1:2026-10-08';
   const prior = { ...item, id: 'stale-source', when: '09:00', durationMinutes: 30 };

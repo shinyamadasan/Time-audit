@@ -18,6 +18,8 @@ On top of reviewed tip `7ea76d611b6878de3ca65f13d34917c39ddd6047`, the server no
 
 The user-scoped RTDB transport streams at most 1 MiB per complete collection before JSON parsing and refuses larger sources with typed `DOMAIN_LIMIT`; the independent 64 KiB serialized response limit remains. The Worker bounds `/authorize` consent POST at the existing 8,192-byte token-form limit before form parsing, after Access verification. No read contract shape, HMAC/nonce rule, OAuth scope, MCP tool, production configuration or domain write changed.
 
+CR-002R follow-up on `9be724f38f46b36dd7b15a536d1321e2260e35e0`: the same validation pass also rejects contradictory source or destination identities at the highest relocation sequence for a stable item ID. A valid higher sequence continues to supersede lower claims. No canonical tie-breaker, response shape, or Worker path changed.
+
 ## Worker
 
 The canonical Worker is `workers/chronasense-conversational-bridge/`, with the dedicated `OAUTH_KV` namespace. OAuth uses CIMD, no dynamic registration endpoint, S256 PKCE for public clients, and exact `chronasense:read` scope and MCP resource. Cloudflare Access JWT verification is applied at `/authorize`; the verified `sub` must equal configured `CHRONASENSE_OWNER_SUBJECT`. MCP bearer auth, token audience and per-tool scope are checked on every read. The Worker signs one Action API request per tool call and performs no domain derivation.
@@ -38,4 +40,4 @@ Separately authorize and configure Firebase rules and Action API deployment in t
 
 ## Verification
 
-Local gate results are recorded in `TEST_REPORT.md` and the TASK-009 entry in `TASKS.md`. Draft PR #5's run 37961309632 passed both jobs on the earlier functional candidate; the targeted repair needs both hosted jobs on its new exact tip. No real account data or production route was used by local tests.
+Local gate results are recorded in `TEST_REPORT.md` and the TASK-009 entry in `TASKS.md`; the exact-tip hosted result is linked from draft PR #5. No real account data or production route was used by local tests.
