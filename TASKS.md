@@ -478,6 +478,58 @@ blocker:
 
 ---
 
+### TASK-008 - CI stability sweep: pair-claim reload + wife-shared unlink smoke flakes
+status: codex
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: tests/pair-accountability.spec.js, tests/wife-shared-accountability.spec.js, TASKS.md, CHANGELOG.md, TEST_REPORT.md
+
+context:
+  Owner-direct authorization, 2026-10-08/09 ("ChronaSense — CI STABILITY SWEEP", re-confirmed in the
+  recovery instruction after an interrupted session): eliminate the two known unrelated hosted smoke
+  flakes without changing product semantics, on production main
+  e35ed20cc858ab4ccd1ea2ab439181a3661c4a43. Hosted CI run 37863426417 on e35ed20 failed only
+  (1) tests/pair-accountability.spec.js:253 "F2 — pending claim survives a creator reload" (30.0s
+  test timeout at the post-reload waitForFunction(_pendingPairClaim === 'bob'); it normally passes
+  in ~3s), and (2) tests/wife-shared-accountability.spec.js:342 "unlink clears the partner card
+  immediately" (partnerShared still held Alice's full payload when read; the same failure also
+  occurred in run 36254429147). TASK-007 is done and is not reopened.
+  Process note: the task-008 worktree (from origin/main e35ed20) and a temporary, uncommitted
+  investigation spec (tests/zz-diag.spec.js) were created during the interrupted session BEFORE this
+  entry was recorded; this entry was recorded on resumption. The diagnostic file is investigation-only
+  and is removed (or folded into a canonical spec) before commit.
+
+acceptance:
+  - [ ] Root cause of each flake established: the async/state transition involved, whether product
+        behavior is correct, whether test synchronization is wrong, whether a real production race
+        exists, and the deterministic completion signal the test should wait for.
+  - [ ] Each test waits for authoritative observable state, not elapsed time or rendered text that
+        does not prove the state transition.
+  - [ ] Product semantics unchanged unless a real defect is proven (then smallest fix + regression test).
+  - [ ] Both focused tests pass repeatedly, including under the parallel load that reproduced them.
+  - [ ] Surrounding Partner View / shared-accountability suites, full Playwright smoke, npm test and the
+        Firebase fence/rules gates pass; candidate hosted PR CI passes; clean committed candidate.
+
+constraints:
+  - No arbitrary sleeps, timeout increases or retries as the fix, no skips, no weakened assertions.
+  - Do not change unlink semantics merely to satisfy the test.
+  - No deployment, no production/Firebase mutations, no backend or rules changes.
+  - Scope limited to the two spec files above (plus product code only if a real defect is proven),
+    this task's TASKS.md entry, and required CHANGELOG.md / TEST_REPORT.md evidence.
+
+verification:
+  - [ ] Focused tests with --repeat-each under multi-worker load (the reproducing configuration).
+  - [ ] Partner View / pair / wife-shared specs; npm test; npm run test:smoke; npm run test:fence.
+  - [ ] git diff --check; hosted GitHub Actions green on the candidate PR.
+
+stop conditions:
+  - STOP — PRODUCT DEFECT REQUIRES REVIEW if a real production race/defect is proven that needs more
+    than the smallest fix; STOP — INVARIANT DIFFERED if base/governance state differs from the above.
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
