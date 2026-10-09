@@ -479,7 +479,7 @@ blocker:
 ---
 
 ### TASK-008 - CI stability sweep: pair-claim reload + wife-shared unlink smoke flakes
-status: review
+status: done
 owner: codex
 source: owner-direct
 priority: P1
@@ -509,7 +509,7 @@ acceptance:
         does not prove the state transition.
   - [x] Product semantics unchanged unless a real defect is proven (then smallest fix + regression test).
   - [x] Both focused tests pass repeatedly, including under the parallel load that reproduced them.
-  - [ ] Surrounding Partner View / shared-accountability suites, full Playwright smoke, npm test and the
+  - [x] Surrounding Partner View / shared-accountability suites, full Playwright smoke, npm test and the
         Firebase fence/rules gates pass; candidate hosted PR CI passes; clean committed candidate.
 
 constraints:
@@ -522,7 +522,7 @@ constraints:
 verification:
   - [x] Focused tests with --repeat-each under multi-worker load (the reproducing configuration).
   - [x] Partner View / pair / wife-shared specs; npm test; npm run test:smoke; npm run test:fence.
-  - [ ] git diff --check; hosted GitHub Actions green on the candidate PR.
+  - [x] git diff --check; hosted GitHub Actions green on the candidate PR.
 
 stop conditions:
   - STOP — PRODUCT DEFECT REQUIRES REVIEW if a real production race/defect is proven that needs more
