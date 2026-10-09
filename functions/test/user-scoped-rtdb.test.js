@@ -77,7 +77,7 @@ test('cross-account access is denied: rules refusing the token -> FORBIDDEN; the
   for (const forged of [{ firebaseUid: UID, roomId: 'uid_victim' }, { firebaseUid: 'victim/../x', roomId: 'uid_victim/../x' }, { firebaseUid: UID }, null]) {
     await assert.rejects(rtdb.readRoomCollection(forged, 'brainDump'), AuthorityBoundaryViolation, JSON.stringify(forged));
   }
-  for (const collection of ['plans', 'calendarPlans', '', '../uid_victim/brainDump', 'brainDump/x']) {
+  for (const collection of ['users', 'rooms', '', '../uid_victim/brainDump', 'brainDump/x']) {
     await assert.rejects(rtdb.readRoomCollection(IDENTITY, collection), AuthorityBoundaryViolation, collection);
   }
 });

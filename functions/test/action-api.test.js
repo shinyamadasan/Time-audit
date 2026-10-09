@@ -135,7 +135,7 @@ test('envelope: requestId must equal the signed one; contractVersion 1; unknown 
     ['envelope-fields', { contractVersion: 1, requestId: id, kind: 'get_brain_dump' }],
     ['parameters-type', { contractVersion: 1, requestId: id, kind: 'get_brain_dump', parameters: [] }],
     ['parameters-type', { contractVersion: 1, requestId: id, kind: 'get_brain_dump', parameters: null }],
-    ...['get_today', 'get_plan', 'get_item', 'brain_dump_add', 'brain_dump_triage', 'brain_dump_promote', 'brain_dump_disposition', 'plan_create', 'plan_update_same_target', 'plan_complete', 'actual_log', 'chronasense:get_brain_dump', '__proto__', 'constructor', 'toString']
+    ...['get_raw', 'brain_dump_add', 'brain_dump_triage', 'brain_dump_promote', 'brain_dump_disposition', 'plan_create', 'plan_update_same_target', 'plan_complete', 'actual_log', 'chronasense:get_brain_dump', '__proto__', 'constructor', 'toString']
       .map(kind => ['unsupported-kind', { contractVersion: 1, requestId: id, kind, parameters: {} }]),
     ['envelope-fields', { contractVersion: 1, actionId: 'act1_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', kind: 'brain_dump_add', parameters: { text: 'x' }, expectedRevision: null, requestId: id }],
   ];

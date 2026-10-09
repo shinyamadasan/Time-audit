@@ -65,8 +65,8 @@ test('parity check fails on modified, missing, stale-extra or under-packaged sha
     // An authoritative module that starts importing an unpackaged file is caught too (the closure is complete).
     const root = tracked();
     for (const name of SHARED_FILES) cpSync(path.join(REPO, name), path.join(root, name));
-    writeFileSync(path.join(root, 'brain-dump-model.js'), `import { x } from './commitments-model.js';\n${readFileSync(path.join(root, 'brain-dump-model.js'), 'utf8')}`);
-    assert.ok(sharedProblems({ repoRoot: root, sharedDir: path.join(FUNCTIONS, 'shared') }).includes('brain-dump-model.js imports ./commitments-model.js, which is not packaged'));
+    writeFileSync(path.join(root, 'brain-dump-model.js'), `import { x } from './unpackaged-model.js';\n${readFileSync(path.join(root, 'brain-dump-model.js'), 'utf8')}`);
+    assert.ok(sharedProblems({ repoRoot: root, sharedDir: path.join(FUNCTIONS, 'shared') }).includes('brain-dump-model.js imports ./unpackaged-model.js, which is not packaged'));
   } finally { for (const dir of made) rmSync(dir, { recursive: true, force: true }); }
 });
 

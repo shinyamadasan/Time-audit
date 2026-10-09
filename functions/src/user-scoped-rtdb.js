@@ -13,7 +13,11 @@ import { ApiError, AuthorityBoundaryViolation } from './errors.js';
 import { validFirebaseUid } from './identity.js';
 
 /** The only room collections a user-scoped read may name. Paths are built here, never taken from a request. */
-const READABLE_COLLECTIONS = new Set(['brainDump']);
+const READABLE_COLLECTIONS = new Set([
+  'brainDump', 'settings', 'calendarPlanAuthority', 'dayBoundaryRevisions',
+  'calendarPlans', 'operationalPlans', 'plans', 'calendarPlanFences',
+  'operationalPlanFences', 'planFences', 'entries', 'commitments', 'coarseLifeEvidence',
+]);
 const TOKEN_EXCHANGE_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken';
 
 const transport = reason => new ApiError('RETRYABLE_TRANSPORT', 'ChronaSense data is temporarily unavailable.', { reason });
