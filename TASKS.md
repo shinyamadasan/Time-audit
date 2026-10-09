@@ -530,6 +530,38 @@ stop conditions:
 
 ---
 
+### TASK-009 - Conversational Read V1
+status: review
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: TASK-005, TASK-006
+files: functions/src/ (typed read queries and user-scoped collection allowlist), functions/shared/ (generated pure domain modules), functions/test/ (read adversarial tests), functions/README.md (read contract), scripts/functions-shared.mjs, workers/chronasense-conversational-bridge/ (new canonical read-only OAuth/MCP Worker and tests), .github/workflows/ci.yml (Worker test gate), TASKS.md, CHANGELOG.md, TEST_REPORT.md, CONVERSATIONAL_READ_V1_HANDOFF.md (new)
+
+context:
+  Owner-direct instruction, 2026-10-09: implement a read-only conversational milestone from live
+  origin/main a32dae209d1a95a13d9df832a7177992cfff205a. Preserve TASK-005 authentication,
+  identity, replay, response-limit and user-scoped read boundaries and TASK-006 interpretation semantics.
+  Prepare the canonical Cloudflare Worker locally; an untracked local spike is reference only.
+
+acceptance:
+  - [x] Typed useful get_brain_dump, get_today, get_plan, get_item and get_intelligence read contracts, or a documented smaller coherent set based on actual source authority.
+  - [x] Plan/calendar identity, account/time semantics, stable IDs, absence/unknown and provenance remain accurate; Intelligence interpretation is recomputed, never canonical truth.
+  - [x] Worker exposes only read-only MCP tools with OAuth, Access subject binding, per-tool scope checks, HMAC to the existing Action API and no Firebase/path passthrough.
+  - [x] Adversarial backend and Worker tests cover authentication, scope, replay, malformed and contradictory data, identity, time boundaries, deterministic ordering, Unicode/size and read-only boundaries.
+  - [x] Required repo gates and available hosted CI pass; clean committed candidate and strict-review handoff. No integration or production mutation.
+
+constraints:
+  - No deployment, production config/secrets, Access mutation, RTDB mutation, write tools or generic data access.
+  - CHRONASENSE_OWNER_SUBJECT must come from the real Access JWT sub during deployment; local fixtures only in tests.
+  - User instruction controls this owner-direct task's scope; changes stay surgical and preserve existing source authority.
+
+verification:
+  - [x] Targeted backend and Worker tests, npm test, npm run test:smoke, npm run lint, npm run check:www-parity, npm run check:firebase-rules, npm run test:fence, git diff --check.
+  - [x] SELF_REVIEW.md Code Health and QA.md applicable AI checks; hosted CI if available without production deployment.
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

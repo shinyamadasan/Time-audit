@@ -32,6 +32,15 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+      - name: Install Conversational Read Worker dependencies
+        run: npm ci --prefix workers/chronasense-conversational-bridge
+
+      - name: Test Conversational Read Worker
+        run: npm test --prefix workers/chronasense-conversational-bridge
+
+      - name: Bundle Conversational Read Worker without deploying
+        run: npm run check:bundle --prefix workers/chronasense-conversational-bridge
+
       - name: Run smoke tests
         run: npm run test:smoke
 

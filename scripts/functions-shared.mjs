@@ -21,7 +21,12 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.join(HERE, '..');
 export const SHARED_DIR = path.join(REPO_ROOT, 'functions', 'shared');
 /** The closure of root modules the backend imports (brain-dump-model.js -> plan-item-origin.js). */
-export const SHARED_FILES = Object.freeze(['brain-dump-model.js', 'plan-item-origin.js']);
+export const SHARED_FILES = Object.freeze([
+  'brain-dump-model.js', 'plan-item-origin.js', 'plan-item-relocation.js',
+  'plan-tomorrow-model.js', 'personal-day-boundary-model.js', 'operational-plan-model.js',
+  'calendar-plan-model.js', 'commitments-model.js', 'coarse-life-evidence-model.js',
+  'intelligence-read-model.js', 'stale-plan-recovery-model.js', 'evidence-interpretation.js',
+]);
 
 const toLf = text => text.replace(/\r\n/g, '\n');
 const relativeImports = text => [...text.matchAll(/^\s*(?:import|export)\b[^'"]*?\bfrom\s*['"](\.[^'"]+)['"]|^\s*import\s*['"](\.[^'"]+)['"]/gm)].map(m => m[1] ?? m[2]);

@@ -2,8 +2,7 @@
 //
 // The §5 query envelope, strictly: exactly { contractVersion: 1, requestId, kind, parameters }, nothing else at
 // either level. Account, UID, room, path or subject are never parameters, so there is no field through which a
-// caller could name them. Phase A1 knows exactly one kind; every other kind (other reads, every command) is
-// INVALID_INPUT, so there is no write surface.
+// caller could name them. Only fixed, read-only kinds are accepted; every command is INVALID_INPUT.
 
 import { JsonInputError, strictParseJson } from './canonical-json.js';
 import { ApiError } from './errors.js';
@@ -11,6 +10,10 @@ import { ApiError } from './errors.js';
 /** kind -> { scope, parameter keys } */
 export const QUERY_KINDS = Object.freeze({
   get_brain_dump: Object.freeze({ scope: 'chronasense:read', parameters: Object.freeze([]) }),
+  get_today: Object.freeze({ scope: 'chronasense:read', parameters: Object.freeze([]) }),
+  get_plan: Object.freeze({ scope: 'chronasense:read', parameters: Object.freeze(['target']) }),
+  get_item: Object.freeze({ scope: 'chronasense:read', parameters: Object.freeze(['source', 'id', 'target']) }),
+  get_intelligence: Object.freeze({ scope: 'chronasense:read', parameters: Object.freeze([]) }),
 });
 const ENVELOPE_KEYS = ['contractVersion', 'kind', 'parameters', 'requestId'];
 
@@ -34,5 +37,17 @@ export function parseQueryEnvelope(rawBody, { requestId }) {
   if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) throw invalid('parameters must be an object.', 'parameters-type');
   const unknown = Object.keys(parameters).filter(key => !spec.parameters.includes(key));
   if (unknown.length) throw invalid('Unknown parameters.', 'unknown-parameters');
+  if (body.kind === 'get_plan' && Object.hasOwn(parameters, 'target') && !validTarget(parameters.target)) throw invalid('Invalid plan target.', 'plan-target');
+  if (body.kind === 'get_item') {
+    if (!['brain_dump', 'plan'].includes(parameters.source) || typeof parameters.id !== 'string' || !parameters.id || parameters.id.length > 500) throw invalid('A supported source and stable item ID are required.', 'item-identity');
+    if (parameters.source === 'plan' ? !validTarget(parameters.target) : Object.hasOwn(parameters, 'target')) throw invalid('Plan items require an exact target; captures do not take one.', 'item-target');
+  }
   return { kind: body.kind, parameters, scope: spec.scope };
+}
+
+function validTarget(value) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).sort().join(',') === 'id,store'
+    && ['calendar', 'legacy', 'operational'].includes(value.store)
+    && typeof value.id === 'string' && value.id.length > 0 && value.id.length <= 500;
 }
