@@ -531,7 +531,7 @@ stop conditions:
 ---
 
 ### TASK-009 - Conversational Read V1
-status: in-progress
+status: review
 owner: codex
 source: owner-direct
 priority: P1
@@ -549,7 +549,7 @@ acceptance:
   - [x] Plan/calendar identity, account/time semantics, stable IDs, absence/unknown and provenance remain accurate; Intelligence interpretation is recomputed, never canonical truth.
   - [x] Worker exposes only read-only MCP tools with OAuth, Access subject binding, per-tool scope checks, HMAC to the existing Action API and no Firebase/path passthrough.
   - [x] Adversarial backend and Worker tests cover authentication, scope, replay, malformed and contradictory data, identity, time boundaries, deterministic ordering, Unicode/size and read-only boundaries.
-  - [ ] Required repo gates and available hosted CI pass; clean committed candidate and strict-review handoff. No integration or production mutation.
+  - [x] Required repo gates and available hosted CI pass; clean committed candidate and strict-review handoff. No integration or production mutation.
 
 constraints:
   - No deployment, production config/secrets, Access mutation, RTDB mutation, write tools or generic data access.
@@ -558,7 +558,7 @@ constraints:
 
 verification:
   - [x] Targeted backend and Worker tests, npm test, npm run test:smoke, npm run lint, npm run check:www-parity, npm run check:firebase-rules, npm run test:fence, git diff --check.
-  - [ ] SELF_REVIEW.md Code Health and QA.md applicable AI checks; hosted CI if available without production deployment.
+  - [x] SELF_REVIEW.md Code Health and QA.md applicable AI checks; hosted CI if available without production deployment.
 
 ---
 
