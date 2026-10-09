@@ -422,7 +422,7 @@ verification:
 ---
 
 ### TASK-007 - Make the Partner View scheduled auto-log smoke fixture day-stable
-status: blocked
+status: done
 owner: codex
 source: owner-direct
 priority: P1
@@ -468,12 +468,13 @@ verification:
         after local CI-equivalent proof.
 
 blocker:
-  Local verification is green, but the candidate's hosted check cannot be triggered from this environment:
-  the GitHub CLI keyring token is invalid, git has no GitHub credentials, and the read-only public workflow
-  job-log endpoint returns HTTP 403 "Must have admin rights to Repository." The public run metadata identifies
-  the failed smoke job and its time, but not the full assertion output or effective runner timezone. Restore
-  repository Actions-log/admin access and GitHub write credentials, or have an authorized operator attach the
-  job log and run the candidate check.
+  Resolved 2026-10-08: authenticated run 37811850639 logs confirmed the exact Partner View assertion
+  (expected "Scribe shift", actual current-day timeline empty), one failure with no retries, and the
+  UTC GitHub-hosted Ubuntu runner versus the account's Asia/Manila publisher day. The previous
+  Date.now()-120m fixture started on the prior publisher day and was excluded by canonical tsStart
+  day-keying. Candidate PR run 37853241261 passed on 3ad55dadfd91222ec9c8d1672ff1b9aa84d588f2;
+  PR #1 merged as ff04347bf772bc67618b55fd2607da8102a99c4b. GitHub Pages deployment and signed-out
+  production smoke succeeded; post-merge CI also passed.
 
 ---
 
