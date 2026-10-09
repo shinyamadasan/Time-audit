@@ -113,6 +113,60 @@ test('relocation authority, not input order, decides which plan owns one stable 
   assert.deepEqual(target.body.result.plan.items.map(row => row.itemId), [item.id]);
 });
 
+test('divergent equal-authority recovery destinations fail every affected read in either record order', async () => {
+  const source = 'cal1:2026-10-08';
+  const prior = { ...item, id: 'stale-source', when: '09:00', durationMinutes: 30 };
+  const destinations = ['cal1:2026-10-09', 'cal1:2026-10-10'];
+  const moved = destinations.map((day, index) => ({ ...prior, id: `carry-${index}`, task: `Different ${index}`,
+    carriedFromId: prior.id, carriedFromDayId: source,
+    relocationRevision: { schemaVersion: 1, sequence: 1, fromDayId: source, toDayId: day, updatedBy: 'fixture' } }));
+  for (const order of [destinations, [...destinations].reverse()]) {
+    const calendarPlans = Object.fromEntries([[source, { timezone: 'UTC', items: [prior] }],
+      ...order.map(day => [day, { timezone: 'UTC', items: [moved[destinations.indexOf(day)]] }])]);
+    const data = rooms({ calendarPlans });
+    for (const [kind, parameters] of [['get_plan', {}], ['get_today', {}], ['get_intelligence', {}],
+      ['get_item', { source: 'plan', id: moved[0].id, target: TARGET }]]) {
+      const response = await query(harness({ rooms: data, nowMs: NOW }), kind, parameters);
+      assert.equal(response.body.error?.code, 'CONFLICT', `${kind}: ${JSON.stringify(response.body)}`);
+      assert.ok(!('result' in response.body));
+    }
+  }
+});
+
+test('malformed and impossible relocation authority fails closed while absent and valid metadata remains readable', async () => {
+  const destination = 'cal1:2026-10-10';
+  const valid = { schemaVersion: 1, sequence: 1, fromDayId: TARGET.id, toDayId: destination, updatedBy: 'fixture' };
+  const badCases = [
+    { name: 'invalid revision', value: { ...valid, sequence: 'bad' } },
+    { name: 'malformed target', value: { ...valid, toDayId: 'not-a-day' } },
+    { name: 'stale impossible reference', value: valid },
+  ];
+  for (const { name, value } of badCases) {
+    const data = rooms({ calendarPlans: { [TARGET.id]: { timezone: 'UTC', items: [{ ...item,
+      ...(name === 'stale impossible reference' ? { deleted: true } : {}), relocationRevision: value }] } } });
+    for (const [kind, parameters] of [['get_plan', {}], ['get_item', { source: 'plan', id: item.id, target: TARGET }],
+      ['get_today', {}], ['get_intelligence', {}]]) {
+      const response = await query(harness({ rooms: data, nowMs: NOW }), kind, parameters);
+      assert.equal(response.body.error?.code, 'CONFLICT', `${name} ${kind}: ${JSON.stringify(response.body)}`);
+      assert.ok(!('result' in response.body));
+    }
+  }
+  const ordinary = await query(harness({ rooms: rooms(), nowMs: NOW }), 'get_plan');
+  assert.deepEqual(ordinary.body.result.plan.items.map(row => row.itemId), [item.id]);
+  const orphan = rooms({ calendarPlans: { [destination]: { timezone: 'UTC', items: [{ ...item, relocationRevision: valid }] } } });
+  const orphanRead = await query(harness({ rooms: orphan, nowMs: NOW }), 'get_plan',
+    { target: { store: 'calendar', id: destination } });
+  assert.equal(orphanRead.body.error?.code, 'CONFLICT');
+  const data = rooms({ calendarPlans: {
+    [TARGET.id]: { timezone: 'UTC', items: [{ ...item, deleted: true, movedToDayId: destination, relocationRevision: valid }] },
+    [destination]: { timezone: 'UTC', items: [{ ...item, relocationRevision: valid }] },
+  } });
+  const source = await query(harness({ rooms: data, nowMs: NOW }), 'get_item', { source: 'plan', id: item.id, target: TARGET });
+  assert.equal(source.body.result.state, 'tombstoned');
+  const target = await query(harness({ rooms: data, nowMs: NOW }), 'get_plan', { target: { store: 'calendar', id: destination } });
+  assert.deepEqual(target.body.result.plan.items.map(row => row.itemId), [item.id]);
+});
+
 test('a fenced Brain Dump item wins over an older same-ID plan-array copy', async () => {
   const id = 'bdp1|bcap0001';
   const old = { id, task: 'Old array copy', when: '', done: false, updatedAt: 1, updatedBy: 'old' };

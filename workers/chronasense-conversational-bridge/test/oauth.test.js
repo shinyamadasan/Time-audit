@@ -81,3 +81,28 @@ test('token grant requires the canonical resource but no Access assertion', asyn
     body: new URLSearchParams({ grant_type: 'authorization_code', resource: RESOURCE, padding: 'x'.repeat(9000) }) });
   assert.equal((await rejectInvalidTokenResource(oversized)).status, 413);
 });
+
+test('Access-gated consent POST accepts 8192 bytes, rejects 8193 and malformed form safely', async () => {
+  const calls = [];
+  const oauth = {
+    async approveConsent(_request, handle) { calls.push(['approve', handle]); return { request: { scope: [READ_SCOPE], resource: RESOURCE }, headers: new Headers() }; },
+    async denyConsent(_request, handle) { calls.push(['deny', handle]); return { headers: new Headers() }; },
+    async completeAuthorization() { calls.push(['complete']); return { redirectTo: 'https://client.test/callback' }; },
+  };
+  const send = async (body, headers = {}) => handleDefaultRequest(new Request(`${ISSUER}/authorize`, {
+    method: 'POST', body, headers }), { ...env, OAUTH_PROVIDER: oauth }, deps);
+  const exact = `handle=${'x'.repeat(8192 - 'handle='.length)}`;
+  assert.equal((await send(exact)).status, 401);
+  assert.deepEqual(calls, []);
+  const auth = { 'Cf-Access-Jwt-Assertion': await assertion(), 'Content-Type': 'application/x-www-form-urlencoded' };
+  assert.equal((await send(exact, auth)).status, 302);
+  assert.deepEqual(calls, [['deny', 'x'.repeat(8192 - 'handle='.length)]]);
+  calls.length = 0;
+  assert.equal((await send(exact + 'x', auth)).status, 413);
+  assert.deepEqual(calls, []);
+  assert.equal((await send('handle=x&decision=approve', { ...auth, 'Content-Type': 'text/plain' })).status, 400);
+  assert.equal((await send('incomplete multipart', { ...auth, 'Content-Type': 'multipart/form-data; boundary=x' })).status, 400);
+  assert.deepEqual(calls, []);
+  assert.equal((await send('handle=x&decision=approve', auth)).status, 302);
+  assert.deepEqual(calls, [['approve', 'x'], ['complete']]);
+});

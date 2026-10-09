@@ -110,6 +110,12 @@ repository root) resolves and runs.
 
 ## Response size
 
+Each user-scoped RTDB collection response is also limited to 1 MiB of UTF-8 source bytes, measured while
+streaming and before JSON parsing. This fixed read model needs complete collections to resolve plan and
+recovery authority; a larger collection fails whole with `DOMAIN_LIMIT` (`reason: source-too-large`,
+`details.limitBytes: 1048576`). The source cap bounds one fetch independently of the API response cap and
+can be revised if the read model changes. No collection is truncated.
+
 §5's 64 KiB maximum applies to responses as well as requests, inclusively (65,536 bytes allowed). It is measured in
 UTF-8 bytes of the exact JSON payload `index.js` sends. A complete result that does not fit is refused whole with
 `DOMAIN_LIMIT` (HTTP 422, `details.limitBytes: 65536`, not retryable) — never truncated into a partial list.

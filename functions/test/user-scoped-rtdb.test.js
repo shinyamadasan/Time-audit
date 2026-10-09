@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { AuthorityBoundaryViolation } from '../src/errors.js';
-import { createIdTokenProvider, createUserScopedRtdb } from '../src/user-scoped-rtdb.js';
+import { createIdTokenProvider, createUserScopedRtdb, MAX_SOURCE_BODY_BYTES } from '../src/user-scoped-rtdb.js';
 
 const UID = 'ownerUid123';
 const IDENTITY = Object.freeze({ firebaseUid: UID, roomId: `uid_${UID}` });
@@ -95,4 +95,22 @@ test('unknown outcomes are RETRYABLE_TRANSPORT, never absent: network failure, 5
     const rtdb = createUserScopedRtdb({ databaseUrl: 'https://x.firebaseio.com', fetch: recordingFetch(respond), idTokens: { getIdToken: async () => 't' } });
     await assert.rejects(rtdb.readRoomCollection(IDENTITY, 'brainDump'), error => error.code === 'RETRYABLE_TRANSPORT');
   }
+});
+
+test('domain source bytes have an inclusive bound independent of the serialized output limit', async () => {
+  const read = (body, headers = {}) => createUserScopedRtdb({ databaseUrl: 'https://x.firebaseio.com',
+    fetch: recordingFetch(() => new Response(body, { status: 200, headers })),
+    idTokens: { getIdToken: async () => 't' } }).readRoomCollection(IDENTITY, 'brainDump');
+  const exact = JSON.stringify({ value: 'x'.repeat(MAX_SOURCE_BODY_BYTES - 12) });
+  assert.equal(Buffer.byteLength(exact), MAX_SOURCE_BODY_BYTES);
+  assert.equal((await read(exact)).value.length, MAX_SOURCE_BODY_BYTES - 12);
+  for (const headers of [{}, { 'Content-Length': '1' }]) {
+    await assert.rejects(read(exact + ' ', headers), error => error.code === 'DOMAIN_LIMIT'
+      && error.reason === 'source-too-large' && error.details.limitBytes === MAX_SOURCE_BODY_BYTES);
+  }
+  const unicode = JSON.stringify({ value: '😀'.repeat(Math.floor((MAX_SOURCE_BODY_BYTES - 12) / 4)) });
+  assert.ok(unicode.length < MAX_SOURCE_BODY_BYTES);
+  await assert.rejects(read(unicode + ' '.repeat(MAX_SOURCE_BODY_BYTES - Buffer.byteLength(unicode) + 1)),
+    error => error.code === 'DOMAIN_LIMIT');
+  assert.deepEqual(await read(JSON.stringify({ value: '😀' })), { value: '😀' });
 });

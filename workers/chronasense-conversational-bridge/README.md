@@ -5,6 +5,7 @@ This is the canonical, read-only Cloudflare OAuth/MCP Worker for `TASK-009`. It 
 ## Routes and grants
 
 - `/authorize` verifies a Cloudflare Access JWT (RS256, exact issuer/audience, `type=app`) and binds its `sub` to the configured owner subject. Email is never an identity key.
+- `/authorize` consent POST reads at most 8,192 body bytes before parsing its form, using the same inclusive form bound as `/oauth/token`.
 - `/mcp`, `/oauth/token`, and OAuth `.well-known` routes remain public to the OAuth protocol; the OAuth provider authenticates MCP bearer tokens. The `chronasense:read` scope is required on every tool call and signed again to the backend.
 - CIMD is enabled. No dynamic client registration endpoint is configured. The provider enforces S256 PKCE for public authorization-code clients.
 - Tools: `get_brain_dump`, `get_today`, `get_plan`, `get_item`, `get_intelligence`. There are no write tools or generic Firebase path inputs.
