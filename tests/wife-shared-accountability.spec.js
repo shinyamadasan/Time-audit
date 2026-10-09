@@ -363,10 +363,17 @@ test.describe('Wife/Shared Accountability V1', () => {
 
     // Alice disconnects.
     await alice.evaluate(() => removePair());
-    await bob.waitForFunction(() => !document.getElementById('partner-card').textContent.includes('Some priority'));
+    // Bob's side of the unlink completes asynchronously: Alice's removePair() deletes
+    // `pairs/<code>` only after a `once()` round-trip, and Bob tears down (clearPartnerLink)
+    // when his pair-code listener sees that deletion. The partner card never renders
+    // priority titles, so its text is no completion signal. Wait for Bob's own link state
+    // — `ta3-partner-uid` is removed in the same synchronous teardown that drops
+    // partnerShared and re-renders the card — then assert nothing stale remains.
+    await bob.waitForFunction(() => localStorage.getItem('ta3-partner-uid') === null);
 
     const bobText = await bob.evaluate(() => document.getElementById('partner-card').textContent);
     expect(bobText).not.toContain('Some priority');
+    expect(bobText).not.toContain('ALICE');
     expect(await bob.evaluate(() => typeof partnerShared === 'undefined' ? null : partnerShared)).toBeNull();
 
     await ctxA.close(); await ctxB.close();
