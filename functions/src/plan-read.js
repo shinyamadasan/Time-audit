@@ -9,8 +9,8 @@ import { activeBoundaryRevision, legacyBoundaryRevision, normalizeBoundaryRevisi
 import { mergeOperationalPlanRecords, resolvePlanAuthority, validateOperationalPlanItemRange } from '../shared/operational-plan-model.js';
 import { localPlanDate, mergeDatePlans, validPlanDate, validPlanTimezone } from '../shared/plan-tomorrow-model.js';
 import { captureIdOfPlanItem, isFencedItem, mergeFencedItem, physicalTargetKey } from '../shared/plan-item-origin.js';
-import { canonicalPlanItemRelocations, planItemIsActiveInDay } from '../shared/plan-item-relocation.js';
-import { collectStaleUnfinished } from '../shared/stale-plan-recovery-model.js';
+import { canonicalPlanItemRelocations, normalizePlanItemRelocation, planItemIsActiveInDay } from '../shared/plan-item-relocation.js';
+import { collectRecoveryConflicts, collectStaleUnfinished } from '../shared/stale-plan-recovery-model.js';
 import { canonicalize } from './canonical-json.js';
 import { ApiError } from './errors.js';
 
@@ -73,6 +73,26 @@ function planItems(rawItems, canonical, targetId, store, targetKey, date, ref, h
       revision: revision({ v: 1, store, targetKey, item }) });
   }
   return projected.sort((a, b) => compare(a.itemId, b.itemId));
+}
+
+function validateRelocations(dayRecords) {
+  const validDay = id => validDate(id) || !!parseCalendarPlanId(id) || !!parseOperationalDayId(id);
+  for (const [dayId, record] of Object.entries(dayRecords)) {
+    for (const item of record.items) {
+      if (!Object.hasOwn(item, 'relocationRevision')) continue;
+      const relocation = normalizePlanItemRelocation(item);
+      if (!relocation || !validDay(relocation.fromDayId) || !validDay(relocation.toDayId)
+          || (dayId !== relocation.fromDayId && dayId !== relocation.toDayId)
+          || (item.movedToDayId !== undefined && item.movedToDayId !== relocation.toDayId)
+          || (item.carriedFromDayId !== undefined && item.carriedFromDayId !== relocation.fromDayId)) {
+        throw malformed('plan relocation');
+      }
+      if (dayId === relocation.fromDayId && !dayRecords[relocation.toDayId]?.items.some(candidate =>
+        candidate.id === item.id && normalizePlanItemRelocation(candidate))) throw malformed('plan relocation');
+      if (dayId === relocation.toDayId && !dayRecords[relocation.fromDayId]?.items.some(candidate =>
+        candidate.id === (item.carriedFromId || item.id))) throw malformed('plan relocation');
+    }
+  }
 }
 
 export async function createPlanRead(identity, { domain, nowMs }) {
@@ -149,6 +169,8 @@ export async function createPlanRead(identity, { domain, nowMs }) {
         dayRecords[id] = { items: rawPlanItems(stored[physicalKey], fenced[physicalKey], kind, id, physicalKey) };
       }
     }
+    validateRelocations(dayRecords);
+    if (collectRecoveryConflicts(dayRecords).length) throw malformed('plan recovery');
     const canonical = canonicalPlanItemRelocations(dayRecords);
     return { stores, fences, dayRecords, canonical };
     })();

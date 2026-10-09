@@ -19,9 +19,36 @@ const READABLE_COLLECTIONS = new Set([
   'operationalPlanFences', 'planFences', 'entries', 'commitments', 'coarseLifeEvidence',
 ]);
 const TOKEN_EXCHANGE_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken';
+// Fixed read model: cap each complete RTDB collection at 1 MiB before parsing; the separate API result cap is 64 KiB.
+export const MAX_SOURCE_BODY_BYTES = 1024 * 1024;
 
 const transport = reason => new ApiError('RETRYABLE_TRANSPORT', 'ChronaSense data is temporarily unavailable.', { reason });
 const denied = reason => new ApiError('FORBIDDEN', 'ChronaSense account access was refused.', { reason });
+const sourceTooLarge = () => new ApiError('DOMAIN_LIMIT', 'The complete source collection exceeds the 1 MiB read limit; no partial result is returned.',
+  { reason: 'source-too-large', details: { limitBytes: MAX_SOURCE_BODY_BYTES } });
+
+async function boundedSourceJson(response) {
+  const reader = response.body?.getReader();
+  if (!reader) throw transport('domain-read-body');
+  const bytes = new Uint8Array(MAX_SOURCE_BODY_BYTES);
+  let length = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (length + value.length > MAX_SOURCE_BODY_BYTES) {
+        void reader.cancel().catch(() => {});
+        throw sourceTooLarge();
+      }
+      bytes.set(value, length);
+      length += value.length;
+    }
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, length)));
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw transport('domain-read-body');
+  }
+}
 
 function jwtSubject(idToken) {
   try {
@@ -91,7 +118,7 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
       } catch { throw transport('domain-read-network'); }
       if (response.status === 401 || response.status === 403) throw denied(`domain-read-${response.status}`);
       if (response.status !== 200) throw transport(`domain-read-${response.status}`);
-      try { return JSON.parse(await response.text()); } catch { throw transport('domain-read-body'); }
+      return boundedSourceJson(response);
     },
   });
 }

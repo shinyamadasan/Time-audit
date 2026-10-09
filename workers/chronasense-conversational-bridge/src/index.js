@@ -146,8 +146,16 @@ async function beginAuthorization(request, oauth, ownerSubject) {
 
 async function finishAuthorization(request, oauth, ownerSubject) {
   if (!oauth) return textResponse('OAuth provider is unavailable.', 503);
+  let form;
   try {
-    const form = await request.formData();
+    const bytes = await readBoundedFormBytes(request);
+    form = await new Request(request.url, { method: 'POST',
+      headers: { 'Content-Type': request.headers.get('Content-Type') || '' }, body: bytes }).formData();
+  } catch (error) {
+    if (error instanceof FormBodyTooLarge) return textResponse('Authorization request is too large.', 413);
+    return textResponse('The authorization form is invalid.', 400);
+  }
+  try {
     const handle = String(form.get('handle') || '');
     if (form.get('decision') !== 'approve') {
       const denied = await oauth.denyConsent(request, handle);
@@ -254,23 +262,14 @@ function escapeHtml(value) {
 export async function rejectInvalidTokenResource(request) {
   if (new URL(request.url).pathname !== '/oauth/token' || request.method !== 'POST') return null;
   if (!/^application\/x-www-form-urlencoded(?:\s*;|\s*$)/i.test(request.headers.get('Content-Type') || '')) return textResponse('Invalid token request.', 400);
-  if (Number(request.headers.get('Content-Length')) > MAX_TOKEN_FORM_BYTES) return textResponse('Token request is too large.', 413);
   let form;
   try {
-    const reader = request.clone().body.getReader();
-    const bytes = new Uint8Array(MAX_TOKEN_FORM_BYTES);
-    let length = 0;
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (length + value.length > MAX_TOKEN_FORM_BYTES) {
-        return textResponse('Token request is too large.', 413);
-      }
-      bytes.set(value, length);
-      length += value.length;
-    }
-    form = new URLSearchParams(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, length)));
-  } catch { return textResponse('Invalid token request.', 400); }
+    const bytes = await readBoundedFormBytes(request.clone());
+    form = new URLSearchParams(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch (error) {
+    if (error instanceof FormBodyTooLarge) return textResponse('Token request is too large.', 413);
+    return textResponse('Invalid token request.', 400);
+  }
   if (!['authorization_code', 'refresh_token'].includes(String(form.get('grant_type') || ''))) return null;
   const resources = form.getAll('resource').map(String);
   if (resources.length === 1 && resources[0] === RESOURCE) return null;
@@ -278,6 +277,27 @@ export async function rejectInvalidTokenResource(request) {
     status: 400,
     headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' }
   });
+}
+
+class FormBodyTooLarge extends Error {}
+
+async function readBoundedFormBytes(request) {
+  if (Number(request.headers.get('Content-Length')) > MAX_TOKEN_FORM_BYTES) throw new FormBodyTooLarge();
+  const reader = request.body?.getReader();
+  if (!reader) throw new TypeError('Missing form body.');
+  const bytes = new Uint8Array(MAX_TOKEN_FORM_BYTES);
+  let length = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (length + value.length > MAX_TOKEN_FORM_BYTES) {
+      void reader.cancel().catch(() => {});
+      throw new FormBodyTooLarge();
+    }
+    bytes.set(value, length);
+    length += value.length;
+  }
+  return bytes.subarray(0, length);
 }
 
 function textResponse(message, status) {

@@ -10,7 +10,13 @@ All five kinds use the existing HMAC envelope, subject→UID binding, nonce clai
 
 Plan targets preserve calendar-native `cal1:` IDs, personal-day operational IDs and legacy date IDs. The no-target read follows current routing; an exact target can still inspect a historical legacy record superseded by calendar cutover, so an open-loop item remains addressable. Calendar item instants use their frozen item timezone and day offset; plan home intervals use the plan's frozen timezone. Operational items and stale unfinished plans use the existing boundary and recovery models. Deterministic item ordering, revisions and source references make reads traceable. Device-local routine completion and live timer state are explicitly unevaluated in server Intelligence reads.
 
-The fenced Brain Dump child wins over a stale same-ID plan-array copy under the shipped fence merge rule. ID-only deleted entry tombstones are recognized and excluded from actual evidence. Full fixed collections are read for these views; an oversized response is refused whole with `DOMAIN_LIMIT` rather than truncated into a misleading partial result.
+The fenced Brain Dump child wins over a stale same-ID plan-array copy under the shipped fence merge rule. ID-only deleted entry tombstones are recognized and excluded from actual evidence. Full fixed collections are read for these views; a collection above 1 MiB of source bytes or a response above 64 KiB is refused whole with `DOMAIN_LIMIT` rather than truncated into a misleading partial result.
+
+## CR-001..CR-004 targeted strict-review repair
+
+On top of reviewed tip `7ea76d611b6878de3ca65f13d34917c39ddd6047`, the server now checks the canonical recovery conflict projection and validates present relocation metadata against its recorded day and source/destination references before projecting any plan, Today or Intelligence result. Contradictory equal-authority recovery candidates and malformed or impossible relocation claims return typed `CONFLICT`, including when `get_item` names a candidate. Fenced child and tombstone precedence still apply before these checks. Valid moves and metadata-free items retain their prior behavior.
+
+The user-scoped RTDB transport streams at most 1 MiB per complete collection before JSON parsing and refuses larger sources with typed `DOMAIN_LIMIT`; the independent 64 KiB serialized response limit remains. The Worker bounds `/authorize` consent POST at the existing 8,192-byte token-form limit before form parsing, after Access verification. No read contract shape, HMAC/nonce rule, OAuth scope, MCP tool, production configuration or domain write changed.
 
 ## Worker
 
@@ -32,4 +38,4 @@ Separately authorize and configure Firebase rules and Action API deployment in t
 
 ## Verification
 
-Local and hosted gate results are recorded in `TEST_REPORT.md` and the TASK-009 entry in `TASKS.md`. Draft PR #5's hosted run 37961309632 passed both jobs on the functional candidate. No real account data or production route was used by local tests.
+Local gate results are recorded in `TEST_REPORT.md` and the TASK-009 entry in `TASKS.md`. Draft PR #5's run 37961309632 passed both jobs on the earlier functional candidate; the targeted repair needs both hosted jobs on its new exact tip. No real account data or production route was used by local tests.

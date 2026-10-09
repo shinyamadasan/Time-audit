@@ -4690,3 +4690,14 @@ changed:
 tests: see TASK-009 in TEST_REPORT.md.
 deviations: no production deployment or mutation; real Access sub and service secrets remain deployment-phase configuration.
 → status set to `review` in TASKS.md after hosted CI passed; no merge or deployment.
+
+## TASK-009 — CR-001..CR-004 targeted strict-review repair (branch: task-009-conversational-read-v1, 2026-10-09)
+reviewed tip: `7ea76d611b6878de3ca65f13d34917c39ddd6047`; base remains `a32dae209d1a95a13d9df832a7177992cfff205a`.
+changed:
+  - CR-001: Function plan read invokes the shipped recovery-conflict projection before returning plan, Today, Intelligence or plan-item truth. Equal-authority divergent destinations now return typed `CONFLICT`, independent of record order.
+  - CR-002: Function validates every present relocation revision after fenced-item merge and checks its day identity and source/destination references. Malformed and impossible claims return typed `CONFLICT`; valid moves, absent metadata, fenced precedence and tombstones retain their behavior.
+  - CR-003: user-scoped RTDB collection reads have an inclusive 1 MiB source-byte cap during streaming, before JSON parse. Exceeding it returns `DOMAIN_LIMIT` for the complete read; the separate 64 KiB serialized response cap remains.
+  - CR-004: Worker consent POST uses the existing inclusive 8,192-byte form bound before parsing, after Access verification. Token endpoint uses the same bounded reader; consent and read-only MCP behavior remain.
+  - Focused adversarial tests and readme/handoff notes cover the four findings and limits.
+tests: see the TASK-009 CR-001..CR-004 entry in TEST_REPORT.md. Draft PR #5 carries hosted CI for the pushed tip.
+release: no deployment, production mutation or merge. TASK-009 remains `review`.
