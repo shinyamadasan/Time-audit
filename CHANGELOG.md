@@ -4689,4 +4689,4 @@ changed:
   - TASKS.md and CONVERSATIONAL_READ_V1_HANDOFF.md — track the owner-direct milestone and strict-review handoff.
 tests: see TASK-009 in TEST_REPORT.md.
 deviations: no production deployment or mutation; real Access sub and service secrets remain deployment-phase configuration.
-→ local gates complete; TASK-009 remains `in-progress` until hosted PR CI is verified.
+→ status set to `review` in TASKS.md after hosted CI passed; no merge or deployment.

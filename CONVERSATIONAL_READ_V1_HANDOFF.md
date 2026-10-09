@@ -32,4 +32,4 @@ Separately authorize and configure Firebase rules and Action API deployment in t
 
 ## Verification
 
-Local and hosted gate results are recorded in `TEST_REPORT.md` and the TASK-009 entry in `TASKS.md` after completion. No real account data or production route was used by local tests.
+Local and hosted gate results are recorded in `TEST_REPORT.md` and the TASK-009 entry in `TASKS.md`. Draft PR #5's hosted run 37961309632 passed both jobs on the functional candidate. No real account data or production route was used by local tests.
