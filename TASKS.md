@@ -479,7 +479,7 @@ blocker:
 ---
 
 ### TASK-008 - CI stability sweep: pair-claim reload + wife-shared unlink smoke flakes
-status: codex
+status: review
 owner: codex
 source: owner-direct
 priority: P1
@@ -502,13 +502,13 @@ context:
   and is removed (or folded into a canonical spec) before commit.
 
 acceptance:
-  - [ ] Root cause of each flake established: the async/state transition involved, whether product
+  - [x] Root cause of each flake established: the async/state transition involved, whether product
         behavior is correct, whether test synchronization is wrong, whether a real production race
         exists, and the deterministic completion signal the test should wait for.
-  - [ ] Each test waits for authoritative observable state, not elapsed time or rendered text that
+  - [x] Each test waits for authoritative observable state, not elapsed time or rendered text that
         does not prove the state transition.
-  - [ ] Product semantics unchanged unless a real defect is proven (then smallest fix + regression test).
-  - [ ] Both focused tests pass repeatedly, including under the parallel load that reproduced them.
+  - [x] Product semantics unchanged unless a real defect is proven (then smallest fix + regression test).
+  - [x] Both focused tests pass repeatedly, including under the parallel load that reproduced them.
   - [ ] Surrounding Partner View / shared-accountability suites, full Playwright smoke, npm test and the
         Firebase fence/rules gates pass; candidate hosted PR CI passes; clean committed candidate.
 
@@ -520,8 +520,8 @@ constraints:
     this task's TASKS.md entry, and required CHANGELOG.md / TEST_REPORT.md evidence.
 
 verification:
-  - [ ] Focused tests with --repeat-each under multi-worker load (the reproducing configuration).
-  - [ ] Partner View / pair / wife-shared specs; npm test; npm run test:smoke; npm run test:fence.
+  - [x] Focused tests with --repeat-each under multi-worker load (the reproducing configuration).
+  - [x] Partner View / pair / wife-shared specs; npm test; npm run test:smoke; npm run test:fence.
   - [ ] git diff --check; hosted GitHub Actions green on the candidate PR.
 
 stop conditions:

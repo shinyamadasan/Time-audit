@@ -4661,3 +4661,19 @@ blockers:
 deviations: hosted CI and complete hosted logs unavailable; all local CI-equivalent gates completed. The first six-worker full smoke attempt had 8 load-sensitive unrelated failures and the four-worker attempt had one unrelated planning-continuity failure; those failures passed serially, and the full two-worker run passed all 857 tests without retries or skips.
 review: test-only diff is bounded and uses canonical date/time helpers; no Intelligence V1 or product files changed. Applicable AI QA checks and `git diff --check` pass. Coverage percentage not measured.
 → status set to `blocked` in TASKS.md
+
+## TASK-008 — CI stability sweep candidate (branch: task-008, 2026-10-09)
+changed:
+  - tests/pair-accountability.spec.js — serve the app over a throwaway local http origin (same pattern as tests/wife-shared-accountability.spec.js) instead of `file://`; the creator-reload test now asserts the reloaded page sees the persisted pair code before resuming the watch. Assertions otherwise unchanged.
+  - tests/wife-shared-accountability.spec.js — the unlink test now waits for Bob's own link teardown (`ta3-partner-uid` removed by clearPartnerLink, the same synchronous block that nulls partnerShared/partnerViewShared and re-renders the card) instead of a card-text condition; added `not.toContain('ALICE')` on the unlinked card. No product code changed.
+  - TASKS.md — recorded owner-direct TASK-008 (on resumption; worktree + temporary diagnostic predated the entry, noted in context).
+investigation:
+  - Hosted run 37863426417 (e35ed20): pair-accountability.spec.js:253 hit the 30s test timeout at the post-reload `waitForFunction(_pendingPairClaim === 'bob')` (normally ~3s); wife-shared-accountability.spec.js:342 read a non-null partnerShared (Alice's full payload). Same unlink failure in run 36254429147. Both reproduced locally at 8 workers (pair 5/40 first run, rarer later; unlink 3–10 per 50).
+  - Unlink: the partner card renders only `name · status`, never priority titles, so `!card.includes('Some priority')` was true before unlink started. Alice's removePair() deletes `pairs/<code>` after an un-awaited once() round-trip; Bob's watchPairCode listener then runs clearPartnerLink(). The test read partnerShared before that chain completed. Product teardown is correct (partnerShared is nulled together with the link); test synchronization was wrong.
+  - Pair-claim: non-perturbing probes captured the stall with rAF firing, page visible, currentUser = alice, `_pairCodeRef` null, and `localStorage['ta3-pair-code']` null on the reloaded page while the old page still held it and the DB pair record was intact. A Storage.prototype recorder showed no removeItem/clear of that key by either page; the reloaded `file://` page started with zero localStorage keys (none of the old page's) and still read null 11s later. The guarded `if (localStorage.getItem('ta3-pair-code')) watchPairCode()` therefore silently skipped and the wait could never succeed. Harness defect (divergent `file://` storage between two pages of one context under load), not a product race; app JS never removed the key.
+tests:
+  - focused (both tests, 8 workers, --repeat-each=50 × 8 rounds): 800/800 (400 each), 0 failures; pre-fix the same configuration failed every round.
+  - pair-accountability + wife-shared specs: 10/10. npm test: exit 0. npm run test:smoke -- --workers=2: 857/857. npm run test:fence: 94/94. check:www-parity: pass. git diff --check: clean.
+deviations: a default-worker (6) local full smoke run had 6 load-sensitive failures in untouched specs (timeouts / Playwright "object not bound" connection error), the same class TASK-007 recorded; the full run at CI's 2 workers passed 857/857. Temporary tests/zz-diag.spec.js and in-place probes were investigation-only and are not committed.
+release: no deploy, production mutation or merge.
+→ status set to `review` in TASKS.md
