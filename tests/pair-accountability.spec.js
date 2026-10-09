@@ -11,9 +11,41 @@
 
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import http from 'node:http';
+import { readFile } from 'node:fs/promises';
 
-const APP_URL = pathToFileURL(path.resolve('index.html')).href;
+// Served over a throwaway local static server (same pattern as
+// tests/wife-shared-accountability.spec.js), not `file://`: the reload test below relies on
+// two pages of one context sharing the creator's persisted localStorage, and under load a
+// second `file://` page was observed starting with an empty, independent localStorage (none
+// of the first page's keys, permanently), so the persisted pair code was never visible.
+const ROOT_DIR = path.resolve('.');
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
+let server;
+let APP_URL;
+
+test.beforeAll(async () => {
+  server = http.createServer(async (req, res) => {
+    try {
+      const urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+      const rel = urlPath === '/' ? 'index.html' : urlPath.replace(/^\//, '');
+      const abs = path.join(ROOT_DIR, rel);
+      if (!abs.startsWith(ROOT_DIR)) { res.writeHead(403); res.end(); return; }
+      const body = await readFile(abs);
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(abs)] || 'application/octet-stream' });
+      res.end(body);
+    } catch {
+      res.writeHead(404); res.end();
+    }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  APP_URL = `http://127.0.0.1:${port}/index.html`;
+});
+
+test.afterAll(async () => {
+  await new Promise(resolve => server.close(resolve));
+});
 
 // Minimal boot stub: enough for index.html to parse + expose its functions.
 // onAuthStateChanged(null) keeps startSync() out of the way; the tests install a
@@ -271,6 +303,9 @@ test.describe('pairing handshake (Shared Access Hardening V1)', () => {
     alice = await ctxA.newPage();
     await boot(alice, 'alice', { clearStorage: false });
     await shared.attach(alice);
+    // Precondition, asserted rather than silently guarded: the reloaded page must see the
+    // creator's persisted pair code, or resuming the watch below can never surface the claim.
+    expect(await alice.evaluate(() => localStorage.getItem('ta3-pair-code'))).toBe(code);
     await alice.evaluate(() => { if (localStorage.getItem('ta3-pair-code')) watchPairCode(); });
     await alice.waitForFunction(() => typeof _pendingPairClaim !== 'undefined' && _pendingPairClaim === 'bob');
 
