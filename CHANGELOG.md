@@ -79,6 +79,7 @@ noticed, not built:
   - The deployed URL's request path must be verified to be `/v1/query` in Phase B.
 → status set to `review` in TASKS.md
 
+
 ## ChronaSense Action API V1 architecture — ready for strict review
 
 Docs-only specification on `design/chronasense-action-api-v1`, based on verified production commit `745123d697175b314b82bd0de0dd3400679e8266`. Adds the backend/MCP boundary, identity and HMAC authentication contracts, user-scoped Firebase authority strategy, typed query/command tools, immutable action IDs, receipts/reconciliation, opaque revisions, provenance/evidence separation, explicit time handling, scopes, errors, security, phases and stop conditions. Adds Action Provenance V1 and clarifies the evidence contract without changing its semantic model. Updates CODEMAP and records proposed architecture decision #34. No runtime code, Firebase rules, deployment, production data, or release generation changed.
@@ -4677,3 +4678,34 @@ tests:
 deviations: a default-worker (6) local full smoke run had 6 load-sensitive failures in untouched specs (timeouts / Playwright "object not bound" connection error), the same class TASK-007 recorded; the full run at CI's 2 workers passed 857/857. Temporary tests/zz-diag.spec.js and in-place probes were investigation-only and are not committed.
 release: no deploy, production mutation or merge.
 → status set to `review` in TASKS.md
+
+## TASK-009 — Conversational Read V1 (branch: task-009-conversational-read-v1, 2026-10-09)
+changed:
+  - functions/src/ and functions/shared/ — extend the TASK-005 signed query pipeline with fixed Today, Plan, Item and Intelligence reads; preserve get_brain_dump, user-scoped data access, authoritative plan identity, frozen time and deterministic interpretation.
+  - scripts/functions-shared.mjs — package byte-identical root domain models needed by the deployable Function.
+  - functions/test/ and functions/README.md — add adversarial read tests and document the exact contract and known source gaps.
+  - workers/chronasense-conversational-bridge/ — add the canonical thin read-only OAuth/MCP Worker with Access-sub owner binding, dedicated OAUTH_KV and matching Action API HMAC, plus Worker tests.
+  - .github/workflows/ci.yml — require Worker tests in PR CI without any deployment.
+  - TASKS.md and CONVERSATIONAL_READ_V1_HANDOFF.md — track the owner-direct milestone and strict-review handoff.
+tests: see TASK-009 in TEST_REPORT.md.
+deviations: no production deployment or mutation; real Access sub and service secrets remain deployment-phase configuration.
+→ status set to `review` in TASKS.md after hosted CI passed; no merge or deployment.
+
+## TASK-009 — CR-001..CR-004 targeted strict-review repair (branch: task-009-conversational-read-v1, 2026-10-09)
+reviewed tip: `7ea76d611b6878de3ca65f13d34917c39ddd6047`; base remains `a32dae209d1a95a13d9df832a7177992cfff205a`.
+changed:
+  - CR-001: Function plan read invokes the shipped recovery-conflict projection before returning plan, Today, Intelligence or plan-item truth. Equal-authority divergent destinations now return typed `CONFLICT`, independent of record order.
+  - CR-002: Function validates every present relocation revision after fenced-item merge and checks its day identity and source/destination references. Malformed and impossible claims return typed `CONFLICT`; valid moves, absent metadata, fenced precedence and tombstones retain their behavior.
+  - CR-003: user-scoped RTDB collection reads have an inclusive 1 MiB source-byte cap during streaming, before JSON parse. Exceeding it returns `DOMAIN_LIMIT` for the complete read; the separate 64 KiB serialized response cap remains.
+  - CR-004: Worker consent POST uses the existing inclusive 8,192-byte form bound before parsing, after Access verification. Token endpoint uses the same bounded reader; consent and read-only MCP behavior remain.
+  - Focused adversarial tests and readme/handoff notes cover the four findings and limits.
+tests: see the TASK-009 CR-001..CR-004 entry in TEST_REPORT.md. Draft PR #5 carries hosted CI for the pushed tip.
+release: no deployment, production mutation or merge. TASK-009 remains `review`.
+
+## TASK-009 — CR-002R relocation conflict repair (branch: task-009-conversational-read-v1, 2026-10-09)
+reviewed tip: `9be724f38f46b36dd7b15a536d1321e2260e35e0`.
+changed:
+  - The existing Function relocation validator now compares normalized claims for each stable item ID at its highest sequence. Equal-sequence claims with different source or destination identities return typed `CONFLICT` before any read projection. A later valid sequence still supersedes lower claims; the canonical comparator and valid response shapes are unchanged.
+  - Focused tests reproduce the reviewed contradiction in both record orders across Plan, Item, Today and Intelligence reads, then verify a later sequence wins. Existing same-identity, ordinary-item, fenced-child, tombstone and recovery-conflict cases remain in the suite.
+tests: see TASK-009 CR-002R in TEST_REPORT.md. PR #5 carries the exact-tip hosted result.
+release: no deployment, production mutation or merge. TASK-009 remains `review`.

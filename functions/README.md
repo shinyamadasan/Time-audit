@@ -1,13 +1,25 @@
-# ChronaSense Action API V1 — backend (Phase A1)
+# ChronaSense Action API V1 — read backend
 
-> **NOT DEPLOYED.** Phase A1 (TASK-005) is a locally tested candidate only. Deploying the function or the
+> **NOT DEPLOYED.** TASK-005 and TASK-009 are locally tested candidates only. Deploying the function or the
 > rules change is a separate, separately authorized step (rules first). Nothing here has run against
 > production Firebase.
 
 Firebase Functions v2 HTTPS function `chronasenseActionApi` in `asia-southeast1`.
-Contract: [`docs/CHRONASENSE_ACTION_API_V1.md`](../docs/CHRONASENSE_ACTION_API_V1.md). Phase A1 serves exactly one
-read-only query, `get_brain_dump`, behind Worker→backend HMAC authentication. There is no write surface: every
-other `kind` (other reads, every command) is rejected as `INVALID_INPUT`.
+Contract foundation: [`docs/CHRONASENSE_ACTION_API_V1.md`](../docs/CHRONASENSE_ACTION_API_V1.md). TASK-009 extends
+the same Worker→backend HMAC query pipeline with five fixed read kinds. Every command and unknown kind remains
+`INVALID_INPUT`; there is no write surface.
+
+| Kind | Parameters | Result |
+|---|---|---|
+| `get_brain_dump` | `{}` | Unchanged TASK-005 capture list and revisions. |
+| `get_today` | `{}` | Current authoritative plan target plus derived attention and explicit unknowns. |
+| `get_plan` | `{}` or `{ "target": { "store": "calendar", "id": "<exact plan ID>" } }` (store may also be `legacy` or `operational`) | Current or exact authoritative plan, stable item IDs, frozen calendar times, record state and revision. |
+| `get_item` | `{ "source": "brain_dump", "id": "<capture ID>" }` or `{ "source": "plan", "id": "<item ID>", "target": { "store": "...", "id": "<exact plan ID>" } }` | One capture or plan item; known tombstone/relocation is distinct from `NOT_FOUND`. |
+| `get_intelligence` | `{}` | Recomputed Intelligence V1: attention, plan versus actual, recorded actuals, open loops and recent patterns, each with evidence refs. |
+
+The target ID is returned by `get_today` or `get_plan`. No parameter names an account, Firebase path or arbitrary
+collection. Missing actual evidence stays unknown. Device-local routine completion and live timer state are
+unevaluated by server reads and appear in notes. Derived Intelligence is an interpretation, not persisted truth.
 
 ## Request
 
@@ -71,6 +83,7 @@ Any missing or malformed value fails closed (every call refused).
 ```
 npm test                                  # from the repo root: includes functions/test/*.test.js
 node --test functions/test/*.test.js      # just this package (needs no functions/node_modules)
+cd workers/chronasense-conversational-bridge && npm ci && npm test  # thin OAuth/MCP Worker
 npm run test:rules-emulator               # real RTDB emulator: private-path denial, concurrent nonce claims,
                                           # indexed sweep, user-scoped + cross-account reads, end to end
 ```
@@ -80,8 +93,8 @@ Node built-ins and the packaged shared domain model only.
 
 ## Packaging the shared domain model
 
-A deploy uploads only `functions/`. The backend needs the Brain Dump domain model, whose ONLY authority is the
-repository-root `brain-dump-model.js` (+ its import `plan-item-origin.js`). `functions/shared/` holds
+A deploy uploads only `functions/`. The backend needs the Brain Dump, plan, calendar and Intelligence domain models,
+whose ONLY authority is the corresponding repository-root modules. `functions/shared/` holds
 byte-identical GENERATED copies — never edit them; edit the root file, then regenerate:
 
 ```
@@ -96,6 +109,12 @@ packaged. `test/packaging.test.js` also proves a clean copy of `functions/` (no 
 repository root) resolves and runs.
 
 ## Response size
+
+Each user-scoped RTDB collection response is also limited to 1 MiB of UTF-8 source bytes, measured while
+streaming and before JSON parsing. This fixed read model needs complete collections to resolve plan and
+recovery authority; a larger collection fails whole with `DOMAIN_LIMIT` (`reason: source-too-large`,
+`details.limitBytes: 1048576`). The source cap bounds one fetch independently of the API response cap and
+can be revised if the read model changes. No collection is truncated.
 
 §5's 64 KiB maximum applies to responses as well as requests, inclusively (65,536 bytes allowed). It is measured in
 UTF-8 bytes of the exact JSON payload `index.js` sends. A complete result that does not fit is refused whole with

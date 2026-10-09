@@ -14,6 +14,7 @@
 // Responses never echo anything unauthenticated: requestId appears only once the HMAC has verified it.
 
 import { getBrainDump } from './brain-dump-query.js';
+import { getToday, getPlan, getItem, getIntelligence } from './read-queries.js';
 import { ApiError, errorBody } from './errors.js';
 import { bindIdentity, requireScope } from './identity.js';
 import { parseQueryEnvelope } from './envelope.js';
@@ -23,7 +24,8 @@ export const CANONICAL_PATH = '/v1/query';
 /** §5 "maximum 64 KiB" applies to every API body, responses included: inclusive, 65536 bytes is allowed. */
 export const MAX_RESPONSE_BYTES = MAX_BODY_BYTES;
 
-const QUERIES = Object.freeze({ get_brain_dump: getBrainDump });
+const QUERIES = Object.freeze({ get_brain_dump: getBrainDump, get_today: getToday, get_plan: getPlan,
+  get_item: getItem, get_intelligence: getIntelligence });
 
 /**
  * @param {{keys:Map<string,Uint8Array>, owner:{ownerSubject:string, ownerFirebaseUid:string},
@@ -45,7 +47,7 @@ export function createActionApiHandler({ keys, owner, nonces, domain, now = Date
       await nonces.claim(SERVICE_IDENTITY, requestId, nowMs);
       // Bounded retention sweep; best-effort, it never decides the outcome of this request.
       nonces.sweepExpired(SERVICE_IDENTITY, nowMs).catch(() => log({ event: 'nonce-sweep-failed', requestId }));
-      const { result, authority } = await QUERIES[query.kind](identity, { domain, nowMs });
+      const { result, authority } = await QUERIES[query.kind](identity, { domain, nowMs, parameters: query.parameters });
       const body = { contractVersion: 1, requestId, kind: query.kind, result, authority };
       const payload = JSON.stringify(body);
       // §5: every API body is at most 64 KiB, measured in UTF-8 bytes of exactly what is sent. A complete result
