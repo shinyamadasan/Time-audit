@@ -46,7 +46,7 @@ function getHandler() {
   return handler;
 }
 
-export const chronasenseActionApi = onRequest({ region: 'asia-southeast1', secrets: [HMAC_KEYS] },async (req, res) => {
+export const chronasenseActionApi = onRequest({ region: 'asia-southeast1', minInstances: 0, maxInstances: 1, secrets: [HMAC_KEYS] },async (req, res) => {
   let handle;
   try { handle = getHandler(); } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
