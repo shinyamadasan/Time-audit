@@ -27,20 +27,40 @@ async function records(domain, identity, name, validate) {
   return out.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
-function entryRange(e, fallback) {
-  if (!Number.isFinite(e?.ts)) return null;
-  const segmentSeconds = Array.isArray(e.segments) ? e.segments.reduce((n, segment) => n + (Number(segment?.duration) || 0), 0) : 0;
-  const minutes = segmentSeconds > 0 ? Math.max(1, Math.round(segmentSeconds / 60))
-    : Number.isFinite(Number(e.blockIntervalMin)) && Number(e.blockIntervalMin) > 0 ? Math.round(Number(e.blockIntervalMin)) : fallback;
-  const startMs = e.tsStart ? Number(e.tsStart) : e.ts - minutes * 60000;
-  return Number.isFinite(startMs) && startMs < e.ts ? { startMs, endMs: e.ts } : null;
+function entryRange(e) {
+  if (!Number.isFinite(e?.ts) || e.ts <= 0) return null;
+  const hasStart = e.tsStart !== undefined && e.tsStart !== null;
+  if (hasStart && (!Number.isFinite(e.tsStart) || e.tsStart <= 0 || e.tsStart >= e.ts)) return null;
+  const spanMinutes = hasStart ? Math.round((e.ts - e.tsStart) / 60000) : null;
+  if (hasStart && spanMinutes <= 0) return null;
+
+  let segmentMinutes = null;
+  if (e.segments !== undefined && e.segments !== null) {
+    if (!Array.isArray(e.segments) || e.segments.some(segment => !object(segment)
+        || !Number.isFinite(segment.duration) || segment.duration <= 0)) return null;
+    if (e.segments.length) segmentMinutes = Math.round(e.segments.reduce((sum, segment) => sum + segment.duration, 0) / 60);
+    if (segmentMinutes !== null && (!Number.isFinite(segmentMinutes) || segmentMinutes <= 0)) return null;
+  }
+  let blockMinutes = null;
+  if (e.blockIntervalMin !== undefined && e.blockIntervalMin !== null) {
+    if (!Number.isFinite(e.blockIntervalMin) || e.blockIntervalMin <= 0) return null;
+    blockMinutes = Math.round(e.blockIntervalMin);
+    if (blockMinutes <= 0) return null;
+  }
+  const minutes = spanMinutes ?? segmentMinutes ?? blockMinutes;
+  if (minutes === null || (segmentMinutes !== null && segmentMinutes !== minutes)
+      || (blockMinutes !== null && blockMinutes !== minutes)) return null;
+  const startMs = hasStart ? e.tsStart : e.ts - minutes * 60000;
+  return Number.isFinite(startMs) && startMs > 0 && startMs < e.ts ? { startMs, endMs: e.ts } : null;
 }
 
-async function entries(domain, identity, fallback) {
+async function entries(domain, identity) {
   const store = await domain.readRoomCollection(identity, 'entries');
   if (store !== null && !object(store)) throw conflict('entries');
   // The extension writes numeric keys; web sync writes e_<id> copies of those entries.
   const byId = new Map();
+  // Keep every active copy until tombstone authority is known; newer copies cannot hide bad evidence.
+  const activeCopies = [];
   for (const [key, e] of Object.entries(store || {})) {
     if (!object(e) || (typeof e.id !== 'string' && typeof e.id !== 'number')
         || (key !== `e_${e.id}` && !(e.source === 'browser-extension' && typeof e.id === 'number'
@@ -48,6 +68,7 @@ async function entries(domain, identity, fallback) {
         || (e.deleted !== undefined && e.deleted !== true)
         || (e.missed !== undefined && typeof e.missed !== 'boolean')) throw conflict('entries');
     const id = String(e.id);
+    if (e.deleted !== true && e.missed !== true) activeCopies.push({ id, entry: e });
     const prior = byId.get(id);
     if (!prior) { byId.set(id, e); continue; }
     if (typeof e.id !== typeof prior.id) throw conflict('entries');
@@ -65,11 +86,15 @@ async function entries(domain, identity, fallback) {
     if (version > priorVersion) byId.set(id, e);
     else if (version === priorVersion && !isDeepStrictEqual(e, prior)) throw conflict('entries');
   }
+  for (const { id, entry } of activeCopies) {
+    if (byId.get(id).deleted === true) continue;
+    if (typeof entry.activity !== 'string' || !entry.activity.trim() || !entryRange(entry)) throw conflict('entries');
+  }
   const out = [];
   for (const e of byId.values()) {
     if (e.deleted === true || e.missed === true) continue; // These markers assert no eligible interval.
     if (typeof e.activity !== 'string' || !e.activity.trim()) throw conflict('entries');
-    const range = entryRange(e, fallback);
+    const range = entryRange(e);
     if (!range) throw conflict('entries');
     out.push({ id: String(e.id), title: e.activity, ...range, planItemId: e.planItemId || null,
       eligible: !e.deleted && !e.missed && globalThis.hasConfirmedEnergyClassification(e) });
@@ -91,14 +116,12 @@ async function intelligenceInput(identity, { domain, nowMs }) {
   const planReader = await createPlanRead(identity, { domain, nowMs });
   const plan = await planReader.read();
   const stale = await planReader.stale();
-  const settings = await domain.readRoomCollection(identity, 'settings');
-  const fallbackMinutes = Number.isFinite(settings?.intervalMin) && settings.intervalMin > 0 ? settings.intervalMin : 30;
   const days = Array.from({ length: RECENT_DAYS }, (_, n) => {
     const date = addCalendarDays(planReader.today, -n);
     return { date, ...calendarPlanInterval(date, planReader.timezone) };
   });
   const [rawEntries, captures, commitments, coarse] = await Promise.all([
-    entries(domain, identity, fallbackMinutes),
+    entries(domain, identity),
     records(domain, identity, 'brainDump', normalizeCapture),
     records(domain, identity, 'commitments', normalizeCommitment),
     records(domain, identity, 'coarseLifeEvidence', value => { validateCoarseEvidenceRecord(value); return value; }),

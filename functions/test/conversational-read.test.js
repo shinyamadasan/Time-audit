@@ -424,6 +424,96 @@ test('entry key compatibility does not accept wrong provenance, ambiguous twins 
   assert.equal(plan.status, 200, JSON.stringify(plan.body));
 });
 
+test('malformed active entry copies cannot hide behind a newer valid copy', async () => {
+  const id = NOW - 3_600_000;
+  const valid = { id, ts: id + 1_800_000, tsStart: id, blockIntervalMin: 30,
+    activity: 'Fixture observation', source: 'browser-extension', updatedAt: id + 2_000_000 };
+  const malformed = { ...valid, blockIntervalMin: 0, updatedAt: id + 1_000_000 };
+  delete malformed.tsStart;
+  const pairs = [
+    [[String(id), malformed], [`e_${id}`, valid]],
+    [[`e_${id}`, malformed], [String(id), valid]],
+  ];
+  for (const copies of pairs) for (const ordered of [copies, [...copies].reverse()]) {
+    const data = rooms({ entries: orderedEntries(ordered) });
+    for (const kind of ['get_today', 'get_intelligence']) {
+      const response = await query(harness({ rooms: data, nowMs: NOW }), kind);
+      assert.equal(response.status, 409, `${kind}: ${JSON.stringify(response.body)}`);
+      assert.equal(response.body.error.code, 'CONFLICT');
+    }
+    const plan = await query(harness({ rooms: data, nowMs: NOW }), 'get_plan');
+    assert.equal(plan.status, 200, JSON.stringify(plan.body));
+  }
+});
+
+test('authoritative entry tombstones still mask stale malformed active copies', async () => {
+  const id = NOW - 3_600_000;
+  const malformed = { id, ts: id + 1_800_000, blockIntervalMin: 0,
+    activity: 'Fixture observation', source: 'browser-extension', updatedAt: id + 1_000_000 };
+  const tombstone = { id, deleted: true, updatedAt: id + 2_000_000 };
+  for (const copies of [
+    [[String(id), malformed], [`e_${id}`, tombstone]],
+    [[`e_${id}`, tombstone], [String(id), malformed]],
+  ]) for (const kind of ['get_today', 'get_intelligence']) {
+    const response = await query(harness({ rooms: rooms({ entries: orderedEntries(copies) }), nowMs: NOW }), kind);
+    const expected = await query(harness({ rooms: rooms({ entries: { [`e_${id}`]: tombstone } }), nowMs: NOW }), kind);
+    assert.equal(response.status, 200, `${kind}: ${JSON.stringify(response.body)}`);
+    assert.deepEqual(response.body.result, expected.body.result);
+  }
+});
+
+test('active entries require positive consistent persisted interval evidence', async () => {
+  const id = NOW - 3_600_000;
+  const valid = { id, ts: id + 1_800_000, tsStart: id, blockIntervalMin: 30,
+    activity: 'Fixture observation', updatedAt: id + 1_800_000 };
+  const zeroWithoutStart = { ...valid, blockIntervalMin: 0 };
+  delete zeroWithoutStart.tsStart;
+  const missingDuration = { ...zeroWithoutStart };
+  delete missingDuration.blockIntervalMin;
+  const malformed = {
+    zeroWithoutStart,
+    missingDuration,
+    negativeDuration: { ...zeroWithoutStart, blockIntervalMin: -30 },
+    negativeWithSpan: { ...valid, blockIntervalMin: -30 },
+    inconsistentWithSpan: { ...valid, blockIntervalMin: 15 },
+    malformedStart: { ...valid, tsStart: 'not-a-time' },
+    endBeforeStart: { ...valid, tsStart: valid.ts + 1 },
+    malformedEnd: { ...valid, ts: 'not-a-time' },
+    contradictorySegments: { ...valid, segments: [{ duration: 60 }] },
+  };
+  for (const [caseName, entry] of Object.entries(malformed)) {
+    const data = rooms({ entries: { [`e_${id}`]: entry } });
+    for (const kind of ['get_today', 'get_intelligence']) {
+      const response = await query(harness({ rooms: data, nowMs: NOW }), kind);
+      assert.equal(response.status, 409, `${caseName} ${kind}: ${JSON.stringify(response.body)}`);
+      assert.equal(response.body.error.code, 'CONFLICT');
+    }
+    const plan = await query(harness({ rooms: data, nowMs: NOW }), 'get_plan');
+    assert.equal(plan.status, 200, `${caseName}: ${JSON.stringify(plan.body)}`);
+  }
+});
+
+test('positive persisted spans and legacy duration fields remain usable without settings fallback', async () => {
+  const id = NOW - 3_600_000;
+  const entry = { id, ts: id + 1_800_000, tsStart: id, blockIntervalMin: 30,
+    activity: 'Fixture observation', updatedAt: id + 1_800_000 };
+  const storedDuration = { ...entry };
+  delete storedDuration.tsStart;
+  const explicitSpan = { ...entry };
+  delete explicitSpan.blockIntervalMin;
+  const storedSegments = { ...storedDuration, segments: [{ duration: 1_800 }] };
+  delete storedSegments.blockIntervalMin;
+  for (const valid of [
+    entry,
+    storedDuration,
+    explicitSpan,
+    storedSegments,
+  ]) for (const kind of ['get_today', 'get_intelligence']) {
+    const response = await query(harness({ rooms: rooms({ entries: { [`e_${id}`]: valid } }), nowMs: NOW }), kind);
+    assert.equal(response.status, 200, `${kind}: ${JSON.stringify(response.body)}`);
+  }
+});
+
 test('wrong signed subject, wrong scope, replay, duplicate keys and caller paths fail before any domain read', async () => {
   const h = harness({ rooms: rooms(), nowMs: NOW });
   const wrongSubject = await query(h, 'get_plan', {}, { signed: { subject: 'different-subject' } });
