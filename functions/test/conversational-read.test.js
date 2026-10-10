@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { buildActivationFact } from '../shared/calendar-plan-model.js';
 import { LEGACY_CALENDAR_DAY_REVISION_ID, legacyBoundaryRevision, operationalDayContaining, operationalDayId, proposeBoundaryRevision } from '../shared/personal-day-boundary-model.js';
 import { physicalTargetKey } from '../shared/plan-item-origin.js';
+import { entryRange } from '../src/read-queries.js';
 import { harness, OWNER, signedRequest, capture } from './support.js';
 
 const NOW = Date.UTC(2026, 9, 9, 12);
@@ -462,7 +463,7 @@ test('authoritative entry tombstones still mask stale malformed active copies', 
   }
 });
 
-test('active entries require positive consistent persisted interval evidence', async () => {
+test('active entries require positive persisted interval evidence', async () => {
   const id = NOW - 3_600_000;
   const valid = { id, ts: id + 1_800_000, tsStart: id, blockIntervalMin: 30,
     activity: 'Fixture observation', updatedAt: id + 1_800_000 };
@@ -474,12 +475,13 @@ test('active entries require positive consistent persisted interval evidence', a
     zeroWithoutStart,
     missingDuration,
     negativeDuration: { ...zeroWithoutStart, blockIntervalMin: -30 },
+    zeroWithSpan: { ...valid, blockIntervalMin: 0 },
     negativeWithSpan: { ...valid, blockIntervalMin: -30 },
-    inconsistentWithSpan: { ...valid, blockIntervalMin: 15 },
+    malformedDurationWithSpan: { ...valid, blockIntervalMin: '30' },
     malformedStart: { ...valid, tsStart: 'not-a-time' },
     endBeforeStart: { ...valid, tsStart: valid.ts + 1 },
     malformedEnd: { ...valid, ts: 'not-a-time' },
-    contradictorySegments: { ...valid, segments: [{ duration: 60 }] },
+    negativeSegment: { ...valid, segments: [{ duration: -60 }] },
   };
   for (const [caseName, entry] of Object.entries(malformed)) {
     const data = rooms({ entries: { [`e_${id}`]: entry } });
@@ -490,6 +492,29 @@ test('active entries require positive consistent persisted interval evidence', a
     }
     const plan = await query(harness({ rooms: data, nowMs: NOW }), 'get_plan');
     assert.equal(plan.status, 200, `${caseName}: ${JSON.stringify(plan.body)}`);
+  }
+});
+
+test('manual-save explicit elapsed span wins over a different positive configured block size', async () => {
+  const end = NOW - 30 * 60000;
+  for (const elapsedMinutes of [25, 45]) {
+    const entry = { id: end, ts: end, tsStart: end - elapsedMinutes * 60000,
+      blockIntervalMin: 30, date: DAY, activity: 'Manual-save fixture', energy: 'deep',
+      onPlan: true, retro: false, category: 'deep', originalLabel: 'deep', updatedAt: end };
+    assert.deepEqual(entryRange(entry), { startMs: end - elapsedMinutes * 60000, endMs: end });
+    const explicitOnly = { ...entry };
+    delete explicitOnly.blockIntervalMin;
+    const data = rooms({ entries: { [`e_${entry.id}`]: entry } });
+    const expectedData = rooms({ entries: { [`e_${entry.id}`]: explicitOnly } });
+    for (const kind of ['get_today', 'get_intelligence']) {
+      const response = await query(harness({ rooms: data, nowMs: NOW }), kind);
+      const expected = await query(harness({ rooms: expectedData, nowMs: NOW }), kind);
+      assert.equal(response.status, 200, `${elapsedMinutes}m ${kind}: ${JSON.stringify(response.body)}`);
+      assert.deepEqual(response.body.result, expected.body.result);
+      if (kind === 'get_intelligence') assert.ok(response.body.result.view.actuals.some(row => row.id === `entry:${entry.id}`));
+    }
+    const plan = await query(harness({ rooms: data, nowMs: NOW }), 'get_plan');
+    assert.equal(plan.status, 200, JSON.stringify(plan.body));
   }
 });
 

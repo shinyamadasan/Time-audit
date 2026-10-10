@@ -27,7 +27,7 @@ async function records(domain, identity, name, validate) {
   return out.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
-function entryRange(e) {
+export function entryRange(e) {
   if (!Number.isFinite(e?.ts) || e.ts <= 0) return null;
   const hasStart = e.tsStart !== undefined && e.tsStart !== null;
   if (hasStart && (!Number.isFinite(e.tsStart) || e.tsStart <= 0 || e.tsStart >= e.ts)) return null;
@@ -47,9 +47,9 @@ function entryRange(e) {
     blockMinutes = Math.round(e.blockIntervalMin);
     if (blockMinutes <= 0) return null;
   }
+  // An explicit span is elapsed evidence; positive stored durations are fallback sources, not equality claims.
   const minutes = spanMinutes ?? segmentMinutes ?? blockMinutes;
-  if (minutes === null || (segmentMinutes !== null && segmentMinutes !== minutes)
-      || (blockMinutes !== null && blockMinutes !== minutes)) return null;
+  if (minutes === null) return null;
   const startMs = hasStart ? e.tsStart : e.ts - minutes * 60000;
   return Number.isFinite(startMs) && startMs > 0 && startMs < e.ts ? { startMs, endMs: e.ts } : null;
 }
