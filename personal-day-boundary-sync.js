@@ -141,107 +141,17 @@
 
 import { appRoomOwner, createPersonalDayBoundaryRepository } from './personal-day-boundary-repository.js';
 import {
-  LEGACY_CALENDAR_DAY_REVISION_ID,
   normalizeBoundaryRevisionHistory,
   pickCanonicalRevisionId,
   revisionsAreSemanticDuplicates,
   validateBoundaryRevision,
-  validOperationalDayTimezone,
 } from './personal-day-boundary-model.js';
+import { decodeWireMap, decodeWireRevision, encodeRevisionForWire } from './personal-day-boundary-wire.js';
+export { decodeWireMap } from './personal-day-boundary-wire.js';
 
 export const DAY_BOUNDARY_REVISIONS_REMOTE_PATH = 'dayBoundaryRevisions';
 
-// ── wire-safe anchor encoding (Personal Day Boundary Wire Format V1) ────────
-//
-// Firebase RTDB deletes any object key whose value is a literal `null` — writing
-// `{effectiveFromInstant: null, ...}` at any path (top-level or nested inside a
-// larger object, via `.set()` or a value returned from `.transaction()`) leaves
-// that ONE field simply absent on every future read, never `null`. The anchor
-// revision (`personal-day-boundary-model.js`'s `legacyBoundaryRevision`) is the
-// only place this whole app ever persists a literal `null`, so it is the only
-// revision this silently corrupts — but it corrupts EVERY account's anchor, on
-// the very first push, every time: `validateBoundaryRevision` requires
-// `effectiveFromInstant === null` OR a finite number; `undefined` (the absent
-// field) satisfies neither, so `decodeRemoteHistory`/`mergeRemoteRevisions`
-// reject the anchor outright on the next read-back — including this device's
-// OWN read-back of what it just wrote. A real account was found stuck exactly
-// this way: one revision received, one rejected, no conflict — the anchor,
-// alone, permanently unappliable.
-//
-// The fix is confined to this module (the one Firebase-aware layer;
-// personal-day-boundary-model.js and -repository.js stay Firebase-agnostic, by
-// their own documented contracts, and never see a literal `null` sent over the
-// wire): encode `effectiveFromInstant: null` as an explicit, non-prunable string
-// sentinel before it is ever returned from a `.transaction()` update function,
-// and decode it back to `null` on every read — before validation, so
-// `validateBoundaryRevision`/`normalizeBoundaryRevisionHistory` never see the
-// wire representation.
-//
-// Decoding also accepts the OLD, already-corrupted shape (the field simply
-// absent) as equivalent to the sentinel — but ONLY after proving the object is
-// actually anchor-shaped, never merely "any revision missing this field is
-// probably the anchor" (an independent review's correction: that would be too
-// broad — a genuinely different, unrelated corruption that happens to also be
-// missing this one field must still fail validation, not be silently accepted
-// as a plausible anchor). Every anchor this codebase has ever created comes
-// from exactly one factory (`legacyBoundaryRevision`), which always uses the
-// reserved id `LEGACY_CALENDAR_DAY_REVISION_ID` and always sets `boundaryTime`
-// to `'00:00'` — that exact (id, boundaryTime) pair, plus a real timezone, is
-// the proof. An object missing `effectiveFromInstant` that does NOT match this
-// known shape (a different id — some other, real revision — or a boundaryTime
-// other than '00:00', or an invalid timezone) is left exactly as found, so
-// `validateBoundaryRevision` rejects it for what it actually is: malformed,
-// never quietly reinterpreted as an anchor it was never meant to be.
-const WIRE_ANCHOR_SENTINEL = 'legacy-anchor-instant';
-
-/** True only for an object that PROVES it is the anchor shape this codebase's one anchor factory
- *  produces (reserved id + boundaryTime '00:00' + a real timezone) — checked on every field except
- *  `effectiveFromInstant` itself, which is exactly the field in question. Never a generic "missing
- *  the field" guess. */
-function provablyAnchorShaped(raw) {
-  return raw.id === LEGACY_CALENDAR_DAY_REVISION_ID
-    && raw.boundaryTime === '00:00'
-    && validOperationalDayTimezone(raw.timezone);
-}
-
-/** Revision -> wire shape: `effectiveFromInstant: null` becomes the sentinel so
- *  Firebase never sees (and therefore never prunes) a literal `null`. Every
- *  other field, and every revision whose `effectiveFromInstant` is a real
- *  number, passes through unchanged. Only ever applied to a revision THIS
- *  device is about to write — an untouched sibling entry already in a
- *  transaction's remote map must never be re-encoded, or its byte shape would
- *  change without the revision itself having changed.
- *  @param {object} revision @returns {object} */
-function encodeRevisionForWire(revision) {
-  return revision.effectiveFromInstant === null ? { ...revision, effectiveFromInstant: WIRE_ANCHOR_SENTINEL } : revision;
-}
-
-/** Wire shape -> revision: the sentinel, or the field being entirely absent
- *  (`undefined` — the pre-fix corrupted shape), both rehydrate to the real
- *  `effectiveFromInstant: null` — but ONLY once `provablyAnchorShaped` confirms
- *  every OTHER field already matches the one shape this codebase's anchor
- *  factory produces. A revision that already reads `null` (e.g. seeded
- *  directly into a test double that never round-tripped through real Firebase)
- *  passes through unchanged — decoding is idempotent. Never invents validity
- *  for anything else: a raw entry that is not an object, or does not prove
- *  anchor-shaped, is returned exactly as given, for `validateBoundaryRevision`
- *  to reject on its own merits.
- *  @param {*} raw @returns {*} */
-function decodeWireRevision(raw) {
-  if (!raw || typeof raw !== 'object') return raw;
-  const missingOrSentinel = raw.effectiveFromInstant === undefined || raw.effectiveFromInstant === WIRE_ANCHOR_SENTINEL;
-  if (missingOrSentinel && provablyAnchorShaped(raw)) return { ...raw, effectiveFromInstant: null };
-  return raw;
-}
-
-/** Decodes every entry of a raw `{id: rawRevision}` map as read from Firebase
- *  (`.val()`). Keys are preserved; only values are rehydrated.
- *  @param {object} remoteMap @returns {object} */
-export function decodeWireMap(remoteMap) {
-  const decoded = {};
-  Object.entries(remoteMap || {}).forEach(([id, raw]) => { decoded[id] = decodeWireRevision(raw); });
-  return decoded;
-}
+// The shared wire codec decodes Firebase-pruned legacy anchors before validation.
 
 /** Decodes a raw remote `dayBoundaryRevisions` value (as read inside a
  *  transaction) into `{valid, revisions}`. An absent/empty map is valid-empty
@@ -419,7 +329,7 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
       // comparison/validation below — comparing a decoded local revision against a raw wire entry
       // would falsely see the (correctly-decoded) anchor as "different" or "missing" every time.
       const remoteById = remoteMap || {};
-      const decodedRemoteById = decoded.revisions.reduce((acc, r) => { acc[r.id] = r; return acc; }, {});
+      const decodedRemoteById = decoded.revisions.reduce((acc, r) => { acc[r.id] = r; return acc; }, Object.create(null));
 
       const existingSameId = decodedRemoteById[revision.id];
       if (existingSameId) {
@@ -436,7 +346,7 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
         }
         // This candidate's id is the deterministic winner: swap identity. Validated against
         // DECODED semantics; written in wire shape, with only the two touched keys encoded.
-        const swappedForValidation = { ...decodedRemoteById };
+        const swappedForValidation = Object.assign(Object.create(null), decodedRemoteById);
         delete swappedForValidation[semanticMatch.id];
         swappedForValidation[revision.id] = revision;
         try {
@@ -447,9 +357,8 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
         }
         const swapped = { ...remoteById };
         delete swapped[semanticMatch.id];
-        swapped[revision.id] = encodeRevisionForWire(revision);
         outcome = 'canonicalized';
-        return swapped;
+        return { ...swapped, [revision.id]: encodeRevisionForWire(revision) };
       }
 
       const contradiction = decoded.revisions.find(r => r.effectiveFromInstant === revision.effectiveFromInstant);
@@ -461,7 +370,7 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
       // must not have the earlier one rejected merely because remote does
       // not yet have the other one. Validated against DECODED remote semantics;
       // written in wire shape, with only this one new key encoded.
-      const localContext = repository.listAllRaw().reduce((acc, r) => { acc[r.id] = r; return acc; }, {});
+      const localContext = repository.listAllRaw().reduce((acc, r) => { acc[r.id] = r; return acc; }, Object.create(null));
       try {
         normalizeBoundaryRevisionHistory(Object.values({ ...localContext, ...decodedRemoteById, [revision.id]: revision }));
       } catch {

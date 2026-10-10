@@ -6,6 +6,7 @@ import { calendarAuthorityForDate, calendarItemInstants, calendarPlanId, calenda
   effectiveActivation, parseCalendarPlanId, validateActivationFact, validateCalendarPlanItem } from '../shared/calendar-plan-model.js';
 import { activeBoundaryRevision, legacyBoundaryRevision, normalizeBoundaryRevisionHistory,
   operationalDayContaining, operationalDayId, operationalDayInterval, parseOperationalDayId } from '../shared/personal-day-boundary-model.js';
+import { decodeWireMap } from '../shared/personal-day-boundary-wire.js';
 import { mergeOperationalPlanRecords, resolvePlanAuthority, validateOperationalPlanItemRange } from '../shared/operational-plan-model.js';
 import { localPlanDate, mergeDatePlans, validPlanDate, validPlanTimezone } from '../shared/plan-tomorrow-model.js';
 import { captureIdOfPlanItem, isFencedItem, mergeFencedItem, physicalTargetKey } from '../shared/plan-item-origin.js';
@@ -113,7 +114,7 @@ export async function createPlanRead(identity, { domain, nowMs }) {
   for (const [key, value] of Object.entries(storedHistory)) if (key !== value?.id) throw malformed('day boundary');
   let history;
   try { history = normalizeBoundaryRevisionHistory(Object.keys(storedHistory).length
-    ? Object.values(storedHistory) : [legacyBoundaryRevision(timezone)]); }
+    ? Object.values(decodeWireMap(storedHistory)) : [legacyBoundaryRevision(timezone)]); }
   catch { throw malformed('day boundary'); }
   const today = localPlanDate(nowMs, timezone);
   let dayRecordsPromise;

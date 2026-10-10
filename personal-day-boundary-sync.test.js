@@ -159,6 +159,18 @@ test('pushRevision writes a new revision into the shared collection map', async 
   assert.deepEqual(remoteMap(roomRef), { [anchor.id]: anchor, r1: revision });
 });
 
+test('pushRevision writes special revision IDs as own RTDB child keys', async () => {
+  for (const id of ['__proto__', 'constructor', 'prototype']) {
+    const roomRef = fakeRoomRef({ [DAY_BOUNDARY_REVISIONS_REMOTE_PATH]: { [anchor.id]: anchor } });
+    const { bridge } = makeBridge({ roomRef });
+    const revision = { id, boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
+    assert.deepEqual(await bridge.pushRevision(revision), { committed: true, outcome: 'committed' }, id);
+    assert.equal(Object.hasOwn(remoteMap(roomRef), id), true, id);
+    assert.deepEqual(remoteMap(roomRef)[id], revision, id);
+    assertRemoteValid(roomRef);
+  }
+});
+
 test('pushing a custom revision with no anchor anywhere (remote or local) is rejected — an anchor-less history is never valid', async () => {
   const { bridge } = makeBridge(); // empty remote, empty local storage/idGenerator context
   const revision = { id: 'r1', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: T_1800_MANILA };
@@ -408,7 +420,7 @@ test('a malformed/conflicting anchor at the reserved id fails safely without cor
   assert.deepEqual(await bridgeB.pushRevision(conflictingAnchor), { committed: false, outcome: 'conflict' });
   // Decoded: the anchor bridgeA actually wrote is the wire-safe (sentinel/pruned-null-proof)
   // shape, not the literal `null` object it was pushed as — semantically identical.
-  assert.deepEqual(decodeWireMap(remoteMap(roomRef)), { [anchor.id]: anchor });
+  assert.deepEqual(Object.entries(decodeWireMap(remoteMap(roomRef))), [[anchor.id, anchor]]);
   assertRemoteValid(roomRef);
   // The anchor ALONE is not a useful configuration to adopt (repository guard): a fresh device
   // bootstrapping from a remote that holds nothing but the anchor stays 'absent' (legacy), exactly

@@ -166,7 +166,7 @@ test('legacy user opens the upgraded app: nothing is persisted, nothing is attac
   // No operational-plan listener anywhere, and no remote boundary data.
   assert.deepEqual(device.live.liveDayIds(), []);
   assert.deepEqual(device.live.attachedDayIds(), []);
-  assert.deepEqual(remoteRevisions(roomRef), {});
+  assert.deepEqual(Object.entries(remoteRevisions(roomRef)), []);
 });
 
 test('legacy plan behavior is unchanged: reads and writes for a never-enabled account go straight to plans[dateKey]', () => {
