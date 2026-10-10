@@ -207,7 +207,7 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
       const envelope = readEnvelope(storage, key);
       const existing = envelope ? Object.values(envelope.revisions) : [legacyBoundaryRevision(canonicalTimezone)];
       const { revision, revisions } = proposeBoundaryRevision(existing, { id: idGenerator(), boundaryTime: candidate.boundaryTime, timezone: canonicalTimezone }, nowMs);
-      const nextRevisions = {};
+      const nextRevisions = Object.create(null);
       revisions.forEach(r => { nextRevisions[r.id] = r; });
       writeEnvelope(storage, key, { schemaVersion: PERSONAL_DAY_BOUNDARY_SCHEMA_VERSION, revisions: nextRevisions });
       return { revision, revisions };
@@ -258,11 +258,11 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
       const key = activeKey();
       if (key === null || !isPlainObject(remoteRecordsById)) return { changed: false, changedIds: [], rejectedIds: [], droppedIds: [], conflict: null };
       const envelope = readEnvelope(storage, key);
-      const localById = envelope ? { ...envelope.revisions } : {};
+      const localById = Object.assign(Object.create(null), envelope?.revisions);
       const changedIds = [];
       const rejectedIds = [];
       const droppedIds = [];
-      const candidateById = { ...localById };
+      const candidateById = Object.assign(Object.create(null), localById);
       Object.entries(remoteRecordsById).forEach(([id, remote]) => {
         if (!remote || typeof remote !== 'object' || remote.id !== id || !validateBoundaryRevision(remote)) { rejectedIds.push(id); return; }
         const local = localById[id];
@@ -310,7 +310,7 @@ export function createPersonalDayBoundaryRepository(deps = {}) {
       if (!normalized.some(r => r.effectiveFromInstant !== null)) {
         return { changed: false, changedIds: [], rejectedIds, droppedIds: [], conflict: null, incomplete: true };
       }
-      const nextRevisions = {};
+      const nextRevisions = Object.create(null);
       normalized.forEach(r => { nextRevisions[r.id] = r; });
       writeEnvelope(storage, key, { schemaVersion: PERSONAL_DAY_BOUNDARY_SCHEMA_VERSION, revisions: nextRevisions });
       return { changed: true, changedIds, rejectedIds, droppedIds, conflict: null };
