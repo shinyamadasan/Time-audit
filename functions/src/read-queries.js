@@ -1,4 +1,5 @@
 import '../shared/evidence-interpretation.js';
+import { isDeepStrictEqual } from 'node:util';
 import { buildIntelligence, RECENT_DAYS } from '../shared/intelligence-read-model.js';
 import { addCalendarDays } from '../shared/plan-tomorrow-model.js';
 import { calendarPlanId, calendarPlanInterval } from '../shared/calendar-plan-model.js';
@@ -38,11 +39,33 @@ function entryRange(e, fallback) {
 async function entries(domain, identity, fallback) {
   const store = await domain.readRoomCollection(identity, 'entries');
   if (store !== null && !object(store)) throw conflict('entries');
-  const out = [];
+  // The extension writes numeric keys; web sync writes e_<id> copies of those entries.
+  const byId = new Map();
   for (const [key, e] of Object.entries(store || {})) {
-    if (!object(e) || (typeof e.id !== 'string' && typeof e.id !== 'number') || key !== `e_${e.id}`
+    if (!object(e) || (typeof e.id !== 'string' && typeof e.id !== 'number')
+        || (key !== `e_${e.id}` && !(e.source === 'browser-extension' && typeof e.id === 'number'
+          && Number.isSafeInteger(e.id) && e.id > 0 && key === String(e.id)))
         || (e.deleted !== undefined && e.deleted !== true)
         || (e.missed !== undefined && typeof e.missed !== 'boolean')) throw conflict('entries');
+    const id = String(e.id);
+    const prior = byId.get(id);
+    if (!prior) { byId.set(id, e); continue; }
+    const version = e.updatedAt || e.ts;
+    const priorVersion = prior.updatedAt || prior.ts;
+    if (!Number.isFinite(version) || !Number.isFinite(priorVersion)) throw conflict('entries');
+    if (e.deleted === true && prior.deleted !== true) {
+      if (!prior.undoRestoredAt || priorVersion <= version) byId.set(id, e);
+      continue;
+    }
+    if (prior.deleted === true && e.deleted !== true) {
+      if (e.undoRestoredAt && version > priorVersion) byId.set(id, e);
+      continue;
+    }
+    if (version > priorVersion) byId.set(id, e);
+    else if (version === priorVersion && !isDeepStrictEqual(e, prior)) throw conflict('entries');
+  }
+  const out = [];
+  for (const e of byId.values()) {
     if (e.deleted === true || e.missed === true) continue; // These markers assert no eligible interval.
     if (typeof e.activity !== 'string' || !e.activity.trim()) throw conflict('entries');
     const range = entryRange(e, fallback);
