@@ -30,6 +30,10 @@ async function query(h, kind, parameters = {}, overrides = {}) {
   return h.handle(request);
 }
 
+const orderedEntries = pairs => new Proxy(Object.fromEntries(pairs), {
+  ownKeys: () => pairs.map(([key]) => key),
+});
+
 test('plan read preserves calendar target, item identity, frozen time and missing-actual uncertainty', async () => {
   const h = harness({ rooms: rooms(), nowMs: NOW });
   const plan = await query(h, 'get_plan');
@@ -353,6 +357,70 @@ test('malformed entry evidence and Unicode oversize plan fail whole reads', asyn
   const oversize = await query(harness({ rooms: huge, nowMs: NOW }), 'get_plan');
   assert.equal(oversize.body.error.code, 'DOMAIN_LIMIT');
   assert.ok(!('result' in oversize.body));
+});
+
+test('extension numeric wire keys and newer web copies produce one stable entry in either order', async () => {
+  const id = NOW - 3_600_000;
+  const raw = { id, tsStart: id, ts: id + 1_800_000, blockIntervalMin: 30,
+    activity: 'Fixture observation', category: 'waste', date: DAY, energy: 'waste',
+    originalLabel: 'waste', onPlan: false, quickLogged: true, retro: true,
+    source: 'browser-extension', browserUsage: true, updatedAt: id + 1_800_000 };
+  const newer = { ...raw, activity: 'Updated fixture observation', updatedAt: raw.updatedAt + 1 };
+  for (const kind of ['get_today', 'get_intelligence']) {
+    const expected = await query(harness({ rooms: rooms({ entries: { [`e_${id}`]: newer } }), nowMs: NOW }), kind);
+    assert.equal(expected.status, 200, JSON.stringify(expected.body));
+    for (const pairs of [[[String(id), raw], [`e_${id}`, newer]], [[`e_${id}`, newer], [String(id), raw]]]) {
+      const response = await query(harness({ rooms: rooms({ entries: orderedEntries(pairs) }), nowMs: NOW }), kind);
+      assert.equal(response.status, 200, JSON.stringify(response.body));
+      assert.deepEqual(response.body.result, expected.body.result);
+    }
+    const rawOnly = await query(harness({ rooms: rooms({ entries: { [id]: raw } }), nowMs: NOW }), kind);
+    const prefixedOnly = await query(harness({ rooms: rooms({ entries: { [`e_${id}`]: raw } }), nowMs: NOW }), kind);
+    assert.deepEqual(rawOnly.body.result, prefixedOnly.body.result);
+    const identicalTwins = await query(harness({ rooms: rooms({ entries: { [id]: raw, [`e_${id}`]: { ...raw } } }), nowMs: NOW }), kind);
+    assert.deepEqual(identicalTwins.body.result, prefixedOnly.body.result);
+  }
+});
+
+test('entry tombstones prevail over extension copies unless an explicit newer undo restored the ID', async () => {
+  const id = NOW - 3_600_000;
+  const raw = { id, tsStart: id, ts: id + 1_800_000, blockIntervalMin: 30,
+    activity: 'Fixture observation', source: 'browser-extension', updatedAt: id + 3_000_000 };
+  const tombstone = { id, ts: raw.ts, deleted: true, updatedAt: id + 2_000_000 };
+  for (const pairs of [[[String(id), raw], [`e_${id}`, tombstone]], [[`e_${id}`, tombstone], [String(id), raw]]]) {
+    const response = await query(harness({ rooms: rooms({ entries: orderedEntries(pairs) }), nowMs: NOW }), 'get_intelligence');
+    const onlyTombstone = await query(harness({ rooms: rooms({ entries: { [`e_${id}`]: tombstone } }), nowMs: NOW }), 'get_intelligence');
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.deepEqual(response.body.result, onlyTombstone.body.result);
+  }
+  const restored = { ...raw, undoRestoredAt: raw.updatedAt };
+  const result = await query(harness({ rooms: rooms({ entries: { [id]: restored, [`e_${id}`]: tombstone } }), nowMs: NOW }), 'get_intelligence');
+  const onlyRestored = await query(harness({ rooms: rooms({ entries: { [`e_${id}`]: restored } }), nowMs: NOW }), 'get_intelligence');
+  assert.deepEqual(result.body.result, onlyRestored.body.result);
+});
+
+test('entry key compatibility does not accept wrong provenance, ambiguous twins or zero-length evidence', async () => {
+  const id = NOW - 3_600_000;
+  const raw = { id, tsStart: id, ts: id + 1_800_000, blockIntervalMin: 30,
+    activity: 'Fixture observation', source: 'browser-extension', updatedAt: id + 1_800_000 };
+  const badStores = [
+    { [id]: { ...raw, source: 'other' } },
+    { [id]: { ...raw, id: id + 1 } },
+    { [id]: { ...raw, id: String(id) } },
+    { not_numeric: raw },
+    { [id]: raw, [`e_${id}`]: { ...raw, activity: 'Conflicting same-version value' } },
+    { [`e_${id}`]: { id, ts: id, tsStart: id, blockIntervalMin: 0,
+      activity: 'Zero-duration fixture', date: DAY, energy: 'deep', onPlan: false, retro: true,
+      category: 'deep', originalLabel: 'deep', updatedAt: id } },
+  ];
+  for (const entries of badStores) for (const kind of ['get_today', 'get_intelligence']) {
+    const response = await query(harness({ rooms: rooms({ entries }), nowMs: NOW }), kind);
+    assert.equal(response.status, 409, `${kind}: ${JSON.stringify(response.body)}`);
+    assert.equal(response.body.error.code, 'CONFLICT');
+    assert.equal(response.reason, 'malformed-entries');
+  }
+  const plan = await query(harness({ rooms: rooms({ entries: badStores.at(-1) }), nowMs: NOW }), 'get_plan');
+  assert.equal(plan.status, 200, JSON.stringify(plan.body));
 });
 
 test('wrong signed subject, wrong scope, replay, duplicate keys and caller paths fail before any domain read', async () => {
