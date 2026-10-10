@@ -114,6 +114,28 @@ test('mergeRemoteRevisions unions distinct revisions from two devices — arriva
   assert.equal(status.revisions.length, 3);
 });
 
+test('mergeRemoteRevisions retains special revision IDs as persisted own keys', () => {
+  const storage = memory();
+  const r = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds });
+  const anchor = { id: LEGACY_CALENDAR_DAY_REVISION_ID, boundaryTime: '00:00', timezone: MANILA, effectiveFromInstant: null };
+  const special = ['__proto__', 'constructor', 'prototype'];
+  const records = Object.fromEntries([[anchor.id, anchor], ...special.map((id, index) => [id,
+    { id, boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: Date.parse(`2026-09-${14 + index}T10:00:00Z`) }])]);
+  const result = r.mergeRemoteRevisions(records);
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.rejectedIds, []);
+  assert.deepEqual(Object.keys(JSON.parse(storage.getItem(r.key)).revisions), Object.keys(records));
+  assert.deepEqual(r.listAllRaw().map(value => value.id), Object.keys(records));
+});
+
+test('propose persists a special generated revision ID as an own key', () => {
+  const storage = memory();
+  const r = createPersonalDayBoundaryRepository({ storage, idGenerator: () => '__proto__' });
+  r.propose({ boundaryTime: '18:00', timezone: MANILA }, Date.parse('2026-09-14T00:30:00Z'));
+  assert.deepEqual(Object.keys(JSON.parse(storage.getItem(r.key)).revisions), [LEGACY_CALENDAR_DAY_REVISION_ID, '__proto__']);
+  assert.deepEqual(r.listAllRaw().map(value => value.id), [LEGACY_CALENDAR_DAY_REVISION_ID, '__proto__']);
+});
+
 test('mergeRemoteRevisions rejects (never overwrites) a same-id revision with conflicting facts', () => {
   const storage = memory();
   const r = createPersonalDayBoundaryRepository({ storage, idGenerator: seqIds });

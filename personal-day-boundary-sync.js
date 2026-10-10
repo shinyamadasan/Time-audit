@@ -329,7 +329,7 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
       // comparison/validation below — comparing a decoded local revision against a raw wire entry
       // would falsely see the (correctly-decoded) anchor as "different" or "missing" every time.
       const remoteById = remoteMap || {};
-      const decodedRemoteById = decoded.revisions.reduce((acc, r) => { acc[r.id] = r; return acc; }, {});
+      const decodedRemoteById = decoded.revisions.reduce((acc, r) => { acc[r.id] = r; return acc; }, Object.create(null));
 
       const existingSameId = decodedRemoteById[revision.id];
       if (existingSameId) {
@@ -346,7 +346,7 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
         }
         // This candidate's id is the deterministic winner: swap identity. Validated against
         // DECODED semantics; written in wire shape, with only the two touched keys encoded.
-        const swappedForValidation = { ...decodedRemoteById };
+        const swappedForValidation = Object.assign(Object.create(null), decodedRemoteById);
         delete swappedForValidation[semanticMatch.id];
         swappedForValidation[revision.id] = revision;
         try {
@@ -357,9 +357,8 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
         }
         const swapped = { ...remoteById };
         delete swapped[semanticMatch.id];
-        swapped[revision.id] = encodeRevisionForWire(revision);
         outcome = 'canonicalized';
-        return swapped;
+        return { ...swapped, [revision.id]: encodeRevisionForWire(revision) };
       }
 
       const contradiction = decoded.revisions.find(r => r.effectiveFromInstant === revision.effectiveFromInstant);
@@ -371,7 +370,7 @@ export function createPersonalDayBoundarySyncBridge(deps = {}) {
       // must not have the earlier one rejected merely because remote does
       // not yet have the other one. Validated against DECODED remote semantics;
       // written in wire shape, with only this one new key encoded.
-      const localContext = repository.listAllRaw().reduce((acc, r) => { acc[r.id] = r; return acc; }, {});
+      const localContext = repository.listAllRaw().reduce((acc, r) => { acc[r.id] = r; return acc; }, Object.create(null));
       try {
         normalizeBoundaryRevisionHistory(Object.values({ ...localContext, ...decodedRemoteById, [revision.id]: revision }));
       } catch {

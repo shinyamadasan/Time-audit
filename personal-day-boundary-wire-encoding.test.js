@@ -259,3 +259,31 @@ test('decodeWireMap leaves a real, non-null effectiveFromInstant completely unch
   const timed = { id: 'r1', boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: t };
   assert.deepEqual(decodeWireMap({ r1: timed }).r1, timed);
 });
+
+test('decodeWireMap preserves every special RTDB key as an own enumerable data entry', () => {
+  const anchor = { id: LEGACY_CALENDAR_DAY_REVISION_ID, boundaryTime: '00:00', timezone: MANILA };
+  const special = ['__proto__', 'constructor', 'prototype'];
+  const raw = Object.fromEntries([[anchor.id, anchor], ...special.map((id, index) => [id,
+    { id, boundaryTime: '18:00', timezone: MANILA, effectiveFromInstant: Date.parse(`2026-09-${14 + index}T10:00:00Z`) }])]);
+  const decoded = decodeWireMap(raw);
+  assert.deepEqual(Object.keys(decoded), Object.keys(raw));
+  assert.equal(Object.getPrototypeOf(decoded), null);
+  for (const id of special) {
+    assert.equal(Object.hasOwn(decoded, id), true, id);
+    assert.equal(Object.getOwnPropertyDescriptor(decoded, id).enumerable, true, id);
+    assert.deepEqual(decoded[id], raw[id], id);
+  }
+  assert.equal(decoded[anchor.id].effectiveFromInstant, null);
+});
+
+test('a malformed __proto__ revision survives decoding and fails canonical history validation', () => {
+  const anchor = { id: LEGACY_CALENDAR_DAY_REVISION_ID, boundaryTime: '00:00', timezone: MANILA };
+  const malformed = { id: '__proto__', boundaryTime: '18:00', timezone: MANILA }; // missing activation instant
+  const raw = Object.fromEntries([[anchor.id, anchor], ['__proto__', malformed]]);
+  assert.throws(() => normalizeBoundaryRevisionHistory(Object.values(raw)));
+  const decoded = decodeWireMap(raw);
+  assert.deepEqual(Object.keys(decoded), Object.keys(raw));
+  assert.equal(Object.hasOwn(decoded, '__proto__'), true);
+  assert.equal(decoded.__proto__, malformed);
+  assert.throws(() => normalizeBoundaryRevisionHistory(Object.values(decoded)));
+});

@@ -284,6 +284,20 @@ test('Today, Plan and Intelligence accept the production-shaped Firebase-pruned 
   }
 });
 
+test('a malformed __proto__ revision beside a valid pruned Manila anchor fails all three signed reads', async () => {
+  const anchor = { id: LEGACY_CALENDAR_DAY_REVISION_ID, boundaryTime: '00:00', timezone: 'Asia/Manila' };
+  const malformed = { id: '__proto__', boundaryTime: '18:00', timezone: 'Asia/Manila' };
+  const dayBoundaryRevisions = Object.fromEntries([[anchor.id, anchor], ['__proto__', malformed]]);
+  assert.deepEqual(Object.keys(dayBoundaryRevisions), [anchor.id, '__proto__']);
+  for (const kind of ['get_today', 'get_plan', 'get_intelligence']) {
+    const response = await query(harness({ rooms: rooms({ settings: { timezone: 'Asia/Manila', intervalMin: 30 },
+      dayBoundaryRevisions }), nowMs: NOW }), kind);
+    assert.equal(response.status, 409, `${kind}: ${JSON.stringify(response.body)}`);
+    assert.equal(response.body.error.code, 'CONFLICT');
+    assert.equal(response.reason, 'malformed-day-boundary');
+  }
+});
+
 test('the day-boundary reader still rejects missing activation on non-anchors and malformed anchor shapes', async () => {
   const anchor = { id: LEGACY_CALENDAR_DAY_REVISION_ID, boundaryTime: '00:00', timezone: 'Asia/Manila' };
   const malformed = [
