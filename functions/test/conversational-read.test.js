@@ -518,6 +518,26 @@ test('manual-save explicit elapsed span wins over a different positive configure
   }
 });
 
+test('positive sub-minute persisted spans are evidence before whole-minute interpretation', async () => {
+  const end = NOW - 30 * 60000;
+  for (const [elapsedMs, blockIntervalMin] of [[1, 0], [20_000, 0], [20_000, 0.1], [20_000, 1], [20_000, 30]]) {
+    const entry = { id: end, ts: end, tsStart: end - elapsedMs, blockIntervalMin,
+      date: DAY, activity: 'Short fixture observation', energy: 'deep', updatedAt: end };
+    assert.deepEqual(entryRange(entry), { startMs: end - elapsedMs, endMs: end });
+    const data = rooms({ entries: { [`e_${end}`]: entry } });
+    for (const kind of ['get_today', 'get_intelligence', 'get_plan']) {
+      const response = await query(harness({ rooms: data, nowMs: NOW }), kind);
+      assert.equal(response.status, 200, `${elapsedMs}ms/${blockIntervalMin} ${kind}: ${JSON.stringify(response.body)}`);
+      if (kind === 'get_intelligence') assert.ok(response.body.result.view.actuals.some(row => row.id === `entry:${end}`));
+    }
+  }
+  const shortSegments = { id: end, ts: end, segments: [{ duration: 5 }, { duration: 5 }],
+    activity: 'Short segment fixture', updatedAt: end };
+  assert.deepEqual(entryRange(shortSegments), { startMs: end - 10_000, endMs: end });
+  const segmentRead = await query(harness({ rooms: rooms({ entries: { [`e_${end}`]: shortSegments } }), nowMs: NOW }), 'get_intelligence');
+  assert.equal(segmentRead.status, 200, JSON.stringify(segmentRead.body));
+});
+
 test('positive persisted spans and legacy duration fields remain usable without settings fallback', async () => {
   const id = NOW - 3_600_000;
   const entry = { id, ts: id + 1_800_000, tsStart: id, blockIntervalMin: 30,
