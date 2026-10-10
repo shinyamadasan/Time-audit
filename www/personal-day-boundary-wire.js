@@ -28,7 +28,7 @@ export function decodeWireRevision(raw) {
 }
 
 export function decodeWireMap(remoteMap) {
-  const decoded = {};
+  const decoded = Object.create(null);
   Object.entries(remoteMap || {}).forEach(([id, raw]) => { decoded[id] = decodeWireRevision(raw); });
   return decoded;
 }
