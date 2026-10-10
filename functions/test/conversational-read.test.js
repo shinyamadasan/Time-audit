@@ -408,6 +408,7 @@ test('entry key compatibility does not accept wrong provenance, ambiguous twins 
     { [id]: { ...raw, id: id + 1 } },
     { [id]: { ...raw, id: String(id) } },
     { not_numeric: raw },
+    { [id]: raw, [`e_${id}`]: { ...raw, id: String(id) } },
     { [id]: raw, [`e_${id}`]: { ...raw, activity: 'Conflicting same-version value' } },
     { [`e_${id}`]: { id, ts: id, tsStart: id, blockIntervalMin: 0,
       activity: 'Zero-duration fixture', date: DAY, energy: 'deep', onPlan: false, retro: true,

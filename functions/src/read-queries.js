@@ -50,6 +50,7 @@ async function entries(domain, identity, fallback) {
     const id = String(e.id);
     const prior = byId.get(id);
     if (!prior) { byId.set(id, e); continue; }
+    if (typeof e.id !== typeof prior.id) throw conflict('entries');
     const version = e.updatedAt || e.ts;
     const priorVersion = prior.updatedAt || prior.ts;
     if (!Number.isFinite(version) || !Number.isFinite(priorVersion)) throw conflict('entries');
