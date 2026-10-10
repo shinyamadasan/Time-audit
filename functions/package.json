@@ -8,7 +8,7 @@
     "node": "22"
   },
   "scripts": {
-    "build": "node ../scripts/functions-shared.mjs --write",
+    "build": "node --check index.js",
     "check:shared": "node ../scripts/functions-shared.mjs",
     "test": "node ../scripts/functions-shared.mjs && node --test test/*.test.js"
   },

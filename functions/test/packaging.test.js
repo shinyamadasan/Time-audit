@@ -5,8 +5,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { builtinModules } from 'node:module';
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -39,6 +40,41 @@ function runtimeModules(dir) {
 test('the committed package is exactly the authoritative root sources', () => {
   assert.deepEqual(sharedProblems(), []);
   assert.deepEqual(readdirSync(path.join(FUNCTIONS, 'shared')).sort(), [...SHARED_FILES].sort());
+});
+
+test('the Cloud Build command runs from the isolated Functions upload source', () => {
+  const dir = cleanPackage();
+  try {
+    const { build } = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')).scripts;
+    assert.doesNotMatch(build, /\.\.[\\/]/);
+    const command = process.platform === 'win32' ? 'cmd.exe' : 'npm';
+    const args = process.platform === 'win32' ? ['/d', '/s', '/c', 'npm run build --silent'] : ['run', 'build', '--silent'];
+    execFileSync(command, args, { cwd: dir, stdio: 'pipe' });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the Firebase predeploy hook invokes the root parity gate and rejects stale uploads', () => {
+  const { functions } = JSON.parse(readFileSync(path.join(REPO, 'firebase.json'), 'utf8'));
+  assert.deepEqual(functions.predeploy, ['node scripts/functions-shared.mjs']);
+  const dir = tempDir();
+  try {
+    const scripts = path.join(dir, 'scripts');
+    const shared = path.join(dir, 'functions', 'shared');
+    mkdirSync(scripts);
+    cpSync(path.join(REPO, 'scripts', 'functions-shared.mjs'), path.join(scripts, 'functions-shared.mjs'), { recursive: true });
+    cpSync(path.join(FUNCTIONS, 'shared'), shared, { recursive: true });
+    for (const name of SHARED_FILES) cpSync(path.join(REPO, name), path.join(dir, name));
+    const check = () => execFileSync(process.execPath, ['scripts/functions-shared.mjs'], { cwd: dir, stdio: 'pipe' });
+    assert.doesNotThrow(check);
+    rmSync(path.join(shared, SHARED_FILES[0]));
+    assert.throws(check);
+    cpSync(path.join(REPO, SHARED_FILES[0]), path.join(shared, SHARED_FILES[0]));
+    writeFileSync(path.join(shared, SHARED_FILES[0]), `${readFileSync(path.join(shared, SHARED_FILES[0]), 'utf8')}\n`);
+    assert.throws(check);
+    cpSync(path.join(REPO, SHARED_FILES[0]), path.join(shared, SHARED_FILES[0]));
+    writeFileSync(path.join(shared, 'stale-model.js'), 'export {};');
+    assert.throws(check);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('parity check fails on modified, missing, stale-extra or under-packaged shared content (and tolerates only CRLF)', () => {

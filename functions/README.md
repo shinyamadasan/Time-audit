@@ -108,6 +108,9 @@ copy, an unexpected/stale file in `functions/shared/`, or an authoritative modul
 packaged. `test/packaging.test.js` also proves a clean copy of `functions/` (no `node_modules`, no tests, no
 repository root) resolves and runs.
 
+The local Firebase predeploy hook checks root-to-package parity before upload. Cloud Build then runs the
+package-local `npm run build` syntax check, which does not depend on repository-root files outside `functions/`.
+
 ## Response size
 
 Each user-scoped RTDB collection response is also limited to 1 MiB of UTF-8 source bytes, measured while
