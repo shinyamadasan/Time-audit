@@ -31,26 +31,25 @@ export function entryRange(e) {
   if (!Number.isFinite(e?.ts) || e.ts <= 0) return null;
   const hasStart = e.tsStart !== undefined && e.tsStart !== null;
   if (hasStart && (!Number.isFinite(e.tsStart) || e.tsStart <= 0 || e.tsStart >= e.ts)) return null;
-  const spanMinutes = hasStart ? Math.round((e.ts - e.tsStart) / 60000) : null;
-  if (hasStart && spanMinutes <= 0) return null;
 
-  let segmentMinutes = null;
+  let segmentMs = null;
   if (e.segments !== undefined && e.segments !== null) {
     if (!Array.isArray(e.segments) || e.segments.some(segment => !object(segment)
         || !Number.isFinite(segment.duration) || segment.duration <= 0)) return null;
-    if (e.segments.length) segmentMinutes = Math.round(e.segments.reduce((sum, segment) => sum + segment.duration, 0) / 60);
-    if (segmentMinutes !== null && (!Number.isFinite(segmentMinutes) || segmentMinutes <= 0)) return null;
+    if (e.segments.length) segmentMs = e.segments.reduce((sum, segment) => sum + segment.duration, 0) * 1000;
+    if (segmentMs !== null && (!Number.isFinite(segmentMs) || segmentMs <= 0)) return null;
   }
   let blockMinutes = null;
   if (e.blockIntervalMin !== undefined && e.blockIntervalMin !== null) {
-    if (!Number.isFinite(e.blockIntervalMin) || e.blockIntervalMin <= 0) return null;
+    if (!Number.isFinite(e.blockIntervalMin) || e.blockIntervalMin < 0
+        || (e.blockIntervalMin === 0 && (!hasStart || Math.round((e.ts - e.tsStart) / 60000) !== 0))) return null;
     blockMinutes = Math.round(e.blockIntervalMin);
-    if (blockMinutes <= 0) return null;
+    if (!hasStart && blockMinutes <= 0) return null;
   }
   // An explicit span is elapsed evidence; positive stored durations are fallback sources, not equality claims.
-  const minutes = spanMinutes ?? segmentMinutes ?? blockMinutes;
-  if (minutes === null) return null;
-  const startMs = hasStart ? e.tsStart : e.ts - minutes * 60000;
+  const durationMs = segmentMs ?? (blockMinutes === null ? null : blockMinutes * 60000);
+  if (!hasStart && durationMs === null) return null;
+  const startMs = hasStart ? e.tsStart : e.ts - durationMs;
   return Number.isFinite(startMs) && startMs > 0 && startMs < e.ts ? { startMs, endMs: e.ts } : null;
 }
 
