@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildActivationFact } from '../shared/calendar-plan-model.js';
-import { legacyBoundaryRevision, operationalDayContaining, operationalDayId, proposeBoundaryRevision } from '../shared/personal-day-boundary-model.js';
+import { LEGACY_CALENDAR_DAY_REVISION_ID, legacyBoundaryRevision, operationalDayContaining, operationalDayId, proposeBoundaryRevision } from '../shared/personal-day-boundary-model.js';
 import { physicalTargetKey } from '../shared/plan-item-origin.js';
 import { harness, OWNER, signedRequest, capture } from './support.js';
 
@@ -263,6 +263,54 @@ test('a personal-day boundary selects the operational target and preserves an ov
   assert.equal(response.body.result.plan.target.id, id);
   assert.equal(response.body.result.plan.items[0].startMs, Date.UTC(2026, 9, 8, 23));
   assert.equal(response.body.result.plan.items[0].endMs, Date.UTC(2026, 9, 9, 1));
+});
+
+test('Today, Plan and Intelligence accept the production-shaped Firebase-pruned legacy anchor', async () => {
+  const anchor = { id: LEGACY_CALENDAR_DAY_REVISION_ID, boundaryTime: '00:00', timezone: 'Asia/Manila' };
+  const timed = { id: '95ad6b59-ca56-4053-a93f-18af3f2e8e9b', boundaryTime: '18:00',
+    timezone: 'Asia/Manila', effectiveFromInstant: Date.parse('2026-09-14T10:00:00Z') };
+  for (const entries of [[[timed.id, timed], [anchor.id, anchor]], [[anchor.id, anchor], [timed.id, timed]]]) {
+    const data = rooms({ settings: { timezone: 'Asia/Manila', intervalMin: 30 },
+      dayBoundaryRevisions: Object.fromEntries(entries) });
+    const responses = [];
+    for (const kind of ['get_today', 'get_plan', 'get_intelligence']) {
+      const response = await query(harness({ rooms: data, nowMs: NOW }), kind);
+      assert.equal(response.status, 200, `${kind}: ${JSON.stringify(response.body)}`);
+      responses.push(response);
+    }
+    const [today, plan, intelligence] = responses;
+    assert.deepEqual(today.body.result.plan.target, plan.body.result.plan.target);
+    assert.deepEqual(intelligence.body.result.view.planActual.map(row => row.refs[0]?.id), [item.id]);
+  }
+});
+
+test('the day-boundary reader still rejects missing activation on non-anchors and malformed anchor shapes', async () => {
+  const anchor = { id: LEGACY_CALENDAR_DAY_REVISION_ID, boundaryTime: '00:00', timezone: 'Asia/Manila' };
+  const malformed = [
+    { ...anchor, id: 'ordinary-revision' },
+    { ...anchor, boundaryTime: '18:00' },
+    { ...anchor, timezone: 'Not/A_Zone' },
+    { ...anchor, id: 'ordinary-revision', effectiveFromInstant: 'legacy-anchor-instant' },
+  ];
+  for (const bad of malformed) {
+    const data = rooms({ dayBoundaryRevisions: { [bad.id]: bad } });
+    for (const kind of ['get_today', 'get_plan', 'get_intelligence']) {
+      const response = await query(harness({ rooms: data, nowMs: NOW }), kind);
+      assert.equal(response.status, 409, `${kind}: ${JSON.stringify(response.body)}`);
+      assert.equal(response.body.error.code, 'CONFLICT');
+    }
+  }
+  const badTimed = { id: 'timed-revision', boundaryTime: '18:00', timezone: 'Asia/Manila' };
+  const histories = [
+    { [anchor.id]: anchor, [badTimed.id]: badTimed },
+    { [anchor.id]: anchor, other: { ...anchor, id: 'other' } },
+    { wrongKey: anchor },
+  ];
+  for (const dayBoundaryRevisions of histories) {
+    const response = await query(harness({ rooms: rooms({ dayBoundaryRevisions }), nowMs: NOW }), 'get_plan');
+    assert.equal(response.status, 409, JSON.stringify(response.body));
+    assert.equal(response.body.error.code, 'CONFLICT');
+  }
 });
 
 test('calendar carryover keeps the source plan ID and next-day instant', async () => {

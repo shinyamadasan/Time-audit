@@ -10,7 +10,7 @@
 // anchor permanently unappliable, even though the account's own device had pushed it correctly.
 //
 // This file's fake room ref is the one place in the suite that actually simulates the prune, so the
-// fix (personal-day-boundary-sync.js's wire-safe sentinel encode/decode) is proven against the real
+// fix (personal-day-boundary-wire.js's shared sentinel encode/decode) is proven against the real
 // wire behavior, not just the other fakes' more forgiving in-memory semantics.
 //
 // A second concern this file covers: an independent review found the FIRST version of the decoder
