@@ -11987,14 +11987,20 @@ function exportCSV() {
 }
 
 function clearAll(){
-  if(!entries.length)return;
+  const toDelete = entries.filter(e => !e.deleted);
+  if(!toDelete.length)return;
   if(!confirm('Clear all entries? This cannot be undone.'))return;
-  entries=[];
+  const now = Date.now();
+  toDelete.forEach(e => { e.deleted = true; e.updatedAt = now; });
   persist();
-  renderToday();
-  // Delete from Firebase so entries don't sync back from other devices
+  _todayRenderKey = '__FORCE__';
+  renderToday(); renderWeek(); renderWeekTable(); renderSettings();
   const clearRef = ownedRoomRef();
-  if(clearRef) clearRef.child('entries').remove();
+  if(clearRef) {
+    const updates = {};
+    toDelete.forEach(e => { updates[`entries/e_${e.id}`] = e; });
+    clearRef.update(updates).catch(notifySyncWriteFailed);
+  }
   showToast('Cleared');
 }
 
@@ -12024,16 +12030,17 @@ function clearTodayOnly(){
   const tz = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const todayKey = getDateInTZ(Date.now(), tz);
   const isToday = e => getDateInTZ(e.tsStart || e.ts, tz) === todayKey;
-  const todayIds = new Set(entries.filter(isToday).map(e=>'e_'+e.id));
-  entries = entries.filter(e=>!isToday(e));
+  const toDelete = entries.filter(e => !e.deleted && isToday(e));
+  const now = Date.now();
+  toDelete.forEach(e => { e.deleted = true; e.updatedAt = now; });
   persist();
-  renderToday();
-  // Remove only today's entries from Firebase
+  _todayRenderKey = '__FORCE__';
+  renderToday(); renderWeek(); renderWeekTable(); renderSettings();
   const clearRef = ownedRoomRef();
-  if(clearRef && todayIds.size){
+  if(clearRef && toDelete.length){
     const updates={};
-    todayIds.forEach(id=>{ updates['entries/'+id]=null; });
-    clearRef.update(updates);
+    toDelete.forEach(e => { updates[`entries/e_${e.id}`] = e; });
+    clearRef.update(updates).catch(notifySyncWriteFailed);
   }
   showToast('Today cleared');
 }

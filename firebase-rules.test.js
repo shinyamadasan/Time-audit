@@ -328,7 +328,7 @@ test('brainDump — E. a capture\'s schemaVersion can never be lowered (old clie
 
 test('calendar barrier preserves every audited ordinary owner-write room path', () => {
   const ordinary = [
-    'timer', 'entries', 'intention', 'devices', 'settings', 'templates', 'templatesSavedAt',
+    'timer', 'intention', 'devices', 'settings', 'templates', 'templatesSavedAt',
     'breakState', 'awayState', 'reviews', 'weeklyReviews', 'focusRedemptions', 'coarseLifeEvidence',
     'dayBoundaryRevisions', 'commitments', 'planByDeadlineRevisions', 'intentionalOffDays', 'calendarPlans',
   ];
@@ -337,6 +337,9 @@ test('calendar barrier preserves every audited ordinary owner-write room path', 
     assert.equal(canWrite(root, A, `/rooms/uid_alice_uid/${child}`, { proof: child }), true, `${child} remains owner-writable`);
     assert.equal(canWrite(root, C, `/rooms/uid_alice_uid/${child}`, { proof: child }), false, `${child} remains account-isolated`);
   }
+  assert.equal(canWrite(root, A, '/rooms/uid_alice_uid/entries/e_1', { id: 1, updatedAt: 1 }), true, 'entry leaf remains owner-writable');
+  assert.equal(canWrite(root, C, '/rooms/uid_alice_uid/entries/e_1', { id: 1, updatedAt: 1 }), false, 'entry leaf remains account-isolated');
+  assert.equal(canWrite(root, A, '/rooms/uid_alice_uid/entries', { e_1: { id: 1, updatedAt: 1 } }), false, 'entries collection has no bypass grant');
   // brainDump is governed per capture (no collection grant), so it is audited at its record.
   assert.equal(canWrite(root, A, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1')), true, 'brainDump captures remain owner-writable');
   assert.equal(canWrite(root, C, '/rooms/uid_alice_uid/brainDump/cap1', bd('cap1')), false, 'brainDump captures remain account-isolated');

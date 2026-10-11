@@ -397,9 +397,9 @@ test('clearTodayOnly: an entry whose stale .date says yesterday but whose timest
     });
     persist();
     clearTodayOnly();
-    return { remaining: entries.length };
+    return { retained: entries.length, deleted: entries[0].deleted, active: getTodayEntries().length };
   });
-  expect(result.remaining).toBe(0);
+  expect(result).toEqual({ retained: 1, deleted: true, active: 0 });
 });
 
 // ════════════════════════════════════════════════════════════════════════

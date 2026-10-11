@@ -1360,10 +1360,12 @@ function startSync() {
         const entry = resolution.entry;
         if (!entry.missed && !entry.deleted) validateEntry(entry);
         entries.push(entry);
+        localMap.set(re.id, entry);
         changed = true;
       } else if (resolution.action === 'replace') {
         if (!resolution.entry.missed && !resolution.entry.deleted) validateEntry(resolution.entry);
-        Object.assign(local, resolution.entry);
+        entries[entries.indexOf(local)] = resolution.entry;
+        localMap.set(re.id, resolution.entry);
         changed = true;
       }
     });
@@ -2161,6 +2163,7 @@ function resolveEntrySync(local, remote, nowTs = Date.now()) {
     if (remoteEntry.undoRestoredAt && remoteV > localV) return { action: 'replace', entry: remoteEntry };
     return { action: 'keep-local' };
   }
+  if (!local.deleted && remoteEntry.deleted) return { action: 'replace', entry: remoteEntry };
   const remoteV = remoteEntry.updatedAt || remoteEntry.ts || 0;
   const localV  = local.updatedAt || local.ts || 0;
   return remoteV > localV ? { action: 'replace', entry: remoteEntry } : { action: 'keep-local' };
