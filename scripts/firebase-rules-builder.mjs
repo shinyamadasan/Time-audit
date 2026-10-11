@@ -221,8 +221,17 @@ export function buildRules({ without = [] } = {}) {
   const arrayItems = { items: { $i: { '.validate': legacyItemValidate } } };
 
   const ownerWrite = { '.write': OWNER };
+  const entryWrite = AND([
+    OWNER,
+    'newData.exists()',
+    OR([
+      "data.child('deleted').val() !== true",
+      AND(["newData.child('deleted').val() === true", "newData.child('updatedAt').isNumber()", "data.child('updatedAt').isNumber()", "newData.child('updatedAt').val() >= data.child('updatedAt').val()"]),
+      AND(["!newData.child('deleted').exists()", "newData.child('id').val() === data.child('id').val()", "newData.child('undoRestoredAt').isNumber()", "newData.child('updatedAt').isNumber()", "data.child('updatedAt').isNumber()", "newData.child('undoRestoredAt').val() === newData.child('updatedAt').val()", "newData.child('updatedAt').val() > data.child('updatedAt').val()"]),
+    ]),
+  ]);
   const roomChildren = {
-    timer: ownerWrite, entries: ownerWrite, intention: ownerWrite, devices: ownerWrite, settings: ownerWrite, templates: ownerWrite, templatesSavedAt: ownerWrite,
+    timer: ownerWrite, entries: { $entryId: { '.write': entryWrite } }, intention: ownerWrite, devices: ownerWrite, settings: ownerWrite, templates: ownerWrite, templatesSavedAt: ownerWrite,
     breakState: ownerWrite, awayState: ownerWrite, reviews: ownerWrite, weeklyReviews: ownerWrite, focusRedemptions: ownerWrite, coarseLifeEvidence: ownerWrite,
     dayBoundaryRevisions: ownerWrite, commitments: ownerWrite,
     // No `.write` on brainDump itself: a whole-collection write is never granted, so no parent

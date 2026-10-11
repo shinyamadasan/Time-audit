@@ -631,6 +631,92 @@ test('entry tombstones stay same-account: A\'s delete never reaches B, even for 
   expect(matching(writesUnder(await writesSinceMark(page), B), /"deleted":true/)).toEqual([]);
 });
 
+test('Clear Today retains tombstones locally and remotely while yesterday, plan, and visible totals stay intact after reload', async ({ page }) => {
+  await openApp(page);
+  await createAccountAFacts(page);
+  const yesterday = { ...aEntry, id: 111114, ts: NOW - 86400000, tsStart: NOW - 86460000, date: '2026-09-23', activity: 'A-private yesterday', updatedAt: NOW - 86400000 };
+  await page.evaluate(async entry => { entries.push(entry); persist(); await syncEntries(); window.__mark = window.__fbTest.log.writes.length; }, yesterday);
+  await page.evaluate(() => clearTodayOnly());
+  await settle(page);
+  const state = await page.evaluate(({ A, NOW }) => ({
+    local: entries.map(e => ({ id: e.id, deleted: !!e.deleted })),
+    persisted: JSON.parse(localStorage.getItem(`ta3-entries:${A}`)).map(e => ({ id: e.id, deleted: !!e.deleted })),
+    today: getTodayEntries().length,
+    intelligence: getIntelligenceAppContext(NOW, 2).entries.filter(e => e.eligible).length,
+    remoteToday: window.__fbTest.get(`rooms/${A}/entries/e_111111`),
+    remoteYesterday: window.__fbTest.get(`rooms/${A}/entries/e_111114`),
+  }), { A, NOW });
+  expect(state.local).toEqual(expect.arrayContaining([{ id: 111111, deleted: true }, { id: 111114, deleted: false }]));
+  expect(state.persisted).toEqual(state.local);
+  expect(state.today).toBe(0);
+  expect(state.intelligence).toBe(1);
+  expect(state.remoteToday.deleted).toBe(true);
+  expect(state.remoteYesterday.deleted).toBeUndefined();
+  expect((await shown(page)).plan).toEqual(['A-private task']);
+  expect((await shown(page)).todayText).not.toContain('A-private entry');
+  expect((await writesSinceMark(page)).filter(w => w.path.includes('/entries/') && w.value === null)).toEqual([]);
+  await page.reload();
+  await page.waitForFunction(() => globalThis.getChronaSenseRoomCode?.() === 'uid_account-a');
+  await settle(page);
+  expect((await shown(page)).entries).toEqual(['A-private yesterday']);
+  expect(await page.evaluate(() => getTodayEntries().length)).toBe(0);
+});
+
+test('Clear All retains existing tombstones and retries an offline atomic clear on reconnect', async ({ page }) => {
+  await openApp(page);
+  await createAccountAFacts(page);
+  const second = { ...aEntry, id: 111115, activity: 'A-private second', updatedAt: NOW - 500000 };
+  const alreadyDead = { ...aEntry, id: 111116, activity: 'A-private old tombstone', deleted: true, updatedAt: NOW - 400000 };
+  await page.evaluate(async ({ second, alreadyDead }) => { entries.push(second, alreadyDead); persist(); await syncEntries(); }, { second, alreadyDead });
+  await page.evaluate(() => {
+    window.__fbTest.setConnected(false);
+    window.__fbTest.setFailWrites(true);
+    window.confirm = () => true;
+    clearAll();
+  });
+  expect((await shown(page)).entries).toEqual([]);
+  const local = await page.evaluate(A => JSON.parse(localStorage.getItem(`ta3-entries:${A}`)), A);
+  expect(local.filter(e => e.deleted).map(e => e.id).sort()).toEqual([111111, 111115, 111116]);
+  expect(local.find(e => e.id === 111116).updatedAt).toBe(alreadyDead.updatedAt);
+  await page.evaluate(() => { window.__mark = window.__fbTest.log.writes.length; window.__fbTest.setFailWrites(false); window.__fbTest.setConnected(true); });
+  await settle(page);
+  const remote = await page.evaluate(A => window.__fbTest.get(`rooms/${A}/entries`), A);
+  expect(remote.e_111111.deleted).toBe(true);
+  expect(remote.e_111115.deleted).toBe(true);
+  expect(remote.e_111116.updatedAt).toBe(alreadyDead.updatedAt);
+  expect((await shown(page)).entries).toEqual([]);
+  expect((await writesSinceMark(page)).filter(w => w.path.includes('/entries/') && w.value === null)).toEqual([]);
+});
+
+test('another client tombstone overrides an active cache and canonical newer undo clears deleted on receipt', async ({ page }) => {
+  await openApp(page);
+  await createAccountAFacts(page);
+  await page.evaluate(({ A, active, NOW }) => {
+    entries.find(e => e.id === active.id).updatedAt = NOW + 5000;
+    window.__fbTest.remoteWrite(`rooms/${A}/entries/e_${active.id}`, { ...active, deleted: true, updatedAt: NOW + 1000 });
+  }, { A, active: aEntry, NOW });
+  await settle(page);
+  expect((await shown(page)).entries).toEqual([]);
+  await page.evaluate(({ A, active, NOW }) => {
+    window.__fbTest.remoteWrite(`rooms/${A}/entries/e_${active.id}`, { ...active, updatedAt: NOW + 6000, undoRestoredAt: NOW + 6000 });
+  }, { A, active: aEntry, NOW });
+  await settle(page);
+  expect((await shown(page)).entries).toEqual(['A-private entry']);
+  expect(await page.evaluate(() => entries.find(e => e.id === 111111).deleted)).toBeUndefined();
+});
+
+test('one listener snapshot with numeric extension and e_ copies applies the tombstone after the active copy', async ({ page }) => {
+  await openApp(page);
+  await createAccountAFacts(page);
+  await page.evaluate(({ A, active, NOW }) => {
+    window.__fbTest.seed(`rooms/${A}/entries/${active.id}`, { ...active, source: 'browser-extension', updatedAt: NOW + 500 });
+    window.__fbTest.remoteWrite(`rooms/${A}/entries/e_${active.id}`, { ...active, deleted: true, updatedAt: NOW + 1000 });
+  }, { A, active: aEntry, NOW });
+  await settle(page);
+  expect((await shown(page)).entries).toEqual([]);
+  expect(await page.evaluate(() => entries.filter(e => e.id === 111111).map(e => e.deleted))).toEqual([true]);
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Unowned pre-scoping data and device-local keys
 // ═══════════════════════════════════════════════════════════════════════════

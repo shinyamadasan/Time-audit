@@ -367,10 +367,10 @@ Deletion reason/provenance MUST distinguish cases such as:
 `tombstone.provenance` should include the explicit deletion marker, source record kind, source
 operation, adapter version, and observed source metadata. Absence-only deletion provenance is invalid.
 
-ChronaSense currently contains hard-delete behavior in `clearAll()` and `clearTodayOnly()`. V1
-adapters cannot safely infer tombstones after those records merely disappear. If Life Ledger requires
-durable deletion history for those operations, ChronaSense must later emit explicit deletion
-markers/events before adapter support can claim authoritative deletion capture.
+ChronaSense `clearAll()` and `clearTodayOnly()` now retain each affected entry with its stable ID,
+`deleted: true`, and a newer `updatedAt`. These source tombstones remain sync authority while
+ordinary views exclude them. A future Life Ledger adapter may use that explicit source marker as
+deletion evidence; absence alone still is not deletion evidence.
 
 ## Tombstones And Restores
 
@@ -1181,8 +1181,8 @@ Tombstone and absence:
 - Given a source record is deleted with an explicit source deletion signal, Life Ledger creates a
   tombstone revision instead of removing the event.
 - Given a source record is absent from one sync snapshot, no tombstone is created.
-- Given `clearAll()` or `clearTodayOnly()` hard-removes ChronaSense records without explicit
-  deletion evidence, V1 cannot create inferred historical tombstones.
+- Given `clearAll()` or `clearTodayOnly()` marks ChronaSense entries `deleted: true`, the source
+  retains explicit deletion evidence; an adapter still must not infer deletion from absence alone.
 - Given a tombstoned event exists, default statistics exclude it while explicit history queries can
   still find it by `eventId`.
 - Given an adapter crash, network failure, partial source load, or local absence occurs, no
@@ -1267,8 +1267,13 @@ Observed ChronaSense behavior relevant to implementation:
   semantic duplicates rather than only the clicked raw ID.
 - `clearSelectedDay()` tombstones entries for the selected date with `deleted: true` and
   `updatedAt`.
-- `clearAll()` hard-deletes local entries and removes the Firebase `entries` path.
-- `clearTodayOnly()` hard-deletes today's local entries and removes corresponding Firebase children.
+- `clearAll()` tombstones active entries locally and writes an atomic multipath tombstone update.
+- `clearTodayOnly()` tombstones today's active entries using the account timezone and writes an
+  atomic multipath tombstone update; other days stay active.
+- Entry rules deny physical deletion and stale reactivation of a server tombstone. A restore must
+  preserve the entry ID, remove `deleted`, and set equal `undoRestoredAt` and `updatedAt` values
+  newer than the tombstone's `updatedAt`. Old clients that hard-delete or replay stale entries
+  receive write failures until updated. Irreversible hard purge is outside TASK-009.
 - Plan items are synced per date and per item ID. Removed plan items are tombstoned with
   `deleted: true`.
 - Merged editing can splice/remove multiple source entries and replace them with one source entry.
@@ -1286,8 +1291,8 @@ Observed ChronaSense behavior relevant to implementation:
 
 Potential conflicts to resolve during implementation:
 
-- `clearAll()` and `clearTodayOnly()` hard-remove entries/Firebase paths, while authoritative Life
-  Ledger tombstones require explicit source deletion evidence.
+- Legacy clients that still hard-remove entries/Firebase paths cannot perform those clears under
+  the new entry rules and must update before their clear operations can sync.
 - Merged entry edits need explicit source semantics before removed sub-entry IDs can become
   tombstones such as `merge_replaced`.
 - Duplicate physical ChronaSense rows sharing one ID must resolve through deterministic source rules
