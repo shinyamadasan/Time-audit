@@ -55,23 +55,22 @@ test('canonical newer undo is the only tombstone-to-active path', async () => {
   assert.equal((await db.read(at('e_one'))).deleted, undefined);
 });
 
-test('legacy tombstones with missing or string updatedAt can only self-heal as the same deleted ID', async () => {
+test('unsupported malformed legacy tombstones cannot repair updatedAt or change payload', async () => {
   for (const legacyStamp of [undefined, 'legacy']) {
     const db = await fresh();
     const active = entry('one');
-    const legacy = { ...active, deleted: true };
+    const legacy = { ...active, note: 'Original note', deleted: true };
     if (legacyStamp === undefined) delete legacy.updatedAt;
     else legacy.updatedAt = legacyStamp;
     await db.seed(at('e_one'), legacy);
     assert.equal(await db.write(at('e_one'), active), false, 'no ordinary resurrection');
     assert.equal(await db.write(at('e_one'), undo(active)), false, 'legacy timestamp cannot bypass newer-undo check');
     assert.equal(await db.write(at('e_one'), null), false, 'no physical delete');
-    assert.equal(await db.write(at('e_one'), { ...tombstone(active), id: 'other' }), false, 'ID stays stable');
-    assert.equal(await db.write(at('e_one'), tombstone(active)), true, 'canonical tombstone self-heals timestamp');
-    assert.deepEqual(await db.read(at('e_one')), tombstone(active));
-    assert.equal(await db.write(at('e_one'), tombstone(active, 1900)), false, 'numeric non-regression resumes');
-    assert.equal(await db.write(at('e_one'), active), false, 'still cannot resurrect without undo');
-    assert.equal(await db.write(at('e_one'), undo(active)), true, 'canonical newer undo remains allowed');
+    assert.equal(await db.write(at('e_one'), tombstone(legacy)), false, 'timestamp-only repair denied');
+    assert.equal(await db.write(at('e_one'), { ...tombstone(legacy), activity: 'Changed' }), false, 'activity change denied');
+    assert.equal(await db.write(at('e_one'), { ...tombstone(legacy), tsStart: 101 }), false, 'tsStart change denied');
+    assert.equal(await db.write(at('e_one'), { ...tombstone(legacy), note: 'Changed note' }), false, 'ordinary payload change denied');
+    assert.deepEqual(await db.read(at('e_one')), legacy);
   }
 });
 

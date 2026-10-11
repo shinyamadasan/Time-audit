@@ -226,10 +226,7 @@ export function buildRules({ without = [] } = {}) {
     'newData.exists()',
     OR([
       "data.child('deleted').val() !== true",
-      AND(["newData.child('deleted').val() === true", "newData.child('updatedAt').isNumber()", OR([
-        AND(["data.child('updatedAt').isNumber()", "newData.child('updatedAt').val() >= data.child('updatedAt').val()"]),
-        AND(["!data.child('updatedAt').isNumber()", "data.child('id').exists()", "newData.child('id').val() === data.child('id').val()"]),
-      ])]),
+      AND(["newData.child('deleted').val() === true", "newData.child('updatedAt').isNumber()", "data.child('updatedAt').isNumber()", "newData.child('updatedAt').val() >= data.child('updatedAt').val()"]),
       AND(["!newData.child('deleted').exists()", "newData.child('id').val() === data.child('id').val()", "newData.child('undoRestoredAt').isNumber()", "newData.child('updatedAt').isNumber()", "data.child('updatedAt').isNumber()", "newData.child('undoRestoredAt').val() === newData.child('updatedAt').val()", "newData.child('updatedAt').val() > data.child('updatedAt').val()"]),
     ]),
   ]);
