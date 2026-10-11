@@ -11979,9 +11979,10 @@ function repairDataDoctorFlaggedEntries() {
 }
 
 function exportCSV() {
-  if (!entries.length){showToast('No entries to export');return;}
+  const activeEntries = entries.filter(e => !e.deleted);
+  if (!activeEntries.length){showToast('No entries to export');return;}
   const rows=[['Date','Time','Activity','Energy','On Plan','DEA-P','$/hr','Note']];
-  entries.forEach(e=>rows.push([e.date,localTime(e.ts),`"${e.activity.replace(/"/g,'""')}"`,e.energy,e.onPlan===null?'':e.onPlan?'yes':'no',e.deap||'',e.rate||'',`"${(e.note||'').replace(/"/g,'""')}"`]));
+  activeEntries.forEach(e=>rows.push([e.date,localTime(e.ts),`"${e.activity.replace(/"/g,'""')}"`,e.energy,e.onPlan===null?'':e.onPlan?'yes':'no',e.deap||'',e.rate||'',`"${(e.note||'').replace(/"/g,'""')}"`]));
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'})),download:`time-audit-${toDateKey(new Date())}.csv`});
   a.click(); showToast('CSV exported ✓');
 }

@@ -244,6 +244,16 @@ const shown = page => page.evaluate(TODAY => ({
   todayText: document.getElementById('view-today')?.innerText || '',
 }), TODAY);
 
+const exportedCsv = page => page.evaluate(async () => {
+  const originalUrl = URL.createObjectURL;
+  const originalClick = HTMLAnchorElement.prototype.click;
+  let csv = null;
+  URL.createObjectURL = blob => { csv = blob.text(); return 'blob:test-export'; };
+  HTMLAnchorElement.prototype.click = () => {};
+  try { exportCSV(); return csv ? await csv : null; }
+  finally { URL.createObjectURL = originalUrl; HTMLAnchorElement.prototype.click = originalClick; }
+});
+
 async function visibleTextAcrossViews(page) {
   let text = '';
   for (const view of ['today', 'week', 'settings']) {
@@ -715,6 +725,44 @@ test('one listener snapshot with numeric extension and e_ copies applies the tom
   await settle(page);
   expect((await shown(page)).entries).toEqual([]);
   expect(await page.evaluate(() => entries.filter(e => e.id === 111111).map(e => e.deleted))).toEqual([true]);
+});
+
+test('CSV exports active rows only, including after Clear Today', async ({ page }) => {
+  await openApp(page);
+  await createAccountAFacts(page);
+  const baseline = await exportedCsv(page);
+  const yesterday = { ...aEntry, id: 111117, ts: NOW - 86400000, tsStart: NOW - 86460000, date: '2026-09-23', activity: 'CSV yesterday' };
+  const oldTombstone = { ...aEntry, id: 111118, activity: 'CSV deleted', deleted: true };
+  await page.evaluate(({ yesterday, oldTombstone }) => { entries.push(yesterday, oldTombstone); persist(); }, { yesterday, oldTombstone });
+  const before = await exportedCsv(page);
+  expect(before).toContain('"A-private entry"');
+  expect(before).toContain('"CSV yesterday"');
+  expect(before).not.toContain('CSV deleted');
+  expect(before.split('\n')).toHaveLength(3);
+  expect(before.split('\n').slice(0, 2)).toEqual(baseline.split('\n'));
+  await page.evaluate(() => clearTodayOnly());
+  const after = await exportedCsv(page);
+  expect(after).toContain('"CSV yesterday"');
+  expect(after).not.toContain('A-private entry');
+  expect(after).not.toContain('CSV deleted');
+  expect(after.split('\n')).toHaveLength(2);
+});
+
+test('CSV excludes tombstones and Clear All, but includes canonical undo restoration', async ({ page }) => {
+  await openApp(page);
+  await createAccountAFacts(page);
+  const baseline = await exportedCsv(page);
+  expect(baseline).toContain('"A-private entry"');
+  await page.evaluate(() => deleteEntry(111111));
+  expect(await exportedCsv(page)).toBeNull();
+  await page.evaluate(() => undoLastAction());
+  const restored = await page.evaluate(() => entries.find(e => e.id === 111111));
+  expect(restored.deleted).toBeUndefined();
+  expect(restored.undoRestoredAt).toBe(restored.updatedAt);
+  expect(await exportedCsv(page)).toBe(baseline);
+  await page.evaluate(() => { window.confirm = () => true; clearAll(); });
+  expect(await exportedCsv(page)).toBeNull();
+  expect(await page.evaluate(() => entries.find(e => e.id === 111111).deleted)).toBe(true);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

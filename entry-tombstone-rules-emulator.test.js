@@ -55,6 +55,26 @@ test('canonical newer undo is the only tombstone-to-active path', async () => {
   assert.equal((await db.read(at('e_one'))).deleted, undefined);
 });
 
+test('legacy tombstones with missing or string updatedAt can only self-heal as the same deleted ID', async () => {
+  for (const legacyStamp of [undefined, 'legacy']) {
+    const db = await fresh();
+    const active = entry('one');
+    const legacy = { ...active, deleted: true };
+    if (legacyStamp === undefined) delete legacy.updatedAt;
+    else legacy.updatedAt = legacyStamp;
+    await db.seed(at('e_one'), legacy);
+    assert.equal(await db.write(at('e_one'), active), false, 'no ordinary resurrection');
+    assert.equal(await db.write(at('e_one'), undo(active)), false, 'legacy timestamp cannot bypass newer-undo check');
+    assert.equal(await db.write(at('e_one'), null), false, 'no physical delete');
+    assert.equal(await db.write(at('e_one'), { ...tombstone(active), id: 'other' }), false, 'ID stays stable');
+    assert.equal(await db.write(at('e_one'), tombstone(active)), true, 'canonical tombstone self-heals timestamp');
+    assert.deepEqual(await db.read(at('e_one')), tombstone(active));
+    assert.equal(await db.write(at('e_one'), tombstone(active, 1900)), false, 'numeric non-regression resumes');
+    assert.equal(await db.write(at('e_one'), active), false, 'still cannot resurrect without undo');
+    assert.equal(await db.write(at('e_one'), undo(active)), true, 'canonical newer undo remains allowed');
+  }
+});
+
 test('no ancestor grant permits collection replacement or legacy Clear Today / Clear All deletion', async () => {
   const db = await fresh();
   const active = entry('one');
