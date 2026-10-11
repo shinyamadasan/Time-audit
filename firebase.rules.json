@@ -10,7 +10,7 @@
         },
         "entries": {
           "$entryId": {
-            ".write": "auth != null && $roomId === ('uid_' + auth.uid) && newData.exists() && (data.child('deleted').val() !== true || newData.child('deleted').val() === true && newData.child('updatedAt').isNumber() && (data.child('updatedAt').isNumber() && newData.child('updatedAt').val() >= data.child('updatedAt').val() || !data.child('updatedAt').isNumber() && data.child('id').exists() && newData.child('id').val() === data.child('id').val()) || !newData.child('deleted').exists() && newData.child('id').val() === data.child('id').val() && newData.child('undoRestoredAt').isNumber() && newData.child('updatedAt').isNumber() && data.child('updatedAt').isNumber() && newData.child('undoRestoredAt').val() === newData.child('updatedAt').val() && newData.child('updatedAt').val() > data.child('updatedAt').val())"
+            ".write": "auth != null && $roomId === ('uid_' + auth.uid) && newData.exists() && (data.child('deleted').val() !== true || newData.child('deleted').val() === true && newData.child('updatedAt').isNumber() && data.child('updatedAt').isNumber() && newData.child('updatedAt').val() >= data.child('updatedAt').val() || !newData.child('deleted').exists() && newData.child('id').val() === data.child('id').val() && newData.child('undoRestoredAt').isNumber() && newData.child('updatedAt').isNumber() && data.child('updatedAt').isNumber() && newData.child('undoRestoredAt').val() === newData.child('updatedAt').val() && newData.child('updatedAt').val() > data.child('updatedAt').val())"
           }
         },
         "intention": {
