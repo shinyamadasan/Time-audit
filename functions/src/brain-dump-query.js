@@ -22,7 +22,7 @@ export const BRAIN_DUMP_STORE = 'brainDump';
 
 /**
  * The `rev1:` revision of one capture (§7). Projection, documented and pinned by tests: the WHOLE normalized
- * authoritative record (id, text, status, classification and triage time, disposition and its time, delegatedTo,
+ * authoritative record (id, immutable creationActionId when present, text, status, classification and triage time, disposition and its time, delegatedTo,
  * the promotion claim identity including revokedAt, the promotion identity, claimEpoch (fence generation),
  * expiredClaim (revoke/recovery state), reopenCount (reopen generation), schemaVersion, createdAt, updatedAt,
  * updatedBy), wrapped with the revision version and target identity (store + captureId). There is no

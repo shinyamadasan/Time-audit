@@ -2,10 +2,12 @@
 //
 // The §5 query envelope, strictly: exactly { contractVersion: 1, requestId, kind, parameters }, nothing else at
 // either level. Account, UID, room, path or subject are never parameters, so there is no field through which a
-// caller could name them. Only fixed, read-only kinds are accepted; every command is INVALID_INPUT.
+// caller could name them. Commands use the separate strict create envelope and route below.
 
 import { JsonInputError, strictParseJson } from './canonical-json.js';
 import { ApiError } from './errors.js';
+import { createHash } from 'node:crypto';
+import { ACTION_ID } from './command-identity.js';
 
 /** kind -> { scope, parameter keys } */
 export const QUERY_KINDS = Object.freeze({
@@ -50,4 +52,37 @@ function validTarget(value) {
     && Object.keys(value).sort().join(',') === 'id,store'
     && ['calendar', 'legacy', 'operational'].includes(value.store)
     && typeof value.id === 'string' && value.id.length > 0 && value.id.length <= 500;
+}
+
+export function actionActorRef(subject) {
+  return `actor1:${createHash('sha256').update(`chronasense-action-actor-v1\n${subject}`, 'utf8').digest('base64url')}`;
+}
+
+/** A single structured create command. Transport requestId changes on retry; every other field remains semantic. */
+export function parseCreateEnvelope(rawBody, { requestId, subject }) {
+  let body;
+  try { body = strictParseJson(rawBody); }
+  catch (error) { if (error instanceof JsonInputError) throw invalid('Malformed command body.', 'malformed-json'); throw error; }
+  const fields = ['actionId', 'actionProvenance', 'contractVersion', 'expectedRevision', 'kind', 'parameters', 'requestId'];
+  if (Object.keys(body).sort().join(',') !== fields.join(',') || body.contractVersion !== 1 || body.requestId !== requestId
+    || body.kind !== 'brain_dump_add' || typeof body.actionId !== 'string' || !ACTION_ID.test(body.actionId)
+    || body.expectedRevision !== null) throw invalid('Unsupported or malformed create command.', 'command-envelope');
+  const parameters = body.parameters;
+  if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters) || Object.keys(parameters).join(',') !== 'text'
+    || typeof parameters.text !== 'string' || !parameters.text.trim()) {
+    throw invalid('Brain Dump text is required.', 'capture-text');
+  }
+  if (parameters.text.trim().length > 1000) throw new ApiError('DOMAIN_LIMIT', 'Brain Dump text exceeds 1000 characters.',
+    { reason: 'capture-text-limit', details: { limit: 1000 } });
+  const provenance = body.actionProvenance;
+  if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance)
+    || Object.keys(provenance).sort().join(',') !== 'actionId,actorRef,capturedAt,sourceKind,version'
+    || provenance.version !== 1 || provenance.sourceKind !== 'chatgpt_plugin'
+    || provenance.actionId !== body.actionId || provenance.actorRef !== actionActorRef(subject)
+    || typeof provenance.capturedAt !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(provenance.capturedAt)
+    || Number.isNaN(Date.parse(provenance.capturedAt)) || new Date(provenance.capturedAt).toISOString() !== provenance.capturedAt) {
+    throw invalid('Action provenance is invalid.', 'action-provenance');
+  }
+  return { contractVersion: 1, actionId: body.actionId, kind: body.kind,
+    parameters: { text: parameters.text.trim() }, expectedRevision: null, actionProvenance: provenance };
 }

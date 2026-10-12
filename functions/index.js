@@ -1,7 +1,7 @@
 // functions/index.js
 //
-// ChronaSense Action API V1 — Phase A1 entry point: Firebase Functions v2 HTTPS in asia-southeast1.
-// NOT DEPLOYED. The only file that imports Firebase; everything it wires is in src/ and tested without it.
+// ChronaSense Action API V1 — Firebase Functions v2 HTTPS in asia-southeast1.
+// The only file that imports Firebase; everything it wires is in src/ and tested without it.
 //
 // Authority split (docs/CHRONASENSE_ACTION_API_V1.md §3):
 //   - Admin SDK: confirm the configured UID, mint its custom token, and (via the Admin credential's access
@@ -18,6 +18,7 @@ import { ConfigError, parseDatabaseUrl, parseHmacKeys, requireValue } from './sr
 import { ApiError, errorBody } from './src/errors.js';
 import { createInfraRtdb } from './src/infra-rtdb.js';
 import { createNonceStore } from './src/nonce-store.js';
+import { createReceiptStore } from './src/receipts.js';
 import { createIdTokenProvider, createUserScopedRtdb } from './src/user-scoped-rtdb.js';
 
 const HMAC_KEYS = defineSecret('CHRONASENSE_WORKER_HMAC_KEYS');
@@ -39,6 +40,7 @@ function getHandler() {
     keys: parseHmacKeys(HMAC_KEYS.value()),
     owner: { ownerSubject: OWNER_SUBJECT.value(), ownerFirebaseUid: OWNER_FIREBASE_UID.value() },
     nonces: createNonceStore({ infra }),
+    receipts: createReceiptStore({ infra }),
     domain: createUserScopedRtdb({ databaseUrl, idTokens }),
     // Codes, reasons and request IDs only: never headers, bodies, subjects, tokens or secrets.
     log: entry => console.log(JSON.stringify({ component: 'chronasense-action-api', ...entry })),

@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 
-import { handleMcpRequest, READ_SCOPE, READ_TOOLS, RESOURCE, ISSUER } from '../src/mcp.js';
-import { queryActionApi } from '../src/action-client.js';
+import { handleMcpRequest, READ_SCOPE, READ_TOOLS, WRITE_SCOPE, WRITE_TOOLS, RESOURCE, ISSUER } from '../src/mcp.js';
+import { commandActionApi, queryActionApi } from '../src/action-client.js';
+import { actionActorRef } from '../../../functions/src/envelope.js';
 import { harness, KEY, OWNER, NOW_MS, capture } from '../../../functions/test/support.js';
 
 const subject = OWNER.ownerSubject;
@@ -32,18 +33,22 @@ async function message(response) {
   return JSON.parse(line ? line.slice(6) : body);
 }
 
-test('MCP route lists exactly the five read tools with read-only annotations and per-tool OAuth scope', async () => {
+test('MCP route preserves the five reads and adds only one scoped Brain Dump create tool', async () => {
   const response = await handleMcpRequest(request('tools/list'), env, { nowSeconds }, ctx());
   assert.equal(response.status, 200);
   const tools = (await message(response)).result.tools;
-  assert.deepEqual(tools.map(tool => tool.name), Object.keys(READ_TOOLS));
-  for (const tool of tools) {
+  assert.deepEqual(tools.map(tool => tool.name), [...Object.keys(READ_TOOLS), ...Object.keys(WRITE_TOOLS)]);
+  for (const tool of tools.filter(tool => Object.hasOwn(READ_TOOLS, tool.name))) {
     assert.equal(tool.annotations.readOnlyHint, true);
     assert.equal(tool.annotations.destructiveHint, false);
     assert.deepEqual(tool.securitySchemes, [{ type: 'oauth2', scopes: [READ_SCOPE] }]);
     assert.deepEqual(tool._meta.securitySchemes, tool.securitySchemes);
   }
-  assert.ok(!tools.some(tool => /create|update|delete|reschedule|complete|query_path/.test(tool.name)));
+  const write = tools.find(tool => tool.name === 'brain_dump_add');
+  assert.equal(write.annotations.readOnlyHint, false);
+  assert.equal(write.annotations.destructiveHint, false);
+  assert.deepEqual(write.securitySchemes, [{ type: 'oauth2', scopes: [READ_SCOPE, WRITE_SCOPE] }]);
+  assert.ok(!tools.some(tool => /plan_create|update|delete|reschedule|complete|query_path/.test(tool.name)));
 });
 
 test('MCP scope/owner/resource checks refuse invocation before reaching the backend', async () => {
@@ -76,6 +81,53 @@ test('MCP tool maps only typed arguments to one Action API read; no generic path
   const write = await message(await handleMcpRequest(request('tools/call', { name: 'plan_complete', arguments: {} }), env, deps, ctx()));
   assert.equal(write.error.code, -32602);
   assert.equal(calls.length, 1);
+});
+
+test('Brain Dump create requires step-up scope and sends one structured action with verified actor provenance', async () => {
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const args = { actionId, capturedAt: '2026-10-12T12:00:00.000Z', text: 'buy milk' };
+  const calls = [];
+  const deps = { nowSeconds, cryptoImpl: webcrypto, commandActionApi: async (_env, call) => {
+    calls.push(call);
+    return { contractVersion: 1, requestId: 'fixture', kind: 'brain_dump_add',
+      result: { actionId, captureId: `bdc1_${actionId.slice(5)}`, text: 'buy milk', status: 'untriaged',
+        createdAt: args.capturedAt, revision: 'rev1:x', idempotentReplay: false },
+      authority: { authority: 'brain_dump_capture', access: 'user_scoped', readAt: args.capturedAt } };
+  } };
+  const call = () => request('tools/call', { name: 'brain_dump_add', arguments: args });
+  const denied = await message(await handleMcpRequest(call(), env, deps, ctx()));
+  assert.equal(denied.result.isError, true);
+  assert.match(JSON.stringify(denied), /insufficient_scope/);
+  assert.equal(calls.length, 0);
+  const permitted = await message(await handleMcpRequest(call(), env, deps,
+    ctx({ auth: { scope: [READ_SCOPE, WRITE_SCOPE] } })));
+  assert.equal(permitted.result.isError, undefined, JSON.stringify(permitted));
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].scopes, [WRITE_SCOPE]);
+  assert.equal(calls[0].command.actionProvenance.actorRef, actionActorRef(subject));
+  assert.deepEqual(calls[0].command.parameters, { text: 'buy milk' });
+});
+
+test('Worker command HMAC signs /v1/command, write scope and the stable action payload', async () => {
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const records = new Map();
+  const backend = harness({ domain: {
+    async createCaptureIfAbsent(_identity, id, _action, record) { if (records.has(id)) return 'exists'; records.set(id, record); return 'created'; },
+    async readCapture(_identity, id) { return records.get(id) ?? null; },
+  } });
+  const command = { contractVersion: 1, actionId, kind: 'brain_dump_add', parameters: { text: 'buy milk' },
+    expectedRevision: null, actionProvenance: { version: 1, sourceKind: 'chatgpt_plugin', actionId,
+      actorRef: actionActorRef(subject), capturedAt: '2026-10-12T12:00:00.000Z' } };
+  const fetchImpl = async (url, init) => {
+    assert.equal(new URL(url).pathname, '/v1/command');
+    const result = await backend.handle({ method: init.method, path: new URL(url).pathname,
+      rawHeaders: Object.entries(init.headers).flat(), rawBody: new TextEncoder().encode(init.body) });
+    return new Response(result.payload, { status: result.status });
+  };
+  const answer = await commandActionApi(env, { subject, scopes: [WRITE_SCOPE], command },
+    { fetchImpl, cryptoImpl: webcrypto, now: () => NOW_MS });
+  assert.equal(answer.result.captureId, `bdc1_${actionId.slice(5)}`);
+  assert.equal(records.size, 1);
 });
 
 test('Worker HMAC exactly matches the existing Action API pipeline, including subject and scope', async () => {

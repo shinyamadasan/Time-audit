@@ -1,7 +1,7 @@
 {
   "name": "chronasense-action-api-functions",
   "private": true,
-  "description": "ChronaSense Action API V1 backend (Firebase Functions v2 HTTPS, asia-southeast1). Phase A1: service auth + read-only get_brain_dump. NOT deployed.",
+  "description": "ChronaSense Action API V1 backend (Firebase Functions v2 HTTPS, asia-southeast1). Read tools and guarded Brain Dump create candidate.",
   "type": "module",
   "main": "index.js",
   "engines": {

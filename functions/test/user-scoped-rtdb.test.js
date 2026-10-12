@@ -15,7 +15,7 @@ function authAdmin({ user = { uid: UID }, getUserError, createError } = {}) {
   return {
     calls,
     async getUser(uid) { calls.push(['getUser', uid]); if (getUserError) throw getUserError; return user; },
-    async createCustomToken(uid) { calls.push(['createCustomToken', uid]); if (createError) throw createError; return `custom-token-for-${uid}`; },
+    async createCustomToken(uid, claims) { calls.push(claims === undefined ? ['createCustomToken', uid] : ['createCustomToken', uid, claims]); if (createError) throw createError; return `custom-token-for-${uid}`; },
   };
 }
 
@@ -57,6 +57,39 @@ test('token exchange fails closed: missing/disabled account, an ID token for ano
     await assert.rejects(provider.getIdToken(UID), error => error.code === code, JSON.stringify(adminOptions));
   }
   await assert.rejects(createIdTokenProvider({ authAdmin: authAdmin(), webApiKey: 'k' }).getIdToken('../x'), error => error.code === 'FORBIDDEN');
+});
+
+test('create token binds the exact action claim; an exchanged token missing that claim is refused', async () => {
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const admin = authAdmin();
+  const provider = createIdTokenProvider({ authAdmin: admin, webApiKey: 'k',
+    fetch: recordingFetch(() => json(200, { idToken: jwt({ user_id: UID, chronasenseActionId: actionId }) })) });
+  await provider.getIdToken(UID, actionId);
+  assert.deepEqual(admin.calls[1], ['createCustomToken', UID, { chronasenseActionId: actionId }]);
+  const missing = createIdTokenProvider({ authAdmin: admin, webApiKey: 'k',
+    fetch: recordingFetch(() => json(200, { idToken: jwt({ user_id: UID }) })) });
+  await assert.rejects(missing.getIdToken(UID, actionId), error => error.code === 'FORBIDDEN');
+  await assert.rejects(provider.getIdToken(UID, 'act1_bad'), error => error.code === 'FORBIDDEN');
+});
+
+test('capture create is a user-scoped conditional PUT at one deterministic Brain Dump child', async () => {
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const captureId = `bdc1_${actionId.slice(5)}`;
+  const calls = [];
+  const fetch = recordingFetch((url, init) => { calls.push([url, init]); return json(init.method === 'PUT' ? 200 : 200,
+    init.method === 'PUT' ? {} : { id: captureId, creationActionId: actionId }); });
+  const rtdb = createUserScopedRtdb({ databaseUrl: 'https://x.firebaseio.com', fetch,
+    idTokens: { getIdToken: async (uid, claimedActionId) => {
+      assert.equal(uid, UID);
+      if (claimedActionId) assert.equal(claimedActionId, actionId);
+      return 'user-id-token';
+    } } });
+  assert.equal(await rtdb.createCaptureIfAbsent(IDENTITY, captureId, actionId, { id: captureId, creationActionId: actionId }), 'created');
+  assert.equal(calls[0][1].headers['if-match'], 'null_etag');
+  assert.equal(new URL(calls[0][0]).searchParams.get('auth'), 'user-id-token');
+  assert.equal(calls[0][1].headers.Authorization, undefined);
+  assert.equal((await rtdb.readCapture(IDENTITY, captureId)).creationActionId, actionId);
+  await assert.rejects(rtdb.createCaptureIfAbsent(IDENTITY, '../other', actionId, { id: '../other', creationActionId: actionId }), AuthorityBoundaryViolation);
 });
 
 test('domain read: rooms/uid_<uid>/brainDump with ?auth=<ID token>; never an Authorization header; refresh token never used', async () => {

@@ -60,6 +60,20 @@ export function createInfraRtdb({ databaseUrl, namespace, fetch: fetchImpl = glo
       if (response.status !== 200) throw transport(`infra-get-${response.status}`);
       try { return await response.json(); } catch { throw transport('infra-get-body'); }
     },
+    async getWithEtag(path) {
+      const response = await call('GET', path, { headers: { 'X-Firebase-ETag': 'true' } });
+      if (response.status !== 200) throw transport(`infra-etag-get-${response.status}`);
+      const etag = response.headers.get('ETag');
+      if (!etag) throw transport('infra-etag-missing');
+      try { return { value: await response.json(), etag }; } catch { throw transport('infra-etag-body'); }
+    },
+    async putIfMatch(path, value, etag) {
+      if (typeof etag !== 'string' || !etag) throw new Error('an RTDB ETag is required');
+      const response = await call('PUT', path, { body: value, headers: { 'if-match': etag } });
+      if (response.status === 200) return 'written';
+      if (response.status === 412) return 'changed';
+      throw transport(`infra-etag-put-${response.status}`);
+    },
     /** Children of `path` ordered by `childKey` with value <= `endAt`, at most `limit` of them. */
     async queryAtMost(path, childKey, endAt, limit) {
       const response = await call('GET', path, { query: { orderBy: JSON.stringify(childKey), endAt: String(endAt), limitToFirst: String(limit) } });

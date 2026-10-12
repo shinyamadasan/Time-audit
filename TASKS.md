@@ -562,29 +562,30 @@ verification:
 
 ---
 
-### TASK-010 - Conversational Actions V1: safe capture and explicit plan add
-status: blocked
+### TASK-010 - Conversational Actions V1: safe Brain Dump capture
+status: review
 owner: codex
 source: owner-direct
 priority: P1
 depends-on: TASK-009
-files: brain-dump-model.js, brain-dump-repository.js, brain-dump-sync.js, plan-authority.js, calendar-plan-model.js, calendar-plan-repository.js, operational-plan-model.js, operational-plan-repository.js, scripts/firebase-rules-builder.mjs, firebase.rules.json, functions/, workers/chronasense-conversational-bridge/, TASKS.md, CHANGELOG.md, TEST_REPORT.md
+files: brain-dump-model.js, brain-dump-model.test.js, firebase-rules-emulator.test.js, personal-day-boundary-web-runtime.test.js, tests/partner-view.spec.js (clock-bound fixture), scripts/firebase-rules-builder.mjs, firebase.rules.json, index.html (Brain Dump import map), www/ (generated mirror), CODEMAP.md, functions/, workers/chronasense-conversational-bridge/, TASKS.md, CHANGELOG.md, TEST_REPORT.md
 
 context:
   Owner-direct instruction, 2026-10-12: build at most two conversational writes from live main
   ac63892d08cd6bf7ccbfd7d0167c300f22d7d56c, on isolated branch task-010. Create one
-  Brain Dump capture or add one item to an exact authoritative Daily Plan target. No production rollout.
+  Brain Dump capture. Owner narrowed V1 to this single write on 2026-10-12 after discovery that
+  plan arrays cannot protect immutable Action API attribution across reorder. No production rollout.
 
 acceptance:
-  - [ ] Preserve canonical Brain Dump and Plan Authority validation, identity, time and Firebase rules.
+  - [ ] Preserve canonical Brain Dump validation, identity, promotion fence and Firebase rules.
   - [ ] Require distinct write scope, exact owner binding, structured invocation and user-scoped domain writes.
-  - [ ] Make both creates idempotent under parallel calls and uncertain response, with authoritative readback and recoverable private receipts.
-  - [ ] Expose only the two create tools; keep all five TASK-009 read tools unchanged.
+  - [ ] Make capture create idempotent under parallel calls and uncertain response, with authoritative readback and recoverable private receipts.
+  - [ ] Expose only the Brain Dump create tool; keep all five TASK-009 read tools unchanged.
   - [ ] Produce a clean committed candidate for strict review without production mutation.
 
 constraints:
   - No delete, completion, edit, move, bulk or generic path/action tools.
-  - No Admin domain bypass, invented task entity or guessed target/timezone.
+  - No Admin domain bypass, invented task entity or plan write.
   - No Function, Worker, OAuth or rules deployment, production data write or secret rotation.
 
 verification:
@@ -595,12 +596,8 @@ verification:
         SELF_REVIEW.md and QA.md applicable checks.
 
 blocker:
-  The current Brain Dump builder and normalizer discard creationActionId, and its RTDB rule
-  neither binds marker creation to an action-scoped Firebase claim nor preserves it on later
-  writes. docs/CHRONASENSE_ACTION_API_V1.md requires this durable, protected marker for
-  create retry attribution and explicitly calls for a compatibility decision when the current
-  validator/store cannot preserve and protect it. Decide whether TASK-010 may extend the
-  governed Brain Dump record and rules for immutable Action API attribution before any write.
+  Resolved by owner on 2026-10-12: governed Brain Dump model/rules extension for immutable,
+  action-scoped creationActionId is authorized. Plan write is excluded from V1 by owner decision.
 
 ---
 

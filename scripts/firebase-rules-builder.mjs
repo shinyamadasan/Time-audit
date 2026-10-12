@@ -112,6 +112,7 @@ export function buildRules({ without = [] } = {}) {
   const schemaMonotonic = OR([`!${d}.child('schemaVersion').isNumber()`, group(AND([`${n}.child('schemaVersion').isNumber()`, `${n}.child('schemaVersion').val() >= ${d}.child('schemaVersion').val()`]))]);
   const captureUpdate = AND([
     `${n}.child('createdAt').val() === ${d}.child('createdAt').val()`,
+    `${n}.child('creationActionId').val() === ${d}.child('creationActionId').val()`,
     schemaMonotonic,
     claimTransition,
     promotedImmutable,
@@ -119,6 +120,15 @@ export function buildRules({ without = [] } = {}) {
   ]);
   const captureCreate = AND([
     `!${d}.exists()`,
+    OR([
+      `!${n}.child('creationActionId').exists()`,
+      group(AND([
+        `${n}.child('creationActionId').isString()`,
+        `${n}.child('creationActionId').val().matches(/^act1_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)`,
+        `${n}.child('creationActionId').val() === auth.token.chronasenseActionId`,
+        `${n}.child('id').val() === ('bdc1_' + ${n}.child('creationActionId').val().replace('act1_', ''))`,
+      ])),
+    ]),
     OR([`!${n}.child('claimEpoch').exists()`, group(AND([`${n}.child('claimEpoch').isNumber()`, `${n}.child('claimEpoch').val() >= 0`, `${n}.child('claimEpoch').val() % 1 === 0`]))]),
     OR([`!${NC}.exists()`, group(claimShape)]),
     OR([`!${NC}.exists()`, active(n)]),

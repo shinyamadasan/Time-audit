@@ -60,7 +60,8 @@ test('existing receipt classification never authorizes blind re-execution', () =
   assert.equal(classifyExistingReceipt(base, { requestHash: 'other', nowMs: 0 }), 'conflict');
   assert.equal(classifyExistingReceipt(base, { requestHash: 'h', nowMs: 1999 }), 'lease_active');
   assert.equal(classifyExistingReceipt(base, { requestHash: 'h', nowMs: 2000 }), 'recover');
-  assert.equal(classifyExistingReceipt({ ...base, state: 'pending_unknown' }, { requestHash: 'h', nowMs: 0 }), 'recover');
+  assert.equal(classifyExistingReceipt({ ...base, state: 'pending_unknown' }, { requestHash: 'h', nowMs: 0 }), 'lease_active');
+  assert.equal(classifyExistingReceipt({ ...base, state: 'pending_unknown' }, { requestHash: 'h', nowMs: 2000 }), 'recover');
   for (const state of TERMINAL_RECEIPT_STATES) assert.equal(classifyExistingReceipt({ ...base, state }, { requestHash: 'h', nowMs: 0 }), 'replay');
   assert.equal(classifyExistingReceipt({ ...base, state: 'applied' }, { requestHash: 'other', nowMs: 0 }), 'conflict');
 });
