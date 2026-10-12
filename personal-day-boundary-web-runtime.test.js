@@ -268,7 +268,7 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // Intelligence adds a read-context bridge and account-reset seam; retire the prior governed URL.
 // The shared boundary wire codec changes the sync import graph; advance every governed URL together.
 const CURRENT_RELEASE = '20261010-task009-boundary-wire-v1';
-const BRAIN_DUMP_RELEASE = '20261005-brain-dump-location-bound-fence-v1';
+const BRAIN_DUMP_RELEASE = '20261012-brain-dump-action-attribution-v1';
 // Brain Dump entry tokens that were published (on main or a candidate branch) and must never be reused.
 // (Its round-1 entries also used '20261002-brain-dump-eisenhower-v1-fix1', which is still the governed
 // token, so it is checked as "not the Brain Dump token" instead of "absent from index.html".)

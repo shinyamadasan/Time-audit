@@ -364,14 +364,14 @@ test.describe('Partner View V1', () => {
   });
 
   test('Timeline distinguishes actual / OBSERVED / gap / template hint exactly like the owner\'s own Today screen', async ({ browser }) => {
-    const { shared, ctxA, ctxB, alice, bob } = await setupLinkedPair(browser);
+    const { shared, ctxA, ctxB, alice, bob } = await setupLinkedPair(browser, {
+      timezoneId: 'UTC', fixedTime: '2026-10-08T16:52:00Z'
+    });
     const todayKey = await alice.evaluate(() => getDateInTZ(Date.now(), 'Asia/Manila'));
     const now = await alice.evaluate(() => Date.now());
 
-    // Small offsets from the real "now" (not fixed clock times) — small enough that they
-    // cannot cross a calendar-day boundary regardless of what wall-clock time the suite
-    // happens to run at (a fixed early-morning anchor time can itself be "in the future"
-    // relative to `now` when the real Manila clock is between midnight and that hour).
+    // Fixed 00:52 in Manila keeps both entries in the same factual day while retaining
+    // their exact 15-minute gap and the OBSERVED versus actual evidence distinction.
     const dow = await alice.evaluate(({ todayKey }) => tzDow(tzParseTime(todayKey, '12:00')), { todayKey });
     await setAliceStateAndPublish(alice, {
       timezone: 'Asia/Manila', todayKey, items: [],

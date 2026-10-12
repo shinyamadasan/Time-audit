@@ -4709,3 +4709,14 @@ changed:
   - Focused tests reproduce the reviewed contradiction in both record orders across Plan, Item, Today and Intelligence reads, then verify a later sequence wins. Existing same-identity, ordinary-item, fenced-child, tombstone and recovery-conflict cases remain in the suite.
 tests: see TASK-009 CR-002R in TEST_REPORT.md. PR #5 carries the exact-tip hosted result.
 release: no deployment, production mutation or merge. TASK-009 remains `review`.
+
+## TASK-010 — Brain Dump conversational create (branch: task-010, 2026-10-12)
+changed:
+  - Brain Dump model and generated RTDB rules preserve and protect immutable action attribution for deterministic captures.
+  - Action API adds one scoped, user-authorized create command with a private receipt, conditional domain create, exact readback, replay and unknown-outcome recovery.
+  - Conversational Worker adds one Brain Dump create tool and explicit write-scope consent; five read tools remain available.
+  - Root and www runtime mirrors, Function package, CODEMAP and contract notes reflect the new field and route.
+tests: see TASK-010 in TEST_REPORT.md.
+blockers: none; owner authorized the governed Brain Dump field/rules extension and limited V1 to this one write.
+deviations: Daily Plan scheduling is excluded by owner decision; no production rollout.
+→ status set to `review` in TASKS.md; no merge or deployment.

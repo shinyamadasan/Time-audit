@@ -1,13 +1,15 @@
 import { McpServer, createMcpHandler, hostHeaderValidationResponse, localhostAllowedHostnames,
   localhostAllowedOrigins, originValidationResponse } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { queryActionApi } from './action-client.js';
+import { commandActionApi, queryActionApi } from './action-client.js';
 
 export const ISSUER = 'https://chronasense-conversational-bridge.shinyamadasan.workers.dev';
 export const RESOURCE = `${ISSUER}/mcp`;
 export const READ_SCOPE = 'chronasense:read';
+export const WRITE_SCOPE = 'chronasense:brain-dump.write';
 const RESOURCE_METADATA = `${ISSUER}/.well-known/oauth-protected-resource/mcp`;
 const SCHEMES = [{ type: 'oauth2', scopes: [READ_SCOPE] }];
+const WRITE_SCHEMES = [{ type: 'oauth2', scopes: [READ_SCOPE, WRITE_SCOPE] }];
 const ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const HOST = new URL(ISSUER).hostname;
 
@@ -51,7 +53,16 @@ export const READ_TOOLS = Object.freeze({
     inputSchema: z.strictObject({}), outputSchema: output('get_intelligence', z.strictObject({ view })) },
 });
 
-export function requireReadContext(env, ctx, nowSeconds = Math.floor(Date.now() / 1000)) {
+const ACTION_ID = /^act1_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+export const WRITE_TOOLS = Object.freeze({
+  brain_dump_add: { title: 'Add Brain Dump capture', description: 'Create one untriaged Brain Dump capture. Reuse the same actionId and capturedAt when retrying.',
+    inputSchema: z.strictObject({ actionId: z.string().regex(ACTION_ID), capturedAt: z.string().regex(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/),
+      text: z.string().trim().min(1).max(1000) }),
+    outputSchema: output('brain_dump_add', z.strictObject({ actionId: z.string(), captureId: z.string(),
+      text: z.string(), status: z.string(), createdAt: z.string(), revision: z.string(), idempotentReplay: z.boolean() })) },
+});
+
+function requireContext(env, ctx, requiredScope, nowSeconds = Math.floor(Date.now() / 1000)) {
   const subject = env.CHRONASENSE_OWNER_SUBJECT;
   if (typeof subject !== 'string' || !subject || !/^[\x21-\x2b\x2d-\x7e]{1,256}$/.test(subject)) throw new Error('owner-not-configured');
   const auth = ctx?.auth;
@@ -60,15 +71,26 @@ export function requireReadContext(env, ctx, nowSeconds = Math.floor(Date.now() 
       || props.resource !== RESOURCE || props.issuer !== ISSUER || auth.userId !== subject
       || props.ownerSubject !== subject || !Number.isFinite(props.notBefore) || props.notBefore > nowSeconds
       || !Number.isFinite(auth.expiresAt) || auth.expiresAt <= nowSeconds) throw new Error('invalid-token');
-  if (!Array.isArray(auth.scope) || auth.scope.length !== 1 || auth.scope[0] !== READ_SCOPE) throw new Error('insufficient-scope');
-  return { subject, scopes: [READ_SCOPE] };
+  if (!Array.isArray(auth.scope) || !auth.scope.includes(requiredScope) || (requiredScope === WRITE_SCOPE && !auth.scope.includes(READ_SCOPE))
+    || auth.scope.some(scope => ![READ_SCOPE, WRITE_SCOPE].includes(scope))
+    || new Set(auth.scope).size !== auth.scope.length) throw new Error('insufficient-scope');
+  return { subject, scopes: requiredScope === READ_SCOPE ? [READ_SCOPE] : [WRITE_SCOPE] };
 }
 
-function challenge(error) {
+export const requireReadContext = (env, ctx, nowSeconds) => requireContext(env, ctx, READ_SCOPE, nowSeconds);
+export const requireWriteContext = (env, ctx, nowSeconds) => requireContext(env, ctx, WRITE_SCOPE, nowSeconds);
+
+function challenge(error, requiredScope = READ_SCOPE) {
   const scope = error?.message === 'insufficient-scope';
-  const message = scope ? 'The chronasense:read scope is required.' : 'Authentication is required.';
+  const message = scope ? `The ${requiredScope} scope is required.` : 'Authentication is required.';
   return { content: [{ type: 'text', text: message }], isError: true,
-    _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${RESOURCE_METADATA}", error="${scope ? 'insufficient_scope' : 'invalid_token'}", scope="${READ_SCOPE}"`] } };
+    _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${RESOURCE_METADATA}", error="${scope ? 'insufficient_scope' : 'invalid_token'}", scope="${requiredScope === WRITE_SCOPE ? `${READ_SCOPE} ${WRITE_SCOPE}` : READ_SCOPE}"`] } };
+}
+
+async function actorRef(subject, cryptoImpl = globalThis.crypto) {
+  const bytes = new TextEncoder().encode(`chronasense-action-actor-v1\n${subject}`);
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest('SHA-256', bytes));
+  return `actor1:${btoa(String.fromCharCode(...digest)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
 }
 
 export function createReadServer(env = {}, deps = {}, ctx = {}) {
@@ -84,6 +106,25 @@ export function createReadServer(env = {}, deps = {}, ctx = {}) {
         return { structuredContent: response, content: [{ type: 'text', text: JSON.stringify(response) }] };
       } catch (error) {
         return { content: [{ type: 'text', text: error?.code ? `${error.code}: ${error.message}` : 'ChronaSense data could not be read.' }], isError: true };
+      }
+    });
+  }
+  for (const [kind, spec] of Object.entries(WRITE_TOOLS)) {
+    server.registerTool(kind, { ...spec, _meta: { securitySchemes: WRITE_SCHEMES },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false } }, async parameters => {
+      let identity;
+      try { identity = requireWriteContext(env, ctx, deps.nowSeconds); }
+      catch (error) { return challenge(error, WRITE_SCOPE); }
+      try {
+        const command = { contractVersion: 1, actionId: parameters.actionId, kind,
+          parameters: { text: parameters.text }, expectedRevision: null,
+          actionProvenance: { version: 1, sourceKind: 'chatgpt_plugin', actionId: parameters.actionId,
+            actorRef: await actorRef(identity.subject, deps.cryptoImpl), capturedAt: parameters.capturedAt } };
+        const response = await (deps.commandActionApi || commandActionApi)(env, { ...identity, command }, deps);
+        spec.outputSchema.parse(response);
+        return { structuredContent: response, content: [{ type: 'text', text: JSON.stringify(response) }] };
+      } catch (error) {
+        return { content: [{ type: 'text', text: error?.code ? `${error.code}: ${error.message}` : 'ChronaSense capture could not be created.' }], isError: true };
       }
     });
   }
@@ -108,8 +149,8 @@ async function exposeToolScopes(response) {
   const original = await response.clone().text();
   let changed = false;
   const decorate = message => {
-    for (const tool of message?.result?.tools || []) if (Object.hasOwn(READ_TOOLS, tool.name)) {
-      tool.securitySchemes = SCHEMES;
+    for (const tool of message?.result?.tools || []) if (Object.hasOwn(READ_TOOLS, tool.name) || Object.hasOwn(WRITE_TOOLS, tool.name)) {
+      tool.securitySchemes = Object.hasOwn(READ_TOOLS, tool.name) ? SCHEMES : WRITE_SCHEMES;
       changed = true;
     }
     return message;

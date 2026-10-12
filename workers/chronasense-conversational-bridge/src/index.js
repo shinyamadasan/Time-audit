@@ -1,5 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { handleMcpRequest, ISSUER, RESOURCE, READ_SCOPE, validateMcpRequestOrigin } from './mcp.js';
+import { handleMcpRequest, ISSUER, RESOURCE, READ_SCOPE, WRITE_SCOPE, validateMcpRequestOrigin } from './mcp.js';
 
 const ACCESS_ASSERTION_HEADER = 'Cf-Access-Jwt-Assertion';
 const ACCESS_ALGORITHM = 'RS256';
@@ -13,7 +13,7 @@ let remoteJwks = null;
 
 export const OAUTH_PROVIDER_CONFIG = Object.freeze({
   apiRoute: '/mcp', authorizeEndpoint: '/authorize', tokenEndpoint: '/oauth/token',
-  scopesSupported: [READ_SCOPE], requiredScopes: [READ_SCOPE],
+  scopesSupported: [READ_SCOPE, WRITE_SCOPE], requiredScopes: [READ_SCOPE],
   resourceMetadata: { resource: RESOURCE, authorization_servers: [ISSUER],
     bearer_methods_supported: ['header'], resource_name: 'ChronaSense' },
   clientIdMetadataDocumentEnabled: true,
@@ -133,12 +133,12 @@ async function beginAuthorization(request, oauth, ownerSubject) {
   if (!oauth) return textResponse('OAuth provider is unavailable.', 503);
   try {
     const authRequest = await oauth.parseAuthRequest(request);
-    requireBootstrapAuthorizationRequest(request, authRequest);
+    requireAuthorizationRequest(request, authRequest);
     const details = await oauth.describeConsent(authRequest);
     const consent = await oauth.beginConsent(authRequest);
     consent.headers.set('Content-Type', 'text/html; charset=utf-8');
     consent.headers.set('Cache-Control', 'no-store');
-    return new Response(consentPage(details, consent.handle, ownerSubject), { status: 200, headers: consent.headers });
+    return new Response(consentPage(details, consent.handle, ownerSubject, authorizedScopes(authRequest)), { status: 200, headers: consent.headers });
   } catch (error) {
     return authorizationErrorResponse(error);
   }
@@ -163,12 +163,12 @@ async function finishAuthorization(request, oauth, ownerSubject) {
     }
 
     const approved = await oauth.approveConsent(request, handle);
-    requireApprovedBootstrapRequest(approved.request);
+    requireApprovedRequest(approved.request);
     const { redirectTo } = await oauth.completeAuthorization({
       request: approved.request,
       userId: ownerSubject,
       metadata: {},
-      scope: [READ_SCOPE],
+      scope: authorizedScopes(approved.request),
       props: { ownerSubject, issuer: ISSUER, resource: RESOURCE, notBefore: Math.floor(Date.now() / 1000) }
     });
     approved.headers.set('Location', redirectTo);
@@ -179,8 +179,8 @@ async function finishAuthorization(request, oauth, ownerSubject) {
   }
 }
 
-function requireBootstrapAuthorizationRequest(request, authRequest) {
-  requireBootstrapScope(authRequest);
+function requireAuthorizationRequest(request, authRequest) {
+  authorizedScopes(authRequest);
   const url = new URL(request.url);
   const resources = url.searchParams.getAll('resource');
   if (resources.length !== 1 || resources[0] !== RESOURCE || authRequest.resource !== RESOURCE) {
@@ -188,21 +188,23 @@ function requireBootstrapAuthorizationRequest(request, authRequest) {
   }
 }
 
-function requireApprovedBootstrapRequest(authRequest) {
-  requireBootstrapScope(authRequest);
+function requireApprovedRequest(authRequest) {
+  authorizedScopes(authRequest);
   if (authRequest.resource !== RESOURCE) throw invalidAuthorizationRequest(authRequest);
 }
 
-function requireBootstrapScope(authRequest) {
+function authorizedScopes(authRequest) {
   const requestedScopes = (Array.isArray(authRequest.scope) ? authRequest.scope : [authRequest.scope])
     .flatMap((scope) => typeof scope === 'string' ? scope.split(' ') : [])
     .filter(Boolean);
   const uniqueScopes = [...new Set(requestedScopes)];
-  if (uniqueScopes.length !== 1 || uniqueScopes[0] !== READ_SCOPE) throw invalidAuthorizationRequest(authRequest);
+  if (!uniqueScopes.includes(READ_SCOPE) || uniqueScopes.some(scope => ![READ_SCOPE, WRITE_SCOPE].includes(scope))
+    || uniqueScopes.length !== requestedScopes.length) throw invalidAuthorizationRequest(authRequest);
+  return uniqueScopes.sort();
 }
 
 function invalidAuthorizationRequest(authRequest) {
-  const error = new Error('Only the ChronaSense read scope and resource are supported.');
+  const error = new Error('Only the ChronaSense read and Brain Dump write scopes and resource are supported.');
   error.name = 'AuthorizationError';
   if (authRequest.redirectUri) {
     const redirectTo = new URL(authRequest.redirectUri);
@@ -223,19 +225,20 @@ function authorizationErrorResponse(error) {
   return textResponse('Authorization is temporarily unavailable.', 503);
 }
 
-function consentPage(details, handle, ownerSubject) {
+function consentPage(details, handle, ownerSubject, scopes) {
   const clientName = escapeHtml(details.clientName || 'OAuth client');
   const clientDomain = details.clientDomain
     ? 'Published by <strong>' + escapeHtml(details.clientDomain) + '</strong>.'
     : 'The client identity document is not available.';
   const subject = escapeHtml(ownerSubject);
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<title>Authorize ' + clientName + '</title></head><body><main><h1>Allow read access to ChronaSense?</h1>' +
+    '<title>Authorize ' + clientName + '</title></head><body><main><h1>' + (scopes.includes(WRITE_SCOPE) ? 'Allow Brain Dump capture creation?' : 'Allow read access to ChronaSense?') + '</h1>' +
     '<p>' + clientDomain + ' The redirect destination is <strong>' + escapeHtml(details.redirectHost) + '</strong>.</p>' +
     '<p>Verified Cloudflare Access subject: <code>' + subject + '</code>.</p>' +
-    '<p>This grants <code>' + READ_SCOPE + '</code>: read-only access to your ChronaSense plan, captures and derived intelligence. It cannot change your data.</p>' +
+    '<p>This grants <code>' + READ_SCOPE + '</code>: ' + (scopes.includes(WRITE_SCOPE) ? 'read access' : 'read-only access') + ' to your ChronaSense plan, captures and derived intelligence.'
+    + (scopes.includes(WRITE_SCOPE) ? ' It also grants <code>' + WRITE_SCOPE + '</code>: create one Brain Dump capture per action. It cannot edit, delete or schedule items.' : ' It cannot change your data.') + '</p>' +
     '<form method="post"><input type="hidden" name="handle" value="' + escapeHtml(handle) + '">' +
-    '<button name="decision" value="approve">Allow read access</button> ' +
+    '<button name="decision" value="approve">' + (scopes.includes(WRITE_SCOPE) ? 'Allow capture creation' : 'Allow read access') + '</button> ' +
     '<button name="decision" value="deny">Deny</button></form></main></body></html>';
 }
 

@@ -1,13 +1,12 @@
-# ChronaSense Action API V1 — read backend
+# ChronaSense Action API V1 — reads and Brain Dump create candidate
 
-> **NOT DEPLOYED.** TASK-005 and TASK-009 are locally tested candidates only. Deploying the function or the
-> rules change is a separate, separately authorized step (rules first). Nothing here has run against
-> production Firebase.
+> TASK-009 reads are deployed. TASK-010 Brain Dump create and its rule change are a local candidate only.
+> This task does not deploy the Function, Worker, OAuth scope or rules, or write production data.
 
 Firebase Functions v2 HTTPS function `chronasenseActionApi` in `asia-southeast1`.
-Contract foundation: [`docs/CHRONASENSE_ACTION_API_V1.md`](../docs/CHRONASENSE_ACTION_API_V1.md). TASK-009 extends
-the same Worker→backend HMAC query pipeline with five fixed read kinds. Every command and unknown kind remains
-`INVALID_INPUT`; there is no write surface.
+Contract foundation: [`docs/CHRONASENSE_ACTION_API_V1.md`](../docs/CHRONASENSE_ACTION_API_V1.md). TASK-009 uses
+five fixed read kinds. TASK-010 adds only `brain_dump_add` on a separate signed command route; unsupported commands
+and unknown kinds remain `INVALID_INPUT`.
 
 | Kind | Parameters | Result |
 |---|---|---|
@@ -23,11 +22,16 @@ unevaluated by server reads and appear in notes. Derived Intelligence is an inte
 
 ## Request
 
-`POST /v1/query`, `Content-Type: application/json`, body ≤ 64 KiB:
+Reads use `POST /v1/query`, `Content-Type: application/json`, body ≤ 64 KiB:
 
 ```json
 { "contractVersion": 1, "requestId": "<uuidv4>", "kind": "get_brain_dump", "parameters": {} }
 ```
+
+Brain Dump create uses `POST /v1/command` with `actionId`, `kind: "brain_dump_add"`,
+`parameters: {"text":"..."}`, `expectedRevision: null` and the exact `ActionProvenanceV1` fields.
+The Worker requires one stable UUIDv4 action ID and captured-at UTC time across retries, but signs a new
+transport `requestId` on each attempt. Its OAuth grant must include `chronasense:brain-dump.write`.
 
 Signed headers (each exactly once; any other `x-chronasense-*` header is refused):
 
@@ -46,7 +50,8 @@ the subject and scopes travel in these two signed headers (an interpretation rec
 
 Check order: method/path → headers → service → key → freshness → HMAC over the raw body bytes → strict envelope
 (duplicate keys, unknown fields, `contractVersion`, `requestId` match, known kind) → owner binding → scope
-`chronasense:read` → replay nonce → user-scoped read. Nothing touches Firebase until every earlier check passed.
+`chronasense:read` or `chronasense:brain-dump.write` → replay nonce → user-scoped domain operation.
+No domain data is accessed until authentication, envelope, owner binding, scope and nonce checks pass.
 
 ## Authority split
 
@@ -55,6 +60,7 @@ Check order: method/path → headers → service → key → freshness → HMAC 
 | Owner binding | signed subject == `CHRONASENSE_OWNER_SUBJECT` → `CHRONASENSE_OWNER_FIREBASE_UID` → room `uid_<uid>` | `src/identity.js` |
 | UID validation + custom token | Admin SDK `getUser` / `createCustomToken` | `src/user-scoped-rtdb.js` |
 | Domain reads | custom token → `accounts:signInWithCustomToken` → ID token → RTDB REST `?auth=`; existing rules enforce `auth.uid` | `src/user-scoped-rtdb.js` |
+| Brain Dump create | action-scoped custom claim → owner ID token → conditional REST create at `bdc1_<uuid>` → exact user-scoped readback; rules require immutable `creationActionId` | `src/user-scoped-rtdb.js`, `src/brain-dump-action.js` |
 | Nonces / receipts | Admin credential access token → RTDB REST, allowlisted to `serverRequestNonces/` and `serverActionReceipts/` only | `src/infra-rtdb.js` |
 
 No module falls back from user-scoped to privileged domain access (`STOP — AUTHORITY BOUNDARY VIOLATED`);
@@ -63,8 +69,10 @@ refresh token is discarded unread.
 
 Replay nonce: `serverRequestNonces/chronasense-plugin-worker-v1/<requestId>`, created with an RTDB conditional
 `PUT` (`if-match: null_etag`), kept 660 s (the 600 s worst-case replay window + 60 s skew margin) and removed by a
-bounded sweep (≤ 50 per request, indexed on `expiresAt`). Receipts (`serverActionReceipts/<uid>/<actionId>`):
-storage, RFC 8785 request hash and state machine only — no command executes and reads create no receipt.
+bounded sweep (≤ 50 per request, indexed on `expiresAt`). Brain Dump creates claim
+`serverActionReceipts/<uid>/<actionId>` before any domain write. Same ID with a different canonical hash is
+`IDEMPOTENCY_CONFLICT`; uncertain outcomes stay `pending_unknown` until the guarded deterministic create and
+attributed readback prove the result. ETag compare-and-set protects receipt transitions. Reads create no receipt.
 
 ## Configuration (names only — values never enter the repository)
 
@@ -84,8 +92,8 @@ Any missing or malformed value fails closed (every call refused).
 npm test                                  # from the repo root: includes functions/test/*.test.js
 node --test functions/test/*.test.js      # just this package (needs no functions/node_modules)
 cd workers/chronasense-conversational-bridge && npm ci && npm test  # thin OAuth/MCP Worker
-npm run test:rules-emulator               # real RTDB emulator: private-path denial, concurrent nonce claims,
-                                          # indexed sweep, user-scoped + cross-account reads, end to end
+npm run test:rules-emulator               # real RTDB emulator: private paths, protected capture attribution,
+                                          # conditional create, receipt ETags, user-scoped reads
 ```
 
 `functions/node_modules` is only needed to load `index.js` (the Firebase entry); `src/` and its tests depend on
@@ -123,12 +131,12 @@ can be revised if the read model changes. No collection is truncated.
 UTF-8 bytes of the exact JSON payload `index.js` sends. A complete result that does not fit is refused whole with
 `DOMAIN_LIMIT` (HTTP 422, `details.limitBytes: 65536`, not retryable) — never truncated into a partial list.
 
-## Known open items (not Phase A1 scope)
+## Known open items
 
 - **Invoker / rate limits / concurrency:** §13 per-principal and per-action rate limits and bounded concurrency
   are not implemented; the Cloud Run invoker policy is left at the platform default. Both are deploy-time
   decisions.
 - **Large Brain Dumps:** a Brain Dump whose complete projection exceeds 64 KiB is currently unreadable through
   the API (`DOMAIN_LIMIT`); pagination/filtering would be a separate contract change.
-- **Canonical path on the deployed URL:** the signed path is the request path the function sees (`/v1/query`).
-  Phase B must verify it matches what the Worker signs for the deployed URL form.
+- **Command route on the deployed URL:** `/v1/command` is tested locally and signed by the Worker. Verify the
+  deployed Function URL forwards that exact path before enabling the write tool in production.

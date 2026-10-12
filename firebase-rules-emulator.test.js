@@ -36,11 +36,32 @@ let emulator;
 test.before(async () => { emulator = await startEmulator(); });
 test.after(() => emulator?.stop());
 const freshDb = () => emulator.fresh(RULES);
+const withActionClaim = actionId => {
+  const [header, payload] = token('alice').split('.');
+  const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  return `${header}.${Buffer.from(JSON.stringify({ ...claims, chronasenseActionId: actionId })).toString('base64url')}.`;
+};
 
 /** The state in which a fenced item is authorized: a live claim at the exact location. */
 async function liveClaim(db, def, extra = {}) { await db.seed(captureAt(), capture({ promotionClaim: claim(def), ...extra })); }
 async function promoted(db, def, extra = {}) { await db.seed(captureAt(), promotedCapture(def, extra)); }
 const otherStore = def => Object.values(STORES).find(o => o.store !== def.store);
+
+test('Action API capture attribution requires its scoped claim and cannot be removed or changed by an ordinary owner', async () => {
+  const db = await freshDb();
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const otherAction = 'act1_1b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const id = `bdc1_${actionId.slice(5)}`;
+  const at = captureAt(id);
+  const record = capture({ id, creationActionId: actionId });
+  assert.equal(await db.write(at, record), false, 'ordinary owner cannot fabricate attribution');
+  assert.equal(await db.write(at, record, withActionClaim(otherAction)), false, 'wrong action claim cannot create');
+  assert.equal(await db.write(at, record, withActionClaim(actionId)), true, 'matching action claim creates');
+  assert.equal(await db.write(at, { ...record, text: 'edited' }), true, 'ordinary owner may edit without losing attribution');
+  assert.equal(await db.write(at, { ...record, creationActionId: undefined }), false, 'marker cannot be removed');
+  assert.equal(await db.write(at, { ...record, creationActionId: otherAction }), false, 'marker cannot be changed');
+  assert.equal(await db.write(captureAt('bnormal1'), capture({ id: 'bnormal1' })), true, 'ordinary unmarked capture remains supported');
+});
 
 for (const def of Object.values(STORES)) {
   const { store } = def;
@@ -405,6 +426,26 @@ test('action api: the privileged server mechanism can claim nonces and receipts'
   const again = await receipts.claim({ firebaseUid: 'alice', actionId: ACTION, requestHash: 'b'.repeat(64), kind: 'brain_dump_add', attemptId: 'x2', nowMs: NOW_MS, leaseMs: 30_000 });
   assert.equal(again.claimed, false);
   assert.equal(again.existing.requestHash, 'a'.repeat(64), 'the first claim is never overwritten');
+});
+
+test('action api: conditional capture create and receipt ETag compare-and-set work against the real RTDB emulator', async () => {
+  const db = await freshDb();
+  const id = `bdc1_${ACTION.slice(5)}`;
+  const identity = { firebaseUid: 'alice', roomId: 'uid_alice' };
+  const scoped = createUserScopedRtdb({ databaseUrl: emulator.base, namespace: db.name,
+    idTokens: { getIdToken: async (_uid, actionId) => actionId ? withActionClaim(actionId) : ALICE } });
+  const record = apiCapture(id, { creationActionId: ACTION });
+  assert.equal(await scoped.createCaptureIfAbsent(identity, id, ACTION, record), 'created');
+  assert.equal(await scoped.createCaptureIfAbsent(identity, id, ACTION, record), 'exists');
+  assert.equal((await scoped.readCapture(identity, id)).creationActionId, ACTION);
+  const infra = infraFor(db);
+  const receipts = createReceiptStore({ infra });
+  await receipts.claim({ firebaseUid: 'alice', actionId: ACTION, requestHash: 'a'.repeat(64),
+    kind: 'brain_dump_add', attemptId: 'first', nowMs: NOW_MS, leaseMs: 30_000 });
+  const first = await receipts.readWithEtag('alice', ACTION);
+  assert.equal(await receipts.compareAndSet('alice', ACTION, { ...first.value, state: 'applied' }, first.etag), 'written');
+  assert.equal(await receipts.compareAndSet('alice', ACTION, { ...first.value, state: 'conflict' }, first.etag), 'changed');
+  assert.equal((await receipts.read('alice', ACTION)).state, 'applied');
 });
 
 test('action api: concurrent replay against the real server -> exactly one nonce claim wins', async () => {

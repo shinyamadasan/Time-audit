@@ -7,9 +7,10 @@
 // auth.uid === the owner and stay fully enforced. The refresh token is discarded; tokens never leave this module.
 //
 // There is deliberately NO Admin path here: this module never receives an Admin database or access token, and
-// if the ID token cannot be obtained the read FAILS. It never falls back to privileged access.
+// if the ID token cannot be obtained the operation FAILS. It never falls back to privileged access.
 
 import { ApiError, AuthorityBoundaryViolation } from './errors.js';
+import { ACTION_ID, captureIdForAction } from './command-identity.js';
 import { validFirebaseUid } from './identity.js';
 
 /** The only room collections a user-scoped read may name. Paths are built here, never taken from a request. */
@@ -50,22 +51,22 @@ async function boundedSourceJson(response) {
   }
 }
 
-function jwtSubject(idToken) {
+function jwtClaims(idToken) {
   try {
-    const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString('utf8'));
-    return typeof payload.user_id === 'string' ? payload.user_id : payload.sub;
+    return JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString('utf8'));
   } catch { return null; }
 }
 
 /**
- * @param {{authAdmin:{getUser(uid:string):Promise<{disabled?:boolean}>, createCustomToken(uid:string):Promise<string>},
+ * @param {{authAdmin:{getUser(uid:string):Promise<{disabled?:boolean}>, createCustomToken(uid:string, claims?:object):Promise<string>},
  *          webApiKey:string, fetch?:typeof fetch, exchangeUrl?:string, timeoutMs?:number}} options
- * @returns {{getIdToken(firebaseUid:string):Promise<string>}}
+ * @returns {{getIdToken(firebaseUid:string, actionId?:string):Promise<string>}}
  */
 export function createIdTokenProvider({ authAdmin, webApiKey, fetch: fetchImpl = globalThis.fetch, exchangeUrl = TOKEN_EXCHANGE_URL, timeoutMs = 10_000 }) {
   return Object.freeze({
-    async getIdToken(firebaseUid) {
+    async getIdToken(firebaseUid, actionId) {
       if (!validFirebaseUid(firebaseUid)) throw denied('invalid-uid');
+      if (actionId !== undefined && (typeof actionId !== 'string' || !ACTION_ID.test(actionId))) throw denied('invalid-action-id');
       let user;
       try { user = await authAdmin.getUser(firebaseUid); } catch (error) {
         if (error?.code === 'auth/user-not-found') throw denied('owner-account-missing');
@@ -73,7 +74,7 @@ export function createIdTokenProvider({ authAdmin, webApiKey, fetch: fetchImpl =
       }
       if (!user || user.disabled) throw denied('owner-account-disabled');
       let customToken;
-      try { customToken = await authAdmin.createCustomToken(firebaseUid); } catch { throw transport('custom-token'); }
+      try { customToken = await authAdmin.createCustomToken(firebaseUid, actionId ? { chronasenseActionId: actionId } : undefined); } catch { throw transport('custom-token'); }
       let response;
       try {
         response = await fetchImpl(`${exchangeUrl}?key=${encodeURIComponent(webApiKey)}`, {
@@ -88,7 +89,8 @@ export function createIdTokenProvider({ authAdmin, webApiKey, fetch: fetchImpl =
       let idToken;
       try { ({ idToken } = await response.json()); } catch { throw transport('token-exchange-body'); }
       // The refresh token in that response is dropped here, unread. The ID token must name exactly the owner.
-      if (typeof idToken !== 'string' || jwtSubject(idToken) !== firebaseUid) throw denied('token-exchange-identity');
+      const claims = typeof idToken === 'string' ? jwtClaims(idToken) : null;
+      if (!claims || (claims.user_id ?? claims.sub) !== firebaseUid || (actionId && claims.chronasenseActionId !== actionId)) throw denied('token-exchange-identity');
       return idToken;
     },
   });
@@ -99,7 +101,43 @@ export function createIdTokenProvider({ authAdmin, webApiKey, fetch: fetchImpl =
  */
 export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl = globalThis.fetch, idTokens, timeoutMs = 10_000 }) {
   if (!idTokens || typeof idTokens.getIdToken !== 'function') throw new Error('user-scoped RTDB needs an ID-token provider');
+  function captureUrl(identity, captureId, idToken) {
+    if (!validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}`
+      || typeof captureId !== 'string' || !/^bdc1_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(captureId)) {
+      throw new AuthorityBoundaryViolation('capture address is not derived from the bound UID and action ID');
+    }
+    const url = new URL(`${databaseUrl}/rooms/${identity.roomId}/brainDump/${captureId}.json`);
+    if (namespace) url.searchParams.set('ns', namespace);
+    url.searchParams.set('auth', idToken);
+    return url;
+  }
   return Object.freeze({
+    async createCaptureIfAbsent(identity, captureId, actionId, record) {
+      if (typeof actionId !== 'string' || !ACTION_ID.test(actionId) || captureId !== captureIdForAction(actionId)
+        || record?.id !== captureId || record.creationActionId !== actionId) {
+        throw new AuthorityBoundaryViolation('capture create requires its exact action attribution');
+      }
+      const idToken = await idTokens.getIdToken(identity.firebaseUid, actionId);
+      const url = captureUrl(identity, captureId, idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'PUT', headers: { 'if-match': 'null_etag', 'content-type': 'application/json' },
+        body: JSON.stringify(record), signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-create-network'); }
+      if (response.status === 200) return 'created';
+      if (response.status === 412) return 'exists';
+      if (response.status === 401 || response.status === 403) throw denied(`domain-create-${response.status}`);
+      throw transport(`domain-create-${response.status}`);
+    },
+    async readCapture(identity, captureId) {
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      const url = captureUrl(identity, captureId, idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'GET', signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-capture-read-network'); }
+      if (response.status === 401 || response.status === 403) throw denied(`domain-capture-read-${response.status}`);
+      if (response.status !== 200) throw transport(`domain-capture-read-${response.status}`);
+      return boundedSourceJson(response);
+    },
     /**
      * Reads rooms/<identity.roomId>/<collection> as the owner. Returns the parsed value (null = authoritatively
      * absent). Throws RETRYABLE_TRANSPORT when the outcome is unknown (timeout, 5xx, unreadable body): unknown

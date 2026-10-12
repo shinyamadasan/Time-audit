@@ -1,14 +1,14 @@
-# ChronaSense Conversational Read Worker
+# ChronaSense Conversational Actions Worker
 
-This is the canonical, read-only Cloudflare OAuth/MCP Worker for `TASK-009`. It forwards five fixed tools to the existing Firebase Functions `/v1/query` Action API. Domain reads and Intelligence V1 derivation stay in ChronaSense. Nothing in this directory deploys automatically.
+This Worker preserves TASK-009's five read tools and adds one TASK-010 Brain Dump create candidate. It forwards fixed typed calls to the Firebase Functions `/v1/query` and `/v1/command` routes. Domain decisions stay in ChronaSense. Nothing in this directory deploys automatically.
 
 ## Routes and grants
 
 - `/authorize` verifies a Cloudflare Access JWT (RS256, exact issuer/audience, `type=app`) and binds its `sub` to the configured owner subject. Email is never an identity key.
 - `/authorize` consent POST reads at most 8,192 body bytes before parsing its form, using the same inclusive form bound as `/oauth/token`.
-- `/mcp`, `/oauth/token`, and OAuth `.well-known` routes remain public to the OAuth protocol; the OAuth provider authenticates MCP bearer tokens. The `chronasense:read` scope is required on every tool call and signed again to the backend.
+- `/mcp`, `/oauth/token`, and OAuth `.well-known` routes remain public to the OAuth protocol; the OAuth provider authenticates MCP bearer tokens. Reads require `chronasense:read`; create requires explicit step-up to `chronasense:brain-dump.write` as well. The Worker signs the required scope to the backend.
 - CIMD is enabled. No dynamic client registration endpoint is configured. The provider enforces S256 PKCE for public authorization-code clients.
-- Tools: `get_brain_dump`, `get_today`, `get_plan`, `get_item`, `get_intelligence`. There are no write tools or generic Firebase path inputs.
+- Tools: `get_brain_dump`, `get_today`, `get_plan`, `get_item`, `get_intelligence`, and `brain_dump_add`. There is no plan write or generic Firebase path input.
 
 ## Deployment configuration (pending authorization)
 
@@ -19,7 +19,7 @@ The `OAUTH_KV` binding uses the dedicated `chronasense-conversational-bridge-oau
 | `ACCESS_TEAM_DOMAIN` | Exact HTTPS Cloudflare Access team issuer. |
 | `ACCESS_POLICY_AUD` | Access application audience for `/authorize`. |
 | `CHRONASENSE_OWNER_SUBJECT` | The **real verified Access JWT `sub`**, also configured as the Action API owner subject. Never derive it from email. |
-| `CHRONASENSE_ACTION_API_URL` | HTTPS Firebase Function URL ending exactly `/v1/query`. |
+| `CHRONASENSE_ACTION_API_URL` | HTTPS Firebase Function URL ending exactly `/v1/query`; the command client derives the sibling `/v1/command` URL. |
 | `CHRONASENSE_WORKER_HMAC_KEY_ID` | ID of a key in the backend's `CHRONASENSE_WORKER_HMAC_KEYS` map. |
 | `CHRONASENSE_WORKER_HMAC_KEY_HEX` | Matching 32–128 random-byte lowercase hex key, stored as a secret. |
 

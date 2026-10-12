@@ -1,17 +1,17 @@
 // functions/src/receipts.js
 //
-// Private action-receipt FOUNDATION (docs/CHRONASENSE_ACTION_API_V1.md §5, §6). Phase A1 ships the storage
-// module, the canonical request hash and the state-machine types the write phases (C/D) will build on. NO
-// command executes in Phase A1 and no read creates a receipt: nothing in action-api.js calls this module.
+// Private action receipts (docs/CHRONASENSE_ACTION_API_V1.md §5, §6). Brain Dump create uses the
+// canonical request hash, initial claim and ETag-guarded transitions. Reads create no receipt.
 //
 // A receipt records only what ChronaSense accepted/applied for one actionId. It is operational/audit linkage,
 // never domain truth, and never evidence that anything happened in real life (Action Provenance V1).
 
 import { canonicalSha256Hex } from './canonical-json.js';
+import { ACTION_ID } from './command-identity.js';
 import { validFirebaseUid } from './identity.js';
 
 export const RECEIPT_ROOT = 'serverActionReceipts';
-export const ACTION_ID = /^act1_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+export { ACTION_ID } from './command-identity.js';
 export const RECEIPT_STATES = Object.freeze(['started', 'pending_unknown', 'applied', 'conflict', 'rejected', 'needs_user_decision']);
 export const TERMINAL_RECEIPT_STATES = Object.freeze(['applied', 'conflict', 'rejected', 'needs_user_decision']);
 
@@ -47,7 +47,8 @@ export function receiptPath(firebaseUid, actionId) {
 export function classifyExistingReceipt(existing, { requestHash, nowMs }) {
   if (existing.requestHash !== requestHash) return 'conflict';
   if (TERMINAL_RECEIPT_STATES.includes(existing.state)) return 'replay';
-  if (existing.state === 'started' && Number.isSafeInteger(existing.leaseExpiresAt) && existing.leaseExpiresAt > nowMs) return 'lease_active';
+  if (['started', 'pending_unknown'].includes(existing.state)
+    && Number.isSafeInteger(existing.leaseExpiresAt) && existing.leaseExpiresAt > nowMs) return 'lease_active';
   return 'recover';
 }
 
@@ -55,12 +56,15 @@ export function classifyExistingReceipt(existing, { requestHash, nowMs }) {
 export function createReceiptStore({ infra }) {
   return Object.freeze({
     /** The atomic initial claim (§6): ABSENT grants exactly one executor. */
-    async claim({ firebaseUid, actionId, requestHash, kind, attemptId, nowMs, leaseMs }) {
+    async claim({ firebaseUid, actionId, requestHash, kind, attemptId, nowMs, leaseMs, plannedRecordId, authorizationContext, actionProvenanceRefs }) {
       if (!/^[0-9a-f]{64}$/.test(requestHash) || typeof kind !== 'string' || !kind || typeof attemptId !== 'string' || !attemptId) throw new Error('invalid receipt claim');
       if (!Number.isSafeInteger(nowMs) || !Number.isSafeInteger(leaseMs) || leaseMs <= 0) throw new Error('invalid receipt lease');
       const receipt = {
         contractVersion: 1, actionId, requestHash, kind, state: 'started', attemptId,
         leaseAcquiredAt: nowMs, leaseExpiresAt: nowMs + leaseMs, createdAt: nowMs, updatedAt: nowMs,
+        ...(plannedRecordId ? { plannedRecordId } : {}),
+        ...(authorizationContext ? { authorizationContext } : {}),
+        ...(actionProvenanceRefs ? { actionProvenanceRefs } : {}),
       };
       const path = receiptPath(firebaseUid, actionId);
       if ((await infra.createIfAbsent(path, receipt)) === 'created') return { claimed: true, receipt };
@@ -68,6 +72,12 @@ export function createReceiptStore({ infra }) {
     },
     async read(firebaseUid, actionId) {
       return infra.get(receiptPath(firebaseUid, actionId));
+    },
+    async readWithEtag(firebaseUid, actionId) {
+      return infra.getWithEtag(receiptPath(firebaseUid, actionId));
+    },
+    async compareAndSet(firebaseUid, actionId, receipt, etag) {
+      return infra.putIfMatch(receiptPath(firebaseUid, actionId), receipt, etag);
     },
   });
 }

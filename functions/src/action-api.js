@@ -9,18 +9,20 @@
 //   3. identity binding (signed subject == configured owner -> configured UID -> room uid_<uid>)
 //   4. required scope present in the SIGNED scopes
 //   5. replay nonce: atomic create-if-absent (duplicate fails closed)
-//   6. the typed query, through the user-scoped reader only
+//   6. the typed query or guarded Brain Dump create, through user-scoped domain authority
 //
 // Responses never echo anything unauthenticated: requestId appears only once the HMAC has verified it.
 
 import { getBrainDump } from './brain-dump-query.js';
+import { createBrainDumpAction } from './brain-dump-action.js';
 import { getToday, getPlan, getItem, getIntelligence } from './read-queries.js';
 import { ApiError, errorBody } from './errors.js';
 import { bindIdentity, requireScope } from './identity.js';
-import { parseQueryEnvelope } from './envelope.js';
+import { parseCreateEnvelope, parseQueryEnvelope } from './envelope.js';
 import { MAX_BODY_BYTES, SERVICE_IDENTITY, verifyServiceRequest } from './service-auth.js';
 
 export const CANONICAL_PATH = '/v1/query';
+export const COMMAND_PATH = '/v1/command';
 /** §5 "maximum 64 KiB" applies to every API body, responses included: inclusive, 65536 bytes is allowed. */
 export const MAX_RESPONSE_BYTES = MAX_BODY_BYTES;
 
@@ -30,24 +32,30 @@ const QUERIES = Object.freeze({ get_brain_dump: getBrainDump, get_today: getToda
 /**
  * @param {{keys:Map<string,Uint8Array>, owner:{ownerSubject:string, ownerFirebaseUid:string},
  *          nonces:ReturnType<import('./nonce-store.js').createNonceStore>,
- *          domain:{readRoomCollection(identity:object, collection:string):Promise<unknown>},
+ *          receipts?:ReturnType<import('./receipts.js').createReceiptStore>,
+ *          domain:{readRoomCollection(identity:object, collection:string):Promise<unknown>,
+ *            createCaptureIfAbsent?:Function, readCapture?:Function},
  *          now?:()=>number, log?:(entry:object)=>void}} deps
  * @returns {(request:{method:string, path:string, rawHeaders:string[], rawBody:Uint8Array}) => Promise<{status:number, body:object, payload:string, reason:string}>}  `payload` is the exact JSON text to send
  */
-export function createActionApiHandler({ keys, owner, nonces, domain, now = Date.now, log = () => {} }) {
+export function createActionApiHandler({ keys, owner, nonces, receipts, domain, now = Date.now, log = () => {} }) {
   return async function handle(request) {
     let requestId = null;
     try {
       const nowMs = now();
-      const assertion = verifyServiceRequest(request, { keys, nowSeconds: Math.floor(nowMs / 1000), canonicalPath: CANONICAL_PATH });
+      const isCommand = request.path === COMMAND_PATH;
+      const assertion = verifyServiceRequest(request, { keys, nowSeconds: Math.floor(nowMs / 1000), canonicalPath: isCommand ? COMMAND_PATH : CANONICAL_PATH });
       requestId = assertion.requestId;
-      const query = parseQueryEnvelope(request.rawBody, { requestId });
       const identity = bindIdentity(assertion, owner);
-      requireScope(identity, query.scope);
+      const query = isCommand ? parseCreateEnvelope(request.rawBody, { requestId, subject: identity.principalSubject })
+        : parseQueryEnvelope(request.rawBody, { requestId });
+      requireScope(identity, isCommand ? 'chronasense:brain-dump.write' : query.scope);
       await nonces.claim(SERVICE_IDENTITY, requestId, nowMs);
       // Bounded retention sweep; best-effort, it never decides the outcome of this request.
       nonces.sweepExpired(SERVICE_IDENTITY, nowMs).catch(() => log({ event: 'nonce-sweep-failed', requestId }));
-      const { result, authority } = await QUERIES[query.kind](identity, { domain, nowMs, parameters: query.parameters });
+      const { result, authority } = isCommand
+        ? await createBrainDumpAction(identity, { command: query, domain, receipts, attemptId: requestId, nowMs })
+        : await QUERIES[query.kind](identity, { domain, nowMs, parameters: query.parameters });
       const body = { contractVersion: 1, requestId, kind: query.kind, result, authority };
       const payload = JSON.stringify(body);
       // §5: every API body is at most 64 KiB, measured in UTF-8 bytes of exactly what is sent. A complete result

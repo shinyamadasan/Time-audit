@@ -45,6 +45,20 @@ test('buildCapture requires only text — no time, date, duration, category, pri
   assert.equal(built.record.delegatedTo, null);
 });
 
+test('Action API attribution survives normalization, edits and either merge order', () => {
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const id = `bdc1_${actionId.slice(5)}`;
+  const built = buildCapture({ id, text: '  Call the vet  ', now: T0, updatedBy: 'actor', creationActionId: actionId });
+  assert.equal(built.ok, true);
+  assert.equal(normalizeCapture(built.record).creationActionId, actionId);
+  const stale = { ...built.record, creationActionId: undefined, updatedAt: T0 + 1 };
+  assert.equal(mergeCaptureRecords(stale, built.record).creationActionId, actionId);
+  assert.equal(mergeCaptureRecords(built.record, stale).creationActionId, actionId);
+  assert.equal(triageCapture(built.record, { important: true, urgent: false, now: T0 + 2, updatedBy: 'actor' }).record.creationActionId, actionId);
+  assert.equal(buildCapture({ id: 'another-id', text: 'x', now: T0, updatedBy: 'actor', creationActionId: actionId }).ok, false);
+  assert.equal(normalizeCapture({ ...built.record, creationActionId: 'act1_invalid' }), null);
+});
+
 test('buildCapture refuses empty/whitespace-only text', () => {
   assert.equal(buildCapture({ id: 'bidone1', text: '   ', now: T0, updatedBy: 'd' }).ok, false);
   assert.equal(buildCapture({ id: 'bidone1', text: '', now: T0, updatedBy: 'd' }).ok, false);

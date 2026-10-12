@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 
 import { createActionApiHandler, CANONICAL_PATH } from '../src/action-api.js';
 import { createNonceStore } from '../src/nonce-store.js';
+import { createReceiptStore } from '../src/receipts.js';
 import { HEADERS, SERVICE_IDENTITY, sha256Hex, sign, signingInput } from '../src/service-auth.js';
 
 export const KEY_ID = 'test-key-1';
@@ -40,11 +41,17 @@ export function signedRequest(overrides = {}) {
 /** In-memory privileged store: createIfAbsent is atomic (JS is single-threaded between awaits). Records every call. */
 export function fakeInfra() {
   const data = new Map();
+  const versions = new Map();
   const calls = [];
   return {
     data, calls,
-    async createIfAbsent(path, value) { calls.push(['createIfAbsent', path]); await null; if (data.has(path)) return 'exists'; data.set(path, structuredClone(value)); return 'created'; },
+    async createIfAbsent(path, value) { calls.push(['createIfAbsent', path]); await null; if (data.has(path)) return 'exists'; data.set(path, structuredClone(value)); versions.set(path, (versions.get(path) ?? 0) + 1); return 'created'; },
     async get(path) { calls.push(['get', path]); return data.has(path) ? structuredClone(data.get(path)) : null; },
+    async getWithEtag(path) { calls.push(['getWithEtag', path]); return { value: data.has(path) ? structuredClone(data.get(path)) : null,
+      etag: data.has(path) ? `v${versions.get(path) ?? 1}` : 'null_etag' }; },
+    async putIfMatch(path, value, etag) { calls.push(['putIfMatch', path]); await null;
+      if (etag !== (data.has(path) ? `v${versions.get(path) ?? 1}` : 'null_etag')) return 'changed';
+      data.set(path, structuredClone(value)); versions.set(path, (versions.get(path) ?? 0) + 1); return 'written'; },
     async queryAtMost(path, childKey, endAt, limit) {
       calls.push(['queryAtMost', path]);
       const rows = [...data].filter(([key, value]) => key.startsWith(`${path}/`) && value[childKey] <= endAt)
@@ -68,7 +75,8 @@ export function harness({ rooms, owner = OWNER, nowMs = NOW_MS, domain } = {}) {
   const infra = fakeInfra();
   const reader = domain ?? fakeDomain(rooms);
   const logs = [];
-  const handle = createActionApiHandler({ keys: KEYS, owner, nonces: createNonceStore({ infra }), domain: reader, now: () => nowMs, log: entry => logs.push(entry) });
+  const handle = createActionApiHandler({ keys: KEYS, owner, nonces: createNonceStore({ infra }),
+    receipts: createReceiptStore({ infra }), domain: reader, now: () => nowMs, log: entry => logs.push(entry) });
   return { handle, infra, domain: reader, logs };
 }
 

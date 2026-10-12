@@ -176,6 +176,7 @@ export const PROMOTION_TYPES = new Set(['do-today', 'schedule']);
 const MAX_TEXT = 1000;
 const MAX_DELEGATED_TO = 200;
 const ID_RE = /^[A-Za-z0-9_-]{3,64}$/;
+const ACTION_ID_RE = /^act1_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 /** The deterministic plan-item id namespace a promoted capture mints into. '|' is
  *  the separator (mirrors plan-authority.js's OPERATIONAL_CARRY_ID_PREFIX
  *  convention) because a minted capture id is restricted to ID_RE and can never
@@ -217,8 +218,10 @@ export function brainDumpPlanItemId(captureId) {
  *  date, no category, no priority, no Eisenhower answers — just the thought.
  *  @returns {{ok:true, record:object} | {ok:false, reason:string, field?:string}} */
 export function buildCapture(input = {}) {
-  const { id, text, now, updatedBy } = input;
+  const { id, text, now, updatedBy, creationActionId } = input;
   if (!validBrainDumpId(id)) return { ok: false, reason: 'invalid-input', field: 'id' };
+  if (creationActionId !== undefined && (typeof creationActionId !== 'string' || !ACTION_ID_RE.test(creationActionId)
+    || id !== `bdc1_${creationActionId.slice(5)}`)) return { ok: false, reason: 'invalid-input', field: 'creationActionId' };
   const cleanedText = cleanText(text);
   if (!cleanedText) return { ok: false, reason: 'invalid-input', field: 'text' };
   const createdAt = timestamp(now);
@@ -230,6 +233,7 @@ export function buildCapture(input = {}) {
     record: {
       schemaVersion: BRAIN_DUMP_SCHEMA_VERSION,
       id,
+      ...(creationActionId ? { creationActionId } : {}),
       text: cleanedText,
       createdAt,
       updatedAt: createdAt,
@@ -611,6 +615,8 @@ export function normalizeCapture(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   if (!RECORD_SCHEMA_VERSIONS.has(value.schemaVersion)) return null;
   if (!validBrainDumpId(value.id)) return null;
+  if (value.creationActionId !== undefined && (typeof value.creationActionId !== 'string'
+    || !ACTION_ID_RE.test(value.creationActionId) || value.id !== `bdc1_${value.creationActionId.slice(5)}`)) return null;
   const text = cleanText(value.text);
   if (!text) return null;
   if (!BRAIN_DUMP_STATUSES.has(value.status)) return null;
@@ -725,6 +731,7 @@ export function normalizeCapture(value) {
   return {
     schemaVersion: value.schemaVersion,
     id: value.id,
+    ...(value.creationActionId ? { creationActionId: value.creationActionId } : {}),
     text,
     createdAt,
     updatedAt,
@@ -774,7 +781,12 @@ export function mergeCaptureRecords(localValue, remoteValue) {
   const remote = normalizeCapture(remoteValue);
   if (!local) return remote;
   if (!remote) return local;
+  if (local.creationActionId && remote.creationActionId && local.creationActionId !== remote.creationActionId) {
+    throw new Error('Conflicting Brain Dump action attribution for one capture.');
+  }
   let winner = pickCaptureWinner(local, remote);
+  const creationActionId = local.creationActionId || remote.creationActionId;
+  if (creationActionId && winner.creationActionId !== creationActionId) winner = { ...winner, creationActionId };
   // The record generation is monotonic: once either side is reopen-aware, the
   // merged record is too, whichever side won. Otherwise a new client's own
   // claim or edit could carry a generation-1 copy back over a generation-2
