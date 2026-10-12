@@ -4720,3 +4720,14 @@ tests: see TASK-010 in TEST_REPORT.md.
 blockers: none; owner authorized the governed Brain Dump field/rules extension and limited V1 to this one write.
 deviations: Daily Plan scheduling is excluded by owner decision; no production rollout.
 → status set to `review` in TASKS.md; no merge or deployment.
+
+## TASK-010 — F1/F2/F3/F4 targeted strict-review repair (branch: task-010, 2026-10-12)
+reviewed tip: `4647f6a9585bdec8d972f2b1528b02b1d7e33bf2`.
+changed:
+  - Worker `brain_dump_add` returns a typed unknown result with the exact same-action retry arguments for timeout, unreadable response, malformed response, backend unknown outcome and output-schema failure. The command timeout is 130 seconds against the Function's 120-second request cap; reads keep 10 seconds. Definite backend rejections stay definite.
+  - Generated RTDB rules confine action-claim ID tokens to creating the matching marked Brain Dump capture. Normal owner writes retain their rules. Current Brain Dump clients preserve `creationActionId`; emulator and SDK regressions prove stale-client marker drops are denied without changing server truth, and the current client converges afterward.
+  - Local Auth/RTDB emulator proof exercises real Admin `createCustomToken`, Auth exchange, verified ID-token claim and rules enforcement. `DECISIONS.md` records web/Android/rules/Function/Worker rollout order and the residual owner-read capability of an escaped action token; `CODEMAP.md` and package READMEs locate the contract and proof.
+tests: see TASK-010 F1/F2/F3/F4 in TEST_REPORT.md.
+blockers: none. Auth emulator does not prove production custom-token signature/IAM validation; production rollout remains separately gated.
+deviations: no production deployment, data mutation, OAuth scope change, merge or push. Exactly one write tool and five TASK-009 read tools remain.
+→ TASK-010 remains `status: review` for targeted re-review.

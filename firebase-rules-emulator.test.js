@@ -25,6 +25,8 @@ import { createReceiptStore } from './functions/src/receipts.js';
 import { createUserScopedRtdb } from './functions/src/user-scoped-rtdb.js';
 import { getBrainDump } from './functions/src/brain-dump-query.js';
 import { KEYS, NOW_MS, signedRequest } from './functions/test/support.js';
+import { archiveCapture, buildCapture, claimPromotion, editHandledCapture, finalizePromotion,
+  mergeCaptureRecords, normalizeCapture, reopenCapture, triageCapture } from './brain-dump-model.js';
 import {
   CAPTURE, ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, legacyClaim, ordinary, origin, planRecord, promotedCapture, promotion,
 } from './fence-rules-fixtures.js';
@@ -61,6 +63,74 @@ test('Action API capture attribution requires its scoped claim and cannot be rem
   assert.equal(await db.write(at, { ...record, creationActionId: undefined }), false, 'marker cannot be removed');
   assert.equal(await db.write(at, { ...record, creationActionId: otherAction }), false, 'marker cannot be changed');
   assert.equal(await db.write(captureAt('bnormal1'), capture({ id: 'bnormal1' })), true, 'ordinary unmarked capture remains supported');
+});
+
+test('action token can create only its marked capture; ordinary owner paths stay normal-token only', async () => {
+  const db = await freshDb();
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const actionToken = withActionClaim(actionId);
+  const id = `bdc1_${actionId.slice(5)}`;
+  const at = captureAt(id);
+  const record = capture({ id, creationActionId: actionId });
+  const other = capture({ id: 'bnormal2' });
+  const ordinaryWrites = [
+    [`${ROOM}/settings`, { timezone: 'UTC' }],
+    [`${ROOM}/entries/e1`, { id: 'e1', updatedAt: T }],
+    [`${ROOM}/calendarPlans/cal1:2026-10-12`, { id: 'cal1:2026-10-12' }],
+    [`${ROOM}/commitments`, { sample: true }],
+    ['uid_alice/public', { sample: true }],
+    ['uid_alice/pairCode', '1234'],
+    ['pairs/p1', { creator: 'alice' }],
+  ];
+  for (const [path, value] of ordinaryWrites) {
+    assert.equal(await db.write(path, value, actionToken), false, `action token denied at ${path}`);
+    assert.equal(await db.write(path, value, ALICE), true, `ordinary owner allowed at ${path}`);
+  }
+  assert.equal(await db.write(captureAt(other.id), other, actionToken), false, 'action token cannot create an unmarked capture');
+  assert.equal(await db.write(captureAt(other.id), other, ALICE), true);
+  assert.equal(await db.write(captureAt(other.id), { ...other, text: 'changed' }, actionToken), false,
+    'action token cannot edit an unrelated capture');
+  assert.equal(await db.write(at, record, actionToken), true, 'action token creates the exact marked capture');
+  assert.equal(await db.write(at, { ...record, text: 'changed' }, actionToken), false, 'action token cannot update even its marked capture');
+  assert.equal(await db.write(at, { ...record, text: 'owner edit' }, ALICE), true, 'normal owner keeps existing capture edit authority');
+});
+
+test('current client preserves action attribution; stale-client drop is denied and current sync converges', async () => {
+  const db = await freshDb();
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const id = `bdc1_${actionId.slice(5)}`;
+  const at = captureAt(id);
+  const built = buildCapture({ id, creationActionId: actionId, text: 'thought', now: T, updatedBy: 'action-actor' });
+  assert.equal(built.ok, true);
+  assert.equal(await db.write(at, built.record, withActionClaim(actionId)), true);
+  const local = normalizeCapture(await db.read(at));
+  assert.equal(local.creationActionId, actionId, 'current normalizer retains marker');
+  const triaged = triageCapture(local, { important: true, urgent: false, now: T + 1, updatedBy: 'web' });
+  assert.equal(triaged.record.creationActionId, actionId);
+  assert.equal(await db.write(at, triaged.record, ALICE), true, 'current sync shape passes server rules');
+  const archived = archiveCapture(triaged.record, { now: T + 2, updatedBy: 'web' });
+  assert.equal(archived.record.creationActionId, actionId);
+  const edited = editHandledCapture(archived.record, { text: 'edited thought', now: T + 3, updatedBy: 'web' });
+  assert.equal(edited.record.creationActionId, actionId);
+  const reopened = reopenCapture(edited.record, { now: T + 4, updatedBy: 'web' });
+  assert.equal(reopened.record.creationActionId, actionId, 'reopen keeps marker');
+  const claim = claimPromotion(triaged.record, { promotion: { type: 'do-today', store: 'calendar',
+    targetId: 'cal1:2026-10-12', targetKey: 'cal1:2026-10-12', planItemId: `bdp1|${id}` },
+  now: T + 2, updatedBy: 'web' });
+  assert.equal(claim.record.creationActionId, actionId, 'promotion keeps marker on the capture');
+  const finalized = finalizePromotion(claim.record, { now: T + 3, updatedBy: 'web' });
+  assert.equal(finalized.record.creationActionId, actionId, 'finalization keeps marker');
+
+  const { creationActionId: _droppedByOldNormalizer, ...stale } = normalizeCapture(await db.read(at));
+  assert.ok(!Object.hasOwn(stale, 'creationActionId'), 'simulated old client strips unknown marker');
+  const staleEdit = { ...stale, text: 'stale edit', updatedAt: T + 4, updatedBy: 'old-web' };
+  assert.equal(await db.write(at, staleEdit, ALICE), false, 'stale whole-record write is rejected');
+  assert.equal((await db.read(at)).text, triaged.record.text, 'server truth survives rejection');
+  assert.equal((await db.read(at)).creationActionId, actionId);
+  const converged = mergeCaptureRecords(staleEdit, normalizeCapture(await db.read(at)));
+  assert.equal(converged.creationActionId, actionId, 'current merge restores immutable marker');
+  assert.equal(await db.write(at, converged, ALICE), true, 'current client can sync after stale rejection');
+  assert.equal((await db.read(at)).creationActionId, actionId);
 });
 
 for (const def of Object.values(STORES)) {

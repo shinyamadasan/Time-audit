@@ -35,7 +35,7 @@ import { createOperationalPlanRepository } from './operational-plan-repository.j
 import { createOperationalPlanSyncBridge } from './operational-plan-sync.js';
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { createBrainDumpSyncBridge } from './brain-dump-sync.js';
-import { brainDumpPlanItemId, normalizeCapture } from './brain-dump-model.js';
+import { brainDumpPlanItemId, buildCapture, normalizeCapture } from './brain-dump-model.js';
 import { promoteCaptureToPlan, settleOutstandingClaim } from './brain-dump-promotion.js';
 import { fencedPresence, partitionOutboundItemsWith, physicalTargetKey } from './plan-item-origin.js';
 import { memoryStorage } from './calendar-plan-test-support.js';
@@ -82,6 +82,31 @@ async function world() {
  *  has one. The production Brain Dump bridge attaches its whole-subtree listener at startup (attach()), so the
  *  capture helpers below hold a listener on the capture the same way before they transact. */
 const primed = async ref => { await new Promise(resolve => { ref.on('value', () => resolve()); }); return ref; };
+
+test('current Brain Dump bridge round-trips action attribution after a stale-client write is rejected', async () => {
+  const { db, connect } = await world();
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const id = `bdc1_${actionId.slice(5)}`;
+  const at = `rooms/${ROOM}/brainDump/${id}`;
+  const built = buildCapture({ id, creationActionId: actionId, text: 'action thought', now: T, updatedBy: 'action-actor' });
+  assert.equal(built.ok, true);
+  await db.seed(at, built.record);
+  const connection = connect();
+  const repository = createBrainDumpRepository({ storage: memoryStorage(), getOwner: () => ROOM,
+    now: () => T + 1, deviceId: () => 'web-device' });
+  const bridge = createBrainDumpSyncBridge({ repository, getRoomRef: () => connection.roomRef(),
+    getRoomId: () => ROOM, now: () => T + 1, deviceId: () => 'web-device' });
+  bridge.attach();
+  await until(() => repository.read(id)?.creationActionId === actionId, 'action capture hydration');
+  assert.equal(repository.triage(id, { important: true, urgent: false }).ok, true);
+  assert.equal(await bridge.syncCapture(id), true);
+  assert.equal((await db.read(at)).creationActionId, actionId);
+  const { creationActionId: _droppedByOldClient, ...oldShape } = await db.read(at);
+  assert.equal(await db.write(at, { ...oldShape, text: 'stale edit', updatedAt: T + 2, updatedBy: 'old-web' }), false);
+  assert.equal((await db.read(at)).creationActionId, actionId, 'stale rejection leaves authoritative capture intact');
+  assert.equal(await bridge.syncCapture(id), true, 'current bridge still converges');
+  assert.equal((await db.read(at)).creationActionId, actionId);
+});
 
 /** One create-or-merge transaction at the fenced child, exactly the shape the client sends. */
 const createFenced = (connection, def, item = fencedItem(def)) => connection.roomRef().child(def.fence).child(def.key).child(item.id)

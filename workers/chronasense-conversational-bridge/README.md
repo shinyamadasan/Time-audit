@@ -9,6 +9,7 @@ This Worker preserves TASK-009's five read tools and adds one TASK-010 Brain Dum
 - `/mcp`, `/oauth/token`, and OAuth `.well-known` routes remain public to the OAuth protocol; the OAuth provider authenticates MCP bearer tokens. Reads require `chronasense:read`; create requires explicit step-up to `chronasense:brain-dump.write` as well. The Worker signs the required scope to the backend.
 - CIMD is enabled. No dynamic client registration endpoint is configured. The provider enforces S256 PKCE for public authorization-code clients.
 - Tools: `get_brain_dump`, `get_today`, `get_plan`, `get_item`, `get_intelligence`, and `brain_dump_add`. There is no plan write or generic Firebase path input.
+- A write with an unreadable response, timeout, or backend unknown status returns structured `outcome: unknown`, `mayHaveCommitted: true`, and exact retry arguments (`actionId`, `capturedAt`, `text`, `newActionIdAllowed: false`). Definite backend rejections remain definite. The Function request is capped at 120 seconds; the Worker waits at most 130 seconds for its response. Reads retain their 10-second timeout.
 
 ## Deployment configuration (pending authorization)
 
