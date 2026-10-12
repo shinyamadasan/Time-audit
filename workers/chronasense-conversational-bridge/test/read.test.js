@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 
 import { handleMcpRequest, READ_SCOPE, READ_TOOLS, WRITE_SCOPE, WRITE_TOOLS, RESOURCE, ISSUER } from '../src/mcp.js';
-import { commandActionApi, queryActionApi } from '../src/action-client.js';
+import { COMMAND_TIMEOUT_MS, commandActionApi, queryActionApi } from '../src/action-client.js';
 import { actionActorRef } from '../../../functions/src/envelope.js';
 import { harness, KEY, OWNER, NOW_MS, capture } from '../../../functions/test/support.js';
 
@@ -128,6 +128,79 @@ test('Worker command HMAC signs /v1/command, write scope and the stable action p
     { fetchImpl, cryptoImpl: webcrypto, now: () => NOW_MS });
   assert.equal(answer.result.captureId, `bdc1_${actionId.slice(5)}`);
   assert.equal(records.size, 1);
+});
+
+test('write timeout after backend commit reports a typed unknown and same-action retry returns one capture', async () => {
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const args = { actionId, capturedAt: '2026-10-12T12:00:00.000Z', text: 'buy milk' };
+  const records = new Map();
+  const backend = harness({ domain: {
+    async createCaptureIfAbsent(_identity, id, _action, record) { if (!records.has(id)) records.set(id, record); },
+    async readCapture(_identity, id) { return records.get(id) ?? null; },
+  } });
+  let calls = 0;
+  const deps = { nowSeconds, cryptoImpl: webcrypto, now: () => NOW_MS, fetchImpl: async (url, init) => {
+    assert.equal(init.signal?.constructor.name, 'AbortSignal');
+    assert.equal(COMMAND_TIMEOUT_MS, 130_000);
+    const result = await backend.handle({ method: init.method, path: new URL(url).pathname,
+      rawHeaders: Object.entries(init.headers).flat(), rawBody: new TextEncoder().encode(init.body) });
+    if (++calls === 1) throw new DOMException('timed out after commit', 'TimeoutError');
+    return new Response(result.payload, { status: result.status });
+  } };
+  const call = () => request('tools/call', { name: 'brain_dump_add', arguments: args });
+  const context = ctx({ auth: { scope: [READ_SCOPE, WRITE_SCOPE] } });
+  const first = (await message(await handleMcpRequest(call(), env, deps, context))).result;
+  assert.equal(first.isError, true);
+  assert.equal(first.structuredContent.outcome, 'unknown');
+  assert.equal(first.structuredContent.code, 'PENDING_UNKNOWN');
+  assert.equal(first.structuredContent.mayHaveCommitted, true);
+  assert.deepEqual(first.structuredContent.retry, { actionId, capturedAt: args.capturedAt,
+    parameters: { text: args.text }, newActionIdAllowed: false });
+  assert.doesNotMatch(JSON.stringify(first), /(?:use|try|mint|create) a new actionId/i);
+  const retry = (await message(await handleMcpRequest(call(), env, deps, context))).result;
+  assert.equal(retry.isError, undefined, JSON.stringify(retry));
+  assert.equal(retry.structuredContent.result.idempotentReplay, true);
+  assert.equal(records.size, 1);
+});
+
+test('malformed success after commit is unknown; backend unknown stays typed; definite rejection stays definite', async () => {
+  const args = { actionId: 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4',
+    capturedAt: '2026-10-12T12:00:00.000Z', text: 'buy milk' };
+  const context = ctx({ auth: { scope: [READ_SCOPE, WRITE_SCOPE] } });
+  const call = () => request('tools/call', { name: 'brain_dump_add', arguments: args });
+  const records = new Map();
+  const backend = harness({ domain: {
+    async createCaptureIfAbsent(_identity, id, _action, record) { if (!records.has(id)) records.set(id, record); },
+    async readCapture(_identity, id) { return records.get(id) ?? null; },
+  } });
+  for (const mode of ['bad-json', 'bad-output', 'PENDING_UNKNOWN', 'RETRYABLE_TRANSPORT', 'INVALID_INPUT']) {
+    const deps = { nowSeconds, cryptoImpl: webcrypto, now: () => NOW_MS, fetchImpl: async (url, init) => {
+      const { requestId } = JSON.parse(init.body);
+      if (mode === 'bad-json' || mode === 'bad-output') {
+        const committed = await backend.handle({ method: init.method, path: new URL(url).pathname,
+          rawHeaders: Object.entries(init.headers).flat(), rawBody: new TextEncoder().encode(init.body) });
+        assert.equal(committed.status, 200);
+      }
+      if (mode === 'bad-json') return new Response('{');
+      if (mode === 'bad-output') return new Response(JSON.stringify({ contractVersion: 1, requestId,
+        kind: 'brain_dump_add', result: {}, authority: {} }));
+      return new Response(JSON.stringify({ contractVersion: 1, requestId,
+        error: { code: mode, message: 'Safe backend response.', retryability: 'not_retryable' } }),
+      { status: mode === 'INVALID_INPUT' ? 400 : 503 });
+    } };
+    const result = (await message(await handleMcpRequest(call(), env, deps, context))).result;
+    assert.equal(result.isError, true);
+    if (mode === 'INVALID_INPUT') {
+      assert.equal(result.structuredContent, undefined);
+      assert.match(result.content[0].text, /^INVALID_INPUT:/);
+    } else {
+      assert.equal(result.structuredContent.outcome, 'unknown', mode);
+      assert.equal(result.structuredContent.code, mode === 'RETRYABLE_TRANSPORT' ? mode : 'PENDING_UNKNOWN');
+      assert.equal(result.structuredContent.retry.actionId, args.actionId);
+      assert.equal(result.structuredContent.retry.newActionIdAllowed, false);
+    }
+  }
+  assert.equal(records.size, 1, 'both unreadable post-commit responses refer to one deterministic capture');
 });
 
 test('Worker HMAC exactly matches the existing Action API pipeline, including subject and scope', async () => {

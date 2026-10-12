@@ -22,7 +22,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const RULES_PATH = path.join(HERE, '..', 'firebase.rules.json');
 
-const OWNER = "auth != null && $roomId === ('uid_' + auth.uid)";
+const ROOM_OWNER = "auth != null && $roomId === ('uid_' + auth.uid)";
+const NORMAL_TOKEN = 'auth.token.chronasenseActionId == null';
+const ACTION_TOKEN = 'auth.token.chronasenseActionId != null';
+const OWNER = `${ROOM_OWNER} && ${NORMAL_TOKEN}`;
 const AND = parts => parts.filter(Boolean).join(' && ');
 const OR = parts => `(${parts.filter(Boolean).join(' || ')})`;
 const group = expression => `(${expression})`;
@@ -133,7 +136,10 @@ export function buildRules({ without = [] } = {}) {
     OR([`!${NC}.exists()`, group(claimShape)]),
     OR([`!${NC}.exists()`, active(n)]),
   ]);
-  const captureWrite = AND([OWNER, `${n}.exists()`, `${n}.child('id').val() === $captureId`, OR([group(captureCreate), group(AND([`${d}.exists()`, captureUpdate]))])]);
+  const captureWrite = AND([ROOM_OWNER, `${n}.exists()`, `${n}.child('id').val() === $captureId`, OR([
+    group(AND([NORMAL_TOKEN, OR([group(captureCreate), group(AND([`${d}.exists()`, captureUpdate]))])])),
+    group(AND([ACTION_TOKEN, `${n}.child('creationActionId').exists()`, captureCreate])),
+  ])]);
 
   // ── fenced plan items (rooms/<room>/<fence collection>/$targetKey/$itemId) ──
   const itemCapture = `${ROOM_REF}.child('brainDump').child($itemId.replace('bdp1|', ''))`;
@@ -282,21 +288,21 @@ export function buildRules({ without = [] } = {}) {
       pairs: {
         $pairId: {
           '.read': "auth != null && (data.child('creator').val() === auth.uid || data.child('partner').val() === auth.uid)",
-          '.write': "auth != null && ((!data.exists() && newData.child('creator').val() === auth.uid && !newData.child('partner').exists()) || (data.child('creator').val() === auth.uid) || (data.child('creator').exists() && data.child('creator').val() !== auth.uid && newData.child('creator').val() === data.child('creator').val() && newData.child('accepted').val() === data.child('accepted').val() && newData.child('createdAt').val() === data.child('createdAt').val() && ((!data.child('partner').exists() && newData.child('partner').val() === auth.uid) || (data.child('partner').val() === auth.uid && !newData.child('partner').exists()))))",
+          '.write': `auth != null && ${NORMAL_TOKEN} && ((!data.exists() && newData.child('creator').val() === auth.uid && !newData.child('partner').exists()) || (data.child('creator').val() === auth.uid) || (data.child('creator').exists() && data.child('creator').val() !== auth.uid && newData.child('creator').val() === data.child('creator').val() && newData.child('accepted').val() === data.child('accepted').val() && newData.child('createdAt').val() === data.child('createdAt').val() && ((!data.child('partner').exists() && newData.child('partner').val() === auth.uid) || (data.child('partner').val() === auth.uid && !newData.child('partner').exists()))))`,
         },
       },
       $userNode: {
         public: {
           '.read': "auth != null && ($userNode === ('uid_' + auth.uid) || (root.child($userNode).child('partnerUid').val() === auth.uid && root.child('uid_' + auth.uid).child('partnerUid').val() === $userNode.replace('uid_', '')))",
-          '.write': "auth != null && $userNode === ('uid_' + auth.uid)",
+          '.write': `auth != null && ${NORMAL_TOKEN} && $userNode === ('uid_' + auth.uid)`,
         },
         shared: {
           '.read': "auth != null && ($userNode === ('uid_' + auth.uid) || (root.child($userNode).child('partnerUid').val() === auth.uid && root.child('uid_' + auth.uid).child('partnerUid').val() === $userNode.replace('uid_', '')))",
-          '.write': "auth != null && $userNode === ('uid_' + auth.uid)",
+          '.write': `auth != null && ${NORMAL_TOKEN} && $userNode === ('uid_' + auth.uid)`,
         },
-        partnerUid: { '.read': "auth != null && $userNode === ('uid_' + auth.uid)", '.write': "auth != null && $userNode === ('uid_' + auth.uid)" },
-        pairCode: { '.read': "auth != null && $userNode === ('uid_' + auth.uid)", '.write': "auth != null && $userNode === ('uid_' + auth.uid)" },
-        nudges: { '.read': "auth != null && $userNode === ('uid_' + auth.uid)", '.write': "auth != null && root.child($userNode).child('partnerUid').val() === auth.uid" },
+        partnerUid: { '.read': "auth != null && $userNode === ('uid_' + auth.uid)", '.write': `auth != null && ${NORMAL_TOKEN} && $userNode === ('uid_' + auth.uid)` },
+        pairCode: { '.read': "auth != null && $userNode === ('uid_' + auth.uid)", '.write': `auth != null && ${NORMAL_TOKEN} && $userNode === ('uid_' + auth.uid)` },
+        nudges: { '.read': "auth != null && $userNode === ('uid_' + auth.uid)", '.write': `auth != null && ${NORMAL_TOKEN} && root.child($userNode).child('partnerUid').val() === auth.uid` },
       },
     },
   };

@@ -99,6 +99,15 @@ npm run test:rules-emulator               # real RTDB emulator: private paths, p
 `functions/node_modules` is only needed to load `index.js` (the Firebase entry); `src/` and its tests depend on
 Node built-ins and the packaged shared domain model only.
 
+The standalone `npm run test:auth-claim-proof` gate (from `functions/`) requires the local Firebase Auth emulator
+on `127.0.0.1:9099` with project `demo-chronasense-task010`, started using
+`test/auth-emulator.firebase.json` and `firebase emulators:start --only auth --project demo-chronasense-task010 --config test/auth-emulator.firebase.json`.
+Set `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099` for the proof process. It uses an ephemeral local RSA key,
+the real Admin SDK `createCustomToken` and Auth emulator exchange, verifies the resulting ID-token claim,
+then presents that ID token to the real RTDB emulator rules. It asserts marked create, missing/wrong claim denial,
+and the action-token unrelated-path denial. It prints no tokens and contacts no production project. The Auth emulator
+does not verify custom-token signatures, so this is claim-propagation and rule-observation proof, not production IAM proof.
+
 ## Packaging the shared domain model
 
 A deploy uploads only `functions/`. The backend needs the Brain Dump, plan, calendar and Intelligence domain models,

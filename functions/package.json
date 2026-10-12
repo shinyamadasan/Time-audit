@@ -10,7 +10,8 @@
   "scripts": {
     "build": "node --check index.js",
     "check:shared": "node ../scripts/functions-shared.mjs",
-    "test": "node ../scripts/functions-shared.mjs && node --test test/*.test.js"
+    "test": "node ../scripts/functions-shared.mjs && node --test test/*.test.js",
+    "test:auth-claim-proof": "node proof/auth-action-claim.mjs"
   },
   "dependencies": {
     "firebase-admin": "^14.5.0",

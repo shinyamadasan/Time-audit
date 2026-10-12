@@ -54,13 +54,26 @@ export const READ_TOOLS = Object.freeze({
 });
 
 const ACTION_ID = /^act1_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const DEFINITIVE_WRITE_CODES = new Set(['INVALID_INPUT', 'AUTH_REQUIRED', 'FORBIDDEN', 'CONFLICT',
+  'IDEMPOTENCY_CONFLICT', 'DOMAIN_LIMIT']);
+const unknownWrite = z.strictObject({ outcome: z.literal('unknown'), code: z.enum(['PENDING_UNKNOWN', 'RETRYABLE_TRANSPORT']),
+  mayHaveCommitted: z.literal(true), retry: z.strictObject({ actionId: z.string(), capturedAt: z.string(),
+    parameters: z.strictObject({ text: z.string() }), newActionIdAllowed: z.literal(false) }) });
 export const WRITE_TOOLS = Object.freeze({
-  brain_dump_add: { title: 'Add Brain Dump capture', description: 'Create one untriaged Brain Dump capture. Reuse the same actionId and capturedAt when retrying.',
+  brain_dump_add: { title: 'Add Brain Dump capture', description: 'Create one untriaged Brain Dump capture. An unknown outcome may already be committed; retry with the same actionId, capturedAt and text.',
     inputSchema: z.strictObject({ actionId: z.string().regex(ACTION_ID), capturedAt: z.string().regex(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/),
       text: z.string().trim().min(1).max(1000) }),
-    outputSchema: output('brain_dump_add', z.strictObject({ actionId: z.string(), captureId: z.string(),
-      text: z.string(), status: z.string(), createdAt: z.string(), revision: z.string(), idempotentReplay: z.boolean() })) },
+    outputSchema: z.union([output('brain_dump_add', z.strictObject({ actionId: z.string(), captureId: z.string(),
+      text: z.string(), status: z.string(), createdAt: z.string(), revision: z.string(), idempotentReplay: z.boolean() })), unknownWrite]) },
 });
+
+function unknownWriteResult(parameters, code) {
+  const result = { outcome: 'unknown', code, mayHaveCommitted: true,
+    retry: { actionId: parameters.actionId, capturedAt: parameters.capturedAt,
+      parameters: { text: parameters.text }, newActionIdAllowed: false } };
+  return { structuredContent: result, content: [{ type: 'text',
+    text: `${code}: The capture may already exist. Retry with the same actionId, capturedAt and text. Keep the actionId unchanged.` }], isError: true };
+}
 
 function requireContext(env, ctx, requiredScope, nowSeconds = Math.floor(Date.now() / 1000)) {
   const subject = env.CHRONASENSE_OWNER_SUBJECT;
@@ -124,6 +137,9 @@ export function createReadServer(env = {}, deps = {}, ctx = {}) {
         spec.outputSchema.parse(response);
         return { structuredContent: response, content: [{ type: 'text', text: JSON.stringify(response) }] };
       } catch (error) {
+        if (!DEFINITIVE_WRITE_CODES.has(error?.code)) {
+          return unknownWriteResult(parameters, error?.code === 'RETRYABLE_TRANSPORT' ? error.code : 'PENDING_UNKNOWN');
+        }
         return { content: [{ type: 'text', text: error?.code ? `${error.code}: ${error.message}` : 'ChronaSense capture could not be created.' }], isError: true };
       }
     });

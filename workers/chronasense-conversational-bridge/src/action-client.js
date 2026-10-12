@@ -4,7 +4,15 @@ const SIGNING_VERSION = 'chronasense-worker-auth-v1';
 const PATH = '/v1/query';
 const COMMAND_PATH = '/v1/command';
 const MAX_RESPONSE_BYTES = 64 * 1024;
+// The Function is capped at 120s. Leave 10s for its terminal response or network failure.
+export const COMMAND_TIMEOUT_MS = 130_000;
 const encoder = new TextEncoder();
+
+function unknownCommandOutcome() {
+  const error = new Error('The capture outcome is unknown; it may already be committed.');
+  error.code = 'PENDING_UNKNOWN';
+  return error;
+}
 
 const hex = bytes => [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 
@@ -55,7 +63,8 @@ async function sendActionApi(env, { subject, scopes, kind, parameters, command }
   const key = await cryptoImpl.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const signature = hex(await cryptoImpl.subtle.sign('HMAC', key, encoder.encode(message)));
   const endpoint = command ? url.replace(/\/v1\/query$/, COMMAND_PATH) : url;
-  const response = await (deps.fetchImpl || fetch)(endpoint, { method: 'POST', headers: {
+  let response;
+  try { response = await (deps.fetchImpl || fetch)(endpoint, { method: 'POST', headers: {
     'Content-Type': 'application/json; charset=utf-8',
     'x-chronasense-service': SERVICE,
     'x-chronasense-key-id': keyId,
@@ -64,18 +73,36 @@ async function sendActionApi(env, { subject, scopes, kind, parameters, command }
     'x-chronasense-subject': subject,
     'x-chronasense-scopes': scopes.join(','),
     'x-chronasense-signature': signature,
-  }, body, signal: AbortSignal.timeout(10000) });
-  const bytes = await boundedBody(response);
+  }, body, signal: AbortSignal.timeout(command ? COMMAND_TIMEOUT_MS : 10_000) }); }
+  catch (error) {
+    if (!command) throw error;
+    throw unknownCommandOutcome();
+  }
+  let bytes;
+  try { bytes = await boundedBody(response); }
+  catch (error) {
+    if (!command) throw error;
+    throw unknownCommandOutcome();
+  }
   let answer;
   try { answer = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
-  catch { throw new Error('Action API response is invalid.'); }
-  if (answer?.contractVersion !== 1 || answer.requestId !== requestId) throw new Error('Action API response does not match the request.');
+  catch {
+    if (command) throw unknownCommandOutcome();
+    const error = new Error('Action API response is invalid.');
+    throw error;
+  }
+  if (answer?.contractVersion !== 1 || answer.requestId !== requestId) {
+    if (command) throw unknownCommandOutcome();
+    const error = new Error('Action API response does not match the request.');
+    throw error;
+  }
   if (response.status === 200 && answer.kind === (command?.kind ?? kind) && answer.result && answer.authority) return answer;
   if (response.status !== 200 && answer.error?.code && typeof answer.error.message === 'string') {
     const error = new Error(answer.error.message);
     error.code = answer.error.code;
     throw error;
   }
+  if (command) throw unknownCommandOutcome();
   throw new Error('Action API response is incompatible.');
 }
 
