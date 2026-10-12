@@ -531,7 +531,7 @@ stop conditions:
 ---
 
 ### TASK-009 - Conversational Read V1
-status: review
+status: done
 owner: codex
 source: owner-direct
 priority: P1
