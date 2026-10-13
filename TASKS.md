@@ -613,6 +613,49 @@ closure:
 
 ---
 
+### TASK-011 - Plan Authority + Conversational Scheduling V1
+status: in-progress
+owner: claude
+source: owner-direct
+priority: P1
+depends-on: TASK-010
+files: plan-item-origin.js, plan-authority.js, planning-continuity-ui.js, scripts/firebase-rules-builder.mjs, firebase.rules.json (GENERATED), firebase-rules-emulator.test.js, firebase-rules-mutation.test.js, plan-item-origin.test.js, plan-authority-fence.test.js, functions/ (plan create command, scoped token claims, read compatibility, tests), functions/shared/ (GENERATED), workers/chronasense-conversational-bridge/ (plan_create tool, plan.write scope), www/ (GENERATED mirror), CODEMAP.md, DECISIONS.md, TASKS.md, CHANGELOG.md, TEST_REPORT.md, TASK_011_HANDOFF.md (new)
+
+context:
+  Owner-direct instruction, 2026-10-12 (owner unavailable; build autonomously to REVIEW-READY):
+  "Add gym tomorrow at 6 PM" — ChatGPT/MCP adds ONE new item to an explicitly identified,
+  authoritative Daily Plan target through the Action Gateway, with structured time, durable
+  idempotency, user-scoped authorization, authoritative receipts and no generic path write.
+  Base: live origin/main 327e0cbd52bf3cb740cb55c1ed5d4a9944e05819 (TASK-010 closed). TASK-010
+  excluded plan writes because plan item arrays cannot protect immutable attribution across
+  reorder; this task proves/establishes that authority before enabling the one create tool.
+
+acceptance:
+  - [ ] Exactly one new write tool (`plan_create`, docs/CHRONASENSE_ACTION_API_V1.md §10) behind
+        `chronasense:plan.write`; five read tools and brain_dump_add behaviorally unchanged.
+  - [ ] Target resolved and validated through existing calendar authority (activation, frozen plan
+        zone, past-day immutability); no implicit activation, no legacy fallback, typed refusals.
+  - [ ] Deterministic `api1_<uuid>` item with immutable, rules-protected `creationActionId`; no lost
+        concurrent edit, no duplicate item, no tombstone resurrection, reorder never changes identity.
+  - [ ] Receipt/idempotency: exact replay, payload conflict, crash/unknown recovery from receipt plus
+        authoritative readback; applied only when the attributed item is proven present.
+  - [ ] Action token can create only its own claimed item; cannot write Brain Dump, settings,
+        entries, plans or other owner paths; normal owner writes keep working.
+  - [ ] Clean, locally committed candidate plus fresh-reviewer handoff. No push, merge or deploy.
+
+constraints:
+  - No edit/move/complete/delete/reschedule tools, no generic write, no caller UID/room/path.
+  - No storage migration of existing data, no second truth store, no Admin domain bypass.
+  - No deploy, production Firebase/Cloudflare/OAuth/IAM/secret mutation, force push or destructive Git.
+
+verification:
+  - [ ] Targeted model, Function, Worker and real RTDB-emulator rules tests (adversarial).
+  - [ ] npm test, npm run test:smoke, npm run lint, npm run check:www-parity,
+        npm run check:firebase-rules, npm run test:fence, git diff --check,
+        SELF_REVIEW.md and QA.md applicable checks.
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
