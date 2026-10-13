@@ -687,7 +687,8 @@ test('action api: plan_create end to end against the real server - create, repla
   const stored = await db.read(itemAt);
   assert.equal(stored.creationActionId, ACTION_A);
   assert.equal(stored.task, 'Gym');
-  assert.equal(await db.read(`${PLAN_ROOM}/calendarPlans`), null, 'the plan record was never written');
+  assert.deepEqual(await db.read(`${PLAN_ROOM}/calendarPlans`), { [planId]: { createdAt: NOW_MS, timezone: 'Asia/Manila', updatedAt: 0 } },
+    'R011-02: the absent plan got ONLY its canonical origin, through the ordinary owner rules; no item in its array');
   assert.equal((await db.read(`serverActionReceipts/${PLAN_OWNER_UID}/${ACTION_A}`)).state, 'applied');
 
   const replay = await handle(planCommand(ACTION_A, parameters));
@@ -725,5 +726,38 @@ test('action api: plan_create refuses a non-authoritative account against the re
   const response = await handle(planCommand(ACTION_A, { target: { store: 'calendar', id: `cal1:${tomorrow}` }, title: 'Gym' }));
   assert.equal(response.body.error?.code, 'NOT_FOUND', JSON.stringify(response.body));
   assert.equal(await db.read(`${PLAN_ROOM}/calendarPlanFences`), null);
+  assert.equal(await db.read(`${PLAN_ROOM}/calendarPlans`), null, 'no origin for a refused target');
   assert.equal(await db.read(`${PLAN_ROOM}/calendarPlanAuthority`), null, 'nothing activated');
+});
+
+test('action api (R011-02): an existing owner plan keeps origin, items and preparation; the origin freezes the home zone against a later settings change', async () => {
+  const db = await freshDb();
+  await seedPlanAccount(db);
+  const tomorrow = new Date(NOW_MS + 8 * 3_600_000 + 86_400_000).toISOString().slice(0, 10);
+  const planId = `cal1:${tomorrow}`;
+  const ownerRecord = { createdAt: NOW_MS - 5_000, timezone: 'Asia/Tokyo', updatedAt: NOW_MS - 1, updatedBy: 'phone',
+    items: [{ id: 'powner1', task: 'Owner task', when: '', done: false, updatedAt: NOW_MS - 1, updatedBy: 'phone' }] };
+  assert.equal((await asClient(db, 'PUT', `${PLAN_ROOM}/calendarPlans/${planId}`, token(PLAN_OWNER_UID), ownerRecord)).status, 200, 'owner wrote the plan normally');
+  const infra = infraFor(db);
+  const domain = createUserScopedRtdb({ databaseUrl: emulator.base, namespace: db.name, idTokens: planScopedTokens });
+  const handle = createActionApiHandler({ keys: KEYS, owner: { ownerSubject: 'access-sub-owner-1', ownerFirebaseUid: PLAN_OWNER_UID },
+    nonces: createNonceStore({ infra }), receipts: createReceiptStore({ infra }), domain, now: () => NOW_MS });
+  const created = await handle(planCommand(ACTION_A, { target: { store: 'calendar', id: planId }, title: 'Gym', when: '18:00', whenTz: 'Asia/Manila' }));
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+  assert.deepEqual(await db.read(`${PLAN_ROOM}/calendarPlans/${planId}`), ownerRecord, 'existing origin, items and writer untouched');
+
+  // Absent plan: origin frozen; then the account moves zone and the plan interval does not move.
+  const dayAfter = new Date(NOW_MS + 8 * 3_600_000 + 2 * 86_400_000).toISOString().slice(0, 10);
+  const target = { store: 'calendar', id: `cal1:${dayAfter}` };
+  assert.equal((await handle(planCommand(ACTION_B, { target, title: 'Call mom' }))).status, 200);
+  const readPlan = async () => {
+    const requestId = randomUUID();
+    return (await handle(signedRequest({ requestId, envelope: { contractVersion: 1, requestId, kind: 'get_plan', parameters: { target } } }))).body.result.plan.target;
+  };
+  const before = await readPlan();
+  assert.equal((await asClient(db, 'PUT', `${PLAN_ROOM}/settings`, token(PLAN_OWNER_UID), { timezone: 'America/Los_Angeles' })).status, 200);
+  const after = await readPlan();
+  assert.deepEqual([after.timezone, after.startMs, after.endMs], [before.timezone, before.startMs, before.endMs]);
+  assert.equal(before.timezone, 'Asia/Manila');
+  assert.equal((await db.read(`${PLAN_ROOM}/calendarPlans/${target.id}`)).items, undefined, 'no api1_ item in any plan array');
 });

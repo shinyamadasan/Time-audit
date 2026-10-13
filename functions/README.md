@@ -43,7 +43,10 @@ resolved through Plan Authority's server read (`NOT_FOUND` when not calendar-aut
 once its plan day has ended). The item `api1_<uuid>` is conditionally created at
 `rooms/uid_<uid>/calendarPlanFences/<planId>/api1_<uuid>` with an ID token whose custom claims bind the action, kind
 and target (`src/plan-create-action.js`, `src/user-scoped-rtdb.js`); applied only after exact readback of the
-attributed child. The receipt and result carry IDs, target, schedule and revision, never the title.
+attributed child. For a plan that has no canonical origin yet, its origin (createdAt + home timezone) is frozen first,
+through `mergeCalendarPlanRecords` under an ETag compare-and-set on `calendarPlans/<planId>` with the ordinary owner
+token. REJECTED is recorded only by an action's first attempt; a takeover stays `PENDING_UNKNOWN` until the exact child
+proves the outcome. The receipt and result carry IDs, target, schedule and revision, never the title.
 
 Signed headers (each exactly once; any other `x-chronasense-*` header is refused):
 

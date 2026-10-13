@@ -780,11 +780,21 @@ it; the owner sees and edits it as an ordinary task (title, time, done, kind, to
   stripped or rewritten), the tombstone is monotonic, no relocation fields, no delete, no parent overwrite.
 - Plan arrays reserve `api1_` ids and refuse `creationActionId`; a plan-kind action token cannot create a Brain Dump
   capture. Each predicate is named in the rules builder and mutation-proven on the real emulator.
-- **Concurrency:** the create touches one keyed child with `if-match: null_etag`; it never reads or writes the plan
-  record, so no concurrent owner edit, reorder or second action can be lost or misidentified.
-- **Idempotency/recovery:** receipt claim -> exact-child read (marker = proof) -> Plan Authority checks -> conditional
-  create -> exact readback. Applied only when the attributed child is present. A definite refusal is terminal only on a
-  fresh claim or once no earlier attempt can still be writing (`MAX_ATTEMPT_MS` = Function timeout + margin).
+- **Concurrency:** the item create touches one keyed child with `if-match: null_etag`; the item never enters the
+  plan record's array, so reorder or a second action can never misidentify it.
+- **Plan origin (review fix R011-02):** before the first item of a plan that has no canonical origin, the Function
+  establishes the EXISTING origin (`createdAt` + home `timezone`, the zone the target was judged in) exactly as a
+  client's first plan write does: `mergeCalendarPlanRecords` (earliest origin wins; items and preparation kept) under a
+  whole-record ETag compare-and-set with the ordinary owner token (never the action token), retried on a concurrent
+  write and never applied over an existing origin. If another device's origin wins in a different zone, the target is
+  judged again in that zone. Without this, reads kept deriving the zone from current settings, so a later account zone
+  change could move the plan interval and reopen an ended day.
+- **Idempotency/recovery (review fix R011-01):** receipt claim -> exact-child read (marker = proof) -> Plan Authority
+  checks -> origin -> conditional create -> exact readback. APPLIED only when the attributed child is present.
+  REJECTED only on the action's FIRST attempt (fresh claim; it has written nothing and nothing earlier exists). A
+  takeover never rejects: a paused earlier attempt can still commit however much time has passed (a request timeout
+  is not a writer fence), so the outcome stays PENDING_UNKNOWN until the exact child proves it; only the same action
+  may retry. (The candidate's elapsed-time rule was removed.)
 
 **V1 limits (stated):** calendar store only (an unactivated/legacy account gets a typed `DOMAIN_LIMIT`/`NOT_FOUND`);
 always an "Other task" (`kind: 'task'`), so the Top 3 cap is not at stake; like a Brain Dump task, an action-created task
@@ -797,6 +807,7 @@ backward compatible: no existing item carries `api1_`/`creationActionId`), then 
 
 **Do not:** write an action item into a plan record's `items`; give the action token any path beyond its one claimed
 child; infer success from title/time; report a create applied without the attributed child; or reuse an action ID after
-an unknown outcome to escape it.
+an unknown outcome to escape it; or treat elapsed time or a request timeout as proof that an earlier attempt
+cannot still commit.
 
 ---

@@ -9,7 +9,10 @@ import { randomUUID } from 'node:crypto';
 import { COMMAND_PATH, CANONICAL_PATH } from '../src/action-api.js';
 import { actionActorRef } from '../src/envelope.js';
 import { ApiError } from '../src/errors.js';
-import { MAX_ATTEMPT_MS } from '../src/plan-create-action.js';
+import { createActionApiHandler } from '../src/action-api.js';
+import { createNonceStore } from '../src/nonce-store.js';
+import { createReceiptStore } from '../src/receipts.js';
+import { KEYS, fakeInfra } from './support.js';
 import { addCalendarDays, localPlanDate } from '../shared/plan-tomorrow-model.js';
 import { NOW_MS, OWNER, harness, signedRequest } from './support.js';
 
@@ -39,25 +42,45 @@ function request({ actionId = ACTION, parameters = GYM, requestId, scopes = ['ch
 }
 
 /** One owner room: what Plan Authority's read sees and where the keyed item lands. */
-function planDomain({ room: overrides = {}, loseResponse = false, failBeforeWrite = false, failRead = false, forbidCreate = false, hideAfterCreate = false } = {}) {
+function planDomain({ room: overrides = {}, loseResponse = false, failBeforeWrite = false, failRead = false, forbidCreate = false, hideAfterCreate = false, hooks = {} } = {}) {
   const room = { settings: { timezone: ZONE }, calendarPlanAuthority: { [FACT.id]: FACT }, ...overrides };
   const writes = [];
+  const originWrites = [];
+  const versions = new Map();
+  const etagOf = planId => (room.calendarPlans?.[planId] === undefined ? 'null_etag' : `v${versions.get(planId) ?? 1}`);
+  /** As another device/owner would: replace the plan record and change its ETag. */
+  const ownerWrite = (planId, record) => { room.calendarPlans ??= {}; room.calendarPlans[planId] = structuredClone(record); versions.set(planId, (versions.get(planId) ?? 1) + 1); };
   const fence = (planId, create = false) => {
     if (create) { room.calendarPlanFences ??= {}; room.calendarPlanFences[planId] ??= {}; }
     return room.calendarPlanFences?.[planId];
   };
   return {
-    room, writes,
+    room, writes, originWrites, ownerWrite,
     set(flags) { ({ loseResponse = loseResponse, failBeforeWrite = failBeforeWrite, failRead = failRead, forbidCreate = forbidCreate, hideAfterCreate = hideAfterCreate } = flags); },
     async readRoomCollection(_identity, collection) { return structuredClone(room[collection] ?? null); },
     async readPlanItem(identity, planId, itemId) {
       assert.equal(identity.roomId, `uid_${OWNER.ownerFirebaseUid}`);
       if (failRead) throw new ApiError('RETRYABLE_TRANSPORT', 'Read unavailable.');
       if (hideAfterCreate) return null;
-      return structuredClone(fence(planId)?.[itemId] ?? null);
+      const value = structuredClone(fence(planId)?.[itemId] ?? null);
+      if (hooks.afterItemRead) await hooks.afterItemRead(value);
+      return value;
+    },
+    async readCalendarPlanWithEtag(_identity, planId) {
+      return { value: structuredClone(room.calendarPlans?.[planId] ?? null), etag: etagOf(planId) };
+    },
+    async putCalendarPlanIfMatch(_identity, planId, record, etag) {
+      if (hooks.beforeOriginPut) await hooks.beforeOriginPut(planId);
+      if (etag !== etagOf(planId)) return 'changed';
+      const stored = structuredClone(record);
+      if (Array.isArray(stored.items) && !stored.items.length) delete stored.items; // Firebase prunes an empty array
+      ownerWrite(planId, stored);
+      originWrites.push(planId);
+      return 'written';
     },
     async createPlanItemIfAbsent(identity, planId, itemId, actionId, record) {
       writes.push({ roomId: identity.roomId, planId, itemId, actionId });
+      if (hooks.beforeCreate) await hooks.beforeCreate();
       if (failBeforeWrite) throw new ApiError('RETRYABLE_TRANSPORT', 'Write unavailable.');
       if (forbidCreate) throw new ApiError('FORBIDDEN', 'ChronaSense account access was refused.');
       const children = fence(planId, true);
@@ -80,7 +103,8 @@ test('"Add gym tomorrow at 6 PM": one attributed item on tomorrow\'s calendar pl
   const item = itemAt(store);
   assert.deepEqual(item, { id: ITEM_ID, task: 'Gym', when: '18:00', whenTz: ZONE, durationMinutes: 60, done: false,
     updatedAt: NOW_MS, updatedBy: provenanceFor(ACTION).actorRef, kind: 'task', creationActionId: ACTION }, 'an ordinary planned task + action provenance only');
-  assert.equal(store.room.calendarPlans, undefined, 'the plan record (and its array) is never written');
+  assert.deepEqual(store.room.calendarPlans, { [planIdOf(TOMORROW)]: { createdAt: NOW_MS, timezone: ZONE, updatedAt: 0 } },
+    'the absent plan gets ONLY its canonical origin (home zone frozen); the item never enters the array');
   const { result, authority } = first.body;
   assert.equal(result.itemId, ITEM_ID);
   assert.deepEqual(result.target, { store: 'calendar', id: planIdOf(TOMORROW), date: TOMORROW });
@@ -405,28 +429,213 @@ test('scope isolation: read-only and Brain-Dump-only grants cannot plan-write; p
   assert.equal(code(await h.handle(asQuery)), 'INVALID_INPUT');
 });
 
-test('a definite refusal on a takeover stays unknown while an earlier attempt could still land, then becomes terminal', async () => {
-  const store = planDomain({ room: { calendarPlanAuthority: null } });
-  const started = NOW_MS - 40_000;
-  const first = harness({ domain: store, nowMs: started });
-  store.set({ failRead: true });
-  await first.handle(request({ signed: { timestamp: Math.floor(started / 1000) } })); // an attempt whose outcome is unobservable
-  store.set({ failRead: false });
-  // Copy that receipt into a fresh harness clock, lease expired, 40 s after the first attempt began.
+// ── R011-01: a takeover never turns a refusal into REJECTED; a paused earlier writer may still commit ─────────
+/** One shared receipt store and nonce store over a movable clock, so several attempts of ONE action interleave. */
+function clockHarness(domain) {
+  const clock = { now: NOW_MS };
+  const infra = fakeInfra();
+  const handle = createActionApiHandler({ keys: KEYS, owner: OWNER, nonces: createNonceStore({ infra }),
+    receipts: createReceiptStore({ infra }), domain, now: () => clock.now });
+  const attempt = (options = {}) => handle(request({ ...options, signed: { timestamp: Math.floor(clock.now / 1000) } }));
+  return { clock, infra, attempt, receipt: () => infra.data.get(RECEIPT(ACTION)) };
+}
+function deferred() { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; }
+const TODAY_TARGET = { ...GYM, target: { store: 'calendar', id: planIdOf(TODAY) } };
+const TODAY_END = Date.parse(`${TOMORROW}T00:00:00+08:00`);
+/** The invariant under test: an attributed item and a REJECTED receipt never coexist. */
+function assertNeverRejectedWithItem(store, h, step) {
+  const item = itemAt(store, TODAY);
+  assert.ok(!(item && h.receipt()?.state === 'rejected'), `${step}: item present while receipt says rejected`);
+}
+
+test('R011-01 order 1: writer paused before create; takeover long after the old window sees PAST; writer then commits -> never REJECTED, converges to APPLIED', async () => {
+  const entered = deferred();
+  const gate = deferred();
+  let gated = true;
+  const store = planDomain({ hooks: { beforeCreate: async () => { if (gated) { gated = false; entered.resolve(); await gate.promise; } } } });
+  const h = clockHarness(store);
+  const original = h.attempt({ parameters: TODAY_TARGET });
+  await entered.promise; // the first attempt passed every check and is about to create
+  h.clock.now = TODAY_END + 600_000; // lease long expired, far beyond the old 150 s rule, target now in the past
+  const takeover = await h.attempt({ parameters: TODAY_TARGET });
+  assert.equal(code(takeover), 'PENDING_UNKNOWN', 'a semantic refusal is not proof the earlier attempt cannot commit');
+  assert.equal(h.receipt().state, 'pending_unknown');
+  assertNeverRejectedWithItem(store, h, 'after takeover');
+  gate.resolve();
+  const late = await original;
+  assert.equal(code(late), 'PENDING_UNKNOWN', 'its receipt CAS loses to the takeover');
+  assert.ok(itemAt(store, TODAY), 'the late writer committed');
+  assertNeverRejectedWithItem(store, h, 'after late commit');
+  h.clock.now += 60_000;
+  const recovered = await h.attempt({ parameters: TODAY_TARGET });
+  assert.equal(recovered.status, 200, JSON.stringify(recovered.body));
+  assert.equal(recovered.body.result.idempotentReplay, true);
+  assert.equal(h.receipt().state, 'applied');
+  const replay = await h.attempt({ parameters: TODAY_TARGET });
+  assert.equal(replay.body.result.idempotentReplay, true, 'same-action replay after recovery');
+  assert.equal(Object.keys(store.room.calendarPlanFences[planIdOf(TODAY)]).length, 1, 'one item');
+});
+
+test('R011-01 order 2: the late writer commits between the takeover\'s absent read and its refusal -> still never REJECTED', async () => {
+  const entered = deferred();
+  const gate = deferred();
+  const committed = deferred();
+  let gated = true;
+  let takeoverRead = false;
+  const store = planDomain({ hooks: {
+    beforeCreate: async () => { if (gated) { gated = false; entered.resolve(); await gate.promise; } },
+    afterItemRead: async value => {
+      // The takeover's first exact read sees "absent"; only then does the paused writer land its create.
+      if (takeoverRead || value !== null || !entered.promise) return;
+      if (h.clock.now < TODAY_END) return;
+      takeoverRead = true;
+      gate.resolve();
+      await committed.promise;
+    },
+  } });
+  const originalCreate = store.createPlanItemIfAbsent;
+  store.createPlanItemIfAbsent = async (...args) => { const result = await originalCreate(...args); committed.resolve(); return result; };
+  const h = clockHarness(store);
+  const original = h.attempt({ parameters: TODAY_TARGET });
+  await entered.promise;
+  h.clock.now = TODAY_END + 600_000;
+  const takeover = await h.attempt({ parameters: TODAY_TARGET });
+  assert.equal(code(takeover), 'PENDING_UNKNOWN');
+  assert.ok(itemAt(store, TODAY), 'the item exists although the takeover read it as absent');
+  assertNeverRejectedWithItem(store, h, 'after takeover');
+  await original;
+  assertNeverRejectedWithItem(store, h, 'after the original returns');
+  h.clock.now += 60_000;
+  assert.equal((await h.attempt({ parameters: TODAY_TARGET })).status, 200);
+  assert.equal(h.receipt().state, 'applied');
+});
+
+test('R011-01: concurrent takeovers over a paused writer never reject; the item appears once and is applied', async () => {
+  const entered = deferred();
+  const gate = deferred();
+  let gated = true;
+  const store = planDomain({ hooks: { beforeCreate: async () => { if (gated) { gated = false; entered.resolve(); await gate.promise; } } } });
+  const h = clockHarness(store);
+  const original = h.attempt({ parameters: TODAY_TARGET });
+  await entered.promise;
+  h.clock.now = TODAY_END + 600_000;
+  const takeovers = await Promise.all(Array.from({ length: 6 }, () => h.attempt({ parameters: TODAY_TARGET })));
+  assert.ok(takeovers.every(r => code(r) === 'PENDING_UNKNOWN'), JSON.stringify(takeovers.map(code)));
+  assert.notEqual(h.receipt().state, 'rejected');
+  gate.resolve();
+  await original;
+  assertNeverRejectedWithItem(store, h, 'after the late commit');
+  h.clock.now += 60_000;
+  assert.equal((await h.attempt({ parameters: TODAY_TARGET })).status, 200);
+  assert.equal(store.writes.filter(w => w.planId === planIdOf(TODAY)).length, 1, 'takeovers never issued a second create');
+});
+
+test('R011-01: an item that never appears keeps the action PENDING_UNKNOWN (never REJECTED, never "use a new action ID")', async () => {
+  const store = planDomain({ hooks: { beforeCreate: async () => { throw new Error('process died mid-create'); } } });
+  const h = clockHarness(store);
+  const crashed = await h.attempt({ parameters: TODAY_TARGET });
+  assert.equal(code(crashed), 'RETRYABLE_TRANSPORT', 'an untyped fault is an unknown server fault (never a definite answer)');
+  assert.equal(h.receipt().state, 'started');
+  for (const later of [TODAY_END + 600_000, TODAY_END + 86_400_000, TODAY_END + 30 * 86_400_000]) {
+    h.clock.now = later;
+    const answer = await h.attempt({ parameters: TODAY_TARGET });
+    assert.equal(code(answer), 'PENDING_UNKNOWN', `at +${later - NOW_MS} ms`);
+    assert.equal(answer.body.error.retryability, 'retry_with_new_request_id', 'retry the SAME action with a new transport request id');
+    assert.notEqual(h.receipt().state, 'rejected');
+  }
+  assert.equal(itemAt(store, TODAY), undefined);
+});
+
+test('R011-01: a FIRST attempt that refuses before creating is still a definite REJECTED (nothing earlier exists to commit)', async () => {
+  const h = clockHarness(planDomain());
+  h.clock.now = TODAY_END + 1;
+  const refused = await h.attempt({ parameters: TODAY_TARGET });
+  assert.equal(code(refused), 'PAST_TARGET_IMMUTABLE');
+  assert.equal(h.receipt().state, 'rejected');
+});
+
+// ── R011-02: the first item of an absent plan freezes that plan's canonical origin ───────────────────────────
+const read = async (h, parameters, nowMs = NOW_MS) => {
+  const requestId = randomUUID();
+  return h.handle(signedRequest({ requestId, signed: { timestamp: Math.floor(nowMs / 1000) }, envelope: { contractVersion: 1, requestId, kind: 'get_plan', parameters } }));
+};
+
+test('R011-02: timed and date-only creates on an absent plan freeze its home zone; a later account zone change moves nothing', async () => {
+  for (const parameters of [GYM, { target: GYM.target, title: 'Call mom' }]) {
+    const store = planDomain();
+    const h = harness({ domain: store });
+    assert.equal((await h.handle(request({ parameters }))).status, 200);
+    const origin = store.room.calendarPlans[planIdOf(TOMORROW)];
+    assert.equal(origin.timezone, ZONE);
+    assert.equal(origin.createdAt, NOW_MS);
+    assert.equal(origin.items, undefined, 'no api1_ item in the plan array');
+    const before = (await read(h, { target: GYM.target })).body.result.plan;
+    store.room.settings.timezone = 'America/Los_Angeles';
+    const after = (await read(harness({ domain: store }), { target: GYM.target })).body.result.plan; // a fresh reader: "reload"
+    assert.deepEqual([after.target.timezone, after.target.startMs, after.target.endMs], [before.target.timezone, before.target.startMs, before.target.endMs]);
+    assert.equal(store.room.calendarPlanAuthority[FACT.id].id, FACT.id, 'activation facts untouched');
+    assert.equal(Object.keys(store.room.calendarPlanAuthority).length, 1);
+  }
+});
+
+test('R011-02: an ended plan cannot be reopened by moving the account to a later timezone', async () => {
+  const later = TODAY_END + 3_600_000; // Manila: TODAY ended an hour ago. Los Angeles: still TODAY morning.
+  const at = nowMs => ({ signed: { timestamp: Math.floor(nowMs / 1000) } });
+  const store = planDomain();
+  assert.equal((await harness({ domain: store }).handle(request({ parameters: TODAY_TARGET }))).status, 200, 'first item freezes Manila');
+  store.room.settings.timezone = 'America/Los_Angeles';
+  const reopened = await harness({ domain: store, nowMs: later }).handle(request({ actionId: ACTION_2, parameters: TODAY_TARGET, ...at(later) }));
+  assert.equal(code(reopened), 'PAST_TARGET_IMMUTABLE', 'judged in the frozen home zone, never current settings');
+  // Control: the same move on a plan that never had an item IS still live in Los Angeles (only real origins freeze).
+  const control = planDomain({ room: { settings: { timezone: 'America/Los_Angeles' } } });
+  assert.equal((await harness({ domain: control, nowMs: later }).handle(request({ actionId: ACTION_2, parameters: TODAY_TARGET, ...at(later) }))).status, 200);
+  assert.equal(control.room.calendarPlans[planIdOf(TODAY)].timezone, 'America/Los_Angeles');
+});
+
+test('R011-02: a concurrently prepared/edited owner plan keeps its origin, items and preparation (CAS re-merge, never overwrite)', async () => {
+  const ownerRecord = { createdAt: NOW_MS - 5_000, timezone: 'Asia/Tokyo', updatedAt: NOW_MS - 1, updatedBy: 'phone',
+    items: [{ id: 'powner1', task: 'Owner task', when: '', done: false, updatedAt: NOW_MS - 1, updatedBy: 'phone' }],
+    preparation: { schemaVersion: 1, targetDate: TOMORROW, preparedAt: NOW_MS - 2, timezone: ZONE, routineInstanceIds: ['r1'], oneOffItemIds: ['powner1'] } };
+  let raced = false;
+  const store = planDomain({ hooks: { beforeOriginPut: async planId => { if (!raced) { raced = true; store.ownerWrite(planId, ownerRecord); } } } });
   const h = harness({ domain: store });
-  const receipt = { ...first.infra.data.get(RECEIPT(ACTION)), leaseAcquiredAt: started, leaseExpiresAt: started + 30_000 };
-  h.infra.data.set(RECEIPT(ACTION), receipt);
-  const early = await h.handle(request());
-  assert.equal(code(early), 'PENDING_UNKNOWN', 'NOT_FOUND now, but the first attempt may still be writing');
-  assert.equal(h.infra.data.get(RECEIPT(ACTION)).state, 'pending_unknown');
-  assert.equal(h.infra.data.get(RECEIPT(ACTION)).leaseAcquiredAt, started, 'a refusing attempt wrote nothing: the window stays anchored to the first attempt');
-  const lateMs = started + MAX_ATTEMPT_MS;
-  const late = harness({ domain: store, nowMs: lateMs });
-  late.infra.data.set(RECEIPT(ACTION), { ...h.infra.data.get(RECEIPT(ACTION)), leaseExpiresAt: lateMs - 1 });
-  const terminal = await late.handle(request({ signed: { timestamp: Math.floor(lateMs / 1000) } }));
-  assert.equal(code(terminal), 'NOT_FOUND');
-  assert.equal(late.infra.data.get(RECEIPT(ACTION)).state, 'rejected');
-  assert.equal(store.writes.length, 0);
+  const response = await h.handle(request());
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  assert.deepEqual(store.room.calendarPlans[planIdOf(TOMORROW)], ownerRecord, 'the owner record is byte-for-byte intact');
+  assert.equal(store.originWrites.length, 0, 'our stale CAS lost and the re-read found an origin');
+  assert.ok(itemAt(store), 'the action item still landed at its keyed child');
+  // A record that has items but no origin is merged (items kept), never replaced.
+  const bare = planDomain({ room: { calendarPlans: { [planIdOf(TOMORROW)]: { updatedAt: 3, items: [ownerRecord.items[0]] } } } });
+  assert.equal((await harness({ domain: bare }).handle(request())).status, 200);
+  const merged = bare.room.calendarPlans[planIdOf(TOMORROW)];
+  assert.deepEqual(merged.items, ownerRecord.items);
+  assert.deepEqual([merged.createdAt, merged.timezone], [NOW_MS, ZONE]);
+});
+
+test('R011-02: two actions on the same absent plan converge on ONE origin and ONE record; a pre-switch target writes no origin', async () => {
+  const store = planDomain();
+  const h = harness({ domain: store });
+  const [a, b] = await Promise.all([h.handle(request()), h.handle(request({ actionId: ACTION_2, parameters: { ...GYM, title: 'Stretch' } }))]);
+  assert.equal(a.status, 200, JSON.stringify(a.body));
+  assert.equal(b.status, 200, JSON.stringify(b.body));
+  assert.equal(store.originWrites.length, 1, 'exactly one origin write won');
+  assert.deepEqual(Object.keys(store.room.calendarPlans), [planIdOf(TOMORROW)]);
+  assert.equal(Object.keys(store.room.calendarPlanFences[planIdOf(TOMORROW)]).length, 2);
+  const pre = planDomain();
+  const refused = await harness({ domain: pre }).handle(request({ parameters: { ...GYM, target: { store: 'calendar', id: planIdOf(addCalendarDays(FACT.activationDate, -1)) } } }));
+  assert.equal(code(refused), 'NOT_FOUND');
+  assert.equal(pre.room.calendarPlans, undefined, 'a refused target gets no origin');
+});
+
+test('R011-02: if another device froze the origin in a different zone first, the target is re-judged in that zone', async () => {
+  const later = TODAY_END - 3_600_000; // Manila: TODAY still has an hour. Tokyo (+09): TODAY already ended.
+  let raced = false;
+  const store = planDomain({ hooks: { beforeOriginPut: async planId => {
+    if (!raced) { raced = true; store.ownerWrite(planId, { createdAt: NOW_MS - 9, timezone: 'Asia/Tokyo', updatedAt: 1, updatedBy: 'tablet' }); }
+  } } });
+  const answer = await harness({ domain: store, nowMs: later }).handle(request({ parameters: TODAY_TARGET, signed: { timestamp: Math.floor(later / 1000) } }));
+  assert.equal(code(answer), 'PAST_TARGET_IMMUTABLE');
+  assert.equal(itemAt(store, TODAY), undefined, 'no item was created into an already-ended plan');
 });
 
 test('a rules refusal of the create is re-checked against the exact child before it is reported', async () => {

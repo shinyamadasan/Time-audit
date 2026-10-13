@@ -1,5 +1,22 @@
 # ChronaSense — Changelog
 
+## TASK-011 — bounded FIX FIRST pass (R011-01, R011-02) (branch: task-011)
+
+On top of reviewed candidate `a16b6e6`. Local only; nothing deployed or pushed.
+changed:
+  - R011-01 functions/src/plan-create-action.js: the elapsed-time rule (`MAX_ATTEMPT_MS`) is removed. REJECTED is
+    written only by an action's first attempt; a takeover's refusal settles PENDING_UNKNOWN (same-action retry only)
+    and converges to APPLIED when the exact child shows the attributed item.
+  - R011-02 functions/src/plan-create-action.js `ensurePlanOrigin` + functions/src/user-scoped-rtdb.js
+    `readCalendarPlanWithEtag` / `putCalendarPlanIfMatch` (pinned to calendarPlans/<planId>, ordinary owner token):
+    an absent plan's canonical origin is frozen before its first action item, via mergeCalendarPlanRecords + ETag CAS;
+    re-judged if another device's origin wins in another zone.
+  - Tests: R011-01 race orderings, concurrent takeovers, never-appearing item, first-attempt control; R011-02 timed /
+    date-only origin, zone change, no reopen, concurrent owner record, two actions, pre-switch; emulator owner-record +
+    zone-freeze case; client test for a server-frozen origin; Worker test double gains the origin primitives.
+  - DECISIONS #37, CODEMAP, functions README, handoff updated.
+unchanged: rules, tool surface, scopes, client runtime modules, Brain Dump.
+
 ## TASK-011 — Plan Authority + Conversational Scheduling V1 — review candidate (branch: task-011)
 
 From origin/main `327e0cb`. Local only: not pushed, merged or deployed; no production data, rules, Function, Worker,
@@ -7,7 +24,7 @@ OAuth, IAM or secret touched. Red-zone (rules, sync boundary, Action API): land 
 changed:
   - ONE new write tool `plan_create` ("Add gym tomorrow at 6 PM") behind `chronasense:plan.write` (DECISIONS #37).
     The item `api1_<uuid>` with immutable `creationActionId` lives at its keyed child
-    `calendarPlanFences/<planId>/api1_<uuid>`; the plan record/array is never written by the backend. No migration.
+    `calendarPlanFences/<planId>/api1_<uuid>`; the item never enters the plan array. No migration.
   - plan-item-origin.js: `isActionPlanItem`, `actionPlanItemIdFor`, `fencedMoveRefusal`, `ACTION_PLAN_ITEM_MOVE_REFUSED`;
     action items count as fenced (split/fold/merge; tombstone monotonic; attributed copy wins). plan-authority.js:
     cross-day move refused; the saveItems funnel never introduces one into a plan. planning-continuity-ui.js: date pinned.

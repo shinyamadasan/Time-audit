@@ -5,8 +5,10 @@
 //
 //     rooms/<room>/calendarPlanFences/<cal1:YYYY-MM-DD>/api1_<uuid>
 //
-// The plan record (and its re-sorted `items` array) is never written, so no concurrent owner edit can be lost
-// and array order can never decide identity. The private receipt serializes attempts; the user-scoped RTDB
+// The item never enters the plan record's re-sorted `items` array, so array order can never decide identity. The
+// only plan-record write is the canonical ORIGIN (createdAt + home timezone), established once, through the existing
+// mergeCalendarPlanRecords contract under an ETag compare-and-set, so the plan's home zone is frozen by its first
+// item and no concurrent owner edit can be lost (R011-02). The private receipt serializes attempts; the user-scoped RTDB
 // conditional create (`if-match: null_etag`, with a token whose claims name exactly this action, kind and plan)
 // allows at most one absent -> created transition, even across lease expiry, crash or a lost response.
 //
@@ -14,11 +16,14 @@
 //   1. claim/replay the receipt (an applied or rejected action answers from it, never re-executes)
 //   2. read the EXACT child: an item carrying this action's marker proves this action created it
 //   3. only if it is absent: resolve the target through Plan Authority (calendar activation, frozen home zone,
-//      past-day immutability) and create-if-absent
+//      past-day immutability), freeze the plan's canonical origin, and create-if-absent
 //   4. read the exact child back: applied ONLY when the attributed item is proven present
-// A definite refusal is made terminal only when no earlier attempt of this action can still be writing.
+// REJECTED is written only by the FIRST attempt of an action (a fresh receipt claim): no earlier attempt exists that
+// could still commit. A takeover never rejects: an earlier attempt's create may still land whatever time has passed
+// (a request timeout is not a writer fence), so its outcome stays PENDING_UNKNOWN until the exact child proves it
+// (R011-01). Only the same action may retry.
 
-import { calendarItemInstants, parseCalendarPlanId } from '../shared/calendar-plan-model.js';
+import { calendarItemInstants, mergeCalendarPlanRecords, parseCalendarPlanId } from '../shared/calendar-plan-model.js';
 import { actionPlanItemIdFor, isActionPlanItem } from '../shared/plan-item-origin.js';
 import { planItemTime } from './envelope.js';
 import { ApiError, ERROR_CODES } from './errors.js';
@@ -26,8 +31,8 @@ import { createPlanRead, revision } from './plan-read.js';
 import { canonicalRequestHash, classifyExistingReceipt } from './receipts.js';
 
 const LEASE_MS = 30_000;
-/** No earlier attempt can still be writing after this: the Function's own 120 s timeout, plus margin. */
-export const MAX_ATTEMPT_MS = 150_000;
+/** Compare-and-set rounds for establishing the plan origin against concurrent writers before reporting unknown. */
+const ORIGIN_CAS_ATTEMPTS = 3;
 /** Refusals that are facts about the account's authoritative state (not transport uncertainty). */
 const DEFINITIVE_REFUSALS = new Set(['NOT_FOUND', 'CONFLICT', 'PAST_TARGET_IMMUTABLE', 'FORBIDDEN', 'DOMAIN_LIMIT']);
 
@@ -66,7 +71,7 @@ function resultFor({ actionId, itemId, planId, date, parameters, item, createdAt
 
 /** Plan Authority's own rules for an ordinary direct Add, server-side: the date must be calendar-authoritative
  *  (never activated by this call), its plan must not have ended in its frozen home zone, and the deterministic id
- *  must not already be in use anywhere in that plan. */
+ *  must not already be in use anywhere in that plan. @returns {string} the home zone the plan was judged in */
 async function assertWritableTarget(identity, { domain, nowMs, planId, itemId }) {
   const reader = await createPlanRead(identity, { domain, nowMs });
   const target = { store: 'calendar', id: planId };
@@ -75,6 +80,26 @@ async function assertWritableTarget(identity, { domain, nowMs, planId, itemId })
     throw new ApiError('PAST_TARGET_IMMUTABLE', 'That plan day has ended. Past plans are history and cannot be added to.', { reason: 'plan-target-past' });
   }
   if (plan.items.some(item => item.itemId === itemId) || await reader.inactiveItem(target, itemId)) throw conflict('plan-item-id-occupied');
+  return plan.target.timezone;
+}
+
+/** The plan record already carries its canonical origin (the same test mergeCalendarPlanRecords applies). */
+const hasOrigin = record => !!record && Number.isFinite(Number(record.createdAt)) && Number(record.createdAt) > 0 && typeof record.timezone === 'string';
+
+/** R011-02: freeze the plan's home timezone before its first action item exists, exactly as a client's first plan
+ *  write does (createdAt + timezone, merged by mergeCalendarPlanRecords: earliest origin wins, items and preparation
+ *  preserved). A record that already has an origin is never rewritten. Whole-record compare-and-set with the ordinary
+ *  owner token (never the action token): a concurrent owner/device write changes the ETag and is re-merged, never lost.
+ *  @returns {Promise<string>} the plan's frozen home zone */
+async function ensurePlanOrigin(identity, { domain, planId, homeZone, createdAt }) {
+  for (let round = 0; round < ORIGIN_CAS_ATTEMPTS; round++) {
+    const { value, etag } = await domain.readCalendarPlanWithEtag(identity, planId);
+    if (value !== null && (typeof value !== 'object' || Array.isArray(value))) throw new ApiError('CONFLICT', 'The plan record contains incompatible data.', { reason: 'malformed-plan-record' });
+    if (hasOrigin(value)) return value.timezone;
+    const merged = mergeCalendarPlanRecords(value, { items: [], createdAt, timezone: homeZone }, planId);
+    if ((await domain.putCalendarPlanIfMatch(identity, planId, merged, etag)) === 'written') return homeZone;
+  }
+  throw new ApiError('RETRYABLE_TRANSPORT', 'The plan record kept changing.', { reason: 'plan-origin-contended' });
 }
 
 async function settle(receipts, identity, actionId, snapshot, update) {
@@ -115,10 +140,8 @@ export async function createPlanAction(identity, { command, domain, receipts, at
   }
   if (['conflict', 'needs_user_decision'].includes(existing.state)) throw conflict('terminal-receipt');
   if (!['started', 'pending_unknown'].includes(existing.state)) throw conflict('malformed-receipt-state');
-  let priorAttemptAt = null;
   if (!claim.claimed) {
     if (classifyExistingReceipt(existing, { requestHash, nowMs }) === 'lease_active') throw pending();
-    priorAttemptAt = Number.isSafeInteger(existing.leaseAcquiredAt) ? existing.leaseAcquiredAt : 0;
     const takeover = { ...existing, attemptId, leaseAcquiredAt: nowMs, leaseExpiresAt: nowMs + LEASE_MS, updatedAt: nowMs };
     if ((await receipts.compareAndSet(identity.firebaseUid, actionId, takeover, snapshot.etag)) !== 'written') throw pending();
     snapshot = await receipts.readWithEtag(identity.firebaseUid, actionId);
@@ -131,12 +154,9 @@ export async function createPlanAction(identity, { command, domain, receipts, at
     throw pending();
   };
   const refuse = async error => {
-    // Terminal only if no earlier attempt of this action can still land its write; otherwise stay unknown. This
-    // attempt wrote nothing, so the window stays anchored to the earlier attempt (quick retries cannot extend it).
-    if (priorAttemptAt !== null && nowMs < priorAttemptAt + MAX_ATTEMPT_MS) {
-      await settle(receipts, identity, actionId, snapshot, { state: 'pending_unknown', leaseAcquiredAt: priorAttemptAt, leaseExpiresAt: nowMs, updatedAt: nowMs });
-      throw pending();
-    }
+    // Terminal only on this action's FIRST attempt, which has itself written nothing. After a takeover an earlier
+    // attempt may still commit, so the refusal is not proof of absence: stay unknown (same-action retry only).
+    if (!claim.claimed) return unknown();
     await settle(receipts, identity, actionId, snapshot, { state: 'rejected', resultCode: error.code, resultMessage: error.message,
       retryability: 'not_retryable', updatedAt: nowMs });
     throw error;
@@ -154,8 +174,12 @@ export async function createPlanAction(identity, { command, domain, receipts, at
 
   let item = await readOwned();
   if (!item) {
-    try { await assertWritableTarget(identity, { domain, nowMs, planId, itemId }); }
-    catch (error) {
+    try {
+      const homeZone = await assertWritableTarget(identity, { domain, nowMs, planId, itemId });
+      const frozenZone = await ensurePlanOrigin(identity, { domain, planId, homeZone, createdAt });
+      // Another device froze the origin first, in another zone: judge the target again in the zone that won.
+      if (frozenZone !== homeZone && await assertWritableTarget(identity, { domain, nowMs, planId, itemId }) !== frozenZone) throw new ApiError('RETRYABLE_TRANSPORT', 'The plan origin changed.', { reason: 'plan-origin-moved' });
+    } catch (error) {
       if (error instanceof ApiError && DEFINITIVE_REFUSALS.has(error.code)) return refuse(error);
       return unknown();
     }
