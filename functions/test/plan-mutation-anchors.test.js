@@ -142,7 +142,7 @@ const ANCHORS = [
     [["  return { source: stamped({ ...pre, deleted: true, movedToDayId: destination.id, relocationRevision }), destination: moved };",
       '  return { source: stamped({ ...pre }), destination: moved };']]],
   ['wire form ignored -> an applied uncomplete can never be proven', 'wireFormProven',
-    [['  const stamped = item => wireForm({ ...item, updatedAt: stampMs, updatedBy: actorRef });', '  const stamped = item => ({ ...item, updatedAt: stampMs, updatedBy: actorRef });']]],
+    [['  const stamped = item => wireForm({ ...item, updatedAt: stampMs, updatedBy: writer });', '  const stamped = item => ({ ...item, updatedAt: stampMs, updatedBy: writer });']]],
   ['move write not conditional on the read -> a concurrent owner delete is silently undone', 'moveNeverUndoesConcurrentDelete',
     [['        outcome = await domain.putCalendarPlansIfMatch(identity, plans, physical.etag);',
       '        outcome = await domain.putCalendarPlansIfMatch(identity, plans, (await domain.readCalendarPlansWithEtag(identity)).etag);']]],

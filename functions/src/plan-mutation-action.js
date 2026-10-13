@@ -25,7 +25,8 @@
 //   - expectedRevision is the item revision get_plan/get_item returned. It is compared against the item's
 //     AUTHORITATIVE physical copy read with its ETag, and the write is conditional on that ETag, so a newer owner
 //     edit is never overwritten: it changes the ETag (the CAS fails) and the revision (the action is stale).
-//   - The post-state is deterministic: stamp = max(receipt.createdAt, pre.updatedAt + 1), updatedBy = actorRef. Before
+//   - The post-state is deterministic AND action-specific: stamp = max(receipt.createdAt, pre.updatedAt + 1) and
+//     updatedBy = the actionId (a writer name every merge already treats as an opaque tie-break string). Before
 //     its FIRST domain write an attempt records that INTENT (stamp + planned resulting revisions) in the receipt by a
 //     receipt compare-and-set. A takeover's receipt CAS therefore fences every earlier attempt that had not yet recorded
 //     an intent: such an attempt can never write. If no intent exists, nothing this action did can ever land, and a
@@ -106,15 +107,15 @@ async function readRecord(identity, domain, planId, itemId) {
 /** One conditional write of `next` to the copy `physical` was read from. A record write is the client's own push:
  *  mergeCalendarPlanRecords (per-item relocation order, then updatedAt), with the plan origin frozen if absent.
  *  @returns {Promise<'written'|'changed'>} */
-async function writePhysical(identity, domain, planId, physical, next, { stampMs, actorRef, homeZone }) {
+async function writePhysical(identity, domain, planId, physical, next, { stampMs, writer, homeZone }) {
   if (physical.where === 'fence') return domain.putPlanFenceItemIfMatch(identity, planId, next.id, next, physical.etag);
-  return domain.putCalendarPlanIfMatch(identity, planId, mergedRecord(physical.record, planId, next, { stampMs, actorRef, homeZone }), physical.etag);
+  return domain.putCalendarPlanIfMatch(identity, planId, mergedRecord(physical.record, planId, next, { stampMs, writer, homeZone }), physical.etag);
 }
 
 /** `record` with `next` pushed into it exactly as a client push merges an item (relocation order, then updatedAt),
  *  its origin frozen if absent. */
-function mergedRecord(record, planId, next, { stampMs, actorRef, homeZone }) {
-  const candidate = { items: [next], updatedAt: stampMs, updatedBy: actorRef,
+function mergedRecord(record, planId, next, { stampMs, writer, homeZone }) {
+  const candidate = { items: [next], updatedAt: stampMs, updatedBy: writer,
     ...(hasOrigin(record) ? {} : { createdAt: stampMs, timezone: homeZone }) };
   const merged = wireForm(mergeCalendarPlanRecords(record, candidate, planId));
   // The stored copy must not out-rank the action's item (a newer relocation elsewhere): never write a merge that drops it.
@@ -178,8 +179,8 @@ function assertValidOn(date, item) {
  * no-op. Pure apart from the Plan Authority facts in `facts`. Throws a definitive ApiError for a domain refusal.
  * @returns {{noop:true} | {source:object, destination?:object}}
  */
-export function planMutation(kind, parameters, pre, { stampMs, actorRef, date, ended, today, accountZone, destination }) {
-  const stamped = item => wireForm({ ...item, updatedAt: stampMs, updatedBy: actorRef });
+export function planMutation(kind, parameters, pre, { stampMs, writer, date, ended, today, accountZone, destination }) {
+  const stamped = item => wireForm({ ...item, updatedAt: stampMs, updatedBy: writer });
   if (kind === 'plan_set_completion') {
     if (ended) {
       // completeCarryoverItem: an ended plan's item is still live only when its own start lands on today's date.
@@ -208,7 +209,7 @@ export function planMutation(kind, parameters, pre, { stampMs, actorRef, date, e
   if (planItemKind(pre) === 'priority' && destination.activePriorities >= PRIORITY_MAX) {
     throw new ApiError('DOMAIN_LIMIT', `That day's Top ${PRIORITY_MAX} is already full. Finish, remove or demote one first.`, { reason: 'priority-cap' });
   }
-  const relocationRevision = nextPlanItemRelocation(pre, { fromDayId: destination.sourceId, toDayId: destination.id, updatedAt: stampMs, updatedBy: actorRef });
+  const relocationRevision = nextPlanItemRelocation(pre, { fromDayId: destination.sourceId, toDayId: destination.id, updatedAt: stampMs, updatedBy: writer });
   const moved = stamped({ ...draft, relocationRevision, movedToDayId: null, ...(draft.deleted !== undefined ? { deleted: false } : {}) });
   return { source: stamped({ ...pre, deleted: true, movedToDayId: destination.id, relocationRevision }), destination: moved };
 }
@@ -329,7 +330,7 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
     const pre = physical.item;
     const currentRevision = pre ? itemRevision(planId, pre) : null;
 
-    // ── proof: the planned post-state is authoritative (deterministic stamp + actorRef make it this action's)
+    // ── proof: the planned post-state is authoritative (its writer is this actionId: no other action can produce it)
     if (intent && currentRevision === intent.sourceRevision) {
       if (kind !== 'plan_move') return applied(planId, pre, true);
       // The source tombstone and the destination copy committed together: the tombstone proves the move.
@@ -357,7 +358,7 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
     const stampMs = intent?.stampMs ?? Math.max(snapshot.value.createdAt, (Number.isSafeInteger(pre.updatedAt) ? pre.updatedAt : 0) + 1);
     let planned;
     try {
-      planned = planMutation(kind, parameters, pre, { stampMs, actorRef, date, ended: source.target.endMs <= nowMs,
+      planned = planMutation(kind, parameters, pre, { stampMs, writer: actionId, date, ended: source.target.endMs <= nowMs,
         today: reader.today, accountZone: reader.timezone,
         destination: destination && { id: destinationId, sourceId: planId, date: destination.target.date, ended: destination.target.endMs <= nowMs,
           activePriorities: destination.items.filter(item => item.itemId !== itemId && item.kind === 'priority').length } });
@@ -396,11 +397,11 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
       if (planned.destination) {
         // Destination origin frozen in the same write when absent, in the zone the destination was judged in.
         const plans = { ...physical.plans,
-          [planId]: mergedRecord(physical.record, planId, planned.source, { stampMs, actorRef, homeZone: source.target.timezone }),
-          [destinationId]: mergedRecord(physical.destination.record, destinationId, planned.destination, { stampMs, actorRef, homeZone: destination.target.timezone }) };
+          [planId]: mergedRecord(physical.record, planId, planned.source, { stampMs, writer: actionId, homeZone: source.target.timezone }),
+          [destinationId]: mergedRecord(physical.destination.record, destinationId, planned.destination, { stampMs, writer: actionId, homeZone: destination.target.timezone }) };
         outcome = await domain.putCalendarPlansIfMatch(identity, plans, physical.etag);
       } else {
-        outcome = await writePhysical(identity, domain, planId, physical, planned.source, { stampMs, actorRef, homeZone: source.target.timezone });
+        outcome = await writePhysical(identity, domain, planId, physical, planned.source, { stampMs, writer: actionId, homeZone: source.target.timezone });
       }
       if (outcome === 'written') ownWriteLanded = true;
     } catch (error) {

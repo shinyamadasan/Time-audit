@@ -680,7 +680,7 @@ closure:
 ---
 
 ### TASK-012 - Expanded Conversational Plan Actions
-status: in-progress
+status: review
 owner: claude
 source: owner-direct
 priority: P1
@@ -695,25 +695,30 @@ context:
   resolves language; ChronaSense owns identity, current truth, revisions, time, tombstones, receipts.
 
 acceptance:
-  - [ ] Separate semantic plan mutation tools behind `chronasense:plan.write` (no generic patch/path/execute);
+  - [x] Separate semantic plan mutation tools behind `chronasense:plan.write` (no generic patch/path/execute);
         five reads, brain_dump_add and plan_create behaviorally unchanged.
-  - [ ] Every mutation names a stable item ID + exact calendar target + expectedRevision; a stale revision is
+  - [x] Every mutation names a stable item ID + exact calendar target + expectedRevision; a stale revision is
         a typed STALE_REVISION and never overwrites a newer owner edit.
-  - [ ] Reuses the existing Plan Authority semantics (updateItem done/edit/same-id relocation, in-place
+  - [x] Reuses the existing Plan Authority semantics (updateItem done/edit/same-id relocation, in-place
         tombstone, carryover-completion exception); typed refusals where the domain refuses (fenced cross-day move).
-  - [ ] Receipt idempotency for every action: exact replay, payload conflict, takeover, late writer, APPLIED only
+  - [x] Receipt idempotency for every action: exact replay, payload conflict, takeover, late writer, APPLIED only
         after authoritative readback, REJECTED only when no earlier attempt can still write.
-  - [ ] Worker deploy cannot silently drop the required plaintext bindings (bounded local gate).
-  - [ ] Clean, locally committed candidate plus fresh-reviewer handoff. No push, merge or deploy.
+  - [x] Worker deploy cannot silently drop the required plaintext bindings (bounded local gate).
+  - [x] Clean, locally committed candidate plus fresh-reviewer handoff. No push, merge or deploy.
 
 constraints:
   - No caller UID/room/path, no Admin domain bypass, no second truth store, no storage migration.
   - No deploy, production Firebase/Cloudflare/OAuth/IAM/secret mutation, force push or destructive Git.
 
 verification:
-  - [ ] Targeted Function, Worker and real RTDB-emulator tests (adversarial), mutation anchors.
-  - [ ] npm test, npm run test:smoke, npm run lint, npm run check:www-parity,
+  - [x] Targeted Function, Worker and real RTDB-emulator tests (adversarial), mutation anchors.
+  - [x] npm test, npm run test:smoke, npm run lint, npm run check:www-parity,
         npm run check:firebase-rules, npm run test:fence, git diff --check.
+
+review:
+  Builder self-review only (TASK_012_HANDOFF.md). Red-zone (RTDB plan writes, Action API): an approval must land as
+  `approved` (held), never auto-merged. Open owner decision: moving api1_/bdp1| items needs a successor-identity model.
+
 
 ---
 

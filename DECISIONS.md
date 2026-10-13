@@ -811,3 +811,71 @@ an unknown outcome to escape it; or treat elapsed time or a request timeout as p
 cannot still commit.
 
 ---
+
+## 38. TASK-012 conversational plan mutations: four semantic commands that replay the client's own Plan Authority operations, guarded by item revision and one atomic write
+
+**Status:** review-ready candidate (2026-10-13); no production rollout.
+
+**Problem:** TASK-011 could only add a task. "Mark gym done", "change it to 7 PM", "move that to Friday", "delete that
+test task" mutate EXISTING plan truth, which a conversation reads at one moment and acts on later. The owner may edit in
+between, an attempt may die mid-flight, and a move touches two plan records.
+
+**Decision:**
+- **Four commands, not a patch:** `plan_set_completion` (`completed: true|false`), `plan_edit` (title / explicit
+  `time {when, whenTz, whenDayOffset}` / `durationMinutes` / `clearSchedule: true`; absence means unchanged, nothing is
+  cleared by omission), `plan_move` (another calendar plan, optional new time/duration), `plan_delete`. Each is the
+  server twin of the owner client's own operation: `updateItem({done, doneAt})` (plus `completeCarryoverItem`'s
+  "starts today" exception on an ended plan), `updateItem` same target, `updateItem` cross-day (SAME id goes live at
+  the destination with the next `relocationRevision`; the source copy becomes a tombstone naming `movedToDayId`), and the
+  in-place stamped tombstone. No third identity model. Calendar store only (`DOMAIN_LIMIT` otherwise), all under the
+  existing `chronasense:plan.write` scope (no new scope: no destructive operation here is irreversible beyond what
+  the owner's own client already does with the same rules).
+- **Identity:** the caller names `target` (exact `cal1:` plan) + stable `itemId` + `expectedRevision` (the `rev1:` item
+  revision `get_plan`/`get_item` return). Never an index, title or time. The physical location follows the item's own
+  identity: `api1_` / `bdp1|` live at their keyed calendar fence child, everything else in the plan record's array.
+- **Lost-update protection:** the revision is compared with the item's authoritative physical copy read WITH its ETag,
+  and the write is conditional on that ETag; a newer owner edit changes both, so it is never overwritten
+  (`STALE_REVISION` carries the current revision). Array writes go through `mergeCalendarPlanRecords` exactly like a
+  client push (other items, preparation and origin survive; an absent origin is frozen in the same write).
+- **A move is ONE atomic write:** source tombstone + destination copy are one `if-match` PUT of the owner's
+  `calendarPlans` collection. Two separate writes (the client's order) were tried and failed review-by-test: an owner
+  delete landing between the source read and the destination write was silently undone by the destination's relocation.
+  The collection is already read whole (and capped at 1 MiB) by every Action API plan read, so no new limit is added;
+  any concurrent plan write anywhere just retries the CAS (bounded).
+- **Fenced items are not moved:** `api1_` and `bdp1|` items are location-bound by their path (DECISIONS #33/#37) and
+  the unchanged rules refuse relocation fields on a fence child. `plan_move` refuses them with a typed `DOMAIN_LIMIT`
+  before anything is written, as Plan Authority's own `updateItem` does. A stale-recovery copy (`carriedFromId` /
+  `carriedFromDayId`) is also refused (re-moving it is the Unfinished flow's job; the server read model would reject its
+  relocation chain). Moving a ChatGPT-created task needs a reviewed successor-identity model: an open owner decision.
+- **Rules are unchanged.** Every write uses the ordinary owner token at a URL pinned by `user-scoped-rtdb.js`
+  (`readPlanFenceItemWithEtag`/`putPlanFenceItemIfMatch`: one existing `api1_`/`bdp1|` child, never a create or delete;
+  `readCalendarPlansWithEtag`/`putCalendarPlansIfMatch`: the collection, calendar keys only, existing ETag only;
+  TASK-011's `readCalendarPlanWithEtag`/`putCalendarPlanIfMatch`). The existing rules keep enforcing marker pinning,
+  tombstone monotonicity and no relocation on fence children, and no `api1_`/marker in any array (emulator-proven
+  against the Function's own primitives).
+- **Idempotency and recovery:** same receipt store and claim/replay/takeover as TASK-011. The post-state is
+  deterministic and action-specific (`stamp = max(receipt.createdAt, pre.updatedAt + 1)`, `updatedBy = actionId`, in RTDB
+  wire form), so a planned revision can only be produced by this action, never by an identical intent from another one.
+  Before its first domain write an attempt records an **intent** (stamp + planned resulting revisions) by a receipt
+  compare-and-set; a takeover's receipt CAS therefore fences every older attempt that had not yet recorded one. Then:
+  planned revision observed -> APPLIED (after an authoritative re-read only); pre-state -> (re)apply the identical
+  post-state; anything else -> PENDING_UNKNOWN if an earlier intent exists or one of this attempt's writes landed or
+  had an unknown result, else a definite `STALE_REVISION`. REJECTED is written only when no write of this action can
+  ever land, which (unlike TASK-011's "first attempt only") also holds for a takeover that finds no recorded intent.
+  Already-in-state completion and an unchanged edit are APPLIED no-ops (`changed: false`).
+
+**Known limits (stated):** an action whose earlier attempt recorded an intent and whose item was then edited stays
+PENDING_UNKNOWN indefinitely (whether it applied before the edit cannot be proven); the controller must not re-send that
+intent under a new action ID, but may start a new action from a fresh read. ETag CAS is content-addressed: a byte-exact
+restoration of the pre-image could re-admit a paused earlier write of the identical planned post-state. Array-item
+tombstones remain last-writer-wins on clients (as before); fence tombstones are server-monotonic. A concurrent owner move
+of the same item on another device with an equal relocation sequence remains the existing recovery-conflict case.
+
+**Release order:** no client or rules change. Function first (new commands are unreachable until the Worker exposes
+them), then the Worker via `scripts/deploy.mjs` (all five plaintext bindings passed explicitly; never `--keep-vars`).
+
+**Do not:** add a generic patch/update tool; accept an index, title or path as identity; write a move as two separate
+record writes; move an `api1_`/`bdp1|` item by tombstone + recreate; report APPLIED without an authoritative re-read;
+report REJECTED while an earlier attempt's intent exists or one of its own writes may have landed; or deploy the Worker with a plain `wrangler deploy`.
+
+---

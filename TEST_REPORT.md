@@ -5,6 +5,32 @@
 
 ---
 
+## TASK-012 Expanded Conversational Plan Actions (candidate) · 2026-10-13
+suite: functions `node --test test/*.test.js`; root `npm test` (after `npm ci --legacy-peer-deps`, as CI installs);
+  `npm run test:fence`; Worker `npm test` + `npm run check:bundle` + `node scripts/deploy.mjs --dry-run`;
+  `npm run test:smoke`; `npm run lint`; check:www-parity / check:firebase-rules / check:functions-shared; `git diff --check`.
+result:
+  - functions 205/205 (159 baseline; plan-mutation-action 35, plan-mutation-anchors 8, N1 1, N2 + primitive pins 3).
+  - mutation anchors: 7/7 source mutants killed (revision check, intent record, post-intent rejection, destination
+    origin freeze, source tombstone, wire form, move CAS), shipped baseline passes all scenarios. Two mutants initially
+    survived; the scenarios were sharpened until each guard was proven load-bearing.
+  - test:fence exit 0: rules-emulator 77/77 (3 new TASK-012 real-server cases: array complete/edit/move/delete +
+    stale; api1_/bdp1| fence-child mutations; owner-token primitives refused by the real rules), fence-sdk 20/20,
+    rules-mutation 28/28. Rules unchanged (check:firebase-rules OK).
+  - npm test: exit 0, 2154 node:test passes, 0 failures, 1 pre-existing env-gated skip.
+  - Worker 32/32 (plan-mutation 7, deploy-bindings 4 new; read/plan-create pins updated for the new tool surface and
+    consent wording); bundle dry run OK; deploy gate `--dry-run` attaches all five bindings, values hidden.
+  - lint: 0 errors, 47 warnings, identical file set to base 2dfa1df. www parity OK; functions/shared parity OK; diff --check OK.
+  - browser smoke (no client runtime file changed vs base): run 1: 860/863 (3 timing failures: planning-continuity.spec.js:161, :193, smoke.spec.js:868; each
+    passed in isolation on BOTH this branch and base 2dfa1df); run 2 full suite: 863/863, exit 0.
+found and fixed during the build (all now under test): two-write move undid a concurrent owner delete; RTDB null
+  pruning broke the receipt/readback proof (caught only by the real emulator, so the unit fakes now prune nulls too);
+  own definite 412 misreported as unknown; post-crash move takeover refused its own relocated source; identical intents
+  from two actions could claim each other's write.
+untested: production IAM/custom-token signing, deployed /v1/command, Android build, a real `scripts/deploy.mjs --confirm`.
+
+---
+
 ## TASK-011 production rollout acceptance · 2026-10-13
 suite: production checks only (no test suite rerun; runtime unchanged since the reviewed SHA).
 result:
