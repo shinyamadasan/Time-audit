@@ -679,6 +679,44 @@ closure:
 
 ---
 
+### TASK-012 - Expanded Conversational Plan Actions
+status: in-progress
+owner: claude
+source: owner-direct
+priority: P1
+depends-on: TASK-011
+files: functions/src/ (plan mutation command, envelope, user-scoped fence-item primitives, dispatch), functions/test/, firebase-rules-emulator.test.js, workers/chronasense-conversational-bridge/ (mutation tools, deploy binding gate), docs/CHRONASENSE_ACTION_API_V1.md, DECISIONS.md, CODEMAP.md, TASKS.md, CHANGELOG.md, TEST_REPORT.md, TASK_012_HANDOFF.md (new)
+
+context:
+  Owner-direct instruction, 2026-10-13 (owner unavailable; build autonomously to REVIEW-READY): safe
+  conversational mutation of EXISTING authoritative plan items ("Mark gym done", "mark that incomplete",
+  "change gym to 7 PM", "move that to Friday", "rename it", "make it 90 minutes", "delete that task").
+  Base: live origin/main 2dfa1df9c0c4a5f8304c64b42f1aa1e7745ed3fa (TASK-011 closed). The controller
+  resolves language; ChronaSense owns identity, current truth, revisions, time, tombstones, receipts.
+
+acceptance:
+  - [ ] Separate semantic plan mutation tools behind `chronasense:plan.write` (no generic patch/path/execute);
+        five reads, brain_dump_add and plan_create behaviorally unchanged.
+  - [ ] Every mutation names a stable item ID + exact calendar target + expectedRevision; a stale revision is
+        a typed STALE_REVISION and never overwrites a newer owner edit.
+  - [ ] Reuses the existing Plan Authority semantics (updateItem done/edit/same-id relocation, in-place
+        tombstone, carryover-completion exception); typed refusals where the domain refuses (fenced cross-day move).
+  - [ ] Receipt idempotency for every action: exact replay, payload conflict, takeover, late writer, APPLIED only
+        after authoritative readback, REJECTED only when no earlier attempt can still write.
+  - [ ] Worker deploy cannot silently drop the required plaintext bindings (bounded local gate).
+  - [ ] Clean, locally committed candidate plus fresh-reviewer handoff. No push, merge or deploy.
+
+constraints:
+  - No caller UID/room/path, no Admin domain bypass, no second truth store, no storage migration.
+  - No deploy, production Firebase/Cloudflare/OAuth/IAM/secret mutation, force push or destructive Git.
+
+verification:
+  - [ ] Targeted Function, Worker and real RTDB-emulator tests (adversarial), mutation anchors.
+  - [ ] npm test, npm run test:smoke, npm run lint, npm run check:www-parity,
+        npm run check:firebase-rules, npm run test:fence, git diff --check.
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

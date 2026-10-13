@@ -84,14 +84,14 @@ async function assertWritableTarget(identity, { domain, nowMs, planId, itemId })
 }
 
 /** The plan record already carries its canonical origin (the same test mergeCalendarPlanRecords applies). */
-const hasOrigin = record => !!record && Number.isFinite(Number(record.createdAt)) && Number(record.createdAt) > 0 && typeof record.timezone === 'string';
+export const hasOrigin = record => !!record && Number.isFinite(Number(record.createdAt)) && Number(record.createdAt) > 0 && typeof record.timezone === 'string';
 
 /** R011-02: freeze the plan's home timezone before its first action item exists, exactly as a client's first plan
  *  write does (createdAt + timezone, merged by mergeCalendarPlanRecords: earliest origin wins, items and preparation
  *  preserved). A record that already has an origin is never rewritten. Whole-record compare-and-set with the ordinary
  *  owner token (never the action token): a concurrent owner/device write changes the ETag and is re-merged, never lost.
  *  @returns {Promise<string>} the plan's frozen home zone */
-async function ensurePlanOrigin(identity, { domain, planId, homeZone, createdAt }) {
+export async function ensurePlanOrigin(identity, { domain, planId, homeZone, createdAt }) {
   for (let round = 0; round < ORIGIN_CAS_ATTEMPTS; round++) {
     const { value, etag } = await domain.readCalendarPlanWithEtag(identity, planId);
     if (value !== null && (typeof value !== 'object' || Array.isArray(value))) throw new ApiError('CONFLICT', 'The plan record contains incompatible data.', { reason: 'malformed-plan-record' });

@@ -761,3 +761,142 @@ test('action api (R011-02): an existing owner plan keeps origin, items and prepa
   assert.equal(before.timezone, 'Asia/Manila');
   assert.equal((await db.read(`${PLAN_ROOM}/calendarPlans/${target.id}`)).items, undefined, 'no api1_ item in any plan array');
 });
+
+// ── TASK-012 conversational plan mutations (DECISIONS #38) ──────────────────
+// The Function's mutation path against the REAL server and rules: owner-token compare-and-set of an array record,
+// of an api1_/bdp1| fence child, and the ONE atomic calendarPlans write a move uses. Then the same primitives used
+// as an adversary would: the unchanged rules still refuse resurrection, relocation, marker rewrite and array injection.
+const MUTATION_PLAN = STORES.calendar.targetId;
+const MUTATION_OTHER = STORES.calendar.otherId;
+const mutationGym = (extra = {}) => ({ id: 'pgym1', task: 'Gym', when: '18:00', whenTz: 'Asia/Manila', durationMinutes: 60, done: false, updatedAt: T, updatedBy: 'phone', ...extra });
+async function mutationAccount() {
+  const db = await freshDb();
+  await db.seed(`${ROOM}/settings`, { timezone: 'Asia/Manila' });
+  await seedCalendarAuthority(db);
+  const record = { createdAt: T - 10, timezone: 'Asia/Manila', updatedAt: T, updatedBy: 'phone', items: [mutationGym(), { ...ordinary }] };
+  assert.equal((await asClient(db, 'PUT', `${ROOM}/calendarPlans/${MUTATION_PLAN}`, ALICE, record)).status, 200, 'the owner wrote the plan normally');
+  const infra = infraFor(db);
+  const domain = createUserScopedRtdb({ databaseUrl: emulator.base, namespace: db.name, idTokens: planScopedTokens });
+  const handle = createActionApiHandler({ keys: KEYS, owner: { ownerSubject: 'access-sub-owner-1', ownerFirebaseUid: 'alice' },
+    nonces: createNonceStore({ infra }), receipts: createReceiptStore({ infra }), domain, now: () => NOW_MS,
+    log: entry => { if (process.env.DBG && entry.event === 'rejected') console.log('LOG', JSON.stringify(entry)); } });
+  return { db, domain, handle };
+}
+function mutationCommand(kind, parameters, expectedRevision, actionId = `act1_${randomUUID()}`) {
+  const requestId = randomUUID();
+  return signedRequest({ path: COMMAND_PATH, requestId, signed: { path: COMMAND_PATH, scopes: ['chronasense:plan.write'] },
+    envelope: { contractVersion: 1, requestId, actionId, kind, parameters, expectedRevision,
+      actionProvenance: { version: 1, sourceKind: 'chatgpt_plugin', actionId, actorRef: actionActorRef('access-sub-owner-1'), capturedAt: new Date(NOW_MS).toISOString() } } });
+}
+async function readPlanItem(handle, planId, itemId) {
+  const requestId = randomUUID();
+  const response = await handle(signedRequest({ requestId, envelope: { contractVersion: 1, requestId, kind: 'get_item',
+    parameters: { source: 'plan', id: itemId, target: { store: 'calendar', id: planId } } } }));
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  return response.body.result;
+}
+const atPlan = planId => ({ store: 'calendar', id: planId });
+const STALE_ETAG = '"stale-etag"';
+
+test('TASK-012: complete, edit, delete and an atomic move through the real rules; replay; stale write refused; owner edit kept', async () => {
+  const { db, handle } = await mutationAccount();
+  const planAt = `${ROOM}/calendarPlans/${MUTATION_PLAN}`;
+  const item = async () => (await db.read(planAt)).items.find(entry => entry.id === 'pgym1');
+
+  const completeId = `act1_${randomUUID()}`;
+  const before = (await readPlanItem(handle, MUTATION_PLAN, 'pgym1')).item.revision;
+  const done = await handle(mutationCommand('plan_set_completion', { target: atPlan(MUTATION_PLAN), itemId: 'pgym1', completed: true }, before, completeId));
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal((await item()).done, true);
+  assert.equal(done.body.result.revision, (await readPlanItem(handle, MUTATION_PLAN, 'pgym1')).item.revision, 'readback revision == result');
+  assert.equal((await handle(mutationCommand('plan_set_completion', { target: atPlan(MUTATION_PLAN), itemId: 'pgym1', completed: true }, before, completeId))).body.result.idempotentReplay, true);
+
+  const undone = await handle(mutationCommand('plan_set_completion', { target: atPlan(MUTATION_PLAN), itemId: 'pgym1', completed: false },
+    (await readPlanItem(handle, MUTATION_PLAN, 'pgym1')).item.revision));
+  assert.equal(undone.status, 200, JSON.stringify(undone.body));
+  assert.equal((await item()).doneAt, undefined, 'RTDB pruned doneAt; the proof still matched');
+
+  // The owner edits after ChatGPT read: the old revision is refused and the owner edit is kept.
+  const stale = (await readPlanItem(handle, MUTATION_PLAN, 'pgym1')).item.revision;
+  const record = await db.read(planAt);
+  record.items = record.items.map(entry => entry.id === 'pgym1' ? { ...entry, task: 'Gym (legs)', updatedAt: entry.updatedAt + 1, updatedBy: 'phone' } : entry);
+  assert.equal((await asClient(db, 'PUT', planAt, ALICE, record)).status, 200);
+  const staleEdit = await handle(mutationCommand('plan_edit', { target: atPlan(MUTATION_PLAN), itemId: 'pgym1', title: 'Strength' }, stale));
+  assert.equal(staleEdit.body.error?.code, 'STALE_REVISION', JSON.stringify(staleEdit.body));
+  assert.equal((await item()).task, 'Gym (legs)');
+
+  const retimed = await handle(mutationCommand('plan_edit', { target: atPlan(MUTATION_PLAN), itemId: 'pgym1',
+    time: { when: '19:00', whenTz: 'Asia/Manila' }, durationMinutes: 90 }, (await readPlanItem(handle, MUTATION_PLAN, 'pgym1')).item.revision));
+  assert.equal(retimed.status, 200, JSON.stringify(retimed.body));
+  assert.deepEqual([(await item()).when, (await item()).durationMinutes, (await item()).task], ['19:00', 90, 'Gym (legs)']);
+
+  const moved = await handle(mutationCommand('plan_move', { target: atPlan(MUTATION_PLAN), itemId: 'pgym1', destination: atPlan(MUTATION_OTHER) },
+    (await readPlanItem(handle, MUTATION_PLAN, 'pgym1')).item.revision));
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
+  const destination = await db.read(`${ROOM}/calendarPlans/${MUTATION_OTHER}`);
+  assert.equal(destination.items[0].id, 'pgym1', 'the same identity at the destination');
+  assert.equal(destination.items[0].relocationRevision.toDayId, MUTATION_OTHER);
+  assert.deepEqual([destination.timezone, destination.createdAt], ['Asia/Manila', destination.items[0].updatedAt], 'destination origin frozen at the move stamp');
+  assert.equal((await item()).deleted, true);
+  assert.equal((await item()).movedToDayId, MUTATION_OTHER);
+  assert.equal((await readPlanItem(handle, MUTATION_PLAN, 'pgym1')).state, 'tombstoned');
+  assert.equal((await readPlanItem(handle, MUTATION_OTHER, 'pgym1')).item.revision, moved.body.result.revision);
+
+  const deleted = await handle(mutationCommand('plan_delete', { target: atPlan(MUTATION_OTHER), itemId: 'pgym1' },
+    (await readPlanItem(handle, MUTATION_OTHER, 'pgym1')).item.revision));
+  assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
+  assert.equal((await db.read(`${ROOM}/calendarPlans/${MUTATION_OTHER}`)).items[0].deleted, true);
+  assert.deepEqual((await db.read(planAt)).items.find(entry => entry.id === ordinary.id), ordinary, 'the unrelated item never changed');
+});
+
+test('TASK-012: an api1_ item and a fenced Brain Dump item are mutated at their keyed child through the real fence rules; never moved', async () => {
+  const { db, handle } = await mutationAccount();
+  // A plan_create item, created exactly as TASK-011 creates it.
+  const created = await handle(planCommand(ACTION_A, { target: atPlan(MUTATION_PLAN), title: 'Gym', when: '07:00', whenTz: 'Asia/Manila' }));
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+  const apiAt = actionItemAt(ACTION_A, MUTATION_PLAN);
+  const apiId = actionItemId(ACTION_A);
+  for (const [kind, extra] of [['plan_set_completion', { completed: true }], ['plan_edit', { title: 'Strength training', durationMinutes: 45 }]]) {
+    const response = await handle(mutationCommand(kind, { target: atPlan(MUTATION_PLAN), itemId: apiId, ...extra }, (await readPlanItem(handle, MUTATION_PLAN, apiId)).item.revision));
+    assert.equal(response.status, 200, `${kind}: ${JSON.stringify(response.body)}`);
+  }
+  const refusedMove = await handle(mutationCommand('plan_move', { target: atPlan(MUTATION_PLAN), itemId: apiId, destination: atPlan(MUTATION_OTHER) },
+    (await readPlanItem(handle, MUTATION_PLAN, apiId)).item.revision));
+  assert.equal(refusedMove.body.error?.code, 'DOMAIN_LIMIT', JSON.stringify(refusedMove.body));
+  const deleted = await handle(mutationCommand('plan_delete', { target: atPlan(MUTATION_PLAN), itemId: apiId }, (await readPlanItem(handle, MUTATION_PLAN, apiId)).item.revision));
+  assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
+  const stored = await db.read(apiAt);
+  assert.deepEqual([stored.creationActionId, stored.task, stored.durationMinutes, stored.done, stored.deleted], [ACTION_A, 'Strength training', 45, true, true]);
+  assert.equal(stored.relocationRevision, undefined);
+  assert.equal(await db.read(`${ROOM}/calendarPlans/${MUTATION_OTHER}`), null, 'nothing ever landed on the other day');
+
+  // A fenced Brain Dump item: the rules re-authorize every update by its capture's promotion.
+  await db.seed(captureAt(), promotedCapture(STORES.calendar));
+  await db.seed(STORES.calendar.itemAt, fencedItem(STORES.calendar));
+  const bd = await handle(mutationCommand('plan_set_completion', { target: atPlan(MUTATION_PLAN), itemId: ITEM_ID, completed: true },
+    (await readPlanItem(handle, MUTATION_PLAN, ITEM_ID)).item.revision));
+  assert.equal(bd.status, 200, JSON.stringify(bd.body));
+  assert.equal((await db.read(STORES.calendar.itemAt)).done, true);
+  assert.deepEqual((await db.read(STORES.calendar.itemAt)).brainDumpOrigin, origin(STORES.calendar), 'origin pinned');
+});
+
+test('TASK-012: the owner-token mutation primitives cannot break fence or array invariants (the real rules refuse)', async () => {
+  const { db, domain } = await mutationAccount();
+  const identity = { firebaseUid: 'alice', roomId: 'uid_alice' };
+  await db.seed(actionItemAt(), actionItem({ deleted: true }));
+  const read = await domain.readPlanFenceItemWithEtag(identity, ACTION_PLAN, actionItemId(ACTION_A));
+  const refuse = (record, why) => assert.rejects(domain.putPlanFenceItemIfMatch(identity, ACTION_PLAN, actionItemId(ACTION_A), record, read.etag),
+    error => error.code === 'FORBIDDEN', why);
+  await refuse({ ...read.value, deleted: false }, 'a tombstone cannot be resurrected');
+  await refuse({ ...read.value, creationActionId: ACTION_B }, 'the creation marker cannot be rewritten');
+  await refuse({ ...read.value, relocationRevision: { schemaVersion: 1, sequence: 1, fromDayId: ACTION_PLAN, toDayId: ACTION_OTHER_PLAN, updatedBy: 'x' } }, 'no relocation');
+  assert.equal(await domain.putPlanFenceItemIfMatch(identity, ACTION_PLAN, actionItemId(ACTION_A), { ...read.value, task: 'renamed' }, STALE_ETAG), 'changed', 'a stale ETag never writes');
+  await assert.rejects(domain.putPlanFenceItemIfMatch(identity, ACTION_PLAN, actionItemId(ACTION_B), actionItem({ id: actionItemId(ACTION_B), creationActionId: ACTION_B }), 'null_etag'),
+    error => error.name === 'AuthorityBoundaryViolation', 'an update can never create (fabricate) a fence child');
+  const plans = await domain.readCalendarPlansWithEtag(identity);
+  const injected = { ...plans.value, [MUTATION_PLAN]: { ...plans.value[MUTATION_PLAN], items: [...plans.value[MUTATION_PLAN].items, actionItem({ id: actionItemId(ACTION_B), creationActionId: ACTION_B })] } };
+  await assert.rejects(domain.putCalendarPlansIfMatch(identity, injected, plans.etag), error => error.code === 'FORBIDDEN', 'no api1_/marker in a plan array');
+  assert.equal(await domain.putCalendarPlansIfMatch(identity, plans.value, STALE_ETAG), 'changed');
+  await assert.rejects(domain.putCalendarPlansIfMatch(identity, { settings: {} }, plans.etag), error => error.name === 'AuthorityBoundaryViolation');
+  assert.equal((await db.read(actionItemAt())).deleted, true, 'still a tombstone');
+});

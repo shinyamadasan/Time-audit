@@ -38,20 +38,35 @@ export function signedRequest(overrides = {}) {
   return { method: overrides.method ?? fields.method, path: overrides.path ?? fields.path, rawHeaders, rawBody: overrides.sendBody ?? rawBody, requestId };
 }
 
-/** In-memory privileged store: createIfAbsent is atomic (JS is single-threaded between awaits). Records every call. */
+/** Realtime Database keeps no null value: a key written as null (or holding only nulls) reads back absent. */
+const pruned = value => {
+  if (Array.isArray(value)) return value.map(pruned);
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (child === null || child === undefined) continue;
+    const next = pruned(child);
+    if (next && typeof next === 'object' && !Array.isArray(next) && !Object.keys(next).length) continue;
+    out[key] = next;
+  }
+  return out;
+};
+
+/** In-memory privileged store: createIfAbsent is atomic (JS is single-threaded between awaits). Records every call.
+ *  Stored values are pruned of nulls exactly as Realtime Database prunes them. */
 export function fakeInfra() {
   const data = new Map();
   const versions = new Map();
   const calls = [];
   return {
     data, calls,
-    async createIfAbsent(path, value) { calls.push(['createIfAbsent', path]); await null; if (data.has(path)) return 'exists'; data.set(path, structuredClone(value)); versions.set(path, (versions.get(path) ?? 0) + 1); return 'created'; },
+    async createIfAbsent(path, value) { calls.push(['createIfAbsent', path]); await null; if (data.has(path)) return 'exists'; data.set(path, pruned(structuredClone(value))); versions.set(path, (versions.get(path) ?? 0) + 1); return 'created'; },
     async get(path) { calls.push(['get', path]); return data.has(path) ? structuredClone(data.get(path)) : null; },
     async getWithEtag(path) { calls.push(['getWithEtag', path]); return { value: data.has(path) ? structuredClone(data.get(path)) : null,
       etag: data.has(path) ? `v${versions.get(path) ?? 1}` : 'null_etag' }; },
     async putIfMatch(path, value, etag) { calls.push(['putIfMatch', path]); await null;
       if (etag !== (data.has(path) ? `v${versions.get(path) ?? 1}` : 'null_etag')) return 'changed';
-      data.set(path, structuredClone(value)); versions.set(path, (versions.get(path) ?? 0) + 1); return 'written'; },
+      data.set(path, pruned(structuredClone(value))); versions.set(path, (versions.get(path) ?? 0) + 1); return 'written'; },
     async queryAtMost(path, childKey, endAt, limit) {
       calls.push(['queryAtMost', path]);
       const rows = [...data].filter(([key, value]) => key.startsWith(`${path}/`) && value[childKey] <= endAt)
@@ -76,7 +91,7 @@ export function harness({ rooms, owner = OWNER, nowMs = NOW_MS, domain } = {}) {
   const reader = domain ?? fakeDomain(rooms);
   const logs = [];
   const handle = createActionApiHandler({ keys: KEYS, owner, nonces: createNonceStore({ infra }),
-    receipts: createReceiptStore({ infra }), domain: reader, now: () => nowMs, log: entry => logs.push(entry) });
+    receipts: createReceiptStore({ infra }), domain: reader, now: () => nowMs, log: entry => { logs.push(entry); if (process.env.DBG) console.log('LOG', JSON.stringify(entry)); } });
   return { handle, infra, domain: reader, logs };
 }
 

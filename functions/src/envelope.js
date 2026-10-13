@@ -8,7 +8,7 @@ import { JsonInputError, strictParseJson } from './canonical-json.js';
 import { ApiError } from './errors.js';
 import { createHash } from 'node:crypto';
 import { ACTION_ID } from './command-identity.js';
-import { parseCalendarPlanId, validateCalendarPlanItem } from '../shared/calendar-plan-model.js';
+import { calendarItemInstants, parseCalendarPlanId, validateCalendarPlanItem } from '../shared/calendar-plan-model.js';
 import { canonicalizeOperationalDayTimezone, validOperationalDayTimezone } from '../shared/personal-day-boundary-model.js';
 import { validPlanItemDuration, validPlanItemTime } from '../shared/plan-tomorrow-model.js';
 
@@ -16,7 +16,16 @@ import { validPlanItemDuration, validPlanItemTime } from '../shared/plan-tomorro
 export const COMMAND_KINDS = Object.freeze({
   brain_dump_add: Object.freeze({ scope: 'chronasense:brain-dump.write' }),
   plan_create: Object.freeze({ scope: 'chronasense:plan.write' }),
+  // TASK-012: semantic mutations of ONE existing plan item (docs/CHRONASENSE_ACTION_API_V1.md §10, DECISIONS #38).
+  plan_set_completion: Object.freeze({ scope: 'chronasense:plan.write', mutation: true }),
+  plan_edit: Object.freeze({ scope: 'chronasense:plan.write', mutation: true }),
+  plan_move: Object.freeze({ scope: 'chronasense:plan.write', mutation: true }),
+  plan_delete: Object.freeze({ scope: 'chronasense:plan.write', mutation: true }),
 });
+/** An item revision exactly as get_plan/get_item return it (`rev1:` + base64url SHA-256). */
+const ITEM_REVISION = /^rev1:[A-Za-z0-9_-]{43}$/;
+/** A stable plan item id as a single RTDB key segment: never a path, never a Firebase-reserved character. */
+const PLAN_ITEM_ID = /^[^./#$[\]\x00-\x1f\x7f]{1,200}$/;
 /** The plan task editor's own title bound (planning-continuity-ui.js maxlength). */
 export const PLAN_TITLE_MAX = 200;
 
@@ -77,10 +86,101 @@ export function parseCreateEnvelope(rawBody, { requestId, subject }) {
   const fields = ['actionId', 'actionProvenance', 'contractVersion', 'expectedRevision', 'kind', 'parameters', 'requestId'];
   if (Object.keys(body).sort().join(',') !== fields.join(',') || body.contractVersion !== 1 || body.requestId !== requestId
     || typeof body.kind !== 'string' || !Object.hasOwn(COMMAND_KINDS, body.kind) || typeof body.actionId !== 'string' || !ACTION_ID.test(body.actionId)
-    || body.expectedRevision !== null) throw invalid('Unsupported or malformed create command.', 'command-envelope');
-  const parameters = body.kind === 'plan_create' ? planCreateParameters(body.parameters) : brainDumpParameters(body.parameters);
+    // A create has no prior state; a mutation names exactly the item revision its caller read.
+    || (COMMAND_KINDS[body.kind].mutation ? typeof body.expectedRevision !== 'string' || !ITEM_REVISION.test(body.expectedRevision) : body.expectedRevision !== null)) {
+    throw invalid('Unsupported or malformed command.', 'command-envelope');
+  }
+  const parameters = COMMAND_KINDS[body.kind].mutation ? planMutationParameters(body.kind, body.parameters)
+    : body.kind === 'plan_create' ? planCreateParameters(body.parameters) : brainDumpParameters(body.parameters);
   return { contractVersion: 1, actionId: body.actionId, kind: body.kind,
-    parameters, expectedRevision: null, actionProvenance: actionProvenance(body, subject) };
+    parameters, expectedRevision: body.expectedRevision, actionProvenance: actionProvenance(body, subject) };
+}
+
+const MUTATION_KEYS = Object.freeze({
+  plan_set_completion: ['completed', 'itemId', 'target'],
+  plan_edit: ['clearSchedule', 'durationMinutes', 'itemId', 'target', 'time', 'title'],
+  plan_move: ['destination', 'durationMinutes', 'itemId', 'target', 'time'],
+  plan_delete: ['itemId', 'target'],
+});
+
+/** An exact calendar plan target. Other stores are a typed domain limit, exactly as for plan_create. */
+function calendarTarget(target, what = 'plan target') {
+  if (!target || typeof target !== 'object' || Array.isArray(target) || Object.keys(target).sort().join(',') !== 'id,store'
+    || typeof target.store !== 'string' || typeof target.id !== 'string') throw invalid(`An exact ${what} is required.`, 'plan-target');
+  if (target.store !== 'calendar') {
+    throw new ApiError('DOMAIN_LIMIT', 'Conversational plan actions support calendar-day plans only.',
+      { reason: 'plan-store-unsupported', details: { supportedStores: ['calendar'] } });
+  }
+  const date = parseCalendarPlanId(target.id);
+  if (!date || target.id !== `cal1:${date}`) throw invalid('Invalid calendar plan identity.', 'plan-target');
+  return { store: 'calendar', id: target.id };
+}
+
+/** An explicit wall time: { when: HH:MM, whenTz: canonical IANA, whenDayOffset?: 0|1 } -> normalized (offset explicit). */
+function wallTime(time) {
+  if (!time || typeof time !== 'object' || Array.isArray(time) || Object.keys(time).some(key => !['when', 'whenDayOffset', 'whenTz'].includes(key))) {
+    throw invalid('time must be { when, whenTz, whenDayOffset? }.', 'plan-time');
+  }
+  if (!validPlanItemTime(time.when)) throw invalid('Start time must be HH:MM (24-hour).', 'plan-when');
+  if (typeof time.whenTz !== 'string' || !validOperationalDayTimezone(time.whenTz)
+    || canonicalizeOperationalDayTimezone(time.whenTz) !== time.whenTz) throw invalid('A canonical IANA timezone is required with a start time.', 'plan-timezone');
+  const whenDayOffset = Object.hasOwn(time, 'whenDayOffset') ? time.whenDayOffset : 0;
+  if (whenDayOffset !== 0 && whenDayOffset !== 1) throw invalid('whenDayOffset must be 0 or 1.', 'plan-day-offset');
+  return { when: time.when, whenTz: time.whenTz, whenDayOffset };
+}
+
+/** TASK-012 structured intent of ONE mutation of ONE existing item. Absence always means "unchanged": nothing is
+ *  cleared by omission, and the only way to remove a schedule is the explicit `clearSchedule: true`. Everything
+ *  decidable from the payload alone is decided here, before a receipt exists; anything that depends on the item's
+ *  current state (its existing duration, the Top 3, the plan having ended) is decided after the claim. */
+function planMutationParameters(kind, parameters) {
+  if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)
+    || Object.keys(parameters).some(key => !MUTATION_KEYS[kind].includes(key))) throw invalid('Unsupported plan action parameters.', 'plan-parameters');
+  const target = calendarTarget(parameters.target);
+  if (typeof parameters.itemId !== 'string' || !PLAN_ITEM_ID.test(parameters.itemId)) throw invalid('A stable plan item ID is required.', 'plan-item-id');
+  const normalized = { target, itemId: parameters.itemId };
+  if (kind === 'plan_set_completion') {
+    if (typeof parameters.completed !== 'boolean') throw invalid('completed must be true or false.', 'plan-completed');
+    return { ...normalized, completed: parameters.completed };
+  }
+  if (kind === 'plan_delete') return normalized;
+  let date = parseCalendarPlanId(target.id);
+  if (kind === 'plan_move') {
+    normalized.destination = calendarTarget(parameters.destination, 'destination plan');
+    if (normalized.destination.id === target.id) throw invalid('A move needs a different destination plan; use plan_edit to change the time on the same day.', 'plan-move-same-target');
+    date = parseCalendarPlanId(normalized.destination.id);
+  }
+  if (kind === 'plan_edit' && Object.hasOwn(parameters, 'title')) {
+    if (typeof parameters.title !== 'string' || !parameters.title.trim()) throw invalid('A task title cannot be empty.', 'plan-title');
+    const title = parameters.title.trim();
+    if (title.length > PLAN_TITLE_MAX) {
+      throw new ApiError('DOMAIN_LIMIT', `Task titles are limited to ${PLAN_TITLE_MAX} characters.`, { reason: 'plan-title-limit', details: { limit: PLAN_TITLE_MAX } });
+    }
+    normalized.title = title;
+  }
+  if (Object.hasOwn(parameters, 'clearSchedule')) {
+    if (parameters.clearSchedule !== true) throw invalid('clearSchedule may only be true.', 'plan-clear-schedule');
+    if (Object.hasOwn(parameters, 'time') || Object.hasOwn(parameters, 'durationMinutes')) throw invalid('clearSchedule cannot be combined with a time or duration.', 'plan-clear-schedule');
+    normalized.clearSchedule = true;
+  }
+  if (Object.hasOwn(parameters, 'time')) {
+    normalized.time = wallTime(parameters.time);
+    // A wall time in a DST gap does not exist whatever else the item carries: refused before any receipt exists.
+    if (calendarItemInstants(date, { when: normalized.time.when, whenTz: normalized.time.whenTz,
+      ...(normalized.time.whenDayOffset ? { whenDayOffset: 1 } : {}) }).reason === 'nonexistent-time') {
+      throw new ApiError('NONEXISTENT_TIME', 'That wall time does not exist on that date in that timezone (DST gap).', { reason: 'plan-nonexistent-time' });
+    }
+  }
+  if (Object.hasOwn(parameters, 'durationMinutes')) {
+    if (!validPlanItemDuration(parameters.durationMinutes)) {
+      throw new ApiError('DOMAIN_LIMIT', 'Duration must be a whole number of minutes from 1 to 720.', { reason: 'plan-duration', details: { min: 1, max: 720 } });
+    }
+    normalized.durationMinutes = parameters.durationMinutes;
+  }
+  if (kind === 'plan_edit' && !['title', 'time', 'durationMinutes', 'clearSchedule'].some(key => Object.hasOwn(normalized, key))) {
+    throw invalid('Name at least one change: title, time, durationMinutes or clearSchedule.', 'plan-edit-empty');
+  }
+  return normalized;
 }
 
 function brainDumpParameters(parameters) {
