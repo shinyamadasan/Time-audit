@@ -145,6 +145,8 @@ Writes use the listed single-intent commands only:
 
 No V1 delete/tombstone, cross-target move/reschedule, calendar activation, Personal Day/boundary mutation, `actual_log`, arbitrary Firebase write, generic execute tool, or active Brain Dump edit. If active edit semantics are defined and reviewed later, add a separate command.
 
+**Implemented so far (candidates, not a production claim):** `brain_dump_add` (TASK-010) and `plan_create` (TASK-011, DECISIONS #37). `plan_create` parameters are exactly `target` `{ store: 'calendar', id: 'cal1:YYYY-MM-DD' }`, `title` (1-200 characters after trim) and, together or not at all, `when` (`HH:MM`) + `whenTz` (canonical IANA) with optional `whenDayOffset` (0|1, default 0) and `durationMinutes` (1-720). The item `api1_<uuid>` lives at its keyed calendar fence child `calendarPlanFences/<planId>/api1_<uuid>` (never in the plan's `items` array), created with an action token whose claims bind action, kind (`plan_create`) and target. Only the calendar store is enabled; operational/legacy targets get `DOMAIN_LIMIT`. The result and receipt carry IDs, target, schedule and revision, never the title. `plan_update_same_target` and `plan_complete` remain unimplemented.
+
 ## 11. Scopes and authorization
 
 Scopes are `chronasense:read`, `chronasense:brain-dump.write`, and `chronasense:plan.write`. Initial Plugin authorization requests read only. Each write invocation requires OAuth scope step-up for the matching write scope; Worker verifies token scope and backend independently verifies signed normalized grants. ChatGPT interactive confirmation is UX only. Backend relies on verified scope, exact identity binding, typed validation, revisions and domain rules, never `confirmed: true`.

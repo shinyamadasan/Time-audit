@@ -12,6 +12,8 @@
 import { ApiError, AuthorityBoundaryViolation } from './errors.js';
 import { ACTION_ID, captureIdForAction } from './command-identity.js';
 import { validFirebaseUid } from './identity.js';
+import { parseCalendarPlanId } from '../shared/calendar-plan-model.js';
+import { actionPlanItemIdFor, isActionPlanItemId } from '../shared/plan-item-origin.js';
 
 /** The only room collections a user-scoped read may name. Paths are built here, never taken from a request. */
 const READABLE_COLLECTIONS = new Set([
@@ -57,8 +59,8 @@ function jwtClaims(idToken) {
   } catch { return null; }
 }
 
-const CALENDAR_PLAN_KEY = /^cal1:\d{4}-\d{2}-\d{2}$/;
-const PLAN_ITEM_ID = /^api1_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+/** A calendar plan's own Firebase key (`cal1:<valid date>`), never a path. */
+const calendarPlanKey = value => typeof value === 'string' && parseCalendarPlanId(value) !== null && value === `cal1:${parseCalendarPlanId(value)}`;
 
 /** The custom claims of an action-scoped token. Brain Dump (TASK-010) keeps exactly its original single claim;
  *  a plan create (TASK-011) also names its kind and its ONE target plan, so the rules let that token create
@@ -78,7 +80,7 @@ export function createIdTokenProvider({ authAdmin, webApiKey, fetch: fetchImpl =
     async getIdToken(firebaseUid, actionId, plan) {
       if (!validFirebaseUid(firebaseUid)) throw denied('invalid-uid');
       if (actionId !== undefined && (typeof actionId !== 'string' || !ACTION_ID.test(actionId))) throw denied('invalid-action-id');
-      if (plan !== undefined && (actionId === undefined || !plan || typeof plan.target !== 'string' || !CALENDAR_PLAN_KEY.test(plan.target))) throw denied('invalid-action-target');
+      if (plan !== undefined && (actionId === undefined || !plan || !calendarPlanKey(plan.target))) throw denied('invalid-action-target');
       const claimsWanted = actionId ? actionClaims(actionId, plan) : undefined;
       let user;
       try { user = await authAdmin.getUser(firebaseUid); } catch (error) {
@@ -127,7 +129,7 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
   }
   function planItemUrl(identity, planId, itemId, idToken) {
     if (!validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}`
-      || typeof planId !== 'string' || !CALENDAR_PLAN_KEY.test(planId) || typeof itemId !== 'string' || !PLAN_ITEM_ID.test(itemId)) {
+      || !calendarPlanKey(planId) || !isActionPlanItemId(itemId)) {
       throw new AuthorityBoundaryViolation('plan item address is not derived from the bound UID, plan and action ID');
     }
     const url = new URL(`${databaseUrl}/rooms/${identity.roomId}/calendarPlanFences/${planId}/${itemId}.json`);
@@ -155,7 +157,7 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
     /** TASK-011: the one Action API plan item, at its keyed calendar fence child, conditionally created with a
      *  token whose claims name exactly this action, kind and plan. @returns {Promise<'created'|'exists'>} */
     async createPlanItemIfAbsent(identity, planId, itemId, actionId, record) {
-      if (typeof actionId !== 'string' || !ACTION_ID.test(actionId) || itemId !== `api1_${actionId.slice(5)}`
+      if (typeof actionId !== 'string' || !ACTION_ID.test(actionId) || itemId !== actionPlanItemIdFor(actionId)
         || record?.id !== itemId || record.creationActionId !== actionId) {
         throw new AuthorityBoundaryViolation('plan item create requires its exact action attribution');
       }

@@ -267,7 +267,9 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // was published on a candidate branch, so it is retired like a shipped one.
 // Intelligence adds a read-context bridge and account-reset seam; retire the prior governed URL.
 // The shared boundary wire codec changes the sync import graph; advance every governed URL together.
-const CURRENT_RELEASE = '20261010-task009-boundary-wire-v1';
+// TASK-011 makes Action API plan items location-bound (plan-item-origin.js, plan-authority.js and
+// planning-continuity-ui.js change), so the whole governed group moves together again.
+const CURRENT_RELEASE = '20261012-task011-plan-action-items-v1';
 const BRAIN_DUMP_RELEASE = '20261012-brain-dump-action-attribution-v1';
 // Brain Dump entry tokens that were published (on main or a candidate branch) and must never be reused.
 // (Its round-1 entries also used '20261002-brain-dump-eisenhower-v1-fix1', which is still the governed
@@ -311,7 +313,7 @@ test('no Brain Dump module pins its own ?v= import, and no governed module impor
 });
 // '20260924-cross-store-account-isolation-v1' was never deployed (review candidate only), but it was
 // published on the candidate branch, so it is retired like a shipped token.
-const PREVIOUS_RELEASES = ['20261007-intelligence-v1', '20261005-location-bound-fence-v1', '20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1', '20260926-device-local-account-isolation-fix1', '20260927-calendar-day-extended-my-day-v1', '20260927-calendar-day-extended-my-day-fix1', '20260927-calendar-native-plan-identity-v1', '20260927-calendar-native-activation-safety-fix1', '20260928-calendar-native-activation-safety-fix2', '20260928-calendar-native-activation-safety-fix3', '20260930-timer-away-account-isolation-v1', '20261001-daily-plan-ux-v2-time-ranges-extended-my-day1', '20261002-brain-dump-eisenhower-v1-fix1', '20261003-brain-dump-promotion-fence-v1'];
+const PREVIOUS_RELEASES = ['20261010-task009-boundary-wire-v1', '20261007-intelligence-v1', '20261005-location-bound-fence-v1', '20260921-pdb-web-sync-v1', '20260922-pdb-wire-format-v1', '20260923-pdb-legacy-recovery-v2', '20260924-operational-plan-account-isolation-v1', '20260924-cross-store-account-isolation-v1', '20260924-cross-store-account-isolation-fix1', '20260924-remaining-remote-account-isolation-v1', '20260924-focus-redemption-account-isolation-v1', '20260925-device-local-account-isolation-v1', '20260926-device-local-account-isolation-fix1', '20260927-calendar-day-extended-my-day-v1', '20260927-calendar-day-extended-my-day-fix1', '20260927-calendar-native-plan-identity-v1', '20260927-calendar-native-activation-safety-fix1', '20260928-calendar-native-activation-safety-fix2', '20260928-calendar-native-activation-safety-fix3', '20260930-timer-away-account-isolation-v1', '20261001-daily-plan-ux-v2-time-ranges-extended-my-day1', '20261002-brain-dump-eisenhower-v1-fix1', '20261003-brain-dump-promotion-fence-v1'];
 
 test('the release is a NEW generation: never a previously shipped token, and no URL is left on an old one', () => {
   assert.equal(release, CURRENT_RELEASE);

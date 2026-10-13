@@ -1,12 +1,13 @@
-# ChronaSense Action API V1 — reads and Brain Dump create candidate
+# ChronaSense Action API V1 — reads, Brain Dump create and plan create candidate
 
-> TASK-009 reads are deployed. TASK-010 Brain Dump create and its rule change are a local candidate only.
-> This task does not deploy the Function, Worker, OAuth scope or rules, or write production data.
+> TASK-009 reads and TASK-010 Brain Dump create are deployed (see TASKS.md closures). TASK-011 `plan_create` and its
+> rule change are a local candidate only: nothing here deploys the Function, Worker, OAuth scope or rules, or writes
+> production data.
 
 Firebase Functions v2 HTTPS function `chronasenseActionApi` in `asia-southeast1`.
 Contract foundation: [`docs/CHRONASENSE_ACTION_API_V1.md`](../docs/CHRONASENSE_ACTION_API_V1.md). TASK-009 uses
-five fixed read kinds. TASK-010 adds only `brain_dump_add` on a separate signed command route; unsupported commands
-and unknown kinds remain `INVALID_INPUT`.
+five fixed read kinds. TASK-010 adds `brain_dump_add` and TASK-011 adds `plan_create` on a separate signed command
+route; unsupported commands and unknown kinds remain `INVALID_INPUT`.
 
 | Kind | Parameters | Result |
 |---|---|---|
@@ -33,6 +34,17 @@ Brain Dump create uses `POST /v1/command` with `actionId`, `kind: "brain_dump_ad
 The Worker requires one stable UUIDv4 action ID and captured-at UTC time across retries, but signs a new
 transport `requestId` on each attempt. Its OAuth grant must include `chronasense:brain-dump.write`.
 
+Plan create (TASK-011, DECISIONS #37) uses the same route with `kind: "plan_create"` and requires
+`chronasense:plan.write`. Parameters: `target` `{ "store": "calendar", "id": "cal1:YYYY-MM-DD" }`, `title` (1-200
+characters) and, for a timed task, `when` (`HH:MM`) + `whenTz` (canonical IANA) with optional `whenDayOffset` (0|1)
+and `durationMinutes` (1-720); an untimed task sends none of those. Shape, wall time, DST gap and the plan's two-date
+extent are refused before any receipt (`INVALID_INPUT`, `NONEXISTENT_TIME`, `DOMAIN_LIMIT`); the target is then
+resolved through Plan Authority's server read (`NOT_FOUND` when not calendar-authoritative, `PAST_TARGET_IMMUTABLE`
+once its plan day has ended). The item `api1_<uuid>` is conditionally created at
+`rooms/uid_<uid>/calendarPlanFences/<planId>/api1_<uuid>` with an ID token whose custom claims bind the action, kind
+and target (`src/plan-create-action.js`, `src/user-scoped-rtdb.js`); applied only after exact readback of the
+attributed child. The receipt and result carry IDs, target, schedule and revision, never the title.
+
 Signed headers (each exactly once; any other `x-chronasense-*` header is refused):
 
 | Header | Value |
@@ -50,7 +62,8 @@ the subject and scopes travel in these two signed headers (an interpretation rec
 
 Check order: method/path → headers → service → key → freshness → HMAC over the raw body bytes → strict envelope
 (duplicate keys, unknown fields, `contractVersion`, `requestId` match, known kind) → owner binding → scope
-`chronasense:read` or `chronasense:brain-dump.write` → replay nonce → user-scoped domain operation.
+`chronasense:read`, or the command kind's own write scope (`chronasense:brain-dump.write` / `chronasense:plan.write`)
+→ replay nonce → user-scoped domain operation.
 No domain data is accessed until authentication, envelope, owner binding, scope and nonce checks pass.
 
 ## Authority split

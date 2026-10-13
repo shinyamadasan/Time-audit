@@ -18,14 +18,11 @@
 //   4. read the exact child back: applied ONLY when the attributed item is proven present
 // A definite refusal is made terminal only when no earlier attempt of this action can still be writing.
 
-import { createHash } from 'node:crypto';
-
 import { calendarItemInstants, parseCalendarPlanId } from '../shared/calendar-plan-model.js';
 import { actionPlanItemIdFor, isActionPlanItem } from '../shared/plan-item-origin.js';
-import { canonicalize } from './canonical-json.js';
 import { planItemTime } from './envelope.js';
 import { ApiError, ERROR_CODES } from './errors.js';
-import { createPlanRead } from './plan-read.js';
+import { createPlanRead, revision } from './plan-read.js';
 import { canonicalRequestHash, classifyExistingReceipt } from './receipts.js';
 
 const LEASE_MS = 30_000;
@@ -37,8 +34,6 @@ const DEFINITIVE_REFUSALS = new Set(['NOT_FOUND', 'CONFLICT', 'PAST_TARGET_IMMUT
 const pending = () => new ApiError('PENDING_UNKNOWN', 'The plan create outcome is being reconciled. Retry with the same action ID and parameters and a new request ID.',
   { reason: 'plan-create-outcome-unknown' });
 const conflict = reason => new ApiError('CONFLICT', 'The action ID is occupied by an incompatible plan item.', { reason });
-// Identical to get_plan's item revision (plan-read.js), so a create's revision matches a later read of the item.
-const revision = value => `rev1:${createHash('sha256').update(canonicalize(value), 'utf8').digest('base64url')}`;
 
 /** The stored child as THIS action's item, null when absent; anything else at that key is a conflict. Only the
  *  immutable creation facts decide (path-bound id, marker); title/time/done/deleted are the owner's to edit. */
@@ -65,6 +60,7 @@ function resultFor({ actionId, itemId, planId, date, parameters, item, createdAt
       endAt: instants.endMs === null ? null : new Date(instants.endMs).toISOString() };
   }
   return { actionId, itemId, target: { store: 'calendar', id: planId, date }, schedule,
+    // get_plan's own item revision, so a create's revision matches a later read of the item.
     createdAt: new Date(createdAt).toISOString(), revision: revision({ v: 1, store: 'calendar', targetKey: planId, item }) };
 }
 

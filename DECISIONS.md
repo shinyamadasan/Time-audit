@@ -756,3 +756,47 @@ The Worker authenticates to the backend with a dedicated HMAC service credential
 **Action-token boundary:** a claim-bearing owner ID token may create only `rooms/uid_<uid>/brainDump/bdc1_<claim UUID>` with exactly matching immutable `creationActionId`. It cannot update a capture or write settings, entries, plans, fence items, pair/share nodes or any other owner-writable path. A normal owner token without the claim retains existing writes. The token remains an owner identity for reads permitted by existing rules if it escaped the backend; the backend pins its write URL, keeps tokens private, and has no Admin domain fallback. The real RTDB emulator tests the write restriction; a local Auth-emulator/Admin-SDK custom-token exchange proved claim propagation to an ID token and RTDB rules. The Auth emulator does not validate custom-token signatures or production IAM, so those are deployment controls, not claims made by this local proof.
 
 ---
+
+## 37. TASK-011 conversational plan create: an Action API plan item is a location-bound keyed item, not an array entry
+
+**Status:** review-ready candidate (2026-10-12); no production rollout.
+
+**Problem:** `plan_create` needs an immutable, rules-protected `creationActionId` (Action API §6). A calendar plan
+serializes `items` as an id-sorted array, so rules cannot address one item (the reason TASK-010 excluded plan writes,
+and the reason #33 moved fenced Brain Dump items out of the array). Writing into the array would also need a token
+that may rewrite the whole plan record, which no action token may hold.
+
+**Decision:** an Action API plan item `api1_<uuid of actionId>` carrying `creationActionId` lives at
+`rooms/<room>/calendarPlanFences/<cal1:YYYY-MM-DD>/api1_<uuid>`: the representation #33 already established for a
+location-bound item. It is the item's ONE authoritative copy (never mirrored into the array, no second store, no
+migration of existing data). `plan-item-origin.js` treats it as fenced, so the existing split/fold/merge boundary carries
+it; the owner sees and edits it as an ordinary task (title, time, done, kind, tombstone delete).
+- **Create** only with the backend's action token whose claims are `{ chronasenseActionId, chronasenseActionKind:
+  'plan_create', chronasenseActionTarget: <planId> }`: item id, marker and path must all derive from those claims, the
+  child must not exist, and the account must already hold a calendar activation fact (never created by this call).
+  Date routing (date >= activation date), frozen home zone and past-day immutability are Plan Authority's, checked by
+  the Function through the same server read as `get_plan`.
+- **Update** only with an ordinary owner token; the path-bound id must keep deriving from the marker (so it cannot be
+  stripped or rewritten), the tombstone is monotonic, no relocation fields, no delete, no parent overwrite.
+- Plan arrays reserve `api1_` ids and refuse `creationActionId`; a plan-kind action token cannot create a Brain Dump
+  capture. Each predicate is named in the rules builder and mutation-proven on the real emulator.
+- **Concurrency:** the create touches one keyed child with `if-match: null_etag`; it never reads or writes the plan
+  record, so no concurrent owner edit, reorder or second action can be lost or misidentified.
+- **Idempotency/recovery:** receipt claim -> exact-child read (marker = proof) -> Plan Authority checks -> conditional
+  create -> exact readback. Applied only when the attributed child is present. A definite refusal is terminal only on a
+  fresh claim or once no earlier attempt can still be writing (`MAX_ATTEMPT_MS` = Function timeout + margin).
+
+**V1 limits (stated):** calendar store only (an unactivated/legacy account gets a typed `DOMAIN_LIMIT`/`NOT_FOUND`);
+always an "Other task" (`kind: 'task'`), so the Top 3 cap is not at stake; like a Brain Dump task, an action-created task
+cannot be moved to another day yet (Plan Authority, task editor and rules refuse; stale recovery still copies it as an
+ordinary `ocarry1|` item); a stale client predating this change does not display action items until it updates
+(a visibility gap, not corruption: it never reads or writes the fence children).
+
+**Release order:** web client (and any Android build, owner-authorized) and the reviewed rules first (the rules are
+backward compatible: no existing item carries `api1_`/`creationActionId`), then the Function, then the Worker scope/tool.
+
+**Do not:** write an action item into a plan record's `items`; give the action token any path beyond its one claimed
+child; infer success from title/time; report a create applied without the attributed child; or reuse an action ID after
+an unknown outcome to escape it.
+
+---
