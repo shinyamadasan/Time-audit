@@ -5,6 +5,31 @@
 
 ---
 
+## TASK-011 production rollout acceptance · 2026-10-13
+suite: production checks only (no test suite rerun; runtime unchanged since the reviewed SHA).
+result:
+  - Pages: index.html and the three changed client modules byte-identical to 6d4185e.
+  - RTDB rules: live fingerprint bc4cac30…cab6e = reviewed (pre-rollout d96d9e77…e323e5 = TASK-010).
+  - Function: revision chronasenseactionapi-00006-xor ACTIVE, 100% latest; configuration identical to the
+    pre-deploy capture; unauthenticated POST /v1/query -> 401 AUTH_REQUIRED. minInstanceCount not returned by the API.
+  - Worker: version 626afd01-da5d-4634-9879-0256db921b74 active 100%; five plaintext bindings, HMAC secret binding
+    and OAUTH_KV present (after the binding repair recorded in CHANGELOG.md); OAuth discovery advertises
+    chronasense:read, chronasense:brain-dump.write, chronasense:plan.write; owner OAuth via the connector succeeded.
+  - Connector: 7 tools (5 reads; writes brain_dump_add, plan_create).
+  - Canary act1_bd46a3e6-4e29-47f3-a3dc-1a6c5a48cad8 on previously absent cal1:2026-10-21 (Asia/Manila):
+    first create success, idempotentReplay false, item api1_bd46a3e6-4e29-47f3-a3dc-1a6c5a48cad8; get_plan present,
+    timezone Asia/Manila, exactly one item with expected title/12:00/Asia/Manila/offset 0/15 min, creationActionId
+    matching, revision rev1:62diejQF_ltFtJ37NTDFIWckLrgSVbwQTghOFrBI0Gc. Exact same-action replay: idempotentReplay
+    true, same item ID and revision, no new item. Final get_plan: one item, same revision.
+accepted limitations: verification was at connector level (owner-accepted before replay). The private receipt and
+  raw calendarPlans/cal1:2026-10-21 origin record were NOT read directly (needs additional privileged read
+  permission), so "receipt applied" and "item absent from the plan array" rest on the replay result plus the reviewed
+  code and live rules, not on direct inspection. A final get_item call failed connector argument validation and was
+  not retried (non-blocking: get_plan verified the item after replay).
+untested: none further; no additional production write after the replay.
+
+---
+
 ## TASK-011 bounded FIX FIRST (R011-01, R011-02) · 2026-10-13
 suite: focused new tests first; functions `node --test test/*.test.js`; `npm run test:fence`; root `npm test`;
   Worker `npm test`; check:firebase-rules / check:functions-shared / check:www-parity; `git diff --check`.

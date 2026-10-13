@@ -1,5 +1,29 @@
 # ChronaSense — Changelog
 
+## TASK-011 — production rollout and closure (2026-10-13)
+
+Owner-authorized staged rollout of reviewed runtime `6d4185e`; no runtime change during rollout or closure.
+deployed:
+  - Pages: TASK-011 client live (byte-identical to the reviewed client; governed token `20261012-task011-plan-action-items-v1`).
+  - RTDB rules: REST PUT of `git show 6d4185e:firebase.rules.json`; live parsed-JSON SHA-256 `bc4cac30…cab6e`
+    (was TASK-010 `d96d9e77…e323e5`).
+  - Function `chronasenseActionApi`: gcloud source-only update from a clean LF export of `6d4185e` (51 files, no
+    node_modules); revision `chronasenseactionapi-00005-tih` -> `-00006-xor`; service account, ingress, memory, CPU,
+    concurrency, limits, timeout, secret binding v1 and public invoker unchanged; unauthenticated probe -> AUTH_REQUIRED.
+  - Worker: reviewed bundle; final active version `626afd01-da5d-4634-9879-0256db921b74` (100%).
+incident (repaired during rollout): the first Worker deploy (`d4175162…`, plain `wrangler deploy`) dropped the five
+  plaintext bindings managed outside `wrangler.jsonc`, breaking `/authorize`; its post-deploy checks (OAuth discovery,
+  deployment list, unauthenticated /mcp) did not cover those bindings. A `--keep-vars` redeploy (`747cf911…`) still
+  lacked them. Repaired by deploying the reviewed source with a temporary external config carrying the five values
+  recovered from known-good `1a47f247…` (HMAC secret and OAUTH_KV untouched; values never printed; temp files deleted).
+acceptance: seven tools, three scopes; canary `act1_bd46a3e6-4e29-47f3-a3dc-1a6c5a48cad8` -> item
+  `api1_bd46a3e6-4e29-47f3-a3dc-1a6c5a48cad8` on previously absent `cal1:2026-10-21`; first create and exact replay
+  passed with one final item (see TEST_REPORT.md).
+follow-ups (not implemented): explicit deploy-time source of truth for the Worker's environment-specific plaintext
+  bindings (never rely on `--keep-vars` alone, and verify bindings after every Worker deploy); N1 test that origin CAS
+  exhaustion / transport-unknown cannot fall through to item creation; N2 direct unit tests pinning the owner-token
+  plan primitives to UID/planId/ETag, optionally hardening the accepted plan-record shape.
+
 ## TASK-011 — bounded FIX FIRST pass (R011-01, R011-02) (branch: task-011)
 
 On top of reviewed candidate `a16b6e6`. Local only; nothing deployed or pushed.
