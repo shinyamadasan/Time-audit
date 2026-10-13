@@ -72,6 +72,63 @@ test('create token binds the exact action claim; an exchanged token missing that
   await assert.rejects(provider.getIdToken(UID, 'act1_bad'), error => error.code === 'FORBIDDEN');
 });
 
+test('plan create token (TASK-011) binds action, kind AND target; an exchanged token missing or altering any claim is refused', async () => {
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const target = 'cal1:2026-10-13';
+  const claims = { chronasenseActionId: actionId, chronasenseActionKind: 'plan_create', chronasenseActionTarget: target };
+  const admin = authAdmin();
+  const provider = createIdTokenProvider({ authAdmin: admin, webApiKey: 'k', fetch: recordingFetch(() => json(200, { idToken: jwt({ user_id: UID, ...claims }) })) });
+  await provider.getIdToken(UID, actionId, { target });
+  assert.deepEqual(admin.calls[1], ['createCustomToken', UID, claims]);
+  for (const echoed of [{ chronasenseActionId: actionId }, { ...claims, chronasenseActionTarget: 'cal1:2026-10-14' }, { ...claims, chronasenseActionKind: 'brain_dump_add' }]) {
+    const wrong = createIdTokenProvider({ authAdmin: authAdmin(), webApiKey: 'k', fetch: recordingFetch(() => json(200, { idToken: jwt({ user_id: UID, ...echoed }) })) });
+    await assert.rejects(wrong.getIdToken(UID, actionId, { target }), error => error.code === 'FORBIDDEN', JSON.stringify(echoed));
+  }
+  for (const [badAction, badPlan] of [[undefined, { target }], [actionId, { target: '2026-10-13' }], [actionId, { target: 'cal1:2026-10-13/../x' }], [actionId, null]]) {
+    await assert.rejects(provider.getIdToken(UID, badAction, badPlan), error => error.code === 'FORBIDDEN');
+  }
+  // TASK-010's Brain Dump token is byte-for-byte what it was: one claim, no kind, no target.
+  const bd = authAdmin();
+  await createIdTokenProvider({ authAdmin: bd, webApiKey: 'k', fetch: recordingFetch(() => json(200, { idToken: jwt({ user_id: UID, chronasenseActionId: actionId }) })) }).getIdToken(UID, actionId);
+  assert.deepEqual(bd.calls[1], ['createCustomToken', UID, { chronasenseActionId: actionId }]);
+});
+
+test('plan item create/read are pinned to rooms/uid_<uid>/calendarPlanFences/<cal1 plan>/<api1 item> and nothing else', async () => {
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const itemId = `api1_${actionId.slice(5)}`;
+  const planId = 'cal1:2026-10-13';
+  const record = { id: itemId, task: 'Gym', creationActionId: actionId };
+  const calls = [];
+  const tokenCalls = [];
+  const fetch = recordingFetch((url, init) => { calls.push([url, init]); return json(200, init.method === 'PUT' ? {} : record); });
+  const rtdb = createUserScopedRtdb({ databaseUrl: 'https://x.firebaseio.com', fetch,
+    idTokens: { getIdToken: async (...args) => { tokenCalls.push(args); return 'scoped-token'; } } });
+  assert.equal(await rtdb.createPlanItemIfAbsent(IDENTITY, planId, itemId, actionId, record), 'created');
+  assert.equal(new URL(calls[0][0]).pathname, `/rooms/uid_${UID}/calendarPlanFences/${planId}/${itemId}.json`);
+  assert.equal(calls[0][1].method, 'PUT');
+  assert.equal(calls[0][1].headers['if-match'], 'null_etag');
+  assert.deepEqual(tokenCalls[0], [UID, actionId, { target: planId }], 'the create token names this action and this plan');
+  assert.deepEqual(await rtdb.readPlanItem(IDENTITY, planId, itemId), record);
+  assert.deepEqual(tokenCalls[1], [UID], 'the read uses the ordinary owner token');
+  const violations = [
+    [IDENTITY, planId, `api1_${'0'.repeat(36)}`, actionId, record],
+    [IDENTITY, planId, itemId, 'act1_1c9a2d3e-4f5a-4b6c-9d7e-8f9012a3b4c5', record],
+    [IDENTITY, planId, itemId, actionId, { ...record, creationActionId: undefined }],
+    [IDENTITY, planId, itemId, actionId, { ...record, id: 'other' }],
+    [IDENTITY, '2026-10-13', itemId, actionId, record],
+    [IDENTITY, 'cal1:2026-10-13/../../settings', itemId, actionId, record],
+    [{ firebaseUid: UID, roomId: 'uid_someoneElse' }, planId, itemId, actionId, record],
+  ];
+  for (const args of violations) await assert.rejects(rtdb.createPlanItemIfAbsent(...args), AuthorityBoundaryViolation, JSON.stringify(args.slice(1, 3)));
+  await assert.rejects(rtdb.readPlanItem(IDENTITY, planId, '../x'), AuthorityBoundaryViolation);
+  const statuses = [[412, 'exists'], [403, 'FORBIDDEN'], [401, 'FORBIDDEN'], [500, 'RETRYABLE_TRANSPORT']];
+  for (const [status, expected] of statuses) {
+    const answer = createUserScopedRtdb({ databaseUrl: 'https://x.firebaseio.com', fetch: async () => json(status, {}), idTokens: { getIdToken: async () => 't' } });
+    const outcome = await answer.createPlanItemIfAbsent(IDENTITY, planId, itemId, actionId, record).catch(error => error.code);
+    assert.equal(outcome, expected, String(status));
+  }
+});
+
 test('capture create is a user-scoped conditional PUT at one deterministic Brain Dump child', async () => {
   const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
   const captureId = `bdc1_${actionId.slice(5)}`;

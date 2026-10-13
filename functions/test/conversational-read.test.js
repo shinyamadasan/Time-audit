@@ -227,6 +227,28 @@ test('a fenced Brain Dump item wins over an older same-ID plan-array copy', asyn
   assert.equal(response.body.result.plan.items[0].sourceCaptureId, 'bcap0001');
 });
 
+test('an Action API plan item (TASK-011) is read at its calendar fence child; out of place or forged it fails closed', async () => {
+  const actionId = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const id = `api1_${actionId.slice(5)}`;
+  const actionItem = { id, task: 'Gym', when: '18:00', whenTz: 'UTC', durationMinutes: 60, done: false, updatedAt: NOW, updatedBy: 'actor1:x', kind: 'task', creationActionId: actionId };
+  const ok = await query(harness({ rooms: rooms({ calendarPlanFences: { [TARGET.id]: { [id]: actionItem } } }), nowMs: NOW }), 'get_plan');
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const read = ok.body.result.plan.items.find(candidate => candidate.itemId === id);
+  assert.equal(read.task, 'Gym');
+  assert.equal(read.sourceCaptureId, null, 'not a Brain Dump item');
+  assert.deepEqual(Object.keys(read).sort(), Object.keys(ok.body.result.plan.items.find(candidate => candidate.itemId === 'stable-1')).sort(), 'the read projection shape is unchanged');
+  const forged = [
+    ['in a legacy fence', { planFences: { [DAY]: { [id]: actionItem } } }, { store: 'legacy', id: DAY }],
+    ['marker of another action', { calendarPlanFences: { [TARGET.id]: { [id]: { ...actionItem, creationActionId: 'act1_1c9a2d3e-4f5a-4b6c-9d7e-8f9012a3b4c5' } } } }, TARGET],
+    ['carrying a Brain Dump origin', { calendarPlanFences: { [TARGET.id]: { [id]: { ...actionItem, brainDumpOrigin: { v: 2, claimEpoch: 0, type: 'do-today', store: 'calendar', targetKey: TARGET.id } } } } }, TARGET],
+    ['under another key', { calendarPlanFences: { [TARGET.id]: { other: actionItem } } }, TARGET],
+  ];
+  for (const [why, overrides, target] of forged) {
+    const response = await query(harness({ rooms: rooms(overrides), nowMs: NOW }), 'get_plan', { target });
+    assert.equal(response.body.error?.code, 'CONFLICT', why);
+  }
+});
+
 test('previous unfinished plans remain open loops; missing actual never becomes a missed fact', async () => {
   const previous = 'cal1:2026-10-08';
   const yesterday = { ...item, id: 'still-open', when: '09:00', durationMinutes: 30 };

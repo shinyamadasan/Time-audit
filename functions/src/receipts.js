@@ -56,13 +56,14 @@ export function classifyExistingReceipt(existing, { requestHash, nowMs }) {
 export function createReceiptStore({ infra }) {
   return Object.freeze({
     /** The atomic initial claim (§6): ABSENT grants exactly one executor. */
-    async claim({ firebaseUid, actionId, requestHash, kind, attemptId, nowMs, leaseMs, plannedRecordId, authorizationContext, actionProvenanceRefs }) {
+    async claim({ firebaseUid, actionId, requestHash, kind, attemptId, nowMs, leaseMs, plannedRecordId, plannedTarget, authorizationContext, actionProvenanceRefs }) {
       if (!/^[0-9a-f]{64}$/.test(requestHash) || typeof kind !== 'string' || !kind || typeof attemptId !== 'string' || !attemptId) throw new Error('invalid receipt claim');
       if (!Number.isSafeInteger(nowMs) || !Number.isSafeInteger(leaseMs) || leaseMs <= 0) throw new Error('invalid receipt lease');
       const receipt = {
         contractVersion: 1, actionId, requestHash, kind, state: 'started', attemptId,
         leaseAcquiredAt: nowMs, leaseExpiresAt: nowMs + leaseMs, createdAt: nowMs, updatedAt: nowMs,
         ...(plannedRecordId ? { plannedRecordId } : {}),
+        ...(plannedTarget ? { plannedTarget } : {}),
         ...(authorizationContext ? { authorizationContext } : {}),
         ...(actionProvenanceRefs ? { actionProvenanceRefs } : {}),
       };

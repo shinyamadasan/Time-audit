@@ -14,11 +14,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ALICE, MALLORY, ROOM, startEmulator, token } from './rtdb-emulator-support.js';
-import { createActionApiHandler } from './functions/src/action-api.js';
+import { COMMAND_PATH, createActionApiHandler } from './functions/src/action-api.js';
+import { actionActorRef } from './functions/src/envelope.js';
 import { createInfraRtdb } from './functions/src/infra-rtdb.js';
 import { createNonceStore, NONCE_ROOT } from './functions/src/nonce-store.js';
 import { createReceiptStore } from './functions/src/receipts.js';
@@ -29,6 +31,7 @@ import { archiveCapture, buildCapture, claimPromotion, editHandledCapture, final
   mergeCaptureRecords, normalizeCapture, reopenCapture, triageCapture } from './brain-dump-model.js';
 import {
   CAPTURE, ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, legacyClaim, ordinary, origin, planRecord, promotedCapture, promotion,
+  ACTION_A, ACTION_B, ACTION_OTHER_PLAN, ACTION_PLAN, actionItem, actionItemAt, actionItemId, planActionToken, seedCalendarAuthority,
 } from './fence-rules-fixtures.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -565,4 +568,162 @@ test('action api: end to end against the real server - signed get_brain_dump, th
   assert.equal((await handle(request)).reason, 'replayed-request-id');
   assert.ok(await db.read(`${NONCE_ROOT}/${SERVICE}/${request.requestId}`), 'the nonce is persisted server-side');
   assert.equal(await db.read('serverActionReceipts'), null, 'a read creates no receipt');
+});
+
+// ── Action API plan items (TASK-011, DECISIONS #37) ─────────────────────────
+// A conversational plan_create lands at ONE keyed calendar fence child. These attack it as the
+// backend's own scoped token (wrong kind/target/marker/id, overwrite) and as the room owner
+// (fabricate, strip/rewrite the marker, resurrect, move, smuggle it into the plan array).
+
+test('action plan item: only the matching plan-scoped token creates it, and only on a calendar-authoritative account', async () => {
+  const db = await freshDb();
+  const at = actionItemAt();
+  assert.equal(await db.write(at, actionItem()), false, 'an ordinary owner cannot fabricate Action API attribution');
+  assert.equal(await db.write(at, actionItem(), planActionToken()), false, 'no calendar authority yet: refused (no implicit activation)');
+  await seedCalendarAuthority(db);
+  assert.equal(await db.write(at, actionItem(), planActionToken(ACTION_A, { kind: 'brain_dump_add' })), false, 'a non-plan action kind cannot create a plan item');
+  assert.equal(await db.write(at, actionItem(), planActionToken(ACTION_A, { kind: null, target: null })), false, 'a TASK-010 Brain Dump token (id only) cannot create a plan item');
+  assert.equal(await db.write(at, actionItem(), planActionToken(ACTION_A, { target: ACTION_OTHER_PLAN })), false, 'a token for another plan cannot create here');
+  assert.equal(await db.write(at, actionItem(), planActionToken(ACTION_B)), false, "another action cannot create this action's item");
+  const otherAt = actionItemAt(ACTION_B);
+  assert.equal(await db.write(otherAt, actionItem({ id: actionItemId(ACTION_B), creationActionId: ACTION_B }), planActionToken(ACTION_A)), false,
+    "this action cannot create another action's (self-consistent) item");
+  assert.equal(await db.write(otherAt, actionItem({ id: actionItemId(ACTION_B) }), planActionToken(ACTION_A)), false, 'the item id must derive from the marker');
+  assert.equal(await db.write(at, actionItem({ brainDumpOrigin: origin(STORES.calendar) }), planActionToken()), false, 'no Brain Dump origin on an action item');
+  assert.equal(await db.write(at, actionItem({ movedToDayId: ACTION_OTHER_PLAN }), planActionToken()), false, 'created unmoved');
+  assert.equal(await db.write(at, actionItem(), token('mallory', { chronasenseActionId: ACTION_A, chronasenseActionKind: 'plan_create', chronasenseActionTarget: ACTION_PLAN })), false,
+    'another account holding identical claims cannot write this room');
+  assert.equal(await db.write(at, actionItem(), planActionToken()), true, 'the exact scoped token creates the exact item');
+  assert.equal(await db.write(at, actionItem(), planActionToken()), false, 'create-only: the token cannot rewrite it, even identically');
+  assert.equal(await db.write(at, actionItem({ task: 'Gym!' }), planActionToken()), false, 'the action token cannot edit it');
+  assert.deepEqual(await db.read(at), actionItem(), 'the stored item is exactly the created one');
+});
+
+test('action plan item: the owner edits it like any task but cannot strip/rewrite the marker, resurrect, move or delete it', async () => {
+  const db = await freshDb();
+  await seedCalendarAuthority(db);
+  const at = actionItemAt();
+  await db.seed(at, actionItem());
+  assert.equal(await db.write(at, actionItem({ task: 'Gym (legs)', done: true, doneAt: T + 9, updatedAt: T + 9, updatedBy: 'device' })), true, 'ordinary edit + completion');
+  assert.equal(await db.write(at, actionItem({ when: '19:00', durationMinutes: 45, updatedAt: T + 10 })), true, 'ordinary retime in the same plan');
+  assert.equal(await db.write(at, actionItem({ creationActionId: undefined })), false, 'marker cannot be stripped');
+  assert.equal(await db.write(at, actionItem({ creationActionId: ACTION_B })), false, 'marker cannot be rewritten');
+  assert.equal(await db.write(at, actionItem({ relocationRevision: { schemaVersion: 1, sequence: 1, fromDayId: ACTION_PLAN, toDayId: ACTION_OTHER_PLAN, updatedBy: 'd' } })), false, 'no relocation');
+  assert.equal(await db.write(at, actionItem({ deleted: true, movedToDayId: ACTION_OTHER_PLAN })), false, 'no move tombstone');
+  assert.equal(await db.write(at, null), false, 'the child can never be removed');
+  assert.equal(await db.write(`${ROOM}/calendarPlanFences/${ACTION_PLAN}`, { [actionItemId(ACTION_A)]: actionItem({ task: 'overwritten' }) }), false, 'no parent overwrite');
+  assert.equal(await db.write(at, actionItem({ deleted: true, updatedAt: T + 11 })), true, 'ordinary delete is a tombstone');
+  assert.equal(await db.write(at, actionItem({ deleted: false, updatedAt: T + 99 })), false, 'tombstone is monotonic: never resurrected');
+  assert.equal(await db.write(at, actionItem({ updatedAt: T + 99 })), false, 'not even by omitting the flag');
+  assert.equal(await db.write(at, actionItem({ deleted: true, task: 'renamed tombstone', updatedAt: T + 12 })), true, 'a tombstone may still be re-stamped');
+  assert.equal((await db.read(at)).creationActionId, ACTION_A, 'attribution survived every owner write');
+});
+
+test('action plan item: the plan-scoped token cannot touch anything else, and no plan array can carry Action API identity', async () => {
+  const db = await freshDb();
+  await seedCalendarAuthority(db);
+  const planToken = planActionToken();
+  await db.seed(captureAt(), capture({ promotionClaim: claim(STORES.calendar) }));
+  const deniedForToken = [
+    [`${ROOM}/calendarPlans/${ACTION_PLAN}`, planRecord([ordinary])],
+    [`${ROOM}/settings`, { timezone: 'UTC' }],
+    [`${ROOM}/entries/e1`, { id: 'e1', updatedAt: T }],
+    [`${ROOM}/timer`, { running: false }],
+    [`${ROOM}/planFences/2026-10-03/${actionItemId(ACTION_A)}`, actionItem()],
+    [`${ROOM}/operationalPlanFences/${STORES.operational.key}/${actionItemId(ACTION_A)}`, actionItem()],
+    [STORES.calendar.itemAt, fencedItem(STORES.calendar)],
+    ['uid_alice/public', { sample: true }],
+  ];
+  for (const [path, value] of deniedForToken) assert.equal(await db.write(path, value, planToken), false, `plan token denied at ${path}`);
+  const bdc = `bdc1_${ACTION_A.slice(5)}`;
+  assert.equal(await db.write(captureAt(bdc), capture({ id: bdc, creationActionId: ACTION_A }), planToken), false, 'a plan.write token cannot create a Brain Dump capture');
+  assert.equal(await db.write(captureAt(bdc), capture({ id: bdc, creationActionId: ACTION_A }), token('alice', { chronasenseActionId: ACTION_A })), true,
+    'the unchanged TASK-010 Brain Dump token still creates its capture');
+  // The owner's ordinary plan arrays (calendar while active; legacy/operational before activation): no api1_ namespace, no marker.
+  for (const def of Object.values(STORES)) {
+    if (def.store !== 'calendar') await db.seed(`${ROOM}/calendarPlanAuthority`, null);
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, actionItem()])), false, `${def.store}: a marked api1_ item cannot sit in the array`);
+    assert.equal(await db.write(def.planAt, planRecord([ordinary, { ...ordinary, id: actionItemId(ACTION_B) }])), false, `${def.store}: the api1_ namespace is reserved`);
+    assert.equal(await db.write(def.planAt, planRecord([{ ...ordinary, creationActionId: ACTION_A }])), false, `${def.store}: an ordinary item cannot carry a marker`);
+    assert.equal(await db.write(def.planAt, planRecord([ordinary])), true, `${def.store}: ordinary plan writes are unaffected`);
+    if (def.store !== 'calendar') await seedCalendarAuthority(db);
+  }
+});
+
+// The Function's own path against the real server: signed command -> receipt -> Plan Authority read -> REST
+// conditional create with the claim-bearing token -> exact readback -> receipt applied; then replay, a race,
+// an owner edit, and the conditional-create precedence the recovery protocol relies on.
+const PLAN_OWNER_UID = 'ownerUid123';
+const PLAN_ROOM = `rooms/uid_${PLAN_OWNER_UID}`;
+const planScopedTokens = { getIdToken: async (uid, actionId, plan) => token(uid, actionId
+  ? { chronasenseActionId: actionId, ...(plan ? { chronasenseActionKind: 'plan_create', chronasenseActionTarget: plan.target } : {}) } : {}) };
+async function seedPlanAccount(db) {
+  const activatedAtMs = NOW_MS - 10 * 86_400_000;
+  await db.seed(`${PLAN_ROOM}/settings`, { timezone: 'Asia/Manila' });
+  await db.seed(`${PLAN_ROOM}/calendarPlanAuthority/fact-1`, { schemaVersion: 1, id: 'fact-1', activatedAtMs, timezone: 'Asia/Manila',
+    activationDate: new Date(activatedAtMs + 8 * 3_600_000).toISOString().slice(0, 10), deviceId: 'phone' });
+}
+function planCommand(actionId, parameters) {
+  const requestId = randomUUID();
+  return signedRequest({ path: COMMAND_PATH, requestId, signed: { path: COMMAND_PATH, scopes: ['chronasense:plan.write'] },
+    envelope: { contractVersion: 1, requestId, actionId, kind: 'plan_create', parameters, expectedRevision: null,
+      actionProvenance: { version: 1, sourceKind: 'chatgpt_plugin', actionId, actorRef: actionActorRef('access-sub-owner-1'), capturedAt: new Date(NOW_MS).toISOString() } } });
+}
+
+test('action api: plan_create end to end against the real server - create, replay, race, owner edit, conditional precedence', async () => {
+  const db = await freshDb();
+  await seedPlanAccount(db);
+  const tomorrow = new Date(NOW_MS + 8 * 3_600_000 + 86_400_000).toISOString().slice(0, 10);
+  const planId = `cal1:${tomorrow}`;
+  const parameters = { target: { store: 'calendar', id: planId }, title: 'Gym', when: '18:00', whenTz: 'Asia/Manila', durationMinutes: 60 };
+  const domain = createUserScopedRtdb({ databaseUrl: emulator.base, namespace: db.name, idTokens: planScopedTokens });
+  const infra = infraFor(db);
+  const handle = createActionApiHandler({ keys: KEYS, owner: { ownerSubject: 'access-sub-owner-1', ownerFirebaseUid: PLAN_OWNER_UID },
+    nonces: createNonceStore({ infra }), receipts: createReceiptStore({ infra }), domain, now: () => NOW_MS });
+  const itemAt = `${PLAN_ROOM}/calendarPlanFences/${planId}/${actionItemId(ACTION_A)}`;
+
+  const first = await handle(planCommand(ACTION_A, parameters));
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  const stored = await db.read(itemAt);
+  assert.equal(stored.creationActionId, ACTION_A);
+  assert.equal(stored.task, 'Gym');
+  assert.equal(await db.read(`${PLAN_ROOM}/calendarPlans`), null, 'the plan record was never written');
+  assert.equal((await db.read(`serverActionReceipts/${PLAN_OWNER_UID}/${ACTION_A}`)).state, 'applied');
+
+  const replay = await handle(planCommand(ACTION_A, parameters));
+  assert.equal(replay.body.result.idempotentReplay, true, JSON.stringify(replay.body));
+
+  // The conditional create the recovery protocol relies on: an existing child answers 412 ("exists"), not a rules denial.
+  assert.equal(await domain.createPlanItemIfAbsent({ firebaseUid: PLAN_OWNER_UID, roomId: `uid_${PLAN_OWNER_UID}` }, planId, actionItemId(ACTION_A), ACTION_A, stored), 'exists');
+
+  // The owner edits it through the ordinary rules; the action's replay is unaffected and attribution survives.
+  assert.equal((await asClient(db, 'PUT', itemAt, token(PLAN_OWNER_UID), { ...stored, task: 'Gym (legs)', done: true, updatedAt: NOW_MS + 5 })).status, 200);
+  assert.equal((await handle(planCommand(ACTION_A, parameters))).body.result.idempotentReplay, true);
+  assert.equal((await db.read(itemAt)).creationActionId, ACTION_A);
+
+  // Twelve concurrent attempts of ANOTHER action: exactly one item, never two.
+  const race = await Promise.all(Array.from({ length: 12 }, () => handle(planCommand(ACTION_B, { ...parameters, title: 'Stretch', when: '19:30' }))));
+  assert.ok(race.some(r => r.status === 200), JSON.stringify(race.map(r => r.body.error?.code)));
+  assert.ok(race.every(r => r.status === 200 || r.body.error.code === 'PENDING_UNKNOWN'));
+  assert.deepEqual(Object.keys(await db.read(`${PLAN_ROOM}/calendarPlanFences/${planId}`)).sort(), [actionItemId(ACTION_A), actionItemId(ACTION_B)].sort());
+
+  // Plan Authority's server read (the unchanged get_plan) sees both, with the create's revision.
+  const requestId = randomUUID();
+  const read = await handle(signedRequest({ requestId, envelope: { contractVersion: 1, requestId, kind: 'get_plan', parameters: { target: { store: 'calendar', id: planId } } } }));
+  assert.equal(read.status, 200, JSON.stringify(read.body));
+  assert.deepEqual(read.body.result.plan.items.map(i => i.itemId).sort(), [actionItemId(ACTION_A), actionItemId(ACTION_B)].sort());
+});
+
+test('action api: plan_create refuses a non-authoritative account against the real rules without writing anything', async () => {
+  const db = await freshDb();
+  await db.seed(`${PLAN_ROOM}/settings`, { timezone: 'Asia/Manila' });
+  const tomorrow = new Date(NOW_MS + 8 * 3_600_000 + 86_400_000).toISOString().slice(0, 10);
+  const infra = infraFor(db);
+  const handle = createActionApiHandler({ keys: KEYS, owner: { ownerSubject: 'access-sub-owner-1', ownerFirebaseUid: PLAN_OWNER_UID },
+    nonces: createNonceStore({ infra }), receipts: createReceiptStore({ infra }),
+    domain: createUserScopedRtdb({ databaseUrl: emulator.base, namespace: db.name, idTokens: planScopedTokens }), now: () => NOW_MS });
+  const response = await handle(planCommand(ACTION_A, { target: { store: 'calendar', id: `cal1:${tomorrow}` }, title: 'Gym' }));
+  assert.equal(response.body.error?.code, 'NOT_FOUND', JSON.stringify(response.body));
+  assert.equal(await db.read(`${PLAN_ROOM}/calendarPlanFences`), null);
+  assert.equal(await db.read(`${PLAN_ROOM}/calendarPlanAuthority`), null, 'nothing activated');
 });

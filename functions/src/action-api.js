@@ -9,16 +9,17 @@
 //   3. identity binding (signed subject == configured owner -> configured UID -> room uid_<uid>)
 //   4. required scope present in the SIGNED scopes
 //   5. replay nonce: atomic create-if-absent (duplicate fails closed)
-//   6. the typed query or guarded Brain Dump create, through user-scoped domain authority
+//   6. the typed query or one guarded create (Brain Dump capture, plan item), through user-scoped domain authority
 //
 // Responses never echo anything unauthenticated: requestId appears only once the HMAC has verified it.
 
 import { getBrainDump } from './brain-dump-query.js';
 import { createBrainDumpAction } from './brain-dump-action.js';
+import { createPlanAction } from './plan-create-action.js';
 import { getToday, getPlan, getItem, getIntelligence } from './read-queries.js';
 import { ApiError, errorBody } from './errors.js';
 import { bindIdentity, requireScope } from './identity.js';
-import { parseCreateEnvelope, parseQueryEnvelope } from './envelope.js';
+import { COMMAND_KINDS, parseCreateEnvelope, parseQueryEnvelope } from './envelope.js';
 import { MAX_BODY_BYTES, SERVICE_IDENTITY, verifyServiceRequest } from './service-auth.js';
 
 export const CANONICAL_PATH = '/v1/query';
@@ -28,13 +29,15 @@ export const MAX_RESPONSE_BYTES = MAX_BODY_BYTES;
 
 const QUERIES = Object.freeze({ get_brain_dump: getBrainDump, get_today: getToday, get_plan: getPlan,
   get_item: getItem, get_intelligence: getIntelligence });
+/** Each command kind has its own write scope (COMMAND_KINDS) and its own guarded create. */
+const COMMANDS = Object.freeze({ brain_dump_add: createBrainDumpAction, plan_create: createPlanAction });
 
 /**
  * @param {{keys:Map<string,Uint8Array>, owner:{ownerSubject:string, ownerFirebaseUid:string},
  *          nonces:ReturnType<import('./nonce-store.js').createNonceStore>,
  *          receipts?:ReturnType<import('./receipts.js').createReceiptStore>,
  *          domain:{readRoomCollection(identity:object, collection:string):Promise<unknown>,
- *            createCaptureIfAbsent?:Function, readCapture?:Function},
+ *            createCaptureIfAbsent?:Function, readCapture?:Function, createPlanItemIfAbsent?:Function, readPlanItem?:Function},
  *          now?:()=>number, log?:(entry:object)=>void}} deps
  * @returns {(request:{method:string, path:string, rawHeaders:string[], rawBody:Uint8Array}) => Promise<{status:number, body:object, payload:string, reason:string}>}  `payload` is the exact JSON text to send
  */
@@ -49,12 +52,12 @@ export function createActionApiHandler({ keys, owner, nonces, receipts, domain, 
       const identity = bindIdentity(assertion, owner);
       const query = isCommand ? parseCreateEnvelope(request.rawBody, { requestId, subject: identity.principalSubject })
         : parseQueryEnvelope(request.rawBody, { requestId });
-      requireScope(identity, isCommand ? 'chronasense:brain-dump.write' : query.scope);
+      requireScope(identity, isCommand ? COMMAND_KINDS[query.kind].scope : query.scope);
       await nonces.claim(SERVICE_IDENTITY, requestId, nowMs);
       // Bounded retention sweep; best-effort, it never decides the outcome of this request.
       nonces.sweepExpired(SERVICE_IDENTITY, nowMs).catch(() => log({ event: 'nonce-sweep-failed', requestId }));
       const { result, authority } = isCommand
-        ? await createBrainDumpAction(identity, { command: query, domain, receipts, attemptId: requestId, nowMs })
+        ? await COMMANDS[query.kind](identity, { command: query, domain, receipts, attemptId: requestId, nowMs })
         : await QUERIES[query.kind](identity, { domain, nowMs, parameters: query.parameters });
       const body = { contractVersion: 1, requestId, kind: query.kind, result, authority };
       const payload = JSON.stringify(body);

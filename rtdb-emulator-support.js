@@ -22,7 +22,7 @@ export const JAR = process.env.FIREBASE_DATABASE_EMULATOR_JAR
 
 const b64 = value => Buffer.from(JSON.stringify(value)).toString('base64url');
 /** An unsigned JWT the emulator accepts as `auth` (uid becomes auth.uid inside the rules). */
-export const token = uid => `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ sub: uid, user_id: uid, uid, iat: 1, exp: 9999999999, aud: 'demo', iss: 'https://securetoken.google.com/demo', auth_time: 1, firebase: { sign_in_provider: 'custom' } })}.`;
+export const token = (uid, claims = {}) => `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ sub: uid, user_id: uid, uid, iat: 1, exp: 9999999999, aud: 'demo', iss: 'https://securetoken.google.com/demo', auth_time: 1, firebase: { sign_in_provider: 'custom' }, ...claims })}.`;
 export const ALICE = token('alice');
 export const MALLORY = token('mallory');
 export const ROOM = 'rooms/uid_alice';
