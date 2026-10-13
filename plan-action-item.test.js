@@ -118,6 +118,22 @@ test('end to end: a server-created item appears in the plan, and owner edits/com
   assert.deepEqual(db.denials, [], 'every owner write was accepted by the real rules');
 });
 
+test('end to end (R011-02): a device loading a plan whose origin the server froze uses that home zone, and its own pushes keep it', async () => {
+  const db = rulesEnforcingDatabase({ targaryen, rules: RULES, uid: 'A' });
+  const origin = { createdAt: 5, timezone: 'Asia/Tokyo', updatedAt: 0 };
+  db.seed(`rooms/uid_A/calendarPlans/${SUN_ID}`, origin);
+  db.seed(FENCE_AT, actionItem());
+  const app = device(db); // account zone is Asia/Manila
+  const today = app.authority.current();
+  assert.equal(today.timezone, 'Asia/Tokyo', 'the frozen home zone, not the account zone');
+  app.authority.addItem({ destination: today, item: { id: 'pmine1', task: 'mine', when: '', done: false, doneAt: null, updatedAt: app.clock.now, updatedBy: 'phone', kind: 'task' } });
+  await app.calendarSync.pushPlan(SUN_ID);
+  const record = db.read(`rooms/uid_A/calendarPlans/${SUN_ID}`);
+  assert.deepEqual([record.createdAt, record.timezone], [5, 'Asia/Tokyo'], 'the earliest (server) origin survives the device push');
+  assert.deepEqual(record.items.map(i => i.id), ['pmine1'], 'the action item never enters the array');
+  assert.deepEqual(db.denials, []);
+});
+
 test('end to end: moving it to another day is refused before anything is written', async () => {
   const db = rulesEnforcingDatabase({ targaryen, rules: RULES, uid: 'A' });
   db.seed(FENCE_AT, actionItem());

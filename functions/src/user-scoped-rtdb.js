@@ -127,6 +127,16 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
     url.searchParams.set('auth', idToken);
     return url;
   }
+  /** R011-02: the one calendar plan record whose canonical origin plan_create may freeze; nothing else. */
+  function planRecordUrl(identity, planId, idToken) {
+    if (!validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}` || !calendarPlanKey(planId)) {
+      throw new AuthorityBoundaryViolation('plan record address is not derived from the bound UID and plan');
+    }
+    const url = new URL(`${databaseUrl}/rooms/${identity.roomId}/calendarPlans/${planId}.json`);
+    if (namespace) url.searchParams.set('ns', namespace);
+    url.searchParams.set('auth', idToken);
+    return url;
+  }
   function planItemUrl(identity, planId, itemId, idToken) {
     if (!validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}`
       || !calendarPlanKey(planId) || !isActionPlanItemId(itemId)) {
@@ -182,6 +192,33 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
       if (response.status === 401 || response.status === 403) throw denied(`domain-plan-item-read-${response.status}`);
       if (response.status !== 200) throw transport(`domain-plan-item-read-${response.status}`);
       return boundedSourceJson(response);
+    },
+    /** The calendar plan record and its ETag, as the ordinary owner (no action claim). */
+    async readCalendarPlanWithEtag(identity, planId) {
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      const url = planRecordUrl(identity, planId, idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'GET', headers: { 'X-Firebase-ETag': 'true' }, signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-plan-record-read-network'); }
+      if (response.status === 401 || response.status === 403) throw denied(`domain-plan-record-read-${response.status}`);
+      if (response.status !== 200) throw transport(`domain-plan-record-read-${response.status}`);
+      const etag = response.headers.get('ETag');
+      if (!etag) throw transport('domain-plan-record-etag-missing');
+      return { value: await boundedSourceJson(response), etag };
+    },
+    /** Compare-and-set of that record, as the ordinary owner, through the unchanged plan rules. @returns {Promise<'written'|'changed'>} */
+    async putCalendarPlanIfMatch(identity, planId, record, etag) {
+      if (typeof etag !== 'string' || !etag || !record || typeof record !== 'object' || Array.isArray(record)) throw new AuthorityBoundaryViolation('plan record write requires a record and an ETag');
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      const url = planRecordUrl(identity, planId, idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'PUT', headers: { 'if-match': etag, 'content-type': 'application/json' },
+        body: JSON.stringify(record), signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-plan-record-write-network'); }
+      if (response.status === 200) return 'written';
+      if (response.status === 412) return 'changed';
+      if (response.status === 401 || response.status === 403) throw denied(`domain-plan-record-write-${response.status}`);
+      throw transport(`domain-plan-record-write-${response.status}`);
     },
     async readCapture(identity, captureId) {
       const idToken = await idTokens.getIdToken(identity.firebaseUid);

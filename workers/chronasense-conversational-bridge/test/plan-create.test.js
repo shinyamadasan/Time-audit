@@ -47,6 +47,16 @@ function backend() {
   const h = harness({ domain: {
     async readRoomCollection(_identity, collection) { return structuredClone(room[collection] ?? null); },
     async readPlanItem(_identity, planId, itemId) { return structuredClone(room.calendarPlanFences[planId]?.[itemId] ?? null); },
+    async readCalendarPlanWithEtag(_identity, planId) {
+      const value = room.calendarPlans?.[planId] ?? null;
+      return { value: structuredClone(value), etag: value ? JSON.stringify(value) : 'null_etag' };
+    },
+    async putCalendarPlanIfMatch(_identity, planId, record, etag) {
+      const value = room.calendarPlans?.[planId] ?? null;
+      if (etag !== (value ? JSON.stringify(value) : 'null_etag')) return 'changed';
+      room.calendarPlans = { ...room.calendarPlans, [planId]: structuredClone(record) };
+      return 'written';
+    },
     async createPlanItemIfAbsent(_identity, planId, itemId, _actionId, record) {
       writes.push(itemId);
       room.calendarPlanFences[planId] ??= {};

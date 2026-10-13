@@ -16,15 +16,18 @@ surface; every Brain Dump behaviour test is untouched and passes).
 
 - No migration, no second store. The item `api1_<uuid>` (+ immutable `creationActionId`) lives at its keyed child
   `rooms/<room>/calendarPlanFences/<planId>/api1_<uuid>` — the location-bound representation #33 already uses for
-  fenced Brain Dump items. The plan record and its re-sorted `items` array are never written by the backend.
+  fenced Brain Dump items. The item never enters the plan record's `items` array; the only plan-record write is the
+  existing canonical origin (createdAt + home timezone) for a plan that has none (R011-02), via
+  `mergeCalendarPlanRecords` under an ETag CAS with the ordinary owner token.
 - Rules: CREATE only by an action token whose claims (`chronasenseActionId`, `chronasenseActionKind:'plan_create'`,
   `chronasenseActionTarget`) bind item id, marker and path; child absent; calendar activation fact present. UPDATE only
   by an ordinary owner token, marker pinned (id must derive from it), tombstone monotonic, no relocation, no delete, no
   parent overwrite. Plan arrays reserve `api1_` and refuse markers; a plan token cannot create a Brain Dump capture.
 - Function: pre-claim structured validation (incl. DST gap / plan extent) → receipt claim/replay/takeover → exact-child
   read (marker = proof) → Plan Authority server read (calendar-authoritative, frozen home zone, not past, id unused) →
-  `if-match: null_etag` create → exact readback → applied. Definite refusals become terminal only on a fresh claim or
-  after `MAX_ATTEMPT_MS`; a rules refusal is re-checked against the child before it is reported.
+  origin freeze → `if-match: null_etag` create → exact readback → applied. A definite refusal is REJECTED only on the
+  action's first attempt; any takeover stays PENDING_UNKNOWN until the child proves it (R011-01). A rules refusal is
+  re-checked against the child before it is reported.
 - Client: `plan-item-origin.js` counts action items as fenced (split/fold/merge, tombstone monotonic); cross-day move
   refused (Plan Authority, editor, rules); the `saveItems` funnel never introduces one into a plan. Governed import-map
   generation moved to `20261012-task011-plan-action-items-v1`.
@@ -42,7 +45,9 @@ Calendar store only (legacy/operational targets: `DOMAIN_LIMIT`; unactivated acc
 task" (`kind:'task'`). Action-created tasks cannot be moved to another day yet (same V1 rule as Brain Dump tasks; stale
 recovery still copies them as ordinary `ocarry1|` items). A client predating this change does not display action items
 until it updates (visibility gap, not corruption). Rules check that an activation fact exists, not the date >= activation
-date (the Function enforces date routing). Not proven locally: production custom-token signing/IAM (the TASK-010
+date (the Function enforces date routing). No domain-side writer fence exists, so an action whose earlier attempt
+died before writing, and whose takeover then meets a definite refusal, stays PENDING_UNKNOWN indefinitely (never
+REJECTED); the controller must not mint a new action ID for it. Not proven locally: production custom-token signing/IAM (the TASK-010
 Auth-emulator proof covers only claim propagation), the deployed `/v1/command` route, Android build.
 
 ## Release order (owner-authorized, not done here)

@@ -5,6 +5,24 @@
 
 ---
 
+## TASK-011 bounded FIX FIRST (R011-01, R011-02) · 2026-10-13
+suite: focused new tests first; functions `node --test test/*.test.js`; `npm run test:fence`; root `npm test`;
+  Worker `npm test`; check:firebase-rules / check:functions-shared / check:www-parity; `git diff --check`.
+result:
+  - functions 159/159 (plan-create-action 32: R011-01 x5, R011-02 x5 new; the elapsed-time test replaced).
+  - mutation check (local, not committed): disabling the takeover guard fails 4/5 R011-01 tests (the 5th is the
+    first-attempt control); skipping ensurePlanOrigin fails 5/5 R011-02 tests. Source restored and re-verified.
+  - test:fence: rules-emulator 74/74 (end-to-end origin assertion + new owner-record / zone-freeze case), fence-sdk
+    20/20, rules-mutation 28/28. Rules unchanged.
+  - npm test: exit 0, 2109 node:test passes, 0 failures, 1 pre-existing env-gated skip.
+  - client plan-action-item 9/9 (server-frozen origin honoured after load and kept through device pushes).
+  - Worker 21/21 (test double gained the two origin primitives; Worker source unchanged).
+  - browser smoke NOT rerun: no client runtime module, index.html or www/ changed in this pass (863/863 evidence on
+    a16b6e6 stands).
+untested: same as the candidate (production IAM/token signing, deployed route, Android, real ChatGPT client).
+
+---
+
 ## TASK-011 Plan Authority + Conversational Scheduling V1 · 2026-10-12
 suite: root `npm test`; `npm run test:fence`; functions `node --test test/*.test.js`; Worker `npm test` and
   `npm run check:bundle` (dry-run, no deploy); `npm run test:smoke`; `npm run lint`; `check:firebase-rules`;
