@@ -614,7 +614,7 @@ closure:
 ---
 
 ### TASK-011 - Plan Authority + Conversational Scheduling V1
-status: approved
+status: done
 owner: claude
 source: owner-direct
 priority: P1
@@ -663,6 +663,19 @@ integration:
   (reviewed runtime SHA, byte-identical tree). Hosted CI run 38424018266 success; pages-build-deployment success.
   Production rollout and acceptance PENDING: no Function, Worker, RTDB rules, OAuth/IAM/secret change, production
   write or live plan_create performed. `done` is reserved for owner-confirmed production acceptance.
+
+closure:
+  Closed 2026-10-13 on owner-confirmed production acceptance. Reviewed runtime 6d4185e live: Pages client; RTDB rules
+  parsed-JSON SHA-256 bc4cac304396f0559232464461b5011420ec54717e3f9858dacc7047e71cab6e; Function revision
+  chronasenseactionapi-00006-xor; Worker version 626afd01-da5d-4634-9879-0256db921b74. Seven tools (five reads,
+  brain_dump_add, plan_create); scopes read, brain-dump.write, plan.write. Canary act1_bd46a3e6-4e29-47f3-a3dc-1a6c5a48cad8
+  -> api1_bd46a3e6-4e29-47f3-a3dc-1a6c5a48cad8 on previously absent cal1:2026-10-21: first create PASS, exact replay
+  idempotent PASS, exactly one final item, plan timezone Asia/Manila.
+  Accepted limitation: acceptance evidence is connector-level; the private receipt and raw plan-origin record were not
+  read directly. A final get_item failed connector argument validation (non-blocking).
+  Follow-ups (separate, not scheduled): Worker plaintext-binding deploy source of truth (a plain wrangler deploy dropped
+  five externally managed bindings during this rollout; repaired, see CHANGELOG.md); N1 origin-CAS-exhaustion test;
+  N2 owner-token plan primitive tests.
 
 ---
 
