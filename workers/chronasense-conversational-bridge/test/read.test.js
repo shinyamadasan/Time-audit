@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 
-import { handleMcpRequest, READ_SCOPE, READ_TOOLS, WRITE_SCOPE, WRITE_TOOLS, RESOURCE, ISSUER } from '../src/mcp.js';
+import { handleMcpRequest, PLAN_WRITE_SCOPE, READ_SCOPE, READ_TOOLS, WRITE_SCOPE, WRITE_TOOLS, RESOURCE, ISSUER } from '../src/mcp.js';
 import { COMMAND_TIMEOUT_MS, commandActionApi, queryActionApi } from '../src/action-client.js';
 import { actionActorRef } from '../../../functions/src/envelope.js';
 import { harness, KEY, OWNER, NOW_MS, capture } from '../../../functions/test/support.js';
@@ -33,7 +33,7 @@ async function message(response) {
   return JSON.parse(line ? line.slice(6) : body);
 }
 
-test('MCP route preserves the five reads and adds only one scoped Brain Dump create tool', async () => {
+test('MCP route preserves the five reads and exposes exactly two scoped create tools (Brain Dump, plan task)', async () => {
   const response = await handleMcpRequest(request('tools/list'), env, { nowSeconds }, ctx());
   assert.equal(response.status, 200);
   const tools = (await message(response)).result.tools;
@@ -48,7 +48,13 @@ test('MCP route preserves the five reads and adds only one scoped Brain Dump cre
   assert.equal(write.annotations.readOnlyHint, false);
   assert.equal(write.annotations.destructiveHint, false);
   assert.deepEqual(write.securitySchemes, [{ type: 'oauth2', scopes: [READ_SCOPE, WRITE_SCOPE] }]);
-  assert.ok(!tools.some(tool => /plan_create|update|delete|reschedule|complete|query_path/.test(tool.name)));
+  const plan = tools.find(tool => tool.name === 'plan_create');
+  assert.equal(plan.annotations.readOnlyHint, false);
+  assert.equal(plan.annotations.destructiveHint, false);
+  assert.deepEqual(plan.securitySchemes, [{ type: 'oauth2', scopes: [READ_SCOPE, PLAN_WRITE_SCOPE] }]);
+  assert.deepEqual(plan._meta.securitySchemes, plan.securitySchemes);
+  assert.deepEqual(Object.keys(WRITE_TOOLS), ['brain_dump_add', 'plan_create']);
+  assert.ok(!tools.some(tool => /update|delete|reschedule|complete|move|archive|query_path|execute|raw/.test(tool.name)));
 });
 
 test('MCP scope/owner/resource checks refuse invocation before reaching the backend', async () => {

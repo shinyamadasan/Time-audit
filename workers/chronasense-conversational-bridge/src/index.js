@@ -1,5 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { handleMcpRequest, ISSUER, RESOURCE, READ_SCOPE, WRITE_SCOPE, validateMcpRequestOrigin } from './mcp.js';
+import { handleMcpRequest, ISSUER, KNOWN_SCOPES, PLAN_WRITE_SCOPE, RESOURCE, READ_SCOPE, WRITE_SCOPE, validateMcpRequestOrigin } from './mcp.js';
 
 const ACCESS_ASSERTION_HEADER = 'Cf-Access-Jwt-Assertion';
 const ACCESS_ALGORITHM = 'RS256';
@@ -13,7 +13,7 @@ let remoteJwks = null;
 
 export const OAUTH_PROVIDER_CONFIG = Object.freeze({
   apiRoute: '/mcp', authorizeEndpoint: '/authorize', tokenEndpoint: '/oauth/token',
-  scopesSupported: [READ_SCOPE, WRITE_SCOPE], requiredScopes: [READ_SCOPE],
+  scopesSupported: [...KNOWN_SCOPES], requiredScopes: [READ_SCOPE],
   resourceMetadata: { resource: RESOURCE, authorization_servers: [ISSUER],
     bearer_methods_supported: ['header'], resource_name: 'ChronaSense' },
   clientIdMetadataDocumentEnabled: true,
@@ -198,13 +198,13 @@ function authorizedScopes(authRequest) {
     .flatMap((scope) => typeof scope === 'string' ? scope.split(' ') : [])
     .filter(Boolean);
   const uniqueScopes = [...new Set(requestedScopes)];
-  if (!uniqueScopes.includes(READ_SCOPE) || uniqueScopes.some(scope => ![READ_SCOPE, WRITE_SCOPE].includes(scope))
+  if (!uniqueScopes.includes(READ_SCOPE) || uniqueScopes.some(scope => !KNOWN_SCOPES.includes(scope))
     || uniqueScopes.length !== requestedScopes.length) throw invalidAuthorizationRequest(authRequest);
   return uniqueScopes.sort();
 }
 
 function invalidAuthorizationRequest(authRequest) {
-  const error = new Error('Only the ChronaSense read and Brain Dump write scopes and resource are supported.');
+  const error = new Error('Only the ChronaSense read, Brain Dump write and plan write scopes and resource are supported.');
   error.name = 'AuthorizationError';
   if (authRequest.redirectUri) {
     const redirectTo = new URL(authRequest.redirectUri);
@@ -225,20 +225,33 @@ function authorizationErrorResponse(error) {
   return textResponse('Authorization is temporarily unavailable.', 503);
 }
 
+function consentHeading(scopes) {
+  const capture = scopes.includes(WRITE_SCOPE);
+  const plan = scopes.includes(PLAN_WRITE_SCOPE);
+  if (capture && plan) return ['Allow Brain Dump capture and plan task creation?', 'Allow capture and task creation'];
+  if (plan) return ['Allow adding tasks to your ChronaSense plan?', 'Allow task creation'];
+  if (capture) return ['Allow Brain Dump capture creation?', 'Allow capture creation'];
+  return ['Allow read access to ChronaSense?', 'Allow read access'];
+}
+
 function consentPage(details, handle, ownerSubject, scopes) {
   const clientName = escapeHtml(details.clientName || 'OAuth client');
+  const [heading, approve] = consentHeading(scopes);
+  const writes = scopes.includes(WRITE_SCOPE) || scopes.includes(PLAN_WRITE_SCOPE);
   const clientDomain = details.clientDomain
     ? 'Published by <strong>' + escapeHtml(details.clientDomain) + '</strong>.'
     : 'The client identity document is not available.';
   const subject = escapeHtml(ownerSubject);
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<title>Authorize ' + clientName + '</title></head><body><main><h1>' + (scopes.includes(WRITE_SCOPE) ? 'Allow Brain Dump capture creation?' : 'Allow read access to ChronaSense?') + '</h1>' +
+    '<title>Authorize ' + clientName + '</title></head><body><main><h1>' + heading + '</h1>' +
     '<p>' + clientDomain + ' The redirect destination is <strong>' + escapeHtml(details.redirectHost) + '</strong>.</p>' +
     '<p>Verified Cloudflare Access subject: <code>' + subject + '</code>.</p>' +
-    '<p>This grants <code>' + READ_SCOPE + '</code>: ' + (scopes.includes(WRITE_SCOPE) ? 'read access' : 'read-only access') + ' to your ChronaSense plan, captures and derived intelligence.'
-    + (scopes.includes(WRITE_SCOPE) ? ' It also grants <code>' + WRITE_SCOPE + '</code>: create one Brain Dump capture per action. It cannot edit, delete or schedule items.' : ' It cannot change your data.') + '</p>' +
+    '<p>This grants <code>' + READ_SCOPE + '</code>: ' + (writes ? 'read access' : 'read-only access') + ' to your ChronaSense plan, captures and derived intelligence.'
+    + (scopes.includes(WRITE_SCOPE) ? ' It also grants <code>' + WRITE_SCOPE + '</code>: create one Brain Dump capture per action. It cannot edit, delete or schedule items.' : '')
+    + (scopes.includes(PLAN_WRITE_SCOPE) ? ' It also grants <code>' + PLAN_WRITE_SCOPE + '</code>: add one new task to an exact calendar-day plan per action. It cannot edit, move, complete or delete plan items.' : '')
+    + (writes ? '' : ' It cannot change your data.') + '</p>' +
     '<form method="post"><input type="hidden" name="handle" value="' + escapeHtml(handle) + '">' +
-    '<button name="decision" value="approve">' + (scopes.includes(WRITE_SCOPE) ? 'Allow capture creation' : 'Allow read access') + '</button> ' +
+    '<button name="decision" value="approve">' + approve + '</button> ' +
     '<button name="decision" value="deny">Deny</button></form></main></body></html>';
 }
 
