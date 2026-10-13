@@ -13,8 +13,8 @@ import { ApiError } from '../src/errors.js';
 import { wireForm } from '../src/plan-mutation-action.js';
 import { addCalendarDays, localPlanDate } from '../shared/plan-tomorrow-model.js';
 import { NOW_MS, OWNER, harness, signedRequest } from './support.js';
+import { FACT, ZONE, planDomain } from './plan-domain-support.js';
 
-const ZONE = 'Asia/Manila';
 const TODAY = localPlanDate(NOW_MS, ZONE);
 const TOMORROW = addCalendarDays(TODAY, 1);
 const DAY_AFTER = addCalendarDays(TODAY, 2);
@@ -24,8 +24,7 @@ const P = { today: planIdOf(TODAY), tomorrow: planIdOf(TOMORROW), dayAfter: plan
 const uuid = () => randomUUID();
 const newAction = () => `act1_${uuid()}`;
 const ACTOR = actionActorRef(OWNER.ownerSubject);
-const ACTIVATED_AT = NOW_MS - 10 * 86_400_000;
-const FACT = { schemaVersion: 1, id: 'fact-1', activatedAtMs: ACTIVATED_AT, timezone: ZONE, activationDate: localPlanDate(ACTIVATED_AT, ZONE), deviceId: 'phone' };
+import { ACTIVATED_AT } from './plan-domain-support.js';
 const RECEIPT = actionId => `serverActionReceipts/${OWNER.ownerFirebaseUid}/${actionId}`;
 const T0 = NOW_MS - 3_600_000;
 const API_ACTION = 'act1_550e8400-e29b-41d4-a716-446655440000';
@@ -39,85 +38,6 @@ const apiItem = (overrides = {}) => ({ id: API_ITEM, task: 'Gym', when: '18:00',
   updatedAt: T0, updatedBy: ACTOR, kind: 'task', creationActionId: API_ACTION, ...overrides });
 const bdItem = (overrides = {}) => ({ id: BD_ITEM, task: 'Gym', when: '', done: false, updatedAt: T0, updatedBy: 'phone', kind: 'task',
   brainDumpOrigin: { v: 2, claimEpoch: 0, type: 'schedule', store: 'calendar', targetKey: P.tomorrow }, ...overrides });
-
-/** RTDB-shaped owner room with content ETags, null pruning and the fence-child update rules. */
-function planDomain(seed = {}, hooks = {}) {
-  const room = { settings: { timezone: ZONE }, calendarPlanAuthority: { [FACT.id]: FACT }, calendarPlans: {}, calendarPlanFences: {}, ...structuredClone(seed) };
-  const versions = new Map();
-  const writes = [];
-  let collectionVersion = 1;
-  const bump = key => { versions.set(key, (versions.get(key) ?? 1) + 1); if (key.startsWith('rec:')) collectionVersion++; };
-  const etag = (key, exists) => (exists ? `v${versions.get(key) ?? 1}` : 'null_etag');
-  const own = identity => assert.equal(identity.roomId, `uid_${OWNER.ownerFirebaseUid}`, 'every domain call is the bound owner room');
-  const store = value => {
-    const pruned = wireForm(structuredClone(value));
-    if (Array.isArray(pruned.items) && !pruned.items.length) delete pruned.items;
-    return pruned;
-  };
-  const api = {
-    room, writes, versions,
-    /** Another device/owner write: replaces the record (or child) and changes its ETag. */
-    ownerRecord(planId, record) { room.calendarPlans[planId] = store(record); bump(`rec:${planId}`); },
-    ownerFence(planId, item) { (room.calendarPlanFences[planId] ??= {})[item.id] = store(item); bump(`fence:${planId}/${item.id}`); },
-    async readRoomCollection(identity, collection) { own(identity); return structuredClone(room[collection] ?? null); },
-    async readCalendarPlanWithEtag(identity, planId) {
-      own(identity);
-      if (hooks.beforeRecordRead) await hooks.beforeRecordRead(planId);
-      return { value: structuredClone(room.calendarPlans[planId] ?? null), etag: etag(`rec:${planId}`, room.calendarPlans[planId] !== undefined) };
-    },
-    async putCalendarPlanIfMatch(identity, planId, record, tag) {
-      own(identity);
-      if (hooks.beforeRecordPut) await hooks.beforeRecordPut(planId, record);
-      if (tag !== etag(`rec:${planId}`, room.calendarPlans[planId] !== undefined)) return 'changed';
-      for (const item of record.items || []) assert.ok(!item.creationActionId && !String(item.id).startsWith('api1_') && !item.brainDumpOrigin, 'no fenced item in an array');
-      room.calendarPlans[planId] = store(record);
-      bump(`rec:${planId}`);
-      writes.push({ planId, where: 'record' });
-      if (hooks.afterRecordPut) await hooks.afterRecordPut(planId);
-      return 'written';
-    },
-    async readCalendarPlansWithEtag(identity) {
-      own(identity);
-      if (hooks.beforePlansRead) await hooks.beforePlansRead();
-      return { value: structuredClone(Object.keys(room.calendarPlans).length ? room.calendarPlans : null), etag: `c${collectionVersion}` };
-    },
-    async putCalendarPlansIfMatch(identity, plans, tag) {
-      own(identity);
-      if (hooks.beforePlansPut) await hooks.beforePlansPut(plans);
-      if (tag !== `c${collectionVersion}`) return 'changed';
-      const changed = Object.keys(plans).filter(planId => JSON.stringify(store(plans[planId])) !== JSON.stringify(room.calendarPlans[planId]));
-      for (const planId of Object.keys(room.calendarPlans)) assert.ok(Object.hasOwn(plans, planId), 'a collection write never drops a plan');
-      for (const planId of changed) { room.calendarPlans[planId] = store(plans[planId]); versions.set(`rec:${planId}`, (versions.get(`rec:${planId}`) ?? 1) + 1); }
-      collectionVersion++;
-      writes.push({ planIds: changed.sort(), where: 'collection' });
-      if (hooks.afterPlansPut) await hooks.afterPlansPut();
-      return 'written';
-    },
-    async readPlanFenceItemWithEtag(identity, planId, itemId) {
-      own(identity);
-      const value = room.calendarPlanFences[planId]?.[itemId];
-      return { value: structuredClone(value ?? null), etag: etag(`fence:${planId}/${itemId}`, value !== undefined) };
-    },
-    async putPlanFenceItemIfMatch(identity, planId, itemId, record, tag) {
-      own(identity);
-      if (hooks.beforeFencePut) await hooks.beforeFencePut(planId, itemId);
-      const current = room.calendarPlanFences[planId]?.[itemId];
-      assert.ok(current !== undefined && tag !== 'null_etag', 'an update never creates a fence child');
-      if (tag !== etag(`fence:${planId}/${itemId}`, true)) return 'changed';
-      // The unchanged fence rules, as the server applies them to an owner update.
-      if (record.creationActionId !== current.creationActionId || JSON.stringify(record.brainDumpOrigin) !== JSON.stringify(current.brainDumpOrigin)
-        || (current.deleted === true && record.deleted !== true) || record.relocationRevision || record.movedToDayId) {
-        throw new ApiError('FORBIDDEN', 'ChronaSense account access was refused.');
-      }
-      room.calendarPlanFences[planId][itemId] = store(record);
-      bump(`fence:${planId}/${itemId}`);
-      writes.push({ planId, itemId, where: 'fence' });
-      if (hooks.afterFencePut) await hooks.afterFencePut(planId, itemId);
-      return 'written';
-    },
-  };
-  return api;
-}
 
 const provenanceFor = actionId => ({ version: 1, sourceKind: 'chatgpt_plugin', actionId, actorRef: ACTOR, capturedAt: new Date(NOW_MS).toISOString() });
 function command(kind, parameters, { actionId = API_ACTION.replace('550e8400', 'aaaa0000'), expectedRevision, scopes = ['chronasense:plan.write'], requestId = uuid() } = {}) {

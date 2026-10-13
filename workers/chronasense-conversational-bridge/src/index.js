@@ -228,8 +228,8 @@ function authorizationErrorResponse(error) {
 function consentHeading(scopes) {
   const capture = scopes.includes(WRITE_SCOPE);
   const plan = scopes.includes(PLAN_WRITE_SCOPE);
-  if (capture && plan) return ['Allow Brain Dump capture and plan task creation?', 'Allow capture and task creation'];
-  if (plan) return ['Allow adding tasks to your ChronaSense plan?', 'Allow task creation'];
+  if (capture && plan) return ['Allow Brain Dump capture and plan task changes?', 'Allow captures and task changes'];
+  if (plan) return ['Allow adding and changing tasks in your ChronaSense plan?', 'Allow task changes'];
   if (capture) return ['Allow Brain Dump capture creation?', 'Allow capture creation'];
   return ['Allow read access to ChronaSense?', 'Allow read access'];
 }
@@ -248,7 +248,7 @@ function consentPage(details, handle, ownerSubject, scopes) {
     '<p>Verified Cloudflare Access subject: <code>' + subject + '</code>.</p>' +
     '<p>This grants <code>' + READ_SCOPE + '</code>: ' + (writes ? 'read access' : 'read-only access') + ' to your ChronaSense plan, captures and derived intelligence.'
     + (scopes.includes(WRITE_SCOPE) ? ' It also grants <code>' + WRITE_SCOPE + '</code>: create one Brain Dump capture per action. It cannot edit, delete or schedule items.' : '')
-    + (scopes.includes(PLAN_WRITE_SCOPE) ? ' It also grants <code>' + PLAN_WRITE_SCOPE + '</code>: add one new task to an exact calendar-day plan per action. It cannot edit, move, complete or delete plan items.' : '')
+    + (scopes.includes(PLAN_WRITE_SCOPE) ? ' It also grants <code>' + PLAN_WRITE_SCOPE + '</code>: per action, add one new task to an exact calendar-day plan, or complete/uncomplete, edit, move or remove one existing task named by its id and the revision last read. It cannot touch Brain Dump, settings, timers or time entries.' : '')
     + (writes ? '' : ' It cannot change your data.') + '</p>' +
     '<form method="post"><input type="hidden" name="handle" value="' + escapeHtml(handle) + '">' +
     '<button name="decision" value="approve">' + approve + '</button> ' +

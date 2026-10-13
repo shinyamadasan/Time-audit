@@ -656,3 +656,21 @@ test('a rules refusal of the create is re-checked against the exact child before
   const applied = await h2.handle(request());
   assert.equal(applied.status, 200, JSON.stringify(applied.body));
 });
+
+test('N1: origin CAS exhaustion or an unknown origin write never falls through into the item create', async () => {
+  // Another writer keeps changing the origin-less record under every compare-and-set round.
+  const contended = planDomain({ hooks: { beforeOriginPut: async planId => contended.ownerWrite(planId, { items: [], updatedAt: Date.now() }) } });
+  contended.ownerWrite(planIdOf(TOMORROW), { updatedAt: 1 });
+  const h1 = harness({ domain: contended });
+  const exhausted = await h1.handle(request());
+  assert.equal(code(exhausted), 'PENDING_UNKNOWN', JSON.stringify(exhausted.body));
+  assert.equal(contended.writes.length, 0, 'no item create after origin CAS exhaustion');
+  assert.equal(itemAt(contended), undefined);
+  assert.equal(h1.infra.data.get(RECEIPT(ACTION)).state, 'pending_unknown', 'never rejected');
+
+  const lost = planDomain({ hooks: { beforeOriginPut: async () => { throw new ApiError('RETRYABLE_TRANSPORT', 'origin write timed out'); } } });
+  const h2 = harness({ domain: lost });
+  const unknown = await h2.handle(request());
+  assert.equal(code(unknown), 'PENDING_UNKNOWN', JSON.stringify(unknown.body));
+  assert.equal(lost.writes.length, 0, 'no item create after an unknown origin write');
+});

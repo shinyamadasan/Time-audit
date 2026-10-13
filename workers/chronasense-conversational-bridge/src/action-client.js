@@ -8,7 +8,8 @@ const MAX_RESPONSE_BYTES = 64 * 1024;
 export const COMMAND_TIMEOUT_MS = 130_000;
 const encoder = new TextEncoder();
 /** command kind -> the one write scope it is signed with (the backend re-checks the same table). */
-const COMMAND_SCOPES = Object.freeze({ brain_dump_add: 'chronasense:brain-dump.write', plan_create: 'chronasense:plan.write' });
+const COMMAND_SCOPES = Object.freeze({ brain_dump_add: 'chronasense:brain-dump.write', plan_create: 'chronasense:plan.write',
+  plan_set_completion: 'chronasense:plan.write', plan_edit: 'chronasense:plan.write', plan_move: 'chronasense:plan.write', plan_delete: 'chronasense:plan.write' });
 const KNOWN_SCOPES = ['chronasense:brain-dump.write', 'chronasense:plan.write', 'chronasense:read'];
 
 function unknownCommandOutcome() {
@@ -103,6 +104,7 @@ async function sendActionApi(env, { subject, scopes, kind, parameters, command }
   if (response.status !== 200 && answer.error?.code && typeof answer.error.message === 'string') {
     const error = new Error(answer.error.message);
     error.code = answer.error.code;
+    if (answer.error.details && typeof answer.error.details === 'object') error.details = answer.error.details;
     throw error;
   }
   if (command) throw unknownCommandOutcome();

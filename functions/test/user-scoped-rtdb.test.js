@@ -204,3 +204,76 @@ test('domain source bytes have an inclusive bound independent of the serialized 
     error => error.code === 'DOMAIN_LIMIT');
   assert.deepEqual(await read(JSON.stringify({ value: '😀' })), { value: '😀' });
 });
+
+// ── N2 (TASK-011 follow-up) + TASK-012: every owner-token plan primitive is pinned to the bound UID, an exact plan /
+// item / collection key and an ETag, and uses the ORDINARY owner token (never an action claim). ──────────────────
+function ownerPrimitives({ status = 200, body = {}, etag = '"e1"' } = {}) {
+  const calls = [];
+  const tokenCalls = [];
+  const fetch = async (url, init) => { calls.push([String(url), init]); return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...(etag ? { ETag: etag } : {}) } }); };
+  const rtdb = createUserScopedRtdb({ databaseUrl: 'https://x.firebaseio.com', fetch, idTokens: { getIdToken: async (...args) => { tokenCalls.push(args); return 'owner-token'; } } });
+  return { rtdb, calls, tokenCalls };
+}
+
+test('N2: plan record read/CAS is pinned to rooms/uid_<uid>/calendarPlans/<cal1 plan>, needs an ETag, and uses the owner token', async () => {
+  const planId = 'cal1:2026-10-13';
+  const { rtdb, calls, tokenCalls } = ownerPrimitives({ body: { items: [] } });
+  assert.deepEqual(await rtdb.readCalendarPlanWithEtag(IDENTITY, planId), { value: { items: [] }, etag: '"e1"' });
+  assert.equal(new URL(calls[0][0]).pathname, `/rooms/uid_${UID}/calendarPlans/${planId}.json`);
+  assert.equal(calls[0][1].headers['X-Firebase-ETag'], 'true');
+  assert.equal(await rtdb.putCalendarPlanIfMatch(IDENTITY, planId, { items: [] }, '"e1"'), 'written');
+  assert.equal(calls[1][1].method, 'PUT');
+  assert.equal(calls[1][1].headers['if-match'], '"e1"');
+  assert.deepEqual(tokenCalls, [[UID], [UID]], 'never an action-claimed token for a plan record');
+  for (const bad of ['2026-10-13', 'cal1:2026-13-01', 'cal1:2026-10-13/items', '../settings', 'cal1:2026-10-13 ']) {
+    await assert.rejects(rtdb.readCalendarPlanWithEtag(IDENTITY, bad), AuthorityBoundaryViolation, bad);
+    await assert.rejects(rtdb.putCalendarPlanIfMatch(IDENTITY, bad, { items: [] }, '"e1"'), AuthorityBoundaryViolation, bad);
+  }
+  for (const identity of [{ firebaseUid: UID, roomId: 'uid_other' }, { firebaseUid: '../x', roomId: 'uid_../x' }]) {
+    await assert.rejects(rtdb.readCalendarPlanWithEtag(identity, planId), AuthorityBoundaryViolation);
+  }
+  for (const [record, tag] of [[{ items: [] }, undefined], [{ items: [] }, ''], [null, '"e1"'], [[], '"e1"']]) {
+    await assert.rejects(rtdb.putCalendarPlanIfMatch(IDENTITY, planId, record, tag), AuthorityBoundaryViolation);
+  }
+  const missingEtag = ownerPrimitives({ etag: null });
+  await assert.rejects(missingEtag.rtdb.readCalendarPlanWithEtag(IDENTITY, planId), error => error.code === 'RETRYABLE_TRANSPORT', 'no ETag, no CAS');
+  for (const [status, expected] of [[412, 'changed'], [403, 'FORBIDDEN'], [503, 'RETRYABLE_TRANSPORT']]) {
+    const outcome = await ownerPrimitives({ status }).rtdb.putCalendarPlanIfMatch(IDENTITY, planId, { items: [] }, '"e1"').catch(error => error.code);
+    assert.equal(outcome, expected, String(status));
+  }
+});
+
+test('TASK-012: fence-item CAS is pinned to an EXISTING api1_/bdp1| child of one calendar plan; never a create, never another key', async () => {
+  const planId = 'cal1:2026-10-13';
+  const apiId = 'api1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const bdId = 'bdp1|cap_01';
+  const { rtdb, calls, tokenCalls } = ownerPrimitives({ body: { id: apiId } });
+  await rtdb.readPlanFenceItemWithEtag(IDENTITY, planId, apiId);
+  assert.equal(new URL(calls[0][0]).pathname, `/rooms/uid_${UID}/calendarPlanFences/${planId}/${apiId}.json`);
+  await rtdb.readPlanFenceItemWithEtag(IDENTITY, planId, bdId);
+  assert.equal(new URL(calls[1][0]).pathname, `/rooms/uid_${UID}/calendarPlanFences/${planId}/bdp1%7Ccap_01.json`, 'the | is encoded, never a path separator');
+  assert.equal(await rtdb.putPlanFenceItemIfMatch(IDENTITY, planId, apiId, { id: apiId, task: 'x' }, '"e1"'), 'written');
+  assert.equal(calls[2][1].headers['if-match'], '"e1"');
+  assert.deepEqual(tokenCalls, [[UID], [UID], [UID]], 'the ordinary owner token');
+  for (const bad of ['pgym1', 'api1_bad', 'bdp1|', 'bdp1|a/b', '../x', `${apiId}/task`]) {
+    await assert.rejects(rtdb.readPlanFenceItemWithEtag(IDENTITY, planId, bad), AuthorityBoundaryViolation, bad);
+  }
+  await assert.rejects(rtdb.readPlanFenceItemWithEtag(IDENTITY, '2026-10-13', apiId), AuthorityBoundaryViolation);
+  for (const [record, tag] of [[{ id: apiId }, 'null_etag'], [{ id: apiId }, undefined], [{ id: 'other' }, '"e1"'], [null, '"e1"']]) {
+    await assert.rejects(rtdb.putPlanFenceItemIfMatch(IDENTITY, planId, apiId, record, tag), AuthorityBoundaryViolation, JSON.stringify([record, tag]));
+  }
+});
+
+test('TASK-012: the move collection CAS is pinned to rooms/uid_<uid>/calendarPlans, calendar keys only, existing collection only', async () => {
+  const { rtdb, calls, tokenCalls } = ownerPrimitives({ body: {} });
+  await rtdb.readCalendarPlansWithEtag(IDENTITY);
+  assert.equal(new URL(calls[0][0]).pathname, `/rooms/uid_${UID}/calendarPlans.json`);
+  assert.equal(await rtdb.putCalendarPlansIfMatch(IDENTITY, { 'cal1:2026-10-13': { items: [] } }, '"e1"'), 'written');
+  assert.equal(calls[1][1].headers['if-match'], '"e1"');
+  assert.deepEqual(tokenCalls, [[UID], [UID]]);
+  for (const [plans, tag] of [[{ 'cal1:2026-10-13': {} }, 'null_etag'], [{ 'cal1:2026-10-13': {} }, ''], [{ settings: {} }, '"e1"'],
+    [{ '2026-10-13': {} }, '"e1"'], [[], '"e1"'], [null, '"e1"']]) {
+    await assert.rejects(rtdb.putCalendarPlansIfMatch(IDENTITY, plans, tag), AuthorityBoundaryViolation, JSON.stringify(plans));
+  }
+  await assert.rejects(rtdb.readCalendarPlansWithEtag({ firebaseUid: UID, roomId: 'uid_x' }), AuthorityBoundaryViolation);
+});
