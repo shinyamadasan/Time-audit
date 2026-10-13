@@ -614,7 +614,7 @@ closure:
 ---
 
 ### TASK-011 - Plan Authority + Conversational Scheduling V1
-status: review
+status: approved
 owner: claude
 source: owner-direct
 priority: P1
@@ -654,9 +654,15 @@ verification:
         npm run check:firebase-rules, npm run test:fence, git diff --check,
         SELF_REVIEW.md and QA.md applicable checks.
 
-review-gate:
-  Builder self-review only (not an independent PASS). Red-zone (rules, sync boundary, Action API): approve at
-  `approved` for a human merge, never auto-merge. Handoff: TASK_011_HANDOFF.md. Evidence: TEST_REPORT.md.
+review:
+  Strict independent review: FIX FIRST on a16b6e6564bffa21718c88a599bcda2fb2b1f2e5 (R011-01, R011-02); targeted
+  re-review PASS on 6d4185e414cd48c3b5e4ce010f63abdc4c4ff032 (reported by the owner). Red-zone: held at `approved`.
+
+integration:
+  Owner-authorized fast-forward of origin/main 327e0cb..6d4185e414cd48c3b5e4ce010f63abdc4c4ff032 on 2026-10-13
+  (reviewed runtime SHA, byte-identical tree). Hosted CI run 38424018266 success; pages-build-deployment success.
+  Production rollout and acceptance PENDING: no Function, Worker, RTDB rules, OAuth/IAM/secret change, production
+  write or live plan_create performed. `done` is reserved for owner-confirmed production acceptance.
 
 ---
 
