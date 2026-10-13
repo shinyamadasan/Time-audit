@@ -7,9 +7,12 @@ export const ISSUER = 'https://chronasense-conversational-bridge.shinyamadasan.w
 export const RESOURCE = `${ISSUER}/mcp`;
 export const READ_SCOPE = 'chronasense:read';
 export const WRITE_SCOPE = 'chronasense:brain-dump.write';
+export const PLAN_WRITE_SCOPE = 'chronasense:plan.write';
+/** Every scope this resource knows. A write tool requires read plus exactly its own write scope. */
+export const KNOWN_SCOPES = Object.freeze([READ_SCOPE, WRITE_SCOPE, PLAN_WRITE_SCOPE]);
 const RESOURCE_METADATA = `${ISSUER}/.well-known/oauth-protected-resource/mcp`;
 const SCHEMES = [{ type: 'oauth2', scopes: [READ_SCOPE] }];
-const WRITE_SCHEMES = [{ type: 'oauth2', scopes: [READ_SCOPE, WRITE_SCOPE] }];
+const writeSchemes = scope => [{ type: 'oauth2', scopes: [READ_SCOPE, scope] }];
 const ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const HOST = new URL(ISSUER).hostname;
 
@@ -54,25 +57,42 @@ export const READ_TOOLS = Object.freeze({
 });
 
 const ACTION_ID = /^act1_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const CAPTURED_AT = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
+// Backend answers that are definite facts (nothing was or will be written by this action); everything else is unknown.
 const DEFINITIVE_WRITE_CODES = new Set(['INVALID_INPUT', 'AUTH_REQUIRED', 'FORBIDDEN', 'CONFLICT',
-  'IDEMPOTENCY_CONFLICT', 'DOMAIN_LIMIT']);
-const unknownWrite = z.strictObject({ outcome: z.literal('unknown'), code: z.enum(['PENDING_UNKNOWN', 'RETRYABLE_TRANSPORT']),
+  'IDEMPOTENCY_CONFLICT', 'DOMAIN_LIMIT', 'NOT_FOUND', 'NONEXISTENT_TIME', 'PAST_TARGET_IMMUTABLE']);
+const unknownWrite = parameters => z.strictObject({ outcome: z.literal('unknown'), code: z.enum(['PENDING_UNKNOWN', 'RETRYABLE_TRANSPORT']),
   mayHaveCommitted: z.literal(true), retry: z.strictObject({ actionId: z.string(), capturedAt: z.string(),
-    parameters: z.strictObject({ text: z.string() }), newActionIdAllowed: z.literal(false) }) });
+    parameters, newActionIdAllowed: z.literal(false) }) });
+const planCreateParameters = z.strictObject({ target: targetInput, title: z.string().trim().min(1).max(200),
+  when: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(), whenDayOffset: z.union([z.literal(0), z.literal(1)]).optional(),
+  whenTz: z.string().min(1).max(64).optional(), durationMinutes: z.number().int().min(1).max(720).optional() });
+const schedule = z.strictObject({ when: z.string(), whenDayOffset: z.number().int(), whenTz: z.string(),
+  durationMinutes: z.number().nullable(), startAt: z.string(), endAt: z.string().nullable() });
 export const WRITE_TOOLS = Object.freeze({
-  brain_dump_add: { title: 'Add Brain Dump capture', description: 'Create one untriaged Brain Dump capture. An unknown outcome may already be committed; retry with the same actionId, capturedAt and text.',
-    inputSchema: z.strictObject({ actionId: z.string().regex(ACTION_ID), capturedAt: z.string().regex(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/),
+  brain_dump_add: { scope: WRITE_SCOPE, noun: 'capture', title: 'Add Brain Dump capture', description: 'Create one untriaged Brain Dump capture. An unknown outcome may already be committed; retry with the same actionId, capturedAt and text.',
+    inputSchema: z.strictObject({ actionId: z.string().regex(ACTION_ID), capturedAt: z.string().regex(CAPTURED_AT),
       text: z.string().trim().min(1).max(1000) }),
+    parameters: ({ text }) => ({ text }),
     outputSchema: z.union([output('brain_dump_add', z.strictObject({ actionId: z.string(), captureId: z.string(),
-      text: z.string(), status: z.string(), createdAt: z.string(), revision: z.string(), idempotentReplay: z.boolean() })), unknownWrite]) },
+      text: z.string(), status: z.string(), createdAt: z.string(), revision: z.string(), idempotentReplay: z.boolean() })),
+    unknownWrite(z.strictObject({ text: z.string() }))]) },
+  plan_create: { scope: PLAN_WRITE_SCOPE, noun: 'plan task', title: 'Add task to a plan day',
+    description: 'Create ONE new task on an exact calendar-day plan (target from get_today/get_plan, e.g. cal1:YYYY-MM-DD). Resolve natural language first: pass an explicit HH:MM start with its IANA timezone (whenDayOffset 1 = after midnight of the plan date) and optional duration, or omit all time fields for an anytime task. It never edits, moves, completes or deletes. An unknown outcome may already be committed; retry with the same actionId, capturedAt and parameters.',
+    inputSchema: planCreateParameters.extend({ actionId: z.string().regex(ACTION_ID), capturedAt: z.string().regex(CAPTURED_AT) }),
+    parameters: ({ actionId: _actionId, capturedAt: _capturedAt, ...rest }) => rest,
+    outputSchema: z.union([output('plan_create', z.strictObject({ actionId: z.string(), itemId: z.string(),
+      target: z.strictObject({ store: z.literal('calendar'), id: z.string(), date: z.string() }), schedule: schedule.nullable(),
+      createdAt: z.string(), revision: z.string(), idempotentReplay: z.boolean() })), unknownWrite(planCreateParameters)]) },
 });
 
-function unknownWriteResult(parameters, code) {
+function unknownWriteResult(spec, parameters, code) {
   const result = { outcome: 'unknown', code, mayHaveCommitted: true,
     retry: { actionId: parameters.actionId, capturedAt: parameters.capturedAt,
-      parameters: { text: parameters.text }, newActionIdAllowed: false } };
+      parameters: spec.parameters(parameters), newActionIdAllowed: false } };
+  const fields = spec.scope === WRITE_SCOPE ? 'text' : 'parameters';
   return { structuredContent: result, content: [{ type: 'text',
-    text: `${code}: The capture may already exist. Retry with the same actionId, capturedAt and text. Keep the actionId unchanged.` }], isError: true };
+    text: `${code}: The ${spec.noun} may already exist. Retry with the same actionId, capturedAt and ${fields}. Keep the actionId unchanged.` }], isError: true };
 }
 
 function requireContext(env, ctx, requiredScope, nowSeconds = Math.floor(Date.now() / 1000)) {
@@ -84,20 +104,21 @@ function requireContext(env, ctx, requiredScope, nowSeconds = Math.floor(Date.no
       || props.resource !== RESOURCE || props.issuer !== ISSUER || auth.userId !== subject
       || props.ownerSubject !== subject || !Number.isFinite(props.notBefore) || props.notBefore > nowSeconds
       || !Number.isFinite(auth.expiresAt) || auth.expiresAt <= nowSeconds) throw new Error('invalid-token');
-  if (!Array.isArray(auth.scope) || !auth.scope.includes(requiredScope) || (requiredScope === WRITE_SCOPE && !auth.scope.includes(READ_SCOPE))
-    || auth.scope.some(scope => ![READ_SCOPE, WRITE_SCOPE].includes(scope))
+  if (!Array.isArray(auth.scope) || !auth.scope.includes(requiredScope) || (requiredScope !== READ_SCOPE && !auth.scope.includes(READ_SCOPE))
+    || auth.scope.some(scope => !KNOWN_SCOPES.includes(scope))
     || new Set(auth.scope).size !== auth.scope.length) throw new Error('insufficient-scope');
-  return { subject, scopes: requiredScope === READ_SCOPE ? [READ_SCOPE] : [WRITE_SCOPE] };
+  // Forward only the one scope this call needs: the backend re-checks it, and never sees broader grants.
+  return { subject, scopes: [requiredScope] };
 }
 
 export const requireReadContext = (env, ctx, nowSeconds) => requireContext(env, ctx, READ_SCOPE, nowSeconds);
-export const requireWriteContext = (env, ctx, nowSeconds) => requireContext(env, ctx, WRITE_SCOPE, nowSeconds);
+export const requireWriteContext = (env, ctx, nowSeconds, scope = WRITE_SCOPE) => requireContext(env, ctx, scope, nowSeconds);
 
 function challenge(error, requiredScope = READ_SCOPE) {
   const scope = error?.message === 'insufficient-scope';
   const message = scope ? `The ${requiredScope} scope is required.` : 'Authentication is required.';
   return { content: [{ type: 'text', text: message }], isError: true,
-    _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${RESOURCE_METADATA}", error="${scope ? 'insufficient_scope' : 'invalid_token'}", scope="${requiredScope === WRITE_SCOPE ? `${READ_SCOPE} ${WRITE_SCOPE}` : READ_SCOPE}"`] } };
+    _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${RESOURCE_METADATA}", error="${scope ? 'insufficient_scope' : 'invalid_token'}", scope="${requiredScope === READ_SCOPE ? READ_SCOPE : `${READ_SCOPE} ${requiredScope}`}"`] } };
 }
 
 async function actorRef(subject, cryptoImpl = globalThis.crypto) {
@@ -123,14 +144,15 @@ export function createReadServer(env = {}, deps = {}, ctx = {}) {
     });
   }
   for (const [kind, spec] of Object.entries(WRITE_TOOLS)) {
-    server.registerTool(kind, { ...spec, _meta: { securitySchemes: WRITE_SCHEMES },
+    const { scope, noun: _noun, parameters: toParameters, ...definition } = spec;
+    server.registerTool(kind, { ...definition, _meta: { securitySchemes: writeSchemes(scope) },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false } }, async parameters => {
       let identity;
-      try { identity = requireWriteContext(env, ctx, deps.nowSeconds); }
-      catch (error) { return challenge(error, WRITE_SCOPE); }
+      try { identity = requireWriteContext(env, ctx, deps.nowSeconds, scope); }
+      catch (error) { return challenge(error, scope); }
       try {
         const command = { contractVersion: 1, actionId: parameters.actionId, kind,
-          parameters: { text: parameters.text }, expectedRevision: null,
+          parameters: toParameters(parameters), expectedRevision: null,
           actionProvenance: { version: 1, sourceKind: 'chatgpt_plugin', actionId: parameters.actionId,
             actorRef: await actorRef(identity.subject, deps.cryptoImpl), capturedAt: parameters.capturedAt } };
         const response = await (deps.commandActionApi || commandActionApi)(env, { ...identity, command }, deps);
@@ -138,9 +160,9 @@ export function createReadServer(env = {}, deps = {}, ctx = {}) {
         return { structuredContent: response, content: [{ type: 'text', text: JSON.stringify(response) }] };
       } catch (error) {
         if (!DEFINITIVE_WRITE_CODES.has(error?.code)) {
-          return unknownWriteResult(parameters, error?.code === 'RETRYABLE_TRANSPORT' ? error.code : 'PENDING_UNKNOWN');
+          return unknownWriteResult(spec, parameters, error?.code === 'RETRYABLE_TRANSPORT' ? error.code : 'PENDING_UNKNOWN');
         }
-        return { content: [{ type: 'text', text: error?.code ? `${error.code}: ${error.message}` : 'ChronaSense capture could not be created.' }], isError: true };
+        return { content: [{ type: 'text', text: error?.code ? `${error.code}: ${error.message}` : `ChronaSense ${spec.noun} could not be created.` }], isError: true };
       }
     });
   }
@@ -166,7 +188,7 @@ async function exposeToolScopes(response) {
   let changed = false;
   const decorate = message => {
     for (const tool of message?.result?.tools || []) if (Object.hasOwn(READ_TOOLS, tool.name) || Object.hasOwn(WRITE_TOOLS, tool.name)) {
-      tool.securitySchemes = Object.hasOwn(READ_TOOLS, tool.name) ? SCHEMES : WRITE_SCHEMES;
+      tool.securitySchemes = Object.hasOwn(READ_TOOLS, tool.name) ? SCHEMES : writeSchemes(WRITE_TOOLS[tool.name].scope);
       changed = true;
     }
     return message;

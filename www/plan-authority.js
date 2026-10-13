@@ -86,7 +86,7 @@ import {
   nextPlanItemRelocation,
   planItemIsActiveInDay,
 } from './plan-item-relocation.js';
-import { BRAIN_DUMP_MOVE_REFUSED, fencedPresence, isFencedItem, originOf, physicalTargetKey } from './plan-item-origin.js';
+import { BRAIN_DUMP_MOVE_REFUSED, fencedMoveRefusal, fencedPresence, isFencedItem, originOf, physicalTargetKey } from './plan-item-origin.js';
 import {
   deadlineInstantForCalendarDate,
   evaluatePlanningDeadlineQualification,
@@ -1589,7 +1589,7 @@ export function createPlanAuthority(deps = {}) {
     const current = items(sourceTarget).find(item => item.id === itemId);
     if (!current) throw new Error('That planned task no longer exists.');
     // Refused BEFORE anything is written, so no source tombstone or destination copy can ever exist.
-    if (isFencedItem(current) && (destination.store !== sourceTarget.store || destination.id !== sourceTarget.id)) throw new Error(BRAIN_DUMP_MOVE_REFUSED);
+    if (isFencedItem(current) && (destination.store !== sourceTarget.store || destination.id !== sourceTarget.id)) throw new Error(fencedMoveRefusal(current));
 
     const title = Object.prototype.hasOwnProperty.call(changes, 'task') ? String(changes.task || '').trim() : current.task;
     if (!title) throw new Error('Name the task first.');

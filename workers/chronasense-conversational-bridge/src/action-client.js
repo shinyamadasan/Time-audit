@@ -7,9 +7,12 @@ const MAX_RESPONSE_BYTES = 64 * 1024;
 // The Function is capped at 120s. Leave 10s for its terminal response or network failure.
 export const COMMAND_TIMEOUT_MS = 130_000;
 const encoder = new TextEncoder();
+/** command kind -> the one write scope it is signed with (the backend re-checks the same table). */
+const COMMAND_SCOPES = Object.freeze({ brain_dump_add: 'chronasense:brain-dump.write', plan_create: 'chronasense:plan.write' });
+const KNOWN_SCOPES = ['chronasense:brain-dump.write', 'chronasense:plan.write', 'chronasense:read'];
 
 function unknownCommandOutcome() {
-  const error = new Error('The capture outcome is unknown; it may already be committed.');
+  const error = new Error('The write outcome is unknown; it may already be committed.');
   error.code = 'PENDING_UNKNOWN';
   return error;
 }
@@ -49,9 +52,9 @@ async function sendActionApi(env, { subject, scopes, kind, parameters, command }
   const { url, keyId, secret } = configuration(env);
   if (typeof subject !== 'string' || !/^[\x21-\x2b\x2d-\x7e]{1,256}$/.test(subject)) throw new Error('Owner subject is invalid.');
   if (!Array.isArray(scopes) || !scopes.length || scopes.some((scope, index) =>
-    !['chronasense:brain-dump.write', 'chronasense:read'].includes(scope) || (index > 0 && scopes[index - 1] >= scope))) throw new Error('Action scopes are invalid.');
+    !KNOWN_SCOPES.includes(scope) || (index > 0 && scopes[index - 1] >= scope))) throw new Error('Action scopes are invalid.');
   const path = command ? COMMAND_PATH : PATH;
-  if (command ? !scopes.includes('chronasense:brain-dump.write') : !scopes.includes('chronasense:read')) throw new Error('The required action scope is missing.');
+  if (command ? !Object.hasOwn(COMMAND_SCOPES, command.kind) || !scopes.includes(COMMAND_SCOPES[command.kind]) : !scopes.includes('chronasense:read')) throw new Error('The required action scope is missing.');
   const cryptoImpl = deps.cryptoImpl || globalThis.crypto;
   const requestId = (deps.randomUUID || (() => cryptoImpl.randomUUID()))();
   const timestamp = Math.floor((deps.now || Date.now)() / 1000);

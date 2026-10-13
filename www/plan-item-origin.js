@@ -55,8 +55,28 @@
 // location-bound (it may legitimately have been moved by an ordinary edit):
 // the rules authorize it by capture state alone. It is never fabricated into a
 // fenced item.
+//
+// ── Action API plan items (TASK-011, DECISIONS #37) ─────────────────────────
+// A conversational `plan_create` makes exactly one calendar plan item, id
+// `api1_<uuid>` (the causing action id's UUID), carrying the immutable
+// `creationActionId: 'act1_<uuid>'`. It is location-bound exactly like a fenced
+// Brain Dump item and for the same reason (the array cannot protect an immutable
+// marker across reorder), so it lives at the same kind of stable keyed child:
+//
+//     rooms/<room>/calendarPlanFences/<planId>/api1_<uuid>
+//
+// Only the backend's action-scoped token can CREATE that child (the rules bind
+// item id, marker and plan to the token's claims); an ordinary owner client may
+// then edit it like any other task, but can never strip or rewrite the marker,
+// un-delete it, move it, or fabricate one. Its ordinary fields stay editable.
 
 export const BRAIN_DUMP_PLAN_ITEM_PREFIX = 'bdp1|';
+export const ACTION_PLAN_ITEM_PREFIX = 'api1_';
+/** The same V1 location rule as a Brain Dump task, for the same reason. */
+export const ACTION_PLAN_ITEM_MOVE_REFUSED = "Tasks added from ChatGPT can't be moved to another day yet.";
+const ACTION_UUID = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const ACTION_PLAN_ITEM_ID_RE = new RegExp(`^api1_${ACTION_UUID}$`);
+const ACTION_ID_RE = new RegExp(`^act1_${ACTION_UUID}$`);
 /** A Brain Dump task is bound to the one plan it was promoted into: its authorization identity is a physical
  *  location, so V1 refuses every cross-target move (Plan Authority's API, the task editor and the server all say
  *  no) instead of weakening the fence. Timing may still cross midnight inside the same plan (a later End,
@@ -116,10 +136,30 @@ export function originOf(item) {
   return { v: o.v, claimEpoch: o.claimEpoch, type: o.type, store: o.store, targetKey: o.targetKey };
 }
 
-/** True for a Brain Dump item carrying a valid origin: it belongs in a fence collection,
- *  never in a plan record's `items` array. */
+export function isActionPlanItemId(id) {
+  return typeof id === 'string' && ACTION_PLAN_ITEM_ID_RE.test(id);
+}
+
+/** The deterministic plan item id of an Action API action id, or null for a malformed action id. */
+export function actionPlanItemIdFor(actionId) {
+  return typeof actionId === 'string' && ACTION_ID_RE.test(actionId) ? `${ACTION_PLAN_ITEM_PREFIX}${actionId.slice(5)}` : null;
+}
+
+/** True for an Action API-created plan item: a well-formed `api1_` id whose `creationActionId` is
+ *  exactly the action that id was derived from. Anything else is not one (and is never upgraded). */
+export function isActionPlanItem(item) {
+  return !!item && isActionPlanItemId(item.id) && actionPlanItemIdFor(item.creationActionId) === item.id;
+}
+
+/** True for a location-bound item — a Brain Dump item carrying a valid origin, or an Action
+ *  API-created item: it belongs in a fence collection, never in a plan record's `items` array. */
 export function isFencedItem(item) {
-  return !!item && captureIdOfPlanItem(item.id) !== null && originOf(item) !== null;
+  return !!item && ((captureIdOfPlanItem(item.id) !== null && originOf(item) !== null) || isActionPlanItem(item));
+}
+
+/** The refusal shown when a location-bound item would leave its plan. */
+export function fencedMoveRefusal(item) {
+  return isActionPlanItem(item) ? ACTION_PLAN_ITEM_MOVE_REFUSED : BRAIN_DUMP_MOVE_REFUSED;
 }
 
 /** True when two items have the same immutable origin (both well-formed). */
@@ -146,7 +186,7 @@ export function splitFencedItems(items) {
 //   2. `deleted: true` is monotonic: a tombstone beats any live copy, whatever its updatedAt;
 //   3. a fenced item beats an un-fenced array item of the same id (the fence is the authority for it).
 // Everything else (same generation, both live or both tombstoned) is the store's own per-item choice,
-// passed in as `choose`.
+// passed in as `choose`. An Action API item has no generation; laws 2 and 3 apply to it unchanged.
 
 function originRank(item) {
   const origin = originOf(item);
@@ -162,6 +202,7 @@ export function mergeFencedItem(a, b, choose) {
   if (!!left !== !!right) return left ? a : b;
   if (left && right && left.claimEpoch !== right.claimEpoch) return left.claimEpoch > right.claimEpoch ? a : b;
   if (left && right && !sameOrigin(a, b)) return originRank(a) >= originRank(b) ? a : b; // one claim per generation: not reachable on a healthy server
+  if (isActionPlanItem(a) !== isActionPlanItem(b)) return isActionPlanItem(a) ? a : b;
   if ((a.deleted === true) !== (b.deleted === true)) return a.deleted === true ? a : b;
   return choose(a, b);
 }
@@ -288,4 +329,5 @@ export function partitionOutboundItemsWith(items, lookup) {
 globalThis.PlanItemOrigin = {
   BRAIN_DUMP_PLAN_ITEM_PREFIX, BRAIN_DUMP_MOVE_REFUSED, BRAIN_DUMP_ORIGIN_VERSION, FENCE_STORES, FENCE_REMOTE_PATHS, isBrainDumpPlanItemId, captureIdOfPlanItem, physicalTargetKey,
   brainDumpOrigin, originOf, isFencedItem, sameOrigin, splitFencedItems, mergeFencedItem, foldFencedItems, fencedItemsOf, fencedPresence, originAuthorization, setBrainDumpCaptureLookup, partitionOutboundItems,
+  ACTION_PLAN_ITEM_PREFIX, ACTION_PLAN_ITEM_MOVE_REFUSED, isActionPlanItemId, actionPlanItemIdFor, isActionPlanItem, fencedMoveRefusal,
 };

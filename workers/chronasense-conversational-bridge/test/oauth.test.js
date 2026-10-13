@@ -5,7 +5,7 @@ import { createLocalJWKSet, exportJWK, SignJWT } from 'jose';
 
 import { createOAuthWorker, handleDefaultRequest, OAUTH_PROVIDER_CONFIG,
   rejectInvalidTokenResource, requireAccessSubject } from '../src/index.js';
-import { ISSUER, READ_SCOPE, WRITE_SCOPE, RESOURCE } from '../src/mcp.js';
+import { ISSUER, PLAN_WRITE_SCOPE, READ_SCOPE, WRITE_SCOPE, RESOURCE } from '../src/mcp.js';
 
 const NOW = 1_800_000_000;
 const ACCESS_ISSUER = 'https://fixture.cloudflareaccess.com';
@@ -25,7 +25,7 @@ async function assertion(overrides = {}) {
 }
 const deps = { jwks, currentDate: new Date(NOW * 1000) };
 
-test('OAuth configuration is CIMD-enabled, DCR-disabled, read by default with distinct Brain Dump write scope', () => {
+test('OAuth configuration is CIMD-enabled, DCR-disabled, read by default with distinct Brain Dump and plan write scopes', () => {
   let options;
   createOAuthWorker(class { constructor(value) { options = value; } });
   assert.equal(options.clientIdMetadataDocumentEnabled, true);
@@ -33,7 +33,7 @@ test('OAuth configuration is CIMD-enabled, DCR-disabled, read by default with di
   assert.equal(options.apiRoute, '/mcp');
   assert.equal(options.authorizeEndpoint, '/authorize');
   assert.equal(options.tokenEndpoint, '/oauth/token');
-  assert.deepEqual(options.scopesSupported, [READ_SCOPE, WRITE_SCOPE]);
+  assert.deepEqual(options.scopesSupported, [READ_SCOPE, WRITE_SCOPE, PLAN_WRITE_SCOPE]);
   assert.deepEqual(options.requiredScopes, [READ_SCOPE]);
   assert.equal(options.resourceMetadata.resource, RESOURCE);
   assert.equal(options.allowTokenExchangeGrant, false);
