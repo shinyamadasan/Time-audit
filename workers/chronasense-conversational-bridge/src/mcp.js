@@ -60,15 +60,41 @@ const ACTION_ID = /^act1_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-
 const CAPTURED_AT = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 // Backend answers that are definite facts (nothing was or will be written by this action); everything else is unknown.
 const DEFINITIVE_WRITE_CODES = new Set(['INVALID_INPUT', 'AUTH_REQUIRED', 'FORBIDDEN', 'CONFLICT',
-  'IDEMPOTENCY_CONFLICT', 'DOMAIN_LIMIT', 'NOT_FOUND', 'NONEXISTENT_TIME', 'PAST_TARGET_IMMUTABLE']);
-const unknownWrite = parameters => z.strictObject({ outcome: z.literal('unknown'), code: z.enum(['PENDING_UNKNOWN', 'RETRYABLE_TRANSPORT']),
+  'IDEMPOTENCY_CONFLICT', 'DOMAIN_LIMIT', 'NOT_FOUND', 'NONEXISTENT_TIME', 'PAST_TARGET_IMMUTABLE', 'STALE_REVISION']);
+const unknownWrite = (parameters, revised = false) => z.strictObject({ outcome: z.literal('unknown'), code: z.enum(['PENDING_UNKNOWN', 'RETRYABLE_TRANSPORT']),
   mayHaveCommitted: z.literal(true), retry: z.strictObject({ actionId: z.string(), capturedAt: z.string(),
-    parameters, newActionIdAllowed: z.literal(false) }) });
+    ...(revised ? { expectedRevision: z.string() } : {}), parameters, newActionIdAllowed: z.literal(false) }) });
 const planCreateParameters = z.strictObject({ target: targetInput, title: z.string().trim().min(1).max(200),
   when: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(), whenDayOffset: z.union([z.literal(0), z.literal(1)]).optional(),
   whenTz: z.string().min(1).max(64).optional(), durationMinutes: z.number().int().min(1).max(720).optional() });
 const schedule = z.strictObject({ when: z.string(), whenDayOffset: z.number().int(), whenTz: z.string(),
   durationMinutes: z.number().nullable(), startAt: z.string(), endAt: z.string().nullable() });
+// TASK-012: one existing plan item, named by its stable itemId + exact plan target + the item revision a read returned.
+const ITEM_REVISION = /^rev1:[A-Za-z0-9_-]{43}$/;
+const calendarTarget = z.strictObject({ store: z.literal('calendar'), id: z.string().regex(/^cal1:\d{4}-\d{2}-\d{2}$/) });
+const itemRef = { target: calendarTarget, itemId: z.string().min(1).max(200) };
+const wallTime = z.strictObject({ when: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), whenTz: z.string().min(1).max(64),
+  whenDayOffset: z.union([z.literal(0), z.literal(1)]).optional() });
+const mutationParameters = Object.freeze({
+  plan_set_completion: z.strictObject({ ...itemRef, completed: z.boolean() }),
+  plan_edit: z.strictObject({ ...itemRef, title: z.string().trim().min(1).max(200).optional(), time: wallTime.optional(),
+    durationMinutes: z.number().int().min(1).max(720).optional(), clearSchedule: z.literal(true).optional() }),
+  plan_move: z.strictObject({ ...itemRef, destination: calendarTarget, time: wallTime.optional(), durationMinutes: z.number().int().min(1).max(720).optional() }),
+  plan_delete: z.strictObject(itemRef),
+});
+const planRef = z.strictObject({ store: z.literal('calendar'), id: z.string(), date: z.string() });
+const mutationResult = kind => output(kind, z.strictObject({ actionId: z.string(), itemId: z.string(), operation: z.literal(kind), target: planRef,
+  ...(kind === 'plan_move' ? { destination: planRef } : {}),
+  item: z.strictObject({ completed: z.boolean(), deleted: z.boolean(), schedule: schedule.nullable() }),
+  revision: z.string(), previousRevision: z.string(), changed: z.boolean(), idempotentReplay: z.boolean() }));
+const REVISION_RULES = ' Name the item by itemId and its plan target exactly as get_plan/get_item returned them, and pass that read\'s item revision as expectedRevision. STALE_REVISION means the item changed since that read: read it again and confirm with the user; a new attempt then uses a NEW actionId. An unknown outcome may already be committed: retry with the same actionId, capturedAt, expectedRevision and parameters, never a new actionId.';
+const mutationTool = (kind, { title, description, destructive = false }) => ({ scope: PLAN_WRITE_SCOPE, noun: 'plan change', title,
+  description: description + REVISION_RULES, destructive, revised: true,
+  inputSchema: mutationParameters[kind].extend({ actionId: z.string().regex(ACTION_ID), capturedAt: z.string().regex(CAPTURED_AT),
+    expectedRevision: z.string().regex(ITEM_REVISION) }),
+  parameters: ({ actionId: _actionId, capturedAt: _capturedAt, expectedRevision: _expectedRevision, ...rest }) => rest,
+  outputSchema: z.union([mutationResult(kind), unknownWrite(mutationParameters[kind], true)]) });
+
 export const WRITE_TOOLS = Object.freeze({
   brain_dump_add: { scope: WRITE_SCOPE, noun: 'capture', title: 'Add Brain Dump capture', description: 'Create one untriaged Brain Dump capture. An unknown outcome may already be committed; retry with the same actionId, capturedAt and text.',
     inputSchema: z.strictObject({ actionId: z.string().regex(ACTION_ID), capturedAt: z.string().regex(CAPTURED_AT),
@@ -78,21 +104,30 @@ export const WRITE_TOOLS = Object.freeze({
       text: z.string(), status: z.string(), createdAt: z.string(), revision: z.string(), idempotentReplay: z.boolean() })),
     unknownWrite(z.strictObject({ text: z.string() }))]) },
   plan_create: { scope: PLAN_WRITE_SCOPE, noun: 'plan task', title: 'Add task to a plan day',
-    description: 'Create ONE new task on an exact calendar-day plan (target from get_today/get_plan, e.g. cal1:YYYY-MM-DD). Resolve natural language first: pass an explicit HH:MM start with its IANA timezone (whenDayOffset 1 = after midnight of the plan date) and optional duration, or omit all time fields for an anytime task. It never edits, moves, completes or deletes. An unknown outcome may already be committed; retry with the same actionId, capturedAt and parameters.',
+    description: 'Create ONE new task on an exact calendar-day plan (target from get_today/get_plan, e.g. cal1:YYYY-MM-DD). Resolve natural language first: pass an explicit HH:MM start with its IANA timezone (whenDayOffset 1 = after midnight of the plan date) and optional duration, or omit all time fields for an anytime task. It never edits, moves, completes or deletes an existing task (plan_edit, plan_move, plan_set_completion and plan_delete do). An unknown outcome may already be committed; retry with the same actionId, capturedAt and parameters.',
     inputSchema: planCreateParameters.extend({ actionId: z.string().regex(ACTION_ID), capturedAt: z.string().regex(CAPTURED_AT) }),
     parameters: ({ actionId: _actionId, capturedAt: _capturedAt, ...rest }) => rest,
     outputSchema: z.union([output('plan_create', z.strictObject({ actionId: z.string(), itemId: z.string(),
       target: z.strictObject({ store: z.literal('calendar'), id: z.string(), date: z.string() }), schedule: schedule.nullable(),
       createdAt: z.string(), revision: z.string(), idempotentReplay: z.boolean() })), unknownWrite(planCreateParameters)]) },
+  plan_set_completion: mutationTool('plan_set_completion', { title: 'Mark a plan task done or not done',
+    description: 'Mark ONE existing plan task done (completed: true) or not done again (completed: false). Already in that state is a no-op success. A task on an ended day can only be completed if it is scheduled to happen today.' }),
+  plan_edit: mutationTool('plan_edit', { title: 'Edit a plan task',
+    description: 'Change ONE existing task within the SAME plan day: a new title, a new explicit HH:MM start with its IANA timezone (whenDayOffset 1 = after midnight of the plan date), a new durationMinutes, or clearSchedule: true to make it an anytime task. Omitted fields stay exactly as they are. It never moves the task to another day (use plan_move), completes or deletes it.' }),
+  plan_move: mutationTool('plan_move', { title: 'Move a plan task to another day',
+    description: 'Move ONE existing task to another calendar-day plan (destination cal1:YYYY-MM-DD), keeping the same task identity; optionally give a new explicit time and/or durationMinutes, judged on the destination date. Tasks added from ChatGPT or promoted from Brain Dump, and tasks recovered from an earlier day, cannot be moved yet (DOMAIN_LIMIT): say so instead of deleting and re-adding.' }),
+  plan_delete: mutationTool('plan_delete', { title: 'Remove a plan task', destructive: true,
+    description: 'Remove ONE existing task from its plan. Confirm with the user which task first. The task is tombstoned (it stops appearing), never physically erased, and cannot be restored by this tool.' }),
 });
 
 function unknownWriteResult(spec, parameters, code) {
   const result = { outcome: 'unknown', code, mayHaveCommitted: true,
     retry: { actionId: parameters.actionId, capturedAt: parameters.capturedAt,
+      ...(spec.revised ? { expectedRevision: parameters.expectedRevision } : {}),
       parameters: spec.parameters(parameters), newActionIdAllowed: false } };
-  const fields = spec.scope === WRITE_SCOPE ? 'text' : 'parameters';
+  const fields = spec.scope === WRITE_SCOPE ? 'text' : spec.revised ? 'expectedRevision and parameters' : 'parameters';
   return { structuredContent: result, content: [{ type: 'text',
-    text: `${code}: The ${spec.noun} may already exist. Retry with the same actionId, capturedAt and ${fields}. Keep the actionId unchanged.` }], isError: true };
+    text: `${code}: The ${spec.noun} may already ${spec.revised ? 'be applied' : 'exist'}. Retry with the same actionId, capturedAt and ${fields}. Keep the actionId unchanged.` }], isError: true };
 }
 
 function requireContext(env, ctx, requiredScope, nowSeconds = Math.floor(Date.now() / 1000)) {
@@ -144,15 +179,15 @@ export function createReadServer(env = {}, deps = {}, ctx = {}) {
     });
   }
   for (const [kind, spec] of Object.entries(WRITE_TOOLS)) {
-    const { scope, noun: _noun, parameters: toParameters, ...definition } = spec;
+    const { scope, noun: _noun, parameters: toParameters, destructive = false, revised = false, ...definition } = spec;
     server.registerTool(kind, { ...definition, _meta: { securitySchemes: writeSchemes(scope) },
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false } }, async parameters => {
+      annotations: { readOnlyHint: false, destructiveHint: destructive, openWorldHint: false } }, async parameters => {
       let identity;
       try { identity = requireWriteContext(env, ctx, deps.nowSeconds, scope); }
       catch (error) { return challenge(error, scope); }
       try {
         const command = { contractVersion: 1, actionId: parameters.actionId, kind,
-          parameters: toParameters(parameters), expectedRevision: null,
+          parameters: toParameters(parameters), expectedRevision: revised ? parameters.expectedRevision : null,
           actionProvenance: { version: 1, sourceKind: 'chatgpt_plugin', actionId: parameters.actionId,
             actorRef: await actorRef(identity.subject, deps.cryptoImpl), capturedAt: parameters.capturedAt } };
         const response = await (deps.commandActionApi || commandActionApi)(env, { ...identity, command }, deps);
@@ -162,7 +197,8 @@ export function createReadServer(env = {}, deps = {}, ctx = {}) {
         if (!DEFINITIVE_WRITE_CODES.has(error?.code)) {
           return unknownWriteResult(spec, parameters, error?.code === 'RETRYABLE_TRANSPORT' ? error.code : 'PENDING_UNKNOWN');
         }
-        return { content: [{ type: 'text', text: error?.code ? `${error.code}: ${error.message}` : `ChronaSense ${spec.noun} could not be created.` }], isError: true };
+        const details = error?.details ? ` ${JSON.stringify(error.details)}` : '';
+        return { content: [{ type: 'text', text: error?.code ? `${error.code}: ${error.message}${details}` : `ChronaSense ${spec.noun} could not be ${revised ? 'applied' : 'created'}.` }], isError: true };
       }
     });
   }

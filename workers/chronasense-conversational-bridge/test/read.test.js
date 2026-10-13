@@ -53,8 +53,11 @@ test('MCP route preserves the five reads and exposes exactly two scoped create t
   assert.equal(plan.annotations.destructiveHint, false);
   assert.deepEqual(plan.securitySchemes, [{ type: 'oauth2', scopes: [READ_SCOPE, PLAN_WRITE_SCOPE] }]);
   assert.deepEqual(plan._meta.securitySchemes, plan.securitySchemes);
-  assert.deepEqual(Object.keys(WRITE_TOOLS), ['brain_dump_add', 'plan_create']);
-  assert.ok(!tools.some(tool => /update|delete|reschedule|complete|move|archive|query_path|execute|raw/.test(tool.name)));
+  // TASK-012: semantic plan item tools only; never a generic update/patch/mutate/execute/path/raw tool.
+  assert.deepEqual(Object.keys(WRITE_TOOLS), ['brain_dump_add', 'plan_create', 'plan_set_completion', 'plan_edit', 'plan_move', 'plan_delete']);
+  assert.deepEqual(tools.map(tool => tool.name).sort(), ['brain_dump_add', 'get_brain_dump', 'get_intelligence', 'get_item', 'get_plan', 'get_today',
+    'plan_create', 'plan_delete', 'plan_edit', 'plan_move', 'plan_set_completion']);
+  assert.ok(!tools.some(tool => /update|patch|mutate|reschedule|archive|query_path|execute|raw|write/.test(tool.name)));
 });
 
 test('MCP scope/owner/resource checks refuse invocation before reaching the backend', async () => {

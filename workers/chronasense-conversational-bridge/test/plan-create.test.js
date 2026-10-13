@@ -178,8 +178,8 @@ test('OAuth consent names the plan scope and grants exactly what was requested',
   const assertion = await new SignJWT({ type: 'app', sub: 'owner-sub', iss: accessEnv.ACCESS_TEAM_DOMAIN, aud: ['aud'], nbf: NOW - 5, exp: NOW + 300 })
     .setProtectedHeader({ alg: 'RS256', kid: 'k' }).sign(privateKey);
   const deps = { jwks: createLocalJWKSet({ keys: [jwk] }), currentDate: new Date(NOW * 1000) };
-  for (const [scopes, heading] of [[[READ_SCOPE, PLAN_WRITE_SCOPE], /Allow adding tasks to your ChronaSense plan\?/],
-    [[READ_SCOPE, WRITE_SCOPE, PLAN_WRITE_SCOPE], /Allow Brain Dump capture and plan task creation\?/]]) {
+  for (const [scopes, heading] of [[[READ_SCOPE, PLAN_WRITE_SCOPE], /Allow adding and changing tasks in your ChronaSense plan\?/],
+    [[READ_SCOPE, WRITE_SCOPE, PLAN_WRITE_SCOPE], /Allow Brain Dump capture and plan task changes\?/]]) {
     let completed;
     const oauth = {
       parseAuthRequest: async () => ({ scope: scopes, resource: RESOURCE }),
@@ -192,7 +192,7 @@ test('OAuth consent names the plan scope and grants exactly what was requested',
     const page = await handleDefaultRequest(new Request(`${ISSUER}/authorize?resource=${encodeURIComponent(RESOURCE)}`, { headers }), { ...accessEnv, OAUTH_PROVIDER: oauth }, deps);
     const html = await page.text();
     assert.match(html, heading);
-    assert.match(html, /cannot edit, move, complete or delete plan items/);
+    assert.match(html, /one existing task named by its id and the revision last read\. It cannot touch Brain Dump, settings, timers or time entries/);
     const approved = await handleDefaultRequest(new Request(`${ISSUER}/authorize`, { method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'handle=opaque&decision=approve' }), { ...accessEnv, OAUTH_PROVIDER: oauth }, deps);
     assert.equal(approved.status, 302);
