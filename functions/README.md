@@ -1,8 +1,8 @@
-# ChronaSense Action API V1 — reads, Brain Dump create and plan create candidate
+# ChronaSense Action API V1 — reads, Brain Dump create, plan create and plan item mutations
 
-> TASK-009 reads and TASK-010 Brain Dump create are deployed (see TASKS.md closures). TASK-011 `plan_create` and its
-> rule change are a local candidate only: nothing here deploys the Function, Worker, OAuth scope or rules, or writes
-> production data.
+> TASK-009 reads, TASK-010 Brain Dump create and TASK-011 `plan_create` are deployed (see TASKS.md closures). The
+> TASK-012 plan item mutations are a local candidate only: nothing here deploys the Function, Worker, OAuth scope or
+> rules, or writes production data.
 
 Firebase Functions v2 HTTPS function `chronasenseActionApi` in `asia-southeast1`.
 Contract foundation: [`docs/CHRONASENSE_ACTION_API_V1.md`](../docs/CHRONASENSE_ACTION_API_V1.md). TASK-009 uses
@@ -47,6 +47,18 @@ attributed child. For a plan that has no canonical origin yet, its origin (creat
 through `mergeCalendarPlanRecords` under an ETag compare-and-set on `calendarPlans/<planId>` with the ordinary owner
 token. REJECTED is recorded only by an action's first attempt; a takeover stays `PENDING_UNKNOWN` until the exact child
 proves the outcome. The receipt and result carry IDs, target, schedule and revision, never the title.
+
+Plan item mutations (TASK-012, DECISIONS #38) use the same route and scope: `plan_set_completion` (`completed`),
+`plan_edit` (`title`, `time` `{ when, whenTz, whenDayOffset? }`, `durationMinutes`, or `clearSchedule: true`; absence
+means unchanged), `plan_move` (`destination` calendar plan, optional `time`/`durationMinutes`) and `plan_delete`. Each
+names `target` (calendar), `itemId` and `expectedRevision` (the item revision a read returned; `STALE_REVISION` when it
+changed, with `details.currentRevision`). `src/plan-mutation-action.js` reruns Plan Authority's own semantics
+server-side; writes are ordinary-owner-token compare-and-sets pinned in `src/user-scoped-rtdb.js`
+(`readPlanFenceItemWithEtag`/`putPlanFenceItemIfMatch` for an `api1_`/`bdp1|` child, the plan record for array items,
+`readCalendarPlansWithEtag`/`putCalendarPlansIfMatch` for a move's one atomic write). `api1_`/`bdp1|` and recovered
+carry items are never moved (`DOMAIN_LIMIT`). The receipt records a deterministic intent (stamp + planned revisions,
+writer = actionId) before the first write; APPLIED only after a re-read shows it, REJECTED only when no write of the
+action can still land.
 
 Signed headers (each exactly once; any other `x-chronasense-*` header is refused):
 

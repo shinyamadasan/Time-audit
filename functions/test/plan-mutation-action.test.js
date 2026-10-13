@@ -10,10 +10,9 @@ import { randomUUID } from 'node:crypto';
 import { COMMAND_PATH } from '../src/action-api.js';
 import { actionActorRef } from '../src/envelope.js';
 import { ApiError } from '../src/errors.js';
-import { wireForm } from '../src/plan-mutation-action.js';
 import { addCalendarDays, localPlanDate } from '../shared/plan-tomorrow-model.js';
 import { NOW_MS, OWNER, harness, signedRequest } from './support.js';
-import { FACT, ZONE, planDomain } from './plan-domain-support.js';
+import { ZONE, planDomain } from './plan-domain-support.js';
 
 const TODAY = localPlanDate(NOW_MS, ZONE);
 const TOMORROW = addCalendarDays(TODAY, 1);
@@ -78,7 +77,7 @@ test('"Mark gym done": the array item completes in place, same id, other items u
   const first = await h.handle(command('plan_set_completion', parameters, { actionId, expectedRevision: before }));
   assert.equal(first.status, 200, JSON.stringify(first.body));
   const stamp = NOW_MS; // receipt createdAt > the item's own updatedAt
-  assert.deepEqual(recordItem(store, P.tomorrow, 'pgym1'), gym({ done: true, doneAt: stamp, updatedAt: stamp, updatedBy: ACTOR }));
+  assert.deepEqual(recordItem(store, P.tomorrow, 'pgym1'), gym({ done: true, doneAt: stamp, updatedAt: stamp, updatedBy: actionId }), 'the writer is this action: a per-action proof');
   assert.deepEqual(recordItem(store, P.tomorrow, 'pother'), other(), 'an unrelated item is byte-identical');
   assert.equal(store.room.calendarPlans[P.tomorrow].createdAt, T0 - 1000, 'origin kept');
   const { result } = first.body;
@@ -362,9 +361,9 @@ test('"Move that to Friday": same id live at the destination (relocation seq 1),
   const parameters = { target: { store: 'calendar', id: P.tomorrow }, itemId: 'pgym1', destination: { store: 'calendar', id: P.dayAfter } };
   const moved = await h.handle(command('plan_move', parameters, { actionId, expectedRevision: rev }));
   assert.equal(moved.status, 200, JSON.stringify(moved.body));
-  const relocation = { schemaVersion: 1, sequence: 1, fromDayId: P.tomorrow, toDayId: P.dayAfter, updatedBy: ACTOR, updatedAt: NOW_MS };
-  assert.deepEqual(recordItem(store, P.dayAfter, 'pgym1'), gym({ relocationRevision: relocation, updatedAt: NOW_MS, updatedBy: ACTOR }), 'the SAME identity, live at its destination');
-  assert.deepEqual(recordItem(store, P.tomorrow, 'pgym1'), gym({ deleted: true, movedToDayId: P.dayAfter, relocationRevision: relocation, updatedAt: NOW_MS, updatedBy: ACTOR }));
+  const relocation = { schemaVersion: 1, sequence: 1, fromDayId: P.tomorrow, toDayId: P.dayAfter, updatedBy: actionId, updatedAt: NOW_MS };
+  assert.deepEqual(recordItem(store, P.dayAfter, 'pgym1'), gym({ relocationRevision: relocation, updatedAt: NOW_MS, updatedBy: actionId }), 'the SAME identity, live at its destination');
+  assert.deepEqual(recordItem(store, P.tomorrow, 'pgym1'), gym({ deleted: true, movedToDayId: P.dayAfter, relocationRevision: relocation, updatedAt: NOW_MS, updatedBy: actionId }));
   assert.deepEqual(recordItem(store, P.tomorrow, 'pother'), other());
   assert.deepEqual([store.room.calendarPlans[P.dayAfter].createdAt, store.room.calendarPlans[P.dayAfter].timezone], [NOW_MS, ZONE], 'destination origin frozen in the same write');
   assert.deepEqual((await getPlan(h, P.tomorrow)).items.map(item => item.itemId), ['pother'], 'never two current copies');
@@ -470,7 +469,7 @@ test('"Delete that test task": an in-place stamped tombstone (never a physical d
   const rev = await revisionOf(h, P.tomorrow, API_ITEM);
   const deleted = await h.handle(command('plan_delete', parameters, { actionId, expectedRevision: rev }));
   assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
-  assert.deepEqual(store.room.calendarPlanFences[P.tomorrow][API_ITEM], apiItem({ deleted: true, updatedAt: NOW_MS }), 'tombstone keeps creation provenance');
+  assert.deepEqual(store.room.calendarPlanFences[P.tomorrow][API_ITEM], apiItem({ deleted: true, updatedAt: NOW_MS, updatedBy: actionId }), 'tombstone keeps creation provenance');
   assert.equal(deleted.body.result.item.deleted, true);
   assert.equal((await h.handle(command('plan_delete', parameters, { actionId, expectedRevision: rev }))).body.result.idempotentReplay, true);
   assert.equal(store.writes.length, 1, 'one tombstone');
@@ -665,4 +664,32 @@ test('scope isolation: read-only and Brain Dump write grants cannot mutate a pla
     }
   }
   assert.equal(store.writes.length, 0);
+});
+
+test('two DIFFERENT actions with the identical intent in the same millisecond: one applies, the other never claims its write', async () => {
+  for (const order of ['sequential', 'parallel']) {
+    const { store, h } = await setup(tomorrowWith(gym()));
+    const rev = await revisionOf(h, P.tomorrow, 'pgym1');
+    const parameters = { target: { store: 'calendar', id: P.tomorrow }, itemId: 'pgym1', completed: true };
+    const [a, b] = [newAction(), newAction()];
+    const run = id => h.handle(command('plan_set_completion', parameters, { actionId: id, expectedRevision: rev }));
+    const results = order === 'parallel' ? await Promise.all([run(a), run(b)]) : [await run(a), await run(b)];
+    assert.deepEqual(results.map(r => (r.status === 200 ? 'ok' : code(r))).sort(), ['STALE_REVISION', 'ok'], order);
+    assert.equal(store.writes.length, 1);
+    const winner = results[0].status === 200 ? a : b;
+    assert.equal(recordItem(store, P.tomorrow, 'pgym1').updatedBy, winner, 'the stored writer names the action that applied');
+  }
+});
+
+test('two concurrent moves of one item to DIFFERENT days: one wins, the other is STALE; never two current copies', async () => {
+  const third = planIdOf(addCalendarDays(TODAY, 3));
+  const { store, h } = await setup(tomorrowWith(gym()));
+  const rev = await revisionOf(h, P.tomorrow, 'pgym1');
+  const move = destination => h.handle(command('plan_move', { target: { store: 'calendar', id: P.tomorrow }, itemId: 'pgym1',
+    destination: { store: 'calendar', id: destination } }, { actionId: newAction(), expectedRevision: rev }));
+  const results = await Promise.all([move(P.dayAfter), move(third)]);
+  assert.deepEqual(results.map(r => (r.status === 200 ? 'ok' : code(r))).sort(), ['STALE_REVISION', 'ok'], JSON.stringify(results.map(r => r.body.error)));
+  const live = [...(await getPlan(h, P.tomorrow)).items, ...(await getPlan(h, P.dayAfter)).items, ...(await getPlan(h, third)).items];
+  assert.deepEqual(live.map(item => item.itemId), ['pgym1'], 'exactly one current copy');
+  assert.equal(store.writes.length, 1);
 });

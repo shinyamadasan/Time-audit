@@ -1,5 +1,35 @@
 # ChronaSense — Changelog
 
+## TASK-012 — Expanded Conversational Plan Actions (branch: task-012)
+
+Owner-direct, built autonomously to REVIEW-READY from origin/main `2dfa1df`. Local only; nothing pushed, merged or
+deployed; no production data, Cloudflare, OAuth/IAM or secret touched. DECISIONS #38.
+added:
+  - functions/src/plan-mutation-action.js: `plan_set_completion`, `plan_edit`, `plan_move`, `plan_delete` (server twin
+    of Plan Authority `updateItem` / `completeCarryoverItem` / in-place tombstone). expectedRevision checked against the
+    item's ETag-read physical copy; one conditional write (record, fence child, or for a move ONE `calendarPlans`
+    collection CAS); receipt intent (deterministic stamp, writer = actionId, planned revisions) recorded before the
+    first write; APPLIED only after a re-read; REJECTED only when no write of the action can still land.
+  - functions/src/envelope.js: four mutation kinds (`mutation: true`), required `rev1:` expectedRevision, strict
+    allowlisted parameters (absence = unchanged; `clearSchedule: true` the only schedule removal), DST gap pre-claim.
+  - functions/src/user-scoped-rtdb.js: owner-token pinned `readPlanFenceItemWithEtag`/`putPlanFenceItemIfMatch`
+    (existing api1_/bdp1| child only, never create/delete) and `readCalendarPlansWithEtag`/`putCalendarPlansIfMatch`.
+  - functions/src/action-api.js: dispatch. functions/src/plan-create-action.js: `ensurePlanOrigin`/`hasOrigin` exported (no behavior change).
+  - Worker: four MCP tools (plan.write; `plan_delete` destructiveHint), expectedRevision carried and kept in the typed
+    unknown-outcome retry, STALE_REVISION definite with its details, consent wording; `scripts/deploy.mjs` deploy gate
+    (five plaintext bindings from untracked `.deploy-vars.json`, validated, passed as `--var`, redacted; secrets
+    refused), `deploy-vars.example.json`, `npm run deploy`, `.gitignore`.
+  - Tests: functions plan-mutation-action (35), plan-mutation-anchors (7 source mutants + baseline), plan-domain-support
+    (RTDB-shaped fake), N1 (plan-create-action), N2 + new primitive pins (user-scoped-rtdb); fake infra now prunes
+    nulls like RTDB; 3 real-emulator TASK-012 cases; Worker plan-mutation (7) and deploy-bindings (4).
+  - Docs: DECISIONS #38, docs/CHRONASENSE_ACTION_API_V1.md §10, CODEMAP, functions/README, Worker README, TASK_012_HANDOFF.md.
+unchanged: firebase.rules.json, every client runtime module, index.html, www/, the five reads, brain_dump_add, plan_create behavior.
+found during build and fixed (each now covered by a test): a move written as two record CASes could undo a concurrent
+  owner delete (-> one atomic collection CAS); RTDB pruning of `doneAt: null` / `destinationRevision: null` defeated
+  the readback proof (-> wire form); an attempt's own definite 412 was reported unknown (-> STALE); a post-crash move
+  takeover refused its own relocated source; two different actions with an identical intent could claim each other's
+  write (-> writer = actionId).
+
 ## TASK-011 — production rollout and closure (2026-10-13)
 
 Owner-authorized staged rollout of reviewed runtime `6d4185e`; no runtime change during rollout or closure.
