@@ -5,6 +5,26 @@
 
 ---
 
+## TASK-011 Plan Authority + Conversational Scheduling V1 · 2026-10-12
+suite: root `npm test`; `npm run test:fence`; functions `node --test test/*.test.js`; Worker `npm test` and
+  `npm run check:bundle` (dry-run, no deploy); `npm run test:smoke`; `npm run lint`; `check:firebase-rules`;
+  `check:functions-shared`; `check:www-parity`; `git diff --check`. Local Windows, Node 24.19, Java 21, RTDB emulator 4.11.2.
+result:
+  - npm test: exit 0, 2099 node:test passes, 0 failures; 1 skip = the pre-existing env-gated cross-repo control proof
+    (CROSS_REPO_COMPAT_CONTROL_PROOF), unchanged from base. An earlier run in this task FAILED 2 fence-source-mutation
+    tests (source anchor pinned the old updateItem refusal line); fixed, then rerun green.
+  - test:fence: rules-emulator 73/73 (incl. 3 action-plan-item matrices + 2 end-to-end signed plan_create against the
+    real server), fence-sdk 20/20, rules-mutation 28/28 (10 new predicates each refused by real rules, accepted by mutant).
+  - functions: 150/150 (plan-create-action 23, user-scoped-rtdb +2, conversational-read +1).
+  - Worker: 21/21 (plan-create 6 new; 2 surface-pinning tests updated); bundle dry-run OK.
+  - client: plan-action-item 8/8 (real calendar Plan Authority stack vs compiled rules via targaryen).
+  - smoke: 863/863 passed (8.2m), on 5806ad3 + the final Function-only liveness fix.
+  - lint: 0 errors, 47 warnings (identical count to base; none in changed files). Parity checks match; diff --check clean.
+untested: production custom-token signing/IAM, deployed /v1/command route, Android build, real ChatGPT client, manual
+  SMOKETEST.md (no push).
+
+---
+
 ## TASK-005 FINAL FIX FIRST (A1-03, A1-04) · 2026-10-07
 suite: functions `npm test`; scripts/task-gating.test.js; root `npm test`; `npm run test:fence`;
   `npm run check:firebase-rules`; `npm run check:functions-shared`; `git diff --check`.

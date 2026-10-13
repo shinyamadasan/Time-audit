@@ -419,7 +419,8 @@ test('a definite refusal on a takeover stays unknown while an earlier attempt co
   const early = await h.handle(request());
   assert.equal(code(early), 'PENDING_UNKNOWN', 'NOT_FOUND now, but the first attempt may still be writing');
   assert.equal(h.infra.data.get(RECEIPT(ACTION)).state, 'pending_unknown');
-  const lateMs = h.infra.data.get(RECEIPT(ACTION)).leaseAcquiredAt + MAX_ATTEMPT_MS;
+  assert.equal(h.infra.data.get(RECEIPT(ACTION)).leaseAcquiredAt, started, 'a refusing attempt wrote nothing: the window stays anchored to the first attempt');
+  const lateMs = started + MAX_ATTEMPT_MS;
   const late = harness({ domain: store, nowMs: lateMs });
   late.infra.data.set(RECEIPT(ACTION), { ...h.infra.data.get(RECEIPT(ACTION)), leaseExpiresAt: lateMs - 1 });
   const terminal = await late.handle(request({ signed: { timestamp: Math.floor(lateMs / 1000) } }));

@@ -131,8 +131,12 @@ export async function createPlanAction(identity, { command, domain, receipts, at
     throw pending();
   };
   const refuse = async error => {
-    // Terminal only if no earlier attempt of this action can still land its write; otherwise stay unknown.
-    if (priorAttemptAt !== null && nowMs < priorAttemptAt + MAX_ATTEMPT_MS) return unknown();
+    // Terminal only if no earlier attempt of this action can still land its write; otherwise stay unknown. This
+    // attempt wrote nothing, so the window stays anchored to the earlier attempt (quick retries cannot extend it).
+    if (priorAttemptAt !== null && nowMs < priorAttemptAt + MAX_ATTEMPT_MS) {
+      await settle(receipts, identity, actionId, snapshot, { state: 'pending_unknown', leaseAcquiredAt: priorAttemptAt, leaseExpiresAt: nowMs, updatedAt: nowMs });
+      throw pending();
+    }
     await settle(receipts, identity, actionId, snapshot, { state: 'rejected', resultCode: error.code, resultMessage: error.message,
       retryability: 'not_retryable', updatedAt: nowMs });
     throw error;
