@@ -41,7 +41,7 @@ async function mutant(file, edits, tag) {
   return import(`${pathToFileURL(out).href}?t=${Date.now()}`);
 }
 
-const UPDATE_ITEM_REFUSAL = "    if (isFencedItem(current) && (destination.store !== sourceTarget.store || destination.id !== sourceTarget.id)) throw new Error(BRAIN_DUMP_MOVE_REFUSED);";
+const UPDATE_ITEM_REFUSAL = "    if (isFencedItem(current) && (destination.store !== sourceTarget.store || destination.id !== sourceTarget.id)) throw new Error(fencedMoveRefusal(current));";
 const FUNNEL_GUARD = "    assertFencedItemsBelong(target, nextItems);";
 
 test('baseline: the shipped modules pass every scenario (so a failing mutant fails because of the mutation, nothing else)', async () => {

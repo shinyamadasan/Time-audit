@@ -1,15 +1,15 @@
 # ChronaSense Conversational Actions Worker
 
-This Worker preserves TASK-009's five read tools and adds one TASK-010 Brain Dump create candidate. It forwards fixed typed calls to the Firebase Functions `/v1/query` and `/v1/command` routes. Domain decisions stay in ChronaSense. Nothing in this directory deploys automatically.
+This Worker preserves TASK-009's five read tools and TASK-010's Brain Dump create, and adds the TASK-011 `plan_create` candidate. It forwards fixed typed calls to the Firebase Functions `/v1/query` and `/v1/command` routes. Domain decisions stay in ChronaSense. Nothing in this directory deploys automatically.
 
 ## Routes and grants
 
 - `/authorize` verifies a Cloudflare Access JWT (RS256, exact issuer/audience, `type=app`) and binds its `sub` to the configured owner subject. Email is never an identity key.
 - `/authorize` consent POST reads at most 8,192 body bytes before parsing its form, using the same inclusive form bound as `/oauth/token`.
-- `/mcp`, `/oauth/token`, and OAuth `.well-known` routes remain public to the OAuth protocol; the OAuth provider authenticates MCP bearer tokens. Reads require `chronasense:read`; create requires explicit step-up to `chronasense:brain-dump.write` as well. The Worker signs the required scope to the backend.
+- `/mcp`, `/oauth/token`, and OAuth `.well-known` routes remain public to the OAuth protocol; the OAuth provider authenticates MCP bearer tokens. Reads require `chronasense:read`; each create also requires explicit step-up to its own write scope (`brain_dump_add`: `chronasense:brain-dump.write`; `plan_create`: `chronasense:plan.write`). A grant for one write scope never unlocks the other. The Worker signs only the one required scope to the backend.
 - CIMD is enabled. No dynamic client registration endpoint is configured. The provider enforces S256 PKCE for public authorization-code clients.
-- Tools: `get_brain_dump`, `get_today`, `get_plan`, `get_item`, `get_intelligence`, and `brain_dump_add`. There is no plan write or generic Firebase path input.
-- A write with an unreadable response, timeout, or backend unknown status returns structured `outcome: unknown`, `mayHaveCommitted: true`, and exact retry arguments (`actionId`, `capturedAt`, `text`, `newActionIdAllowed: false`). Definite backend rejections remain definite. The Function request is capped at 120 seconds; the Worker waits at most 130 seconds for its response. Reads retain their 10-second timeout.
+- Tools: `get_brain_dump`, `get_today`, `get_plan`, `get_item`, `get_intelligence`, `brain_dump_add` and `plan_create` (one new task on an exact calendar-day plan; it never edits, moves, completes or deletes). There is no generic write or Firebase path input.
+- A write with an unreadable response, timeout, or backend unknown status returns structured `outcome: unknown`, `mayHaveCommitted: true`, and exact retry arguments (`actionId`, `capturedAt`, the tool's own parameters, `newActionIdAllowed: false`). Definite backend rejections remain definite. The Function request is capped at 120 seconds; the Worker waits at most 130 seconds for its response. Reads retain their 10-second timeout.
 
 ## Deployment configuration (pending authorization)
 

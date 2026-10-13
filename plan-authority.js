@@ -86,7 +86,7 @@ import {
   nextPlanItemRelocation,
   planItemIsActiveInDay,
 } from './plan-item-relocation.js';
-import { BRAIN_DUMP_MOVE_REFUSED, fencedMoveRefusal, fencedPresence, isFencedItem, originOf, physicalTargetKey } from './plan-item-origin.js';
+import { ACTION_PLAN_ITEM_MOVE_REFUSED, BRAIN_DUMP_MOVE_REFUSED, fencedMoveRefusal, fencedPresence, isActionPlanItem, isFencedItem, originOf, physicalTargetKey } from './plan-item-origin.js';
 import {
   deadlineInstantForCalendarDate,
   evaluatePlanningDeadlineQualification,
@@ -650,12 +650,19 @@ export function createPlanAuthority(deps = {}) {
   }
 
   /** The single write funnel's own cross-target guard: a fenced Brain Dump item may only ever be written to the
-   *  exact plan its origin names. Nothing is saved (no source/destination ghost) when it is anywhere else. */
+   *  exact plan its origin names. Nothing is saved (no source/destination ghost) when it is anywhere else.
+   *  An Action API item (DECISIONS #37) names no location of its own: only the server creates one, at one plan's
+   *  keyed child, so a client may keep editing one this plan already holds but never introduce one into a plan. */
   function assertFencedItemsBelong(target, nextItems) {
     const key = physicalTargetKey(target.store, target.id);
+    let held = null;
     for (const item of Array.isArray(nextItems) ? nextItems : []) {
       const origin = isFencedItem(item) ? originOf(item) : null;
       if (origin && (origin.store !== target.store || origin.targetKey !== key)) throw new Error(BRAIN_DUMP_MOVE_REFUSED);
+      if (isActionPlanItem(item)) {
+        held ??= new Set(target.store === 'calendar' ? rawItems(target).map(candidate => candidate.id) : []);
+        if (!held.has(item.id)) throw new Error(ACTION_PLAN_ITEM_MOVE_REFUSED);
+      }
     }
   }
 

@@ -18,7 +18,7 @@ import { ApiError } from './errors.js';
 const malformed = what => new ApiError('CONFLICT', `The ${what} authority contains incompatible data.`, { reason: `malformed-${what.replaceAll(' ', '-')}` });
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-const revision = value => `rev1:${createHash('sha256').update(canonicalize(value), 'utf8').digest('base64url')}`;
+export const revision = value => `rev1:${createHash('sha256').update(canonicalize(value), 'utf8').digest('base64url')}`;
 const validDate = value => { try { return validPlanDate(value); } catch { return false; } };
 
 async function collection(domain, identity, name) {

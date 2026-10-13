@@ -156,12 +156,20 @@ test('end to end: a stale device cannot resurrect a deleted item; concurrent ord
   assert.equal(laptop.calendarRepository.read(SUN).items.find(i => i.id === ITEM_ID).deleted, true, 'the stale device converged locally too');
 });
 
-test('end to end: an ordinary owner client cannot fabricate one (the rules refuse the create, the plan record is unaffected)', async () => {
+test('end to end: an ordinary owner client cannot fabricate one (Plan Authority refuses; the rules refuse a bypass; the plan record is unaffected)', async () => {
   const db = rulesEnforcingDatabase({ targaryen, rules: RULES, uid: 'A' });
   const app = device(db);
   const today = app.authority.current();
-  app.authority.addItem({ destination: today, item: actionItem({ updatedAt: app.clock.now }) });
-  app.authority.addItem({ destination: today, item: { id: 'pfine1', task: 'fine', when: '', done: false, doneAt: null, updatedAt: app.clock.now, updatedBy: 'phone', kind: 'task' } });
+  const tomorrow = app.authority.upcoming();
+  assert.throws(() => app.authority.addItem({ destination: today, item: actionItem({ updatedAt: app.clock.now }) }), { message: ACTION_PLAN_ITEM_MOVE_REFUSED },
+    'the saveItems funnel never introduces an Action API item into a plan');
+  db.seed(FENCE_AT, actionItem());
+  assert.throws(() => app.authority.saveItems(tomorrow, [...app.authority.rawItems(tomorrow), actionItem()]), { message: ACTION_PLAN_ITEM_MOVE_REFUSED },
+    'nor copies one it holds into another plan');
+  db.seed(FENCE_AT, null);
+  // A buggy or hostile client that bypasses Plan Authority entirely is refused by the server.
+  app.calendarRepository.write(SUN, [...app.calendarRepository.read(SUN).items.filter(i => i.id !== ITEM_ID), actionItem({ updatedAt: app.clock.now }),
+    { id: 'pfine1', task: 'fine', when: '', done: false, doneAt: null, updatedAt: app.clock.now, updatedBy: 'phone', kind: 'task' }], { updatedBy: 'phone', now: app.clock.now });
   const result = await app.calendarSync.pushPlan(SUN_ID);
   assert.equal(result.outcome, 'fence-denied');
   assert.equal(db.read(FENCE_AT), null, 'no attributed item exists');
