@@ -13,7 +13,7 @@ import { ApiError, AuthorityBoundaryViolation } from './errors.js';
 import { ACTION_ID, captureIdForAction } from './command-identity.js';
 import { validFirebaseUid } from './identity.js';
 import { parseCalendarPlanId } from '../shared/calendar-plan-model.js';
-import { actionPlanItemIdFor, isActionPlanItemId } from '../shared/plan-item-origin.js';
+import { actionPlanItemIdFor, captureIdOfPlanItem, isActionPlanItemId } from '../shared/plan-item-origin.js';
 
 /** The only room collections a user-scoped read may name. Paths are built here, never taken from a request. */
 const READABLE_COLLECTIONS = new Set([
@@ -147,7 +147,93 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
     url.searchParams.set('auth', idToken);
     return url;
   }
+  /** TASK-012: one EXISTING calendar fence child — an Action API item (`api1_<uuid>`) or a fenced Brain Dump item
+   *  (`bdp1|<captureId>`) — for an ordinary-owner compare-and-set update. Never another collection or depth. */
+  function fenceItemUrl(identity, planId, itemId, idToken) {
+    if (!validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}`
+      || !calendarPlanKey(planId) || !(isActionPlanItemId(itemId) || captureIdOfPlanItem(itemId) !== null)) {
+      throw new AuthorityBoundaryViolation('fence item address is not derived from the bound UID, plan and a fenced item id');
+    }
+    const url = new URL(`${databaseUrl}/rooms/${identity.roomId}/calendarPlanFences/${planId}/${encodeURIComponent(itemId)}.json`);
+    if (namespace) url.searchParams.set('ns', namespace);
+    url.searchParams.set('auth', idToken);
+    return url;
+  }
+  /** TASK-012: the owner's calendar plan collection, for the ONE atomic compare-and-set a cross-day move needs (its
+   *  source tombstone and destination copy must commit together or not at all). Nothing else, at no other depth. */
+  function calendarPlansUrl(identity, idToken) {
+    if (!validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}`) {
+      throw new AuthorityBoundaryViolation('calendar plans address is not derived from the bound UID');
+    }
+    const url = new URL(`${databaseUrl}/rooms/${identity.roomId}/calendarPlans.json`);
+    if (namespace) url.searchParams.set('ns', namespace);
+    url.searchParams.set('auth', idToken);
+    return url;
+  }
   return Object.freeze({
+    /** TASK-012: every calendar plan record and the collection ETag, as the ordinary owner (bounded like every read). */
+    async readCalendarPlansWithEtag(identity) {
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      const url = calendarPlansUrl(identity, idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'GET', headers: { 'X-Firebase-ETag': 'true' }, signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-plans-read-network'); }
+      if (response.status === 401 || response.status === 403) throw denied(`domain-plans-read-${response.status}`);
+      if (response.status !== 200) throw transport(`domain-plans-read-${response.status}`);
+      const etag = response.headers.get('ETag');
+      if (!etag) throw transport('domain-plans-etag-missing');
+      return { value: await boundedSourceJson(response), etag };
+    },
+    /** TASK-012: atomic compare-and-set of the whole collection, as the ordinary owner, through the unchanged plan
+     *  rules. Only over an EXISTING collection (a move's source plan exists). @returns {Promise<'written'|'changed'>} */
+    async putCalendarPlansIfMatch(identity, plans, etag) {
+      if (typeof etag !== 'string' || !etag || etag === 'null_etag' || !plans || typeof plans !== 'object' || Array.isArray(plans)
+        || Object.keys(plans).some(key => !calendarPlanKey(key))) {
+        throw new AuthorityBoundaryViolation('calendar plans write requires calendar plan records and the collection ETag');
+      }
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      const url = calendarPlansUrl(identity, idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'PUT', headers: { 'if-match': etag, 'content-type': 'application/json' },
+        body: JSON.stringify(plans), signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-plans-write-network'); }
+      if (response.status === 200) return 'written';
+      if (response.status === 412) return 'changed';
+      if (response.status === 401 || response.status === 403) throw denied(`domain-plans-write-${response.status}`);
+      throw transport(`domain-plans-write-${response.status}`);
+    },
+    /** TASK-012: the exact fence child and its ETag, as the ordinary owner (value null = authoritatively absent). */
+    async readPlanFenceItemWithEtag(identity, planId, itemId) {
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      const url = fenceItemUrl(identity, planId, itemId, idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'GET', headers: { 'X-Firebase-ETag': 'true' }, signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-fence-item-read-network'); }
+      if (response.status === 401 || response.status === 403) throw denied(`domain-fence-item-read-${response.status}`);
+      if (response.status !== 200) throw transport(`domain-fence-item-read-${response.status}`);
+      const etag = response.headers.get('ETag');
+      if (!etag) throw transport('domain-fence-item-etag-missing');
+      return { value: await boundedSourceJson(response), etag };
+    },
+    /** TASK-012: compare-and-set of an EXISTING fence child, as the ordinary owner, through the unchanged fence rules
+     *  (marker pinned, tombstone monotonic, no relocation). Never a create (no null ETag) and never a delete.
+     *  @returns {Promise<'written'|'changed'>} */
+    async putPlanFenceItemIfMatch(identity, planId, itemId, record, etag) {
+      if (typeof etag !== 'string' || !etag || etag === 'null_etag' || !record || typeof record !== 'object'
+        || Array.isArray(record) || record.id !== itemId) {
+        throw new AuthorityBoundaryViolation('fence item update requires the existing item, its id and its ETag');
+      }
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      const url = fenceItemUrl(identity, planId, itemId, idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'PUT', headers: { 'if-match': etag, 'content-type': 'application/json' },
+        body: JSON.stringify(record), signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-fence-item-write-network'); }
+      if (response.status === 200) return 'written';
+      if (response.status === 412) return 'changed';
+      if (response.status === 401 || response.status === 403) throw denied(`domain-fence-item-write-${response.status}`);
+      throw transport(`domain-fence-item-write-${response.status}`);
+    },
     async createCaptureIfAbsent(identity, captureId, actionId, record) {
       if (typeof actionId !== 'string' || !ACTION_ID.test(actionId) || captureId !== captureIdForAction(actionId)
         || record?.id !== captureId || record.creationActionId !== actionId) {

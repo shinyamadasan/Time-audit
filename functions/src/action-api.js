@@ -9,13 +9,15 @@
 //   3. identity binding (signed subject == configured owner -> configured UID -> room uid_<uid>)
 //   4. required scope present in the SIGNED scopes
 //   5. replay nonce: atomic create-if-absent (duplicate fails closed)
-//   6. the typed query or one guarded create (Brain Dump capture, plan item), through user-scoped domain authority
+//   6. the typed query, one guarded create (Brain Dump capture, plan item) or one guarded plan item mutation,
+//      through user-scoped domain authority
 //
 // Responses never echo anything unauthenticated: requestId appears only once the HMAC has verified it.
 
 import { getBrainDump } from './brain-dump-query.js';
 import { createBrainDumpAction } from './brain-dump-action.js';
 import { createPlanAction } from './plan-create-action.js';
+import { mutatePlanAction } from './plan-mutation-action.js';
 import { getToday, getPlan, getItem, getIntelligence } from './read-queries.js';
 import { ApiError, errorBody } from './errors.js';
 import { bindIdentity, requireScope } from './identity.js';
@@ -29,8 +31,9 @@ export const MAX_RESPONSE_BYTES = MAX_BODY_BYTES;
 
 const QUERIES = Object.freeze({ get_brain_dump: getBrainDump, get_today: getToday, get_plan: getPlan,
   get_item: getItem, get_intelligence: getIntelligence });
-/** Each command kind has its own write scope (COMMAND_KINDS) and its own guarded create. */
-const COMMANDS = Object.freeze({ brain_dump_add: createBrainDumpAction, plan_create: createPlanAction });
+/** Each command kind has its own write scope (COMMAND_KINDS) and its own guarded create or item mutation. */
+const COMMANDS = Object.freeze({ brain_dump_add: createBrainDumpAction, plan_create: createPlanAction,
+  plan_set_completion: mutatePlanAction, plan_edit: mutatePlanAction, plan_move: mutatePlanAction, plan_delete: mutatePlanAction });
 
 /**
  * @param {{keys:Map<string,Uint8Array>, owner:{ownerSubject:string, ownerFirebaseUid:string},
