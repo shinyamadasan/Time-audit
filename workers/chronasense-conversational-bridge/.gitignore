@@ -1,2 +1,4 @@
 .wrangler/
 .wrangler-dist/
+# Environment-specific plaintext bindings for scripts/deploy.mjs. Never commit (see README "Deployment").
+.deploy-vars.json

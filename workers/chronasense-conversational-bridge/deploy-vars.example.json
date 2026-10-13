@@ -1,0 +1,7 @@
+{
+  "ACCESS_TEAM_DOMAIN": "https://example-team.cloudflareaccess.com",
+  "ACCESS_POLICY_AUD": "replace-with-access-application-aud",
+  "CHRONASENSE_OWNER_SUBJECT": "replace-with-verified-access-sub",
+  "CHRONASENSE_ACTION_API_URL": "https://example-function-url.a.run.app/v1/query",
+  "CHRONASENSE_WORKER_HMAC_KEY_ID": "replace-with-key-id"
+}
