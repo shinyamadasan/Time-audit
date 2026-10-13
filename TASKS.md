@@ -563,7 +563,7 @@ verification:
 ---
 
 ### TASK-010 - Conversational Actions V1: safe Brain Dump capture
-status: review
+status: done
 owner: codex
 source: owner-direct
 priority: P1
@@ -598,6 +598,18 @@ verification:
 blocker:
   Resolved by owner on 2026-10-12: governed Brain Dump model/rules extension for immutable,
   action-scoped creationActionId is authorized. Plan write is excluded from V1 by owner decision.
+
+closure:
+  Closed 2026-10-12 on owner-confirmed production acceptance. Integrated runtime SHA
+  e53c6637bf2fdc5452463d06d54bf29a43087e14 (origin/main). Pages, reviewed RTDB rules, the Function
+  and the Worker/OAuth write scope are live; first live brain_dump_add applied once, replayed with
+  idempotentReplay:true, no duplicate, and marker-aware UI triage/edit preserved creationActionId.
+  Five read tools + one write tool (brain_dump_add) only; read-only scope cannot invoke the write.
+  Observability limitation (non-blocking, owner-accepted): during the final browser session only
+  aggregate before/after fingerprints were retained, so the exact set of unrelated background paths
+  written cannot be reconstructed. The canary capture delta is proven exact (status, important,
+  urgent, triagedAt, updatedAt, updatedBy). No TASK-010-caused unexpected write is evidenced.
+  Follow-up (separate, not scheduled): retain per-path before/after capture for future rollout audits.
 
 ---
 
