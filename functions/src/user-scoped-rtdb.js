@@ -57,16 +57,29 @@ function jwtClaims(idToken) {
   } catch { return null; }
 }
 
+const CALENDAR_PLAN_KEY = /^cal1:\d{4}-\d{2}-\d{2}$/;
+const PLAN_ITEM_ID = /^api1_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/** The custom claims of an action-scoped token. Brain Dump (TASK-010) keeps exactly its original single claim;
+ *  a plan create (TASK-011) also names its kind and its ONE target plan, so the rules let that token create
+ *  exactly one item at exactly one path and nothing else (DECISIONS #37). */
+function actionClaims(actionId, plan) {
+  if (!plan) return { chronasenseActionId: actionId };
+  return { chronasenseActionId: actionId, chronasenseActionKind: 'plan_create', chronasenseActionTarget: plan.target };
+}
+
 /**
  * @param {{authAdmin:{getUser(uid:string):Promise<{disabled?:boolean}>, createCustomToken(uid:string, claims?:object):Promise<string>},
  *          webApiKey:string, fetch?:typeof fetch, exchangeUrl?:string, timeoutMs?:number}} options
- * @returns {{getIdToken(firebaseUid:string, actionId?:string):Promise<string>}}
+ * @returns {{getIdToken(firebaseUid:string, actionId?:string, plan?:{target:string}):Promise<string>}}
  */
 export function createIdTokenProvider({ authAdmin, webApiKey, fetch: fetchImpl = globalThis.fetch, exchangeUrl = TOKEN_EXCHANGE_URL, timeoutMs = 10_000 }) {
   return Object.freeze({
-    async getIdToken(firebaseUid, actionId) {
+    async getIdToken(firebaseUid, actionId, plan) {
       if (!validFirebaseUid(firebaseUid)) throw denied('invalid-uid');
       if (actionId !== undefined && (typeof actionId !== 'string' || !ACTION_ID.test(actionId))) throw denied('invalid-action-id');
+      if (plan !== undefined && (actionId === undefined || !plan || typeof plan.target !== 'string' || !CALENDAR_PLAN_KEY.test(plan.target))) throw denied('invalid-action-target');
+      const claimsWanted = actionId ? actionClaims(actionId, plan) : undefined;
       let user;
       try { user = await authAdmin.getUser(firebaseUid); } catch (error) {
         if (error?.code === 'auth/user-not-found') throw denied('owner-account-missing');
@@ -74,7 +87,7 @@ export function createIdTokenProvider({ authAdmin, webApiKey, fetch: fetchImpl =
       }
       if (!user || user.disabled) throw denied('owner-account-disabled');
       let customToken;
-      try { customToken = await authAdmin.createCustomToken(firebaseUid, actionId ? { chronasenseActionId: actionId } : undefined); } catch { throw transport('custom-token'); }
+      try { customToken = await authAdmin.createCustomToken(firebaseUid, claimsWanted); } catch { throw transport('custom-token'); }
       let response;
       try {
         response = await fetchImpl(`${exchangeUrl}?key=${encodeURIComponent(webApiKey)}`, {
@@ -90,7 +103,8 @@ export function createIdTokenProvider({ authAdmin, webApiKey, fetch: fetchImpl =
       try { ({ idToken } = await response.json()); } catch { throw transport('token-exchange-body'); }
       // The refresh token in that response is dropped here, unread. The ID token must name exactly the owner.
       const claims = typeof idToken === 'string' ? jwtClaims(idToken) : null;
-      if (!claims || (claims.user_id ?? claims.sub) !== firebaseUid || (actionId && claims.chronasenseActionId !== actionId)) throw denied('token-exchange-identity');
+      if (!claims || (claims.user_id ?? claims.sub) !== firebaseUid
+        || Object.entries(claimsWanted || {}).some(([name, value]) => claims[name] !== value)) throw denied('token-exchange-identity');
       return idToken;
     },
   });
@@ -111,6 +125,16 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
     url.searchParams.set('auth', idToken);
     return url;
   }
+  function planItemUrl(identity, planId, itemId, idToken) {
+    if (!validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}`
+      || typeof planId !== 'string' || !CALENDAR_PLAN_KEY.test(planId) || typeof itemId !== 'string' || !PLAN_ITEM_ID.test(itemId)) {
+      throw new AuthorityBoundaryViolation('plan item address is not derived from the bound UID, plan and action ID');
+    }
+    const url = new URL(`${databaseUrl}/rooms/${identity.roomId}/calendarPlanFences/${planId}/${itemId}.json`);
+    if (namespace) url.searchParams.set('ns', namespace);
+    url.searchParams.set('auth', idToken);
+    return url;
+  }
   return Object.freeze({
     async createCaptureIfAbsent(identity, captureId, actionId, record) {
       if (typeof actionId !== 'string' || !ACTION_ID.test(actionId) || captureId !== captureIdForAction(actionId)
@@ -127,6 +151,35 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
       if (response.status === 412) return 'exists';
       if (response.status === 401 || response.status === 403) throw denied(`domain-create-${response.status}`);
       throw transport(`domain-create-${response.status}`);
+    },
+    /** TASK-011: the one Action API plan item, at its keyed calendar fence child, conditionally created with a
+     *  token whose claims name exactly this action, kind and plan. @returns {Promise<'created'|'exists'>} */
+    async createPlanItemIfAbsent(identity, planId, itemId, actionId, record) {
+      if (typeof actionId !== 'string' || !ACTION_ID.test(actionId) || itemId !== `api1_${actionId.slice(5)}`
+        || record?.id !== itemId || record.creationActionId !== actionId) {
+        throw new AuthorityBoundaryViolation('plan item create requires its exact action attribution');
+      }
+      const idToken = await idTokens.getIdToken(identity.firebaseUid, actionId, { target: planId });
+      const url = planItemUrl(identity, planId, itemId, idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'PUT', headers: { 'if-match': 'null_etag', 'content-type': 'application/json' },
+        body: JSON.stringify(record), signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-plan-create-network'); }
+      if (response.status === 200) return 'created';
+      if (response.status === 412) return 'exists';
+      if (response.status === 401 || response.status === 403) throw denied(`domain-plan-create-${response.status}`);
+      throw transport(`domain-plan-create-${response.status}`);
+    },
+    /** The exact keyed child, as the owner (null = authoritatively absent; unknown is never absent). */
+    async readPlanItem(identity, planId, itemId) {
+      const idToken = await idTokens.getIdToken(identity.firebaseUid);
+      const url = planItemUrl(identity, planId, itemId, idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'GET', signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-plan-item-read-network'); }
+      if (response.status === 401 || response.status === 403) throw denied(`domain-plan-item-read-${response.status}`);
+      if (response.status !== 200) throw transport(`domain-plan-item-read-${response.status}`);
+      return boundedSourceJson(response);
     },
     async readCapture(identity, captureId) {
       const idToken = await idTokens.getIdToken(identity.firebaseUid);

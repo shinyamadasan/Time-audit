@@ -35,6 +35,9 @@ export const PREDICATES = Object.freeze([
   'targetBinding', 'storeBinding', 'originImmutability', 'itemIdBinding', 'revokeMonotonic', 'epochMonotonic', 'tombstoneMonotonic',
   'stableKeyFormat', 'parentOverwriteClosed', 'epochBinding', 'claimIdentity', 'recoveryAbsence', 'finalizePresence', 'claimDeletionClosed',
   'relocationRefused',
+  // Action API plan items (TASK-011, DECISIONS #37): a calendar fence child created by the action-scoped token.
+  'actionKindBinding', 'actionTargetBinding', 'actionMarkerBinding', 'actionIdMarkerConsistency', 'actionCreateOnly',
+  'actionAuthorityRequired', 'actionTombstoneMonotonic', 'actionRelocationRefused', 'actionCaptureKind', 'arrayActionRefused',
 ]);
 
 const ROOM_REF = "root.child('rooms').child($roomId)";
@@ -46,6 +49,10 @@ const TARGET_KEY_FORMAT = {
   operational: '/^[A-Za-z0-9_-]+$/',
 };
 const ITEM_ID_FORMAT = '/^bdp1\\|[A-Za-z0-9_-]{3,64}$/';
+
+const ACTION_UUID = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const ACTION_ITEM_ID_FORMAT = `/^api1_${ACTION_UUID}$/`;
+const ACTION_ID_FORMAT = `/^act1_${ACTION_UUID}$/`;
 
 export function buildRules({ without = [] } = {}) {
   const off = new Set(without);
@@ -138,7 +145,8 @@ export function buildRules({ without = [] } = {}) {
   ]);
   const captureWrite = AND([ROOM_OWNER, `${n}.exists()`, `${n}.child('id').val() === $captureId`, OR([
     group(AND([NORMAL_TOKEN, OR([group(captureCreate), group(AND([`${d}.exists()`, captureUpdate]))])])),
-    group(AND([ACTION_TOKEN, `${n}.child('creationActionId').exists()`, captureCreate])),
+    group(AND([ACTION_TOKEN, `${n}.child('creationActionId').exists()`,
+      on('actionCaptureKind') ? "(auth.token.chronasenseActionKind == null || auth.token.chronasenseActionKind === 'brain_dump_add')" : null, captureCreate])),
   ])]);
 
   // ── fenced plan items (rooms/<room>/<fence collection>/$targetKey/$itemId) ──
@@ -146,6 +154,45 @@ export function buildRules({ without = [] } = {}) {
   const itemClaim = `${itemCapture}.child('promotionClaim')`;
   const itemPromotion = `${itemCapture}.child('promotion')`;
   const origin = node => `${node}.child('brainDumpOrigin')`;
+  // ── Action API plan items (rooms/<room>/calendarPlanFences/$targetKey/api1_<uuid>) ──
+  // The same location-bound representation as a fenced Brain Dump item (DECISIONS #33/#37). The path IS the
+  // identity: CREATE only by the backend's action-scoped token, at exactly the item id, marker and plan its
+  // claims name, and only once the account is calendar-authoritative (date routing itself is the backend's,
+  // through Plan Authority). UPDATE only by an ordinary owner token, with the marker pinned (the path-bound
+  // id must keep deriving from it) and the tombstone monotonic. No delete, no move, no parent overwrite.
+  const actionPlanItemRules = () => {
+    const marker = `${n}.child('creationActionId')`;
+    const create = AND([
+      ROOM_OWNER, ACTION_TOKEN,
+      on('actionCreateOnly') ? `!${d}.exists()` : null,
+      on('actionKindBinding') ? "auth.token.chronasenseActionKind === 'plan_create'" : null,
+      on('actionTargetBinding') ? '$targetKey === auth.token.chronasenseActionTarget' : null,
+      on('actionMarkerBinding') ? `${marker}.val() === auth.token.chronasenseActionId` : null,
+      on('actionAuthorityRequired') ? `${ROOM_REF}.child('calendarPlanAuthority').exists()` : null,
+    ]);
+    const update = AND([
+      OWNER, `${d}.exists()`,
+      on('actionTombstoneMonotonic') ? `(${d}.child('deleted').val() !== true || ${n}.child('deleted').val() === true)` : null,
+    ]);
+    const write = AND([
+      `${n}.exists()`,
+      `$targetKey.matches(${TARGET_KEY_FORMAT.calendar}) && $itemId.matches(${ACTION_ITEM_ID_FORMAT})`,
+      `${n}.child('id').val() === $itemId`,
+      // In .write, not only .validate: .validate is an OR with the Brain Dump branch, which an origin would satisfy.
+      `!${n}.child('brainDumpOrigin').exists()`,
+      `${marker}.isString() && ${marker}.val().matches(${ACTION_ID_FORMAT})`,
+      on('actionIdMarkerConsistency') ? `$itemId === ('api1_' + ${marker}.val().replace('act1_', ''))` : null,
+      OR([group(create), group(update)]),
+    ]);
+    const validate = AND([
+      `$itemId.matches(${ACTION_ITEM_ID_FORMAT})`,
+      `${n}.hasChildren(['id', 'task', 'creationActionId'])`,
+      `!${n}.child('brainDumpOrigin').exists()`,
+      on('actionRelocationRefused') ? `!${n}.child('relocationRevision').exists() && !${n}.child('movedToDayId').exists()` : null,
+    ]);
+    return { write, validate };
+  };
+
   const fencedItemRules = store => {
     // The origin an item is authorized BY: a create is judged on the origin it brings; an update is judged
     // on the origin ALREADY STORED (and origin immutability then pins the update to it), so immutability
@@ -191,6 +238,7 @@ export function buildRules({ without = [] } = {}) {
       on('relocationRefused') ? `!${n}.child('relocationRevision').exists() && !${n}.child('movedToDayId').exists()` : null,
     ]);
     const originKey = key => [key, { '.validate': true }];
+    const action = store === 'calendar' ? actionPlanItemRules() : null;
     return {
       [FENCE_COLLECTION_BY_STORE[store]]: {
         // No `.write` here or on $targetKey: a parent overwrite is never granted, so every
@@ -198,8 +246,8 @@ export function buildRules({ without = [] } = {}) {
         ...(on('parentOverwriteClosed') ? {} : { '.write': AND([OWNER]) }),
         $targetKey: {
           $itemId: {
-            '.write': write,
-            '.validate': validate,
+            '.write': action ? OR([group(write), group(action.write)]) : write,
+            '.validate': action ? OR([group(validate), group(action.validate)]) : validate,
             brainDumpOrigin: {
               '.validate': `${n}.hasChildren(['v', 'claimEpoch', 'type', 'store', 'targetKey'])`,
               ...Object.fromEntries(['v', 'claimEpoch', 'type', 'store', 'targetKey'].map(originKey)),
@@ -221,6 +269,8 @@ export function buildRules({ without = [] } = {}) {
   const legacyPromotion = `${legacyCapture}.child('promotion')`;
   const legacyItemValidate = AND([
     `!newData.child('brainDumpOrigin').exists()`,
+    // The api1_ namespace and the Action API marker exist only at an action item's keyed fence child (#37).
+    on('arrayActionRefused') ? "!newData.child('creationActionId').exists() && (!newData.child('id').isString() || !newData.child('id').val().beginsWith('api1_'))" : null,
     OR([
       '!newData.child(\'id\').isString()',
       '!newData.child(\'id\').val().beginsWith(\'bdp1|\')',

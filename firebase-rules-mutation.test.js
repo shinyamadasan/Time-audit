@@ -17,7 +17,8 @@ import { fileURLToPath } from 'node:url';
 
 import { ROOM, startEmulator } from './rtdb-emulator-support.js';
 import { PREDICATES, artifactMatchesBuilder, buildRules, serializeRules } from './scripts/firebase-rules-builder.mjs';
-import { ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, planRecord, promotedCapture } from './fence-rules-fixtures.js';
+import { ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, planRecord, promotedCapture,
+  ACTION_A, ACTION_B, ACTION_OTHER_PLAN, ACTION_PLAN, actionItem, actionItemAt, actionItemId, planActionToken, seedCalendarAuthority } from './fence-rules-fixtures.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const COMMITTED = readFileSync(path.join(HERE, 'firebase.rules.json'), 'utf8');
@@ -78,6 +79,41 @@ const ATTACKS = {
     await db.seed(captureAt(), promotedCapture(CAL));
     return db.write(CAL.itemAt, fencedItem(CAL, { relocationRevision: { schemaVersion: 1, sequence: 1, fromDayId: CAL.targetId, toDayId: CAL.otherId, updatedBy: 'd' } }));
   },
+  // ── Action API plan items (TASK-011) ──
+  async actionKindBinding(db) { await seedCalendarAuthority(db); return db.write(actionItemAt(), actionItem(), planActionToken(ACTION_A, { kind: 'brain_dump_add' })); },
+  async actionTargetBinding(db) { await seedCalendarAuthority(db); return db.write(actionItemAt(), actionItem(), planActionToken(ACTION_A, { target: ACTION_OTHER_PLAN })); },
+  async actionMarkerBinding(db) {
+    // A self-consistent item of ANOTHER action, written with this action's token.
+    await seedCalendarAuthority(db);
+    return db.write(actionItemAt(ACTION_B), actionItem({ id: actionItemId(ACTION_B), creationActionId: ACTION_B }), planActionToken(ACTION_A));
+  },
+  async actionIdMarkerConsistency(db) {
+    // The token's own marker, at an item id that does not derive from it.
+    await seedCalendarAuthority(db);
+    return db.write(actionItemAt(ACTION_B), actionItem({ id: actionItemId(ACTION_B) }), planActionToken(ACTION_A));
+  },
+  async actionCreateOnly(db) {
+    // The action token re-"creating" over its own tombstone would resurrect it.
+    await seedCalendarAuthority(db);
+    await db.seed(actionItemAt(), actionItem({ deleted: true }));
+    return db.write(actionItemAt(), actionItem(), planActionToken());
+  },
+  async actionAuthorityRequired(db) { return db.write(actionItemAt(), actionItem(), planActionToken()); },
+  async actionTombstoneMonotonic(db) {
+    await seedCalendarAuthority(db);
+    await db.seed(actionItemAt(), actionItem({ deleted: true }));
+    return db.write(actionItemAt(), actionItem({ deleted: false, updatedAt: T + 99 }));
+  },
+  async actionRelocationRefused(db) {
+    await seedCalendarAuthority(db);
+    await db.seed(actionItemAt(), actionItem());
+    return db.write(actionItemAt(), actionItem({ relocationRevision: { schemaVersion: 1, sequence: 1, fromDayId: ACTION_PLAN, toDayId: ACTION_OTHER_PLAN, updatedBy: 'd' } }));
+  },
+  async actionCaptureKind(db) {
+    const id = `bdc1_${ACTION_A.slice(5)}`;
+    return db.write(captureAt(id), capture({ id, creationActionId: ACTION_A }), planActionToken());
+  },
+  async arrayActionRefused(db) { return db.write(CAL.planAt, planRecord([actionItem()])); },
 };
 
 test('every named predicate has an attack in this suite (a new predicate cannot ship unproven)', () => {

@@ -5,7 +5,7 @@
 // store, built from the REAL contract (plan-item-origin.js's physicalTargetKey), never
 // from guessed strings.
 
-import { ROOM } from './rtdb-emulator-support.js';
+import { ROOM, token } from './rtdb-emulator-support.js';
 import { FENCE_REMOTE_PATHS, physicalTargetKey } from './plan-item-origin.js';
 
 export const T = 1790816400000;
@@ -57,3 +57,20 @@ export const fencedItem = (def, extra = {}) => {
 };
 export const ordinary = { id: 'pnormal1', task: 'ordinary', when: '', done: false, updatedAt: T, updatedBy: 'd' };
 export const planRecord = items => ({ items, updatedAt: T, updatedBy: 'd' });
+
+// ── Action API plan items (TASK-011, DECISIONS #37) ─────────────────────────
+export const ACTION_A = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+export const ACTION_B = 'act1_1c9a2d3e-4f5a-4b6c-9d7e-8f9012a3b4c5';
+export const ACTION_PLAN = STORES.calendar.targetId;
+export const ACTION_OTHER_PLAN = STORES.calendar.otherId;
+export const actionItemId = actionId => `api1_${actionId.slice(5)}`;
+export const actionItemAt = (actionId = ACTION_A, planId = ACTION_PLAN) => `${ROOM}/${FENCE_REMOTE_PATHS.calendar}/${planId}/${actionItemId(actionId)}`;
+/** The backend's action-scoped owner token: exactly the claims the Function mints for one plan_create. */
+export const planActionToken = (actionId = ACTION_A, { target = ACTION_PLAN, kind = 'plan_create', uid = 'alice' } = {}) => token(uid,
+  { chronasenseActionId: actionId, ...(kind === null ? {} : { chronasenseActionKind: kind }), ...(target === null ? {} : { chronasenseActionTarget: target }) });
+export const actionItem = (extra = {}) => ({
+  id: actionItemId(ACTION_A), task: 'Gym', when: '18:00', whenTz: 'Asia/Manila', durationMinutes: 60, done: false,
+  updatedAt: T, updatedBy: 'actor1:test', kind: 'task', creationActionId: ACTION_A, ...extra,
+});
+export const authorityFact = { schemaVersion: 1, id: 'fact1', activatedAtMs: T, timezone: 'Asia/Manila', activationDate: '2026-10-01', deviceId: 'd' };
+export const seedCalendarAuthority = db => db.seed(`${ROOM}/calendarPlanAuthority/fact1`, authorityFact);

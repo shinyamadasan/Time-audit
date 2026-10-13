@@ -9,7 +9,7 @@ import { activeBoundaryRevision, legacyBoundaryRevision, normalizeBoundaryRevisi
 import { decodeWireMap } from '../shared/personal-day-boundary-wire.js';
 import { mergeOperationalPlanRecords, resolvePlanAuthority, validateOperationalPlanItemRange } from '../shared/operational-plan-model.js';
 import { localPlanDate, mergeDatePlans, validPlanDate, validPlanTimezone } from '../shared/plan-tomorrow-model.js';
-import { captureIdOfPlanItem, isFencedItem, mergeFencedItem, physicalTargetKey } from '../shared/plan-item-origin.js';
+import { captureIdOfPlanItem, isActionPlanItem, isFencedItem, mergeFencedItem, physicalTargetKey } from '../shared/plan-item-origin.js';
 import { canonicalPlanItemRelocations, normalizePlanItemRelocation, planItemIsActiveInDay } from '../shared/plan-item-relocation.js';
 import { collectRecoveryConflicts, collectStaleUnfinished } from '../shared/stale-plan-recovery-model.js';
 import { canonicalize } from './canonical-json.js';
@@ -41,8 +41,12 @@ function rawPlanItems(record, fences, store, targetId, targetKey) {
   if (fences !== undefined) {
     if (!object(fences)) throw malformed('plan fences');
     for (const [id, item] of Object.entries(fences)) {
-      if (!object(item) || item.id !== id || !isFencedItem(item) || item.brainDumpOrigin.store !== store
-          || item.brainDumpOrigin.targetKey !== targetKey) throw malformed('plan fences');
+      // A Brain Dump item names its location in its origin; an Action API item (TASK-011) is located by its
+      // calendar fence path alone, which the rules bind at creation and never let it leave.
+      const located = object(item) && (isActionPlanItem(item)
+        ? store === 'calendar' && item.brainDumpOrigin === undefined
+        : isFencedItem(item) && item.brainDumpOrigin.store === store && item.brainDumpOrigin.targetKey === targetKey);
+      if (!located || item.id !== id) throw malformed('plan fences');
       const old = byId.get(id);
       const choose = (a, b) => (store === 'calendar' ? mergeCalendarPlanRecords({ items: [a] }, { items: [b] }, targetId)
         : store === 'operational' ? mergeOperationalPlanRecords({ items: [a] }, { items: [b] }, targetId)
