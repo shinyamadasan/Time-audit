@@ -614,7 +614,7 @@ closure:
 ---
 
 ### TASK-011 - Plan Authority + Conversational Scheduling V1
-status: in-progress
+status: review
 owner: claude
 source: owner-direct
 priority: P1
@@ -631,17 +631,17 @@ context:
   reorder; this task proves/establishes that authority before enabling the one create tool.
 
 acceptance:
-  - [ ] Exactly one new write tool (`plan_create`, docs/CHRONASENSE_ACTION_API_V1.md §10) behind
+  - [x] Exactly one new write tool (`plan_create`, docs/CHRONASENSE_ACTION_API_V1.md §10) behind
         `chronasense:plan.write`; five read tools and brain_dump_add behaviorally unchanged.
-  - [ ] Target resolved and validated through existing calendar authority (activation, frozen plan
+  - [x] Target resolved and validated through existing calendar authority (activation, frozen plan
         zone, past-day immutability); no implicit activation, no legacy fallback, typed refusals.
-  - [ ] Deterministic `api1_<uuid>` item with immutable, rules-protected `creationActionId`; no lost
+  - [x] Deterministic `api1_<uuid>` item with immutable, rules-protected `creationActionId`; no lost
         concurrent edit, no duplicate item, no tombstone resurrection, reorder never changes identity.
-  - [ ] Receipt/idempotency: exact replay, payload conflict, crash/unknown recovery from receipt plus
+  - [x] Receipt/idempotency: exact replay, payload conflict, crash/unknown recovery from receipt plus
         authoritative readback; applied only when the attributed item is proven present.
-  - [ ] Action token can create only its own claimed item; cannot write Brain Dump, settings,
+  - [x] Action token can create only its own claimed item; cannot write Brain Dump, settings,
         entries, plans or other owner paths; normal owner writes keep working.
-  - [ ] Clean, locally committed candidate plus fresh-reviewer handoff. No push, merge or deploy.
+  - [x] Clean, locally committed candidate plus fresh-reviewer handoff. No push, merge or deploy.
 
 constraints:
   - No edit/move/complete/delete/reschedule tools, no generic write, no caller UID/room/path.
@@ -649,10 +649,14 @@ constraints:
   - No deploy, production Firebase/Cloudflare/OAuth/IAM/secret mutation, force push or destructive Git.
 
 verification:
-  - [ ] Targeted model, Function, Worker and real RTDB-emulator rules tests (adversarial).
-  - [ ] npm test, npm run test:smoke, npm run lint, npm run check:www-parity,
+  - [x] Targeted model, Function, Worker and real RTDB-emulator rules tests (adversarial).
+  - [x] npm test, npm run test:smoke, npm run lint, npm run check:www-parity,
         npm run check:firebase-rules, npm run test:fence, git diff --check,
         SELF_REVIEW.md and QA.md applicable checks.
+
+review-gate:
+  Builder self-review only (not an independent PASS). Red-zone (rules, sync boundary, Action API): approve at
+  `approved` for a human merge, never auto-merge. Handoff: TASK_011_HANDOFF.md. Evidence: TEST_REPORT.md.
 
 ---
 

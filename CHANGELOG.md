@@ -1,5 +1,32 @@
 # ChronaSense — Changelog
 
+## TASK-011 — Plan Authority + Conversational Scheduling V1 — review candidate (branch: task-011)
+
+From origin/main `327e0cb`. Local only: not pushed, merged or deployed; no production data, rules, Function, Worker,
+OAuth, IAM or secret touched. Red-zone (rules, sync boundary, Action API): land at `approved` for a human merge.
+changed:
+  - ONE new write tool `plan_create` ("Add gym tomorrow at 6 PM") behind `chronasense:plan.write` (DECISIONS #37).
+    The item `api1_<uuid>` with immutable `creationActionId` lives at its keyed child
+    `calendarPlanFences/<planId>/api1_<uuid>`; the plan record/array is never written by the backend. No migration.
+  - plan-item-origin.js: `isActionPlanItem`, `actionPlanItemIdFor`, `fencedMoveRefusal`, `ACTION_PLAN_ITEM_MOVE_REFUSED`;
+    action items count as fenced (split/fold/merge; tombstone monotonic; attributed copy wins). plan-authority.js:
+    cross-day move refused; the saveItems funnel never introduces one into a plan. planning-continuity-ui.js: date pinned.
+  - scripts/firebase-rules-builder.mjs -> firebase.rules.json: action-token-only create bound to the token's id/kind/
+    target claims on a calendar-activated account; owner updates keep the marker pinned, tombstone monotonic, no
+    relocation/delete/parent overwrite; arrays reserve `api1_` and refuse markers; plan tokens cannot create Brain Dump
+    captures. Ten new named predicates, each mutation-proven on the real emulator.
+  - functions: `envelope.js` (`COMMAND_KINDS`, strict plan_create parameters, pre-claim time/DST/extent validation),
+    `plan-create-action.js` (new), `user-scoped-rtdb.js` (plan-scoped token claims, pinned create/read),
+    `plan-read.js` (reads action items; exports `revision`), `receipts.js` (`plannedTarget`), `action-api.js` (dispatch).
+  - Worker: `plan_create` tool, per-tool write scope, generalized unknown-outcome retry payload, OAuth scope + consent.
+  - Governed import-map generation -> `20261012-task011-plan-action-items-v1`; www/ mirror regenerated.
+  - Tests: plan-action-item.test.js, functions/test/plan-create-action.test.js, worker test/plan-create.test.js, new
+    emulator cases (rules matrix + end-to-end signed plan_create) and mutation attacks; two Worker tests that pinned the
+    TASK-010 surface (one write tool, two scopes) updated to the intended surface.
+  - Docs: DECISIONS #37, CODEMAP, Action API implementation note, functions/Worker READMEs, TASK_011_HANDOFF.md.
+unchanged: brain_dump_add behavior and its TASK-010 token claims; the five read tools' projections; legacy/operational
+  plan stores; calendar activation, Personal Day boundary, carryover and preparation semantics.
+
 ## TASK-005 — Phase A1 FINAL FIX FIRST (A1-03 comment bypass, A1-04 lifecycle gate) (branch: task-005)
 
 On top of `4d69095`. Test-only changes; no production code, rules, packaging, TASKS.md or gating logic touched.
