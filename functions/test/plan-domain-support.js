@@ -68,6 +68,31 @@ export function planDomain(seed = {}, hooks = {}) {
       if (hooks.afterPlansPut) await hooks.afterPlansPut();
       return 'written';
     },
+    /** TASK-012: the atomic multi-path relocation, judged exactly as actionPlanItemRules' moveIn/moveOut judge it. */
+    async relocateActionPlanItem(identity, { actionId, sourcePlanId, destinationPlanId, itemId, sourceStamp, sourceWriter, tombstone, moved }) {
+      own(identity);
+      assert.match(actionId, /^act1_/);
+      if (hooks.beforeRelocate) await hooks.beforeRelocate();
+      const source = room.calendarPlanFences[sourcePlanId]?.[itemId];
+      const destination = room.calendarPlanFences[destinationPlanId]?.[itemId];
+      const relocation = moved.relocationRevision;
+      const refused = !source || source.deleted === true || destination !== undefined
+        || source.updatedAt !== sourceStamp || source.updatedBy !== sourceWriter
+        || moved.creationActionId !== source.creationActionId || tombstone.creationActionId !== source.creationActionId
+        || JSON.stringify(relocation) !== JSON.stringify(tombstone.relocationRevision) || relocation?.schemaVersion !== 1
+        || relocation.fromDayId !== sourcePlanId || relocation.toDayId !== destinationPlanId
+        || relocation.sequence !== (source.relocationRevision?.sequence ?? 0) + 1
+        || tombstone.deleted !== true || tombstone.movedToDayId !== destinationPlanId || moved.deleted === true || moved.movedToDayId !== undefined
+        || !room.calendarPlanAuthority;
+      if (refused) throw new ApiError('FORBIDDEN', 'ChronaSense account access was refused.');
+      room.calendarPlanFences[sourcePlanId][itemId] = store(tombstone);
+      (room.calendarPlanFences[destinationPlanId] ??= {})[itemId] = store(moved);
+      bump(`fence:${sourcePlanId}/${itemId}`);
+      bump(`fence:${destinationPlanId}/${itemId}`);
+      writes.push({ planIds: [sourcePlanId, destinationPlanId], itemId, where: 'relocation' });
+      if (hooks.afterRelocate) await hooks.afterRelocate();
+      return 'written';
+    },
     async readPlanFenceItemWithEtag(identity, planId, itemId) {
       own(identity);
       const value = room.calendarPlanFences[planId]?.[itemId];
@@ -81,7 +106,10 @@ export function planDomain(seed = {}, hooks = {}) {
       if (tag !== etag(`fence:${planId}/${itemId}`, true)) return 'changed';
       // The unchanged fence rules, as the server applies them to an owner update.
       if (record.creationActionId !== current.creationActionId || JSON.stringify(record.brainDumpOrigin) !== JSON.stringify(current.brainDumpOrigin)
-        || (current.deleted === true && record.deleted !== true) || record.relocationRevision || record.movedToDayId) {
+        || (current.deleted === true && record.deleted !== true)
+        // TASK-012: an ordinary owner write keeps the item's relocation exactly (it can neither move nor fabricate one).
+        || JSON.stringify(record.relocationRevision ?? null) !== JSON.stringify(current.relocationRevision ?? null)
+        || (record.movedToDayId ?? null) !== (current.movedToDayId ?? null)) {
         throw new ApiError('FORBIDDEN', 'ChronaSense account access was refused.');
       }
       room.calendarPlanFences[planId][itemId] = store(record);

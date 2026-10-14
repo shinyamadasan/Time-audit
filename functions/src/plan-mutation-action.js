@@ -11,7 +11,10 @@
 //                        relocationRevision, and the source copy becomes a tombstone naming movedToDayId. Both
 //                        records commit in ONE compare-and-set of the calendarPlans collection: a concurrent edit or
 //                        delete of the source can never be silently undone by an already-landed destination copy,
-//                        and no crash can leave half a move behind.
+//                        and no crash can leave half a move behind. An Action API item (api1_) moves the same way at
+//                        its keyed fence children: ONE atomic multi-path update whose rules check each end against the
+//                        other and the source against the writer stamp the plan_move token names. A fenced Brain Dump
+//                        item (bdp1|) is refused: its capture's promotion names its one location.
 //   plan_delete          the in-place stamped tombstone (`deleted: true`), never a physical delete
 //
 // Location (decided by the item's own identity, never by the caller): an Action API item (`api1_`) or a fenced
@@ -38,7 +41,7 @@
 //   - APPLIED only after an authoritative re-read shows the planned revision(s).
 
 import { calendarItemInstants, mergeCalendarPlanRecords, parseCalendarPlanId, validateCalendarPlanItem } from '../shared/calendar-plan-model.js';
-import { captureIdOfPlanItem, fencedMoveRefusal, isActionPlanItemId, isFencedItem } from '../shared/plan-item-origin.js';
+import { BRAIN_DUMP_MOVE_REFUSED, captureIdOfPlanItem, isActionPlanItem, isActionPlanItemId, isFencedItem } from '../shared/plan-item-origin.js';
 import { nextPlanItemRelocation } from '../shared/plan-item-relocation.js';
 import { localPlanDate, planItemKind, validPlanItemTime } from '../shared/plan-tomorrow-model.js';
 import { canonicalize } from './canonical-json.js';
@@ -197,9 +200,11 @@ export function planMutation(kind, parameters, pre, { stampMs, writer, date, end
     assertValidOn(date, draft);
     return same(wireForm(draft), pre) ? { noop: true } : { source: stamped(draft) };
   }
-  // plan_move: Plan Authority refuses a location-bound item before anything is written (DECISIONS #33/#37), and a
-  // stale-recovery copy is re-moved only through the Unfinished flow (its carry provenance names its source day).
-  if (isFencedItem(pre)) throw new ApiError('DOMAIN_LIMIT', fencedMoveRefusal(pre), { reason: 'fenced-item-move-refused' });
+  // plan_move: a fenced Brain Dump item stays bound to the plan its capture's promotion names (DECISIONS #33): moving it
+  // would have to move that promotion too, which is Brain Dump's authority, not this command's. An Action API item has
+  // no such external authority: it relocates with the existing same-id + relocationRevision contract (DECISIONS #38).
+  // A stale-recovery copy is re-moved only through the Unfinished flow (its carry provenance names its source day).
+  if (isFencedItem(pre) && !isActionPlanItem(pre)) throw new ApiError('DOMAIN_LIMIT', BRAIN_DUMP_MOVE_REFUSED, { reason: 'fenced-item-move-refused' });
   if (pre.carriedFromId !== undefined || pre.carriedFromDayId !== undefined) {
     throw new ApiError('DOMAIN_LIMIT', 'A task recovered from an earlier day is rescheduled from Unfinished, not moved.', { reason: 'carried-item-move-refused' });
   }
@@ -279,6 +284,7 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
   const earlierIntent = intent !== null;
   let ownWriteUnknown = false;
   let ownWriteLanded = false;
+  let relocationRefused = false;
 
   const unknown = async (reason, details) => {
     await settle(receipts, identity, actionId, snapshot, { state: 'pending_unknown', leaseExpiresAt: nowMs, updatedAt: nowMs });
@@ -319,8 +325,10 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
       physical = await readPhysical(identity, domain, planId, itemId);
       if (destinationId) {
         destination = await reader.read({ store: 'calendar', id: destinationId });
-        // An array item moves through ONE collection compare-and-set; a keyed item is refused before any write.
+        // An array item moves through ONE collection compare-and-set; an Action API item through ONE atomic
+        // relocation of its two fence children, so its destination is its own exact child there.
         if (physical.where === 'record') physical = await readMove(identity, domain, planId, destinationId, itemId);
+        else physical.destination = { item: (await domain.readPlanFenceItemWithEtag(identity, destinationId, itemId)).value };
       }
     } catch (error) {
       if (error instanceof ApiError && DEFINITIVE_REFUSALS.has(error.code)) return refuse(error);
@@ -348,6 +356,15 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
         { reason: 'plan-item-stale', details: active ? { currentRevision: active.revision } : { state: pre.deleted === true ? 'tombstoned' : 'inactive' } }));
     }
     if (pre.deleted === true) return refuse(conflict('That plan item was removed.', 'plan-item-deleted', { state: 'tombstoned' }));
+    const fenceMove = kind === 'plan_move' && physical.where === 'fence';
+    if (fenceMove && physical.destination.item !== null) {
+      // Its own earlier copy (a move tombstone) already holds that child, and a fence tombstone is never revived.
+      return refuse(new ApiError('DOMAIN_LIMIT', 'This task was on that day before; moving a ChatGPT task back to a day it left is not supported yet.',
+        { reason: 'move-onto-own-history' }));
+    }
+    if (fenceMove && !(Number.isSafeInteger(pre.updatedAt) && pre.updatedAt > 0 && typeof pre.updatedBy === 'string' && pre.updatedBy && pre.updatedBy.length <= 200)) {
+      return refuse(conflict('That plan item has no writer stamp to move it safely.', 'plan-item-unversioned'));
+    }
     if (!source.items.some(item => item.itemId === itemId)) {
       const inactive = await reader.inactiveItem({ store: 'calendar', id: planId }, itemId).catch(() => null);
       return refuse(conflict('That plan item is no longer active in that plan.', 'plan-item-inactive',
@@ -389,12 +406,30 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
         throw error;
       }
     }
+    if (fenceMove) {
+      // The destination plan's origin, likewise frozen before anything lands there.
+      try {
+        if (!hasOrigin((await domain.readCalendarPlanWithEtag(identity, destinationId)).value)) {
+          await ensurePlanOrigin(identity, { domain, planId: destinationId, homeZone: destination.target.timezone, createdAt: stampMs });
+          continue;
+        }
+      } catch (error) {
+        if (error instanceof ApiError && error.code === 'RETRYABLE_TRANSPORT') continue;
+        if (error instanceof ApiError && DEFINITIVE_REFUSALS.has(error.code)) return refuse(error);
+        throw error;
+      }
+    }
     if (!intent) await recordIntent(wanted);
 
     // ── write: ONE conditional write on the ETag just read; any doubt goes back to observe
     try {
       let outcome;
-      if (planned.destination) {
+      if (fenceMove) {
+        // ONE atomic multi-path update: the rules accept the source tombstone and the destination copy together, only
+        // while the source is still exactly the version read (writer stamp) and the destination child is absent.
+        outcome = await domain.relocateActionPlanItem(identity, { actionId, sourcePlanId: planId, destinationPlanId: destinationId, itemId,
+          sourceStamp: pre.updatedAt, sourceWriter: pre.updatedBy, tombstone: planned.source, moved: planned.destination });
+      } else if (planned.destination) {
         // Destination origin frozen in the same write when absent, in the zone the destination was judged in.
         const plans = { ...physical.plans,
           [planId]: mergedRecord(physical.record, planId, planned.source, { stampMs, writer: actionId, homeZone: source.target.timezone }),
@@ -406,6 +441,9 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
       if (outcome === 'written') ownWriteLanded = true;
     } catch (error) {
       if (error instanceof ApiError && error.code === 'RETRYABLE_TRANSPORT') { ownWriteUnknown = true; continue; }
+      // A refused relocation most often means the source changed after this round read it: observe once more to tell
+      // a stale source (STALE_REVISION) from a genuine refusal. Nothing of a refused multi-path update landed.
+      if (fenceMove && error instanceof ApiError && error.code === 'FORBIDDEN' && !relocationRefused) { relocationRefused = true; continue; }
       if (error instanceof ApiError && DEFINITIVE_REFUSALS.has(error.code)) return refuse(error);
       throw error;
     }

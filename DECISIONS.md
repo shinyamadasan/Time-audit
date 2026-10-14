@@ -816,7 +816,7 @@ cannot still commit.
 
 **Status:** review-ready candidate (2026-10-13); no production rollout.
 
-**Problem:** TASK-011 could only add a task. "Mark gym done", "change it to 7 PM", "move that to Friday", "delete that
+**Problem:** TASK-011 could only add a task, and #37 refused moving a ChatGPT-created task to another day. "Mark gym done", "change it to 7 PM", "move that to Friday", "delete that
 test task" mutate EXISTING plan truth, which a conversation reads at one moment and acts on later. The owner may edit in
 between, an attempt may die mid-flight, and a move touches two plan records.
 
@@ -842,17 +842,35 @@ between, an attempt may die mid-flight, and a move touches two plan records.
   delete landing between the source read and the destination write was silently undone by the destination's relocation.
   The collection is already read whole (and capped at 1 MiB) by every Action API plan read, so no new limit is added;
   any concurrent plan write anywhere just retries the CAS (bounded).
-- **Fenced items are not moved:** `api1_` and `bdp1|` items are location-bound by their path (DECISIONS #33/#37) and
-  the unchanged rules refuse relocation fields on a fence child. `plan_move` refuses them with a typed `DOMAIN_LIMIT`
-  before anything is written, as Plan Authority's own `updateItem` does. A stale-recovery copy (`carriedFromId` /
-  `carriedFromDayId`) is also refused (re-moving it is the Unfinished flow's job; the server read model would reject its
-  relocation chain). Moving a ChatGPT-created task needs a reviewed successor-identity model: an open owner decision.
-- **Rules are unchanged.** Every write uses the ordinary owner token at a URL pinned by `user-scoped-rtdb.js`
+- **An Action API item (`api1_`) moves with the SAME relocation contract (supersedes #37's V1 move refusal):** the same
+  id becomes live at the destination plan's keyed fence child with the next `relocationRevision`, and its source child
+  becomes a move tombstone (`deleted`, `movedToDayId`, same relocation) — no successor identity, no second store, the
+  creation marker unchanged on both ends. Both ends are written by ONE atomic multi-path update (PATCH of
+  `calendarPlanFences`, proven on the emulator to be evaluated per path with each path's rule seeing the other's new
+  state), with a backend-held `plan_move` token whose claims bind action, item, source plan, destination plan and the
+  source's writer stamp (`updatedAt` + `updatedBy`). The rules accept the pair only if: the destination child is absent
+  (no revival), the source child is live and still carries exactly that writer stamp (any edit since restamps it, so a
+  stale move is refused at commit), the relocation is the source's next sequence from source to destination, and each
+  end matches the other. A second move of the same source is refused (already tombstoned), so concurrent moves cannot
+  produce two destinations, and no crash can leave half a move. The Function checks the full revision first; a refused
+  relocation is re-observed once so a racing edit reports `STALE_REVISION`. An ordinary owner write keeps an item's
+  relocation exactly (`actionRelocationImmutable`): clients can edit the moved task but never fabricate or strip a move.
+  The unchanged client folds, shows and edits the moved item correctly (proven against the compiled rules); its own
+  editor still does not move ChatGPT tasks (only `plan_move` does).
+- **Still refused (`DOMAIN_LIMIT`):** a fenced Brain Dump item (`bdp1|`): its capture's claim/promotion names its one
+  location (#33), so moving it would have to move Brain Dump's promotion, which is not this command's authority. A
+  ChatGPT task returning to a day it already left: its old move tombstone holds that child and a fence tombstone is
+  never revived (reviving needs a client merge-law change: follow-up). A stale-recovery copy (`carriedFromId` /
+  `carriedFromDayId`): re-moving it is the Unfinished flow's job.
+- **Rules:** every other write uses the ordinary owner token at a URL pinned by `user-scoped-rtdb.js`
   (`readPlanFenceItemWithEtag`/`putPlanFenceItemIfMatch`: one existing `api1_`/`bdp1|` child, never a create or delete;
   `readCalendarPlansWithEtag`/`putCalendarPlansIfMatch`: the collection, calendar keys only, existing ETag only;
-  TASK-011's `readCalendarPlanWithEtag`/`putCalendarPlanIfMatch`). The existing rules keep enforcing marker pinning,
-  tombstone monotonicity and no relocation on fence children, and no `api1_`/marker in any array (emulator-proven
-  against the Function's own primitives).
+  TASK-011's `readCalendarPlanWithEtag`/`putCalendarPlanIfMatch`; `relocateActionPlanItem`: the one atomic api1_ move).
+  The rules change only for `api1_` fence children: the `moveIn`/`moveOut` branches above (predicates `actionMoveBinding`,
+  `actionMoveSourceLive`, `actionMoveSourceStamp`, `actionMoveLinked`, `actionMoveSequence`, `actionRelocationImmutable`;
+  `actionRelocationRefused` now keeps a plan_create token from creating a pre-moved item), each mutation-proven on the
+  emulator. Marker pinning, tombstone monotonicity, no parent overwrite, no delete and no `api1_`/marker in any array are
+  unchanged. A `plan_move` token can write nothing but that pair.
 - **Idempotency and recovery:** same receipt store and claim/replay/takeover as TASK-011. The post-state is
   deterministic and action-specific (`stamp = max(receipt.createdAt, pre.updatedAt + 1)`, `updatedBy = actionId`, in RTDB
   wire form), so a planned revision can only be produced by this action, never by an identical intent from another one.
@@ -871,11 +889,14 @@ restoration of the pre-image could re-admit a paused earlier write of the identi
 tombstones remain last-writer-wins on clients (as before); fence tombstones are server-monotonic. A concurrent owner move
 of the same item on another device with an equal relocation sequence remains the existing recovery-conflict case.
 
-**Release order:** no client or rules change. Function first (new commands are unreachable until the Worker exposes
-them), then the Worker via `scripts/deploy.mjs` (all five plaintext bindings passed explicitly; never `--keep-vars`).
+**Release order:** no client change. Rules FIRST (backward compatible: no existing `api1_` child carries relocation
+fields, and every existing client/Function write is still accepted), then the Function (new commands are unreachable
+until the Worker exposes them), then the Worker via `scripts/deploy.mjs` (all five plaintext bindings passed
+explicitly; never `--keep-vars`).
 
 **Do not:** add a generic patch/update tool; accept an index, title or path as identity; write a move as two separate
-record writes; move an `api1_`/`bdp1|` item by tombstone + recreate; report APPLIED without an authoritative re-read;
+record writes; move an `api1_` item by anything but the one atomic relocation (never tombstone + recreate, never two
+separate child writes); move a `bdp1|` item; report APPLIED without an authoritative re-read;
 report REJECTED while an earlier attempt's intent exists or one of its own writes may have landed; or deploy the Worker with a plain `wrangler deploy`.
 
 ---

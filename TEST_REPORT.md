@@ -5,6 +5,33 @@
 
 ---
 
+## TASK-012 api1_ cross-day move gap closure · 2026-10-14
+suite: focused api1_ move tests first; functions `node --test test/*.test.js`; root `npm test`; `npm run test:fence`;
+  Worker `npm test`; `npm run test:smoke`; lint; www / rules / functions-shared parity; `git diff --check`.
+result:
+  - api1_ move (functions/test/plan-mutation-action.test.js): 7/7: happy path + replay + same-action/different-destination
+    IDEMPOTENCY_CONFLICT; stale revision; owner edit racing the relocation -> STALE (rules refused the stale stamp);
+    already-deleted source; two concurrent moves to different days -> one destination; crash after the relocation ->
+    takeover proves it; receipt CAS loss -> retry proves it; destination origin absent / concurrently created in another
+    zone; past and pre-switch destination refused; edits keep the relocation, onward move = sequence 2, no move back onto
+    its own tombstone; stale-client resurrection and relocation strip/forge refused.
+  - primitive / token pins: relocateActionPlanItem (exact PATCH URL + two keys, malformed refused) and plan_move claims
+    (every claim must round-trip) — user-scoped-rtdb 16/16.
+  - functions 218/218. Mutation anchors 12/12 (11 mutants killed incl. 4 new: refused relocation re-observed, destination
+    origin freeze, own-history refusal, bdp1| refusal).
+  - test:fence exit 0: rules-emulator 79/79 (2 new: the Function's api1_ move end to end on the real server; direct
+    attacks: owner / plan_create / other-room / half-pair / physical delete / provenance change / self-move / move token
+    on settings, entries, timer, plan array, Brain Dump, another fence child all refused; exact pair accepted once; second
+    destination refused; owner resurrection / redirect / strip / forge / delete refused; ordinary edit accepted),
+    fence-sdk 20/20, rules-mutation 34/34 (6 new predicates each load-bearing).
+  - client (unchanged code, compiled rules via targaryen): plan-action-item 11/11 (2 new: moved item shows only on its
+    new day and edits keep relocation + marker with zero denials; stale offline device cannot resurrect the source).
+  - npm test: exit 0, 2170 passes, 0 failures, 1 pre-existing env-gated skip. Worker 32/32. Smoke 863/863.
+  - lint 0 errors / 47 warnings (same as base); parity checks OK; diff --check OK.
+untested: production IAM/token signing, deployed /v1/command, Android build, a real Worker deploy.
+
+---
+
 ## TASK-012 Expanded Conversational Plan Actions (candidate) · 2026-10-13
 suite: functions `node --test test/*.test.js`; root `npm test` (after `npm ci --legacy-peer-deps`, as CI installs);
   `npm run test:fence`; Worker `npm test` + `npm run check:bundle` + `node scripts/deploy.mjs --dry-run`;

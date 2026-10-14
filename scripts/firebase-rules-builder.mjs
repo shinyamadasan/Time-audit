@@ -38,6 +38,10 @@ export const PREDICATES = Object.freeze([
   // Action API plan items (TASK-011, DECISIONS #37): a calendar fence child created by the action-scoped token.
   'actionKindBinding', 'actionTargetBinding', 'actionMarkerBinding', 'actionIdMarkerConsistency', 'actionCreateOnly',
   'actionAuthorityRequired', 'actionTombstoneMonotonic', 'actionRelocationRefused', 'actionCaptureKind', 'arrayActionRefused',
+  // TASK-012 (DECISIONS #38): an Action API item relocates to another calendar plan only through ONE atomic multi-path
+  // update by a plan_move token (destination create + source tombstone, each checked against the other's new state).
+  'actionMoveBinding', 'actionMoveSourceLive', 'actionMoveSourceStamp', 'actionMoveLinked',
+  'actionMoveSequence', 'actionRelocationImmutable',
 ]);
 
 const ROOM_REF = "root.child('rooms').child($roomId)";
@@ -162,17 +166,56 @@ export function buildRules({ without = [] } = {}) {
   // id must keep deriving from it) and the tombstone monotonic. No delete, no move, no parent overwrite.
   const actionPlanItemRules = () => {
     const marker = `${n}.child('creationActionId')`;
+    const authority = on('actionAuthorityRequired') ? `${ROOM_REF}.child('calendarPlanAuthority').exists()` : null;
     const create = AND([
       ROOM_OWNER, ACTION_TOKEN,
       on('actionCreateOnly') ? `!${d}.exists()` : null,
-      on('actionKindBinding') ? "auth.token.chronasenseActionKind === 'plan_create'" : null,
+      on('actionKindBinding') ? "auth.token.chronasenseActionKind === 'plan_create'" : "auth.token.chronasenseActionKind !== 'plan_move'",
       on('actionTargetBinding') ? '$targetKey === auth.token.chronasenseActionTarget' : null,
       on('actionMarkerBinding') ? `${marker}.val() === auth.token.chronasenseActionId` : null,
-      on('actionAuthorityRequired') ? `${ROOM_REF}.child('calendarPlanAuthority').exists()` : null,
+      // A created item has never moved: relocation fields exist only through a plan_move (below).
+      on('actionRelocationRefused') ? `!${n}.child('relocationRevision').exists() && !${n}.child('movedToDayId').exists()` : null,
+      authority,
+    ]);
+    // ── TASK-012 move: the item's OTHER end, in the plan the token names, before (root) and after (newData) this write.
+    const before = plan => `${ROOM_REF}.child('calendarPlanFences').child(${plan}).child($itemId)`;
+    const after = plan => `${n}.parent().parent().child(${plan}).child($itemId)`;
+    const reloc = node => `${node}.child('relocationRevision')`;
+    const sameRelocation = (a, b) => AND(['schemaVersion', 'sequence', 'fromDayId', 'toDayId', 'updatedBy', 'updatedAt']
+      .map(field => `${reloc(a)}.child('${field}').val() === ${reloc(b)}.child('${field}').val()`));
+    const SOURCE = 'auth.token.chronasenseActionSource';
+    const DESTINATION = 'auth.token.chronasenseActionTarget';
+    const moveToken = AND([ROOM_OWNER, ACTION_TOKEN, "auth.token.chronasenseActionKind === 'plan_move'",
+      on('actionMoveBinding') ? `$itemId === auth.token.chronasenseActionItem && ${SOURCE} !== ${DESTINATION}` : null]);
+    // The destination copy: created (never over an existing child), carrying the source's marker and the NEXT relocation,
+    // and only together with the source's own tombstone in the same atomic update.
+    const moveIn = AND([
+      moveToken, `!${d}.exists()`, '$targetKey === ' + DESTINATION,
+      on('actionMoveSourceLive') ? `${before(SOURCE)}.exists() && ${before(SOURCE)}.child('deleted').val() !== true` : null,
+      // (Both ends' marker is already pinned by the id <-> marker consistency above: one id, one creating action.)
+      on('actionMoveSequence') ? AND([`${reloc(n)}.child('schemaVersion').val() === 1`, `${reloc(n)}.child('fromDayId').val() === ${SOURCE}`,
+        `${reloc(n)}.child('toDayId').val() === $targetKey`,
+        `${reloc(n)}.child('sequence').val() === (${reloc(before(SOURCE))}.child('sequence').isNumber() ? ${reloc(before(SOURCE))}.child('sequence').val() : 0) + 1`]) : null,
+      on('actionMoveLinked') ? AND([`${after(SOURCE)}.child('deleted').val() === true`, `${after(SOURCE)}.child('movedToDayId').val() === $targetKey`,
+        sameRelocation(n, after(SOURCE))]) : null,
+      `!${n}.child('movedToDayId').exists()`, `${n}.child('deleted').val() !== true`, `${reloc(n)}.exists()`,
+      authority,
+    ]);
+    // The source copy: tombstoned in place, naming the destination, only while it is still EXACTLY the version the
+    // token was minted for (its writer stamp: any edit since restamps it), and only with the destination created
+    // in the same atomic update.
+    const moveOut = AND([
+      moveToken, `${d}.exists()`, '$targetKey === ' + SOURCE, on('actionMoveSourceLive') ? `${d}.child('deleted').val() !== true` : null,
+      on('actionMoveSourceStamp') ? `${d}.child('updatedAt').val() === auth.token.chronasenseActionSourceStamp && ${d}.child('updatedBy').val() === auth.token.chronasenseActionSourceWriter` : null,
+      `${marker}.val() === ${d}.child('creationActionId').val()`,
+      `${n}.child('deleted').val() === true`, `${n}.child('movedToDayId').val() === ${DESTINATION}`,
+      on('actionMoveLinked') ? AND([`!${before(DESTINATION)}.exists()`, `${after(DESTINATION)}.exists()`, sameRelocation(n, after(DESTINATION))]) : null,
     ]);
     const update = AND([
       OWNER, `${d}.exists()`,
       on('actionTombstoneMonotonic') ? `(${d}.child('deleted').val() !== true || ${n}.child('deleted').val() === true)` : null,
+      // An ordinary owner write keeps whatever relocation the item has: it can neither move nor fabricate a move.
+      on('actionRelocationImmutable') ? AND([sameRelocation(n, d), `${n}.child('movedToDayId').val() === ${d}.child('movedToDayId').val()`]) : null,
     ]);
     const write = AND([
       `${n}.exists()`,
@@ -182,13 +225,13 @@ export function buildRules({ without = [] } = {}) {
       `!${n}.child('brainDumpOrigin').exists()`,
       `${marker}.isString() && ${marker}.val().matches(${ACTION_ID_FORMAT})`,
       on('actionIdMarkerConsistency') ? `$itemId === ('api1_' + ${marker}.val().replace('act1_', ''))` : null,
-      OR([group(create), group(update)]),
+      OR([group(create), group(update), group(moveIn), group(moveOut)]),
     ]);
     const validate = AND([
       `$itemId.matches(${ACTION_ITEM_ID_FORMAT})`,
       `${n}.hasChildren(['id', 'task', 'creationActionId'])`,
       `!${n}.child('brainDumpOrigin').exists()`,
-      on('actionRelocationRefused') ? `!${n}.child('relocationRevision').exists() && !${n}.child('movedToDayId').exists()` : null,
+      `(!${n}.child('movedToDayId').exists() || ${n}.child('deleted').val() === true)`,
     ]);
     return { write, validate };
   };
@@ -253,6 +296,12 @@ export function buildRules({ without = [] } = {}) {
               ...Object.fromEntries(['v', 'claimEpoch', 'type', 'store', 'targetKey'].map(originKey)),
               $other: { '.validate': false },
             },
+            // Only an Action API item can carry one (a fenced Brain Dump item refuses it in its own .validate).
+            ...(action ? { relocationRevision: {
+              '.validate': `${n}.hasChildren(['schemaVersion', 'sequence', 'fromDayId', 'toDayId', 'updatedBy']) && ${n}.child('schemaVersion').val() === 1 && ${n}.child('sequence').isNumber() && ${n}.child('fromDayId').isString() && ${n}.child('toDayId').isString() && ${n}.child('updatedBy').isString()`,
+              ...Object.fromEntries(['schemaVersion', 'sequence', 'fromDayId', 'toDayId', 'updatedBy', 'updatedAt'].map(originKey)),
+              $other: { '.validate': false },
+            } } : {}),
           },
         },
       },

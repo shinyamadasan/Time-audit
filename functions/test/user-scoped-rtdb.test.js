@@ -277,3 +277,47 @@ test('TASK-012: the move collection CAS is pinned to rooms/uid_<uid>/calendarPla
   }
   await assert.rejects(rtdb.readCalendarPlansWithEtag({ firebaseUid: UID, roomId: 'uid_x' }), AuthorityBoundaryViolation);
 });
+
+test('TASK-012 api1_ move: ONE PATCH of exactly the two item paths under calendarPlanFences, with a token binding every move claim', async () => {
+  const actionId = 'act1_2d0b3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
+  const creator = 'act1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const itemId = `api1_${creator.slice(5)}`;
+  const reloc = { schemaVersion: 1, sequence: 1, fromDayId: 'cal1:2026-10-21', toDayId: 'cal1:2026-10-23', updatedBy: actionId, updatedAt: 5 };
+  const tombstone = { id: itemId, task: 'Gym', creationActionId: creator, deleted: true, movedToDayId: 'cal1:2026-10-23', relocationRevision: reloc };
+  const moved = { id: itemId, task: 'Gym', creationActionId: creator, relocationRevision: reloc };
+  const move = { actionId, sourcePlanId: 'cal1:2026-10-21', destinationPlanId: 'cal1:2026-10-23', itemId, sourceStamp: 4, sourceWriter: 'phone', tombstone, moved };
+  const { rtdb, calls, tokenCalls } = ownerPrimitives();
+  assert.equal(await rtdb.relocateActionPlanItem(IDENTITY, move), 'written');
+  assert.equal(new URL(calls[0][0]).pathname, `/rooms/uid_${UID}/calendarPlanFences.json`);
+  assert.equal(calls[0][1].method, 'PATCH');
+  assert.deepEqual(Object.keys(JSON.parse(calls[0][1].body)).sort(), [`cal1:2026-10-21/${itemId}`, `cal1:2026-10-23/${itemId}`]);
+  assert.deepEqual(tokenCalls[0], [UID, actionId, { kind: 'plan_move', target: 'cal1:2026-10-23', source: 'cal1:2026-10-21', item: itemId, sourceStamp: 4, sourceWriter: 'phone' }]);
+  const bad = [
+    { ...move, itemId: 'pgym1' }, { ...move, destinationPlanId: move.sourcePlanId }, { ...move, sourcePlanId: '2026-10-21' },
+    { ...move, moved: { ...moved, creationActionId: actionId } }, { ...move, tombstone: { ...tombstone, deleted: false } },
+    { ...move, moved: { ...moved, deleted: true } }, { ...move, sourceStamp: undefined }, { ...move, sourceWriter: '' }, { ...move, actionId: 'act1_x' },
+  ];
+  for (const args of bad) await assert.rejects(rtdb.relocateActionPlanItem(IDENTITY, args), AuthorityBoundaryViolation, JSON.stringify(Object.keys(args)));
+  await assert.rejects(rtdb.relocateActionPlanItem({ firebaseUid: UID, roomId: 'uid_other' }, move), AuthorityBoundaryViolation);
+  for (const [status, expected] of [[401, 'FORBIDDEN'], [403, 'FORBIDDEN'], [503, 'RETRYABLE_TRANSPORT']]) {
+    assert.equal(await ownerPrimitives({ status }).rtdb.relocateActionPlanItem(IDENTITY, move).catch(error => error.code), expected, String(status));
+  }
+});
+
+test('TASK-012 plan_move token: the exchanged ID token must carry every move claim exactly, or it is refused', async () => {
+  const actionId = 'act1_2d0b3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
+  const plan = { kind: 'plan_move', target: 'cal1:2026-10-23', source: 'cal1:2026-10-21', item: 'api1_0b8f1c2e-3d4a-4b5c-8d6e-7f8091a2b3c4', sourceStamp: 4, sourceWriter: 'phone' };
+  const claims = { chronasenseActionId: actionId, chronasenseActionKind: 'plan_move', chronasenseActionTarget: plan.target, chronasenseActionSource: plan.source,
+    chronasenseActionItem: plan.item, chronasenseActionSourceStamp: 4, chronasenseActionSourceWriter: 'phone' };
+  const admin = authAdmin();
+  const ok = createIdTokenProvider({ authAdmin: admin, webApiKey: 'k', fetch: recordingFetch(() => json(200, { idToken: jwt({ user_id: UID, ...claims }) })) });
+  await ok.getIdToken(UID, actionId, plan);
+  assert.deepEqual(admin.calls[1], ['createCustomToken', UID, claims]);
+  for (const name of Object.keys(claims)) {
+    const altered = createIdTokenProvider({ authAdmin: authAdmin(), webApiKey: 'k', fetch: recordingFetch(() => json(200, { idToken: jwt({ user_id: UID, ...claims, [name]: 'x' }) })) });
+    await assert.rejects(altered.getIdToken(UID, actionId, plan), error => error.code === 'FORBIDDEN', name);
+  }
+  for (const broken of [{ ...plan, source: plan.target }, { ...plan, item: 'pgym1' }, { ...plan, sourceStamp: 0 }, { ...plan, sourceWriter: 'x'.repeat(201) }, { ...plan, kind: 'plan_patch' }]) {
+    await assert.rejects(ok.getIdToken(UID, actionId, broken), error => error.code === 'FORBIDDEN', JSON.stringify(broken));
+  }
+});
