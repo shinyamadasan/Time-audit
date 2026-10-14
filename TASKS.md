@@ -680,7 +680,7 @@ closure:
 ---
 
 ### TASK-012 - Expanded Conversational Plan Actions
-status: review
+status: approved
 owner: claude
 source: owner-direct
 priority: P1
@@ -716,9 +716,27 @@ verification:
         npm run check:firebase-rules, npm run test:fence, git diff --check.
 
 review:
-  Builder self-review only (TASK_012_HANDOFF.md). Red-zone (RTDB plan writes, Action API): an approval must land as
-  `approved` (held), never auto-merged. Gap closure (owner-direct, on top of 400c770): api1_ items now move across days
-  (same id, one atomic relocation; rules change). bdp1| items and a move back onto a day the task left stay refused.
+  Full independent review PASS (reported by the owner). Gap closure (owner-direct, on top of 400c770): api1_ items move
+  across days (same id, one atomic relocation; rules change); bdp1| items and a move back onto a day the task left stay
+  refused. Codex targeted review of 400c770..55647d0: FIX FIRST, R1 (HIGH, stale api1_ move could overwrite a newer
+  same-stamp owner edit). R1 fixed in b8c2f31834f89fb55b2fbc45bf6c533c95e0e72b (server-timed moveLock taken by a PUT
+  conditional on the source's ETag; relocation only under that lock); targeted Codex re-review PASS; the moveLock/ETag
+  fix is accepted. Red-zone: held at `approved`.
+  N1 (LOW, non-blocking, not implemented): the aggregate plan revision hashes raw fences, so it includes transient
+  moveLock coordination state while a lock exists; item revisions exclude moveLock and every mutation keys off item
+  revisions.
+
+integration:
+  Owner-performed fast-forward of origin/main 2dfa1df..b8c2f31834f89fb55b2fbc45bf6c533c95e0e72b on 2026-10-14 (the exact
+  reviewed SHA, byte-identical tree). Hosted CI run 38577311312 success (test, Firebase fence / rules integration); pages-build-deployment run 38577310493 success.
+  Production rollout and acceptance PENDING: no rules, Function, Worker, OAuth/IAM/secret change, production write or
+  canary performed. `done` is reserved for owner-confirmed production acceptance.
+
+rollout gates (owner-authorized, in order):
+  1. reviewed RTDB rules first; 2. reviewed Function second; 3. reviewed Worker third, from clean merged source via
+  scripts/deploy.mjs; 4. verify the five plaintext Worker bindings; 5. verify /authorize; 6. revoke the existing
+  chronasense:plan.write grant; 7. re-grant under the new mutation/delete consent text; 8. controlled production
+  mutation canary; 9. exact same-action replay; 10. lifecycle `done` only after production acceptance.
 
 
 ---
