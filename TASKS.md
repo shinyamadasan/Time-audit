@@ -762,7 +762,7 @@ owner: claude
 source: owner-direct
 priority: P1
 depends-on: TASK-012 (done)
-files: tests/daily-use-reliability.spec.js (new), docs/RELIABILITY_BASELINE_V1.md (new), TASKS.md, CHANGELOG.md, TEST_REPORT.md
+files: tests/daily-use-reliability.spec.js (new), docs/RELIABILITY_BASELINE_V1.md (new), TASK_013_HANDOFF.md (new), TASKS.md, CHANGELOG.md, TEST_REPORT.md
 
 context:
   Owner-direct instruction, 2026-10-14 ("OWNER-DIRECT — TASK-013: Daily-Use Reliability Baseline V1", target
