@@ -757,7 +757,7 @@ closure:
 ---
 
 ### TASK-013 - Daily-Use Reliability Baseline V1
-status: review
+status: approved
 owner: claude
 source: owner-direct
 priority: P1
@@ -800,7 +800,9 @@ review:
   Next recommended task (not scheduled): TASK-014 notification-tap quick log records the completed block (F-5 + D-4/F-4),
   blocked on owner decisions D-2 and D-4 (D-1 informs).
   Independent review of 6d9dbb9: FIX FIRST (R1 expected-failure integrity, R2 stronger assertions, R3 docs). Rework
-  applied (owner-authorized R1-R3 only); awaiting targeted independent re-review. F-4 reclassified
+  applied (owner-authorized R1-R3 only). Targeted independent re-review of d158084: PASS (R1-R3 resolved,
+  mutations M2/M3 confirmed, no runtime change). Gate: approved (red-zone behavior documented; test+docs only);
+  owner-authorized integration 2026-10-14. F-4 reclassified
   DESIGN_DECISION_NEEDED (D-4); confirmed failures are now F-1, F-2, F-3, F-5, F-6, F-7.
 
 
