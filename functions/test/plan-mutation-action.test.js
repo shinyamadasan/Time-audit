@@ -715,8 +715,9 @@ test('"Move my ChatGPT gym task to Friday": same api1_ id live at the destinatio
     'the SAME identity and creation provenance, live at the destination');
   assert.deepEqual(fenceItem(store, P.tomorrow), apiItem({ deleted: true, movedToDayId: P.dayAfter, relocationRevision: relocation, updatedAt: NOW_MS, updatedBy: actionId }),
     'the source child is kept as a move tombstone (history is never physically deleted)');
-  assert.deepEqual(store.writes, [{ planId: P.dayAfter, where: 'record' }, { planIds: [P.tomorrow, P.dayAfter], itemId: API_ITEM, where: 'relocation' }],
-    'the destination origin, then ONE atomic relocation; nothing else');
+  assert.deepEqual(store.writes, [{ planId: P.dayAfter, where: 'record' }, { planId: P.tomorrow, itemId: API_ITEM, where: 'lock' },
+    { planIds: [P.tomorrow, P.dayAfter], itemId: API_ITEM, where: 'relocation' }],
+    'the destination origin, the conditional move lock, then ONE atomic relocation; nothing else');
   assert.ok(Object.values(store.room.calendarPlans).every(record => !(record.items || []).some(item => item.id === API_ITEM)), 'no api1_ ever enters a plan array');
   assert.deepEqual([store.room.calendarPlans[P.dayAfter].timezone, store.room.calendarPlans[P.dayAfter].createdAt], [ZONE, NOW_MS], 'destination origin frozen first');
   assert.deepEqual(await liveCopies(h, [P.tomorrow, P.dayAfter]).then(items => items.length), 1, 'get_plan shows ONE current logical item');
@@ -730,7 +731,7 @@ test('"Move my ChatGPT gym task to Friday": same api1_ id live at the destinatio
     'the receipt names the source item/target and the resulting effective item/target');
   const replay = await moveApi(h, rev, { actionId });
   assert.equal(replay.body.result.idempotentReplay, true);
-  assert.equal(store.writes.length, 2, 'no duplicate destination');
+  assert.equal(store.writes.length, 3, 'no duplicate destination');
   const conflict = await moveApi(h, rev, { actionId, destination: planIdOf(addCalendarDays(TODAY, 3)) });
   assert.equal(code(conflict), 'IDEMPOTENCY_CONFLICT', 'same action, different destination');
 });
@@ -741,10 +742,10 @@ test('api1_ move: stale revision, a source edit racing the relocation, an alread
   store.ownerFence(P.tomorrow, apiItem({ task: 'Gym (legs)', updatedAt: T0 + 5, updatedBy: 'phone' }));
   assert.equal(code(await moveApi(h, stale)), 'STALE_REVISION');
 
-  // The owner edits after the Function's read but before the relocation commits: the rules' writer-stamp check refuses
-  // the multi-path update, and the re-read reports STALE (never FORBIDDEN, never a half move).
+  // The owner edits after the Function's read but before the move lock lands: the lock's conditional write fails on the
+  // changed content, and the re-read reports STALE (never FORBIDDEN, never a half move).
   let once = true;
-  const raced = planDomain(apiSeed(), { async beforeRelocate() { if (once) { once = false; raced.ownerFence(P.tomorrow, apiItem({ task: 'Owner', updatedAt: T0 + 7, updatedBy: 'phone' })); } } });
+  const raced = planDomain(apiSeed(), { async beforeLock() { if (once) { once = false; raced.ownerFence(P.tomorrow, apiItem({ task: 'Owner', updatedAt: T0 + 7, updatedBy: 'phone' })); } } });
   const hr = harness({ domain: raced });
   const racedMove = await moveApi(hr, await revisionOf(hr, P.tomorrow, API_ITEM));
   assert.equal(code(racedMove), 'STALE_REVISION', JSON.stringify(racedMove.body));
@@ -850,4 +851,73 @@ test('api1_ move: a stale client cannot resurrect the source or fabricate/strip 
   await assert.rejects(store.putPlanFenceItemIfMatch(identity, P.dayAfter, API_ITEM, stripped, dest.etag), error => error.code === 'FORBIDDEN');
   assert.equal(await store.putPlanFenceItemIfMatch(identity, P.dayAfter, API_ITEM, { ...dest.value, task: 'Gym!', updatedAt: NOW_MS + 1 }, dest.etag), 'written',
     'an ordinary owner edit that keeps the relocation is fine');
+});
+
+// ── R1 regression: a SAME-STAMP accepted owner edit can never be overwritten by a stale api1_ move ───────────
+// The Codex reproduction: the Function reads the item (and checks expectedRevision), the owner then changes its content
+// while keeping BOTH updatedAt and updatedBy, and the move commits. It must be refused, with the owner's content kept.
+const SAME_STAMP_EDITS = {
+  title: { task: 'Strength' },
+  completion: { done: true, doneAt: T0 },
+  time: { when: '19:00' },
+  duration: { durationMinutes: 90 },
+};
+for (const [name, change] of Object.entries(SAME_STAMP_EDITS)) {
+  test(`R1 (${name}): a same-stamp owner edit after the Function's read -> STALE_REVISION, owner content kept, nothing moved, receipt not applied`, async () => {
+    let once = true;
+    const store = planDomain(apiSeed(), {
+      // Lands right after the Function's source read in the round that would lock (destination origin already frozen).
+      async afterFenceRead(planId, itemId, value) {
+        if (once && planId === P.tomorrow && value && !value.moveLock && store.room.calendarPlans[P.dayAfter]) {
+          once = false;
+          store.ownerFence(P.tomorrow, apiItem(change)); // SAME updatedAt (T0) and SAME updatedBy (ACTOR) as the read
+        }
+      },
+    });
+    const h = harness({ domain: store });
+    const actionId = newAction();
+    const response = await moveApi(h, await revisionOf(h, P.tomorrow, API_ITEM), { actionId });
+    assert.equal(code(response), 'STALE_REVISION', JSON.stringify(response.body));
+    assert.equal(once, false, 'the same-stamp edit really landed inside the window');
+    assert.deepEqual(fenceItem(store, P.tomorrow), apiItem(change), 'the newer owner content is current, unlocked, not a tombstone');
+    assert.equal(fenceItem(store, P.dayAfter), undefined, 'no live destination copy');
+    assert.equal(store.writes.filter(write => write.where !== 'record').length, 0, 'no lock and no relocation was written');
+    assert.equal(h.infra.data.get(RECEIPT(actionId)).state, 'rejected', 'never APPLIED');
+  });
+}
+
+test('R1: once this move holds its lock, a same-stamp owner write is refused by the rules; the move commits the exact locked content', async () => {
+  let once = true;
+  const identity = { firebaseUid: OWNER.ownerFirebaseUid, roomId: `uid_${OWNER.ownerFirebaseUid}` };
+  const store = planDomain(apiSeed(), {
+    async beforeRelocate() {
+      if (!once) return;
+      once = false;
+      const locked = await store.readPlanFenceItemWithEtag(identity, P.tomorrow, API_ITEM);
+      await assert.rejects(store.putPlanFenceItemIfMatch(identity, P.tomorrow, API_ITEM, { ...locked.value, task: 'Strength' }, locked.etag),
+        error => error.code === 'FORBIDDEN', 'no accepted write can change the locked source');
+    },
+  });
+  const h = harness({ domain: store });
+  const moved = await moveApi(h, await revisionOf(h, P.tomorrow, API_ITEM));
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
+  assert.equal(once, false);
+  assert.equal(fenceItem(store, P.dayAfter).task, 'Gym', 'the locked, still-current content moved');
+  assert.equal(fenceItem(store, P.dayAfter).moveLock, undefined);
+  assert.equal(fenceItem(store, P.tomorrow).moveLock, undefined, 'the tombstone carries no lock');
+});
+
+test('R1: another action holding an active lock -> typed CONFLICT for any change to that item; an expired lock is no obstacle', async () => {
+  const foreign = { actionId: 'act1_99999999-9999-4999-8999-999999999999', destination: planIdOf(addCalendarDays(TODAY, 3)), at: NOW_MS };
+  const store = planDomain(apiSeed({ calendarPlanFences: { [P.tomorrow]: { [API_ITEM]: apiItem({ moveLock: foreign }) } } }));
+  const h = harness({ domain: store });
+  const rev = await revisionOf(h, P.tomorrow, API_ITEM);
+  assert.equal(rev, (await revisionOf(harness({ domain: planDomain(apiSeed()) }), P.tomorrow, API_ITEM)), 'a lock is not item content: same revision');
+  assert.equal(code(await moveApi(h, rev)), 'CONFLICT');
+  const edit = await h.handle(command('plan_edit', { target: { store: 'calendar', id: P.tomorrow }, itemId: API_ITEM, title: 'x' }, { actionId: newAction(), expectedRevision: rev }));
+  assert.equal(code(edit), 'CONFLICT');
+  assert.equal(store.writes.filter(write => write.where !== 'record').length, 0);
+  store.serverNow += 61_000; // the foreign lock expires by server time
+  const moved = await moveApi(h, rev);
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
 });

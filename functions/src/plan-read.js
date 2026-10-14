@@ -19,6 +19,13 @@ const malformed = what => new ApiError('CONFLICT', `The ${what} authority contai
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 export const revision = value => `rev1:${createHash('sha256').update(canonicalize(value), 'utf8').digest('base64url')}`;
+/** An item's rev1 revision. A TASK-012 move lock (`moveLock`) is transient coordination, not item content: a revision read
+ *  while a move holds its lock equals the one read before it (DECISIONS #38). For every unlocked item this is unchanged. */
+export const itemRevision = (store, targetKey, item) => {
+  if (!item || typeof item !== 'object' || !Object.hasOwn(item, 'moveLock')) return revision({ v: 1, store, targetKey, item });
+  const { moveLock: _lock, ...content } = item;
+  return revision({ v: 1, store, targetKey, item: content });
+};
 const validDate = value => { try { return validPlanDate(value); } catch { return false; } };
 
 async function collection(domain, identity, name) {
@@ -75,7 +82,7 @@ function planItems(rawItems, canonical, targetId, store, targetKey, date, ref, h
       when: item.when || null, whenDayOffset: item.whenDayOffset || 0, whenTz: item.whenTz || null,
       durationMinutes: item.durationMinutes ?? null, startMs: instants?.startMs ?? null, endMs: instants?.endMs ?? null,
       sourceCaptureId: isFencedItem(item) ? captureIdOfPlanItem(item.id) : null,
-      revision: revision({ v: 1, store, targetKey, item }) });
+      revision: itemRevision(store, targetKey, item) });
   }
   return projected.sort((a, b) => compare(a.itemId, b.itemId));
 }

@@ -12,15 +12,18 @@
 //                        records commit in ONE compare-and-set of the calendarPlans collection: a concurrent edit or
 //                        delete of the source can never be silently undone by an already-landed destination copy,
 //                        and no crash can leave half a move behind. An Action API item (api1_) moves the same way at
-//                        its keyed fence children: ONE atomic multi-path update whose rules check each end against the
-//                        other and the source against the writer stamp the plan_move token names. A fenced Brain Dump
-//                        item (bdp1|) is refused: its capture's promotion names its one location.
+//                        its keyed fence children: first a move LOCK taken by a PUT conditional on the source's exact
+//                        content (ETag), under which the rules refuse every other write; then ONE atomic multi-path
+//                        update the rules accept only under that lock, each end checked against the other (R1). A fenced
+//                        Brain Dump item (bdp1|) is refused: its capture's promotion names its one location.
 //   plan_delete          the in-place stamped tombstone (`deleted: true`), never a physical delete
 //
 // Location (decided by the item's own identity, never by the caller): an Action API item (`api1_`) or a fenced
 // Brain Dump item (`bdp1|`) is its ONE keyed calendar fence child; any other item lives in the plan record's array.
 // Every write is a user-scoped compare-and-set with the ORDINARY owner token, at a URL pinned by user-scoped-rtdb.js,
-// through the unchanged rules (fence: marker pinned, tombstone monotonic, no relocation; array: no api1_/marker).
+// through the rules (fence: marker pinned, tombstone monotonic, an ordinary write keeps any relocation exactly and never
+// writes under an active move lock; only a plan_move token relocates an api1_ item, a bdp1| item never; array: no
+// api1_/marker).
 // A record write goes through mergeCalendarPlanRecords exactly as a client push does, so every other item,
 // preparation and the plan origin survive, and an absent origin is frozen in the same write.
 //
@@ -32,8 +35,9 @@
 //     updatedBy = the actionId (a writer name every merge already treats as an opaque tie-break string). Before
 //     its FIRST domain write an attempt records that INTENT (stamp + planned resulting revisions) in the receipt by a
 //     receipt compare-and-set. A takeover's receipt CAS therefore fences every earlier attempt that had not yet recorded
-//     an intent: such an attempt can never write. If no intent exists, nothing this action did can ever land, and a
-//     definite refusal is REJECTED, even after a takeover.
+//     an intent: such an attempt can never write or mutate the ITEM (it may already have frozen a plan's canonical origin,
+//     which is not the item and never rewrites an existing one). If no intent exists, nothing this action did to the item
+//     can ever land, and a definite refusal is REJECTED, even after a takeover.
 //   - Once an intent exists, an earlier attempt may still be in flight. Its write is conditional on the ETag it read,
 //     which only matches while the item is still exactly the pre-state; it would then write the identical planned
 //     post-state. So: item == planned post-state -> APPLIED; item == pre-state -> (re)apply the same post-state;
@@ -46,13 +50,13 @@ import { nextPlanItemRelocation } from '../shared/plan-item-relocation.js';
 import { localPlanDate, planItemKind, validPlanItemTime } from '../shared/plan-tomorrow-model.js';
 import { canonicalize } from './canonical-json.js';
 import { ApiError, ERROR_CODES } from './errors.js';
-import { createPlanRead, revision } from './plan-read.js';
+import { createPlanRead, itemRevision as readRevision } from './plan-read.js';
 import { ensurePlanOrigin, hasOrigin } from './plan-create-action.js';
 import { canonicalRequestHash, classifyExistingReceipt } from './receipts.js';
 
 const LEASE_MS = 30_000;
 /** Observe -> decide -> conditional write rounds before the outcome is reported unknown. */
-const ROUNDS = 4;
+const ROUNDS = 6;
 /** Plan Authority's default Top 3 (plan-authority.js priorityMax). */
 const PRIORITY_MAX = 3;
 /** Refusals that are facts about the account's authoritative state (not transport uncertainty). */
@@ -61,7 +65,11 @@ export const PLAN_MUTATION_KINDS = Object.freeze(['plan_set_completion', 'plan_e
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const same = (a, b) => canonicalize(a) === canonicalize(b);
-const itemRevision = (planId, item) => revision({ v: 1, store: 'calendar', targetKey: planId, item });
+/** get_plan's own item revision (a transient TASK-012 move lock is not item content). */
+const itemRevision = (planId, item) => readRevision('calendar', planId, item);
+/** The item without a move lock: what every planned post-state is built from. */
+const withoutLock = item => { if (!item || !Object.hasOwn(item, 'moveLock')) return item; const { moveLock: _lock, ...content } = item; return content; };
+const SERVER_TIME = Object.freeze({ '.sv': 'timestamp' });
 /** Exactly what Realtime Database stores and reads back: a null (or undefined) value is no key at all. The planned
  *  post-state is compared against an authoritative re-read, so it is computed in this form. */
 export function wireForm(value) {
@@ -285,6 +293,8 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
   let ownWriteUnknown = false;
   let ownWriteLanded = false;
   let relocationRefused = false;
+  let lockRefused = false;
+  let relockNeeded = false;
 
   const unknown = async (reason, details) => {
     await settle(receipts, identity, actionId, snapshot, { state: 'pending_unknown', leaseExpiresAt: nowMs, updatedAt: nowMs });
@@ -362,9 +372,6 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
       return refuse(new ApiError('DOMAIN_LIMIT', 'This task was on that day before; moving a ChatGPT task back to a day it left is not supported yet.',
         { reason: 'move-onto-own-history' }));
     }
-    if (fenceMove && !(Number.isSafeInteger(pre.updatedAt) && pre.updatedAt > 0 && typeof pre.updatedBy === 'string' && pre.updatedBy && pre.updatedBy.length <= 200)) {
-      return refuse(conflict('That plan item has no writer stamp to move it safely.', 'plan-item-unversioned'));
-    }
     if (!source.items.some(item => item.itemId === itemId)) {
       const inactive = await reader.inactiveItem({ store: 'calendar', id: planId }, itemId).catch(() => null);
       return refuse(conflict('That plan item is no longer active in that plan.', 'plan-item-inactive',
@@ -375,7 +382,7 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
     const stampMs = intent?.stampMs ?? Math.max(snapshot.value.createdAt, (Number.isSafeInteger(pre.updatedAt) ? pre.updatedAt : 0) + 1);
     let planned;
     try {
-      planned = planMutation(kind, parameters, pre, { stampMs, writer: actionId, date, ended: source.target.endMs <= nowMs,
+      planned = planMutation(kind, parameters, withoutLock(pre), { stampMs, writer: actionId, date, ended: source.target.endMs <= nowMs,
         today: reader.today, accountZone: reader.timezone,
         destination: destination && { id: destinationId, sourceId: planId, date: destination.target.date, ended: destination.target.endMs <= nowMs,
           activePriorities: destination.items.filter(item => item.itemId !== itemId && item.kind === 'priority').length } });
@@ -385,7 +392,7 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
     }
     if (planned.noop) {
       if (intent) throw conflict('The action receipt is inconsistent with its item.', 'intent-noop-mismatch');
-      return applied(planId, pre, false);
+      return applied(planId, withoutLock(pre), false);
     }
     // Stored exactly as RTDB keeps it (a non-move has no destination revision key at all).
     const wanted = wireForm({ stampMs, sourceRevision: itemRevision(planId, planned.source),
@@ -424,11 +431,20 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
     // ── write: ONE conditional write on the ETag just read; any doubt goes back to observe
     try {
       let outcome;
-      if (fenceMove) {
-        // ONE atomic multi-path update: the rules accept the source tombstone and the destination copy together, only
-        // while the source is still exactly the version read (writer stamp) and the destination child is absent.
+      const holdsLock = pre.moveLock?.actionId === actionId && pre.moveLock?.destination === destinationId;
+      if (fenceMove && (!holdsLock || relockNeeded)) {
+        // R1, step 1: lock the source with a PUT conditional on its exact content (ETag). Landing proves the content is
+        // exactly what this round read and built the move from; while the lock is active the rules refuse every other
+        // write to it. The lock is coordination only (excluded from revisions), timed by the server clock.
+        relockNeeded = false;
+        await domain.lockActionPlanItemForMove(identity, { actionId, sourcePlanId: planId, destinationPlanId: destinationId, itemId,
+          record: { ...withoutLock(pre), moveLock: { actionId, destination: destinationId, at: SERVER_TIME } }, etag: physical.etag });
+        continue; // 'written' or 'changed': observe again (the lock, or whatever changed instead)
+      } else if (fenceMove) {
+        // Step 2: ONE atomic multi-path update. The rules accept the source tombstone and the destination copy together
+        // only under THIS action's active lock (so the source is still the locked pre-image) with the destination absent.
         outcome = await domain.relocateActionPlanItem(identity, { actionId, sourcePlanId: planId, destinationPlanId: destinationId, itemId,
-          sourceStamp: pre.updatedAt, sourceWriter: pre.updatedBy, tombstone: planned.source, moved: planned.destination });
+          tombstone: planned.source, moved: planned.destination });
       } else if (planned.destination) {
         // Destination origin frozen in the same write when absent, in the zone the destination was judged in.
         const plans = { ...physical.plans,
@@ -441,9 +457,16 @@ export async function mutatePlanAction(identity, { command, domain, receipts, at
       if (outcome === 'written') ownWriteLanded = true;
     } catch (error) {
       if (error instanceof ApiError && error.code === 'RETRYABLE_TRANSPORT') { ownWriteUnknown = true; continue; }
-      // A refused relocation most often means the source changed after this round read it: observe once more to tell
-      // a stale source (STALE_REVISION) from a genuine refusal. Nothing of a refused multi-path update landed.
-      if (fenceMove && error instanceof ApiError && error.code === 'FORBIDDEN' && !relocationRefused) { relocationRefused = true; continue; }
+      if (error instanceof ApiError && error.code === 'FORBIDDEN' && physical.where === 'fence') {
+        const holds = pre.moveLock?.actionId === actionId && pre.moveLock?.destination === destinationId;
+        // Our own lock was refused at relocation: it expired (server clock). Take it again, once, from the same pre-image.
+        if (fenceMove && holds && !relocationRefused) { relocationRefused = true; relockNeeded = true; continue; }
+        // Someone else's move holds the item right now (rules refuse other writes while its lock is active).
+        if (pre.moveLock && !holds) return refuse(conflict('That plan item is being moved right now. Read it again in a minute.', 'item-move-in-progress'));
+        // A refused lock most often means the source changed after this round read it: observe once more to tell a stale
+        // source (STALE_REVISION) from a genuine refusal. Nothing of a refused write landed.
+        if (fenceMove && !lockRefused) { lockRefused = true; continue; }
+      }
       if (error instanceof ApiError && DEFINITIVE_REFUSALS.has(error.code)) return refuse(error);
       throw error;
     }

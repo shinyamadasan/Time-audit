@@ -847,13 +847,25 @@ between, an attempt may die mid-flight, and a move touches two plan records.
   becomes a move tombstone (`deleted`, `movedToDayId`, same relocation) — no successor identity, no second store, the
   creation marker unchanged on both ends. Both ends are written by ONE atomic multi-path update (PATCH of
   `calendarPlanFences`, proven on the emulator to be evaluated per path with each path's rule seeing the other's new
-  state), with a backend-held `plan_move` token whose claims bind action, item, source plan, destination plan and the
-  source's writer stamp (`updatedAt` + `updatedBy`). The rules accept the pair only if: the destination child is absent
-  (no revival), the source child is live and still carries exactly that writer stamp (any edit since restamps it, so a
-  stale move is refused at commit), the relocation is the source's next sequence from source to destination, and each
-  end matches the other. A second move of the same source is refused (already tombstoned), so concurrent moves cannot
-  produce two destinations, and no crash can leave half a move. The Function checks the full revision first; a refused
-  relocation is re-observed once so a racing edit reports `STALE_REVISION`. An ordinary owner write keeps an item's
+  state), with a backend-held `plan_move` token whose claims bind action, item, source plan and destination plan.
+  **Commit-time pre-image guard (R1 fix):** a multi-path PATCH cannot be conditional (RTDB REST answers `if-match` on
+  PATCH with 400, emulator-verified), and a writer stamp (`updatedAt` + `updatedBy`) is NOT a revision: the client can
+  produce different accepted content under the same stamp, which the strict review reproduced as a lost update. So the
+  move first takes a **move lock** on the source child: a PUT whose `if-match` is that child's ETag (a hash of its exact
+  content) adding `moveLock { actionId, destination, at }`, `at` being the server timestamp of the write. It lands only
+  if the source is still byte-for-byte the content the Function read, checked its revision against and built the move
+  from; while it is active (server time < `at` + 60 s) the rules refuse every ordinary write to that child
+  (`actionMoveLockRespected`), another move's lock (`actionMoveLockExclusive`) and any client-supplied lock time
+  (`actionMoveLockServerTime`). The relocation PATCH is accepted only under this action's active lock
+  (`actionMoveLocked`), so the locked pre-image is provably still current when it commits. A lock expires by itself
+  (a crashed move never freezes the item; an expired own lock is re-taken from the same pre-image, once). The lock is
+  coordination, not item content: revisions exclude it (`plan-read.js` `itemRevision`; for every unlocked item the
+  revision is unchanged), and the tombstone and destination never carry it. While another move holds an active lock,
+  any change to that item answers `CONFLICT` (`item-move-in-progress`). The rules also accept the pair only if the
+  destination child is absent (no revival), the relocation is the source's next sequence from source to destination,
+  and each end matches the other. A second move of the same source is refused (already tombstoned), so concurrent
+  moves cannot produce two destinations, and no crash can leave half a move. A refused lock is re-observed once so a
+  racing edit reports `STALE_REVISION`. An ordinary owner write keeps an item's
   relocation exactly (`actionRelocationImmutable`): clients can edit the moved task but never fabricate or strip a move.
   The unchanged client folds, shows and edits the moved item correctly (proven against the compiled rules); its own
   editor still does not move ChatGPT tasks (only `plan_move` does).
@@ -867,19 +879,22 @@ between, an attempt may die mid-flight, and a move touches two plan records.
   `readCalendarPlansWithEtag`/`putCalendarPlansIfMatch`: the collection, calendar keys only, existing ETag only;
   TASK-011's `readCalendarPlanWithEtag`/`putCalendarPlanIfMatch`; `relocateActionPlanItem`: the one atomic api1_ move).
   The rules change only for `api1_` fence children: the `moveIn`/`moveOut` branches above (predicates `actionMoveBinding`,
-  `actionMoveSourceLive`, `actionMoveSourceStamp`, `actionMoveLinked`, `actionMoveSequence`, `actionRelocationImmutable`;
+  `actionMoveSourceLive`, `actionMoveLinked`, `actionMoveSequence`, `actionRelocationImmutable`, `actionMoveLocked`,
+  `actionMoveLockExclusive`, `actionMoveLockServerTime`, `actionMoveLockRespected`; the lock branch `lockCreate`;
   `actionRelocationRefused` now keeps a plan_create token from creating a pre-moved item), each mutation-proven on the
   emulator. Marker pinning, tombstone monotonicity, no parent overwrite, no delete and no `api1_`/marker in any array are
   unchanged. A `plan_move` token can write nothing but that pair.
 - **Idempotency and recovery:** same receipt store and claim/replay/takeover as TASK-011. The post-state is
   deterministic and action-specific (`stamp = max(receipt.createdAt, pre.updatedAt + 1)`, `updatedBy = actionId`, in RTDB
   wire form), so a planned revision can only be produced by this action, never by an identical intent from another one.
-  Before its first domain write an attempt records an **intent** (stamp + planned resulting revisions) by a receipt
-  compare-and-set; a takeover's receipt CAS therefore fences every older attempt that had not yet recorded one. Then:
+  Before its first write to the ITEM (the move lock included) an attempt records an **intent** (stamp + planned
+  resulting revisions) by a receipt compare-and-set; a takeover's receipt CAS therefore fences every older attempt that
+  had not yet recorded one: such an attempt can no longer write or mutate the item. (It may still have frozen a plan's
+  canonical origin through `ensurePlanOrigin`, which is not the item and never changes an existing origin.) Then:
   planned revision observed -> APPLIED (after an authoritative re-read only); pre-state -> (re)apply the identical
   post-state; anything else -> PENDING_UNKNOWN if an earlier intent exists or one of this attempt's writes landed or
-  had an unknown result, else a definite `STALE_REVISION`. REJECTED is written only when no write of this action can
-  ever land, which (unlike TASK-011's "first attempt only") also holds for a takeover that finds no recorded intent.
+  had an unknown result, else a definite `STALE_REVISION`. REJECTED is written only when no write of this action to
+  the item can ever land, which (unlike TASK-011's "first attempt only") also holds for a takeover that finds no recorded intent.
   Already-in-state completion and an unchanged edit are APPLIED no-ops (`changed: false`).
 
 **Known limits (stated):** an action whose earlier attempt recorded an intent and whose item was then edited stays

@@ -132,12 +132,22 @@ const scenarios = {
     const result = await run(impl, { domain, infra: fakeInfra(), cmd: command('plan_move', { destination: { store: 'calendar', id: OTHER } }, revOf(raw(domain, PLAN))) });
     return result.code === 'STALE_REVISION' && domain.room.calendarPlans[OTHER] === undefined && raw(domain, PLAN).deleted === true;
   },
-  /** api1_: an owner edit racing the relocation is reported STALE (the rules refused the stale-stamped move). */
-  async apiRaceIsStale(impl) {
+  /** R1: a SAME-STAMP owner edit between the Function's read and its lock never moves stale content. */
+  async apiSameStampEditIsStale(impl) {
     let once = true;
-    const domain = apiDomain({}, { async beforeRelocate() { if (once) { once = false; domain.ownerFence(PLAN, apiItem({ task: 'Owner', updatedAt: T0 + 7 })); } } });
+    // Right after the Function's source read in the round that locks (the destination origin is frozen by then).
+    const domain = apiDomain({}, { async afterFenceRead(planId, itemId, value) {
+      if (once && planId === PLAN && value && !value.moveLock && domain.room.calendarPlans[OTHER]) { once = false; domain.ownerFence(PLAN, apiItem({ task: 'Strength' })); }
+    } });
     const result = await moveApi(impl, domain);
-    return result.code === 'STALE_REVISION' && !domain.room.calendarPlanFences[OTHER];
+    return result.code === 'STALE_REVISION' && !domain.room.calendarPlanFences[OTHER] && domain.room.calendarPlanFences[PLAN][API_ITEM].task === 'Strength';
+  },
+  /** R1: this action's own lock expiring before the relocation is re-taken (from the same pre-image), never forced. */
+  async apiExpiredLockRetaken(impl) {
+    let once = true;
+    const domain = apiDomain({}, { async beforeRelocate() { if (once) { once = false; domain.serverNow += 61_000; } } });
+    const result = await moveApi(impl, domain);
+    return !!result.ok && domain.writes.filter(write => write.where === 'lock').length === 2;
   },
   /** api1_: a move into a plan with no record freezes that plan's origin before the item lands there. */
   async apiDestinationOriginFrozen(impl) {
@@ -182,8 +192,11 @@ const ANCHORS = [
   ['move write not conditional on the read -> a concurrent owner delete is silently undone', 'moveNeverUndoesConcurrentDelete',
     [['        outcome = await domain.putCalendarPlansIfMatch(identity, plans, physical.etag);',
       '        outcome = await domain.putCalendarPlansIfMatch(identity, plans, (await domain.readCalendarPlansWithEtag(identity)).etag);']]],
-  ['refused relocation not re-observed -> a racing owner edit surfaces as FORBIDDEN instead of STALE', 'apiRaceIsStale',
-    [["      if (fenceMove && error instanceof ApiError && error.code === 'FORBIDDEN' && !relocationRefused) { relocationRefused = true; continue; }", '']]],
+  ['R1: lock not conditional on the read AND relocation in the same round -> a same-stamp edit is moved as stale content', 'apiSameStampEditIsStale',
+    [["etag: physical.etag });\n        continue; // 'written' or 'changed': observe again (the lock, or whatever changed instead)",
+      "etag: (await domain.readPlanFenceItemWithEtag(identity, planId, itemId)).etag });\n        outcome = await domain.relocateActionPlanItem(identity, { actionId, sourcePlanId: planId, destinationPlanId: destinationId, itemId, tombstone: planned.source, moved: planned.destination });"]]],
+  ['expired own lock not re-taken -> the move fails instead of re-locking the same pre-image', 'apiExpiredLockRetaken',
+    [['        if (fenceMove && holds && !relocationRefused) { relocationRefused = true; relockNeeded = true; continue; }', '']]],
   ['destination origin freeze skipped for an api1_ move -> the plan it lands in keeps a floating home zone', 'apiDestinationOriginFrozen',
     [['    if (fenceMove) {\n      // The destination plan\'s origin, likewise frozen before anything lands there.', '    if (false) {\n      // The destination plan\'s origin, likewise frozen before anything lands there.']]],
   ['own-history check removed -> a move back onto its tombstone is no longer a typed refusal', 'apiOwnHistoryRefused',

@@ -19,7 +19,7 @@ import { ROOM, startEmulator } from './rtdb-emulator-support.js';
 import { PREDICATES, artifactMatchesBuilder, buildRules, serializeRules } from './scripts/firebase-rules-builder.mjs';
 import { ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, planRecord, promotedCapture,
   ACTION_A, ACTION_B, ACTION_OTHER_PLAN, ACTION_PLAN, actionItem, actionItemAt, actionItemId, planActionToken, seedCalendarAuthority,
-  FENCES_AT, moveToken, movePatch, relocation } from './fence-rules-fixtures.js';
+  FENCES_AT, moveToken, movePatch, relocation, lockedItem, SERVER_TIME } from './fence-rules-fixtures.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const COMMITTED = readFileSync(path.join(HERE, 'firebase.rules.json'), 'utf8');
@@ -113,27 +113,43 @@ const ATTACKS = {
   // ── TASK-012 api1_ move: each attack is otherwise a well-formed atomic move ──
   async actionMoveBinding(db) {
     await seedCalendarAuthority(db);
-    await db.seed(actionItemAt(), actionItem());
+    await db.seed(actionItemAt(), lockedItem());
     return db.patch(FENCES_AT, movePatch(), moveToken({ item: actionItemId(ACTION_B) })); // a token minted for another item
   },
   async actionMoveSourceLive(db) {
     await seedCalendarAuthority(db);
-    await db.seed(actionItemAt(), actionItem({ deleted: true })); // a deleted task "moved" back to life on another day
+    await db.seed(actionItemAt(), lockedItem({ deleted: true })); // a deleted task "moved" back to life on another day
     return db.patch(FENCES_AT, movePatch(), moveToken());
   },
-  async actionMoveSourceStamp(db) {
+  async actionMoveLocked(db) {
     await seedCalendarAuthority(db);
-    await db.seed(actionItemAt(), actionItem({ task: 'Owner edit', updatedAt: T + 9, updatedBy: 'phone' })); // edited after the read
+    await db.seed(actionItemAt(), actionItem()); // R1: no lock = no proof the source is still the pre-image the move was built from
     return db.patch(FENCES_AT, movePatch(), moveToken());
+  },
+  async actionMoveLockExclusive(db) {
+    await seedCalendarAuthority(db);
+    await db.seed(actionItemAt(), lockedItem({}, { actionId: ACTION_B })); // another action holds an active lock
+    return db.write(actionItemAt(), lockedItem({}, { at: SERVER_TIME }), moveToken());
+  },
+  async actionMoveLockServerTime(db) {
+    await seedCalendarAuthority(db);
+    await db.seed(actionItemAt(), actionItem());
+    return db.write(actionItemAt(), lockedItem({}, { at: Date.now() + 30 * 86_400_000 }), moveToken()); // a lock "taken" a month from now would freeze the task
+  },
+  async actionMoveLockRespected(db) {
+    await seedCalendarAuthority(db);
+    await db.seed(actionItemAt(), lockedItem());
+    const { moveLock: lock } = await db.read(actionItemAt());
+    return db.write(actionItemAt(), actionItem({ task: 'Strength', moveLock: lock })); // R1: a same-stamp owner edit under the lock
   },
   async actionMoveLinked(db) {
     await seedCalendarAuthority(db);
-    await db.seed(actionItemAt(), actionItem());
+    await db.seed(actionItemAt(), lockedItem());
     return db.patch(FENCES_AT, movePatch({ omitSource: true }), moveToken()); // a destination copy with the source still live
   },
   async actionMoveSequence(db) {
     await seedCalendarAuthority(db);
-    await db.seed(actionItemAt(), actionItem());
+    await db.seed(actionItemAt(), lockedItem());
     return db.patch(FENCES_AT, movePatch({ reloc: { sequence: 7 } }), moveToken()); // a forged relocation order
   },
   async actionRelocationImmutable(db) {

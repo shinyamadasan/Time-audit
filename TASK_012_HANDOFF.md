@@ -39,9 +39,10 @@ change. Rules change only to let an `api1_` item relocate through one atomic mul
 - `bdp1|` Brain Dump tasks still cannot change day. A ChatGPT task cannot move BACK onto a day it already left (its move
   tombstone holds that child; reviving it safely needs a client merge-law change). The app's own editor still does not
   move ChatGPT tasks (only `plan_move` does).
-- The `api1_` move's commit-time staleness guard is the source's writer stamp (`updatedAt` + `updatedBy`), checked by the
-  rules; the Function checks the full revision just before. Two different contents with the identical stamp would need
-  the same device to write twice in the same millisecond.
+- The `api1_` move's commit-time guard (R1 fix) is a short server-timed move lock taken by a PUT conditional on the
+  source's exact content (ETag); while it is active (60 s from the server timestamp) every ordinary write to that item is
+  refused, so a client edit made inside that window is not accepted (the client re-syncs; after the move it sees the
+  item on its new day). Another action's active lock makes changes to that item answer `CONFLICT` until it expires.
 - An action whose earlier attempt recorded an intent and whose item was then edited stays PENDING_UNKNOWN indefinitely
   (whether it applied before the edit is unprovable). ETag CAS is content-addressed: a byte-exact pre-image restoration
   could re-admit a paused earlier write of the identical planned post-state.

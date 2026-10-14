@@ -1,5 +1,26 @@
 # ChronaSense — Changelog
 
+## TASK-012 — R1 lost-update fix (branch: task-012, on top of 55647d0)
+
+Targeted cross-model review FIX FIRST, R1 (HIGH): a stale api1_ cross-day move could overwrite a newer accepted owner edit,
+because the commit-time guard was the source's writer stamp (updatedAt + updatedBy) and the client can produce different
+accepted content under the same stamp. Local only; nothing pushed or deployed.
+changed:
+  - Guard replaced by a server-timed move lock: the Function takes `moveLock { actionId, destination, at }` on the source
+    with a PUT conditional on the source child's exact content (ETag; `at` = server timestamp); the rules refuse every
+    ordinary write while it is active (60 s from `at`), refuse another move's lock and any client-chosen lock time, and
+    accept the atomic relocation only under this action's active lock. (A conditional multi-path PATCH does not exist:
+    RTDB answers `if-match` on PATCH with 400.) Predicates: actionMoveSourceStamp removed; actionMoveLocked,
+    actionMoveLockExclusive, actionMoveLockServerTime, actionMoveLockRespected added; plan_create cannot write a lock.
+  - functions/src/user-scoped-rtdb.js: `lockActionPlanItemForMove`; plan_move claims no longer carry a stamp;
+    `relocateActionPlanItem` refuses a lock on either end. functions/src/plan-read.js: `itemRevision` excludes a lock
+    (unchanged for every unlocked item). functions/src/plan-mutation-action.js: lock (re-take once if expired) -> relocate;
+    another action's active lock -> CONFLICT `item-move-in-progress`; rounds 4 -> 6.
+  - F3 (DECISIONS #38) / F4 (engine comment) wording only.
+  - Tests: R1 same-stamp title / completion / time / duration (Function suite and real emulator through the Function),
+    lock-window refusal, foreign/expired lock, 4 rules-mutation attacks, 2 new engine anchors, 1 client compatibility case.
+unchanged: client runtime, index.html, www/, Worker, every non-api1_-move behavior.
+
 ## TASK-012 — api1_ cross-day move gap closure (branch: task-012, on top of 400c770)
 
 Owner-direct follow-up: "Move my ChatGPT gym task to Friday" must succeed. Local only; nothing pushed or deployed.

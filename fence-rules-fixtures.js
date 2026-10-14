@@ -80,9 +80,13 @@ export const seedCalendarAuthority = db => db.seed(`${ROOM}/calendarPlanAuthorit
 export const MOVE_ACTION = 'act1_2d0b3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
 export const FENCES_AT = `${ROOM}/${FENCE_REMOTE_PATHS.calendar}`;
 export const moveToken = ({ actionId = MOVE_ACTION, source = ACTION_PLAN, target = ACTION_OTHER_PLAN, item = actionItemId(ACTION_A),
-  stamp = T, writer = 'actor1:test', kind = 'plan_move', uid = 'alice' } = {}) => token(uid, { chronasenseActionId: actionId,
-  chronasenseActionKind: kind, chronasenseActionTarget: target, chronasenseActionSource: source, chronasenseActionItem: item,
-  chronasenseActionSourceStamp: stamp, chronasenseActionSourceWriter: writer });
+  kind = 'plan_move', uid = 'alice' } = {}) => token(uid, { chronasenseActionId: actionId,
+  chronasenseActionKind: kind, chronasenseActionTarget: target, chronasenseActionSource: source, chronasenseActionItem: item });
+/** R1 move lock on the source child. `at` is the lock write's server timestamp; seeds use the emulator's wall clock. */
+export const moveLock = ({ actionId = MOVE_ACTION, destination = ACTION_OTHER_PLAN, at = Date.now() } = {}) => ({ actionId, destination, at });
+export const SERVER_TIME = { '.sv': 'timestamp' };
+/** The source as the Function leaves it after its conditional lock write: the exact item plus this action's lock. */
+export const lockedItem = (extra = {}, lock = {}) => actionItem({ moveLock: moveLock(lock), ...extra });
 export const relocation = (extra = {}) => ({ schemaVersion: 1, sequence: 1, fromDayId: ACTION_PLAN, toDayId: ACTION_OTHER_PLAN,
   updatedBy: MOVE_ACTION, updatedAt: T + 50, ...extra });
 /** The move's multi-path body. Overrides edit one end (or `omitSource`/`omitDestination` drop it). */

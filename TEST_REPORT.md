@@ -5,6 +5,35 @@
 
 ---
 
+## TASK-012 R1 lost-update fix · 2026-10-14
+suite: new R1 tests first; functions `node --test test/*.test.js`; `npm run test:fence`; root `npm test`; Worker `npm test`;
+  lint; rules / functions-shared / www parity; `git diff --check`. Browser smoke NOT rerun (no client runtime file,
+  index.html or www/ changed; the rules delta only gates api1_ fence children under a move lock; last run at 55647d0
+  863/863).
+result:
+  - R1 regression (Function suite): same-stamp owner edit (identical updatedAt AND updatedBy) after the Function's read,
+    variants title / completion / time / duration: each STALE_REVISION, owner content current and unlocked, no tombstone,
+    no destination copy, no lock or relocation written, receipt `rejected`. Plus: an owner write under this move's lock is
+    refused and the exact locked content moves; another action's active lock -> CONFLICT for move and edit, an expired
+    lock is no obstacle, and a lock does not change the item revision.
+  - R1 on the REAL emulator through the Function: the same four same-stamp variants, each owner edit accepted by the
+    real rules (HTTP 200) inside the window, each move STALE_REVISION with the owner content kept, no lock, no tombstone,
+    no destination child and a `rejected` receipt. Direct rules: no relocation without the lock; lock time must be the
+    server clock; owners and other-item tokens cannot lock; a same-stamp owner edit under the lock is refused; one move
+    at a time; the exact pair under the lock is accepted once.
+  - functions 225/225; mutation anchors 13/13 (12 mutants killed; new: the R1 mutant (unconditional lock + relocation in
+    the same round) moves stale same-stamp content and is caught; an expired own lock not re-taken is caught).
+  - test:fence exit 0: rules-emulator 80/80, fence-sdk 20/20, rules-mutation 37/37 (stamp predicate removed; four lock
+    predicates each load-bearing).
+  - client (unchanged code, compiled rules): plan-action-item 12/12 (new: an edit under a move lock is refused and the
+    client converges after the move).
+  - npm test: exit 0, 2178 passes, 0 failures, 1 pre-existing env-gated skip. Worker 32/32. lint 0 errors / 47 warnings
+    (same as base). Parity OK. diff --check OK.
+untested: production IAM/token signing, deployed /v1/command, Android build, a real Worker deploy; production server
+  timestamp semantics for the lock are covered by the emulator only.
+
+---
+
 ## TASK-012 api1_ cross-day move gap closure · 2026-10-14
 suite: focused api1_ move tests first; functions `node --test test/*.test.js`; root `npm test`; `npm run test:fence`;
   Worker `npm test`; `npm run test:smoke`; lint; www / rules / functions-shared parity; `git diff --check`.
