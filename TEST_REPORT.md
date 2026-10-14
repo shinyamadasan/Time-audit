@@ -5,6 +5,30 @@
 
 ---
 
+## TASK-013 FIX FIRST rework (R1–R3) · 2026-10-14
+suite: tests/daily-use-reliability.spec.js + required gates. Same environment as the TASK-013 entry below.
+result:
+  - Default mode: 29/29 expected outcomes (22 pass, 7 expected-fail). Six workers x `--repeat-each=3`: 87/87.
+  - `T13_STRICT=1`: 22 passed; 7 failed = F-1..F-7, each on the assertion directly after `knownFailure()`:
+    F-1 sessionKept; F-2 heartbeat null; F-3 prompt-or-kept; F-4 tsStart = block start; F-5 duration vs instants;
+    F-6 remote Sleep segments = 2; F-7 remote = [Email, Lunch].
+  - Mutation M2 (`_doQuickSave()` returns immediately; index.html restored from git afterwards, verified identical
+    to main): 3 real failures, F-4, F-5, D-2 (no longer absorbed as expected failures); 26 others pass.
+  - Mutation M3 (`quickRetroLog()` returns immediately; restored and verified): 2 real failures, F-6 and F-7, at
+    their local-creation preconditions; 27 others pass.
+  - `npm test` exit 0 (node:test 2179 total, 2178 pass, 0 fail, 1 env-gated skip; legacy runner 455/455).
+    `npm run lint` 0 errors / 47 pre-existing warnings; spec lints clean. `check:www-parity` OK.
+    `check:firebase-rules` matches builder. `test:fence` exit 0 (80 + 20 + 37). `git diff --check` clean.
+    No diff vs main in index.html, storage.js, sw.js, www/, firebase.rules.json, functions/, workers/.
+  - `npm run test:smoke` (6 workers): 889 passed, 3 failed — all pre-existing tests, none in the new spec:
+    `my-day-timeline.spec.js:330` and `planning-continuity.spec.js:161` (30 s test timeout),
+    `planning-continuity.spec.js:492` legacy-store variant (5 s expect timeout waiting for `#timeline-anytime`).
+    Isolated rerun of all three, 2x each: 8/8 passed. Same load-sensitive pattern as the first candidate's runs
+    (where a control run without the new spec also failed one pre-existing test). Not waived; reported.
+untested: unchanged from the TASK-013 entry; plus reopen-with-auto-start (harness forces `ta3-session-started`).
+
+---
+
 ## TASK-013 · 2026-10-14
 suite: tests/daily-use-reliability.spec.js (new) + full required gates. Local Windows 10, Node 24.19.0 (CI uses 22),
   Playwright 1.61.0 Chromium. Install: `npm ci --legacy-peer-deps` (as CI).

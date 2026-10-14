@@ -1,5 +1,27 @@
 # ChronaSense — Changelog
 
+## TASK-013 — FIX FIRST rework R1–R3 (branch: task-013, 2026-10-14)
+Reviewed candidate `6d9dbb9` → independent review FIX FIRST. Only the owner-authorized R1–R3 corrections;
+no runtime, Firebase, Worker, Function, OAuth or production change; TASK-014 not implemented.
+changed:
+  - tests/daily-use-reliability.spec.js (R1) `knownFailure()` now runs immediately before each contract
+    assertion, after setup and explicit preconditions: recovery prompt content and no remote timer (F-1);
+    clean exit logged once (F-2); persisted running session and heartbeat before termination (F-3);
+    quick-log overlay, Continue button and exactly one created entry in memory and slot (F-4/F-5); both
+    retro logs created locally with exact instants, in memory and slot, and a remote push (F-6/F-7).
+    (R2) D-2 asserts the quick-log entry before Stop and exactly one quick-log + one Stop entry after;
+    S5 native asserts `schedule` was called. F-4 relabelled EXPECTED FAILURE (DESIGN_DECISION_NEEDED);
+    the S6 toast assertion is commented as stub-dependent.
+  - docs/RELIABILITY_BASELINE_V1.md (R3) F-4 → D-4; F-5 frequency unverified; TASK-014 dependencies
+    (D-1/D-2/D-4) and red-zone reach; forced `ta3-session-started` flag + reopen-with-auto-start gap;
+    stub-vs-SDK differences (offline `once()`, rejected vs pending writes, reconnect order); stub-dependent
+    toast; clock description; mutation M2/M3 evidence.
+  - TASK_013_HANDOFF.md, TASKS.md, TEST_REPORT.md: rework evidence and re-review instructions.
+tests: see TASK-013 FIX FIRST rework in TEST_REPORT.md.
+blockers: none.
+deviations: none.
+→ status stays `review` in TASKS.md for targeted independent re-review; no merge or push.
+
 ## TASK-013 — Daily-Use Reliability Baseline V1 (branch: task-013, 2026-10-14)
 Owner-direct, test-hardening only. Base `origin/main` `bc71f14`. No production runtime, schema, rules, auth,
 Worker/Function, CI or infrastructure change.

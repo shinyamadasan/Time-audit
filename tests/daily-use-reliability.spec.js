@@ -13,7 +13,9 @@
 //
 // Reproduced pre-existing failures stay explicit: each such test asserts the EXISTING contract
 // and is annotated with test.fail(), so the default run reports it as "expected to fail" and turns
-// red the moment the behavior changes. Run `T13_STRICT=1 npx playwright test
+// red the moment the behavior changes. The annotation is applied only immediately before the
+// contract assertion, after every setup step and precondition has passed, so broken setup, missing
+// UI or missing entries still fail the test for real. Run `T13_STRICT=1 npx playwright test
 // tests/daily-use-reliability.spec.js` to drop the annotation and see the raw assertion failure.
 // Finding ids (F-n) refer to docs/RELIABILITY_BASELINE_V1.md.
 
@@ -36,8 +38,8 @@ const PAST_RECOVERY_PROMPT_MS = 800;
 let appServer;
 let appUrl;
 
-function knownFailure(id) {
-  test.fail(!STRICT, `${id}: reproduced pre-existing failure, see docs/RELIABILITY_BASELINE_V1.md`);
+function knownFailure(id, classification = 'CONFIRMED_FAILURE') {
+  test.fail(!STRICT, `${id} (${classification}): reproduced pre-existing behavior, see docs/RELIABILITY_BASELINE_V1.md`);
 }
 
 const firebaseStub = `
@@ -436,16 +438,20 @@ test.describe('A. Timer lifecycle', () => {
   });
 
   test('F-1 KNOWN FAILURE: termination longer than one interval in an OFFLINE session -> "accidental" must not lose the session', async ({ context }) => {
-    knownFailure('F-1');
     const page0 = await openApp(context);
     await goOffline(page0); // timer started without connectivity: no remote copy exists to re-adopt
     const page = await startThenTerminate(context, page0, T0 + 45 * MIN);
+    // Preconditions: the recovery prompt describes this session and its expired ping timer.
     await expect(page.locator('#recovery-overlay')).toBeVisible();
+    await expect(page.locator('#recovery-msg')).toContainText('Writing');
     await expect(page.locator('#recovery-msg')).toContainText('The ping timer also expired');
+    expect(await page.evaluate(room => window.__fbTest.get(`rooms/${room}/timer`), A)).toBeNull(); // nothing to re-adopt
     await page.getByRole('button', { name: /it was accidental/ }).click();
     await goOnline(page);
     await page.waitForTimeout(500);
-    expect(sessionKept(await state(page))).toBe(true);
+    const s = await state(page);
+    knownFailure('F-1');
+    expect(sessionKept(s)).toBe(true);
   });
 
   test('S2: termination longer than one interval -> "intentional" logs the session exactly once', async ({ context }) => {
@@ -477,17 +483,22 @@ test.describe('A. Timer lifecycle', () => {
   });
 
   test('F-2 KNOWN FAILURE: expired-timer recovery in an OFFLINE session must clear the heartbeat (no false recovery prompt on the next open)', async ({ context }) => {
-    knownFailure('F-2');
     const page0 = await openApp(context);
     await goOffline(page0);
     const page = await startThenTerminate(context, page0, T0 + 45 * MIN);
     await expect(page.locator('#recovery-overlay')).toBeVisible();
     await page.getByRole('button', { name: /closed it intentionally/ }).click();
-    expect((await state(page)).entries).toHaveLength(1); // precondition: the session itself was logged
+    // Preconditions: the clean exit itself worked (session logged once, timer stopped).
+    const exited = await state(page);
+    expect(exited.running).toBe(false);
+    expect(exited.entries).toHaveLength(1);
+    expect(exited.entries[0]).toMatchObject({ activity: 'Writing' });
     await goOnline(page);
     const page2 = await reopen(context, page, T0 + 60 * MIN);
     await page2.waitForTimeout(PAST_RECOVERY_PROMPT_MS);
     const s = await state(page2);
+    expect(s.entries).toHaveLength(1);
+    knownFailure('F-2');
     expect(s.heartbeat).toBeNull();
     expect(s.recoveryVisible).toBe(false);
   });
@@ -499,6 +510,12 @@ test.describe('A. Timer lifecycle', () => {
     await page0.evaluate(() => { clearInterval(ticker); ticker = null; });
     await setNow(page0, T0 + 30 * MIN + 30 * 1000);
     await page0.evaluate(() => _startHeartbeat());
+    // Preconditions: a running Writing session from T0 is persisted with a 30 s-old heartbeat, and no ping ran.
+    const before = await state(page0);
+    expect(before).toMatchObject({ running: true, currentTask: 'Writing', pingCount: 0 });
+    expect(before.timerSlot).toMatchObject({ running: true, currentTask: 'Writing' });
+    expect(before.timerSlot.taskStartTime).toBeLessThan(T0 + 1000);
+    expect(Number(before.heartbeat)).toBeGreaterThanOrEqual(T0 + 30 * MIN + 30 * 1000);
     const page = await reopen(context, page0, T0 + 31 * MIN, { kill: true });
     await page.waitForTimeout(PAST_RECOVERY_PROMPT_MS);
     return page;
@@ -510,7 +527,6 @@ test.describe('A. Timer lifecycle', () => {
   });
 
   test('F-3 KNOWN FAILURE: in an OFFLINE session, reopening within 2 min of the last heartbeat after a missed ping must not silently drop the session', async ({ context }) => {
-    knownFailure('F-3');
     const page0 = await openApp(context);
     await goOffline(page0);
     const page = await missedPingThenTerminate(context, page0);
@@ -518,6 +534,7 @@ test.describe('A. Timer lifecycle', () => {
     await goOnline(page);
     await page.waitForTimeout(500);
     const s = await state(page);
+    knownFailure('F-3');
     expect(offline.recoveryVisible || sessionKept(s)).toBe(true);
   });
 
@@ -637,23 +654,30 @@ test.describe('B. Ping and notification', () => {
     // calls openQuickLog(); the user then taps "Continue: Writing" ten seconds later.
     await setNow(page, T0 + 30 * MIN + 15 * 1000);
     await page.evaluate(() => openQuickLog());
+    await expect(page.locator('#quicklog-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#ql-continue-btn')).toBeVisible();
     await page.locator('#ql-continue-btn').click();
+    // Preconditions: exactly one quick-log entry was created, for the continued activity, and the timer runs on.
     const s = await state(page);
     const created = s.entries.filter(e => e.quickLogged && e.ts > T0);
     expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ activity: 'Writing', energy: 'deep' });
+    expect(created[0].ts).toBeGreaterThanOrEqual(T0 + 30 * MIN + 15 * 1000);
+    expect(s.slotEntries.some(e => e.id === created[0].id)).toBe(true);
+    expect(s.running).toBe(true);
     return { start, created: created[0] };
   }
 
-  test('F-4 KNOWN FAILURE: a notification-tap quick log after the ping must describe the completed block', async ({ context }) => {
-    knownFailure('F-4');
+  test('F-4 EXPECTED FAILURE (DESIGN_DECISION_NEEDED): a notification-tap quick log after the ping describes the completed block, as the notification copy implies', async ({ context }) => {
     const { start, created } = await pingThenTapNotification(context);
+    knownFailure('F-4', 'DESIGN_DECISION_NEEDED');
     expect(created.tsStart).toBe(start);
   });
 
   test('F-5 KNOWN FAILURE: a quick log must not store a duration its own instants do not support', async ({ context }) => {
-    knownFailure('F-5');
     const { created } = await pingThenTapNotification(context);
     const measuredMin = (created.ts - created.tsStart) / MIN;
+    knownFailure('F-5');
     expect(Math.abs(created.blockIntervalMin - measuredMin)).toBeLessThan(1);
   });
 
@@ -667,9 +691,15 @@ test.describe('B. Ping and notification', () => {
     await setNow(page, T0 + 40 * MIN);
     await page.evaluate(() => openQuickLog());
     await page.locator('#ql-continue-btn').click();
+    const afterQuickLog = (await state(page)).entries.filter(e => e.ts > T0);
+    expect(afterQuickLog).toHaveLength(1);
+    expect(afterQuickLog[0]).toMatchObject({ activity: 'Writing', quickLogged: true });
+    expect(afterQuickLog[0].ts).toBeGreaterThanOrEqual(T0 + 40 * MIN);
     await setNow(page, T0 + 50 * MIN);
     await page.evaluate(() => stopAndLog());
     const created = (await state(page)).entries.filter(e => e.ts > T0);
+    expect(created).toHaveLength(2);
+    expect(created.filter(e => e.quickLogged).map(e => e.id)).toEqual([afterQuickLog[0].id]);
     const stopEnd = Math.max(...created.map(e => e.ts));
     for (const e of created) {
       expect(e.tsStart).toBeGreaterThanOrEqual(start);
@@ -725,6 +755,7 @@ test.describe('B. Ping and notification', () => {
     expect(s.entries).toHaveLength(1);
     expect(s.entries[0].activity).toBe('Writing');
     expect(calls).toContain('requestPermissions');
+    expect(calls).toContain('schedule'); // scheduleNativePing() still calls the plugin; its rejection is absorbed
     expect(errors).toEqual([]);
   });
 });
@@ -750,6 +781,7 @@ test.describe('C/D. Logging, persistence and sync', () => {
     expect(logged).toBeTruthy();
     expect(offline.slotEntries.some(e => e.id === logged.id)).toBe(true);
     expect((await remoteEntries(page)).some(e => e.id === logged.id)).toBe(false);
+    // Stub-dependent: the stub rejects offline writes; the real SDK keeps them pending, so no toast there.
     await expect(page.locator('#toast')).toContainText('saved locally');
 
     await goOnline(page);
@@ -853,34 +885,49 @@ test.describe('C/D. Logging, persistence and sync', () => {
   }
 
   test('F-6 KNOWN FAILURE: two retro logs that cross the same midnight must both survive locally and remotely', async ({ context }) => {
-    knownFailure('F-6');
     const page = await openApp(context); // 2026-10-14 09:00 Manila
     await page.evaluate(() => setViewDate('2026-10-13'));
     await retroLog(page, 'Movie', '22:30', '00:30');
     await setNow(page, T0 + 1 * MIN);
     await retroLog(page, 'Sleep', '23:45', '07:00');
     await page.waitForTimeout(300);
-    const local = (await state(page)).entries;
+    const s = await state(page);
     const remote = await remoteEntries(page);
-    // Each log is split at midnight: four segments in total, with distinct ids.
-    for (const list of [local, remote]) {
-      expect(list.filter(e => e.activity === 'Movie')).toHaveLength(2);
-      expect(list.filter(e => e.activity === 'Sleep')).toHaveLength(2);
+    // Preconditions: both logs were created locally (each split at midnight), in memory and in the
+    // account's local slot, and the sync push reached the remote.
+    const midnight = Date.parse('2026-10-13T16:00:00Z');
+    for (const list of [s.entries, s.slotEntries]) {
+      expect(list.filter(e => e.activity === 'Movie').map(e => [e.tsStart, e.ts]).sort())
+        .toEqual([[midnight - 90 * MIN, midnight], [midnight, midnight + 30 * MIN]]);
+      expect(list.filter(e => e.activity === 'Sleep').map(e => [e.tsStart, e.ts]).sort())
+        .toEqual([[midnight - 15 * MIN, midnight], [midnight, midnight + 7 * 60 * MIN]]);
     }
-    expect(new Set(local.map(e => e.id)).size).toBe(local.length);
+    expect(remote.length).toBeGreaterThan(0);
+    knownFailure('F-6');
+    // Contract: all four segments survive remotely, with distinct ids.
+    expect(remote.filter(e => e.activity === 'Movie')).toHaveLength(2);
+    expect(remote.filter(e => e.activity === 'Sleep')).toHaveLength(2);
+    expect(new Set(s.entries.map(e => e.id)).size).toBe(s.entries.length);
   });
 
   test('F-7 KNOWN FAILURE: two retro logs ending in the same minute must both survive locally and remotely', async ({ context }) => {
-    knownFailure('F-7');
     const page = await openApp(context, { now: Date.parse('2026-10-14T06:00:00Z') }); // 14:00 Manila
     await retroLog(page, 'Lunch', '12:00', '12:30');
     await setNow(page, Date.parse('2026-10-14T06:01:00Z'));
     await retroLog(page, 'Email', '12:15', '12:30');
     await page.waitForTimeout(300);
-    const local = (await state(page)).entries;
+    const s = await state(page);
     const remote = await remoteEntries(page);
-    for (const list of [local, remote]) {
-      expect(list.map(e => e.activity).sort()).toEqual(['Email', 'Lunch']);
+    // Preconditions: both logs were created locally, in memory and in the account's local slot.
+    const end = Date.parse('2026-10-14T04:30:00Z');
+    for (const list of [s.entries, s.slotEntries]) {
+      expect(list.map(e => [e.activity, e.tsStart, e.ts]).sort()).toEqual([
+        ['Email', end - 15 * MIN, end],
+        ['Lunch', end - 30 * MIN, end]
+      ]);
     }
+    expect(remote.length).toBeGreaterThan(0);
+    knownFailure('F-7');
+    expect(remote.map(e => e.activity).sort()).toEqual(['Email', 'Lunch']);
   });
 });
