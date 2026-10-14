@@ -796,8 +796,12 @@ review:
   Builder self-review only (SELF_REVIEW.md + QA.md AI checks). NOT independently reviewed. A fresh reviewer must
   review the candidate before any merge. Test-only diff, but it documents red-zone behavior (timer recovery,
   entry identity, sync), so hold at `approved` if accepted; do not auto-merge.
-  Findings: CONFIRMED_FAILURE F-1..F-7, DESIGN_DECISION_NEEDED D-1..D-3 (docs/RELIABILITY_BASELINE_V1.md).
-  Next recommended task (not scheduled): TASK-014 notification-tap quick log records the completed block (F-4+F-5).
+  Findings: see docs/RELIABILITY_BASELINE_V1.md.
+  Next recommended task (not scheduled): TASK-014 notification-tap quick log records the completed block (F-5 + D-4/F-4),
+  blocked on owner decisions D-2 and D-4 (D-1 informs).
+  Independent review of 6d9dbb9: FIX FIRST (R1 expected-failure integrity, R2 stronger assertions, R3 docs). Rework
+  applied (owner-authorized R1-R3 only); awaiting targeted independent re-review. F-4 reclassified
+  DESIGN_DECISION_NEEDED (D-4); confirmed failures are now F-1, F-2, F-3, F-5, F-6, F-7.
 
 
 ---
