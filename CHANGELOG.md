@@ -1,5 +1,26 @@
 # ChronaSense — Changelog
 
+## TASK-013 — Daily-Use Reliability Baseline V1 (branch: task-013, 2026-10-14)
+Owner-direct, test-hardening only. Base `origin/main` `bc71f14`. No production runtime, schema, rules, auth,
+Worker/Function, CI or infrastructure change.
+changed:
+  - tests/daily-use-reliability.spec.js (new, 29 Playwright tests): real index.html/storage.js runtime with a
+    persisted, room-partitioned Firebase stub and a controlled persisted clock; covers reload/termination
+    recovery, ping ownership, delayed pings, notification permission (browser + fake Capacitor bridge),
+    notification-tap quick log, offline log/reconnect, account separation, manual-vs-automatic precedence,
+    cross-midnight and retro-log identity. 7 reproduced pre-existing failures kept explicit with `test.fail`
+    (raw failures with `T13_STRICT=1`).
+  - docs/RELIABILITY_BASELINE_V1.md (new): reliability matrix, confirmed failures F-1..F-7 with repro steps,
+    coverage gaps, platform verification, design decisions D-1..D-3, device acceptance checklist, and the one
+    recommended next task (TASK-014: notification-tap quick log records the completed block, F-4 + F-5).
+  - TASKS.md: TASK-013 owner-direct entry.
+tests: see TASK-013 in TEST_REPORT.md.
+blockers: none.
+deviations: STATUS.md / CODEMAP.md not updated (no code structure moved; STATUS left to closure). Doc drift
+  noted, not edited: CODEMAP "Ping delivery (sound + modal)", DECISIONS #17 and QA.md's quoted doPing guard
+  text no longer match `doPing()` (D-1).
+→ status set to `review` in TASKS.md; no merge, push or deployment.
+
 ## TASK-012 — production rollout and closure (2026-10-14)
 
 Owner-authorized staged rollout of reviewed runtime `b8c2f31`; no runtime change during rollout or closure.

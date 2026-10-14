@@ -5,6 +5,33 @@
 
 ---
 
+## TASK-013 · 2026-10-14
+suite: tests/daily-use-reliability.spec.js (new) + full required gates. Local Windows 10, Node 24.19.0 (CI uses 22),
+  Playwright 1.61.0 Chromium. Install: `npm ci --legacy-peer-deps` (as CI).
+result:
+  - New spec, default mode: 29/29 (22 contract tests pass; 7 `test.fail` known failures fail as expected); stable over
+    `--repeat-each=3` (84/84 for the 28 tests present then; the 29th, D-2 observation, was added afterwards and passed in every later run: targeted, default, strict and both full smoke passes).
+  - New spec, `T13_STRICT=1`: 22 passed, 7 failed = exactly F-1..F-7, each at its contract assertion (observed: F-1/F-3
+    session gone after offline recovery; F-2 heartbeat key kept; F-4 tsStart = ping instant, not block start; F-5
+    blockIntervalMin 30 vs 10 s span; F-6/F-7 remote entries map lost a colliding id).
+  - Baseline on unmodified main bc71f14: `npm test` exit 0 (node:test 2179 total, 2178 pass, 0 fail, 1 skip; legacy runner
+    455/455); `npm run test:smoke` 863/863 passed.
+  - Candidate: `npm test` exit 0, identical counts to baseline. `npm run lint` 0 errors, 47 pre-existing warnings (lint does
+    not cover tests/; `npx eslint tests/daily-use-reliability.spec.js` clean). `npm run check:www-parity` OK (91 files).
+    `npm run check:firebase-rules` matches builder. `npm run test:fence` exit 0 (80 + 20 + 37 = 137 passed; emulator
+    v4.11.2 checksum verified). `git diff --check` clean.
+  - Candidate `npm run test:smoke` (6 workers), run twice: 891 passed, 1 failed each time, both
+    `planning-continuity.spec.js:161` (Test timeout 30000 ms in `selectOption`). Pre-existing and load-sensitive, NOT
+    waived: in isolation 8/9 pass (15-19 s of the 30 s budget, 14 form interactions), 1/9 timed out. Control run of the
+    full suite WITHOUT the new spec: 862 passed, 1 failed in a different pre-existing test (`my-day-timeline.spec.js:330`,
+    page.goto aborted, 30 s timeout), which passes 3/3 on rerun. No production file differs from main.
+untested: physical Android/iOS/macOS devices, real Firebase SDK offline queue, service-worker ping delivery, quiet hours,
+  single-account Break reload, near-simultaneous two-device Stop (see docs/RELIABILITY_BASELINE_V1.md). Worker suite
+  (`npm test --prefix workers/chronasense-conversational-bridge`, run by CI) NOT_RUN: not in the required list and the
+  Worker is untouched. Coverage percentage not measured.
+
+---
+
 ## TASK-012 production rollout acceptance · 2026-10-14
 suite: production checks only (runtime unchanged since the reviewed SHA).
 result:
