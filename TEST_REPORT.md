@@ -5,6 +5,37 @@
 
 ---
 
+## TASK-012 production rollout acceptance · 2026-10-14
+suite: production checks only (runtime unchanged since the reviewed SHA).
+result:
+  - Pre-rollout baseline matched every expected predecessor: rules bc4cac30…cab6e; Function chronasenseactionapi-00006-xor
+    ACTIVE 100%; Worker 626afd01… 100% with all seven bindings; three scopes; /mcp 401 unauthenticated.
+  - RTDB rules: live fingerprint 197cc3be…38fa20 = reviewed (the fingerprint method reproduced TASK-011's from git).
+  - Function: chronasenseactionapi-00007-mon ACTIVE, 100% latest; configuration diff vs the captured predecessor empty;
+    minInstanceCount absent (not inferred); unauthenticated /v1/query and /v1/command -> 401 AUTH_REQUIRED; no other
+    Function in the project.
+  - Worker: ebdbbd1c-418a-4123-ae8a-6dbf83a610bc active 100%; bindings ACCESS_POLICY_AUD, ACCESS_TEAM_DOMAIN,
+    CHRONASENSE_ACTION_API_URL, CHRONASENSE_OWNER_SUBJECT, CHRONASENSE_WORKER_HMAC_KEY_ID (plain_text),
+    CHRONASENSE_WORKER_HMAC_KEY_HEX (secret_text), OAUTH_KV (kv_namespace); discovery advertises the three scopes;
+    /authorize -> Access; /mcp unauthenticated 401. Consent text confirmed by the owner during re-authorization.
+  - OAuth: TASK-011 plan.write grant (hashed e68c0ff7b4) absent; new grant (27f43359ba) read + brain-dump.write +
+    plan.write, same client and redirect, created between the Worker deploy and the canary.
+  - Connector: 11 tools (get_brain_dump, get_today, get_plan, get_item, get_intelligence, brain_dump_add, plan_create,
+    plan_set_completion, plan_edit, plan_move, plan_delete).
+  - Canary: pre-revision rev1:62diejQF_ltFtJ37NTDFIWckLrgSVbwQTghOFrBI0Gc (= the TASK-011 acceptance revision: unchanged).
+    plan_move act1_82041c20-2ab4-4fa8-8357-275536ad7d0c, cal1:2026-10-21 -> cal1:2026-10-22: changed true,
+    idempotentReplay false, revision rev1:AeDIiqcJuI7s_9jDLgeeFk3Y73ARmweTE7pYNPvZ6Ag. Exact same-action replay: the same
+    result with idempotentReplay true (no second mutation). get_plan 2026-10-22: exactly the canary, same id and
+    revision, Asia/Manila; get_plan 2026-10-21: no items.
+  - Raw read-only RTDB check: source child is the move tombstone (deleted, movedToDayId 2026-10-22, relocation seq 1 by
+    the canary action, creationActionId kept, no moveLock); destination child live with the same id, content,
+    creationActionId and relocation, no moveLock; destination plan origin Asia/Manila; no api1_ item in any plan array.
+accepted limitations: the private receipt was not read (connector replay evidence, as in TASK-011). ChatGPT rejected the
+  get_item argument schema (pre-existing since TASK-011), so the read used get_plan. N1 (LOW) accepted.
+untested: no other production mutation (completion/edit/delete canaries intentionally not run).
+
+---
+
 ## TASK-012 R1 lost-update fix · 2026-10-14
 suite: new R1 tests first; functions `node --test test/*.test.js`; `npm run test:fence`; root `npm test`; Worker `npm test`;
   lint; rules / functions-shared / www parity; `git diff --check`. Browser smoke NOT rerun (no client runtime file,

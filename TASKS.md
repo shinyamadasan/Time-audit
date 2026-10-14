@@ -680,7 +680,7 @@ closure:
 ---
 
 ### TASK-012 - Expanded Conversational Plan Actions
-status: approved
+status: done
 owner: claude
 source: owner-direct
 priority: P1
@@ -737,6 +737,21 @@ rollout gates (owner-authorized, in order):
   scripts/deploy.mjs; 4. verify the five plaintext Worker bindings; 5. verify /authorize; 6. revoke the existing
   chronasense:plan.write grant; 7. re-grant under the new mutation/delete consent text; 8. controlled production
   mutation canary; 9. exact same-action replay; 10. lifecycle `done` only after production acceptance.
+
+closure:
+  Closed 2026-10-14 on owner-authorized production rollout and acceptance. Reviewed runtime b8c2f31 live (main 7472fae
+  before closure; runtime byte-identical). RTDB rules parsed-JSON SHA-256
+  197cc3beeef451961e6add7615837772ed0ee19f3d195e654b694f0ddc38fa20 (was bc4cac30…cab6e). Function revision
+  chronasenseactionapi-00007-mon (was -00006-xor; configuration identical, minInstanceCount absent before and after,
+  unauthenticated probes 401 AUTH_REQUIRED). Worker version ebdbbd1c-418a-4123-ae8a-6dbf83a610bc via scripts/deploy.mjs
+  (five plaintext bindings + HMAC secret + OAUTH_KV present). Old plan.write grant revoked by the owner's re-authorization
+  under the new consent text; new grant read + brain-dump.write + plan.write. 11 tools (5 reads, 6 writes).
+  Canary act1_82041c20-2ab4-4fa8-8357-275536ad7d0c moved api1_bd46a3e6-4e29-47f3-a3dc-1a6c5a48cad8 cal1:2026-10-21 ->
+  cal1:2026-10-22: first move PASS (rev1:62diejQF… -> rev1:AeDIiqcJ…), exact replay idempotentReplay:true with no second
+  mutation, one current item at the destination; raw read-only check: same id and creationActionId, source move
+  tombstone, no lock left, destination origin Asia/Manila. N1 accepted (LOW). No other production mutation test.
+  Follow-up (separate, not scheduled; pre-existing since TASK-011): ChatGPT rejects the get_item tool's argument schema
+  (discriminated union), so the connector used get_plan for the read.
 
 
 ---

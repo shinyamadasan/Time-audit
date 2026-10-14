@@ -1,5 +1,24 @@
 # ChronaSense — Changelog
 
+## TASK-012 — production rollout and closure (2026-10-14)
+
+Owner-authorized staged rollout of reviewed runtime `b8c2f31`; no runtime change during rollout or closure.
+deployed:
+  - RTDB rules: REST PUT of `git show b8c2f31:firebase.rules.json`; live parsed-JSON SHA-256 `197cc3be…38fa20`
+    (was TASK-011 `bc4cac30…cab6e`, captured for rollback).
+  - Function `chronasenseActionApi`: gcloud source-only update from a git-archive of `b8c2f31` functions/ (55 files, every
+    blob verified, LF, no node_modules); revision `-00006-xor` -> `-00007-mon`; service account, ingress, memory, CPU,
+    concurrency, max instances, timeout, VPC, secret binding v1, env names/values hash and invoker unchanged;
+    minInstanceCount absent before and after; unauthenticated /v1/query and /v1/command -> 401 AUTH_REQUIRED.
+  - Worker: `scripts/deploy.mjs` (plan, dry run, then the owner ran `--confirm`: the session permission guard blocked an
+    agent-run confirmed deploy) with the five plaintext bindings recovered from known-good `626afd01…` into the
+    gitignored vars file (values never printed; file deleted afterwards); active version `ebdbbd1c-418a-4123-ae8a-6dbf83a610bc`
+    with all five plaintext bindings, the HMAC secret and OAUTH_KV. No binding was lost this time.
+oauth: the owner re-authorized the same connector under the new consent text; the library's default revokeExistingGrants
+  replaced the TASK-011 plan.write grant (verified by hashed grant keys: old absent, new one with all three scopes).
+acceptance: 11 tools; canary `act1_82041c20-2ab4-4fa8-8357-275536ad7d0c` moved `api1_bd46a3e6…` from `cal1:2026-10-21`
+  to `cal1:2026-10-22`; exact replay idempotent; one current item (see TEST_REPORT.md).
+
 ## TASK-012 — R1 lost-update fix (branch: task-012, on top of 55647d0)
 
 Targeted cross-model review FIX FIRST, R1 (HIGH): a stale api1_ cross-day move could overwrite a newer accepted owner edit,
