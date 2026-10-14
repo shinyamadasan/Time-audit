@@ -29,8 +29,10 @@ export function planDomain(seed = {}, hooks = {}) {
     if (Array.isArray(pruned.items) && !pruned.items.length) delete pruned.items;
     return pruned;
   };
+  // The database's own clock (rules `now`), for the R1 move lock; tests may advance it to expire a lock.
+  const lockActive = item => !!item?.moveLock && item.moveLock.at > api.serverNow - 60_000;
   const api = {
-    room, writes, versions,
+    room, writes, versions, serverNow: NOW_MS,
     /** Another device/owner write: replaces the record (or child) and changes its ETag. */
     ownerRecord(planId, record) { room.calendarPlans[planId] = store(record); bump(`rec:${planId}`); },
     ownerFence(planId, item) { (room.calendarPlanFences[planId] ??= {})[item.id] = store(item); bump(`fence:${planId}/${item.id}`); },
@@ -69,7 +71,24 @@ export function planDomain(seed = {}, hooks = {}) {
       return 'written';
     },
     /** TASK-012: the atomic multi-path relocation, judged exactly as actionPlanItemRules' moveIn/moveOut judge it. */
-    async relocateActionPlanItem(identity, { actionId, sourcePlanId, destinationPlanId, itemId, sourceStamp, sourceWriter, tombstone, moved }) {
+    /** R1: the conditional move lock (PUT if-match on the source child's exact content), judged as lockCreate is. */
+    async lockActionPlanItemForMove(identity, { actionId, sourcePlanId, destinationPlanId, itemId, record, etag }) {
+      own(identity);
+      if (hooks.beforeLock) await hooks.beforeLock();
+      const current = room.calendarPlanFences[sourcePlanId]?.[itemId];
+      assert.ok(current !== undefined && etag !== 'null_etag');
+      if (etag !== `v${versions.get(`fence:${sourcePlanId}/${itemId}`) ?? 1}`) return 'changed';
+      if (current.deleted === true || (lockActive(current) && current.moveLock.actionId !== actionId) || record.moveLock?.actionId !== actionId
+        || record.moveLock.destination !== destinationPlanId || JSON.stringify(record.moveLock.at) !== '{".sv":"timestamp"}'
+        || JSON.stringify(record.relocationRevision ?? null) !== JSON.stringify(current.relocationRevision ?? null)) {
+        throw new ApiError('FORBIDDEN', 'ChronaSense account access was refused.');
+      }
+      room.calendarPlanFences[sourcePlanId][itemId] = store({ ...record, moveLock: { ...record.moveLock, at: api.serverNow } });
+      bump(`fence:${sourcePlanId}/${itemId}`);
+      writes.push({ planId: sourcePlanId, itemId, where: 'lock' });
+      return 'written';
+    },
+    async relocateActionPlanItem(identity, { actionId, sourcePlanId, destinationPlanId, itemId, tombstone, moved }) {
       own(identity);
       assert.match(actionId, /^act1_/);
       if (hooks.beforeRelocate) await hooks.beforeRelocate();
@@ -77,7 +96,8 @@ export function planDomain(seed = {}, hooks = {}) {
       const destination = room.calendarPlanFences[destinationPlanId]?.[itemId];
       const relocation = moved.relocationRevision;
       const refused = !source || source.deleted === true || destination !== undefined
-        || source.updatedAt !== sourceStamp || source.updatedBy !== sourceWriter
+        || !lockActive(source) || source.moveLock.actionId !== actionId || source.moveLock.destination !== destinationPlanId
+        || tombstone.moveLock !== undefined || moved.moveLock !== undefined
         || moved.creationActionId !== source.creationActionId || tombstone.creationActionId !== source.creationActionId
         || JSON.stringify(relocation) !== JSON.stringify(tombstone.relocationRevision) || relocation?.schemaVersion !== 1
         || relocation.fromDayId !== sourcePlanId || relocation.toDayId !== destinationPlanId
@@ -96,7 +116,10 @@ export function planDomain(seed = {}, hooks = {}) {
     async readPlanFenceItemWithEtag(identity, planId, itemId) {
       own(identity);
       const value = room.calendarPlanFences[planId]?.[itemId];
-      return { value: structuredClone(value ?? null), etag: etag(`fence:${planId}/${itemId}`, value !== undefined) };
+      const result = { value: structuredClone(value ?? null), etag: etag(`fence:${planId}/${itemId}`, value !== undefined) };
+      // Runs AFTER the read was taken: a write here lands between the caller's read and its next write (the R1 window).
+      if (hooks.afterFenceRead) await hooks.afterFenceRead(planId, itemId, result.value);
+      return result;
     },
     async putPlanFenceItemIfMatch(identity, planId, itemId, record, tag) {
       own(identity);
@@ -109,7 +132,9 @@ export function planDomain(seed = {}, hooks = {}) {
         || (current.deleted === true && record.deleted !== true)
         // TASK-012: an ordinary owner write keeps the item's relocation exactly (it can neither move nor fabricate one).
         || JSON.stringify(record.relocationRevision ?? null) !== JSON.stringify(current.relocationRevision ?? null)
-        || (record.movedToDayId ?? null) !== (current.movedToDayId ?? null)) {
+        || (record.movedToDayId ?? null) !== (current.movedToDayId ?? null)
+        // R1: nothing ordinary writes under an active move lock; an owner may keep or drop an expired lock, never forge one.
+        || lockActive(current) || (record.moveLock !== undefined && JSON.stringify(record.moveLock) !== JSON.stringify(current.moveLock ?? null))) {
         throw new ApiError('FORBIDDEN', 'ChronaSense account access was refused.');
       }
       room.calendarPlanFences[planId][itemId] = store(record);

@@ -32,7 +32,7 @@ import { archiveCapture, buildCapture, claimPromotion, editHandledCapture, final
 import {
   CAPTURE, ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, legacyClaim, ordinary, origin, planRecord, promotedCapture, promotion,
   ACTION_A, ACTION_B, ACTION_OTHER_PLAN, ACTION_PLAN, actionItem, actionItemAt, actionItemId, planActionToken, seedCalendarAuthority,
-  FENCES_AT, MOVE_ACTION, moveToken, movePatch,
+  FENCES_AT, MOVE_ACTION, moveToken, movePatch, lockedItem, SERVER_TIME,
 } from './fence-rules-fixtures.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -961,8 +961,19 @@ test('TASK-012 api1_ move rules: only the exact atomic pair from the exact plan_
     [actionItemAt(ACTION_B), actionItem({ id: actionItemId(ACTION_B), creationActionId: ACTION_B })]]) {
     assert.equal(await db.write(path, value, moveTokenOnly), false, `move token denied at ${path}`);
   }
+  // R1: without this action's lock the pair is refused; the lock is taken by the move token at server time only.
+  assert.equal(await db.patch(FENCES_AT, movePatch(), moveToken()), false, 'no relocation without the move lock');
+  assert.equal(await db.write(actionItemAt(), lockedItem({}, { at: Date.now() - 1000 }), moveToken()), false, 'the lock time is the server clock, never supplied');
+  assert.equal(await db.write(actionItemAt(), lockedItem({}, { at: SERVER_TIME })), false, 'an ordinary owner cannot take a lock');
+  assert.equal(await db.write(actionItemAt(), lockedItem({ task: 'x' }, { at: SERVER_TIME }), moveToken({ item: actionItemId(ACTION_B) })), false, 'a token for another item cannot lock this one');
+  assert.equal(await db.write(actionItemAt(), lockedItem({}, { at: SERVER_TIME }), moveToken()), true, 'the move token takes its lock');
+  const locked = await db.read(actionItemAt());
+  // R1 on the real rules: a SAME-STAMP owner edit under the lock is refused, and so is another action's lock.
+  assert.equal(await db.write(actionItemAt(), { ...locked, task: 'Strength' }), false, 'no accepted owner write under an active lock (same updatedAt/updatedBy)');
+  assert.equal(await db.write(actionItemAt(), { ...locked, done: true }), false);
+  assert.equal(await db.write(actionItemAt(), lockedItem({}, { actionId: ACTION_B, at: SERVER_TIME }), moveToken({ actionId: ACTION_B })), false, 'one move at a time');
   // The exact pair is accepted once; a replay/second move of the now-tombstoned source is not.
-  assert.equal(await db.patch(FENCES_AT, movePatch(), moveToken()), true, 'the exact atomic move');
+  assert.equal(await db.patch(FENCES_AT, movePatch(), moveToken()), true, 'the exact atomic move under its lock');
   assert.equal(await db.patch(FENCES_AT, movePatch({ to: 'cal1:2026-10-05' }), moveToken({ target: 'cal1:2026-10-05' })), false, 'never a second destination');
   // Owners afterwards: resurrecting the source, stripping or forging the relocation, or deleting either child is refused.
   const source = await db.read(actionItemAt());
@@ -976,3 +987,42 @@ test('TASK-012 api1_ move rules: only the exact atomic pair from the exact plan_
   assert.equal(await db.write(destinationAt, null), false);
   assert.equal(await db.write(destinationAt, { ...destination, task: 'Gym (legs)', updatedAt: T + 60 }), true, 'an ordinary edit at the new day');
 });
+
+// R1 on the REAL server, through the Function: the owner changes the item with an accepted write that keeps BOTH writer
+// stamp fields, right after the Function read it. The move must be refused and the owner's content kept.
+test('TASK-012 R1 (real rules): same-stamp owner edits after the Function read -> STALE_REVISION; owner content kept; nothing moved', async () => {
+  for (const [name, change] of [['title', { task: 'Strength' }], ['completion', { done: true, doneAt: T + 1 }], ['time', { when: '19:00' }], ['duration', { durationMinutes: 90 }]]) {
+    const { db, handle: _unused } = await mutationAccount();
+    const real = createUserScopedRtdb({ databaseUrl: emulator.base, namespace: db.name, idTokens: planScopedTokens });
+    const created = await createHandler(db, real)(planCommand(ACTION_A, { target: atPlan(MUTATION_PLAN), title: 'Gym', when: '18:00', whenTz: 'Asia/Manila', durationMinutes: 60 }));
+    assert.equal(created.status, 200, JSON.stringify(created.body));
+    const sourceAt = actionItemAt(ACTION_A, MUTATION_PLAN);
+    let edited = false;
+    const domain = { ...real, async readPlanFenceItemWithEtag(identity, planId, itemId) {
+      const result = await real.readPlanFenceItemWithEtag(identity, planId, itemId);
+      if (!edited && planId === MUTATION_PLAN && result.value && !result.value.moveLock && await db.read(`${ROOM}/calendarPlans/${MUTATION_OTHER}`)) {
+        edited = true; // an accepted owner write, SAME updatedAt and updatedBy, different content
+        const response = await asClient(db, 'PUT', sourceAt, ALICE, { ...result.value, ...change });
+        assert.equal(response.status, 200, `${name}: the owner's same-stamp edit is accepted by the real rules`);
+      }
+      return result;
+    } };
+    const handle = createHandler(db, domain);
+    const rev = (await readPlanItem(handle, MUTATION_PLAN, actionItemId(ACTION_A))).item.revision;
+    const moveId = `act1_${randomUUID()}`;
+    const moved = await handle(mutationCommand('plan_move', { target: atPlan(MUTATION_PLAN), itemId: actionItemId(ACTION_A), destination: atPlan(MUTATION_OTHER) }, rev, moveId));
+    assert.equal(edited, true, `${name}: the edit really landed inside the window`);
+    assert.equal(moved.body.error?.code, 'STALE_REVISION', `${name}: ${JSON.stringify(moved.body)}`);
+    const source = await db.read(sourceAt);
+    for (const [key, value] of Object.entries(change)) assert.equal(source[key], value, `${name}: owner content kept`);
+    assert.equal(source.deleted, undefined, `${name}: no tombstone from stale state`);
+    assert.equal(source.moveLock, undefined, `${name}: not even locked`);
+    assert.equal(await db.read(actionItemAt(ACTION_A, MUTATION_OTHER)), null, `${name}: no live destination copy`);
+    assert.equal((await db.read(`serverActionReceipts/alice/${moveId}`)).state, 'rejected', `${name}: receipt not applied`);
+  }
+});
+function createHandler(db, domain) {
+  const infra = infraFor(db);
+  return createActionApiHandler({ keys: KEYS, owner: { ownerSubject: 'access-sub-owner-1', ownerFirebaseUid: 'alice' },
+    nonces: createNonceStore({ infra }), receipts: createReceiptStore({ infra }), domain, now: () => NOW_MS });
+}

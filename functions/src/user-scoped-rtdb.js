@@ -68,17 +68,15 @@ const calendarPlanKey = value => typeof value === 'string' && parseCalendarPlanI
 function actionClaims(actionId, plan) {
   if (!plan) return { chronasenseActionId: actionId };
   if (plan.kind === 'plan_move') {
-    // TASK-012: one atomic move of ONE Action API item from one calendar plan to another, valid only while the source is
-    // still exactly the version (writer stamp) the Function read. The rules bind every claim (DECISIONS #38).
+    // TASK-012: the move lock and the one atomic move of ONE Action API item from one calendar plan to another. The rules
+    // bind every claim (DECISIONS #38); source freshness is proven by the lock's conditional write, not by a claim.
     return { chronasenseActionId: actionId, chronasenseActionKind: 'plan_move', chronasenseActionTarget: plan.target,
-      chronasenseActionSource: plan.source, chronasenseActionItem: plan.item,
-      chronasenseActionSourceStamp: plan.sourceStamp, chronasenseActionSourceWriter: plan.sourceWriter };
+      chronasenseActionSource: plan.source, chronasenseActionItem: plan.item };
   }
   return { chronasenseActionId: actionId, chronasenseActionKind: 'plan_create', chronasenseActionTarget: plan.target };
 }
 const validMovePlan = plan => plan.kind === 'plan_move' && calendarPlanKey(plan.source) && plan.source !== plan.target
-  && isActionPlanItemId(plan.item) && Number.isSafeInteger(plan.sourceStamp) && plan.sourceStamp > 0
-  && typeof plan.sourceWriter === 'string' && plan.sourceWriter.length > 0 && plan.sourceWriter.length <= 200;
+  && isActionPlanItemId(plan.item) && Object.keys(plan).sort().join(',') === 'item,kind,source,target';
 
 /**
  * @param {{authAdmin:{getUser(uid:string):Promise<{disabled?:boolean}>, createCustomToken(uid:string, claims?:object):Promise<string>},
@@ -215,18 +213,17 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
     },
     /** TASK-012: ONE atomic relocation of an Action API item between two calendar plans: a multi-path update of exactly
      *  `<source>/<item>` (its tombstone) and `<destination>/<item>` (its live copy) under calendarPlanFences, with a token
-     *  whose claims name this action, both plans, the item and the source's writer stamp. The rules accept both paths
-     *  or neither. @returns {Promise<'written'>} */
-    async relocateActionPlanItem(identity, { actionId, sourcePlanId, destinationPlanId, itemId, sourceStamp, sourceWriter, tombstone, moved }) {
+     *  whose claims name this action, both plans and the item. The rules accept both paths or neither, and only while this
+     *  action holds its move lock on the source (lockActionPlanItemForMove). @returns {Promise<'written'>} */
+    async relocateActionPlanItem(identity, { actionId, sourcePlanId, destinationPlanId, itemId, tombstone, moved }) {
       if (typeof actionId !== 'string' || !ACTION_ID.test(actionId) || !validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}`
         || !calendarPlanKey(sourcePlanId) || !calendarPlanKey(destinationPlanId) || sourcePlanId === destinationPlanId || !isActionPlanItemId(itemId)
         || tombstone?.id !== itemId || moved?.id !== itemId || tombstone.creationActionId !== moved.creationActionId
-        || actionPlanItemIdFor(moved.creationActionId) !== itemId || tombstone.deleted !== true || moved.deleted === true) {
+        || actionPlanItemIdFor(moved.creationActionId) !== itemId || tombstone.deleted !== true || moved.deleted === true
+        || tombstone.moveLock !== undefined || moved.moveLock !== undefined) {
         throw new AuthorityBoundaryViolation('relocation requires one Action API item, two distinct calendar plans and its exact two ends');
       }
-      const plan = { kind: 'plan_move', target: destinationPlanId, source: sourcePlanId, item: itemId, sourceStamp, sourceWriter };
-      if (!validMovePlan(plan)) throw new AuthorityBoundaryViolation('relocation requires the source writer stamp');
-      const idToken = await idTokens.getIdToken(identity.firebaseUid, actionId, plan);
+      const idToken = await idTokens.getIdToken(identity.firebaseUid, actionId, { kind: 'plan_move', target: destinationPlanId, source: sourcePlanId, item: itemId });
       const url = new URL(`${databaseUrl}/rooms/${identity.roomId}/calendarPlanFences.json`);
       if (namespace) url.searchParams.set('ns', namespace);
       url.searchParams.set('auth', idToken);
@@ -237,6 +234,30 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
       if (response.status === 200) return 'written';
       if (response.status === 401 || response.status === 403) throw denied(`domain-relocate-${response.status}`);
       throw transport(`domain-relocate-${response.status}`);
+    },
+    /** TASK-012 R1: the move lock. A conditional PUT (`if-match` = the source child's ETag, i.e. its exact content) of the
+     *  same item plus this action's `moveLock` (its `at` is the server timestamp placeholder, so the rules time the lock by
+     *  server clock), with the plan_move token. Landing proves the source is exactly the
+     *  pre-image the move was built from; while the lock is active the rules refuse every ordinary write to it.
+     *  @returns {Promise<'written'|'changed'>} */
+    async lockActionPlanItemForMove(identity, { actionId, sourcePlanId, destinationPlanId, itemId, record, etag }) {
+      if (typeof actionId !== 'string' || !ACTION_ID.test(actionId) || !calendarPlanKey(sourcePlanId) || !calendarPlanKey(destinationPlanId)
+        || sourcePlanId === destinationPlanId || !isActionPlanItemId(itemId) || record?.id !== itemId || record.deleted === true
+        || actionPlanItemIdFor(record.creationActionId) !== itemId || record.moveLock?.actionId !== actionId
+        || record.moveLock.destination !== destinationPlanId || JSON.stringify(record.moveLock.at) !== '{".sv":"timestamp"}'
+        || typeof etag !== 'string' || !etag || etag === 'null_etag') {
+        throw new AuthorityBoundaryViolation('a move lock requires the existing Action API item, its exact ETag and this action lock');
+      }
+      const idToken = await idTokens.getIdToken(identity.firebaseUid, actionId, { kind: 'plan_move', target: destinationPlanId, source: sourcePlanId, item: itemId });
+      const url = fenceItemUrl(identity, sourcePlanId, itemId, idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'PUT', headers: { 'if-match': etag, 'content-type': 'application/json' },
+        body: JSON.stringify(record), signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-move-lock-network'); }
+      if (response.status === 200) return 'written';
+      if (response.status === 412) return 'changed';
+      if (response.status === 401 || response.status === 403) throw denied(`domain-move-lock-${response.status}`);
+      throw transport(`domain-move-lock-${response.status}`);
     },
     /** TASK-012: the exact fence child and its ETag, as the ordinary owner (value null = authoritatively absent). */
     async readPlanFenceItemWithEtag(identity, planId, itemId) {

@@ -243,3 +243,19 @@ test('end to end (TASK-012): a stale device holding the pre-move live copy canno
   assert.equal(db.read(MON_FENCE_AT).deleted, undefined, 'the moved copy is untouched');
   assert.deepEqual(db.denials, [], 'convergence needed no denied write');
 });
+
+test('end to end (TASK-012 R1): while a server move holds its lock, a client edit is refused (no accepted change); the client converges after the move', async () => {
+  const db = rulesEnforcingDatabase({ targaryen, rules: RULES, uid: 'A' });
+  db.seed(FENCE_AT, actionItem({ moveLock: { actionId: MOVE, destination: MON_ID, at: Date.now() } }));
+  const app = device(db);
+  const sunday = app.authority.current();
+  assert.ok(app.authority.items(sunday).some(i => i.id === ITEM_ID), 'still current on its day while locked');
+  app.authority.updateItem({ sourceTarget: sunday, itemId: ITEM_ID, changes: { task: 'Strength' }, stamp: app.stamp });
+  await app.calendarSync.pushPlan(SUN_ID).catch(() => {});
+  assert.equal(db.read(FENCE_AT).task, 'Gym', 'the locked source is unchanged on the server');
+  assert.ok(db.denials.length > 0, 'the rules refused the edit under the lock');
+  serverMove(db); // the move commits the locked content
+  const fresh = device(db);
+  assert.equal(fresh.authority.items(fresh.authority.current()).some(i => i.id === ITEM_ID), false);
+  assert.equal(fresh.authority.items(fresh.authority.upcoming()).find(i => i.id === ITEM_ID)?.task, 'Gym');
+});
