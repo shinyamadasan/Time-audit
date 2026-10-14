@@ -67,8 +67,18 @@ const calendarPlanKey = value => typeof value === 'string' && parseCalendarPlanI
  *  exactly one item at exactly one path and nothing else (DECISIONS #37). */
 function actionClaims(actionId, plan) {
   if (!plan) return { chronasenseActionId: actionId };
+  if (plan.kind === 'plan_move') {
+    // TASK-012: one atomic move of ONE Action API item from one calendar plan to another, valid only while the source is
+    // still exactly the version (writer stamp) the Function read. The rules bind every claim (DECISIONS #38).
+    return { chronasenseActionId: actionId, chronasenseActionKind: 'plan_move', chronasenseActionTarget: plan.target,
+      chronasenseActionSource: plan.source, chronasenseActionItem: plan.item,
+      chronasenseActionSourceStamp: plan.sourceStamp, chronasenseActionSourceWriter: plan.sourceWriter };
+  }
   return { chronasenseActionId: actionId, chronasenseActionKind: 'plan_create', chronasenseActionTarget: plan.target };
 }
+const validMovePlan = plan => plan.kind === 'plan_move' && calendarPlanKey(plan.source) && plan.source !== plan.target
+  && isActionPlanItemId(plan.item) && Number.isSafeInteger(plan.sourceStamp) && plan.sourceStamp > 0
+  && typeof plan.sourceWriter === 'string' && plan.sourceWriter.length > 0 && plan.sourceWriter.length <= 200;
 
 /**
  * @param {{authAdmin:{getUser(uid:string):Promise<{disabled?:boolean}>, createCustomToken(uid:string, claims?:object):Promise<string>},
@@ -80,7 +90,8 @@ export function createIdTokenProvider({ authAdmin, webApiKey, fetch: fetchImpl =
     async getIdToken(firebaseUid, actionId, plan) {
       if (!validFirebaseUid(firebaseUid)) throw denied('invalid-uid');
       if (actionId !== undefined && (typeof actionId !== 'string' || !ACTION_ID.test(actionId))) throw denied('invalid-action-id');
-      if (plan !== undefined && (actionId === undefined || !plan || !calendarPlanKey(plan.target))) throw denied('invalid-action-target');
+      if (plan !== undefined && (actionId === undefined || !plan || !calendarPlanKey(plan.target)
+        || (plan.kind !== undefined && !validMovePlan(plan)))) throw denied('invalid-action-target');
       const claimsWanted = actionId ? actionClaims(actionId, plan) : undefined;
       let user;
       try { user = await authAdmin.getUser(firebaseUid); } catch (error) {
@@ -201,6 +212,31 @@ export function createUserScopedRtdb({ databaseUrl, namespace, fetch: fetchImpl 
       if (response.status === 412) return 'changed';
       if (response.status === 401 || response.status === 403) throw denied(`domain-plans-write-${response.status}`);
       throw transport(`domain-plans-write-${response.status}`);
+    },
+    /** TASK-012: ONE atomic relocation of an Action API item between two calendar plans: a multi-path update of exactly
+     *  `<source>/<item>` (its tombstone) and `<destination>/<item>` (its live copy) under calendarPlanFences, with a token
+     *  whose claims name this action, both plans, the item and the source's writer stamp. The rules accept both paths
+     *  or neither. @returns {Promise<'written'>} */
+    async relocateActionPlanItem(identity, { actionId, sourcePlanId, destinationPlanId, itemId, sourceStamp, sourceWriter, tombstone, moved }) {
+      if (typeof actionId !== 'string' || !ACTION_ID.test(actionId) || !validFirebaseUid(identity?.firebaseUid) || identity.roomId !== `uid_${identity.firebaseUid}`
+        || !calendarPlanKey(sourcePlanId) || !calendarPlanKey(destinationPlanId) || sourcePlanId === destinationPlanId || !isActionPlanItemId(itemId)
+        || tombstone?.id !== itemId || moved?.id !== itemId || tombstone.creationActionId !== moved.creationActionId
+        || actionPlanItemIdFor(moved.creationActionId) !== itemId || tombstone.deleted !== true || moved.deleted === true) {
+        throw new AuthorityBoundaryViolation('relocation requires one Action API item, two distinct calendar plans and its exact two ends');
+      }
+      const plan = { kind: 'plan_move', target: destinationPlanId, source: sourcePlanId, item: itemId, sourceStamp, sourceWriter };
+      if (!validMovePlan(plan)) throw new AuthorityBoundaryViolation('relocation requires the source writer stamp');
+      const idToken = await idTokens.getIdToken(identity.firebaseUid, actionId, plan);
+      const url = new URL(`${databaseUrl}/rooms/${identity.roomId}/calendarPlanFences.json`);
+      if (namespace) url.searchParams.set('ns', namespace);
+      url.searchParams.set('auth', idToken);
+      let response;
+      try { response = await fetchImpl(url, { method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ [`${sourcePlanId}/${itemId}`]: tombstone, [`${destinationPlanId}/${itemId}`]: moved }), signal: AbortSignal.timeout(timeoutMs) }); }
+      catch { throw transport('domain-relocate-network'); }
+      if (response.status === 200) return 'written';
+      if (response.status === 401 || response.status === 403) throw denied(`domain-relocate-${response.status}`);
+      throw transport(`domain-relocate-${response.status}`);
     },
     /** TASK-012: the exact fence child and its ETag, as the ordinary owner (value null = authoritatively absent). */
     async readPlanFenceItemWithEtag(identity, planId, itemId) {

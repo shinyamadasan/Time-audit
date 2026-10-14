@@ -74,3 +74,23 @@ export const actionItem = (extra = {}) => ({
 });
 export const authorityFact = { schemaVersion: 1, id: 'fact1', activatedAtMs: T, timezone: 'Asia/Manila', activationDate: '2026-10-01', deviceId: 'd' };
 export const seedCalendarAuthority = db => db.seed(`${ROOM}/calendarPlanAuthority/fact1`, authorityFact);
+
+// ── TASK-012 api1_ cross-day move (DECISIONS #38): the exact claims the Function mints for one plan_move, and the one
+// atomic multi-path update (source tombstone + destination copy) it sends to rooms/<room>/calendarPlanFences.
+export const MOVE_ACTION = 'act1_2d0b3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
+export const FENCES_AT = `${ROOM}/${FENCE_REMOTE_PATHS.calendar}`;
+export const moveToken = ({ actionId = MOVE_ACTION, source = ACTION_PLAN, target = ACTION_OTHER_PLAN, item = actionItemId(ACTION_A),
+  stamp = T, writer = 'actor1:test', kind = 'plan_move', uid = 'alice' } = {}) => token(uid, { chronasenseActionId: actionId,
+  chronasenseActionKind: kind, chronasenseActionTarget: target, chronasenseActionSource: source, chronasenseActionItem: item,
+  chronasenseActionSourceStamp: stamp, chronasenseActionSourceWriter: writer });
+export const relocation = (extra = {}) => ({ schemaVersion: 1, sequence: 1, fromDayId: ACTION_PLAN, toDayId: ACTION_OTHER_PLAN,
+  updatedBy: MOVE_ACTION, updatedAt: T + 50, ...extra });
+/** The move's multi-path body. Overrides edit one end (or `omitSource`/`omitDestination` drop it). */
+export const movePatch = ({ source = {}, destination = {}, reloc = {}, from = ACTION_PLAN, to = ACTION_OTHER_PLAN, omitSource = false, omitDestination = false } = {}) => {
+  const moved = relocation({ fromDayId: from, toDayId: to, ...reloc });
+  const id = actionItemId(ACTION_A);
+  return {
+    ...(omitSource ? {} : { [`${from}/${id}`]: actionItem({ deleted: true, movedToDayId: to, relocationRevision: moved, updatedAt: T + 50, updatedBy: MOVE_ACTION, ...source }) }),
+    ...(omitDestination ? {} : { [`${to}/${id}`]: actionItem({ relocationRevision: moved, updatedAt: T + 50, updatedBy: MOVE_ACTION, ...destination }) }),
+  };
+};

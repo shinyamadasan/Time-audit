@@ -1,5 +1,25 @@
 # ChronaSense — Changelog
 
+## TASK-012 — api1_ cross-day move gap closure (branch: task-012, on top of 400c770)
+
+Owner-direct follow-up: "Move my ChatGPT gym task to Friday" must succeed. Local only; nothing pushed or deployed.
+changed:
+  - scripts/firebase-rules-builder.mjs + generated firebase.rules.json: `api1_` fence children gain `moveIn`/`moveOut`
+    branches for a `plan_move` token (one atomic multi-path update: destination created absent-only with the source's
+    next relocationRevision; source tombstoned with movedToDayId only while live and carrying the token's writer stamp;
+    each end checked against the other's new state) and `actionRelocationImmutable` for ordinary owner writes;
+    `actionRelocationRefused` now applies to plan_create. Six new mutation-proven predicates. Nothing else changes.
+  - functions/src/user-scoped-rtdb.js: `plan_move` token claims (action, kind, destination, source, item, source
+    stamp/writer) and `relocateActionPlanItem` (one PATCH of exactly the two item paths under calendarPlanFences).
+  - functions/src/plan-mutation-action.js: `plan_move` moves an `api1_` item (same id, next relocation, source move
+    tombstone), freezing the destination origin first; refuses `bdp1|`, and a move back onto the item's own tombstone;
+    a refused relocation is re-observed once so a racing edit reports STALE_REVISION.
+  - Worker: plan_move description; README. Docs: DECISIONS #38 (supersedes #37's V1 move refusal), API doc §10,
+    CODEMAP, functions README, TASK_012_HANDOFF.md.
+  - Tests: 7 api1_ move tests + fake rules (plan-domain-support), primitive/claim pins, 2 real-emulator cases (Function
+    end to end; direct attacks), 6 rules-mutation attacks, 4 engine mutation anchors, 2 unchanged-client cases.
+unchanged: every client runtime module, index.html, www/; completion/edit/delete/array-move/receipt behavior of 400c770.
+
 ## TASK-012 — Expanded Conversational Plan Actions (branch: task-012)
 
 Owner-direct, built autonomously to REVIEW-READY from origin/main `2dfa1df`. Local only; nothing pushed, merged or

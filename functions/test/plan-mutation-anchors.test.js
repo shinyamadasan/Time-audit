@@ -48,6 +48,15 @@ const gym = (extra = {}) => ({ id: 'pgym1', task: 'Gym', when: '18:00', whenTz: 
 const record = (items, extra = {}) => ({ createdAt: T0 - 1000, timezone: ZONE, updatedAt: T0, updatedBy: 'phone', items, ...extra });
 const raw = (store, planId, itemId = 'pgym1') => (store.room.calendarPlans[planId]?.items || []).find(item => item.id === itemId);
 const revOf = item => revision({ v: 1, store: 'calendar', targetKey: PLAN, item });
+// TASK-012 api1_ move fixtures.
+const API_ACTION = 'act1_550e8400-e29b-41d4-a716-446655440000';
+const API_ITEM = 'api1_550e8400-e29b-41d4-a716-446655440000';
+const apiItem = (extra = {}) => ({ id: API_ITEM, task: 'Gym', when: '18:00', whenTz: ZONE, durationMinutes: 60, done: false, updatedAt: T0, updatedBy: 'phone',
+  kind: 'task', creationActionId: API_ACTION, ...extra });
+const apiDomain = (extraFences = {}, hooks = {}) => planDomain({ calendarPlans: { [PLAN]: record([]) }, calendarPlanFences: { [PLAN]: { [API_ITEM]: apiItem() }, ...extraFences } }, hooks);
+const moveApi = (impl, domain, { destination = OTHER, itemId = API_ITEM, item } = {}) => run(impl, { domain, infra: fakeInfra(),
+  cmd: { ...command('plan_move', { destination: { store: 'calendar', id: destination } }, revOf(item ?? domain.room.calendarPlanFences[PLAN][itemId])),
+    parameters: { target: { store: 'calendar', id: PLAN }, itemId, destination: { store: 'calendar', id: destination } } } });
 
 /** One normalized command, exactly as parseCreateEnvelope produces it. */
 function command(kind, parameters, expectedRevision, actionId = `act1_${randomUUID()}`) {
@@ -123,6 +132,33 @@ const scenarios = {
     const result = await run(impl, { domain, infra: fakeInfra(), cmd: command('plan_move', { destination: { store: 'calendar', id: OTHER } }, revOf(raw(domain, PLAN))) });
     return result.code === 'STALE_REVISION' && domain.room.calendarPlans[OTHER] === undefined && raw(domain, PLAN).deleted === true;
   },
+  /** api1_: an owner edit racing the relocation is reported STALE (the rules refused the stale-stamped move). */
+  async apiRaceIsStale(impl) {
+    let once = true;
+    const domain = apiDomain({}, { async beforeRelocate() { if (once) { once = false; domain.ownerFence(PLAN, apiItem({ task: 'Owner', updatedAt: T0 + 7 })); } } });
+    const result = await moveApi(impl, domain);
+    return result.code === 'STALE_REVISION' && !domain.room.calendarPlanFences[OTHER];
+  },
+  /** api1_: a move into a plan with no record freezes that plan's origin before the item lands there. */
+  async apiDestinationOriginFrozen(impl) {
+    const domain = apiDomain();
+    const result = await moveApi(impl, domain);
+    return !!result.ok && domain.room.calendarPlans[OTHER]?.timezone === ZONE && !!domain.room.calendarPlanFences[OTHER]?.[API_ITEM];
+  },
+  /** api1_: moving back onto its own move tombstone is a typed DOMAIN_LIMIT (a fence tombstone is never revived). */
+  async apiOwnHistoryRefused(impl) {
+    const domain = apiDomain({ [OTHER]: { [API_ITEM]: apiItem({ deleted: true, movedToDayId: PLAN }) } });
+    const result = await moveApi(impl, domain);
+    return result.code === 'DOMAIN_LIMIT' && domain.writes.length === 0;
+  },
+  /** bdp1|: a fenced Brain Dump item still never moves (its capture's promotion names its one location). */
+  async brainDumpNeverMoves(impl) {
+    const bdItem = { id: 'bdp1|cap_gym01', task: 'Gym', when: '', done: false, updatedAt: T0, updatedBy: 'phone', kind: 'task',
+      brainDumpOrigin: { v: 2, claimEpoch: 0, type: 'schedule', store: 'calendar', targetKey: PLAN } };
+    const domain = planDomain({ calendarPlans: { [PLAN]: record([]) }, calendarPlanFences: { [PLAN]: { [bdItem.id]: bdItem } } });
+    const result = await moveApi(impl, domain, { itemId: bdItem.id, item: bdItem });
+    return result.code === 'DOMAIN_LIMIT' && !domain.room.calendarPlanFences[OTHER];
+  },
 };
 
 test('baseline: the shipped module passes every anchor scenario', async () => {
@@ -146,6 +182,14 @@ const ANCHORS = [
   ['move write not conditional on the read -> a concurrent owner delete is silently undone', 'moveNeverUndoesConcurrentDelete',
     [['        outcome = await domain.putCalendarPlansIfMatch(identity, plans, physical.etag);',
       '        outcome = await domain.putCalendarPlansIfMatch(identity, plans, (await domain.readCalendarPlansWithEtag(identity)).etag);']]],
+  ['refused relocation not re-observed -> a racing owner edit surfaces as FORBIDDEN instead of STALE', 'apiRaceIsStale',
+    [["      if (fenceMove && error instanceof ApiError && error.code === 'FORBIDDEN' && !relocationRefused) { relocationRefused = true; continue; }", '']]],
+  ['destination origin freeze skipped for an api1_ move -> the plan it lands in keeps a floating home zone', 'apiDestinationOriginFrozen',
+    [['    if (fenceMove) {\n      // The destination plan\'s origin, likewise frozen before anything lands there.', '    if (false) {\n      // The destination plan\'s origin, likewise frozen before anything lands there.']]],
+  ['own-history check removed -> a move back onto its tombstone is no longer a typed refusal', 'apiOwnHistoryRefused',
+    [['    if (fenceMove && physical.destination.item !== null) {', '    if (false) {']]],
+  ['bdp1| refusal removed -> a fenced Brain Dump item is relocated away from its promotion', 'brainDumpNeverMoves',
+    [['  if (isFencedItem(pre) && !isActionPlanItem(pre)) throw', '  if (false) throw']]],
 ];
 
 for (const [title, scenario, edits] of ANCHORS) {

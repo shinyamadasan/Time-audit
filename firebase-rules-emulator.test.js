@@ -32,6 +32,7 @@ import { archiveCapture, buildCapture, claimPromotion, editHandledCapture, final
 import {
   CAPTURE, ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, legacyClaim, ordinary, origin, planRecord, promotedCapture, promotion,
   ACTION_A, ACTION_B, ACTION_OTHER_PLAN, ACTION_PLAN, actionItem, actionItemAt, actionItemId, planActionToken, seedCalendarAuthority,
+  FENCES_AT, MOVE_ACTION, moveToken, movePatch,
 } from './fence-rules-fixtures.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -655,8 +656,12 @@ test('action plan item: the plan-scoped token cannot touch anything else, and no
 // an owner edit, and the conditional-create precedence the recovery protocol relies on.
 const PLAN_OWNER_UID = 'ownerUid123';
 const PLAN_ROOM = `rooms/uid_${PLAN_OWNER_UID}`;
-const planScopedTokens = { getIdToken: async (uid, actionId, plan) => token(uid, actionId
-  ? { chronasenseActionId: actionId, ...(plan ? { chronasenseActionKind: 'plan_create', chronasenseActionTarget: plan.target } : {}) } : {}) };
+// Exactly the claims user-scoped-rtdb.js asks Firebase Auth to mint: plan_create (action, kind, target) or, for TASK-012's
+// api1_ move, plan_move (action, kind, destination, source, item, source writer stamp).
+const planScopedTokens = { getIdToken: async (uid, actionId, plan) => token(uid, !actionId ? {} : !plan ? { chronasenseActionId: actionId }
+  : plan.kind === 'plan_move' ? { chronasenseActionId: actionId, chronasenseActionKind: 'plan_move', chronasenseActionTarget: plan.target,
+    chronasenseActionSource: plan.source, chronasenseActionItem: plan.item, chronasenseActionSourceStamp: plan.sourceStamp, chronasenseActionSourceWriter: plan.sourceWriter }
+    : { chronasenseActionId: actionId, chronasenseActionKind: 'plan_create', chronasenseActionTarget: plan.target }) };
 async function seedPlanAccount(db) {
   const activatedAtMs = NOW_MS - 10 * 86_400_000;
   await db.seed(`${PLAN_ROOM}/settings`, { timezone: 'Asia/Manila' });
@@ -849,7 +854,7 @@ test('TASK-012: complete, edit, delete and an atomic move through the real rules
   assert.deepEqual((await db.read(planAt)).items.find(entry => entry.id === ordinary.id), ordinary, 'the unrelated item never changed');
 });
 
-test('TASK-012: an api1_ item and a fenced Brain Dump item are mutated at their keyed child through the real fence rules; never moved', async () => {
+test('TASK-012: an api1_ item and a fenced Brain Dump item are mutated at their keyed child through the real fence rules; a Brain Dump item never moves', async () => {
   const { db, handle } = await mutationAccount();
   // A plan_create item, created exactly as TASK-011 creates it.
   const created = await handle(planCommand(ACTION_A, { target: atPlan(MUTATION_PLAN), title: 'Gym', when: '07:00', whenTz: 'Asia/Manila' }));
@@ -860,15 +865,11 @@ test('TASK-012: an api1_ item and a fenced Brain Dump item are mutated at their 
     const response = await handle(mutationCommand(kind, { target: atPlan(MUTATION_PLAN), itemId: apiId, ...extra }, (await readPlanItem(handle, MUTATION_PLAN, apiId)).item.revision));
     assert.equal(response.status, 200, `${kind}: ${JSON.stringify(response.body)}`);
   }
-  const refusedMove = await handle(mutationCommand('plan_move', { target: atPlan(MUTATION_PLAN), itemId: apiId, destination: atPlan(MUTATION_OTHER) },
-    (await readPlanItem(handle, MUTATION_PLAN, apiId)).item.revision));
-  assert.equal(refusedMove.body.error?.code, 'DOMAIN_LIMIT', JSON.stringify(refusedMove.body));
   const deleted = await handle(mutationCommand('plan_delete', { target: atPlan(MUTATION_PLAN), itemId: apiId }, (await readPlanItem(handle, MUTATION_PLAN, apiId)).item.revision));
   assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
   const stored = await db.read(apiAt);
   assert.deepEqual([stored.creationActionId, stored.task, stored.durationMinutes, stored.done, stored.deleted], [ACTION_A, 'Strength training', 45, true, true]);
   assert.equal(stored.relocationRevision, undefined);
-  assert.equal(await db.read(`${ROOM}/calendarPlans/${MUTATION_OTHER}`), null, 'nothing ever landed on the other day');
 
   // A fenced Brain Dump item: the rules re-authorize every update by its capture's promotion.
   await db.seed(captureAt(), promotedCapture(STORES.calendar));
@@ -878,6 +879,10 @@ test('TASK-012: an api1_ item and a fenced Brain Dump item are mutated at their 
   assert.equal(bd.status, 200, JSON.stringify(bd.body));
   assert.equal((await db.read(STORES.calendar.itemAt)).done, true);
   assert.deepEqual((await db.read(STORES.calendar.itemAt)).brainDumpOrigin, origin(STORES.calendar), 'origin pinned');
+  const bdMove = await handle(mutationCommand('plan_move', { target: atPlan(MUTATION_PLAN), itemId: ITEM_ID, destination: atPlan(MUTATION_OTHER) },
+    (await readPlanItem(handle, MUTATION_PLAN, ITEM_ID)).item.revision));
+  assert.equal(bdMove.body.error?.code, 'DOMAIN_LIMIT', JSON.stringify(bdMove.body));
+  assert.equal(await db.read(`${ROOM}/calendarPlanFences/${MUTATION_OTHER}`), null, 'nothing ever landed on the other day');
 });
 
 test('TASK-012: the owner-token mutation primitives cannot break fence or array invariants (the real rules refuse)', async () => {
@@ -899,4 +904,75 @@ test('TASK-012: the owner-token mutation primitives cannot break fence or array 
   assert.equal(await domain.putCalendarPlansIfMatch(identity, plans.value, STALE_ETAG), 'changed');
   await assert.rejects(domain.putCalendarPlansIfMatch(identity, { settings: {} }, plans.etag), error => error.name === 'AuthorityBoundaryViolation');
   assert.equal((await db.read(actionItemAt())).deleted, true, 'still a tombstone');
+});
+
+// ── TASK-012 api1_ cross-day move against the REAL server and rules ─────────
+test('TASK-012 api1_ move: "move my ChatGPT gym task to Friday" end to end through the real rules; one current copy; replay; second move denied', async () => {
+  const { db, handle } = await mutationAccount();
+  const created = await handle(planCommand(ACTION_A, { target: atPlan(MUTATION_PLAN), title: 'Gym', when: '18:00', whenTz: 'Asia/Manila', durationMinutes: 60 }));
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+  const apiId = actionItemId(ACTION_A);
+  const rev = (await readPlanItem(handle, MUTATION_PLAN, apiId)).item.revision;
+  const moveId = `act1_${randomUUID()}`;
+  const parameters = { target: atPlan(MUTATION_PLAN), itemId: apiId, destination: atPlan(MUTATION_OTHER) };
+  const moved = await handle(mutationCommand('plan_move', parameters, rev, moveId));
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
+  const source = await db.read(actionItemAt(ACTION_A, MUTATION_PLAN));
+  const destination = await db.read(actionItemAt(ACTION_A, MUTATION_OTHER));
+  assert.deepEqual([source.deleted, source.movedToDayId, source.creationActionId], [true, MUTATION_OTHER, ACTION_A], 'source kept as a move tombstone');
+  assert.deepEqual([destination.id, destination.creationActionId, destination.deleted, destination.task], [apiId, ACTION_A, undefined, 'Gym'], 'same identity + provenance');
+  assert.deepEqual(destination.relocationRevision, source.relocationRevision);
+  assert.deepEqual([destination.relocationRevision.sequence, destination.relocationRevision.fromDayId, destination.relocationRevision.toDayId], [1, MUTATION_PLAN, MUTATION_OTHER]);
+  assert.equal((await db.read(`${ROOM}/calendarPlans/${MUTATION_OTHER}`)).timezone, 'Asia/Manila', 'destination origin frozen');
+  assert.equal((await db.read(`${ROOM}/calendarPlans/${MUTATION_OTHER}`)).items, undefined, 'no api1_ in any plan array');
+  assert.equal((await readPlanItem(handle, MUTATION_PLAN, apiId)).state, 'tombstoned');
+  assert.equal((await readPlanItem(handle, MUTATION_OTHER, apiId)).item.revision, moved.body.result.revision);
+  assert.equal((await handle(mutationCommand('plan_move', parameters, rev, moveId))).body.result.idempotentReplay, true);
+  // A second, different move from the same (old) read: refused as stale; never a second destination.
+  const third = 'cal1:2026-10-05';
+  const again = await handle(mutationCommand('plan_move', { ...parameters, destination: atPlan(third) }, rev));
+  assert.equal(again.body.error?.code, 'STALE_REVISION', JSON.stringify(again.body));
+  assert.equal(await db.read(actionItemAt(ACTION_A, third)), null);
+  // The moved task keeps working as an ordinary task at its new day (owner client and Function edits keep the relocation).
+  assert.equal((await asClient(db, 'PUT', actionItemAt(ACTION_A, MUTATION_OTHER), ALICE, { ...destination, done: true, updatedAt: destination.updatedAt + 1, updatedBy: 'phone' })).status, 200);
+  const renamed = await handle(mutationCommand('plan_edit', { target: atPlan(MUTATION_OTHER), itemId: apiId, title: 'Strength' }, (await readPlanItem(handle, MUTATION_OTHER, apiId)).item.revision));
+  assert.equal(renamed.status, 200, JSON.stringify(renamed.body));
+  assert.equal((await db.read(actionItemAt(ACTION_A, MUTATION_OTHER))).relocationRevision.sequence, 1);
+});
+
+test('TASK-012 api1_ move rules: only the exact atomic pair from the exact plan_move token; owners cannot resurrect, strip or fabricate a move', async () => {
+  const db = await freshDb();
+  await seedCalendarAuthority(db);
+  await db.seed(actionItemAt(), actionItem());
+  const id = actionItemId(ACTION_A);
+  // Not by an ordinary owner, not by a plan_create token, not by another account holding identical claims, not half of it.
+  assert.equal(await db.patch(FENCES_AT, movePatch()), false, 'owner token cannot relocate');
+  assert.equal(await db.patch(FENCES_AT, movePatch(), planActionToken()), false, 'a plan_create token cannot relocate');
+  assert.equal(await db.patch('rooms/uid_mallory/calendarPlanFences', movePatch(), token('mallory', { chronasenseActionId: MOVE_ACTION, chronasenseActionKind: 'plan_move',
+    chronasenseActionTarget: ACTION_OTHER_PLAN, chronasenseActionSource: ACTION_PLAN, chronasenseActionItem: id, chronasenseActionSourceStamp: T, chronasenseActionSourceWriter: 'actor1:test' })), false, 'another room');
+  assert.equal(await db.patch(FENCES_AT, movePatch({ omitDestination: true }), moveToken()), false, 'a source tombstone alone');
+  assert.equal(await db.patch(FENCES_AT, { [`${ACTION_PLAN}/${id}`]: null, ...movePatch({ omitSource: true }) }, moveToken()), false, 'no physical delete of the source');
+  assert.equal(await db.patch(FENCES_AT, movePatch({ destination: { creationActionId: ACTION_B } }), moveToken()), false, 'provenance cannot change');
+  assert.equal(await db.patch(FENCES_AT, movePatch({ to: ACTION_PLAN, from: ACTION_PLAN }), moveToken({ target: ACTION_PLAN })), false, 'not onto itself');
+  // The move token can write nothing else.
+  const moveTokenOnly = moveToken();
+  for (const [path, value] of [[`${ROOM}/settings`, { timezone: 'UTC' }], [`${ROOM}/entries/e1`, { id: 'e1', updatedAt: T }], [`${ROOM}/timer`, { running: false }],
+    [`${ROOM}/calendarPlans/${ACTION_PLAN}`, planRecord([ordinary])], [captureAt(`bdc1_${MOVE_ACTION.slice(5)}`), capture({ id: `bdc1_${MOVE_ACTION.slice(5)}`, creationActionId: MOVE_ACTION })],
+    [actionItemAt(ACTION_B), actionItem({ id: actionItemId(ACTION_B), creationActionId: ACTION_B })]]) {
+    assert.equal(await db.write(path, value, moveTokenOnly), false, `move token denied at ${path}`);
+  }
+  // The exact pair is accepted once; a replay/second move of the now-tombstoned source is not.
+  assert.equal(await db.patch(FENCES_AT, movePatch(), moveToken()), true, 'the exact atomic move');
+  assert.equal(await db.patch(FENCES_AT, movePatch({ to: 'cal1:2026-10-05' }), moveToken({ target: 'cal1:2026-10-05' })), false, 'never a second destination');
+  // Owners afterwards: resurrecting the source, stripping or forging the relocation, or deleting either child is refused.
+  const source = await db.read(actionItemAt());
+  const destinationAt = actionItemAt(ACTION_A, ACTION_OTHER_PLAN);
+  const destination = await db.read(destinationAt);
+  assert.equal(await db.write(actionItemAt(), actionItem({ updatedAt: T + 99 })), false, 'stale client cannot resurrect the source');
+  assert.equal(await db.write(actionItemAt(), { ...source, movedToDayId: 'cal1:2026-10-05' }), false, 'nor redirect its move');
+  const { relocationRevision: _stripped, ...noRelocation } = destination;
+  assert.equal(await db.write(destinationAt, noRelocation), false, 'the moved copy keeps its relocation');
+  assert.equal(await db.write(destinationAt, { ...destination, relocationRevision: { ...destination.relocationRevision, sequence: 9 } }), false);
+  assert.equal(await db.write(destinationAt, null), false);
+  assert.equal(await db.write(destinationAt, { ...destination, task: 'Gym (legs)', updatedAt: T + 60 }), true, 'an ordinary edit at the new day');
 });

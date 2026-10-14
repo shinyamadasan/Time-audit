@@ -18,7 +18,8 @@ import { fileURLToPath } from 'node:url';
 import { ROOM, startEmulator } from './rtdb-emulator-support.js';
 import { PREDICATES, artifactMatchesBuilder, buildRules, serializeRules } from './scripts/firebase-rules-builder.mjs';
 import { ITEM_ID, STORES, T, capture, captureAt, claim, expired, fencedItem, planRecord, promotedCapture,
-  ACTION_A, ACTION_B, ACTION_OTHER_PLAN, ACTION_PLAN, actionItem, actionItemAt, actionItemId, planActionToken, seedCalendarAuthority } from './fence-rules-fixtures.js';
+  ACTION_A, ACTION_B, ACTION_OTHER_PLAN, ACTION_PLAN, actionItem, actionItemAt, actionItemId, planActionToken, seedCalendarAuthority,
+  FENCES_AT, moveToken, movePatch, relocation } from './fence-rules-fixtures.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const COMMITTED = readFileSync(path.join(HERE, 'firebase.rules.json'), 'utf8');
@@ -105,9 +106,40 @@ const ATTACKS = {
     return db.write(actionItemAt(), actionItem({ deleted: false, updatedAt: T + 99 }));
   },
   async actionRelocationRefused(db) {
+    // A plan_create token cannot create an item that claims to have moved already.
+    await seedCalendarAuthority(db);
+    return db.write(actionItemAt(), actionItem({ relocationRevision: relocation({ fromDayId: ACTION_OTHER_PLAN, toDayId: ACTION_PLAN }) }), planActionToken());
+  },
+  // ── TASK-012 api1_ move: each attack is otherwise a well-formed atomic move ──
+  async actionMoveBinding(db) {
     await seedCalendarAuthority(db);
     await db.seed(actionItemAt(), actionItem());
-    return db.write(actionItemAt(), actionItem({ relocationRevision: { schemaVersion: 1, sequence: 1, fromDayId: ACTION_PLAN, toDayId: ACTION_OTHER_PLAN, updatedBy: 'd' } }));
+    return db.patch(FENCES_AT, movePatch(), moveToken({ item: actionItemId(ACTION_B) })); // a token minted for another item
+  },
+  async actionMoveSourceLive(db) {
+    await seedCalendarAuthority(db);
+    await db.seed(actionItemAt(), actionItem({ deleted: true })); // a deleted task "moved" back to life on another day
+    return db.patch(FENCES_AT, movePatch(), moveToken());
+  },
+  async actionMoveSourceStamp(db) {
+    await seedCalendarAuthority(db);
+    await db.seed(actionItemAt(), actionItem({ task: 'Owner edit', updatedAt: T + 9, updatedBy: 'phone' })); // edited after the read
+    return db.patch(FENCES_AT, movePatch(), moveToken());
+  },
+  async actionMoveLinked(db) {
+    await seedCalendarAuthority(db);
+    await db.seed(actionItemAt(), actionItem());
+    return db.patch(FENCES_AT, movePatch({ omitSource: true }), moveToken()); // a destination copy with the source still live
+  },
+  async actionMoveSequence(db) {
+    await seedCalendarAuthority(db);
+    await db.seed(actionItemAt(), actionItem());
+    return db.patch(FENCES_AT, movePatch({ reloc: { sequence: 7 } }), moveToken()); // a forged relocation order
+  },
+  async actionRelocationImmutable(db) {
+    await seedCalendarAuthority(db);
+    await db.seed(actionItemAt(), actionItem());
+    return db.write(actionItemAt(), actionItem({ relocationRevision: relocation(), updatedAt: T + 1 })); // an ordinary owner write fabricating a move
   },
   async actionCaptureKind(db) {
     const id = `bdc1_${ACTION_A.slice(5)}`;

@@ -55,8 +55,9 @@ names `target` (calendar), `itemId` and `expectedRevision` (the item revision a 
 changed, with `details.currentRevision`). `src/plan-mutation-action.js` reruns Plan Authority's own semantics
 server-side; writes are ordinary-owner-token compare-and-sets pinned in `src/user-scoped-rtdb.js`
 (`readPlanFenceItemWithEtag`/`putPlanFenceItemIfMatch` for an `api1_`/`bdp1|` child, the plan record for array items,
-`readCalendarPlansWithEtag`/`putCalendarPlansIfMatch` for a move's one atomic write). `api1_`/`bdp1|` and recovered
-carry items are never moved (`DOMAIN_LIMIT`). The receipt records a deterministic intent (stamp + planned revisions,
+`readCalendarPlansWithEtag`/`putCalendarPlansIfMatch` for an array move's one atomic write, `relocateActionPlanItem` for
+an `api1_` move's one atomic multi-path update under a `plan_move` token). `bdp1|` items, recovered carry items and an
+`api1_` item returning to a day it left are not moved (`DOMAIN_LIMIT`). The receipt records a deterministic intent (stamp + planned revisions,
 writer = actionId) before the first write; APPLIED only after a re-read shows it, REJECTED only when no write of the
 action can still land.
 

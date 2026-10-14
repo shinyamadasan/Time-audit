@@ -717,7 +717,8 @@ verification:
 
 review:
   Builder self-review only (TASK_012_HANDOFF.md). Red-zone (RTDB plan writes, Action API): an approval must land as
-  `approved` (held), never auto-merged. Open owner decision: moving api1_/bdp1| items needs a successor-identity model.
+  `approved` (held), never auto-merged. Gap closure (owner-direct, on top of 400c770): api1_ items now move across days
+  (same id, one atomic relocation; rules change). bdp1| items and a move back onto a day the task left stay refused.
 
 
 ---

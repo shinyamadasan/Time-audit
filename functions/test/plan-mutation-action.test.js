@@ -396,7 +396,7 @@ test('move with an explicit new time judges the time on the destination date; an
   assert.deepEqual(destination.items.map(item => item.id), ['pgym1', 'pthere']);
 });
 
-test('move refusals: api1_ and bdp1| (location-bound), recovered carry copies, priority cap, unauthoritative destination', async () => {
+test('move refusals: bdp1| (bound by its capture), recovered carry copies, priority cap, unauthoritative destination', async () => {
   const fullTop3 = ['pa', 'pb', 'pc'].map(id => ({ id, task: `Priority ${id}`, when: '', done: false, updatedAt: T0, updatedBy: 'phone' }));
   const seed = { calendarPlans: { [P.tomorrow]: planRecord([gym(), gym({ id: 'pcarry', carriedFromId: 'porig', carriedFromDayId: P.yesterday,
     relocationRevision: { schemaVersion: 1, sequence: 1, fromDayId: P.yesterday, toDayId: P.tomorrow, updatedBy: 'phone' } })]),
@@ -405,10 +405,9 @@ test('move refusals: api1_ and bdp1| (location-bound), recovered carry copies, p
   const { store, h } = await setup(seed);
   const move = async (itemId, destination = P.dayAfter) => h.handle(command('plan_move', { target: { store: 'calendar', id: P.tomorrow }, itemId,
     destination: { store: 'calendar', id: destination } }, { actionId: newAction(), expectedRevision: await revisionOf(h, P.tomorrow, itemId) }));
-  const api = await move(API_ITEM);
-  assert.equal(code(api), 'DOMAIN_LIMIT');
-  assert.match(api.body.error.message, /ChatGPT can't be moved/);
-  assert.equal(code(await move(BD_ITEM)), 'DOMAIN_LIMIT');
+  const bd = await move(BD_ITEM);
+  assert.equal(code(bd), 'DOMAIN_LIMIT');
+  assert.match(bd.body.error.message, /Brain Dump tasks can't be moved/);
   assert.equal(code(await move('pcarry')), 'DOMAIN_LIMIT');
   assert.equal(code(await move('pgym1')), 'DOMAIN_LIMIT', 'a priority never overflows the destination Top 3');
   const before = activationLimitDate();
@@ -692,4 +691,163 @@ test('two concurrent moves of one item to DIFFERENT days: one wins, the other is
   const live = [...(await getPlan(h, P.tomorrow)).items, ...(await getPlan(h, P.dayAfter)).items, ...(await getPlan(h, third)).items];
   assert.deepEqual(live.map(item => item.itemId), ['pgym1'], 'exactly one current copy');
   assert.equal(store.writes.length, 1);
+});
+
+// ── api1_ CROSS-DAY MOVE (TASK-012 gap closure) ─────────────────────────────
+// "Move my ChatGPT gym task to Friday": the SAME api1_ id goes live at the destination plan's keyed fence child with the
+// next relocationRevision, and its source child becomes a move tombstone, in ONE atomic multi-path update.
+const fenceItem = (store, planId, itemId = API_ITEM) => store.room.calendarPlanFences[planId]?.[itemId];
+const apiSeed = (extra = {}) => ({ calendarPlans: { [P.tomorrow]: planRecord([other()]) },
+  calendarPlanFences: { [P.tomorrow]: { [API_ITEM]: apiItem() } }, ...extra });
+const moveApi = (h, rev, { actionId = newAction(), destination = P.dayAfter, from = P.tomorrow, ...extra } = {}) =>
+  h.handle(command('plan_move', { target: { store: 'calendar', id: from }, itemId: API_ITEM, destination: { store: 'calendar', id: destination }, ...extra },
+    { actionId, expectedRevision: rev }));
+const liveCopies = async (h, planIds) => (await Promise.all(planIds.map(id => getPlan(h, id)))).flatMap(plan => plan.items).filter(item => item.itemId === API_ITEM);
+
+test('"Move my ChatGPT gym task to Friday": same api1_ id live at the destination child, source move tombstone, provenance kept, one atomic write', async () => {
+  const { store, h } = await setup(apiSeed());
+  const rev = await revisionOf(h, P.tomorrow, API_ITEM);
+  const actionId = newAction();
+  const moved = await moveApi(h, rev, { actionId });
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
+  const relocation = { schemaVersion: 1, sequence: 1, fromDayId: P.tomorrow, toDayId: P.dayAfter, updatedBy: actionId, updatedAt: NOW_MS };
+  assert.deepEqual(fenceItem(store, P.dayAfter), apiItem({ relocationRevision: relocation, updatedAt: NOW_MS, updatedBy: actionId }),
+    'the SAME identity and creation provenance, live at the destination');
+  assert.deepEqual(fenceItem(store, P.tomorrow), apiItem({ deleted: true, movedToDayId: P.dayAfter, relocationRevision: relocation, updatedAt: NOW_MS, updatedBy: actionId }),
+    'the source child is kept as a move tombstone (history is never physically deleted)');
+  assert.deepEqual(store.writes, [{ planId: P.dayAfter, where: 'record' }, { planIds: [P.tomorrow, P.dayAfter], itemId: API_ITEM, where: 'relocation' }],
+    'the destination origin, then ONE atomic relocation; nothing else');
+  assert.ok(Object.values(store.room.calendarPlans).every(record => !(record.items || []).some(item => item.id === API_ITEM)), 'no api1_ ever enters a plan array');
+  assert.deepEqual([store.room.calendarPlans[P.dayAfter].timezone, store.room.calendarPlans[P.dayAfter].createdAt], [ZONE, NOW_MS], 'destination origin frozen first');
+  assert.deepEqual(await liveCopies(h, [P.tomorrow, P.dayAfter]).then(items => items.length), 1, 'get_plan shows ONE current logical item');
+  assert.deepEqual((await getPlan(h, P.dayAfter)).items.map(item => item.itemId), [API_ITEM]);
+  assert.equal((await getItem(h, P.tomorrow, API_ITEM)).state, 'tombstoned');
+  const { result } = moved.body;
+  assert.deepEqual([result.target.id, result.destination.id, result.itemId], [P.tomorrow, P.dayAfter, API_ITEM]);
+  assert.equal(result.revision, await revisionOf(h, P.dayAfter, API_ITEM), 'the effective item revision is the readable one');
+  const receipt = h.infra.data.get(RECEIPT(actionId));
+  assert.deepEqual([receipt.state, receipt.plannedRecordId, receipt.plannedTarget.id, receipt.effectiveTarget.id], ['applied', API_ITEM, P.tomorrow, P.dayAfter],
+    'the receipt names the source item/target and the resulting effective item/target');
+  const replay = await moveApi(h, rev, { actionId });
+  assert.equal(replay.body.result.idempotentReplay, true);
+  assert.equal(store.writes.length, 2, 'no duplicate destination');
+  const conflict = await moveApi(h, rev, { actionId, destination: planIdOf(addCalendarDays(TODAY, 3)) });
+  assert.equal(code(conflict), 'IDEMPOTENCY_CONFLICT', 'same action, different destination');
+});
+
+test('api1_ move: stale revision, a source edit racing the relocation, an already-deleted source: never moved, owner state kept', async () => {
+  const { store, h } = await setup(apiSeed());
+  const stale = await revisionOf(h, P.tomorrow, API_ITEM);
+  store.ownerFence(P.tomorrow, apiItem({ task: 'Gym (legs)', updatedAt: T0 + 5, updatedBy: 'phone' }));
+  assert.equal(code(await moveApi(h, stale)), 'STALE_REVISION');
+
+  // The owner edits after the Function's read but before the relocation commits: the rules' writer-stamp check refuses
+  // the multi-path update, and the re-read reports STALE (never FORBIDDEN, never a half move).
+  let once = true;
+  const raced = planDomain(apiSeed(), { async beforeRelocate() { if (once) { once = false; raced.ownerFence(P.tomorrow, apiItem({ task: 'Owner', updatedAt: T0 + 7, updatedBy: 'phone' })); } } });
+  const hr = harness({ domain: raced });
+  const racedMove = await moveApi(hr, await revisionOf(hr, P.tomorrow, API_ITEM));
+  assert.equal(code(racedMove), 'STALE_REVISION', JSON.stringify(racedMove.body));
+  assert.equal(fenceItem(raced, P.dayAfter), undefined, 'no destination copy');
+  assert.equal(fenceItem(raced, P.tomorrow).task, 'Owner', 'the racing owner edit stands');
+
+  const deleted = planDomain(apiSeed());
+  const hd = harness({ domain: deleted });
+  const liveRev = await revisionOf(hd, P.tomorrow, API_ITEM);
+  deleted.ownerFence(P.tomorrow, apiItem({ deleted: true, updatedAt: T0 + 9, updatedBy: 'phone' }));
+  assert.equal(code(await moveApi(hd, liveRev)), 'STALE_REVISION', 'a deleted task is never moved back to life');
+  assert.equal(fenceItem(deleted, P.dayAfter), undefined);
+  assert.equal([...store.writes, ...raced.writes, ...deleted.writes].filter(write => write.where !== 'record').length, 0, 'no item write (only a destination origin)');
+});
+
+test('api1_ move: two concurrent moves to DIFFERENT days -> one destination, the other STALE; never two current copies', async () => {
+  const third = planIdOf(addCalendarDays(TODAY, 3));
+  const { store, h } = await setup(apiSeed());
+  const rev = await revisionOf(h, P.tomorrow, API_ITEM);
+  const results = await Promise.all([moveApi(h, rev, { destination: P.dayAfter }), moveApi(h, rev, { destination: third })]);
+  assert.deepEqual(results.map(r => (r.status === 200 ? 'ok' : code(r))).sort(), ['STALE_REVISION', 'ok'], JSON.stringify(results.map(r => r.body.error)));
+  assert.equal((await liveCopies(h, [P.tomorrow, P.dayAfter, third])).length, 1);
+  assert.equal(store.writes.filter(write => write.where === 'relocation').length, 1);
+  assert.equal([fenceItem(store, P.dayAfter), fenceItem(store, third)].filter(Boolean).length, 1, 'exactly one destination child exists');
+});
+
+test('api1_ move: crash after the atomic relocation -> the takeover proves it from the source tombstone; receipt CAS loss -> retry proves it', async () => {
+  let crash = true;
+  const store = planDomain(apiSeed(), { async afterRelocate() { if (crash) { crash = false; throw new Error('process died'); } } });
+  const h = harness({ domain: store });
+  const rev = await revisionOf(h, P.tomorrow, API_ITEM);
+  const actionId = newAction();
+  assert.equal((await moveApi(h, rev, { actionId })).status, 500);
+  assert.ok(h.infra.data.get(RECEIPT(actionId)).intent.destinationRevision, 'the intent named the destination revision before writing');
+  const retry = await harnessWithInfra(store, h.infra, NOW_MS + 31_000).handle(command('plan_move', { target: { store: 'calendar', id: P.tomorrow },
+    itemId: API_ITEM, destination: { store: 'calendar', id: P.dayAfter } }, { actionId, expectedRevision: rev }));
+  assert.equal(retry.status, 200, JSON.stringify(retry.body));
+  assert.equal(store.writes.filter(write => write.where === 'relocation').length, 1, 'proven, never relocated twice');
+
+  const lost = planDomain(apiSeed());
+  const hl = harness({ domain: lost });
+  const lostRev = await revisionOf(hl, P.tomorrow, API_ITEM);
+  const lostId = newAction();
+  const put = hl.infra.putIfMatch;
+  let calls = 0;
+  hl.infra.putIfMatch = async (path, value, etag) => (value.state === 'applied' && calls++ === 0 ? 'changed' : put(path, value, etag));
+  assert.equal(code(await moveApi(hl, lostRev, { actionId: lostId })), 'PENDING_UNKNOWN');
+  hl.infra.putIfMatch = put;
+  const proven = await harnessWithInfra(lost, hl.infra, NOW_MS + 31_000).handle(command('plan_move', { target: { store: 'calendar', id: P.tomorrow },
+    itemId: API_ITEM, destination: { store: 'calendar', id: P.dayAfter } }, { actionId: lostId, expectedRevision: lostRev }));
+  assert.equal(proven.status, 200, JSON.stringify(proven.body));
+  assert.equal(lost.writes.filter(write => write.where === 'relocation').length, 1);
+});
+
+test('api1_ move: destination origin absent, concurrently created in another zone, or already in another zone; past and pre-switch refused', async () => {
+  // Concurrently created: another device writes the destination origin (Tokyo) while ours is being frozen.
+  let once = true;
+  const store = planDomain(apiSeed(), { async beforeRecordPut(planId) {
+    if (planId === P.dayAfter && once) { once = false; store.ownerRecord(P.dayAfter, planRecord([other({ id: 'ptokyo' })], { createdAt: T0 - 9, timezone: 'Asia/Tokyo' })); }
+  } });
+  const h = harness({ domain: store });
+  const moved = await moveApi(h, await revisionOf(h, P.tomorrow, API_ITEM), { time: { when: '07:00', whenTz: ZONE } });
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
+  assert.equal(store.room.calendarPlans[P.dayAfter].timezone, 'Asia/Tokyo', 'the earliest origin wins and is never rewritten');
+  assert.equal(moved.body.result.item.schedule.startAt, new Date(Date.parse(`${DAY_AFTER}T07:00:00+08:00`)).toISOString(), 'the item keeps its own explicit zone');
+  assert.deepEqual(store.room.calendarPlans[P.dayAfter].items.map(item => item.id), ['ptokyo'], 'still no api1_ in the array');
+
+  const refused = planDomain(apiSeed());
+  const hr = harness({ domain: refused });
+  const rev = await revisionOf(hr, P.tomorrow, API_ITEM);
+  assert.equal(code(await moveApi(hr, rev, { destination: P.yesterday })), 'PAST_TARGET_IMMUTABLE');
+  assert.equal(code(await moveApi(hr, rev, { destination: planIdOf(addCalendarDays(localPlanDate(ACTIVATED_AT, ZONE), -1)) })), 'NOT_FOUND', 'pre-switch day');
+  assert.equal(refused.writes.length, 0);
+});
+
+test('api1_ move: edits after the move keep the relocation; it can move on again (sequence 2) but not back onto its own tombstone', async () => {
+  const third = planIdOf(addCalendarDays(TODAY, 3));
+  const { store, h } = await setup(apiSeed());
+  assert.equal((await moveApi(h, await revisionOf(h, P.tomorrow, API_ITEM))).status, 200);
+  const done = await h.handle(command('plan_set_completion', { target: { store: 'calendar', id: P.dayAfter }, itemId: API_ITEM, completed: true },
+    { actionId: newAction(), expectedRevision: await revisionOf(h, P.dayAfter, API_ITEM) }));
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(fenceItem(store, P.dayAfter).relocationRevision.sequence, 1, 'an edit never changes the relocation');
+  const back = await moveApi(h, await revisionOf(h, P.dayAfter, API_ITEM), { from: P.dayAfter, destination: P.tomorrow });
+  assert.equal(code(back), 'DOMAIN_LIMIT', 'a fence tombstone is never revived');
+  const onward = await moveApi(h, await revisionOf(h, P.dayAfter, API_ITEM), { from: P.dayAfter, destination: third });
+  assert.equal(onward.status, 200, JSON.stringify(onward.body));
+  assert.equal(fenceItem(store, third).relocationRevision.sequence, 2);
+  assert.equal(fenceItem(store, third).creationActionId, API_ACTION);
+  assert.equal(fenceItem(store, P.tomorrow).relocationRevision.sequence, 1, 'older history is untouched');
+  assert.deepEqual((await liveCopies(h, [P.tomorrow, P.dayAfter, third])).map(item => item.done), [true], 'one current copy, still done');
+});
+
+test('api1_ move: a stale client cannot resurrect the source or fabricate/strip a relocation (owner-write rules)', async () => {
+  const { store, h } = await setup(apiSeed());
+  assert.equal((await moveApi(h, await revisionOf(h, P.tomorrow, API_ITEM))).status, 200);
+  const identity = { firebaseUid: OWNER.ownerFirebaseUid, roomId: `uid_${OWNER.ownerFirebaseUid}` };
+  const source = await store.readPlanFenceItemWithEtag(identity, P.tomorrow, API_ITEM);
+  await assert.rejects(store.putPlanFenceItemIfMatch(identity, P.tomorrow, API_ITEM, apiItem({ updatedAt: T0 + 99 }), source.etag),
+    error => error.code === 'FORBIDDEN', 'the pre-move live copy cannot come back');
+  const dest = await store.readPlanFenceItemWithEtag(identity, P.dayAfter, API_ITEM);
+  const { relocationRevision: _r, ...stripped } = dest.value;
+  await assert.rejects(store.putPlanFenceItemIfMatch(identity, P.dayAfter, API_ITEM, stripped, dest.etag), error => error.code === 'FORBIDDEN');
+  assert.equal(await store.putPlanFenceItemIfMatch(identity, P.dayAfter, API_ITEM, { ...dest.value, task: 'Gym!', updatedAt: NOW_MS + 1 }, dest.etag), 'written',
+    'an ordinary owner edit that keeps the relocation is fine');
 });

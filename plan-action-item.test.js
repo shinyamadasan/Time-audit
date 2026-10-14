@@ -191,3 +191,55 @@ test('end to end: an ordinary owner client cannot fabricate one (Plan Authority 
   assert.equal(db.read(FENCE_AT), null, 'no attributed item exists');
   assert.ok(db.read(`rooms/uid_A/calendarPlans/${SUN_ID}`).items.some(i => i.id === 'pfine1'), 'ordinary items still sync');
 });
+
+// ── TASK-012: the UNCHANGED client after a server-side api1_ move (DECISIONS #38) ─────────────────────────────
+// The Function relocates the item with one atomic multi-path update: the source child becomes a move tombstone and the
+// destination child carries the same id with relocationRevision. The shipped client must show it only on the
+// destination, edit it there through the new rules without stripping the relocation, and never let a stale device
+// resurrect the source.
+const MON_FENCE_AT = `rooms/uid_A/calendarPlanFences/${MON_ID}/${ITEM_ID}`;
+const MOVE = 'act1_2d0b3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
+const moveRelocation = { schemaVersion: 1, sequence: 1, fromDayId: SUN_ID, toDayId: MON_ID, updatedBy: MOVE, updatedAt: 50 };
+const serverMove = db => {
+  db.seed(FENCE_AT, actionItem({ deleted: true, movedToDayId: MON_ID, relocationRevision: moveRelocation, updatedAt: 50, updatedBy: MOVE }));
+  db.seed(MON_FENCE_AT, actionItem({ relocationRevision: moveRelocation, updatedAt: 50, updatedBy: MOVE }));
+};
+
+test('end to end (TASK-012): a server-moved api1_ item shows only on its new day and is edited there with its relocation and marker intact', async () => {
+  const db = rulesEnforcingDatabase({ targaryen, rules: RULES, uid: 'A' });
+  serverMove(db);
+  const app = device(db);
+  const sunday = app.authority.current();
+  const monday = app.authority.upcoming();
+  assert.equal(app.authority.items(sunday).some(i => i.id === ITEM_ID), false, 'not current on the day it left');
+  const moved = app.authority.items(monday).find(i => i.id === ITEM_ID);
+  assert.ok(moved, 'current on its destination day');
+  assert.equal(moved.creationActionId, ACTION);
+  app.authority.updateItem({ sourceTarget: monday, itemId: ITEM_ID, changes: { done: true, doneAt: app.clock.now }, stamp: app.stamp });
+  await app.calendarSync.pushPlan(MON_ID);
+  const server = db.read(MON_FENCE_AT);
+  assert.equal(server.done, true);
+  assert.deepEqual(server.relocationRevision, moveRelocation, 'the relocation survives an ordinary client edit');
+  assert.equal(server.creationActionId, ACTION);
+  assert.equal((db.read(`rooms/uid_A/calendarPlans/${MON_ID}`)?.items || []).some(i => i?.id === ITEM_ID), false, 'never copied into a plan array');
+  assert.deepEqual(db.denials, [], 'every client write was accepted by the new rules');
+});
+
+test('end to end (TASK-012): a stale device holding the pre-move live copy cannot resurrect it on the day it left', async () => {
+  const db = rulesEnforcingDatabase({ targaryen, rules: RULES, uid: 'A' });
+  db.seed(FENCE_AT, actionItem());
+  const laptop = device(db, 'laptop');
+  const sunday = laptop.authority.current();
+  laptop.state.online = false;
+  laptop.calendarSync.detachPlans();
+  serverMove(db); // the Function moves it while the laptop is offline
+  laptop.clock.now += 60_000;
+  laptop.authority.updateItem({ sourceTarget: sunday, itemId: ITEM_ID, changes: { task: 'stale rename' }, stamp: laptop.stamp });
+  laptop.state.online = true;
+  await laptop.calendarSync.pushPlan(SUN_ID);
+  const source = db.read(FENCE_AT);
+  assert.deepEqual([source.deleted, source.movedToDayId], [true, MON_ID], 'the move tombstone stays authoritative');
+  assert.deepEqual(source.relocationRevision, moveRelocation);
+  assert.equal(db.read(MON_FENCE_AT).deleted, undefined, 'the moved copy is untouched');
+  assert.deepEqual(db.denials, [], 'convergence needed no denied write');
+});
