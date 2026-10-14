@@ -756,6 +756,52 @@ closure:
 
 ---
 
+### TASK-013 - Daily-Use Reliability Baseline V1
+status: review
+owner: claude
+source: owner-direct
+priority: P1
+depends-on: TASK-012 (done)
+files: tests/daily-use-reliability.spec.js (new), docs/RELIABILITY_BASELINE_V1.md (new), TASKS.md, CHANGELOG.md, TEST_REPORT.md
+
+context:
+  Owner-direct instruction, 2026-10-14 ("OWNER-DIRECT — TASK-013: Daily-Use Reliability Baseline V1", target
+  REVIEW-READY ONLY). Base: origin/main bc71f146a374edeafe141073adb8ce0d46330048 (TASK-012 closed `done`).
+  Characterize the critical daily loop (start/resume -> interval ping -> log -> persist -> sync -> recover) with
+  deterministic regression tests before any larger reliability change. Test-hardening only; not a redesign.
+
+acceptance:
+  - [x] Existing behavior and test coverage mapped (timer, ping/notification, logging, persistence/sync, platforms).
+  - [x] Minimal deterministic reliability regression suite added (controlled clock, in-memory room-partitioned
+        Firebase stub; no real-time sleeps for the clock under test).
+  - [x] Every one of the 10 priority scenarios classified with executed evidence (PASS / CONFIRMED_FAILURE /
+        COVERAGE_GAP / PLATFORM_UNVERIFIED / DESIGN_DECISION_NEEDED / KNOWN_ACCEPTED_LIMITATION).
+  - [x] Reproduced failures kept explicit (Playwright `test.fail` asserting the existing contract, strict mode
+        `T13_STRICT=1` shows the raw failure); never encoded as passing desired behavior.
+  - [x] Reliability baseline report + device acceptance matrix (Windows browser, Android Capacitor, macOS
+        browser, iOS browser/PWA) + exactly one next-fix recommendation.
+  - [x] No production behavior, schema, rules, auth, Worker/Function or infrastructure change.
+
+constraints:
+  - CODEMAP-first navigation; never read index.html in full.
+  - Do not change production code to make a test green; a needed production seam is reported, not added.
+  - No deploy, production write, push, merge, force push or destructive Git. Stop at REVIEW-READY.
+  - Builder self-review is not independent review; a fresh reviewer must review before any merge.
+
+verification:
+  - [x] npm test, npm run test:smoke, npm run lint, npm run check:www-parity, npm run check:firebase-rules,
+        npm run test:fence, git diff --check (NOT_RUN only with a stated environment reason).
+
+review:
+  Builder self-review only (SELF_REVIEW.md + QA.md AI checks). NOT independently reviewed. A fresh reviewer must
+  review the candidate before any merge. Test-only diff, but it documents red-zone behavior (timer recovery,
+  entry identity, sync), so hold at `approved` if accepted; do not auto-merge.
+  Findings: CONFIRMED_FAILURE F-1..F-7, DESIGN_DECISION_NEEDED D-1..D-3 (docs/RELIABILITY_BASELINE_V1.md).
+  Next recommended task (not scheduled): TASK-014 notification-tap quick log records the completed block (F-4+F-5).
+
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
