@@ -1088,13 +1088,15 @@ source: owner-direct
 priority: P1
 depends-on: none
 files: design/task-018/ standalone HTML/CSS/mock JS, design documentation and capture scripts;
-  playwright-report/task-018-design/ screenshots and measurements (local evidence); TASKS.md lifecycle/phase record.
+  playwright-report/task-018-design/ and playwright-report/task-018-refined-a/ screenshots and measurements
+  (local evidence); TASKS.md lifecycle/phase record.
 
 context:
   Owner-direct visual-first design instructions supplied in Pasted text.txt in this session, 2026-10-15,
   supersede the earlier implementation sequence. Base bb171a287ac67d76ae27634b5227bc24f66919de.
   Worktree task-018; preserve prior proposal files and uncommitted edits. TASK-017 failed real-use UX acceptance.
-  MODE DESIGN ONLY. No design is selected or approved; 64px is an unapproved exploration, not a constraint.
+  MODE DESIGN ONLY. Owner now directs refinement of Option A only; production approval remains pending.
+  The earlier 64px proposal remains an unapproved exploration, not a constraint.
 
 objective:
   Produce three distinct, polished standalone alternatives for Unfinished in the context of My Day,
@@ -1131,7 +1133,7 @@ verification:
   - Confirm production files unchanged and prior local proposal bytes preserved. Deliver requested design fields,
     recommendation/tradeoffs, OWNER_APPROVAL PENDING; stop at design delivery.
 
-design-delivery:
+initial-design-delivery:
   Three standalone alternatives and comparison page delivered in design/task-018/. Owner visual selection pending.
   A is recommended only, not selected/approved. Earlier 64px exploration remains unapproved and preserved byte-for-byte.
   Real browser evidence at 390x844 and 1440x900: all requested default/menu/date and My Day context images,
@@ -1141,6 +1143,26 @@ design-delivery:
   see design/task-018/FEASIBILITY.md. No production UI, Plan Authority, sync, schema/rules, www or live-data changes.
   No full production regression suite (explicit owner instruction), merge, push or deployment.
   Status review is a design-only handoff. Do not resume production implementation without separate owner authorization.
+
+current-refinement:
+  Owner-direct "Refine Option A Only" in this session, 2026-10-15, authorizes visual prototype changes only.
+  Keep original A/B/C study and prior uncommitted work; create A-refined.html / A-refined.css / A-refined.js,
+  capture-A-refined.mjs and A-REFINEMENT.md under design/task-018; link the refinement from comparison/README.
+  Replace pagination with five-item preview + View all opening a bounded searchable backlog without permanent
+  search/grouping in My Day. Checkbox means Complete today; Done earlier stays in compact anchored More.
+  Use a small temporary Undo notice; preserve long-title access and touch targets. Show complete My Day at
+  390px/1440px, preview, full backlog, More and date states; measure footprint and interaction counts.
+  Mock-only interactions, no production/persistence/Firebase/planning changes; no merge/push/deploy.
+  Focused browser design checks only, then stop at design evidence with production approval pending.
+
+refinement-delivery:
+  Refined A is available at design/task-018/A-refined.html; complete screenshot gallery and measurements at
+  A-refinement-evidence.html / A-REFINEMENT.md. Both requested widths captured in complete mock My Day context.
+  Five-task preview + View all; bounded searchable 22-item backlog; More/Done earlier; temporary Undo notification.
+  Measured section 367px mobile / 348px desktop; notification 46px; 62 focused mock assertions pass, no browser
+  exceptions/external requests/storage writes/overflow. Original A/B/C assets and old uncommitted proposal preserved.
+  Design-only handoff. No production/persistence/Firebase/planning changes, merge, push or deployment.
+  Production approval remains pending; stop after this visual evidence.
 
 ---
 

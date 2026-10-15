@@ -1,0 +1,25 @@
+.refinement-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; margin: 0 0 20px; }
+.refinement-label strong { color: var(--deep); font-weight: 500; letter-spacing: .04em; }
+.context-streak { margin-bottom: 28px; }
+.mock-controls { margin-bottom: 70px; }
+.backlog-window { padding: 0; color: var(--text); background: var(--bg2); border: 1px solid #494950; border-radius: 14px; width: min(600px, calc(100vw - 24px)); max-height: min(600px, calc(100dvh - 64px)); overflow: visible; }
+.backlog-window[open] { display: flex; flex-direction: column; }
+.backlog-window::backdrop { background: #000a; }
+.backlog-header { display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 4px 8px 4px 16px; gap: 8px; }
+.backlog-header h2 { margin: 0; font-size: 15px; }
+.backlog-header h2 span { font: 11px var(--mono); color: var(--muted); margin-left: 8px; }
+.backlog-window .find-bar { flex: none; margin: 0 12px 8px; }
+.backlog-window .find-bar input:focus-visible { outline: none; }
+.backlog-rows { overflow: auto; overscroll-behavior: contain; padding: 0 10px; min-height: 80px; max-height: min(440px, calc(100dvh - 210px)); scrollbar-width: thin; }
+.backlog-footer { padding: 9px 16px; color: var(--muted); border-top: 1px solid var(--line); font-size: 11px; }
+.backlog-window .task-row { flex-shrink: 0; }
+.undo-notice { position: fixed; z-index: 80; bottom: 84px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; width: max-content; max-width: calc(100vw - 32px); min-height: 44px; padding: 0 6px 0 13px; border: 1px solid #4a5154; border-radius: 9px; background: #24282a; color: var(--text); font-size: 12px; box-shadow: 0 6px 22px #0006; }
+.undo-notice button { min-height: 44px; min-width: 44px; padding: 0 9px; font-size: 12px; color: var(--deep); }
+.undo-notice.error { border-color: #754646; color: var(--danger); }
+.backlog-window .undo-notice { position: absolute; bottom: 44px; }
+.preview-shell { position: relative; }
+.backlog-window .popover { z-index: 100; }
+/* Full-document evidence places navigation at the document foot; interactive views keep it fixed. */
+body.document-capture { position: relative; }
+body.document-capture .context-nav { position: absolute; }
+@media (max-height: 520px) { .backlog-window { max-height: calc(100dvh - 24px); } .backlog-rows { max-height: calc(100dvh - 168px); } }
