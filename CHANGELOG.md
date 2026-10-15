@@ -5025,3 +5025,19 @@ tests: isolated proposal renderer passes three viewports, 22 synthetic tasks and
 blockers: waiting for the owner-requested UX acceptance before production implementation; persistence contract audit pending.
 deviations: none — no production code, model, rules, sync, www, deployment or live-data changes.
 → proposal only; final review-ready candidate and independent review pending.
+
+## TASK-018 — approved Refined A implementation safety gate (branch: task-018)
+changed:
+  - TASKS.md: record current owner implementation authorization and blocked safety-gate result.
+  - TASK_018_IMPLEMENTATION_SAFETY_GATE.md: exact all-store retention, old-client and cutover blockers;
+    required contract, source consumers, evidence and explicitly unfulfilled implementation deliverables.
+  - design/task-018/audit-completion-safety.mjs: offline synthetic reproduction of 18 current-contract observations,
+    with integrity checks for all 14 released-client fixture files. Not a production completion implementation.
+tests: 18 observations reproduced (gate BLOCKED); 116 existing focused baseline tests pass; rules/parity/diff checks pass.
+blockers: old writers can erase an annotation; post-cutover ordinary legacy sources deny the write. Need a reviewed,
+  proven server-enforced stable-identity retention/transition and compatibility protocol across all source stores,
+  plus historical convergence and exact acknowledgements/conditional Undo. See safety-gate report.
+deviations: stopped as owner required before production edits. No implementation SHA, real completion acceptance,
+  production screenshots or full regression/emulator/device evidence. Existing unrelated dirty design files preserved.
+  No new completion/delete behavior, production/rules/sync/live-data changes, merge, push or deployment.
+→ status set to `blocked` in TASKS.md; independent review requested for exact local audit checkpoint, not an implementation.
