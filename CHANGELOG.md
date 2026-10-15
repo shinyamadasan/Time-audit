@@ -1,7 +1,7 @@
 # ChronaSense — Changelog
 
 ## TASK-015 — post-rebase F3 rewrite and docs (branch: task-015, 2026-10-15)
-base: rebased by the lead onto origin/main `2411ee4`. Tokens: governed = `20261014-task014-normal-tracking-hud-v1`;
+base: rebased by the lead onto origin/main `2411ee4`, then cleanly onto `8abe63b` (TASKS.md-only delta). Tokens: governed = `20261014-task014-normal-tracking-hud-v1`;
   Brain Dump = `20261015-task015-plan-tray-v1`.
 changed:
   - tests/brain-dump-plan-tray.spec.js: both F3 tests made deterministic. Claims are held in flight with __bdHold,

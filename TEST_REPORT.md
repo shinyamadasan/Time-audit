@@ -5,9 +5,9 @@
 
 ---
 
-## TASK-015 post-rebase (origin/main 2411ee4) · 2026-10-15
+## TASK-015 post-rebase (origin/main 2411ee4; final base 8abe63b, TASKS.md-only delta) · 2026-10-15
 suite: lead's gates on the rebased branch (npm test, lint, parity, rules, diff-check, targeted 7 specs, full smoke).
-  Then, after the F3 rewrite (`2d712ed`): `npx playwright test tests/brain-dump-plan-tray.spec.js -g F3
+  Then, after the F3 rewrite (`601113e`): `npx playwright test tests/brain-dump-plan-tray.spec.js -g F3
   --repeat-each=50 --workers=2`; `npx playwright test tests/brain-dump-plan-tray.spec.js --workers=2`;
   `npx playwright test --workers=2`.
 result:
