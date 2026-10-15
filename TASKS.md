@@ -1014,7 +1014,7 @@ follow-ups (recorded at integration; not scheduled; TASK-016 is proposed, not au
 ---
 
 ### TASK-017 - Unfinished Task UX Improvement V1
-status: review
+status: approved
 owner: codex
 source: owner-direct
 priority: P1
@@ -1052,6 +1052,32 @@ verification:
   - npm test; focused Playwright regressions; lint; www parity; generated rules unchanged; git diff --check.
   - Capture and inspect desktop/mobile screenshots using synthetic data only.
   - SELF_REVIEW.md and applicable QA.md checks; independent read-only review; stop at review-ready.
+
+
+review:
+  PASS WITH NOTES for exact candidate 85fa30c19c027e224ed1f61a2c3e26993f596692 (owner-supplied verdict,
+  independently reconfirmed against the clean final candidate in this integration session, 2026-10-15).
+  Owner explicitly authorized integration; status stays approved pending real-use acceptance, never done here.
+
+integration:
+  Authorized base origin/main: cbbfab625dd143199d74e934e6c2d79aae3ce081, freshly fetched and exact before landing.
+  Reviewed scope: 16 files; this lifecycle commit changes TASKS.md only. Candidate ancestry and clean worktree verified.
+  Plan Authority, Firebase rules/schema, synchronization/backend contracts and Brain Dump code are unchanged;
+  historical Completed/Delete remains design-only. No TASK-016 work or production data mutation.
+  Local gates: npm test exit 0 (2190 Node passes + separate 455-case legacy harness, 0 failures, 1 existing opt-in
+  skip); Worker 32/32; lint 0 errors / 48 baseline warnings; 92-file www parity, generated rules and diff checks pass.
+  Browser evidence (same reviewed SHA, no test/config/assertion/retry changes): first full 938-case attempt had
+  930 ordinary passes + 7 expected failures + 1 recurring-editor failure, reproduced on exact base at 1/10.
+  Second full attempt had 931 ordinary passes + 6 expected failures + 1 Chromium context-creation setup failure
+  before F-3's annotation. Fresh entire reliability file: exit 0, 22 ordinary + 7 expected failures, 0 unexpected.
+  Independent gate review accepts complete per-case evidence across full and targeted runs under existing policy
+  and TASK-014 precedent. Neither full attempt is claimed exit 0; the seven TASK-013 failures remain unresolved.
+  Land only by normal fast-forward push through existing Claude Code permission checks; no force/rebase or bypass.
+  Final remote SHA, hosted CI and Pages results are returned in the integration session.
+  Acceptance hold: real daily-use acceptance on the owner's devices is still pending; do not mark done.
+  Preserved limitations: Undo guards observed local state, not unseen remote edits; historical calendar sources lack
+  default live subscriptions; legacy/post-cutover dismissal durability is unverified against production rules;
+  no live Firebase, real cross-device/account race, physical phone/Android or real-use acceptance was tested.
 
 ---
 
