@@ -906,7 +906,7 @@ follow-ups (non-blocking, recorded at integration; not scheduled):
 ---
 
 ### TASK-015 - Unified My Day + Brain Dump V1 (planning tray)
-status: review
+status: approved
 owner: codex
 source: owner-direct
 priority: P1
@@ -986,6 +986,14 @@ verification:
 review:
   Gate if accepted: approved (held) — triggers promotion writes into plan stores. Must be reconciled onto origin/main
   after TASK-014 lands and re-tested before independent review.
+  Reconciled onto origin/main 2411ee4 then 8abe63b (TASK-014 landed and closed); tokens: governed
+  20261014-task014-normal-tracking-hud-v1, Brain Dump 20261015-task015-plan-tray-v1. Independent review PASS WITH NOTES
+  (REVIEW.md ca1ab21 + addendum 1bd49fe), no must-fix. Gate: approved (held) — NOT merged, pushed or deployed; needs
+  separate owner authorization. Post-rebase: npm test 2190/0/1 skip, lint 0 errors (48 = main baseline), parity/rules/
+  diff-check clean, full smoke 921 passed / 0 failed (2 workers), F3 150/150.
+  Follow-ups (not scheduled; protected layer, need owner approval): F-A false cross-tab "being added on another
+  device" toast; F-B pre-existing stuck claim after a same-browser two-tab race (one item, capture left triaged+claimed,
+  reload sweep does not heal); S3 tray in-flight guard. See TASK_015_HANDOFF.md.
 
 ---
 
