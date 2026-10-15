@@ -2164,3 +2164,23 @@ recovery: initial sandbox Chromium spawn EPERM; approved local renderer retry. F
   click-bubbling defect found by the date-form check. Final renderer exit 0 on all three viewports.
 untested: real persistence/sync/account/old-client safety; physical Android; production regressions and npm test.
   These are pending implementation after the owner's required proposal acceptance, not skipped completion gates.
+
+## TASK-018 implementation safety gate · 2026-10-15
+suite: node design/task-018/audit-completion-safety.mjs
+result: 18 offline observations reproduced; gate explicitly BLOCKED, not a feature pass. Verified 14 hash-pinned
+  released cf43080 fixture files. Reproduced annotation loss in current/released merges, accepted stale calendar
+  overwrite, denied ordinary post-cutover legacy/operational writes, existing ended-task completion refusal,
+  original-day classifier/backlog mismatch, omitted historical listeners and local-first unacknowledged writes.
+suite: node --test calendar-plan-model.test.js calendar-plan-live.test.js calendar-plan-sync.test.js
+  plan-authority-calendar.test.js plan-authority-fence.test.js firebase-rules.test.js
+result: 116 passed, 0 failed, 0 skipped. Existing baseline only, no new completion behavior under test.
+checks: check:firebase-rules matches builder; check:www-parity passes (92-file closure); git diff --check passes.
+environment: initial audit dependency missing; npm ci --offline failed peer-cache resolution, then
+  --offline --legacy-peer-deps --ignore-scripts --no-audit --no-fund succeeded (no lockfile changes). Early audit
+  fixture hash CRLF/wire-key issues corrected before final exit 0. Initial isolated Node tests had six spawn EPERM
+  file-launch failures under the sandbox; permission-approved retry passed all 116 tests, no product failure claimed.
+untested: full npm test and browser regressions; production completion/Undo/search/long-title acceptance, real
+  failed/uncertain writes, new account/two-client sync protocol, emulator/physical devices. No implementation
+  was made after the explicit safety stop, so no production screenshots or REVIEW-READY claim. Rules interpreter
+  observations and synthetic sync stub are not real-SDK/emulator proof. TASK-014/015/017 behavior unchanged;
+  existing expected-failure/known-issue results were not rerun, relabelled or claimed fixed. No live data accessed.

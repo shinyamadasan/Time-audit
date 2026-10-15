@@ -1081,15 +1081,44 @@ integration:
 
 ---
 
-### TASK-018 - Unfinished Resolution + Compact UX (visual-first design phase)
-status: review
+### TASK-018 - Unfinished Resolution + Compact UX (approved Refined A; implementation safety gate)
+status: blocked
 owner: codex
 source: owner-direct
 priority: P1
 depends-on: none
 files: design/task-018/ standalone HTML/CSS/mock JS, design documentation and capture scripts;
   playwright-report/task-018-design/ and playwright-report/task-018-refined-a/ screenshots and measurements
-  (local evidence); TASKS.md lifecycle/phase record.
+  (local evidence); TASKS.md lifecycle/phase record; TASK_018_IMPLEMENTATION_SAFETY_GATE.md;
+  CHANGELOG.md and TEST_REPORT.md append-only. Production file manifest requires a passing safety gate first.
+
+implementation-phase (supersedes design-only execution restrictions below; historical records retained):
+  Owner-direct "TASK-018 - Implement Approved Refined A", current session 2026-10-15.
+  Visual direction approved at 26e24b46214cf6ae12828d5bd8389171a5644b28. Fetch and verify current origin/main.
+  Goal: real historical completion with the approved compact rows, five-task preview, searchable View all,
+  anchored More/Done earlier, temporary feedback, 44px targets, full-title access and keyboard/mobile support.
+  Preserve original plan date/outcome separately from reported actual completion date; no fabricated time,
+  old-day completion or streak credit; no second task store. Audit Plan Authority, Firebase rules,
+  reconciliation, sync and old-client compatibility BEFORE persistence implementation. Require account-bound
+  revision-aware writes, confirmed durability, recoverable failures/unknown results and conditional Undo.
+  STOP and report a specific blocker if protected data-model changes cannot be proven safe; no decorative check
+  or hidden Move-to-today substitute. No live cleanup/deletion, unrelated changes, merge, push or deployment.
+  If gate passes: declare exact production files here, implement the complete slice, test today/earlier/Undo/
+  conflict/search/titles/account-switch/two-client/failure/unknown/history/old-client and TASK-014/015/017,
+  capture actual production 390px/1440px UI including backlog, run repository verification and independent
+  review on exact candidate. Target REVIEW-READY ONLY; if blocked, report skipped implementation deliverables.
+
+implementation-safety-gate:
+  BLOCKED before production changes. Current and released cf43080 whole-item merges erase a proposed resolution
+  when a newer offline pre-resolution edit arrives; ordinary calendar rules accept that overwrite. Ordinary
+  plans/operationalPlans history rejects all writes after calendar activation although it remains in Unfinished.
+  New-client CAS alone fixes neither gap. Need a reviewed all-store, stable-identity retention/transition and
+  post-cutover exception contract, including old-writer policy, before persistence can be proven safe.
+  Historical subscriptions and exact acknowledgement/conditional Undo also require protected sync changes.
+  See TASK_018_IMPLEMENTATION_SAFETY_GATE.md and design/task-018/audit-completion-safety.mjs (18 offline observations,
+  14 released-fixture hashes verified). Existing six-file baseline: 116 tests pass; rules generation/parity pass.
+  No production checkbox/completion/Undo was implemented. Full implementation tests/screenshots and production
+  independent review are unavailable; independent review of the exact safety-audit checkpoint is requested.
 
 context:
   Owner-direct visual-first design instructions supplied in Pasted text.txt in this session, 2026-10-15,
