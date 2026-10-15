@@ -1081,6 +1081,54 @@ integration:
 
 ---
 
+### TASK-018 - Unfinished Resolution + Compact UX
+status: codex
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: TASK_018_UX_PROPOSAL.html, TASK_018_UX_PROPOSAL.md, TASKS.md,
+  CHANGELOG.md, TEST_REPORT.md; production file scope must be recorded after the completion-contract audit,
+  before any production implementation.
+
+context:
+  Owner-direct instruction in this session, 2026-10-15. TASK-017 failed owner real-use UX acceptance.
+  Freshly fetched origin/main equals the authorized base bb171a287ac67d76ae27634b5227bc24f66919de.
+  Worktree task-018, solo interactive execution. Target REVIEW-READY ONLY; no merge, push or deployment.
+
+objective:
+  Compact Unfinished rows with truthful explicit late-completion resolution, preserving original plan history.
+
+sequence:
+  1. Produce compact desktop/mobile proposal using synthetic 22-item backlog; wait for owner acceptance before implementation.
+  2. Confirm historical completion contract and exact consumers, using TASK_017_COMPLETION_DELETE_DESIGN.md.
+  3. Implement smallest safe complete persistence/UI slice only after those gates; no decorative production checkmark.
+  4. Deterministic unit/browser/synchronization/account tests, full verification, independent exact-candidate review.
+
+acceptance:
+  - Five tasks fit without excess whitespace; rows approximately 56-80px, left checkmark, title, subtle planned date,
+    small anchored More menu; no full-width action panels, large gaps or ordinary full-screen completion forms.
+  - One intentional checkmark reports completed today; Done earlier offers an explicit date picker, initially today.
+  - Remove only the intended task after confirmed persistence; provide success feedback and safe failure recovery.
+  - Preserve Move, Reschedule, Not doing semantics as secondary actions, account separation, Brain Dump and My Day timeline.
+  - Preserve planned date separately from owner-reported actual completion date; never mark an old planning day done,
+    fabricate tracked time, streaks or daily-review outcomes.
+  - Duplicate/concurrent actions, stale records, remote synchronization, account changes and old clients are safe.
+  - Test synthetic existing-size 22-item backlog at Android/desktop sizes; no TASK-014/015/017 regressions.
+
+constraints:
+  - No second task store, deletion workflow, unrelated UI, TASK-016 work, live-data mutations, merge, push or deployment.
+  - Protected persistence/sync changes are limited to the necessary bounded complete slice; if unsafe, stop with exact blocker.
+  - Proposal acceptance is a required owner gate. Production implementation has not started.
+
+verification:
+  - Proposal: rendered desktop/mobile screenshots, measured row/section sizes, anchored-menu/date-form geometry,
+    22-item paging, simulated saving/success/failure and zero network or persistence operations.
+  - Implementation after gates: npm test, full Playwright, relevant sync/account/old-client and real emulator suites,
+    lint, generated-rule and runtime-mirror checks, SELF_REVIEW.md/QA.md, independent review of exact final candidate.
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

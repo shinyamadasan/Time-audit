@@ -2151,3 +2151,16 @@ untested:
   - Owner screenshot unavailable. Completed/Delete behavior is design-only; no historical semantic tests claimed.
 evidence: task017-npm-final.log, task017-browser-final.log, task017-layout-final.log, task017-lint-final.log (ignored local logs);
   playwright-report/task-017/unfinished-{360,390,1920}.png and unfinished-more-{360,390,1920}.png (local images).
+
+## TASK-018 proposal checkpoint · 2026-10-15
+suite: isolated Playwright proposal renderer (`playwright-report/task-018-proposal/render.mjs`), not the production app
+result: PASS at 360x800, 390x844 and 1280x900; five 64px rows, 445px section, 44px controls,
+  224px anchored menu / 272px date form, all 22 fixture identities reachable, no horizontal overflow,
+  date default and simulated pending/error/unknown/success identity checks, Escape/collapse, 0 external requests,
+  0 browser errors. 21 screenshots and measurements retained in local ignored proposal evidence folder.
+  Builder inspected all three ready layouts and 390px menu/date/error/success screenshots.
+recovery: initial sandbox Chromium spawn EPERM; approved local renderer retry. Fixed URL-decoding in the capture
+  script (two misplaced synthetic captures removed from the exact checked output directory), then a proposal-only
+  click-bubbling defect found by the date-form check. Final renderer exit 0 on all three viewports.
+untested: real persistence/sync/account/old-client safety; physical Android; production regressions and npm test.
+  These are pending implementation after the owner's required proposal acceptance, not skipped completion gates.
