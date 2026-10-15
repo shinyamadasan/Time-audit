@@ -2105,3 +2105,49 @@ result: npm test exit 0 (2190 pass / 0 fail); bridge unit 33/33; HUD browser spe
 mutations (final candidate): M1 no clear in resetTimer → 2 fail; M2 tracking over Focus in bridge → 3 unit fail (browser masked by selector); M3 no device-owner check → 1 fail; M4 no clear on account detach → 1 fail; M5 claim re-stamped per send → 2 fail.
 regression found during build: the selector could project the Focus task with the earlier task's start (hybrid); reproduced, then traced to pre-existing H-1; test now asserts HUD == ChronaSense's own state and nothing while Focus is active.
 untested: live WPF window, real Chrome Local Network Access prompt, a real second Chrome tab against a running companion, production RTDB echo for H-1.
+
+
+## TASK-017 · 2026-10-15
+suite: npm test; affected Playwright suites (8 specs, --workers=2); final layout-only rerun; lint/parity/rules/static QA
+result:
+  - npm test: exit 0. Node runner summaries: 2190 passed, 0 failed, 1 skipped. Legacy test.js harness separately
+    reports 455 passed, 0 failed. Coverage was not collected.
+  - Skip is the existing opt-in lower-case-drive control proof (CROSS_REPO_COMPAT_CONTROL_PROOF=1), not task coverage.
+  - Playwright: 154 passed, 0 failed (5.4m), including 17 new Unfinished cases. Specs: unfinished-ux,
+    planning-continuity, planning-continuity-fixes, brain-dump-plan-tray, my-day-timeline, brain-dump-eisenhower,
+    brain-dump-production-ux, calendar-native-plan-identity. Final contrast-only layout rerun: 3/3 passed (10.8s).
+  - Lint: exit 0, 0 errors / 48 pre-existing warnings. www parity: 92-file closure matches. Generated Firebase
+    rules match builder; git diff --check clean. Node syntax check passes for the new spec.
+  - Protected-source equality check PASS against cbbfab625dd143199d74e934e6c2d79aae3ce081. index.html was verified
+    to differ ONLY by release URLs. No authority/sync/Brain Dump source or schema/rules change.
+  - SELF_REVIEW Code Health and applicable QA checks pass; source/design independently reviewed PASS after repairs.
+  - Screenshots generated at 360/390/1920px, closed/open More actions. Final 390px expanded and 1920px default images
+    inspected by builder; earlier 360px default/expanded images also inspected. No overflow; 44px targets asserted.
+    Reviewer inspected two earlier images; final brighter evidence is builder-verified.
+chaos evidence:
+  - Dismiss + same-clock Undo across legacy/operational/calendar stores; sibling and original plan facts preserved.
+  - Same id on different source days; duplicate dismissal/Undo; dismiss→Undo→dismiss with stale restored snapshot.
+  - Firebase null/key-order normalization; observed remote edit or recovery destination refuses Undo.
+  - Stale rendered dismissal after a move refuses; account A→B→A clears receipt; reload preserves dismissal/history.
+  - 125-task traversal keeps five DOM rows and reaches every task. 100-task mobile/desktop fixture layouts pass.
+  - Two synthetic clients exchange recorded calendar snapshots through actual sync listeners; historical source
+    subscription is explicitly attached by the fixture. This is NOT proof of default live historical propagation.
+  - Existing stale recovery, recovery conflicts, timeline and TASK-015 tray suites pass; Brain Dump code unchanged.
+verification history (resolved, not hidden):
+  - Initial sandbox attempts could not spawn test workers (EPERM); rerun with local execution permission succeeded.
+  - Early fixture/assertion failures and an inherited 40px button override were corrected. Independent review found
+    repeated-action revision ordering and Firebase-pruned equality issues; both fixed and covered by regressions.
+  - An early npm run caught mirror drift during iteration; mirror regenerated. Another stopped on missing targaryen.
+    Locked worktree install used documented --legacy-peer-deps for existing Capacitor 8 / Google Auth peer mismatch,
+    with --ignore-scripts; manifests and lockfile unchanged. Installing while a browser run was active disrupted
+    module identity (70 passed, 4 loader failures, 80 not run); the stable repeat passed 154/154.
+untested:
+  - No real Firebase/physical phone/Android build/live cross-device race. Full repository Playwright suite and
+    emulator/fence suites were not run; affected browser specs, npm suite and unchanged-rules check were run.
+  - Existing LWW cannot detect unseen concurrent edits. Historical calendar sources hydrate but are not subscribed
+    live by default; cross-device source-listener coverage needs separately authorized protected work.
+  - Post-cutover legacy-source dismissal/Undo remote persistence was not verified against production rules.
+  - Undo is session-only and only for the latest dismissal. Exceptional conflict lists remain unpaginated.
+  - Owner screenshot unavailable. Completed/Delete behavior is design-only; no historical semantic tests claimed.
+evidence: task017-npm-final.log, task017-browser-final.log, task017-layout-final.log, task017-lint-final.log (ignored local logs);
+  playwright-report/task-017/unfinished-{360,390,1920}.png and unfinished-more-{360,390,1920}.png (local images).

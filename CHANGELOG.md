@@ -4994,3 +4994,25 @@ tests: see TASK-014 in TEST_REPORT.md.
 blockers: none. Finding H-1 (pre-existing Focus-echo → normal timer after a break ends in the overlay) documented with a bounded recommendation; not fixed (red-zone timer change outside the brief).
 deviations: none from the brief. No Firebase schema/rules, Action API, Worker, OAuth or Function change; no push, merge or deploy.
 → status set to `review` in TASKS.md.
+
+
+## TASK-017 — done (implementation only; branch: task-017; review-ready)
+changed:
+  - planning-continuity-ui.js: five-row paging, More actions, account/source-guarded session Undo through existing
+    Plan Authority; stampStaleMutation and sameOnWire protect repeat ordering/wire equivalence (107 changed loc).
+  - planning-continuity.css: scoped responsive hierarchy, 44px targets, two-line titles and readable metadata (27 loc).
+  - index.html: governed generation and planning CSS URLs only; matching release assertions in
+    personal-day-boundary-web-runtime.test.js / tests/calendar-native-plan-identity.spec.js.
+  - tests/unfinished-ux.spec.js: 17 regressions; tests/planning-continuity.spec.js: disclosure/paging expectations.
+  - www/index.html, www/planning-continuity-ui.js, www/planning-continuity.css: generated mirrors.
+  - CODEMAP.md, TASKS.md, TEST_REPORT.md, TASK_017_HANDOFF.md, TASK_017_COMPLETION_DELETE_DESIGN.md: contract,
+    evidence, separate historical-resolution design and exact file manifest. Independent source/design review PASS.
+tests: npm test exit 0 (2190 Node passes + separate 455-case legacy harness, 0 failed, 1 existing opt-in skip);
+  affected Playwright 154/154 including 17 new; final contrast-only layouts 3/3; lint 0 errors (48 baseline warnings);
+  parity/rules/diff/static QA pass. See TEST_REPORT.md for environment retries and unverified scenarios.
+blockers: no remaining UI implementation blocker; strict unseen-remote conflict protection and default live
+  historical-source synchronization require separately authorized protected work. Historical Completed/Delete
+  intentionally remain design-only, pending separate owner authorization.
+deviations: owner screenshot unavailable; written feedback used. Full Playwright/emulator suites and physical
+  devices not exercised. Only observed-state Undo safety is claimed under existing LWW. No integration/push/deploy.
+→ status set to `review` in TASKS.md; stop at REVIEW-READY.

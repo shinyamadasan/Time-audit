@@ -88,6 +88,33 @@
 #unfinished-recovery-section[hidden] { display: none; }
 .pc-stale-trigger { width: 100%; min-height: 46px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; background: none; border: 0; color: var(--text); font: 600 13px var(--ui); cursor: pointer; }
 
+/* Bounded unfinished list: task and planned date first, secondary actions on demand. */
+#unfinished-recovery-section { --muted: color-mix(in srgb, var(--text) 72%, var(--bg2)); }
+#unfinished-recovery-section .pc-stale-row { display: block; padding: 14px 0; }
+.pc-stale-row .pc-row-title { font-size: 15px; line-height: 1.45; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.pc-stale-row .pc-row-meta { font-size: 12px; line-height: 1.5; margin-top: 5px; overflow-wrap: anywhere; }
+.pc-stale-actions { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+#unfinished-recovery-section .btn.sm,#unfinished-recovery-section .pc-icon,.pc-stale-more summary { min-height: 44px; min-width: 44px; }
+.pc-stale-more { flex: 1 1 150px; min-width: 0; }
+.pc-stale-more summary { display: flex; align-items: center; width: fit-content; padding: 0 12px; border: 1px solid var(--bd); border-radius: 6px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.pc-stale-more summary::after { content: ' +'; margin-left: 8px; }
+.pc-stale-more[open] summary::after { content: ' −'; }
+.pc-stale-options { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-top: 8px; padding: 10px; background: var(--bg3); border-radius: 6px; }
+.pc-stale-full-title { overflow-wrap: anywhere; line-height: 1.5; }
+.pc-stale-pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--bd); padding-top: 10px; }
+.pc-stale-pager .pc-muted { text-align: center; }
+.pc-stale-feedback { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.pc-stale-feedback .pc-stale-full-title { flex-basis: 100%; }
+#unfinished-recovery-section :focus-visible { outline: 2px solid var(--deep); outline-offset: 3px; }
+
+@media (max-width: 520px) {
+  .pc-stale-actions > .btn { flex: 1 1 140px; }
+  .pc-stale-more { flex-basis: 120px; }
+  .pc-stale-more summary { width: 100%; justify-content: center; }
+  .pc-stale-more[open] { flex-basis: 100%; }
+  .pc-stale-pager .btn { padding-inline: 8px; font-size: 12px; }
+}
+
 /* My Day owns the visible timeline identity; the old destination wrapper label is redundant. */
 #timeline-details > summary { display: none !important; }
 #timeline-details { margin-top: 14px; }

@@ -1013,6 +1013,48 @@ follow-ups (recorded at integration; not scheduled; TASK-016 is proposed, not au
 
 ---
 
+### TASK-017 - Unfinished Task UX Improvement V1
+status: review
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: planning-continuity-ui.js, planning-continuity.css, index.html (release URLs only),
+  personal-day-boundary-web-runtime.test.js, tests/calendar-native-plan-identity.spec.js (release assertions only), tests/planning-continuity.spec.js,
+  tests/unfinished-ux.spec.js (new), www/ generated mirror, CODEMAP.md,
+  TASK_017_HANDOFF.md, TASK_017_COMPLETION_DELETE_DESIGN.md (new), CHANGELOG.md, TEST_REPORT.md, TASKS.md
+
+context:
+  Owner-direct instruction in this session, 2026-10-15: TASK-017 Unfinished Task UX Improvement V1.
+  Base verified by fresh fetch: origin/main cbbfab625dd143199d74e934e6c2d79aae3ce081.
+  Goal: manageable Unfinished UX on My Day, preserving compact/collapsible behavior, Brain Dump tray
+  and timeline. Referenced owner screenshot is unavailable in this thread; use written feedback and existing UI.
+  Solo interactive task; target REVIEW-READY ONLY. Recording authorized by CLAUDE.md Owner-Direct Task Override.
+
+acceptance:
+  - Clear task names/dates, primary Move to today and secondary More actions containing Move & edit,
+    Reschedule, Not doing this; explain active-backlog removal with history preserved.
+  - Investigate and expose Undo only if existing Plan Authority supports it safely; no authority changes.
+  - Bounded progressive disclosure for 20–100+ tasks; mobile readability, truncation and 44px controls.
+  - Focused tests: intended dismissal/Undo, preserved history, duplicate/stale actions, account isolation,
+    simulated synchronization, large lists, mobile/desktop, existing recovery and Brain Dump integration.
+  - Separate minimal Completed/Delete design with exact required changes; distinguish planned date from
+    actual completion date, never silently complete a historical day; implementation requires separate authorization.
+  - Desktop/mobile evidence, exact changed files, test results, limitations and independent review handoff.
+
+constraints:
+  - No new task store, persistence, planning authority, schema/rules changes, protected authority/sync edits,
+    live-user task mutation, TASK-016 work, historical completion/deletion semantics, integration, push or deployment.
+  - If safe UI work needs protected architectural changes, stop that part and report the blocker.
+  - Preserve Brain Dump tray and My Day timeline; reuse existing behavior. Independent review required.
+
+verification:
+  - npm test; focused Playwright regressions; lint; www parity; generated rules unchanged; git diff --check.
+  - Capture and inspect desktop/mobile screenshots using synthetic data only.
+  - SELF_REVIEW.md and applicable QA.md checks; independent read-only review; stop at review-ready.
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
