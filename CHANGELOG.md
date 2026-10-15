@@ -1,5 +1,19 @@
 # ChronaSense — Changelog
 
+## TASK-015 — post-rebase F3 rewrite and docs (branch: task-015, 2026-10-15)
+base: rebased by the lead onto origin/main `2411ee4`. Tokens: governed = `20261014-task014-normal-tracking-hud-v1`;
+  Brain Dump = `20261015-task015-plan-tray-v1`.
+changed:
+  - tests/brain-dump-plan-tray.spec.js: both F3 tests made deterministic. Claims are held in flight with __bdHold,
+    the queue depth is asserted, then the holds are released; the two-tab test runs in both settle orders. The
+    cross-tab false-conflict toast assertion is dropped, because that copy is pre-existing protected-layer
+    behaviour. The same-tab double tap keeps its toast assertion (reviewer S2).
+  - TASK_015_HANDOFF.md: post-rebase state, results, stuck-claim investigation, known limitations; S3 is an open
+    follow-up.
+  - No production code changed.
+tests: see "TASK-015 post-rebase" in TEST_REPORT.md.
+→ status stays `review`.
+
 ## TASK-015 — Unified My Day + Brain Dump V1 planning tray (branch: task-015, 2026-10-15)
 base: origin/main `cbd82fc` + planning commit `d29f508`. Not pushed, not merged, not deployed.
 changed:
