@@ -822,7 +822,7 @@ closure:
 ---
 
 ### TASK-014 - Normal Tracking HUD V1
-status: approved
+status: done
 owner: claude
 source: owner-direct
 priority: P1
@@ -880,6 +880,15 @@ acceptance (real Windows desktop, owner-reported 2026-10-15; matching deployed w
   - Everything else rests on simulated evidence only (Playwright with stubbed Firebase; AST-extracted companion
     functions with mocked WPF).
   Status stays `approved` until Away and sign-out are confirmed on the real desktop.
+  Update (owner-reported 2026-10-15, closure authorization): Away clears the HUD — VERIFIED by owner; sign-out clears the
+  HUD and the previous activity information — VERIFIED by owner. Still NOT VERIFIED: backgrounded-tab throttling /
+  stale-indicator behavior; the browser's first Local Network Access permission prompt.
+
+closure:
+  Closed 2026-10-15 on owner authorization after verified integration (2411ee4), hosted CI 38751677656 and Pages
+  38751676251, and owner real-desktop acceptance of every required scenario (normal tracking, Switch Activity, Break,
+  Stop, Focus, Away, sign-out). Background throttling and the first LNA prompt remain NOT VERIFIED. The follow-ups below
+  (including H-1 and the clock-claim caveat) stay open and unscheduled. Lifecycle commits are TASKS.md only.
 
 follow-ups (non-blocking, recorded at integration; not scheduled):
   - Clock claims: two-tab arbitration trusts one machine clock; a large backwards jump can make the companion drop a
