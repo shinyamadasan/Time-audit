@@ -1,5 +1,16 @@
 # ChronaSense — Changelog
 
+## TASK-013 — integration and closure (2026-10-14)
+
+Owner-authorized fast-forward of origin/main `bc71f14..e123059` (reviewed `d158084` + TASKS.md approval commit), then
+documentation-only lifecycle closure. Independent review PASS. Hosted CI run 38662124556 success; Pages run 38662124031
+success. No application runtime, Firebase, Cloudflare, Worker, Function, OAuth or secrets change; no production data
+mutation.
+changed:
+  - TASKS.md: TASK-013 `approved` -> `done`, with integration and closure records.
+  - CHANGELOG.md, TEST_REPORT.md: closure entries.
+→ TASK-013 `done`. TASK-014 not started (owner decisions D-2, D-4 pending).
+
 ## TASK-013 — FIX FIRST rework R1–R3 (branch: task-013, 2026-10-14)
 Reviewed candidate `6d9dbb9` → independent review FIX FIRST. Only the owner-authorized R1–R3 corrections;
 no runtime, Firebase, Worker, Function, OAuth or production change; TASK-014 not implemented.

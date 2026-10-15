@@ -757,7 +757,7 @@ closure:
 ---
 
 ### TASK-013 - Daily-Use Reliability Baseline V1
-status: approved
+status: done
 owner: claude
 source: owner-direct
 priority: P1
@@ -804,6 +804,19 @@ review:
   mutations M2/M3 confirmed, no runtime change). Gate: approved (red-zone behavior documented; test+docs only);
   owner-authorized integration 2026-10-14. F-4 reclassified
   DESIGN_DECISION_NEEDED (D-4); confirmed failures are now F-1, F-2, F-3, F-5, F-6, F-7.
+
+integration:
+  Owner-authorized fast-forward of origin/main bc71f14..e12305995e979b3fed8474f175e9f069e83542d5 on 2026-10-14 (reviewed
+  candidate d158084 + approval commit e123059, TASKS.md lifecycle only). Pre-push gates at e123059: npm test exit 0, lint
+  0 errors, www parity OK, Firebase rules match builder, full Playwright smoke at 2 workers (CI count) 892/892, fence
+  137/137, diff check clean. Hosted CI run 38662124556 success (test, Firebase fence / rules integration); Pages run
+  38662124031 success.
+
+closure:
+  Closed 2026-10-14 on owner authorization after verified integration and hosted CI. Independent review PASS (targeted
+  re-review of d158084). Test + docs only: no application runtime, Firebase, Cloudflare, Worker, Function, OAuth or
+  secrets change and no production data mutation (runtime files identical to bc71f14). Six-worker load-sensitive
+  smoke timeouts in pre-existing tests remain a separate issue. TASK-014 not started (needs owner decisions D-2, D-4).
 
 
 ---
