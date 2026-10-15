@@ -1,5 +1,31 @@
 # ChronaSense — Changelog
 
+## TASK-015 — Unified My Day + Brain Dump V1 planning tray (branch: task-015, 2026-10-15)
+base: origin/main `cbd82fc` + planning commit `d29f508`. Not pushed, not merged, not deployed.
+changed:
+  - brain-dump-ui.js: My Day tray rendered into `#bd-plan-tray` by the existing module (`renderTray`, `trayDays`,
+    `trayDateHint`, `trayRowHtml`, `trayButtonHtml`, `trayOrder`, `toggleTray`, `showAllTray`, `trayPlace`). Today reuses
+    `doToday()`; Tomorrow uses the new DOM-free `scheduleTo()` extracted from `confirmSchedule()` and is offered only when
+    `dayForScheduledDate(date, '')` resolves to `next(current()).id`. Midnight guard refuses a tap rendered for another
+    day ("The day just changed — check where this goes.") and writes nothing. Pending ids show "Still confirming…" with
+    no Today/Tomorrow. Up to 5 triaged rows + "Show all (N)" inline; up to 3 untriaged texts read-only + "M to triage"
+    (opens the Brain Dump view). Expanded state per device in `ta3-bd-tray-open` (try/catch). `render()` and
+    `refreshBrainDumpSurfaces` refresh the tray; `globalThis.refreshBrainDumpTray` exposed.
+  - index.html: one `<section id="bd-plan-tray" hidden>` after `#planning-continuity-section`; one line
+    `globalThis.refreshBrainDumpTray?.()` in `refreshAuthoritativePlanSurfaces()`; one stylesheet link; Brain Dump
+    import-map + entry-tag token `20261012-brain-dump-action-attribution-v1` -> `20261015-task015-plan-tray-v1` (7 URLs).
+    Governed token unchanged.
+  - brain-dump-tray.css (new): `.bdt-*` and `#bd-plan-tray` only; 44px touch targets at <=520px.
+  - personal-day-boundary-web-runtime.test.js: `BRAIN_DUMP_RELEASE` pin moved to the new token; old token retired.
+  - www/: regenerated mirror (`npm run mirror:www`).
+  - CODEMAP.md: Brain Dump section documents the tray.
+tests: tests/brain-dump-plan-tray.spec.js (14 cases, all pass). See TASK-015 in TEST_REPORT.md.
+blockers: none.
+deviations: Brain Dump view's existing pending copy "Still confirming a previous action…" kept as-is (F11 forbids
+  changing existing tests that pin it); the tray uses "Still confirming…". F6 "refused claim" exercised as a rejected
+  claim transaction (definite transport failure).
+→ status set to `review` in TASKS.md. Gate if accepted: approved (held), per the task.
+
 ## TASK-013 — integration and closure (2026-10-14)
 
 Owner-authorized fast-forward of origin/main `bc71f14..e123059` (reviewed `d158084` + TASKS.md approval commit), then

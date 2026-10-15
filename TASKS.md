@@ -906,7 +906,7 @@ follow-ups (non-blocking, recorded at integration; not scheduled):
 ---
 
 ### TASK-015 - Unified My Day + Brain Dump V1 (planning tray)
-status: codex
+status: review
 owner: codex
 source: owner-direct
 priority: P1
@@ -951,22 +951,22 @@ design (binding):
   - No duplicate DOM ids between the tray and #bd-root (tray ids use a distinct prefix).
 
 acceptance:
-  - [ ] F1 Today: with >=1 triaged capture, expand tray + Today = 2 taps, 0 view changes; bdp1|<id> exists in
+  - [x] F1 Today: with >=1 triaged capture, expand tray + Today = 2 taps, 0 view changes; bdp1|<id> exists in
         PlanAuthority.items(current()) and its row renders in My Day without navigation.
-  - [ ] F2 Tomorrow (owner refinement 2): 2 taps; bdp1|<id> exists in items(next(current())) and NOT in current();
+  - [x] F2 Tomorrow (owner refinement 2): 2 taps; bdp1|<id> exists in items(next(current())) and NOT in current();
         the button's date label equals that target's date; navigating the My Day timeline to the next day shows the
         item; the Brain Dump view's Recently handled row shows "Scheduled · <that date>". Also covered: Tomorrow
         button omitted when the round-trip check fails (stubbed authority).
-  - [ ] F3 No duplicates: double tap, and tray + Brain Dump view in two tabs, yield exactly one bdp1|<id> item.
-  - [ ] F4 150 captures: <=5 triaged rows + "Show all (N)" and <=3 untriaged preview rows by default; collapsed
+  - [x] F3 No duplicates: double tap, and tray + Brain Dump view in two tabs, yield exactly one bdp1|<id> item.
+  - [x] F4 150 captures: <=5 triaged rows + "Show all (N)" and <=3 untriaged preview rows by default; collapsed
         header <=56px tall.
-  - [ ] F5 0 active captures: tray hidden, zero layout height.
-  - [ ] F6 Offline / refused claim: existing offline copy shown, no plan item, capture stays triaged.
-  - [ ] F7 Account A -> B: tray shows none of A's captures after switch.
-  - [ ] F8 Rendered before midnight, clicked after: never lands on a date other than the label; refuses + re-renders.
-  - [ ] F9 Pending claim: "Still confirming…" and no Today/Tomorrow in both tray and Brain Dump view.
-  - [ ] F10 390px: no horizontal scroll; tray buttons >=44px tall. Screenshots at 390px and 1920px attached to handoff.
-  - [ ] F11 Existing tests pass unchanged: brain-dump-eisenhower, brain-dump-production-ux, planning-continuity,
+  - [x] F5 0 active captures: tray hidden, zero layout height.
+  - [x] F6 Offline / refused claim: existing offline copy shown, no plan item, capture stays triaged.
+  - [x] F7 Account A -> B: tray shows none of A's captures after switch.
+  - [x] F8 Rendered before midnight, clicked after: never lands on a date other than the label; refuses + re-renders.
+  - [x] F9 Pending claim: "Still confirming…" and no Today/Tomorrow in both tray and Brain Dump view.
+  - [x] F10 390px: no horizontal scroll; tray buttons >=44px tall. Screenshots at 390px and 1920px attached to handoff.
+  - [x] F11 Existing tests pass unchanged: brain-dump-eisenhower, brain-dump-production-ux, planning-continuity,
         planning-continuity-fixes, my-day-timeline specs and npm test.
 
 constraints:
@@ -979,9 +979,9 @@ constraints:
   - No push, merge or deploy.
 
 verification:
-  - [ ] npm test; npm run lint; npm run check:www-parity; npm run check:firebase-rules (unchanged output); git diff --check
-  - [ ] npx playwright test tests/brain-dump-plan-tray.spec.js plus the F11 specs; then npm run test:smoke (2 workers)
-  - [ ] Results appended to TEST_REPORT.md; changes to CHANGELOG.md; CODEMAP.md updated (new tray functions)
+  - [x] npm test; npm run lint; npm run check:www-parity; npm run check:firebase-rules (unchanged output); git diff --check
+  - [x] npx playwright test tests/brain-dump-plan-tray.spec.js plus the F11 specs; then npm run test:smoke (2 workers)
+  - [x] Results appended to TEST_REPORT.md; changes to CHANGELOG.md; CODEMAP.md updated (new tray functions)
 
 review:
   Gate if accepted: approved (held) — triggers promotion writes into plan stores. Must be reconciled onto origin/main

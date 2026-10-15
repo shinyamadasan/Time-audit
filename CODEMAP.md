@@ -59,6 +59,20 @@ maybeReconcile and from a bind-time sweep. Tests: `firebase-rules-emulator.test.
 `legacy-fence-sync.test.js`, `plan-authority-fence.test.js`, `fence-source-mutation.test.js`; the real cf43080 client lives in
 `fixtures/cf43080-client/` (hash-pinned).
 
+TASK-015 My Day planning tray (review candidate, 2026-10-15): `<section id="bd-plan-tray" hidden>` in `#view-today`,
+directly after `#planning-continuity-section`, rendered by `brain-dump-ui.js` itself (shares `pendingPromotionIds`,
+the reconciler and the promotion path with `#bd-root`). Functions: `renderTray()` (exported; hidden + emptied with 0
+untriaged and 0 triaged), `trayDays()` (Today = `current()`; Tomorrow = `next(current())` only when
+`dayForScheduledDate(date, '')` resolves to that same id), `trayDateHint()` (mirrors planning-continuity-ui.js
+`taskDateHint`), `trayRowHtml()`/`trayButtonHtml()`/`trayOrder()` (do-first > schedule > delegate > archive, then
+createdAt), `toggleTray()` (device-local `ta3-bd-tray-open`), `showAllTray()`, and `trayPlace(button, kind)` (midnight
+guard via the button's `data-bdt-today`/`data-bdt-target`/`data-bdt-date`, then `doToday()` or `scheduleTo()`).
+`scheduleTo(id, { dateKey, when, durationMinutes })` is the DOM-free Schedule promotion now shared by `confirmSchedule()`.
+`render()` also calls `renderTray()`; `refreshBrainDumpSurfaces` re-renders the tray when the Brain Dump view is not
+active; `globalThis.refreshBrainDumpTray` is called from index.html `refreshAuthoritativePlanSurfaces()`. Styles:
+`brain-dump-tray.css` (`.bdt-*` only, own `?v=20261015-task015-plan-tray-v1`). The tray has no element ids. Brain Dump
+generation token is now `20261015-task015-plan-tray-v1`. Tests: `tests/brain-dump-plan-tray.spec.js`.
+
 New nav entry `#nav-braindump` / view `#view-braindump` (mounted between My Day and Week), rendered
 entirely by `brain-dump-ui.js` into `#bd-root` via `showView('braindump')`. Independently versioned as its
 OWN generation inside the shared import map: all five `brain-dump-*.js` modules map to

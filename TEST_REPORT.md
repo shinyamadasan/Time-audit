@@ -5,6 +5,29 @@
 
 ---
 
+## TASK-015 · 2026-10-15
+suite: `npm ci --legacy-peer-deps` (plain `npm ci` fails ERESOLVE on the existing capacitor-google-auth peer range, as in CI);
+  `npm test`; `npm run lint` (baseline taken before edits); `npm run check:www-parity`; `npm run check:firebase-rules`;
+  `git diff --check` / `git diff --cached --check`; `npx playwright test tests/brain-dump-plan-tray.spec.js
+  tests/brain-dump-eisenhower.spec.js tests/brain-dump-production-ux.spec.js tests/planning-continuity.spec.js
+  tests/planning-continuity-fixes.spec.js tests/my-day-timeline.spec.js --workers=2`; `npm run test:smoke -- --workers=2`;
+  `npm run test:fence`.
+result:
+  - npm test exit 0: node:test 2179 total, 2178 pass, 0 fail, 1 env-gated skip (CROSS_REPO_COMPAT_CONTROL_PROOF); legacy runner 455/455.
+  - lint exit 0: 0 errors, 47 warnings before and after (delta 0; none in brain-dump-ui.js).
+  - www parity OK (92-file closure, adds brain-dump-tray.css); firebase.rules.json matches the builder; diff checks clean.
+  - new spec tests/brain-dump-plan-tray.spec.js 14/14; targeted F11 run 106/106 passed (4.2m).
+  - full Playwright 906 passed, 0 failed, 2 workers (18.8m), no retries; the 7 TASK-013 `test.fail` expected failures
+    (daily-use-reliability F-1..F-7) behaved as declared.
+  - test:fence exit 0: 80 + 20 + 37 passed (not required: no rules change; run for completeness).
+  - mutation checks (temporary, reverted): removing the midnight guard, the Tomorrow round-trip check, or the tray
+    pending state each made the F8 / F2-omitted / F9 test fail.
+  - screenshots (untracked, gitignored): playwright-report/task-015/tray-390x844.png, tray-390-element.png,
+    tray-1920x1080.png, tray-1920-element.png. Coverage percentage not measured.
+untested: calendar-native and Personal Day boundary accounts in the tray (specs use the legacy calendar-day store, as
+  the other Brain Dump specs do); real Firebase; Android/Capacitor build; a real two-device race (two tabs of one
+  browser context sharing a localStorage-backed stub remote stand in for it).
+
 ## TASK-013 integration and closure · 2026-10-14
 suite: pre-push gates on e12305995e979b3fed8474f175e9f069e83542d5 (= reviewed d158084 + TASKS.md approval commit) and
   hosted CI. No tests changed by the closure.
