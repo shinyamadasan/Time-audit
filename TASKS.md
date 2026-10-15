@@ -822,7 +822,7 @@ closure:
 ---
 
 ### TASK-014 - Normal Tracking HUD V1
-status: review
+status: approved
 owner: claude
 source: owner-direct
 priority: P1
@@ -862,6 +862,23 @@ verification:
 review:
   Builder self-review only. NOT independently reviewed. Red-zone adjacent (timer lifecycle call sites, storage.js account
   detach, governed release token), so if accepted hold at `approved`; do not auto-merge. See TASK_014_HANDOFF.md.
+  Independent review of 288b4be: PASS (per the owner's integration instruction, 2026-10-15; no REVIEW.md entry was
+  written by the reviewer). Gate: approved (red-zone adjacent). Owner-authorized integration 2026-10-15.
+  Acceptance hold: not `done` until real Windows desktop acceptance (matching web + companion; normal start/change/stop,
+  Focus, Break/Away, sign-out, background, real Chrome/Edge Local Network Access prompt).
+
+follow-ups (non-blocking, recorded at integration; not scheduled):
+  - Clock claims: two-tab arbitration trusts one machine clock; a large backwards jump can make the companion drop a
+    legitimate new session until the next session change or a companion restart.
+  - Test coverage: companion verified with AST-extracted functions and mocked WPF only; no live window, real second tab
+    against a running companion, or real LNA prompt. Full Playwright was not re-run after the final dead-guard deletion
+    (affected specs 69/69). Bridge-level Focus priority is caught only by unit tests (the selector masks it in-browser).
+  - Lint: +1 `no-undef` warning (`refreshHudTracking` in storage.js; cross-script pattern), 48 total, 0 errors.
+  - Localhost requests: with a selector present the bridge polls locally every 1 s (no network unless a session
+    starts/changes/clears) and POSTs a 4 s heartbeat to 127.0.0.1 while a session is active, in every open tab, whether
+    or not a companion runs; with none running, each POST fails fast.
+  - H-1 (pre-existing): a Focus break ending inside the overlay turns the Focus timer into a normal running timer
+    (Focus echo -> normal ticker -> doPing). Bounded fix proposal in TASK_014_HANDOFF.md; red zone; needs owner approval.
 
 
 ---
