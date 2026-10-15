@@ -839,7 +839,8 @@ test('30 stale tasks occupy one compact main-page indicator until opened', async
   const compactHeight = await unfinished(page).evaluate(element => element.getBoundingClientRect().height);
   expect(compactHeight).toBeLessThan(140);
   await trigger.click();
-  await expect(unfinished(page)).toContainText('Stale task 30');
+  await expect(unfinished(page).locator('[data-pc-stale]')).toHaveCount(5);
+  await expect(unfinished(page).getByRole('button', { name: 'Next tasks' })).toBeVisible();
 });
 
 test('long task titles keep usable controls at mobile width', async ({ page }) => {
@@ -900,6 +901,7 @@ test('a completed historical task never appears as unfinished', async ({ page })
 test('a dismissed stale task stops resurfacing and is not marked done', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(3) });
   const recovery = await openStaleRecovery(page);
+  await recovery.getByText('More actions', { exact: true }).click();
   await recovery.getByRole('button', { name: 'Not doing this' }).click();
   await expect(unfinished(page)).not.toContainText('Unfinished ·');
 
@@ -915,6 +917,7 @@ test('a dismissed stale task stops resurfacing and is not marked done', async ({
 test('a stale task can be rescheduled onto an arbitrary future personal day', async ({ page }) => {
   await openApp(page, { operationalPlans: staleOperationalPlans(3) });
   const recovery = await openStaleRecovery(page);
+  await recovery.getByText('More actions', { exact: true }).click();
   await recovery.getByRole('button', { name: 'Reschedule…' }).click();
 
   // The browser opens so the owner can pick a destination rather than it being guessed.

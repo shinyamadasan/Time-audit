@@ -30,6 +30,7 @@ import {
 import { describeStaleAge } from './stale-plan-recovery-model.js';
 import { addCalendarDays, durationBetween, planItemEndTime } from './plan-tomorrow-model.js';
 import { fencedMoveRefusal, isFencedItem } from './plan-item-origin.js';
+import { sameOnWire } from './plan-fence-sync.js';
 
 const SECTION_ID = 'planning-continuity-section';
 /** How many rows each list renders before "Show all". A DISPLAY bound only — the
@@ -43,6 +44,10 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': 
 
 const state = {
   expanded: { upcoming: false, stale: false },
+  staleOffset: 0,
+  staleOwner: null,
+  staleUndo: null,     // session-only receipt for ONE exact dismissal, never a task store
+  staleStatus: '',
   detail: null,
   itemForm: null,      // task: { type, dayId?, anchorDayId, itemId?, dateTouched }
   browseOpen: false,
@@ -483,25 +488,34 @@ function staleHtml(nowMs) {
   const { items, unresolvable } = projection;
   const conflicts = layer.recoveryConflicts?.() || [];
   if (!items.length && !unresolvable.length && !conflicts.length) return '';
-  const shown = state.expanded.stale ? items : items.slice(0, PREVIEW_ROWS);
+  state.staleOffset = Math.min(state.staleOffset, Math.max(0, Math.ceil(items.length / PREVIEW_ROWS) - 1) * PREVIEW_ROWS);
+  const shown = items.slice(state.staleOffset, state.staleOffset + PREVIEW_ROWS);
+  const openMenu = staleSection()?.querySelector('details[open]');
   const rows = shown.map(entry => {
-    const where = `${escape(describeStaleAge(entry.ageMs))} · ${escape(dayWindowLabel(entry.target))}`;
-    const kindNote = entry.kind === 'task' ? '<span class="pc-zone">task</span>' : '';
-    return `<div class="pc-row" data-pc-stale="${escape(entry.item.id)}" data-pc-day="${escape(entry.sourceDayId)}">
+    const where = `Planned ${escape(dayWindowLabel(entry.target))} · ${escape(describeStaleAge(entry.ageMs))}`;
+    const menuOpen = openMenu?.dataset.id === entry.item.id && openMenu?.dataset.day === entry.sourceDayId;
+    return `<div class="pc-row pc-stale-row" data-pc-stale="${escape(entry.item.id)}" data-pc-day="${escape(entry.sourceDayId)}">
       <div class="pc-row-main">
-        <div class="pc-row-title">${escape(entry.item.task)}${kindNote}</div>
+        <div class="pc-row-title" title="${escape(entry.item.task)}">${escape(entry.item.task)}</div>
         <div class="pc-row-meta">${where}</div>
       </div>
+      <div class="pc-stale-actions">
       <button type="button" class="btn sm" data-pc-action="move-today" data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}">Move to today</button>
+      <details class="pc-stale-more" data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}"${menuOpen ? ' open' : ''}>
+      <summary>More actions</summary>
+      <div class="pc-stale-options">
+      <p class="pc-muted pc-stale-full-title">${escape(entry.item.task)}</p>
       <button type="button" class="btn sm ghost" data-pc-action="move-edit" data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}">Move &amp; edit</button>
       <button type="button" class="btn sm ghost" data-pc-action="reschedule" data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}">Reschedule…</button>
       <button type="button" class="pc-icon" data-pc-action="dismiss" data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}">Not doing this</button>
+      <p class="pc-muted">Removes this task from the active backlog. Its original plan and history are kept; it is not marked completed.</p>
+      </div></details></div>
     </div>`;
   }).join('');
-  const more = items.length > shown.length
-    ? `<button type="button" class="pc-more" data-pc-action="expand-stale">Show all ${items.length}</button>`
-    : (state.expanded.stale && items.length > PREVIEW_ROWS
-      ? '<button type="button" class="pc-more" data-pc-action="collapse-stale">Show fewer</button>' : '');
+  const more = items.length > PREVIEW_ROWS
+    ? `<div class="pc-stale-pager"><button type="button" class="btn sm ghost" data-pc-action="stale-previous"${state.staleOffset ? '' : ' disabled'}>Previous tasks</button>
+      <span class="pc-muted">${state.staleOffset + 1}–${state.staleOffset + shown.length} of ${items.length}</span>
+      <button type="button" class="btn sm ghost" data-pc-action="stale-next"${state.staleOffset + shown.length < items.length ? '' : ' disabled'}>Next tasks</button></div>` : '';
   // A day whose interval cannot be resolved is still SHOWN. "No planned information
   // becomes unreachable because it is old" has to hold even when a revision is gone.
   const stranded = unresolvable.length
@@ -522,6 +536,7 @@ function staleHtml(nowMs) {
   }).join('');
   return `<section class="pc-block">
     <div class="pc-head"><h3>Unfinished · ${items.length + unresolvable.reduce((n, day) => n + day.items.length, 0) + conflicts.length}</h3><button type="button" class="btn sm ghost" data-pc-action="collapse-stale">Close</button></div>
+    <p class="pc-muted">Previously planned tasks. Open More actions to reschedule or choose Not doing this.</p>
     ${conflictRows}
     ${rows}
     ${more}
@@ -560,14 +575,27 @@ function noticeFor(result) {
   return result && result.demoted ? MOVED_AS_TASK_NOTICE : '';
 }
 
+/** Both directions must beat the source revision, including same-tick repeated actions. */
+function stampStaleMutation(value) {
+  const next = stamp(value);
+  return { ...next, updatedAt: Math.max(next.updatedAt, (Number(value.updatedAt) || 0) + 1) };
+}
+
 function staleAction(action, itemId, dayId) {
   const layer = authority();
   if (!layer) return;
   const sourceTarget = layer.targetById(dayId);
   if (!sourceTarget) { setNotice('That day cannot be resolved right now.', 'error'); render(); return; }
   try {
+    if (!layer.staleUnfinished().items.some(entry => entry.item.id === itemId && entry.sourceDayId === dayId)) {
+      throw new Error('This task has changed or is no longer unfinished. Check the refreshed list.');
+    }
     if (action === 'dismiss') {
-      layer.dismissStaleItem({ sourceTarget, itemId, stamp });
+      layer.dismissStaleItem({ sourceTarget, itemId, stamp: stampStaleMutation });
+      const dismissed = layer.rawItems(sourceTarget).find(item => item.id === itemId);
+      state.staleUndo = state.staleOwner && dismissed?.dismissedAt
+        ? { owner: state.staleOwner, dayId, itemId, task: dismissed.task, snapshot: JSON.parse(JSON.stringify(dismissed)) } : null;
+      state.staleStatus = 'Removed from the active backlog. Original plan and history kept.';
       setNotice('');
     } else if (action === 'reschedule') {
       // Reschedule means "choose a day": open the browser and let the owner pick,
@@ -586,6 +614,27 @@ function staleAction(action, itemId, dayId) {
     }
   } catch (err) {
     setNotice(err.message, 'error');
+  }
+  globalThis.refreshAuthoritativePlanSurfaces?.();
+  render();
+}
+
+function undoStaleDismissal() {
+  const receipt = state.staleUndo;
+  state.staleUndo = null; // one-shot, including duplicate clicks and refused attempts
+  if (!receipt || receipt.owner !== repository()?.ownerRoomId?.()) return;
+  const layer = authority();
+  try {
+    const sourceTarget = layer.targetById(receipt.dayId);
+    const current = sourceTarget && layer.rawItems(sourceTarget).find(item => item.id === receipt.itemId);
+    if (!current || !sameOnWire(current, receipt.snapshot) || current.done || current.deleted
+      || layer.staleMoveDestination(receipt.itemId, receipt.dayId)) {
+      throw new Error('This task changed since dismissal. Undo was not applied.');
+    }
+    layer.undismissStaleItem({ sourceTarget, itemId: receipt.itemId, stamp: stampStaleMutation });
+    state.staleStatus = 'Task restored to Unfinished.';
+  } catch (err) {
+    state.staleStatus = err.message;
   }
   globalThis.refreshAuthoritativePlanSurfaces?.();
   render();
@@ -634,8 +683,21 @@ function completePendingMove(dayId) {
 export function render() {
   const root = section();
   if (!root) return;
+  const recovery = staleSection();
+  const focused = recovery?.contains(document.activeElement) ? document.activeElement : null;
+  const focusedOwner = recovery?.dataset.pcOwner;
+  const focusedMenu = focused?.matches('summary') ? focused.closest('details')?.dataset : null;
   const layer = authority();
   if (!layer) { root.hidden = true; root.innerHTML = ''; return; }
+  const owner = repository()?.ownerRoomId?.() || null;
+  if (owner !== state.staleOwner) {
+    state.staleOwner = owner;
+    state.staleUndo = null;
+    state.staleStatus = '';
+    state.staleOffset = 0;
+    state.expanded.stale = false;
+    state.pendingMove = null;
+  }
   const nowMs = Date.now();
   let html = '';
   try {
@@ -655,11 +717,22 @@ export function render() {
   }
   root.hidden = false;
   root.innerHTML = html;
-  const recovery = staleSection();
   if (recovery) {
-    const recoveryHtml = staleCompactHtml(nowMs);
+    const feedback = state.staleStatus ? `<div class="pc-notice pc-stale-feedback" role="status"><span>${escape(state.staleStatus)}</span>
+      ${state.staleUndo ? `<span class="pc-stale-full-title">${escape(state.staleUndo.task)}</span><button type="button" class="btn sm ghost" data-pc-action="undo-dismiss">Undo</button>` : ''}
+      <button type="button" class="pc-icon" data-pc-action="close-stale-status" aria-label="Dismiss unfinished notice">Close</button></div>` : '';
+    const recoveryHtml = feedback + staleCompactHtml(nowMs);
     recovery.hidden = !recoveryHtml;
+    recovery.dataset.pcOwner = owner || '';
     recovery.innerHTML = recoveryHtml;
+    if (focused && focusedOwner === (owner || '')) {
+      const controls = [...recovery.querySelectorAll('[data-pc-action]')];
+      const replacement = focusedMenu
+        ? [...recovery.querySelectorAll('details')].find(menu => menu.dataset.id === focusedMenu.id && menu.dataset.day === focusedMenu.day)?.querySelector('summary')
+        : controls.find(button => button.dataset.pcAction === focused.dataset.pcAction
+          && button.dataset.id === focused.dataset.id && button.dataset.day === focused.dataset.day && !button.disabled);
+      (replacement || controls.find(button => !button.disabled))?.focus({ preventScroll: true });
+    }
   }
 }
 
@@ -669,6 +742,10 @@ function onClick(event) {
   const action = control.dataset.pcAction;
   const id = control.dataset.id;
   event.preventDefault();
+  if (control.closest('#unfinished-recovery-section') && staleSection().dataset.pcOwner !== (repository()?.ownerRoomId?.() || '')) {
+    render();
+    return;
+  }
   switch (action) {
     case 'open-item-form': {
       const current = authority()?.current();
@@ -684,8 +761,12 @@ function onClick(event) {
     case 'dst-later': resolveAmbiguous('later'); break;
     case 'expand-upcoming': state.expanded.upcoming = true; render(); break;
     case 'collapse-upcoming': state.expanded.upcoming = false; render(); break;
-    case 'expand-stale': state.expanded.stale = true; render(); break;
+    case 'expand-stale': state.expanded.stale = true; state.staleOffset = 0; render(); break;
     case 'collapse-stale': state.expanded.stale = false; render(); break;
+    case 'stale-next': state.staleOffset += PREVIEW_ROWS; render(); break;
+    case 'stale-previous': state.staleOffset = Math.max(0, state.staleOffset - PREVIEW_ROWS); render(); break;
+    case 'undo-dismiss': undoStaleDismissal(); break;
+    case 'close-stale-status': state.staleUndo = null; state.staleStatus = ''; render(); break;
     case 'set-date': {
       const input = section()?.querySelector('#pc-task-form [name="date"]');
       if (input) input.value = control.dataset.date;

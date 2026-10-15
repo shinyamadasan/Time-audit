@@ -1,6 +1,18 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## Unfinished UX V1 (TASK-017 review candidate, 2026-10-15)
+
+- `planning-continuity-ui.js`: `staleHtml` renders five ordinary backlog rows per page; native More actions
+  holds Move & edit / Reschedule / Not doing this, with source plan and history explanation. `staleAction`
+  rechecks recoverability; `undoStaleDismissal` uses the existing authority undismissal API, exact session/
+  account/source receipt and `sameOnWire` comparison. `stampStaleMutation` advances both mutation revisions.
+  `render` clears receipts on account change and preserves recovery focus/disclosure across refreshes.
+- `planning-continuity.css`: `.pc-stale-*` hierarchy, two-line titles, 44px controls and responsive paging.
+- Tests: `tests/unfinished-ux.spec.js`; generated root/www parity. Governed token
+  `20261015-task017-unfinished-ux-v1`; Brain Dump retains `20261015-task015-plan-tray-v1`.
+- Completion/Delete is design-only in `TASK_017_COMPLETION_DELETE_DESIGN.md`; current history semantics unchanged.
+
 ## Intelligence V1 (TASK-006 review candidate)
 
 - `intelligence-read-model.js`: `buildIntelligence()` consumes account-proven authoritative snapshots;
