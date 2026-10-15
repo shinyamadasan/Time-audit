@@ -123,6 +123,68 @@ through the remote claim transaction and Plan Authority's addItem. That is RTDB 
 misplaced or lost item is not easily reconstructed (Hard Rule 9). It also changes the shared refresh path in
 index.html. It must not auto-merge. TASKS.md status is left for the lead to set after the smoke run.
 
+### Addendum — 2026-10-15 (post-rebase F3 rewrite, stuck-claim finding)
+Reviewed at HEAD c305c02 (base origin/main 8abe63b; 2411ee4..8abe63b touches only TASKS.md). Since 5c5957e no
+runtime file has changed (`git diff 5c5957e..HEAD` covers no .js/.html/.css/www file except the spec). The only
+code change is test-only commit 601113e. I did not run Playwright; the results below are the lead's and builder's.
+
+**The F3 rewrite (601113e) is not vacuous, and nothing was weakened except the cross-tab toast.**
+- *Same-tab double tap.* Both `trayPlace(button,'today')` calls start synchronously under `__bdHold`, and
+  `__bdHeldCount === 2` proves both claim transactions are queued and unsettled before the release. That is a real
+  concurrent double tap, so my S2 is resolved. It keeps every assertion: `promoted`, exactly one `bdp1|<id>`, the
+  stale re-tap still one item, and no false-conflict toast. The toast assertion is now stronger, because it holds
+  under true concurrency.
+- *Two tabs, tray + view.* Each tab holds its own queue, and the stub's `held` map is per window. Before any release
+  the test proves both claims are in flight (count 1 per tab) and that nothing is written (`triaged`, 0 items). It
+  runs both settle orders. It asserts `promoted` in both tabs' local stores, exactly one item, and one item after a
+  stale re-tap. Starting from captured handles (`trayPlace(captured button)` and `doToday(id)`) skips only the
+  inline onclick wiring, which F1, F2, F8 and F9 cover with real clicks. This is acceptable.
+- *Dropped cross-tab no-false-conflict assertion.* This is justified. The lead reproduced the copy with two plain
+  Brain Dump views, so it comes from the protected promotion/sync layer and not from the tray. Writing that copy
+  is not a TASK-015 regression. It is a real defect, though ("another device" said to a winner of the same
+  intent), and it must be tracked: see follow-up F-A.
+- *Settle window.* The `promoted` poll now allows 20s. That gives tolerance under load, and a stuck claim would
+  still fail it. It is not a weakening.
+
+**S1 (stale docs) is mostly resolved.** TASK_015_HANDOFF.md, TEST_REPORT.md and CHANGELOG.md now describe the
+rebased state. They label pre-rebase evidence as superseded and record the lead's results, the F3 rewrite, the
+stuck-claim investigation and S3 as open. Three NITs remain:
+- they cite base `2411ee4`, but the branch is now on `8abe63b` (a TASKS.md-only move);
+- they cite the F3 commit as `2d712ed`, but it is now `601113e`;
+- they cite this review as `602805b`, but after the rebase it is `ca1ab21`.
+Fix these at merge time; they do not block.
+
+**The stuck-claim finding does not change the verdict or the gate.** Reasons:
+1. *It is pre-existing and outside TASK-015's diff.* It reproduces with two plain Brain Dump views and no tray
+   (3/240 at 6 workers). Its mechanism lies in brain-dump-sync/-repository and the reconciler trigger, which this
+   task is barred from editing.
+2. *The tray adds no new writer.* renderTray and trayDays only read. trayPlace writes only through the pre-existing
+   doToday / promoteCaptureToPlan path (brain-dump-ui.js:703-720). The suspected lost update (two tabs
+   read-merge-writing the shared localStorage envelope) involves only the repository and sync writers, which are
+   unchanged. 7/240 (tray + view) against 3/240 (plain views) is not a meaningful difference at these counts.
+3. *Exposure is about the same as before.* The race needs two tabs in the same browser, both tapping one capture
+   within a few hundred ms. The tray only adds a second place to tap from. That was already possible with two
+   Brain Dump tabs, and a single tab cannot race itself cross-tab.
+4. *The damage is bounded.* No duplicate item appeared in any run (480 + 180 + 150), and exactly one plan item
+   exists. No logged time is involved. The inconsistency is that the capture stays `triaged` with its claim while
+   the task is already on My Day. A manual `reconcilePromotionClaim` heals it. It does not violate Hard Rule 9.
+The gate stays `approved` (held), for the reasons in the original Risk-gate. The verdict stays PASS WITH NOTES.
+
+**New follow-ups.** These need owner approval and belong in the protected layer, so they are not TASK-015 work.
+Record them in planning/ROADMAP.md Known Issues:
+- [ ] **F-A.** A cross-tab or cross-device winner of the same intent can be told "…already being added to your plan
+  on another device." even though the item was added.
+- [ ] **F-B.** A same-browser two-tab race can leave a stuck claim (`triaged` + `promotionClaim`, one item) that
+  neither the listener nor the bind-time sweep finalizes, even after a reload. The hypothesis is a localStorage
+  whole-envelope lost update, not proven. Also determine why the rebind sweep (settleAllOutstandingClaims) did not
+  heal it after the reload. That reconciler is the designed recovery path, so a gap there matters beyond this race.
+- [ ] **S3** (unchanged, tray-local, non-blocking): an in-flight guard in trayPlace would cut both the tray's
+  Today-then-Tomorrow false-conflict path and the same-tab re-tap window.
+
+**Addendum verdict:** PASS WITH NOTES. Gate: `approved` (held). There is still no must-fix. Approval rests on the
+reported green full smoke (921 passed / 0 failed), F3 150/150 over 50 repeats, and the new spec 15/15. I did not
+re-run any of them.
+
 ---
 
 ## Review TASK-003 - APPROVED, HELD (per-task scope note, soft gate, ported from the Meal Prep app)
