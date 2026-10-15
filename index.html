@@ -21,6 +21,7 @@
 <link rel="stylesheet" href="partner-view.css?v=20260912-partner-view-v1">
 <link rel="stylesheet" href="operational-plan.css?v=20260917-personal-day-boundary-live-wiring-v1">
 <link rel="stylesheet" href="planning-continuity.css?v=20260918-planning-continuity-v1">
+<link rel="stylesheet" href="brain-dump-tray.css?v=20261015-task015-plan-tray-v1">
 </head>
 <body>
 <div id="desktop-layout">
@@ -129,6 +130,9 @@
   <section id="calendar-plan-section" hidden aria-label="Calendar-day plans"></section>
   <section id="operational-plan-section" hidden aria-label="Personal day plan"></section>
   <section id="planning-continuity-section" hidden aria-label="Upcoming commitments and future planning"></section>
+  <!-- TASK-015 Brain Dump planning tray: rendered by brain-dump-ui.js (renderTray). Hidden, with zero
+       height, while the account has no untriaged or triaged captures. -->
+  <section id="bd-plan-tray" hidden aria-label="Brain Dump planning tray"></section>
   <section id="today-commitments" aria-label="Today's commitments" hidden>
     <div class="tc-head">
       <h2>Today's commitments</h2>
@@ -1764,11 +1768,11 @@
     "./calendar-plan-live.js": "./calendar-plan-live.js?v=20261014-task014-normal-tracking-hud-v1",
     "./plan-item-origin.js": "./plan-item-origin.js?v=20261014-task014-normal-tracking-hud-v1",
     "./plan-fence-sync.js": "./plan-fence-sync.js?v=20261014-task014-normal-tracking-hud-v1",
-    "./brain-dump-model.js": "./brain-dump-model.js?v=20261012-brain-dump-action-attribution-v1",
-    "./brain-dump-repository.js": "./brain-dump-repository.js?v=20261012-brain-dump-action-attribution-v1",
-    "./brain-dump-promotion.js": "./brain-dump-promotion.js?v=20261012-brain-dump-action-attribution-v1",
-    "./brain-dump-sync.js": "./brain-dump-sync.js?v=20261012-brain-dump-action-attribution-v1",
-    "./brain-dump-ui.js": "./brain-dump-ui.js?v=20261012-brain-dump-action-attribution-v1"
+    "./brain-dump-model.js": "./brain-dump-model.js?v=20261015-task015-plan-tray-v1",
+    "./brain-dump-repository.js": "./brain-dump-repository.js?v=20261015-task015-plan-tray-v1",
+    "./brain-dump-promotion.js": "./brain-dump-promotion.js?v=20261015-task015-plan-tray-v1",
+    "./brain-dump-sync.js": "./brain-dump-sync.js?v=20261015-task015-plan-tray-v1",
+    "./brain-dump-ui.js": "./brain-dump-ui.js?v=20261015-task015-plan-tray-v1"
   }
 }
 </script>
@@ -1804,8 +1808,8 @@ if (new URLSearchParams(location.search).get('pdbdiag') === '1') window.addEvent
 <script type="module" src="operational-plan-ui.js?v=20261014-task014-normal-tracking-hud-v1"></script>
 <script type="module" src="commitments-sync.js?v=20261014-task014-normal-tracking-hud-v1"></script>
 <script type="module" src="planning-continuity-ui.js?v=20261014-task014-normal-tracking-hud-v1"></script>
-<script type="module" src="brain-dump-sync.js?v=20261012-brain-dump-action-attribution-v1"></script>
-<script type="module" src="brain-dump-ui.js?v=20261012-brain-dump-action-attribution-v1"></script>
+<script type="module" src="brain-dump-sync.js?v=20261015-task015-plan-tray-v1"></script>
+<script type="module" src="brain-dump-ui.js?v=20261015-task015-plan-tray-v1"></script>
 <script type="module" src="intelligence-ui.js?v=20261008-intelligence-int001"></script>
 
 <script>
@@ -7304,6 +7308,7 @@ function refreshAuthoritativePlanSurfaces() {
   // Planning Continuity V1 — Upcoming / future-day browser / stale recovery all read
   // authoritative plan state, so they refresh on the same signal as every other surface.
   if (typeof globalThis.refreshCommitmentSurfaces === 'function') globalThis.refreshCommitmentSurfaces();
+  globalThis.refreshBrainDumpTray?.();
   refreshMyDayTimeline();
 }
 globalThis.refreshAuthoritativePlanSurfaces = refreshAuthoritativePlanSurfaces;

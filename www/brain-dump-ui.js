@@ -262,6 +262,9 @@ function disposedSectionHtml(items) {
 }
 
 export function render() {
+  // Every Brain Dump state change already ends in render(); refreshing the My Day
+  // tray here keeps both surfaces showing the same pending/promoted truth.
+  renderTray();
   const root = document.getElementById('bd-root');
   if (!root) return;
   const all = repository().listAllRaw();
@@ -398,7 +401,16 @@ async function confirmSchedule(id) {
   if (!dateKey) { notify('Pick a date first.'); return; }
   const when = timeInput && timeInput.value ? timeInput.value : '';
   const durationMinutes = durationInput && durationInput.value ? Number(durationInput.value) : undefined;
-  const result = await promoteCaptureToPlan({
+  const result = await scheduleTo(id, { dateKey, when, durationMinutes });
+  if (result.ok) openScheduleId = null;
+  reportPromotionOutcome(result, 'Added to your plan.', id);
+}
+
+/** The Schedule promotion without any DOM: shared by the Brain Dump view's
+ *  Schedule form and the My Day tray's Tomorrow button, so both surfaces go
+ *  through one claim/create/finalize path. The caller reports the outcome. */
+function scheduleTo(id, { dateKey, when = '', durationMinutes } = {}) {
+  return promoteCaptureToPlan({
     repository: repository(),
     planAuthority: window.PlanAuthority,
     claimPromotionRemote,
@@ -410,8 +422,6 @@ async function confirmSchedule(id) {
     now: Date.now(),
     deviceId: deviceId(),
   });
-  if (result.ok) openScheduleId = null;
-  reportPromotionOutcome(result, 'Added to your plan.', id);
 }
 
 /** FIX FIRST round 3 — the abandoned-claim fix's UI-side trigger. Called from
@@ -558,8 +568,160 @@ function openInPlan(id) {
   globalThis.jumpTimelineToDate(openDateKey);
 }
 
+// ── My Day planning tray (TASK-015) ─────────────────────────────────────────
+// Places triaged captures on Today or Tomorrow without leaving My Day. It lives
+// in this module (not its own) so it shares pendingPromotionIds, the reconciler
+// and the one promotion path with the Brain Dump view. Deliberately narrow: no
+// triage, archive, delegate, timed scheduling or capture here.
+
+const TRAY_ORDER = ['do-first', 'schedule', 'delegate-candidate', 'archive-candidate'];
+const TRAY_CHIP = { 'do-first': 'Do first', schedule: 'Schedule', 'delegate-candidate': 'Delegate?', 'archive-candidate': 'Archive?' };
+const TRAY_ROWS = 5;
+const TRAY_PREVIEW = 3;
+const TRAY_OPEN_KEY = 'ta3-bd-tray-open'; // per device, not per account: it is a view preference
+
+let trayExpanded = null; // read lazily; an unavailable localStorage just means "collapsed"
+let trayShowAll = false;
+
+function isTrayExpanded() {
+  if (trayExpanded === null) {
+    try { trayExpanded = localStorage.getItem(TRAY_OPEN_KEY) === '1'; } catch { trayExpanded = false; }
+  }
+  return trayExpanded;
+}
+
+function toggleTray() {
+  trayExpanded = !isTrayExpanded();
+  if (!trayExpanded) trayShowAll = false;
+  try { localStorage.setItem(TRAY_OPEN_KEY, trayExpanded ? '1' : '0'); } catch { /* remembered for this page only */ }
+  renderTray();
+}
+
+function showAllTray() {
+  trayShowAll = true;
+  renderTray();
+}
+
+/** The calendar date a target is labelled with — the same derivation as
+ *  planning-continuity-ui.js's taskDateHint (its scheduled date, else its start
+ *  date in its own zone, else its dateKey). */
+function trayDateHint(target) {
+  let scheduled = null;
+  try { scheduled = window.PlanAuthority.scheduledDateForTarget(target, ''); } catch { scheduled = null; }
+  if (scheduled) return scheduled;
+  return Number.isFinite(target.startMs)
+    ? localPlanDate(target.startMs, target.timezone || resolveAccountingTimezone())
+    : target.dateKey || '';
+}
+
+/** Today and Tomorrow as the tray offers them. Tomorrow is offered ONLY when
+ *  scheduling its labelled date provably lands on next(current()) — otherwise the
+ *  label could promise a day the Schedule path would not write to. */
+function trayDays() {
+  const authority = window.PlanAuthority;
+  let today = null;
+  try { today = authority ? authority.current() : null; } catch { today = null; }
+  if (!today?.id) return { today: null, tomorrow: null };
+  let tomorrow = null;
+  try {
+    const next = authority.next(today);
+    const date = trayDateHint(next);
+    const resolved = date ? authority.dayForScheduledDate(date, '') : null;
+    if (next?.id && resolved?.ok && resolved.target?.id === next.id) tomorrow = { target: next, date };
+  } catch { tomorrow = null; }
+  return { today: { target: today, date: trayDateHint(today) }, tomorrow };
+}
+
+function trayButtonHtml(kind, item, days, day) {
+  const label = kind === 'today' ? 'Today' : 'Tomorrow';
+  const date = formatDateKey(day.date);
+  return `<button type="button" class="btn sm bdt-btn" data-bdt-id="${escapeHtml(item.id)}" data-bdt-today="${escapeHtml(days.today.target.id)}" data-bdt-target="${escapeHtml(day.target.id)}" data-bdt-date="${escapeHtml(day.date)}" onclick="window.BrainDumpUI.trayPlace(this,'${kind}')">${label}${date ? ` · ${escapeHtml(date)}` : ''}</button>`;
+}
+
+function trayRowHtml(item, days) {
+  const quadrant = quadrantOf(item);
+  // Same rule as the Brain Dump view: never offer a second promotion while the
+  // first one's outcome is unknown.
+  const actions = pendingPromotionIds.has(item.id)
+    ? '<span class="bdt-pending">Still confirming…</span>'
+    : `${days.today ? trayButtonHtml('today', item, days, days.today) : ''}${days.tomorrow ? trayButtonHtml('tomorrow', item, days, days.tomorrow) : ''}`;
+  return `
+    <li class="bdt-row" data-bdt-row="${escapeHtml(item.id)}">
+      <div class="bdt-text">${escapeHtml(item.text)}</div>
+      <div class="bdt-meta"><span class="bdt-chip">${escapeHtml(TRAY_CHIP[quadrant] || '')}</span>${actions}</div>
+    </li>`;
+}
+
+function trayOrder(triaged) {
+  // Array#sort is stable, so the model's canonical createdAt order holds within a quadrant.
+  const rank = item => { const i = TRAY_ORDER.indexOf(quadrantOf(item)); return i < 0 ? TRAY_ORDER.length : i; };
+  return triaged.slice().sort((a, b) => rank(a) - rank(b));
+}
+
+export function renderTray() {
+  const section = typeof document !== 'undefined' ? document.getElementById('bd-plan-tray') : null;
+  if (!section) return;
+  let all = {};
+  try { all = repository().listAllRaw(); } catch { all = {}; }
+  const untriaged = untriagedCaptures(all);
+  const triaged = triagedCaptures(all);
+  if (!untriaged.length && !triaged.length) {
+    section.hidden = true;
+    section.innerHTML = '';
+    return;
+  }
+  const expanded = isTrayExpanded();
+  const toTriage = untriaged.length ? ` · ${untriaged.length} to triage` : '';
+  let body = '';
+  if (expanded) {
+    const days = trayDays();
+    const ordered = trayOrder(triaged);
+    const shown = trayShowAll ? ordered : ordered.slice(0, TRAY_ROWS);
+    const more = ordered.length > shown.length
+      ? `<button type="button" class="btn sm ghost bdt-more" onclick="window.BrainDumpUI.showAllTray()">Show all (${ordered.length})</button>` : '';
+    const preview = untriaged.length ? `
+      <div class="bdt-untriaged">
+        <ul class="bdt-preview">${untriaged.slice(0, TRAY_PREVIEW).map(item => `<li>${escapeHtml(item.text)}</li>`).join('')}</ul>
+        <button type="button" class="btn sm ghost bdt-more" onclick="showView('braindump')">${untriaged.length} to triage</button>
+      </div>` : '';
+    body = `
+      <div class="bdt-body">
+        ${shown.length ? `<ul class="bdt-list">${shown.map(item => trayRowHtml(item, days)).join('')}</ul>` : ''}
+        ${more}${preview}
+      </div>`;
+  }
+  section.hidden = false;
+  section.innerHTML = `
+    <button type="button" class="bdt-head" aria-expanded="${expanded}" onclick="window.BrainDumpUI.toggleTray()">
+      <span>Brain Dump · ${triaged.length} to plan${toTriage}</span><span class="bdt-caret" aria-hidden="true">${expanded ? '▾' : '▸'}</span>
+    </button>${body}`;
+}
+
+/** Today / Tomorrow from the tray. Midnight guard: the button carries the day it
+ *  was rendered for; if that is no longer the day the tap would write to, nothing
+ *  is written and the tray is redrawn with the real days. */
+async function trayPlace(button, kind) {
+  const { bdtId: id, bdtToday: renderedToday, bdtTarget: renderedTarget, bdtDate: renderedDate } = button?.dataset || {};
+  if (!id || pendingPromotionIds.has(id)) return;
+  const days = trayDays();
+  const day = kind === 'today' ? days.today : days.tomorrow;
+  if (days.today?.target.id !== renderedToday || day?.target.id !== renderedTarget || day?.date !== renderedDate) {
+    notify('The day just changed — check where this goes.');
+    renderTray();
+    return;
+  }
+  // No await between the guard and these calls: the promotion resolves its
+  // target synchronously, in the same tick the guard checked.
+  if (kind === 'today') { await doToday(id); return; }
+  const result = await scheduleTo(id, { dateKey: renderedDate });
+  reportPromotionOutcome(result, 'Added to tomorrow\'s plan.', id);
+}
+
 if (typeof window !== 'undefined') {
-  window.BrainDumpUI = { render, setTriageAnswer, saveTriage, doToday, toggleSchedule, confirmSchedule, archive, delegate, toggleHandledEdit, saveHandledEdit, reopen, openInPlan };
+  window.BrainDumpUI = { render, setTriageAnswer, saveTriage, doToday, toggleSchedule, confirmSchedule, archive, delegate, toggleHandledEdit, saveHandledEdit, reopen, openInPlan, renderTray, toggleTray, showAllTray, trayPlace };
+  // My Day's plan surfaces refresh on every authoritative plan change; the tray's
+  // day labels and Tomorrow availability depend on that same state.
+  globalThis.refreshBrainDumpTray = renderTray;
   // A different account's cache becoming active (sign-in/out, a direct switch) must
   // re-render so nothing drawn from the previous account's captures lingers — the
   // same reasoning commitments-sync.js documents for refreshCommitmentSurfaces.
@@ -571,5 +733,7 @@ if (typeof window !== 'undefined') {
     if (id) maybeReconcile(id, record);
     else settleAllOutstandingClaims(); // a (re)bind: the account's cache just became active
     if (document.getElementById('view-braindump')?.classList.contains('active')) render();
+    else renderTray(); // the tray is on My Day: a remote change or account switch must reach it too
   };
+  renderTray();
 }
