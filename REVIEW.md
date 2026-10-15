@@ -6,6 +6,125 @@
 
 ---
 
+## Review TASK-015 - PASS WITH NOTES, HOLD AT APPROVED (Unified My Day + Brain Dump V1 planning tray)
+branch: task-015 @ 5c5957e (rebased onto origin/main 2411ee4; pre-rebase builder SHA cabb793, tag task-015-prereconcile)
+verdict: approved (red-zone, held for human merge), once the lead's post-rebase smoke run is green
+reviewer: independent Claude reviewer (did not build this task)
+
+### What was checked
+Read the TASK-015 contract (TASKS.md), TASK_015_HANDOFF.md, the CODEMAP Brain Dump entry, the full
+`git diff origin/main..HEAD`, brain-dump-promotion.js in full, and the changed and surrounding parts of
+brain-dump-ui.js. I checked `dayForScheduledDate` / `scheduledDateForTarget` / `next` / `current` / `onWrite` in
+plan-authority.js. I ran `npm test` (exit 0, every suite fail 0), `npm run lint` (0 errors; no warnings in
+brain-dump files), `check:www-parity` (OK, 92-file closure, byte-identical), `check:firebase-rules` (matches builder)
+and `git diff --check` (clean). I compared the commits with `git range-diff cbd82fc..task-015-prereconcile
+2411ee4..HEAD`. Playwright was NOT run by me: the lead's smoke run owns the port and output dirs.
+
+### Findings (verified)
+1. **Constraints hold.** `git diff origin/main..HEAD` is empty for brain-dump-model/-repository/-sync/-promotion.js,
+   plan-authority.js, plan-item-origin.js, plan-fence-sync.js, storage.js, firebase.rules.json, functions/ and
+   workers/. The governed token `20261014-task014-normal-tracking-hud-v1` is untouched (index.html:8,16,1741-1770,
+   1779-1810). Only the Brain Dump token moved, in 7 URLs (index.html:1771-1775 import map, 1811-1812 entry tags),
+   plus the new CSS link at index.html:24. The test pin and the retired list moved together
+   (personal-day-boundary-web-runtime.test.js:275,279). The old token appears nowhere else in runtime files.
+   www/ is byte-identical for index.html, brain-dump-ui.js and brain-dump-tray.css.
+2. **Extracting scheduleTo is behaviour-preserving.** confirmSchedule (brain-dump-ui.js:395-407) still has the
+   pending guard, the "Pick a date first." validation, the same `when`/`durationMinutes` derivation, the
+   `openScheduleId = null` reset on ok only, and the same `reportPromotionOutcome(..., 'Added to your plan.')`.
+   scheduleTo (412-425) passes exactly the same promoteCaptureToPlan arguments; the `when = ''` default never
+   applies because confirmSchedule always passes a string. Today uses the existing doToday (376-386) unchanged.
+   The tray lives in the same module, so pendingPromotionIds, reconciling and the reconciler are shared.
+3. **The Tomorrow round trip is correct and fails closed.** trayDays (brain-dump-ui.js:620-633) offers Tomorrow only
+   when `dayForScheduledDate(date,'').target.id === next(current()).id`. promoteCaptureToPlan resolves the schedule
+   target with exactly that call (brain-dump-promotion.js:137), so the label date and the written day are one
+   resolution.
+   - Calendar: `next` → `calendarTarget(D+1)`, and `dayForScheduledDate` returns the same id (plan-authority.js:401,
+     467-472).
+   - Legacy without a boundary: `scheduledDateForTarget` returns `dateKey`, and `dayForCalendarDate` →
+     `legacyTarget` (plan-authority.js:522-525, 459-460).
+   - Personal Day: the noon anchor is checked against `next.id`. The fallback label (start date) is still verified.
+   - Legacy→calendar cutover eve: the ids differ, so Tomorrow is omitted. Never a wrong day.
+   - Because the check demands `next.id`, Tomorrow can never land on today.
+4. **The midnight guard is sound.** trayPlace (brain-dump-ui.js:703-720) recomputes trayDays and compares today id,
+   target id and date for both kinds before any write. The guard and the promotion's target resolution run in the
+   same synchronous segment: doToday and scheduleTo reach `planAuthority.current()` / `dayForScheduledDate` before
+   their first `await` (brain-dump-promotion.js:121-140). The only write-side await is the claim, which is after
+   resolution. A claim that straddles midnight is handled by the existing expired-claim reconciler (pre-existing
+   behaviour, unchanged).
+5. **Pending state and account switch.** A pending id shows "Still confirming…" with no buttons
+   (brain-dump-ui.js:641-651). render() calls renderTray first (265-267), so every outcome path refreshes the tray.
+   refreshBrainDumpSurfaces renders the tray on both the id and no-id paths, either via render() or the new `else`
+   branch (732-737). The module also renders once at load (738). The tray has no element ids at all (only data-*),
+   so it cannot collide with #bd-root.
+6. **No XSS.** Capture text, chip, id, target id and date are all escapeHtml'd into double-quoted attributes or text
+   (brain-dump-ui.js:635-651, 661-700). The inline onclicks pass `this` or constants, never a capture id. This is
+   safer than the existing view's `'${id}'` inline handlers.
+7. **Layout bounds hold.** The section is `hidden` and its innerHTML emptied with 0/0 captures (668-671), plus
+   `#bd-plan-tray[hidden]{display:none}` (brain-dump-tray.css:7). It is collapsed by default, and the localStorage
+   read/write is wrapped in try/catch (586-597). Rows are limited by TRAY_ROWS=5 and TRAY_PREVIEW=3, with an inline
+   "Show all (N)" and no scroller. CSS is scoped to `#bd-plan-tray` / `.bdt-*` only.
+8. **No loop in refreshAuthoritativePlanSurfaces.** The new line is index.html:7311. renderTray only reads Plan
+   Authority. onWrite fires only from write paths (plan-authority.js:681,686,777,811), so there is no recursion. The
+   addItem → onWrite → renderTray re-entry during createAndFinalize is synchronous, and the final render() corrects
+   it.
+9. **The rebase is clean.** The range-diff shows the TASK-015 patches as identical except for context lines (TASK-014
+   tokens and the TASKS.md anchor). The only `-` lines in `git diff origin/main..HEAD` are the confirmSchedule
+   extraction, the BrainDumpUI export line and the 7 Brain Dump token lines (x2 for www) plus the test pin. No
+   TASK-014 hunk was lost, and both TASKS.md entries are present.
+10. **Hard Rules are untouched.** The index.html diff contains no timer, heartbeat, `_todayRenderKey` or INIT-order
+    change.
+
+### Must-fix
+- None.
+
+### Should-fix (non-blocking)
+- [ ] **S1. Handoff and evidence docs are stale after the rebase.** TASK_015_HANDOFF.md still says "base cbd82fc …
+  Not reconciled onto main after TASK-014. That has NOT been done here". CHANGELOG.md and TEST_REPORT.md cite the
+  pre-rebase base and pre-rebase results (lint "47 warnings"; it is 48 now, and the new one is from the base, not
+  this task). Update them with the post-rebase smoke results before merge. The contract also requires a re-test
+  after reconciliation.
+- [ ] **S2. The F3 "double tap" test may not exercise two in-flight promotions.** `dblclick()`
+  (tests/brain-dump-plan-tray.spec.js:300) can land its second click after the first promotion has already
+  re-rendered or hidden the tray, and the follow-up stale tap (303-308) runs after settlement. The two-tab case and
+  the deterministic plan-item id still cover the duplicate invariant. A stronger test would `__bdHold` the
+  capture, call trayPlace twice, then release.
+- [ ] **S3. The tray has no in-flight guard.** During a normal (non-pending) claim round trip, the row still shows
+  Today and Tomorrow. Tapping Today then Tomorrow quickly gives the second attempt `already-claimed` → "…already
+  being added to your plan on another device." That message is false, though nothing is duplicated. The Brain Dump
+  view has the same pre-existing behaviour (Do today then Schedule). A tray-local in-flight Set in trayPlace would
+  fix it. This does not block.
+
+### Nits
+- **F9 wording differs by surface.** The view says "Still confirming a previous action…" and the tray says "Still
+  confirming…". Both hide the actions. This is acceptable because F11 pins the existing copy.
+- **F6 covers transport refusal only.** Arbitration refusals (`already-claimed`/`already-disposed`) go through the
+  same reportPromotionOutcome path and its existing copy. This is acceptable.
+- **No "show less"** (not in the contract). Collapsing resets Show all. This is acceptable.
+- **The tray date labels can go stale overnight** until any refresh. The guard turns a stale tap into a refusal, not
+  a misplacement. The guard is conservative: a pre-midnight Tomorrow tap made just after midnight is refused even
+  though its date is still valid. That matches the contract.
+- **The Today label uses trayDateHint**, which for a truncated Personal Day can show the start date. It is
+  presentation only, since Today always writes to `current()`.
+- **Browser tests cover only the legacy store.** Calendar and Personal Day tray paths are verified here by reading
+  the code, not by tests.
+
+### Builder's mutation claims
+I judged these plausible but did not re-run them. Without the guard, F8 would promote to Oct 2 and the
+`plans === before` and status checks would fail. Without the round-trip check, the stubbed-authority test would
+still render Tomorrow. Without the pending branch, F9's row assertion fails.
+
+### Verdict
+PASS WITH NOTES. No must-fix items. The approval is conditional on the lead's in-progress post-rebase smoke run
+being green (I could not run Playwright here).
+
+### Risk-gate
+Gate picked: `approved` (red-zone, held). The tray writes plan items (`bdp1|<id>`) into authoritative plan stores
+through the remote claim transaction and Plan Authority's addItem. That is RTDB sync plus plan data, where a
+misplaced or lost item is not easily reconstructed (Hard Rule 9). It also changes the shared refresh path in
+index.html. It must not auto-merge. TASKS.md status is left for the lead to set after the smoke run.
+
+---
+
 ## Review TASK-003 - APPROVED, HELD (per-task scope note, soft gate, ported from the Meal Prep app)
 branch: task-003
 verdict: approved (red-zone, held for human `/merge`)
