@@ -1092,6 +1092,31 @@ files: design/task-018/ standalone HTML/CSS/mock JS, design documentation and ca
   (local evidence); TASKS.md lifecycle/phase record; TASK_018_IMPLEMENTATION_SAFETY_GATE.md;
   CHANGELOG.md and TEST_REPORT.md append-only. Production file manifest requires a passing safety gate first.
 
+current-contract-phase (supersedes execution authorization below; implementation remains blocked):
+  Owner-direct "Completion Durability Contract", current session 2026-10-15. MODE CONTRACT DESIGN + OFFLINE PROOF.
+  Base bb171a287ac67d76ae27634b5227bc24f66919de; audit 07ae51cf28b0aed41a2b5061fcc50dfd5baeb4d9.
+  Allowed additions: TASK_018_COMPLETION_DURABILITY_CONTRACT.md and design/task-018/contract/ isolated proof
+  fixtures/tests; append CHANGELOG/TEST_REPORT and record this phase only. Preserve all earlier work/mockups.
+  Investigate exact all-store/fenced identity, duplicates/moves/boundary conflicts, independently protected
+  resolution-only records versus item annotations, authenticated revision-aware idempotent writes/acks,
+  released-client survival, reload/other-device recovery, failure/unknown handling and conditional Undo.
+  Prove old replay retention, unchanged cutover freeze, resolution without historical rewrite, concurrency,
+  account isolation, reload, no false completion, and malformed/unauthorized refusal with offline fixtures.
+  No production implementation, deployed Firebase changes, live tasks, general task store/event framework,
+  UI redesign, integration, push or deployment. Independent final technical review required.
+  Deliver recommended contract, stable identity/storage/write-ack/compatibility/Undo/rules impact/minimal files,
+  proof results/residual risks/review/readiness. STOP at OWNER APPROVAL GATE, not automatic implementation.
+
+contract-delivery:
+  TASK_018_COMPLETION_DURABILITY_CONTRACT.md recommends independent resolution-only sibling records plus a
+  dedicated authenticated backend room-ETag CAS, retaining original sources and durable per-task op receipts.
+  This requires explicit owner approval of a privileged-domain architecture exception, NOT a fallback in the
+  existing Action API. Typed original identity; all-store/fence proof; conservative move/duplicate/generation/
+  boundary conflicts; conditional Undo; old-client survival; size/priority/contention/unknown limits documented.
+  46 isolated checks pass (35 deterministic, 11 real local RTDB emulator/SDK); 99 existing model tests pass.
+  No production functionality/rules/sync changes. New proposal remains unapproved; TASK-018 implementation
+  stays blocked. Independent review requested for exact local contract checkpoint; stop at owner approval gate.
+
 implementation-phase (supersedes design-only execution restrictions below; historical records retained):
   Owner-direct "TASK-018 - Implement Approved Refined A", current session 2026-10-15.
   Visual direction approved at 26e24b46214cf6ae12828d5bd8389171a5644b28. Fetch and verify current origin/main.

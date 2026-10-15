@@ -2184,3 +2184,25 @@ untested: full npm test and browser regressions; production completion/Undo/sear
   was made after the explicit safety stop, so no production screenshots or REVIEW-READY claim. Rules interpreter
   observations and synthetic sync stub are not real-SDK/emulator proof. TASK-014/015/017 behavior unchanged;
   existing expected-failure/known-issue results were not rerun, relabelled or claimed fixed. No live data accessed.
+
+## TASK-018 completion durability contract · 2026-10-15
+suite: node --test design/task-018/contract/contract.test.mjs design/task-018/contract/emulator.test.mjs
+result: 46 passed, 0 failed, 0 skipped: 35 deterministic and 11 real loopback RTDB emulator/SDK tests. All 14
+  files of the pinned cf43080 release hash-verified. Calendar/operational/legacy ordinary/fenced identity,
+  unchanged history, separate date/report instant, old merge replay and real released calendar bridge replay,
+  account/path denial, live second SDK listener/reload, conditional source CAS/conflicting dates, stale Undo,
+  retained idempotency receipts, lost request/response/readback and same-ID recovery, priority/size refusal,
+  timezone boundary, malformed input/future schema and safe reader projection all exercised.
+suite: node --test calendar-plan-model.test.js operational-plan-model.test.js plan-tomorrow.test.js
+result: 99 passed, 0 failed, 0 skipped. Existing baseline, not newly fixed tests.
+checks: generated Firebase rules match builder; www parity passes (92-file runtime closure); diff whitespace clean.
+recovery: initial isolated fixture import and test signature errors corrected. First emulator pass found Firebase
+  pruning of nullable identity origin; changed to non-null unmarked marker and real Undo passed. Independent
+  source review found reader-side future-version validation gap; fixed and covered before final 46/46 pass.
+environment: Java from JAVA_HOME/bin prepended only in the test process; existing pinned emulator jar and Firebase
+  SDK used. Proposed deny rule loaded in disposable emulator namespaces only. Emulator privileged/unsigned
+  tokens are test facilities; no production credentials, authentication or account data used.
+untested: real Firebase ID-token verification/revocation, deployment IAM and service isolation, streaming limit,
+  production browser/account-switch callback wiring, physical devices, real-data room scale and full npm/browser
+  regressions. No production functionality was implemented. Old-client UI awareness and ordinary id-reuse
+  guarantees are not supplied by the resolution-only record. Existing expected failures/issues remain unchanged.

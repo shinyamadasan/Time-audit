@@ -5041,3 +5041,17 @@ deviations: stopped as owner required before production edits. No implementation
   production screenshots or full regression/emulator/device evidence. Existing unrelated dirty design files preserved.
   No new completion/delete behavior, production/rules/sync/live-data changes, merge, push or deployment.
 → status set to `blocked` in TASKS.md; independent review requested for exact local audit checkpoint, not an implementation.
+
+## TASK-018 — completion durability contract and offline proof (branch: task-018)
+changed:
+  - TASK_018_COMPLETION_DURABILITY_CONTRACT.md: independent resolution-only records, stable source identity,
+    dedicated backend room CAS, confirmed/unknown recovery and conditional Undo; owner architecture gate explicit.
+  - design/task-018/contract/: four isolated proof/fixture/test modules; existing source validators and one
+    14-file hash-pinned cf43080 release reused; no production imports or endpoint.
+  - TASKS.md: record current owner contract-only instructions and proof delivery; implementation remains blocked.
+tests: 46 isolated checks pass (35 deterministic + 11 real loopback RTDB emulator/SDK); 99 existing model tests pass.
+blockers: owner must approve privileged-domain exception and bounded identity/size/priority/contention policy
+  before production implementation; real authentication/IAM, app integration and release gates remain unproved.
+deviations: none. Original audit and all mockups/uncommitted prototype edits preserved. Production/rules/backend
+  and live data unchanged; no UI redesign, integration, push or deployment.
+→ contract recommendation handed off for exact-checkpoint independent review; stop at OWNER APPROVAL GATE.
