@@ -5016,3 +5016,12 @@ blockers: no remaining UI implementation blocker; strict unseen-remote conflict 
 deviations: owner screenshot unavailable; written feedback used. Full Playwright/emulator suites and physical
   devices not exercised. Only observed-state Undo safety is claimed under existing LWW. No integration/push/deploy.
 → status set to `review` in TASKS.md; stop at REVIEW-READY.
+
+## TASK-018 — proposal checkpoint (branch: task-018)
+changed:
+  - TASK_018_UX_PROPOSAL.html / TASK_018_UX_PROPOSAL.md: isolated compact-row proposal and explicit pending completion-contract audit.
+  - TASKS.md: record owner-direct scope and required proposal-acceptance gate; status remains codex.
+tests: isolated proposal renderer passes three viewports, 22 synthetic tasks and simulated action states; see TEST_REPORT.md.
+blockers: waiting for the owner-requested UX acceptance before production implementation; persistence contract audit pending.
+deviations: none — no production code, model, rules, sync, www, deployment or live-data changes.
+→ proposal only; final review-ready candidate and independent review pending.
