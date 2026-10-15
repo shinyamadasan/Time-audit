@@ -4943,3 +4943,14 @@ tests: see TASK-010 F1/F2/F3/F4 in TEST_REPORT.md.
 blockers: none. Auth emulator does not prove production custom-token signature/IAM validation; production rollout remains separately gated.
 deviations: no production deployment, data mutation, OAuth scope change, merge or push. Exactly one write tool and five TASK-009 read tools remain.
 → TASK-010 remains `status: review` for targeted re-review.
+
+## TASK-014 — Normal Tracking HUD V1 (branch: task-014, 2026-10-14)
+changed:
+  - windows-hud-bridge.js projects ONE session: Focus first, else this device's normal tracking (read-only `getHudTrackingFields()` selector), else nothing. New `tracking-active` snapshot; every snapshot carries a title-free `sessionKey` and per-tab `claimedAt`. 1 s change-only selector poll, 4 s heartbeat, exactly one clear per session.
+  - index.html: `getHudTrackingFields()` + `refreshHudTracking()`; one-line re-projection after `_startTimer()`, `resetTimer()`, `startBreak()` and the Away stop. storage.js: one read-only call at the end of `detachTimerAwayRuntime()` (sign-out / account switch). Governed release token moved to `20261014-task014-normal-tracking-hud-v1`.
+  - windows-hud/ChronaSenseHud.ps1: accepts `tracking-active`; validates optional `claimedAt`/`sessionKey`; multi-tab arbitration (`Resolve-HudSnapshotUpdate`, 202 = superseded); TRACKING render with `Xm on task`; hide follows the session kind.
+  - Docs: windows-hud/README.md (Normal tracking, schema, two tabs, known gaps), CODEMAP.md (bridge block, Timer functions), DECISIONS.md #39, TASK_014_HANDOFF.md.
+tests: see TASK-014 in TEST_REPORT.md.
+blockers: none. Finding H-1 (pre-existing Focus-echo → normal timer after a break ends in the overlay) documented with a bounded recommendation; not fixed (red-zone timer change outside the brief).
+deviations: none from the brief. No Firebase schema/rules, Action API, Worker, OAuth or Function change; no push, merge or deploy.
+→ status set to `review` in TASKS.md.
