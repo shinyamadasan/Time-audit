@@ -994,6 +994,22 @@ review:
   Follow-ups (not scheduled; protected layer, need owner approval): F-A false cross-tab "being added on another
   device" toast; F-B pre-existing stuck claim after a same-browser two-tab race (one item, capture left triaged+claimed,
   reload sweep does not heal); S3 tray in-flight guard. See TASK_015_HANDOFF.md.
+  Owner-authorized integration 2026-10-15 (fast-forward of origin/main 8abe63b; reviewed candidate 49ee6a2 + this
+  metadata commit only). Acceptance hold: stays `approved`, not `done`, until real daily-use acceptance on the owner's
+  devices (tray Today/Tomorrow placement on My Day, Brain Dump view parity, account switch, offline refusal).
+
+follow-ups (recorded at integration; not scheduled; TASK-016 is proposed, not authorized):
+  - F-B (P1, propose TASK-016): stuck Brain Dump promotion claim. After a same-browser two-tab race the capture can stay
+    `triaged` with an open promotionClaim while exactly one bdp1 plan item exists; a reload's settleAllOutstandingClaims
+    sweep does not finalize it; a manual reconcilePromotionClaim does. Reproduces with two plain Brain Dump views and no
+    tray (3/240 at 6 workers). Suspected (unproven): whole-record overwrite through shared localStorage. Protected layer
+    (brain-dump-sync/-repository/-promotion): needs its own owner-approved task.
+  - F-A (investigate with TASK-016): misleading two-tab contention message — the losing tab of a same-intent race can be
+    told "This item is already being added to your plan on another device." Pre-existing (two plain views reproduce it).
+  - S3 (separate small UI follow-up): no tray in-flight guard; rapid Today-then-Tomorrow before the first claim settles
+    shows the F-A message. No duplicate item.
+  - Unverified, preserved: real Firebase; Android/Capacitor build; real cross-device race; calendar-native and Personal
+    Day accounts in the browser (code-read only); real daily use; whether a re-tap clears an F-B capture.
 
 ---
 
