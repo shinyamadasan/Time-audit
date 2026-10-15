@@ -5,6 +5,32 @@
 
 ---
 
+## TASK-015 post-rebase (origin/main 2411ee4) · 2026-10-15
+suite: lead's gates on the rebased branch (npm test, lint, parity, rules, diff-check, targeted 7 specs, full smoke).
+  Then, after the F3 rewrite (`2d712ed`): `npx playwright test tests/brain-dump-plan-tray.spec.js -g F3
+  --repeat-each=50 --workers=2`; `npx playwright test tests/brain-dump-plan-tray.spec.js --workers=2`;
+  `npx playwright test --workers=2`.
+result:
+  - lead's results: npm test 2190 pass, 0 fail, 1 skip; lint 0 errors / 48 warnings (= main baseline); parity, rules
+    and diff-check clean; targeted 7 specs (incl. normal-tracking-hud) 120/120. First full smoke: 919 passed,
+    1 failed (old two-tab F3: 4/30 toast failures; with the toast assertion removed, 8/30 still failed on
+    uncontrolled ordering).
+  - F3 rewrite (claims held in flight with __bdHold, queue depth asserted, then released; two-tab test runs in both
+    settle orders): 150/150 over 50 repeats x 3 tests.
+  - whole new spec: 15/15.
+  - full smoke (2 workers): 921 passed, 0 failed (17.4m). The 7 TASK-013 `test.fail` cases (daily-use-reliability
+    F-1..F-7) behaved as declared.
+investigation (temporary specs, not committed; old uncontrolled two-tab race, up to 40s settle window):
+  - 2 workers: 60/60 settled, p50 141 ms, max 195 ms.
+  - 6 workers: tray + view, 7/240 stuck (plus 2/180 in an earlier run); two plain Brain Dump views, 3/240 stuck.
+    0 duplicate items in any run.
+  - In every stuck run the capture stayed `triaged` with its claim, locally and remotely, for at least 40s; there
+    was exactly one plan item; both tabs toasted success; a reload did not heal it within 10s.
+  - A manual `reconcilePromotionClaim` after reload finalized it at once. Pre-existing trigger gap in the protected
+    promotion/sync layer, not fixed. The cross-tab false-conflict toast appeared in 41/240 tray runs and 95/240
+    plain-view runs.
+untested: real two-device race; real Firebase; the reviewer's S3 Today-then-Tomorrow case (not re-run).
+
 ## TASK-015 · 2026-10-15
 suite: `npm ci --legacy-peer-deps` (plain `npm ci` fails ERESOLVE on the existing capacitor-google-auth peer range, as in CI);
   `npm test`; `npm run lint` (baseline taken before edits); `npm run check:www-parity`; `npm run check:firebase-rules`;
