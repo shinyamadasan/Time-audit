@@ -903,6 +903,89 @@ follow-ups (non-blocking, recorded at integration; not scheduled):
   - H-1 (pre-existing): a Focus break ending inside the overlay turns the Focus timer into a normal running timer
     (Focus echo -> normal ticker -> doPing). Bounded fix proposal in TASK_014_HANDOFF.md; red zone; needs owner approval.
 
+---
+
+### TASK-015 - Unified My Day + Brain Dump V1 (planning tray)
+status: codex
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none (runs in parallel with TASK-014; must be reconciled onto origin/main after TASK-014 lands)
+files: brain-dump-ui.js, index.html (My Day markup: one new section after #planning-continuity-section;
+  refreshAuthoritativePlanSurfaces: one refresh line; Brain Dump import-map/entry release token only),
+  CSS for the tray (brain-dump-ui-owned block; no change to existing selectors), tests/brain-dump-plan-tray.spec.js (new),
+  www/ mirror (npm run mirror:www), CODEMAP.md, CHANGELOG.md, TEST_REPORT.md, TASK_015_HANDOFF.md (new), TASKS.md (status only)
+
+context:
+  Owner-direct instruction, 2026-10-15 ("Authorize TASK-015 — Unified My Day + Brain Dump V1", target REVIEW-READY,
+  not integration). Base: origin/main cbd82fc463d6a48aa9e32949f95264a0a48f3528. Design: Unified My Day Planning UX
+  feasibility report, Option B-lite, with the owner's approved refinements: (1) an untriaged-item preview and
+  (2) explicit verification of the Tomorrow planning workflow. Today the owner must leave My Day to place a
+  Brain Dump capture on a day and cannot see the day's plan while doing it. Promotion already exists
+  (brain-dump-promotion.js via Plan Authority) and creates a fenced `bdp1|<captureId>` kind:'task' item.
+
+design (binding):
+  - New `<section id="bd-plan-tray" hidden>` in #view-today directly after #planning-continuity-section, rendered by
+    brain-dump-ui.js itself (NOT a new module: the tray must share the module's pendingPromotionIds / reconciling
+    state and promotion path with the Brain Dump view).
+  - Hidden with zero layout height when the account has 0 untriaged and 0 triaged captures.
+  - Collapsed header (<=56px): "Brain Dump · N to plan" (+ untriaged count). Expanded/collapsed remembered per device
+    in localStorage behind try/catch; collapsed by default.
+  - Expanded, TRIAGED list: order do-first > schedule > delegate-candidate > archive-candidate, then the model's
+    canonical createdAt order; first 5 rows, then "Show all (N)" expands inline (no nested scroll container).
+    Row: text (2-line clamp), short quadrant chip, buttons "Today · <date>" and "Tomorrow · <date>".
+  - Untriaged preview (owner refinement 1): up to 3 untriaged capture texts, read-only, plus "M to triage" which
+    opens the Brain Dump view. No triage controls in the tray.
+  - Today = existing doToday() path. Tomorrow = the existing Schedule path (extract a DOM-free
+    scheduleTo(id, { dateKey, when, durationMinutes }) from confirmSchedule() so both surfaces share it) with the
+    next authoritative day's date; the Tomorrow button is shown ONLY if
+    PlanAuthority.dayForScheduledDate(date, '') resolves to exactly next(current()).id, otherwise omitted.
+  - Midnight guard: each action button carries the target id it was rendered for; on click, if the current target
+    id differs, re-render and notify ("The day just changed — check where this goes.") and write nothing.
+  - Pending promotion: a row whose id is in pendingPromotionIds shows "Still confirming…" with no Today/Tomorrow,
+    on both surfaces.
+  - refreshBrainDumpSurfaces re-renders the tray as well (remote change, rebind/account switch);
+    index.html refreshAuthoritativePlanSurfaces calls globalThis.refreshBrainDumpTray?.().
+  - Not in the tray: archive, delegate, schedule-with-time, capture input, triage, "add as Top Priority".
+  - Single-column layout at all widths. No side panels, no grid/fixed layout change (DECISIONS #3).
+  - No duplicate DOM ids between the tray and #bd-root (tray ids use a distinct prefix).
+
+acceptance:
+  - [ ] F1 Today: with >=1 triaged capture, expand tray + Today = 2 taps, 0 view changes; bdp1|<id> exists in
+        PlanAuthority.items(current()) and its row renders in My Day without navigation.
+  - [ ] F2 Tomorrow (owner refinement 2): 2 taps; bdp1|<id> exists in items(next(current())) and NOT in current();
+        the button's date label equals that target's date; navigating the My Day timeline to the next day shows the
+        item; the Brain Dump view's Recently handled row shows "Scheduled · <that date>". Also covered: Tomorrow
+        button omitted when the round-trip check fails (stubbed authority).
+  - [ ] F3 No duplicates: double tap, and tray + Brain Dump view in two tabs, yield exactly one bdp1|<id> item.
+  - [ ] F4 150 captures: <=5 triaged rows + "Show all (N)" and <=3 untriaged preview rows by default; collapsed
+        header <=56px tall.
+  - [ ] F5 0 active captures: tray hidden, zero layout height.
+  - [ ] F6 Offline / refused claim: existing offline copy shown, no plan item, capture stays triaged.
+  - [ ] F7 Account A -> B: tray shows none of A's captures after switch.
+  - [ ] F8 Rendered before midnight, clicked after: never lands on a date other than the label; refuses + re-renders.
+  - [ ] F9 Pending claim: "Still confirming…" and no Today/Tomorrow in both tray and Brain Dump view.
+  - [ ] F10 390px: no horizontal scroll; tray buttons >=44px tall. Screenshots at 390px and 1920px attached to handoff.
+  - [ ] F11 Existing tests pass unchanged: brain-dump-eisenhower, brain-dump-production-ux, planning-continuity,
+        planning-continuity-fixes, my-day-timeline specs and npm test.
+
+constraints:
+  - Read CODEMAP.md first; never read index.html in full. Hard Rules apply (no timer/heartbeat/_todayRenderKey edits).
+  - NO edits to brain-dump-model.js, brain-dump-repository.js, brain-dump-sync.js, brain-dump-promotion.js,
+    plan-authority.js, plan-item-origin.js, plan-fence-sync.js, storage.js, firebase.rules.json, functions/, workers/.
+  - No schema, rules, Action API or persistence change; no new store; no new task kind.
+  - Do not touch the TASK-014 branch/worktree or its files' content beyond the shared index.html regions named above.
+  - Bump only the Brain Dump generation token (brain-dump-*.js import map + entry tags); leave the governed token alone.
+  - No push, merge or deploy.
+
+verification:
+  - [ ] npm test; npm run lint; npm run check:www-parity; npm run check:firebase-rules (unchanged output); git diff --check
+  - [ ] npx playwright test tests/brain-dump-plan-tray.spec.js plus the F11 specs; then npm run test:smoke (2 workers)
+  - [ ] Results appended to TEST_REPORT.md; changes to CHANGELOG.md; CODEMAP.md updated (new tray functions)
+
+review:
+  Gate if accepted: approved (held) — triggers promotion writes into plan stores. Must be reconciled onto origin/main
+  after TASK-014 lands and re-tested before independent review.
 
 ---
 
