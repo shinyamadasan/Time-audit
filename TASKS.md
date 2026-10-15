@@ -867,6 +867,20 @@ review:
   Acceptance hold: not `done` until real Windows desktop acceptance (matching web + companion; normal start/change/stop,
   Focus, Break/Away, sign-out, background, real Chrome/Edge Local Network Access prompt).
 
+integration:
+  Owner fast-forwarded origin/main cbd82fc..2411ee483d8eef8ea13e0118dbc19079978091a4 (reviewed 288b4be + approval commit,
+  TASKS.md only). Local gates at 2411ee4: npm test exit 0, lint 0 errors / 48 warnings, www parity OK, rules match
+  builder, diff check clean, PowerShell 56/56 + 30/30, fence 137/137, Playwright 905/906 at 2 workers (smoke.spec.js:1627
+  load flake; passed 3/3 alone and 76/76 file rerun). Hosted CI run 38751677656 success; Pages run 38751676251 success.
+
+acceptance (real Windows desktop, owner-reported 2026-10-15; matching deployed web + companion):
+  - VERIFIED by owner: normal tracking shown on the HUD; Switch Activity; Break; Stop; Focus mode.
+  - NOT VERIFIED (owner confirmation missing): Away; account sign-out clearing the HUD; backgrounded-tab /
+    stale-indicator behavior; the real Chrome/Edge Local Network Access prompt experience.
+  - Everything else rests on simulated evidence only (Playwright with stubbed Firebase; AST-extracted companion
+    functions with mocked WPF).
+  Status stays `approved` until Away and sign-out are confirmed on the real desktop.
+
 follow-ups (non-blocking, recorded at integration; not scheduled):
   - Clock claims: two-tab arbitration trusts one machine clock; a large backwards jump can make the companion drop a
     legitimate new session until the next session change or a companion restart.
