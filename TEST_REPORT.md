@@ -5,6 +5,19 @@
 
 ---
 
+## TASK-013 integration and closure · 2026-10-14
+suite: pre-push gates on e12305995e979b3fed8474f175e9f069e83542d5 (= reviewed d158084 + TASKS.md approval commit) and
+  hosted CI. No tests changed by the closure.
+result:
+  - npm test exit 0 (node:test 2179 total, 2178 pass, 0 fail, 1 env-gated skip; legacy runner 455/455); lint 0 errors /
+    47 pre-existing warnings; www parity OK; Firebase rules match builder; git diff --check clean.
+  - Full Playwright smoke at 2 workers (CI worker count): 892/892 passed. test:fence 137/137 (80 + 20 + 37).
+  - Hosted CI run 38662124556 (push, e123059): success — test, Firebase fence / rules integration. Pages run
+    38662124031: success.
+untested: six-worker local smoke load-sensitive timeouts in pre-existing tests remain a separate issue (not a gate).
+
+---
+
 ## TASK-013 FIX FIRST rework (R1–R3) · 2026-10-14
 suite: tests/daily-use-reliability.spec.js + required gates. Same environment as the TASK-013 entry below.
 result:
