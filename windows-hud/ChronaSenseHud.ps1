@@ -99,8 +99,9 @@ $hudSettings = Load-HudSettings
 # One-way only: there is no PendingCommand of any kind here. The HUD cannot
 # mutate Focus state — see windows-hud-bridge.js and README.md.
 $shared = [hashtable]::Synchronized(@{
-  Snapshot        = $null   # last 'focus-active' payload, or $null
+  Snapshot        = $null   # last 'focus-active' / 'tracking-active' payload, or $null
   LastReceivedAt  = [DateTime]::MinValue
+  ClaimFloor      = [double]0  # TASK-014: newest accepted claimedAt — older claims from a stale tab are dropped
 })
 $shared.Lock = New-Object object
 
@@ -278,8 +279,12 @@ $RootBorder.Add_MouseLeftButtonUp({
 
 # ── Hide until Focus ends (does not touch Focus state at all) ───────────
 $hiddenUntilEnd = $false
+$hiddenForType = ''
+# TASK-014: the hide lasts until the hidden kind of session ends — a Focus
+# hide is fulfilled when Focus hands over to normal tracking, and vice versa.
 function Hide-HudUntilFocusEnds {
   $script:hiddenUntilEnd = $true
+  $script:hiddenForType = [string]$shared.Snapshot.type
   $window.Hide()
 }
 
@@ -327,6 +332,18 @@ function Format-Started([double]$startedAtMs) {
   return "Started $($start.ToString('h:mm tt'))"
 }
 
+# TASK-014: display-only elapsed time from ChronaSense's authoritative start
+# timestamp; matches the app's own "Xm on task" hero wording.
+function Format-Elapsed([double]$startedAtMs) {
+  $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+  $min = [Math]::Max(0, [Math]::Floor(($nowMs - $startedAtMs) / 60000))
+  if ($min -ge 60) {
+    $h = [Math]::Floor($min / 60); $m = $min % 60
+    if ($m -gt 0) { return "${h}h ${m}m on task" } else { return "${h}h on task" }
+  }
+  return "${min}m on task"
+}
+
 function Write-HudDebug([string]$msg) {
   if ($env:CHRONASENSE_HUD_DEBUG) { Add-Content -Path $env:CHRONASENSE_HUD_DEBUG -Value "$(Get-Date -Format o) $msg" }
 }
@@ -356,10 +373,14 @@ function Render-HudState {
   # Fix round 1: visibility-aware staleness. pageVisibility is bridge-health
   # metadata reported by the page itself — it only selects which threshold
   # applies below; it is never displayed as Focus truth.
+  # A hide is fulfilled once the hidden kind of session is no longer the one shown.
+  if ($script:hiddenUntilEnd -and [string]$snap.type -ne $script:hiddenForType) { $script:hiddenUntilEnd = $false }
+
   $staleThresholdMs = if ($snap.pageVisibility -eq 'hidden') { $StaleAfterHiddenMs } else { $StaleAfterVisibleMs }
   $isStale = ([DateTime]::UtcNow - $lastAt).TotalMilliseconds -gt $staleThresholdMs
-  $phaseText = if ($snap.phase -eq 'break') { 'BREAK' } else { 'FOCUS' }
-  $dotColor = if ($isStale) { '#9CA3AF' } elseif ($snap.phase -eq 'break') { '#60A5FA' } else { '#4ade80' }
+  $isTracking = $snap.type -eq 'tracking-active'
+  $phaseText = if ($isTracking) { 'TRACKING' } elseif ($snap.phase -eq 'break') { 'BREAK' } else { 'FOCUS' }
+  $dotColor = if ($isStale) { '#9CA3AF' } elseif ($isTracking) { '#FBBF24' } elseif ($snap.phase -eq 'break') { '#60A5FA' } else { '#4ade80' }
 
   $PhaseLabel.Text = $phaseText; $PhaseLabelExp.Text = $phaseText
   $StatusDot.Fill = $dotColor; $StatusDotExp.Fill = $dotColor
@@ -368,7 +389,7 @@ function Render-HudState {
   $TitleLabelCollapsed.Text = $title
   $TitleLabelExp.Text = if ($privacyMode) { '(hidden — privacy mode)' } else { $title }
 
-  $endText = if ($isStale) { 'Syncing…' } else { Format-EndTime -plannedEndAtMs $snap.plannedEndAt }
+  $endText = if ($isStale) { 'Syncing…' } elseif ($isTracking) { Format-Elapsed -startedAtMs $snap.startedAt } else { Format-EndTime -plannedEndAtMs $snap.plannedEndAt }
   $EndLabelCollapsed.Text = $endText
   $EndLabelExp.Text = $endText
   $StartedLabel.Text = Format-Started -startedAtMs $snap.startedAt
@@ -382,6 +403,9 @@ function Render-HudState {
   }
 
   $ConnLabel.Text = if ($isStale) { 'Not confirmed — companion has not heard from ChronaSense recently.' } else { 'Synced' }
+  $hideText = if ($isTracking) { 'Hide until tracking ends' } else { 'Hide until Focus ends' }
+  if ($HideBtn) { $HideBtn.Content = $hideText }
+  if ($hideItem) { $hideItem.Text = $hideText }
   Render-Privacy
 
   if (-not $script:hiddenUntilEnd -and -not $window.IsVisible) { $window.Show() }
@@ -438,9 +462,22 @@ $listenerPS.Runspace = $listenerRunspace
   # Strict, bounded shape check — the snapshot is a handful of small,
   # explicit fields; reject anything that doesn't match rather than trusting
   # whatever ConvertFrom-Json happened to produce.
+  function Test-HudNumber($value) {
+    return ($value -is [double] -or $value -is [int] -or $value -is [long])
+  }
+
   function Test-ValidFocusPayload($payload) {
     if ($null -eq $payload) { return $false }
+    # TASK-014 arbitration fields: optional so a pre-TASK-014 page keeps working.
+    if ($null -ne $payload.claimedAt -and -not (Test-HudNumber $payload.claimedAt)) { return $false }
+    if ($null -ne $payload.sessionKey -and ($payload.sessionKey -isnot [string] -or $payload.sessionKey.Length -gt 64)) { return $false }
     if ($payload.type -eq 'focus-ended') { return $true }
+    if ($payload.type -eq 'tracking-active') {
+      if ($payload.title -isnot [string] -or $payload.title.Length -gt 200) { return $false }
+      if (-not (Test-HudNumber $payload.startedAt)) { return $false }
+      if ($payload.pageVisibility -ne 'visible' -and $payload.pageVisibility -ne 'hidden') { return $false }
+      return $true
+    }
     if ($payload.type -ne 'focus-active') { return $false }
     if ($payload.title -isnot [string] -or $payload.title.Length -gt 200) { return $false }
     if ($payload.phase -ne 'work' -and $payload.phase -ne 'break') { return $false }
@@ -449,6 +486,31 @@ $listenerPS.Runspace = $listenerRunspace
     if ($payload.linkType -ne 'daily-routine' -and $payload.linkType -ne 'learning-plan' -and $payload.linkType -ne 'none') { return $false }
     if ($payload.pageVisibility -ne 'visible' -and $payload.pageVisibility -ne 'hidden') { return $false }
     return $true
+  }
+
+  # TASK-014: one displayed session even with several ChronaSense tabs open.
+  # Pure decision, no side effects. Accepts: a heartbeat for the session on
+  # screen; a new session whose claim is not older than the newest accepted
+  # one; an end for the session on screen. Drops a stale tab's older session
+  # or its end for a session that is no longer shown. A payload without
+  # claimedAt (pre-TASK-014 page) keeps the old last-write-wins behavior.
+  function Resolve-HudSnapshotUpdate($payload, $current, [double]$floor) {
+    if ($null -eq $payload.claimedAt) {
+      $next = if ($payload.type -eq 'focus-ended') { $null } else { $payload }
+      return @{ Accept = $true; Snapshot = $next; Floor = $floor }
+    }
+    $claim = [double]$payload.claimedAt
+    $currentKey = if ($null -ne $current) { [string]$current.sessionKey } else { '' }
+    if ($payload.type -eq 'focus-ended') {
+      if ($null -eq $current -or ($currentKey -and [string]$payload.sessionKey -ne $currentKey)) {
+        return @{ Accept = $false; Snapshot = $current; Floor = $floor }
+      }
+      return @{ Accept = $true; Snapshot = $null; Floor = [Math]::Max($floor, $claim) }
+    }
+    if (($currentKey -and [string]$payload.sessionKey -eq $currentKey) -or $claim -ge $floor) {
+      return @{ Accept = $true; Snapshot = $payload; Floor = [Math]::Max($floor, $claim) }
+    }
+    return @{ Accept = $false; Snapshot = $current; Floor = $floor }
   }
 
   while ($listener.IsListening) {
@@ -518,25 +580,23 @@ $listenerPS.Runspace = $listenerRunspace
         [System.IO.File]::AppendAllText($env:CHRONASENSE_HUD_DEBUG, "$(Get-Date -Format o) recv type=$($payload.type) pageVisibility=$($payload.pageVisibility)`n")
       }
 
-      if ($payload.type -eq 'focus-active') {
-        [System.Threading.Monitor]::Enter($shared.Lock)
-        try {
-          $shared.Snapshot = $payload
+      $accepted = $false
+      [System.Threading.Monitor]::Enter($shared.Lock)
+      try {
+        $decision = Resolve-HudSnapshotUpdate $payload $shared.Snapshot ([double]$shared.ClaimFloor)
+        $accepted = $decision.Accept
+        if ($accepted) {
+          $shared.Snapshot = $decision.Snapshot
+          $shared.ClaimFloor = $decision.Floor
           $shared.LastReceivedAt = [DateTime]::UtcNow
-        } finally { [System.Threading.Monitor]::Exit($shared.Lock) }
-      } else {
-        [System.Threading.Monitor]::Enter($shared.Lock)
-        try {
-          $shared.Snapshot = $null
-          $shared.LastReceivedAt = [DateTime]::UtcNow
-        } finally { [System.Threading.Monitor]::Exit($shared.Lock) }
-      }
+        }
+      } finally { [System.Threading.Monitor]::Exit($shared.Lock) }
 
-      $window.Dispatcher.BeginInvoke($renderOnUiThread) | Out-Null
+      if ($accepted) { $window.Dispatcher.BeginInvoke($renderOnUiThread) | Out-Null }
 
       # One-way only: no response body, no command of any kind is ever
-      # returned to the browser.
-      $res.StatusCode = 204
+      # returned to the browser. 202 = well-formed but superseded (stale tab).
+      $res.StatusCode = if ($accepted) { 204 } else { 202 }
       $res.Close()
     } catch {
       try { $ctx.Response.StatusCode = 500; $ctx.Response.Close() } catch { }

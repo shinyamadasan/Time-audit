@@ -364,6 +364,13 @@ Variables: `focusModeOn`, `focusBlockCountdown`, `pomodoroPhase`, `pomodoroTimer
 Depends on: `entries`, `settings`, `running`, `ticker`, `blockStartTime`, `currentTask`, `intention`, `lastTaskForRepeat`, `timerStartedAt`, `totalSecs`, `remaining`, `dailyCommitment`, `persist()`, `syncEntries()`, `syncTimerState()`, `showToast()`, `resetTimer()`, `getTodayEntries()`, `getActivityColor()`, `toDateKey()`, `fmtDur()`, `getBucket()`, `renderToday()`, `updateRing()`, `doPing()`, `buildHeroSuggestions()`, `buildSugItem()`, `canonicalizeActivityInput()`, `_startHeartbeat()`, `_stopHeartbeat()`
 Source-truth (Phase 6G.1): `endWorkSession()` ends a completed work phase at its **planned endpoint** (phase start + configured work minutes), never `Date.now()` — a delayed `restoreFocusSession()` cannot inflate a short session to hours. `logFocusSession()` collapses a duplicate completion (same deterministic `id`/`tsStart`/`energy: deep`). Manual early exit (`saveActiveFocusSession()`) still uses real elapsed time. See `contracts/CHRONASENSE_EVIDENCE_CONTRACT_V1.md` "Expired Focus".
 
+### windows-hud-bridge.js
+Lines: external file (ES module; Phase 6B.1, extended by TASK-014)
+Purpose: One-way loopback projection of the ONE authoritative session (Focus first, else this device's normal tracking, else nothing) to the optional Windows HUD companion (`windows-hud/ChronaSenseHud.ps1`, documented in `windows-hud/README.md`). Owns no timer state; never reads a response.
+Functions: `buildActiveSnapshot()`, `buildEndedSnapshot()`, `buildTrackingSnapshot()`, `hudSessionKey()`, `createHudBridge()` (→ `pushActive()`, `pushEnded()`, `refresh()`, `notifyVisibilityChange()`, `isConnected()`), `getSharedHudBridge()`
+Variables: `HUD_BRIDGE_PORT`, `HUD_BRIDGE_URL`, `HUD_HEARTBEAT_MS`, `HUD_TRACKING_POLL_MS`; exposes `window.chronaSenseHudBridge`
+Depends on: `getHudTrackingFields()` (index.html, read-only selector; polled every 1 s), focus-mode.js `pushHudFocusState()` / `pushHudFocusEnded()`, `refreshHudTracking()` call sites (`_startTimer()`, `resetTimer()`, `startBreak()`, `startAway()`, storage.js `detachTimerAwayRuntime()`)
+
 
 ### chronasense-life-ledger-adapter.js: date-scoped read
 
@@ -773,7 +780,7 @@ Depends on: `entries`, `focusRedemptions`, `persist()`, `scheduleRenderToday()`,
 ## [Timer — Core Interval Tracking]
 Lines: 2197–2476
 Purpose: Start/stop/reset the 30-min countdown ring, pre-commit modal for naming tasks, state switching, coverage-context display annotation, heartbeat, and the `beforeunload` guard.
-Functions: `fmt()`, `normalizeActivity()`, `activityBaseName()`, `activityGroupKey()`, `activityDisplayLabel()`, `preferActivityLabel()`, `canonicalActivityBase()`, `canonicalizeActivityInput()`, `expandPCTimeEntries()`, `isPcTimeEntry()`, `overlapMs()`, `displayEntryIds()`, `exactDisplayDuplicateKey()`, `collapseExactDuplicatesForDisplay()`, `entryMatchesScheduleTemplate()`, `entryMatchesPlanItem()`, `isScheduleOrPlanBlock()`, `isRecurringCoverageBlock()`, `isLegacyJobCoverageBlock()`, `isCoverageContextBlock()`, `annotateCoverageContextForDisplay()`, `squashTinyPCTimeFragments()`, `fmtDur()`, `updateRing()`, `toggleTimer()`, `continueLastTask()`, `switchToNewTask()`, `confirmPreCommit()`, `updateTimerTaskLabel()`, `_startTimer()`, `switchState()`, `playAlert()`, `resetTimer()`, `stopAndLog()`, `switchTaskMidBlock()`
+Functions: `fmt()`, `normalizeActivity()`, `activityBaseName()`, `activityGroupKey()`, `activityDisplayLabel()`, `preferActivityLabel()`, `canonicalActivityBase()`, `canonicalizeActivityInput()`, `expandPCTimeEntries()`, `isPcTimeEntry()`, `overlapMs()`, `displayEntryIds()`, `exactDisplayDuplicateKey()`, `collapseExactDuplicatesForDisplay()`, `entryMatchesScheduleTemplate()`, `entryMatchesPlanItem()`, `isScheduleOrPlanBlock()`, `isRecurringCoverageBlock()`, `isLegacyJobCoverageBlock()`, `isCoverageContextBlock()`, `annotateCoverageContextForDisplay()`, `squashTinyPCTimeFragments()`, `fmtDur()`, `updateRing()`, `toggleTimer()`, `continueLastTask()`, `switchToNewTask()`, `confirmPreCommit()`, `updateTimerTaskLabel()`, `getHudTrackingFields()`, `refreshHudTracking()`, `_startTimer()`, `switchState()`, `playAlert()`, `resetTimer()`, `stopAndLog()`, `switchTaskMidBlock()`
 Variables: `CIRCUM` (314.2 SVG circumference)
 Depends on: State globals, `persist()`, `syncEntries()`, `showToast()`, `renderToday()`, Firebase sync section
 

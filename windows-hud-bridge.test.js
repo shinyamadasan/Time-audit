@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import {
   buildActiveSnapshot,
   buildEndedSnapshot,
+  buildTrackingSnapshot,
+  hudSessionKey,
+  HUD_TRACKING_POLL_MS,
   createHudBridge,
   HUD_BRIDGE_URL,
   HUD_HEARTBEAT_MS
@@ -68,7 +71,8 @@ test('a pure projection: the snapshot only ever reflects fields it was given, ne
 test('createHudBridge exposes no outbound command mechanism of any kind', () => {
   const bridge = createHudBridge({ fetchImpl: async () => ({ ok: true }), setIntervalImpl: () => 1, clearIntervalImpl: () => {} });
   const keys = Object.keys(bridge).sort();
-  assert.deepEqual(keys, ['_send', 'isConnected', 'notifyVisibilityChange', 'pushActive', 'pushEnded']);
+  // refresh is page-internal (index.html re-derives after its own timer transitions); it reads nothing from the HUD.
+  assert.deepEqual(keys, ['_send', 'isConnected', 'notifyVisibilityChange', 'pushActive', 'pushEnded', 'refresh']);
   assert.equal('onEndCommand' in bridge, false);
 });
 
@@ -219,7 +223,10 @@ test('pushEnded stops the heartbeat and sends exactly one ended snapshot; the HU
   await Promise.resolve(); await Promise.resolve();
 
   assert.equal(calls.length, 2);
-  assert.deepEqual(calls[1], { type: 'focus-ended' });
+  // TASK-014: the ended snapshot names only the (title-free) session it ends and when.
+  assert.deepEqual(Object.keys(calls[1]).sort(), ['claimedAt', 'sessionKey', 'type']);
+  assert.equal(calls[1].type, 'focus-ended');
+  assert.equal(calls[1].sessionKey, calls[0].sessionKey);
   assert.equal(timers.has(1), false, 'heartbeat interval must be cleared on end');
 });
 
@@ -263,4 +270,150 @@ test('onStatusChange only fires on actual transitions, not on every repeated pus
   bridge.pushActive({ title: 'A', phase: 'work', startedAt: 1, plannedEndAt: 2 });
   await Promise.resolve(); await Promise.resolve();
   assert.deepEqual(statuses, [true]);
+});
+
+// ══════════════════════════════════════════════════════
+// TASK-014 — Normal Tracking HUD V1
+// ══════════════════════════════════════════════════════
+
+// A tracking-aware bridge: interval 1 is the 1 s tracking poll, created at construction.
+function trackingBridge(initialFields = null) {
+  const calls = [];
+  const timers = fakeTimers();
+  const state = { fields: initialFields, clock: 1000 };
+  const bridge = createHudBridge({
+    fetchImpl: async (url, opts) => { calls.push(JSON.parse(opts.body)); return { ok: true }; },
+    ...timers,
+    getTrackingFields: () => state.fields,
+    now: () => state.clock
+  });
+  const flush = async () => { for (let i = 0; i < 4; i++) await Promise.resolve(); };
+  return { bridge, calls, timers, state, flush, poll: () => timers.fire(1) };
+}
+
+test('tracking: buildTrackingSnapshot carries only title, start and visibility', () => {
+  const snap = buildTrackingSnapshot({ title: 'Write report', startedAt: 5000 });
+  assert.deepEqual(Object.keys(snap).sort(), ['pageVisibility', 'startedAt', 'title', 'type']);
+  assert.equal(snap.type, 'tracking-active');
+  assert.equal(buildTrackingSnapshot({ title: 'x'.repeat(500), startedAt: 1 }).title.length, 200);
+});
+
+test('tracking: session keys are title-free and distinguish Focus phases from normal tasks', () => {
+  assert.equal(hudSessionKey({ type: 'tracking-active', title: 'Secret', startedAt: 7 }), 'tracking:7');
+  assert.equal(hudSessionKey({ type: 'focus-active', phase: 'break', startedAt: 7 }), 'focus:break:7');
+  assert.equal(hudSessionKey({ type: 'focus-ended' }), null);
+});
+
+test('tracking: normal tracking start is projected with its authoritative start time', async () => {
+  const t = trackingBridge();
+  t.poll(); await t.flush();
+  assert.equal(t.calls.length, 0, 'no authoritative session -> nothing is invented');
+  t.state.fields = { title: 'Deep work', startedAt: 900 };
+  t.poll(); await t.flush();
+  assert.equal(t.calls.length, 1);
+  assert.equal(t.calls[0].type, 'tracking-active');
+  assert.equal(t.calls[0].title, 'Deep work');
+  assert.equal(t.calls[0].startedAt, 900);
+  assert.equal(t.calls[0].sessionKey, 'tracking:900');
+  assert.equal(t.calls[0].claimedAt, 1000);
+});
+
+test('tracking: identical state is never re-sent by the poll; only the 4 s heartbeat repeats it', async () => {
+  const t = trackingBridge({ title: 'Deep work', startedAt: 900 });
+  t.poll(); await t.flush();
+  for (let i = 0; i < 10; i++) { t.poll(); await t.flush(); }
+  assert.equal(t.calls.length, 1, 'repeated identical polls send nothing new');
+  assert.equal(t.timers.intervalFor(2), HUD_HEARTBEAT_MS);
+  t.state.clock = 9000;
+  t.timers.fire(2); await t.flush();
+  assert.equal(t.calls.length, 2);
+  assert.equal(t.calls[1].claimedAt, 1000, 'a heartbeat keeps the original claim stamp');
+});
+
+test('tracking: stop clears the snapshot with exactly one ended message and never re-sends it', async () => {
+  const t = trackingBridge({ title: 'Deep work', startedAt: 900 });
+  t.bridge.refresh(); await t.flush();
+  t.state.fields = null; t.state.clock = 5000;
+  t.bridge.refresh(); await t.flush();
+  assert.equal(t.calls.length, 2);
+  assert.deepEqual(t.calls[1], { type: 'focus-ended', sessionKey: 'tracking:900', claimedAt: 5000 });
+  assert.equal(t.timers.has(2), false, 'heartbeat stops once nothing is active');
+  t.poll(); t.bridge.refresh(); await t.flush();
+  assert.equal(t.calls.length, 2, 'a cleared HUD stays cleared - no repeated ended snapshots');
+});
+
+test('tracking: a heartbeat after an unhooked stop clears instead of re-sending the completed session', async () => {
+  const t = trackingBridge({ title: 'Deep work', startedAt: 900 });
+  t.bridge.refresh(); await t.flush();
+  t.state.fields = null;
+  t.timers.fire(2); await t.flush();
+  assert.equal(t.calls.at(-1).type, 'focus-ended');
+});
+
+test('tracking: an activity change is a new session with a new claim', async () => {
+  const t = trackingBridge({ title: 'Email', startedAt: 900 });
+  t.bridge.refresh(); await t.flush();
+  t.state.fields = { title: 'Report', startedAt: 2000 }; t.state.clock = 2001;
+  t.poll(); await t.flush();
+  assert.equal(t.calls.length, 2);
+  assert.equal(t.calls[1].title, 'Report');
+  assert.equal(t.calls[1].sessionKey, 'tracking:2000');
+  assert.equal(t.calls[1].claimedAt, 2001);
+});
+
+test('tracking: Focus wins while active; normal tracking is never shown alongside it', async () => {
+  const t = trackingBridge({ title: 'Paused task', startedAt: 900 });
+  t.bridge.pushActive({ title: 'Focus task', phase: 'work', startedAt: 3000, plannedEndAt: 4500 });
+  await t.flush();
+  t.poll(); await t.flush();
+  assert.equal(t.calls.length, 1);
+  assert.equal(t.calls[0].type, 'focus-active');
+  assert.equal(t.calls[0].title, 'Focus task');
+});
+
+test('tracking: Focus end falls back to normal tracking only when the selector confirms it', async () => {
+  const confirmed = trackingBridge({ title: 'Still running', startedAt: 900 });
+  confirmed.bridge.pushActive({ title: 'F', phase: 'work', startedAt: 3000, plannedEndAt: 4500 });
+  confirmed.state.clock = 5000;
+  confirmed.bridge.pushEnded(); await confirmed.flush();
+  assert.equal(confirmed.calls.at(-1).type, 'tracking-active');
+  assert.equal(confirmed.calls.at(-1).claimedAt, 5000);
+
+  const released = trackingBridge(null);
+  released.bridge.pushActive({ title: 'F', phase: 'work', startedAt: 3000, plannedEndAt: 4500 });
+  released.bridge.pushEnded(); await released.flush();
+  assert.equal(released.calls.at(-1).type, 'focus-ended');
+});
+
+test('tracking: a throwing or malformed selector is treated as "no session", never fabricated', async () => {
+  for (const bad of [{ title: '', startedAt: 1 }, { title: 'x', startedAt: NaN }, { title: 'x', startedAt: 0 }, 'str']) {
+    const t = trackingBridge(bad);
+    t.bridge.refresh(); await t.flush();
+    assert.equal(t.calls.length, 0, `rejected ${JSON.stringify(bad)}`);
+  }
+  const calls = [];
+  const bridge = createHudBridge({
+    fetchImpl: async (u, o) => { calls.push(o); return { ok: true }; },
+    setIntervalImpl: () => 1, clearIntervalImpl: () => {},
+    getTrackingFields: () => { throw new Error('boom'); }
+  });
+  assert.doesNotThrow(() => bridge.refresh());
+  assert.equal(calls.length, 0);
+});
+
+test('tracking: no companion running never throws and is reported as disconnected', async () => {
+  const bridge = createHudBridge({
+    fetchImpl: async () => { throw new Error('Failed to fetch'); },
+    setIntervalImpl: () => 1, clearIntervalImpl: () => {},
+    getTrackingFields: () => ({ title: 'Deep work', startedAt: 900 })
+  });
+  await assert.doesNotReject(async () => { bridge.refresh(); await Promise.resolve(); await Promise.resolve(); });
+  assert.equal(bridge.isConnected(), false);
+});
+
+test('tracking: a Focus-only bridge (no selector) never polls; the 1 s poll exists only with a selector', () => {
+  const timers = fakeTimers();
+  createHudBridge({ fetchImpl: async () => ({ ok: true }), ...timers });
+  assert.equal(timers.has(1), false);
+  assert.equal(trackingBridge().timers.intervalFor(1), HUD_TRACKING_POLL_MS);
 });

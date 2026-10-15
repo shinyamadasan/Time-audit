@@ -821,6 +821,51 @@ closure:
 
 ---
 
+### TASK-014 - Normal Tracking HUD V1
+status: review
+owner: claude
+source: owner-direct
+priority: P1
+depends-on: TASK-013 (done)
+files: windows-hud-bridge.js, index.html (Timer section: getHudTrackingFields/refreshHudTracking + 4 call sites; governed
+  release token), storage.js (one read-only call in detachTimerAwayRuntime), windows-hud/ChronaSenseHud.ps1,
+  windows-hud/README.md, windows-hud/Test-HudNormalTracking.ps1 (new), windows-hud-bridge.test.js,
+  tests/normal-tracking-hud.spec.js (new), personal-day-boundary-web-runtime.test.js + tests/calendar-native-plan-identity.spec.js
+  (release token only), www/ mirror, CODEMAP.md, DECISIONS.md (#39), TASK_014_HANDOFF.md (new), TASKS.md, CHANGELOG.md,
+  TEST_REPORT.md
+
+context:
+  Owner-direct instruction, 2026-10-14 ("OWNER-DIRECT — TASK-014: Normal Tracking HUD V1", target REVIEW-READY ONLY).
+  Base: origin/main cbd82fc463d6a48aa9e32949f95264a0a48f3528 (TASK-013 closed `done`). Extend the existing Windows
+  Ambient Focus HUD to show normal tracking sessions; passive, read-only, one authoritative timer (ChronaSense).
+  ID note: TASK-013's closure text proposed a different, unscheduled "TASK-014" (notification-tap quick log). The owner's
+  direct instruction assigns TASK-014 to this HUD work; that proposal still needs owner decisions D-2/D-4 and a new id.
+
+acceptance:
+  - [x] Normal tracking owned by this device + signed-in account shows activity, started time and elapsed duration.
+  - [x] Existing Focus HUD behavior preserved (Focus fields unchanged; Focus wins while active).
+  - [x] Focus <-> normal switching shows the authoritative session; after Focus ends, tracking only if the selector confirms it.
+  - [x] Stop clears the HUD immediately; a completed session is never shown as running; nothing invented when idle.
+  - [x] Visibility-aware stale indicator, tray, privacy, position and hide behavior preserved (hide wording follows the session kind).
+  - [x] Timer ownership and account separation respected (other-device timer not projected; sign-out clears at once).
+  - [x] No task mutation or logging action; HUD remains one-way with no command channel.
+
+constraints:
+  - Reuse the loopback-only, exact-origin, one-way transport; extend the snapshot schema only as needed.
+  - No new timer engine, no Firebase schema/rules, Action API, Worker, OAuth or Function change; no deploy, push or merge.
+  - If safe Focus/normal arbitration needs broader timer changes, stop and recommend instead of expanding scope.
+
+verification:
+  - [x] npm test, npm run test:smoke (2 workers), npm run lint, npm run check:www-parity, npm run check:firebase-rules,
+        npm run test:fence, git diff --check, both windows-hud PowerShell tests (results in TEST_REPORT.md).
+
+review:
+  Builder self-review only. NOT independently reviewed. Red-zone adjacent (timer lifecycle call sites, storage.js account
+  detach, governed release token), so if accepted hold at `approved`; do not auto-merge. See TASK_014_HANDOFF.md.
+
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:

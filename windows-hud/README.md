@@ -5,6 +5,10 @@ session already running in the ChronaSense web app. It never runs its own
 timer, and it cannot change Focus state in any way — it only ever displays
 the last state ChronaSense pushed to it.
 
+Since TASK-014 it also mirrors an ordinary (non-Focus) tracking session that
+this Windows machine owns — see [Normal tracking](#normal-tracking-task-014).
+It is still one-way, read-only, and shows at most one session at a time.
+
 ## Run it manually
 
 ```
@@ -98,6 +102,78 @@ controls (or the HUD's "Open ChronaSense" button, which just does
 5. The companion itself re-renders every 20 seconds purely to refresh its own
    displayed text from already-known values (no per-second ticking anywhere —
    the HUD is calm by design).
+
+## Normal tracking (TASK-014)
+
+The same channel projects an ordinary ChronaSense tracking session (the
+Today hero timer), not only Focus. Nothing new owns time:
+
+1. **One read-only selector decides.** `getHudTrackingFields()` in
+   `index.html` returns `{ title, startedAt }` only when ChronaSense itself
+   says a normal timer is `running`, has a task and a `taskStartTime`, is owned
+   by **this device** (`timerOwnerDeviceId === syncedDeviceId`) and by the
+   **signed-in account** (`timerStateOwnedByCurrentAccount()`), and no Focus,
+   break or Away is active. Otherwise it returns `null`. It writes nothing.
+   `startedAt` is the same `taskStartTime` the app's own "Xm on task" uses.
+2. **One session at a time, Focus first.** The bridge projects Focus when
+   `focus-mode.js` has pushed it; otherwise normal tracking if the selector
+   confirms it; otherwise nothing. When Focus ends, the HUD shows normal
+   tracking only if the selector confirms it is still active. Today
+   `enterFocusMode()` itself logs and stops a running normal block, and
+   `confirmExitFocus()` releases timer ownership, so the HUD clears after Focus
+   rather than resurrecting the earlier task.
+3. **When it's sent.** Immediately after `_startTimer()`, `resetTimer()`
+   (which covers Stop & Log and a remote stop), `startBreak()`, starting
+   Away, and the account detach in `storage.js` (sign-out / account switch);
+   plus a 1 s local poll of the selector as a safety net for every other
+   timer path (task switch, takeover, deep links, reload restore). The poll
+   sends only when a session starts, changes or clears; the existing 4 s
+   heartbeat repeats the active snapshot.
+4. **What the HUD shows.** `TRACKING` (amber dot), the activity title,
+   `Started h:mm`, and `Xm on task` / `Xh Ym on task`, computed from the
+   authoritative `startedAt` by wall clock at render time (every 20 s). There
+   is no planned end. Privacy mode hides the title exactly as for Focus; the
+   stale indicator, tray, position and Collapse behave as before. "Hide until
+   Focus ends" reads "Hide until tracking ends" while tracking is shown; a
+   hide lasts until that kind of session is no longer the one displayed, so a
+   Focus → tracking handover shows the HUD again.
+
+### Snapshot schema
+
+| `type` | Fields |
+|---|---|
+| `focus-active` | unchanged: `title, phase, startedAt, plannedEndAt, linkType, deviceOwned, pageVisibility` + `sessionKey, claimedAt` |
+| `tracking-active` (new) | `title, startedAt, pageVisibility, sessionKey, claimedAt` |
+| `focus-ended` | `sessionKey, claimedAt` — the generic "nothing active" clear, for Focus and normal tracking alike |
+
+`sessionKey` is title-free (`focus:<phase>:<startedAt>` or
+`tracking:<startedAt>`). `claimedAt` is when this tab began projecting that
+session; heartbeats reuse it.
+
+### Two tabs
+
+Each open ChronaSense tab runs its own bridge. Without arbitration, a tab that
+had not yet heard about a stop could heartbeat the finished session back onto
+the HUD. The companion keeps the newest accepted `claimedAt` and accepts:
+
+- a heartbeat for the session on screen (same `sessionKey`), from any tab;
+- a new session whose `claimedAt` is not older than the newest accepted one;
+- an end naming the session on screen.
+
+It drops (HTTP `202`, no body) an older tab's other session, and an end for a
+session that is no longer shown. A payload without `claimedAt` (a page from
+before TASK-014) keeps the old last-write-wins behavior, so an updated
+companion still works with the old page; an old companion answers the new
+`tracking-active` type with `400` (Focus keeps working) — update both.
+
+### Tests
+
+```
+node --test windows-hud-bridge.test.js
+npx playwright test tests/normal-tracking-hud.spec.js
+pwsh -File .\windows-hud\Test-HudNormalTracking.ps1
+pwsh -File .\windows-hud\Test-HudDogfoodPolish.ps1
+```
 
 ## Visibility-aware staleness (fix round 1)
 
@@ -196,12 +272,14 @@ Every request is also bounded and validated before it can touch the
 companion's state:
 - Body capped at **8 KB** (checked against `Content-Length` before reading,
   and again against the actual bytes read) — rejected with `413`.
-- The parsed JSON must match one of exactly two shapes
-  (`{type:'focus-ended'}` or the full active-snapshot shape with `title`
+- The parsed JSON must match one of exactly three shapes
+  (`{type:'focus-ended'}`, the full Focus active-snapshot shape with `title`
   bounded to 200 chars, `phase` in `{work, break}`, numeric timestamps,
   `linkType` in `{daily-routine, learning-plan, none}`, `pageVisibility` in
-  `{visible, hidden}`) — anything else is rejected with `400`, never
-  partially applied.
+  `{visible, hidden}`, or — TASK-014 — `tracking-active` with a bounded
+  `title`, numeric `startedAt` and `pageVisibility`). The optional
+  `claimedAt` must be numeric and `sessionKey` a string of at most 64 chars.
+  Anything else is rejected with `400`, never partially applied.
 
 Only five fields ever cross the bridge (plus the visibility hint above) — no
 Life Ledger data, no Firebase collections, no secrets.
@@ -263,6 +341,9 @@ beyond the local loopback heartbeat, no background wakeups when idle.
 
 - `ChronaSenseHud.ps1` — the whole companion: WPF window, local HTTP bridge,
   tray icon, position/privacy persistence.
+- `Test-HudDogfoodPolish.ps1` / `Test-HudNormalTracking.ps1` — deterministic
+  checks of the real companion functions (extracted by AST; no window,
+  listener or network is started).
 - `Install-HudStartup.ps1` / `Remove-HudStartup.ps1` — optional, reversible
   per-user Windows login startup.
 - Settings persisted to `%LOCALAPPDATA%\ChronaSenseHud\settings.json`
@@ -336,6 +417,35 @@ bridge carries it through as `linkType` — never a fabricated calendar/cadence
 claim.
 
 ## Known gaps / deferred
+
+- **TASK-014 — no normal tracking after Focus.** Entering Focus mode logs and
+  stops a running normal block (`enterFocusMode()` → `resetTimer()`), so
+  there is nothing to resume on the HUD when Focus ends; it clears.
+- **TASK-014 finding H-1 (pre-existing, not changed): after a Focus break
+  ends inside the Focus overlay, ChronaSense turns the Focus timer into a
+  normal running timer.** The Focus timer's own RTDB echo starts a normal
+  ticker in `applyRemoteTimerState()`; when the break interval elapses,
+  `doPing()` re-syncs it with `mode: null`, and the Today hero shows
+  "tracking · <Focus task>" from the break's start. The HUD mirrors that
+  authoritative state (it shows `TRACKING · <Focus task>`); it never shows it
+  while Focus is still active. Fixing it is a red-zone timer change (see
+  `TASK_014_HANDOFF.md` for the bounded recommendation). Observed with the
+  in-memory RTDB stub; the real SDK also delivers local writes to local
+  listeners, but this was not verified against production.
+- **TASK-014 — breaks and Away clear the HUD.** A normal break or Away is not
+  a running tracking session, so the HUD shows nothing for it.
+- **TASK-014 — up to ~1 s lag** for normal-timer paths without an explicit
+  hook (task switch, takeover, deep links, reload restore), and longer in a
+  backgrounded tab where Chromium throttles the poll. Stop, break, Away and
+  sign-out clear immediately.
+- **TASK-014 — two-tab arbitration trusts one machine clock.** A large
+  backwards system-clock jump while the companion runs could make it drop a
+  legitimate new session until the next session change or a companion
+  restart. Both tabs and the companion run on the same machine, so ordinary
+  NTP corrections (milliseconds) are not a concern.
+- **TASK-014 — the stale second tab is only dropped, not corrected.** If the
+  only open tab is offline and stale, the HUD shows the last state it
+  accepted and goes grey ("Syncing…") as before.
 
 - Cross-device mirroring (e.g., a phone starts Focus, this PC's HUD shows
   it) is not wired up. Today the HUD only reflects a session started or

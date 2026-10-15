@@ -32,11 +32,21 @@
 // visibilitychange listener forces an immediate re-push (bypassing the
 // heartbeat's in-flight guard) so the companion learns about the transition
 // itself, not just its downstream effect on timer cadence.
+//
+// TASK-014 — Normal Tracking HUD V1: the same one-way channel also projects an
+// ordinary (non-Focus) tracking session. The bridge still owns no timer state:
+// it asks a read-only selector in index.html (getHudTrackingFields) whether
+// THIS device owns a running, account-owned normal timer, and projects at most
+// ONE session — Focus first, then normal tracking, else nothing. Every
+// snapshot carries a claimedAt stamp and a title-free sessionKey so the
+// companion can drop a stale second tab's heartbeat instead of flipping back
+// to a session another tab already ended.
 // ══════════════════════════════════════════════════════
 
 export const HUD_BRIDGE_PORT = 51739;
 export const HUD_BRIDGE_URL = `http://127.0.0.1:${HUD_BRIDGE_PORT}/focus-bridge/state`;
 export const HUD_HEARTBEAT_MS = 4000;
+export const HUD_TRACKING_POLL_MS = 1000;
 const LINK_TYPES = ['daily-routine', 'learning-plan', 'none'];
 
 function currentPageVisibility() {
@@ -61,16 +71,40 @@ export function buildEndedSnapshot() {
   return { type: 'focus-ended' };
 }
 
+export function buildTrackingSnapshot({ title, startedAt }) {
+  return {
+    type: 'tracking-active',
+    title: String(title || 'Tracking').slice(0, 200),
+    startedAt: Number(startedAt),
+    pageVisibility: currentPageVisibility()
+  };
+}
+
+// Identifies one displayed session without carrying its title. A Focus phase
+// change or a new normal task is a new session; a heartbeat is not.
+export function hudSessionKey(snapshot) {
+  if (snapshot?.type === 'focus-active') return `focus:${snapshot.phase}:${snapshot.startedAt}`;
+  if (snapshot?.type === 'tracking-active') return `tracking:${snapshot.startedAt}`;
+  return null;
+}
+
+function validTrackingFields(fields) {
+  return !!(fields && typeof fields.title === 'string' && fields.title.trim()
+    && Number.isFinite(fields.startedAt) && fields.startedAt > 0);
+}
+
 // fetchImpl/setIntervalImpl/clearIntervalImpl are injectable purely so this can be
 // unit-tested with no real network/timers (see windows-hud-bridge.test.js).
 export function createHudBridge({
   fetchImpl = (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : null),
   setIntervalImpl = (typeof setInterval !== 'undefined' ? setInterval : null),
   clearIntervalImpl = (typeof clearInterval !== 'undefined' ? clearInterval : null),
+  getTrackingFields = null, // read-only selector; omitted = Focus-only (the pre-TASK-014 behavior)
+  now = () => Date.now(),
   onStatusChange
 } = {}) {
-  let lastSnapshot = null;
-  let lastActiveFields = null; // raw fields, kept so visibilitychange can rebuild with fresh visibility
+  let lastActiveFields = null; // raw Focus fields, kept so visibilitychange can rebuild with fresh visibility
+  let current = null; // { key, claimedAt } of the session last projected, or null
   let heartbeatTimer = null;
   let inFlight = false;
   let connected = null; // null = unknown yet, true/false once we've observed an outcome
@@ -82,7 +116,6 @@ export function createHudBridge({
   }
 
   async function send(snapshot, { isHeartbeat = false } = {}) {
-    lastSnapshot = snapshot;
     if (!fetchImpl) return;
     if (isHeartbeat && inFlight) return; // never stack heartbeats behind a slow/hung request
     inFlight = true;
@@ -103,6 +136,16 @@ export function createHudBridge({
     }
   }
 
+  // Focus always wins (it pauses the normal timer under it). Normal tracking
+  // is projected only when the read-only selector confirms it; else nothing.
+  function desiredSnapshot() {
+    if (lastActiveFields) return buildActiveSnapshot(lastActiveFields);
+    if (typeof getTrackingFields !== 'function') return null;
+    let fields = null;
+    try { fields = getTrackingFields(); } catch { fields = null; }
+    return validTrackingFields(fields) ? buildTrackingSnapshot(fields) : null;
+  }
+
   function stopHeartbeat() {
     if (heartbeatTimer && clearIntervalImpl) clearIntervalImpl(heartbeatTimer);
     heartbeatTimer = null;
@@ -111,36 +154,55 @@ export function createHudBridge({
   function startHeartbeat() {
     stopHeartbeat();
     if (!setIntervalImpl) return;
-    heartbeatTimer = setIntervalImpl(() => {
-      if (lastSnapshot && lastSnapshot.type === 'focus-active') send(lastSnapshot, { isHeartbeat: true });
-    }, HUD_HEARTBEAT_MS);
+    heartbeatTimer = setIntervalImpl(() => refresh({ isHeartbeat: true }), HUD_HEARTBEAT_MS);
+  }
+
+  // Re-derives and projects the one authoritative session. The tracking poll
+  // passes onlyOnChange: it sends nothing unless a session started, changed
+  // or cleared. Clearing sends exactly one ended snapshot, then goes quiet.
+  function refresh({ isHeartbeat = false, onlyOnChange = false } = {}) {
+    const snapshot = desiredSnapshot();
+    if (!snapshot) {
+      stopHeartbeat();
+      if (!current) return; // never fabricates a session to end
+      const ended = { ...buildEndedSnapshot(), sessionKey: current.key, claimedAt: now() };
+      current = null;
+      send(ended);
+      connected = null; // unknown again until the next real attempt
+      return;
+    }
+    const key = hudSessionKey(snapshot);
+    const changed = !current || current.key !== key;
+    if (onlyOnChange && !changed) return;
+    if (changed) current = { key, claimedAt: now() };
+    send({ ...snapshot, sessionKey: key, claimedAt: current.claimedAt }, { isHeartbeat: isHeartbeat && !changed });
+    if (changed || !heartbeatTimer) startHeartbeat();
   }
 
   function pushActive(fields) {
     lastActiveFields = fields;
-    const snapshot = buildActiveSnapshot(fields);
-    send(snapshot);
-    startHeartbeat();
+    refresh();
   }
 
   function pushEnded() {
-    stopHeartbeat();
     lastActiveFields = null;
-    const hadSnapshot = !!lastSnapshot;
-    lastSnapshot = null;
-    if (hadSnapshot) send(buildEndedSnapshot());
-    connected = null; // unknown again until the next real attempt
+    refresh(); // falls through to normal tracking only if the selector confirms it
   }
 
   function notifyVisibilityChange() {
     // Bridge-health metadata only — rebuilding from the same raw fields just
-    // re-stamps a fresh pageVisibility; it never alters Focus truth.
-    if (lastActiveFields) pushActive(lastActiveFields);
+    // re-stamps a fresh pageVisibility; it never alters session truth.
+    if (current) refresh();
+  }
+
+  if (typeof getTrackingFields === 'function' && setIntervalImpl) {
+    setIntervalImpl(() => refresh({ onlyOnChange: true }), HUD_TRACKING_POLL_MS);
   }
 
   return {
     pushActive,
     pushEnded,
+    refresh: () => refresh(),
     notifyVisibilityChange,
     isConnected: () => connected,
     _send: send // exposed for tests only
@@ -155,6 +217,8 @@ export function getSharedHudBridge(handlers) {
 
 if (typeof window !== 'undefined') {
   const bridge = getSharedHudBridge({
+    getTrackingFields: () => (typeof globalThis.getHudTrackingFields === 'function'
+      ? globalThis.getHudTrackingFields() : null),
     onStatusChange: (isConnected) => {
       if (typeof globalThis.onHudBridgeStatusChange === 'function') {
         globalThis.onHudBridgeStatusChange(isConnected);

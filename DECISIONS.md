@@ -915,3 +915,29 @@ separate child writes); move a `bdp1|` item; report APPLIED without an authorita
 report REJECTED while an earlier attempt's intent exists or one of its own writes may have landed; or deploy the Worker with a plain `wrangler deploy`.
 
 ---
+
+## 39. TASK-014 Windows HUD normal tracking: one projected session, derived from a read-only selector, arbitrated by claim stamp
+
+**Status:** review candidate (2026-10-14), owner-direct TASK-014. Not yet independently reviewed.
+
+**Decision:** the existing one-way HUD bridge also projects ordinary tracking, without a second timer or new hooks in
+every timer path. `getHudTrackingFields()` (index.html) is the only judge: it returns `{title, startedAt}` only for a
+running, this-device-owned (`timerOwnerDeviceId === syncedDeviceId`), signed-in-account-owned, non-Focus/break/Away
+timer, and writes nothing. The bridge projects Focus first, then that selector, else nothing; it re-derives on
+explicit `refreshHudTracking()` calls after start, reset (Stop / remote stop), break, Away and account detach, and on
+a 1 s local poll for every other path. Each snapshot carries a title-free `sessionKey` and a per-tab `claimedAt`; the
+companion accepts a heartbeat for the shown session, a new session not older than the newest accepted claim, or an
+end naming the shown session, and drops the rest. This keeps a second, not-yet-synced tab from re-showing a stopped
+session.
+
+**Rejected:** (1) hooking every one of the ~10 places that mutate `running`/`currentTask` (red-zone timer code, easy
+to miss one — the poll covers them instead, with explicit hooks only where a lingering "still running" display is
+not acceptable); (2) using `currentTimerSyncStamp()` as the arbitration stamp (it reads shared localStorage, so a
+stale tab would carry the fresh stamp); (3) fixing, inside TASK-014, the pre-existing Focus-echo behavior that turns a
+finished Focus break into a normal running timer (finding H-1, TASK_014_HANDOFF.md) — a red-zone timer change; the HUD
+mirrors whatever ChronaSense reports and never projects it while Focus is active.
+
+**Do not:** let the HUD or bridge create, stop, edit or persist any activity; read anything back from the companion;
+carry titles in `sessionKey`; or project a timer this device/account does not own.
+
+---

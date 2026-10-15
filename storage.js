@@ -255,6 +255,8 @@ function detachTimerAwayRuntime(previousOwner) {
   if (typeof updateTimerTaskLabel === 'function') updateTimerTaskLabel();
   if (typeof showHeroState === 'function') showHeroState('idle');
   if (typeof updateRing === 'function') updateRing();
+  // TASK-014: the previous account's activity must leave the Windows HUD at once (read-only re-projection).
+  if (typeof refreshHudTracking === 'function') refreshHudTracking();
 }
 
 function restoreTimerAwayState(room) {
