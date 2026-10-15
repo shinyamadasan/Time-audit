@@ -1081,51 +1081,66 @@ integration:
 
 ---
 
-### TASK-018 - Unfinished Resolution + Compact UX
-status: codex
+### TASK-018 - Unfinished Resolution + Compact UX (visual-first design phase)
+status: review
 owner: codex
 source: owner-direct
 priority: P1
 depends-on: none
-files: TASK_018_UX_PROPOSAL.html, TASK_018_UX_PROPOSAL.md, TASKS.md,
-  CHANGELOG.md, TEST_REPORT.md; production file scope must be recorded after the completion-contract audit,
-  before any production implementation.
+files: design/task-018/ standalone HTML/CSS/mock JS, design documentation and capture scripts;
+  playwright-report/task-018-design/ screenshots and measurements (local evidence); TASKS.md lifecycle/phase record.
 
 context:
-  Owner-direct instruction in this session, 2026-10-15. TASK-017 failed owner real-use UX acceptance.
-  Freshly fetched origin/main equals the authorized base bb171a287ac67d76ae27634b5227bc24f66919de.
-  Worktree task-018, solo interactive execution. Target REVIEW-READY ONLY; no merge, push or deployment.
+  Owner-direct visual-first design instructions supplied in Pasted text.txt in this session, 2026-10-15,
+  supersede the earlier implementation sequence. Base bb171a287ac67d76ae27634b5227bc24f66919de.
+  Worktree task-018; preserve prior proposal files and uncommitted edits. TASK-017 failed real-use UX acceptance.
+  MODE DESIGN ONLY. No design is selected or approved; 64px is an unapproved exploration, not a constraint.
 
 objective:
-  Compact Unfinished rows with truthful explicit late-completion resolution, preserving original plan history.
+  Produce three distinct, polished standalone alternatives for Unfinished in the context of My Day,
+  using 22 realistic mock tasks; compare measurable UX and technical feasibility before owner visual selection.
 
 sequence:
-  1. Produce compact desktop/mobile proposal using synthetic 22-item backlog; wait for owner acceptance before implementation.
-  2. Confirm historical completion contract and exact consumers, using TASK_017_COMPLETION_DELETE_DESIGN.md.
-  3. Implement smallest safe complete persistence/UI slice only after those gates; no decorative production checkmark.
-  4. Deterministic unit/browser/synchronization/account tests, full verification, independent exact-candidate review.
+  1. Inspect current My Day/full-page screenshots, TASK-017 source, existing proposal/edits, tokens and constraints.
+  2. Research Todoist, Things 3 and Linear from actual accessible references; distinguish observations from assumptions.
+  3. Create A minimal checkbox list, B efficient grouped manager, C triage inbox; no predetermined row height.
+  4. Render all options, measure real footprints, compare UX and assess protected persistence separately.
+  5. Deliver visual evidence and a recommendation; stop for owner visual selection, never auto-select or implement.
 
 acceptance:
-  - Five tasks fit without excess whitespace; rows approximately 56-80px, left checkmark, title, subtle planned date,
-    small anchored More menu; no full-width action panels, large gaps or ordinary full-screen completion forms.
-  - One intentional checkmark reports completed today; Done earlier offers an explicit date picker, initially today.
-  - Remove only the intended task after confirmed persistence; provide success feedback and safe failure recovery.
-  - Preserve Move, Reschedule, Not doing semantics as secondary actions, account separation, Brain Dump and My Day timeline.
-  - Preserve planned date separately from owner-reported actual completion date; never mark an old planning day done,
-    fabricate tracked time, streaks or daily-review outcomes.
-  - Duplicate/concurrent actions, stale records, remote synchronization, account changes and old clients are safe.
-  - Test synthetic existing-size 22-item backlog at Android/desktop sizes; no TASK-014/015/017 regressions.
+  - Three meaningfully different interaction/information architectures, cohesive with existing ChronaSense dark UI.
+  - Each demonstrates mock completion today/earlier, anchored More open/close, move/reschedule, dismissal,
+    feedback/Undo concept, long titles, 22 realistic tasks, empty/error states; no real persistence claim.
+  - Readable text/subtle available dates, accessible touch and keyboard controls, no horizontal overflow,
+    duplicated titles, repeated oversized actions, full-width More panel or unnecessary instructional paragraphs.
+  - Each has 390x844 default/menu/date and 1440x900 default/menu captures, plus surrounding My Day context.
+  - One visual comparison page/contact sheet, local paths/opening instructions and measurable criteria:
+    five-row/section footprint, taps, finding effort, density, clarity, mobile/desktop, accessibility and complexity.
+  - Separate feasibility assessment covers completion truth, Firebase/rules, sync/concurrency, account isolation,
+    old clients, Plan Authority, Undo and TASK-016; identify blockers without implementing any of them.
 
 constraints:
-  - No second task store, deletion workflow, unrelated UI, TASK-016 work, live-data mutations, merge, push or deployment.
-  - Protected persistence/sync changes are limited to the necessary bounded complete slice; if unsafe, stop with exact blocker.
-  - Proposal acceptance is a required owner gate. Production implementation has not started.
+  - Local design artifacts/mock JavaScript/documentation/screenshots and design-only commits are authorized.
+  - No production UI, Plan Authority/sync, schema/rules changes, real-data mutation, merge, push or deployment.
+  - No automatic design selection. Recommendation is not approval. Delete requires separate data-model approval.
+  - Preserve existing local work; earlier 64px proposal is unapproved. Do not run complete production regressions for mocks.
 
 verification:
-  - Proposal: rendered desktop/mobile screenshots, measured row/section sizes, anchored-menu/date-form geometry,
-    22-item paging, simulated saving/success/failure and zero network or persistence operations.
-  - Implementation after gates: npm test, full Playwright, relevant sync/account/old-client and real emulator suites,
-    lint, generated-rule and runtime-mirror checks, SELF_REVIEW.md/QA.md, independent review of exact final candidate.
+  - Real browser render and inspect every option and required state at requested sizes; focused mock interaction,
+    keyboard/touch/overflow checks and measured dimensions, no live network/storage connections.
+  - Confirm production files unchanged and prior local proposal bytes preserved. Deliver requested design fields,
+    recommendation/tradeoffs, OWNER_APPROVAL PENDING; stop at design delivery.
+
+design-delivery:
+  Three standalone alternatives and comparison page delivered in design/task-018/. Owner visual selection pending.
+  A is recommended only, not selected/approved. Earlier 64px exploration remains unapproved and preserved byte-for-byte.
+  Real browser evidence at 390x844 and 1440x900: all requested default/menu/date and My Day context images,
+  empty/error/success/Undo/long-title states, C selection concept and measured footprints. Focused mock checks:
+  182 assertions pass, 0 browser exceptions/external requests; comparison loads all 7 visual states without overflow.
+  Production completion/Undo remains blocked on a separately reviewed persistence/concurrency/compatibility contract;
+  see design/task-018/FEASIBILITY.md. No production UI, Plan Authority, sync, schema/rules, www or live-data changes.
+  No full production regression suite (explicit owner instruction), merge, push or deployment.
+  Status review is a design-only handoff. Do not resume production implementation without separate owner authorization.
 
 ---
 
