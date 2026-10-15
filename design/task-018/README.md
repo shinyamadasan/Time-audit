@@ -1,5 +1,9 @@
 # TASK-018 — Visual-first design study
 
+**Latest refinement:** the owner directed refinement of A only, without production implementation authorization.
+Open [refined A in complete My Day](A-refined.html), [the visual evidence page](A-refinement-evidence.html), or
+[refinement notes and measurements](A-REFINEMENT.md). The initial A/B/C study below remains unchanged for reference.
+
 2026-10-15 · **DESIGN ONLY · OWNER APPROVAL PENDING**.
 Owner's pasted instructions in this session authorize these standalone artifacts, mock JavaScript, screenshots,
 research and feasibility documentation only. No design is selected. The earlier 64px exploration remains unapproved.
