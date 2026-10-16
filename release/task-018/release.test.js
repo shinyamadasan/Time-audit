@@ -16,16 +16,16 @@ function goodFacts() {
     CHRONASENSE_OWNER_FIREBASE_UID: 'ownerUid123', CHRONASENSE_OWNER_SUBJECT: SECRETISH, CHRONASENSE_RTDB_URL: E.rtdbUrl };
   return {
     errors: [],
-    target: { projectFlag: E.projectId, region: E.region, firebasercAbsent: true },
+    target: { account: E.operatorAccount, firebasercAbsent: true },
     project: { projectId: E.projectId, projectNumber: E.projectNumber, lifecycleState: 'ACTIVE' },
-    functions: [{ name: 'chronasenseActionApi', state: 'ACTIVE', runtime: 'nodejs22' }],
+    functions: [{ name: 'chronasenseActionApi', state: 'ACTIVE', runtime: 'nodejs22', revision: E.actionApiRevision }],
     iam: { bindings: [{ role: 'roles/owner', members: [E.ownerUser] }, { role: 'roles/editor', members: [...E.editorBaseline] }] },
-    serviceAccounts: [], customRoles: [],
+    serviceAccounts: [], customRoles: [], saPolicies: {},
     rules: { live: structuredClone(live), candidate: structuredClone(candidate) },
-    auth: { subtype: 'FIREBASE_AUTH', googleEnabled: true, emailEnabled: false, authorizedDomains: ['localhost', 'shinyamadasan.github.io', 'x.firebaseapp.com'] },
+    auth: { subtype: 'FIREBASE_AUTH', googleEnabled: true, emailEnabled: false, anonymousEnabled: false, phoneEnabled: false, authorizedDomains: ['localhost', 'shinyamadasan.github.io', 'x.firebaseapp.com'] },
     env: { values: envValues }, actionApiEnv: { ...envValues, FUNCTION_TARGET: 'x' },
     secret: { name: E.secretName, enabledVersions: 1 },
-    artifact: { tracked: 10, missing: [], mismatched: [], unexpected: [], stagingHits: 0, stagingFiles: [], insideGitRepo: false },
+    artifact: { sha: E.candidateSha, tracked: 10, missing: [], mismatched: [], unexpected: [], stagingHits: 0, stagingFiles: [], insideGitRepo: false },
     owner: { timezone: 'Asia/Manila' },
   };
 }
@@ -34,6 +34,7 @@ const failed = result => result.checks.filter(c => !c.ok).map(c => c.name);
 test('preflight passes only on the exact expected production state, and never echoes env values', () => {
   const ok = evaluatePreflight(goodFacts(), 'before-identities');
   assert.equal(ok.pass, true, JSON.stringify(failed(ok)));
+  assert.equal(ok.sha, E.candidateSha, 'the report records the exact candidate SHA');
   assert.equal(JSON.stringify(ok).includes(SECRETISH), false);
   assert.equal(JSON.stringify(ok).includes('ownerUid123'), false);
 });
@@ -42,16 +43,18 @@ test('every mismatch or unknown state fails closed', () => {
   const cases = {
     'probe:no-errors': f => { f.errors = ['iam']; },
     'project:identity': f => { f.project.projectId = 'chronasense-staging-t018'; },
-    'target:explicit': f => { f.target.firebasercAbsent = false; },
+    'target:operator-and-no-firebaserc': f => { f.target.firebasercAbsent = false; },
+    'functions:action-api-untouched': f => { f.functions[0].revision = 'chronasenseactionapi-00008-new'; },
+    'artifact:pinned-candidate-sha': f => { f.artifact.sha = 'deadbeef'; },
     'functions:baseline': f => { f.functions.push({ name: 'chronasenseCompletionApi', state: 'ACTIVE', runtime: 'nodejs22' }); },
-    'rules:candidate-delta-exact': f => { f.rules.candidate.rules.rooms.$roomId['.write'] = true; },
+    'rules:phase-state': f => { f.rules.candidate.rules.rooms.$roomId['.write'] = true; },
     'rules:root-closed': f => { f.rules.live.rules['.write'] = true; f.rules.candidate.rules['.write'] = true; },
     'iam:single-owner': f => { f.iam.bindings[0].members.push('user:someone@example.org'); },
     'iam:editor-baseline-unchanged': f => { f.iam.bindings[1].members.push(`serviceAccount:${E.runtimeSA}`); },
     'iam:no-staging-principals': f => { f.iam.bindings.push({ role: 'roles/viewer', members: ['serviceAccount:x@chronasense-staging-t018.iam.gserviceaccount.com'] }); },
     'iam:no-public-project-bindings': f => { f.iam.bindings.push({ role: 'roles/viewer', members: ['allUsers'] }); },
     'identities:not-yet-created': f => { f.serviceAccounts.push(E.buildSA); },
-    'auth:google-only': f => { f.auth.emailEnabled = true; },
+    'auth:google-only': f => { f.auth.anonymousEnabled = true; },
     'auth:authorized-domains': f => { f.auth.authorizedDomains = ['shinyamadasan.github.io']; },
     'env:exact-keys': f => { f.env.values.EXTRA = '1'; },
     'env:completion-values': f => { f.env.values.CHRONASENSE_RTDB_URL = 'https://chronasense-staging-t018-default-rtdb.asia-southeast1.firebasedatabase.app'; },
@@ -74,20 +77,30 @@ test('every mismatch or unknown state fails closed', () => {
   assert.equal(evaluatePreflight(goodFacts(), 'after-everything').pass, false, 'unknown phase');
 });
 
-test('before-b2 requires exactly the planned identities and grants', () => {
+test('before-b1/b2 require exactly the planned identities, no impersonation, and the phase-correct rules state', () => {
   const f = goodFacts();
+  f.target.account = E.operatorAccount;
   f.serviceAccounts = [E.runtimeSA, E.buildSA];
   f.customRoles = [{ name: E.customRole, includedPermissions: [...E.customRolePermissions] }];
   f.iam.bindings.push({ role: E.customRole, members: [`serviceAccount:${E.runtimeSA}`] },
     ...E.buildRoles.map(role => ({ role, members: [`serviceAccount:${E.buildSA}`] })));
-  assert.equal(evaluatePreflight(f, 'before-b2').pass, true, JSON.stringify(failed(evaluatePreflight(f, 'before-b2'))));
+  f.saPolicies = { [E.runtimeSA]: { etag: 'x' }, [E.buildSA]: { etag: 'y' } };
+  assert.equal(evaluatePreflight(f, 'before-b1').pass, true, JSON.stringify(failed(evaluatePreflight(f, 'before-b1'))));
   assert.equal(evaluatePreflight(f, 'before-identities').pass, false);
+  assert.ok(failed(evaluatePreflight(f, 'before-b2')).includes('rules:phase-state'), 'rules not yet deployed');
+  const deployed = structuredClone(f); deployed.rules.live = structuredClone(deployed.rules.candidate);
+  assert.equal(evaluatePreflight(deployed, 'before-b2').pass, true, JSON.stringify(failed(evaluatePreflight(deployed, 'before-b2'))));
+  assert.ok(failed(evaluatePreflight(deployed, 'before-b1')).includes('rules:phase-state'), 'already deployed');
+  const impersonable = structuredClone(f); impersonable.saPolicies[E.buildSA] = { bindings: [{ role: 'roles/iam.serviceAccountTokenCreator', members: ['user:x@y.z'] }] };
+  assert.ok(failed(evaluatePreflight(impersonable, 'before-b1')).includes('identities:no-impersonation-bindings'));
+  const unknownPolicy = structuredClone(f); delete unknownPolicy.saPolicies[E.runtimeSA];
+  assert.ok(failed(evaluatePreflight(unknownPolicy, 'before-b1')).includes('identities:no-impersonation-bindings'));
   const extra = structuredClone(f); extra.iam.bindings.push({ role: 'roles/firebasedatabase.admin', members: [`serviceAccount:${E.runtimeSA}`] });
-  assert.ok(failed(evaluatePreflight(extra, 'before-b2')).includes('identities:runtime-exactly-custom-role'));
+  assert.ok(failed(evaluatePreflight(extra, 'before-b1')).includes('identities:runtime-exactly-custom-role'));
   const broad = structuredClone(f); broad.customRoles[0].includedPermissions.push('iam.serviceAccounts.actAs');
-  assert.ok(failed(evaluatePreflight(broad, 'before-b2')).includes('identities:custom-role-permissions'));
+  assert.ok(failed(evaluatePreflight(broad, 'before-b1')).includes('identities:custom-role-permissions'));
   const build = structuredClone(f); build.iam.bindings.find(b => b.role === 'roles/editor').members.push(`serviceAccount:${E.buildSA}`);
-  assert.ok(failed(evaluatePreflight(build, 'before-b2')).includes('identities:build-exactly-planned-roles'));
+  assert.ok(failed(evaluatePreflight(build, 'before-b1')).includes('identities:build-exactly-planned-roles'));
 });
 
 test('rule diff and dotenv parsing', () => {
@@ -134,4 +147,15 @@ test('alert policies: six reviewed conditions, completion service only, channel 
   }
   const channel = JSON.parse(readFileSync(new URL('channel-email.json', dir), 'utf8'));
   assert.equal(channel.labels.email_address, 'OWNER_EMAIL', 'no real address committed');
+});
+
+test('operator helper: exact argument contract; the mutating command needs the literal confirmation', async () => {
+  const { parseOpsArgs, BUILD_SA_RESOURCE } = await import('./prod-ops.mjs');
+  assert.deepEqual(parseOpsArgs(['env', '--artifact', 'D:/a']), { command: 'env', artifact: 'D:/a' });
+  assert.deepEqual(parseOpsArgs(['snapshot', '--out', 'D:/s']), { command: 'snapshot', out: 'D:/s' });
+  assert.deepEqual(parseOpsArgs(['patch-build-sa', '--confirm-production']), { command: 'patch-build-sa' });
+  for (const bad of [['patch-build-sa'], ['patch-build-sa', '--confirm'], ['patch-build-sa', '--confirm-production', '--project', 'x'], ['deploy'], []]) {
+    assert.throws(() => parseOpsArgs(bad), /usage/);
+  }
+  assert.equal(BUILD_SA_RESOURCE, `projects/${E.projectId}/serviceAccounts/${E.buildSA}`);
 });

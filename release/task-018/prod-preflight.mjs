@@ -1,7 +1,7 @@
 // TASK-018 Gate B production PREFLIGHT. Strictly read-only: gcloud describe/list/get-iam-policy, RTDB rules and one
 // settings field via REST GET, Identity Toolkit config GET, secret METADATA only. Never prints env or secret values.
 // Fails closed: any missing fact, probe error or mismatch => FAIL.
-//   node release/task-018/prod-preflight.mjs --phase <before-identities|before-b2> --repo <git repo> --sha <candidate>
+//   node release/task-018/prod-preflight.mjs --phase <before-identities|before-b1|before-b2> --repo <git repo> --sha <candidate>
 //        --artifact <disposable deploy dir> [--report out.json]
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -20,6 +20,9 @@ export const EXPECTED = Object.freeze({
   customRolePermissions: ['firebaseauth.users.get', 'firebasedatabase.instances.get', 'firebasedatabase.instances.update'],
   buildRoles: ['roles/artifactregistry.writer', 'roles/cloudbuild.builds.builder', 'roles/logging.logWriter', 'roles/storage.objectViewer'],
   baselineFunctions: ['chronasenseActionApi'], completionFunction: 'chronasenseCompletionApi',
+  // Reviewed release candidate (PR #7) and the live Action API revision observed read-only on 2026-10-16.
+  candidateSha: '08e9371be7c56961a0c074e1041962adef4eac0c', actionApiRevision: 'chronasenseactionapi-00007-mon',
+  operatorAccount: 'OPERATOR_EMAIL_REDACTED',
   ownerUser: 'user:OPERATOR_EMAIL_REDACTED',
   // Baseline Editor holders observed read-only on 2026-10-16; any change is a FAIL until re-baselined by the owner.
   editorBaseline: ['serviceAccount:548433155531-compute@developer.gserviceaccount.com', 'serviceAccount:548433155531@cloudservices.gserviceaccount.com',
@@ -29,7 +32,9 @@ export const EXPECTED = Object.freeze({
   envKeys: ['CHRONASENSE_COMPLETION_SERVICE_ACCOUNT', 'CHRONASENSE_FIREBASE_WEB_API_KEY', 'CHRONASENSE_OWNER_FIREBASE_UID', 'CHRONASENSE_OWNER_SUBJECT', 'CHRONASENSE_RTDB_URL'],
   rulesDelta: 'rooms.$roomId.taskCompletionResolutions',
 });
-const PHASES = new Set(['before-identities', 'before-b2']);
+// before-identities: nothing created yet. before-b1: identities created, rules not yet deployed.
+// before-b2: identities + rules deployed, backend not yet created. After B2 the runbook's manual verifications apply.
+const PHASES = new Set(['before-identities', 'before-b1', 'before-b2']);
 
 // ---------- pure evaluation (tested offline) ----------
 const canonical = value => JSON.stringify(value, (_k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v));
@@ -53,7 +58,7 @@ export function evaluatePreflight(facts, phase, E = EXPECTED) {
   check('probe:no-errors', () => ({ ok: Array.isArray(facts.errors) && facts.errors.length === 0, info: (facts.errors || ['unknown']).join(',') || 'none' }));
   // Project identity and target
   check('project:identity', () => facts.project.projectId === E.projectId && String(facts.project.projectNumber) === E.projectNumber && facts.project.lifecycleState === 'ACTIVE');
-  check('target:explicit', () => facts.target.projectFlag === E.projectId && facts.target.region === E.region && facts.target.firebasercAbsent === true);
+  check('target:operator-and-no-firebaserc', () => facts.target.account === E.operatorAccount && facts.target.firebasercAbsent === true);
   // Functions baseline
   check('functions:baseline', () => {
     const names = facts.functions.map(f => f.name).sort();
@@ -61,13 +66,16 @@ export function evaluatePreflight(facts, phase, E = EXPECTED) {
   });
   check('functions:action-api-untouched', () => {
     const f = facts.functions.find(x => x.name === 'chronasenseActionApi');
-    return f?.state === 'ACTIVE' && f.runtime === 'nodejs22';
+    return { ok: f?.state === 'ACTIVE' && f.runtime === 'nodejs22' && f.revision === E.actionApiRevision, info: f?.revision };
   });
-  // Rules: live must equal the pre-B1 baseline structure; candidate differs ONLY by the resolution write-deny.
-  check('rules:candidate-delta-exact', () => {
+  // Rules: before B1 the candidate differs from live ONLY by the resolution write-deny; from before-b2 on, live == candidate.
+  check('rules:phase-state', () => {
     const diff = ruleDiff(facts.rules.live?.rules, facts.rules.candidate?.rules);
     const node = facts.rules.candidate?.rules?.rooms?.$roomId?.taskCompletionResolutions;
-    return { ok: diff.length === 1 && diff[0] === E.rulesDelta && canonical(node) === canonical({ '.write': false }), info: diff.join(' | ') || 'no difference' };
+    if (canonical(node) !== canonical({ '.write': false })) return { ok: false, info: 'candidate lacks the resolution deny' };
+    const expectDeployed = phase === 'before-b2';
+    return { ok: expectDeployed ? diff.length === 0 && facts.rules.live.rules !== undefined : diff.length === 1 && diff[0] === E.rulesDelta,
+      info: `${expectDeployed ? 'expect live == candidate' : 'expect exactly the resolution deny pending'}; diff: ${diff.join(' | ') || 'none'}` };
   });
   check('rules:root-closed', () => facts.rules.live.rules['.write'] === false && facts.rules.live.rules['.read'] === false);
   // IAM
@@ -85,9 +93,12 @@ export function evaluatePreflight(facts, phase, E = EXPECTED) {
     check('identities:runtime-exactly-custom-role', () => facts.serviceAccounts.includes(E.runtimeSA) && canonical(membersOf(facts.iam, runtimeMember)) === canonical([E.customRole]));
     check('identities:custom-role-permissions', () => canonical([...(facts.customRoles.find(r => r.name === E.customRole)?.includedPermissions || [])].sort()) === canonical(E.customRolePermissions));
     check('identities:build-exactly-planned-roles', () => facts.serviceAccounts.includes(E.buildSA) && canonical(membersOf(facts.iam, buildMember)) === canonical(E.buildRoles));
+    // Nobody is granted impersonation on the new accounts (the Owner's own actAs comes from Owner, not a binding).
+    check('identities:no-impersonation-bindings', () => [E.runtimeSA, E.buildSA].every(sa => Array.isArray(facts.saPolicies[sa]?.bindings ?? []) && (facts.saPolicies[sa].bindings ?? []).length === 0));
   }
   // Auth configuration for the canary and the shipped web client
-  check('auth:google-only', () => facts.auth.subtype === 'FIREBASE_AUTH' && facts.auth.googleEnabled === true && facts.auth.emailEnabled === false);
+  check('auth:google-only', () => facts.auth.subtype === 'FIREBASE_AUTH' && facts.auth.googleEnabled === true && facts.auth.emailEnabled === false
+    && facts.auth.anonymousEnabled === false && facts.auth.phoneEnabled === false);
   check('auth:authorized-domains', () => ['localhost', 'shinyamadasan.github.io'].every(d => facts.auth.authorizedDomains.includes(d)));
   // Deploy environment (values compared, never reported)
   check('env:exact-keys', () => canonical(Object.keys(facts.env.values).sort()) === canonical(E.envKeys));
@@ -97,6 +108,7 @@ export function evaluatePreflight(facts, phase, E = EXPECTED) {
     .every(k => typeof facts.env.values[k] === 'string' && facts.env.values[k].length > 0 && facts.env.values[k] === facts.actionApiEnv[k]));
   check('secret:available-metadata-only', () => facts.secret.name === E.secretName && facts.secret.enabledVersions >= 1);
   // Artifact: immutable, reviewed SHA, no staging configuration
+  check('artifact:pinned-candidate-sha', () => ({ ok: facts.artifact.sha === E.candidateSha, info: facts.artifact.sha }));
   check('artifact:matches-reviewed-sha', () => ({ ok: facts.artifact.mismatched.length === 0 && facts.artifact.missing.length === 0 && facts.artifact.unexpected.length === 0 && facts.artifact.tracked > 0,
     info: `${facts.artifact.tracked} tracked; missing ${facts.artifact.missing.length}, changed ${facts.artifact.mismatched.length}, unexpected ${facts.artifact.unexpected.length}` }));
   check('artifact:no-staging-config', () => ({ ok: facts.artifact.stagingHits === 0, info: facts.artifact.stagingFiles?.join(",") || "deploy inputs clean" }));
@@ -104,7 +116,7 @@ export function evaluatePreflight(facts, phase, E = EXPECTED) {
   // Owner account timezone (presence/validity only)
   check('owner:account-timezone-present', () => isZone(facts.owner.timezone), 'settings.timezone must exist and be a valid IANA zone');
   const pass = checks.every(c => c.ok);
-  return { phase, pass, checks };
+  return { phase, pass, sha: facts.artifact?.sha ?? null, at: facts.at ?? null, checks };
 }
 
 // ---------- read-only fact collection ----------
@@ -132,30 +144,37 @@ export function inspectArtifact({ repo, sha, artifact }) {
   const stagingHits = stagingFiles.length;
   let insideGitRepo = false;
   for (let d = resolve(artifact); ; d = resolve(d, '..')) { if (existsSync(join(d, '.git'))) { insideGitRepo = true; break; } if (resolve(d, '..') === d) break; }
-  return { tracked: tracked.size, missing, mismatched, unexpected, stagingHits, stagingFiles, insideGitRepo };
+  return { sha, tracked: tracked.size, missing, mismatched, unexpected, stagingHits, stagingFiles, insideGitRepo };
 }
 export function parseEnv(text) {
   return Object.fromEntries(text.split(/\r?\n/).filter(l => l.trim() && !l.startsWith('#')).map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; }));
 }
 function collect({ repo, sha, artifact }) {
-  const P = EXPECTED.projectId, errors = [], facts = { errors };
+  const P = EXPECTED.projectId, errors = [], facts = { errors, at: new Date().toISOString() };
   const run = (name, fn) => { try { return fn(); } catch { errors.push(name); return undefined; } };
-  // gcloud is a .cmd shim on Windows (needs a shell); every argument here is a fixed literal or the fixed project ID.
-  const sh = { encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'ignore'], shell: process.platform === 'win32' };
+  // gcloud is a .cmd shim on Windows (needs a shell). Arguments are fixed literals, the fixed project ID, region and
+  // secret name, planned SA emails, and custom-role IDs from API output (GCP restricts those to [A-Za-z0-9_.]).
+  const sh = { encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'ignore'], shell: process.platform === 'win32', timeout: 120000 };
   const gcloud = args => JSON.parse(execFileSync('gcloud', [...args, `--project=${P}`, '--format=json'], sh));
   const token = run('token', () => execFileSync('gcloud', ['auth', 'print-access-token'], sh).trim());
-  const rest = (url, extra = {}) => JSON.parse(execFileSync('curl', ['-s', '-f', '-H', `Authorization: Bearer ${token}`, '-H', `x-goog-user-project: ${P}`, url], { encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'ignore'], ...extra }));
-  facts.target = { projectFlag: P, region: EXPECTED.region, firebasercAbsent: !existsSync(join(artifact, '.firebaserc')) };
+  // Token and URL go to curl on stdin (-K -), never argv, so they are not visible in the process list. GET only.
+  const rest = url => JSON.parse(execFileSync('curl', ['-s', '-f', '--max-time', '30', '-K', '-'], { encoding: 'utf8', maxBuffer: 64 << 20,
+    input: `header = "Authorization: Bearer ${token}"\nheader = "x-goog-user-project: ${P}"\nurl = "${url}"\n`, stdio: ['pipe', 'pipe', 'ignore'], timeout: 60000 }));
+  facts.target = { account: run('account', () => execFileSync('gcloud', ['auth', 'list', '--filter=status:ACTIVE', '--format=value(account)'], sh).trim()),
+    firebasercAbsent: !existsSync(join(artifact, '.firebaserc')) };
   facts.project = run('project', () => gcloud(['projects', 'describe', P]));
-  facts.functions = run('functions', () => gcloud(['functions', 'list']).map(f => ({ name: f.name.split('/').pop(), state: f.state, runtime: f.buildConfig?.runtime })));
+  facts.functions = run('functions', () => gcloud(['functions', 'list']).map(f => ({ name: f.name.split('/').pop(), state: f.state, runtime: f.buildConfig?.runtime, revision: f.serviceConfig?.revision })));
   facts.iam = run('iam', () => gcloud(['projects', 'get-iam-policy', P]));
   facts.serviceAccounts = run('serviceAccounts', () => gcloud(['iam', 'service-accounts', 'list']).map(a => a.email));
+  facts.saPolicies = Object.fromEntries([EXPECTED.runtimeSA, EXPECTED.buildSA].filter(sa => facts.serviceAccounts?.includes(sa))
+    .map(sa => [sa, run(`saPolicy:${sa.split('@')[0]}`, () => gcloud(['iam', 'service-accounts', 'get-iam-policy', sa]))]));
   facts.customRoles = run('customRoles', () => gcloud(['iam', 'roles', 'list']).map(r => ({ name: r.name, includedPermissions: (run(`role:${r.name}`, () => gcloud(['iam', 'roles', 'describe', r.name.split('/').pop()])) || {}).includedPermissions })));
   facts.rules = { live: run('rules', () => rest(`${EXPECTED.rtdbUrl}/.settings/rules.json`)), candidate: run('candidateRules', () => JSON.parse(readFileSync(join(artifact, 'firebase.rules.json'), 'utf8'))) };
   facts.auth = run('auth', () => {
     const config = rest(`https://identitytoolkit.googleapis.com/admin/v2/projects/${P}/config`);
     const idps = rest(`https://identitytoolkit.googleapis.com/admin/v2/projects/${P}/defaultSupportedIdpConfigs`);
-    return { subtype: config.subtype, emailEnabled: config.signIn?.email?.enabled === true, authorizedDomains: config.authorizedDomains || [],
+    return { subtype: config.subtype, emailEnabled: config.signIn?.email?.enabled === true, anonymousEnabled: config.signIn?.anonymous?.enabled === true,
+      phoneEnabled: config.signIn?.phoneNumber?.enabled === true, authorizedDomains: config.authorizedDomains || [],
       googleEnabled: (idps.defaultSupportedIdpConfigs || []).some(i => i.name.endsWith('/google.com') && i.enabled) };
   });
   facts.env = run('env', () => ({ values: parseEnv(readFileSync(join(artifact, 'functions', `.env.${P}`), 'utf8')) }));

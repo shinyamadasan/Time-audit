@@ -5,5 +5,5 @@
   "conditions": [{ "displayName": "unconfirmed completion write", "conditionMatchedLog": { "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"chronasensecompletionapi\" AND jsonPayload.component=\"chronasense-completion-api\" AND jsonPayload.unconfirmedWrite=true" } }],
   "alertStrategy": { "notificationRateLimit": { "period": "300s" }, "autoClose": "1800s" },
   "notificationChannels": ["NOTIFICATION_CHANNEL"],
-  "documentation": { "mimeType": "text/markdown", "content": "A completion may have been written without proof (UNKNOWN). Clients keep the original receipt and recover via status; check for repeats grouped by jsonPayload.uncertain before acting. Logs carry only sanitized fields (no UID, task, dates, zone, operation IDs, ETags or tokens). Runbook: staging/task-018/GATE_B_PACKET.md (rollback section)." }
+  "documentation": { "mimeType": "text/markdown", "content": "A completion may have been written without proof (UNKNOWN). Clients keep the original receipt and recover via status; check for repeats grouped by jsonPayload.uncertain before acting. Logs carry only sanitized fields (no UID, task, dates, zone, operation IDs, ETags or tokens). Runbook: release/task-018/GATE_B_DEPLOYMENT.md §6 (rollback)." }
 }
