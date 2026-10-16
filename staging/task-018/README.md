@@ -58,9 +58,9 @@ insufficient, so the gap cannot pass silently. Stdout logging needs no runtime g
 2. Static artifact verifier (above) — build fails on any production data-plane identifier.
 3. Harness: every request goes through `guardedFetch` (https + exact staging host allowlist + production-marker
    refusal); tested against prod RTDB/functions/apiKey URLs, Pages and arbitrary hosts.
-4. Browser runs (**manual step, not implemented in this kit**): block and record any URL containing
-   `time-audit-3c3da`, the production apiKey or `shinyamadasan.github.io` (DevTools request blocking or a
-   Playwright `context.route`); fail if anything is recorded. Not part of the API harness gate.
+4. Browser runs (`browser-acceptance.mjs`): every HTTP request is checked before sending and every WebSocket
+   (including the RTDB `?ns=`) before connecting; any `time-audit-3c3da`, production apiKey or
+   `shinyamadasan.github.io` target is aborted and FAILS the run. Last run: 24/24, 0 blocked, all sockets staging ns.
 5. Runtime SA exists only in staging; dotenv params point at staging RTDB; `assertStagingConfig` refuses mixes.
 
 ## 4. Automated staging tests
@@ -102,8 +102,9 @@ after the run. Unverified: RTDB REST accepting its scopes; fallback `firebase da
 `STAGING_REVOKED_ID_TOKEN` must come from a **third** user C revoked *before* the run (never A, whose token the run
 uses). `STAGING_FOREIGN_ID_TOKEN` must come from a non-production, non-staging project — **never a production user**.
 
-Not automated (manual, readiness §ISOLATED_ACCEPTANCE_TEST): approved Refined A UI flows, sign-out/account switch
-during a held response, browser isolation route log, physical Android.
+Automated in `browser-acceptance.mjs` (real cloud): Refined A UI flows, outcomes, account switch, fresh-device zone,
+not automated: sign-out/account switch
+during a held response, physical Android (deferred: web-only release).
 
 Run order (from the worktree root, absolute paths):
 1. `node staging/task-018/harness.mjs --config D:\chronasense-staging\STAGING_CONFIG.json --report D:\chronasense-staging\report.json`

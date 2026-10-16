@@ -1,6 +1,7 @@
 // TASK-018 real-cloud browser acceptance of the approved Refined A UI against STAGING ONLY.
-// Fresh Chromium profile per account, service workers blocked, no trace/video (they would capture credentials).
-// Every request and websocket is recorded; any production marker or production static host is aborted and FAILS the run.
+// Fresh Chromium profile for A (desktop; B signs in inside it as an account switch) and for C (mobile); service workers
+// blocked; no trace/video (they would capture credentials). Every HTTP request is checked BEFORE sending and every
+// WebSocket (incl. its RTDB ?ns=) BEFORE connecting; any production marker is aborted and FAILS the run.
 //   node staging/task-018/browser-acceptance.mjs --config STAGING_CONFIG.json --site <built site dir> --tls <dir with key.pem/cert.pem> --out <evidence dir>
 // Env: STAGING_USER_{A,B,C}_EMAIL/_PASSWORD, STAGING_SEED_ACCESS_TOKEN (operator OAuth token, sent only to the staging RTDB host).
 import { createServer } from 'node:https';
@@ -56,32 +57,42 @@ export async function runBrowserAcceptance({ config, site, tls, out, env = proce
   const now = Date.now(), today = utcDate(now), yesterday = utcDate(now - DAY);
   let activePage = null; // for a diagnostic screenshot if the run stops
 
-  async function openAccount(user, uid, viewport, label) {
+  async function openAccount(user, uid, viewport, label, { pinZone = true } = {}) {
+    const tag = { account: user }; // updated on in-page account switch so the request log names the signed-in account
     const context = await browser.newContext({ viewport, timezoneId: 'Etc/UTC', ignoreHTTPSErrors: true, serviceWorkers: 'block',
       ...(viewport.width < 500 ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {}) });
     await context.route('**/*', route => {
       const url = route.request().url();
-      if (productionMarker(url)) { blocked.push({ account: user, url: new URL(url).origin }); return route.abort('blockedbyclient'); }
+      if (productionMarker(url)) { blocked.push({ account: tag.account, url: new URL(url).origin }); return route.abort('blockedbyclient'); }
       return route.continue();
     });
-    context.on('request', request => requests.push({ account: user, label, method: request.method(), origin: new URL(request.url()).origin, path: new URL(request.url()).pathname }));
+    // WebSockets are not covered by route(): check every socket (incl. the RTDB namespace in ?ns=) BEFORE connecting.
+    await context.routeWebSocket(/.*/, ws => {
+      const url = new URL(ws.url()), ns = url.searchParams.get('ns');
+      requests.push({ account: tag.account, label, method: 'WS', origin: url.origin, path: url.pathname, ns });
+      if (productionMarker(ws.url()) || (ns !== null && ns !== `${config.projectId}-default-rtdb`)) {
+        blocked.push({ account: tag.account, url: url.origin, ns }); ws.close(); return;
+      }
+      ws.connectToServer();
+    });
+    context.on('request', request => requests.push({ account: tag.account, label, method: request.method(), origin: new URL(request.url()).origin,
+      path: new URL(request.url()).pathname, ...(request.url().startsWith(endpoint) ? { kind: request.postDataJSON()?.kind } : {}) }));
     const page = await context.newPage(); activePage = page;
-    page.on('websocket', ws => requests.push({ account: user, label, method: 'WS', origin: new URL(ws.url()).origin, path: new URL(ws.url()).pathname }));
     const room = `uid_${uid}`;
-    await page.addInitScript(({ room }) => {
+    await page.addInitScript(({ room, pinZone }) => {
       if (sessionStorage.getItem('stg-seeded') === '1') return;
       sessionStorage.setItem('stg-seeded', '1'); sessionStorage.setItem('ta3-session-started', '1');
       localStorage.setItem('ta3-onboarded', '1');
-      localStorage.setItem(`ta3-tz:${room}`, 'Etc/UTC');
+      if (pinZone) localStorage.setItem(`ta3-tz:${room}`, 'Etc/UTC'); // unpinned = real fresh device (Intl zone, e.g. "UTC")
       localStorage.setItem(`ta3-settings:${room}`, JSON.stringify({ timezone: 'Etc/UTC', hardMode: true, intervalMin: 30, targetRate: 250, deepGoal: 20, exitDelay: 10,
         presets: [], activityColors: {}, coachTone: 'analyst', reviewHour: 22, reviewTime: '22:00', sleepTime: '23:00', wakeTime: '07:00', sleepReminderMin: 30, sleepSetupDone: true, templates: [] }));
-    }, { room });
+    }, { room, pinZone });
     await page.goto('https://localhost/');
     await page.waitForFunction(() => !!window.firebase?.auth && typeof window.PlanAuthority === 'object', null, { timeout: TIMEOUT });
     await page.evaluate(({ email, password }) => firebase.auth().signInWithEmailAndPassword(email, password).then(() => true),
       { email: env[`STAGING_USER_${user}_EMAIL`], password: env[`STAGING_USER_${user}_PASSWORD`] });
     await page.waitForFunction(room => globalThis.getChronaSenseRoomCode?.() === room, room, { timeout: TIMEOUT });
-    return { context, page };
+    return { context, page, tag };
   }
   const recovery = page => page.locator('#unfinished-recovery-section');
   const row = (page, id) => recovery(page).locator(`[data-pc-stale="${id}"]`);
@@ -116,7 +127,7 @@ export async function runBrowserAcceptance({ config, site, tls, out, env = proce
     const idsA = await seedRoom(A, 22, `${label}a`), idsB = await seedRoom(B, 2, `${label}b`), idsC = await seedRoom(C, 22, `${label}c`);
 
     // ---------- Desktop 1440, account A ----------
-    let { context, page } = await openAccount('A', A, { width: 1440, height: 900 }, 'desktop');
+    let { context, page, tag: tagA } = await openAccount('A', A, { width: 1440, height: 900 }, 'desktop');
     await openUnfinished(page, 22); await ready(page, idsA[0]);
     check('compact:five-row-preview', await recovery(page).locator('.pc-completion-row').count() === 5);
     const targets = await recovery(page).locator('.pc-complete-target,.pc-complete-title,.pc-complete-more')
@@ -154,7 +165,7 @@ export async function runBrowserAcceptance({ config, site, tls, out, env = proce
     check('backlog:view-all', await dialog.locator('.pc-completion-row').count() === 21);
     await page.getByRole('searchbox', { name: 'Search unfinished tasks' }).fill(`${tw} 7`);
     for (const started = Date.now(); await dialog.locator('.pc-completion-row').count() !== 1 && Date.now() - started < TIMEOUT;) await page.waitForTimeout(200);
-    check('backlog:search', await dialog.locator(`[data-pc-stale="${idsA[7]}"]`).count() === 1);
+    check('backlog:search', await dialog.locator('.pc-completion-row').count() === 1 && await dialog.locator(`[data-pc-stale="${idsA[7]}"]`).count() === 1);
     await shot(page, '1440-backlog-search');
     await dialog.getByRole('button', { name: 'Close backlog' }).click();
     await dialog.waitFor({ state: 'hidden', timeout: TIMEOUT });
@@ -194,21 +205,37 @@ export async function runBrowserAcceptance({ config, site, tls, out, env = proce
     check('unknown:recovered-same-operation', recovered.completionOpId === pending[0].operationId && recovered.revision === 1
       && await page.evaluate(() => TaskCompletions.pendingAll().length) === 0);
 
-    // BACKEND UNAVAILABLE: every endpoint call fails; nothing is completed or written.
+    // BACKEND UNAVAILABLE (pre-flight): every endpoint call fails, so the fresh inspection fails and no write is attempted.
     await ready(page, offId);
+    const mutatesBefore = requests.filter(r => r.kind === 'mutate').length;
     await page.route(endpoint, route => route.abort('connectionrefused'));
     await row(page, offId).getByRole('checkbox').click();
-    await toast(page).getByText(/Not saved|Still checking/).waitFor({ timeout: TIMEOUT });
-    check('unavailable:no-completion', await row(page, offId).count() === 1 && !(await recordFor(A, offId)), { toast: await toast(page).innerText() });
+    await toast(page).getByText('Not saved · SOURCE_UNAVAILABLE').waitFor({ timeout: TIMEOUT });
+    check('unavailable:preflight-refused', await row(page, offId).count() === 1 && !(await recordFor(A, offId))
+      && requests.filter(r => r.kind === 'mutate').length === mutatesBefore);
     await shot(page, '1440-unavailable');
     await page.unroute(endpoint);
+    // BACKEND UNAVAILABLE (write): inspection succeeds, the write never reaches the server; UNKNOWN, staged, nothing written.
+    // After an outage views stay stale until the next room event or click; request a re-inspection explicitly.
+    await page.evaluate(() => TaskCompletions.refresh()); await ready(page, offId);
+    await page.route(endpoint, route => route.request().postDataJSON().kind === 'mutate' ? route.abort('connectionrefused') : route.continue());
+    await row(page, offId).getByRole('checkbox').click();
+    await toast(page).getByText('Still checking completion').waitFor({ timeout: TIMEOUT });
+    const lostWrite = await page.evaluate(() => TaskCompletions.pendingAll());
+    check('unavailable:write-lost-stays-unknown', lostWrite.length === 1 && !(await recordFor(A, offId)));
+    await page.unroute(endpoint);
+    await toast(page).getByRole('button', { name: 'Check status' }).click();
+    await toast(page).getByText('Completion status recovered').waitFor({ timeout: TIMEOUT });
+    const offRecord = await recordFor(A, offId);
+    check('unavailable:write-recovered-same-operation', offRecord?.completionOpId === lostWrite[0].operationId && offRecord.revision === 1);
 
     // NEEDS-REVIEW: the released cf43080 client edits the plan; the completed task returns flagged, not silently.
-    const plan = Object.values((await rtdb(`rooms/uid_${A}`)).calendarPlans)[0];
     const { releasedClientReplay } = await import('./old-client.mjs');
     const replay = await Promise.race([releasedClientReplay(config, { email: env.STAGING_USER_A_EMAIL, password: env.STAGING_USER_A_PASSWORD,
       uid: A, date: utcDate(now - 3 * DAY), targetId: `cal1:${utcDate(now - 3 * DAY)}` }), new Promise((_, no) => setTimeout(() => no(new Fail('OLD_CLIENT_TIMEOUT')), 60000))]);
-    check('needs-review:released-client-pushed', replay.committed.every(Boolean) && plan.items.length === 22);
+    const pushed = Object.values((await rtdb(`rooms/uid_${A}`)).calendarPlans)[0].items;
+    check('needs-review:released-client-pushed', replay.committed.length === 2 && replay.committed.every(Boolean)
+      && pushed.length === 22 && pushed.every(item => / \(released-client edit\)$/.test(item.task)));
     const warning = row(page, idsA[1]).locator('.pc-completion-warning');
     await warning.waitFor({ timeout: TIMEOUT });
     check('needs-review:flagged-and-locked', /Changed or ambiguous/.test(await warning.innerText()) && await row(page, idsA[1]).getByRole('checkbox').isDisabled()
@@ -218,49 +245,35 @@ export async function runBrowserAcceptance({ config, site, tls, out, env = proce
     // ACCOUNT SWITCH: B sees only B's tasks; B's completion never touches A.
     const aRecords = JSON.stringify(await records(A));
     await page.evaluate(() => firebase.auth().signOut());
+    tagA.account = 'B';
     await page.evaluate(({ email, password }) => firebase.auth().signInWithEmailAndPassword(email, password).then(() => true),
       { email: env.STAGING_USER_B_EMAIL, password: env.STAGING_USER_B_PASSWORD });
     await page.waitForFunction(room => globalThis.getChronaSenseRoomCode?.() === room, `uid_${B}`, { timeout: TIMEOUT });
     await openUnfinished(page, 2); await ready(page, idsB[0]);
     check('switch:no-a-data-visible', await recovery(page).locator('.pc-completion-row').count() === 2
       && await page.locator(idsA.map(id => `[data-pc-stale="${id}"]`).join(',')).count() === 0 && await toast(page).count() === 0);
-    // FRESH-DEVICE observation: B never used this browser, so its in-app zone comes from defaults, not the account.
-    const zone = () => page.evaluate(() => globalThis.getTaskCompletionAppContext?.()?.timezone);
-    const zoneAtSwitch = await zone();
-    for (const started = Date.now(); await zone() !== 'Etc/UTC' && Date.now() - started < 15000;) await page.waitForTimeout(500);
-    const zoneAfterWait = await zone();
+    // FRESH DEVICE: B never used this browser, so its device-locked zone is the Intl name ("UTC"), not the account's.
+    // With the timezone fix, completion must use the account zone from the authoritative inspection and SUCCEED.
+    const deviceZone = await page.evaluate(() => globalThis.getTaskCompletionAppContext?.()?.timezone);
+    const accountZone = (await rtdb(`rooms/uid_${B}/settings`))?.timezone;
     await row(page, idsB[0]).getByRole('checkbox').click();
-    const freshToast = toast(page).getByText(/Completion saved|Not saved/);
-    await freshToast.waitFor({ timeout: TIMEOUT });
-    const freshText = await freshToast.innerText(), freshRecord = await recordFor(B, idsB[0]);
+    await toast(page).getByText(/Completion saved|Not saved/).waitFor({ timeout: TIMEOUT });
+    const freshText = await toast(page).innerText(), freshRecord = await recordFor(B, idsB[0]);
     await shot(page, '1440-account-b-fresh-device');
-    check('switch:fresh-device-outcome-safe', (freshText.includes('Completion saved') && freshRecord?.state === 'completed')
-      || (/ACCOUNT_ZONE_CHANGED/.test(freshText) && !freshRecord), { zoneAtSwitch, zoneAfterWait, accountZone: 'Etc/UTC', toast: freshText });
-    if (!freshRecord) {
-      // RETURNING-DEVICE path: B's device-local settings match the account (as after any prior session on this device).
-      await page.evaluate(() => firebase.auth().signOut());
-      await page.evaluate(room => {
-        localStorage.setItem(`ta3-tz:${room}`, 'Etc/UTC');
-        localStorage.setItem(`ta3-settings:${room}`, JSON.stringify({ ...JSON.parse(localStorage.getItem(`ta3-settings:${room}`) || '{}'), timezone: 'Etc/UTC' }));
-      }, `uid_${B}`);
-      await page.evaluate(({ email, password }) => firebase.auth().signInWithEmailAndPassword(email, password).then(() => true),
-        { email: env.STAGING_USER_B_EMAIL, password: env.STAGING_USER_B_PASSWORD });
-      await page.waitForFunction(room => globalThis.getChronaSenseRoomCode?.() === room, `uid_${B}`, { timeout: TIMEOUT });
-      await openUnfinished(page, 2); await ready(page, idsB[0]);
-      await row(page, idsB[0]).getByRole('checkbox').click();
-      await toast(page).getByText('Completion saved').waitFor({ timeout: TIMEOUT });
-    }
+    check('switch:fresh-device-completes-in-account-zone', /Completion saved/.test(freshText) && freshRecord?.state === 'completed'
+      && freshRecord.operations[freshRecord.completionOpId].timezone === accountZone && freshRecord.operations[freshRecord.completionOpId].date === today,
+      { deviceZone, accountZone, toast: freshText });
     check('switch:isolated-writes', (await recordFor(B, idsB[0]))?.state === 'completed' && JSON.stringify(await records(A)) === aRecords);
     await shot(page, '1440-account-b');
     await context.close();
 
     // ---------- Mobile 390, account C (fresh profile) ----------
-    ({ context, page } = await openAccount('C', C, { width: 390, height: 844 }, 'mobile'));
+    ({ context, page } = await openAccount('C', C, { width: 390, height: 844 }, 'mobile', { pinZone: false })); // C: fresh device too
     await openUnfinished(page, 22); await ready(page, idsC[0]);
     check('mobile:five-row-preview', await recovery(page).locator('.pc-completion-row').count() === 5);
     const mobileTargets = await recovery(page).locator('.pc-complete-target,.pc-complete-title,.pc-complete-more')
       .evaluateAll(els => els.map(el => ({ w: el.getBoundingClientRect().width, h: el.getBoundingClientRect().height })));
-    check('mobile:44px-targets', mobileTargets.every(b => b.w >= 44 && b.h >= 44), { min: Math.min(...mobileTargets.flatMap(b => [b.w, b.h])) });
+    check('mobile:44px-targets', mobileTargets.length >= 15 && mobileTargets.every(b => b.w >= 44 && b.h >= 44), { min: Math.min(...mobileTargets.flatMap(b => [b.w, b.h])) });
     check('mobile:no-horizontal-scroll', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     await shot(page, '390-unfinished');
     await row(page, idsC[0]).getByRole('checkbox').tap();
@@ -276,7 +289,10 @@ export async function runBrowserAcceptance({ config, site, tls, out, env = proce
 
     // ---------- Isolation verdict ----------
     const origins = [...new Set(requests.map(r => r.origin))].sort();
-    check('isolation:zero-production-requests', blocked.length === 0 && requests.every(r => !productionMarker(`${r.origin}${r.path}`)), { blocked: blocked.length, origins });
+    const sockets = requests.filter(r => r.method === 'WS');
+    check('isolation:zero-production-requests', blocked.length === 0 && requests.every(r => !productionMarker(`${r.origin}${r.path}`))
+      && sockets.length > 0 && sockets.every(r => r.ns === null || r.ns === `${config.projectId}-default-rtdb`),
+      { blocked: blocked.length, origins, sockets: sockets.length, namespaces: [...new Set(sockets.map(r => r.ns))] });
     report.pass = true;
   } catch (error) {
     report.stoppedAt = error instanceof Fail ? error.message : `ERROR: ${String(error?.message || error).split('\n')[0].slice(0, 300)}`;
