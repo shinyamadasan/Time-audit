@@ -43,6 +43,7 @@ gcloud alpha monitoring policies create --project=time-audit-3c3da --policy-from
 All six policy definitions were accepted by the Cloud Monitoring API in staging (created without channels, deleted).
 
 ## 3. Rules (B1)
+First confirm the Firebase CLI identity (separate from gcloud): `firebase login:list` must show only the owner account.
 ```
 firebase deploy --project time-audit-3c3da --only database --non-interactive        (run inside ART)
 node WT\release\task-018\prod-preflight.mjs --phase before-b2 ...    (now requires live rules == candidate)
@@ -74,6 +75,9 @@ artifact; the exception ends at 4c. No narrow-build-first alternative is offered
   `node WT\release\task-018\prod-ops.mjs snapshot --out D:\chronasense-prod-evidence\after-b2` and diff vs `before`:
   project IAM = only the step-1 bindings; secret IAM identical; Action API revision `chronasenseactionapi-00007-mon` unchanged;
   unauthenticated POST to the endpoint returns `401 {"outcome":"REJECTED","reason":"UNAUTHENTICATED"}`.
+- If 4c errors (e.g. a network blip while polling): do not re-run blindly — run 4d and the describe command above. If the
+  build SA is set and ACTIVE, continue; if the switch never happened, re-run 4c once; if the function is unhealthy or the
+  switch keeps failing, STOP and roll back with §6 (delete the function; the compute-SA-built version must not stay live).
 Later CLI deploys preserve the build SA (proven in staging B0).
 
 ## 5. Production canary (B4) — synthetic records only, old UI still live
