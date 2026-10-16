@@ -1,68 +1,101 @@
-# TASK-018 Gate B — production approval packet (prepared 2026-10-16; NOTHING applied)
+# TASK-018 Gate B — production approval packet (revised 2026-10-16; NOTHING applied to production)
 
-Target: production project `time-audit-3c3da` (RTDB `time-audit-3c3da-default-rtdb`, asia-southeast1).
-Candidate: branch `task-018-candidate` @ `60b471a` = reviewed `07f77d4` + monitoring `9349963`/`ea10342` (tree-identical
-to reviewed `ea10342`) + doc clarification. Staging evidence: API 53/53, browser 22/22, zero production requests.
+Production: project `time-audit-3c3da`, RTDB `time-audit-3c3da-default-rtdb` (asia-southeast1), Pages = legacy `main:/`.
+Candidate: `task-018-candidate` @ `08e9371` = reviewed `07f77d4` + monitoring (tree-identical to reviewed `ea10342`)
++ account-zone fix `0f762aa`/`7bf4961` (independently reviewed, PASS WITH NOTES) + docs + design files removed.
+Evidence (isolated staging `chronasense-staging-t018`): API 53/53; browser 24/24 on the fix, zero production
+requests; B0 build identity proven. `main` is now protected (required: `test`, `Firebase fence / rules integration`).
+
+## What staging proved
+| Item | Result |
+|---|---|
+| Runtime custom role (`firebasedatabase.instances.get`, `.update`, `firebaseauth.users.get`) | Sufficient: checkRevoked, export reads, conditional PUTs |
+| Dedicated build SA (`cloudbuild.builds.builder`, `artifactregistry.writer`, `logging.logWriter`, `storage.objectViewer`) | Builds succeed; no Editor/Owner. Minimality NOT proven (builder may already cover the other three) |
+| Build SA mechanism | Firebase CLI 15.2.1 has no build-SA option, but its update mask omits `buildConfig.serviceAccount`, so a value set via the Cloud Functions API is PRESERVED by later `firebase deploy` (observed: build ran as `chronasense-build`) |
+| Default build identity | `gcloud builds get-default-service-account`: compute SA in BOTH projects. In production that SA holds Editor and is the live Action API runtime — do not modify it |
+| Fresh-device zone | Fixed: completion uses `rooms/<uid>/settings/timezone`; device "UTC" vs account "Etc/UTC" now saves in the account zone |
 
 ## Preconditions (all required before B1)
-- P1 Hosted CI green on the candidate PR (Node 22, `npm test`, smoke, Firebase fence). No push has happened yet.
-- P2 **Build-identity proof in staging (B0)**: a deploy of the completion function in `chronasense-staging-t018`
-  succeeds using a dedicated build SA (staging compute SA no longer has Editor, so this is a clean test). Until the
-  mechanism (Firebase CLI vs `gcloud functions deploy --build-service-account`) is proven, B2 cannot run without
-  the production compute SA's Editor — which must NOT be removed: it is the existing Action API runtime.
-- P3 Read-only production snapshot (functions list, IAM policy, RTDB rules) saved; prior Pages SHA recorded.
-- P4 Production deploy env values prepared in a disposable artifact outside the repo; a production variant of the
-  env gate (the staging gate deliberately refuses production) checks RTDB URL/SA/apiKey against production.
-- P5 Canary identity = a NEW dedicated, non-personal **Google** account (production has only Google sign-in;
-  do not enable Email/Password in production). Synthetic tasks only, created through the UI.
+- P1 PR CI green on the exact candidate SHA (Linux, Node 22). Owner reviews the PR. NOT merged (merge = Gate C).
+- P2 Read-only snapshot immediately before B1: functions list, project IAM, RTDB rules export, Pages SHA.
+- P3 Owner's real room has `settings.timezone` (read-only, owner's own data). If absent, completion refuses with
+  `ACCOUNT_ZONE_UNAVAILABLE` until the app's Settings writes it — decide before Gate C.
+- P4 Disposable deploy artifact outside every repo: `git archive <candidate SHA>`, `npm ci --prefix functions`,
+  `node scripts/functions-shared.mjs`, `functions/.env.time-audit-3c3da` (RTDB URL, web API key, completion SA,
+  and the EXISTING Action API owner params). **Missing tooling:** a production env gate (the staging gate refuses
+  production by design) — to be written and reviewed; until then B2 is blocked.
+- P5 **Missing:** alert-policy definitions + notification channel (only the 4 metric YAMLs exist, from
+  `task-018-monitoring` ≥ `a48324a`, severity via `EXTRACT(severity)`) — to be written and reviewed before B3.
+- P6 Canary identity: a NEW dedicated non-personal Google account (production Auth is Google-only; do not enable
+  Email/Password). See "Production canary procedure".
 
-## Identities (least privilege; mirrors what staging proved)
-| Identity | Grant | Proven |
-|---|---|---|
-| Runtime `chronasense-completion@time-audit-3c3da` | custom role `chronasenseCompletionRuntime` = `firebasedatabase.instances.get`, `firebasedatabase.instances.update`, `firebaseauth.users.get` | Yes (staging: checkRevoked, export reads, CAS writes) |
-| Build `chronasense-build@time-audit-3c3da` | `roles/cloudbuild.builds.builder`, `roles/artifactregistry.writer`, `roles/logging.logWriter`, `roles/storage.objectViewer` | **No — B0** |
-| Deployer (owner user, existing Owner) | `iam.serviceAccountUser` scoped to the two SAs above (Owner already implies it) | n/a |
-| Invoker | `allUsers` → `roles/run.invoker` on `chronasensecompletionapi` ONLY | Yes (staging: 401 + reads=0 for bad/revoked tokens) |
-Never: Owner/Editor/TokenCreator/Secret access for the runtime SA; no change to the Action API or its SA; no
-production HMAC secret access for completion. Known breadth: `instances.update` = whole-instance data + rules.
+## Identities (production; mirrors staging)
+```
+gcloud iam roles create chronasenseCompletionRuntime --project=time-audit-3c3da --title="ChronaSense completion runtime" --permissions=firebasedatabase.instances.get,firebasedatabase.instances.update,firebaseauth.users.get --stage=GA
+gcloud iam service-accounts create chronasense-completion --project=time-audit-3c3da
+gcloud projects add-iam-policy-binding time-audit-3c3da --member=serviceAccount:chronasense-completion@time-audit-3c3da.iam.gserviceaccount.com --role=projects/time-audit-3c3da/roles/chronasenseCompletionRuntime --condition=None
+gcloud iam service-accounts create chronasense-build --project=time-audit-3c3da
+for R in roles/cloudbuild.builds.builder roles/artifactregistry.writer roles/logging.logWriter roles/storage.objectViewer; do gcloud projects add-iam-policy-binding time-audit-3c3da --member=serviceAccount:chronasense-build@time-audit-3c3da.iam.gserviceaccount.com --role=$R --condition=None; done
+```
+Invoker: `allUsers` → `roles/run.invoker` on `chronasensecompletionapi` only (Firebase CLI applies it for a new HTTPS
+function). Never: Editor/Owner/TokenCreator/secret access for either SA; no change to `chronasenseActionApi` or the
+compute SA. Known breadth: `instances.update` = whole-instance data + rules access.
 
-## Exact order (each step one command, stop on any non-zero exit)
-1. B1 Rules: `firebase deploy --project time-audit-3c3da --only database --non-interactive` (adds only the explicit
-   resolution write-deny). Verify: rules hash = candidate builder output; production smoke of ordinary writes.
-2. B2 Backend: `firebase deploy --project time-audit-3c3da --only functions:chronasenseCompletionApi --non-interactive`
-   from the disposable artifact; `firebase functions:artifacts:setpolicy --project time-audit-3c3da --location asia-southeast1`.
-   Verify: function list = existing Action API + completion only; Cloud Run SA = runtime SA; concurrency 1, max 1;
-   invoker only on completion; secret IAM unchanged; `chronasenseActionApi` revision unchanged.
-3. B3 Monitoring: create the 4 log metrics (`staging/task-018/monitoring/*.yaml`, severity via `EXTRACT(severity)`)
-   and alert policies → owner email: any `unconfirmedWrite`; any `completion-unavailable`; any `sizeRefusal`;
-   `CONTENDED` > 3 per hour; handler latency p95 > 4 s over 15 min; 5xx > 0. Group alerts by `uncertain`.
-4. B4 Canary (backend only, old UI still live): canary account completes/undoes synthetic tasks via a reviewed
-   production-canary procedure; log scan = one event per request, zero forbidden strings.
-5. Gate C (separate approval): merge candidate PR → Pages publishes → canary UI pass → owner real use.
+**First-build caveat (owner decision):** a brand-new function's FIRST build cannot have the build SA preset via the
+CLI. Recommended: B2 creates the function (one build by the existing default identity — the same one that builds
+the Action API today, no new privilege), then immediately PATCH `buildConfig.serviceAccount` (as in B0) which
+rebuilds with `chronasense-build`; all later CLI deploys preserve it. Alternative (unproven): create via
+`gcloud functions deploy --build-service-account` — skips Firebase param/invoker handling; not recommended.
+
+## Exact order (one command at a time; stop on any non-zero exit)
+1. B1 Rules. Pre-check: re-export live rules; the diff vs the candidate builder output must be exactly
+   `rooms/$roomId/taskCompletionResolutions/.write = false`, else STOP.
+   `firebase deploy --project time-audit-3c3da --only database --non-interactive`; verify the export equals the builder output.
+2. B2 Backend (from the P4 artifact): `firebase deploy --project time-audit-3c3da --only functions:chronasenseCompletionApi --non-interactive`
+   → PATCH build SA (B0 procedure) → `firebase functions:artifacts:setpolicy --project time-audit-3c3da --location asia-southeast1`
+   (note: this sets cleanup on the `gcf-artifacts` repo shared with the Action API; review its current policy first).
+   Verify: function list = Action API + completion; Cloud Run SA = runtime SA; concurrency 1, max 1; invoker only on
+   completion; whole-project IAM before/after diff = only the planned bindings; `chronasenseActionApi` revision unchanged.
+3. B3 Monitoring: 4 log metrics + P5 alert policies → owner email: any `unconfirmedWrite` (group by `uncertain`);
+   any `completion-unavailable`; any `sizeRefusal`; `CONTENDED` > 3/hour; handler p95 > 4 s over 15 min; 5xx > 0.
+4. B4 Production canary (below). Stop on any failure.
+5. Gate C (separate approval): merge PR → Pages publishes → owner real use → TASK-018 closure.
+
+## Production canary procedure (prepared, not executed)
+Backend-only canary while the old UI stays live. No privileged writes, no seeding, no personal data.
+1. Day 0: in a fresh browser profile, serve the candidate `www` UNCHANGED (production config) at exactly
+   `https://localhost` (reviewed CORS origin; production Auth already authorizes `localhost`). Sign in with the canary
+   Google account; create 4 tasks named `Canary <date> 1..4` in today's plan. Sign out. Nothing else.
+2. Day 1 (tasks are now unfinished history): sign in again (same profile) and run, with DevTools request log on:
+   Done today on task 1 → Undo → Done earlier (yesterday) on task 2 → reload (task 2 stays resolved) → View all.
+   Task 3: DevTools offline → click → "Not saved · SOURCE_UNAVAILABLE" → online. Task 4 left open.
+3. Verify (read-only): canary room only (`rooms/uid_<canary>/taskCompletionResolutions`) holds the expected receipts;
+   owner's room unchanged; logs: one `completion-request` per endpoint call, zero hits for canary uid/email/task text;
+   no `unconfirmedWrite`, no 5xx; request log contains no non-production/staging hosts.
+4. Stop conditions: any unexpected outcome, any write outside the canary room, any log leak, any alert.
+   Then: function delete (rollback) and report. Canary data is retained as evidence.
 
 ## Rollback and receipt preservation
-- Resolution records and client pending receipts are NEVER deleted or rewritten by any rollback.
-- Backend stop: `firebase functions:delete chronasenseCompletionApi --region asia-southeast1 --project time-audit-3c3da`
-  (endpoint only; data intact; cached clients keep uncertain commands and recover when it returns).
-- Rules: keep the deny (harmless to old clients). Restore saved rules only on a proven rules regression.
-- Frontend: forward revert on `main` (never force-push); old UI ignores resolution facts (proven with cf43080).
+- Never delete or rewrite `taskCompletionResolutions` or client pending receipts.
+- Backend: `firebase functions:delete chronasenseCompletionApi --region asia-southeast1 --project time-audit-3c3da`
+  (interactive confirm; endpoint only; data intact; cached clients keep uncertain commands and recover later; a
+  later redeploy re-applies the invoker).
+- Rules: keep the deny. It is redundant with the root `.write: false` (rooms have no `.write`), so restoring the saved
+  pre-B1 rules does not expose resolution records either.
+- Frontend: forward revert on `main` (protected; never force-push). Old UI ignores resolution facts (proven, cf43080).
 
-## Operating cost (staging measurements; production unmeasured)
-- Per completion ≈ 3 full-room reads by the function (inspect + read + readback): 0.5 MiB room ≈ 1.5 MiB, 8 MiB ≈ 24 MiB.
-- Client re-inspects on changes in 10 room namespaces (150 ms debounce); a staging browser session used ~38 calls.
-  Each inspect is a full room read → read volume scales with room size × edit frequency. Measure the owner's real
-  room size read-only before B2 and set the RTDB download alert accordingly (10 GB/month no-cost quota).
-- Staging full cycle: ~160 MB RTDB download, ~100 function requests, 1 build — estimated ≤ US$0.05.
-- Budget alerts (existing $2/$5 production budgets) are notifications only; neither has an automated cap.
+## Operating cost (staging-measured; production unmeasured)
+- Per UI completion: ≥ 4 full-room reads (pre-inspection, server read, readback, post-confirm inspection; +1 per CAS
+  retry) plus one full-room conditional PUT. Plus re-inspections on changes in 10 room namespaces (~38 endpoint calls
+  in a staging browser session). Measure the owner's room size (read-only) before B2 and set an RTDB download alert.
+- Staging totals so far: ~160 MB RTDB download (API run), ~300 function requests, 5 builds; estimated ≤ US$0.10.
+- Existing production budgets ($2 and $5) are e-mail alerts only — no automated cap.
 
 ## Residual risks (owner must accept or defer)
-1. Fresh-device zone mismatch: in-app zone `UTC` vs account `Etc/UTC` did not converge in 15 s; server refuses with
-   `ACCOUNT_ZONE_CHANGED` (safe, nothing written) and the UI shows "Not saved · ACCOUNT_ZONE_CHANGED". Real users
-   whose device zone name differs from the account setting cannot complete until settings match.
-2. Old-client edits flag every resolved-or-undone task in the edited plan as "Changed or ambiguous" (locked) — honest,
-   conservative, possibly noisy.
-3. Public invoker without App Check / per-user rate limit; maxInstances 1 bounds compute, not RTDB read cost from an
-   authenticated abuser. Budget alerts do not cap spend.
-4. `main` is unprotected and Pages publishes on every push; TASK-018 design/prototype files in the candidate become
-   publicly served.
-5. Runtime RTDB permission is instance-wide (`instances.update`); the code lens is the only path boundary.
+1. Old-client edits flag resolved-or-undone tasks in the edited plan "Changed or ambiguous" (locked) — honest, noisy.
+2. Public invoker without App Check/per-user rate limit: maxInstances 1 bounds compute, not authenticated RTDB read
+   cost. Budget alerts do not cap spend.
+3. Runtime RTDB permission is instance-wide (`instances.update`); the code's resolution-only lens is the boundary.
+4. First production build runs under the default (Editor) identity unless the alternative path is chosen.
+5. Web-only release: installed Android APKs keep the old UI (compatible); Android acceptance deferred.
+6. A completion near midnight with device/server clock skew can be refused (safe, retry).
