@@ -188,9 +188,12 @@ export function operationStatus(record, uid, request) {
 export function createCompletionHandler({ verifyIdToken, domain, now = Date.now, log = () => {}, clock = () => performance.now() }) {
   const handle = createRequestHandler({ verifyIdToken, domain, now });
   return async request => {
-    const started = clock(), metered = meterTransport(domain), facts = {};
+    let started = 0;
+    emitSafely(() => { started = clock(); });
+    const metered = meterTransport(domain), facts = {};
     const result = await handle(request, metered.io, facts);
-    emitSafely(log, completionEvent({ ...facts, status: result.status, body: result.body, stats: metered.stats, latencyMs: clock() - started }));
+    // Clock, event construction and sink all sit inside the guard: none can turn a committed result into a failure.
+    emitSafely(() => log(completionEvent({ ...facts, status: result.status, body: result.body, stats: metered.stats, latencyMs: clock() - started })));
     return result;
   };
 }

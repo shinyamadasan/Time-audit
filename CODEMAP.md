@@ -14,7 +14,7 @@
   separate completion function with a required dedicated-service-account parameter; no deployment performed.
 - `functions/src/completion-telemetry.js` (`meterTransport`, `completionEvent`, `emitSafely`): one sanitized
   structured event per completion request (op/outcome/allowlisted reason/CAS attempts+412 conflicts/reads/
-  byte buckets/latency/size-refusal/severity). Fixed vocabularies and counts only — never UID, path, task,
+  room-read and response byte buckets/latency/size-refusal/unconfirmedWrite/severity). Fixed vocabularies and counts only — never UID, path, task,
   identity, dates, zone, operation IDs, ETags or tokens. Wired via `createCompletionHandler({ log })`.
 - Rules builder/generated rules deny all direct resolution writes; owner reads inherit existing isolation.
   `functions/shared/task-completion-model.js` is generated from the root source.
