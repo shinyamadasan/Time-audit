@@ -1082,7 +1082,7 @@ integration:
 ---
 
 ### TASK-018 - Unfinished Resolution + Compact UX (approved Refined A; implementation safety gate)
-status: blocked
+status: review
 owner: codex
 source: owner-direct
 priority: P1
@@ -1091,6 +1091,27 @@ files: design/task-018/ standalone HTML/CSS/mock JS, design documentation and ca
   playwright-report/task-018-design/ and playwright-report/task-018-refined-a/ screenshots and measurements
   (local evidence); TASKS.md lifecycle/phase record; TASK_018_IMPLEMENTATION_SAFETY_GATE.md;
   CHANGELOG.md and TEST_REPORT.md append-only. Production file manifest requires a passing safety gate first.
+
+current-implementation-authorization (supersedes contract-only gate below):
+  Owner-direct attachment 44332b2d-84ff-4e8f-a4f2-80178f0818f9/Pasted text.txt, current session 2026-10-15:
+  Implement Reviewed Completion Contract, REVIEW-READY ONLY. Contract df7c279ea730526314c2e97c7f6597674208b518
+  and Refined A 26e24b46214cf6ae12828d5bd8389171a5644b28 explicitly approved for bounded local development.
+  Dedicated privileged completion boundary approved; no fallback in existing Action API. Preserve prior dirty
+  design artifacts. No deployment, Firebase/IAM changes, real account/task writes, secrets, merge/push/release,
+  UI redesign, bulk migration or TASK-016 work. Stop at first unresolved safety blocker or final review-ready.
+  Exact source scope: new task-completion-model/repository/sync.js; functions/src/completion-api/domain.js;
+  functions/index.js; readonly plan-read helper if necessary; plan-authority.js/stale-plan-recovery-model.js
+  resolution overlay only; storage.js account seam; planning-continuity-ui.js/.css; index.html wiring;
+  scripts/functions-shared.mjs and generated functions/shared; rules builder/generated rules; generated www;
+  completion unit/backend/emulator/browser tests and their wiring; CODEMAP.md, handoff, append-only logs and
+  this task metadata. No other architectural changes. TASK_018_COMPLETION_DURABILITY_CONTRACT.md is authoritative.
+  Acceptance: real today/explicit earlier completion, exact identity/source/revision/receipt protocol and
+  confirmed removal, recoverable rejected/unknown states, conditional Undo, all original history preserved,
+  approved compact five-preview/search/menu/date UI and 44px targets. Bounded conditional PUT only, sibling
+  preservation, streaming size/priority refusals and representative cost/contention observations required.
+  Verify full Node/browser/fence/rules/parity gates, read actual summaries, capture real production UI at
+  390px/1440px including backlog, independently review exact final SHA/security/concurrency/history/UI/results,
+  fix must-fixes. Report all owner-requested fields and limitations; no integration.
 
 current-contract-phase (supersedes execution authorization below; implementation remains blocked):
   Owner-direct "Completion Durability Contract", current session 2026-10-15. MODE CONTRACT DESIGN + OFFLINE PROOF.

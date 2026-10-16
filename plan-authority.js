@@ -1392,7 +1392,7 @@ export function createPlanAuthority(deps = {}) {
 
   /** Unfinished from previous days: unfinished, undeleted, undismissed, not already
    *  moved, on a day that has ENDED. No lookback cap on discovery. */
-  function staleUnfinished(nowMs = now()) {
+  function rawStaleUnfinished(nowMs = now()) {
     const days = recoverableDays();
     const canonical = relocationIndex();
     const visibleDays = days.map(entry => ({
@@ -1408,6 +1408,12 @@ export function createPlanAuthority(deps = {}) {
       dayRecords: Object.fromEntries(visibleDays.map(entry => [entry.target.id, entry.record])),
       itemEndMs: (target, item) => (target.store === 'calendar' ? calendarItemEndMs(target, item) : null),
     });
+  }
+
+  // Read-only completion overlay. Original done/doneAt, preparation, time and history remain unchanged.
+  function staleUnfinished(nowMs = now()) {
+    const projection = rawStaleUnfinished(nowMs);
+    return { ...projection, items: projection.items.filter(entry => globalThis.TaskCompletions?.view(entry)?.state !== 'completed') };
   }
 
   /** Where a stale item was moved to, or null — so a surface can render
@@ -1860,7 +1866,7 @@ export function createPlanAuthority(deps = {}) {
     planningDeadlineStreak, deadlineDateKeyForTarget,
     preparedPlans, boundaryChangeImpact,
     setItemKind, updateItem, completeCarryoverItem,
-    staleUnfinished, staleMoveDestination, recoveryConflicts, resolveRecoveryConflict, moveStaleItem, rescheduleStaleItem,
+    rawStaleUnfinished, staleUnfinished, staleMoveDestination, recoveryConflicts, resolveRecoveryConflict, moveStaleItem, rescheduleStaleItem,
     dismissStaleItem, undismissStaleItem, targetById, recoverableDays,
     legacyTarget, remoteItemPresence,
     priorityMax: () => priorityMax,

@@ -23,11 +23,11 @@
 // reviewable in one place instead of spread through render code.
 
 import './plan-authority.js';
+import './task-completion-sync.js';
 import {
   activeCommitments, upcomingCommitments, commitmentsForTarget,
   formatCommitmentTime, normalizeCommitment,
 } from './commitments-model.js';
-import { describeStaleAge } from './stale-plan-recovery-model.js';
 import { addCalendarDays, durationBetween, planItemEndTime } from './plan-tomorrow-model.js';
 import { fencedMoveRefusal, isFencedItem } from './plan-item-origin.js';
 import { sameOnWire } from './plan-fence-sync.js';
@@ -476,6 +476,188 @@ function prepareDay(dayId) {
 
 // ── Unfinished from previous days ───────────────────────────────────────────
 
+let completionPopover = null, completionAnchor = null, completionDialog = null, completionNoticeTimer = null;
+let completionQuery = '', completionLimit = 50, completionOwnerGeneration = 0;
+const completions = () => globalThis.TaskCompletions;
+function completionEntry(id, day) { return authority()?.rawStaleUnfinished().items.find(entry => entry.item.id === id && entry.sourceDayId === day); }
+function completionPlannedDate(entry) {
+  return entry.target.dateKey || localDateKey(entry.target.startMs, entry.target.timezone || accountTimezone());
+}
+function completionRowHtml(entry) {
+  const { item, sourceDayId } = entry, view = completions()?.view(entry);
+  let pending = null;
+  try { pending = completions()?.pending(entry); } catch { /* receipt storage failure is surfaced on action */ }
+  const busy = completions()?.busy(entry), conflict = view?.state === 'needs-review';
+  const data = `data-id="${escape(item.id)}" data-day="${escape(sourceDayId)}"`;
+  const planned = completionPlannedDate(entry);
+  const date = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${planned}T12:00:00Z`));
+  return `<div class="pc-row pc-stale-row pc-completion-row" data-pc-stale="${escape(item.id)}" data-pc-day="${escape(sourceDayId)}"${busy ? ' aria-busy="true"' : ''}>
+    <label class="pc-complete-target"><input type="checkbox" data-pc-action="complete-today" ${data} aria-label="Complete today: ${escape(item.task)}"${busy || pending || conflict ? ' disabled' : ''}></label>
+    <div class="pc-complete-copy"><button type="button" class="pc-complete-title" data-pc-action="reveal-stale-title" ${data} aria-expanded="false"><span class="pc-complete-task">${escape(item.task)}</span>
+    <span class="pc-complete-date">Planned ${escape(date)}${busy ? ' · Saving…' : ''}</span></button>
+    ${pending && !busy ? `<button type="button" class="pc-completion-retry" data-pc-action="retry-completion" ${data}>Still checking · Retry</button>` : ''}
+    ${conflict ? '<span class="pc-completion-warning">Changed or ambiguous · refresh before resolving</span>' : ''}</div>
+    <button type="button" class="pc-complete-more" data-pc-action="completion-menu" ${data} aria-haspopup="menu" aria-expanded="false" aria-label="More actions: ${escape(item.task)}">···</button>
+  </div>`;
+}
+function closeCompletionPopover(restore = false) {
+  completionPopover?.remove(); completionPopover = null;
+  const anchor = completionAnchor; completionAnchor = null;
+  anchor?.setAttribute('aria-expanded', 'false');
+  if (restore && anchor?.isConnected) anchor.focus();
+}
+function positionCompletionPopover() {
+  if (!completionPopover) return;
+  if (!completionAnchor?.isConnected) {
+    const selector = completionDialog?.open ? completionDialog : staleSection();
+    completionAnchor = [...(selector?.querySelectorAll('.pc-complete-more') || [])].find(button => button.dataset.id === completionPopover.dataset.id && button.dataset.day === completionPopover.dataset.day);
+  }
+  if (!completionAnchor) { closeCompletionPopover(); return; }
+  completionAnchor.setAttribute('aria-expanded', 'true');
+  const rect = completionAnchor.getBoundingClientRect(), box = completionPopover.getBoundingClientRect();
+  completionPopover.style.left = `${Math.max(12, Math.min(globalThis.innerWidth - box.width - 12, rect.right - box.width))}px`;
+  completionPopover.style.top = `${Math.max(12, Math.min(globalThis.innerHeight - box.height - 12, rect.bottom + 4 + box.height > globalThis.innerHeight ? rect.top - box.height - 4 : rect.bottom + 4))}px`;
+}
+function openCompletionPopover(control, dateForm = false) {
+  const entry = completionEntry(control.dataset.id, control.dataset.day);
+  if (!entry) return;
+  closeCompletionPopover(); completionAnchor = control;
+  control.setAttribute('aria-expanded', 'true');
+  const pop = document.createElement(dateForm ? 'form' : 'div');
+  pop.className = 'pc-completion-popover'; pop.dataset.id = entry.item.id; pop.dataset.day = entry.sourceDayId;
+  pop.dataset.owner = state.staleOwner || '';
+  pop.setAttribute('role', dateForm ? 'dialog' : 'menu'); pop.setAttribute('aria-label', dateForm ? 'Done earlier' : 'Task actions');
+  const data = `data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}"`;
+  const today = localDateKey();
+  let unresolved = null;
+  try { unresolved = completions()?.pending(entry); } catch { unresolved = true; }
+  if (unresolved || completions()?.busy(entry)) {
+    pop.innerHTML = `<p>A completion change is still being checked. Resolve it before changing this task.</p><button type="button" data-pc-action="recover-completion" ${data}>Check status</button>`;
+  } else if (dateForm) {
+    pop.innerHTML = `<h3>Done earlier</h3><p class="pc-muted">Originally planned ${escape(completionPlannedDate(entry))}</p><label>Actual completion date<input name="completion-date" aria-label="Actual completion date" type="date" max="${today}" value="${today}" required></label>
+      <div class="pc-completion-date-actions"><button type="button" data-pc-action="completion-yesterday">Yesterday</button><button type="button" data-pc-action="close-completion-popover">Cancel</button><button type="submit">Save completion</button></div>`;
+    pop.addEventListener('submit', event => { event.preventDefault(); if (pop.dataset.owner === state.staleOwner) void completeHistorical(entry, pop.querySelector('input').value); });
+  } else {
+    pop.innerHTML = `<button role="menuitem" data-pc-action="completion-date" ${data}>Done earlier…</button><hr>
+      <button role="menuitem" data-pc-action="move-today" ${data}>Move to today</button><button role="menuitem" data-pc-action="move-edit" ${data}>Move &amp; edit</button>
+      <button role="menuitem" data-pc-action="reschedule" ${data}>Reschedule…</button><button role="menuitem" data-pc-action="dismiss" ${data}>Not doing this</button>
+      <p class="pc-muted">Not doing removes it from the backlog and keeps its history.</p>`;
+  }
+  pop.addEventListener('click', event => { event.stopPropagation(); if (pop.dataset.owner === state.staleOwner) onClick(event); });
+  completionPopover = pop;
+  (completionDialog?.open ? completionDialog : document.body).append(pop);
+  positionCompletionPopover(); pop.querySelector(dateForm ? 'input' : 'button')?.focus();
+}
+function closeCompletionBacklog() {
+  if (completionDialog?.contains(completionPopover)) closeCompletionPopover();
+  const toast = completionDialog?.querySelector('.pc-completion-toast');
+  if (toast) staleSection()?.append(toast);
+  completionDialog?.close(); completionDialog?.remove(); completionDialog = null; completionQuery = '';
+}
+function renderCompletionBacklog() {
+  if (!completionDialog?.open) return;
+  const items = authority().staleUnfinished().items;
+  const focused = completionDialog.querySelector('.pc-backlog-rows')?.contains(document.activeElement) ? { ...document.activeElement.dataset } : null;
+  const filtered = items.filter(entry => entry.item.task.toLocaleLowerCase().includes(completionQuery.toLocaleLowerCase()));
+  completionDialog.querySelector('.pc-backlog-count').textContent = `${items.length} tasks`;
+  completionDialog.querySelector('.pc-backlog-rows').innerHTML = filtered.slice(0, completionLimit).map(completionRowHtml).join('') || '<p class="pc-muted">No matching tasks</p>';
+  completionDialog.querySelector('.pc-backlog-footer').innerHTML = `${Math.min(filtered.length, completionLimit)} of ${filtered.length} matching tasks${filtered.length > completionLimit ? '<button type="button" data-pc-action="more-backlog">Show 50 more</button>' : ''}`;
+  const toast = staleSection()?.querySelector('.pc-completion-toast');
+  if (toast) { completionDialog.querySelector('.pc-completion-toast')?.remove(); completionDialog.append(toast); }
+  if (focused) {
+    const controls = [...completionDialog.querySelectorAll('[data-pc-action]')];
+    (controls.find(button => button.dataset.id === focused.id && button.dataset.day === focused.day && button.dataset.pcAction === focused.pcAction && !button.disabled)
+      || completionDialog.querySelector('.pc-complete-more'))?.focus({ preventScroll: true });
+  }
+}
+function openCompletionBacklog() {
+  closeCompletionPopover(); closeCompletionBacklog(); completionLimit = 50;
+  const dialog = document.createElement('dialog'); dialog.className = 'pc-completion-backlog'; dialog.dataset.owner = state.staleOwner || '';
+  dialog.setAttribute('aria-label', 'All unfinished tasks');
+  dialog.innerHTML = '<div class="pc-backlog-header"><h3>Unfinished</h3><span class="pc-backlog-count pc-muted"></span><button type="button" data-pc-action="close-completion-backlog" aria-label="Close backlog">✕</button></div><input class="pc-backlog-search" type="search" aria-label="Search unfinished tasks" placeholder="Search all tasks…"><div class="pc-backlog-rows"></div><div class="pc-backlog-footer pc-muted"></div>';
+  dialog.addEventListener('click', event => { if (dialog.dataset.owner === state.staleOwner) onClick(event); });
+  dialog.addEventListener('input', event => { if (event.target.matches('.pc-backlog-search')) { completionQuery = event.target.value; completionLimit = 50; renderCompletionBacklog(); } });
+  dialog.addEventListener('cancel', event => { event.preventDefault(); if (completionPopover) closeCompletionPopover(true); else closeCompletionBacklog(); });
+  document.body.append(dialog); completionDialog = dialog; dialog.showModal(); renderCompletionBacklog(); dialog.querySelector('input').focus();
+}
+function completionNoticeHtml() {
+  let pending = [];
+  try { pending = completions()?.pendingAll() || []; } catch { /* action reports storage refusal */ }
+  if (!state.completionNotice && !pending.length) return '';
+  return `<div class="pc-completion-toast" role="status"><span>${escape(state.completionNotice || 'A completion change is still being checked.')}</span>
+    ${state.completionReceipt ? '<button type="button" data-pc-action="undo-completion">Undo</button>' : pending.length ? '<button type="button" data-pc-action="recover-completion">Check status</button>' : ''}</div>`;
+}
+function showCompletionNotice(text, receipt = null, persistent = false) {
+  clearTimeout(completionNoticeTimer); state.completionNotice = text; state.completionReceipt = receipt;
+  function expire() {
+    if (document.querySelector('.pc-completion-toast:hover,.pc-completion-toast:focus-within')) { completionNoticeTimer = setTimeout(expire, 1000); return; }
+    state.completionNotice = ''; state.completionReceipt = null; render();
+  }
+  if (!persistent) completionNoticeTimer = setTimeout(expire, 8000);
+  render();
+}
+async function completeHistorical(entry, date) {
+  const owner = state.staleOwner, generation = completionOwnerGeneration;
+  closeCompletionPopover();
+  const result = await completions().complete(entry, date, accountTimezone());
+  if (state.staleOwner !== owner || completionOwnerGeneration !== generation) return;
+  if (result.outcome === 'CONFIRMED') {
+    const current = completions().view(entry);
+    const active = current?.state === 'completed' && current.record?.revision === result.record.revision
+      && current.record?.completionOpId === result.request.operationId && result.record.completionOpId === result.request.operationId;
+    showCompletionNotice(active ? 'Completion saved' : 'Saved · status refreshed', active ? { uid: globalThis.getTaskCompletionAppContext?.()?.uid, record: result.record } : null);
+  } else showCompletionNotice(result.outcome === 'UNKNOWN' ? 'Still checking completion' : `Not saved · ${result.reason || 'Please retry'}`, null, result.outcome === 'UNKNOWN');
+}
+function handleCompletionAction(action, control) {
+  const id = control.dataset.id, day = control.dataset.day;
+  switch (action) {
+    case 'complete-today': case 'retry-completion': { const entry = completionEntry(id, day); if (entry) void completeHistorical(entry, localDateKey()); return true; }
+    case 'reveal-stale-title': control.setAttribute('aria-expanded', String(control.getAttribute('aria-expanded') !== 'true')); return true;
+    case 'completion-menu': openCompletionPopover(control); return true;
+    case 'completion-date': openCompletionPopover(completionAnchor, true); return true;
+    case 'completion-yesterday': completionPopover.querySelector('input').value = addCalendarDays(localDateKey(), -1); return true;
+    case 'close-completion-popover': closeCompletionPopover(true); return true;
+    case 'view-all-stale': openCompletionBacklog(); return true;
+    case 'close-completion-backlog': closeCompletionBacklog(); staleSection()?.querySelector('[data-pc-action="view-all-stale"]')?.focus(); return true;
+    case 'more-backlog': completionLimit += 50; renderCompletionBacklog(); return true;
+    case 'undo-completion': {
+      const receipt = state.completionReceipt, owner = state.staleOwner, generation = completionOwnerGeneration;
+      if (!receipt) return true;
+      state.completionReceipt = null;
+      void completions().undo(receipt).then(result => {
+        if (state.staleOwner !== owner || completionOwnerGeneration !== generation) return;
+        const entry = completionEntry(receipt.record.identity.itemId, receipt.record.identity.targetId), current = entry && completions().view(entry);
+        const open = result.record?.state === 'open' && current?.state === 'unfinished' && current.record?.revision === result.record.revision;
+        showCompletionNotice(result.outcome === 'CONFIRMED' ? open ? 'Completion undone' : 'Undo recorded · status refreshed'
+          : result.outcome === 'UNKNOWN' ? 'Undo still checking' : 'Undo refused · task changed', null, result.outcome === 'UNKNOWN');
+      });
+      render(); return true;
+    }
+    case 'recover-completion': {
+      const entry = id && completionEntry(id, day);
+      const pending = entry ? completions().pending(entry) : completions().pendingAll()[0], owner = state.staleOwner, generation = completionOwnerGeneration;
+      if (pending) void completions().resume(pending).then(result => { if (state.staleOwner === owner && completionOwnerGeneration === generation) showCompletionNotice(result.outcome === 'CONFIRMED' ? 'Completion status recovered' : 'Still checking · retry when connected', null, result.outcome !== 'CONFIRMED'); });
+      return true;
+    }
+    case 'move-today': case 'move-edit': case 'reschedule': case 'dismiss': closeCompletionPopover(); return false;
+    default: return false;
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', event => { if (completionPopover && !completionPopover.contains(event.target) && !event.target.closest('.pc-complete-more')) closeCompletionPopover(); });
+  document.addEventListener('keydown', event => {
+    if (!completionPopover) return;
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeCompletionPopover(true); }
+    if (['ArrowDown', 'ArrowUp'].includes(event.key) && completionPopover.getAttribute('role') === 'menu') {
+      event.preventDefault(); const buttons = [...completionPopover.querySelectorAll('button')];
+      const index = buttons.indexOf(document.activeElement), step = event.key === 'ArrowDown' ? 1 : -1;
+      buttons[(index + step + buttons.length) % buttons.length].focus();
+    }
+  });
+  document.addEventListener('scroll', positionCompletionPopover, true);
+}
+
 function staleHtml(nowMs) {
   const layer = authority();
   if (!layer) return '';
@@ -488,34 +670,10 @@ function staleHtml(nowMs) {
   const { items, unresolvable } = projection;
   const conflicts = layer.recoveryConflicts?.() || [];
   if (!items.length && !unresolvable.length && !conflicts.length) return '';
-  state.staleOffset = Math.min(state.staleOffset, Math.max(0, Math.ceil(items.length / PREVIEW_ROWS) - 1) * PREVIEW_ROWS);
-  const shown = items.slice(state.staleOffset, state.staleOffset + PREVIEW_ROWS);
-  const openMenu = staleSection()?.querySelector('details[open]');
-  const rows = shown.map(entry => {
-    const where = `Planned ${escape(dayWindowLabel(entry.target))} · ${escape(describeStaleAge(entry.ageMs))}`;
-    const menuOpen = openMenu?.dataset.id === entry.item.id && openMenu?.dataset.day === entry.sourceDayId;
-    return `<div class="pc-row pc-stale-row" data-pc-stale="${escape(entry.item.id)}" data-pc-day="${escape(entry.sourceDayId)}">
-      <div class="pc-row-main">
-        <div class="pc-row-title" title="${escape(entry.item.task)}">${escape(entry.item.task)}</div>
-        <div class="pc-row-meta">${where}</div>
-      </div>
-      <div class="pc-stale-actions">
-      <button type="button" class="btn sm" data-pc-action="move-today" data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}">Move to today</button>
-      <details class="pc-stale-more" data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}"${menuOpen ? ' open' : ''}>
-      <summary>More actions</summary>
-      <div class="pc-stale-options">
-      <p class="pc-muted pc-stale-full-title">${escape(entry.item.task)}</p>
-      <button type="button" class="btn sm ghost" data-pc-action="move-edit" data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}">Move &amp; edit</button>
-      <button type="button" class="btn sm ghost" data-pc-action="reschedule" data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}">Reschedule…</button>
-      <button type="button" class="pc-icon" data-pc-action="dismiss" data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}">Not doing this</button>
-      <p class="pc-muted">Removes this task from the active backlog. Its original plan and history are kept; it is not marked completed.</p>
-      </div></details></div>
-    </div>`;
-  }).join('');
+  const shown = items.slice(0, PREVIEW_ROWS);
+  const rows = shown.map(completionRowHtml).join('');
   const more = items.length > PREVIEW_ROWS
-    ? `<div class="pc-stale-pager"><button type="button" class="btn sm ghost" data-pc-action="stale-previous"${state.staleOffset ? '' : ' disabled'}>Previous tasks</button>
-      <span class="pc-muted">${state.staleOffset + 1}–${state.staleOffset + shown.length} of ${items.length}</span>
-      <button type="button" class="btn sm ghost" data-pc-action="stale-next"${state.staleOffset + shown.length < items.length ? '' : ' disabled'}>Next tasks</button></div>` : '';
+    ? `<div class="pc-preview-footer"><span>Showing ${shown.length} of ${items.length}</span><button type="button" data-pc-action="view-all-stale">View all <span aria-hidden="true">›</span></button></div>` : '';
   // A day whose interval cannot be resolved is still SHOWN. "No planned information
   // becomes unreachable because it is old" has to hold even when a revision is gone.
   const stranded = unresolvable.length
@@ -535,8 +693,7 @@ function staleHtml(nowMs) {
     return `<div class="pc-block" data-pc-recovery-conflict="${escape(conflict.sourceItemId)}"><div class="pc-head"><h3>Recovery conflict</h3></div><p class="pc-muted">Two devices edited this recovered task differently. Choose the version to keep; both candidates remain preserved in history.</p>${candidates}</div>`;
   }).join('');
   return `<section class="pc-block">
-    <div class="pc-head"><h3>Unfinished · ${items.length + unresolvable.reduce((n, day) => n + day.items.length, 0) + conflicts.length}</h3><button type="button" class="btn sm ghost" data-pc-action="collapse-stale">Close</button></div>
-    <p class="pc-muted">Previously planned tasks. Open More actions to reschedule or choose Not doing this.</p>
+    <div class="pc-head"><h3>Unfinished</h3><span class="pc-muted">${items.length} tasks</span><button type="button" class="btn sm ghost" data-pc-action="collapse-stale" aria-label="Collapse Unfinished">⌄</button></div>
     ${conflictRows}
     ${rows}
     ${more}
@@ -691,14 +848,18 @@ export function render() {
   if (!layer) { root.hidden = true; root.innerHTML = ''; return; }
   const owner = repository()?.ownerRoomId?.() || null;
   if (owner !== state.staleOwner) {
+    completionOwnerGeneration++;
     state.staleOwner = owner;
     state.staleUndo = null;
     state.staleStatus = '';
     state.staleOffset = 0;
+    closeCompletionPopover(); closeCompletionBacklog(); clearTimeout(completionNoticeTimer);
+    state.completionNotice = null; state.completionReceipt = null;
     state.expanded.stale = false;
     state.pendingMove = null;
   }
   const nowMs = Date.now();
+  globalThis.TaskCompletions?.ensure((layer.rawStaleUnfinished?.(nowMs) || layer.staleUnfinished(nowMs)).items);
   let html = '';
   try {
     const notice = state.notice
@@ -721,10 +882,12 @@ export function render() {
     const feedback = state.staleStatus ? `<div class="pc-notice pc-stale-feedback" role="status"><span>${escape(state.staleStatus)}</span>
       ${state.staleUndo ? `<span class="pc-stale-full-title">${escape(state.staleUndo.task)}</span><button type="button" class="btn sm ghost" data-pc-action="undo-dismiss">Undo</button>` : ''}
       <button type="button" class="pc-icon" data-pc-action="close-stale-status" aria-label="Dismiss unfinished notice">Close</button></div>` : '';
-    const recoveryHtml = feedback + staleCompactHtml(nowMs);
+    const recoveryHtml = feedback + completionNoticeHtml() + staleCompactHtml(nowMs);
     recovery.hidden = !recoveryHtml;
     recovery.dataset.pcOwner = owner || '';
     recovery.innerHTML = recoveryHtml;
+    renderCompletionBacklog();
+    positionCompletionPopover();
     if (focused && focusedOwner === (owner || '')) {
       const controls = [...recovery.querySelectorAll('[data-pc-action]')];
       const replacement = focusedMenu
@@ -746,6 +909,7 @@ function onClick(event) {
     render();
     return;
   }
+  if (handleCompletionAction(action, control)) return;
   switch (action) {
     case 'open-item-form': {
       const current = authority()?.current();

@@ -2206,3 +2206,46 @@ untested: real Firebase ID-token verification/revocation, deployment IAM and ser
   production browser/account-switch callback wiring, physical devices, real-data room scale and full npm/browser
   regressions. No production functionality was implemented. Old-client UI awareness and ordinary id-reuse
   guarantees are not supplied by the resolution-only record. Existing expected failures/issues remain unchanged.
+
+## TASK-018 approved completion implementation · 2026-10-15
+suite: npm test (task018-node-gates-final.log)
+result: node:test 2250 total, 2249 passed, 0 failed, 1 existing opt-in lower-case-drive negative-control skip
+  requiring CROSS_REPO_COMPAT_CONTROL_PROOF=1; legacy harness 455/455 passed. New production deterministic
+  proofs 59/59 (38 contract, 13 client/sync, 5 backend-boundary, 3 cost/contention), also independently rerun.
+suite: npx playwright test --workers=4 --reporter=list,json (task018-full-browser-review.log)
+result: 947 expected outcomes: 940 passed + 7 unchanged expected failures; 0 unexpected, 0 skipped, 0 flaky.
+  Actual structured JSON inspected at playwright-report/task-018-production/full-browser.json. TASK-013 F-1
+  through F-7 still fail as expected; no relabelling or newly-fixed claim. TASK-014/015/017 regressions included;
+  existing TASK-015 claim/false-conflict and Today-then-Tomorrow limitations remain unchanged.
+suite: npm run test:fence (task018-fence-final.log)
+result: 151/151 passed: 94 rules/emulator, 20 real-SDK fence, 37 mutation. Includes all 14 new production
+  completion emulator cases (also separately 14/14). All 14 pinned files represent one cf43080 released client,
+  not 14 releases; replay, calendar cutover, ordinary/fenced history, account denial, real two-client reads,
+  sibling heartbeat contention, priorities, lost actual PUT acknowledgement and receipt recovery covered.
+suite: unchanged Conversational Worker CI tests and local bundle (task018-worker-gate-final.log)
+result: 32/32 passed; locked Wrangler 4.149.0 dry-run bundle passed, telemetry disabled, no upload. Initial
+  missing-dependency run failed; locked offline install succeeded and rerun passed, no lockfile/source changes.
+checks: generated Firebase rules and functions/shared match sources; www parity passes (95-file closure);
+  lint 0 errors/48 existing warnings; diff whitespace clean. Functions SDK metadata import confirmed separate
+  service-account parameter, region, single-instance/single-concurrency and 512MiB settings without invocation.
+ui: actual production HTML/modules served locally with synthetic 22-task backlog and populated Today timeline.
+  390px/1440px full My Day, five-preview, backlog/search/long-title, menu and date evidence in
+  playwright-report/task-018-production/. Section 375px both widths, row controls >=44x44. Today1 action;
+  earlier4 controls (native picker varies). Final ignored settled-scroll capture rerun 2/2 passed; no CSS hiding.
+cost: 22/.5MiB, 100/2MiB, 1000/8MiB mock rooms: inspect1/1/10 root reads; one concurrent sibling change causes
+  3 completion reads/2 PUT attempts with sibling retained. Total downloads2.10/8.39/109.05MB, attempted uploads
+  1.05/4.20/16.78MB. Lower-bound in-memory observations, not live network/billing or account-scale acceptance.
+recovery: earlier full browser iterations had13, then10, then2 unexpected failures; all are superseded by the
+  final clean947-outcome gate, not reclassified. Causes/repairs disclosed in handoff: stale UI/release assertions,
+  empty-candidate listener duplication, accidentally removed/restored offline backend test helper, baseline INIT
+  autofill form race and detached ElementHandle in double-click test. The baseline race was independently
+  reproduced on exact bb171a sources; production blocks unchanged. Shared smoke startup readiness and atomic
+  connected-control double clicks preserve assertions and add exact revision/sibling checks. Three corrected
+  cases repeated8 each passed24/24, then passed full gate. Early fixture/CSS/wire/parity failures also corrected.
+untested: deployed Firebase ID-token/revocation/IAM/service isolation, physical Android/iOS, hosted CI, live room
+  size/cost and real-use acceptance. Local Node24 differs from declared deployment Node22. Broad privileged
+  credential capability is not RTDB path-scoped IAM; deployment review remains required. Unknown writes stay
+  recoverable; conservative identity/refusal, ordinary byte-identical ID reuse, unseen edits, legacy dismissal
+  durability and unbounded receipt growth limitations remain. No production data accessed/mutated; no deployment,
+  IAM change, merge, push, release, historical migration or TASK-016 work. Exact final SHA independently reviewed
+  separately; REVIEW-READY only, not done.

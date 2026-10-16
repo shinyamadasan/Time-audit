@@ -152,14 +152,16 @@ test('scan fidelity: the lexer loses no real import of the package (every static
   }
 });
 
-test('static: only infra-rtdb.js sends a privileged Authorization header; domain modules never import it', () => {
-  for (const file of PACKAGE_FILES.filter(file => file.name !== 'src/infra-rtdb.js' && file.name !== 'index.js')) {
-    assert.ok(!/\bAuthorization\s*:|Bearer\s/.test(file.text), `${file.name} must not send a privileged Authorization header`);
+test('static: only infrastructure and the owner-approved completion adapter send privileged headers', () => {
+  for (const file of PACKAGE_FILES.filter(file => !['src/infra-rtdb.js', 'src/completion-domain.js', 'index.js'].includes(file.name))) {
+    // The dedicated endpoint RECEIVES the app token. Exempt only its exact incoming parser expression.
+    const text = file.name === 'src/completion-api.js' ? file.text.replace('!/^Bearer [^\\s]+$/.test(authorization)', 'incomingTokenIsInvalid') : file.text;
+    assert.ok(!/\bAuthorization\s*:|Bearer\s/.test(text), `${file.name} must not send a privileged Authorization header`);
   }
   // Runtime coupling only: JSDoc type references (`@param {ReturnType<import('./nonce-store.js')...>}`) are not loads.
   const code = text => text.replace(/\/\*[\s\S]*?\*\//g, '');
   for (const file of ['user-scoped-rtdb.js', 'brain-dump-query.js', 'action-api.js', 'envelope.js', 'identity.js']) {
-    assert.ok(!specifiersOf(code(source(file))).some(s => /infra-rtdb|nonce-store|receipts/.test(s)), `${file} must not import privileged infrastructure`);
+    assert.ok(!specifiersOf(code(source(file))).some(s => /infra-rtdb|nonce-store|receipts|completion-/.test(s)), `${file} must not import privileged infrastructure or the completion exception`);
   }
   // The domain query's only data dependency is the packaged copy of the shared, pure domain model.
   assert.deepEqual(specifiersOf(source('brain-dump-query.js')).filter(s => !s.startsWith('./') && !s.startsWith('node:')), ['../shared/brain-dump-model.js']);

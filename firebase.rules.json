@@ -73,6 +73,9 @@
             }
           }
         },
+        "taskCompletionResolutions": {
+          ".write": false
+        },
         "plans": {
           ".write": "auth != null && $roomId === ('uid_' + auth.uid) && auth.token.chronasenseActionId == null && !root.child('rooms').child($roomId).child('calendarPlanAuthority').exists()",
           "$dateKey": {
