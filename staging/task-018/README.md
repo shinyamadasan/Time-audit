@@ -86,12 +86,12 @@ insufficient, so the gap cannot pass silently. Stdout logging needs no runtime g
 | `size:*`, `size:oversize-refused` | 0.5/2/8 MiB rooms meet p95; 16 MiB+64 KiB refused `ROOM_TOO_LARGE`, nothing written |
 | `latency:no-near-timeout` | no call ≥ 15 s (client timeout 20 s) |
 
-Self-test (`node --test staging/task-018/staging.test.js`, 5/5): guard, artifact isolation, synthetic rooms, all
+Self-test (`node --test staging/task-018/staging.test.js`, 6/6): guard, artifact isolation, synthetic rooms, all
 scenarios against the real handler, **negative control** (lost-ack backend ⇒ NO-GO), log scanner.
 
 Every check stops the run on failure; the report is always written (`apiGo`, `stoppedAt`, `traffic`). Hard limits:
 300 endpoint requests, 64 MiB seeded, 20 s per request, redirects refused. Output says "API checks GO; manual gates
-pending" — cold start, RTDB bytes/cost and the log scan are separate gates, never implied by the harness.
+pending" — cold start, RTDB bytes/cost and the log scan are separate gates, never implied by the harness. A GO that lists `SKIPPED auth:wrong-project` / `SKIPPED auth:revoked` has not tested those cases; supply the optional tokens or record them as open manual gates.
 
 **Seeding finding (local emulator, real rules):** an ordinary owner cannot write `calendarPlanAuthority`, fence
 collections, `entries` or `brainDump` fixtures. The harness therefore seeds with `STAGING_SEED_ACCESS_TOKEN` = the
@@ -243,3 +243,12 @@ Not requested now: production rules/backend/frontend, merge, push, Pages publica
 Note: the released-client scenario's SDK websocket/long-poll traffic does not pass `guardedFetch`; its isolation rests
 on `assertStagingConfig` (only the 4 validated staging fields reach `initializeApp`) and the per-run browser/route log.
 Its real SDK path has no offline proof (no Auth emulator here); a failure there is a false NO-GO, never a false GO.
+
+If a run stops at `OLD_CLIENT_TIMEOUT`, the SDK replay may still be connected: the report is already written, but the
+process may not exit (Ctrl+C it) and a queued released-client plan push may still land in the synthetic room afterwards.
+Treat that room as dirty and re-seed before any rerun.
+
+`readBytes` in completion events is the per-request SUM across all room reads (resolution-key reads excluded): a
+read-amplification signal, not a room-size measure. Room-size refusal is reported only as `reason=ROOM_TOO_LARGE` /
+`sizeRefusal=true`. Metric `completion_requests` labels severity from the LogEntry (`EXTRACT(severity)`); verified in
+staging Metrics (INFO/WARNING populated after the fix).

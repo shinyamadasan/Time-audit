@@ -5105,3 +5105,10 @@ changed:
     exact provisioning commands and the single owner approval packet.
 tests: `node --test staging/task-018/staging.test.js` 5/5 offline (incl. lost-ack negative control ⇒ NO-GO).
   No cloud resource, billing, IAM, secret, deploy, production data, push or merge.
+
+## TASK-018 — monitoring clarification and staging evidence (owner-direct, branch: task-018-monitoring)
+- Clarification: `readBytes` buckets the SUM of bytes across all room reads in one request (resolution-key reads
+  excluded); it is a read-amplification signal, not a room-size measure. Room-size refusal is reported only as
+  `reason=ROOM_TOO_LARGE` / `sizeRefusal=true`. Cloud Logging lifts the JSON `severity` to LogEntry severity.
+- Staging (chronasense-staging-t018): API harness 53/53; browser acceptance 22/22 with zero production requests;
+  staging kit and evidence under staging/task-018 and outside the repo. No production change.
