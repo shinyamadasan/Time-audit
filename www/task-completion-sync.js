@@ -4,13 +4,16 @@ import { createTaskCompletionRepository } from './task-completion-repository.js'
 
 export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, changed = () => {} }) {
   let owner = null, generation = 0, epoch = 0, candidates = [], signature = '', views = new Map(), inflight = null;
+  // Account timezone from the latest fresh authoritative inspection (rooms/<uid>/settings/timezone), never the
+  // device-locked zone. Valid only for the epoch it was observed in; any room/settings change invalidates it.
+  let zone = null;
   let listeners = [], timer = null, watchFailed = false;
   const busy = new Map();
   const repository = createTaskCompletionRepository({ storage, getOwner: () => context()?.uid || null });
   const identityKey = identity => canonicalCompletion(identity);
   const entryKey = entry => identityKey(completionIdentity(entry.target, entry.item));
   function reset() {
-    generation++; epoch++; owner = null; signature = ''; candidates = []; views = new Map(); inflight = null; busy.clear();
+    generation++; epoch++; owner = null; signature = ''; candidates = []; views = new Map(); inflight = null; zone = null; busy.clear();
     listeners.forEach(([ref, fn]) => ref.off('value', fn)); listeners = [];
     clearTimeout(timer); timer = null; watchFailed = false;
   }
@@ -59,6 +62,7 @@ export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, 
     if (inflight) return inflight;
     const selected = candidates.slice(), observedEpoch = epoch;
     const work = (async () => {
+      const zones = new Set();
       try {
         // One root observation per batch, never one room download per task.
         for (let offset = 0; offset < selected.length; offset += 100) {
@@ -66,6 +70,7 @@ export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, 
           const response = await call(ctx, { kind: 'inspect', identities: batch.map(entry => completionIdentity(entry.target, entry.item)) }, token);
           if (epoch !== observedEpoch) return;
           if (response.outcome !== 'CONFIRMED' || response.uid !== ctx.uid || !Array.isArray(response.views)) throw new Error('Completion verification unavailable.');
+          zones.add(typeof response.timezone === 'string' && response.timezone ? response.timezone : null);
           if (response.views.length !== batch.length || new Set(response.views.map(view => identityKey(view.identity))).size !== batch.length) throw new Error('Completion verification incomplete.');
           for (const view of response.views) {
             const entry = batch.find(item => entryKey(item) === identityKey(view.identity));
@@ -82,8 +87,10 @@ export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, 
               local: canonicalCompletion(wire), fresh: true });
           }
         }
+        // All batches must agree (each is its own snapshot); disagreement or absence leaves no usable zone.
+        if (current(ctx.uid, token) && epoch === observedEpoch) zone = zones.size === 1 && [...zones][0] ? { value: [...zones][0], epoch: observedEpoch } : null;
       } catch {
-        if (current(ctx?.uid, token)) for (const view of views.values()) view.fresh = false;
+        if (current(ctx?.uid, token)) { for (const view of views.values()) view.fresh = false; zone = null; }
       } finally { if (current(ctx?.uid, token)) { inflight = null; changed(); if (epoch !== observedEpoch) globalThis.queueMicrotask(() => { void refresh(); }); } }
     })();
     inflight = work;
@@ -144,6 +151,10 @@ export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, 
         if (!current(ctx?.uid, token)) return { outcome: 'REJECTED', reason: 'ACCOUNT_CHANGED' };
         const observed = view(entry);
         if (!observed?.fresh || !observed.sourceRevision || !['unfinished', 'completed'].includes(observed.state)) return { outcome: 'REJECTED', reason: 'SOURCE_UNAVAILABLE' };
+        // Never send a device zone the account does not use: the server would refuse it, and the date was chosen in it.
+        const accountZone = accountTimezone();
+        if (!accountZone) return { outcome: 'REJECTED', reason: 'ACCOUNT_ZONE_UNAVAILABLE' };
+        if (timezone !== accountZone) return { outcome: 'REJECTED', reason: 'ACCOUNT_ZONE_CHANGED' };
         const request = { identity: completionIdentity(entry.target, entry.item), operationId: globalThis.crypto.randomUUID(), expectedRevision: observed.record?.revision || 0,
           expectedSourceRevision: observed.sourceRevision, kind: 'complete', date, timezone };
         return await dispatch(ctx, request, false, token);
@@ -165,7 +176,11 @@ export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, 
     if (!ctx?.uid || !repository.list(ctx.uid).some(item => canonicalCompletion(item) === canonicalCompletion(request))) return { outcome: 'REJECTED', reason: 'RECEIPT_NOT_FOUND' };
     return dispatch(ctx, request, true, token);
   }
-  return { ensure, refresh, view, pending, complete, undo, resume, reset,
+  function accountTimezone() {
+    bind();
+    return zone && zone.epoch === epoch ? zone.value : null;
+  }
+  return { ensure, refresh, view, pending, complete, undo, resume, reset, accountTimezone,
     pendingAll: () => { const ctx = bind(); return ctx?.uid ? repository.list(ctx.uid) : []; }, busy: entry => busy.has(entryKey(entry)) };
 }
 

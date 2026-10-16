@@ -152,3 +152,30 @@ test('missing or duplicate inspection views invalidate any prior completed proje
   }
   w.sync.reset();
 });
+test('fresh device: completion uses the account zone from the authoritative inspection, never the device zone', async () => {
+  const w = setup(); await ready(w);
+  assert.equal(w.sync.accountTimezone(), 'Etc/UTC');
+  const before = w.calls.length;
+  // Device-locked zone differs from rooms/<uid>/settings/timezone (observed in staging: "UTC" vs "Etc/UTC").
+  const mismatch = await w.sync.complete(w.entry, '2026-10-15', 'UTC');
+  assert.deepEqual([mismatch.outcome, mismatch.reason], ['REJECTED', 'ACCOUNT_ZONE_CHANGED']);
+  assert.equal(w.calls.slice(before).filter(call => call.kind === 'mutate').length, 0, 'no request in a zone the account does not use');
+  assert.equal(w.sync.pendingAll().length, 0); assert.equal(w.io.value().taskCompletionResolutions, undefined);
+  const ok = await w.sync.complete(w.entry, '2026-10-15', w.sync.accountTimezone());
+  assert.equal(ok.outcome, 'CONFIRMED'); assert.equal(ok.receipt.timezone, 'Etc/UTC');
+  w.sync.reset(); assert.equal(w.sync.accountTimezone(), null, 'account reset forgets the zone');
+});
+test('account zone is invalidated by any room change and absent zones refuse completion', async () => {
+  const w = setup(); await ready(w);
+  w.listeners.get('settings').fn();
+  assert.equal(w.sync.accountTimezone(), null, 'a settings event makes the observed zone stale until re-inspected');
+  await new Promise(resolve => setTimeout(resolve, 200)); await w.sync.refresh(); await tick();
+  assert.equal(w.sync.accountTimezone(), 'Etc/UTC');
+  // An inspection without an account zone (e.g. an older server) leaves views fresh but no zone: refuse, never guess.
+  w.fault((input, result) => ({ json: async () => input.kind === 'inspect' ? { ...result.body, timezone: undefined } : result.body }));
+  w.listeners.get('settings').fn(); await new Promise(resolve => setTimeout(resolve, 200)); await w.sync.refresh(); await tick();
+  assert.equal(w.sync.view(w.entry)?.state, 'unfinished'); assert.equal(w.sync.accountTimezone(), null);
+  const refused = await w.sync.complete(w.entry, '2026-10-15', 'Etc/UTC');
+  assert.deepEqual([refused.outcome, refused.reason], ['REJECTED', 'ACCOUNT_ZONE_UNAVAILABLE']);
+  assert.equal(w.io.value().taskCompletionResolutions, undefined); w.sync.reset();
+});

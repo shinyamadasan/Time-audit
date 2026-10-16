@@ -479,6 +479,10 @@ function prepareDay(dayId) {
 let completionPopover = null, completionAnchor = null, completionDialog = null, completionNoticeTimer = null;
 let completionQuery = '', completionLimit = 50, completionOwnerGeneration = 0;
 const completions = () => globalThis.TaskCompletions;
+// Historical completion dates are chosen in the ACCOUNT's authoritative zone (from the fresh inspection), not the
+// device-locked zone; with no fresh account zone, completion refuses instead of guessing.
+function completionZone() { return completions()?.accountTimezone?.() || null; }
+function completionToday() { return localDateKey(Date.now(), completionZone() || accountTimezone()); }
 function completionEntry(id, day) { return authority()?.rawStaleUnfinished().items.find(entry => entry.item.id === id && entry.sourceDayId === day); }
 function completionPlannedDate(entry) {
   return entry.target.dateKey || localDateKey(entry.target.startMs, entry.target.timezone || accountTimezone());
@@ -528,7 +532,7 @@ function openCompletionPopover(control, dateForm = false) {
   pop.dataset.owner = state.staleOwner || '';
   pop.setAttribute('role', dateForm ? 'dialog' : 'menu'); pop.setAttribute('aria-label', dateForm ? 'Done earlier' : 'Task actions');
   const data = `data-id="${escape(entry.item.id)}" data-day="${escape(entry.sourceDayId)}"`;
-  const today = localDateKey();
+  const today = completionToday();
   let unresolved = null;
   try { unresolved = completions()?.pending(entry); } catch { unresolved = true; }
   if (unresolved || completions()?.busy(entry)) {
@@ -599,7 +603,7 @@ function showCompletionNotice(text, receipt = null, persistent = false) {
 async function completeHistorical(entry, date) {
   const owner = state.staleOwner, generation = completionOwnerGeneration;
   closeCompletionPopover();
-  const result = await completions().complete(entry, date, accountTimezone());
+  const result = await completions().complete(entry, date, completionZone());
   if (state.staleOwner !== owner || completionOwnerGeneration !== generation) return;
   if (result.outcome === 'CONFIRMED') {
     const current = completions().view(entry);
@@ -611,11 +615,11 @@ async function completeHistorical(entry, date) {
 function handleCompletionAction(action, control) {
   const id = control.dataset.id, day = control.dataset.day;
   switch (action) {
-    case 'complete-today': case 'retry-completion': { const entry = completionEntry(id, day); if (entry) void completeHistorical(entry, localDateKey()); return true; }
+    case 'complete-today': case 'retry-completion': { const entry = completionEntry(id, day); if (entry) void completeHistorical(entry, completionToday()); return true; }
     case 'reveal-stale-title': control.setAttribute('aria-expanded', String(control.getAttribute('aria-expanded') !== 'true')); return true;
     case 'completion-menu': openCompletionPopover(control); return true;
     case 'completion-date': openCompletionPopover(completionAnchor, true); return true;
-    case 'completion-yesterday': completionPopover.querySelector('input').value = addCalendarDays(localDateKey(), -1); return true;
+    case 'completion-yesterday': completionPopover.querySelector('input').value = addCalendarDays(completionToday(), -1); return true;
     case 'close-completion-popover': closeCompletionPopover(true); return true;
     case 'view-all-stale': openCompletionBacklog(); return true;
     case 'close-completion-backlog': closeCompletionBacklog(); staleSection()?.querySelector('[data-pc-action="view-all-stale"]')?.focus(); return true;

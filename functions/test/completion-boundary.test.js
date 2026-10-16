@@ -59,3 +59,11 @@ test('streaming room bound refuses oversized header and chunked data before allo
   await assert.rejects(readCompletionJson(new Response('0123456789'), 5), /ROOM_TOO_LARGE/);
   assert.deepEqual(await readCompletionJson(new Response('{"ok":true}'), 20), { ok: true });
 });
+test('inspect returns the account zone from the same snapshot; an invalid zone is withheld as null', async () => {
+  const f = fixture(), io = memory(f.room);
+  const handler = createCompletionHandler({ verifyIdToken: async uid => ({ uid }), domain: io, now: () => NOW });
+  const inspect = () => handler({ method: 'POST', authorization: 'Bearer alice', rawBody: Buffer.from(JSON.stringify({ kind: 'inspect', identities: [f.identity] })) });
+  assert.equal((await inspect()).body.timezone, 'Etc/UTC');
+  io.change(room => { room.settings.timezone = 'Not/AZone'; return room; });
+  assert.equal((await inspect()).body.timezone, null);
+});

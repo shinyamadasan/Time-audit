@@ -231,7 +231,9 @@ function createRequestHandler({ verifyIdToken, now }) {
           } catch (error) { views.push({ identity, state: 'needs-review', reason: error.reason || error.code || 'SOURCE_UNAVAILABLE' }); }
         }
         facts.views = views;
-        body = { outcome: 'CONFIRMED', uid, views };
+        // The account's authoritative zone from this SAME snapshot: completion requests must name it (see propose()).
+        const zone = snapshot.value.settings?.timezone;
+        body = { outcome: 'CONFIRMED', uid, timezone: typeof zone === 'string' && validPlanTimezone(zone) ? zone : null, views };
       } else if (input.kind === 'status') {
         keys(input, ['kind', 'request']);
         const request = input.request;
