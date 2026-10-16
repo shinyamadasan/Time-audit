@@ -132,6 +132,9 @@ async function openApp(page, { entries = [], focusRedemptions = [], plans = {}, 
   await page.waitForFunction(() => typeof window.quickRetroLog === 'function' && !!document.getElementById('timeline-blocks'));
   await expect(page.locator('#today-date')).not.toHaveText('');
   await expect(page.locator('#signin-overlay')).toBeHidden();
+  // Existing INIT clears unfocused autofill fields after 800ms. Finish startup before opening forms;
+  // the separate baseline startup draft-clear race remains, and all form assertions stay unchanged.
+  await page.waitForTimeout(850);
 }
 
 async function clickToastUndo(page) {
