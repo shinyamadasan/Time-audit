@@ -14,5 +14,5 @@ labelExtractors:
   op: EXTRACT(jsonPayload.op)
   outcome: EXTRACT(jsonPayload.outcome)
   reason: EXTRACT(jsonPayload.reason)
-  severity: EXTRACT(jsonPayload.severity)
+  severity: EXTRACT(severity)  # Cloud Logging lifts JSON `severity` to the entry level (observed in staging)
   uncertain: EXTRACT(jsonPayload.uncertain)
