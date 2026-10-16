@@ -1,6 +1,7 @@
 // TASK-018 client boundary: all writes go through the authenticated completion endpoint.
 import { completionIdentity, completionDigest, completionWireValue, canonicalCompletion, validateCompletionRecord } from './task-completion-model.js';
 import { createTaskCompletionRepository } from './task-completion-repository.js';
+import { localPlanDate } from './plan-tomorrow-model.js';
 
 export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, changed = () => {} }) {
   let owner = null, generation = 0, epoch = 0, candidates = [], signature = '', views = new Map(), inflight = null;
@@ -151,12 +152,14 @@ export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, 
         if (!current(ctx?.uid, token)) return { outcome: 'REJECTED', reason: 'ACCOUNT_CHANGED' };
         const observed = view(entry);
         if (!observed?.fresh || !observed.sourceRevision || !['unfinished', 'completed'].includes(observed.state)) return { outcome: 'REJECTED', reason: 'SOURCE_UNAVAILABLE' };
-        // Never send a device zone the account does not use: the server would refuse it, and the date was chosen in it.
+        // The zone is read AFTER this call's own refresh: always the account's authoritative zone, never the device's.
+        // A caller-supplied zone must match it; `date` omitted means "today" in that zone.
         const accountZone = accountTimezone();
         if (!accountZone) return { outcome: 'REJECTED', reason: 'ACCOUNT_ZONE_UNAVAILABLE' };
-        if (timezone !== accountZone) return { outcome: 'REJECTED', reason: 'ACCOUNT_ZONE_CHANGED' };
+        if (timezone != null && timezone !== accountZone) return { outcome: 'REJECTED', reason: 'ACCOUNT_ZONE_CHANGED' };
+        const day = date ?? localPlanDate(Date.now(), accountZone);
         const request = { identity: completionIdentity(entry.target, entry.item), operationId: globalThis.crypto.randomUUID(), expectedRevision: observed.record?.revision || 0,
-          expectedSourceRevision: observed.sourceRevision, kind: 'complete', date, timezone };
+          expectedSourceRevision: observed.sourceRevision, kind: 'complete', date: day, timezone: accountZone };
         return await dispatch(ctx, request, false, token);
       } catch (error) { return { outcome: 'REJECTED', reason: error.message }; }
       finally { if (current(ctx?.uid, token)) { busy.delete(key); changed(); } }

@@ -479,8 +479,8 @@ function prepareDay(dayId) {
 let completionPopover = null, completionAnchor = null, completionDialog = null, completionNoticeTimer = null;
 let completionQuery = '', completionLimit = 50, completionOwnerGeneration = 0;
 const completions = () => globalThis.TaskCompletions;
-// Historical completion dates are chosen in the ACCOUNT's authoritative zone (from the fresh inspection), not the
-// device-locked zone; with no fresh account zone, completion refuses instead of guessing.
+// Done earlier's date picker uses the ACCOUNT's authoritative zone when known (device zone only as a display fallback);
+// the zone actually sent is chosen by TaskCompletions.complete() after its own refresh, never pre-captured here.
 function completionZone() { return completions()?.accountTimezone?.() || null; }
 function completionToday() { return localDateKey(Date.now(), completionZone() || accountTimezone()); }
 function completionEntry(id, day) { return authority()?.rawStaleUnfinished().items.find(entry => entry.item.id === id && entry.sourceDayId === day); }
@@ -603,7 +603,7 @@ function showCompletionNotice(text, receipt = null, persistent = false) {
 async function completeHistorical(entry, date) {
   const owner = state.staleOwner, generation = completionOwnerGeneration;
   closeCompletionPopover();
-  const result = await completions().complete(entry, date, completionZone());
+  const result = await completions().complete(entry, date); // zone (and 'today' when date is null) chosen after its own refresh
   if (state.staleOwner !== owner || completionOwnerGeneration !== generation) return;
   if (result.outcome === 'CONFIRMED') {
     const current = completions().view(entry);
@@ -615,7 +615,7 @@ async function completeHistorical(entry, date) {
 function handleCompletionAction(action, control) {
   const id = control.dataset.id, day = control.dataset.day;
   switch (action) {
-    case 'complete-today': case 'retry-completion': { const entry = completionEntry(id, day); if (entry) void completeHistorical(entry, completionToday()); return true; }
+    case 'complete-today': case 'retry-completion': { const entry = completionEntry(id, day); if (entry) void completeHistorical(entry, null); return true; }
     case 'reveal-stale-title': control.setAttribute('aria-expanded', String(control.getAttribute('aria-expanded') !== 'true')); return true;
     case 'completion-menu': openCompletionPopover(control); return true;
     case 'completion-date': openCompletionPopover(completionAnchor, true); return true;

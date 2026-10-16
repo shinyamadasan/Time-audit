@@ -179,3 +179,18 @@ test('account zone is invalidated by any room change and absent zones refuse com
   assert.deepEqual([refused.outcome, refused.reason], ['REJECTED', 'ACCOUNT_ZONE_UNAVAILABLE']);
   assert.equal(w.io.value().taskCompletionResolutions, undefined); w.sync.reset();
 });
+test('common case: a room event just before the click still completes; zone and today come from the post-refresh view', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW }); // align client "today" with the test server clock
+  const w = setup(); await ready(w);
+  w.listeners.get('plans').fn(); // e.g. this device's own previous write: zone is stale at click time
+  assert.equal(w.sync.accountTimezone(), null);
+  const today = await w.sync.complete(w.entry); // Done today: no pre-captured date or zone
+  assert.equal(today.outcome, 'CONFIRMED', JSON.stringify(today));
+  assert.deepEqual([today.receipt.date, today.receipt.timezone], ['2026-10-15', 'Etc/UTC']);
+  const undo = await w.sync.undo({ uid: 'alice', record: today.record }); assert.equal(undo.outcome, 'CONFIRMED');
+  w.listeners.get('settings').fn();
+  const earlier = await w.sync.complete(w.entry, '2026-10-13'); // Done earlier: explicit date, zone from the account
+  assert.equal(earlier.outcome, 'CONFIRMED', JSON.stringify(earlier));
+  assert.deepEqual([earlier.receipt.date, earlier.receipt.timezone], ['2026-10-13', 'Etc/UTC']);
+  w.sync.reset();
+});
