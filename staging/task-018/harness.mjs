@@ -116,6 +116,8 @@ export async function runScenarios(transport, { nowMs = Date.now(), sizes = THRE
     const bad = [['missing', null], ['malformed', 'Bearer'], ['garbage', 'Bearer not.a.jwt'],
       ...(optional.foreignToken ? [['wrong-project', `Bearer ${optional.foreignToken}`]] : []),
       ...(optional.revokedToken ? [['revoked', `Bearer ${optional.revokedToken}`]] : [])];
+    if (!optional.foreignToken) report.manualGatesPending.push('SKIPPED auth:wrong-project (no STAGING_FOREIGN_ID_TOKEN)');
+    if (!optional.revokedToken) report.manualGatesPending.push('SKIPPED auth:revoked (no STAGING_REVOKED_ID_TOKEN)');
     for (const [kind, header] of bad) {
       const r = await io.raw(header, { kind: 'inspect', identities: [] });
       check(`auth:${kind}`, r.status === 401 && r.body?.reason === 'UNAUTHENTICATED', { status: r.status });
@@ -318,7 +320,12 @@ export function cloudTransport(config, env = process.env, fetchImpl = fetch) {
     },
     async oldClientReplay(args) {
       const { releasedClientReplay } = await import('./old-client.mjs');
-      return releasedClientReplay(config, { ...args, email: need('STAGING_USER_A_EMAIL'), password: need('STAGING_USER_A_PASSWORD') });
+      // The SDK queues once()/transaction() indefinitely when it cannot connect: bound it so the report is still written.
+      let timer;
+      const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new StopRun('OLD_CLIENT_TIMEOUT')), 60000); });
+      try {
+        return await Promise.race([releasedClientReplay(config, { ...args, email: need('STAGING_USER_A_EMAIL'), password: need('STAGING_USER_A_PASSWORD') }), timeout]);
+      } finally { clearTimeout(timer); }
     },
     sleep: ms => new Promise(done => setTimeout(done, ms)),
   };

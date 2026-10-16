@@ -210,14 +210,14 @@ gcloud billing projects unlink STAGING
 gcloud config configurations activate default
 ```
 
-Never: bare `firebase deploy`, `--force` on any deploy, any `--project time-audit-3c3da` mutation, production secret copies.
+Never: bare `firebase deploy`, `--force` on any deploy (the `--force` on staging artifacts:setpolicy and functions:delete is not a deploy), any `--project time-audit-3c3da` mutation, production secret copies.
 
 ## 8. Owner approval packet (one decision)
 
 Approve, for the **staging project only**:
 
 1. **Resource:** create project `chronasense-staging-<suffix>` with Firebase, default RTDB (asia-southeast1),
-   Email/Password Auth, one web app, two synthetic test users, one dummy Secret Manager secret, 4 log metrics.
+   Email/Password Auth, one web app, three synthetic test users (A, B, and C for the revoked-token case), one dummy Secret Manager secret, 4 log metrics.
 2. **Billing:** link a billing account (Blaze — required for Functions v2). Budget US$10/month, alerts 50/90/100 %.
    Expected spend ≈ US$0–2 per run; alerts are not a hard cap; stop = delete function/shutdown project.
 3. **IAM:** create custom role + `chronasense-completion` runtime SA bound to it; public `run.invoker` on the
@@ -225,7 +225,7 @@ Approve, for the **staging project only**:
    the custom role is proven insufficient, with a second explicit approval.
 4. **Secrets:** create a staging-only random `CHRONASENSE_WORKER_HMAC_KEYS` (never a production copy).
 5. **Deploy to staging:** rules (`--only database`) and `functions:chronasenseCompletionApi` from `ea10342`.
-6. **Data:** synthetic rooms only, seeded with the operator's short-lived staging token. Zero production data,
+6. **Data:** synthetic rooms only, seeded with the operator's own Google OAuth token (NOT project-bound; env only, sent only to the staging RTDB host, unset after the run). Zero production data,
    zero production changes.
 
 Not requested now: production rules/backend/frontend, merge, push, Pages publication, Android staging build.
@@ -239,3 +239,7 @@ Not requested now: production rules/backend/frontend, merge, push, Pages publica
   for a staging hostname; neither is authorized. Desktop + Android-sized viewport only until decided.
 - No hosted Linux Node 22 CI run for any candidate SHA (unchanged from readiness; requires a push decision).
 - Monitoring commits (`9349963`, `ea10342`) and this kit are on local branch `task-018-monitoring`, not in `task-018`.
+
+Note: the released-client scenario's SDK websocket/long-poll traffic does not pass `guardedFetch`; its isolation rests
+on `assertStagingConfig` (only the 4 validated staging fields reach `initializeApp`) and the per-run browser/route log.
+Its real SDK path has no offline proof (no Auth emulator here); a failure there is a false NO-GO, never a false GO.

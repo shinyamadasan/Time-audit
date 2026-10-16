@@ -21,7 +21,8 @@ export function scanLogs(entries, forbidden, harnessReport = null) {
   const checks = {
     noForbiddenStrings: hits.length === 0,
     eventsPresent: events.length > 0,
-    unauthenticatedReadNothing: unauthenticated.every(e => e.reads === 0),
+    // At least the three mandatory bad-token cases, and none of them read anything.
+    unauthenticatedReadNothing: unauthenticated.length >= 3 && unauthenticated.every(e => e.reads === 0),
     noUnavailableEvents: unavailable === 0,
     // Exactly one event per endpoint request the harness sent (deliberate missing-endpoint calls never reach it).
     oneEventPerRequest: harnessReport ? events.length === harnessReport.traffic?.endpointRequests : null,

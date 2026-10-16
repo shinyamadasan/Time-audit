@@ -168,8 +168,9 @@ test('harness: every scenario passes against the real handler; stops NO-GO on lo
 
 test('log scan: full-text leak scan, one event per request, 401 reads nothing; never echoes a hit', () => {
   const event = extra => ({ jsonPayload: { component: 'chronasense-completion-api', event: 'completion-request', op: 'mutate', outcome: 'CONFIRMED', status: 200, ...extra } });
-  const entries = [event(), event({ op: 'unparsed', outcome: 'REJECTED', status: 401, reason: 'UNAUTHENTICATED', reads: 0 })];
-  const harness = { traffic: { endpointRequests: 2 } };
+  const bad = () => event({ op: 'unparsed', outcome: 'REJECTED', status: 401, reason: 'UNAUTHENTICATED', reads: 0 });
+  const entries = [event(), bad(), bad(), bad()];
+  const harness = { traffic: { endpointRequests: 4 } };
   assert.equal(scanLogs(entries, ['stagingUserA'], harness).ok, true);
   assert.equal(scanLogs(entries, [], { traffic: { endpointRequests: 3 } }).checks.oneEventPerRequest, false);
   assert.equal(scanLogs([...entries, { textPayload: 'stack at stagingUserA' }], ['stagingUserA'], harness).ok, false, 'textPayload scanned');
