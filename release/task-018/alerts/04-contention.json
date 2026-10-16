@@ -1,0 +1,16 @@
+{
+  "displayName": "ChronaSense completion: repeated conditional-write contention",
+  "severity": "WARNING",
+  "combiner": "OR",
+  "conditions": [{
+    "displayName": "CONTENDED outcomes > 3 in 1 hour",
+    "conditionThreshold": {
+      "filter": "metric.type=\"logging.googleapis.com/user/completion_requests\" AND resource.type=\"cloud_run_revision\" AND metric.label.reason=\"CONTENDED\"",
+      "aggregations": [{ "alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }],
+      "comparison": "COMPARISON_GT", "thresholdValue": 3, "duration": "0s", "trigger": { "count": 1 }
+    }
+  }],
+  "alertStrategy": { "autoClose": "7200s" },
+  "notificationChannels": ["NOTIFICATION_CHANNEL"],
+  "documentation": { "mimeType": "text/markdown", "content": "Three-attempt CAS retry bound exhausted repeatedly (room write contention). Outcomes are explicit REJECTED; nothing is lost. Investigate concurrent writers." }
+}

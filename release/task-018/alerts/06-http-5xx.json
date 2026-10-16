@@ -1,0 +1,16 @@
+{
+  "displayName": "ChronaSense completion: HTTP 5xx",
+  "severity": "CRITICAL",
+  "combiner": "OR",
+  "conditions": [{
+    "displayName": "any 5xx in 5 min",
+    "conditionThreshold": {
+      "filter": "metric.type=\"run.googleapis.com/request_count\" AND resource.type=\"cloud_run_revision\" AND resource.label.service_name=\"chronasensecompletionapi\" AND metric.label.response_code_class=\"5xx\"",
+      "aggregations": [{ "alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }],
+      "comparison": "COMPARISON_GT", "thresholdValue": 0, "duration": "0s", "trigger": { "count": 1 }
+    }
+  }],
+  "alertStrategy": { "autoClose": "1800s" },
+  "notificationChannels": ["NOTIFICATION_CHANNEL"],
+  "documentation": { "mimeType": "text/markdown", "content": "Platform or handler 5xx, including the handler's 503 RESPONSE_TOO_LARGE / SERVICE_UNAVAILABLE (Cloud Run 429 throttling is 4xx and not covered here). Completions stay refused or UNKNOWN; check revision, SA and RTDB availability." }
+}

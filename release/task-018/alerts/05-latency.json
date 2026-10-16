@@ -1,0 +1,16 @@
+{
+  "displayName": "ChronaSense completion: excessive handler latency",
+  "severity": "WARNING",
+  "combiner": "OR",
+  "conditions": [{
+    "displayName": "handler latency p95 > 4 s over 15 min",
+    "conditionThreshold": {
+      "filter": "metric.type=\"logging.googleapis.com/user/completion_latency\" AND resource.type=\"cloud_run_revision\"",
+      "aggregations": [{ "alignmentPeriod": "900s", "perSeriesAligner": "ALIGN_PERCENTILE_95", "crossSeriesReducer": "REDUCE_MAX" }],
+      "comparison": "COMPARISON_GT", "thresholdValue": 4000, "duration": "0s", "trigger": { "count": 1 }
+    }
+  }],
+  "alertStrategy": { "autoClose": "3600s" },
+  "notificationChannels": ["NOTIFICATION_CHANNEL"],
+  "documentation": { "mimeType": "text/markdown", "content": "Staging p95 was ~1.2 s server-side (3.6 s max on an 8 MiB room). The client times out at 20 s and recovers as UNKNOWN; sustained slowness risks unknown outcomes." }
+}
