@@ -5102,3 +5102,6 @@ tests: Node 22.23.3 focused completion/functions 291/291 (284 prior + 7 new), RT
   read-amplification signal, not a room-size measure. Room-size refusal is reported only as `reason=ROOM_TOO_LARGE` /
   `sizeRefusal=true`. Cloud Logging lifts the JSON `severity` to LogEntry severity (observed in isolated staging).
 - Isolated staging (separate project): API acceptance 53/53, browser acceptance 22/22 with zero production requests.
+- Release hygiene: TASK-018 design prototypes, capture scripts and the interactive UX proposal (`design/task-018/`,
+  `TASK_018_UX_PROPOSAL.html`) are not shipped (GitHub Pages serves the repository root). They are preserved on the
+  local branch `task-018` at 07f77d4 (worktree `.worktrees/task-018`); historical references in TASK-018 docs point there.
