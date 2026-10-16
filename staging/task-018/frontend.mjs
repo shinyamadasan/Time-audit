@@ -4,7 +4,7 @@
 //   node staging/task-018/frontend.mjs verify --config <staging-config.json> --out <dir>
 import { cpSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertStagingConfig, PRODUCTION, StagingGuardError } from './guard.mjs';
 
@@ -34,7 +34,7 @@ export function stagingConfigBlock(config) {
 export function buildStagingFrontend({ config, out, source = join(REPO, 'www') }) {
   assertStagingConfig(config);
   const target = resolve(out), rel = relative(REPO, target);
-  if (!rel.startsWith('..') && !rel.includes(':')) refuse('staging artifact must be written OUTSIDE the repository');
+  if (!(rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel))) refuse('staging artifact must be written OUTSIDE the repository');
   if (existsSync(target) && readdirSync(target).length) refuse('output directory must be empty (disposable artifact)');
   const original = readFileSync(join(source, 'storage.js'), 'utf8'), eol = original.includes('\r\n') ? '\r\n' : '\n';
   const storage = original.replace(/\r\n/g, '\n');
@@ -59,7 +59,14 @@ export function verifyStagingFrontend({ config, out }) {
   const storage = readFileSync(join(out, 'storage.js'), 'utf8');
   report.configOk = storage.replace(/\r\n/g, '\n').includes(stagingConfigBlock(config)) && (storage.match(/const firebaseConfig = \{/g) || []).length === 1
     && storage.includes('https://asia-southeast1-${projectId}.cloudfunctions.net/chronasenseCompletionApi');
-  report.ok = report.dataPlaneHits.length === 0 && report.configOk;
+  // Tamper check: every file except the manifest must match the hashes recorded at build time.
+  const manifestPath = join(out, 'STAGING_MANIFEST.json');
+  const recorded = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : null;
+  const present = files(resolve(out)).map(at => relative(out, at).split(sep).join('/')).filter(name => name !== 'STAGING_MANIFEST.json');
+  report.manifestOk = Boolean(recorded) && recorded.projectId === config.projectId
+    && present.length === Object.keys(recorded.files).length
+    && present.every(name => recorded.files[name] === sha(readFileSync(join(out, name))));
+  report.ok = report.dataPlaneHits.length === 0 && report.configOk && report.manifestOk;
   if (!report.ok) throw Object.assign(new StagingGuardError('staging artifact is NOT isolated from production'), { report });
   return report;
 }

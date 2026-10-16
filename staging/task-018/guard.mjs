@@ -28,6 +28,7 @@ export function assertStagingConfig(config) {
   }
   if (authDomain !== `${projectId}.firebaseapp.com`) refuse('authDomain must belong to the staging project');
   const db = new URL(databaseURL);
+  if (db.search || db.hash || db.username || db.password || db.port) refuse('databaseURL must be a bare https origin');
   const dbOk = db.protocol === 'https:' && db.pathname === '/' && (db.hostname === `${projectId}-default-rtdb.asia-southeast1.firebasedatabase.app`
     || db.hostname === `${projectId}-default-rtdb.firebaseio.com`);
   if (!dbOk) refuse('databaseURL must be the staging project default RTDB instance');
@@ -44,6 +45,7 @@ export function guardedFetch(config, fetchImpl = fetch) {
     const url = new URL(typeof input === 'string' ? input : input.url);
     if (PRODUCTION.dataPlaneMarkers.some(marker => url.href.includes(marker))) refuse(`blocked production request to ${url.hostname}`);
     if (url.protocol !== 'https:' || !hosts.has(url.hostname)) refuse(`blocked non-staging request to ${url.hostname}`);
-    return fetchImpl(url, options);
+    // Redirects are never followed: the allowlist must hold for every hop, so a redirect is an error.
+    return fetchImpl(url, { ...options, redirect: 'error' });
   };
 }

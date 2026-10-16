@@ -58,8 +58,9 @@ insufficient, so the gap cannot pass silently. Stdout logging needs no runtime g
 2. Static artifact verifier (above) — build fails on any production data-plane identifier.
 3. Harness: every request goes through `guardedFetch` (https + exact staging host allowlist + production-marker
    refusal); tested against prod RTDB/functions/apiKey URLs, Pages and arbitrary hosts.
-4. Browser runs: Playwright `context.route('**/*', …)` aborts and records any URL containing `time-audit-3c3da`,
-   the production apiKey or `shinyamadasan.github.io`; run fails if the recorded list is non-empty. HAR retained.
+4. Browser runs (**manual step, not implemented in this kit**): block and record any URL containing
+   `time-audit-3c3da`, the production apiKey or `shinyamadasan.github.io` (DevTools request blocking or a
+   Playwright `context.route`); fail if anything is recorded. Not part of the API harness gate.
 5. Runtime SA exists only in staging; dotenv params point at staging RTDB; `assertStagingConfig` refuses mixes.
 
 ## 4. Automated staging tests
@@ -75,7 +76,12 @@ insufficient, so the gap cannot pass silently. Stdout logging needs no runtime g
 | `compete:one-head` | two intents, same expected revision → exactly one CONFIRMED |
 | `undo:exact-revision`, `undo:newer-source-refused` | conditional Undo; newer source refuses with no overwrite |
 | `isolation:cross-account`, `isolation:direct-write-denied` | B cannot affect A; rules deny direct resolution writes |
-| `concurrency:all-resolved` | 5 parallel completions, ≤3 rounds, zero UNKNOWN, siblings byte-identical |
+| `earlier-date:*` | Done-earlier date recorded in receipt; original plan byte-identical |
+| `old-client:*` | real cf43080 plan bridge (compat SDK 10.12.2) hydrates + pushes an edit twice; resolution record retained; projection honest |
+| `unavailable:*` | real client module: backend down ⇒ no completion; write error ⇒ UNKNOWN, staged, nothing written; recovery with same UUID |
+| `priority:refused` | `.priority` export metadata ⇒ `PRIORITY_UNSUPPORTED`, nothing written |
+| `http:no-429-5xx-nonjson`, `latency:every-call-below-guard` | every endpoint call measured; any 429/5xx/non-JSON stops the run |
+| `concurrency:all-resolved-siblings-intact` | 5 parallel completions, ≤3 rounds, zero UNKNOWN, siblings byte-identical. Server is concurrency 1 / maxInstances 1, so this proves queuing; heartbeat is the real CAS contention test |
 | `heartbeat:explicit-contention` | sibling heartbeat during completions: no UNKNOWN, no sibling loss, contention explicit |
 | `size:*`, `size:oversize-refused` | 0.5/2/8 MiB rooms meet p95; 16 MiB+64 KiB refused `ROOM_TOO_LARGE`, nothing written |
 | `latency:no-near-timeout` | no call ≥ 15 s (client timeout 20 s) |
@@ -83,18 +89,26 @@ insufficient, so the gap cannot pass silently. Stdout logging needs no runtime g
 Self-test (`node --test staging/task-018/staging.test.js`, 5/5): guard, artifact isolation, synthetic rooms, all
 scenarios against the real handler, **negative control** (lost-ack backend ⇒ NO-GO), log scanner.
 
+Every check stops the run on failure; the report is always written (`apiGo`, `stoppedAt`, `traffic`). Hard limits:
+300 endpoint requests, 64 MiB seeded, 20 s per request, redirects refused. Output says "API checks GO; manual gates
+pending" — cold start, RTDB bytes/cost and the log scan are separate gates, never implied by the harness.
+
 **Seeding finding (local emulator, real rules):** an ordinary owner cannot write `calendarPlanAuthority`, fence
-collections, `entries` or `brainDump` fixtures. The harness therefore seeds with the operator's short-lived staging
-token (`STAGING_SEED_ACCESS_TOKEN`). Unverified: that RTDB REST accepts a gcloud user token's scopes; fallback is
-`firebase database:set /rooms/uid_<A> room.json --project STAGING` with the same JSON.
+collections, `entries` or `brainDump` fixtures. The harness therefore seeds with `STAGING_SEED_ACCESS_TOKEN` = the
+operator's own short-lived Google OAuth token. **It is not project-bound** (it is valid wherever the operator has
+access, including production, for ~1 h); the guard only ever sends it to the staging RTDB host. Env only, unset
+after the run. Unverified: RTDB REST accepting its scopes; fallback `firebase database:set` with the same JSON.
 
-Not automated here (manual, from readiness §ISOLATED_ACCEPTANCE_TEST): UI flows in the approved Refined A, released-
-client merge replay (`fixtures/cf43080-client`), sign-out/account switch during a held response, backend-down UX
-(block endpoint in DevTools), physical Android. Revoked token: operator revokes A's sessions in console mid-run.
+`STAGING_REVOKED_ID_TOKEN` must come from a **third** user C revoked *before* the run (never A, whose token the run
+uses). `STAGING_FOREIGN_ID_TOKEN` must come from a non-production, non-staging project — **never a production user**.
 
-Run order: `node staging/task-018/harness.mjs --config STAGING_CONFIG.json --report D:\chronasense-staging\report.json`
-→ `gcloud logging read 'jsonPayload.component="chronasense-completion-api"' --project STAGING --freshness=2h --format=json > logs.json`
-→ `node staging/task-018/scan-logs.mjs logs.json <uidA> <uidB> <emailA> <emailB> "Synthetic staging task" <runLabel>`.
+Not automated (manual, readiness §ISOLATED_ACCEPTANCE_TEST): approved Refined A UI flows, sign-out/account switch
+during a held response, browser isolation route log, physical Android.
+
+Run order (from the worktree root, absolute paths):
+1. `node staging/task-018/harness.mjs --config D:\chronasense-staging\STAGING_CONFIG.json --report D:\chronasense-staging\report.json`
+2. `gcloud logging read 'resource.labels.service_name="chronasensecompletionapi"' --project=STAGING --freshness=3h --format=json > D:\chronasense-staging\logs.json`
+3. `node staging/task-018/scan-logs.mjs D:\chronasense-staging\logs.json D:\chronasense-staging\report.json <uidA> <uidB> <emailA> <emailB> "Synthetic staging task" <runLabel>`
 
 ## 5. Go/no-go thresholds (fixed before testing — `thresholds.json`)
 
@@ -123,8 +137,8 @@ Expected per full run (estimate, not measured): ≈ 45 completions, < 250 MB RTD
 container image. Expected to stay inside no-cost usage quotas; the budget is the backstop.
 
 - Budget: US$10/month on the staging project only, alerts at 50/90/100 % to the owner. **Alerts are not a cap.**
-  Stop procedure: delete the staging function (`firebase functions:delete chronasenseCompletionApi --region
-  asia-southeast1 --project STAGING`), or shut down the whole staging project — never touch production billing.
+  Hard stop: `gcloud billing projects unlink STAGING` (stops all paid usage) or shut down the staging project.
+  Soft stop: delete only the function. Never touch production billing.
 - Artifact Registry cleanup policy set at deploy (`firebase functions:artifacts:setpolicy --project STAGING`).
 - Log metrics (`monitoring/*.yaml`): `completion_requests` (op/outcome/reason/severity/uncertain), `completion_latency`
   (distribution), `completion_cas_conflicts` (0–3 distribution), `completion_alerting_events`. Alerts for staging:
@@ -133,60 +147,70 @@ container image. Expected to stay inside no-cost usage quotas; the budget is the
   `unconfirmedWrite`). Platform: Cloud Run request count/latency/5xx and RTDB bandwidth/load dashboards.
   Verify the Cloud Run service name is `chronasensecompletionapi` on first deploy and fix the filters if not.
 
-## 7. Exact provisioning actions (NOT run — require the approval in §8)
+## 7. Exact provisioning actions
 
-Placeholders: `STAGING` = `chronasense-staging-<suffix>`, `BILLING` = billing account ID, `D:\chronasense-staging` =
-disposable directory outside every repo. Firebase CLI 15.2.1, Node 22.23.3.
+Placeholders: `STAGING` = `chronasense-staging-<suffix>`, `BILLING` = billing account ID, `WT` = absolute path of the
+`task-018-monitoring` worktree, `D:\chronasense-staging` = disposable directory outside every repo. Firebase CLI
+15.2.1, Node 22.23.3. **Run one command at a time and stop on any non-zero exit** (`$LASTEXITCODE`); never paste
+the block. A dedicated gcloud configuration makes STAGING the default/quota project, so no command can fall back
+to another project (the machine default is an unrelated project).
 
 ```powershell
-# 1 Project, billing, Firebase, APIs
+# 0 Isolated CLI context (switch back with: gcloud config configurations activate default)
+gcloud config configurations create chronasense-staging
+gcloud config set account <operator-email>
+# 1 Project, billing, Firebase, APIs, budget
 gcloud projects create STAGING --name="ChronaSense Staging"
+gcloud config set project STAGING
 gcloud billing projects link STAGING --billing-account=BILLING
 firebase projects:addfirebase STAGING
-gcloud services enable cloudfunctions.googleapis.com run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com firebasedatabase.googleapis.com identitytoolkit.googleapis.com secretmanager.googleapis.com logging.googleapis.com monitoring.googleapis.com --project=STAGING
-gcloud billing budgets create --billing-account=BILLING --display-name="chronasense-staging" --budget-amount=10USD --filter-projects=projects/STAGING --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0
-# 2 Console (no reliable CLI): RTDB default instance, asia-southeast1, locked mode; Auth: enable Email/Password;
-#   add users A and B (generated passwords, stored only in the operator's password manager); confirm `localhost`
-#   is an authorized domain. Web app:
+gcloud services enable cloudfunctions.googleapis.com run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com firebasedatabase.googleapis.com identitytoolkit.googleapis.com secretmanager.googleapis.com logging.googleapis.com monitoring.googleapis.com billingbudgets.googleapis.com --project=STAGING
+gcloud billing budgets create --billing-account=BILLING --billing-project=STAGING --display-name="chronasense-staging" --budget-amount=10USD --filter-projects=projects/STAGING --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0
+# 2 RTDB default instance (asia-southeast1) via the Firebase Realtime Database Management API, then rules (step 6).
+#   POST https://firebasedatabase.googleapis.com/v1beta/projects/STAGING/locations/asia-southeast1/instances?databaseId=STAGING-default-rtdb
+#   body {"type":"DEFAULT_DATABASE"}  (Authorization: operator token, x-goog-user-project: STAGING)
+#   Auth: initialize Firebase Authentication and enable Email/Password (console "Get started", or Identity Toolkit admin
+#   config PATCH signIn.email.enabled=true). Users A, B (and C for the revoked-token case) with generated passwords kept
+#   only in the operator's secret store / process env. Web app:
 firebase apps:create WEB chronasense-staging-web --project STAGING
 firebase apps:sdkconfig WEB <APP_ID> --project STAGING      # -> D:\chronasense-staging\STAGING_CONFIG.json (4 fields)
 # 3 Runtime identity (least privilege)
 gcloud iam roles create chronasenseCompletionRuntime --project=STAGING --title="ChronaSense completion runtime" --permissions=firebasedatabase.instances.get,firebasedatabase.instances.update,firebaseauth.users.get --stage=GA
 gcloud iam service-accounts create chronasense-completion --project=STAGING --display-name="ChronaSense completion runtime"
 gcloud projects add-iam-policy-binding STAGING --member=serviceAccount:chronasense-completion@STAGING.iam.gserviceaccount.com --role=projects/STAGING/roles/chronasenseCompletionRuntime --condition=None
-# 4 Shared-entrypoint bootstrap: staging-only dummy HMAC secret (Action API is NOT deployed; completion gets no access)
+# 4 Shared-entrypoint bootstrap: staging-only random HMAC secret (Action API is NOT deployed; completion gets no access)
 node -e "console.log(JSON.stringify({stg1:require('crypto').randomBytes(32).toString('hex')}))" | gcloud secrets create CHRONASENSE_WORKER_HMAC_KEYS --project=STAGING --replication-policy=automatic --data-file=-
-# 5 Disposable deploy artifact from the reviewed monitoring SHA (outside the repo)
-git -C "<repo>" archive ea10342 --prefix=src/ -o D:\chronasense-staging\src.tar; tar -xf D:\chronasense-staging\src.tar -C D:\chronasense-staging
-#   D:\chronasense-staging\src\functions\.env.STAGING :
-#     CHRONASENSE_OWNER_SUBJECT=staging-unused
-#     CHRONASENSE_OWNER_FIREBASE_UID=staging-unused
-#     CHRONASENSE_FIREBASE_WEB_API_KEY=<staging apiKey>
-#     CHRONASENSE_RTDB_URL=https://STAGING-default-rtdb.asia-southeast1.firebasedatabase.app
-#     CHRONASENSE_COMPLETION_SERVICE_ACCOUNT=chronasense-completion@STAGING.iam.gserviceaccount.com
-cd D:\chronasense-staging\src; npm ci --prefix functions; node scripts/functions-shared.mjs
-# 6 Deploy (rules first, then ONLY the completion function)
+# 5 Disposable deploy artifact from the reviewed monitoring SHA (outside every repo) + env gate
+git -C WT archive ea10342 --prefix=src/ -o D:\chronasense-staging\src.tar
+tar -xf D:\chronasense-staging\src.tar -C D:\chronasense-staging
+#   write D:\chronasense-staging\src\functions\.env.STAGING (5 keys: OWNER_SUBJECT/OWNER_FIREBASE_UID placeholders,
+#   staging WEB_API_KEY, staging RTDB_URL, chronasense-completion@STAGING SA), then:
+node WT\staging\task-018\check-deploy-env.mjs --config D:\chronasense-staging\STAGING_CONFIG.json --env D:\chronasense-staging\src\functions\.env.STAGING
+npm ci --prefix D:\chronasense-staging\src\functions
+node D:\chronasense-staging\src\scripts\functions-shared.mjs
+# 6 Deploy from D:\chronasense-staging\src (rules first, then ONLY the completion function)
 firebase deploy --project STAGING --only database --non-interactive
 firebase deploy --project STAGING --only functions:chronasenseCompletionApi --non-interactive
-firebase functions:artifacts:setpolicy --project STAGING
+firebase functions:artifacts:setpolicy --project STAGING --force
 # 7 Post-deploy verification (read-only)
 gcloud run services describe chronasensecompletionapi --region=asia-southeast1 --project=STAGING --format="value(spec.template.spec.serviceAccountName)"
 gcloud run services get-iam-policy chronasensecompletionapi --region=asia-southeast1 --project=STAGING
 gcloud secrets get-iam-policy CHRONASENSE_WORKER_HMAC_KEYS --project=STAGING     # must NOT list the completion SA
 gcloud projects get-iam-policy STAGING --format=json                            # build identity: no Editor
 gcloud functions list --project=STAGING                                         # exactly chronasenseCompletionApi
-gcloud projects get-iam-policy time-audit-3c3da --format=json                   # no STAGING principal
+gcloud projects get-iam-policy time-audit-3c3da --format=json                   # read-only: no STAGING principal
 # 8 Monitoring
-foreach ($m in 'completion_requests','completion_latency','completion_cas_conflicts','completion_alerting_events') { gcloud logging metrics create $m --project=STAGING --config-from-file=staging/task-018/monitoring/$m.yaml }
-# 9 Frontend + tests
-node staging/task-018/frontend.mjs build --config D:\chronasense-staging\STAGING_CONFIG.json --out D:\chronasense-staging\site
-node staging/task-018/harness.mjs --config D:\chronasense-staging\STAGING_CONFIG.json --report D:\chronasense-staging\report.json
-# 10 Teardown after evidence is retained
-firebase functions:delete chronasenseCompletionApi --region asia-southeast1 --project STAGING
-gcloud projects delete STAGING          # optional; 30-day recoverable shutdown
+foreach ($m in 'completion_requests','completion_latency','completion_cas_conflicts','completion_alerting_events') { gcloud logging metrics create $m --project=STAGING --config-from-file=WT\staging\task-018\monitoring\$m.yaml }
+# 9 Frontend + acceptance (from WT)
+node WT\staging\task-018\frontend.mjs build --config D:\chronasense-staging\STAGING_CONFIG.json --out D:\chronasense-staging\site
+node WT\staging\task-018\harness.mjs --config D:\chronasense-staging\STAGING_CONFIG.json --report D:\chronasense-staging\report.json
+# 10 Hard stop after evidence is retained (owner decides; deleting only the function is the soft stop)
+firebase functions:delete chronasenseCompletionApi --region asia-southeast1 --project STAGING --force
+gcloud billing projects unlink STAGING
+gcloud config configurations activate default
 ```
 
-Never: bare `firebase deploy`, `--force`, any `--project time-audit-3c3da` command, production secret copies.
+Never: bare `firebase deploy`, `--force` on any deploy, any `--project time-audit-3c3da` mutation, production secret copies.
 
 ## 8. Owner approval packet (one decision)
 
