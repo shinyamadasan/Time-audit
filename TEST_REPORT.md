@@ -2263,3 +2263,9 @@ untested: deployed Firebase ID-token/revocation/IAM/service isolation, physical 
 - Review follow-up (independent PASS WITH NOTES on 9349963): clock/event build/sink all inside the guard (new test: throwing
   clock still returns the committed CONFIRMED); PRIORITY_UNSUPPORTED no longer flagged as size refusal; `transportError`
   rename with name-only classes; mutate UNKNOWN → `unconfirmedWrite` + ERROR; ETag sentinel added. Node22 291/291, emulator 14/14.
+
+## TASK-018 account-zone fix (0f762aa + 7bf4961) · 2026-10-16
+- Node 22.23.3 focused completion/functions: 295/295; RTDB emulator 14/14; affected browser specs
+  (task-completion, unfinished-ux) 26/26 locally; www parity, functions/shared and rules builder OK; ESLint clean on sources.
+- Isolated staging (chronasense-staging-t018, function rebuilt from 7bf4961 by the dedicated build identity):
+  real-cloud browser acceptance 24/24, zero production requests (HTTP checked pre-send, WebSockets incl. RTDB ns pre-connect).

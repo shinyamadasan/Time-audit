@@ -7,6 +7,9 @@
   Firebase wire comparison. `task-completion-repository.js` stores account-bound pending commands only.
 - `task-completion-sync.js`: authenticated inspection/commands, exact receipt recovery, revision-aware Undo,
   source/context listeners and account-generation guards. No optimistic durable completion or task cache.
+  `accountTimezone()` exposes the account zone (`rooms/<uid>/settings/timezone`) from the latest fresh inspection;
+  `complete()` chooses date/zone after its own refresh, never the device-locked `ta3-tz`. UI: `completionZone()`/`completionToday()`
+  (planning-continuity-ui.js) only size the Done-earlier picker.
 - `functions/src/completion-api.js`: dedicated Firebase-session authentication, immutable snapshot validation,
   bounded room CAS and authoritative receipt readback. `completion-domain.js`: the explicitly owner-approved
   privileged exception; owner-derived paths, streaming bounds, mandatory ETag and independent resolution-only

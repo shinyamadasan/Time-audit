@@ -5105,3 +5105,8 @@ tests: Node 22.23.3 focused completion/functions 291/291 (284 prior + 7 new), RT
 - Release hygiene: TASK-018 design prototypes, capture scripts and the interactive UX proposal (`design/task-018/`,
   `TASK_018_UX_PROPOSAL.html`) are not shipped (GitHub Pages serves the repository root). They are preserved on the
   local branch `task-018` at 07f77d4 (worktree `.worktrees/task-018`); historical references in TASK-018 docs point there.
+- Fix (found in isolated staging): a fresh device locks its own browser zone (`ta3-tz`) and never adopts the account's
+  `settings.timezone`, so every historical completion was refused with ACCOUNT_ZONE_CHANGED ("UTC" vs "Etc/UTC").
+  Inspect now returns the account zone from the same snapshot; `complete()` uses it after its own refresh ("today"
+  computed in it); a mismatching caller zone or a missing zone refuses locally. Server checks unchanged.
+  Staging: browser acceptance 24/24 on the fix (fresh-device completion saved in the account zone).
