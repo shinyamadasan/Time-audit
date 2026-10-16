@@ -1,0 +1,21 @@
+{
+  "_note": "TASK-018 staging go/no-go thresholds, fixed BEFORE any cloud run (2026-10-16). Latencies are client end-to-end ms from the harness host, warm. Changing a threshold after seeing results requires a recorded owner decision. Size limits are never relaxed to pass.",
+  "clientTimeoutGuardMs": 15000,
+  "single": { "tasks": 22, "samples": 10, "p50Ms": 1500, "p95Ms": 4000, "maxMs": 8000 },
+  "concurrency": { "tasks": 10, "parallel": 5, "maxRounds": 3 },
+  "heartbeat": { "tasks": 5, "intervalMs": 500, "minConfirmedRatio": 0.6 },
+  "sizes": [
+    { "name": "0.5MiB", "tasks": 22, "bytes": 524288, "samples": 3, "p95Ms": 4000 },
+    { "name": "2MiB", "tasks": 100, "bytes": 2097152, "samples": 3, "p95Ms": 6000 },
+    { "name": "8MiB", "tasks": 1000, "bytes": 8388608, "samples": 3, "p95Ms": 12000 }
+  ],
+  "oversize": { "bytes": 16842752 },
+  "coldStart": { "maxMs": 12000 },
+  "cost": {
+    "maxRtdbDownloadedBytesPerRun": 2000000000,
+    "maxDownloadAmplificationPerCompletion": 3.5,
+    "maxRunCostUsd": 5,
+    "stagingMonthlyBudgetUsd": 10
+  },
+  "monitoring": { "eventPerRequest": 1, "forbiddenStringHitsInLogs": 0 }
+}

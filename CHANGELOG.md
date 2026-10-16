@@ -5096,3 +5096,12 @@ changed:
     class-only `completion-unavailable` event on the 503 path. Endpoint metadata unchanged.
 tests: Node 22.23.3 focused completion/functions 291/291 (284 prior + 7 new), RTDB emulator 14/14, lint clean,
   rules/shared/www parity unchanged. No deployment, IAM, cloud, push or merge.
+
+## TASK-018 — staging preparation kit (owner-direct, branch: task-018-monitoring)
+changed:
+  - staging/task-018/: production guard + allowlisted fetch, disposable staging frontend builder/verifier (only the 4
+    public config values differ; built outside repo), API-level staging harness with synthetic rooms and pre-fixed
+    go/no-go thresholds, log-based metric definitions, log privacy scanner, README with IAM, test plan, cost,
+    exact provisioning commands and the single owner approval packet.
+tests: `node --test staging/task-018/staging.test.js` 5/5 offline (incl. lost-ack negative control ⇒ NO-GO).
+  No cloud resource, billing, IAM, secret, deploy, production data, push or merge.

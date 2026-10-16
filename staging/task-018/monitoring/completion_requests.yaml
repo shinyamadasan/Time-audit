@@ -1,0 +1,18 @@
+# gcloud logging metrics create completion_requests --project=STAGING_PROJECT_ID --config-from-file=completion_requests.yaml
+description: TASK-018 completion requests by op/outcome/reason/severity (sanitized events only).
+filter: 'resource.type="cloud_run_revision" AND resource.labels.service_name="chronasensecompletionapi" AND jsonPayload.component="chronasense-completion-api" AND jsonPayload.event="completion-request"'
+metricDescriptor:
+  metricKind: DELTA
+  valueType: INT64
+  labels:
+  - { key: op, valueType: STRING }
+  - { key: outcome, valueType: STRING }
+  - { key: reason, valueType: STRING }
+  - { key: severity, valueType: STRING }
+  - { key: uncertain, valueType: STRING }
+labelExtractors:
+  op: EXTRACT(jsonPayload.op)
+  outcome: EXTRACT(jsonPayload.outcome)
+  reason: EXTRACT(jsonPayload.reason)
+  severity: EXTRACT(jsonPayload.severity)
+  uncertain: EXTRACT(jsonPayload.uncertain)

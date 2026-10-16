@@ -1,0 +1,12 @@
+# gcloud logging metrics create completion_alerting_events --project=STAGING_PROJECT_ID --config-from-file=completion_alerting_events.yaml
+description: TASK-018 events needing attention - unconfirmed writes, size refusals, integrity/contention, 503s.
+filter: 'resource.type="cloud_run_revision" AND resource.labels.service_name="chronasensecompletionapi" AND jsonPayload.component="chronasense-completion-api" AND (jsonPayload.unconfirmedWrite=true OR jsonPayload.sizeRefusal=true OR jsonPayload.reason=("CONTENDED" OR "ACK_UNPROVEN" OR "LENS_REFUSED" OR "WRITE_DENIED" OR "RECORD_CONFLICT") OR jsonPayload.event="completion-unavailable")'
+metricDescriptor:
+  metricKind: DELTA
+  valueType: INT64
+  labels:
+  - { key: reason, valueType: STRING }
+  - { key: uncertain, valueType: STRING }
+labelExtractors:
+  reason: EXTRACT(jsonPayload.reason)
+  uncertain: EXTRACT(jsonPayload.uncertain)
