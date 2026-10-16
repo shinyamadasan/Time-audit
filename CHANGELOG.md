@@ -5096,3 +5096,9 @@ changed:
     class-only `completion-unavailable` event on the 503 path. Endpoint metadata unchanged.
 tests: Node 22.23.3 focused completion/functions 291/291 (284 prior + 7 new), RTDB emulator 14/14, lint clean,
   rules/shared/www parity unchanged. No deployment, IAM, cloud, push or merge.
+
+## TASK-018 — monitoring clarification (release candidate)
+- `readBytes` buckets the SUM of bytes across all room reads in one request (resolution-key reads excluded); it is a
+  read-amplification signal, not a room-size measure. Room-size refusal is reported only as `reason=ROOM_TOO_LARGE` /
+  `sizeRefusal=true`. Cloud Logging lifts the JSON `severity` to LogEntry severity (observed in isolated staging).
+- Isolated staging (separate project): API acceptance 53/53, browser acceptance 22/22 with zero production requests.
