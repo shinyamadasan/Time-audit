@@ -1,6 +1,31 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## Historical task resolution (TASK-018, approved Refined A)
+
+- `task-completion-model.js`: typed original identity, resolution validation, canonical hashes and conservative
+  Firebase wire comparison. `task-completion-repository.js` stores account-bound pending commands only.
+- `task-completion-sync.js`: authenticated inspection/commands, exact receipt recovery, revision-aware Undo,
+  source/context listeners and account-generation guards. No optimistic durable completion or task cache.
+- `functions/src/completion-api.js`: dedicated Firebase-session authentication, immutable snapshot validation,
+  bounded room CAS and authoritative receipt readback. `completion-domain.js`: the explicitly owner-approved
+  privileged exception; owner-derived paths, streaming bounds, mandatory ETag and independent resolution-only
+  write lens. Existing user-scoped Action API cannot import this exception. `functions/index.js` exports the
+  separate completion function with a required dedicated-service-account parameter; no deployment performed.
+- Rules builder/generated rules deny all direct resolution writes; owner reads inherit existing isolation.
+  `functions/shared/task-completion-model.js` is generated from the root source.
+- `plan-authority.js`: `rawStaleUnfinished` preserves original history; `staleUnfinished` adds only a confirmed,
+  source-matching completion overlay. `storage.js` supplies authenticated context and account/teardown resets.
+- `planning-continuity-ui.js` / `.css`: five-row preview, searchable bounded backlog, anchored More/Done earlier,
+  separate title access, actual pending/error/unknown recovery and conditional temporary Undo. Existing timeline
+  check styling matches Unfinished; timeline completion semantics and Brain Dump behavior stay unchanged.
+- Tests: `task-completion*.test.js`, `functions/test/completion-boundary.test.js`, `tests/task-completion.spec.js`,
+  retained `tests/unfinished-ux.spec.js`; generated `www/` parity. Governed token
+  `20261015-task018-completion-v1`; Brain Dump retains `20261015-task015-plan-tray-v1`.
+- Contract: `TASK_018_COMPLETION_DURABILITY_CONTRACT.md`; current evidence/limitations:
+  `TASK_018_IMPLEMENTATION_HANDOFF.md`. TASK-017's design-only completion restriction below is historical;
+  owner-authorized TASK-018 implements separate resolution facts, never old-day completion or deletion.
+
 ## Unfinished UX V1 (TASK-017 review candidate, 2026-10-15)
 
 - `planning-continuity-ui.js`: `staleHtml` renders five ordinary backlog rows per page; native More actions

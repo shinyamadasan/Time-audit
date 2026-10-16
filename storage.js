@@ -212,6 +212,15 @@ function ownedRoomRef() {
   return fbRoomRef;
 }
 
+globalThis.getTaskCompletionAppContext = () => {
+  const user = currentUser, ref = ownedRoomRef();
+  const projectId = fbApp?.options?.projectId;
+  if (!user?.uid || roomCode !== `uid_${user.uid}` || !ref) return null;
+  return { uid: user.uid, roomRef: ref, timezone: settings.timezone,
+    endpoint: projectId ? `https://asia-southeast1-${projectId}.cloudfunctions.net/chronasenseCompletionApi` : null,
+    getIdToken: typeof user.getIdToken === 'function' ? () => user.getIdToken() : null };
+};
+
 /** Detaches the previous account's active state without stopping/logging it. Its scoped local record and
  *  Firebase room remain authoritative, so returning to that account restores/reconciles the same state. */
 function detachTimerAwayRuntime(previousOwner) {
@@ -421,6 +430,7 @@ function rebindAccountLocalState() {
   // a save nor its hidden analysis DOM can carry that account's review, entries or plans into this one.
   if (typeof resetReviewModalForAccount === 'function') resetReviewModalForAccount();
   globalThis.resetIntelligenceForAccount?.();
+  globalThis.resetTaskCompletionsForAccount?.();
   globalThis.PlanAuthority?.invalidate();
   if (typeof syncCommitmentFromPlan === 'function') syncCommitmentFromPlan();
   if (typeof _todayRenderKey !== 'undefined') _todayRenderKey = '__FORCE__';
@@ -2367,6 +2377,7 @@ function teardownRoomListeners() {
   if (_partnerSharedListener) { _partnerSharedListener.off(); _partnerSharedListener = null; }
   partnerShared = null;
   _lastSharedPayloadSignature = null;
+  globalThis.resetTaskCompletionsForAccount?.();
 }
 
 function initPartnerListener(partnerUid) {

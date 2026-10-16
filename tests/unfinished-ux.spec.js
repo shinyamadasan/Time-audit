@@ -189,15 +189,15 @@ async function raw(page, store = 'operational') {
 }
 
 async function dismiss(page, id = 'a') {
-  await row(page, id).getByText('More actions', { exact: true }).click();
-  await row(page, id).getByRole('button', { name: 'Not doing this', exact: true }).click();
+  await row(page, id).getByRole('button', { name: /^More actions:/ }).click();
+  await page.getByRole('menuitem', { name: 'Not doing this', exact: true }).click();
 }
 
 for (const store of ['legacy', 'operational', 'calendar']) {
   test(`${store}: targeted dismissal + same-clock Undo preserve original history and survive stale merge`, async ({ page }) => {
     await seed(page, store);
     const before = await raw(page, store);
-    await expect(row(page, 'a').getByRole('button', { name: 'Not doing this' })).toBeHidden();
+    await expect(page.getByRole('menuitem', { name: 'Not doing this' })).toBeHidden();
     await dismiss(page);
     await expect(row(page, 'a')).toHaveCount(0);
     await expect(row(page, 'b')).toBeVisible();
@@ -222,23 +222,19 @@ for (const store of ['legacy', 'operational', 'calendar']) {
   });
 }
 
-test('125 tasks stay at five rows, every page reachable, compact close and reopen', async ({ page }) => {
-  await seed(page, 'operational', Array.from({ length: 125 }, (_, n) => item(String(n).padStart(3, '0'))));
-  const ids = new Set();
-  for (let p = 0; p < 25; p++) {
-    await expect(recovery(page).locator('[data-pc-stale]')).toHaveCount(5);
-    (await recovery(page).locator('[data-pc-stale]').evaluateAll(nodes => nodes.map(n => n.dataset.pcStale))).forEach(id => ids.add(id));
-    if (p < 24) await recovery(page).getByRole('button', { name: 'Next tasks' }).click();
-  }
-  expect(ids.size).toBe(125);
-  await expect(recovery(page).getByRole('button', { name: 'Next tasks' })).toBeDisabled();
-  await recovery(page).getByRole('button', { name: 'Previous tasks' }).click();
-  await expect(recovery(page)).toContainText('116–120 of 125');
-  await recovery(page).getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(recovery(page).locator('[data-pc-stale]')).toHaveCount(0);
-  expect((await recovery(page).boundingBox()).height).toBeLessThanOrEqual(56);
-  await recovery(page).getByRole('button', { name: 'Unfinished · 125' }).click();
-  await expect(recovery(page)).toContainText('1–5 of 125');
+test('125 tasks use five-item preview and bounded searchable backlog', async ({ page }) => {
+  await seed(page, 'calendar', Array.from({ length: 125 }, (_, i) => item('large-' + i)));
+  await expect(recovery(page).locator('[data-pc-stale]')).toHaveCount(5);
+  await recovery(page).getByRole('button', { name: /View all/ }).click();
+  const dialog=page.getByRole('dialog', { name: 'All unfinished tasks' });
+  await expect(dialog.locator('[data-pc-stale]')).toHaveCount(50);
+  await dialog.getByRole('button', { name: 'Show 50 more' }).click();
+  await expect(dialog.locator('[data-pc-stale]')).toHaveCount(100);
+  await dialog.getByRole('searchbox').fill('large-124');
+  await expect(dialog.locator('[data-pc-stale]')).toHaveCount(1);
+  await expect(dialog).toContainText('large-124');
+  await dialog.getByRole('button', { name: 'Close backlog' }).click();
+  await expect(recovery(page).locator('[data-pc-stale]')).toHaveCount(5);
 });
 
 test('same item id on different days dismisses only the chosen source', async ({ page }) => {
@@ -251,8 +247,8 @@ test('same item id on different days dismisses only the chosen source', async ({
     });
   });
   const chosen = recovery(page).locator('[data-pc-stale="same"][data-pc-day="cal1:2026-09-23"]');
-  await chosen.getByText('More actions', { exact: true }).click();
-  await chosen.getByRole('button', { name: 'Not doing this' }).click();
+  await chosen.getByRole('button', { name: /^More actions:/ }).click();
+  await page.getByRole('menuitem', { name: 'Not doing this' }).click();
   await expect(recovery(page)).toContainText('Other source');
   await expect.poll(() => page.evaluate(() => PlanAuthority.staleUnfinished().items.map(e => e.sourceDayId))).toEqual(['cal1:2026-09-22']);
   await recovery(page).getByRole('button', { name: 'Undo', exact: true }).click();
@@ -261,11 +257,28 @@ test('same item id on different days dismisses only the chosen source', async ({
 
 test('double dismissal and double Undo are single mutations', async ({ page }) => {
   await seed(page);
-  await row(page, 'a').getByText('More actions', { exact: true }).click();
-  await row(page, 'a').getByRole('button', { name: 'Not doing this' }).evaluate(button => { button.click(); button.click(); });
-  await recovery(page).getByRole('button', { name: 'Undo', exact: true }).evaluate(button => { button.click(); button.click(); });
-  expect(await raw(page)).toHaveLength(2);
-  expect((await raw(page)).filter(i => i.dismissedAt)).toHaveLength(0);
+  await row(page, 'a').getByRole('button', { name: /^More actions:/ }).click();
+  await expect(page.getByRole('menuitem', { name: 'Not doing this' })).toBeVisible();
+  // Background inspection can replace a Locator.evaluate ElementHandle before its callback runs.
+  // Query and double-click the connected control in one turn; the second click still tests one-shot behavior.
+  await page.evaluate(() => {
+    const button = document.querySelector('[role="menuitem"][data-pc-action="dismiss"]');
+    if (!button?.isConnected) throw new Error('Dismiss control is not connected');
+    button.click(); button.click();
+  });
+  const dismissed = await raw(page);
+  expect(dismissed.filter(i => i.dismissedAt)).toHaveLength(1);
+  await expect(recovery(page).getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    const button = document.querySelector('#unfinished-recovery-section [data-pc-action="undo-dismiss"]');
+    if (!button?.isConnected) throw new Error('Undo control is not connected');
+    button.click(); button.click();
+  });
+  const restored = await raw(page);
+  expect(restored).toHaveLength(2);
+  expect(restored.filter(i => i.dismissedAt)).toHaveLength(0);
+  expect(restored[0].updatedAt).toBe(dismissed[0].updatedAt + 1);
+  expect(restored[1]).toEqual(dismissed[1]);
   await expect(recovery(page).locator('[data-pc-stale]')).toHaveCount(2);
 });
 
@@ -311,8 +324,8 @@ test('Undo refuses when the unchanged source has a new recovery destination', as
 
 test('stale rendered dismissal refuses a task already moved by another device', async ({ page }) => {
   await seed(page, 'calendar');
-  await row(page, 'a').getByText('More actions', { exact: true }).click();
-  await row(page, 'a').getByRole('button', { name: 'Not doing this' }).evaluate(button => {
+  await row(page, 'a').getByRole('button', { name: /^More actions:/ }).click();
+  await page.getByRole('menuitem', { name: 'Not doing this' }).evaluate(button => {
     const refresh = refreshAuthoritativePlanSurfaces;
     globalThis.refreshAuthoritativePlanSurfaces = () => {};
     const entry = PlanAuthority.staleUnfinished().items.find(e => e.item.id === 'a');
@@ -388,7 +401,7 @@ for (const width of [360, 390, 1920]) {
   test(`layout ${width}px: readable dates, clamped titles, touch controls and evidence`, async ({ page }) => {
     await page.setViewportSize({ width, height: width > 1000 ? 1080 : 844 });
     await seed(page, 'operational', Array.from({ length: 100 }, (_, n) => item(String(n).padStart(3, '0'), n ? `Previously planned task ${n + 1}` : 'Review the previous project notes and prepare the next practical action with the team '.repeat(4))));
-    await expect(row(page, '000')).toContainText(/Planned Wed,? Sep 23/);
+    await expect(row(page, '000')).toContainText(/Planned Sep 23/);
     await expect(row(page, '000').getByRole('button', { name: 'Not doing this' })).toBeHidden();
     const controls = recovery(page).locator('button:visible, summary:visible');
     for (const b of await controls.all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
@@ -396,12 +409,13 @@ for (const width of [360, 390, 1920]) {
     await fs.mkdir(path.join(APP_ROOT, 'playwright-report', 'task-017'), { recursive: true });
     await recovery(page).scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(APP_ROOT, 'playwright-report', 'task-017', `unfinished-${width}.png`) });
-    await row(page, '000').getByText('More actions', { exact: true }).click();
-    await expect(row(page, '000')).toContainText('Its original plan and history are kept');
+    await row(page, '000').getByRole('button', { name: /^More actions:/ }).click();
+    await expect(page.getByRole('menu')).toContainText('keeps its history');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: path.join(APP_ROOT, 'playwright-report', 'task-017', `unfinished-more-${width}.png`) });
     // A routine refresh preserves the open disclosure.
     await page.evaluate(() => refreshAuthoritativePlanSurfaces());
-    await expect(row(page, '000').locator('details')).toHaveAttribute('open', '');
+    await expect(page.getByRole('menu')).toBeVisible();
+    await expect(row(page, '000').getByRole('button', { name: /^More actions:/ })).toHaveAttribute('aria-expanded', 'true');
   });
 }

@@ -5055,3 +5055,31 @@ blockers: owner must approve privileged-domain exception and bounded identity/si
 deviations: none. Original audit and all mockups/uncommitted prototype edits preserved. Production/rules/backend
   and live data unchanged; no UI redesign, integration, push or deployment.
 → contract recommendation handed off for exact-checkpoint independent review; stop at OWNER APPROVAL GATE.
+
+## TASK-018 — local completion implementation, review-ready (branch: task-018)
+changed:
+  - task-completion-model/repository/sync.js and functions/src/completion-api/domain.js: approved dedicated
+    authenticated resolution facts, account/source/revision binding, bounded room ETag CAS, immutable receipts,
+    confirmed readback, unknown recovery and conditional Undo. No original plan/history rewrite or task copy.
+  - functions/index.js, rules builder/generated rules and functions shared generation: separate required-service-
+    account export and direct-client resolution write denial. No deployed backend, rules, IAM or account writes.
+  - plan-authority.js/rawStaleUnfinished and storage.js account seam: confirmed read-only Unfinished overlay,
+    source/context invalidation, account-generation guards and teardown. Existing Action API/Brain Dump intact.
+  - planning-continuity-ui.js/.css: approved Refined A five-row preview, searchable bounded backlog, anchored
+    More/Done earlier, separate long-title access, 44px targets, honest pending/error/unknown feedback and Undo.
+    Today's timeline check styling aligned without changing its completion callback.
+  - index.html governed release wiring, generated www mirrors, test/lint wiring and focused completion tests;
+    existing planning regressions follow approved controls while retaining history assertions. Shared smoke
+    startup readiness and connected-control double-click harness corrections preserve/strengthen assertions.
+  - CODEMAP.md, TASKS.md status and TASK_018_IMPLEMENTATION_HANDOFF.md: exact 45-file manifest, UI evidence,
+    synthetic cost observations, failed-iteration disclosures, limitations and human/deployment holds.
+tests: npm test: 2249/2250 node:test pass, 0 fail, 1 existing opt-in skip; legacy 455/455 pass. Full browser:
+  940 pass + 7 unchanged expected failures, 0 unexpected/skip/flaky. Firebase fence: 151/151 pass, including
+  14 completion emulator cases. New deterministic proofs 59/59, Worker 32/32 and local dry-run bundle pass;
+  generated rules/shared/www parity pass; lint 0 errors/48 existing warnings. See TEST_REPORT.md and handoff.
+blockers: none for local review handoff; exact-candidate independent verdict supplied separately. Integration,
+  service-account/IAM/live-auth review, physical-device testing and real-use acceptance remain separate gates.
+deviations: existing baseline autofill draft-clear race reproduced independently; only smoke setup waits for
+  startup, production race not fixed. Double-click test avoids a detached ElementHandle and adds exact revision/
+  sibling assertions. Three prior dirty design artifacts preserved and excluded. No merge/push/deployment.
+→ status set to `review` in TASKS.md. REVIEW-READY ONLY; not done or authorized for integration.
