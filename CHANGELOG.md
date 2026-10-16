@@ -5083,3 +5083,16 @@ deviations: existing baseline autofill draft-clear race reproduced independently
   startup, production race not fixed. Double-click test avoids a detached ElementHandle and adds exact revision/
   sibling assertions. Three prior dirty design artifacts preserved and excluded. No merge/push/deployment.
 → status set to `review` in TASKS.md. REVIEW-READY ONLY; not done or authorized for integration.
+
+## TASK-018 — completion monitoring delta (owner-direct staging preparation, branch: task-018-monitoring)
+changed:
+  - functions/src/completion-telemetry.js (new): per-request transport meter and sanitized structured event —
+    outcome (CONFIRMED/REJECTED/UNKNOWN even under HTTP 200), allowlisted reason, CAS attempts, 412 conflicts,
+    denials, reads, read/response byte buckets, latency, transport failure class, size-refusal flag, severity.
+  - functions/src/completion-api.js: handler accepts optional `log`/`clock`, meters its transport and emits once
+    per request. `execute`, `propose`, validation, response bodies and status codes are unchanged.
+  - functions/src/completion-domain.js: `read` also returns received `bytes`; `readCompletionJson` unchanged.
+  - functions/index.js: JSON log sink (`component: chronasense-completion-api`, Cloud Logging `severity`) and a
+    class-only `completion-unavailable` event on the 503 path. Endpoint metadata unchanged.
+tests: Node 22.23.3 focused completion/functions 291/291 (284 prior + 7 new), RTDB emulator 14/14, lint clean,
+  rules/shared/www parity unchanged. No deployment, IAM, cloud, push or merge.

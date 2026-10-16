@@ -2249,3 +2249,14 @@ untested: deployed Firebase ID-token/revocation/IAM/service isolation, physical 
   durability and unbounded receipt growth limitations remain. No production data accessed/mutated; no deployment,
   IAM change, merge, push, release, historical migration or TASK-016 work. Exact final SHA independently reviewed
   separately; REVIEW-READY only, not done.
+
+## TASK-018 completion monitoring delta · 2026-10-16
+- Node 22.23.3 (SHA256 9c9245…db0e verified): `node scripts/functions-shared.mjs && node --test task-completion.test.js
+  task-completion-sync.test.js task-completion-performance.test.js functions/test/*.test.js` → 291 pass, 0 fail/skip.
+- `node --test task-completion-emulator.test.js` (loopback RTDB emulator 4.11.2, synthetic) → 14 pass, 0 fail/skip.
+- New `functions/test/completion-telemetry.test.js` (7): sentinel no-leak scan across inspect/mutate/replay/status/
+  401/405/400 plus field allowlist; applied/replay/rejected/UNKNOWN(ACK_UNPROVEN) under HTTP 200; CONTENDED at the
+  3-attempt bound, one-conflict recovery, WRITE_DENIED; ROOM_TOO_LARGE (real streaming domain) and
+  PRIORITY_UNSUPPORTED flagged; latency/bytes/inspect state counts; TimeoutError class; throwing sink is inert.
+- Entry import under Node22: gcfv2, asia-southeast1, 512MiB, 120s, maxInstances 1, concurrency 1, SA param — unchanged.
+- Rules builder and www mirror checks: unchanged. ESLint on touched files: clean.
