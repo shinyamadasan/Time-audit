@@ -10,7 +10,7 @@ export const COMPLETION_REASONS = new Set([
   'SOURCE_MISSING', 'STALE_RESOLUTION', 'STALE_SOURCE', 'UNAUTHENTICATED', 'UNAVAILABLE', 'UNDO_CONFLICT',
   'UNKNOWN_WRITE', 'WRITE_DENIED', 'SOURCE_UNAVAILABLE',
 ]);
-const SIZE_REFUSALS = new Set(['ROOM_TOO_LARGE', 'RESOLUTION_TOO_LARGE', 'RESPONSE_TOO_LARGE', 'PRIORITY_UNSUPPORTED']);
+const SIZE_REFUSALS = new Set(['ROOM_TOO_LARGE', 'RESOLUTION_TOO_LARGE', 'RESPONSE_TOO_LARGE']);
 const INTEGRITY = new Set(['CONTENDED', 'ACK_UNPROVEN', 'LENS_REFUSED', 'WRITE_DENIED', 'UNKNOWN_WRITE', 'ETAG_REQUIRED', 'RECORD_CONFLICT']);
 const OPS = new Set(['inspect', 'status', 'mutate']);
 const KINDS = new Set(['complete', 'undo']);
@@ -25,16 +25,18 @@ export function bytesBucket(bytes) {
   return (BYTE_BUCKETS.find(([limit]) => bytes <= limit) || [0, 'gt16MiB'])[1];
 }
 const countBucket = n => n === 0 ? '0' : n === 1 ? '1' : n <= 10 ? '2-10' : n <= 50 ? '11-50' : '51-100';
-// Transport failure class only; the thrown error object itself is never inspected for text.
+// Error class only; the thrown error object itself is never inspected for text. Domain refusals keep their
+// controlled reason (e.g. ROOM_TOO_LARGE, LENS_REFUSED); other unexpected errors are FAULT.
 const transportClass = error => error?.name === 'TimeoutError' ? 'TIMEOUT'
-  : error?.name === 'AbortError' ? 'ABORTED' : error?.reason ? reasonLabel(error.reason) : 'NETWORK';
+  : error?.name === 'AbortError' ? 'ABORTED' : error?.reason ? reasonLabel(error.reason)
+    : error?.name === 'TypeError' ? 'NETWORK' : 'FAULT'; // fetch() signals network failure as TypeError
 
 // Wraps the privileged transport without altering arguments, results or thrown errors.
 // Methods are resolved at call time so a transport may gain readResolution after construction.
 export function meterTransport(domain) {
-  const stats = { reads: 0, readBytes: 0, casAttempts: 0, casConflicts: 0, casDenied: 0, transportFailure: undefined };
+  const stats = { reads: 0, readBytes: 0, casAttempts: 0, casConflicts: 0, casDenied: 0, transportError: undefined };
   const observe = async (run) => {
-    try { return await run(); } catch (error) { stats.transportFailure ||= transportClass(error); throw error; }
+    try { return await run(); } catch (error) { stats.transportError ||= transportClass(error); throw error; }
   };
   return {
     stats,
@@ -69,7 +71,7 @@ export function completionEvent({ op, kind, uncertain, replay, status, body, sta
   if (stats) {
     Object.assign(event, { reads: stats.reads, casAttempts: stats.casAttempts, casConflicts: stats.casConflicts, casDenied: stats.casDenied });
     if (stats.readBytes > 0) event.readBytes = bytesBucket(stats.readBytes);
-    if (stats.transportFailure) event.transportFailure = stats.transportFailure;
+    if (stats.transportError) event.transportError = stats.transportError;
   }
   if (Array.isArray(views)) {
     const states = { unfinished: 0, completed: 0, needsReview: 0 }, viewReasons = {};
@@ -86,12 +88,14 @@ export function completionEvent({ op, kind, uncertain, replay, status, body, sta
   if (responseBytes) event.responseBytes = responseBytes;
   const sizeRefused = SIZE_REFUSALS.has(reason) || Object.keys(event.viewReasons || {}).some(r => SIZE_REFUSALS.has(r));
   if (sizeRefused) event.sizeRefusal = true;
-  event.severity = status >= 500 ? 'ERROR'
-    : outcome === 'UNKNOWN' || sizeRefused || INTEGRITY.has(reason) || event.casConflicts > 0 || event.transportFailure ? 'WARNING' : 'INFO';
+  // A mutate that may have written without proof is the never-lose-time risk: dedicated flag + ERROR for alerting.
+  if (event.op === 'mutate' && outcome === 'UNKNOWN') event.unconfirmedWrite = true;
+  event.severity = status >= 500 || event.unconfirmedWrite ? 'ERROR'
+    : outcome === 'UNKNOWN' || sizeRefused || INTEGRITY.has(reason) || event.casConflicts > 0 || event.transportError ? 'WARNING' : 'INFO';
   return event;
 }
 
-// Logging is best-effort: a sink failure must never change a completion response.
-export function emitSafely(log, event) {
-  try { log(event); } catch { /* monitoring must not affect the completion contract */ }
+// Logging is best-effort: no monitoring failure (clock, event construction or sink) may change a response.
+export function emitSafely(run) {
+  try { run(); } catch { /* monitoring must not affect the completion contract */ }
 }

@@ -2260,3 +2260,6 @@ untested: deployed Firebase ID-token/revocation/IAM/service isolation, physical 
   PRIORITY_UNSUPPORTED flagged; latency/bytes/inspect state counts; TimeoutError class; throwing sink is inert.
 - Entry import under Node22: gcfv2, asia-southeast1, 512MiB, 120s, maxInstances 1, concurrency 1, SA param — unchanged.
 - Rules builder and www mirror checks: unchanged. ESLint on touched files: clean.
+- Review follow-up (independent PASS WITH NOTES on 9349963): clock/event build/sink all inside the guard (new test: throwing
+  clock still returns the committed CONFIRMED); PRIORITY_UNSUPPORTED no longer flagged as size refusal; `transportError`
+  rename with name-only classes; mutate UNKNOWN → `unconfirmedWrite` + ERROR; ETag sentinel added. Node22 291/291, emulator 14/14.

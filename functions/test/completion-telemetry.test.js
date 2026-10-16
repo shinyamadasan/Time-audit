@@ -8,7 +8,7 @@ import { fixture, command, NOW, memory } from '../../task-completion-test-suppor
 // Synthetic sentinels: every one is something the monitoring stream must never contain.
 const UID = 'uidSentinel7Q', TOKEN = 'tokSentinel-9f3e.private.signature';
 const ALLOWED_KEYS = new Set(['event', 'op', 'status', 'outcome', 'latencyMs', 'reason', 'kind', 'uncertain', 'replay',
-  'reads', 'readBytes', 'casAttempts', 'casConflicts', 'casDenied', 'transportFailure', 'identities', 'states',
+  'reads', 'readBytes', 'casAttempts', 'casConflicts', 'casDenied', 'transportError', 'unconfirmedWrite', 'identities', 'states',
   'viewReasons', 'responseBytes', 'sizeRefusal', 'severity']);
 
 function harness(domain, { clockStep = 7 } = {}) {
@@ -28,7 +28,10 @@ function withResolutionRead(io) {
 }
 
 test('one sanitized event per request; no UID, token, task, identity, dates, zone, operation or revision leaks', async () => {
-  const f = fixture(), io = withResolutionRead(memory(f.room)), h = harness(io);
+  const f = fixture(), base = withResolutionRead(memory(f.room)), ETAG = 'etagSentinel-55aa';
+  const io = { read: async uid => ({ ...(await base.read(uid)), etag: `${ETAG}-${(await base.read(uid)).etag}` }),
+    cas: (uid, etag, ...rest) => base.cas(uid, Number(String(etag).split('-').pop()), ...rest), readResolution: base.readResolution };
+  const h = harness(io);
   const req = await command(f.room, f.identity, {}, UID);
   await h.send({ kind: 'inspect', identities: [f.identity] });
   await h.send({ kind: 'mutate', request: req, uncertain: false });
@@ -40,7 +43,7 @@ test('one sanitized event per request; no UID, token, task, identity, dates, zon
   assert.equal(h.events.length, 7);
   const text = JSON.stringify(h.events);
   const forbidden = [UID, TOKEN, 'wrong-token-sentinel', f.item.task, f.identity.itemId, f.identity.targetId, f.targetKey,
-    req.operationId, req.date, req.timezone, req.expectedSourceRevision, 'bad token', 'r1_', 'uid_'];
+    req.operationId, req.date, req.timezone, req.expectedSourceRevision, ETAG, 'bad token', 'r1_', 'uid_'];
   for (const value of forbidden) assert.equal(text.includes(value), false, `event stream leaked ${value}`);
   for (const event of h.events) for (const key of Object.keys(event)) assert.ok(ALLOWED_KEYS.has(key), `unexpected field ${key}`);
   assert.deepEqual(h.events.map(e => [e.op, e.status, e.outcome]), [
@@ -64,7 +67,8 @@ test('applied, replayed, rejected and unknown completion outcomes are distinguis
   // Written but authoritative readback lacks the receipt: UNKNOWN with HTTP 200 must still be visible.
   const g = fixture(), lost = memory(g.room), h2 = harness({ ...lost, cas: async () => 'written' });
   await h2.send({ kind: 'mutate', request: await command(g.room, g.identity, {}, UID), uncertain: false });
-  assert.deepEqual(pick(h2.last(), 'status', 'outcome', 'reason', 'severity'), { status: 200, outcome: 'UNKNOWN', reason: 'ACK_UNPROVEN', severity: 'WARNING' });
+  assert.deepEqual(pick(h2.last(), 'status', 'outcome', 'reason', 'severity'), { status: 200, outcome: 'UNKNOWN', reason: 'ACK_UNPROVEN', severity: 'ERROR' });
+  assert.equal(h2.last().unconfirmedWrite, true);
 });
 
 test('conditional-write conflicts and the three-attempt retry bound are counted', async () => {
@@ -91,15 +95,16 @@ test('room-size refusals are flagged on mutate and inspect without relaxing the 
     fetchImpl: async () => new Response('{}', { headers: { etag: '"e"', 'content-length': String(16 * 1024 * 1024 + 1) } }) });
   const h = harness(oversized);
   await h.send({ kind: 'mutate', request: await command(f.room, f.identity, {}, UID), uncertain: false });
-  assert.deepEqual(pick(h.last(), 'outcome', 'reason', 'sizeRefusal', 'transportFailure', 'severity'),
-    { outcome: 'REJECTED', reason: 'ROOM_TOO_LARGE', sizeRefusal: true, transportFailure: 'ROOM_TOO_LARGE', severity: 'WARNING' });
+  assert.deepEqual(pick(h.last(), 'outcome', 'reason', 'sizeRefusal', 'transportError', 'severity'),
+    { outcome: 'REJECTED', reason: 'ROOM_TOO_LARGE', sizeRefusal: true, transportError: 'ROOM_TOO_LARGE', severity: 'WARNING' });
   await h.send({ kind: 'inspect', identities: [f.identity] });
   assert.deepEqual(pick(h.last(), 'status', 'reason', 'sizeRefusal'), { status: 400, reason: 'ROOM_TOO_LARGE', sizeRefusal: true });
 
   const g = fixture(); g.room.settings['.priority'] = 1;
   const p = harness(memory(g.room));
   await p.send({ kind: 'inspect', identities: [g.identity] });
-  assert.equal(p.last().sizeRefusal, true); assert.equal(p.last().reason, 'PRIORITY_UNSUPPORTED');
+  // Unsupported export metadata is visible by reason but is not a size refusal.
+  assert.equal(p.last().sizeRefusal, undefined); assert.equal(p.last().reason, 'PRIORITY_UNSUPPORTED');
 });
 
 test('latency, read bytes and transport timeouts are measured; inspect reports state counts only', async () => {
@@ -116,8 +121,8 @@ test('latency, read bytes and transport timeouts are measured; inspect reports s
   const slow = harness({ read: async () => { throw new DOMException('The operation timed out.', 'TimeoutError'); } });
   const result = await slow.send({ kind: 'mutate', request: await command(f.room, f.identity, {}, UID), uncertain: true });
   assert.equal(result.body.outcome, 'UNKNOWN'); // existing contract: uncertain operation stays unknown
-  assert.deepEqual(pick(slow.last(), 'outcome', 'reason', 'transportFailure', 'severity'),
-    { outcome: 'UNKNOWN', reason: 'OTHER', transportFailure: 'TIMEOUT', severity: 'WARNING' });
+  assert.deepEqual(pick(slow.last(), 'outcome', 'reason', 'transportError', 'unconfirmedWrite', 'severity'),
+    { outcome: 'UNKNOWN', reason: 'OTHER', transportError: 'TIMEOUT', unconfirmedWrite: true, severity: 'ERROR' });
 });
 
 test('a failing log sink never changes the completion response', async () => {
@@ -128,7 +133,14 @@ test('a failing log sink never changes the completion response', async () => {
     const send = input => handler({ method: 'POST', authorization: 'Bearer x', rawBody: Buffer.from(JSON.stringify(input)) });
     return [await send({ kind: 'mutate', request: req, uncertain: false }), await send({ kind: 'status', request: req })];
   };
-  assert.deepEqual(await run(() => { throw new Error('sink down'); }), await run(() => {}));
+  const expected = await run(() => {});
+  assert.deepEqual(await run(() => { throw new Error('sink down'); }), expected);
+  // A throwing clock or an unserializable-event path must not turn a committed result into a failure either.
+  const io = withResolutionRead(memory(f.room));
+  const broken = createCompletionHandler({ verifyIdToken: async () => ({ uid: UID }), domain: io, now: () => NOW,
+    log: () => {}, clock: () => { throw new Error('clock down'); } });
+  const committed = await broken({ method: 'POST', authorization: 'Bearer x', rawBody: Buffer.from(JSON.stringify({ kind: 'mutate', request: req, uncertain: false })) });
+  assert.equal(committed.status, 200); assert.equal(committed.body.outcome, 'CONFIRMED'); assert.equal(committed.body.receipt.revision, 1);
 });
 
 test('vocabulary guards: unknown reasons, ops and kinds collapse to fixed labels', () => {

@@ -83,8 +83,8 @@ export const chronasenseCompletionApi = onRequest({ region: 'asia-southeast1', m
     res.status(result.status).set('cache-control', 'no-store').json(result.body);
   } catch (error) {
     // Authentication/config/transport details and room data are never logged or echoed: class only.
-    emitSafely(completionLog, { event: 'completion-unavailable', severity: 'ERROR', status: 503, outcome: 'UNKNOWN',
-      reason: error instanceof ConfigError ? 'CONFIG_INVALID' : 'HANDLER_FAILURE' });
+    emitSafely(() => completionLog({ event: 'completion-unavailable', severity: 'ERROR', status: 503, outcome: 'UNKNOWN',
+      reason: error instanceof ConfigError ? 'CONFIG_INVALID' : 'HANDLER_FAILURE' }));
     res.status(503).set('cache-control', 'no-store').json({ outcome: 'UNKNOWN', reason: 'SERVICE_UNAVAILABLE' });
   }
 });
