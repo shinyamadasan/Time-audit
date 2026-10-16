@@ -9,6 +9,10 @@ export const COMPLETION_ROOM_LIMIT = 16 * 1024 * 1024;
 const refusal = reason => { throw Object.assign(new Error(reason), { reason }); };
 
 export async function readCompletionJson(response, limit = COMPLETION_ROOM_LIMIT) {
+  return (await readMeasuredJson(response, limit)).value;
+}
+// Same bounded read, also reporting the received byte count for size/cost monitoring.
+async function readMeasuredJson(response, limit) {
   if (Number(response.headers.get('content-length')) > limit) { await response.body?.cancel(); refusal('ROOM_TOO_LARGE'); }
   if (!response.body) refusal('UNAVAILABLE');
   const reader = response.body.getReader(), chunks = [];
@@ -21,7 +25,7 @@ export async function readCompletionJson(response, limit = COMPLETION_ROOM_LIMIT
       if (length > limit) { await reader.cancel(); refusal('ROOM_TOO_LARGE'); }
       chunks.push(Buffer.from(value));
     }
-    return JSON.parse(Buffer.concat(chunks, length).toString('utf8'));
+    return { value: JSON.parse(Buffer.concat(chunks, length).toString('utf8')), bytes: length };
   } finally { reader.releaseLock(); }
 }
 
@@ -61,7 +65,8 @@ export function createCompletionDomain({ databaseUrl, getAccessToken, fetchImpl 
       if (!response.ok) { await response.body?.cancel(); refusal('UNAVAILABLE'); }
       const etag = response.headers.get('etag');
       if (!etag || etag === '*') { await response.body?.cancel(); refusal('ETAG_REQUIRED'); }
-      return { value: await readCompletionJson(response), etag };
+      const { value, bytes } = await readMeasuredJson(response, COMPLETION_ROOM_LIMIT);
+      return { value, etag, bytes };
     },
     async cas(uid, etag, next, before) {
       const at = url(uid);

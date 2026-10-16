@@ -22,6 +22,7 @@ import { createReceiptStore } from './src/receipts.js';
 import { createIdTokenProvider, createUserScopedRtdb } from './src/user-scoped-rtdb.js';
 import { createCompletionHandler } from './src/completion-api.js';
 import { createCompletionDomain } from './src/completion-domain.js';
+import { emitSafely } from './src/completion-telemetry.js';
 
 const HMAC_KEYS = defineSecret('CHRONASENSE_WORKER_HMAC_KEYS');
 const OWNER_SUBJECT = defineString('CHRONASENSE_OWNER_SUBJECT');
@@ -67,6 +68,8 @@ export const chronasenseActionApi = onRequest({ region: 'asia-southeast1', minIn
 });
 
 let completionHandler = null;
+// Cloud Logging reads `severity` from the JSON line. Events are sanitized at source (src/completion-telemetry.js).
+const completionLog = entry => console.log(JSON.stringify({ component: 'chronasense-completion-api', ...entry }));
 export const chronasenseCompletionApi = onRequest({ region: 'asia-southeast1', minInstances: 0, maxInstances: 1,
   concurrency: 1, memory: '512MiB', timeoutSeconds: 120, serviceAccount: COMPLETION_SERVICE_ACCOUNT,
   cors: ['https://shinyamadasan.github.io', 'https://localhost', 'http://localhost', 'capacitor://localhost'],
@@ -75,11 +78,13 @@ export const chronasenseCompletionApi = onRequest({ region: 'asia-southeast1', m
     if (!/^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$/.test(COMPLETION_SERVICE_ACCOUNT.value())) throw new ConfigError('completion service account required');
     completionHandler ||= createCompletionHandler({ verifyIdToken: (value, revoked) => getAuth().verifyIdToken(value, revoked),
       domain: createCompletionDomain({ databaseUrl: parseDatabaseUrl(RTDB_URL.value()),
-        getAccessToken: async () => (await adminCredential.getAccessToken()).access_token }) });
+        getAccessToken: async () => (await adminCredential.getAccessToken()).access_token }), log: completionLog });
     const result = await completionHandler({ method: req.method, authorization: req.get('authorization'), rawBody: req.rawBody });
     res.status(result.status).set('cache-control', 'no-store').json(result.body);
-  } catch {
-    // Authentication/config/transport details and room data are never logged or echoed.
+  } catch (error) {
+    // Authentication/config/transport details and room data are never logged or echoed: class only.
+    emitSafely(completionLog, { event: 'completion-unavailable', severity: 'ERROR', status: 503, outcome: 'UNKNOWN',
+      reason: error instanceof ConfigError ? 'CONFIG_INVALID' : 'HANDLER_FAILURE' });
     res.status(503).set('cache-control', 'no-store').json({ outcome: 'UNKNOWN', reason: 'SERVICE_UNAVAILABLE' });
   }
 });

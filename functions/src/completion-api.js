@@ -7,6 +7,7 @@ import { canonicalize } from './canonical-json.js';
 import { createPlanRead } from './plan-read.js';
 import { physicalTargetKey } from '../shared/plan-item-origin.js';
 import { localPlanDate, validPlanDate, validPlanTimezone } from '../shared/plan-tomorrow-model.js';
+import { completionEvent, emitSafely, meterTransport } from './completion-telemetry.js';
 
 export const RESOLUTIONS = 'taskCompletionResolutions';
 const stores = { calendar: ['calendarPlans', 'calendarPlanFences'], operational: ['operationalPlans', 'operationalPlanFences'], legacy: ['plans', 'planFences'] };
@@ -183,8 +184,18 @@ export function operationStatus(record, uid, request) {
 }
 
 // Browser-facing endpoint. Authentication completes before ANY privileged read or write.
-export function createCompletionHandler({ verifyIdToken, domain, now = Date.now }) {
-  return async ({ method, authorization, rawBody }) => {
+// `log` receives one sanitized event per request (completion-telemetry.js); it never sees request data.
+export function createCompletionHandler({ verifyIdToken, domain, now = Date.now, log = () => {}, clock = () => performance.now() }) {
+  const handle = createRequestHandler({ verifyIdToken, domain, now });
+  return async request => {
+    const started = clock(), metered = meterTransport(domain), facts = {};
+    const result = await handle(request, metered.io, facts);
+    emitSafely(log, completionEvent({ ...facts, status: result.status, body: result.body, stats: metered.stats, latencyMs: clock() - started }));
+    return result;
+  };
+}
+function createRequestHandler({ verifyIdToken, now }) {
+  return async ({ method, authorization, rawBody }, domain, facts) => {
     if (method !== 'POST') return { status: 405, body: { outcome: 'REJECTED', reason: 'METHOD' } };
     let uid;
     try {
@@ -198,6 +209,7 @@ export function createCompletionHandler({ verifyIdToken, domain, now = Date.now 
     try {
       if (!(rawBody instanceof Uint8Array) || rawBody.byteLength > 65536) fail('MALFORMED');
       const input = strictParseJson(rawBody), instant = now();
+      facts.op = input?.kind;
       let body;
       if (input.kind === 'inspect') {
         keys(input, ['kind', 'identities']);
@@ -215,18 +227,22 @@ export function createCompletionHandler({ verifyIdToken, domain, now = Date.now 
               state: !record || record.state !== 'completed' ? 'unfinished' : record.operations[record.completionOpId].sourceRevision === revision ? 'completed' : 'needs-review' });
           } catch (error) { views.push({ identity, state: 'needs-review', reason: error.reason || error.code || 'SOURCE_UNAVAILABLE' }); }
         }
+        facts.views = views;
         body = { outcome: 'CONFIRMED', uid, views };
       } else if (input.kind === 'status') {
         keys(input, ['kind', 'request']);
         const request = input.request;
+        facts.kind = request?.kind;
         validate(request, instant);
         const record = await domain.readResolution(uid, resolutionKey(uid, request.identity));
         body = operationStatus(record, uid, request);
       } else {
         keys(input, ['kind', 'request', 'uncertain']);
         if (input.kind !== 'mutate' || typeof input.uncertain !== 'boolean') fail('MALFORMED');
+        Object.assign(facts, { kind: input.request?.kind, uncertain: input.uncertain });
         // Never return the privileged room preimage/candidate, including on same-operation replay.
         const result = await execute(domain, uid, input.request, instant, { uncertain: input.uncertain });
+        facts.replay = result.replay === true;
         body = result.outcome === 'CONFIRMED'
           ? { outcome: result.outcome, record: result.record, receipt: result.receipt }
           : { outcome: result.outcome, reason: result.reason };
