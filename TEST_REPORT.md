@@ -2151,3 +2151,20 @@ untested:
   - Owner screenshot unavailable. Completed/Delete behavior is design-only; no historical semantic tests claimed.
 evidence: task017-npm-final.log, task017-browser-final.log, task017-layout-final.log, task017-lint-final.log (ignored local logs);
   playwright-report/task-017/unfinished-{360,390,1920}.png and unfinished-more-{360,390,1920}.png (local images).
+
+## Owner-direct overnight HUD pilot · 2026-10-20
+branch: `fix/hud-hidden-tracking-session`, baseline `bb171a2`.
+suite/result:
+  - Reproduction: updated companion test against copied baseline exits 1 at `ActivitySwitchLiftsHide` (expected).
+  - Companion normal tracking: 60 assertions pass; companion dogfood/startup fixture: 30 assertions pass.
+  - HUD bridge: 33 pass. Focused Playwright normal-tracking-hud: 14 pass, stubbed Firebase/companion.
+  - Full npm test completed rerun: exit 0; 2190 Node passes, 0 failures, 1 existing opt-in skip, plus legacy
+    harness 455/455. First run stopped on missing targaryen in reused dependencies. Offline locked npm CI with
+    lifecycle scripts disabled and the repository CI --legacy-peer-deps flag fixed setup; manifests unchanged.
+  - Lint: 0 errors / 48 existing warnings. Runtime 92-file mirror parity, Firebase rules builder parity,
+    repository no-op build and git diff --check pass.
+review: fresh native reviewer `/root/hud_independent_review`: ship, no actionable findings; independently ran
+  both companion suites. Advisory only; no task approval/status/release records changed.
+untested: live WPF/dispatcher/tray, real signed-in browser+companion, first LNA prompt, physical devices, full
+  browser suite, Android, emulator/fence and production. Only companion presentation suppression changed.
+evidence: PILOT_REPORT.md, PILOT_REVIEW.md and sibling ../evidence/ logs, baseline replay and captured reviewed diff.

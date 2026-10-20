@@ -174,6 +174,36 @@ $module = New-Module -ArgumentList (, $sources) -ScriptBlock {
     $r.FocusHideWordingRestored = $script:HideBtn.Content -eq 'Hide until Focus ends'
     $r.FocusShowsEndTime = $script:EndLabelCollapsed.Text -eq 'Ends ~10:30 AM'
 
+    # A direct activity switch can replace the snapshot without an intervening
+    # empty render. Hide belongs to the old tracking session, not the next task.
+    Reset-Hud
+    [void](Post (Tracking 'Email' 1000 1000))
+    Render-HudState
+    Hide-HudUntilFocusEnds
+    [void](Post (Tracking 'Email renamed' 1000 1100 'hidden'))
+    Render-HudState
+    $r.HideHoldsDuringTrackingHeartbeat = -not $script:window.IsVisible
+    [void](Post (Tracking 'Report' 2000 2000))
+    Render-HudState
+    $r.ActivitySwitchLiftsHide = $script:window.IsVisible -and $script:TitleLabelCollapsed.Text -eq 'Report'
+
+    # An end and a new start can also arrive before WPF renders the empty state.
+    Hide-HudUntilFocusEnds
+    [void](Post (Ended 'tracking:2000' 3000))
+    [void](Post (Tracking 'Next task' 4000 4000))
+    Render-HudState
+    $r.TrackingRestartBeforeRenderLiftsHide = $script:window.IsVisible -and $script:TitleLabelCollapsed.Text -eq 'Next task'
+
+    # Focus work/break transitions retain the existing Focus hide contract.
+    [void](Post (Focus 5000 5000))
+    Render-HudState
+    Hide-HudUntilFocusEnds
+    $break = Focus 6000 6000
+    $break.phase = 'break'; $break.sessionKey = 'focus:break:6000'
+    [void](Post $break)
+    Render-HudState
+    $r.FocusPhaseChangeKeepsHide = -not $script:window.IsVisible
+
     # Cleared → hidden, nothing invented.
     $script:shared.Snapshot = $null
     Render-HudState

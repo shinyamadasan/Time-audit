@@ -136,7 +136,9 @@ Today hero timer), not only Focus. Nothing new owns time:
    stale indicator, tray, position and Collapse behave as before. "Hide until
    Focus ends" reads "Hide until tracking ends" while tracking is shown; a
    hide lasts until that kind of session is no longer the one displayed, so a
-   Focus → tracking handover shows the HUD again.
+   Focus → tracking handover shows the HUD again. Switching to a new normal
+   activity also shows it again, even if no idle snapshot was rendered between
+   activities; heartbeats for the same tracking start keep it hidden.
 
 ### Snapshot schema
 

@@ -5016,3 +5016,16 @@ blockers: no remaining UI implementation blocker; strict unseen-remote conflict 
 deviations: owner screenshot unavailable; written feedback used. Full Playwright/emulator suites and physical
   devices not exercised. Only observed-state Undo safety is claimed under existing LWW. No integration/push/deploy.
 → status set to `review` in TASKS.md; stop at REVIEW-READY.
+
+## Owner-direct overnight HUD pilot · 2026-10-20
+branch: `fix/hud-hidden-tracking-session`, isolated repository/worktree based on `bb171a2`.
+changed:
+  - windows-hud/ChronaSenseHud.ps1: bind normal-tracking Hide to the authoritative start time so the next activity
+    becomes visible even when no idle state renders between sessions. Same-session heartbeats and Focus phase
+    hiding preserve their existing behavior; no timer, bridge, transport, account or data changes.
+  - windows-hud/Test-HudNormalTracking.ps1: four regression assertions for activity replacement, same-session
+    heartbeat/title/claim changes, rapid stop/start and Focus work/break suppression.
+  - windows-hud/README.md: document the activity-switch visibility behavior.
+tests: see PILOT_REPORT.md and the sibling evidence directory; independent advisory review: ship (PILOT_REVIEW.md).
+deviations: owner directly authorized this isolated pilot; existing TASK-014/TASK-015 statuses and all approval
+  records remain unchanged. No push, merge, deployment, startup-companion replacement or shared-system edit.
