@@ -6,6 +6,132 @@
 
 ---
 
+## Review TASK-021 (cycle 2) - REWORK (Repair merge-runner subprocess output deadlock)
+branch: task-021 @ c81be06 (baseline main bb171a2)
+verdict: changes requested
+reviewer: Claude reviewer, autonomous review run, 2026-10-20 (did not build this task)
+
+### What was checked
+I read the TASK-021 contract (TASKS.md:1084-1132), `git diff main...task-021` (10 files, +822/-4), and
+tools/Merge-TestProcess.cs in full. I read tools/Run-Merge.ps1:1-60 and :180-320 in context, the full
+scripts/merge-runner-output.test.js, and TASK_021_HANDOFF.md. I also read both TASK-021 entries in
+CHANGELOG.md and TEST_REPORT.md, plus the cycle-1 REWORK below. I did NOT run npm test or the fixtures.
+This run is read-only, and the guardians' shell tools were denied. All test results here are the
+builder's recorded evidence (15/15 focused tests on PS 5.1.19041.7802 and 7.6.7, full npm exit 0). I did
+not reproduce them.
+
+### Guardian Gauntlet
+Both guardians ran this cycle, on c81be06, as read-only advisors via the Agent tool. Neither edited any
+file: `git status --porcelain` was empty after both returned. This fresh security run also covers
+quality-guardian's W-2 concern that the security review was stale.
+
+**security-guardian: RAN. One CONFIRMED finding (MEDIUM). No Critical or High findings.**
+- **S-1 MEDIUM, CONFIRMED. The gate compiles its own containment logic from the candidate branch.**
+  `$root` comes from `$PSScriptRoot` (Run-Merge.ps1:41), so the helper path is inside the same working
+  tree. Run-Merge.ps1:196 runs `git checkout $branchName`, and the auto-rebase at :213-228 may follow.
+  Only then does :238 run `Add-Type -Path (Join-Path $PSScriptRoot 'Merge-TestProcess.cs')`. So it
+  compiles the BRANCH's copy. Run-Merge.ps1 itself was parsed at launch from main. Before this change,
+  every refusal decision (timeout, exit code, cleanliness) lived in that trusted, already-parsed script.
+  Now the timeout, the orphan detection and the fail-closed cleanup are decided by code under review.
+  Example: a branch whose `Run()` returns `ExitCode=0, Failure=""` without launching anything passes
+  the test gate, then fast-forwards and pushes live production main. I traced this independently and
+  agree. Mitigating context: the branch already controls `package.json`'s `test` script, and a human
+  approves the diff. So this widens a trust gap rather than opening a new class. It is still CONFIRMED.
+- S-2 LOW, CONFIRMED, pre-existing: `cmd /c npm test` with lpCurrentDirectory = repo root lets cmd find
+  a committed `npm.cmd`/`npm.bat` in the repo root before PATH. The old code behaved the same way.
+- S-3 LOW, PLAUSIBLE: the full npm stdout/stderr is now appended to claude-session.log. That file is
+  gitignored, but cycle-1 S-1 still applies: `/log` can copy its tail to the public OUTBOX.
+- S-4 LOW, CONFIRMED, liveness only: the non-Windows `$stdoutTask.Result` (:273-274) can still wait with
+  no limit. This fails as a hang, never as a merge.
+- INFO: the `if ($OnWindows)` branches inside the non-Windows else block (:254, :264-265) can never run.
+  Timeout output is captured but never logged.
+- Verified clean: constant CreateProcess command line; SUSPENDED|EXTENDED_STARTUPINFO|NO_WINDOW, with
+  assignment before ResumeThread==1; a whitelist of the inherited handles; an unnamed kill-on-close job
+  with no breakaway. Nothing kills by PID or process name. Each Win32 failure becomes a refusal, and a
+  failed Add-Type is caught and blocks. Temp files are unique and deleted on every path. Test `rmSync`
+  is guarded by tmpdir/prefix asserts, and teardown no longer kills reusable PIDs.
+
+**quality-guardian: RAN. AC1-AC6 MET. AC7 PARTIAL.**
+- AC1 MET: output goes to files, stdin is NUL, the handle list holds 3 entries, and output is read only
+  once the job is empty (cs:44-67, :126-131). Tests: 512 KiB per stream, and the orphan fixture.
+- AC2 MET: the process is suspended, assigned, then resumed. Failed assignment terminates the suspended
+  root (cs:74-80, :109-115). Test: assignment fault plus the `npm-ran` absence check.
+- AC3 MET in code. Tests are PARTIAL: no new fixture covers "npm dirties tree", and that gate is unchanged.
+- AC4 MET: every Failure exits at ps1:244-249, before the ff-merge and the push. Each failure fixture
+  checks local AND bare-remote main. WAIT_FAILED and query-failure are correct by inspection; no test.
+- AC5 MET: the 10-minute literal is asserted exactly once. Waits are bounded at 1 s and 3 s, with
+  kill-on-close as fallback. Kills are by handle only.
+- AC6 MET on Windows. The non-Windows cases have only run on hosted CI, which is still pending
+  (TASKS.md:1130).
+- **AC7 PARTIAL**: non-Windows behaviour DOES differ from main: ReadToEndAsync, the kill change and
+  the log appends. The handoff (:37-39) reads "unchanged" as "unchanged from 102d7af", but the AC text
+  does not say that. Compared with main, that path now has the unbounded post-exit hang from cycle-1
+  must-fix 1. Main fails closed at its timeout instead (W-1).
+- Cycle-1 must-fixes: the drain bound is fixed on Windows by the redesign, but NOT on non-Windows. The
+  orphan fixture, the handoff correction and the fresh evidence are all done. Nit Q-2 (timeout
+  diagnostics) is still open.
+
+Gauntlet result: **NOT PASSED.** security-guardian has a CONFIRMED finding (S-1). Under the verdict
+rules that means mandatory REWORK. quality-guardian rates AC7 PARTIAL.
+
+### Findings (reviewer)
+1. **The Windows containment design is correct and much stronger than 102d7af.** It launches suspended,
+   assigns to a private kill-on-close job before any instruction runs, uses file-backed output, and
+   treats "job empty" as the completion signal. That removes the whole pipe/EOF/orphan class, and the
+   native orphan fixture shows that the earlier false-success merge is now refused. The error handling
+   fails closed throughout. I found no correctness bug in Merge-TestProcess.cs.
+2. **S-1 is real and easy to fix.** Load the helper before checking out the branch (for example, run
+   `Add-Type` right after the `checkout main` at :189 and the main-clean check, before :196), or compile
+   it from `git show main:tools/Merge-TestProcess.cs`. Either way the gate's logic comes from trusted
+   main, just as the runner script already does.
+   Side note: once the helper lives on main, a branch whose base predates TASK-021 still works only
+   because the auto-rebase runs first. Loading it from main removes that dependency as well.
+3. **AC7 is ambiguous, and Codex cannot settle it.** The owner's wording ("Non-Windows behavior remains
+   unchanged") may mean "as in main" or "as in 102d7af". The two readings differ in safety: the
+   102d7af reading keeps a new unbounded hang on that path. That is an owner decision, so I am
+   escalating it rather than guessing.
+
+### Must-fix (Codex must address before approval)
+- [ ] **S-1: compile `Merge-TestProcess.cs` from trusted main, not from the candidate branch.** Move the
+      `Add-Type` before the branch checkout (Run-Merge.ps1:196), or source it from
+      `git show main:tools/Merge-TestProcess.cs`. A failed load must still refuse. Add a regression in
+      which the fixture branch's own copy of the helper is replaced by a stub that reports success, and
+      assert that the runner still uses main's helper. If a stub is put in its place, the assertion is
+      either refusal or real containment, and main/remote stay unchanged. Run it on PS 5.1 and 7.
+- [ ] **AC7 / W-1: get the owner's explicit decision** on what "unchanged" means for non-Windows, and
+      record it in the TASK-021 `context:` (owner-direct rules permit Codex to record the owner's own
+      instruction):
+      (a) "unchanged from main". Then revert the non-Windows block to main's behaviour, or bound
+      the drain the same way cycle-1 must-fix 1 described.
+      (b) "unchanged from 102d7af". Then the owner explicitly accepts the unbounded non-Windows
+      post-exit hang as a known limitation.
+      Do not choose for the owner. If no owner decision is available, set `status: blocked` with that
+      question.
+- [ ] Re-run the focused suite and the full npm suite on both shells, then append fresh evidence to
+      CHANGELOG.md and TEST_REPORT.md.
+
+### Nits (optional, within the existing scope)
+- Log captured stdout/stderr before the Windows `$testFailure` exit at :245-248, so timeout and orphan
+  refusals keep their diagnostics (cycle-1 Q-2, still open).
+- Remove the unreachable `$OnWindows` branches inside the non-Windows else block (:254, :264-265), if
+  the owner's AC7 decision permits touching that block.
+- S-2 (repo-root `npm.cmd` shadowing) and S-3/Q-5 (uncapped log reaching `/log`): consider these as
+  owner-approved follow-ups. They are out of TASK-021 scope.
+
+### Verdict
+REWORK. The Windows containment is good work. However, security-guardian has a CONFIRMED finding: the
+gate's refusal logic is loaded from the code under review. Under the gauntlet rules that is a mandatory
+REWORK, and I agree with it on the merits. AC7 also needs an owner decision.
+
+Gate picked: `codex` (rework). If a later review approves this, the gate must be `approved`, never
+`done`. tools/Run-Merge.ps1 and its helper are the AI Dev OS merge gate itself, which is red-zone under
+CLAUDE.md's Risk-gated merge. The owner's own constraint is also "held at approved if accepted". Hosted
+CI and the held-gate verification items in TASKS.md:1130-1132 are still outstanding.
+
+-> TASK-021 status set to `codex` in TASKS.md.
+
+---
+
 ## Review TASK-021 - REWORK (Repair merge-runner subprocess output deadlock)
 branch: task-021 @ 102d7af (baseline main bb171a2)
 verdict: changes requested
