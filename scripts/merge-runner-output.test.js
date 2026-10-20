@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RUNNER = readFileSync(path.join(ROOT, 'tools/Run-Merge.ps1'), 'utf8');
+const CONTAINMENT = readFileSync(path.join(ROOT, 'tools/Merge-TestProcess.cs'), 'utf8');
 const WINDOWS = process.platform === 'win32';
 const SHELLS = (WINDOWS ? ['powershell', 'pwsh'] : ['pwsh']).filter(shell =>
   spawnSync(shell, ['-NoProfile', '-Command', 'exit 0']).status === 0);
@@ -26,50 +27,97 @@ function alive(pid) {
 
 test.after(() => {
   for (const root of fixtures) {
-    for (const name of ['npm.pid', 'child.pid']) {
-      const pidFile = path.join(root, name);
-      if (!existsSync(pidFile)) continue;
-      const pid = Number(readFileSync(pidFile, 'utf8'));
-      if (alive(pid)) {
-        if (WINDOWS) spawnSync('taskkill', ['/PID', String(pid), '/T', '/F']);
-        else process.kill(pid, 'SIGKILL');
-      }
-    }
+    // Fixtures self-expire even against a broken runner. Never kill by a recycled PID.
     assert.equal(path.dirname(root), os.tmpdir());
     assert.ok(path.basename(root).startsWith('merge-runner-output-'));
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-function fixture(mode, { approved = true, timeoutMs = 6000 } = {}) {
+function fixture(mode, { approved = true, timeoutMs = 6000, fault = '' } = {}) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'merge-runner-output-'));
   fixtures.push(root);
   const repo = path.join(root, 'repo');
   const remote = path.join(root, 'remote.git');
   const bin = path.join(root, 'bin');
   mkdirSync(repo); mkdirSync(bin); mkdirSync(path.join(repo, 'tools'));
-  // The only fixture substitution accelerates the existing ten-minute timeout.
+  // Accelerate only the test deadline; fault injection changes disposable source copies only.
   assert.equal(RUNNER.split('WaitForExit(10 * 60 * 1000)').length, 2);
-  writeFileSync(path.join(repo, 'tools/Run-Merge.ps1'), RUNNER.replace('WaitForExit(10 * 60 * 1000)', `WaitForExit(${timeoutMs})`));
+  assert.equal(RUNNER.split('::Run($root, 10 * 60 * 1000)').length, 2);
+  writeFileSync(path.join(repo, 'tools/Run-Merge.ps1'), RUNNER
+    .replace('WaitForExit(10 * 60 * 1000)', `WaitForExit(${timeoutMs})`)
+    .replace('::Run($root, 10 * 60 * 1000)', `::Run($root, ${timeoutMs})`));
+  let helper = CONTAINMENT;
+  if (fault) {
+    const call = fault === 'cleanup' ? 'TerminateJobObject(job, 1)' : 'AssignProcessToJobObject(job, process.Process)';
+    assert.equal(helper.split(`Check(${call},`).length, 2);
+    helper = helper.replace(`Check(${call},`, 'Check(false,');
+  }
+  writeFileSync(path.join(repo, 'tools/Merge-TestProcess.cs'), helper);
   writeFileSync(path.join(repo, 'TASKS.md'), `### TASK-099 - Output fixture\nstatus: ${approved ? 'approved' : 'review'}\n`);
   writeFileSync(path.join(repo, '.gitignore'), 'claude-session.log\n.last-phase-result.txt\n');
   const childScript = path.join(root, 'child.cjs');
-  writeFileSync(childScript, `require('node:fs').writeFileSync(${JSON.stringify(path.join(root, 'child.pid'))}, String(process.pid)); setInterval(() => {}, 1000);`);
+  writeFileSync(childScript, `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(path.join(root, 'child.pid'))}, String(process.pid));
+if (${JSON.stringify(mode)} === 'orphan') {
+  // Self-expire even against the broken runner; this reproduction cannot leak indefinitely.
+  setTimeout(() => {
+    try { process.kill(Number(process.argv[2]), 0); }
+    catch { fs.writeFileSync(${JSON.stringify(path.join(root, 'parent-exited-child-alive'))}, 'yes'); }
+  }, 500);
+  setTimeout(() => process.exit(0), 12000);
+} else setTimeout(() => process.exit(0), 12000);
+`);
   const npmScript = path.join(root, 'npm.cjs');
   writeFileSync(npmScript, `
 const fs = require('node:fs');
 fs.writeFileSync(${JSON.stringify(path.join(root, 'npm-ran'))}, 'yes');
 fs.writeFileSync(${JSON.stringify(path.join(root, 'npm.pid'))}, String(process.pid));
-if (${JSON.stringify(mode)} === 'timeout') {
-  require('node:child_process').spawn(process.execPath, [${JSON.stringify(childScript)}], { stdio: 'inherit' });
-  setInterval(() => {}, 1000);
+if (['timeout', 'orphan'].includes(${JSON.stringify(mode)})) {
+  require('node:child_process').spawn(process.execPath, [${JSON.stringify(childScript)}, String(process.pid)], { stdio: 'inherit' });
+  if (${JSON.stringify(mode)} === 'orphan') {
+    const ready = setInterval(() => {
+      if (fs.existsSync(${JSON.stringify(path.join(root, 'child.pid'))})) {
+        clearInterval(ready);
+        fs.unlinkSync(${JSON.stringify(path.join(root, 'npm.pid'))});
+        process.exit(0);
+      }
+    }, 10);
+  } else setTimeout(() => process.exit(0), 12000);
 } else {
   fs.writeSync(1, 'STDOUT-BEGIN\\n' + 'o'.repeat(${mode === 'large' ? 524288 : 16}) + '\\nSTDOUT-END\\n');
   fs.writeSync(2, 'STDERR-BEGIN\\n' + 'e'.repeat(${mode === 'large' ? 524288 : 16}) + '\\nSTDERR-END\\n');
   process.exit(${mode === 'failure' ? 23 : 0});
 }
 `);
-  if (WINDOWS) writeFileSync(path.join(bin, 'npm.cmd'), `@echo off\r\n"${process.execPath}" "${npmScript}"\r\nexit /b %errorlevel%\r\n`);
+  if (WINDOWS && mode === 'orphan') {
+    const psChild = path.join(root, 'orphan.ps1');
+    const psQuote = value => `'${value.replaceAll("'", "''")}'`;
+    writeFileSync(psChild, `
+$ErrorActionPreference = 'Stop'
+[IO.File]::WriteAllText(${psQuote(path.join(root, 'child.pid'))}, [string]$PID)
+$parentId = (Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId
+[Console]::WriteLine('ORPHAN-STREAM-OPEN')
+[IO.File]::WriteAllText(${psQuote(path.join(root, 'child.ready'))}, 'yes')
+Start-Sleep -Milliseconds 500
+if (-not (Get-Process -Id $parentId -ErrorAction SilentlyContinue)) {
+  [IO.File]::WriteAllText(${psQuote(path.join(root, 'parent-exited-child-alive'))}, 'yes')
+}
+Start-Sleep -Seconds 12
+`);
+    const readyScript = path.join(root, 'wait-ready.cjs');
+    writeFileSync(readyScript, `
+const fs = require('node:fs');
+const deadline = setTimeout(() => process.exit(24), 4000);
+const poll = setInterval(() => {
+  if (fs.existsSync(${JSON.stringify(path.join(root, 'child.ready'))})) {
+    clearTimeout(deadline); clearInterval(poll);
+  }
+}, 10);
+`);
+    writeFileSync(path.join(bin, 'npm.cmd'), `@echo off\r\nstart "" /b powershell -NoProfile -File "${psChild}"\r\n"${process.execPath}" "${readyScript}"\r\nexit /b %errorlevel%\r\n`);
+  } else if (WINDOWS) writeFileSync(path.join(bin, 'npm.cmd'), `@echo off\r\n"${process.execPath}" "${npmScript}"\r\nexit /b %errorlevel%\r\n`);
   else {
     const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
     writeFileSync(path.join(bin, 'npm'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(npmScript)}\n`);
@@ -152,6 +200,49 @@ for (const shell of SHELLS) {
     const result = run(shell, f);
     assert.equal(result.code, 2, result.text);
     assert.match(result.text, /only lands HELD/);
+    assert.equal(existsSync(path.join(f.root, 'npm-ran')), false);
+    assert.equal(git(f.repo, 'rev-parse', 'main'), f.baseline);
+    assert.equal(git(f.remote, 'rev-parse', 'main'), f.baseline);
+  });
+
+  test(`${shell}: parent exits zero but descendant holds output handles; containment must refuse within its bound`, { skip: !WINDOWS && 'Windows containment; non-Windows path is unchanged' }, () => {
+    const f = fixture('orphan');
+    const started = Date.now();
+    const result = run(shell, f);
+    const elapsedMs = Date.now() - started;
+    assert.equal(existsSync(path.join(f.root, 'parent-exited-child-alive')), true,
+      'the fixture must observe its parent exited while the child remains alive');
+    assert.equal(result.code, 1, `must refuse, not merge after waiting ${elapsedMs}ms: ${result.text}`);
+    assert.match(result.text, /MERGE BLOCKED.*output\/process tree incomplete/i);
+    assert.ok(elapsedMs < 12000, `drain exceeded bounded fixture budget: ${elapsedMs}ms`);
+    assert.equal(git(f.repo, 'rev-parse', 'main'), f.baseline);
+    assert.equal(git(f.remote, 'rev-parse', 'main'), f.baseline);
+    const childPid = Number(readFileSync(path.join(f.root, 'child.pid'), 'utf8'));
+    assert.equal(alive(childPid), false, 'orphaned stream holder must be cleaned up');
+  });
+
+  test(`${shell}: descendant cleanup failure refuses and kill-on-close contains the fixture`, { skip: !WINDOWS && 'Windows Job Object fault injection' }, async () => {
+    const f = fixture('orphan', { fault: 'cleanup' });
+    const started = Date.now();
+    const result = run(shell, f);
+    assert.equal(result.code, 1, result.text);
+    assert.match(result.text, /cleanup failure/);
+    assert.doesNotMatch(result.text, /MERGED:/);
+    assert.ok(Date.now() - started < 12000);
+    assert.equal(existsSync(path.join(f.root, 'parent-exited-child-alive')), true);
+    const childPid = Number(readFileSync(path.join(f.root, 'child.pid'), 'utf8'));
+    for (let i = 0; i < 30 && alive(childPid); i++) await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(alive(childPid), false, 'kill-on-close must terminate the owned descendant');
+    assert.equal(git(f.repo, 'rev-parse', 'main'), f.baseline);
+    assert.equal(git(f.remote, 'rev-parse', 'main'), f.baseline);
+  });
+
+  test(`${shell}: failed launch-time assignment refuses before npm executes`, { skip: !WINDOWS && 'Windows Job Object fault injection' }, () => {
+    const f = fixture('large', { fault: 'assignment' });
+    const result = run(shell, f);
+    assert.equal(result.code, 1, result.text);
+    assert.match(result.text, /assign suspended npm to job/);
+    assert.doesNotMatch(result.text, /MERGED:/);
     assert.equal(existsSync(path.join(f.root, 'npm-ran')), false);
     assert.equal(git(f.repo, 'rev-parse', 'main'), f.baseline);
     assert.equal(git(f.remote, 'rev-parse', 'main'), f.baseline);

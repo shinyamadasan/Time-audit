@@ -2167,3 +2167,40 @@ evidence: durable ChronaSense pilot archive/2026-10-20-hud-234a5ca/runner-repair
   runner-regressions.log, focused-final.log, npm-test.log, lint.log, check-www-parity.log, check-firebase-rules.log.
 limits: non-Windows PowerShell 7 behavior is covered by the forthcoming actual hosted CI, not these local Windows
   results. Formal review and required hosted checks remain pending; no approval, integration or publication claimed.
+
+## TASK-021 - Windows launch-time containment verification (2026-10-20)
+previous failure:
+  - Native orphan reproduction against 102d7af observed an exited parent with a live descendant retaining output
+    handles. Both shells waited about 14 seconds for fixture self-expiry, then incorrectly merged the disposable
+    fixture. Preserved in runner-corrective-evidence/reviewed-commit-native-orphan-regression.log.
+  - Exited-parent taskkill diagnostic could not clean that descendant. No production/main merge occurred.
+corrected verification:
+  - Focused Windows suite 15/15: large stdout AND stderr (512 KiB each), real successful fixture held merge,
+    nonzero 23 plus diagnostics, timeout plus parent/child termination, missing approval, native parent death
+    with live output-holding child, failed descendant cleanup and kill-on-close fallback, failed assignment
+    before npm executes. Failure fixtures check both local and bare-remote main stay unchanged.
+  - Real shells: Windows PowerShell 5.1.19041.7802, PowerShell 7.6.7. Orphan refusals complete in about 3.8s;
+    injected cleanup failure in about 3.5-4.1s. Fixture root timeout is six seconds; production stays ten minutes.
+  - First containment run: 11/15, four fixture-validity failures because parent exit preceded child readiness.
+    Added native readiness handshake; final 15/15 and the full npm repetition passed. Not hidden or called green.
+  - Full npm: exit 0; 2205 Node passes plus separate 455-case legacy harness, zero failures, one existing opt-in
+    skip. Existing task-gating suite 28/28. Lint zero errors / 48 pre-existing warnings, runtime mirror 92-file
+    closure, rules-builder, no-op build and git diff --check pass.
+  - Self-review/QA: exact diff confined to the test subprocess and its tooling/docs; process/job ownership is
+    by native handles, no Windows PID/name killer, fail-closed error paths, no code or approval bypass. No app,
+    HUD, persistence, rules, service worker, canonical template or other-project change. Would ship for review: yes.
+evidence:
+  - Durable archive/2026-10-20-hud-234a5ca/runner-containment-evidence: containment-focused.log (initial failure),
+    containment-focused-final.log, containment-npm-test.log, containment-lint.log, containment-parity.log,
+    containment-rules.log, containment-build.log, companion-unchanged.json, corrected patch/bundle and manifest.
+limits:
+  - Fresh formal review and hosted candidate checks are not claimed here. No integration/Pages publication.
+  - Windows-only containment is deliberately not run on Linux. Non-Windows behavior and its inherited drain
+    limitation remain as in 102d7af, per owner scope. No physical companion replacement/restart.
+
+contained full-suite check:
+  - Ran the complete npm test chain through MergeTestProcess.Run, under its real ten-minute Job Object
+    containment, including all nested PowerShell fixture jobs. ExitCode 0, Failure empty; 2205 Node passes
+    plus 455 legacy cases, zero failures, one existing opt-in skip. Confirms nested-job compatibility and
+    empty-tree completion before the helper reports success. Evidence: containment-nested-result.log and
+    containment-nested-npm.stdout.log / .stderr.log. This invocation ran tests only, no merge or deploy.

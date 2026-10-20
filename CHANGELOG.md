@@ -5028,3 +5028,19 @@ tests: PowerShell 5.1.19041.7802 and 7.6.7; focused runner + existing gating 37/
   mirror/rules parity, no-op build and diff checks pass. See TEST_REPORT.md and durable repair evidence.
 review: submitted to the actual independent formal reviewer; builder claims no review verdict.
 constraints: no HUD, canonical AI Dev OS, other-project, global-instruction or installed-companion changes.
+
+## TASK-021 - launch-time Windows containment correction (2026-10-20)
+changed:
+  - tools/Run-Merge.ps1: Windows-only call to the contained npm helper; existing approval/branch/test/merge
+    safeguards preserved. Non-Windows subprocess behavior retained from the prior repair 102d7af.
+  - tools/Merge-TestProcess.cs: suspended fixed-command launch, assignment to a private kill-on-close job
+    before resume, explicit inherited std-handle list, separate output files, ten-minute root timeout,
+    one-second post-exit job check and three-second cleanup limit. Errors and ambiguous tree completion refuse.
+  - scripts/merge-runner-output.test.js: native orphan readiness/parent-death proof, cleanup-failure and
+    assignment-failure injection in disposable copies only; no reusable-PID teardown kills.
+  - TASKS.md, TASK_021_HANDOFF.md, CODEMAP.md: record owner-authorized expanded scope, correct earlier unbounded
+    drain claim, map the helper and retain integration hold. Earlier formal REWORK remains unchanged.
+tests: focused 15/15 on Windows PowerShell 5.1.19041.7802 and PowerShell 7.6.7; npm test exit 0,
+  2205 Node passes plus 455 legacy cases, zero failed and one existing opt-in skip. Existing task-gating 28/28.
+  Lint zero errors / 48 existing warnings; parity (92-file closure), rules-builder, build and diff checks pass.
+review: fresh formal independent review required on the complete corrected diff. No merge or publication claimed.

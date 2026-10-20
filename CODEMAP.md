@@ -1,6 +1,12 @@
 # ChronaSense — CODEMAP
 > index.html structural reference. Generated 2026-05-07. Update when adding/moving sections.
 
+## Merge gate tooling (TASK-021)
+
+- `tools/Run-Merge.ps1`: existing held merge gate; Windows npm tests use `MergeTestProcess.Run`
+  in `tools/Merge-TestProcess.cs` (suspended launch, private Job Object, output files, bounded cleanup).
+- `scripts/merge-runner-output.test.js`: real-runner disposable Git fixtures on supported PowerShell shells.
+
 ## Unfinished UX V1 (TASK-017 review candidate, 2026-10-15)
 
 - `planning-continuity-ui.js`: `staleHtml` renders five ordinary backlog rows per page; native More actions

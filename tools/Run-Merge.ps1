@@ -233,6 +233,22 @@ if ($LASTEXITCODE -ne 0) {
 # on 5.1 and break every existing Windows install. Hence the explicit null check.
 $OnWindows = if ($null -eq $IsWindows) { $true } else { $IsWindows }
 
+if ($OnWindows) {
+    try {
+        Add-Type -Path (Join-Path $PSScriptRoot 'Merge-TestProcess.cs')
+        $test = [MergeTestProcess]::Run($root, 10 * 60 * 1000)
+        $testStdout = $test.Stdout
+        $testStderr = $test.Stderr
+        $testExitCode = $test.ExitCode
+        $testFailure = $test.Failure
+    } catch { $testFailure = "npm test containment failed: $($_.Exception.Message)" }
+    if ($testFailure) {
+        Invoke-Git -C $root checkout main | Out-Null
+        Write-Result "MERGE BLOCKED: $testFailure on $branchName. main was not changed."
+        exit 1
+    }
+} else {
+# Retain the existing non-Windows subprocess behavior; containment above is Windows-only.
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 # cmd.exe does not exist on macOS; /bin/sh is the equivalent there.
 if ($OnWindows) { $psi.FileName = 'cmd.exe'; $psi.Arguments = '/c npm test' }
@@ -256,11 +272,13 @@ if (-not $p.WaitForExit(10 * 60 * 1000)) {
 }
 $testStdout = $stdoutTask.Result
 $testStderr = $stderrTask.Result
+$testExitCode = $p.ExitCode
+}
 if ($testStdout) { Add-Content -Path $logFile -Value "[Run-Merge] npm test stdout:`n$testStdout" }
 if ($testStderr) { Add-Content -Path $logFile -Value "[Run-Merge] npm test stderr:`n$testStderr" }
-if ($p.ExitCode -ne 0) {
+if ($testExitCode -ne 0) {
     Invoke-Git -C $root checkout main | Out-Null
-    Write-Result "MERGE BLOCKED: npm test FAILED on $branchName (exit $($p.ExitCode)). main was not changed."
+    Write-Result "MERGE BLOCKED: npm test FAILED on $branchName (exit $testExitCode). main was not changed."
     exit 1
 }
 

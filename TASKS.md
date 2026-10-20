@@ -1082,14 +1082,16 @@ integration:
 ---
 
 ### TASK-021 - Repair merge-runner subprocess output deadlock
-status: codex
+status: review
 owner: codex
 source: owner-direct
 priority: P1
 depends-on: none
-files: tools/Run-Merge.ps1 (npm subprocess I/O and timeout child cleanup only),
+files: tools/Run-Merge.ps1 (npm subprocess I/O and launch-time containment only),
+  tools/Merge-TestProcess.cs (Windows-only contained npm launch/output/cleanup),
   scripts/merge-runner-output.test.js (new), package.json (test wiring only), TASK_021_HANDOFF.md (new),
-  TASKS.md (this entry/status only), CHANGELOG.md and TEST_REPORT.md (append-only), REVIEW.md (reviewer only)
+  TASKS.md (this entry/status only), CODEMAP.md (tooling entry only),
+  CHANGELOG.md and TEST_REPORT.md (append-only), REVIEW.md (reviewer only)
 
 context:
   Owner-direct instruction in the current session, 2026-10-20, APPROVED - Narrowly Scoped Merge Runner Repair.
@@ -1098,30 +1100,35 @@ context:
   success, nonzero, timeout and child-cleanup regressions; validate supported PowerShell; obtain independent
   exact-change review; then resume the already authorized TASK-020 HUD integration through the legitimate gate.
   This task starts at main bb171a287ac67d76ae27634b5227bc24f66919de, separately from approved TASK-020.
+  After formal REWORK of 102d7af and a native orphan regression that incorrectly merged a disposable
+  fixture, the owner explicitly expanded scope on 2026-10-20 to Windows launch-time Job Object
+  containment. This supersedes the earlier output-only limit; no general process framework is authorized.
 
 acceptance:
-  - [x] Both redirected streams drain concurrently before waiting; output over pipe capacity completes.
-  - [x] Success still requires npm exit 0 and clean branch, then the existing fast-forward/status/push path.
-  - [x] Nonzero tests still refuse without advancing main, preserving useful stdout/stderr diagnostics.
-  - [x] The production test timeout remains ten minutes; timeout refuses and cleans up its child process tree.
-  - [x] Real-runner disposable Git fixtures cover large stdout/stderr, success, nonzero, timeout, cleanup
-        and refusal on missing approval; Windows PowerShell 5.1 and PowerShell 7 compatibility is verified.
+  - [x] Windows outputs are captured safely without full-pipe or inherited-handle completion deadlocks.
+  - [x] Windows root is suspended until assigned to an owned Job Object, before descendants can execute.
+  - [x] Success requires npm exit 0, an empty job, verified cleanup and a clean branch before existing merge.
+  - [x] Tree, launch, cleanup or ambiguous completion failures refuse without advancing either main.
+  - [x] Ten-minute test timeout remains; Windows post-exit/cleanup waits are bounded. No unrelated PID kills.
+  - [x] Real-runner disposable fixtures cover large outputs, success, nonzero, timeout, orphaned output
+        handles, cleanup failure, failed assignment, missing approval and no false-success merge on PS 5.1/7.6.
+  - [x] Non-Windows behavior remains unchanged; no installed companion or canonical template changes.
 
 constraints:
   - No HUD implementation changes or fabricated gate evidence. Preserve original 234a5ca and task-020 branch.
   - No canonical AI Dev OS/other-project propagation, global instructions, credentials, production data,
     branch protection or installed Windows companion replacement/restart.
   - No direct push-main workaround, runner bypass or weakened check. Only the legitimate held gate lands work.
-  - Stop on failed independent review, changed required approval, unexpected baseline/permissions or scope
-    beyond subprocess output handling (including its expressly authorized timeout child cleanup/tests).
+  - Stop on failed fresh independent review, changed required approval, unexpected baseline/permissions,
+    or inability to provide reliable containment within this narrowly expanded scope.
   - Owner approval includes this isolated repair and resuming TASK-020 integration/automatic Pages publication;
     formal reviewers retain ownership of verdicts. Any expected repair-only baseline change must be explicit,
     preserve the reviewed HUD implementation, and receive refreshed review/CI before HUD landing.
 
 verification:
-  - [ ] Focused real-runner fixtures on PowerShell 5.1 and 7; existing task-gating regressions; npm test.
+  - [x] Focused real-runner fixtures on PowerShell 5.1 and 7; existing task-gating regressions; npm test.
   - [ ] Lint/parity/rules/diff checks; exact runner change receives formal independent review, held at approved
-        if accepted; required hosted test/fence candidate checks pass. Scope stays limited to subprocess I/O.
+        if accepted; required hosted test/fence candidate checks pass before any held integration.
   - [ ] Held gate preview/Confirm, final main CI/Pages and unchanged installed companion evidence.
 
 ---
