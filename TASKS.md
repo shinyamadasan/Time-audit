@@ -1081,6 +1081,52 @@ integration:
 
 ---
 
+### TASK-021 - Repair merge-runner subprocess output deadlock
+status: codex
+owner: codex
+source: owner-direct
+priority: P1
+depends-on: none
+files: tools/Run-Merge.ps1 (npm subprocess I/O and timeout child cleanup only),
+  scripts/merge-runner-output.test.js (new), package.json (test wiring only), TASK_021_HANDOFF.md (new),
+  TASKS.md (this entry/status only), CHANGELOG.md and TEST_REPORT.md (append-only), REVIEW.md (reviewer only)
+
+context:
+  Owner-direct instruction in the current session, 2026-10-20, APPROVED - Narrowly Scoped Merge Runner Repair.
+  The owner separately authorizes the smallest project-only repair to the existing stdout/stderr deadlock,
+  preserving approvals, branches, tests, timeouts, failures and merge safeguards. Add large stdout/stderr,
+  success, nonzero, timeout and child-cleanup regressions; validate supported PowerShell; obtain independent
+  exact-change review; then resume the already authorized TASK-020 HUD integration through the legitimate gate.
+  This task starts at main bb171a287ac67d76ae27634b5227bc24f66919de, separately from approved TASK-020.
+
+acceptance:
+  - [ ] Both redirected streams drain concurrently before waiting; output over pipe capacity completes.
+  - [ ] Success still requires npm exit 0 and clean branch, then the existing fast-forward/status/push path.
+  - [ ] Nonzero tests still refuse without advancing main, preserving useful stdout/stderr diagnostics.
+  - [ ] The production test timeout remains ten minutes; timeout refuses and cleans up its child process tree.
+  - [ ] Real-runner disposable Git fixtures cover large stdout/stderr, success, nonzero, timeout, cleanup
+        and refusal on missing approval; Windows PowerShell 5.1 and PowerShell 7 compatibility is verified.
+  - [ ] Exact runner change receives an actual independent formal review, held at approved if accepted.
+  - [ ] Required candidate CI passes; source scope stays limited to subprocess handling and its tests/wiring.
+
+constraints:
+  - No HUD implementation changes or fabricated gate evidence. Preserve original 234a5ca and task-020 branch.
+  - No canonical AI Dev OS/other-project propagation, global instructions, credentials, production data,
+    branch protection or installed Windows companion replacement/restart.
+  - No direct push-main workaround, runner bypass or weakened check. Only the legitimate held gate lands work.
+  - Stop on failed independent review, changed required approval, unexpected baseline/permissions or scope
+    beyond subprocess output handling (including its expressly authorized timeout child cleanup/tests).
+  - Owner approval includes this isolated repair and resuming TASK-020 integration/automatic Pages publication;
+    formal reviewers retain ownership of verdicts. Any expected repair-only baseline change must be explicit,
+    preserve the reviewed HUD implementation, and receive refreshed review/CI before HUD landing.
+
+verification:
+  - [ ] Focused real-runner fixtures on PowerShell 5.1 and 7; existing task-gating regressions; npm test.
+  - [ ] Lint/parity/rules/diff checks; formal independent review; required hosted test/fence candidate checks.
+  - [ ] Held gate preview/Confirm, final main CI/Pages and unchanged installed companion evidence.
+
+---
+
 <!-- Paste new tasks above this line. -->
 
 <!-- TASK TEMPLATE -- copy and fill:
