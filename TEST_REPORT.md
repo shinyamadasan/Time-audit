@@ -2151,3 +2151,19 @@ untested:
   - Owner screenshot unavailable. Completed/Delete behavior is design-only; no historical semantic tests claimed.
 evidence: task017-npm-final.log, task017-browser-final.log, task017-layout-final.log, task017-lint-final.log (ignored local logs);
   playwright-report/task-017/unfinished-{360,390,1920}.png and unfinished-more-{360,390,1920}.png (local images).
+
+## TASK-021 - subprocess repair verification (2026-10-20)
+suite: real-runner disposable Git fixtures; existing task-gating tests; full npm; lint/parity/rules/build checks.
+result:
+  - Before repair, large stdout/stderr deadlocks reproduce on both PowerShell 5.1 and 7 (expected failures).
+  - Both supported local shells: Windows PowerShell 5.1.19041.7802 and PowerShell 7.6.7. Nine runner assertions
+    cover 512 KiB on EACH stream, successful fixture landing, nonzero refusal/diagnostics, timeout and child-tree
+    cleanup, and refusal without approval. Real remotes are never used by these fixtures.
+  - Final focused runner plus existing gating: 37/37. Full npm: exit 0, 2199 Node passes plus 455 legacy cases,
+    zero failures, one existing opt-in skip; includes final npm-process and descendant cleanup assertions.
+  - Lint: zero errors / 48 existing warnings; runtime mirror 92-file closure, rules builder parity, repository
+    no-op build and git diff --check pass. No application runtime or HUD file changed.
+evidence: durable ChronaSense pilot archive/2026-10-20-hud-234a5ca/runner-repair-evidence: baseline-large-output.log,
+  runner-regressions.log, focused-final.log, npm-test.log, lint.log, check-www-parity.log, check-firebase-rules.log.
+limits: non-Windows PowerShell 7 behavior is covered by the forthcoming actual hosted CI, not these local Windows
+  results. Formal review and required hosted checks remain pending; no approval, integration or publication claimed.

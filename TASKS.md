@@ -1082,7 +1082,7 @@ integration:
 ---
 
 ### TASK-021 - Repair merge-runner subprocess output deadlock
-status: codex
+status: review
 owner: codex
 source: owner-direct
 priority: P1
@@ -1100,14 +1100,12 @@ context:
   This task starts at main bb171a287ac67d76ae27634b5227bc24f66919de, separately from approved TASK-020.
 
 acceptance:
-  - [ ] Both redirected streams drain concurrently before waiting; output over pipe capacity completes.
-  - [ ] Success still requires npm exit 0 and clean branch, then the existing fast-forward/status/push path.
-  - [ ] Nonzero tests still refuse without advancing main, preserving useful stdout/stderr diagnostics.
-  - [ ] The production test timeout remains ten minutes; timeout refuses and cleans up its child process tree.
-  - [ ] Real-runner disposable Git fixtures cover large stdout/stderr, success, nonzero, timeout, cleanup
+  - [x] Both redirected streams drain concurrently before waiting; output over pipe capacity completes.
+  - [x] Success still requires npm exit 0 and clean branch, then the existing fast-forward/status/push path.
+  - [x] Nonzero tests still refuse without advancing main, preserving useful stdout/stderr diagnostics.
+  - [x] The production test timeout remains ten minutes; timeout refuses and cleans up its child process tree.
+  - [x] Real-runner disposable Git fixtures cover large stdout/stderr, success, nonzero, timeout, cleanup
         and refusal on missing approval; Windows PowerShell 5.1 and PowerShell 7 compatibility is verified.
-  - [ ] Exact runner change receives an actual independent formal review, held at approved if accepted.
-  - [ ] Required candidate CI passes; source scope stays limited to subprocess handling and its tests/wiring.
 
 constraints:
   - No HUD implementation changes or fabricated gate evidence. Preserve original 234a5ca and task-020 branch.
@@ -1122,7 +1120,8 @@ constraints:
 
 verification:
   - [ ] Focused real-runner fixtures on PowerShell 5.1 and 7; existing task-gating regressions; npm test.
-  - [ ] Lint/parity/rules/diff checks; formal independent review; required hosted test/fence candidate checks.
+  - [ ] Lint/parity/rules/diff checks; exact runner change receives formal independent review, held at approved
+        if accepted; required hosted test/fence candidate checks pass. Scope stays limited to subprocess I/O.
   - [ ] Held gate preview/Confirm, final main CI/Pages and unchanged installed companion evidence.
 
 ---

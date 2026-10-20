@@ -240,12 +240,24 @@ else            { $psi.FileName = '/bin/sh'; $psi.Arguments = '-c "npm test"' }
 $psi.WorkingDirectory = $root
 $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
 $p = [System.Diagnostics.Process]::Start($psi)
+# Drain both pipes before waiting, or a verbose npm process can block on a full pipe.
+$stdoutTask = $p.StandardOutput.ReadToEndAsync()
+$stderrTask = $p.StandardError.ReadToEndAsync()
 if (-not $p.WaitForExit(10 * 60 * 1000)) {
-    try { $p.Kill() } catch { }
+    # Kill the test tree, not just cmd/npm; descendants can hold the pipes open.
+    try {
+        if ($OnWindows) { & taskkill /PID $p.Id /T /F 2>$null | Out-Null }
+        else { $p.Kill($true) }
+    } catch { }
+    if (-not $p.HasExited) { try { $p.Kill() } catch { } }
     Invoke-Git -C $root checkout main | Out-Null
     Write-Result "MERGE BLOCKED: npm test timed out on $branchName. main was not changed."
     exit 1
 }
+$testStdout = $stdoutTask.Result
+$testStderr = $stderrTask.Result
+if ($testStdout) { Add-Content -Path $logFile -Value "[Run-Merge] npm test stdout:`n$testStdout" }
+if ($testStderr) { Add-Content -Path $logFile -Value "[Run-Merge] npm test stderr:`n$testStderr" }
 if ($p.ExitCode -ne 0) {
     Invoke-Git -C $root checkout main | Out-Null
     Write-Result "MERGE BLOCKED: npm test FAILED on $branchName (exit $($p.ExitCode)). main was not changed."

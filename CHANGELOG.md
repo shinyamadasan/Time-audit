@@ -5016,3 +5016,15 @@ blockers: no remaining UI implementation blocker; strict unseen-remote conflict 
 deviations: owner screenshot unavailable; written feedback used. Full Playwright/emulator suites and physical
   devices not exercised. Only observed-state Undo safety is claimed under existing LWW. No integration/push/deploy.
 → status set to `review` in TASKS.md; stop at REVIEW-READY.
+
+## TASK-021 - project-only merge-runner subprocess repair (2026-10-20)
+branch: task-021, baseline bb171a2; separately owner-authorized infrastructure scope.
+changed: tools/Run-Merge.ps1 drains stdout/stderr concurrently, records diagnostics, and terminates the test
+  process tree on timeout; the existing ten-minute limit and all task/branch/test/merge/push gates are unchanged.
+  scripts/merge-runner-output.test.js exercises the real runner in disposable repositories; package.json wires it
+  into npm test. TASK_021_HANDOFF.md records exact scope, baseline reproduction, compatibility and release limits.
+tests: PowerShell 5.1.19041.7802 and 7.6.7; focused runner + existing gating 37/37; final full npm 2199 Node passes
+  plus 455 legacy cases, zero failures, one existing opt-in skip. Lint zero errors (48 existing warnings),
+  mirror/rules parity, no-op build and diff checks pass. See TEST_REPORT.md and durable repair evidence.
+review: submitted to the actual independent formal reviewer; builder claims no review verdict.
+constraints: no HUD, canonical AI Dev OS, other-project, global-instruction or installed-companion changes.
