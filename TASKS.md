@@ -1082,7 +1082,7 @@ integration:
 ---
 
 ### TASK-021 - Repair merge-runner subprocess output deadlock
-status: review
+status: codex
 owner: codex
 source: owner-direct
 priority: P1

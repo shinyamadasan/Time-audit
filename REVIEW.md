@@ -6,6 +6,114 @@
 
 ---
 
+## Review TASK-021 - REWORK (Repair merge-runner subprocess output deadlock)
+branch: task-021 @ 102d7af (baseline main bb171a2)
+verdict: changes requested
+reviewer: Claude reviewer, autonomous review run, 2026-10-20 (did not build this task)
+
+### What was checked
+I read the TASK-021 contract (TASKS.md:1084-1126), `git diff main...HEAD` (7 files, +284/-2), tools/Run-Merge.ps1
+lines 180-290 in context, the new scripts/merge-runner-output.test.js, the package.json wiring, TASK_021_HANDOFF.md,
+and the TASK-021 entries in CHANGELOG.md and TEST_REPORT.md. I did NOT run npm test or the fixtures myself. This
+run is read-only, and running the real runner fixtures would write to disk. Test results below are the builder's
+recorded evidence, not reproduced by me.
+
+### Guardian Gauntlet
+Both guardians ran as read-only advisors via the Agent tool. Neither edited any file: `git status --porcelain`
+was empty after both returned.
+
+**security-guardian: RAN. No CONFIRMED findings. No Critical or High findings.**
+- Confirmed safe: no command injection. `$p.Id` is an Int32 passed as a separate argument, and the
+  ProcessStartInfo arguments are constants.
+- Confirmed: every merge gate is unchanged. These are the approval check, the clean main and clean branch checks,
+  the exit-code check (still runs after the log appends), the post-test clean check, ancestor/ff-only, and push.
+  The timeout path still fails closed.
+- Confirmed: the fixtures cannot reach a real remote. `$root` comes from `$PSScriptRoot` in the temp fixture, origin
+  is a local bare repo, and npm is a PATH shim. Teardown `rmSync` is guarded by tmpdir/prefix asserts.
+- S-1 MEDIUM, PLAUSIBLE: Run-Merge.ps1:259-260 now writes the full npm output to claude-session.log. That file is
+  ignored by `*.log`, but `/log` (Dispatch-Commands.ps1:913-915) copies the last 40 lines into tracked OUTBOX.md,
+  which is committed and pushed to main (Pages). The result: test stack traces and local paths can land in
+  public history. No current test was found to print secrets. This widens an existing exposure path; it is not
+  a new class.
+- S-2 LOW, PLAUSIBLE: test teardown (merge-runner-output.test.js:28-36) runs `taskkill /T /F` on any recorded PID
+  that is still alive. That includes npm.pid from the large/failure fixtures, which has already exited. If Windows
+  reuses that PID, teardown could kill an unrelated process tree on the operator PC.
+- S-3 LOW, PLAUSIBLE: a theoretical PID-reuse race between the timeout and the taskkill in Run-Merge.ps1:249.
+  Informational only.
+
+**quality-guardian: RAN. One acceptance criterion is NOT fully met.**
+- AC1 (concurrent drain, output over pipe capacity completes): MET. ReadToEndAsync runs on both streams before
+  WaitForExit. A 512 KiB per-stream fixture reproduces the failure before the fix and passes after it on 5.1 and 7.
+- AC2 (success path still needs exit 0 + clean branch, then ff/status/push): MET. The gates are byte-identical to
+  main, and the success fixture checks that main advanced, local equals remote, status is done and the tree is clean.
+- AC3 (nonzero refuses, diagnostics kept): MET. Both streams are logged before the ExitCode check, and the fixture
+  checks exit 1, both markers, main/remote unchanged and status still approved.
+- AC4 (ten-minute timeout bounds the test step; timeout refuses and cleans up the tree): **PARTIAL / NOT MET.** The
+  literal and the tree kill are correct, but the ten-minute limit no longer bounds the test step. See Q-1.
+- AC5 (real-runner fixtures; PS 5.1 + 7 verified): MET on Windows. The non-Windows `$p.Kill($true)` branch and the
+  Linux shim path have not run anywhere yet; hosted CI is still pending. There is no fixture for the Q-1 scenario.
+- Q-1 SHOULD-FIX, close to a blocker: Run-Merge.ps1:257-258 can wait forever after a normal exit. See Must-fix 1.
+- Q-2 NIT: the timeout path throws away all captured output. That is the case where knowing which test hung
+  matters most.
+- Q-3 NIT: Run-Merge.ps1:249 runs `& taskkill ... 2>$null` while EAP is Stop. On 5.1, any taskkill stderr becomes a
+  terminating NativeCommandError (the trap that Invoke-Git's own comment at :52-58 documents). It is caught, but
+  it can cut the tree kill short. Tests pass, so this is not reproduced.
+- Q-4 NIT: `$p.Kill($true)` needs .NET Core. It is correctly reachable only on non-Windows pwsh, but it has not
+  been exercised yet.
+- Q-5 NIT: claude-session.log grows with no cap (multiple MB per /merge), and the encoding is garbled under 5.1.
+- Q-6 PROCESS: every TASKS.md verification item is still unchecked (independent review, hosted CI, held-gate
+  evidence).
+
+Gauntlet result: **NOT PASSED.** quality-guardian found an acceptance criterion that is not met (AC4 / Q-1).
+security-guardian is clean of CONFIRMED findings.
+
+### Findings (reviewer)
+1. **The deadlock fix itself is correct and well evidenced.** Starting the async drain before WaitForExit is the
+   standard .NET remedy. The before/after reproduction on both shells is real evidence, not an assumption. Scope
+   stays inside the subprocess block plus timeout tree cleanup, and no gate is weakened.
+2. **The repair adds a new hang, and it is in the unattended runner.** I traced Q-1 independently and agree with it.
+   `WaitForExit(int)` returns when cmd.exe/sh exits. `ReadToEndAsync().Result` then blocks until *every* holder
+   of the pipe's write end closes it. If a test leaves a stdio-inheriting descendant running and npm exits, the
+   runner now hangs with no limit: no Write-Result, no .last-phase-result.txt, and `/merge` never replies. On the
+   same input, baseline main moved on to the exit-code check. This contradicts the handoff's explicit claim at
+   TASK_021_HANDOFF.md:11 ("No new unbounded wait is introduced") and the AC4 intent that the ten-minute limit
+   bounds the test step. It is latent today, since no current test was found to leak such a child, but this
+   runner exists precisely to fail closed under unexpected test behaviour.
+
+### Must-fix (Codex must address before approval)
+- [ ] **Bound the post-exit drain** (Run-Merge.ps1:257-258). After WaitForExit succeeds, wait on both read tasks
+      with a finite limit, for example `[System.Threading.Tasks.Task]::WaitAll(@($stdoutTask,$stderrTask), <ms>)`.
+      If that expires, kill the test tree using the same code as :248-252, log whatever was captured, and refuse
+      with a distinct MERGE BLOCKED result that says main was not changed. Never fall through to the merge.
+- [ ] **Add a regression fixture for that case.** npm exits 0 but leaves a `stdio: 'inherit'` descendant running.
+      Assert that the runner returns within a limit, refuses, kills the descendant and leaves main/remote unchanged,
+      on both PowerShell 5.1 and 7.
+- [ ] **Correct TASK_021_HANDOFF.md:11** (the "no new unbounded wait" claim) so the handoff matches the code.
+- [ ] Re-run the focused suite and full npm on both shells. Append the fresh evidence to CHANGELOG.md and
+      TEST_REPORT.md.
+
+### Nits (optional, within the existing scope)
+- Q-2: on timeout, after the tree kill, wait briefly on the read tasks (bounded) and log what was captured, so a
+  hung test can be identified.
+- Q-3: lower EAP around the taskkill call (as Invoke-Git does), or start taskkill with Process.Start.
+- S-2: in teardown, kill only the PIDs from timeout-mode fixtures, or have the shim remove its pid file on exit.
+- Q-5: consider capping how much npm output goes into claude-session.log (for example, the last N KB). Note S-1:
+  any tail of that log may reach the public OUTBOX via `/log`. Changing `/log` itself is out of TASK-021 scope; the
+  owner should consider a separate follow-up.
+
+### Verdict
+REWORK. The core deadlock repair is right. It cannot be approved while it adds an unbounded wait to the held merge
+gate, and quality-guardian marked AC4 not fully met. Under the gauntlet rules that is a mandatory REWORK.
+
+Gate picked: `codex` (rework). If a later review approves it, the gate must be `approved`, never `done`: this task
+changes tools/Run-Merge.ps1, the AI Dev OS merge gate itself, which is red-zone under CLAUDE.md's Risk-gated merge.
+The owner's own constraint is also "held at approved if accepted". Hosted CI (non-Windows pwsh kill branch) and
+the remaining TASKS.md verification items are still outstanding.
+
+-> TASK-021 status set to `codex` in TASKS.md.
+
+---
+
 ## Review TASK-015 - PASS WITH NOTES, HOLD AT APPROVED (Unified My Day + Brain Dump V1 planning tray)
 branch: task-015 @ 5c5957e (rebased onto origin/main 2411ee4; pre-rebase builder SHA cabb793, tag task-015-prereconcile)
 verdict: approved (red-zone, held for human merge), once the lead's post-rebase smoke run is green
