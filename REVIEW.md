@@ -6,6 +6,96 @@
 
 ---
 
+## Review TASK-020 - APPROVED, HELD (integrate reviewed HUD tracking-hide pilot 234a5ca)
+branch: task-020 @ 8b02066 (baseline main bb171a2; reviewed runtime commit 234a5ca)
+verdict: approved (held for human merge; owner-required HELD gate)
+reviewer: autonomous Claude reviewer, 2026-10-20 (did not build this task)
+
+### What was checked
+Read the TASK-020 contract (TASKS.md:1084-1135), TASK_020_HANDOFF.md, PILOT_REVIEW.md, the TASK-020 / pilot
+sections of CHANGELOG.md and TEST_REPORT.md, and the full `git diff main...HEAD`. Reviewer shell checks:
+`git rev-parse main` = bb171a287ac6...; `git merge-base --is-ancestor 234a5ca HEAD` succeeds;
+`git diff --stat 234a5ca HEAD -- windows-hud/` is **empty** (the three HUD files are byte-identical to the
+reviewed commit); `git diff --name-only main...HEAD` lists only the 9 files in the task's `files:` field;
+`git status --short` clean. Read `Hide-HudUntilFocusEnds` / `Render-HudState` and the listener's payload
+validation (ChronaSenseHud.ps1:287-293, 381-382, 482, 489).
+
+**Not run by me:** `pwsh` HUD test scripts and `npm test` were denied by this run's permissions, and neither
+guardian could run a shell either. All test counts in this review come from the pilot archive logs, not from a
+live run during this review.
+
+### Findings (verified)
+1. **The fix is correct and minimal.** Hide now records `startedAt` (:291). Render lifts the hide only for a
+   `tracking-active` snapshot whose `startedAt` differs (:382). Same-session heartbeats and title/claim changes
+   keep the same `startedAt` (the bridge builds `sessionKey` from it), so they stay hidden. A new activity, or an
+   end followed by a new start before WPF renders, lifts the hide. Focus work/break never reaches :382 and the
+   kind-handover rule (:381) is unchanged.
+2. **Type-safe comparison.** The listener rejects any non-numeric `startedAt` (:482, :489), so the `-ne` is a
+   numeric compare. A null snapshot at Hide time clears through the existing null/type branches.
+3. **Scope holds.** The only runtime change is ChronaSenseHud.ps1 (5 code lines + 1 comment). No timer,
+   heartbeat, entry schema, RTDB, auth, rules, transport, index.html or storage.js change. Commits after
+   234a5ca touch only lifecycle and evidence docs. CHANGELOG and TEST_REPORT are appended at the end.
+4. **Evidence matches the claims** (quality-guardian checked the archive): baseline-regression.log fails at
+   `ActivitySwitchLiftsHide`. The logs show companion 60/30, bridge 33/33 and browser 14 passed. The per-file
+   counts in npm-test-complete.log sum to 2190 with 0 failures and 1 skip, and legacy is 455/455.
+   desktop-results.jsonl has all five owner-observed WPF/tray checks PASS. desktop-after.json shows the
+   installed companion (same PID) still running, with settings and startup unchanged.
+
+## Guardian Gauntlet
+Both guardians **ran** as read-only advisors and wrote nothing (tree still clean afterwards). Both ran with
+reduced tooling: Bash and PowerShell were denied to them, so they worked from file reads. I closed the git
+gaps myself with the reviewer shell checks above. The live pwsh test re-run remains open for everyone (see
+below).
+
+**security-guardian:** no CONFIRMED findings.
+- INFO: no injection path. `startedAt` is validated as numeric and used only in one comparison. Titles render
+  through WPF `.Text`.
+- INFO: no new network surface. The loopback listener, Origin allow-list and 8 KB cap are unchanged.
+- INFO (pre-existing, documented): a local process can spoof what the HUD displays. Impact is display-only.
+- INFO: `Invoke-Expression` in the test harness runs trusted repo source and is never reachable at runtime.
+- PLAUSIBLE, Low: absolute local paths (the `C:\Users\Admin\...` account name and folder layout) in
+  PILOT_REPORT.md and TASK_020_HANDOFF.md become public on merge. Earlier TEST_REPORT entries already do this.
+  No credential value. Treated as a nit.
+- No secrets, tokens, Firebase config or PII found. PID, SHAs and digests are not sensitive.
+
+**quality-guardian:** all six implementation/formal-review acceptance criteria MET. No constraint violations.
+Release gates are unchecked, as expected at this stage.
+- AC1: ancestry MET. The guardian could not prove byte identity, but my `git diff 234a5ca HEAD -- windows-hud/`
+  shows it is identical.
+- AC2: MET by code trace, including edge cases (number vs string, null startedAt, Hide with a null snapshot).
+- AC3, AC4, AC5: MET from archive evidence. Owner observation itself cannot be re-checked. "exit 0" is inferred
+  from the zero-failure counts and is not a literal log line.
+- AC6: MET.
+- Nits: N1 handoff wording "six added, one replaced" is really 5 added + 1 replaced. N2 "still remote main"
+  cannot be checked from this checkout; the release gate re-checks it anyway. N4 the startedAt rule covers
+  tracking only, so Focus end then a new Focus before any render stays hidden. That is baseline behaviour and
+  within the AC.
+
+Gauntlet result: **PASSED.** Both ran, there are no CONFIRMED security findings and no unmet criterion.
+
+### Must-fix (Codex must address before approval)
+- none
+
+### Pre-merge conditions for the human (already release gates in TASKS.md; not rework)
+- Re-run `pwsh -NoProfile -File windows-hud/Test-HudNormalTracking.ps1` (expect PASS: 60) and
+  `Test-HudDogfoodPolish.ps1` (expect PASS: 30) on the candidate. No one ran them live in this review.
+- Required hosted CI (test + Firebase fence / rules integration) green on the actual task-020 candidate. Then
+  re-check the baseline against remote main before `Run-Merge.ps1`.
+
+### Nits (optional)
+- Replace absolute `C:\Users\Admin\...` paths in PILOT_REPORT.md / TASK_020_HANDOFF.md with relative paths or a
+  `<home>` placeholder before publication.
+- TASK_020_HANDOFF.md:13 line-count wording (5 added + 1 replaced).
+
+### Verdict
+Gate picked: `approved` (held). The HUD runtime change on its own is reversible, display-only companion code.
+The owner explicitly required the HELD gate for this task (TASKS.md constraints), and live test re-runs and
+candidate CI are still outstanding. When torn, choose approved. main is NOT merged by this review.
+
+→ TASK-020 status set to `approved` in TASKS.md.
+
+---
+
 ## Review TASK-015 - PASS WITH NOTES, HOLD AT APPROVED (Unified My Day + Brain Dump V1 planning tray)
 branch: task-015 @ 5c5957e (rebased onto origin/main 2411ee4; pre-rebase builder SHA cabb793, tag task-015-prereconcile)
 verdict: approved (red-zone, held for human merge), once the lead's post-rebase smoke run is green

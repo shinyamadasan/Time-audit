@@ -1082,7 +1082,7 @@ integration:
 ---
 
 ### TASK-020 - Integrate the reviewed HUD tracking-hide pilot
-status: review
+status: approved
 owner: codex
 source: owner-direct
 priority: P1
