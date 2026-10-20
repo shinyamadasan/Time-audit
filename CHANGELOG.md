@@ -5029,3 +5029,10 @@ changed:
 tests: see PILOT_REPORT.md and the sibling evidence directory; independent advisory review: ship (PILOT_REVIEW.md).
 deviations: owner directly authorized this isolated pilot; existing TASK-014/TASK-015 statuses and all approval
   records remain unchanged. No push, merge, deployment, startup-companion replacement or shared-system edit.
+
+## TASK-020 — formal registration of reviewed HUD pilot (2026-10-20)
+branch: task-020; original reviewed commit 234a5ca preserved above baseline bb171a2.
+changed: TASKS.md owner-direct entry, TASK_020_HANDOFF.md and append-only test/evidence records only.
+The three HUD files remain byte-identical to 234a5ca. No new source feature or installed-companion action.
+review: submitted to the existing formal review process; no approval result claimed by builder.
+release: required candidate CI and Run-Merge held gate remain pending. See TASK_020_HANDOFF.md.

@@ -2168,3 +2168,9 @@ review: fresh native reviewer `/root/hud_independent_review`: ship, no actionabl
 untested: live WPF/dispatcher/tray, real signed-in browser+companion, first LNA prompt, physical devices, full
   browser suite, Android, emulator/fence and production. Only companion presentation suppression changed.
 evidence: PILOT_REPORT.md, PILOT_REVIEW.md and sibling ../evidence/ logs, baseline replay and captured reviewed diff.
+
+## TASK-020 — formal review handoff (2026-10-20)
+Original pilot evidence preserved: companion 60/30, bridge 33, focused browser 14; npm 2190 Node passes plus
+455 legacy cases, zero failures, one opt-in skip; lint/parity/rules checks pass. Not rerun or relabeled here.
+Owner subsequently observed five real synthetic-input WPF/tray checks PASS; see TASK_020_HANDOFF.md.
+Formal candidate hosted CI and the merge runner's own npm test remain required. Runtime has not changed.
