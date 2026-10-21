@@ -421,5 +421,76 @@ test('O1: the durable Completed list never offers Undo for a task whose source c
     const entry = PlanAuthority.rawStaleUnfinished().items.find(entry => entry.item.id === 'a');
     return entry && TaskCompletions.view(entry)?.state;
   })).not.toBe('completed');
+  // Expand first: asserting absence on a COLLAPSED list would pass for the wrong reason.
+  const trigger = recovery(page).getByRole('button', { name: /^Completed/ });
+  if (await trigger.count()) await trigger.click();
   await expect(recovery(page).getByRole('button', { name: 'Undo completion: Task a' })).toHaveCount(0);
+});
+
+// O2 regression (found by the Day 1 production canary): after a network drop every row showed
+// "Changed or ambiguous" and never recovered until a full reload. Two states have to heal - a
+// cancelled listener AND a merely failed inspection with the watch intact. The second is the one
+// that actually bit in production: the candidate signature is unchanged, so ensure() is a no-op.
+const ENDPOINT = 'https://asia-southeast1-offline-task018.cloudfunctions.net/chronasenseCompletionApi';
+test('O2: reconnect re-verifies without a reload, even though the watch never failed', async ({ page }) => {
+  await backend(page); await seed(page); await completionReady(page);
+  const state = () => page.evaluate(() => {
+    const entry = PlanAuthority.rawStaleUnfinished().items.find(entry => entry.item.id === 'a');
+    return entry && TaskCompletions.view(entry)?.state;
+  });
+
+  // The endpoint goes away and a re-inspection fails: verification is lost, fail-closed.
+  const offline = route => route.abort('failed');
+  await page.route(ENDPOINT, offline);
+  await page.evaluate(() => TaskCompletions.refresh());
+  await expect.poll(state).not.toBe('unfinished');
+
+  // Connectivity returns. A plain re-render is NOT enough: the candidate signature is unchanged
+  // and the watch never failed, so ensure() short-circuits and nothing re-inspects.
+  await page.unroute(ENDPOINT, offline);
+  await page.evaluate(() => globalThis.PlanningContinuityUI.render());
+  await page.waitForTimeout(500);
+  expect(await state()).not.toBe('unfinished');
+
+  // The 'online' handler re-inspects explicitly. No reload.
+  await page.evaluate(() => globalThis.dispatchEvent(new Event('online')));
+  await expect.poll(state).toBe('unfinished');
+});
+
+// Closes two coverage gaps an independent review found by mutation: (1) the handler used the
+// clicked row's data-id, but nothing proved it - undoing "the first completed task" instead
+// passed every test; (2) nothing exercised escaping in the new template.
+test('O1: Undo in the Completed list acts on the clicked row, not merely the first one', async ({ page }) => {
+  await backend(page); await seed(page); await completionReady(page); await completionReady(page, 'b');
+  await checkbox(page, 'a').click(); await expect(row(page, 'a')).toHaveCount(0);
+  await checkbox(page, 'b').click(); await expect(row(page, 'b')).toHaveCount(0);
+
+  await recovery(page).getByRole('button', { name: /^Completed/ }).click();
+  await expect(recovery(page).locator('.pc-completed-row')).toHaveCount(2);
+
+  // Undo ONLY Task b -- deliberately NOT the first row. The fixture's server clock is fixed, so
+  // both receipts share recordedAt and completedEntries()[0] is Task a; undoing Task a could not
+  // tell "the row I clicked" apart from "the first completed row".
+  await recovery(page).getByRole('button', { name: 'Undo completion: Task b' }).click();
+  await expect.poll(() => page.evaluate(() => PlanAuthority.staleUnfinished().items.map(e => e.item.id)))
+    .toEqual(['b']);
+  const records = await page.evaluate(() => __fbTest.get('rooms/uid_account-a/taskCompletionResolutions'));
+  const byItem = Object.fromEntries(Object.values(records).map(r => [r.identity.itemId, r]));
+  expect(byItem.b.state).toBe('open');
+  expect(byItem.a.state).toBe('completed');
+  expect(Object.keys(byItem.b.operations)).toHaveLength(2);
+  expect(Object.keys(byItem.a.operations)).toHaveLength(1);
+  // And the still-resolved row keeps its Undo affordance.
+  await expect(recovery(page).getByRole('button', { name: 'Undo completion: Task a' })).toBeVisible();
+});
+test('O1: the Completed list escapes task titles', async ({ page }) => {
+  await backend(page); await seed(page, 'calendar', [item('a', '<img src=x onerror="window.__xss=1">'), item('b')]);
+  await completionReady(page);
+  await checkbox(page, 'a').click(); await expect(row(page, 'a')).toHaveCount(0);
+  await recovery(page).getByRole('button', { name: /^Completed/ }).click();
+  const rowEl = recovery(page).locator('.pc-completed-row');
+  await expect(rowEl).toHaveCount(1);
+  await expect(rowEl).toContainText('<img src=x onerror=');
+  expect(await page.evaluate(() => window.__xss)).toBeUndefined();
+  expect(await rowEl.locator('img').count()).toBe(0);
 });

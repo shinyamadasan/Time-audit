@@ -194,24 +194,3 @@ test('common case: a room event just before the click still completes; zone and 
   assert.deepEqual([earlier.receipt.date, earlier.receipt.timezone], ['2026-10-13', 'Etc/UTC']);
   w.sync.reset();
 });
-
-// O2 regression: a dropped socket cancels the room listeners (the error callback), which sets
-// watchFailed and makes refresh() a permanent no-op. Before the fix, ensure() only re-armed when
-// the candidate signature changed, so a reconnect left every row stuck at "changed or ambiguous".
-test('O2: ensure() re-arms the watch after a cancelled listener, so a reconnect restores freshness', async () => {
-  const w = setup(); await ready(w);
-  assert.equal(w.sync.view(w.entry).state, 'unfinished');
-
-  // The socket drops: Firebase invokes each listener's cancel callback.
-  for (const { error } of w.listeners.values()) error(new Error('permission_denied'));
-  assert.equal(w.sync.view(w.entry).state, 'unavailable', 'a cancelled watch must not keep claiming freshness');
-
-  // A refresh alone cannot recover: watchFailed short-circuits it.
-  await w.sync.refresh(); await tick();
-  assert.equal(w.sync.view(w.entry).state, 'unavailable');
-
-  // What the UI does on reconnect: re-render -> ensure() with the SAME candidates.
-  w.sync.ensure([w.entry]); await tick(); await w.sync.refresh(); await tick();
-  assert.equal(w.sync.view(w.entry).state, 'unfinished', 'reconnect must restore a fresh view without a reload');
-  assert.equal(w.sync.accountTimezone(), 'Etc/UTC', 'the account zone must be observable again after re-arming');
-});

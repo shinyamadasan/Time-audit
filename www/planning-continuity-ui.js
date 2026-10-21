@@ -617,7 +617,10 @@ async function completeHistorical(entry, date) {
  *  cannot drift: same receipt shape, same backend call, same handling of UNKNOWN. */
 function runCompletionUndo(receipt) {
   const owner = state.staleOwner, generation = completionOwnerGeneration;
-  void completions().undo(receipt).then(result => {
+  const key = `${receipt.record.identity.targetId}\u0000${receipt.record.identity.itemId}`;
+  if (undoInFlight.has(key)) return;
+  undoInFlight.add(key);
+  void completions().undo(receipt).finally(() => { undoInFlight.delete(key); }).then(result => {
     if (state.staleOwner !== owner || completionOwnerGeneration !== generation) return;
     const entry = completionEntry(receipt.record.identity.itemId, receipt.record.identity.targetId), current = entry && completions().view(entry);
     const open = result.record?.state === 'open' && current?.state === 'unfinished' && current.record?.revision === result.record.revision;
@@ -681,9 +684,15 @@ if (typeof document !== 'undefined') {
     }
   });
   document.addEventListener('scroll', positionCompletionPopover, true);
-  // O2: a dropped socket cancels the completion listeners and every row falls back to
-  // "changed or ambiguous". Re-rendering on reconnect lets ensure() re-arm the watch.
-  globalThis.addEventListener?.('online', () => { try { render(); } catch { /* surface stays as it is */ } });
+  // O2: after a drop, rows fall back to "changed or ambiguous". Two distinct states have to
+  // recover: a CANCELLED listener (watchFailed -> ensure() re-arms it, via render) and a merely
+  // FAILED inspection with the watch still intact, where the candidate signature is unchanged so
+  // ensure() is a no-op and nothing would ever retry. The explicit refresh covers the second.
+  // Independent try blocks: a render fault must never swallow the re-inspection.
+  globalThis.addEventListener?.('online', () => {
+    try { void completions()?.refresh(); } catch { /* reported on the next action */ }
+    try { render(); } catch { /* surface stays as it is */ }
+  });
 }
 
 // ---- O1: durable Undo -------------------------------------------------------
@@ -691,6 +700,9 @@ if (typeof document !== 'undefined') {
 // resolved task stays reachable. These read the SAME resolution records the notice uses
 // (TaskCompletions.view) - no second source of truth, and no extra backend call.
 const completionReceiptOf = record => record?.operations?.[record.completionOpId] || null;
+// Undo is not covered by TaskCompletions.busy() (that tracks complete()), so a double tap would
+// send a second undo that the revision CAS refuses - harmless, but it reads as a failure.
+const undoInFlight = new Set();
 function completedEntries(nowMs) {
   const layer = authority(), api = completions();
   if (!layer || !api || typeof layer.rawStaleUnfinished !== 'function') return [];
@@ -709,7 +721,7 @@ function completedEntries(nowMs) {
 function completedRowHtml({ entry, receipt }) {
   const { item, sourceDayId } = entry;
   const data = `data-id="${escape(item.id)}" data-day="${escape(sourceDayId)}"`;
-  const busy = completions()?.busy(entry);
+  const busy = completions()?.busy(entry) || undoInFlight.has(`${sourceDayId}\u0000${item.id}`);
   const when = receipt.date
     ? new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${receipt.date}T12:00:00Z`))
     : '';
