@@ -76,6 +76,75 @@
 >   rebind would avoid a stuck state.
 > - **O3.** The Unfinished section did not render at all until a reload after first sign-in.
 >
+> ### Git history remediation (Option A) — DONE 2026-10-21, with residual exposure
+>
+> The first push of this branch published the owner's personal Google account inside
+> `release/task-018/prod-preflight.mjs`. `shinyamadasan/Time-audit` is PUBLIC. Commit `48aedd3`
+> removed it from the branch TIP only; four pushed commits (`c6d1035`, `da96b25`, `1e3177f`,
+> `e079508`) still carried it in their trees.
+>
+> **Safeguards checked before rewriting:** no PR referenced the branch (open or closed); no other
+> local or remote branch contained those commits; only this worktree had it checked out;
+> `main` and `task-018-candidate` were unaffected.
+>
+> **Backup first:** tag `backup/task-018-monitoring-pre-scrub` at `94a846d`, plus a verified bundle
+> at `ChronaSense-TASK018-prod-evidence-backup/git-backup/task-018-monitoring-pre-scrub.bundle`
+> (`git bundle verify`: "The bundle records a complete history", okay).
+>
+> **Rewrite:** `git-filter-repo --replace-text` in an ISOLATED clone (so no other ref could be
+> touched), replacing the literal address with `OPERATOR_EMAIL_REDACTED`. Then
+> `git push --force-with-lease=task-018-monitoring:94a846d…` for that one branch.
+>
+> **Verification:** `git log --all -S<address>` returns nothing; a single pass over all 3247 blobs
+> finds 0 occurrences; all 861 commits are preserved; the HEAD tree is byte-identical
+> (`ecfbd062a673576eaa595960867f6ee4ce83fc71` before and after), so no content changed.
+> `main` is still `bb171a2` and `task-018-candidate` still `08e9371`.
+>
+> **Residual exposure — NOT purged, do not claim otherwise:**
+> - The pre-rewrite commits remain retrievable from GitHub by direct SHA. Verified today:
+>   `GET /repos/.../commits/94a846d…` still resolves, and
+>   `GET /repos/.../contents/release/task-018/prod-preflight.mjs?ref=c6d1035` still returns a blob
+>   that CONTAINS the address. They are unreferenced, not deleted; GitHub keeps such objects until
+>   its own GC, and only GitHub Support can force their removal. The branch listing itself now
+>   shows only the rewritten, clean commits.
+> - Separately and pre-existing: the address appears as the commit AUTHOR/COMMITTER e-mail on 1697
+>   commits across the whole repository, including `main`. `--replace-text` rewrites blobs, not
+>   commit metadata. Changing that would mean rewriting `main`, which was not authorised and is not
+>   recommended. Git author e-mails on a public repo are inherently public.
+> - Practical read: the marginal exposure added by the push is now small, because the same address
+>   was already public as commit metadata — but it is not zero, and it is not gone.
+>
+> ### O3 — DEFERRED as a follow-up, with evidence (2026-10-21)
+>
+> **Symptom.** After the first sign-in the Unfinished section stays empty and hidden; it only
+> appears after a page reload. Observed live on the canary during Day 1.
+>
+> **Evidence that the data layer is fine.** With the section still empty and
+> `#unfinished-recovery-section` carrying `hidden` and the correct `data-pc-owner`,
+> `PlanAuthority.staleUnfinished()` already returned all four canary tasks with correct targets and
+> `endedMs`. So discovery works; only the re-render is missing. A reload rendered "Unfinished · 4"
+> immediately.
+>
+> **Root cause located, deliberately not fixed.** The planning-continuity surface re-renders from
+> `globalThis.refreshCommitmentSurfaces`, which `index.html`'s `refreshAuthoritativePlanSurfaces()`
+> calls "after an operational write and after an inbound remote merge". For a LEGACY-store account
+> (this canary: `PlanAuthority.authorityState() === 'legacy'`, no calendar authority, no boundary)
+> the first inbound merge after sign-in lands through `storage.js` -> `writeDatePlanLocal()`, and
+> that path does not reach the same refresh signal, so nothing re-renders when the plan data first
+> arrives.
+>
+> **Why it is deferred rather than fixed now.** The fix belongs in the sign-in / inbound-merge
+> ordering inside `index.html` + `storage.js` — the Firebase sync path, which Hard Rule 9 and the
+> risk gate treat as red zone, and `index.html` is the large navigate-by-CODEMAP file. Changing
+> plan-surface refresh ordering to cure a cosmetic one-reload delay is exactly the "architectural
+> change for a minor UI problem" the task scope rules out. It loses no data, misreports nothing,
+> and self-corrects on any reload.
+>
+> **Suggested follow-up task.** Make the legacy inbound-merge path call
+> `refreshAuthoritativePlanSurfaces()` (or at minimum `refreshCommitmentSurfaces()`) once the first
+> post-sign-in plan snapshot has been applied, with a regression test that asserts Unfinished
+> renders after sign-in without a reload. Red-zone: needs its own owner-approved task.
+>
 > Deviation recorded: the canary is a pre-existing Google account of the owner's rather than the
 > "NEW dedicated non-personal" account section 5 specified. Its ChronaSense room contains only
 > `plans/2026-10-16` and `settings` and never held real data, so the contamination risk that
