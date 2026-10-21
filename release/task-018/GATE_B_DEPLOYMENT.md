@@ -1,4 +1,35 @@
-# TASK-018 Gate B — production deployment procedure (prepared 2026-10-16; NOT executed)
+# TASK-018 Gate B — production deployment procedure (prepared 2026-10-16; steps 0-4 EXECUTED, B4 Day 1 OUTSTANDING)
+
+> ## Execution status — reconciled 2026-10-21 against live production (read-only)
+>
+> **The "NOT executed" title below was stale.** Steps 0-4 and the monitoring step were applied to
+> `time-audit-3c3da` on 2026-10-16, roughly 20 minutes after this runbook was committed. Re-verified
+> independently on 2026-10-21 by querying production directly; do **not** re-run steps 0-4.
+>
+> | Step | Status | Independently verified 2026-10-21 |
+> |---|---|---|
+> | 0 Artifact + baselines | DONE | `D:\chronasense-prod-evidence\{before,after-b2}`; preflight 0/b1/b2 all `pass:true`, 24/27/27 checks, 0 failed, each pinning `08e9371` |
+> | 1 Identities (IAM) | DONE | Exactly the 5 planned bindings present; custom role GA with the 3 intended permissions; no Editor/Owner on either SA |
+> | 2 Monitoring | DONE | 4 log metrics, 6 alert policies (all enabled), 1 email channel |
+> | 3 Rules (B1) | DONE | Live rules byte-identical to the candidate builder output; delta vs `before` is exactly `taskCompletionResolutions/.write=false` |
+> | 4 Backend (B2) | DONE | `chronasensecompletionapi-00002-vin` ACTIVE, nodejs22, runtime SA `chronasense-completion`, build SA `chronasense-build`, maxInstances 1, concurrency 1, 512Mi; invoker `allUsers` only. 4b exited non-zero exactly as predicted (cleanup policy), log contains "Successful create operation" |
+> | Blast radius | CLEAN | `before` vs `after-b2`: Action API snapshot IDENTICAL (`chronasenseactionapi-00007-mon`, unchanged since 2026-10-14), secret IAM IDENTICAL |
+> | Unauthenticated probe | PASS | POST -> `401 {"outcome":"REJECTED","reason":"UNAUTHENTICATED"}`; GET -> 405; cross-origin preflight returns no `access-control-allow-origin` |
+> | 5 Canary **Day 0** | DONE 2026-10-16 | Canary Google account signed in once at `20:54:59Z`; `rooms/uid_<canary>` holds `plans/2026-10-16` + `settings.timezone="America/Phoenix"`; `taskCompletionResolutions` is **null** |
+> | 5 Canary **Day 1** | **NOT RUN** | Canary `lastRefreshAt` is unchanged since Day 0 and the endpoint has served **zero** authenticated requests. Every production log entry since deploy is `op:"unparsed"` (the Day 0 smoke probe and the 2026-10-21 re-probe). No completion or Undo has ever executed in production. |
+> | Artifact cleanup policy | **UNDECIDED** | `gcf-artifacts` (asia-southeast1) still has `cleanupPolicies: null`; repository is 267.8 MB and growing. Owner decision, because the repo is shared with the Action API |
+>
+> **Day 1 date drift.** Day 0 tasks sit in `plans/2026-10-16`, now 5 days old rather than "yesterday".
+> Day 1 remains valid (these are genuinely unfinished history, which is the feature's actual subject),
+> but the step-2 "Done earlier (yesterday)" instruction must be read as an explicit earlier date, and
+> the owner should confirm the drift is acceptable rather than re-running Day 0.
+>
+> **Independent final-diff review.** The PASS recorded below is a claim carried in this runbook; no
+> review artifact is archived in the repository and `REVIEW.md` has no TASK-018 entry. Treat it as
+> reported, not re-verified.
+>
+> Nothing in this reconciliation changed production. Gate C (merge of PR #7) has **not** been taken.
+
 
 Supersedes `staging/task-018/GATE_B_PACKET.md` for execution. Production project `time-audit-3c3da`.
 - Release candidate: PR #7 @ `08e9371be7c56961a0c074e1041962adef4eac0c` (hosted CI green; independent final-diff review PASS).
