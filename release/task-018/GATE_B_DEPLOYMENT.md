@@ -76,6 +76,52 @@
 >   rebind would avoid a stuck state.
 > - **O3.** The Unfinished section did not render at all until a reload after first sign-in.
 >
+> ### Post-canary UI fixes — candidate moved to `354ffb9` (2026-10-21)
+>
+> The Day 1 canary found three UI defects. O1 and O2 are fixed; O3 is deferred (below).
+> **The RELEASE CANDIDATE IS NO LONGER `08e9371`.** PR #7 now heads at
+> `354ffb9be64de38d24f5a14ab0539722aac87e1b` = `08e9371` + `90f4d04` (O1) + `354ffb9` (O2 +
+> review-gap closure). The backend, Firebase rules, schema and the completion contract are
+> BYTE-UNCHANGED, so Gate B's deployed function and rules still match: these are frontend-only
+> commits. No redeploy is implied or required.
+>
+> **O1 — durable Undo. FIXED, accepted in production.** Undo used to exist only inside the
+> temporary notice; once it expired the task was suppressed from Unfinished and the completion was
+> irreversible in the UI although the backend always supported undo. A collapsed "Completed · N"
+> list now sits beside Unfinished, derived from the SAME `TaskCompletions` resolution records (no
+> second source of truth, no extra backend call), with one shared `runCompletionUndo()` so the two
+> undo paths cannot drift, plus an in-flight guard so a double tap sends one undo rather than a
+> second that the CAS refuses. Five-row preview and searchable backlog untouched.
+> Live acceptance on the canary: after a reload the toast Undo is gone (0 found), the Completed
+> list shows both resolutions with correct dates, the Undo control measures 48.75 x 44 px, a double
+> tap produced exactly ONE mutation, and the undo returned CONFIRMED / state `open` / revision 4
+> with all four receipts retained.
+>
+> **O2 — reconnect recovery. FIXED (second attempt), accepted in production.** The FIRST attempt
+> re-armed the watch from `ensure()` on `watchFailed`; production disproved it (still degraded 30s+
+> after reconnect) because a dropped socket does not cancel RTDB listeners — the real path is a
+> failed inspect, which leaves `watchFailed` false and the candidate signature unchanged, so
+> `ensure()` short-circuits and nothing ever re-inspects. An independent review separately showed
+> that re-arm could re-attach all ten listeners per cancel with no backoff. The re-arm was
+> REVERTED. What shipped is the bounded path: on `online`, re-inspect explicitly, in its own try
+> block so a render fault cannot swallow it. Live acceptance: degrades while offline, heals in
+> **1 second**, no reload.
+>
+> **Verification of `354ffb9`:** npm test 2261 total / 2260 pass / 0 fail / 1 known opt-in skip;
+> `test:fence` 151/151; `tests/task-completion.spec.js` 14/14; www parity 15/15; `npm run lint`
+> 0 errors and the same 48 pre-existing warnings. Each fix and each new test was mutation-verified
+> (reverting the fix, or weakening the assertion, turns the suite red).
+>
+> **Review coverage caveat:** the independent review was performed against `90f4d04`. Its verdict
+> was PASS WITH NOTES with no blocker, and its two MAJOR findings (O2 incomplete; re-arm
+> amplification) are exactly what `354ffb9` addresses. The `354ffb9` delta itself — the reverted
+> re-arm, the in-flight guard and four test changes — has NOT been independently reviewed.
+>
+> **Canary ledger after all testing** (synthetic account, retained as evidence):
+> Canary 1 `open` rev 4, receipts complete/undo/complete/undo · Canary 2 `completed` rev 1 ·
+> Canary 3 `open` rev 2 · Canary 4 no record. All four source items remain `done:false` and the
+> owner's `taskCompletionResolutions` is still `null`.
+>
 > ### Git history remediation (Option A) — DONE 2026-10-21, with residual exposure
 >
 > The first push of this branch published the owner's personal Google account inside
