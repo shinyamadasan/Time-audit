@@ -10,6 +10,9 @@ import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PRODUCTION } from '../../staging/task-018/guard.mjs';
 
+const OPERATOR = process.env.CHRONASENSE_PROD_OPERATOR || '';
+if (!OPERATOR) throw new Error('Set CHRONASENSE_PROD_OPERATOR to the owner Google account (never committed; this repo is public).');
+
 export const EXPECTED = Object.freeze({
   projectId: PRODUCTION.projectId, projectNumber: '548433155531', region: 'asia-southeast1',
   rtdbUrl: `https://${PRODUCTION.projectId}-default-rtdb.asia-southeast1.firebasedatabase.app`,
@@ -22,8 +25,10 @@ export const EXPECTED = Object.freeze({
   baselineFunctions: ['chronasenseActionApi'], completionFunction: 'chronasenseCompletionApi',
   // Reviewed release candidate (PR #7) and the live Action API revision observed read-only on 2026-10-16.
   candidateSha: '08e9371be7c56961a0c074e1041962adef4eac0c', actionApiRevision: 'chronasenseactionapi-00007-mon',
-  operatorAccount: 'OPERATOR_EMAIL_REDACTED',
-  ownerUser: 'user:OPERATOR_EMAIL_REDACTED',
+  // Operator identity comes from the environment and is never committed: this repository is public.
+  // Export CHRONASENSE_PROD_OPERATOR=<owner Google account> before running any phase.
+  operatorAccount: OPERATOR,
+  ownerUser: `user:${OPERATOR}`,
   // Baseline Editor holders observed read-only on 2026-10-16; any change is a FAIL until re-baselined by the owner.
   editorBaseline: ['serviceAccount:548433155531-compute@developer.gserviceaccount.com', 'serviceAccount:548433155531@cloudservices.gserviceaccount.com',
     `serviceAccount:${PRODUCTION.projectId}@appspot.gserviceaccount.com`],
