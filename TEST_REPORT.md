@@ -2269,3 +2269,15 @@ untested: deployed Firebase ID-token/revocation/IAM/service isolation, physical 
   (task-completion, unfinished-ux) 26/26 locally; www parity, functions/shared and rules builder OK; ESLint clean on sources.
 - Isolated staging (chronasense-staging-t018, function rebuilt from 7bf4961 by the dedicated build identity):
   real-cloud browser acceptance 24/24, zero production requests (HTTP checked pre-send, WebSockets incl. RTDB ns pre-connect).
+
+
+## TASK-018 - final release verification / pending Undo regression - 2026-10-21
+suite: npm test (Node 24.19.0 locally; hosted CI uses Node 22), plus affected Playwright file
+result: npm test exit 0: 2261 total, 2260 passed, 0 failed, 1 known opt-in skip; separate legacy harness 455/455.
+  Playwright tests/task-completion.spec.js: 16 passed, 0 failed. Focused ESLint, 95-file www parity and git diff --check pass.
+  Before the fix, the new uncertain-Undo browser regression failed with pending count 1 instead of 0 after a second Undo.
+  First post-fix browser attempt: 14 passed / 2 failed solely because the new source comparisons included null fields stripped on Firebase-wire reload; corrected to the existing completionWireValue contract, then 16/16 passed. No product workaround.
+  Sandbox worker-spawn EPERM attempts ran no browser cases; successful runs used process-sandbox escalation.
+  Independent reviewer separately executed both new browser regressions: 2/2 pass; final SHA review archived outside the release tree.
+untested: no new production-canary writes for this UI-only follow-up; post-publication artifact acceptance remains pending. O3 first-login render delay and cancelled-permission-listener rebind limitation remain documented; no synchronization changes.
+evidence: local release-verification/task-018/ (outside candidate worktree); original CI failure was Chromium SEGV at browser.newContext with 951 browser passes, not an assertion failure; exact revised-SHA CI is checked separately before GO.

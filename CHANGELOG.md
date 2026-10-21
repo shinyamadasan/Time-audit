@@ -5110,3 +5110,13 @@ tests: Node 22.23.3 focused completion/functions 291/291 (284 prior + 7 new), RT
   Inspect now returns the account zone from the same snapshot; `complete()` uses it after its own refresh ("today"
   computed in it); a mismatching caller zone or a missing zone refuses locally. Server checks unchanged.
   Staging: browser acceptance 24/24 on the fix (fresh-device completion saved in the account zone).
+
+
+## TASK-018 - done (branch: task-018-candidate; final-release Undo fix, 2026-10-21)
+changed:
+  - planning-continuity-ui.js / www mirror: runCompletionUndo resumes the existing pending task operation; Completed rows show Check status while uncertain. Receipt-read errors refuse before dispatch; cancelled-listener comments match the fail-closed contract (18 changed lines per runtime copy).
+  - tests/task-completion.spec.js: two real-browser regressions preserve the same Undo operation across reload, for request failure before commit and acknowledgement loss after commit (57 changed lines).
+tests: affected browser file 16/16; npm test 2260 pass / 0 fail / 1 known opt-in skip plus legacy harness 455/455; 95-file www parity, focused ESLint and git diff check pass.
+blockers: none in local verification; exact-SHA hosted CI and independent review remain release gates.
+deviations: none. Backend, rules, schema and synchronization unchanged; O3 remains deferred. No merge or publication.
+-> status remains `review` in TASKS.md; owner release approval required.

@@ -408,6 +408,31 @@ test('O1: a completion stays undoable from the durable Completed list after relo
   const kinds = Object.values(record.operations).map(op => op.kind).sort();
   expect(kinds).toEqual(['complete', 'undo']);
 });
+test('O1: an Undo committed without acknowledgement recovers its receipt after reload', async ({ page }) => {
+  const service = await backend(page); await seed(page); await completionReady(page);
+  const before = await raw(page, 'calendar');
+  await checkbox(page, 'a').click(); await expect(toast(page)).toContainText('Completion saved');
+  await recovery(page).getByRole('button', { name: /^Completed/ }).click();
+  service.mode('after');
+  await recovery(page).getByRole('button', { name: 'Undo completion: Task a' }).click();
+  await expect(toast(page)).toContainText('Undo still checking');
+  const pending = await page.evaluate(() => TaskCompletions.pendingAll());
+  expect(pending).toHaveLength(1);
+  expect(pending[0].kind).toBe('undo');
+
+  service.mode('normal'); await service.reload(); await completionReady(page);
+  await toast(page).getByRole('button', { name: 'Check status' }).click();
+  await expect.poll(() => page.evaluate(() => TaskCompletions.pendingAll().length)).toBe(0);
+  const records = await page.evaluate(() => __fbTest.get('rooms/uid_account-a/taskCompletionResolutions'));
+  const record = Object.values(records)[0];
+  expect(record.state).toBe('open');
+  expect(record.revision).toBe(2);
+  expect(Object.keys(record.operations)).toHaveLength(2);
+  expect(record.operations[pending[0].operationId].kind).toBe('undo');
+  // Reload uses Firebase wire form, where null properties are absent.
+  expect(completionWireValue(await raw(page, 'calendar'))).toEqual(completionWireValue(before));
+});
+
 test('O1: the durable Completed list never offers Undo for a task whose source changed', async ({ page }) => {
   const service = await backend(page); await seed(page); await completionReady(page);
   await checkbox(page, 'a').click(); await expect(toast(page)).toContainText('Completion saved');
@@ -427,10 +452,36 @@ test('O1: the durable Completed list never offers Undo for a task whose source c
   await expect(recovery(page).getByRole('button', { name: 'Undo completion: Task a' })).toHaveCount(0);
 });
 
+test('O1: an uncertain Undo resumes the same operation from Completed after reload', async ({ page }) => {
+  const service = await backend(page); await seed(page); await completionReady(page);
+  const before = await raw(page, 'calendar');
+  await checkbox(page, 'a').click(); await expect(toast(page)).toContainText('Completion saved');
+  await recovery(page).getByRole('button', { name: /^Completed/ }).click();
+  service.mode('before');
+  await recovery(page).getByRole('button', { name: 'Undo completion: Task a' }).click();
+  await expect(toast(page)).toContainText('Undo still checking');
+  const pending = await page.evaluate(() => TaskCompletions.pendingAll());
+  expect(pending).toHaveLength(1);
+  expect(pending[0].kind).toBe('undo');
+
+  service.mode('normal'); await service.reload(); await completionReady(page, 'b');
+  await recovery(page).getByRole('button', { name: /^Completed/ }).click();
+  await recovery(page).getByRole('button', { name: /^(Undo completion|Check status): Task a$/ }).click();
+  await expect.poll(() => page.evaluate(() => TaskCompletions.pendingAll().length)).toBe(0);
+  await expect.poll(() => page.evaluate(() => PlanAuthority.staleUnfinished().items.map(entry => entry.item.id))).toContain('a');
+  const records = await page.evaluate(() => __fbTest.get('rooms/uid_account-a/taskCompletionResolutions'));
+  const record = Object.values(records)[0];
+  expect(record.state).toBe('open');
+  expect(record.revision).toBe(2);
+  expect(Object.keys(record.operations)).toHaveLength(2);
+  expect(record.operations[pending[0].operationId].kind).toBe('undo');
+  expect(completionWireValue(await raw(page, 'calendar'))).toEqual(completionWireValue(before));
+});
+
 // O2 regression (found by the Day 1 production canary): after a network drop every row showed
-// "Changed or ambiguous" and never recovered until a full reload. Two states have to heal - a
-// cancelled listener AND a merely failed inspection with the watch intact. The second is the one
-// that actually bit in production: the candidate signature is unchanged, so ensure() is a no-op.
+// "Changed or ambiguous" and never recovered until a full reload. A failed inspection with the
+// watch intact leaves the candidate signature unchanged, so ensure() is a no-op. Permission
+// cancellations deliberately remain fail-closed until rebind; they are not network disconnects.
 const ENDPOINT = 'https://asia-southeast1-offline-task018.cloudfunctions.net/chronasenseCompletionApi';
 test('O2: reconnect re-verifies without a reload, even though the watch never failed', async ({ page }) => {
   await backend(page); await seed(page); await completionReady(page);

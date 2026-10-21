@@ -619,8 +619,12 @@ function runCompletionUndo(receipt) {
   const owner = state.staleOwner, generation = completionOwnerGeneration;
   const key = `${receipt.record.identity.targetId}\u0000${receipt.record.identity.itemId}`;
   if (undoInFlight.has(key)) return;
+  const api = completions(), entry = completionEntry(receipt.record.identity.itemId, receipt.record.identity.targetId);
+  let pending = null;
+  try { pending = entry && api.pending(entry); }
+  catch { showCompletionNotice('Undo unavailable · receipt storage needs recovery', null, true); return; }
   undoInFlight.add(key);
-  void completions().undo(receipt).finally(() => { undoInFlight.delete(key); }).then(result => {
+  void (pending ? api.resume(pending) : api.undo(receipt)).finally(() => { undoInFlight.delete(key); }).then(result => {
     if (state.staleOwner !== owner || completionOwnerGeneration !== generation) return;
     const entry = completionEntry(receipt.record.identity.itemId, receipt.record.identity.targetId), current = entry && completions().view(entry);
     const open = result.record?.state === 'open' && current?.state === 'unfinished' && current.record?.revision === result.record.revision;
@@ -684,10 +688,8 @@ if (typeof document !== 'undefined') {
     }
   });
   document.addEventListener('scroll', positionCompletionPopover, true);
-  // O2: after a drop, rows fall back to "changed or ambiguous". Two distinct states have to
-  // recover: a CANCELLED listener (watchFailed -> ensure() re-arms it, via render) and a merely
-  // FAILED inspection with the watch still intact, where the candidate signature is unchanged so
-  // ensure() is a no-op and nothing would ever retry. The explicit refresh covers the second.
+  // O2: retry a failed inspection after reconnect when the watch is still intact and the
+  // candidate signature is unchanged. Cancelled permission listeners stay fail-closed until rebind.
   // Independent try blocks: a render fault must never swallow the re-inspection.
   globalThis.addEventListener?.('online', () => {
     try { void completions()?.refresh(); } catch { /* reported on the next action */ }
@@ -722,14 +724,16 @@ function completedRowHtml({ entry, receipt }) {
   const { item, sourceDayId } = entry;
   const data = `data-id="${escape(item.id)}" data-day="${escape(sourceDayId)}"`;
   const busy = completions()?.busy(entry) || undoInFlight.has(`${sourceDayId}\u0000${item.id}`);
+  let pending = null;
+  try { pending = completions()?.pending(entry); } catch { /* receipt storage failure is surfaced on action */ }
   const when = receipt.date
     ? new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${receipt.date}T12:00:00Z`))
     : '';
   return `<div class="pc-row pc-completed-row" data-pc-completed="${escape(item.id)}" data-pc-day="${escape(sourceDayId)}"${busy ? ' aria-busy="true"' : ''}>
     <span class="pc-completed-mark" aria-hidden="true">✓</span>
     <div class="pc-complete-copy"><button type="button" class="pc-complete-title" data-pc-action="reveal-stale-title" ${data} aria-expanded="false"><span class="pc-complete-task">${escape(item.task)}</span>
-    <span class="pc-complete-date">Completed ${escape(when)}${busy ? ' · Saving…' : ''}</span></button></div>
-    <button type="button" class="pc-completed-undo" data-pc-action="undo-completed" ${data}${busy ? ' disabled' : ''} aria-label="Undo completion: ${escape(item.task)}">Undo</button>
+    <span class="pc-complete-date">Completed ${escape(when)}${busy ? ' · Saving…' : pending ? ' · Still checking…' : ''}</span></button></div>
+    <button type="button" class="pc-completed-undo" data-pc-action="undo-completed" ${data}${busy ? ' disabled' : ''} aria-label="${pending ? 'Check status' : 'Undo completion'}: ${escape(item.task)}">${pending ? 'Check status' : 'Undo'}</button>
   </div>`;
 }
 function completedHtml(nowMs) {
