@@ -5016,3 +5016,107 @@ blockers: no remaining UI implementation blocker; strict unseen-remote conflict 
 deviations: owner screenshot unavailable; written feedback used. Full Playwright/emulator suites and physical
   devices not exercised. Only observed-state Undo safety is claimed under existing LWW. No integration/push/deploy.
 → status set to `review` in TASKS.md; stop at REVIEW-READY.
+
+## TASK-018 — proposal checkpoint (branch: task-018)
+changed:
+  - TASK_018_UX_PROPOSAL.html / TASK_018_UX_PROPOSAL.md: isolated compact-row proposal and explicit pending completion-contract audit.
+  - TASKS.md: record owner-direct scope and required proposal-acceptance gate; status remains codex.
+tests: isolated proposal renderer passes three viewports, 22 synthetic tasks and simulated action states; see TEST_REPORT.md.
+blockers: waiting for the owner-requested UX acceptance before production implementation; persistence contract audit pending.
+deviations: none — no production code, model, rules, sync, www, deployment or live-data changes.
+→ proposal only; final review-ready candidate and independent review pending.
+
+## TASK-018 — approved Refined A implementation safety gate (branch: task-018)
+changed:
+  - TASKS.md: record current owner implementation authorization and blocked safety-gate result.
+  - TASK_018_IMPLEMENTATION_SAFETY_GATE.md: exact all-store retention, old-client and cutover blockers;
+    required contract, source consumers, evidence and explicitly unfulfilled implementation deliverables.
+  - design/task-018/audit-completion-safety.mjs: offline synthetic reproduction of 18 current-contract observations,
+    with integrity checks for all 14 released-client fixture files. Not a production completion implementation.
+tests: 18 observations reproduced (gate BLOCKED); 116 existing focused baseline tests pass; rules/parity/diff checks pass.
+blockers: old writers can erase an annotation; post-cutover ordinary legacy sources deny the write. Need a reviewed,
+  proven server-enforced stable-identity retention/transition and compatibility protocol across all source stores,
+  plus historical convergence and exact acknowledgements/conditional Undo. See safety-gate report.
+deviations: stopped as owner required before production edits. No implementation SHA, real completion acceptance,
+  production screenshots or full regression/emulator/device evidence. Existing unrelated dirty design files preserved.
+  No new completion/delete behavior, production/rules/sync/live-data changes, merge, push or deployment.
+→ status set to `blocked` in TASKS.md; independent review requested for exact local audit checkpoint, not an implementation.
+
+## TASK-018 — completion durability contract and offline proof (branch: task-018)
+changed:
+  - TASK_018_COMPLETION_DURABILITY_CONTRACT.md: independent resolution-only records, stable source identity,
+    dedicated backend room CAS, confirmed/unknown recovery and conditional Undo; owner architecture gate explicit.
+  - design/task-018/contract/: four isolated proof/fixture/test modules; existing source validators and one
+    14-file hash-pinned cf43080 release reused; no production imports or endpoint.
+  - TASKS.md: record current owner contract-only instructions and proof delivery; implementation remains blocked.
+tests: 46 isolated checks pass (35 deterministic + 11 real loopback RTDB emulator/SDK); 99 existing model tests pass.
+blockers: owner must approve privileged-domain exception and bounded identity/size/priority/contention policy
+  before production implementation; real authentication/IAM, app integration and release gates remain unproved.
+deviations: none. Original audit and all mockups/uncommitted prototype edits preserved. Production/rules/backend
+  and live data unchanged; no UI redesign, integration, push or deployment.
+→ contract recommendation handed off for exact-checkpoint independent review; stop at OWNER APPROVAL GATE.
+
+## TASK-018 — local completion implementation, review-ready (branch: task-018)
+changed:
+  - task-completion-model/repository/sync.js and functions/src/completion-api/domain.js: approved dedicated
+    authenticated resolution facts, account/source/revision binding, bounded room ETag CAS, immutable receipts,
+    confirmed readback, unknown recovery and conditional Undo. No original plan/history rewrite or task copy.
+  - functions/index.js, rules builder/generated rules and functions shared generation: separate required-service-
+    account export and direct-client resolution write denial. No deployed backend, rules, IAM or account writes.
+  - plan-authority.js/rawStaleUnfinished and storage.js account seam: confirmed read-only Unfinished overlay,
+    source/context invalidation, account-generation guards and teardown. Existing Action API/Brain Dump intact.
+  - planning-continuity-ui.js/.css: approved Refined A five-row preview, searchable bounded backlog, anchored
+    More/Done earlier, separate long-title access, 44px targets, honest pending/error/unknown feedback and Undo.
+    Today's timeline check styling aligned without changing its completion callback.
+  - index.html governed release wiring, generated www mirrors, test/lint wiring and focused completion tests;
+    existing planning regressions follow approved controls while retaining history assertions. Shared smoke
+    startup readiness and connected-control double-click harness corrections preserve/strengthen assertions.
+  - CODEMAP.md, TASKS.md status and TASK_018_IMPLEMENTATION_HANDOFF.md: exact 45-file manifest, UI evidence,
+    synthetic cost observations, failed-iteration disclosures, limitations and human/deployment holds.
+tests: npm test: 2249/2250 node:test pass, 0 fail, 1 existing opt-in skip; legacy 455/455 pass. Full browser:
+  940 pass + 7 unchanged expected failures, 0 unexpected/skip/flaky. Firebase fence: 151/151 pass, including
+  14 completion emulator cases. New deterministic proofs 59/59, Worker 32/32 and local dry-run bundle pass;
+  generated rules/shared/www parity pass; lint 0 errors/48 existing warnings. See TEST_REPORT.md and handoff.
+blockers: none for local review handoff; exact-candidate independent verdict supplied separately. Integration,
+  service-account/IAM/live-auth review, physical-device testing and real-use acceptance remain separate gates.
+deviations: existing baseline autofill draft-clear race reproduced independently; only smoke setup waits for
+  startup, production race not fixed. Double-click test avoids a detached ElementHandle and adds exact revision/
+  sibling assertions. Three prior dirty design artifacts preserved and excluded. No merge/push/deployment.
+→ status set to `review` in TASKS.md. REVIEW-READY ONLY; not done or authorized for integration.
+
+## TASK-018 — completion monitoring delta (owner-direct staging preparation, branch: task-018-monitoring)
+changed:
+  - functions/src/completion-telemetry.js (new): per-request transport meter and sanitized structured event —
+    outcome (CONFIRMED/REJECTED/UNKNOWN even under HTTP 200), allowlisted reason, CAS attempts, 412 conflicts,
+    denials, reads, read/response byte buckets, latency, transport failure class, size-refusal flag, severity.
+  - functions/src/completion-api.js: handler accepts optional `log`/`clock`, meters its transport and emits once
+    per request. `execute`, `propose`, validation, response bodies and status codes are unchanged.
+  - functions/src/completion-domain.js: `read` also returns received `bytes`; `readCompletionJson` unchanged.
+  - functions/index.js: JSON log sink (`component: chronasense-completion-api`, Cloud Logging `severity`) and a
+    class-only `completion-unavailable` event on the 503 path. Endpoint metadata unchanged.
+tests: Node 22.23.3 focused completion/functions 291/291 (284 prior + 7 new), RTDB emulator 14/14, lint clean,
+  rules/shared/www parity unchanged. No deployment, IAM, cloud, push or merge.
+
+## TASK-018 — monitoring clarification (release candidate)
+- `readBytes` buckets the SUM of bytes across all room reads in one request (resolution-key reads excluded); it is a
+  read-amplification signal, not a room-size measure. Room-size refusal is reported only as `reason=ROOM_TOO_LARGE` /
+  `sizeRefusal=true`. Cloud Logging lifts the JSON `severity` to LogEntry severity (observed in isolated staging).
+- Isolated staging (separate project): API acceptance 53/53, browser acceptance 22/22 with zero production requests.
+- Release hygiene: TASK-018 design prototypes, capture scripts and the interactive UX proposal (`design/task-018/`,
+  `TASK_018_UX_PROPOSAL.html`) are not shipped (GitHub Pages serves the repository root). They are preserved on the
+  local branch `task-018` at 07f77d4 (worktree `.worktrees/task-018`); historical references in TASK-018 docs point there.
+- Fix (found in isolated staging): a fresh device locks its own browser zone (`ta3-tz`) and never adopts the account's
+  `settings.timezone`, so every historical completion was refused with ACCOUNT_ZONE_CHANGED ("UTC" vs "Etc/UTC").
+  Inspect now returns the account zone from the same snapshot; `complete()` uses it after its own refresh ("today"
+  computed in it); a mismatching caller zone or a missing zone refuses locally. Server checks unchanged.
+  Staging: browser acceptance 24/24 on the fix (fresh-device completion saved in the account zone).
+
+
+## TASK-018 - done (branch: task-018-candidate; final-release Undo fix, 2026-10-21)
+changed:
+  - planning-continuity-ui.js / www mirror: runCompletionUndo resumes the existing pending task operation; Completed rows show Check status while uncertain. Receipt-read errors refuse before dispatch; cancelled-listener comments match the fail-closed contract (18 changed lines per runtime copy).
+  - tests/task-completion.spec.js: two real-browser regressions preserve the same Undo operation across reload, for request failure before commit and acknowledgement loss after commit (57 changed lines).
+tests: affected browser file 16/16; npm test 2260 pass / 0 fail / 1 known opt-in skip plus legacy harness 455/455; 95-file www parity, focused ESLint and git diff check pass.
+blockers: none in local verification; exact-SHA hosted CI and independent review remain release gates.
+deviations: none. Backend, rules, schema and synchronization unchanged; O3 remains deferred. No merge or publication.
+-> status remains `review` in TASKS.md; owner release approval required.

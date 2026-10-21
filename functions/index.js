@@ -20,12 +20,17 @@ import { createInfraRtdb } from './src/infra-rtdb.js';
 import { createNonceStore } from './src/nonce-store.js';
 import { createReceiptStore } from './src/receipts.js';
 import { createIdTokenProvider, createUserScopedRtdb } from './src/user-scoped-rtdb.js';
+import { createCompletionHandler } from './src/completion-api.js';
+import { createCompletionDomain } from './src/completion-domain.js';
+import { emitSafely } from './src/completion-telemetry.js';
 
 const HMAC_KEYS = defineSecret('CHRONASENSE_WORKER_HMAC_KEYS');
 const OWNER_SUBJECT = defineString('CHRONASENSE_OWNER_SUBJECT');
 const OWNER_FIREBASE_UID = defineString('CHRONASENSE_OWNER_FIREBASE_UID');
 const RTDB_URL = defineString('CHRONASENSE_RTDB_URL');
 const WEB_API_KEY = defineString('CHRONASENSE_FIREBASE_WEB_API_KEY');
+// No IAM mutation here: a reviewed dedicated service account must be provisioned before deployment.
+const COMPLETION_SERVICE_ACCOUNT = defineString('CHRONASENSE_COMPLETION_SERVICE_ACCOUNT');
 
 initializeApp();
 const adminCredential = applicationDefault();
@@ -60,4 +65,26 @@ export const chronasenseActionApi = onRequest({ region: 'asia-southeast1', minIn
   // Sends exactly the bytes the handler measured against the 64 KiB response limit (never re-serialized).
   const { status, payload } = await handle({ method: req.method, path: req.url, rawHeaders: req.rawHeaders, rawBody: req.rawBody });
   res.status(status).set('content-type', 'application/json; charset=utf-8').set('cache-control', 'no-store').send(payload);
+});
+
+let completionHandler = null;
+// Cloud Logging reads `severity` from the JSON line. Events are sanitized at source (src/completion-telemetry.js).
+const completionLog = entry => console.log(JSON.stringify({ component: 'chronasense-completion-api', ...entry }));
+export const chronasenseCompletionApi = onRequest({ region: 'asia-southeast1', minInstances: 0, maxInstances: 1,
+  concurrency: 1, memory: '512MiB', timeoutSeconds: 120, serviceAccount: COMPLETION_SERVICE_ACCOUNT,
+  cors: ['https://shinyamadasan.github.io', 'https://localhost', 'http://localhost', 'capacitor://localhost'],
+}, async (req, res) => {
+  try {
+    if (!/^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$/.test(COMPLETION_SERVICE_ACCOUNT.value())) throw new ConfigError('completion service account required');
+    completionHandler ||= createCompletionHandler({ verifyIdToken: (value, revoked) => getAuth().verifyIdToken(value, revoked),
+      domain: createCompletionDomain({ databaseUrl: parseDatabaseUrl(RTDB_URL.value()),
+        getAccessToken: async () => (await adminCredential.getAccessToken()).access_token }), log: completionLog });
+    const result = await completionHandler({ method: req.method, authorization: req.get('authorization'), rawBody: req.rawBody });
+    res.status(result.status).set('cache-control', 'no-store').json(result.body);
+  } catch (error) {
+    // Authentication/config/transport details and room data are never logged or echoed: class only.
+    emitSafely(() => completionLog({ event: 'completion-unavailable', severity: 'ERROR', status: 503, outcome: 'UNKNOWN',
+      reason: error instanceof ConfigError ? 'CONFIG_INVALID' : 'HANDLER_FAILURE' }));
+    res.status(503).set('cache-control', 'no-store').json({ outcome: 'UNKNOWN', reason: 'SERVICE_UNAVAILABLE' });
+  }
 });

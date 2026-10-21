@@ -381,6 +381,8 @@ export function buildRules({ without = [] } = {}) {
     planByDeadlineRevisions: ownerWrite,
     intentionalOffDays: ownerWrite,
     calendarPlans: { '.write': OWNER, $planId: arrayItems },
+    // TASK-018: only the dedicated, owner-authenticated completion service writes resolution facts.
+    taskCompletionResolutions: { '.write': false },
     plans: { '.write': `${OWNER} && !${ROOM_REF}.child('calendarPlanAuthority').exists()`, $dateKey: arrayItems },
     operationalPlans: { '.write': `${OWNER} && !${ROOM_REF}.child('calendarPlanAuthority').exists()`, $dayKey: arrayItems },
     ...fencedItemRules('calendar'),
