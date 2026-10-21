@@ -35,7 +35,53 @@
 > Three non-blocking notes (N1 completion-date has no lower bound, N2 the UNKNOWN state depends on the
 > UI keeping "Check status", N3 per-completion full-room read cost) are recorded there.
 
-> ### Day 1 canary — drift-corrected procedure (prepared 2026-10-21; NOT executed)
+> ### Day 1 canary — EXECUTED 2026-10-21. ALL CHECKS PASSED.
+>
+> Owner authorised the run and personally signed in as the canary (`shinsightblog@gmail.com`,
+> uid `FakeKvcRkDVbpzXHBa64CyPwzfu1`); no credential was shared with or stored by the agent. The
+> unchanged byte-verified `08e9371` artifact was served read-only at `http://localhost` (in the
+> function's reviewed CORS allowlist; plain HTTP avoids a self-signed-cert interstitial breaking the
+> OAuth redirect, and `localhost` is a secure context). Interactions were driven through the real UI
+> in a fresh-profile Chrome. Nothing was redeployed and Day 0 was not re-run.
+>
+> | Check | Result | Evidence |
+> |---|---|---|
+> | Done today (Canary 1) | PASS | CONFIRMED, rev 1, receipt `date=2026-10-21`, `tz=America/Phoenix` — the ACCOUNT zone, not the device's |
+> | Undo (Canary 3) | PASS | CONFIRMED, state back to `open`, rev 2, **2 operations** — the completion receipt was retained, not erased |
+> | Done earlier (Canary 2) | PASS | CONFIRMED, rev 1, receipt `date=2026-10-16` — the explicit 5-day-old plan date |
+> | Reload durability | PASS | After reload, Unfinished = 2 (Canary 3, 4); Canary 1 and 2 stayed resolved |
+> | Offline refusal (Canary 3) | PASS | Request never left the browser (`ERR_INTERNET_DISCONNECTED`); UI showed **"Not saved · SOURCE_UNAVAILABLE"**; nothing written |
+> | Untouched control (Canary 4) | PASS | No resolution record exists for it at all |
+> | Original history preserved | PASS | All four source items in `plans/2026-10-16` remain `done:false`; resolutions are siblings and rewrote no history |
+> | Owner's room | PASS | `rooms/uid_<owner>/taskCompletionResolutions` is still **null** |
+> | Log privacy | PASS | 17 `completion-request` events; scan of raw log JSON for canary uid, canary e-mail, task text, item ids, dates and timezone found **zero** occurrences — only bucketed counts and enums |
+> | Errors / alerts | PASS | 0 × 5xx, 0 unconfirmed writes, 0 WARNING+ entries, no alert fired |
+> | Hosts contacted | PASS | Completion traffic only to `asia-southeast1-time-audit-3c3da.cloudfunctions.net`; no staging or non-production host; 0 page errors |
+>
+> Final ledger: C1 `completed` rev1 (2026-10-21) · C2 `completed` rev1 (2026-10-16) ·
+> C3 `open` rev2 holding BOTH its complete and undo receipts · C4 no record.
+> Evidence: `ChronaSense-TASK018-prod-evidence-backup/<ts>/day1-canary/` (request log, production log
+> export, final resolutions, final source plan, SHA-256 manifest).
+>
+> **Observations (neither is a data-safety defect; both are UX):**
+> - **O1. Undo is reachable only while the temporary notice is shown.** `planning-continuity-ui.js:592`
+>   renders Undo only when `state.completionReceipt` is set. Once the notice expires the task is
+>   suppressed from Unfinished and there is no other path to undo it — the backend supports undo
+>   indefinitely, but the UI does not expose it. First completion in this run became effectively
+>   permanent within seconds. Worth a durable affordance (e.g. Undo from the completed item).
+> - **O2. A transient network drop leaves the section degraded until reload.** While offline every row,
+>   including already-resolved ones, showed "Changed or ambiguous · refresh before resolving", and it
+>   did not self-heal on reconnect; a reload cleared it fully. Fail-closed and documented behaviour
+>   ("cancelled source listeners refuse freshness until rebind/reload"), but a reconnect-triggered
+>   rebind would avoid a stuck state.
+> - **O3.** The Unfinished section did not render at all until a reload after first sign-in.
+>
+> Deviation recorded: the canary is a pre-existing Google account of the owner's rather than the
+> "NEW dedicated non-personal" account section 5 specified. Its ChronaSense room contains only
+> `plans/2026-10-16` and `settings` and never held real data, so the contamination risk that
+> precondition guards against is absent.
+>
+> ### Day 1 canary — drift-corrected procedure (as executed)
 >
 > Day 0 ran 2026-10-16; its tasks are in `plans/2026-10-16`, now 5 days old. Verified immediately
 > before writing this: function ACTIVE on `chronasensecompletionapi-00002-vin`, Action API still
