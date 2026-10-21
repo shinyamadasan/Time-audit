@@ -362,3 +362,64 @@ for (const width of [390, 1440]) test('approved Refined A evidence ' + width, as
   await shot('search-long-title');
   await fs.writeFile(path.join(APP_ROOT, 'playwright-report/task-018-production/' + width + '-metrics.json'), JSON.stringify({ width, sectionHeight: height, rows: 5, targets, interactions: { today: 1, earlier: 'More + Done earlier + date + Save (4 controls)', backlogSearch: 'View all + type' } }, null, 2));
 });
+
+// O1 regression (found by the Day 1 production canary): before this, Undo existed only inside the
+// temporary notice. Once it expired the task was suppressed from Unfinished and the completion
+// became unreachable -- irreversible in the UI although the backend still supported undo.
+const completedList = page => recovery(page).locator('.pc-completed-row');
+test('O1: a completion stays undoable from the durable Completed list after reload, keeping its receipt', async ({ page }) => {
+  const service = await backend(page); await seed(page); await completionReady(page);
+  await checkbox(page, 'a').click();
+  await expect(row(page, 'a')).toHaveCount(0);
+  await expect(toast(page)).toContainText('Completion saved');
+
+  // Reload: the temporary notice and its Undo are gone for good.
+  await service.reload(); await completionReady(page, 'b');
+  await expect(toast(page).getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
+
+  // The durable list is discoverable, collapsed, and counts the resolved task.
+  const trigger = recovery(page).getByRole('button', { name: /^Completed/ });
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  await expect(completedList(page)).toHaveCount(1);
+  await expect(completedList(page)).toContainText('Task a');
+
+  // 44px touch target, per the Refined A contract.
+  const undo = recovery(page).getByRole('button', { name: 'Undo completion: Task a' });
+  const box = await undo.boundingBox();
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(box.width).toBeGreaterThanOrEqual(44);
+
+  await undo.click();
+  // The resolution is reversed: the task is unfinished again and leaves the Completed list.
+  await expect.poll(() => page.evaluate(() => PlanAuthority.staleUnfinished().items.map(entry => entry.item.id)))
+    .toContain('a');
+  await expect(completedList(page)).toHaveCount(0);
+  // Unfinished renders collapsed after a reload; expanding it shows the restored row.
+  await recovery(page).getByRole('button', { name: /^Unfinished/ }).click();
+  await expect(row(page, 'a')).toBeVisible();
+
+  // The original completion receipt survives the undo: state open, revision 2, BOTH operations.
+  const records = await page.evaluate(() => __fbTest.get('rooms/uid_account-a/taskCompletionResolutions'));
+  const record = Object.values(records)[0];
+  expect(record.state).toBe('open');
+  expect(record.revision).toBe(2);
+  expect(Object.keys(record.operations)).toHaveLength(2);
+  const kinds = Object.values(record.operations).map(op => op.kind).sort();
+  expect(kinds).toEqual(['complete', 'undo']);
+});
+test('O1: the durable Completed list never offers Undo for a task whose source changed', async ({ page }) => {
+  const service = await backend(page); await seed(page); await completionReady(page);
+  await checkbox(page, 'a').click(); await expect(toast(page)).toContainText('Completion saved');
+  await service.reload(); await completionReady(page, 'b');
+  // A newer remote edit to the source makes the resolution needs-review, not completed.
+  await page.evaluate(path => __fbTest.remoteWrite(path, { items: [
+    { id: 'a', task: 'Task a edited elsewhere', kind: 'task', when: '', done: false, doneAt: null, updatedAt: 9000, updatedBy: 'other-device' },
+    { id: 'b', task: 'Task b', kind: 'task', when: '', done: false, doneAt: null, updatedAt: 1000, updatedBy: 'device-original' },
+  ], updatedAt: 9000, updatedBy: 'other-device' }), remotePath('calendar'));
+  await expect.poll(() => page.evaluate(() => {
+    const entry = PlanAuthority.rawStaleUnfinished().items.find(entry => entry.item.id === 'a');
+    return entry && TaskCompletions.view(entry)?.state;
+  })).not.toBe('completed');
+  await expect(recovery(page).getByRole('button', { name: 'Undo completion: Task a' })).toHaveCount(0);
+});

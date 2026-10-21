@@ -43,8 +43,9 @@ const BROWSE_DAYS = 14;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
 const state = {
-  expanded: { upcoming: false, stale: false },
+  expanded: { upcoming: false, stale: false, completed: false },
   staleOffset: 0,
+  completedLimit: PREVIEW_ROWS,  // O1: how many resolved tasks the durable Undo list shows
   staleOwner: null,
   staleUndo: null,     // session-only receipt for ONE exact dismissal, never a task store
   staleStatus: '',
@@ -612,6 +613,18 @@ async function completeHistorical(entry, date) {
     showCompletionNotice(active ? 'Completion saved' : 'Saved · status refreshed', active ? { uid: globalThis.getTaskCompletionAppContext?.()?.uid, record: result.record } : null);
   } else showCompletionNotice(result.outcome === 'UNKNOWN' ? 'Still checking completion' : `Not saved · ${result.reason || 'Please retry'}`, null, result.outcome === 'UNKNOWN');
 }
+/** One undo path for both the temporary notice and the durable Completed list, so the two
+ *  cannot drift: same receipt shape, same backend call, same handling of UNKNOWN. */
+function runCompletionUndo(receipt) {
+  const owner = state.staleOwner, generation = completionOwnerGeneration;
+  void completions().undo(receipt).then(result => {
+    if (state.staleOwner !== owner || completionOwnerGeneration !== generation) return;
+    const entry = completionEntry(receipt.record.identity.itemId, receipt.record.identity.targetId), current = entry && completions().view(entry);
+    const open = result.record?.state === 'open' && current?.state === 'unfinished' && current.record?.revision === result.record.revision;
+    showCompletionNotice(result.outcome === 'CONFIRMED' ? open ? 'Completion undone' : 'Undo recorded · status refreshed'
+      : result.outcome === 'UNKNOWN' ? 'Undo still checking' : 'Undo refused · task changed', null, result.outcome === 'UNKNOWN');
+  });
+}
 function handleCompletionAction(action, control) {
   const id = control.dataset.id, day = control.dataset.day;
   switch (action) {
@@ -625,18 +638,26 @@ function handleCompletionAction(action, control) {
     case 'close-completion-backlog': closeCompletionBacklog(); staleSection()?.querySelector('[data-pc-action="view-all-stale"]')?.focus(); return true;
     case 'more-backlog': completionLimit += 50; renderCompletionBacklog(); return true;
     case 'undo-completion': {
-      const receipt = state.completionReceipt, owner = state.staleOwner, generation = completionOwnerGeneration;
+      const receipt = state.completionReceipt;
       if (!receipt) return true;
       state.completionReceipt = null;
-      void completions().undo(receipt).then(result => {
-        if (state.staleOwner !== owner || completionOwnerGeneration !== generation) return;
-        const entry = completionEntry(receipt.record.identity.itemId, receipt.record.identity.targetId), current = entry && completions().view(entry);
-        const open = result.record?.state === 'open' && current?.state === 'unfinished' && current.record?.revision === result.record.revision;
-        showCompletionNotice(result.outcome === 'CONFIRMED' ? open ? 'Completion undone' : 'Undo recorded · status refreshed'
-          : result.outcome === 'UNKNOWN' ? 'Undo still checking' : 'Undo refused · task changed', null, result.outcome === 'UNKNOWN');
-      });
+      runCompletionUndo(receipt);
       render(); return true;
     }
+    // O1: the same undo, reached from the durable Completed list instead of the expiring notice.
+    case 'undo-completed': {
+      const entry = completionEntry(id, day);
+      const view = entry && completions()?.view(entry);
+      const uid = globalThis.getTaskCompletionAppContext?.()?.uid;
+      if (!entry || view?.state !== 'completed' || !view.record || !uid) {
+        showCompletionNotice('Undo unavailable · refresh and retry'); return true;
+      }
+      runCompletionUndo({ uid, record: view.record });
+      render(); return true;
+    }
+    case 'expand-completed': state.expanded.completed = true; state.completedLimit = PREVIEW_ROWS; render(); return true;
+    case 'collapse-completed': state.expanded.completed = false; render(); return true;
+    case 'more-completed': state.completedLimit += PREVIEW_ROWS; render(); return true;
     case 'recover-completion': {
       const entry = id && completionEntry(id, day);
       const pending = entry ? completions().pending(entry) : completions().pendingAll()[0], owner = state.staleOwner, generation = completionOwnerGeneration;
@@ -660,6 +681,60 @@ if (typeof document !== 'undefined') {
     }
   });
   document.addEventListener('scroll', positionCompletionPopover, true);
+  // O2: a dropped socket cancels the completion listeners and every row falls back to
+  // "changed or ambiguous". Re-rendering on reconnect lets ensure() re-arm the watch.
+  globalThis.addEventListener?.('online', () => { try { render(); } catch { /* surface stays as it is */ } });
+}
+
+// ---- O1: durable Undo -------------------------------------------------------
+// A completion is reversible only while its temporary notice is on screen unless the
+// resolved task stays reachable. These read the SAME resolution records the notice uses
+// (TaskCompletions.view) - no second source of truth, and no extra backend call.
+const completionReceiptOf = record => record?.operations?.[record.completionOpId] || null;
+function completedEntries(nowMs) {
+  const layer = authority(), api = completions();
+  if (!layer || !api || typeof layer.rawStaleUnfinished !== 'function') return [];
+  let items = [];
+  try { items = layer.rawStaleUnfinished(nowMs).items || []; } catch { return []; }
+  const out = [];
+  for (const entry of items) {
+    let view = null;
+    try { view = api.view(entry); } catch { view = null; }
+    const receipt = view?.state === 'completed' ? completionReceiptOf(view.record) : null;
+    if (receipt) out.push({ entry, record: view.record, receipt });
+  }
+  // Newest resolution first, by the server's own assertion instant.
+  return out.sort((a, b) => (b.receipt.recordedAt || 0) - (a.receipt.recordedAt || 0));
+}
+function completedRowHtml({ entry, receipt }) {
+  const { item, sourceDayId } = entry;
+  const data = `data-id="${escape(item.id)}" data-day="${escape(sourceDayId)}"`;
+  const busy = completions()?.busy(entry);
+  const when = receipt.date
+    ? new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${receipt.date}T12:00:00Z`))
+    : '';
+  return `<div class="pc-row pc-completed-row" data-pc-completed="${escape(item.id)}" data-pc-day="${escape(sourceDayId)}"${busy ? ' aria-busy="true"' : ''}>
+    <span class="pc-completed-mark" aria-hidden="true">✓</span>
+    <div class="pc-complete-copy"><button type="button" class="pc-complete-title" data-pc-action="reveal-stale-title" ${data} aria-expanded="false"><span class="pc-complete-task">${escape(item.task)}</span>
+    <span class="pc-complete-date">Completed ${escape(when)}${busy ? ' · Saving…' : ''}</span></button></div>
+    <button type="button" class="pc-completed-undo" data-pc-action="undo-completed" ${data}${busy ? ' disabled' : ''} aria-label="Undo completion: ${escape(item.task)}">Undo</button>
+  </div>`;
+}
+function completedHtml(nowMs) {
+  const all = completedEntries(nowMs);
+  if (!all.length) return '';
+  if (!state.expanded.completed) {
+    return `<section class="pc-block pc-completed-compact"><button type="button" class="pc-stale-trigger" data-pc-action="expand-completed" aria-expanded="false"><span>Completed · ${all.length}</span><span aria-hidden="true">›</span></button></section>`;
+  }
+  const shown = all.slice(0, state.completedLimit);
+  const more = all.length > shown.length
+    ? `<div class="pc-preview-footer"><span>Showing ${shown.length} of ${all.length}</span><button type="button" data-pc-action="more-completed">Show more</button></div>` : '';
+  return `<section class="pc-block">
+    <div class="pc-head"><h3>Completed</h3><span class="pc-muted">${all.length} tasks</span><button type="button" class="btn sm ghost" data-pc-action="collapse-completed" aria-label="Collapse Completed">⌄</button></div>
+    <p class="pc-muted">Resolved from earlier days. Undo restores the task; the original completion receipt is kept.</p>
+    ${shown.map(completedRowHtml).join('')}
+    ${more}
+  </section>`;
 }
 
 function staleHtml(nowMs) {
@@ -860,6 +935,8 @@ export function render() {
     closeCompletionPopover(); closeCompletionBacklog(); clearTimeout(completionNoticeTimer);
     state.completionNotice = null; state.completionReceipt = null;
     state.expanded.stale = false;
+    state.expanded.completed = false;
+    state.completedLimit = PREVIEW_ROWS;
     state.pendingMove = null;
   }
   const nowMs = Date.now();
@@ -886,7 +963,7 @@ export function render() {
     const feedback = state.staleStatus ? `<div class="pc-notice pc-stale-feedback" role="status"><span>${escape(state.staleStatus)}</span>
       ${state.staleUndo ? `<span class="pc-stale-full-title">${escape(state.staleUndo.task)}</span><button type="button" class="btn sm ghost" data-pc-action="undo-dismiss">Undo</button>` : ''}
       <button type="button" class="pc-icon" data-pc-action="close-stale-status" aria-label="Dismiss unfinished notice">Close</button></div>` : '';
-    const recoveryHtml = feedback + completionNoticeHtml() + staleCompactHtml(nowMs);
+    const recoveryHtml = feedback + completionNoticeHtml() + staleCompactHtml(nowMs) + completedHtml(nowMs);
     recovery.hidden = !recoveryHtml;
     recovery.dataset.pcOwner = owner || '';
     recovery.innerHTML = recoveryHtml;

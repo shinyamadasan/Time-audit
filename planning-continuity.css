@@ -211,3 +211,12 @@
 .tl-plan-check::before { content:''; position:absolute; width:20px; height:20px; box-sizing:border-box; border:1px solid var(--muted); border-radius:5px; left:12px; top:12px; pointer-events:none; }
 
 @media(max-width:600px) { .pc-backlog-search,.pc-completion-popover input { font-size:16px; } }
+
+/* O1 durable Undo: resolved tasks stay reachable after the temporary notice expires. */
+.pc-completed-row { display:flex; align-items:center; gap:8px; }
+.pc-completed-row .pc-complete-copy { flex:1 1 auto; min-width:0; }
+.pc-completed-mark { flex:0 0 44px; width:44px; min-height:44px; display:grid; place-items:center; color:var(--muted); font-size:14px; }
+.pc-completed-row .pc-complete-task { color:var(--muted); text-decoration:line-through; }
+.pc-completed-undo { flex:0 0 auto; min-width:44px; min-height:44px; padding:0 10px; border:0; border-radius:6px; background:none; color:var(--deep); font:inherit; font-size:12px; cursor:pointer; }
+.pc-completed-undo[disabled] { color:var(--muted); cursor:default; }
+.pc-completed-compact .pc-stale-trigger { color:var(--muted); }

@@ -101,7 +101,9 @@ export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, 
     const ctx = bind();
     const next = canonicalCompletion(entries.map(entry => [completionIdentity(entry.target, entry.item), completionWireValue(entry.item)]));
     candidates = entries;
-    if (signature !== next) { signature = next; epoch++; for (const found of views.values()) found.fresh = false; watch(ctx); void refresh(); }
+    // A cancelled listener (dropped socket) sets watchFailed, which short-circuits refresh()
+    // forever. The candidate signature is unchanged across a reconnect, so re-arm on that too.
+    if (signature !== next || watchFailed) { signature = next; epoch++; for (const found of views.values()) found.fresh = false; watch(ctx); void refresh(); }
   }
   function view(entry) {
     bind();
