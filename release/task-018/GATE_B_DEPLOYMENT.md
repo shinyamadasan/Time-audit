@@ -24,9 +24,51 @@
 > but the step-2 "Done earlier (yesterday)" instruction must be read as an explicit earlier date, and
 > the owner should confirm the drift is acceptable rather than re-running Day 0.
 >
-> **Independent final-diff review.** The PASS recorded below is a claim carried in this runbook; no
-> review artifact is archived in the repository and `REVIEW.md` has no TASK-018 entry. Treat it as
-> reported, not re-verified.
+> **Independent final-diff review — RESOLVED 2026-10-21.** The unsupported PASS claim recorded below
+> has been replaced by a real archived review: see `REVIEW.md`, "Review TASK-018". An independent
+> reviewer that did not build the task read the final diff `df7c279..08e9371`, re-ran the local gates
+> (npm test 2260/2261 with one known opt-in skip; completion suite 99/99; www parity 15/15;
+> authority-boundary 15/15), compared live production rules against this candidate's generated output
+> (byte-identical), and killed 5/5 injected mutations of the security-critical invariants (Action-API
+> claim tokens, token revocation, account-zone enforcement, receipt acknowledgement, UNKNOWN honesty).
+> Verdict: PASS WITH NOTES, `approved` (red-zone), held — explicitly conditional on the Day 1 canary.
+> Three non-blocking notes (N1 completion-date has no lower bound, N2 the UNKNOWN state depends on the
+> UI keeping "Check status", N3 per-completion full-room read cost) are recorded there.
+
+> ### Day 1 canary — drift-corrected procedure (prepared 2026-10-21; NOT executed)
+>
+> Day 0 ran 2026-10-16; its tasks are in `plans/2026-10-16`, now 5 days old. Verified immediately
+> before writing this: function ACTIVE on `chronasensecompletionapi-00002-vin`, Action API still
+> `chronasenseactionapi-00007-mon`, 6 alert policies enabled, canary room = `{plans, settings}` with
+> `plans/2026-10-16` and `settings.timezone="America/Phoenix"`, `taskCompletionResolutions` **null**,
+> unauthenticated POST -> 401. Do NOT re-run Day 0 and do NOT redeploy B1/B2.
+>
+> Substitutions for the five-day drift — everywhere section 5 step 2 says a relative day, use an
+> explicit historical date:
+>
+> | Runbook wording | Use instead |
+> |---|---|
+> | "tasks are now unfinished history" | true, and more so: they are 5 days stale, which is the real subject of this feature |
+> | Task 2 "Done earlier (yesterday)" | **Done earlier -> explicitly pick 2026-10-16**, the task's own plan date (the most defensible assertion, and it exercises a 5-day-old date rather than an off-by-one) |
+> | "reload (task 2 stays resolved)" | unchanged |
+> | expected receipt `date` | `2026-10-16` for task 2; today's account-zone date for task 1 |
+> | account zone in every receipt | `America/Phoenix` |
+>
+> Expected outcomes, stated in advance so a surprise is recognisable:
+> - Task 1 Done today -> `CONFIRMED`, receipt `date` = today in **America/Phoenix** (not the device zone).
+> - Task 1 Undo -> `CONFIRMED`, state back to `open`, the completion receipt **retained**, revision +1.
+> - Task 2 Done earlier 2026-10-16 -> `CONFIRMED`, survives reload and a second fresh profile.
+> - Task 3 offline -> refusal toast `SOURCE_UNAVAILABLE`, and **nothing written** (verify the node).
+> - Task 4 untouched -> remains absent from `taskCompletionResolutions`.
+> - Throughout: `rooms/uid_<owner>` unchanged; zero log entries containing the canary uid, e-mail or
+>   task text; no `unconfirmedWrite`, no 5xx, no alert.
+>
+> **Authentication is the blocker, and it is deliberate.** Production Auth is Google-only, the canary
+> is a `google.com` account, and no canary credential is stored anywhere in the repo or the evidence
+> directory. The session can only be established by a human signing in as the canary. Minting a token
+> for that UID out of band was considered and rejected: it is credential exploration, it would need an
+> IAM grant this packet explicitly forbids (TokenCreator), and it would prove the backend while
+> bypassing the very UI path the canary exists to exercise.
 >
 > Nothing in this reconciliation changed production. Gate C (merge of PR #7) has **not** been taken.
 

@@ -6,6 +6,106 @@
 
 ---
 
+## Review TASK-018 - PASS WITH NOTES, HOLD (durable historical task resolution + completion monitoring)
+branch: task-018-candidate @ `08e9371be7c56961a0c074e1041962adef4eac0c` (PR #7 head; unchanged by this review)
+verdict: approved (red-zone, held) for Gate C — **conditional on the Day 1 production canary, which has not run**
+reviewer: independent Claude reviewer (did not build this task), 2026-10-21
+
+### Why this entry exists
+
+`release/task-018/GATE_B_DEPLOYMENT.md` asserted "independent final-diff review PASS" for this SHA.
+No review artifact was ever archived and `REVIEW.md` had no TASK-018 entry, so that claim was
+unsupported and is **not** carried forward as evidence. This entry is a fresh review of the exact
+candidate, performed against the final diff, and it replaces the earlier claim rather than ratifying
+it. Written on `task-018-monitoring` deliberately: committing to `task-018-candidate` would move
+PR #7's head off the CI-green, deployed-and-verified SHA.
+
+### What was reviewed
+
+Final diff `df7c279..08e9371` (68 files). Read in full: `functions/src/completion-api.js`,
+`functions/src/completion-domain.js`, `task-completion-sync.js`, `task-completion-model.js`,
+`task-completion-repository.js`, plus the generated rules and the `www/` mirror.
+
+### Findings
+
+**1. The authentication boundary is correct and fails closed.** `verifyIdToken(token, true)` checks
+revocation; Action-API claim-bearing tokens are explicitly rejected (`decoded.chronasenseActionId
+!== undefined`); every auth path funnels into one bare `401 {"outcome":"REJECTED","reason":
+"UNAUTHENTICATED"}` with no detail leak. Request bodies are capped at 64 KiB before parsing.
+Confirmed live: unauthenticated POST -> 401, GET -> 405, cross-origin preflight returns no
+`access-control-allow-origin`.
+
+**2. No write is ever reported as durable without an authoritative receipt.** `execute()` requires a
+post-CAS readback whose receipt `intentHash` matches the request, else `ACK_UNPROVEN`. The
+`mayHaveWritten` flag means a failure after a possible write returns `UNKNOWN`, never a false
+`REJECTED`. This is the property that protects hard rule 9, and it is implemented honestly: absence
+of a receipt is explicitly *not* treated as proof of rejection.
+
+**3. The account-zone fix is enforced on both sides.** The client reads the zone only from its own
+fresh authoritative inspection (never the device zone) and refuses when unavailable; the backend
+independently re-checks `request.timezone !== room.settings?.timezone` and refuses with
+`ACCOUNT_ZONE_CHANGED`. A completion date in the future relative to the account zone is rejected.
+Belt and braces, with the server as the authority. This is the fix that distinguishes the candidate
+from `task-018-monitoring`'s base.
+
+**4. Source binding is conservative to a fault, which is the right call.** Duplicate IDs, moved or
+locked items, carried-from aliases, ambiguous origins, `.priority`/`.value` wire shapes and rooms
+over 16 MiB all refuse rather than guess. Completion requires the item to be present in the plan
+*and* in the unfinished set.
+
+**5. The tests genuinely bite.** Five mutations of the security-critical invariants were injected
+and every one was killed:
+
+| Mutation | Result |
+|---|---|
+| Accept Action-API claim-bearing tokens | KILLED |
+| Drop token revocation checking | KILLED |
+| Drop account-zone enforcement | KILLED |
+| Accept a write with no receipt acknowledgement | KILLED (by `task-completion-emulator.test.js`, fence suite) |
+| Never report `UNKNOWN` (collapse to `REJECTED`) | KILLED (7 tests) |
+
+Working tree restored and verified clean after each.
+
+### Verification performed for this review
+
+- `npm test`: 2261 tests, 2260 pass, 0 fail, 1 skip (the known opt-in
+  `CROSS_REPO_COMPAT_CONTROL_PROOF` negative control). SKIP is not counted as PASS.
+- Targeted completion suite (incl. emulator + telemetry): 99/99 pass.
+- `scripts/runtime-mirror.test.js` (`www/` closure parity): 15/15 pass.
+- `functions/test/authority-boundary.test.js` (Action API must not import the completion adapter):
+  15/15 pass.
+- Live production RTDB rules fetched and compared against this candidate's
+  `scripts/firebase-rules-builder.mjs` output: **byte-identical**.
+- Rules builder is deterministic: regenerating left the worktree clean.
+- Hosted CI green on this exact SHA (run 38943166392, headSha `08e9371`).
+- NOT re-run here: `npm run test:fence` in full, and the Playwright browser gate. Both are recorded
+  as passing in `TASK_018_IMPLEMENTATION_HANDOFF.md`; they are reported, not re-verified by me.
+
+### Notes (not must-fix)
+
+- **N1. No lower bound on the completion date.** `validPlanDate` accepts any valid ISO date and the
+  only constraint is `date <= today` in the account zone, so a resolution could record a completion
+  in e.g. 1970. It creates no streak credit, no tracked time and no history rewrite, and it is the
+  account owner asserting about their own task, so impact is cosmetic — but a floor (for example the
+  task's own plan date) would be cheap and would make the record self-evidently sane.
+- **N2. The `UNKNOWN` state is load-bearing and user-visible.** It is correct, but it depends on the
+  UI continuing to offer "Check status" for unresolved operations. Any future UI simplification that
+  removes that affordance silently turns a recoverable state into a dead end.
+- **N3. Cost at scale is real.** Each completion is >= 4 full-room reads plus a full-room conditional
+  PUT. Fine for one owner; it is not a design that survives multi-user growth without change.
+
+### Verdict
+
+Gate picked: **`approved`** (red-zone: dedicated privileged backend, Firebase RTDB sync, auth and
+the entry-resolution data model — Hard Rules 9 and the risk-gated merge table). Held for human merge.
+
+The code is sound and the local and staging evidence is strong. The one thing no amount of code
+reading can substitute for is that **this endpoint has never served an authenticated request in
+production** — the Day 1 canary is still outstanding. Gate C should not be taken until it has run.
+
+TASK-018 stays at `status: review` pending the Day 1 canary; it is not being moved to `approved`
+here, because the owner-facing acceptance that `approved` implies has not happened yet.
+
 ## Review TASK-015 - PASS WITH NOTES, HOLD AT APPROVED (Unified My Day + Brain Dump V1 planning tray)
 branch: task-015 @ 5c5957e (rebased onto origin/main 2411ee4; pre-rebase builder SHA cabb793, tag task-015-prereconcile)
 verdict: approved (red-zone, held for human merge), once the lead's post-rebase smoke run is green
