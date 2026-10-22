@@ -5126,7 +5126,7 @@ changed:
   - task-completion-sync.js: reuse listener-valid inspection; retain backend/post-inspect verification; consume scheduled refresh; coalesce Undo/resume; refuse new offline actions while preserving prior UNKNOWN commands.
   - planning-continuity-ui.js and www mirrors: immediate Saving feedback; reserve recovery controls for inactive pending commands; keep separate UNKNOWN visible.
   - sync/browser tests: source/zone races, request counts, coalescing, offline/UNKNOWN and normal-saving regressions; TASK_018_PERFORMANCE_REPORT.md and task phase record.
-tests: npm test exit 0; sync 21/21; existing browser cases 16 pass plus two new cases pass after harness corrections. Final exact-head hosted CI/review results are in the private performance packet.
+tests: npm test exit 0; sync 21/21; existing browser cases 16 pass plus new saving/offline cases pass after harness corrections. Added mixed pending/active recovery target regression. Final exact-head hosted CI/review results are in the private performance packet.
 blockers: owner performance acceptance remains open; final CI/review must be observed before release consideration.
 deviations: no deployment/merge, protected backend/rules/schema or O3 changes. Completion median 1344.5→955.1ms; Undo and p95 improvement not established.
 → status remains `review`; TASK-018 is not done.

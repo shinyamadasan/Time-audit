@@ -670,7 +670,7 @@ function handleCompletionAction(action, control) {
     case 'more-completed': state.completedLimit += PREVIEW_ROWS; render(); return true;
     case 'recover-completion': {
       const entry = id && completionEntry(id, day);
-      const pending = entry ? completions().pending(entry) : completions().pendingAll()[0], owner = state.staleOwner, generation = completionOwnerGeneration;
+      const pending = entry ? completions().pending(entry) : completions().pendingAll().find(request => !completions().active(request)), owner = state.staleOwner, generation = completionOwnerGeneration;
       if (pending) void completions().resume(pending).then(result => { if (state.staleOwner === owner && completionOwnerGeneration === generation) showCompletionNotice(result.outcome === 'CONFIRMED' ? 'Completion status recovered' : 'Still checking · retry when connected', null, result.outcome !== 'CONFIRMED'); });
       return true;
     }

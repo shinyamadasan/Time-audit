@@ -48,7 +48,7 @@ One additional bounded recovery measurement intentionally aborted an Undo before
 
 ## Verification checkpoint
 
-Local `npm test` passed (exit 0). Sync tests: 21/21. Existing affected browser regressions: 16 passed; two added saving/offline cases pass after harness correction. Full final browser/fence CI and exact-SHA independent review are required on the final PR head; their final observed results, exact candidate SHA and checksums are recorded in the private final evidence packet rather than inferred from this checkpoint.
+Local `npm test` passed (exit 0). Sync tests: 21/21. Existing affected browser regressions: 16 passed; added saving/offline cases pass after harness correction. A third regression checks global recovery targets an inactive uncertain command while another command is active. Full final browser/fence CI and exact-SHA independent review are required on the final PR head; their final observed results, exact candidate SHA and checksums are recorded in the private final evidence packet rather than inferred from this checkpoint.
 
 Live candidate-over-production safety checks passed: completion, persistent Undo/44px target, double tap, deliberately interrupted Undo, reload/same-ID recovery, receipt retention, source-history preservation, explicit offline refusal, natural reconnect and zero page exceptions. Only the chosen existing canary resolution changed; authoritative snapshots are retained privately. Account-switch/newer-source/concurrent resolution/forged receipt/listener cancellation regressions remain covered locally/CI, not by signing into a real account in the canary browser.
 

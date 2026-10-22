@@ -517,6 +517,31 @@ test('known offline click refuses before staging; online refresh restores a usab
   await page.evaluate(() => { delete navigator.onLine; dispatchEvent(new Event('online')); });
   await completionReady(page);
 });
+
+test('global recovery checks the inactive uncertain command while another command is active', async ({ page }) => {
+  const api = await backend(page); await seed(page); await completionReady(page); await completionReady(page, 'b');
+  api.mode('before');
+  await checkbox(page, 'a').click(); await expect(toast(page)).toContainText('Still checking');
+  await checkbox(page, 'b').click();
+  await expect.poll(() => page.evaluate(() => TaskCompletions.pendingAll().length)).toBe(2);
+  const [active, inactive] = await page.evaluate(() => TaskCompletions.pendingAll().map(request => request.identity.itemId));
+  api.mode('normal');
+  let release;
+  await page.route(ENDPOINT, async route => {
+    const input = route.request().postDataJSON();
+    if (input.kind === 'status' && input.request.identity.itemId === active) await new Promise(resolve => { release = resolve; });
+    await route.fallback();
+  });
+  try {
+    await row(page, active).getByRole('button', { name: 'Still checking · Retry' }).click();
+    await expect.poll(() => !!release).toBe(true);
+    await expect(toast(page)).toContainText('A previous change is still being checked');
+    await toast(page).getByRole('button', { name: 'Check status' }).click();
+    await expect.poll(() => page.evaluate(() => TaskCompletions.pendingAll().map(request => request.identity.itemId))).toEqual([active]);
+    await expect(row(page, inactive)).toHaveCount(0);
+  } finally { release?.(); }
+  await expect.poll(() => page.evaluate(() => TaskCompletions.pendingAll().length)).toBe(0);
+});
 test('O2: reconnect re-verifies without a reload, even though the watch never failed', async ({ page }) => {
   await backend(page); await seed(page); await completionReady(page);
   const state = () => page.evaluate(() => {
