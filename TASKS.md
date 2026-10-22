@@ -1082,7 +1082,7 @@ integration:
 ---
 
 ### TASK-018 - Unfinished Resolution + Compact UX (approved Refined A; implementation safety gate)
-status: review
+status: codex
 owner: codex
 source: owner-direct
 priority: P1
@@ -1091,6 +1091,18 @@ files: design/task-018/ standalone HTML/CSS/mock JS, design documentation and ca
   playwright-report/task-018-design/ and playwright-report/task-018-refined-a/ screenshots and measurements
   (local evidence); TASKS.md lifecycle/phase record; TASK_018_IMPLEMENTATION_SAFETY_GATE.md;
   CHANGELOG.md and TEST_REPORT.md append-only. Production file manifest requires a passing safety gate first.
+
+current-performance-remediation (supersedes prior release/acceptance hold):
+  Owner-direct real-use feedback, 2026-10-21: completion and Undo work but feel slow, especially Checking status.
+  Keep TASK-018 open. Dedicated task-018-performance branch from released main ca2c90f.
+  Measure synthetic production median/p95 visual/token/inspection/mutation/refresh/recovery timings and request
+  counts before focused client improvements. Preserve authoritative receipts, operation IDs, authorization,
+  conditional writes, source history, UNKNOWN and account/listener safety. Prefer client changes first.
+  Scope: task-completion-sync.js, planning-continuity-ui.js, their focused tests and generated www mirrors;
+  performance evidence/report, TASKS phase/status, CHANGELOG and TEST_REPORT. Backend inspection/measurement
+  only; no backend/rules/schema/IAM changes or deployment. O3 remains deferred. No merge/deploy or TASK-016.
+  Verify completion/Undo/double-click/reload/interruption/offline/reconnect/account-switch/history, relevant
+  browser/fence gates, CI and fresh independent review. Return review-ready; owner performance acceptance pending.
 
 current-implementation-authorization (supersedes contract-only gate below):
   Owner-direct attachment 44332b2d-84ff-4e8f-a4f2-80178f0818f9/Pasted text.txt, current session 2026-10-15:

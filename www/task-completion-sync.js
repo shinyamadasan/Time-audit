@@ -60,6 +60,7 @@ export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, 
   async function refresh() {
     const ctx = bind(), token = generation;
     if (!ctx?.uid || !candidates.length || watchFailed) return;
+    clearTimeout(timer); timer = null; // this inspection consumes the scheduled invalidation
     if (inflight) return inflight;
     const selected = candidates.slice(), observedEpoch = epoch;
     const work = (async () => {
@@ -144,15 +145,18 @@ export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, 
   async function complete(entry, date, timezone) {
     const ctx = bind(), token = generation, key = entryKey(entry);
     if (busy.has(key)) return busy.get(key);
-    const work = (async () => {
+    const work = Promise.resolve().then(async () => {
       try {
         const resumed = pending(entry);
+        if (globalThis.navigator?.onLine === false) return { outcome: resumed ? 'UNKNOWN' : 'REJECTED', reason: 'SOURCE_UNAVAILABLE', ...(resumed ? { request: resumed } : {}) };
         if (resumed) return await dispatch(ctx, resumed, true, token);
-        await refresh();
+        // Reuse a listener-valid, item-matching inspection. The mutation still validates the exact
+        // source/revision/zone on the backend; stale or missing evidence must be inspected first.
+        if (!view(entry)?.fresh || !accountTimezone()) await refresh();
         if (!current(ctx?.uid, token)) return { outcome: 'REJECTED', reason: 'ACCOUNT_CHANGED' };
         const observed = view(entry);
         if (!observed?.fresh || !observed.sourceRevision || !['unfinished', 'completed'].includes(observed.state)) return { outcome: 'REJECTED', reason: 'SOURCE_UNAVAILABLE' };
-        // The zone is read AFTER this call's own refresh: always the account's authoritative zone, never the device's.
+        // The zone comes from the fresh authoritative inspection, never the device's.
         // A caller-supplied zone must match it; `date` omitted means "today" in that zone.
         const accountZone = accountTimezone();
         if (!accountZone) return { outcome: 'REJECTED', reason: 'ACCOUNT_ZONE_UNAVAILABLE' };
@@ -163,27 +167,43 @@ export function createTaskCompletionSync({ context, storage, fetchImpl = fetch, 
         return await dispatch(ctx, request, false, token);
       } catch (error) { return { outcome: 'REJECTED', reason: error.message }; }
       finally { if (current(ctx?.uid, token)) { busy.delete(key); changed(); } }
-    })();
+    });
     busy.set(key, work); changed(); return work;
   }
   async function undo(receipt) {
     const ctx = bind(), token = generation;
     if (!ctx?.uid || receipt.uid !== ctx.uid) return { outcome: 'REJECTED', reason: 'ACCOUNT_CHANGED' };
-    const record = receipt.record, complete = record.operations[record.completionOpId];
-    const request = { identity: record.identity, operationId: globalThis.crypto.randomUUID(), expectedRevision: record.revision,
-      expectedSourceRevision: complete.sourceRevision, kind: 'undo', undoOf: record.completionOpId };
-    return dispatch(ctx, request, false, token);
+    const record = receipt.record, key = identityKey(record.identity);
+    if (busy.has(key)) return busy.get(key);
+    return track(key, ctx, token, async () => {
+      let pending;
+      try { pending = repository.list(ctx.uid).find(request => identityKey(request.identity) === key); }
+      catch { return { outcome: 'REJECTED', reason: 'RECEIPT_STORAGE_UNAVAILABLE' }; }
+      if (globalThis.navigator?.onLine === false) return { outcome: pending ? 'UNKNOWN' : 'REJECTED', reason: 'SOURCE_UNAVAILABLE', ...(pending ? { request: pending } : {}) };
+      if (pending) return dispatch(ctx, pending, true, token);
+      const complete = record.operations[record.completionOpId];
+      const request = { identity: record.identity, operationId: globalThis.crypto.randomUUID(), expectedRevision: record.revision,
+        expectedSourceRevision: complete.sourceRevision, kind: 'undo', undoOf: record.completionOpId };
+      return dispatch(ctx, request, false, token);
+    });
+  }
+  function track(key, ctx, token, action) {
+    const work = Promise.resolve().then(action).finally(() => { if (current(ctx.uid, token)) { busy.delete(key); changed(); } });
+    busy.set(key, work); changed(); return work;
   }
   async function resume(request) {
     const ctx = bind(), token = generation;
     if (!ctx?.uid || !repository.list(ctx.uid).some(item => canonicalCompletion(item) === canonicalCompletion(request))) return { outcome: 'REJECTED', reason: 'RECEIPT_NOT_FOUND' };
-    return dispatch(ctx, request, true, token);
+    const key = identityKey(request.identity);
+    if (busy.has(key)) return busy.get(key);
+    return track(key, ctx, token, () => dispatch(ctx, request, true, token));
   }
   function accountTimezone() {
     bind();
     return zone && zone.epoch === epoch ? zone.value : null;
   }
   return { ensure, refresh, view, pending, complete, undo, resume, reset, accountTimezone,
+    saving: () => { bind(); return busy.size > 0; }, active: request => busy.has(identityKey(request.identity)),
     pendingAll: () => { const ctx = bind(); return ctx?.uid ? repository.list(ctx.uid) : []; }, busy: entry => busy.has(entryKey(entry)) };
 }
 

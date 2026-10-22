@@ -50,6 +50,80 @@ test('duplicate click shares one dispatched operation', async () => {
   assert.equal(result[0].outcome, 'CONFIRMED'); assert.equal(result[0].request.operationId, result[1].request.operationId);
   assert.equal(w.calls.filter(call => call.kind === 'mutate').length, 1); w.sync.reset();
 });
+
+test('fresh completion reuses inspection, while invalidation requires another inspection', async () => {
+  const w = setup(); await ready(w);
+  let start = w.calls.length;
+  const done = await w.sync.complete(w.entry, '2026-10-15', 'Etc/UTC');
+  assert.equal(done.outcome, 'CONFIRMED');
+  assert.deepEqual(w.calls.slice(start).map(call => call.kind), ['mutate', 'inspect']);
+  await w.sync.undo({ uid: 'alice', record: done.record });
+  w.listeners.get('settings').fn(); start = w.calls.length;
+  assert.equal((await w.sync.complete(w.entry, '2026-10-15', 'Etc/UTC')).outcome, 'CONFIRMED');
+  assert.deepEqual(w.calls.slice(start).map(call => call.kind), ['inspect', 'mutate', 'inspect']);
+  w.sync.reset();
+});
+
+test('cached source and zone never bypass backend validation of a later remote change', async () => {
+  for (const change of [room => { room.settings.timezone = 'Asia/Tokyo'; },
+    room => { room.calendarPlans[wTarget(room)].items[0].task = 'edited remotely'; }]) {
+    const w = setup(); await ready(w);
+    w.io.change(room => { change(room); return room; }); // listener has not delivered yet
+    const result = await w.sync.complete(w.entry, '2026-10-15', 'Etc/UTC');
+    assert.equal(result.outcome, 'REJECTED');
+    assert.equal(w.io.value().taskCompletionResolutions, undefined);
+    assert.equal(w.sync.pendingAll().length, 0); w.sync.reset();
+  }
+  function wTarget(room) { return Object.keys(room.calendarPlans)[0]; }
+});
+
+test('concurrent Undo and status recovery share one operation and preserve its ID', async () => {
+  const w = setup(); await ready(w);
+  const done = await w.sync.complete(w.entry, '2026-10-15', 'Etc/UTC');
+  let release;
+  w.hold(async input => { if (input.kind === 'mutate') await new Promise(resolve => { release = resolve; }); });
+  const receipt = { uid: 'alice', record: done.record };
+  const first = w.sync.undo(receipt), second = w.sync.undo(receipt);
+  while (!release) await tick();
+  const staged = w.sync.pendingAll()[0];
+  const recovered = w.sync.resume(staged);
+  assert.equal(w.sync.saving(), true); assert.equal(w.sync.active(staged), true);
+  release();
+  const results = await Promise.all([first, second, recovered]);
+  assert.ok(results.every(result => result.outcome === 'CONFIRMED' && result.request.operationId === staged.operationId));
+  assert.equal(w.calls.filter(call => call.kind === 'mutate' && call.request.kind === 'undo').length, 1);
+  assert.equal(w.calls.filter(call => call.kind === 'status').length, 0);
+  assert.equal(w.sync.saving(), false); w.sync.reset();
+});
+
+test('known offline refuses both actions without staging or network requests', async t => {
+  const w = setup(); await ready(w);
+  const done = await w.sync.complete(w.entry, '2026-10-15', 'Etc/UTC');
+  const calls = w.calls.length;
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis.navigator, 'onLine');
+  Object.defineProperty(globalThis.navigator, 'onLine', { value: false, configurable: true });
+  t.after(() => { if (descriptor) Object.defineProperty(globalThis.navigator, 'onLine', descriptor); else delete globalThis.navigator.onLine; });
+  assert.equal((await w.sync.undo({ uid: 'alice', record: done.record })).reason, 'SOURCE_UNAVAILABLE');
+  assert.equal((await w.sync.complete(w.entry, '2026-10-15', 'Etc/UTC')).reason, 'SOURCE_UNAVAILABLE');
+  assert.equal(w.calls.length, calls); assert.equal(w.sync.pendingAll().length, 0); w.sync.reset();
+});
+
+test('going offline after a lost acknowledgement preserves UNKNOWN and the exact pending intent', async t => {
+  const w = setup(); await ready(w);
+  w.fault((input, result) => { if (input.kind === 'mutate') throw Error('lost acknowledgement'); return { json: async () => result.body }; });
+  const unknown = await w.sync.complete(w.entry, '2026-10-15', 'Etc/UTC');
+  assert.equal(unknown.outcome, 'UNKNOWN');
+  const pending = w.sync.pendingAll()[0], calls = w.calls.length;
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis.navigator, 'onLine');
+  Object.defineProperty(globalThis.navigator, 'onLine', { value: false, configurable: true });
+  t.after(() => { if (descriptor) Object.defineProperty(globalThis.navigator, 'onLine', descriptor); else delete globalThis.navigator.onLine; });
+  const retry = await w.sync.complete(w.entry, '2026-10-15', 'Etc/UTC');
+  assert.equal(retry.outcome, 'UNKNOWN'); assert.deepEqual(retry.request, pending);
+  const record = Object.values(w.io.value().taskCompletionResolutions)[0];
+  const undo = await w.sync.undo({ uid: 'alice', record });
+  assert.equal(undo.outcome, 'UNKNOWN'); assert.deepEqual(undo.request, pending);
+  assert.equal(w.calls.length, calls); assert.deepEqual(w.sync.pendingAll(), [pending]); w.sync.reset();
+});
 test('lost acknowledgement keeps original operation pending; reload recovers exact receipt', async () => {
   const w = setup(); await ready(w);
   w.fault((input, result) => { if (input.kind === 'mutate') throw new Error('response lost'); return { json: async () => result.body }; });

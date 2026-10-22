@@ -222,7 +222,7 @@ async function backend(page) {
     if (mode === 'after' && input.kind === 'mutate') { await route.abort('failed'); return; }
     await route.fulfill({ status: response.status, contentType: 'application/json', body: JSON.stringify(response.body) });
   });
-  return { mode: value => { mode = value; }, release: () => held?.(), persisted: () => persisted, domain,
+  return { mode: value => { mode = value; }, holding: () => !!held, release: () => { const release = held; held = null; release?.(); }, persisted: () => persisted, domain,
     async reload() {
       const tree = { rooms: { [ROOM]: persisted } };
       await page.addInitScript(tree => { window.__completionSeed = tree; }, tree);
@@ -483,6 +483,40 @@ test('O1: an uncertain Undo resumes the same operation from Completed after relo
 // watch intact leaves the candidate signature unchanged, so ensure() is a no-op. Permission
 // cancellations deliberately remain fail-closed until rebind; they are not network disconnects.
 const ENDPOINT = 'https://asia-southeast1-offline-task018.cloudfunctions.net/chronasenseCompletionApi';
+
+test('normal completion and persistent Undo show saving without recovery controls or duplicate requests', async ({ page }) => {
+  const api = await backend(page); await seed(page); await completionReady(page);
+  api.mode('hold');
+  await checkbox(page, 'a').click();
+  await expect(toast(page)).toHaveText('Saving…');
+  await expect(toast(page).getByRole('button', { name: 'Check status' })).toHaveCount(0);
+  await expect(checkbox(page, 'a')).toBeDisabled();
+  await expect.poll(() => api.holding()).toBe(true);
+  api.release(); await expect(toast(page)).toContainText('Completion saved');
+  await recovery(page).getByRole('button', { name: /^Completed/ }).click();
+  await recovery(page).getByRole('button', { name: 'Undo completion: Task a' }).click({ clickCount: 2, delay: 10 });
+  await expect(toast(page)).toHaveText('Saving…');
+  await expect(recovery(page).getByRole('button', { name: 'Check status: Task a' })).toHaveCount(0);
+  await expect(recovery(page).locator('[data-pc-completed="a"] .pc-completed-undo:not(:disabled)')).toHaveCount(0);
+  await expect.poll(() => api.holding()).toBe(true);
+  api.release(); await expect(toast(page)).toContainText('Completion undone');
+  const records = Object.values(api.persisted().taskCompletionResolutions);
+  expect(records).toHaveLength(1); expect(Object.keys(records[0].operations)).toHaveLength(2);
+});
+
+test('known offline click refuses before staging; online refresh restores a usable row', async ({ page }) => {
+  await backend(page); await seed(page); await completionReady(page);
+  let requests = 0;
+  page.on('request', request => { if (request.url() === ENDPOINT) requests++; });
+  await page.evaluate(() => Object.defineProperty(navigator, 'onLine', { value: false, configurable: true }));
+  const before = requests;
+  await checkbox(page, 'a').click(); await expect(toast(page)).toContainText('Not saved · SOURCE_UNAVAILABLE');
+  expect(requests).toBe(before);
+  expect(await page.evaluate(() => TaskCompletions.pendingAll())).toEqual([]);
+  await expect(row(page, 'a')).toBeVisible();
+  await page.evaluate(() => { delete navigator.onLine; dispatchEvent(new Event('online')); });
+  await completionReady(page);
+});
 test('O2: reconnect re-verifies without a reload, even though the watch never failed', async ({ page }) => {
   await backend(page); await seed(page); await completionReady(page);
   const state = () => page.evaluate(() => {
