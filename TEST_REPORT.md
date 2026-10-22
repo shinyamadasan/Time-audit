@@ -2337,3 +2337,11 @@ result: npm test exit 0; sync 21 passed / 0 failed. Existing 16 browser cases pa
   New production-backed candidate checks preserve source content/prior receipts, use one synthetic task, verify persistent Undo, abort/reload/same-ID pending recovery, offline refusal, natural reconnect (421ms) and no page exceptions. Timed recovery n=1: 2289ms interaction wall time; status/mutate/inspect 388.6/542.3/391.6ms.
   Independent review's UNKNOWN->REJECTED offline regression was fixed and tested. Initial timer-modal and new test harness failures are preserved privately; sandbox spawn EPERM ran no cases. Lint exits 0 with 48 existing warnings; www parity and diff checks pass.
 untested: owner performance acceptance, published candidate, expired authentication, larger real rooms, separate production server auth/read/CPU spans, Android/APK. O3 unchanged. No backend/rules/IAM/schema changes or real-user mutations. TASK-018 remains open in review.
+
+## TASK-016 · 2026-10-21 · before Fix A
+suite: node --test --test-name-pattern='TASK-016 C1/C2' brain-dump-sync.test.js
+result: 0 passed, 2 failed as intentionally required before the fix: initial snapshot and reconnect both
+  leave the capture triaged, with exactly one existing unchanged plan item and its original claim.
+baseline: npm test exit 0; focused Brain Dump 164 passed; test:fence 94 + 20 + 37 = 151 passed.
+  Isolated real-browser module-order reproduction also fails before the fix; direct settlement succeeds.
+untested: final candidate and C1–C14 verification pending. No runtime change yet; no production data touched.

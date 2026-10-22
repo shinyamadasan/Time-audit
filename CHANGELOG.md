@@ -5145,3 +5145,14 @@ tests: npm test exit 0; sync 21/21; existing browser cases 16 pass plus new savi
 blockers: owner performance acceptance remains open; final CI/review must be observed before release consideration.
 deviations: no deployment/merge, protected backend/rules/schema or O3 changes. Completion median 1344.5→955.1ms; Undo and p95 improvement not established.
 → status remains `review`; TASK-018 is not done.
+
+## TASK-016 — failing regression checkpoint (branch: task-016, 2026-10-21)
+base: verified main c2dd2262d875d18ab35265b2cb667a67b33be114 after documentation PR #10.
+authorization: owner explicitly approved design Fix A/B/C and C1–C14 in this session; this supersedes
+  the task's historical planning-only note. No TASK-016 merge/deploy or live data mutation authorized.
+changed:
+  - brain-dump-sync.test.js: preserved C1/C2 failing tests before any runtime fix.
+tests: both targeted cases fail as intended: identical local/remote claim stays triaged rather than promoted.
+  Existing focused baseline 164/164; full npm test exit 0; real emulator fence 151/151.
+blockers: none; this commit intentionally preserves the reproduction, not a release candidate.
+deviations: none. TASK-016 status codex; final candidate must undergo independent review and remain HELD.

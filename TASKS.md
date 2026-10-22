@@ -1293,7 +1293,7 @@ refinement-delivery:
 ---
 
 ### TASK-016 - Brain Dump Promotion and Synchronization Reliability
-status: todo
+status: codex
 owner: claude
 source: owner-direct (preparation + planning authorization only, 2026-10-21)
 priority: P1

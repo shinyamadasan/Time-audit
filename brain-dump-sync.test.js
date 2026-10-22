@@ -15,7 +15,8 @@ import { wireCopy } from './brain-dump-test-support.js';
 
 import { createBrainDumpRepository } from './brain-dump-repository.js';
 import { createBrainDumpSyncBridge, BRAIN_DUMP_REMOTE_PATH } from './brain-dump-sync.js';
-import { normalizeCapture } from './brain-dump-model.js';
+import { normalizeCapture, buildCapture, triageCapture, claimPromotion, brainDumpPlanItemId } from './brain-dump-model.js';
+import { settleOutstandingClaim } from './brain-dump-promotion.js';
 
 const T0 = Date.parse('2026-10-01T08:00:00Z');
 const memory = () => {
@@ -23,6 +24,49 @@ const memory = () => {
   return { getItem: k => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, v), removeItem: k => map.delete(k) };
 };
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve)); };
+
+// TASK-016: a state observation must not depend on a changed cache merge.
+for (const trigger of ['initial snapshot', 'reconnect']) {
+  test(`TASK-016 C1/C2: identical outstanding claim recovers on ${trigger}`, async () => {
+    const room = makeRoom();
+    const repository = createBrainDumpRepository({ storage: memory(), getOwner: () => 'uid_a', now: () => T0, deviceId: () => 'original' });
+    const id = 'task016recovery';
+    const created = buildCapture({ id, text: 'Original task', now: T0, updatedBy: 'original' });
+    const triaged = triageCapture(created.record, { important: true, urgent: false, now: T0, updatedBy: 'original' });
+    const claimed = claimPromotion(triaged.record, { promotion: { type: 'schedule', store: 'calendar', targetId: 'cal1:2026-10-01',
+      targetKey: 'cal1:2026-10-01', planItemId: brainDumpPlanItemId(id), when: '14:00', durationMinutes: 30 }, now: T0, updatedBy: 'original' });
+    assert.equal(claimed.ok, true);
+    repository.mergeRemote(id, claimed.record);
+    room.seed(id, claimed.record);
+    assert.equal(repository.mergeRemote(id, room.raw()[id]).changed, false);
+    const item = { id: brainDumpPlanItemId(id), task: 'Original task', when: '14:00', durationMinutes: 30, done: false };
+    const before = JSON.stringify(item);
+    const items = [item];
+    const target = { store: 'calendar', id: 'cal1:2026-10-01', dateKey: '2026-10-01' };
+    const authority = { targetById: () => target, rawItems: () => items, addItem: () => assert.fail('must not duplicate existing item') };
+    let changes = 0, observations = 0;
+    const settlements = [];
+    const bridge = createBrainDumpSyncBridge({ repository, getRoomId: () => 'uid_a', getRoomRef: () => room.ref,
+      onRemoteChange: () => changes++,
+      onOutstandingClaim: () => {
+        observations++;
+        settlements.push(settleOutstandingClaim({ repository, planAuthority: authority, id, now: T0, deviceId: 'recovering' }));
+      },
+    });
+    if (trigger === 'reconnect') room.goOffline();
+    bridge.attach();
+    if (trigger === 'reconnect') { room.goOnline(); await bridge.pushAllLocal(); }
+    await Promise.all(settlements);
+    assert.equal(changes, 0, 'no change notification is fabricated');
+    assert.equal(repository.read(id).status, 'promoted');
+    assert.equal(observations, 1);
+    assert.equal(repository.read(id).promotion.targetId, claimed.record.promotionClaim.targetId);
+    assert.equal(repository.read(id).promotion.when, '14:00');
+    assert.equal(JSON.stringify(items), `[${before}]`, 'history is untouched');
+    bridge.handleRemoteSnapshot({ [id]: repository.read(id) });
+    assert.equal(observations, 1, 'terminal replay cannot re-enter');
+  });
+}
 
 /** A minimal in-memory room: one subtree, transaction() + on('value')/off(). */
 function makeRoom() {
