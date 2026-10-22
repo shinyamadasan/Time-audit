@@ -74,6 +74,10 @@ let openScheduleId = null;
 // info arrives for that id (success, a different terminal state, or a
 // definitive failure) — never by a timer, never by guessing.
 const pendingPromotionIds = new Set();
+// A foreground request can still be awaiting its result when a synchronous
+// listener clears UNKNOWN state. Keep that shorter lifetime separately.
+const inFlightPromotionIds = new Set();
+const promotionPending = id => pendingPromotionIds.has(id) || inFlightPromotionIds.has(id);
 
 // In-flight guard so a burst of remote-change notifications for the same
 // capture (the claim's own late settlement AND the whole-subtree listener
@@ -154,7 +158,7 @@ function triagedSectionHtml(items) {
     // decides that race, and a user is allowed to try (see
     // brain-dump-sync.js's file banner, "Archive wins before the late
         // transaction runs").
-    const pending = pendingPromotionIds.has(item.id);
+    const pending = promotionPending(item.id);
     return `
     <div class="bd-item" style="padding:10px 0;border-bottom:1px solid var(--border,#2a2a2a)">
       <div>${escapeHtml(item.text)}</div>
@@ -366,34 +370,39 @@ function reportPromotionOutcome(result, successLabel, id) {
     // Only reached for a genuinely different claim (another device or tab chose
     // a different destination first). Our own claim, even if the reconciler
     // finished it, is reported as success instead.
-    'already-claimed': 'This item is already being added to your plan on another device.',
+    'already-claimed': 'This item is already being added to your plan.',
     offline: 'Could not confirm with the server — check your connection and try again.',
   };
   notify(messages[result.reason] || result.reason || 'Could not promote that item.');
   render();
 }
 
+async function promoteFromUi(id, options) {
+  inFlightPromotionIds.add(id);
+  try {
+    render();
+    return await promoteCaptureToPlan({ repository: repository(), planAuthority: window.PlanAuthority,
+      claimPromotionRemote, id, now: Date.now(), deviceId: deviceId(), ...options });
+  } finally {
+    inFlightPromotionIds.delete(id);
+    render();
+  }
+}
+
 async function doToday(id) {
-  if (pendingPromotionIds.has(id)) return; // avoid a second, possibly-incompatible attempt while the first's outcome is unknown
-  const result = await promoteCaptureToPlan({
-    repository: repository(),
-    planAuthority: window.PlanAuthority,
-    claimPromotionRemote,
-    id,
-    type: 'do-today',
-    now: Date.now(),
-    deviceId: deviceId(),
-  });
+  if (promotionPending(id)) return;
+  const result = await promoteFromUi(id, { type: 'do-today' });
   reportPromotionOutcome(result, 'Added to today\'s plan.', id);
 }
 
 function toggleSchedule(id) {
+  if (promotionPending(id)) return;
   openScheduleId = openScheduleId === id ? null : id;
   render();
 }
 
 async function confirmSchedule(id) {
-  if (pendingPromotionIds.has(id)) return;
+  if (promotionPending(id)) return;
   const dateInput = document.getElementById(`bd-sched-date-${id}`);
   const timeInput = document.getElementById(`bd-sched-time-${id}`);
   const durationInput = document.getElementById(`bd-sched-duration-${id}`);
@@ -410,17 +419,11 @@ async function confirmSchedule(id) {
  *  Schedule form and the My Day tray's Tomorrow button, so both surfaces go
  *  through one claim/create/finalize path. The caller reports the outcome. */
 function scheduleTo(id, { dateKey, when = '', durationMinutes } = {}) {
-  return promoteCaptureToPlan({
-    repository: repository(),
-    planAuthority: window.PlanAuthority,
-    claimPromotionRemote,
-    id,
+  return promoteFromUi(id, {
     type: 'schedule',
     dateKey,
     when,
     durationMinutes,
-    now: Date.now(),
-    deviceId: deviceId(),
   });
 }
 
@@ -555,7 +558,8 @@ async function reopen(id) {
   // stuck.
   if (window.BrainDumpSync) await window.BrainDumpSync.syncCapture(id);
   const after = repository().read(id);
-  if (after && (after.status === 'promoted' || after.promotionClaim)) notify('This item was already added to your plan on another device.');
+  if (after?.status === 'promoted') notify('This item was already added to your plan.');
+  else if (after?.promotionClaim) notify('This item is already being added to your plan.');
   else notify('Moved back to triage.');
   render();
 }
@@ -642,7 +646,7 @@ function trayRowHtml(item, days) {
   const quadrant = quadrantOf(item);
   // Same rule as the Brain Dump view: never offer a second promotion while the
   // first one's outcome is unknown.
-  const actions = pendingPromotionIds.has(item.id)
+  const actions = promotionPending(item.id)
     ? '<span class="bdt-pending">Still confirming…</span>'
     : `${days.today ? trayButtonHtml('today', item, days, days.today) : ''}${days.tomorrow ? trayButtonHtml('tomorrow', item, days, days.tomorrow) : ''}`;
   return `
@@ -702,7 +706,7 @@ export function renderTray() {
  *  is written and the tray is redrawn with the real days. */
 async function trayPlace(button, kind) {
   const { bdtId: id, bdtToday: renderedToday, bdtTarget: renderedTarget, bdtDate: renderedDate } = button?.dataset || {};
-  if (!id || pendingPromotionIds.has(id)) return;
+  if (!id || promotionPending(id)) return;
   const days = trayDays();
   const day = kind === 'today' ? days.today : days.tomorrow;
   if (days.today?.target.id !== renderedToday || day?.target.id !== renderedTarget || day?.date !== renderedDate) {
@@ -735,5 +739,10 @@ if (typeof window !== 'undefined') {
     if (document.getElementById('view-braindump')?.classList.contains('active')) render();
     else renderTray(); // the tray is on My Day: a remote change or account switch must reach it too
   };
-  renderTray();
+  window.addEventListener('online', () => globalThis.refreshBrainDumpSurfaces());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') globalThis.refreshBrainDumpSurfaces();
+  });
+  // A bind/hydration may already have happened before this module evaluated.
+  globalThis.refreshBrainDumpSurfaces();
 }

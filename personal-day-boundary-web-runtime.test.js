@@ -274,7 +274,7 @@ test('every entry tag for the group, and storage.js, carries the SAME release to
 // TASK-017 changes only the planning-continuity UI; advance its governed generation together.
 // TASK-018 adds acknowledged resolution modules; retire TASK-017's full governed graph.
 const CURRENT_RELEASE = '20261015-task018-completion-v1';
-const BRAIN_DUMP_RELEASE = '20261015-task015-plan-tray-v1';
+const BRAIN_DUMP_RELEASE = '20261021-task016-promotion-reliability-v1';
 // Brain Dump entry tokens that were published (on main or a candidate branch) and must never be reused.
 // (Its round-1 entries also used '20261002-brain-dump-eisenhower-v1-fix1', which is still the governed
 // token, so it is checked as "not the Brain Dump token" instead of "absent from index.html".)

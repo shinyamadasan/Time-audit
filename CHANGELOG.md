@@ -5156,3 +5156,30 @@ tests: both targeted cases fail as intended: identical local/remote claim stays 
   Existing focused baseline 164/164; full npm test exit 0; real emulator fence 151/151.
 blockers: none; this commit intentionally preserves the reproduction, not a release candidate.
 deviations: none. TASK-016 status codex; final candidate must undergo independent review and remain HELD.
+
+## TASK-016 — review-ready (branch: task-016, 2026-10-21)
+changed:
+  - brain-dump-sync.js and www mirror: separate outstanding-claim observation on unchanged merges;
+    once-per-binding first-hydration callback with room ownership and listener-token guards.
+  - brain-dump-ui.js and www mirror: reuse reconciliation at initialization, online and visible return;
+    share a foreground guard across both surfaces, clear it in finally, preserve separate UNKNOWN state;
+    remove unsupported another-device explanations. No polling or protocol changes.
+  - index.html and www mirror: advance the complete Brain Dump module group release token.
+  - brain-dump-sync.test.js and tests/brain-dump-plan-tray.spec.js: C1–C14 regression coverage,
+    actual module-order reloads, authoritative UNKNOWN recovery, held requests and two-tab races.
+  - personal-day-boundary-web-runtime.test.js: matching strict release token; existing production UX
+    pending case now waits for the actual UNKNOWN timeout rather than the new immediate busy row.
+  - CODEMAP.md: current callbacks, initialization and guard lifetimes; TASKS.md: status only.
+tests: npm test exit 0 (2,269 passed, 0 failed, 1 existing opt-in skip; legacy 455/455);
+  full browser 970/970, Firebase fence 151/151, six-worker same-intent stress 480/480 and
+  competing-intent orders 4/4. Six trigger/guard mutations killed in an isolated checkout.
+  Lint 0 errors/48 existing warnings; 95-file www, rules/shared parity and diff checks pass.
+self-review: SELF_REVIEW.md Code Health passes; would ship this scoped implementation: yes.
+  QA.md AI checks pass for the changed scope; unchanged timer/logging hard rules and protected
+  model/repository/promotion/Plan Authority/storage/backend/rules remain intact. Repository ownership
+  rules take precedence over QA's generic requests to edit STATUS/planning/decision documents.
+blockers: none for builder handoff; independent exact-SHA final verdict is recorded separately.
+deviations: two ancillary test adjustments described above; no weakened assertion. Physical-device/APK
+  acceptance is untested. Neutral contention feedback remains (tray 15/240, view 35/240); stuck claims
+  and duplicates both 0/480. Cross-tab whole-envelope writes/shared locks remain out of scope.
+→ status set to `review` in TASKS.md. REVIEW-READY / HELD; no TASK-016 merge, push or deployment.

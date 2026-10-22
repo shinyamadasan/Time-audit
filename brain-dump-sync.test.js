@@ -39,7 +39,8 @@ for (const trigger of ['initial snapshot', 'reconnect']) {
     repository.mergeRemote(id, claimed.record);
     room.seed(id, claimed.record);
     assert.equal(repository.mergeRemote(id, room.raw()[id]).changed, false);
-    const item = { id: brainDumpPlanItemId(id), task: 'Original task', when: '14:00', durationMinutes: 30, done: false };
+    const item = { id: brainDumpPlanItemId(id), task: 'Original task', when: '14:00', durationMinutes: 30, done: false,
+      brainDumpOrigin: { v: 2, claimEpoch: 0, type: 'schedule', store: 'calendar', targetKey: 'cal1:2026-10-01' } };
     const before = JSON.stringify(item);
     const items = [item];
     const target = { store: 'calendar', id: 'cal1:2026-10-01', dateKey: '2026-10-01' };
@@ -122,6 +123,39 @@ function makeHarness({ owner = 'uid_a', roomRef = null, deviceId = 'device-1', c
   });
   return { repository, bridge, remoteChanges, setRoomRef(ref) { roomRef = ref; } };
 }
+
+test('TASK-016 C3/C5: hydration notification occurs once per binding, after the complete snapshot, including empty rooms', () => {
+  const room = makeRoom();
+  const repository = createBrainDumpRepository({ storage: memory(), getOwner: () => 'uid_a' });
+  const record = buildCapture({ id: 'task016hydrate', text: 'Hydrated', now: T0, updatedBy: 'original' }).record;
+  room.seed(record.id, record);
+  let hydrated = 0;
+  const bridge = createBrainDumpSyncBridge({ repository, getRoomId: () => 'uid_a', getRoomRef: () => room.ref,
+    onHydrated: () => { hydrated++; assert.equal(repository.read(record.id).text, 'Hydrated'); },
+  });
+  bridge.attach();
+  room.goOnline(); room.goOnline(); bridge.attach();
+  assert.equal(hydrated, 1);
+  bridge.detach(); bridge.attach();
+  assert.equal(hydrated, 2);
+  let emptyHydrated = 0;
+  createBrainDumpSyncBridge({ repository, getRoomId: () => 'uid_a', getRoomRef: () => makeRoom().ref,
+    onHydrated: () => emptyHydrated++,
+  }).attach();
+  assert.equal(emptyHydrated, 1);
+});
+
+test('TASK-016 C9/C14: foreign rooms and malformed/terminal claims never issue claim observations', () => {
+  const { repository } = makeHarness();
+  const base = buildCapture({ id: 'task016invalid', text: 'Keep', now: T0, updatedBy: 'original' }).record;
+  let observations = 0;
+  const bridge = createBrainDumpSyncBridge({ repository, getRoomId: () => 'uid_a', onOutstandingClaim: () => observations++ });
+  const bad = { ...base, status: 'archived', promotionClaim: { type: 'do-today' } };
+  bridge.handleRemoteRecord(base.id, bad);
+  bridge.handleRemoteRecord(base.id, base, 'uid_b');
+  assert.equal(repository.read(base.id), null);
+  assert.equal(observations, 0);
+});
 
 test('syncCapture pushes a local record into rooms/<room>/brainDump/<id> via a transaction', async () => {
   const room = makeRoom();

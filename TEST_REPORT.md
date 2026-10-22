@@ -2345,3 +2345,36 @@ result: 0 passed, 2 failed as intentionally required before the fix: initial sna
 baseline: npm test exit 0; focused Brain Dump 164 passed; test:fence 94 + 20 + 37 = 151 passed.
   Isolated real-browser module-order reproduction also fails before the fix; direct settlement succeeds.
 untested: final candidate and C1–C14 verification pending. No runtime change yet; no production data touched.
+
+## TASK-016 · 2026-10-21 · Fix A/B/C builder verification
+suite: full npm test; full test:smoke (two workers); test:fence; six-worker C8 stress;
+  competing-intent C8 cases; isolated mutations; identical-harness browser initialization probe.
+result: npm test exit 0, 2,270 Node-runner cases: 2,269 passed / 0 failed / 1 existing opt-in skip;
+  separate legacy harness 455/455 and all other chained runners exit 0. Full browser 970 passed,
+  0 failed/skipped/flaky. Firebase emulator fence 94 + 20 + 37 = 151 passed, no skips/failures.
+  Stress: 240 tray + 240 plain-view races with six workers; each surface includes 120 settlements
+  in each order. 480 passed, 0 stuck claims, 0 duplicates, 0 unsupported another-device messages.
+  Cause-neutral transient contention feedback: 15/240 tray and 35/240 view (not eliminated).
+  Both competing-intent orders on both surfaces pass, 4/4. Six independent source mutations killed.
+before/after: preserved checkpoint c9f1256 has C1/C2 0 passed / 2 expected failures with runtime
+  untouched; candidate passes both. Warm-cache and empty-cache first snapshots before UI evaluation
+  fail on baseline and recover on candidate; first snapshot after UI evaluation passes on both.
+  Each actual browser reload preserves exactly one original item/target. A counted post-hydration
+  sweep and its killed mutant prove Fix B's hydration path independently of ordinary changed merges.
+matrix: C1/C2 identical initial/reconnect claims; C3/C4 cold/warm cache and module ordering;
+  C5 coalesced held authoritative read and repeated notifications; C6/C7 Today→Tomorrow, Schedule,
+  double tap, thrown-work cleanup and listener-before-response guard; C8 two-tab races above;
+  C9 late account switch/foreign-room refusal; C10 ended-day/revoked UNKNOWN; C11 offline and actual
+  timeout/reconnect; C12 authoritative presence required despite local item; C13 archive/delegate
+  refusal; C14 terminal/malformed normalization. Existing core suites and real SDK/rules gates retained.
+checks: lint exits 0 with 0 errors / 48 unchanged warnings; all 95 www runtime files byte-identical;
+  generated rules/functions-shared parity and git diff --check pass. Protected core/backend files unchanged.
+iterations: stale strict release-token assertion corrected without relaxing the check; first full browser
+  attempt stopped on the pre-existing pending test's now-premature busy-row wait, then strengthened to
+  await the actual UNKNOWN toast and full 970 rerun passed. Private probe clock/harness mismatch,
+  Firebase null-pruning comparison and compensating lifecycle mutants were corrected and rerun;
+  sandbox spawn denial executed no cases. Earlier evidence retained outside the candidate worktree.
+untested: physical devices/Android APK, hosted TASK-016 CI and production use; no live data writes,
+  Firebase deployment or infrastructure change. Cross-tab whole-envelope write hazard/shared locking
+  remains out of scope. UNKNOWN remains pending until authoritative evidence. Independent exact-SHA
+  final review/results are supplied separately; candidate stays REVIEW-READY / HELD.
