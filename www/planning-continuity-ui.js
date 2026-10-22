@@ -590,9 +590,9 @@ function completionNoticeHtml() {
   try { pending = completions()?.pendingAll() || []; } catch { /* action reports storage refusal */ }
   const saving = completions()?.saving();
   pending = pending.filter(request => !completions()?.active(request));
-  if (saving) return '<div class="pc-completion-toast" role="status"><span>Saving…</span></div>';
+  if (saving && !pending.length) return '<div class="pc-completion-toast" role="status"><span>Saving…</span></div>';
   if (!state.completionNotice && !pending.length) return '';
-  return `<div class="pc-completion-toast" role="status"><span>${escape(state.completionNotice || 'A completion change is still being checked.')}</span>
+  return `<div class="pc-completion-toast" role="status"><span>${escape(saving ? 'Saving… · A previous change is still being checked.' : state.completionNotice || 'A completion change is still being checked.')}</span>
     ${state.completionReceipt ? '<button type="button" data-pc-action="undo-completion">Undo</button>' : pending.length ? '<button type="button" data-pc-action="recover-completion">Check status</button>' : ''}</div>`;
 }
 function showCompletionNotice(text, receipt = null, persistent = false) {
@@ -705,8 +705,7 @@ if (typeof document !== 'undefined') {
 // resolved task stays reachable. These read the SAME resolution records the notice uses
 // (TaskCompletions.view) - no second source of truth, and no extra backend call.
 const completionReceiptOf = record => record?.operations?.[record.completionOpId] || null;
-// Undo is not covered by TaskCompletions.busy() (that tracks complete()), so a double tap would
-// send a second undo that the revision CAS refuses - harmless, but it reads as a failure.
+// Keep the UI guard while dispatch begins; the sync layer also coalesces Undo and recovery.
 const undoInFlight = new Set();
 function completedEntries(nowMs) {
   const layer = authority(), api = completions();

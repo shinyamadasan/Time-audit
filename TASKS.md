@@ -1082,7 +1082,7 @@ integration:
 ---
 
 ### TASK-018 - Unfinished Resolution + Compact UX (approved Refined A; implementation safety gate)
-status: codex
+status: review
 owner: codex
 source: owner-direct
 priority: P1
@@ -1093,6 +1093,9 @@ files: design/task-018/ standalone HTML/CSS/mock JS, design documentation and ca
   CHANGELOG.md and TEST_REPORT.md append-only. Production file manifest requires a passing safety gate first.
 
 current-performance-remediation (supersedes prior release/acceptance hold):
+  Delivery checkpoint: TASK_018_PERFORMANCE_REPORT.md; draft PR #9. Completion median 1344.5->955.1ms,
+  observed request count 51->40 across ten pairs; normal checking copy 20/20->0/20. Undo/tail improvement not
+  established. Final exact-head CI/review evidence is archived privately; keep review/performance acceptance hold.
   Owner-direct real-use feedback, 2026-10-21: completion and Undo work but feel slow, especially Checking status.
   Keep TASK-018 open. Dedicated task-018-performance branch from released main ca2c90f.
   Measure synthetic production median/p95 visual/token/inspection/mutation/refresh/recovery timings and request
