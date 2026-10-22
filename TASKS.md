@@ -1082,7 +1082,7 @@ integration:
 ---
 
 ### TASK-018 - Unfinished Resolution + Compact UX (approved Refined A; implementation safety gate)
-status: review
+status: done
 owner: codex
 source: owner-direct
 priority: P1
@@ -1091,6 +1091,42 @@ files: design/task-018/ standalone HTML/CSS/mock JS, design documentation and ca
   playwright-report/task-018-design/ and playwright-report/task-018-refined-a/ screenshots and measurements
   (local evidence); TASKS.md lifecycle/phase record; TASK_018_IMPLEMENTATION_SAFETY_GATE.md;
   CHANGELOG.md and TEST_REPORT.md append-only. Production file manifest requires a passing safety gate first.
+
+closure (2026-10-21, supersedes every prior hold below; owner acceptance received):
+  CLOSED. Owner real-use acceptance explicitly PASS: the owner personally tested the shipped build on
+  their normal device and confirmed (1) completion with responsive Saving feedback, (2) completed tasks
+  still reachable after reload with persistent Undo working, (3) reconnection behaving as expected, and
+  (4) existing time logs, plans and history intact. That was the ONLY outstanding gate; automated
+  verification had already been review-ready. No owner observation here is inferred from automation.
+  Landed: PR #9 "TASK-018: completion responsiveness and honest saving feedback", merged to main as
+  squash 57754a3dad6817cc00bcc99fbfcf4b6939b35ce7 (verified: it is the current tip of origin/main).
+  Deployed: GitHub Pages deployment 7241148022 (environment github-pages, sha 57754a3, state success,
+  https://shinyamadasan.github.io/Time-audit/), Pages build 1304072541, workflow run 39704038172.
+  Verified gates on the exact merged SHA, CI run 39704038615: browser smoke 957/957 passed; Firebase
+  fence / rules integration 151/151 passed across its four suites; legacy unit runner 455/455. Both
+  required jobs concluded success. 12 production canary checks passed (private release evidence).
+  Firebase backend unchanged: firebase.rules.json and firebase.json are byte-identical between the
+  previous released main ca2c90f and 57754a3; the whole diff is frontend, generated www mirrors, tests
+  and docs. No rules deploy, no IAM/schema change, no backend code change.
+  No unexpected data loss and no privacy leakage: all four original canary tasks remain done:false with
+  unchanged wire content, the owner resolution snapshot is unchanged, and privacy verification found zero
+  sensitive-value/key/credential hits across 124 structured events and zero unconfirmed writes.
+  HONEST LIMITATION, deliberately not overstated: completion median improved 29% (1344.5 -> 955.1 ms) and
+  observed API calls fell 51 -> 40 across ten completion/Undo pairs, with normal checking wording gone
+  (20/20 -> 0/20). **Undo latency did NOT measurably improve, and p95 improvement is not established** —
+  candidate Undo median/p95 was 1013.7/1594.2 ms against a 924.4/946.2 ms baseline. Undo still requires
+  its two calls. This closure does not claim otherwise.
+  Accepted limitations carried forward, NOT resolved by this closure: O3 remains deferred; backend
+  server-tail/mutation latency (mutate p95 rose 548 -> 1103 ms) is unimproved; uninstrumented server
+  subspans and expired-auth timing remain unmeasured; larger-room costs unknown; real-device/APK and
+  Android/Capacitor acceptance remain uncovered; permission-cancelled-listener rebind/reload,
+  recovered-completion wording/date-binding and Artifact Registry policy limits stay accepted.
+  Rollback baseline for any future frontend release remains ca2c90f822dc4f8648157fbc62b35324f73f5cca.
+  Evidence retained privately under release-verification/task-018/ (performance/, performance-release-
+  d6c4f7b/, MANIFEST-SHA256.txt and the signed zips); sanitized checkpoint is TASK_018_PERFORMANCE_
+  REPORT.md on main. Raw private evidence is deliberately NOT committed or published.
+  Risk gate: closed as `done` (reversible docs-only closure record). The runtime it records was itself
+  already merged and deployed under separate owner authorization, so this entry ships no code.
 
 current-performance-remediation (supersedes prior release/acceptance hold):
   Delivery checkpoint: TASK_018_PERFORMANCE_REPORT.md; draft PR #9. Completion median 1344.5->955.1ms,
@@ -1255,6 +1291,86 @@ refinement-delivery:
   Production approval remains pending; stop after this visual evidence.
 
 ---
+
+### TASK-016 - Brain Dump Promotion and Synchronization Reliability
+status: todo
+owner: claude
+source: owner-direct (preparation + planning authorization only, 2026-10-21)
+priority: P1
+depends-on: TASK-015 (approved), TASK-018 (done)
+
+NOT IMPLEMENTATION AUTHORIZED. This entry is the planned design handoff only. Do not branch, implement,
+merge, deploy or touch production data for it. It moves to `codex` only on a separate owner GO.
+
+context:
+  TASK-015 shipped the My Day Brain Dump planning tray and documented, in TASK_015_HANDOFF.md, a
+  pre-existing stuck-claim defect in the protected sync layer: same-browser two-tab stress sometimes left a
+  capture `triaged` with an outstanding `promotionClaim` even though its plan item already existed. Manual
+  reconciliation fixed it; ordinary reload did not reliably trigger it. The handoff's suspected cause was a
+  cross-tab localStorage lost update, explicitly recorded as a hypothesis, NOT proven.
+
+audit-finding (confirmed on main 57754a3, 2026-10-21):
+  The defect REMAINS. Root cause is TRIGGER-SIDE, and the localStorage lost-update hypothesis is NOT the
+  cause of the non-recovery. Bisected with a deterministic offline reproduction (2/2):
+  1. The finishing logic is healthy. reconcilePromotionClaim(), invoked directly on the exact stuck record,
+     returns ok:true, settles the capture to `promoted` and yields exactly one correctly-attributed plan
+     item `bdp1|<id>`. Nothing is wrong with reconciliation itself.
+  2. Nothing invokes it. brain-dump-repository.js mergeRemote() gates its `changed` flag on
+     `JSON.stringify(local) !== JSON.stringify(merged)`, and brain-dump-sync.js fires onRemoteChange ONLY
+     when `changed`. Once the stuck record is identical locally and remotely — which is exactly the
+     post-reload steady state the handoff observed — the initial listener delivery, a replayed whole-subtree
+     snapshot and a reconnect pushAllLocal() ALL produce zero onRemoteChange, so the listener-driven
+     reconciler is never called. Measured: 0 onRemoteChange calls across all three.
+  3. The only remaining trigger is the single bind-time sweep (settleAllOutstandingClaims), dispatched as
+     `globalThis.refreshBrainDumpSurfaces?.()` one microtask after attach(). It fires once per bind with no
+     retry, and silently no-ops through that optional chaining if brain-dump-ui.js has not evaluated yet.
+     index.html loads storage.js as a classic script (line 1782) ahead of the deferred brain-dump modules
+     (1814-1815), and brain-dump-sync.js's own bottom block can call attach() before brain-dump-ui.js
+     evaluates. Reload recovery therefore depends on winning a module-evaluation race — precisely
+     "ordinary reload did not RELIABLY trigger it". (Mechanism 3 is code-grounded, not separately executed.)
+
+secondary-findings:
+  - Tray in-flight guard (TASK-015 reviewer S3) is still effectively absent. trayPlace(), doToday() and
+    toggleSchedule() all check `pendingPromotionIds.has(id)`, but that set is only populated in
+    reportPromotionOutcome() AFTER the await resolves with reason 'pending' (brain-dump-ui.js:336). During
+    the in-flight window the set is empty, so Today-then-Tomorrow before the first claim settles passes
+    both guards. No duplicate plan item results (the differing intent is correctly refused), but the user
+    is told "This item is already being added to your plan on another device." on their own single device.
+  - pendingPromotionIds is a module-level Set, so it is per-tab only; cross-tab taps get no guard at all.
+  - Misleading 'already-claimed' copy (brain-dump-ui.js:369 and :558) names "another device" for what is
+    frequently the same device or tab.
+
+objective:
+  Make a settled promotion always leave Triaged, and an unsettled one always recoverable automatically,
+  without adding a second task store, sync engine or backend. Fix the existing triggers.
+
+deliverables (planning phase, all docs-only):
+  - [ ] Current-system audit + reproducible root-cause analysis (above; expand into the design doc).
+  - [ ] Bounded implementation design naming exact affected files.
+  - [ ] Deterministic concurrency + recovery test matrix.
+  - [ ] Real Firebase emulator + browser acceptance plan.
+  - [ ] Risk and rollback assessment.
+  - [ ] Independent-review requirements.
+  - [ ] GO / NO-GO recommendation for implementation.
+
+required-solution-properties (acceptance criteria for the eventual implementation):
+  - [ ] Captures never silently disappear.
+  - [ ] A successful promotion produces exactly one correctly attributed plan item.
+  - [ ] A settled promotion never remains indefinitely stuck in Triaged.
+  - [ ] An unresolved outcome is never reported as success or failure.
+  - [ ] Reconciliation resumes the ORIGINAL authoritative claim and destination, never a competing action.
+  - [ ] No duplicate items, historical rewrites, cross-account leaks or lost captures.
+  - [ ] Recovery runs on appropriate lifecycle events, with no unbounded polling or listener loop.
+  - [ ] In-flight actions cannot be accidentally duplicated.
+  - [ ] User-facing status is understandable and actionable.
+
+constraints:
+  - Red-zone: Brain Dump sync, promotion claims and Plan Authority persistence. Hard Rule 9 applies —
+    never lose logged time or a capture. Any implementation lands at `approved`, never auto-merged.
+  - Prefer repairing existing mechanisms over introducing new infrastructure.
+  - Read CODEMAP.md first; never read index.html in full.
+
+see: docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md
 
 <!-- Paste new tasks above this line. -->
 

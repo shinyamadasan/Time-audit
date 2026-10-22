@@ -5,6 +5,54 @@
 
 ---
 
+## TASK-018 closure verification (origin/main 57754a3) · 2026-10-21
+suite: verification of the owner-named release evidence against GitHub and the retained private artifacts.
+  No runtime change was made in this closure, so no suite was re-run against new code.
+result:
+  - PR #9 "TASK-018: completion responsiveness and honest saving feedback": MERGED, base `main`, head
+    `task-018-performance`, merge commit `57754a3dad6817cc00bcc99fbfcf4b6939b35ce7` — verified to be the
+    current tip of origin/main.
+  - CI run 39704038615 on that exact SHA: both required jobs `success`.
+      · browser smoke: "Running 957 tests using 2 workers" -> "957 passed (17.6m)". 957/957.
+      · Firebase fence / rules integration: four suites summed = tests 151, pass 151, fail 0, skipped 0.
+      · legacy unit runner: "455 tests: 455 passed, 0 failed".
+  - Pages: deployment 7241148022 (environment `github-pages`, sha 57754a3, status state `success`,
+    environment_url https://shinyamadasan.github.io/Time-audit/); Pages build 1304072541; deploy workflow
+    run 39704038172. `pages/builds/latest` is 57754a3, i.e. production serves the accepted build.
+  - Firebase backend unchanged: `git diff ca2c90f..57754a3 -- firebase.rules.json firebase.json` is EMPTY.
+    The whole diff is 10 files: frontend (`planning-continuity-ui.js`, `task-completion-sync.js`), their
+    generated www mirrors, tests, and docs. No backend code, rules, schema or IAM change.
+  - 12 production canary checks: recorded PASS in the retained private evidence
+    (release-verification/task-018/performance-release-d6c4f7b/FINAL_STATUS.json, `productionChecks: 12`).
+    Taken from evidence; not independently re-executed in this closure.
+  - Data integrity: canary-after-summary.json shows all 4 source tasks still `done:false`
+    (`source_all_undone: true`) with the owner resolution snapshot present and unchanged.
+  - Owner real-use acceptance: PASS, stated directly by the owner for their normal device
+    (completion + responsive Saving, post-reload access + persistent Undo, reconnection, data intact).
+not run / limitation (stated plainly):
+  - No local full suite was run for this closure. The closure worktree has no `node_modules`, so
+    `firebase-rules.test.js` cannot resolve its `targaryen` devDependency; that is an environment artifact
+    of a fresh worktree, not a code regression. The authoritative gate is CI run 39704038615 on the exact
+    merged SHA, which passed, and this closure changes no runtime code.
+  - Undo latency and p95 improvement remain NOT established (see the TASKS.md closure block).
+→ TASK-018 verified closed.
+
+## TASK-016 pre-implementation audit (origin/main 57754a3) · 2026-10-21
+suite: deterministic offline reproduction of the TASK-015 stuck-claim defect, run against current main
+  sources (run-only harness, deliberately not committed — TASK-016 is not implementation authorized).
+result: 2 tests, 2 pass, 0 fail. The defect REMAINS on main, and the root cause is trigger-side:
+  - Case 1: `reconcilePromotionClaim()` on the exact stuck record -> `ok:true`, capture settles to
+    `promoted`, exactly one plan item `bdp1|<id>`. The finishing logic is healthy.
+  - Case 2: across the initial listener delivery, a replayed whole-subtree snapshot and a reconnect
+    `pushAllLocal()`, `onRemoteChange` fired ZERO times and the capture stayed `triaged` with its claim.
+    Cause: `mergeRemote()` gates `changed` on deep equality, and the sync bridge fires `onRemoteChange`
+    only when `changed`. `onRebind` (the sweep) fired exactly once.
+  - The localStorage lost-update hypothesis from TASK_015_HANDOFF.md is NOT the cause of the
+    non-recovery: it reproduces with a single client and no competing writer.
+not run: the module-evaluation-order mechanism (M2) and the unhydrated-cache mechanism (M3) are
+  code-grounded only, not separately executed. No browser or emulator run; no implementation.
+→ Audit complete. Full analysis in docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md. TASK-016 stays `todo`.
+
 ## TASK-015 post-rebase (origin/main 2411ee4; final base 8abe63b, TASKS.md-only delta) · 2026-10-15
 suite: lead's gates on the rebased branch (npm test, lint, parity, rules, diff-check, targeted 7 specs, full smoke).
   Then, after the F3 rewrite (`601113e`): `npx playwright test tests/brain-dump-plan-tray.spec.js -g F3

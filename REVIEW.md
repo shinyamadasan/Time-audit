@@ -6,6 +6,57 @@
 
 ---
 
+## Review TASK-018 - CLOSED, status `done` (owner real-use acceptance received)
+branch: closure recorded on `docs/task-018-closure-task-016-plan`; the runtime it closes is origin/main
+  `57754a3dad6817cc00bcc99fbfcf4b6939b35ce7` (PR #9 squash), already merged and deployed under separate
+  owner authorization.
+verdict: done (the closure record is docs-only and reversible; the runtime is already live)
+reviewer: Claude (reviewer role), verifying the owner-named evidence against GitHub and retained artifacts
+
+What was verified, and how:
+  - PR #9 MERGED with merge commit 57754a3, and 57754a3 IS the current tip of origin/main. Verified via
+    the GitHub API, not from the report text.
+  - CI 39704038615 on that exact SHA: both required jobs success; 957/957 browser; 151/151 fence across
+    four suites; 455/455 legacy unit. Counts read out of the CI log itself.
+  - Pages deployment 7241148022 -> sha 57754a3, environment github-pages, state success; and
+    `pages/builds/latest` is 57754a3, so production serves the accepted build.
+  - Firebase backend unchanged: the ca2c90f..57754a3 diff for firebase.rules.json and firebase.json is
+    empty; the change is frontend + generated mirrors + tests + docs only.
+  - No unexpected data loss or privacy leakage, from the retained canary/privacy evidence.
+  - Owner real-use acceptance PASS, stated directly by the owner. This was the only outstanding gate.
+
+One correction to the owner's evidence list, for the record: the Pages identifier 7241148022 is a Pages
+**deployment** id, not an Actions run id. The corresponding Actions run is 39704038172 and the Pages build
+is 1304072541. The deployment id is correct; only its label needed pinning down.
+
+Honest limitation, preserved and not smoothed over: completion median improved 29% (1344.5 -> 955.1 ms)
+and request count fell 51 -> 40, but **Undo latency did not measurably improve and p95 improvement is not
+established** (candidate Undo 1013.7/1594.2 ms vs baseline 924.4/946.2 ms). Backend mutate p95 rose
+548 -> 1103 ms. O3, server-tail latency, uninstrumented subspans, expired-auth timing, larger-room costs
+and real-device/APK acceptance all remain open and are carried forward in the TASKS.md closure block.
+
+Risk gate: `done` rather than `approved`. The gate applies to what this entry SHIPS, and it ships only
+documentation — the red-zone runtime was merged and deployed earlier under its own owner authorization,
+and nothing here can alter it. No runtime file, www mirror, rule or Firebase config is touched.
+
+## Review TASK-016 - PLANNING ACCEPTED, status `todo` (NOT implementation authorized)
+branch: docs/task-018-closure-task-016-plan (docs only)
+verdict: todo — ready for an owner GO/NO-GO decision; no implementation performed or authorized
+reviewer: Claude (planning role)
+
+The TASK-015 defect was confirmed to still exist on current main, and its root cause was established by
+deterministic reproduction rather than inherited assumption. The owner's instruction not to assume the
+localStorage overwrite was correct to give: that hypothesis is NOT the cause of the non-recovery, which
+reproduces with a single client and no competing writer. The cause is trigger-side — `mergeRemote()`'s
+deep-equality `changed` gate suppresses the only listener-driven reconciliation trigger once local and
+remote agree, and the one remaining trigger (the bind-time sweep) fires once, early, and can silently
+no-op on a module-evaluation race.
+
+Recommendation: **GO** for the bounded three-part client-side fix in
+docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md §3. It repairs existing mechanisms, adds no task store,
+sync engine or backend, touches no Firebase rules or schema, and preserves the UNKNOWN/offline contract.
+Any implementation is red-zone (Hard Rule 9) and must land at `approved`, held for human merge.
+
 ## Review TASK-015 - PASS WITH NOTES, HOLD AT APPROVED (Unified My Day + Brain Dump V1 planning tray)
 branch: task-015 @ 5c5957e (rebased onto origin/main 2411ee4; pre-rebase builder SHA cabb793, tag task-015-prereconcile)
 verdict: approved (red-zone, held for human merge), once the lead's post-rebase smoke run is green

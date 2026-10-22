@@ -1,5 +1,20 @@
 # ChronaSense — Changelog
 
+## TASK-018 — formal closure after owner real-use acceptance; TASK-016 planning (docs only, 2026-10-21)
+base: origin/main `57754a3dad6817cc00bcc99fbfcf4b6939b35ce7` (the TASK-018 performance squash, already merged
+  and deployed under separate owner authorization). Branch `docs/task-018-closure-task-016-plan`.
+changed:
+  - TASKS.md: TASK-018 `status: review` -> `status: done`, with a new top `closure` block recording owner
+    real-use acceptance PASS, the merged squash, the Pages deployment, the verified gate numbers, the
+    Firebase-unchanged evidence, the honest Undo/p95 limitation and every carried-forward limitation.
+  - TASKS.md: new TASK-016 entry at `status: todo` (planning authorization only, NOT implementation),
+    carrying the audit finding and the required solution properties.
+  - docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md (new): the full TASK-016 audit, root-cause analysis,
+    bounded design, test matrix, acceptance plan, risk/rollback, review requirements and GO/NO-GO.
+  - No runtime code changed. No Firebase redeployment. No www mirror change. No index.html change.
+tests: no runtime change to test. See TEST_REPORT.md "TASK-018 closure verification".
+→ TASK-018 `done`; TASK-016 `todo` pending a separate owner GO.
+
 ## TASK-015 — post-rebase F3 rewrite and docs (branch: task-015, 2026-10-15)
 base: rebased by the lead onto origin/main `2411ee4`, then cleanly onto `8abe63b` (TASKS.md-only delta). Tokens: governed = `20261014-task014-normal-tracking-hud-v1`;
   Brain Dump = `20261015-task015-plan-tray-v1`.
