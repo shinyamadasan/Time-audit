@@ -5,6 +5,46 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-10-21 — TASK-018 CLOSED (owner accepted); TASK-016 planned, awaiting GO
+
+**Where we are.** TASK-018 is **done**. The owner personally accepted the performance update for everyday
+use on their normal device: completion with responsive Saving, post-reload access with persistent Undo,
+reconnection, and existing logs/plans/history intact. That was the last outstanding gate.
+
+Shipped and live: PR #9 squashed to `57754a3dad6817cc00bcc99fbfcf4b6939b35ce7`, which is the current tip
+of origin/main and what GitHub Pages serves (deployment 7241148022, build 1304072541). CI 39704038615 on
+that exact SHA: 957/957 browser, 151/151 fence, 455/455 legacy unit, both required jobs green. Firebase
+backend unchanged — firebase.rules.json and firebase.json are byte-identical to the previous released
+main `ca2c90f`. 12 production canary checks passed; no data loss, no privacy leakage.
+
+**Stated plainly, not smoothed over:** completion median improved 29% (1344.5 -> 955.1 ms) and request
+count fell 51 -> 40, but **Undo latency did not improve and p95 improvement is not established**. Backend
+mutate p95 rose. O3, server-tail latency, uninstrumented server subspans, expired-auth timing,
+larger-room costs and real-device/APK acceptance all remain open.
+
+Rollback baseline for any future frontend release: `ca2c90f822dc4f8648157fbc62b35324f73f5cca`.
+
+**Next task.** TASK-016 — Brain Dump Promotion and Synchronization Reliability — is prepared at
+`status: todo`. Planning only; **not** implementation authorized. The TASK-015 stuck-claim defect was
+confirmed to still exist on current main, and the root cause was pinned by deterministic reproduction:
+it is trigger-side, not the suspected localStorage overwrite. `mergeRemote()` gates its `changed` flag on
+deep equality and the sync bridge only reconciles when `changed`, so once a stuck record is identical
+locally and remotely nothing ever re-triggers reconciliation; the one remaining trigger (the bind-time
+sweep) fires once, too early, and can silently no-op on a module-evaluation race. The reconciliation
+logic itself is healthy — called directly it settles the record immediately and yields exactly one
+correctly attributed plan item.
+
+Design, test matrix, acceptance plan, risk/rollback and review requirements are in
+`docs/TASK_016_PROMOTION_RELIABILITY_DESIGN.md`. Recommendation is **GO** for the bounded three-part
+client-side fix.
+
+**Blocker / owner decision.** TASK-016 needs an explicit owner GO before any implementation. Nothing is
+built, branched, merged or deployed for it.
+
+**This session changed documentation only** — no runtime code, no Firebase redeployment, no www mirror
+change, no index.html change.
+
+
 ## 2026-09-27 — Calendar-Native Plan Identity V1 (candidate, NOT integrated)
 
 Branch `feat/calendar-native-plan-identity-v1`, created from the immutable WIP `9e2a45f` (which sits on
