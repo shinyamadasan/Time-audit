@@ -5,6 +5,33 @@ The top entry is the current **working memory** (where we are / next task / bloc
 
 ---
 
+## 2026-10-22 — TASK-016 scoped owner acceptance; documentation closure
+
+The owner states that all nine ordinary-use smoke steps (S1–S9) passed and explicitly accepts
+exact-candidate deterministic evidence in its documented environments, with all listed production
+exclusions/deferrals. Final decision: **ACCEPT — SCOPED**. This is owner-reported acceptance, not a new
+machine-captured production test. Smoke execution timestamps, measured counts, screenshots and detailed
+observations were not supplied; none are inferred from this recording date.
+
+Reviewed candidate: `7656891bed3ec8aff54f3c4c2d4726e38edb3e4f`. PR #11 was already merged/deployed as
+`1eb289a51ecb3396a3ffb2aca7eed983127d1bfe`; that historical evidence is unchanged. Original production
+P0 browser assertion and P1–P10 remain **NOT RUN**; the historical P0 HTTP/CI results retain their scope.
+Physical Android/APK, extended daily-use and all other deferred coverage remain **NOT VERIFIED**.
+
+Remaining risks: neutral cross-tab contention, the pre-existing whole-envelope/shared-locking hazard,
+and unobserved live fault/expiry/account-switch/wire-history behavior. Observer image/read uncertainty
+and Basic-auth replay are unresolved; no observer or browser-wide live-containment claim is made.
+No additional implementation is opened by this acceptance.
+
+This documentation-only closure records TASK-016 as done. No harness, runtime/Firebase/configuration
+change, merge/release rerun, deployment or AI Dev OS restart accompanies it. Supporting owner statement,
+completed decision sheet and full preparation diff are retained locally under
+`release-verification/task-016/owner-closure-20261022/` and `acceptance-disposition-20261022/`.
+Next: no automatic next-task selection or publication; separately authorize a documentation publication
+path that accounts for GitHub Pages triggers. Do not republish the private evidence packets.
+
+---
+
 ## 2026-10-21 — TASK-018 CLOSED (owner accepted); TASK-016 planned, awaiting GO
 
 **Where we are.** TASK-018 is **done**. The owner personally accepted the performance update for everyday
