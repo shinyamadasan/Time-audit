@@ -75,6 +75,17 @@ TASK-012 (DECISIONS #38) adds `plan_set_completion`, `plan_edit`, `plan_move`, `
 
 ## Brain Dump + Eisenhower V1 (candidate, 2026-10-01; FIX FIRST rounds 1-3, 2026-10-02; Production UX Correction V1, 2026-10-03)
 
+TASK-016 promotion reliability: `handleRemoteRecord()` emits a separate `onOutstandingClaim` state
+observation for active claims even on unchanged merges; `attach()` emits `onHydrated` once after the
+first owned snapshot. Both use the existing `refreshBrainDumpSurfaces` / `maybeReconcile` path.
+The UI also sweeps at initialization, `online`, and visible `visibilitychange`, with no polling.
+`promoteFromUi()` holds `inFlightPromotionIds` through the foreground await and clears it in `finally`;
+`promotionPending()` combines that guard with the separate UNKNOWN `pendingPromotionIds` lifetime.
+The two surfaces share this guard and cause-neutral feedback. Core claim, destination, expiry and
+account protocols are unchanged. Current Brain Dump generation: `20261021-task016-promotion-reliability-v1`
+(supersedes historical tokens below). Regressions: `brain-dump-sync.test.js`,
+`tests/brain-dump-plan-tray.spec.js` (C1–C14 matrix evidence in TEST_REPORT.md).
+
 Production UX Correction V1: `promotedTo()` (model) lets a foreground promotion recognize its own claim
 already finished by the listener-driven reconciler. `editHandledCapture()`/`reopenCapture()` +
 `reopenCount` (model), `editHandled()`/`reopen()` (repository), and Recently handled Edit / Reopen / Open in
