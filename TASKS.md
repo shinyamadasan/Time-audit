@@ -1092,6 +1092,21 @@ files: design/task-018/ standalone HTML/CSS/mock JS, design documentation and ca
   (local evidence); TASKS.md lifecycle/phase record; TASK_018_IMPLEMENTATION_SAFETY_GATE.md;
   CHANGELOG.md and TEST_REPORT.md append-only. Production file manifest requires a passing safety gate first.
 
+current-performance-remediation (supersedes prior release/acceptance hold):
+  Delivery checkpoint: TASK_018_PERFORMANCE_REPORT.md; draft PR #9. Completion median 1344.5->955.1ms,
+  observed request count 51->40 across ten pairs; normal checking copy 20/20->0/20. Undo/tail improvement not
+  established. Final exact-head CI/review evidence is archived privately; keep review/performance acceptance hold.
+  Owner-direct real-use feedback, 2026-10-21: completion and Undo work but feel slow, especially Checking status.
+  Keep TASK-018 open. Dedicated task-018-performance branch from released main ca2c90f.
+  Measure synthetic production median/p95 visual/token/inspection/mutation/refresh/recovery timings and request
+  counts before focused client improvements. Preserve authoritative receipts, operation IDs, authorization,
+  conditional writes, source history, UNKNOWN and account/listener safety. Prefer client changes first.
+  Scope: task-completion-sync.js, planning-continuity-ui.js, their focused tests and generated www mirrors;
+  performance evidence/report, TASKS phase/status, CHANGELOG and TEST_REPORT. Backend inspection/measurement
+  only; no backend/rules/schema/IAM changes or deployment. O3 remains deferred. No merge/deploy or TASK-016.
+  Verify completion/Undo/double-click/reload/interruption/offline/reconnect/account-switch/history, relevant
+  browser/fence gates, CI and fresh independent review. Return review-ready; owner performance acceptance pending.
+
 current-implementation-authorization (supersedes contract-only gate below):
   Owner-direct attachment 44332b2d-84ff-4e8f-a4f2-80178f0818f9/Pasted text.txt, current session 2026-10-15:
   Implement Reviewed Completion Contract, REVIEW-READY ONLY. Contract df7c279ea730526314c2e97c7f6597674208b518

@@ -588,8 +588,11 @@ function openCompletionBacklog() {
 function completionNoticeHtml() {
   let pending = [];
   try { pending = completions()?.pendingAll() || []; } catch { /* action reports storage refusal */ }
+  const saving = completions()?.saving();
+  pending = pending.filter(request => !completions()?.active(request));
+  if (saving && !pending.length) return '<div class="pc-completion-toast" role="status"><span>Saving…</span></div>';
   if (!state.completionNotice && !pending.length) return '';
-  return `<div class="pc-completion-toast" role="status"><span>${escape(state.completionNotice || 'A completion change is still being checked.')}</span>
+  return `<div class="pc-completion-toast" role="status"><span>${escape(saving ? 'Saving… · A previous change is still being checked.' : state.completionNotice || 'A completion change is still being checked.')}</span>
     ${state.completionReceipt ? '<button type="button" data-pc-action="undo-completion">Undo</button>' : pending.length ? '<button type="button" data-pc-action="recover-completion">Check status</button>' : ''}</div>`;
 }
 function showCompletionNotice(text, receipt = null, persistent = false) {
@@ -604,7 +607,7 @@ function showCompletionNotice(text, receipt = null, persistent = false) {
 async function completeHistorical(entry, date) {
   const owner = state.staleOwner, generation = completionOwnerGeneration;
   closeCompletionPopover();
-  const result = await completions().complete(entry, date); // zone (and 'today' when date is null) chosen after its own refresh
+  const result = await completions().complete(entry, date); // zone and today come from a fresh authoritative inspection
   if (state.staleOwner !== owner || completionOwnerGeneration !== generation) return;
   if (result.outcome === 'CONFIRMED') {
     const current = completions().view(entry);
@@ -667,7 +670,7 @@ function handleCompletionAction(action, control) {
     case 'more-completed': state.completedLimit += PREVIEW_ROWS; render(); return true;
     case 'recover-completion': {
       const entry = id && completionEntry(id, day);
-      const pending = entry ? completions().pending(entry) : completions().pendingAll()[0], owner = state.staleOwner, generation = completionOwnerGeneration;
+      const pending = entry ? completions().pending(entry) : completions().pendingAll().find(request => !completions().active(request)), owner = state.staleOwner, generation = completionOwnerGeneration;
       if (pending) void completions().resume(pending).then(result => { if (state.staleOwner === owner && completionOwnerGeneration === generation) showCompletionNotice(result.outcome === 'CONFIRMED' ? 'Completion status recovered' : 'Still checking · retry when connected', null, result.outcome !== 'CONFIRMED'); });
       return true;
     }
@@ -702,8 +705,7 @@ if (typeof document !== 'undefined') {
 // resolved task stays reachable. These read the SAME resolution records the notice uses
 // (TaskCompletions.view) - no second source of truth, and no extra backend call.
 const completionReceiptOf = record => record?.operations?.[record.completionOpId] || null;
-// Undo is not covered by TaskCompletions.busy() (that tracks complete()), so a double tap would
-// send a second undo that the revision CAS refuses - harmless, but it reads as a failure.
+// Keep the UI guard while dispatch begins; the sync layer also coalesces Undo and recovery.
 const undoInFlight = new Set();
 function completedEntries(nowMs) {
   const layer = authority(), api = completions();
@@ -733,7 +735,7 @@ function completedRowHtml({ entry, receipt }) {
     <span class="pc-completed-mark" aria-hidden="true">✓</span>
     <div class="pc-complete-copy"><button type="button" class="pc-complete-title" data-pc-action="reveal-stale-title" ${data} aria-expanded="false"><span class="pc-complete-task">${escape(item.task)}</span>
     <span class="pc-complete-date">Completed ${escape(when)}${busy ? ' · Saving…' : pending ? ' · Still checking…' : ''}</span></button></div>
-    <button type="button" class="pc-completed-undo" data-pc-action="undo-completed" ${data}${busy ? ' disabled' : ''} aria-label="${pending ? 'Check status' : 'Undo completion'}: ${escape(item.task)}">${pending ? 'Check status' : 'Undo'}</button>
+    <button type="button" class="pc-completed-undo" data-pc-action="undo-completed" ${data}${busy ? ' disabled' : ''} aria-label="${pending && !busy ? 'Check status' : 'Undo completion'}: ${escape(item.task)}">${pending && !busy ? 'Check status' : 'Undo'}</button>
   </div>`;
 }
 function completedHtml(nowMs) {
